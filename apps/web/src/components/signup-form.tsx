@@ -29,7 +29,7 @@ export function SignUpForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className='mt-6'>
+    <form onSubmit={onSubmit}>
       <div className='grid gap-6'>
         <div className='grid gap-2'>
           <Label htmlFor='email'>Email</Label>
@@ -85,7 +85,7 @@ export function SignUpForm() {
                       )}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side='bottom'>
+                  <TooltipContent>
                     <p>{isPasswordVisible ? 'Hide password' : 'Show password'}</p>
                   </TooltipContent>
                 </Tooltip>
