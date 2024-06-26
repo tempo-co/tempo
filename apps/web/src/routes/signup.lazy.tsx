@@ -1,6 +1,7 @@
 import {Link, createLazyFileRoute} from '@tanstack/react-router';
 import {Separator} from '@/components/ui/separator';
 import {SignUpForm} from '@/components/signup-form';
+import {LogoLink} from '@/components/logo-link';
 
 export const Route = createLazyFileRoute('/signup')({
   component: SignUp,
@@ -10,21 +11,12 @@ function SignUp() {
   return (
     <div className='flex h-screen justify-center items-center mx-6'>
       <div className='mx-auto flex w-full flex-col justify-center max-w-96'>
-        <div className='flex flex-col'>
-          <Link to='/' className='flex items-center group mb-12'>
-            <img
-              src='/src/assets/logo.png'
-              alt='Flair logo'
-              className='w-8 transition-transform duration-500 group-hover:rotate-90'
-            />
-            <h1 className='text-4xl font-semibold tracking-tight text-accent-foreground ml-3'>
-              Flair
-            </h1>
-          </Link>
-          <h1 className='text-2xl font-semibold'>Create your account</h1>
+        <div className='flex flex-col items-center'>
+          <LogoLink />
+          <h1 className='text-2xl font-semibold mb-12 text-center'>Create your account</h1>
         </div>
         <SignUpForm />
-        <div className='text-sm text-muted-foreground space-y-6 mt-6'>
+        <div className='text-sm space-y-6 mt-6 text-center'>
           <p>
             By signing up, you agree to Flair&apos;s{' '}
             <Link
@@ -43,12 +35,12 @@ function SignUp() {
             .
           </p>
           <div className='flex justify-center'>
-            <Separator className='w-1/2' />
+            <Separator className='w-1/4' />
           </div>
-          <p className='text-sm text-muted-foreground'>
+          <p className='text-sm'>
             Already have an account?{' '}
             <Link
-              to='/signup'
+              to='/login'
               className='text-sm hover:underline underline-offset-4 font-medium text-accent-foreground'
             >
               Log in
