@@ -8,18 +8,19 @@ import {cn} from '@/lib/utils';
 import {z} from 'zod';
 import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
+import {PasswordStrengthIndicator} from './password-strength-indicator';
 
 const formSchema = z.object({
   email: z
     .string()
-    .min(1, 'Email is required.')
-    .max(255, 'Email must be less than 256 characters.')
-    .email('Email is not valid.'),
-  name: z.string().min(1, 'Name is required.').max(255, 'Name must be less than 256 characters.'),
+    .min(1, 'Required')
+    .max(255, 'Must be less than 256 characters')
+    .email('Invalid'),
+  name: z.string().min(1, 'Required').max(255, 'Must be less than 256 characters'),
   password: z
     .string()
-    .min(8, 'Password must be at least 8 characters.')
-    .max(255, 'Password must be less than 256 characters.'),
+    .min(8, 'Must be at least 8 characters')
+    .max(255, 'Must be less than 256 characters'),
 });
 
 export function SignUpForm() {
@@ -39,9 +40,10 @@ export function SignUpForm() {
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     console.log(values);
+    setIsLoading(true);
     setTimeout(() => {
       setIsLoading(false);
-    }, 3000);
+    }, 1000);
   }
 
   function togglePasswordVisibility() {
@@ -148,6 +150,7 @@ export function SignUpForm() {
                   </div>
                 </FormControl>
                 <FormMessage />
+                <PasswordStrengthIndicator value={field.value} />
               </FormItem>
             )}
           />
