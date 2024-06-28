@@ -26,6 +26,7 @@ const formSchema = z.object({
 export function SignUpForm() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
+  const [passwordStrength, setPasswordStrength] = useState<number>(0);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -39,6 +40,10 @@ export function SignUpForm() {
   });
 
   function onSubmit(values: z.infer<typeof formSchema>) {
+    if (passwordStrength <= 25) {
+      form.setError('password', {message: ''}, {shouldFocus: true});
+      return;
+    }
     console.log(values);
     setIsLoading(true);
     setTimeout(() => {
@@ -57,7 +62,7 @@ export function SignUpForm() {
           <FormField
             control={form.control}
             name='email'
-            render={({field}) => (
+            render={({field, fieldState}) => (
               <FormItem>
                 <FormLabel>Email</FormLabel>
                 <FormControl>
@@ -70,7 +75,7 @@ export function SignUpForm() {
                     autoComplete='email'
                     autoCorrect='off'
                     disabled={isLoading}
-                    className={cn(form.getFieldState('email').error && 'border-destructive')}
+                    className={cn(fieldState.error && 'border-destructive')}
                   />
                 </FormControl>
                 <FormMessage />
@@ -80,7 +85,7 @@ export function SignUpForm() {
           <FormField
             control={form.control}
             name='name'
-            render={({field}) => (
+            render={({field, fieldState}) => (
               <FormItem>
                 <FormLabel>Full name</FormLabel>
                 <FormControl>
@@ -92,7 +97,7 @@ export function SignUpForm() {
                     autoComplete='name'
                     autoCorrect='off'
                     disabled={isLoading}
-                    className={cn(form.getFieldState('name').error && 'border-destructive')}
+                    className={cn(fieldState.error && 'border-destructive')}
                   />
                 </FormControl>
                 <FormMessage />
@@ -102,7 +107,7 @@ export function SignUpForm() {
           <FormField
             control={form.control}
             name='password'
-            render={({field}) => (
+            render={({field, fieldState}) => (
               <FormItem>
                 <FormLabel>Password</FormLabel>
                 <FormControl>
@@ -118,9 +123,10 @@ export function SignUpForm() {
                       className={cn(
                         'z-10',
                         field.value && 'rounded-r-none border-r-0',
-                        form.getFieldState('password').error && 'border-destructive',
+                        (fieldState.error || (fieldState.isDirty && passwordStrength <= 25)) &&
+                          'border-destructive',
                       )}
-                    ></Input>
+                    />
                     {field.value && (
                       <TooltipProvider delayDuration={500}>
                         <Tooltip>
@@ -131,7 +137,9 @@ export function SignUpForm() {
                               type='button'
                               className={cn(
                                 'border-l-0 rounded-l-none',
-                                form.getFieldState('password').error && 'border-destructive',
+                                (fieldState.error ||
+                                  (fieldState.isDirty && passwordStrength <= 25)) &&
+                                  'border-destructive',
                               )}
                             >
                               {isPasswordVisible ? (
@@ -150,7 +158,11 @@ export function SignUpForm() {
                   </div>
                 </FormControl>
                 <FormMessage />
-                <PasswordStrengthIndicator value={field.value} />
+                <PasswordStrengthIndicator
+                  value={field.value}
+                  passwordStrength={passwordStrength}
+                  setPasswordStrength={setPasswordStrength}
+                />
               </FormItem>
             )}
           />

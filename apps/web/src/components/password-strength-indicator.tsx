@@ -1,4 +1,4 @@
-import {useEffect, useState, useRef} from 'react';
+import {useEffect, useRef} from 'react';
 import {Progress} from '@/components/ui/progress';
 import {debounce, zxcvbnAsync, zxcvbnOptions} from '@zxcvbn-ts/core';
 import * as zxcvbnCommonPackage from '@zxcvbn-ts/language-common';
@@ -17,11 +17,15 @@ zxcvbnOptions.setOptions(options);
 
 export type PasswordStrengthIndicatorProps = {
   value: string;
+  passwordStrength: number;
+  setPasswordStrength: (strength: number) => void;
 };
 
-export function PasswordStrengthIndicator({value}: PasswordStrengthIndicatorProps) {
-  const [passwordStrength, setPasswordStrength] = useState<number>(0);
-
+export function PasswordStrengthIndicator({
+  value,
+  passwordStrength,
+  setPasswordStrength,
+}: PasswordStrengthIndicatorProps) {
   const evaluatePasswordStrength = async (password: string) => {
     const result = await zxcvbnAsync(password);
     const calculatedStrength = result.score * 25;
