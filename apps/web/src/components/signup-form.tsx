@@ -13,14 +13,18 @@ import {PasswordStrengthIndicator} from './password-strength-indicator';
 const formSchema = z.object({
   email: z
     .string()
-    .min(1, 'Required')
-    .max(255, 'Must be less than 256 characters')
-    .email('Invalid'),
-  name: z.string().min(1, 'Required').max(255, 'Must be less than 256 characters'),
+    .min(1, 'Please enter your email address.')
+    .max(255, 'Email must be less than 256 characters.')
+    .email('Please enter a valid email address.'),
+  name: z
+    .string()
+    .min(1, 'Please enter your name.')
+    .max(255, 'Name must be less than 256 characters.'),
   password: z
     .string()
-    .min(8, 'Must be at least 8 characters')
-    .max(255, 'Must be less than 256 characters'),
+    .min(1, 'Please enter your password.')
+    .min(8, 'Too short. Must be at least 8 characters.')
+    .max(255, 'Too long. Must be less than 256 characters.'),
 });
 
 export function SignUpForm() {
@@ -87,7 +91,7 @@ export function SignUpForm() {
             name='name'
             render={({field, fieldState}) => (
               <FormItem>
-                <FormLabel>Full name</FormLabel>
+                <FormLabel>Name</FormLabel>
                 <FormControl>
                   <Input
                     {...field}
@@ -158,7 +162,7 @@ export function SignUpForm() {
                   </div>
                 </FormControl>
                 <FormMessage />
-                {field.value.length >= 8 && (
+                {field.value.length >= 8 && field.value.length < 256 && (
                   <PasswordStrengthIndicator
                     value={field.value}
                     passwordStrength={passwordStrength}
@@ -175,8 +179,8 @@ export function SignUpForm() {
           >
             {isLoading ? (
               <>
-                <LoaderCircle className='mr-2 h-4 w-4 animate-spin' />
-                <span>Creating account</span>
+                <span>Creating account...</span>
+                <LoaderCircle className='ml-2 h-4 w-4 animate-spin' />
               </>
             ) : (
               <span>Create account</span>
