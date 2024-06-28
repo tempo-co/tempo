@@ -4,6 +4,9 @@ import {debounce, zxcvbnAsync, zxcvbnOptions} from '@zxcvbn-ts/core';
 import * as zxcvbnCommonPackage from '@zxcvbn-ts/language-common';
 import * as zxcvbnEnPackage from '@zxcvbn-ts/language-en';
 import {cn} from '@/lib/utils';
+import {Button} from './ui/button';
+import {CircleAlert, TriangleAlert} from 'lucide-react';
+import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from './ui/tooltip';
 
 const options = {
   translations: zxcvbnEnPackage.translations,
@@ -75,7 +78,42 @@ export function PasswordStrengthIndicator({
 
   return (
     <>
-      <p className={cn('text-sm font-medium', labelColor)}>{label}</p>
+      <div className='flex items-center justify-between'>
+        <p className={cn('text-sm font-medium', labelColor)}>{label}</p>
+        {passwordStrength <= 50 && (
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type='button'
+                  size='icon'
+                  variant='ghost'
+                  className='h-6 w-6 hover:text-foreground'
+                >
+                  {passwordStrength === 25 && <CircleAlert className='w-4 text-destructive' />}
+                  {passwordStrength === 50 && <TriangleAlert className='w-4 text-amber-600' />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {passwordStrength === 25 && (
+                  <>
+                    <p className='mb-1'>This password is too weak.</p>
+                    <p>Try a longer mix of characters, and avoid common</p>
+                    <p>words, repeating characters or patterns.</p>
+                  </>
+                )}
+                {passwordStrength === 50 && (
+                  <>
+                    <p className='mb-1'>This password will work, but could be stronger.</p>
+                    <p>Consider a longer mix of characters, and avoid</p>
+                    <p>common words, repeating characters or patterns.</p>
+                  </>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
       <Progress
         value={passwordStrength}
         className={cn('mt-2 h-2 border-input border', progressBarColor)}
