@@ -75,15 +75,11 @@ export function PasswordStrengthIndicator({
 
   return (
     <>
-      {value.length >= 8 && (
-        <>
-          <p className={cn('text-sm font-medium', labelColor)}>{label}</p>
-          <Progress
-            value={passwordStrength}
-            className={cn('mt-2 h-2 border-input border', progressBarColor)}
-          />
-        </>
-      )}
+      <p className={cn('text-sm font-medium', labelColor)}>{label}</p>
+      <Progress
+        value={passwordStrength}
+        className={cn('mt-2 h-2 border-input border', progressBarColor)}
+      />
     </>
   );
 }

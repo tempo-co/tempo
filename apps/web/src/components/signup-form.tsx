@@ -158,11 +158,13 @@ export function SignUpForm() {
                   </div>
                 </FormControl>
                 <FormMessage />
-                <PasswordStrengthIndicator
-                  value={field.value}
-                  passwordStrength={passwordStrength}
-                  setPasswordStrength={setPasswordStrength}
-                />
+                {field.value.length >= 8 && (
+                  <PasswordStrengthIndicator
+                    value={field.value}
+                    passwordStrength={passwordStrength}
+                    setPasswordStrength={setPasswordStrength}
+                  />
+                )}
               </FormItem>
             )}
           />
