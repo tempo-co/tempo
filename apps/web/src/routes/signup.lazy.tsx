@@ -17,23 +17,24 @@ function SignUp() {
         </div>
         <SignUpForm />
         <div className='text-sm space-y-6 mt-6 text-center'>
-          <p>
-            By signing up, you agree to Flair&apos;s{' '}
-            <Link
-              to='/signup'
-              className='text-sm hover:underline underline-offset-4 font-medium text-accent-foreground'
-            >
-              Terms of Service
-            </Link>{' '}
-            and{' '}
-            <Link
-              to='/signup'
-              className='text-sm hover:underline underline-offset-4 font-medium text-accent-foreground'
-            >
-              Privacy Policy
-            </Link>
-            .
-          </p>
+          <div>
+            <p>By signing up, you agree to our </p>
+            <p>
+              <Link
+                to='/signup'
+                className='text-sm hover:underline underline-offset-4 font-medium text-accent-foreground'
+              >
+                Terms of Service
+              </Link>{' '}
+              and{' '}
+              <Link
+                to='/signup'
+                className='text-sm hover:underline underline-offset-4 font-medium text-accent-foreground'
+              >
+                Privacy Policy
+              </Link>
+            </p>
+          </div>
           <div className='flex justify-center'>
             <Separator className='w-1/4' />
           </div>
