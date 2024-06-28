@@ -123,7 +123,7 @@ export function SignUpForm() {
                       className={cn(
                         'z-10',
                         field.value && 'rounded-r-none border-r-0',
-                        (fieldState.error || (fieldState.isDirty && passwordStrength <= 25)) &&
+                        (fieldState.error || (fieldState.isTouched && passwordStrength <= 25)) &&
                           'border-destructive',
                       )}
                     />
@@ -138,7 +138,7 @@ export function SignUpForm() {
                               className={cn(
                                 'border-l-0 rounded-l-none',
                                 (fieldState.error ||
-                                  (fieldState.isDirty && passwordStrength <= 25)) &&
+                                  (fieldState.isTouched && passwordStrength <= 25)) &&
                                   'border-destructive',
                               )}
                             >
