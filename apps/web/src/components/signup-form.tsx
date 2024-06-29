@@ -9,6 +9,8 @@ import {z} from 'zod';
 import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import {PasswordStrengthIndicator} from './password-strength-indicator';
+import {useMutation} from '@tanstack/react-query';
+import {toast} from 'sonner';
 
 const formSchema = z.object({
   email: z
@@ -28,7 +30,6 @@ const formSchema = z.object({
 });
 
 export function SignUpForm() {
-  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
   const [passwordStrength, setPasswordStrength] = useState<number>(0);
 
@@ -43,16 +44,37 @@ export function SignUpForm() {
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  const {mutate, isPending} = useMutation({
+    mutationFn: async (formData: z.infer<typeof formSchema>) => {
+      const response = await fetch('http://localhost:3000/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      if (response.status === 409) {
+        form.setError('email', {message: 'Email is already in use'}, {shouldFocus: true});
+        return;
+      }
+      if (response.status != 201) {
+        throw new Error('Network response was not ok');
+      }
+      return response.json();
+    },
+    onError: () => {
+      toast.error('There was a problem with your request.', {
+        description: 'Your account could not be created. Please try again.',
+      });
+    },
+  });
+
+  function onSubmit(formData: z.infer<typeof formSchema>) {
     if (passwordStrength <= 25) {
       form.setError('password', {message: ''}, {shouldFocus: true});
       return;
     }
-    console.log(values);
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
+    mutate(formData);
   }
 
   function togglePasswordVisibility() {
@@ -73,12 +95,12 @@ export function SignUpForm() {
                   <Input
                     {...field}
                     id='email'
-                    placeholder='name@example.com'
+                    placeholder='example@domain.com'
                     type='email'
                     autoCapitalize='none'
                     autoComplete='email'
                     autoCorrect='off'
-                    disabled={isLoading}
+                    disabled={isPending}
                     className={cn(fieldState.error && 'border-destructive')}
                   />
                 </FormControl>
@@ -100,7 +122,7 @@ export function SignUpForm() {
                     autoCapitalize='none'
                     autoComplete='name'
                     autoCorrect='off'
-                    disabled={isLoading}
+                    disabled={isPending}
                     className={cn(fieldState.error && 'border-destructive')}
                   />
                 </FormControl>
@@ -123,7 +145,7 @@ export function SignUpForm() {
                       autoCapitalize='none'
                       autoComplete='current-password'
                       autoCorrect='off'
-                      disabled={isLoading}
+                      disabled={isPending}
                       className={cn(
                         'z-10',
                         field.value && 'rounded-r-none border-r-0',
@@ -172,12 +194,8 @@ export function SignUpForm() {
               </FormItem>
             )}
           />
-          <Button
-            type='submit'
-            disabled={isLoading}
-            className='bg-accent-foreground hover:bg-accent-foreground/90'
-          >
-            {isLoading ? (
+          <Button type='submit' disabled={isPending}>
+            {isPending ? (
               <>
                 <span>Creating account...</span>
                 <LoaderCircle className='ml-2 h-4 w-4 animate-spin' />
