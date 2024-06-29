@@ -16,7 +16,7 @@ const formSchema = z.object({
   email: z
     .string()
     .min(1, 'Please enter your email address.')
-    .max(255, 'Email must be less than 256 characters.')
+    .max(255, 'Email address must be less than 256 characters.')
     .email('Please enter a valid email address.'),
   name: z
     .string()
@@ -37,30 +37,35 @@ export function SignUpForm() {
     resolver: zodResolver(formSchema),
     mode: 'onTouched',
     reValidateMode: 'onChange',
-    defaultValues: {
-      email: '',
-      name: '',
-      password: '',
-    },
+    defaultValues: {email: '', name: '', password: ''},
   });
 
   const {mutate, isPending} = useMutation({
     mutationFn: async (formData: z.infer<typeof formSchema>) => {
-      const response = await fetch('http://localhost:3000/auth/signup', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/signup`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(formData),
       });
-      if (response.status === 409) {
-        form.setError('email', {message: 'Email is already in use'}, {shouldFocus: true});
-        return;
+
+      switch (response.status) {
+        case 201:
+          return response.json();
+        case 409:
+          form.setError(
+            'email',
+            {message: 'This email address is already in use.'},
+            {shouldFocus: true},
+          );
+          break;
+        case 400:
+          toast.error('Validation failed.', {
+            description: 'Please check your input and try again.',
+          });
+          break;
+        default:
+          throw new Error('Network response was not ok.');
       }
-      if (response.status != 201) {
-        throw new Error('Network response was not ok');
-      }
-      return response.json();
     },
     onError: () => {
       toast.error('There was a problem with your request.', {
@@ -75,10 +80,6 @@ export function SignUpForm() {
       return;
     }
     mutate(formData);
-  }
-
-  function togglePasswordVisibility() {
-    setIsPasswordVisible(!isPasswordVisible);
   }
 
   return (
@@ -158,7 +159,7 @@ export function SignUpForm() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
-                              onClick={togglePasswordVisibility}
+                              onClick={() => setIsPasswordVisible(!isPasswordVisible)}
                               variant='outline'
                               type='button'
                               className={cn(
