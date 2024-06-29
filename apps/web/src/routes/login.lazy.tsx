@@ -18,13 +18,13 @@ function LogIn() {
         <LogInForm />
         <div className='text-sm space-y-6 mt-6'>
           <div className='flex justify-center'>
-            <Separator className='w-1/4' />
+            <Separator className='w-1/5' />
           </div>
           <p className='text-sm text-center'>
             New to Flair?{' '}
             <Link
               to='/signup'
-              className='text-sm hover:underline underline-offset-4 font-medium text-accent-foreground'
+              className='text-sm underline decoration-accent hover:decoration-foreground underline-offset-4 font-medium'
             >
               Sign up
             </Link>

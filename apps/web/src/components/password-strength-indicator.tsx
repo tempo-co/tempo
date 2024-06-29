@@ -54,18 +54,18 @@ export function PasswordStrengthIndicator({
     },
     {
       label: 'Fair',
-      progressBarColor: '[&>*]:bg-amber-600',
-      labelColor: 'text-amber-600',
+      progressBarColor: '[&>*]:bg-warning',
+      labelColor: 'text-warning',
     },
     {
       label: 'Good',
-      progressBarColor: '[&>*]:bg-accent-foreground',
-      labelColor: 'text-accent-foreground',
+      progressBarColor: '[&>*]:bg-success',
+      labelColor: 'text-success',
     },
     {
       label: 'Strong',
-      progressBarColor: '[&>*]:bg-accent-foreground',
-      labelColor: 'text-accent-foreground',
+      progressBarColor: '[&>*]:bg-success',
+      labelColor: 'text-success',
     },
   ];
 
@@ -91,7 +91,7 @@ export function PasswordStrengthIndicator({
                   className='h-6 w-6 hover:text-foreground'
                 >
                   {passwordStrength === 25 && <CircleAlert className='w-4 text-destructive' />}
-                  {passwordStrength === 50 && <TriangleAlert className='w-4 text-amber-600' />}
+                  {passwordStrength === 50 && <TriangleAlert className='w-4 text-warning' />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>

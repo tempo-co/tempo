@@ -22,27 +22,28 @@ function SignUp() {
             <p>
               <Link
                 to='/signup'
-                className='text-sm hover:underline underline-offset-4 font-medium text-accent-foreground'
+                className='text-sm underline decoration-accent hover:decoration-foreground underline-offset-4 font-medium'
               >
                 Terms of Service
               </Link>{' '}
               and{' '}
               <Link
                 to='/signup'
-                className='text-sm hover:underline underline-offset-4 font-medium text-accent-foreground'
+                className='text-sm underline decoration-accent hover:decoration-foreground underline-offset-4 font-medium'
               >
                 Privacy Policy
               </Link>
+              .
             </p>
           </div>
           <div className='flex justify-center'>
-            <Separator className='w-1/4' />
+            <Separator className='w-1/5' />
           </div>
           <p className='text-sm'>
             Already have an account?{' '}
             <Link
               to='/login'
-              className='text-sm hover:underline underline-offset-4 font-medium text-accent-foreground'
+              className='text-sm underline decoration-accent hover:decoration-foreground underline-offset-4 font-medium'
             >
               Log in
             </Link>

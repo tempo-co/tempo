@@ -36,7 +36,7 @@ export function LogInForm() {
           <Label htmlFor='email'>Email</Label>
           <Input
             id='email'
-            placeholder='name@example.com'
+            placeholder='example@domain.com'
             type='email'
             autoCapitalize='none'
             autoComplete='email'
@@ -47,7 +47,7 @@ export function LogInForm() {
         <div className='grid gap-2 items-center'>
           <div className='flex justify-between items-center w-full'>
             <Label htmlFor='password'>Password</Label>
-            <Link className='text-sm hover:underline underline-offset-4 font-medium text-accent-foreground'>
+            <Link className='text-sm underline decoration-accent hover:decoration-foreground underline-offset-4 font-medium'>
               Forgot your password?
             </Link>
           </div>
@@ -88,13 +88,14 @@ export function LogInForm() {
             )}
           </div>
         </div>
-        <Button disabled={isLoading} className='bg-accent-foreground hover:bg-accent-foreground/90'>
+        <Button disabled={isLoading}>
           {isLoading ? (
             <>
-              <LoaderCircle className='mr-2 h-4 w-4 animate-spin' /> Logging in
+              <span>Logging in...</span>
+              <LoaderCircle className='ml-2 h-4 w-4 animate-spin' />
             </>
           ) : (
-            'Log in'
+            <span>Log in</span>
           )}
         </Button>
       </div>
