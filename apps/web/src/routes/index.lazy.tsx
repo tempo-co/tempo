@@ -1,3 +1,4 @@
+import {SideBar} from '@/components/sidebar/sidebar';
 import {createLazyFileRoute} from '@tanstack/react-router';
 
 export const Route = createLazyFileRoute('/')({
@@ -6,8 +7,8 @@ export const Route = createLazyFileRoute('/')({
 
 function Index() {
   return (
-    <div className='p-2'>
-      <h3>Index</h3>
-    </div>
+    <>
+      <SideBar />
+    </>
   );
 }
