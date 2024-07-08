@@ -1,10 +1,15 @@
-import {LogInForm} from '@/components/login-form';
-import {LogoLink} from '@/components/logo-link';
 import {Separator} from '@/components/ui/separator';
-import {Link, createLazyFileRoute} from '@tanstack/react-router';
+import {LogInForm} from '@/features/auth/components/login-form';
+import {LogoLink} from '@/features/auth/components/logo-link';
+import {Link, createFileRoute, redirect} from '@tanstack/react-router';
 
-export const Route = createLazyFileRoute('/login')({
+export const Route = createFileRoute('/login')({
   component: LogIn,
+  beforeLoad: ({context}) => {
+    if (context.isAuthenticated) {
+      throw redirect({to: '/dashboard'});
+    }
+  },
 });
 
 function LogIn() {

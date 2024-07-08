@@ -3,7 +3,7 @@ import {Progress} from '@/components/ui/progress';
 import {debounce, zxcvbnAsync, zxcvbnOptions} from '@zxcvbn-ts/core';
 import * as zxcvbnCommonPackage from '@zxcvbn-ts/language-common';
 import * as zxcvbnEnPackage from '@zxcvbn-ts/language-en';
-import {cn} from '@/lib/utils';
+import {cn} from '@/utils/cn';
 import {Button} from '@/components/ui/button';
 import {CircleAlert, TriangleAlert} from 'lucide-react';
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
@@ -15,14 +15,14 @@ const options = {
 };
 zxcvbnOptions.setOptions(options);
 
-export type PasswordStrengthIndicatorProps = {
+const MIN_STRENGTH = 25;
+const STRENGTH_STEP = 25;
+
+type PasswordStrengthIndicatorProps = {
   value: string;
   passwordStrength: number;
   setPasswordStrength: (strength: number) => void;
 };
-
-const MIN_STRENGTH = 25;
-const STRENGTH_STEP = 25;
 
 export function PasswordStrengthIndicator({
   value,

@@ -1,10 +1,15 @@
-import {Link, createLazyFileRoute} from '@tanstack/react-router';
+import {Link, createFileRoute, redirect} from '@tanstack/react-router';
 import {Separator} from '@/components/ui/separator';
-import {SignUpForm} from '@/components/signup-form';
-import {LogoLink} from '@/components/logo-link';
+import {LogoLink} from '@/features/auth/components/logo-link';
+import {SignUpForm} from '@/features/auth/components/signup-form';
 
-export const Route = createLazyFileRoute('/signup')({
+export const Route = createFileRoute('/signup')({
   component: SignUp,
+  beforeLoad: ({context}) => {
+    if (context.isAuthenticated) {
+      throw redirect({to: '/dashboard'});
+    }
+  },
 });
 
 function SignUp() {

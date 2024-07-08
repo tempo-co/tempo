@@ -4,82 +4,48 @@ import {Input} from '@/components/ui/input';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
 import {useState} from 'react';
 import {LoaderCircle, Eye, EyeOff} from 'lucide-react';
-import {cn} from '@/lib/utils';
-import {z} from 'zod';
+import {cn} from '@/utils/cn';
 import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import {PasswordStrengthIndicator} from './password-strength-indicator';
-import {useMutation} from '@tanstack/react-query';
 import {toast} from 'sonner';
-
-const formSchema = z.object({
-  email: z
-    .string()
-    .min(1, 'Please enter your email address.')
-    .max(255, 'Email address must be less than 256 characters.')
-    .email('Please enter a valid email address.'),
-  name: z
-    .string()
-    .min(1, 'Please enter your name.')
-    .max(255, 'Name must be less than 256 characters.'),
-  password: z
-    .string()
-    .min(1, 'Please enter your password.')
-    .min(8, 'Too short. Must be at least 8 characters.')
-    .max(255, 'Too long. Must be less than 256 characters.'),
-});
+import {useSignUp} from '../api/use-signup';
+import {SignUpDto, signUpDtoSchema} from '../types/signup-dto';
 
 export function SignUpForm() {
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
   const [passwordStrength, setPasswordStrength] = useState<number>(0);
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const {mutate, isPending} = useSignUp();
+
+  const form = useForm<SignUpDto>({
+    resolver: zodResolver(signUpDtoSchema),
     mode: 'onTouched',
     reValidateMode: 'onChange',
     defaultValues: {email: '', name: '', password: ''},
   });
 
-  const {mutate, isPending} = useMutation({
-    mutationFn: async (formData: z.infer<typeof formSchema>) => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/signup`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(formData),
-      });
+  function onSubmit(formData: SignUpDto) {
+    if (passwordStrength <= 25) {
+      form.setError('password', {message: ''}, {shouldFocus: true});
+      return;
+    }
 
-      switch (response.status) {
-        case 201:
-          return response.json();
-        case 409:
+    mutate(formData, {
+      onError: (error) => {
+        if (error.status === 409) {
           form.setError(
             'email',
             {message: 'This email address is already in use.'},
             {shouldFocus: true},
           );
-          break;
-        case 400:
+        } else {
           toast.error('Validation failed.', {
             description: 'Please check your input and try again.',
           });
-          break;
-        default:
-          throw new Error('Network response was not ok.');
-      }
-    },
-    onError: () => {
-      toast.error('There was a problem with your request.', {
-        description: 'Your account could not be created. Please try again.',
-      });
-    },
-  });
-
-  function onSubmit(formData: z.infer<typeof formSchema>) {
-    if (passwordStrength <= 25) {
-      form.setError('password', {message: ''}, {shouldFocus: true});
-      return;
-    }
-    mutate(formData);
+        }
+      },
+    });
   }
 
   return (
