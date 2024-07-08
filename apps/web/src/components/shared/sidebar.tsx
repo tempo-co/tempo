@@ -7,13 +7,13 @@ import {cn} from '@/utils/cn';
 import {Link} from '@tanstack/react-router';
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '../ui/tooltip';
 import {Popover, PopoverContent, PopoverTrigger} from '../ui/popover';
-import {useLogOut} from '@/features/auth/api/use-logout';
 import {useCurrentUser} from '@/hooks/use-current-user';
+import {useLogOut} from '@/hooks/use-logout';
 
 export function SideBar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const logOut = useLogOut();
   const {currentUser} = useCurrentUser();
+  const logOut = useLogOut();
 
   const handleLogOut = () => {
     logOut();
@@ -75,7 +75,7 @@ export function SideBar() {
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Link to='/'>
+                  <Link to='/accounts'>
                     <Button
                       variant='ghost'
                       size={isCollapsed ? 'icon' : 'default'}
@@ -93,14 +93,19 @@ export function SideBar() {
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant='ghost'
-                    size={isCollapsed ? 'icon' : 'default'}
-                    className={cn('gap-2 w-full', isCollapsed ? 'justify-center' : 'justify-start')}
-                  >
-                    <CreditCard className='w-5 h-5' />
-                    {!isCollapsed && 'Transactions'}
-                  </Button>
+                  <Link to='/transactions'>
+                    <Button
+                      variant='ghost'
+                      size={isCollapsed ? 'icon' : 'default'}
+                      className={cn(
+                        'gap-2 w-full',
+                        isCollapsed ? 'justify-center' : 'justify-start',
+                      )}
+                    >
+                      <CreditCard className='w-5 h-5' />
+                      {!isCollapsed && 'Transactions'}
+                    </Button>
+                  </Link>
                 </TooltipTrigger>
                 {isCollapsed && <TooltipContent side='right'>Transactions</TooltipContent>}
               </Tooltip>
