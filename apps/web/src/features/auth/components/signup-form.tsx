@@ -16,7 +16,7 @@ export function SignUpForm() {
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
   const [passwordStrength, setPasswordStrength] = useState<number>(0);
 
-  const {mutate, isPending} = useSignUp();
+  const {signUp, isPending} = useSignUp();
 
   const form = useForm<SignUpDto>({
     resolver: zodResolver(signUpDtoSchema),
@@ -31,7 +31,7 @@ export function SignUpForm() {
       return;
     }
 
-    mutate(formData, {
+    signUp(formData, {
       onError: (error) => {
         if (error.status === 409) {
           form.setError(

@@ -16,7 +16,7 @@ export function LogInForm() {
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
   const [hasUnauthorizedError, setHasUnauthorizedError] = useState<boolean>(false);
 
-  const {mutate, isPending} = useLogIn();
+  const {logIn, isPending} = useLogIn();
 
   const form = useForm<LogInDto>({
     resolver: zodResolver(logInDtoSchema),
@@ -37,7 +37,7 @@ export function LogInForm() {
   }, [form, hasUnauthorizedError]);
 
   function onSubmit(formData: LogInDto) {
-    mutate(formData, {
+    logIn(formData, {
       onError: (error) => {
         if (error.status === 401) {
           form.setError('email', {message: ''});

@@ -19,7 +19,7 @@ export const useSignUp = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  return useMutation<void, SignUpHttpError, SignUpDto>({
+  const {mutate: signUp, isPending} = useMutation<void, SignUpHttpError, SignUpDto>({
     mutationFn: async (signUpDto: SignUpDto) => {
       const user = await api.post('/auth/signup', JSON.stringify(signUpDto));
       await queryClient.setQueryData(['currentUser'], user.json());
@@ -35,4 +35,5 @@ export const useSignUp = () => {
       }
     },
   });
+  return {signUp, isPending};
 };
