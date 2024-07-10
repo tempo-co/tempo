@@ -135,7 +135,7 @@ export function SideBar() {
                   <div
                     className={cn(
                       'flex flex-col gap-2 w-[--radix-popover-trigger-width] !p-2 mb-1',
-                      !isCollapsed ? 'w-[--radix-popover-trigger-width]' : 'w-fit ml-2',
+                      isCollapsed && 'w-44 ml-2',
                     )}
                   >
                     <Button variant='ghost' className='w-full justify-start'>
