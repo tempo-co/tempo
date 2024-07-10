@@ -1,6 +1,7 @@
-import * as React from 'react';
+/* eslint-disable react-refresh/only-export-components */
 import * as LabelPrimitive from '@radix-ui/react-label';
 import {Slot} from '@radix-ui/react-slot';
+import * as React from 'react';
 import {
   Controller,
   ControllerProps,
@@ -11,6 +12,7 @@ import {
 } from 'react-hook-form';
 
 import {cn} from '@/utils/cn';
+
 import {Label} from './label';
 
 const Form = FormProvider;

@@ -1,6 +1,7 @@
-import {User} from '@/types/user';
-import {api, HttpError} from '@/utils/api';
 import {useQuery} from '@tanstack/react-query';
+
+import {User} from '@/types/user';
+import {HttpError, api} from '@/utils/api';
 
 export const useCurrentUser = () => {
   const {

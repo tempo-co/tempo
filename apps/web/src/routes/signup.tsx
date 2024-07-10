@@ -1,4 +1,5 @@
 import {Link, createFileRoute, redirect} from '@tanstack/react-router';
+
 import {Separator} from '@/components/ui/separator';
 import {LogoLink} from '@/features/auth/components/logo-link';
 import {SignUpForm} from '@/features/auth/components/signup-form';

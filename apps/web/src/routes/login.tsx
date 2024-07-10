@@ -1,7 +1,8 @@
+import {Link, createFileRoute, redirect} from '@tanstack/react-router';
+
 import {Separator} from '@/components/ui/separator';
 import {LogInForm} from '@/features/auth/components/login-form';
 import {LogoLink} from '@/features/auth/components/logo-link';
-import {Link, createFileRoute, redirect} from '@tanstack/react-router';
 
 export const Route = createFileRoute('/login')({
   component: LogIn,

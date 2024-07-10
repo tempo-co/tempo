@@ -1,7 +1,9 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
-import {api, HttpError} from '@/utils/api';
 import {toast} from 'sonner';
+
+import {HttpError, api} from '@/utils/api';
+
 import {LogInDto} from '../types/login.dto';
 
 type LogInHttpError = HttpError & {

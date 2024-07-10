@@ -1,14 +1,15 @@
-import {useState} from 'react';
-import {Avatar, AvatarFallback} from '../ui/avatar';
-import {Separator} from '../ui/separator';
-import {ChevronLeft, CreditCard, LayoutGrid, LogOut, Settings, WalletCards} from 'lucide-react';
-import {Button} from '../ui/button';
-import {cn} from '@/utils/cn';
 import {Link} from '@tanstack/react-router';
-import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '../ui/tooltip';
-import {Popover, PopoverContent, PopoverTrigger} from '../ui/popover';
+import {ChevronLeft, CreditCard, LayoutGrid, LogOut, Settings, WalletCards} from 'lucide-react';
+import {useState} from 'react';
+
+import {Avatar, AvatarFallback} from '@/components/ui/avatar';
+import {Button} from '@/components/ui/button';
+import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
+import {Separator} from '@/components/ui/separator';
+import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
 import {useCurrentUser} from '@/hooks/use-current-user';
 import {useLogOut} from '@/hooks/use-logout';
+import {cn} from '@/utils/cn';
 
 export function SideBar() {
   const [isCollapsed, setIsCollapsed] = useState(false);

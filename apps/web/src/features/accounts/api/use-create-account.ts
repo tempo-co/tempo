@@ -1,7 +1,9 @@
 import {useMutation} from '@tanstack/react-query';
-import {api} from '@/utils/api';
-import {AccountCreateDto} from '../types/account-create.dto';
+
 import {Account} from '@/types/account';
+import {api} from '@/utils/api';
+
+import {AccountCreateDto} from '../types/account-create.dto';
 
 export const useCreateAccount = () => {
   const {mutate: createAccount, isPending} = useMutation<Account, Error, AccountCreateDto>({

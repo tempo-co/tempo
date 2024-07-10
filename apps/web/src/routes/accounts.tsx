@@ -1,6 +1,7 @@
+import {createFileRoute, redirect} from '@tanstack/react-router';
+
 import {SideBar} from '@/components/shared/sidebar';
 import {AccountsList} from '@/features/accounts/components/accounts-list';
-import {createFileRoute, redirect} from '@tanstack/react-router';
 
 export const Route = createFileRoute('/accounts')({
   component: Accounts,

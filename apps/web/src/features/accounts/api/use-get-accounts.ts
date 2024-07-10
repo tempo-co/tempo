@@ -1,7 +1,8 @@
-import {Account} from '@/types/account';
-import {api} from '@/utils/api';
 import {useQuery} from '@tanstack/react-query';
 import {toast} from 'sonner';
+
+import {Account} from '@/types/account';
+import {api} from '@/utils/api';
 
 export const useGetAccounts = () => {
   const {

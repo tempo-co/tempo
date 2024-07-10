@@ -1,5 +1,6 @@
+import {ComponentType, SVGProps, Suspense, lazy} from 'react';
+
 import {Bank} from '@/types/bank';
-import {ComponentType, lazy, Suspense, SVGProps} from 'react';
 
 type DynamicBankIconProps = {
   bank: Bank;

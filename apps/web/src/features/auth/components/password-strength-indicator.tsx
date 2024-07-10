@@ -1,12 +1,13 @@
-import {useEffect} from 'react';
-import {Progress} from '@/components/ui/progress';
 import {debounce, zxcvbnAsync, zxcvbnOptions} from '@zxcvbn-ts/core';
 import * as zxcvbnCommonPackage from '@zxcvbn-ts/language-common';
 import * as zxcvbnEnPackage from '@zxcvbn-ts/language-en';
-import {cn} from '@/utils/cn';
-import {Button} from '@/components/ui/button';
 import {CircleAlert, TriangleAlert} from 'lucide-react';
+import {useEffect} from 'react';
+
+import {Button} from '@/components/ui/button';
+import {Progress} from '@/components/ui/progress';
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
+import {cn} from '@/utils/cn';
 
 const options = {
   translations: zxcvbnEnPackage.translations,

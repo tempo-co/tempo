@@ -4,5 +4,10 @@
   "trailingComma": "all",
   "endOfLine": "lf",
   "printWidth": 100,
-  "bracketSpacing": false
+  "bracketSpacing": false,
+
+  "plugins": ["@trivago/prettier-plugin-sort-imports"],
+  "importOrder": ["<THIRD_PARTY_MODULES>", "^@/", "^[./]"],
+  "importOrderSeparation": true,
+  "importOrderSortSpecifiers": true
 }

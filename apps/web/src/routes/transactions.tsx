@@ -1,5 +1,6 @@
-import {SideBar} from '@/components/shared/sidebar';
 import {createFileRoute} from '@tanstack/react-router';
+
+import {SideBar} from '@/components/shared/sidebar';
 
 export const Route = createFileRoute('/transactions')({
   component: Transactions,

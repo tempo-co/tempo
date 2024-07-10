@@ -1,12 +1,14 @@
+import {VisuallyHidden} from '@radix-ui/react-visually-hidden';
 import {useState} from 'react';
-import {useMediaQuery} from '@/hooks/use-media-query';
+
+import {DynamicBankIcon} from '@/components/shared/dynamic-bank-icon';
 import {Button} from '@/components/ui/button';
 import {Drawer, DrawerContent, DrawerTitle, DrawerTrigger} from '@/components/ui/drawer';
 import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
+import {useMediaQuery} from '@/hooks/use-media-query';
 import {Bank} from '@/types/bank';
+
 import {BankList} from './bank-list';
-import {VisuallyHidden} from '@radix-ui/react-visually-hidden';
-import {DynamicBankIcon} from '@/components/shared/dynamic-bank-icon';
 
 type BankComboBoxProps = {
   onChange: (bank: Bank) => void;

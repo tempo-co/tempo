@@ -1,16 +1,18 @@
-import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
-import {Button} from '@/components/ui/button';
-import {Input} from '@/components/ui/input';
-import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
-import {useState} from 'react';
-import {LoaderCircle, Eye, EyeOff} from 'lucide-react';
-import {cn} from '@/utils/cn';
-import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
-import {PasswordStrengthIndicator} from './password-strength-indicator';
+import {Eye, EyeOff, LoaderCircle} from 'lucide-react';
+import {useState} from 'react';
+import {useForm} from 'react-hook-form';
 import {toast} from 'sonner';
+
+import {Button} from '@/components/ui/button';
+import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
+import {Input} from '@/components/ui/input';
+import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
+import {cn} from '@/utils/cn';
+
 import {useSignUp} from '../api/use-signup';
 import {SignUpDto, signUpDtoSchema} from '../types/signup.dto';
+import {PasswordStrengthIndicator} from './password-strength-indicator';
 
 export function SignUpForm() {
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
