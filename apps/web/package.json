@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "generate-routes": "tsr generate",
+    "dev": "tsr generate && vite",
+    "build": "tsr generate && tsc -b && vite build",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx}\"",
     "lint": "eslint \"{src,test}/**/*.ts\" --report-unused-disable-directives --max-warnings 0 --fix",
@@ -51,6 +52,7 @@
   },
   "devDependencies": {
     "@tanstack/eslint-plugin-query": "^5.47.0",
+    "@tanstack/router-cli": "^1.43.13",
     "@tanstack/router-devtools": "^1.40.0",
     "@tanstack/router-plugin": "^1.39.13",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
