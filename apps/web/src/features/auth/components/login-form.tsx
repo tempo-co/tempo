@@ -10,7 +10,7 @@ import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import {toast} from 'sonner';
 import {useLogIn} from '../api/use-login';
-import {LogInDto, logInDtoSchema} from '../types/login-dto';
+import {LogInDto, logInDtoSchema} from '../types/login.dto';
 
 export function LogInForm() {
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);

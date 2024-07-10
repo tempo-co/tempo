@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {logInDtoSchema} from './login-dto';
+import {logInDtoSchema} from './login.dto';
 
 export const signUpDtoSchema = logInDtoSchema.extend({
   name: z

@@ -10,7 +10,7 @@ import {zodResolver} from '@hookform/resolvers/zod';
 import {PasswordStrengthIndicator} from './password-strength-indicator';
 import {toast} from 'sonner';
 import {useSignUp} from '../api/use-signup';
-import {SignUpDto, signUpDtoSchema} from '../types/signup-dto';
+import {SignUpDto, signUpDtoSchema} from '../types/signup.dto';
 
 export function SignUpForm() {
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
