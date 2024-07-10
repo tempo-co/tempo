@@ -34,5 +34,6 @@ module.exports = {
     '@typescript-eslint/no-misused-promises': 'off',
     'react-refresh/only-export-components': ['warn', {allowConstantExport: true}],
     'react/prop-types': 'off',
+    'no-console': 'off',
   },
 };
