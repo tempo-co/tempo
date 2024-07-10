@@ -8,14 +8,14 @@
     "build": "tsc -b && vite build",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx}\"",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0 --fix",
-    "lint:check": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint \"{src,test}/**/*.ts\" --report-unused-disable-directives --max-warnings 0 --fix",
+    "lint:check": "eslint \"{src,test}/**/*.ts\" --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "prepare": "husky"
   },
   "lint-staged": {
     "**/*.{ts,tsx,js,jsx}": [
-      "eslint --fix",
+      "eslint \"{src,test}/**/*.ts\" --fix",
       "prettier --write --ignore-unknown"
     ]
   },
