@@ -21,12 +21,14 @@
   "dependencies": {
     "@hookform/resolvers": "^3.6.0",
     "@radix-ui/react-avatar": "^1.1.0",
+    "@radix-ui/react-dialog": "^1.1.1",
     "@radix-ui/react-label": "^2.1.0",
     "@radix-ui/react-popover": "^1.1.1",
     "@radix-ui/react-progress": "^1.1.0",
     "@radix-ui/react-separator": "^1.1.0",
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.1",
+    "@radix-ui/react-visually-hidden": "^1.1.0",
     "@tanstack/react-query": "^5.48.0",
     "@tanstack/react-router": "^1.40.0",
     "@zxcvbn-ts/core": "^3.0.4",
@@ -34,6 +36,7 @@
     "@zxcvbn-ts/language-en": "^3.0.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "cmdk": "^1.0.0",
     "lucide-react": "^0.396.0",
     "next-themes": "^0.3.0",
     "react": "^18.3.1",
@@ -42,6 +45,7 @@
     "sonner": "^1.5.0",
     "tailwind-merge": "^2.3.0",
     "tailwindcss-animate": "^1.0.7",
+    "vaul": "^0.9.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
