@@ -7,15 +7,17 @@ import {Drawer, DrawerContent, DrawerTitle, DrawerTrigger} from '@/components/ui
 import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
 import {useMediaQuery} from '@/hooks/use-media-query';
 import {Bank} from '@/types/bank';
+import {cn} from '@/utils/cn';
 
 import {BankList} from './bank-list';
 
 type BankComboBoxProps = {
   onChange: (bank: Bank) => void;
   isPending?: boolean;
+  error?: boolean;
 };
 
-export function BankComboBox({onChange, isPending}: BankComboBoxProps) {
+export function BankComboBox({onChange, isPending, error}: BankComboBoxProps) {
   const [open, setOpen] = useState(false);
   const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
 
@@ -32,10 +34,16 @@ export function BankComboBox({onChange, isPending}: BankComboBoxProps) {
     return (
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant='outline' disabled={isPending} className='justify-start'>
+          <Button
+            variant='outline'
+            disabled={isPending}
+            className={cn('justify-start', error && 'border-destructive')}
+          >
             {selectedBank ? (
               <>
-                <DynamicBankIcon bank={selectedBank} className='w-4 mr-2' />
+                <div className='p-[0.35rem] bg-muted mr-2 rounded-md'>
+                  <DynamicBankIcon bank={selectedBank} className='w-4 fill-foreground' />
+                </div>
                 {selectedBank}
               </>
             ) : (
