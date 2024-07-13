@@ -30,7 +30,7 @@ export function BankList({setOpen, setSelectedBank}: BankListProps) {
                 setOpen(false);
               }}
             >
-              <DynamicBankIcon bank={bank} className='w-4 mr-2' />
+              <DynamicBankIcon bank={bank} className='w-4 mr-2 fill-foreground' />
               {bank}
             </CommandItem>
           ))}
