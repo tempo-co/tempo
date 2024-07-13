@@ -19,7 +19,11 @@ import {useCreateAccount} from '../api/use-create-account';
 import {AccountCreateDto, accountCreateDtoSchema} from '../types/account-create.dto';
 import {BankComboBox} from './bank-combo-box';
 
-export function AddAccountForm({className}: React.ComponentProps<'form'>) {
+interface AddAccountFormProps extends React.ComponentProps<'form'> {
+  setOpen: (open: boolean) => void;
+}
+
+export function AddAccountForm({className, setOpen}: AddAccountFormProps) {
   const {createAccount, isPending} = useCreateAccount();
 
   const form = useForm<AccountCreateDto>({
@@ -30,6 +34,7 @@ export function AddAccountForm({className}: React.ComponentProps<'form'>) {
 
   function onSubmit(formData: AccountCreateDto) {
     createAccount(formData);
+    setOpen(false);
   }
 
   return (
@@ -42,11 +47,15 @@ export function AddAccountForm({className}: React.ComponentProps<'form'>) {
         <FormField
           control={form.control}
           name='bank'
-          render={({field}) => (
+          render={({field, fieldState}) => (
             <FormItem className='flex flex-col'>
               <FormLabel>Bank</FormLabel>
               <FormControl>
-                <BankComboBox onChange={field.onChange} isPending={isPending} />
+                <BankComboBox
+                  onChange={field.onChange}
+                  isPending={isPending}
+                  error={fieldState.invalid}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -68,7 +77,7 @@ export function AddAccountForm({className}: React.ComponentProps<'form'>) {
                   autoCapitalize='none'
                   autoCorrect='off'
                   disabled={isPending}
-                  className={cn(fieldState.error && 'border-destructive')}
+                  className={cn(fieldState.invalid && 'border-destructive')}
                 />
               </FormControl>
               <FormDescription>A unique name to easily identify this account.</FormDescription>

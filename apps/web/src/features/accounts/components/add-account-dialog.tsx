@@ -35,7 +35,7 @@ export function AddAccountDialog() {
           <DialogHeader>
             <DialogTitle>Add account</DialogTitle>
           </DialogHeader>
-          <AddAccountForm />
+          <AddAccountForm setOpen={setOpen} />
         </DialogContent>
       </Dialog>
     );
@@ -50,7 +50,7 @@ export function AddAccountDialog() {
         <DrawerHeader className='text-left'>
           <DrawerTitle>Add account</DrawerTitle>
         </DrawerHeader>
-        <AddAccountForm className='px-4' />
+        <AddAccountForm className='px-4' setOpen={setOpen} />
         <DrawerFooter className='pt-4'>
           <DrawerClose asChild>
             <Button variant='outline'>Cancel</Button>
