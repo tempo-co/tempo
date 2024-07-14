@@ -1,6 +1,5 @@
 import {Link} from '@tanstack/react-router';
 import {ChevronLeft, CreditCard, LayoutGrid, LogOut, Settings, WalletCards} from 'lucide-react';
-import {useEffect} from 'react';
 
 import {Avatar, AvatarFallback} from '@/components/ui/avatar';
 import {Button} from '@/components/ui/button';
@@ -19,13 +18,9 @@ const links = [
 ];
 
 export function SideBar() {
-  const [isOpen, setIsOpen] = useLocalStorage<boolean>('sidebar', false);
+  const [isOpen, setIsOpen] = useLocalStorage<boolean>('sidebar', true);
   const {currentUser} = useCurrentUser();
   const logOut = useLogOut();
-
-  useEffect(() => {
-    localStorage.setItem('sidebar', JSON.stringify(isOpen));
-  }, [isOpen]);
 
   return (
     <TooltipProvider delayDuration={0}>
