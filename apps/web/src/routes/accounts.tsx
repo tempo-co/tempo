@@ -1,6 +1,5 @@
 import {createFileRoute, redirect} from '@tanstack/react-router';
 
-import {SideBar} from '@/components/shared/sidebar';
 import {AccountsList} from '@/features/accounts/components/accounts-list';
 
 export const Route = createFileRoute('/accounts')({
@@ -13,10 +12,5 @@ export const Route = createFileRoute('/accounts')({
 });
 
 function Accounts() {
-  return (
-    <div className='flex'>
-      <SideBar />
-      <AccountsList />
-    </div>
-  );
+  return <AccountsList />;
 }

@@ -1,7 +1,5 @@
 import {createFileRoute, redirect} from '@tanstack/react-router';
 
-import {SideBar} from '@/components/shared/sidebar';
-
 export const Route = createFileRoute('/dashboard')({
   component: Dashboard,
   beforeLoad: ({context, location}) => {
@@ -12,10 +10,5 @@ export const Route = createFileRoute('/dashboard')({
 });
 
 function Dashboard() {
-  return (
-    <div className='flex'>
-      <SideBar />
-      <p>Dashboard</p>
-    </div>
-  );
+  return <p>Dashboard</p>;
 }
