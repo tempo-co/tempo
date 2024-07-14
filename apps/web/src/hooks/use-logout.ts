@@ -3,9 +3,6 @@ import {useNavigate} from '@tanstack/react-router';
 
 import {api} from '@/utils/api';
 
-/**
- * @throws {LogInHttpError}
- */
 export const useLogOut = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
