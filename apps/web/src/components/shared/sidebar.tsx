@@ -1,5 +1,13 @@
 import {Link} from '@tanstack/react-router';
-import {ChevronLeft, CreditCard, LayoutGrid, LogOut, Settings, WalletCards} from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  LayoutGrid,
+  LogOut,
+  Settings,
+  WalletCards,
+} from 'lucide-react';
 
 import {Avatar, AvatarFallback} from '@/components/ui/avatar';
 import {Button} from '@/components/ui/button';
@@ -23,7 +31,7 @@ export function SideBar() {
   const logOut = useLogOut();
 
   return (
-    <TooltipProvider delayDuration={0}>
+    <TooltipProvider delayDuration={50}>
       <div className='flex'>
         <div
           className={cn(
@@ -65,8 +73,8 @@ export function SideBar() {
                       variant='ghost'
                       size={isOpen ? 'default' : 'icon'}
                       className={cn(
-                        'gap-2 w-full px-3',
-                        isOpen ? 'justify-start' : 'justify-center',
+                        'gap-2 w-full',
+                        isOpen ? 'justify-start px-[0.65rem]' : 'justify-center',
                       )}
                       asChild
                     >
@@ -90,19 +98,22 @@ export function SideBar() {
                     <Button
                       variant='ghost'
                       className={cn(
-                        'flex items-center gap-2 text-sm w-full p-5',
-                        isOpen ? 'justify-start px-[0.375rem]' : 'w-10 rounded-full',
+                        'flex text-sm w-full p-5',
+                        isOpen ? 'justify-between px-[0.375rem]' : 'w-10 rounded-full',
                       )}
                     >
-                      <Avatar className='h-7 w-7'>
-                        <AvatarFallback>JD</AvatarFallback>
-                      </Avatar>
-                      {isOpen && (
-                        <div className='flex flex-col items-start leading-tight'>
-                          <p>{currentUser?.name}</p>
-                          <p className='text-xs text-muted-foreground'>{currentUser?.email}</p>
-                        </div>
-                      )}
+                      <div className='flex items-center'>
+                        <Avatar className='h-7 w-7'>
+                          <AvatarFallback>JD</AvatarFallback>
+                        </Avatar>
+                        {isOpen && (
+                          <div className='flex flex-col items-start leading-none ml-2'>
+                            <p>{currentUser?.name}</p>
+                            <p className='text-xs text-muted-foreground'>{currentUser?.email}</p>
+                          </div>
+                        )}
+                      </div>
+                      <ChevronRight className='w-4 text-muted-foreground' />
                     </Button>
                   </TooltipTrigger>
                 </PopoverTrigger>
@@ -110,7 +121,7 @@ export function SideBar() {
                   <div
                     className={cn(
                       'flex flex-col gap-2 w-[--radix-popover-trigger-width] !p-2 mb-1',
-                      !isOpen && 'w-44 ml-2',
+                      !isOpen && 'ml-2 w-fit',
                     )}
                   >
                     <Button variant='ghost' className='w-full justify-start'>

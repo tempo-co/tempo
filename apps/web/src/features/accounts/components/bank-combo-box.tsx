@@ -37,7 +37,7 @@ export function BankComboBox({onChange, isPending, error}: BankComboBoxProps) {
           <Button
             variant='outline'
             disabled={isPending}
-            className={cn('justify-start', error && 'border-destructive')}
+            className={cn('justify-start px-3', error && 'border-destructive')}
           >
             {selectedBank ? (
               <>
