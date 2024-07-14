@@ -34,7 +34,7 @@ export function SideBar() {
           <div>
             <div className='flex justify-between transition-all duration-1000'>
               {isOpen && (
-                <Button asChild variant='ghost'>
+                <Button asChild variant='ghost' className='px-3'>
                   <Link to='/' className='flex items-center group w-fit'>
                     <img
                       src='/src/assets/logo.png'
@@ -64,7 +64,10 @@ export function SideBar() {
                     <Button
                       variant='ghost'
                       size={isOpen ? 'default' : 'icon'}
-                      className={cn('gap-2 w-full', isOpen ? 'justify-start' : 'justify-center')}
+                      className={cn(
+                        'gap-2 w-full px-3',
+                        isOpen ? 'justify-start' : 'justify-center',
+                      )}
                       asChild
                     >
                       <Link to={to} activeProps={{className: 'bg-secondary rounded-md'}}>
@@ -87,14 +90,19 @@ export function SideBar() {
                     <Button
                       variant='ghost'
                       className={cn(
-                        'flex items-center gap-2 text-sm w-full',
-                        isOpen ? 'justify-start px-1' : 'w-10 rounded-full px-4 py-4',
+                        'flex items-center gap-2 text-sm w-full p-5',
+                        isOpen ? 'justify-start px-[0.375rem]' : 'w-10 rounded-full',
                       )}
                     >
-                      <Avatar className='h-8 w-8'>
+                      <Avatar className='h-7 w-7'>
                         <AvatarFallback>JD</AvatarFallback>
                       </Avatar>
-                      {isOpen && <p>{currentUser?.name}</p>}
+                      {isOpen && (
+                        <div className='flex flex-col items-start leading-tight'>
+                          <p>{currentUser?.name}</p>
+                          <p className='text-xs text-muted-foreground'>{currentUser?.email}</p>
+                        </div>
+                      )}
                     </Button>
                   </TooltipTrigger>
                 </PopoverTrigger>
