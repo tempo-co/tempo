@@ -41,7 +41,7 @@ export function SignUpForm() {
             {message: 'This email address is already in use.'},
             {shouldFocus: true},
           );
-        } else {
+        } else if (error.status === 400) {
           toast.error('Validation failed.', {
             description: 'Please check your input and try again.',
           });

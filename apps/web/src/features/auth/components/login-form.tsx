@@ -45,7 +45,7 @@ export function LogInForm() {
           form.setError('email', {message: ''});
           form.setError('password', {message: 'Invalid email or password. Please try again.'});
           setHasUnauthorizedError(true);
-        } else {
+        } else if (error.status === 400) {
           toast.error('Validation failed.', {
             description: 'Please check your input and try again.',
           });
