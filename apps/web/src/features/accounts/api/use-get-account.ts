@@ -4,16 +4,16 @@ import {toast} from 'sonner';
 import {Account} from '@/types/account';
 import {api} from '@/utils/api';
 
-export const useGetAccounts = () => {
+export const useGetAccount = (id: Account['id']) => {
   const {
-    data: accounts,
+    data: account,
     isPending,
     error,
-  } = useQuery<Account[]>({
-    queryKey: ['accounts'],
+  } = useQuery<Account>({
+    queryKey: [{id}],
     queryFn: async () => {
-      const accounts = await api.get('/accounts/me');
-      return accounts.json();
+      const response = await api.get(`/accounts/${id}`);
+      return response.json();
     },
   });
 
@@ -22,5 +22,5 @@ export const useGetAccounts = () => {
       description: 'Your accounts could not be loaded. Please try again.',
     });
   }
-  return {accounts, isPending};
+  return {account, isPending};
 };
