@@ -86,9 +86,9 @@ export function LogInForm() {
             name='password'
             render={({field, fieldState}) => (
               <FormItem>
-                <div className='flex justify-between items-center w-full'>
+                <div className='flex w-full items-center justify-between'>
                   <FormLabel>Password</FormLabel>
-                  <Link className='text-sm underline decoration-accent hover:decoration-foreground underline-offset-4 font-medium'>
+                  <Link className='text-sm font-medium underline decoration-accent underline-offset-4 hover:decoration-foreground'>
                     Forgot your password?
                   </Link>
                 </div>
@@ -117,7 +117,7 @@ export function LogInForm() {
                               variant='outline'
                               type='button'
                               className={cn(
-                                'border-l-0 rounded-l-none',
+                                'rounded-l-none border-l-0',
                                 fieldState.error && 'border-destructive',
                               )}
                             >

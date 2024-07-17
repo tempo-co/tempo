@@ -34,7 +34,7 @@ export function BankList({setOpen, setSelectedBank}: BankListProps) {
                 setOpen(false);
               }}
             >
-              <div className='p-[0.35rem] bg-muted mr-2 rounded-md'>
+              <div className='mr-2 rounded-md bg-muted p-[0.35rem]'>
                 <DynamicBankIcon bank={bank} className='w-4 fill-foreground' />
               </div>
               {bank}

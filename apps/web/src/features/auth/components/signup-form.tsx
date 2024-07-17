@@ -131,7 +131,7 @@ export function SignUpForm() {
                               variant='outline'
                               type='button'
                               className={cn(
-                                'border-l-0 rounded-l-none',
+                                'rounded-l-none border-l-0',
                                 (fieldState.error ||
                                   (fieldState.isTouched && passwordStrength <= 25)) &&
                                   'border-destructive',

@@ -41,7 +41,7 @@ export function BankComboBox({onChange, isPending, error}: BankComboBoxProps) {
           >
             {selectedBank ? (
               <>
-                <div className='p-[0.35rem] bg-muted mr-2 rounded-md'>
+                <div className='mr-2 rounded-md bg-muted p-[0.35rem]'>
                   <DynamicBankIcon bank={selectedBank} className='w-4 fill-foreground' />
                 </div>
                 {selectedBank}
@@ -67,7 +67,7 @@ export function BankComboBox({onChange, isPending, error}: BankComboBoxProps) {
         <Button variant='outline' disabled={isPending} className='justify-start'>
           {selectedBank ? (
             <>
-              <DynamicBankIcon bank={selectedBank} className='w-4 mr-2' />
+              <DynamicBankIcon bank={selectedBank} className='mr-2 w-4' />
               {selectedBank}
             </>
           ) : (

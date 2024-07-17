@@ -35,7 +35,7 @@ export function SideBar() {
       <div className='flex'>
         <div
           className={cn(
-            'bg-card px-3 py-4 h-screen flex flex-col justify-between transition-all duration-100',
+            'flex h-screen flex-col justify-between bg-card px-3 py-4 transition-all duration-100',
             isOpen ? 'w-52' : 'w-16',
           )}
         >
@@ -43,13 +43,13 @@ export function SideBar() {
             <div className='flex justify-between transition-all duration-1000'>
               {isOpen && (
                 <Button asChild variant='ghost' className='px-3'>
-                  <Link to='/' className='flex items-center group w-fit'>
+                  <Link to='/' className='group flex w-fit items-center'>
                     <img
                       src='/src/assets/logo.png'
                       alt='Flair logo'
                       className='w-6 transition-transform duration-200 group-hover:rotate-90'
                     />
-                    <h1 className='text-2xl font-semibold tracking-tight ml-2'>Flair</h1>
+                    <h1 className='ml-2 text-2xl font-semibold tracking-tight'>Flair</h1>
                   </Link>
                 </Button>
               )}
@@ -65,7 +65,7 @@ export function SideBar() {
               </Button>
             </div>
             <Separator className='my-4' />
-            <div className='grid gap-2 items-start'>
+            <div className='grid items-start gap-2'>
               {links.map(({to, label, icon: Icon}) => (
                 <Tooltip key={to}>
                   <TooltipTrigger asChild>
@@ -73,13 +73,13 @@ export function SideBar() {
                       variant='ghost'
                       size={isOpen ? 'default' : 'icon'}
                       className={cn(
-                        'gap-2 w-full',
+                        'w-full gap-2',
                         isOpen ? 'justify-start px-[0.65rem]' : 'justify-center',
                       )}
                       asChild
                     >
-                      <Link to={to} activeProps={{className: 'bg-secondary rounded-md'}}>
-                        <Icon className='w-5 h-5' />
+                      <Link to={to} activeProps={{className: 'bg-muted rounded-md'}}>
+                        <Icon className='h-5 w-5' />
                         {isOpen && label}
                       </Link>
                     </Button>
@@ -98,7 +98,7 @@ export function SideBar() {
                     <Button
                       variant='ghost'
                       className={cn(
-                        'flex text-sm w-full p-5',
+                        'flex w-full p-5 text-sm',
                         isOpen ? 'justify-between px-[0.375rem]' : 'w-10 rounded-full',
                       )}
                     >
@@ -107,7 +107,7 @@ export function SideBar() {
                           <AvatarFallback>JD</AvatarFallback>
                         </Avatar>
                         {isOpen && (
-                          <div className='flex flex-col items-start leading-none ml-2'>
+                          <div className='ml-2 flex flex-col items-start leading-none'>
                             <p>{currentUser?.name}</p>
                             <p className='text-xs text-muted-foreground'>{currentUser?.email}</p>
                           </div>
@@ -120,12 +120,12 @@ export function SideBar() {
                 <PopoverContent asChild>
                   <div
                     className={cn(
-                      'flex flex-col gap-2 w-[--radix-popover-trigger-width] !p-2 mb-1',
+                      'mb-1 flex w-[--radix-popover-trigger-width] flex-col gap-2 !p-2',
                       !isOpen && 'ml-2 w-fit',
                     )}
                   >
                     <Button variant='ghost' className='w-full justify-start'>
-                      <Settings className='mr-2 w-5 h-5' />
+                      <Settings className='mr-2 h-5 w-5' />
                       Settings
                     </Button>
                     <Button
@@ -133,7 +133,7 @@ export function SideBar() {
                       className='w-full justify-start'
                       onClick={() => logOut()}
                     >
-                      <LogOut className='mr-2 w-5 h-5' />
+                      <LogOut className='mr-2 h-5 w-5' />
                       Log out
                     </Button>
                   </div>

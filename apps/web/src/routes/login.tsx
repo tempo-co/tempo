@@ -15,22 +15,22 @@ export const Route = createFileRoute('/login')({
 
 function LogIn() {
   return (
-    <div className='flex h-screen justify-center items-center mx-6'>
-      <div className='mx-auto flex w-full flex-col justify-center max-w-96'>
+    <div className='mx-6 flex h-screen items-center justify-center'>
+      <div className='mx-auto flex w-full max-w-96 flex-col justify-center'>
         <div className='flex flex-col items-center'>
           <LogoLink />
-          <h1 className='text-2xl font-semibold mb-12 text-center'>Log in</h1>
+          <h1 className='mb-12 text-center text-2xl font-semibold'>Log in</h1>
         </div>
         <LogInForm />
-        <div className='text-sm space-y-6 mt-6'>
+        <div className='mt-6 space-y-6 text-sm'>
           <div className='flex justify-center'>
             <Separator className='w-1/5' />
           </div>
-          <p className='text-sm text-center'>
+          <p className='text-center text-sm'>
             New to Flair?{' '}
             <Link
               to='/signup'
-              className='text-sm underline decoration-accent hover:decoration-foreground underline-offset-4 font-medium'
+              className='text-sm font-medium underline decoration-accent underline-offset-4 hover:decoration-foreground'
             >
               Sign up
             </Link>
