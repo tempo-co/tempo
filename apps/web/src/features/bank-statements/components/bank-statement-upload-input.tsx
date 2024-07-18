@@ -1,11 +1,12 @@
 import {useParams} from '@tanstack/react-router';
-import {FileUp, LoaderCircle} from 'lucide-react';
+import {FileUp} from 'lucide-react';
 import {useCallback, useMemo} from 'react';
 import {useDropzone} from 'react-dropzone';
 
 import {useUploadBankStatement} from '../api/use-upload-bank-statement';
 import {FileTypes} from '../types/file-types';
 import {formatSupportedFileTypes} from '../utils/format-file-types';
+import {FilePreviewCard} from './file-preview-card';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -14,11 +15,7 @@ export function BankStatementUploadInput() {
   const {mutate, isPending, isError} = useUploadBankStatement(accountId);
 
   const onDrop = useCallback((files: File[]) => files[0] && mutate(files[0]), [mutate]);
-
-  const dropzone = useDropzone({
-    onDrop,
-    maxSize: MAX_FILE_SIZE,
-  });
+  const dropzone = useDropzone({onDrop, maxSize: MAX_FILE_SIZE});
 
   const formattedFileTypes = useMemo(() => formatSupportedFileTypes(FileTypes), []);
 
@@ -42,19 +39,21 @@ export function BankStatementUploadInput() {
           ) : (
             <>
               <FileUp className='mb-2 h-10 w-10 text-muted-foreground' />
-              <p>Choose a file or drag & drop it here</p>
-              <p className='text-sm text-muted-foreground'>
-                {formattedFileTypes} formats, up to {MAX_FILE_SIZE / (1024 * 1024)} MB
+              <p>
+                <span className='font-semibold'>Choose a file</span> or drag and drop it here
               </p>
             </>
           )}
         </div>
       </div>
-      {isPending && (
-        <p>
-          Uploading... <LoaderCircle className='ml-2 inline h-4 w-4 animate-spin' />
-        </p>
-      )}
+      <div className='mb-6 mt-2 flex justify-between text-muted-foreground'>
+        <p>Supported formats: {formattedFileTypes}</p>
+        <p>Maximum file size: {MAX_FILE_SIZE / (1024 * 1024)} MB</p>
+      </div>
+      {dropzone.acceptedFiles.length > 0 &&
+        dropzone.acceptedFiles.map((file) => (
+          <FilePreviewCard key={file.lastModified} file={file} isPending={isPending} />
+        ))}
     </>
   );
 }
