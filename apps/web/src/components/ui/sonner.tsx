@@ -1,4 +1,4 @@
-import {CircleAlert, CircleCheck, Info, LoaderCircle, TriangleAlert} from 'lucide-react';
+import {CircleAlert, CircleCheck, Info, Loader, TriangleAlert} from 'lucide-react';
 import {useTheme} from 'next-themes';
 import {Toaster as Sonner} from 'sonner';
 
@@ -34,7 +34,7 @@ const Toaster = ({...props}: ToasterProps) => {
         info: <Info className='w-5' />,
         warning: <TriangleAlert className='w-5' />,
         error: <CircleAlert className='w-5' />,
-        loading: <LoaderCircle className='w-5' />,
+        loading: <Loader className='w-5 animate-slow-spin' />,
       }}
       {...props}
     />

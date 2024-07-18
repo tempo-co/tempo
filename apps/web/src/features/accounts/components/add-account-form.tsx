@@ -1,5 +1,5 @@
 import {zodResolver} from '@hookform/resolvers/zod';
-import {LoaderCircle} from 'lucide-react';
+import {Loader} from 'lucide-react';
 import {useForm} from 'react-hook-form';
 
 import {Button} from '@/components/ui/button';
@@ -89,7 +89,7 @@ export function AddAccountForm({className, setOpen}: AddAccountFormProps) {
           {isPending ? (
             <>
               <span>Adding account...</span>
-              <LoaderCircle className='ml-2 h-4 w-4 animate-spin' />
+              <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
             </>
           ) : (
             <span>Add account</span>

@@ -1,6 +1,6 @@
 import {zodResolver} from '@hookform/resolvers/zod';
 import {Link} from '@tanstack/react-router';
-import {Eye, EyeOff, LoaderCircle} from 'lucide-react';
+import {Eye, EyeOff, Loader} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {useForm} from 'react-hook-form';
 import {toast} from 'sonner';
@@ -144,7 +144,7 @@ export function LogInForm() {
             {isPending ? (
               <>
                 <span>Logging in...</span>
-                <LoaderCircle className='ml-2 h-4 w-4 animate-spin' />
+                <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
               </>
             ) : (
               <span>Log in</span>
