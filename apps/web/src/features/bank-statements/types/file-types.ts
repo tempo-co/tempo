@@ -1,4 +1,4 @@
 export enum FileTypes {
-  xls = 'application/vnd.ms-excel',
-  csv = 'text/csv',
+  XLS = 'application/vnd.ms-excel',
+  CSV = 'text/csv',
 }
