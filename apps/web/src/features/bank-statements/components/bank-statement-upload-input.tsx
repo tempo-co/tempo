@@ -5,7 +5,6 @@ import {useDropzone} from 'react-dropzone';
 
 import {useUploadBankStatement} from '../api/use-upload-bank-statement';
 import {FileTypes} from '../types/file-types';
-import {formatSupportedFileTypes} from '../utils/format-file-types';
 import {FilePreviewCard} from './file-preview-card';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -17,7 +16,7 @@ export function BankStatementUploadInput() {
   const onDrop = useCallback((files: File[]) => files[0] && mutate(files[0]), [mutate]);
   const dropzone = useDropzone({onDrop, maxSize: MAX_FILE_SIZE});
 
-  const formattedFileTypes = useMemo(() => formatSupportedFileTypes(FileTypes), []);
+  const formattedFileTypes = useMemo(() => Object.keys(FileTypes).join(', '), []);
 
   if (isError) {
     return <p>Error uploading the file. Please try again.</p>;
