@@ -1,12 +1,13 @@
-import {Check, FileSpreadsheet, Fullscreen, Loader, Trash2, X} from 'lucide-react';
-import prettyBytes from 'pretty-bytes';
+import {FileSpreadsheet, Trash2, X} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {Progress} from '@/components/ui/progress';
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
-import {cn} from '@/utils/cn';
+
+import {FileMetadata} from './file-metadata';
+import {FileViewerDialog} from './file-viewer-dialog';
 
 type FilePreviewCardProps = {
   file: File;
@@ -53,34 +54,17 @@ export function FilePreviewCard({file, isPending}: FilePreviewCardProps) {
           </div>
           <div>
             <p>{file.name}</p>
-            <p className='mt-1 flex items-center text-sm text-muted-foreground'>
-              <span>{prettyBytes(file.size)}</span>
-              <span className='mx-3'>•</span>
-              <span>{file.type}</span>
-              <span className='mx-3'>•</span>
-              <div className={cn('flex items-center', !isPending && 'text-success')}>
-                {isPending ? (
-                  <Loader className='mr-2 inline h-4 w-4 animate-slow-spin' />
-                ) : (
-                  <Check className='mr-2 h-4 w-4' />
-                )}
-                <span>{progressMessage}</span>
-              </div>
-            </p>
+            <FileMetadata
+              fileSize={file.size}
+              fileType={file.type}
+              isPending={isPending}
+              progressMessage={progressMessage}
+            />
           </div>
         </div>
         <div className='flex gap-3'>
           <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant='ghost' size='icon'>
-                  <Fullscreen className='h-4 w-4' />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>View file</p>
-              </TooltipContent>
-            </Tooltip>
+            <FileViewerDialog file={file} isPending={isPending} progressMessage={progressMessage} />
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant='ghost' size='icon' className='hover:bg-destructive-foreground'>
