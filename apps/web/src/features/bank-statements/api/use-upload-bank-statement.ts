@@ -10,6 +10,7 @@ export const useUploadBankStatement = (accountId: Account['id']) => {
     mutate,
     isPending,
     isError,
+    isSuccess,
   } = useMutation<BankStatement, Error, File>({
     mutationFn: async (file: File) => {
       const formData = new FormData();
@@ -21,5 +22,5 @@ export const useUploadBankStatement = (accountId: Account['id']) => {
     },
   });
 
-  return {statement, mutate, isPending, isError};
+  return {statement, mutate, isPending, isError, isSuccess};
 };

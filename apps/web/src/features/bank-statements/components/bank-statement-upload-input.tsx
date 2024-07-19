@@ -1,26 +1,21 @@
-import {useParams} from '@tanstack/react-router';
 import {FileUp} from 'lucide-react';
-import {useCallback, useMemo} from 'react';
+import {useCallback, useMemo, useState} from 'react';
 import {useDropzone} from 'react-dropzone';
 
-import {useUploadBankStatement} from '../api/use-upload-bank-statement';
 import {FileTypes} from '../types/file-types';
 import {FilePreviewCard} from './file-preview-card';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 export function BankStatementUploadInput() {
-  const {accountId} = useParams({from: '/accounts/$accountId/bank-statements'});
-  const {mutate, isPending, isError} = useUploadBankStatement(accountId);
+  const [files, setFiles] = useState<File[]>([]);
 
-  const onDrop = useCallback((files: File[]) => files[0] && mutate(files[0]), [mutate]);
-  const dropzone = useDropzone({onDrop, maxSize: MAX_FILE_SIZE});
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    setFiles((prevFiles) => [...prevFiles, ...acceptedFiles]);
+  }, []);
+  const dropzone = useDropzone({onDrop, maxSize: MAX_FILE_SIZE, multiple: true});
 
   const formattedFileTypes = useMemo(() => Object.keys(FileTypes).join(', '), []);
-
-  if (isError) {
-    return <p>Error uploading the file. Please try again.</p>;
-  }
 
   return (
     <>
@@ -49,10 +44,13 @@ export function BankStatementUploadInput() {
         <p>Supported formats: {formattedFileTypes}</p>
         <p>Maximum file size: {MAX_FILE_SIZE / (1024 * 1024)} MB</p>
       </div>
-      {dropzone.acceptedFiles.length > 0 &&
-        dropzone.acceptedFiles.map((file) => (
-          <FilePreviewCard key={file.lastModified} file={file} isPending={isPending} />
-        ))}
+      {files.length > 0 && (
+        <div className='grid gap-4'>
+          {files.map((file) => (
+            <FilePreviewCard key={file.lastModified} file={file} />
+          ))}
+        </div>
+      )}
     </>
   );
 }

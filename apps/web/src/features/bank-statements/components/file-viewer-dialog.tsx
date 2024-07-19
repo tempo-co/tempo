@@ -1,4 +1,4 @@
-import {Fullscreen} from 'lucide-react';
+import {FileScan} from 'lucide-react';
 import {useState} from 'react';
 
 import {Button} from '@/components/ui/button';
@@ -28,11 +28,19 @@ import {FileMetadata} from './file-metadata';
 
 type FileViewerDialogProps = {
   file: File;
-  isPending: boolean;
   progressMessage: string;
+  isPending: boolean;
+  isError: boolean;
+  isSuccess: boolean;
 };
 
-export function FileViewerDialog({file, isPending, progressMessage}: FileViewerDialogProps) {
+export function FileViewerDialog({
+  file,
+  progressMessage,
+  isPending,
+  isError,
+  isSuccess,
+}: FileViewerDialogProps) {
   const [open, setOpen] = useState(false);
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
@@ -44,7 +52,7 @@ export function FileViewerDialog({file, isPending, progressMessage}: FileViewerD
             <TooltipTrigger asChild>
               <DialogTrigger asChild>
                 <Button variant='ghost' size='icon'>
-                  <Fullscreen className='h-4 w-4' />
+                  <FileScan className='h-4 w-4' />
                 </Button>
               </DialogTrigger>
             </TooltipTrigger>
@@ -60,8 +68,10 @@ export function FileViewerDialog({file, isPending, progressMessage}: FileViewerD
               <FileMetadata
                 fileSize={file.size}
                 fileType={file.type}
-                isPending={isPending}
                 progressMessage={progressMessage}
+                isPending={isPending}
+                isError={isError}
+                isSuccess={isSuccess}
               />
             </DialogDescription>
           </DialogHeader>
@@ -78,7 +88,7 @@ export function FileViewerDialog({file, isPending, progressMessage}: FileViewerD
           <TooltipTrigger asChild>
             <DrawerTrigger asChild>
               <Button variant='ghost' size='icon'>
-                <Fullscreen className='h-4 w-4' />
+                <FileScan className='h-4 w-4' />
               </Button>
             </DrawerTrigger>
           </TooltipTrigger>
@@ -94,8 +104,10 @@ export function FileViewerDialog({file, isPending, progressMessage}: FileViewerD
             <FileMetadata
               fileSize={file.size}
               fileType={file.type}
-              isPending={isPending}
               progressMessage={progressMessage}
+              isPending={isPending}
+              isError={isError}
+              isSuccess={isSuccess}
             />
           </DrawerDescription>
         </DrawerHeader>
