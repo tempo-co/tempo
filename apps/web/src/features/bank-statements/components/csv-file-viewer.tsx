@@ -8,15 +8,24 @@ type CsvRow = {
   [key: string]: string | number;
 };
 
+type CsvData = {
+  headers: string[];
+  records: CsvRow[];
+  rowCount: number;
+  columnCount: number;
+};
+
 type CsvFileViewerProps = {
   file: File;
 };
 
 export function CsvFileViewer({file}: CsvFileViewerProps) {
-  const [data, setData] = useState<CsvRow[]>([]);
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [rowCount, setRowCount] = useState<number>(0);
-  const [columnCount, setColumnCount] = useState<number>(0);
+  const [csvData, setCsvData] = useState<CsvData>({
+    headers: [],
+    records: [],
+    rowCount: 0,
+    columnCount: 0,
+  });
 
   useEffect(() => {
     if (file) {
@@ -27,10 +36,13 @@ export function CsvFileViewer({file}: CsvFileViewerProps) {
           const filteredRows = rows.filter((row) =>
             Object.values(row).some((value) => value !== null && value !== ''),
           );
-          setHeaders(results.meta.fields || []);
-          setData(filteredRows);
-          setRowCount(filteredRows.length);
-          setColumnCount(results.meta.fields ? results.meta.fields.length : 0);
+          const headers = results.meta.fields || [];
+          setCsvData({
+            headers: headers,
+            records: filteredRows,
+            rowCount: filteredRows.length,
+            columnCount: headers.length,
+          });
         },
       });
     }
@@ -39,14 +51,14 @@ export function CsvFileViewer({file}: CsvFileViewerProps) {
   return (
     <>
       <div className='mb-2 flex justify-end gap-4 text-xs text-muted-foreground'>
-        <p>{columnCount} columns</p>
-        <p>{rowCount} rows</p>
+        <p>{csvData.columnCount} columns</p>
+        <p>{csvData.rowCount} rows</p>
       </div>
       <ScrollArea className='h-full rounded-md border'>
         <Table>
           <TableHeader>
             <TableRow>
-              {headers.map((header, index) => (
+              {csvData.headers.map((header, index) => (
                 <TableHead className='p-3' key={index}>
                   {header}
                 </TableHead>
@@ -54,9 +66,9 @@ export function CsvFileViewer({file}: CsvFileViewerProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map((row, rowIndex) => (
+            {csvData.records.map((row, rowIndex) => (
               <TableRow key={rowIndex}>
-                {headers.map((header, colIndex) => (
+                {csvData.headers.map((header, colIndex) => (
                   <TableCell className='p-3' key={colIndex}>
                     {row[header]}
                   </TableCell>
