@@ -21,12 +21,12 @@ export function FileMetadata({
   isSuccess,
 }: FileMetadataProps) {
   return (
-    <p className='mt-1 flex items-center text-sm text-muted-foreground'>
+    <span className='mt-1 flex items-center text-sm text-muted-foreground'>
       <span>{prettyBytes(fileSize)}</span>
       <span className='mx-3'>•</span>
       <span>{fileType}</span>
       <span className='mx-3'>•</span>
-      <div
+      <span
         className={cn(
           'flex items-center',
           isError && 'text-destructive',
@@ -51,7 +51,7 @@ export function FileMetadata({
             <span>Completed</span>
           </>
         )}
-      </div>
-    </p>
+      </span>
+    </span>
   );
 }
