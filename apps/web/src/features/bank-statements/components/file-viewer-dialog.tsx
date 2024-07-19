@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/drawer';
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
 import {useMediaQuery} from '@/hooks/use-media-query';
+import {cn} from '@/utils/cn';
 
 import {CsvFileViewer} from './csv-file-viewer';
 import {FileMetadata} from './file-metadata';
@@ -61,7 +62,10 @@ export function FileViewerDialog({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        <DialogContent aria-describedby='File' className='h-[80%] max-w-[70%] gap-0'>
+        <DialogContent
+          aria-describedby='File'
+          className={cn('h-[80%] max-w-[70%] gap-0', isError && 'border-destructive')}
+        >
           <DialogHeader>
             <DialogTitle>{file.name}</DialogTitle>
             <DialogDescription>
