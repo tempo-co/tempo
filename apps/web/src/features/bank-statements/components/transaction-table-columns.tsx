@@ -23,7 +23,7 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
         <Button
           variant='ghost'
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          className='-ml-2 px-2 py-0'
+          className='-ml-2 px-3'
         >
           Category
           <ArrowUpDown className='ml-2 h-4 w-4' />
@@ -46,7 +46,7 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
         <Button
           variant='ghost'
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          className='-ml-2 px-2 py-0'
+          className='-ml-3 px-3'
         >
           Started date
           <ArrowUpDown className='ml-2 h-4 w-4' />
@@ -64,7 +64,7 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
         <Button
           variant='ghost'
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          className='-ml-2 px-2 py-0'
+          className='-ml-3 px-3'
         >
           Completed date
           <ArrowUpDown className='ml-2 h-4 w-4' />
@@ -86,7 +86,6 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
         <Button
           variant='ghost'
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          className='px-2 py-0'
         >
           Amount
           <ArrowUpDown className='ml-2 h-4 w-4' />
@@ -94,7 +93,7 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
       );
     },
     cell: ({row}) => {
-      return <p className='text-right'>{row.original.amount.toFixed(2)}</p>;
+      return <p className='pr-4 text-right'>{row.original.amount.toFixed(2)}</p>;
     },
   },
 ];

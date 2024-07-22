@@ -34,7 +34,7 @@ const TableBody = React.forwardRef<
     <tr>
       <td>
         <ScrollBar
-          className={cn('pt-[calc(3rem+2px)]', verticalScrollBarClassName)}
+          className={cn('pt-[calc(3rem+1px)]', verticalScrollBarClassName)}
           orientation='vertical'
         />
         <ScrollBar orientation='horizontal' />
