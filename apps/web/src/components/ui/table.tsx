@@ -2,11 +2,13 @@ import * as React from 'react';
 
 import {cn} from '@/utils/cn';
 
+import {ScrollArea, ScrollBar} from './scroll-area';
+
 const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
   ({className, ...props}, ref) => (
-    <div className='relative w-full overflow-auto'>
+    <ScrollArea className='h-full rounded-md border' disableScrollbar type='auto'>
       <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
-    </div>
+    </ScrollArea>
   ),
 );
 Table.displayName = 'Table';
@@ -15,15 +17,30 @@ const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({className, ...props}, ref) => (
-  <thead ref={ref} className={cn('[&_tr]:border-b', className)} {...props} />
+  <thead
+    ref={ref}
+    className={cn('sticky top-0 whitespace-nowrap bg-background [&_tr]:border-b', className)}
+    {...props}
+  />
 ));
 TableHeader.displayName = 'TableHeader';
 
 const TableBody = React.forwardRef<
   HTMLTableSectionElement,
-  React.HTMLAttributes<HTMLTableSectionElement>
->(({className, ...props}, ref) => (
-  <tbody ref={ref} className={cn('[&_tr:last-child]:border-0', className)} {...props} />
+  React.HTMLAttributes<HTMLTableSectionElement> & {verticalScrollBarClassName?: string}
+>(({className, children, verticalScrollBarClassName, ...props}, ref) => (
+  <tbody ref={ref} className={cn('[&_tr:last-child]:border-0', className)} {...props}>
+    {children}
+    <tr>
+      <td>
+        <ScrollBar
+          className={cn('pt-[calc(3rem+2px)]', verticalScrollBarClassName)}
+          orientation='vertical'
+        />
+        <ScrollBar orientation='horizontal' />
+      </td>
+    </tr>
+  </tbody>
 ));
 TableBody.displayName = 'TableBody';
 
