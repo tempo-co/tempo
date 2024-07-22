@@ -20,6 +20,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from '@/components/ui/drawer';
+import {Progress} from '@/components/ui/progress';
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
 import {useMediaQuery} from '@/hooks/use-media-query';
 import {cn} from '@/utils/cn';
@@ -30,6 +31,7 @@ import {FileMetadata} from './file-metadata';
 type FileViewerDialogProps = {
   file: File;
   progressMessage: string;
+  progressValue: number;
   isPending: boolean;
   isError: boolean;
   isSuccess: boolean;
@@ -38,6 +40,7 @@ type FileViewerDialogProps = {
 export function FileViewerDialog({
   file,
   progressMessage,
+  progressValue,
   isPending,
   isError,
   isSuccess,
@@ -77,6 +80,7 @@ export function FileViewerDialog({
                 isError={isError}
                 isSuccess={isSuccess}
               />
+              {isPending && <Progress value={progressValue} className='my-4 h-1' />}
             </DialogDescription>
           </DialogHeader>
           <CsvFileViewer file={file} />
