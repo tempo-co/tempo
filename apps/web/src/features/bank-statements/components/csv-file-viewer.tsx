@@ -1,7 +1,6 @@
 import Papa from 'papaparse';
 import {useEffect, useState} from 'react';
 
-import {ScrollArea} from '@/components/ui/scroll-area';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 
 type CsvRow = {
@@ -54,30 +53,28 @@ export function CsvFileViewer({file}: CsvFileViewerProps) {
         <p>{csvData.columnCount} columns</p>
         <p>{csvData.rowCount} rows</p>
       </div>
-      <ScrollArea className='h-full rounded-md border'>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {csvData.headers.map((header, index) => (
-                <TableHead className='p-3' key={index}>
-                  {header}
-                </TableHead>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {csvData.headers.map((header, index) => (
+              <TableHead className='p-3' key={index}>
+                {header}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {csvData.records.map((row, rowIndex) => (
+            <TableRow key={rowIndex}>
+              {csvData.headers.map((header, colIndex) => (
+                <TableCell className='p-3' key={colIndex}>
+                  {row[header]}
+                </TableCell>
               ))}
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {csvData.records.map((row, rowIndex) => (
-              <TableRow key={rowIndex}>
-                {csvData.headers.map((header, colIndex) => (
-                  <TableCell className='p-3' key={colIndex}>
-                    {row[header]}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </ScrollArea>
+          ))}
+        </TableBody>
+      </Table>
     </>
   );
 }
