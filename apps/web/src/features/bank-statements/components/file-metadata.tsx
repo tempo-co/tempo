@@ -21,7 +21,7 @@ export function FileMetadata({
   isSuccess,
 }: FileMetadataProps) {
   return (
-    <span className='mt-1 flex items-center text-sm text-muted-foreground'>
+    <span className='mt-1 flex items-center whitespace-nowrap text-sm text-muted-foreground'>
       <span>{prettyBytes(fileSize)}</span>
       <span className='mx-3'>•</span>
       <span>{fileType}</span>
