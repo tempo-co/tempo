@@ -1,4 +1,4 @@
-const MAX_LENGTH = 60;
+const MAX_LENGTH = 70;
 
 export function truncateFileName(name: string) {
   const lastDotIndex = name.lastIndexOf('.');
