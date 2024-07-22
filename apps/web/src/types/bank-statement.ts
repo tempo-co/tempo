@@ -1,9 +1,10 @@
 import {Account} from './account';
+import {File} from './file';
 import {Transaction} from './transaction';
 
 export type BankStatement = {
   id: string;
-  file: Buffer;
-  account: Account;
+  file: File;
   transactions: Transaction[];
+  account: Account;
 };
