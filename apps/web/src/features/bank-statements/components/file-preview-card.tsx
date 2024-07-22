@@ -1,5 +1,5 @@
 import {useParams} from '@tanstack/react-router';
-import {FileSpreadsheet, FileX2, Trash2, X} from 'lucide-react';
+import {ChevronDown, FileSpreadsheet, FileX2, Trash2, X} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
 import {Button} from '@/components/ui/button';
@@ -9,8 +9,10 @@ import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/compon
 import {cn} from '@/utils/cn';
 
 import {useUploadBankStatement} from '../api/use-upload-bank-statement';
+import {truncateFileName} from '../utils/truncate-file-name';
 import {FileMetadata} from './file-metadata';
 import {FileViewerDialog} from './file-viewer-dialog';
+import {TransactionsTable} from './transaction-table';
 
 type FilePreviewCardProps = {
   file: File;
@@ -21,23 +23,38 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
 
   const [progressValue, setProgressValue] = useState(0);
   const [progressMessage, setProgressMessage] = useState('Uploading file...');
+  const [showTransactions, setShowTransactions] = useState(false);
+  const [shouldRenderTransactions, setShouldRenderTransactions] = useState(false);
 
-  const {mutate, isPending, isError, isSuccess} = useUploadBankStatement(accountId);
+  const toggleTransactions = () => {
+    if (showTransactions) {
+      setShowTransactions(false);
+      setTimeout(() => setShouldRenderTransactions(false), 100);
+    } else {
+      setShouldRenderTransactions(true);
+      setTimeout(() => setShowTransactions(true), 0);
+    }
+  };
+
+  const {statement, mutate, isPending, isError, isSuccess} = useUploadBankStatement(accountId);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const updateProgress = () => {
       setProgressValue((prevProgress) => {
-        const increment =
-          prevProgress < 50 ? 10 : prevProgress < 75 ? 5 : prevProgress < 99 ? 1 : 0;
-        const newProgress = prevProgress + increment;
-        if (newProgress < 30) {
+        const randomFactor = 0.6 + Math.random();
+        const progress = Math.min(prevProgress + (100 - prevProgress) * 0.01 * randomFactor, 99.9);
+
+        if (progress < 15) {
+          setProgressMessage('Uploading file...');
+        } else if (progress < 30) {
           setProgressMessage('Parsing file...');
-        } else if (newProgress < 50) {
+        } else if (progress < 40) {
           setProgressMessage('Categorizing transactions...');
         }
-        return newProgress;
+        return progress;
       });
-    }, 1500);
+    };
+    const interval = setInterval(updateProgress, 100);
 
     return () => clearInterval(interval);
   }, [isPending]);
@@ -54,15 +71,33 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
             {isError ? <FileX2 className='h-6 w-6' /> : <FileSpreadsheet className='h-6 w-6' />}
           </div>
           <div>
-            <p>{file.name}</p>
-            <FileMetadata
-              fileSize={file.size}
-              fileType={file.type}
-              progressMessage={progressMessage}
-              isPending={isPending}
-              isError={isError}
-              isSuccess={isSuccess}
-            />
+            <p>{truncateFileName(file.name)}</p>
+            <div className='flex items-center'>
+              <FileMetadata
+                fileSize={file.size}
+                fileType={file.type}
+                progressMessage={progressMessage}
+                isPending={isPending}
+                isError={isError}
+                isSuccess={isSuccess}
+              />
+              {isSuccess && statement && (
+                <div className='mt-1'>
+                  <span className='mx-3 text-muted-foreground'>•</span>
+                  <Button variant='link' className='h-0 p-0' onClick={toggleTransactions}>
+                    <span className='text-foreground'>
+                      {showTransactions ? 'Hide transactions' : 'View transactions'}
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        'ml-1 h-4 w-4 text-foreground transition-transform',
+                        showTransactions && 'rotate-180',
+                      )}
+                    />
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <div className='flex gap-3'>
@@ -70,6 +105,7 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
             <FileViewerDialog
               file={file}
               progressMessage={progressMessage}
+              progressValue={progressValue}
               isPending={isPending}
               isError={isError}
               isSuccess={isSuccess}
@@ -88,6 +124,17 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
         </div>
       </div>
       {isPending && <Progress value={progressValue} className='mt-4 h-1' />}
+      <div
+        className={cn('overflow-hidden transition-all duration-100 ease-in-out', {
+          'max-h-0': !showTransactions,
+          'max-h-[40rem]': showTransactions,
+          'mt-4': shouldRenderTransactions,
+        })}
+      >
+        {isSuccess && statement && shouldRenderTransactions && (
+          <TransactionsTable transactions={statement.transactions} />
+        )}
+      </div>
     </Card>
   );
 }
