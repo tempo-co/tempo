@@ -2,8 +2,8 @@ import {Category} from './category';
 
 export type Transaction = {
   id: string;
-  startedDate: Date;
-  completedDate: Date;
+  startedAt: Date;
+  completedAt: Date;
   description: string;
   amount: number;
   currency: string;

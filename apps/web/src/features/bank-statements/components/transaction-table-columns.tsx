@@ -40,7 +40,7 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
     },
   },
   {
-    accessorKey: 'startedDate',
+    accessorKey: 'startedAt',
     header: ({column}) => {
       return (
         <Button
@@ -54,11 +54,11 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
       );
     },
     cell: ({row}) => {
-      return <p>{dayjs(row.original.startedDate).format('DD/MM/YYYY')}</p>;
+      return <p>{dayjs(row.original.startedAt).format('DD/MM/YYYY')}</p>;
     },
   },
   {
-    accessorKey: 'completedDate',
+    accessorKey: 'completedAt',
     header: ({column}) => {
       return (
         <Button
@@ -72,7 +72,7 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
       );
     },
     cell: ({row}) => {
-      return <p>{dayjs(row.original.completedDate).format('DD/MM/YYYY')}</p>;
+      return <p>{dayjs(row.original.completedAt).format('DD/MM/YYYY')}</p>;
     },
   },
   {
