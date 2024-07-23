@@ -35,7 +35,7 @@ export function TransactionsTable({transactions}: TransactionsTableProps) {
           <TableRow key={headerGroup.id}>
             {headerGroup.headers.map((header) => {
               return (
-                <TableHead key={header.id} className='px-3 py-0'>
+                <TableHead key={header.id} className='p-0'>
                   {header.isPlaceholder
                     ? null
                     : flexRender(header.column.columnDef.header, header.getContext())}

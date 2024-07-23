@@ -23,9 +23,9 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
         <Button
           variant='ghost'
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          className='-ml-2 px-3'
+          className='flex h-12 w-full justify-start px-3'
         >
-          Category
+          <span>Category</span>
           <ArrowUpDown className='ml-2 h-4 w-4' />
         </Button>
       );
@@ -46,7 +46,7 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
         <Button
           variant='ghost'
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          className='-ml-3 px-3'
+          className='h-12 w-full px-3'
         >
           Started date
           <ArrowUpDown className='ml-2 h-4 w-4' />
@@ -64,7 +64,7 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
         <Button
           variant='ghost'
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          className='-ml-3 px-3'
+          className='h-12 w-full px-3'
         >
           Completed date
           <ArrowUpDown className='ml-2 h-4 w-4' />
@@ -77,7 +77,9 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
   },
   {
     accessorKey: 'description',
-    header: 'Description',
+    header: () => {
+      return <p className='px-3'>Description</p>;
+    },
   },
   {
     accessorKey: 'amount',
@@ -86,6 +88,7 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
         <Button
           variant='ghost'
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className='h-12 w-full px-3'
         >
           Amount
           <ArrowUpDown className='ml-2 h-4 w-4' />
@@ -93,7 +96,7 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
       );
     },
     cell: ({row}) => {
-      return <p className='pr-4 text-right'>{row.original.amount.toFixed(2)}</p>;
+      return <p className='pr-2 text-right'>{row.original.amount.toFixed(2)}</p>;
     },
   },
 ];
