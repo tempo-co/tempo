@@ -8,7 +8,7 @@ export const useGetAllAccounts = () => {
   const {
     data: accounts,
     isPending,
-    error,
+    isError,
   } = useQuery<Account[]>({
     queryKey: ['accounts'],
     queryFn: async () => {
@@ -17,7 +17,7 @@ export const useGetAllAccounts = () => {
     },
   });
 
-  if (error) {
+  if (isError) {
     toast.error('There was a problem with your request.', {
       description: 'Your accounts could not be loaded. Please try again.',
     });

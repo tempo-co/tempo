@@ -66,7 +66,7 @@ export function FileViewerDialog({
           </Tooltip>
         </TooltipProvider>
         <DialogContent
-          aria-describedby='File'
+          aria-describedby='View file'
           className={cn('h-[80%] max-w-[70%] gap-0', isError && 'border-destructive')}
         >
           <DialogHeader>

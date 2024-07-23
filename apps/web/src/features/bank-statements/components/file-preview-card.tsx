@@ -36,7 +36,7 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
     }
   };
 
-  const {statement, mutate, isPending, isError, isSuccess} = useUploadBankStatement(accountId);
+  const {bankStatement, mutate, isPending, isError, isSuccess} = useUploadBankStatement(accountId);
 
   useEffect(() => {
     const updateProgress = () => {
@@ -81,7 +81,7 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
                 isError={isError}
                 isSuccess={isSuccess}
               />
-              {isSuccess && statement && (
+              {isSuccess && bankStatement && (
                 <div className='mt-1'>
                   <span className='mx-3 text-muted-foreground'>•</span>
                   <Button variant='link' className='h-0 p-0' onClick={toggleTransactions}>
@@ -131,8 +131,8 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
           'mt-4': shouldRenderTransactions,
         })}
       >
-        {isSuccess && statement && shouldRenderTransactions && (
-          <TransactionsTable transactions={statement.transactions} />
+        {isSuccess && bankStatement && shouldRenderTransactions && (
+          <TransactionsTable transactions={bankStatement.transactions} />
         )}
       </div>
     </Card>

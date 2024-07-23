@@ -1,12 +1,14 @@
-import {useMutation} from '@tanstack/react-query';
+import {useMutation, useQueryClient} from '@tanstack/react-query';
 
 import {Account} from '@/types/account';
 import {BankStatement} from '@/types/bank-statement';
 import {api} from '@/utils/api';
 
 export const useUploadBankStatement = (accountId: Account['id']) => {
+  const queryClient = useQueryClient();
+
   const {
-    data: statement,
+    data: bankStatement,
     mutate,
     isPending,
     isError,
@@ -15,12 +17,20 @@ export const useUploadBankStatement = (accountId: Account['id']) => {
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append('file', file);
-      const response = await api.post(`/bank-statements/upload/${accountId}`, formData, {
+
+      const response = await api.post(`/accounts/${accountId}/bank-statements/upload`, formData, {
         headers: {},
       });
-      return response.json();
+      const bankStatement = (await response.json()) as BankStatement;
+
+      queryClient.setQueryData(
+        ['bank-statements', accountId],
+        (prevBankStatements: BankStatement[]) => [...prevBankStatements, bankStatement],
+      );
+      return bankStatement;
     },
+    retry: false,
   });
 
-  return {statement, mutate, isPending, isError, isSuccess};
+  return {bankStatement, mutate, isPending, isError, isSuccess};
 };

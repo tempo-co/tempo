@@ -59,7 +59,7 @@ export function TransactionsTable({transactions}: TransactionsTableProps) {
         ) : (
           <TableRow>
             <TableCell colSpan={transactionTableColumns.length} className='h-24 text-center'>
-              No results.
+              No transactions.
             </TableCell>
           </TableRow>
         )}
