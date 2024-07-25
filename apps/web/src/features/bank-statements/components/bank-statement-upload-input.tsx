@@ -3,20 +3,20 @@ import {useCallback, useMemo, useState} from 'react';
 import {ErrorCode, FileRejection, useDropzone} from 'react-dropzone';
 import {toast} from 'sonner';
 
+import {MimeType} from '@/types/file';
 import {cn} from '@/utils/cn';
 
-import {FileTypes} from '../types/file-types';
 import {truncateFileName} from '../utils/truncate-file-name';
 import {FilePreviewCard} from './file-preview-card';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-const acceptTypes = Object.fromEntries(Object.values(FileTypes).map((type) => [type, []]));
+const acceptTypes = Object.fromEntries(Object.values(MimeType).map((type) => [type, []]));
 
 export function BankStatementUploadInput() {
   const [files, setFiles] = useState<File[]>([]);
 
-  const formattedFileTypes = useMemo(() => Object.keys(FileTypes).join(', '), []);
+  const formattedFileTypes = useMemo(() => Object.keys(MimeType).join(', '), []);
 
   const onDrop = useCallback(
     (acceptedFiles: File[], fileRejections: FileRejection[]) => {
