@@ -10,7 +10,7 @@ export const useGetAccount = (id: Account['id']) => {
     isPending,
     isError,
   } = useQuery<Account>({
-    queryKey: [{id}],
+    queryKey: ['account', id],
     queryFn: async () => {
       const response = await api.get(`/accounts/${id}`);
       return response.json();
