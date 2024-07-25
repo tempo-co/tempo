@@ -15,7 +15,7 @@ const categoryOrder = Object.values(Category).reduce(
   {} as Record<Category, number>,
 );
 
-export const transactionTableColumns: ColumnDef<Transaction>[] = [
+export const transactionsTableColumns: ColumnDef<Transaction>[] = [
   {
     accessorKey: 'category',
     header: ({column}) => {
@@ -46,9 +46,9 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
         <Button
           variant='ghost'
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          className='h-12 w-full px-3'
+          className='flex h-12 w-full justify-start px-3'
         >
-          Started date
+          Started at
           <ArrowUpDown className='ml-2 h-4 w-4' />
         </Button>
       );
@@ -64,9 +64,9 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
         <Button
           variant='ghost'
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          className='h-12 w-full px-3'
+          className='flex h-12 w-full justify-start px-3'
         >
-          Completed date
+          Completed at
           <ArrowUpDown className='ml-2 h-4 w-4' />
         </Button>
       );
@@ -88,10 +88,10 @@ export const transactionTableColumns: ColumnDef<Transaction>[] = [
         <Button
           variant='ghost'
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          className='h-12 w-full px-3'
+          className='flex h-12 w-full justify-end px-3'
         >
           Amount
-          <ArrowUpDown className='ml-2 h-4 w-4' />
+          <ArrowUpDown className='mx-2 h-4 w-4' />
         </Button>
       );
     },

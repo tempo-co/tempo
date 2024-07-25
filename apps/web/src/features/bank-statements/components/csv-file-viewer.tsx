@@ -57,17 +57,17 @@ export function CsvFileViewer({file}: CsvFileViewerProps) {
         <TableHeader>
           <TableRow>
             {csvData.headers.map((header, index) => (
-              <TableHead className='p-3' key={index}>
+              <TableHead className='p-2 md:p-3' key={index}>
                 {header}
               </TableHead>
             ))}
           </TableRow>
         </TableHeader>
-        <TableBody>
+        <TableBody verticalScrollBarClassName='pt-[2.4rem] md:pt-[2.9rem]'>
           {csvData.records.map((row, rowIndex) => (
             <TableRow key={rowIndex}>
               {csvData.headers.map((header, colIndex) => (
-                <TableCell className='p-3' key={colIndex}>
+                <TableCell className='p-2 md:p-3' key={colIndex}>
                   {row[header]}
                 </TableCell>
               ))}

@@ -1,4 +1,5 @@
 import {CircleAlert, CircleCheck, Loader} from 'lucide-react';
+import mime from 'mime-types';
 import prettyBytes from 'pretty-bytes';
 
 import {cn} from '@/utils/cn';
@@ -22,9 +23,9 @@ export function FileMetadata({
 }: FileMetadataProps) {
   return (
     <span className='mt-1 flex items-center whitespace-nowrap text-sm text-muted-foreground'>
-      <span>{prettyBytes(fileSize)}</span>
+      <span>{mime.extension(fileType).toString().toUpperCase()}</span>
       <span className='mx-3'>•</span>
-      <span>{fileType}</span>
+      <span>{prettyBytes(fileSize)}</span>
       <span className='mx-3'>•</span>
       <span
         className={cn(

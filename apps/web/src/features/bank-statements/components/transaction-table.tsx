@@ -10,7 +10,7 @@ import {useState} from 'react';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {Transaction} from '@/types/transaction';
 
-import {transactionTableColumns} from './transaction-table-columns';
+import {transactionsTableColumns} from './transaction-table-columns';
 
 type TransactionsTableProps = {
   transactions: Transaction[];
@@ -21,7 +21,7 @@ export function TransactionsTable({transactions}: TransactionsTableProps) {
 
   const table = useReactTable({
     data: transactions,
-    columns: transactionTableColumns,
+    columns: transactionsTableColumns,
     getCoreRowModel: getCoreRowModel(),
     onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
@@ -58,7 +58,7 @@ export function TransactionsTable({transactions}: TransactionsTableProps) {
           ))
         ) : (
           <TableRow>
-            <TableCell colSpan={transactionTableColumns.length} className='h-24 text-center'>
+            <TableCell colSpan={transactionsTableColumns.length} className='h-24 text-center'>
               No transactions.
             </TableCell>
           </TableRow>

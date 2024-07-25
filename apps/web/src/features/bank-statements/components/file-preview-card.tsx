@@ -1,15 +1,15 @@
 import {useParams} from '@tanstack/react-router';
-import {ChevronDown, FileSpreadsheet, FileX2, Trash2, X} from 'lucide-react';
+import {ChevronDown, FileSpreadsheet, FileX2, X} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {Progress} from '@/components/ui/progress';
-import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
 import {cn} from '@/utils/cn';
 
 import {useUploadBankStatement} from '../api/use-upload-bank-statement';
 import {truncateFileName} from '../utils/truncate-file-name';
+import {DeleteBankStatementDialog} from './delete-bank-statement-dialog';
 import {FileMetadata} from './file-metadata';
 import {FileViewerDialog} from './file-viewer-dialog';
 import {TransactionsTable} from './transaction-table';
@@ -101,26 +101,20 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
           </div>
         </div>
         <div className='flex gap-3'>
-          <TooltipProvider delayDuration={200}>
-            <FileViewerDialog
-              file={file}
-              progressMessage={progressMessage}
-              progressValue={progressValue}
-              isPending={isPending}
-              isError={isError}
-              isSuccess={isSuccess}
-            />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant='ghost' size='icon' className='hover:bg-destructive-foreground'>
-                  {isPending ? <X className='h-4 w-4' /> : <Trash2 className='h-4 w-4' />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {isPending ? <p>Cancel upload</p> : <p>Delete statement</p>}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <FileViewerDialog
+            file={file}
+            progressMessage={progressMessage}
+            progressValue={progressValue}
+            isPending={isPending}
+            isError={isError}
+            isSuccess={isSuccess}
+          />
+          <Button variant='ghost' size='icon' className='hover:bg-destructive'>
+            {isPending && <X className='h-4 w-4' />}
+            {isSuccess && bankStatement && (
+              <DeleteBankStatementDialog bankStatement={bankStatement} />
+            )}
+          </Button>
         </div>
       </div>
       {isPending && <Progress value={progressValue} className='mt-4 h-1' />}

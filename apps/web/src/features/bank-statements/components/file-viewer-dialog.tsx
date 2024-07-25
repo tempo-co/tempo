@@ -25,6 +25,7 @@ import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/compon
 import {useMediaQuery} from '@/hooks/use-media-query';
 import {cn} from '@/utils/cn';
 
+import {truncateFileName} from '../utils/truncate-file-name';
 import {CsvFileViewer} from './csv-file-viewer';
 import {FileMetadata} from './file-metadata';
 
@@ -70,7 +71,7 @@ export function FileViewerDialog({
           className={cn('h-[80%] max-w-[70%] gap-0', isError && 'border-destructive')}
         >
           <DialogHeader>
-            <DialogTitle>{file.name}</DialogTitle>
+            <DialogTitle>{truncateFileName(file.name)}</DialogTitle>
             <DialogDescription>
               <FileMetadata
                 fileSize={file.size}
@@ -107,7 +108,7 @@ export function FileViewerDialog({
       </TooltipProvider>
       <DrawerContent aria-describedby='File'>
         <DrawerHeader className='text-left'>
-          <DrawerTitle>{file.name}</DrawerTitle>
+          <DrawerTitle>{truncateFileName(file.name)}</DrawerTitle>
           <DrawerDescription>
             <FileMetadata
               fileSize={file.size}
@@ -119,7 +120,9 @@ export function FileViewerDialog({
             />
           </DrawerDescription>
         </DrawerHeader>
-        <CsvFileViewer file={file} />
+        <div className='mb-8 h-[50vh] px-4'>
+          <CsvFileViewer file={file} />
+        </div>
         <DrawerFooter className='pt-4'>
           <DrawerClose asChild>
             <Button variant='outline'>Close</Button>
