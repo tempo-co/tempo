@@ -78,7 +78,7 @@ export function CategoryBadge({category}: CategoryBadgeProps) {
   );
 
   return (
-    <Badge variant='outline' className={cn('whitespace-nowrap text-primary-foreground', bgColor)}>
+    <Badge variant='outline' className={cn('whitespace-nowrap text-background', bgColor)}>
       {icon}
       {label}
     </Badge>

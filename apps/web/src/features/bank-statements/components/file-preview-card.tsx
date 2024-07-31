@@ -1,10 +1,12 @@
 import {useParams} from '@tanstack/react-router';
-import {ChevronDown, FileSpreadsheet, FileX2, X} from 'lucide-react';
+import {ChevronDown, FileWarning} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
+import {MimeTypeIcon} from '@/components/shared/mime-type-icon';
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {Progress} from '@/components/ui/progress';
+import {MimeType} from '@/types/file';
 import {cn} from '@/utils/cn';
 
 import {useUploadBankStatement} from '../api/use-upload-bank-statement';
@@ -22,7 +24,6 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
   const {accountId} = useParams({from: '/accounts/$accountId/bank-statements'});
 
   const [progressValue, setProgressValue] = useState(0);
-  const [progressMessage, setProgressMessage] = useState('Uploading file...');
   const [showTransactions, setShowTransactions] = useState(false);
   const [shouldRenderTransactions, setShouldRenderTransactions] = useState(false);
 
@@ -41,20 +42,13 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
   useEffect(() => {
     const updateProgress = () => {
       setProgressValue((prevProgress) => {
-        const randomFactor = 0.6 + Math.random();
-        const progress = Math.min(prevProgress + (100 - prevProgress) * 0.01 * randomFactor, 99.9);
+        const randomFactor = 0.8 + Math.random();
+        const incrementalProgress = (100 - prevProgress) * 0.02 * randomFactor;
 
-        if (progress < 15) {
-          setProgressMessage('Uploading file...');
-        } else if (progress < 30) {
-          setProgressMessage('Parsing file...');
-        } else if (progress < 40) {
-          setProgressMessage('Categorizing transactions...');
-        }
-        return progress;
+        return Math.min(prevProgress + incrementalProgress, 99);
       });
     };
-    const interval = setInterval(updateProgress, 100);
+    const interval = setInterval(updateProgress, 50);
 
     return () => clearInterval(interval);
   }, [isPending]);
@@ -68,7 +62,11 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
       <div className='flex items-center justify-between'>
         <div className='flex items-center'>
           <div className='mr-4 rounded-md bg-muted p-2'>
-            {isError ? <FileX2 className='h-6 w-6' /> : <FileSpreadsheet className='h-6 w-6' />}
+            {isError ? (
+              <FileWarning className='h-6 w-6' />
+            ) : (
+              <MimeTypeIcon mimeType={file.type as MimeType} />
+            )}
           </div>
           <div>
             <p>{truncateFileName(file.name)}</p>
@@ -76,7 +74,6 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
               <FileMetadata
                 fileSize={file.size}
                 fileType={file.type}
-                progressMessage={progressMessage}
                 isPending={isPending}
                 isError={isError}
                 isSuccess={isSuccess}
@@ -103,18 +100,14 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
         <div className='flex gap-3'>
           <FileViewerDialog
             file={file}
-            progressMessage={progressMessage}
             progressValue={progressValue}
             isPending={isPending}
             isError={isError}
             isSuccess={isSuccess}
           />
-          <Button variant='ghost' size='icon' className='hover:bg-destructive'>
-            {isPending && <X className='h-4 w-4' />}
-            {isSuccess && bankStatement && (
-              <DeleteBankStatementDialog bankStatement={bankStatement} />
-            )}
-          </Button>
+          {isSuccess && bankStatement && (
+            <DeleteBankStatementDialog bankStatement={bankStatement} />
+          )}
         </div>
       </div>
       {isPending && <Progress value={progressValue} className='mt-4 h-1' />}

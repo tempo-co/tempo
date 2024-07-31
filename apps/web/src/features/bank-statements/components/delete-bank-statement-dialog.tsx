@@ -71,10 +71,16 @@ export function DeleteBankStatementDialog({bankStatement}: DeleteBankStatementDi
           <DialogHeader>
             <DialogTitle>Delete Bank Statement</DialogTitle>
             <DialogDescription className='pt-2'>
-              Are you sure you want to delete this bank statement, including all of its{' '}
-              <span className='text-foreground'>
-                {bankStatement.transactions.length} transactions
-              </span>
+              Are you sure you want to delete this bank statement
+              {bankStatement.transactions.length > 0 && (
+                <>
+                  <span>, including all of its</span>{' '}
+                  <span className='text-foreground'>
+                    {bankStatement.transactions.length}{' '}
+                    {bankStatement.transactions.length === 1 ? 'transaction' : 'transactions'}
+                  </span>
+                </>
+              )}
               ? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
@@ -92,8 +98,12 @@ export function DeleteBankStatementDialog({bankStatement}: DeleteBankStatementDi
                 <span>{prettyBytes(Number(bankStatement.file.size))}</span>
                 <span className='mx-3'>•</span>
                 <span>{bankStatement.transactions.length} transactions</span>
-                <span className='mx-3'>•</span>
-                <span>{formatPeriod(bankStatement.period)}</span>
+                {bankStatement.transactions.length > 0 && (
+                  <>
+                    <span className='mx-3'>•</span>
+                    <span>{formatPeriod(bankStatement.period)}</span>
+                  </>
+                )}
               </span>
             </div>
           </Card>

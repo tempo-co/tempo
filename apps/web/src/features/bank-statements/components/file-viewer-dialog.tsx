@@ -26,12 +26,11 @@ import {useMediaQuery} from '@/hooks/use-media-query';
 import {cn} from '@/utils/cn';
 
 import {truncateFileName} from '../utils/truncate-file-name';
-import {CsvFileViewer} from './csv-file-viewer';
 import {FileMetadata} from './file-metadata';
+import {FileViewer} from './file-viewer';
 
 type FileViewerDialogProps = {
   file: File;
-  progressMessage: string;
   progressValue: number;
   isPending: boolean;
   isError: boolean;
@@ -40,7 +39,6 @@ type FileViewerDialogProps = {
 
 export function FileViewerDialog({
   file,
-  progressMessage,
   progressValue,
   isPending,
   isError,
@@ -61,9 +59,7 @@ export function FileViewerDialog({
                 </Button>
               </DialogTrigger>
             </TooltipTrigger>
-            <TooltipContent>
-              <p>View file</p>
-            </TooltipContent>
+            <TooltipContent>View file</TooltipContent>
           </Tooltip>
         </TooltipProvider>
         <DialogContent
@@ -76,15 +72,14 @@ export function FileViewerDialog({
               <FileMetadata
                 fileSize={file.size}
                 fileType={file.type}
-                progressMessage={progressMessage}
                 isPending={isPending}
                 isError={isError}
                 isSuccess={isSuccess}
               />
-              {isPending && <Progress value={progressValue} className='my-4 h-1' />}
             </DialogDescription>
           </DialogHeader>
-          <CsvFileViewer file={file} />
+          {isPending && <Progress value={progressValue} className='!my-4 h-1' />}
+          <FileViewer file={file} />
         </DialogContent>
       </Dialog>
     );
@@ -101,9 +96,7 @@ export function FileViewerDialog({
               </Button>
             </DrawerTrigger>
           </TooltipTrigger>
-          <TooltipContent>
-            <p>View file</p>
-          </TooltipContent>
+          <TooltipContent>View file</TooltipContent>
         </Tooltip>
       </TooltipProvider>
       <DrawerContent aria-describedby='File'>
@@ -113,7 +106,6 @@ export function FileViewerDialog({
             <FileMetadata
               fileSize={file.size}
               fileType={file.type}
-              progressMessage={progressMessage}
               isPending={isPending}
               isError={isError}
               isSuccess={isSuccess}
@@ -121,7 +113,7 @@ export function FileViewerDialog({
           </DrawerDescription>
         </DrawerHeader>
         <div className='mb-8 h-[50vh] px-4'>
-          <CsvFileViewer file={file} />
+          <FileViewer file={file} isDesktop={isDesktop} />
         </div>
         <DrawerFooter className='pt-4'>
           <DrawerClose asChild>

@@ -7,7 +7,6 @@ import {cn} from '@/utils/cn';
 type FileMetadataProps = {
   fileSize: File['size'];
   fileType: File['type'];
-  progressMessage: string;
   isPending: boolean;
   isError: boolean;
   isSuccess: boolean;
@@ -16,7 +15,6 @@ type FileMetadataProps = {
 export function FileMetadata({
   fileSize,
   fileType,
-  progressMessage,
   isPending,
   isError,
   isSuccess,
@@ -37,7 +35,7 @@ export function FileMetadata({
         {isPending && (
           <>
             <Loader className='mr-1 inline h-4 w-4 animate-slow-spin' />
-            <span>{progressMessage}</span>
+            <span>Processing...</span>
           </>
         )}
         {isError && (

@@ -54,7 +54,7 @@ export const bankStatementsTableColumns: ColumnDef<BankStatement>[] = [
         <Button
           variant='ghost'
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          className='-m-4 flex h-12 w-full justify-start px-4'
+          className='-m-4 flex h-12 justify-start px-4'
         >
           <span>Period</span>
           <ArrowUpDown className='ml-2 h-4 w-4' />
