@@ -67,7 +67,7 @@ export function DeleteBankStatementDialog({bankStatement}: DeleteBankStatementDi
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        <DialogContent aria-describedby='Delete Bank Statement' className='max-w-[38rem]'>
+        <DialogContent aria-describedby='Delete Bank Statement' className='max-w-[40rem]'>
           <DialogHeader>
             <DialogTitle>Delete Bank Statement</DialogTitle>
             <DialogDescription className='pt-2'>
