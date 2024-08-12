@@ -1,18 +1,25 @@
+import {useParams} from '@tanstack/react-router';
 import {FileWarning} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
+import {Skeleton} from '@/components/ui/skeleton';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
+import {useMediaQuery} from '@/hooks/use-media-query';
+import {BankStatement} from '@/types/bank-statement';
 import {cn} from '@/utils/cn';
 
+import {useGetFile} from '../api/use-get-file';
 import {FileData} from '../types/file-data';
 import {parseFile} from '../utils/parse-file';
 
 type FileViewerProps = {
-  file: File;
-  isDesktop?: boolean;
+  file?: File;
+  bankStatementId?: BankStatement['id'];
 };
 
-export function FileViewer({file, isDesktop}: FileViewerProps) {
+export function FileViewer({file, bankStatementId}: FileViewerProps) {
+  const {accountId} = useParams({from: '/accounts/$accountId/bank-statements'});
+
   const [error, setError] = useState<Error | null>(null);
   const [data, setData] = useState<FileData>({
     headers: [],
@@ -21,20 +28,32 @@ export function FileViewer({file, isDesktop}: FileViewerProps) {
     columnCount: 0,
   });
 
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+
+  const {fetchFile, file: fetchedFile, isLoading} = useGetFile(accountId, bankStatementId || '');
+
   useEffect(() => {
     async function fetchData() {
-      const data = await parseFile(file);
-      setData(data);
+      if (file) {
+        const data = await parseFile(file);
+        setData(data);
+      } else {
+        await fetchFile();
+        if (fetchedFile) {
+          const data = await parseFile(fetchedFile);
+          setData(data);
+        }
+      }
     }
     fetchData().catch(setError);
-  }, [file, setError]);
+  }, [file, fetchFile, fetchedFile]);
 
   if (error) {
     return (
       <div
         className={cn(
           'flex flex-col items-center text-center text-destructive',
-          isDesktop !== undefined && !isDesktop && 'mt-20',
+          !isDesktop && 'mt-20',
         )}
       >
         <FileWarning className='mb-2 h-14 w-14 text-destructive' />
@@ -42,6 +61,13 @@ export function FileViewer({file, isDesktop}: FileViewerProps) {
         <p>Please check its contents and try again.</p>
       </div>
     );
+  }
+
+  if (isLoading) {
+    const skeletonLoader = Array.from({length: 10}, (_, index) => (
+      <Skeleton key={index} className='mt-4 h-10' />
+    ));
+    return <>{skeletonLoader}</>;
   }
 
   return (

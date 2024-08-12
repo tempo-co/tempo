@@ -1,15 +1,13 @@
 import {ColumnDef} from '@tanstack/react-table';
-import {ArrowUpDown, ChevronDown} from 'lucide-react';
-import prettyBytes from 'pretty-bytes';
+import {ArrowUpDown} from 'lucide-react';
 
 import {MimeTypeIcon} from '@/components/shared/mime-type-icon';
 import {Button} from '@/components/ui/button';
 import {BankStatement} from '@/types/bank-statement';
-import {getMimeTypeKey} from '@/types/file';
 
 import {formatPeriod} from '../utils/format-period';
-import {DeleteBankStatementDialog} from './delete-bank-statement-dialog';
 import {FileActionsDropdown} from './file-actions-dropdown';
+import {FileMetadata} from './file-metadata';
 
 export const bankStatementsTableColumns: ColumnDef<BankStatement>[] = [
   {
@@ -28,22 +26,19 @@ export const bankStatementsTableColumns: ColumnDef<BankStatement>[] = [
     },
     cell: ({row}) => {
       return (
-        <FileActionsDropdown fileName={row.original.file.name}>
-          <div className='flex items-center'>
-            <div className='mr-4 rounded-md bg-muted p-2'>
-              <MimeTypeIcon mimeType={row.original.file.mimeType} />
-            </div>
-            <div className='text-left'>
-              <p className='mb-1 max-w-full text-base text-foreground'>{row.original.file.name}</p>
-              <span className='mt-1 whitespace-nowrap text-sm text-muted-foreground'>
-                <span>{getMimeTypeKey(row.original.file.mimeType)}</span>
-                <span className='mx-3'>•</span>
-                <span>{prettyBytes(Number(row.original.file.size))}</span>
-              </span>
-            </div>
+        <div className='flex items-center px-4 py-3'>
+          <div className='mr-4 rounded-md bg-muted p-2'>
+            <MimeTypeIcon mimeType={row.original.file.type} />
           </div>
-          <ChevronDown className='invisible ml-4 w-4 group-hover:visible' />
-        </FileActionsDropdown>
+          <div className='overflow-hidden'>
+            <p className='mb-1 max-w-full text-base text-foreground'>{row.original.file.name}</p>
+            <FileMetadata
+              fileSize={row.original.file.size}
+              fileType={row.original.file.type}
+              fileUploadedAt={row.original.uploadedAt}
+            />
+          </div>
+        </div>
       );
     },
   },
@@ -68,7 +63,7 @@ export const bankStatementsTableColumns: ColumnDef<BankStatement>[] = [
   {
     id: 'actions',
     cell: ({row}) => {
-      return <DeleteBankStatementDialog bankStatement={row.original} />;
+      return <FileActionsDropdown bankStatement={row.original} />;
     },
   },
 ];

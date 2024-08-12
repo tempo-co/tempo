@@ -1,17 +1,17 @@
 import {useParams} from '@tanstack/react-router';
-import {ChevronDown, FileWarning} from 'lucide-react';
+import {ChevronDown, FileScan, FileWarning} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
 import {MimeTypeIcon} from '@/components/shared/mime-type-icon';
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {Progress} from '@/components/ui/progress';
-import {MimeType} from '@/types/file';
+import {MimeType} from '@/types/mime-type';
 import {cn} from '@/utils/cn';
 
 import {useUploadBankStatement} from '../api/use-upload-bank-statement';
 import {truncateFileName} from '../utils/truncate-file-name';
-import {DeleteBankStatementDialog} from './delete-bank-statement-dialog';
+import {DeleteBankStatementDialog} from './delete-bank-statement/delete-bank-statement-dialog';
 import {FileMetadata} from './file-metadata';
 import {FileViewerDialog} from './file-viewer-dialog';
 import {TransactionsTable} from './transaction-table';
@@ -104,9 +104,15 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
             isPending={isPending}
             isError={isError}
             isSuccess={isSuccess}
-          />
+          >
+            <Button variant='ghost' size='icon'>
+              <FileScan className='h-4 w-4' />
+            </Button>
+          </FileViewerDialog>
           {isSuccess && bankStatement && (
-            <DeleteBankStatementDialog bankStatement={bankStatement} />
+            <DeleteBankStatementDialog bankStatement={bankStatement}>
+              <Button>Delete</Button>
+            </DeleteBankStatementDialog>
           )}
         </div>
       </div>

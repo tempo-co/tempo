@@ -1,5 +1,4 @@
-import {FileScan} from 'lucide-react';
-import {useState} from 'react';
+import {useMemo} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {
@@ -8,7 +7,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
   Drawer,
@@ -18,68 +16,76 @@ import {
   DrawerFooter,
   DrawerHeader,
   DrawerTitle,
-  DrawerTrigger,
 } from '@/components/ui/drawer';
 import {Progress} from '@/components/ui/progress';
-import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
 import {useMediaQuery} from '@/hooks/use-media-query';
+import {BankStatement} from '@/types/bank-statement';
 import {cn} from '@/utils/cn';
 
 import {truncateFileName} from '../utils/truncate-file-name';
 import {FileMetadata} from './file-metadata';
 import {FileViewer} from './file-viewer';
 
+``;
+
 type FileViewerDialogProps = {
-  file: File;
-  progressValue: number;
-  isPending: boolean;
-  isError: boolean;
-  isSuccess: boolean;
+  open: boolean;
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  file?: File;
+  bankStatement?: BankStatement;
+  fileUploadedAt?: Date;
+  progressValue?: number;
+  isPending?: boolean;
+  isError?: boolean;
+  isSuccess?: boolean;
 };
 
 export function FileViewerDialog({
+  open,
+  setOpen,
   file,
+  bankStatement,
+  fileUploadedAt,
   progressValue,
   isPending,
   isError,
   isSuccess,
 }: FileViewerDialogProps) {
-  const [open, setOpen] = useState(false);
   const isDesktop = useMediaQuery('(min-width: 768px)');
+
+  const {truncatedFileName, fileSize, fileType} = useMemo(() => {
+    const fileName = file?.name || bankStatement?.file.name;
+    const size = file?.size || bankStatement?.file.size;
+    const type = file?.type || bankStatement?.file.type;
+    const truncatedName = fileName ? truncateFileName(fileName) : '';
+
+    return {truncatedFileName: truncatedName, fileSize: size, fileType: type};
+  }, [file, bankStatement]);
 
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
-        <TooltipProvider delayDuration={200}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DialogTrigger asChild>
-                <Button variant='ghost' size='icon'>
-                  <FileScan className='h-4 w-4' />
-                </Button>
-              </DialogTrigger>
-            </TooltipTrigger>
-            <TooltipContent>View file</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
         <DialogContent
           aria-describedby='View file'
           className={cn('h-[80%] max-w-[70%] gap-0', isError && 'border-destructive')}
         >
           <DialogHeader>
-            <DialogTitle>{truncateFileName(file.name)}</DialogTitle>
+            <DialogTitle>{truncatedFileName}</DialogTitle>
             <DialogDescription>
-              <FileMetadata
-                fileSize={file.size}
-                fileType={file.type}
-                isPending={isPending}
-                isError={isError}
-                isSuccess={isSuccess}
-              />
+              {fileSize && fileType && (
+                <FileMetadata
+                  fileSize={fileSize}
+                  fileType={fileType}
+                  fileUploadedAt={fileUploadedAt}
+                  isPending={isPending}
+                  isError={isError}
+                  isSuccess={isSuccess}
+                />
+              )}
             </DialogDescription>
           </DialogHeader>
-          {isPending && <Progress value={progressValue} className='!my-4 h-1' />}
-          <FileViewer file={file} />
+          {isPending && progressValue && <Progress value={progressValue} className='!my-4 h-1' />}
+          <FileViewer file={file} bankStatementId={bankStatement?.id} />
         </DialogContent>
       </Dialog>
     );
@@ -87,35 +93,24 @@ export function FileViewerDialog({
 
   return (
     <Drawer open={open} onOpenChange={setOpen}>
-      <TooltipProvider delayDuration={200}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DrawerTrigger asChild>
-              <Button variant='ghost' size='icon'>
-                <FileScan className='h-4 w-4' />
-              </Button>
-            </DrawerTrigger>
-          </TooltipTrigger>
-          <TooltipContent>View file</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      <DrawerContent aria-describedby='File'>
-        <DrawerHeader className='text-left'>
-          <DrawerTitle>{truncateFileName(file.name)}</DrawerTitle>
+      <DrawerContent aria-describedby='File' className='h-[100%] px-4'>
+        <DrawerHeader className='px-0 text-left'>
+          <DrawerTitle>{truncatedFileName}</DrawerTitle>
           <DrawerDescription>
-            <FileMetadata
-              fileSize={file.size}
-              fileType={file.type}
-              isPending={isPending}
-              isError={isError}
-              isSuccess={isSuccess}
-            />
+            {fileSize && fileType && (
+              <FileMetadata
+                fileSize={fileSize}
+                fileType={fileType}
+                fileUploadedAt={fileUploadedAt}
+                isPending={isPending}
+                isError={isError}
+                isSuccess={isSuccess}
+              />
+            )}
           </DrawerDescription>
         </DrawerHeader>
-        <div className='mb-8 h-[50vh] px-4'>
-          <FileViewer file={file} isDesktop={isDesktop} />
-        </div>
-        <DrawerFooter className='pt-4'>
+        <FileViewer file={file} bankStatementId={bankStatement?.id} />
+        <DrawerFooter className='px-0 pt-4'>
           <DrawerClose asChild>
             <Button variant='outline'>Close</Button>
           </DrawerClose>
