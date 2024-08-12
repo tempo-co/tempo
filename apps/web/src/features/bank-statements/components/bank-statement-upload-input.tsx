@@ -82,7 +82,7 @@ export function BankStatementUploadInput() {
                 dropzone.isDragAccept && 'animate-bounce',
               )}
             />
-            <p>
+            <div>
               {dropzone.isDragAccept ? (
                 'Drop the file here!'
               ) : (
@@ -96,7 +96,7 @@ export function BankStatementUploadInput() {
                   </div>
                 </div>
               )}
-            </p>
+            </div>
           </div>
         </div>
       ) : (
