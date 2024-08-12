@@ -33,7 +33,6 @@ type FileViewerDialogProps = {
   setOpen: React.Dispatch<React.SetStateAction<boolean>>;
   file?: File;
   bankStatement?: BankStatement;
-  fileUploadedAt?: Date;
   progressValue?: number;
   isPending?: boolean;
   isError?: boolean;
@@ -45,7 +44,6 @@ export function FileViewerDialog({
   setOpen,
   file,
   bankStatement,
-  fileUploadedAt,
   progressValue,
   isPending,
   isError,
@@ -76,7 +74,7 @@ export function FileViewerDialog({
                 <FileMetadata
                   fileSize={fileSize}
                   fileType={fileType}
-                  fileUploadedAt={fileUploadedAt}
+                  fileUploadedAt={bankStatement?.uploadedAt}
                   isPending={isPending}
                   isError={isError}
                   isSuccess={isSuccess}
@@ -101,12 +99,13 @@ export function FileViewerDialog({
               <FileMetadata
                 fileSize={fileSize}
                 fileType={fileType}
-                fileUploadedAt={fileUploadedAt}
+                fileUploadedAt={bankStatement?.uploadedAt}
                 isPending={isPending}
                 isError={isError}
                 isSuccess={isSuccess}
               />
             )}
+            {isPending && progressValue && <Progress value={progressValue} className='mt-2 h-1' />}
           </DrawerDescription>
         </DrawerHeader>
         <FileViewer file={file} bankStatementId={bankStatement?.id} />
