@@ -1,4 +1,4 @@
-import {MimeType} from '@/types/file';
+import {MimeType} from '@/types/mime-type';
 
 import Csv from './file-types-icons/csv';
 import File from './file-types-icons/file';
