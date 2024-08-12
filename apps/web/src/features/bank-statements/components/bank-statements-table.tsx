@@ -31,7 +31,7 @@ export function BankStatementsTable({bankStatements}: BankStatementsTableProps) 
     <Table>
       <TableHeader>
         {table.getHeaderGroups().map((headerGroup) => (
-          <TableRow key={headerGroup.id}>
+          <TableRow key={headerGroup.id} className='hover:bg-background'>
             {headerGroup.headers.map((header) => {
               return (
                 <TableHead key={header.id} className='p-0'>

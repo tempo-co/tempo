@@ -3,7 +3,9 @@ import {useCallback, useMemo, useState} from 'react';
 import {ErrorCode, FileRejection, useDropzone} from 'react-dropzone';
 import {toast} from 'sonner';
 
-import {MimeType} from '@/types/file';
+import {Button} from '@/components/ui/button';
+import {useMediaQuery} from '@/hooks/use-media-query';
+import {MimeType} from '@/types/mime-type';
 import {cn} from '@/utils/cn';
 
 import {truncateFileName} from '../utils/truncate-file-name';
@@ -15,6 +17,8 @@ const acceptTypes = Object.fromEntries(Object.values(MimeType).map((type) => [ty
 
 export function BankStatementUploadInput() {
   const [files, setFiles] = useState<File[]>([]);
+
+  const isDesktop = useMediaQuery('(min-width: 768px)');
 
   const formattedFileTypes = useMemo(() => Object.keys(MimeType).join(', '), []);
 
@@ -61,32 +65,45 @@ export function BankStatementUploadInput() {
 
   return (
     <>
-      <div
-        {...dropzone.getRootProps()}
-        className={cn(
-          'flex h-40 cursor-pointer select-none items-center justify-center rounded-md border-2 border-dashed border-border transition-all hover:bg-accent',
-          dropzone.isDragActive && 'bg-accent',
-        )}
-      >
-        <input {...dropzone.getInputProps()} />
-        <div className='flex flex-col items-center'>
-          <FileUp
-            className={cn(
-              'mb-2 h-8 w-8 text-muted-foreground',
-              dropzone.isDragAccept && 'animate-bounce',
-            )}
-          />
-          <p>
-            {dropzone.isDragAccept ? (
-              'Drop the file here!'
-            ) : (
-              <>
-                <span className='font-semibold'>Browse files</span> or drag and drop
-              </>
-            )}
-          </p>
+      <h1>Upload bank statements</h1>
+      {isDesktop ? (
+        <div
+          {...dropzone.getRootProps()}
+          className={cn(
+            'flex h-52 cursor-pointer select-none items-center justify-center rounded-md border-2 border-dashed border-border transition-all hover:bg-accent',
+            dropzone.isDragActive && 'bg-accent',
+          )}
+        >
+          <input {...dropzone.getInputProps()} />
+          <div className='flex flex-col items-center'>
+            <FileUp
+              className={cn(
+                'h-8 w-8 text-muted-foreground',
+                dropzone.isDragAccept && 'animate-bounce',
+              )}
+            />
+            <p>
+              {dropzone.isDragAccept ? (
+                'Drop the file here!'
+              ) : (
+                <div className='mt-2 flex flex-col items-center'>
+                  <p>Drag & Drop to upload</p>
+                  <div className='flex items-center'>
+                    <span>or&nbsp;</span>
+                    <Button variant='link' className='h-0 p-0 text-base'>
+                      Browse files
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </p>
+          </div>
         </div>
-      </div>
+      ) : (
+        <Button onClick={dropzone.open} className='w-full'>
+          Upload files
+        </Button>
+      )}
       <div className='mb-6 mt-2 flex justify-between text-muted-foreground'>
         <p>
           Supported file types: <span className='text-foreground'>{formattedFileTypes}</span>
