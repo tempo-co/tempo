@@ -10,4 +10,5 @@ export type BankStatement = {
   transactions: Transaction[];
   account: Account;
   period: Period;
+  uploadedAt: Date;
 };
