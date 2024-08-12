@@ -23,7 +23,7 @@ export const useDeleteBankStatement = (
     },
     onError: () => {
       toast.error('There was a problem with your request.', {
-        description: 'Your accounts could not be loaded. Please try again.',
+        description: 'Bank statement could not be deleted. Please try again.',
       });
     },
     retry: false,

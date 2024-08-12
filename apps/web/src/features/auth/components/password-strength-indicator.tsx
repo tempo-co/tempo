@@ -98,7 +98,7 @@ export function PasswordStrengthIndicator({
       </div>
       <Progress
         value={passwordStrength}
-        className={cn('mt-2 h-2 border border-input', progressBarColor)}
+        className={cn('h-2 border border-input', progressBarColor)}
       />
     </>
   );

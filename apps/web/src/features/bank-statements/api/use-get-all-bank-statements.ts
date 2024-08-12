@@ -20,7 +20,7 @@ export const useGetAllBankStatements = (accountId: Account['id']) => {
 
   if (isError) {
     toast.error('There was a problem with your request.', {
-      description: 'Your accounts could not be loaded. Please try again.',
+      description: 'Your bank statements could not be loaded. Please try again.',
     });
   }
 
