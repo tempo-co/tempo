@@ -63,7 +63,11 @@ export const bankStatementsTableColumns: ColumnDef<BankStatement>[] = [
   {
     id: 'actions',
     cell: ({row}) => {
-      return <FileActionsDropdown bankStatement={row.original} />;
+      return (
+        <div className='mx-4'>
+          <FileActionsDropdown bankStatement={row.original} />
+        </div>
+      );
     },
   },
 ];
