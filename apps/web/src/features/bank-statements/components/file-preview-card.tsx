@@ -1,5 +1,5 @@
 import {useParams} from '@tanstack/react-router';
-import {ChevronDown, FileScan, FileWarning} from 'lucide-react';
+import {ChevronDown, FileWarning} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
 import {MimeTypeIcon} from '@/components/shared/mime-type-icon';
@@ -11,9 +11,8 @@ import {cn} from '@/utils/cn';
 
 import {useUploadBankStatement} from '../api/use-upload-bank-statement';
 import {truncateFileName} from '../utils/truncate-file-name';
-import {DeleteBankStatementDialog} from './delete-bank-statement/delete-bank-statement-dialog';
+import {FileActionsDropdown} from './file-actions-dropdown';
 import {FileMetadata} from './file-metadata';
-import {FileViewerDialog} from './file-viewer-dialog';
 import {TransactionsTable} from './transaction-table';
 
 type FilePreviewCardProps = {
@@ -97,24 +96,14 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
             </div>
           </div>
         </div>
-        <div className='flex gap-3'>
-          <FileViewerDialog
-            file={file}
-            progressValue={progressValue}
-            isPending={isPending}
-            isError={isError}
-            isSuccess={isSuccess}
-          >
-            <Button variant='ghost' size='icon'>
-              <FileScan className='h-4 w-4' />
-            </Button>
-          </FileViewerDialog>
-          {isSuccess && bankStatement && (
-            <DeleteBankStatementDialog bankStatement={bankStatement}>
-              <Button>Delete</Button>
-            </DeleteBankStatementDialog>
-          )}
-        </div>
+        <FileActionsDropdown
+          bankStatement={bankStatement}
+          file={file}
+          progressValue={progressValue}
+          isPending={isPending}
+          isError={isError}
+          isSuccess={isSuccess}
+        />
       </div>
       {isPending && <Progress value={progressValue} className='mt-4 h-1' />}
       <div
