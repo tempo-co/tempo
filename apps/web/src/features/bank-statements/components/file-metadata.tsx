@@ -53,7 +53,7 @@ export function FileMetadata({
       {fileUploadedAt && (
         <>
           <span className='mx-2 sm:mx-3'>•</span>
-          <span className='hidden sm:block'>Uploaded&nbsp;</span>
+          <span className='hidden sm:block'>uploaded&nbsp;</span>
           <span className='truncate'>{formattedDate}</span>
         </>
       )}
