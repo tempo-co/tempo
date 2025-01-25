@@ -11,8 +11,8 @@ export const useCurrentUser = () => {
   } = useQuery<User, HttpError>({
     queryKey: ['currentUser'],
     queryFn: async () => {
-      const user = await api.get('/users/me');
-      return user.json();
+      const response = await api.get('/users/me');
+      return response.json();
     },
     retry: false,
   });

@@ -20,8 +20,8 @@ export const useLogIn = () => {
 
   const {mutate: logIn, isPending} = useMutation<void, LogInHttpError, LogInDto>({
     mutationFn: async (logInDto: LogInDto) => {
-      const user = await api.post('/auth/login', JSON.stringify(logInDto));
-      await queryClient.setQueryData(['currentUser'], user.json());
+      const response = await api.post('/auth/login', JSON.stringify(logInDto));
+      await queryClient.setQueryData(['currentUser'], response.json());
       return navigate({to: '/dashboard'});
     },
     onError: (error) => {

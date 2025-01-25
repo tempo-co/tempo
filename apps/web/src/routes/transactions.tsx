@@ -1,16 +1,14 @@
-import {createFileRoute} from '@tanstack/react-router';
-
-import {SideBar} from '@/components/shared/sidebar';
+import {createFileRoute, redirect} from '@tanstack/react-router';
 
 export const Route = createFileRoute('/transactions')({
   component: Transactions,
+  beforeLoad: ({context, location}) => {
+    if (!context.isAuthenticated) {
+      throw redirect({to: '/login', search: {redirect: location.href}});
+    }
+  },
 });
 
 function Transactions() {
-  return (
-    <div className='flex'>
-      <SideBar />
-      <p>Transactions</p>
-    </div>
-  );
+  return <p>Transactions</p>;
 }

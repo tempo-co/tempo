@@ -1,6 +1,13 @@
 import {Link} from '@tanstack/react-router';
-import {ChevronLeft, CreditCard, LayoutGrid, LogOut, Settings, WalletCards} from 'lucide-react';
-import {useState} from 'react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  LayoutGrid,
+  LogOut,
+  Settings,
+  WalletCards,
+} from 'lucide-react';
 
 import {Avatar, AvatarFallback} from '@/components/ui/avatar';
 import {Button} from '@/components/ui/button';
@@ -8,46 +15,49 @@ import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
 import {Separator} from '@/components/ui/separator';
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
 import {useCurrentUser} from '@/hooks/use-current-user';
+import {useLocalStorage} from '@/hooks/use-local-storage';
 import {useLogOut} from '@/hooks/use-logout';
 import {cn} from '@/utils/cn';
 
+const links = [
+  {to: '/dashboard', label: 'Dashboard', icon: LayoutGrid},
+  {to: '/accounts', label: 'Accounts', icon: WalletCards},
+  {to: '/transactions', label: 'Transactions', icon: CreditCard},
+];
+
 export function SideBar() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isOpen, setIsOpen] = useLocalStorage<boolean>('sidebar', true);
   const {currentUser} = useCurrentUser();
   const logOut = useLogOut();
 
-  const handleLogOut = () => {
-    logOut();
-  };
-
   return (
-    <TooltipProvider delayDuration={0}>
+    <TooltipProvider delayDuration={50}>
       <div className='flex'>
         <div
           className={cn(
-            'bg-card px-3 py-4 h-screen flex flex-col justify-between transition-all duration-100',
-            isCollapsed ? 'w-16' : 'w-52',
+            'flex h-screen flex-col justify-between bg-card px-3 py-4 transition-all duration-100',
+            isOpen ? 'w-52' : 'w-16',
           )}
         >
           <div>
             <div className='flex justify-between transition-all duration-1000'>
-              {!isCollapsed && (
-                <Button asChild variant='ghost'>
-                  <Link to='/' className='flex items-center group w-fit'>
+              {isOpen && (
+                <Button asChild variant='ghost' className='px-3'>
+                  <Link to='/' className='group flex w-fit items-center'>
                     <img
                       src='/src/assets/logo.png'
                       alt='Flair logo'
                       className='w-6 transition-transform duration-200 group-hover:rotate-90'
                     />
-                    <h1 className='text-2xl font-semibold tracking-tight ml-2'>Flair</h1>
+                    <h1 className='ml-2 text-2xl font-semibold tracking-tight'>Flair</h1>
                   </Link>
                 </Button>
               )}
-              <Button onClick={() => setIsCollapsed(!isCollapsed)} size='icon' variant='ghost'>
+              <Button onClick={() => setIsOpen(!isOpen)} size='icon' variant='ghost'>
                 <div
                   className={cn(
                     'transform transition-transform duration-200',
-                    isCollapsed && 'rotate-180',
+                    !isOpen && 'rotate-180',
                   )}
                 >
                   <ChevronLeft />
@@ -55,61 +65,28 @@ export function SideBar() {
               </Button>
             </div>
             <Separator className='my-4' />
-            <div className='grid gap-2 items-start'>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link to='/'>
+            <div className='grid items-start gap-2'>
+              {links.map(({to, label, icon: Icon}) => (
+                <Tooltip key={to}>
+                  <TooltipTrigger asChild>
                     <Button
                       variant='ghost'
-                      size={isCollapsed ? 'icon' : 'default'}
+                      size={isOpen ? 'default' : 'icon'}
                       className={cn(
-                        'gap-2 w-full',
-                        isCollapsed ? 'justify-center' : 'justify-start',
+                        'w-full gap-2',
+                        isOpen ? 'justify-start px-[0.65rem]' : 'justify-center',
                       )}
+                      asChild
                     >
-                      <LayoutGrid className='w-5 h-5' />
-                      {!isCollapsed && 'Dashboard'}
+                      <Link to={to} activeProps={{className: 'bg-muted rounded-md'}}>
+                        <Icon className='h-5 w-5' />
+                        {isOpen && label}
+                      </Link>
                     </Button>
-                  </Link>
-                </TooltipTrigger>
-                {isCollapsed && <TooltipContent side='right'>Dashboard</TooltipContent>}
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link to='/accounts'>
-                    <Button
-                      variant='ghost'
-                      size={isCollapsed ? 'icon' : 'default'}
-                      className={cn(
-                        'gap-2 w-full',
-                        isCollapsed ? 'justify-center' : 'justify-start',
-                      )}
-                    >
-                      <WalletCards className='w-5 h-5' />
-                      {!isCollapsed && 'Accounts'}
-                    </Button>
-                  </Link>
-                </TooltipTrigger>
-                {isCollapsed && <TooltipContent side='right'>Accounts</TooltipContent>}
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link to='/transactions'>
-                    <Button
-                      variant='ghost'
-                      size={isCollapsed ? 'icon' : 'default'}
-                      className={cn(
-                        'gap-2 w-full',
-                        isCollapsed ? 'justify-center' : 'justify-start',
-                      )}
-                    >
-                      <CreditCard className='w-5 h-5' />
-                      {!isCollapsed && 'Transactions'}
-                    </Button>
-                  </Link>
-                </TooltipTrigger>
-                {isCollapsed && <TooltipContent side='right'>Transactions</TooltipContent>}
-              </Tooltip>
+                  </TooltipTrigger>
+                  {!isOpen && <TooltipContent side='right'>{label}</TooltipContent>}
+                </Tooltip>
+              ))}
             </div>
           </div>
           <div>
@@ -121,35 +98,47 @@ export function SideBar() {
                     <Button
                       variant='ghost'
                       className={cn(
-                        'flex items-center gap-2 text-sm w-full',
-                        isCollapsed ? 'w-10 rounded-full px-4 py-4' : 'justify-start px-1',
+                        'flex w-full p-5 text-sm',
+                        isOpen ? 'justify-between px-[0.375rem]' : 'w-10 rounded-full',
                       )}
                     >
-                      <Avatar className='h-8 w-8'>
-                        <AvatarFallback>JD</AvatarFallback>
-                      </Avatar>
-                      {!isCollapsed && <p>{currentUser?.name}</p>}
+                      <div className='flex items-center'>
+                        <Avatar className='h-7 w-7'>
+                          <AvatarFallback>JD</AvatarFallback>
+                        </Avatar>
+                        {isOpen && (
+                          <div className='ml-2 flex flex-col items-start leading-none'>
+                            <p>{currentUser?.name}</p>
+                            <p className='text-xs text-muted-foreground'>{currentUser?.email}</p>
+                          </div>
+                        )}
+                      </div>
+                      <ChevronRight className='w-4 text-muted-foreground' />
                     </Button>
                   </TooltipTrigger>
                 </PopoverTrigger>
                 <PopoverContent asChild>
                   <div
                     className={cn(
-                      'flex flex-col gap-2 w-[--radix-popover-trigger-width] !p-2 mb-1',
-                      isCollapsed && 'w-44 ml-2',
+                      'mb-1 flex w-[--radix-popover-trigger-width] flex-col gap-2 !p-2',
+                      !isOpen && 'ml-2 w-fit',
                     )}
                   >
                     <Button variant='ghost' className='w-full justify-start'>
-                      <Settings className='mr-2 w-5 h-5' />
+                      <Settings className='mr-2 h-5 w-5' />
                       Settings
                     </Button>
-                    <Button variant='ghost' className='w-full justify-start' onClick={handleLogOut}>
-                      <LogOut className='mr-2 w-5 h-5' />
+                    <Button
+                      variant='ghost'
+                      className='w-full justify-start'
+                      onClick={() => logOut()}
+                    >
+                      <LogOut className='mr-2 h-5 w-5' />
                       Log out
                     </Button>
                   </div>
                 </PopoverContent>
-                {isCollapsed && <TooltipContent side='right'>{currentUser?.name}</TooltipContent>}
+                {!isOpen && <TooltipContent side='right'>{currentUser?.name}</TooltipContent>}
               </Tooltip>
             </Popover>
           </div>

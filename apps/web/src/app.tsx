@@ -1,5 +1,5 @@
 import {RouterProvider, createRouter} from '@tanstack/react-router';
-import {LoaderCircle} from 'lucide-react';
+import {Loader} from 'lucide-react';
 import React from 'react';
 
 import {Toaster} from '@/components/ui/sonner';
@@ -28,7 +28,7 @@ export function App() {
     <React.Suspense
       fallback={
         <div className='flex h-screen w-screen items-center justify-center'>
-          <LoaderCircle className='h-20 w-20 animate-spin' />
+          <Loader className='h-20 w-20 animate-slow-spin' />
         </div>
       }
     >

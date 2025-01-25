@@ -1,29 +1,110 @@
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/src/assets/fonts/Geist-Thin.woff2') format('woff2'),
+    url('/src/assets/fonts/Geist-Thin.woff') format('woff');
+  font-weight: 100;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/src/assets/fonts/Geist-UltraLight.woff2') format('woff2'),
+    url('/src/assets/fonts/Geist-UltraLight.woff') format('woff');
+  font-weight: 200;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/src/assets/fonts/Geist-Light.woff2') format('woff2'),
+    url('/src/assets/fonts/Geist-Light.woff') format('woff');
+  font-weight: 300;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/src/assets/fonts/Geist-Regular.woff2') format('woff2'),
+    url('/src/assets/fonts/Geist-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/src/assets/fonts/Geist-Medium.woff2') format('woff2'),
+    url('/src/assets/fonts/Geist-Medium.woff') format('woff');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/src/assets/fonts/Geist-SemiBold.woff2') format('woff2'),
+    url('/src/assets/fonts/Geist-SemiBold.woff') format('woff');
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/src/assets/fonts/Geist-Bold.woff2') format('woff2'),
+    url('/src/assets/fonts/Geist-Bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/src/assets/fonts/Geist-Black.woff2') format('woff2'),
+    url('/src/assets/fonts/Geist-Black.woff') format('woff');
+  font-weight: 800;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/src/assets/fonts/Geist-UltraBlack.woff2') format('woff2'),
+    url('/src/assets/fonts/Geist-UltraBlack.woff') format('woff');
+  font-weight: 900;
+  font-style: normal;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 70 5% 22%;
+    --background: 240 20% 99%;
+    --foreground: 210 13% 13%;
 
-    --card: 0 0% 98%;
-    --card-foreground: 70 5% 17%;
+    --card: 240 20% 98%;
+    --card-foreground: 210 13% 13%;
 
-    --popover: 0 0% 97%;
-    --popover-foreground: 70 5% 12%;
+    --popover: 240 20% 98%;
+    --popover-foreground: 210 13% 13%;
 
-    --primary: 70 5% 22%;
-    --primary-foreground: 70 5% 92%;
+    --primary: 240 60% 60%;
+    --primary-foreground: 0 0% 93%;
 
-    --secondary: 0 0% 75%;
-    --secondary-foreground: 0 0% 15%;
+    --secondary: 238 100% 95%;
+    --secondary-foreground: 238 43% 27%;
 
-    --muted: 0 5% 90%;
-    --muted-foreground: 0 6% 50%;
+    --muted: 230 11% 89%;
+    --muted-foreground: 210 13% 13%;
 
-    --accent: 0 0% 95%;
-    --accent-foreground: 0 0% 25%;
+    --accent: 240 11% 95%;
+    --accent-foreground: 210 13% 13%;
 
     --destructive: 8 87% 51%;
     --destructive-foreground: 8 87% 96%;
@@ -37,34 +118,34 @@
     --success: 142 76% 36%;
     --success-foreground: 138 76% 98%;
 
-    --border: 0 0% 95%;
-    --input: 0 0% 85%;
-    --ring: 70 5% 22%;
+    --border: 233 10% 82%;
+    --input: 233 10% 82%;
+    --ring: 240 60% 60%;
 
-    --radius: 0.5rem;
+    --radius: 0.3rem;
   }
 
   .dark {
-    --background: 0 0% 7%;
-    --foreground: 45 14% 78%;
+    --background: 240 6% 7%;
+    --foreground: 220 9% 94%;
 
-    --card: 0 0% 5%;
-    --card-foreground: 45 14% 83%;
+    --card: 220 6% 10%;
+    --card-foreground: 220 9% 94%;
 
-    --popover: 0 0% 4%;
-    --popover-foreground: 45 14% 88%;
+    --popover: 220 6% 10%;
+    --popover-foreground: 220 9% 94%;
 
-    --primary: 45 14% 78%;
-    --primary-foreground: 45 14% 18%;
+    --primary: 240 60% 60%;
+    --primary-foreground: 0 0% 93%;
 
-    --secondary: 45 4% 25%;
-    --secondary-foreground: 45 4% 85%;
+    --secondary: 236 45% 27%;
+    --secondary-foreground: 242 94% 94%;
 
-    --muted: 0 12% 15%;
-    --muted-foreground: 0 12% 65%;
+    --muted: 214 7% 19%;
+    --muted-foreground: 220 9% 70%;
 
-    --accent: 0 0% 22%;
-    --accent-foreground: 0 0% 82%;
+    --accent: 225 6% 14%;
+    --accent-foreground: 220 9% 94%;
 
     --destructive: 2 84% 31%;
     --destructive-foreground: 0 70% 13%;
@@ -78,9 +159,9 @@
     --success: 142 76% 36%;
     --success-foreground: 138 76% 13%;
 
-    --border: 0 0% 12%;
-    --input: 0 0% 15%;
-    --ring: 45 14% 78%;
+    --border: 213 8% 28%;
+    --input: 213 8% 28%;
+    --ring: 240 60% 60%;
   }
 }
 
@@ -89,6 +170,6 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-geist text-foreground;
   }
 }

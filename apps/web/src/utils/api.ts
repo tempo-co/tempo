@@ -10,7 +10,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL;
 const request = async (resource: string, init?: RequestInit) => {
   const url = API_BASE_URL + resource;
 
-  const headers = {'Content-Type': 'application/json', ...init?.headers};
+  const headers = {...{'Content-Type': 'application/json'}, ...init?.headers};
 
   const response = await fetch(url, {headers, credentials: 'include', ...init});
   if (!response.ok) {

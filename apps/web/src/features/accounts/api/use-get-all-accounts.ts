@@ -4,20 +4,20 @@ import {toast} from 'sonner';
 import {Account} from '@/types/account';
 import {api} from '@/utils/api';
 
-export const useGetAccounts = () => {
+export const useGetAllAccounts = () => {
   const {
     data: accounts,
     isPending,
-    error,
+    isError,
   } = useQuery<Account[]>({
     queryKey: ['accounts'],
     queryFn: async () => {
-      const accounts = await api.get('/accounts/me');
-      return accounts.json();
+      const response = await api.get('/accounts');
+      return response.json();
     },
   });
 
-  if (error) {
+  if (isError) {
     toast.error('There was a problem with your request.', {
       description: 'Your accounts could not be loaded. Please try again.',
     });

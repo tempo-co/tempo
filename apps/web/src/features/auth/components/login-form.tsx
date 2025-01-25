@@ -1,6 +1,6 @@
 import {zodResolver} from '@hookform/resolvers/zod';
 import {Link} from '@tanstack/react-router';
-import {Eye, EyeOff, LoaderCircle} from 'lucide-react';
+import {Eye, EyeOff, Loader} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {useForm} from 'react-hook-form';
 import {toast} from 'sonner';
@@ -45,7 +45,7 @@ export function LogInForm() {
           form.setError('email', {message: ''});
           form.setError('password', {message: 'Invalid email or password. Please try again.'});
           setHasUnauthorizedError(true);
-        } else {
+        } else if (error.status === 400) {
           toast.error('Validation failed.', {
             description: 'Please check your input and try again.',
           });
@@ -86,9 +86,9 @@ export function LogInForm() {
             name='password'
             render={({field, fieldState}) => (
               <FormItem>
-                <div className='flex justify-between items-center w-full'>
+                <div className='flex w-full items-center justify-between'>
                   <FormLabel>Password</FormLabel>
-                  <Link className='text-sm underline decoration-accent hover:decoration-foreground underline-offset-4 font-medium'>
+                  <Link className='text-sm font-medium underline decoration-accent underline-offset-4 hover:decoration-foreground'>
                     Forgot your password?
                   </Link>
                 </div>
@@ -117,7 +117,7 @@ export function LogInForm() {
                               variant='outline'
                               type='button'
                               className={cn(
-                                'border-l-0 rounded-l-none',
+                                'rounded-l-none border-l-0',
                                 fieldState.error && 'border-destructive',
                               )}
                             >
@@ -144,7 +144,7 @@ export function LogInForm() {
             {isPending ? (
               <>
                 <span>Logging in...</span>
-                <LoaderCircle className='ml-2 h-4 w-4 animate-spin' />
+                <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
               </>
             ) : (
               <span>Log in</span>

@@ -11,7 +11,7 @@ export function DynamicBankIcon({bank, ...props}: DynamicBankIconProps) {
   const fileName = bank.replace(' ', '-').toLowerCase();
   const IconComponent = lazy(
     () =>
-      import(`@/assets/bank-icons/${fileName}.tsx`) as Promise<{
+      import(`@/components/shared/bank-icons/${fileName}.tsx`) as Promise<{
         default: ComponentType<SVGProps<SVGSVGElement>>;
       }>,
   );

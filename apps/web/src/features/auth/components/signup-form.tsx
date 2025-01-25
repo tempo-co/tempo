@@ -1,5 +1,5 @@
 import {zodResolver} from '@hookform/resolvers/zod';
-import {Eye, EyeOff, LoaderCircle} from 'lucide-react';
+import {Eye, EyeOff, Loader} from 'lucide-react';
 import {useState} from 'react';
 import {useForm} from 'react-hook-form';
 import {toast} from 'sonner';
@@ -41,7 +41,7 @@ export function SignUpForm() {
             {message: 'This email address is already in use.'},
             {shouldFocus: true},
           );
-        } else {
+        } else if (error.status === 400) {
           toast.error('Validation failed.', {
             description: 'Please check your input and try again.',
           });
@@ -131,7 +131,7 @@ export function SignUpForm() {
                               variant='outline'
                               type='button'
                               className={cn(
-                                'border-l-0 rounded-l-none',
+                                'rounded-l-none border-l-0',
                                 (fieldState.error ||
                                   (fieldState.isTouched && passwordStrength <= 25)) &&
                                   'border-destructive',
@@ -167,7 +167,7 @@ export function SignUpForm() {
             {isPending ? (
               <>
                 <span>Creating account...</span>
-                <LoaderCircle className='ml-2 h-4 w-4 animate-spin' />
+                <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
               </>
             ) : (
               <span>Create account</span>

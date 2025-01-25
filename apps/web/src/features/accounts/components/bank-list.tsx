@@ -1,3 +1,5 @@
+import {useMemo} from 'react';
+
 import {DynamicBankIcon} from '@/components/shared/dynamic-bank-icon';
 import {
   Command,
@@ -15,9 +17,11 @@ type BankListProps = {
 };
 
 export function BankList({setOpen, setSelectedBank}: BankListProps) {
+  const placeholder = useMemo(() => `Search ${Object.values(Bank).length} supported banks...`, []);
+
   return (
     <Command>
-      <CommandInput placeholder='Filter bank...' />
+      <CommandInput placeholder={placeholder} />
       <CommandList>
         <CommandEmpty>No supported banks found.</CommandEmpty>
         <CommandGroup>
@@ -30,7 +34,9 @@ export function BankList({setOpen, setSelectedBank}: BankListProps) {
                 setOpen(false);
               }}
             >
-              <DynamicBankIcon bank={bank} className='w-4 mr-2' />
+              <div className='mr-2 rounded-md bg-muted p-[0.35rem]'>
+                <DynamicBankIcon bank={bank} className='w-4 fill-foreground' />
+              </div>
               {bank}
             </CommandItem>
           ))}
