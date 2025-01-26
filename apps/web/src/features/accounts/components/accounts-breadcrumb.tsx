@@ -48,7 +48,7 @@ export function AccountsBreadcrumb({account, bankStatements}: AccountsBreadcrumb
           <>
             <BreadcrumbSeparator />
             <BreadcrumbLink asChild>
-              <Link to={`/accounts/${account.id}`}>
+              <Link to={`/accounts/$accountId`} params={{accountId: account.id}}>
                 {account.alias ? account.alias : account.bank}
               </Link>
             </BreadcrumbLink>

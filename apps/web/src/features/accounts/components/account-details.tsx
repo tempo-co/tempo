@@ -6,7 +6,7 @@ import {useGetAccount} from '../api/use-get-account';
 import {AccountsBreadcrumb} from './accounts-breadcrumb';
 
 export function AccountDetails() {
-  const {accountId} = useParams({from: '/accounts/$accountId'});
+  const {accountId} = useParams({from: '/(accounts)/accounts/$accountId'});
 
   const {account, isPending} = useGetAccount(accountId);
 

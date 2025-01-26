@@ -20,7 +20,9 @@ type FilePreviewCardProps = {
 };
 
 export function FilePreviewCard({file}: FilePreviewCardProps) {
-  const {accountId} = useParams({from: '/accounts/$accountId/bank-statements'});
+  const {accountId} = useParams({
+    from: '/(accounts)/(statements)/accounts_/$accountId/bank-statements',
+  });
 
   const [progressValue, setProgressValue] = useState(0);
   const [showTransactions, setShowTransactions] = useState(false);

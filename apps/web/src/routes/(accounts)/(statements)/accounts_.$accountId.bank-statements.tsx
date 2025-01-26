@@ -1,7 +1,7 @@
 import {Outlet, createFileRoute} from '@tanstack/react-router';
 
 export const Route = createFileRoute(
-  '/(accounts)/(statements)/accounts/$accountId/bank-statements',
+  '/(accounts)/(statements)/accounts_/$accountId/bank-statements',
 )({
   component: BankStatements,
 });

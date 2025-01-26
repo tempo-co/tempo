@@ -7,7 +7,7 @@ import {BankStatementUploadInput} from '@/features/bank-statements/components/ba
 import {BankStatementsTable} from '@/features/bank-statements/components/bank-statements-table';
 
 export const Route = createFileRoute(
-  '/(accounts)/(statements)/accounts/$accountId/bank-statements/',
+  '/(accounts)/(statements)/accounts_/$accountId/bank-statements/',
 )({
   component: BankStatementsIndex,
 });

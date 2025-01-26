@@ -88,7 +88,10 @@ export function LogInForm() {
               <FormItem>
                 <div className='flex w-full items-center justify-between'>
                   <FormLabel>Password</FormLabel>
-                  <Link className='text-sm font-medium underline decoration-accent underline-offset-4 hover:decoration-foreground'>
+                  <Link
+                    to='/accounts'
+                    className='text-sm font-medium underline decoration-accent underline-offset-4 hover:decoration-foreground'
+                  >
                     Forgot your password?
                   </Link>
                 </div>

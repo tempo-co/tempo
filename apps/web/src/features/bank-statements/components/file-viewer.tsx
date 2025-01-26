@@ -18,7 +18,9 @@ type FileViewerProps = {
 };
 
 export function FileViewer({file, bankStatementId}: FileViewerProps) {
-  const {accountId} = useParams({from: '/accounts/$accountId/bank-statements'});
+  const {accountId} = useParams({
+    from: '/(accounts)/(statements)/accounts_/$accountId/bank-statements',
+  });
 
   const [error, setError] = useState<Error | null>(null);
   const [data, setData] = useState<FileData>({
