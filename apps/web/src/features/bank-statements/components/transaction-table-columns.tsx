@@ -6,6 +6,7 @@ import {CategoryBadge} from '@/components/shared/category-badge';
 import {Button} from '@/components/ui/button';
 import {Category} from '@/types/category';
 import {Transaction} from '@/types/transaction';
+import {cn} from '@/utils/cn';
 
 const categoryOrder = Object.values(Category).reduce(
   (acc, category, index) => {
@@ -96,7 +97,11 @@ export const transactionsTableColumns: ColumnDef<Transaction>[] = [
       );
     },
     cell: ({row}) => {
-      return <p className='pr-2 text-right'>{row.original.amount.toFixed(2)}</p>;
+      return (
+        <p className={cn('px-2 py-1 text-right', row.original.amount > 0 && 'text-success')}>
+          {row.original.amount}
+        </p>
+      );
     },
   },
 ];
