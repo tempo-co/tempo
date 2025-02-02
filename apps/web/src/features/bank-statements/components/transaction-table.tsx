@@ -6,27 +6,21 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import {ChevronFirst, ChevronLast, ChevronLeft, ChevronRight} from 'lucide-react';
-import {Dispatch, SetStateAction, useEffect, useState} from 'react';
+import {CreditCard} from 'lucide-react';
+import {Dispatch, SetStateAction, useState} from 'react';
 
 import {Button} from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {Skeleton} from '@/components/ui/skeleton';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {Transaction} from '@/types/transaction';
 import {cn} from '@/utils/cn';
 
 import {transactionsTableColumns} from './transaction-table-columns';
+import {TransactionTablePagination} from './transaction-table-pagination';
 
 type TransactionsTableProps = {
   transactions: Transaction[];
-  total: number;
+  totalTransactions: number;
   pagination: PaginationState;
   setPagination: Dispatch<SetStateAction<PaginationState>>;
   isPlaceholderData: boolean;
@@ -35,7 +29,7 @@ type TransactionsTableProps = {
 
 export function TransactionsTable({
   transactions,
-  total,
+  totalTransactions,
   pagination,
   setPagination,
   isPlaceholderData,
@@ -52,23 +46,23 @@ export function TransactionsTable({
     onPaginationChange: setPagination,
     manualPagination: true,
     state: {sorting, pagination},
-    rowCount: total,
+    rowCount: totalTransactions,
   });
 
-  useEffect(() => {
-    const totalPages = Math.ceil(total / pagination.pageSize);
-    if (pagination.pageIndex >= totalPages) {
-      setPagination((prev) => ({
-        ...prev,
-        pageIndex: totalPages - 1,
-      }));
-    }
-  }, [pagination, total, setPagination]);
-
-  const startIndex = pagination.pageIndex * pagination.pageSize + 1;
-  const endIndex = Math.min((pagination.pageIndex + 1) * pagination.pageSize, total);
-
-  const totalPages = Math.ceil(total / pagination.pageSize);
+  if (totalTransactions === 0 && !isPending && !isPlaceholderData) {
+    return (
+      <div className='flex flex-col items-center gap-4'>
+        <div className='flex flex-col items-center'>
+          <CreditCard className='h-24 w-24 text-muted' />
+          <p>No transactions.</p>
+        </div>
+        <div className='flex gap-4'>
+          <Button variant='outline'>Add transaction</Button>
+          <Button>Upload bank statement</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -89,7 +83,7 @@ export function TransactionsTable({
           ))}
         </TableHeader>
         <TableBody>
-          {isPending || isPlaceholderData ? (
+          {isPlaceholderData || isPending ? (
             Array.from({length: pagination.pageSize}).map((_, index) => (
               <TableRow key={index}>
                 {transactionsTableColumns.map((column, colIndex) => (
@@ -130,77 +124,14 @@ export function TransactionsTable({
           )}
         </TableBody>
       </Table>
-
-      <div className='mt-4 flex items-center justify-end gap-10'>
-        <div className='flex items-center space-x-6 lg:space-x-8'>
-          <div className='flex items-center space-x-2'>
-            <p className='text-sm font-medium'>Rows per page</p>
-            <Select
-              value={`${table.getState().pagination.pageSize}`}
-              onValueChange={(value) => {
-                setPagination((prev) => ({
-                  ...prev,
-                  pageSize: Number(value),
-                }));
-              }}
-            >
-              <SelectTrigger className='h-8 w-[70px]'>
-                <SelectValue placeholder={table.getState().pagination.pageSize} />
-              </SelectTrigger>
-              <SelectContent side='top'>
-                {[10, 20, 30, 40, 50].map((pageSize) => (
-                  <SelectItem key={pageSize} value={`${pageSize}`}>
-                    {pageSize}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <p className='text-sm'>
-          {startIndex}-{endIndex} of {total}
-        </p>
-        <div className='space-x-2'>
-          <Button
-            onClick={() => setPagination((prev) => ({...prev, pageIndex: 0}))}
-            disabled={pagination.pageIndex < 1}
-            variant='outline'
-            className='h-8 w-8 p-0'
-          >
-            <span className='sr-only'>Go to first page</span>
-            <ChevronFirst className='h-4 w-4' />
-          </Button>
-          <Button
-            onClick={() =>
-              setPagination((prev) => ({...prev, pageIndex: Math.max(prev.pageIndex - 1, 0)}))
-            }
-            disabled={pagination.pageIndex < 1}
-            variant='outline'
-            className='h-8 w-8 p-0'
-          >
-            <span className='sr-only'>Go to previous page</span>
-            <ChevronLeft className='h-4 w-4' />
-          </Button>
-          <Button
-            onClick={() => setPagination((prev) => ({...prev, pageIndex: prev.pageIndex + 1}))}
-            disabled={!table.getCanNextPage()}
-            variant='outline'
-            className='h-8 w-8 p-0'
-          >
-            <span className='sr-only'>Go to next page</span>
-            <ChevronRight className='h-4 w-4' />
-          </Button>
-          <Button
-            onClick={() => setPagination((prev) => ({...prev, pageIndex: totalPages - 1}))}
-            disabled={!table.getCanNextPage()}
-            variant='outline'
-            className='h-8 w-8 p-0'
-          >
-            <span className='sr-only'>Go to last page</span>
-            <ChevronLast className='h-4 w-4' />
-          </Button>
-        </div>
-      </div>
+      {totalTransactions > 0 && (
+        <TransactionTablePagination
+          table={table}
+          totalTransactions={totalTransactions}
+          pagination={pagination}
+          setPagination={setPagination}
+        />
+      )}
     </>
   );
 }
