@@ -11,17 +11,13 @@ function TransactionsIndex() {
   const {data, isPending, pagination, setPagination, isPlaceholderData} = useGetAllTransactions();
 
   return (
-    <>
-      {data && (
-        <TransactionsTable
-          transactions={data.transactions}
-          total={data.total}
-          pagination={pagination}
-          setPagination={setPagination}
-          isPlaceholderData={isPlaceholderData}
-          isPending={isPending}
-        />
-      )}
-    </>
+    <TransactionsTable
+      transactions={data ? data.transactions : []}
+      totalTransactions={data ? data.total : 0}
+      pagination={pagination}
+      setPagination={setPagination}
+      isPlaceholderData={isPlaceholderData}
+      isPending={isPending}
+    />
   );
 }
