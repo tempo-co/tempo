@@ -3,7 +3,7 @@ import {createFileRoute} from '@tanstack/react-router';
 import {useGetAccount} from '@/features/accounts/api/use-get-account';
 import {AccountsBreadcrumb} from '@/features/accounts/components/accounts-breadcrumb';
 import {useGetAllBankStatements} from '@/features/bank-statements/api/use-get-all-bank-statements';
-import {BankStatementUploadInput} from '@/features/bank-statements/components/bank-statement-upload-input';
+import {UploadBankStatementDialog} from '@/features/bank-statements/components/add-bank-statement-dialog';
 import {BankStatementsTable} from '@/features/bank-statements/components/bank-statements-table';
 
 export const Route = createFileRoute(
@@ -32,7 +32,7 @@ function BankStatementsIndex() {
           )}
         </div>
       )}
-      <BankStatementUploadInput />
+      <UploadBankStatementDialog />
     </div>
   );
 }

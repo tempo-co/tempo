@@ -1,5 +1,5 @@
 import {FileUp} from 'lucide-react';
-import {useCallback, useMemo, useState} from 'react';
+import {useCallback, useMemo} from 'react';
 import {ErrorCode, FileRejection, useDropzone} from 'react-dropzone';
 import {toast} from 'sonner';
 
@@ -15,9 +15,12 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const acceptTypes = Object.fromEntries(Object.values(MimeType).map((type) => [type, []]));
 
-export function BankStatementUploadInput() {
-  const [files, setFiles] = useState<File[]>([]);
+type BankStatementUploadInputProps = {
+  files: File[];
+  setFiles: React.Dispatch<React.SetStateAction<File[]>>;
+};
 
+export function BankStatementUploadInput({files, setFiles}: BankStatementUploadInputProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   const formattedFileTypes = useMemo(() => Object.keys(MimeType).join(', '), []);
@@ -53,7 +56,7 @@ export function BankStatementUploadInput() {
         });
       });
     },
-    [formattedFileTypes],
+    [formattedFileTypes, setFiles],
   );
 
   const dropzone = useDropzone({
@@ -65,46 +68,50 @@ export function BankStatementUploadInput() {
 
   return (
     <>
-      <h1>Upload bank statements</h1>
       {isDesktop ? (
-        <div
-          {...dropzone.getRootProps()}
-          className={cn(
-            'flex h-52 cursor-pointer select-none items-center justify-center rounded-md border-2 border-dashed border-border transition-all hover:bg-accent',
-            dropzone.isDragActive && 'bg-accent',
-          )}
-        >
-          <input {...dropzone.getInputProps()} />
-          <div className='flex flex-col items-center'>
-            <FileUp
-              className={cn(
-                'h-8 w-8 text-muted-foreground',
-                dropzone.isDragAccept && 'animate-bounce',
-              )}
-            />
-            <div>
-              {dropzone.isDragAccept ? (
-                'Drop the file here!'
-              ) : (
-                <div className='mt-2 flex flex-col items-center'>
-                  <p>Drag & Drop to upload</p>
-                  <div className='flex items-center'>
-                    <span>or&nbsp;</span>
-                    <Button variant='link' className='h-0 p-0 text-base'>
-                      Browse files
-                    </Button>
+        <>
+          <div
+            {...dropzone.getRootProps()}
+            className={cn(
+              'flex h-52 cursor-pointer select-none items-center justify-center rounded-md border-2 border-dashed border-border transition-all hover:bg-accent',
+              dropzone.isDragActive && 'bg-accent',
+            )}
+          >
+            <input {...dropzone.getInputProps()} />
+            <div className='flex flex-col items-center'>
+              <FileUp
+                className={cn(
+                  'h-8 w-8 text-muted-foreground',
+                  dropzone.isDragAccept && 'animate-bounce',
+                )}
+              />
+              <div>
+                {dropzone.isDragAccept ? (
+                  'Drop the file here!'
+                ) : (
+                  <div className='mt-2 flex flex-col items-center'>
+                    <p>Drag & Drop to upload</p>
+                    <div className='flex items-center'>
+                      <span>or&nbsp;</span>
+                      <Button variant='link' className='h-0 p-0 text-base'>
+                        Browse files
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        </>
       ) : (
-        <Button onClick={dropzone.open} className='w-full'>
-          Upload files
-        </Button>
+        <>
+          <input {...dropzone.getInputProps()} className='hidden' />
+          <Button onClick={dropzone.open} className='w-full'>
+            Upload bank statement
+          </Button>
+        </>
       )}
-      <div className='mb-6 mt-2 flex justify-between text-muted-foreground'>
+      <div className='flex justify-between text-muted-foreground'>
         <p>
           Supported file types: <span className='text-foreground'>{formattedFileTypes}</span>
         </p>
