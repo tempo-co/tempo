@@ -31,7 +31,6 @@ import {FileViewerDialog} from './file-viewer-dialog';
 type FileActionsDropdownProps = {
   bankStatement?: BankStatement;
   file?: File;
-  progressValue?: number;
   isPending?: boolean;
   isError?: boolean;
   isSuccess?: boolean;
@@ -40,7 +39,6 @@ type FileActionsDropdownProps = {
 export function FileActionsDropdown({
   bankStatement,
   file,
-  progressValue,
   isPending,
   isError,
   isSuccess,
@@ -75,7 +73,6 @@ export function FileActionsDropdown({
         file={file || fetchedFile}
         open={isFileViewerDialogOpen}
         setOpen={setIsFileViewerDialogOpen}
-        progressValue={progressValue}
         isPending={isPending}
         isError={isError}
         isSuccess={isSuccess}
@@ -149,7 +146,7 @@ export function FileActionsDropdown({
           )}
           <DrawerContent aria-describedby='File'>
             <DrawerHeader className='m-5 p-0 text-left'>
-              <DrawerTitle className='flex flex-col p-0 text-base font-normal'>
+              <DrawerTitle className='flex flex-col overflow-hidden p-0 text-base font-normal'>
                 {bankStatement && !file && (
                   <>
                     {truncateFileName(bankStatement.file.name)}

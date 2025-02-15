@@ -1,63 +1,30 @@
-import {useParams} from '@tanstack/react-router';
-import {ChevronDown, FileWarning} from 'lucide-react';
-import {useEffect, useState} from 'react';
+import {FileWarning} from 'lucide-react';
 
 import {MimeTypeIcon} from '@/components/shared/mime-type-icon';
-import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
-import {Progress} from '@/components/ui/progress';
+import {BankStatement} from '@/types/bank-statement';
 import {MimeType} from '@/types/mime-type';
 import {cn} from '@/utils/cn';
 
-import {useUploadBankStatement} from '../api/use-upload-bank-statement';
 import {truncateFileName} from '../utils/truncate-file-name';
 import {FileActionsDropdown} from './file-actions-dropdown';
 import {FileMetadata} from './file-metadata';
-import {TransactionsTable} from './transaction-table';
 
 type FilePreviewCardProps = {
   file: File;
+  bankStatement?: BankStatement;
+  isPending: boolean;
+  isError: boolean;
+  isSuccess: boolean;
 };
 
-export function FilePreviewCard({file}: FilePreviewCardProps) {
-  const {accountId} = useParams({
-    from: '/(accounts)/(statements)/accounts_/$accountId/bank-statements',
-  });
-
-  const [progressValue, setProgressValue] = useState(0);
-  const [showTransactions, setShowTransactions] = useState(false);
-  const [shouldRenderTransactions, setShouldRenderTransactions] = useState(false);
-
-  const toggleTransactions = () => {
-    if (showTransactions) {
-      setShowTransactions(false);
-      setTimeout(() => setShouldRenderTransactions(false), 100);
-    } else {
-      setShouldRenderTransactions(true);
-      setTimeout(() => setShowTransactions(true), 0);
-    }
-  };
-
-  const {bankStatement, mutate, isPending, isError, isSuccess} = useUploadBankStatement(accountId);
-
-  useEffect(() => {
-    const updateProgress = () => {
-      setProgressValue((prevProgress) => {
-        const randomFactor = 0.8 + Math.random();
-        const incrementalProgress = (100 - prevProgress) * 0.02 * randomFactor;
-
-        return Math.min(prevProgress + incrementalProgress, 99);
-      });
-    };
-    const interval = setInterval(updateProgress, 50);
-
-    return () => clearInterval(interval);
-  }, [isPending]);
-
-  useEffect(() => {
-    mutate(file);
-  }, [mutate, file]);
-
+export function FilePreviewCard({
+  file,
+  bankStatement,
+  isPending,
+  isError,
+  isSuccess,
+}: FilePreviewCardProps) {
   return (
     <Card className={cn('flex flex-col p-4', isError && 'border-destructive')}>
       <div className='flex items-center justify-between'>
@@ -79,48 +46,16 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
                 isError={isError}
                 isSuccess={isSuccess}
               />
-              {isSuccess && bankStatement && (
-                <div className='mt-1'>
-                  <span className='mx-3 text-muted-foreground'>•</span>
-                  <Button variant='link' className='h-0 p-0' onClick={toggleTransactions}>
-                    <span className='text-foreground'>
-                      {showTransactions ? 'Hide transactions' : 'View transactions'}
-                    </span>
-                    <ChevronDown
-                      className={cn(
-                        'ml-1 h-4 w-4 text-foreground transition-transform',
-                        showTransactions && 'rotate-180',
-                      )}
-                    />
-                  </Button>
-                </div>
-              )}
             </div>
           </div>
         </div>
         <FileActionsDropdown
           bankStatement={bankStatement}
           file={file}
-          progressValue={progressValue}
           isPending={isPending}
           isError={isError}
           isSuccess={isSuccess}
         />
-      </div>
-      {isPending && <Progress value={progressValue} className='mt-4 h-1' />}
-      <div
-        className={cn('overflow-hidden transition-all duration-100 ease-in-out', {
-          'max-h-0': !showTransactions,
-          'max-h-[40rem]': showTransactions,
-          'mt-4': shouldRenderTransactions,
-        })}
-      >
-        {isSuccess && bankStatement && shouldRenderTransactions && (
-          <TransactionsTable
-            transactions={bankStatement.transactions}
-            totalTransactions={bankStatement.transactions.length}
-          />
-        )}
       </div>
     </Card>
   );

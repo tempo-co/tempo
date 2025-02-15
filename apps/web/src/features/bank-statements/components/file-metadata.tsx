@@ -68,7 +68,7 @@ export function FileMetadata({
         {pending && (
           <>
             <Loader className='mr-1 inline h-4 w-4 animate-slow-spin' />
-            <span>Processing...</span>
+            <span>Uploading...</span>
           </>
         )}
         {error && (

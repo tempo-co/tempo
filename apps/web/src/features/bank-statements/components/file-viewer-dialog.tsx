@@ -17,7 +17,6 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/components/ui/drawer';
-import {Progress} from '@/components/ui/progress';
 import {useMediaQuery} from '@/hooks/use-media-query';
 import {BankStatement} from '@/types/bank-statement';
 import {cn} from '@/utils/cn';
@@ -31,7 +30,6 @@ type FileViewerDialogProps = {
   setOpen: React.Dispatch<React.SetStateAction<boolean>>;
   file?: File;
   bankStatement?: BankStatement;
-  progressValue?: number;
   isPending?: boolean;
   isError?: boolean;
   isSuccess?: boolean;
@@ -42,7 +40,6 @@ export function FileViewerDialog({
   setOpen,
   file,
   bankStatement,
-  progressValue,
   isPending,
   isError,
   isSuccess,
@@ -80,7 +77,6 @@ export function FileViewerDialog({
               )}
             </DialogDescription>
           </DialogHeader>
-          {isPending && progressValue && <Progress value={progressValue} className='!my-4 h-1' />}
           <FileViewer file={file} bankStatementId={bankStatement?.id} />
         </DialogContent>
       </Dialog>
@@ -103,7 +99,6 @@ export function FileViewerDialog({
                 isSuccess={isSuccess}
               />
             )}
-            {isPending && progressValue && <Progress value={progressValue} className='mt-2 h-1' />}
           </DrawerDescription>
         </DrawerHeader>
         <FileViewer file={file} bankStatementId={bankStatement?.id} />
