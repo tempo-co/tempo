@@ -15,8 +15,8 @@ import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/c
 import {Transaction} from '@/types/transaction';
 import {cn} from '@/utils/cn';
 
+import {TablePagination} from './table-pagination';
 import {transactionsTableColumns} from './transaction-table-columns';
-import {TransactionTablePagination} from './transaction-table-pagination';
 
 type TransactionsTableProps = {
   transactions: Transaction[];
@@ -83,51 +83,43 @@ export function TransactionsTable({
           ))}
         </TableHeader>
         <TableBody>
-          {(isPlaceholderData || isPending) && pagination ? (
-            Array.from({length: pagination.pageSize}).map((_, index) => (
-              <TableRow key={index}>
-                {transactionsTableColumns.map((column, colIndex) => (
-                  <TableCell
-                    key={colIndex}
-                    className={cn(
-                      'px-3 py-4',
-                      (column as {accessorKey: string}).accessorKey === 'amount' &&
-                        'flex justify-end',
-                    )}
-                  >
-                    <Skeleton
+          {(isPlaceholderData || isPending) && pagination
+            ? Array.from({length: pagination.pageSize}).map((_, index) => (
+                <TableRow key={index}>
+                  {transactionsTableColumns.map((column, colIndex) => (
+                    <TableCell
+                      key={colIndex}
                       className={cn(
-                        'h-[1.25rem] w-[8rem] rounded-full',
-                        (column as {accessorKey: string}).accessorKey === 'amount' && 'w-[5rem]',
+                        'px-3 py-4',
+                        (column as {accessorKey: string}).accessorKey === 'amount' &&
+                          'flex justify-end',
                       )}
-                    />
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
-          ) : table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'}>
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id} className='p-3'>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={transactionsTableColumns.length} className='h-24 text-center'>
-                No transactions.
-              </TableCell>
-            </TableRow>
-          )}
+                    >
+                      <Skeleton
+                        className={cn(
+                          'h-[1.25rem] w-[8rem] rounded-full',
+                          (column as {accessorKey: string}).accessorKey === 'amount' && 'w-[5rem]',
+                        )}
+                      />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            : table.getRowModel().rows.map((row) => (
+                <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'}>
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id} className='p-3'>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
         </TableBody>
       </Table>
       {pagination && setPagination && totalTransactions > 0 && (
-        <TransactionTablePagination
+        <TablePagination
           table={table}
-          totalTransactions={totalTransactions}
+          totalItems={totalTransactions}
           pagination={pagination}
           setPagination={setPagination}
         />

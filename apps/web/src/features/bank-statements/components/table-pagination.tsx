@@ -10,42 +10,41 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {Transaction} from '@/types/transaction';
 
-type TransactionTablePaginationProps = {
-  table: Table<Transaction>;
-  totalTransactions: number;
+type TablePaginationProps<T> = {
+  table: Table<T>;
+  totalItems: number;
   pagination: PaginationState;
   setPagination: Dispatch<SetStateAction<PaginationState>>;
 };
 
-export function TransactionTablePagination({
+export function TablePagination<T>({
   table,
-  totalTransactions,
+  totalItems,
   pagination,
   setPagination,
-}: TransactionTablePaginationProps) {
+}: TablePaginationProps<T>) {
   useEffect(() => {
-    const totalPages = Math.ceil(totalTransactions / pagination.pageSize);
+    const totalPages = Math.ceil(totalItems / pagination.pageSize);
     if (pagination.pageIndex >= totalPages) {
       setPagination((prev) => ({
         ...prev,
         pageIndex: Math.max(totalPages - 1, 0),
       }));
     }
-  }, [pagination.pageIndex, pagination.pageSize, totalTransactions, setPagination]);
+  }, [pagination.pageIndex, pagination.pageSize, totalItems, setPagination]);
 
   const startIndex = useMemo(
     () => pagination.pageIndex * pagination.pageSize + 1,
     [pagination.pageIndex, pagination.pageSize],
   );
   const endIndex = useMemo(
-    () => Math.min((pagination.pageIndex + 1) * pagination.pageSize, totalTransactions),
-    [pagination.pageIndex, pagination.pageSize, totalTransactions],
+    () => Math.min((pagination.pageIndex + 1) * pagination.pageSize, totalItems),
+    [pagination.pageIndex, pagination.pageSize, totalItems],
   );
   const totalPages = useMemo(
-    () => Math.ceil(totalTransactions / pagination.pageSize),
-    [totalTransactions, pagination.pageSize],
+    () => Math.ceil(totalItems / pagination.pageSize),
+    [totalItems, pagination.pageSize],
   );
 
   const handlePageSizeChange = useCallback(
@@ -63,11 +62,17 @@ export function TransactionTablePagination({
   }, [setPagination]);
 
   const handlePreviousPage = useCallback(() => {
-    setPagination((prev) => ({...prev, pageIndex: Math.max(prev.pageIndex - 1, 0)}));
+    setPagination((prev) => ({
+      ...prev,
+      pageIndex: Math.max(prev.pageIndex - 1, 0),
+    }));
   }, [setPagination]);
 
   const handleNextPage = useCallback(() => {
-    setPagination((prev) => ({...prev, pageIndex: prev.pageIndex + 1}));
+    setPagination((prev) => ({
+      ...prev,
+      pageIndex: prev.pageIndex + 1,
+    }));
   }, [setPagination]);
 
   const handleLastPage = useCallback(() => {
@@ -99,7 +104,7 @@ export function TransactionTablePagination({
         </div>
       </div>
       <p className='text-sm'>
-        {startIndex}-{endIndex} of {totalTransactions}
+        {startIndex}-{endIndex} of {totalItems}
       </p>
       <div className='space-x-2'>
         <Button
