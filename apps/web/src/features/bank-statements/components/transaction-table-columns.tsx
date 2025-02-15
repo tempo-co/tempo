@@ -81,6 +81,13 @@ export const transactionsTableColumns: ColumnDef<Transaction>[] = [
     header: () => {
       return <p className='px-3'>Description</p>;
     },
+    cell: ({row}) => {
+      return (
+        <p className='max-w-[70rem] overflow-hidden text-ellipsis whitespace-nowrap px-3'>
+          {row.original.description}
+        </p>
+      );
+    },
   },
   {
     accessorKey: 'amount',
