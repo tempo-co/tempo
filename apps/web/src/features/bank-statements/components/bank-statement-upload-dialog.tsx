@@ -38,7 +38,7 @@ export function BankStatementUploadDialog({pagination}: BankStatementUploadDialo
     return (
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <Button>Upload bank statement</Button>
+          <Button className='w-fit items-end'>Upload bank statement</Button>
         </DialogTrigger>
         <DialogContent className='mx-10 max-w-[50rem]' aria-describedby='Upload bank statement'>
           <DialogHeader>

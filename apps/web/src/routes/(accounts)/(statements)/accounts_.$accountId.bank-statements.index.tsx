@@ -25,18 +25,20 @@ function BankStatementsIndex() {
   } = useGetAllBankStatements(accountId);
 
   return (
-    <div>
+    <>
       {isAccountPending && <AccountsBreadcrumb />}
       {account && <AccountsBreadcrumb account={account} bankStatements />}
-      <BankStatementTable
-        bankStatements={data ? data.bankStatements : []}
-        totalBankStatements={data ? data.total : 0}
-        pagination={pagination}
-        setPagination={setPagination}
-        isPlaceholderData={isPlaceholderData}
-        isPending={isBankStatementsPending}
-      />
-      <BankStatementUploadDialog pagination={pagination} />
-    </div>
+      <div className='flex flex-col gap-4'>
+        <BankStatementUploadDialog pagination={pagination} />
+        <BankStatementTable
+          bankStatements={data ? data.bankStatements : []}
+          totalBankStatements={data ? data.total : 0}
+          pagination={pagination}
+          setPagination={setPagination}
+          isPlaceholderData={isPlaceholderData}
+          isPending={isBankStatementsPending}
+        />
+      </div>
+    </>
   );
 }

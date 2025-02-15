@@ -8,7 +8,7 @@ export const Route = createFileRoute(
 
 function BankStatements() {
   return (
-    <div className='flex flex-col items-center p-10'>
+    <div className='p-10'>
       <Outlet />
     </div>
   );

@@ -82,9 +82,9 @@ export function BankStatementUploadInput({
     maxFiles: 10,
   });
 
-  return (
-    <>
-      {isDesktop ? (
+  if (isDesktop) {
+    return (
+      <>
         <div
           {...dropzone.getRootProps()}
           className={cn(
@@ -117,42 +117,44 @@ export function BankStatementUploadInput({
             </div>
           </div>
         </div>
-      ) : (
-        <>
-          <input {...dropzone.getInputProps()} className='hidden' />
-          <Button onClick={dropzone.open} className='w-full'>
-            Upload bank statement
-          </Button>
-        </>
-      )}
-      <div className='flex justify-between text-muted-foreground'>
-        <p>
-          Supported file types: <span className='text-foreground'>{formattedFileTypes}</span>
-        </p>
-        <p>
-          Maximum file size:{' '}
-          <span className='text-foreground'>{MAX_FILE_SIZE / (1024 * 1024)} MB</span>
-        </p>
-      </div>
-      {files.length > 0 && (
-        <>
-          <Separator />
-          <ScrollArea className='max-h-80' type='auto'>
-            <div className={cn('grid gap-4', files.length > 3 && 'mr-3')}>
-              {files.map(({file, isPending, isError, isSuccess, bankStatement}) => (
-                <FilePreviewCard
-                  key={file.name}
-                  file={file}
-                  isPending={isPending}
-                  isError={isError}
-                  isSuccess={isSuccess}
-                  bankStatement={bankStatement}
-                />
-              ))}
-            </div>
-          </ScrollArea>
-        </>
-      )}
+        <div className='flex justify-between text-muted-foreground'>
+          <p>
+            Supported file types: <span className='text-foreground'>{formattedFileTypes}</span>
+          </p>
+          <p>
+            Maximum file size:{' '}
+            <span className='text-foreground'>{MAX_FILE_SIZE / (1024 * 1024)} MB</span>
+          </p>
+        </div>
+        {files.length > 0 && (
+          <>
+            <Separator />
+            <ScrollArea className='max-h-80' type='auto'>
+              <div className={cn('grid gap-4', files.length > 3 && 'mr-3')}>
+                {files.map(({file, isPending, isError, isSuccess, bankStatement}) => (
+                  <FilePreviewCard
+                    key={file.name}
+                    file={file}
+                    isPending={isPending}
+                    isError={isError}
+                    isSuccess={isSuccess}
+                    bankStatement={bankStatement}
+                  />
+                ))}
+              </div>
+            </ScrollArea>
+          </>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <input {...dropzone.getInputProps()} className='hidden' />
+      <Button onClick={dropzone.open} className='w-full'>
+        Upload bank statement
+      </Button>
     </>
   );
 }

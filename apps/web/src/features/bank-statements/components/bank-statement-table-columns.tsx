@@ -26,8 +26,8 @@ export const bankStatementTableColumns: ColumnDef<BankStatement>[] = [
     },
     cell: ({row}) => {
       return (
-        <div className='flex items-center px-4 py-3'>
-          <div className='mr-4 rounded-md bg-muted p-2'>
+        <div className='flex items-center px-3 py-2'>
+          <div className='mr-3 rounded-md bg-muted p-2'>
             <MimeTypeIcon mimeType={row.original.file.type} />
           </div>
           <div className='overflow-hidden'>
@@ -57,14 +57,14 @@ export const bankStatementTableColumns: ColumnDef<BankStatement>[] = [
       );
     },
     cell: ({row}) => {
-      return <p>{formatPeriod(row.original.period)}</p>;
+      return <p className='whitespace-nowrap'>{formatPeriod(row.original.period)}</p>;
     },
   },
   {
     id: 'actions',
     cell: ({row}) => {
       return (
-        <div className='mx-4'>
+        <div className='mx-4 flex justify-end'>
           <FileActionsDropdown bankStatement={row.original} />
         </div>
       );
