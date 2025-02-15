@@ -1,3 +1,5 @@
+import {useParams} from '@tanstack/react-router';
+import {PaginationState} from '@tanstack/react-table';
 import {FileUp} from 'lucide-react';
 import {useCallback, useMemo} from 'react';
 import {ErrorCode, FileRejection, useDropzone} from 'react-dropzone';
@@ -8,26 +10,32 @@ import {useMediaQuery} from '@/hooks/use-media-query';
 import {MimeType} from '@/types/mime-type';
 import {cn} from '@/utils/cn';
 
+import {useUploadBankStatement} from '../api/use-upload-bank-statement';
 import {truncateFileName} from '../utils/truncate-file-name';
-import {FilePreviewCard} from './file-preview-card';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const acceptTypes = Object.fromEntries(Object.values(MimeType).map((type) => [type, []]));
 
 type BankStatementUploadInputProps = {
-  files: File[];
-  setFiles: React.Dispatch<React.SetStateAction<File[]>>;
+  pagination: PaginationState;
 };
 
-export function BankStatementUploadInput({files, setFiles}: BankStatementUploadInputProps) {
+export function BankStatementUploadInput({pagination}: BankStatementUploadInputProps) {
+  const {accountId} = useParams({
+    from: '/(accounts)/(statements)/accounts_/$accountId/bank-statements',
+  });
+
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   const formattedFileTypes = useMemo(() => Object.keys(MimeType).join(', '), []);
+  const {upload} = useUploadBankStatement(accountId, pagination);
 
   const onDrop = useCallback(
     (acceptedFiles: File[], fileRejections: FileRejection[]) => {
-      setFiles((prevFiles) => [...prevFiles, ...acceptedFiles]);
+      acceptedFiles.forEach((file) => {
+        upload(file);
+      });
 
       fileRejections.forEach(({file, errors}) => {
         errors.forEach((error) => {
@@ -56,7 +64,7 @@ export function BankStatementUploadInput({files, setFiles}: BankStatementUploadI
         });
       });
     },
-    [formattedFileTypes, setFiles],
+    [formattedFileTypes, upload],
   );
 
   const dropzone = useDropzone({
@@ -120,13 +128,6 @@ export function BankStatementUploadInput({files, setFiles}: BankStatementUploadI
           <span className='text-foreground'>{MAX_FILE_SIZE / (1024 * 1024)} MB</span>
         </p>
       </div>
-      {files.length > 0 && (
-        <div className='grid gap-4'>
-          {files.map((file) => (
-            <FilePreviewCard key={file.lastModified} file={file} />
-          ))}
-        </div>
-      )}
     </>
   );
 }

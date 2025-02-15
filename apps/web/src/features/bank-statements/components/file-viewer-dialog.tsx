@@ -26,8 +26,6 @@ import {truncateFileName} from '../utils/truncate-file-name';
 import {FileMetadata} from './file-metadata';
 import {FileViewer} from './file-viewer';
 
-``;
-
 type FileViewerDialogProps = {
   open: boolean;
   setOpen: React.Dispatch<React.SetStateAction<boolean>>;

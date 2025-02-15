@@ -1,3 +1,4 @@
+import {PaginationState} from '@tanstack/react-table';
 import {useState} from 'react';
 
 import {Button} from '@/components/ui/button';
@@ -12,10 +13,14 @@ import {useMediaQuery} from '@/hooks/use-media-query';
 
 import {BankStatementUploadInput} from './bank-statement-upload-input';
 
-export function UploadBankStatementDialog() {
-  const [open, setOpen] = useState(false);
+type BankStatementUploadDialogProps = {
+  pagination: PaginationState;
+};
+
+export function BankStatementUploadDialog({pagination}: BankStatementUploadDialogProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
-  const [files, setFiles] = useState<File[]>([]);
+
+  const [open, setOpen] = useState(false);
 
   if (isDesktop) {
     return (
@@ -27,11 +32,11 @@ export function UploadBankStatementDialog() {
           <DialogHeader>
             <DialogTitle>Upload bank statement</DialogTitle>
           </DialogHeader>
-          <BankStatementUploadInput files={files} setFiles={setFiles} />
+          <BankStatementUploadInput pagination={pagination} />
         </DialogContent>
       </Dialog>
     );
   }
 
-  return <BankStatementUploadInput files={files} setFiles={setFiles} />;
+  return <BankStatementUploadInput pagination={pagination} />;
 }

@@ -1,19 +1,20 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
+import {PaginationState} from '@tanstack/react-table';
+import prettyBytes from 'pretty-bytes';
+import {toast} from 'sonner';
 
 import {Account} from '@/types/account';
 import {BankStatement} from '@/types/bank-statement';
 import {api} from '@/utils/api';
 
-export const useUploadBankStatement = (accountId: Account['id']) => {
+import {formatFileType} from '../utils/format-file-type';
+import {truncateFileName} from '../utils/truncate-file-name';
+import {PaginatedBankStatementsResponse} from './use-get-all-bank-statements';
+
+export const useUploadBankStatement = (accountId: Account['id'], pagination: PaginationState) => {
   const queryClient = useQueryClient();
 
-  const {
-    data: bankStatement,
-    mutate,
-    isPending,
-    isError,
-    isSuccess,
-  } = useMutation<BankStatement, Error, File>({
+  const {mutateAsync} = useMutation<BankStatement, Error, File>({
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append('file', file);
@@ -24,13 +25,25 @@ export const useUploadBankStatement = (accountId: Account['id']) => {
       const bankStatement = (await response.json()) as BankStatement;
 
       queryClient.setQueryData(
-        ['bank-statements', accountId],
-        (prevBankStatements: BankStatement[]) => [...prevBankStatements, bankStatement],
+        ['bank-statements', pagination, accountId],
+        (prevData: PaginatedBankStatementsResponse) => ({
+          bankStatements: [...(prevData?.bankStatements ?? []), bankStatement],
+          total: (prevData?.total ?? 0) + 1,
+        }),
       );
       return bankStatement;
     },
     retry: false,
   });
 
-  return {bankStatement, mutate, isPending, isError, isSuccess};
+  const upload = (file: File) => {
+    return toast.promise(mutateAsync(file), {
+      loading: 'Uploading file...',
+      success: 'Bank statement uploaded successfully',
+      error: 'Error uploading file',
+      description: `${formatFileType(file.type)} • ${prettyBytes(Number(file.size))} • ${truncateFileName(file.name, 30)}`,
+    });
+  };
+
+  return {upload};
 };
