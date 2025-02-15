@@ -34,7 +34,7 @@ export function App() {
     >
       <ThemeProvider defaultTheme='dark' storageKey='vite-ui-theme'>
         <RouterProvider router={router} context={{isAuthenticated}} />
-        <Toaster />
+        <Toaster expand />
       </ThemeProvider>
     </React.Suspense>
   );
