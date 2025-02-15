@@ -116,7 +116,10 @@ export function FilePreviewCard({file}: FilePreviewCardProps) {
         })}
       >
         {isSuccess && bankStatement && shouldRenderTransactions && (
-          <TransactionsTable transactions={bankStatement.transactions} />
+          <TransactionsTable
+            transactions={bankStatement.transactions}
+            totalTransactions={bankStatement.transactions.length}
+          />
         )}
       </div>
     </Card>

@@ -21,10 +21,10 @@ import {TransactionTablePagination} from './transaction-table-pagination';
 type TransactionsTableProps = {
   transactions: Transaction[];
   totalTransactions: number;
-  pagination: PaginationState;
-  setPagination: Dispatch<SetStateAction<PaginationState>>;
-  isPlaceholderData: boolean;
-  isPending: boolean;
+  pagination?: PaginationState;
+  setPagination?: Dispatch<SetStateAction<PaginationState>>;
+  isPlaceholderData?: boolean;
+  isPending?: boolean;
 };
 
 export function TransactionsTable({
@@ -83,7 +83,7 @@ export function TransactionsTable({
           ))}
         </TableHeader>
         <TableBody>
-          {isPlaceholderData || isPending ? (
+          {(isPlaceholderData || isPending) && pagination ? (
             Array.from({length: pagination.pageSize}).map((_, index) => (
               <TableRow key={index}>
                 {transactionsTableColumns.map((column, colIndex) => (
@@ -124,7 +124,7 @@ export function TransactionsTable({
           )}
         </TableBody>
       </Table>
-      {totalTransactions > 0 && (
+      {pagination && setPagination && totalTransactions > 0 && (
         <TransactionTablePagination
           table={table}
           totalTransactions={totalTransactions}
