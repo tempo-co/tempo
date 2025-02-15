@@ -9,7 +9,7 @@ import {formatPeriod} from '../utils/format-period';
 import {FileActionsDropdown} from './file-actions-dropdown';
 import {FileMetadata} from './file-metadata';
 
-export const bankStatementsTableColumns: ColumnDef<BankStatement>[] = [
+export const bankStatementTableColumns: ColumnDef<BankStatement>[] = [
   {
     accessorKey: 'file.name',
     header: ({column}) => {
