@@ -1,17 +1,29 @@
+// BankStatementUploadDialog.tsx
 import {PaginationState} from '@tanstack/react-table';
 import {useState} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {useMediaQuery} from '@/hooks/use-media-query';
+import {BankStatement} from '@/types/bank-statement';
 
 import {BankStatementUploadInput} from './bank-statement-upload-input';
+
+export type FileState = {
+  file: File;
+  isPending: boolean;
+  isError: boolean;
+  isSuccess: boolean;
+  bankStatement?: BankStatement;
+};
 
 type BankStatementUploadDialogProps = {
   pagination: PaginationState;
@@ -19,8 +31,8 @@ type BankStatementUploadDialogProps = {
 
 export function BankStatementUploadDialog({pagination}: BankStatementUploadDialogProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
-
   const [open, setOpen] = useState(false);
+  const [files, setFiles] = useState<FileState[]>([]);
 
   if (isDesktop) {
     return (
@@ -28,15 +40,22 @@ export function BankStatementUploadDialog({pagination}: BankStatementUploadDialo
         <DialogTrigger asChild>
           <Button>Upload bank statement</Button>
         </DialogTrigger>
-        <DialogContent className='mx-10 max-w-[60rem]' aria-describedby='Upload bank statement'>
+        <DialogContent className='mx-10 max-w-[50rem]' aria-describedby='Upload bank statement'>
           <DialogHeader>
             <DialogTitle>Upload bank statement</DialogTitle>
           </DialogHeader>
-          <BankStatementUploadInput pagination={pagination} />
+          <BankStatementUploadInput pagination={pagination} files={files} setFiles={setFiles} />
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type='button' variant='outline' className='w-full'>
+                Close
+              </Button>
+            </DialogClose>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     );
   }
 
-  return <BankStatementUploadInput pagination={pagination} />;
+  return <BankStatementUploadInput pagination={pagination} files={files} setFiles={setFiles} />;
 }
