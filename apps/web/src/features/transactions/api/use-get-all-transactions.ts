@@ -11,8 +11,8 @@ type PaginatedTransactionsResponse = {
   total: number;
 };
 
-export const useGetAllTransactions = () => {
-  const [pagination, setPagination] = useState<PaginationState>({pageIndex: 0, pageSize: 10});
+export const useGetAllTransactions = ({pageIndex = 0, pageSize = 10}: PaginationState) => {
+  const [pagination, setPagination] = useState<PaginationState>({pageIndex, pageSize});
 
   const {data, isPending, isError, isPlaceholderData} = useQuery<PaginatedTransactionsResponse>({
     queryKey: ['transactions', pagination.pageIndex, pagination.pageSize],

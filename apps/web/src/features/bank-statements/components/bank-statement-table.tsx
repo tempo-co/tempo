@@ -6,25 +6,25 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import {CreditCard} from 'lucide-react';
+import {FileText} from 'lucide-react';
 import {Dispatch, SetStateAction, useState} from 'react';
 
-import {Button} from '@/components/ui/button';
 import {Skeleton} from '@/components/ui/skeleton';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {BankStatement} from '@/types/bank-statement';
 import {cn} from '@/utils/cn';
 
 import {bankStatementTableColumns} from './bank-statement-table-columns';
+import {BankStatementUploadDialog} from './bank-statement-upload-dialog';
 import {TablePagination} from './table-pagination';
 
 type BankStatementTableProps = {
   bankStatements: BankStatement[];
   totalBankStatements: number;
-  pagination?: PaginationState;
-  setPagination?: Dispatch<SetStateAction<PaginationState>>;
-  isPlaceholderData?: boolean;
-  isPending?: boolean;
+  pagination: PaginationState;
+  setPagination: Dispatch<SetStateAction<PaginationState>>;
+  isPlaceholderData: boolean;
+  isPending: boolean;
 };
 
 export function BankStatementTable({
@@ -53,10 +53,10 @@ export function BankStatementTable({
     return (
       <div className='flex flex-col items-center gap-4'>
         <div className='flex flex-col items-center'>
-          <CreditCard className='h-24 w-24 text-muted' />
+          <FileText className='mb-1 h-24 w-24 text-muted' />
           <p>No bank statements.</p>
         </div>
-        <Button>Upload bank statement</Button>
+        <BankStatementUploadDialog pagination={pagination} />
       </div>
     );
   }
@@ -80,7 +80,7 @@ export function BankStatementTable({
           ))}
         </TableHeader>
         <TableBody>
-          {(isPlaceholderData || isPending) && pagination
+          {isPlaceholderData || isPending
             ? Array.from({length: pagination.pageSize}).map((_, index) => (
                 <TableRow key={index}>
                   {bankStatementTableColumns.map((column, colIndex) => (
@@ -112,7 +112,7 @@ export function BankStatementTable({
               ))}
         </TableBody>
       </Table>
-      {pagination && setPagination && totalBankStatements > 0 && (
+      {totalBankStatements > 0 && (
         <TablePagination
           table={table}
           totalItems={totalBankStatements}

@@ -29,7 +29,7 @@ function BankStatementsIndex() {
       {isAccountPending && <AccountsBreadcrumb />}
       {account && <AccountsBreadcrumb account={account} bankStatements />}
       <div className='flex flex-col gap-4'>
-        <BankStatementUploadDialog pagination={pagination} />
+        {data && data.total > 0 && <BankStatementUploadDialog pagination={pagination} />}
         <BankStatementTable
           bankStatements={data ? data.bankStatements : []}
           totalBankStatements={data ? data.total : 0}

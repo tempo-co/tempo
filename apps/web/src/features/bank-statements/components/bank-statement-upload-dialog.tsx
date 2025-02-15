@@ -1,4 +1,3 @@
-// BankStatementUploadDialog.tsx
 import {PaginationState} from '@tanstack/react-table';
 import {useState} from 'react';
 

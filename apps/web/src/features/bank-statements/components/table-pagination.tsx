@@ -1,3 +1,4 @@
+import {useNavigate} from '@tanstack/react-router';
 import {PaginationState, Table} from '@tanstack/react-table';
 import {ChevronFirst, ChevronLast, ChevronLeft, ChevronRight} from 'lucide-react';
 import {Dispatch, SetStateAction, useCallback, useEffect, useMemo} from 'react';
@@ -18,19 +19,20 @@ type TablePaginationProps<T> = {
   setPagination: Dispatch<SetStateAction<PaginationState>>;
 };
 
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
+
 export function TablePagination<T>({
   table,
   totalItems,
   pagination,
   setPagination,
 }: TablePaginationProps<T>) {
+  const navigate = useNavigate({from: '/transactions/'});
+
   useEffect(() => {
     const totalPages = Math.ceil(totalItems / pagination.pageSize);
     if (pagination.pageIndex >= totalPages) {
-      setPagination((prev) => ({
-        ...prev,
-        pageIndex: Math.max(totalPages - 1, 0),
-      }));
+      setPagination((prev) => ({...prev, pageIndex: Math.max(totalPages - 1, 0)}));
     }
   }, [pagination.pageIndex, pagination.pageSize, totalItems, setPagination]);
 
@@ -48,38 +50,36 @@ export function TablePagination<T>({
   );
 
   const handlePageSizeChange = useCallback(
-    (value: string) => {
-      setPagination((prev) => ({
-        ...prev,
-        pageSize: Number(value),
-      }));
+    async (value: string) => {
+      await navigate({search: (prev) => ({...prev, pageSize: Number(value)})});
+      setPagination((prev) => ({...prev, pageSize: Number(value)}));
     },
-    [setPagination],
+    [navigate, setPagination],
   );
 
-  const handleFirstPage = useCallback(() => {
+  const handleFirstPage = useCallback(async () => {
+    await navigate({search: (prev) => ({...prev, pageIndex: 0})});
+
     setPagination((prev) => ({...prev, pageIndex: 0}));
-  }, [setPagination]);
+  }, [navigate, setPagination]);
 
-  const handlePreviousPage = useCallback(() => {
-    setPagination((prev) => ({
-      ...prev,
-      pageIndex: Math.max(prev.pageIndex - 1, 0),
-    }));
-  }, [setPagination]);
+  const handlePreviousPage = useCallback(async () => {
+    await navigate({search: (prev) => ({...prev, pageIndex: Math.max(prev.pageIndex - 1, 0)})});
 
-  const handleNextPage = useCallback(() => {
-    setPagination((prev) => ({
-      ...prev,
-      pageIndex: prev.pageIndex + 1,
-    }));
-  }, [setPagination]);
+    setPagination((prev) => ({...prev, pageIndex: Math.max(prev.pageIndex - 1, 0)}));
+  }, [navigate, setPagination]);
 
-  const handleLastPage = useCallback(() => {
+  const handleNextPage = useCallback(async () => {
+    await navigate({search: (prev) => ({...prev, pageIndex: prev.pageIndex + 1})});
+
+    setPagination((prev) => ({...prev, pageIndex: prev.pageIndex + 1}));
+  }, [navigate, setPagination]);
+
+  const handleLastPage = useCallback(async () => {
+    await navigate({search: (prev) => ({...prev, pageIndex: totalPages - 1})});
+
     setPagination((prev) => ({...prev, pageIndex: totalPages - 1}));
-  }, [setPagination, totalPages]);
-
-  const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
+  }, [navigate, setPagination, totalPages]);
 
   return (
     <div className='mt-4 flex items-center justify-end gap-10'>
