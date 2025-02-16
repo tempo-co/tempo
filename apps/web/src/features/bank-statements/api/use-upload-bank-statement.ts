@@ -1,16 +1,17 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {PaginationState} from '@tanstack/react-table';
-import prettyBytes from 'pretty-bytes';
 import {toast} from 'sonner';
 
 import {Account} from '@/types/account';
 import {BankStatement} from '@/types/bank-statement';
-import {api} from '@/utils/api';
+import {HttpError, api} from '@/utils/api';
 
-import {FileState} from '../components/bank-statement-upload-dialog';
-import {formatFileType} from '../utils/format-file-type';
-import {truncateFileName} from '../utils/truncate-file-name';
+import {FileState} from '../types/file-state';
 import {PaginatedBankStatementsResponse} from './use-get-all-bank-statements';
+
+type UploadBankStatementHttpError = HttpError & {
+  status: 400 | 401 | 409 | 422;
+};
 
 export const useUploadBankStatement = (
   accountId: Account['id'],
@@ -19,7 +20,7 @@ export const useUploadBankStatement = (
 ) => {
   const queryClient = useQueryClient();
 
-  const {mutateAsync} = useMutation<BankStatement, Error, File>({
+  const {mutateAsync} = useMutation<BankStatement, UploadBankStatementHttpError, File>({
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append('file', file);
@@ -42,7 +43,7 @@ export const useUploadBankStatement = (
   });
 
   const upload = (file: File) => {
-    setFiles((prev) => [...prev, {file, isPending: true, isError: false, isSuccess: false}]);
+    setFiles((prev) => [...prev, {file, isPending: true, error: null, isSuccess: false}]);
     return toast.promise(
       mutateAsync(file)
         .then((bankStatement) => {
@@ -53,17 +54,18 @@ export const useUploadBankStatement = (
           );
           return bankStatement;
         })
-        .catch((error) => {
+        .catch((error: UploadBankStatementHttpError) => {
           setFiles((prev) =>
-            prev.map((fs) => (fs.file === file ? {...fs, isPending: false, isError: true} : fs)),
+            prev.map((fs) =>
+              fs.file === file ? {...fs, isPending: false, error: error.message} : fs,
+            ),
           );
           throw error;
         }),
       {
         loading: 'Uploading file...',
         success: 'Bank statement uploaded successfully',
-        error: 'Error uploading file',
-        description: `${formatFileType(file.type)} • ${prettyBytes(Number(file.size))} • ${truncateFileName(file.name, 30)}`,
+        error: (error: UploadBankStatementHttpError) => error.message || 'Error uploading file',
       },
     );
   };

@@ -12,17 +12,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {useMediaQuery} from '@/hooks/use-media-query';
-import {BankStatement} from '@/types/bank-statement';
 
+import {FileState} from '../types/file-state';
 import {BankStatementUploadInput} from './bank-statement-upload-input';
-
-export type FileState = {
-  file: File;
-  isPending: boolean;
-  isError: boolean;
-  isSuccess: boolean;
-  bankStatement?: BankStatement;
-};
 
 type BankStatementUploadDialogProps = {
   pagination: PaginationState;

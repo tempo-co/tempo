@@ -3,8 +3,10 @@ import {useMemo} from 'react';
 import {Button} from '@/components/ui/button';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -31,7 +33,7 @@ type FileViewerDialogProps = {
   file?: File;
   bankStatement?: BankStatement;
   isPending?: boolean;
-  isError?: boolean;
+  error?: string | null;
   isSuccess?: boolean;
 };
 
@@ -41,7 +43,7 @@ export function FileViewerDialog({
   file,
   bankStatement,
   isPending,
-  isError,
+  error,
   isSuccess,
 }: FileViewerDialogProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
@@ -60,7 +62,7 @@ export function FileViewerDialog({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           aria-describedby='View file'
-          className={cn('h-[80%] max-w-[70%] gap-0', isError && 'border-destructive')}
+          className={cn('h-[80%] max-w-[70%] gap-0', error && 'border-destructive')}
         >
           <DialogHeader>
             <DialogTitle>{truncatedFileName}</DialogTitle>
@@ -71,13 +73,20 @@ export function FileViewerDialog({
                   fileType={fileType}
                   fileUploadedAt={bankStatement?.uploadedAt}
                   isPending={isPending}
-                  isError={isError}
+                  error={error}
                   isSuccess={isSuccess}
                 />
               )}
             </DialogDescription>
           </DialogHeader>
           <FileViewer file={file} bankStatementId={bankStatement?.id} />
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type='button' variant='outline' className='mt-4 w-full'>
+                Close
+              </Button>
+            </DialogClose>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     );
@@ -95,7 +104,7 @@ export function FileViewerDialog({
                 fileType={fileType}
                 fileUploadedAt={bankStatement?.uploadedAt}
                 isPending={isPending}
-                isError={isError}
+                error={error}
                 isSuccess={isSuccess}
               />
             )}

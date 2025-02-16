@@ -73,7 +73,7 @@ export function DeleteBankStatementDialog({
           <BankStatementCard bankStatement={bankStatement} />
           <DialogFooter>
             <DialogClose asChild>
-              <Button type='button' variant='outline'>
+              <Button type='button' variant='outline' className='mr-2'>
                 Cancel
               </Button>
             </DialogClose>

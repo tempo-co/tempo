@@ -13,8 +13,8 @@ import {MimeType} from '@/types/mime-type';
 import {cn} from '@/utils/cn';
 
 import {useUploadBankStatement} from '../api/use-upload-bank-statement';
+import {FileState} from '../types/file-state';
 import {truncateFileName} from '../utils/truncate-file-name';
-import {FileState} from './bank-statement-upload-dialog';
 import {FilePreviewCard} from './file-preview-card';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -131,12 +131,12 @@ export function BankStatementUploadInput({
             <Separator />
             <ScrollArea className='max-h-80' type='auto'>
               <div className={cn('grid gap-4', files.length > 3 && 'mr-3')}>
-                {files.map(({file, isPending, isError, isSuccess, bankStatement}) => (
+                {files.map(({file, isPending, error, isSuccess, bankStatement}) => (
                   <FilePreviewCard
                     key={file.name}
                     file={file}
                     isPending={isPending}
-                    isError={isError}
+                    error={error}
                     isSuccess={isSuccess}
                     bankStatement={bankStatement}
                   />

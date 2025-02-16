@@ -32,7 +32,7 @@ type FileActionsDropdownProps = {
   bankStatement?: BankStatement;
   file?: File;
   isPending?: boolean;
-  isError?: boolean;
+  error?: string | null;
   isSuccess?: boolean;
 };
 
@@ -40,7 +40,7 @@ export function FileActionsDropdown({
   bankStatement,
   file,
   isPending,
-  isError,
+  error,
   isSuccess,
 }: FileActionsDropdownProps) {
   const {accountId} = useParams({
@@ -74,7 +74,7 @@ export function FileActionsDropdown({
         open={isFileViewerDialogOpen}
         setOpen={setIsFileViewerDialogOpen}
         isPending={isPending}
-        isError={isError}
+        error={error}
         isSuccess={isSuccess}
       />
       {bankStatement && (

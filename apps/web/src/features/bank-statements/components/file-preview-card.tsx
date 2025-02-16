@@ -14,7 +14,7 @@ type FilePreviewCardProps = {
   file: File;
   bankStatement?: BankStatement;
   isPending: boolean;
-  isError: boolean;
+  error: string | null;
   isSuccess: boolean;
 };
 
@@ -22,15 +22,15 @@ export function FilePreviewCard({
   file,
   bankStatement,
   isPending,
-  isError,
+  error,
   isSuccess,
 }: FilePreviewCardProps) {
   return (
-    <Card className={cn('flex flex-col p-4', isError && 'border-destructive')}>
+    <Card className={cn('flex flex-col p-4', error && 'border-destructive')}>
       <div className='flex items-center justify-between'>
         <div className='flex items-center'>
           <div className='mr-4 rounded-md bg-muted p-2'>
-            {isError ? (
+            {error ? (
               <FileWarning className='h-6 w-6' />
             ) : (
               <MimeTypeIcon mimeType={file.type as MimeType} />
@@ -43,7 +43,7 @@ export function FilePreviewCard({
                 fileSize={file.size}
                 fileType={file.type}
                 isPending={isPending}
-                isError={isError}
+                error={error}
                 isSuccess={isSuccess}
               />
             </div>
@@ -53,7 +53,7 @@ export function FilePreviewCard({
           bankStatement={bankStatement}
           file={file}
           isPending={isPending}
-          isError={isError}
+          error={error}
           isSuccess={isSuccess}
         />
       </div>

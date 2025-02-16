@@ -18,7 +18,7 @@ type FileMetadataProps = {
   fileType: string | MimeType;
   fileUploadedAt?: Date;
   isPending?: boolean;
-  isError?: boolean;
+  error?: string | null;
   isSuccess?: boolean;
 };
 
@@ -27,13 +27,13 @@ export function FileMetadata({
   fileType,
   fileUploadedAt,
   isPending,
-  isError,
+  error,
   isSuccess,
 }: FileMetadataProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   const pending = isPending ?? false;
-  const error = isError ?? false;
+  const errorMessage = error ?? false;
   const success = isSuccess ?? false;
 
   const formattedFileType = useMemo(() => formatFileType(fileType), [fileType]);
@@ -57,11 +57,11 @@ export function FileMetadata({
           <span className='truncate'>{formattedDate}</span>
         </>
       )}
-      {(pending || error || success) && <span className='mx-2 sm:mx-3'>•</span>}
+      {(pending || errorMessage || success) && <span className='mx-2 sm:mx-3'>•</span>}
       <span
         className={cn(
           'flex items-center',
-          isError && 'text-destructive',
+          errorMessage && 'text-destructive',
           isSuccess && 'text-success',
         )}
       >
@@ -71,10 +71,10 @@ export function FileMetadata({
             <span>Uploading...</span>
           </>
         )}
-        {error && (
+        {errorMessage && (
           <>
             <CircleAlert className='mr-1 inline h-4 w-4' />
-            <span>Failed</span>
+            <span>{errorMessage}</span>
           </>
         )}
         {success && (
