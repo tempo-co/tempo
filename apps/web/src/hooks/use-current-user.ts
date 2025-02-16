@@ -17,5 +17,5 @@ export const useCurrentUser = () => {
     retry: false,
   });
 
-  return {currentUser, isPending, error, isAuthenticated: !!currentUser};
+  return {currentUser, isPending, error, isAuthenticated: !isPending && !!currentUser};
 };

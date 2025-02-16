@@ -11,8 +11,10 @@ export const Route = createFileRoute('/(transactions)/transactions')({
 
 function Transactions() {
   return (
-    <div className='p-10'>
-      <Outlet />
-    </div>
+    <>
+      <div className='p-10'>
+        <Outlet />
+      </div>
+    </>
   );
 }
