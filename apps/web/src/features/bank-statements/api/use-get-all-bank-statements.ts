@@ -12,8 +12,11 @@ export type PaginatedBankStatementsResponse = {
   total: number;
 };
 
-export const useGetAllBankStatements = (accountId: Account['id']) => {
-  const [pagination, setPagination] = useState<PaginationState>({pageIndex: 0, pageSize: 10});
+export const useGetAllBankStatements = (
+  accountId: Account['id'],
+  {pageIndex = 0, pageSize = 10}: PaginationState,
+) => {
+  const [pagination, setPagination] = useState<PaginationState>({pageIndex, pageSize});
 
   const {data, isPending, isError, isPlaceholderData} = useQuery<PaginatedBankStatementsResponse>({
     queryKey: ['bank-statements', pagination, accountId],

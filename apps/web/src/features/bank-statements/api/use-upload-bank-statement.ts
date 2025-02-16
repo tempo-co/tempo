@@ -1,4 +1,3 @@
-// useUploadBankStatement.ts
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {PaginationState} from '@tanstack/react-table';
 import prettyBytes from 'pretty-bytes';

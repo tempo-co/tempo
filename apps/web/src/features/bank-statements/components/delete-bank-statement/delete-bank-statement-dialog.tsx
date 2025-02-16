@@ -1,4 +1,4 @@
-import {useParams} from '@tanstack/react-router';
+import {useParams, useSearch} from '@tanstack/react-router';
 import {Loader} from 'lucide-react';
 
 import {Button} from '@/components/ui/button';
@@ -39,11 +39,18 @@ export function DeleteBankStatementDialog({
   setOpen,
 }: DeleteBankStatementDialogProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
+
   const {accountId} = useParams({
-    from: '/(accounts)/(statements)/accounts_/$accountId/bank-statements',
+    from: '/(accounts)/(statements)/accounts_/$accountId/bank-statements/',
+  });
+  const {pageIndex, pageSize} = useSearch({
+    from: '/(accounts)/(statements)/accounts_/$accountId/bank-statements/',
   });
 
-  const {mutateAsync, isPending} = useDeleteBankStatement(accountId, bankStatement.id);
+  const {mutateAsync, isPending} = useDeleteBankStatement(accountId, bankStatement.id, {
+    pageIndex,
+    pageSize,
+  });
 
   const handleDelete = async () => {
     await mutateAsync();
