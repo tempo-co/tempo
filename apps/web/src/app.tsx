@@ -32,7 +32,7 @@ export function App() {
     <React.Suspense fallback={<LoadingScreen />}>
       <ThemeProvider defaultTheme='dark' storageKey='vite-ui-theme'>
         <RouterProvider router={router} context={{isAuthenticated}} />
-        <Toaster expand />
+        <Toaster expand duration={5000} />
       </ThemeProvider>
     </React.Suspense>
   );
