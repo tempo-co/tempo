@@ -5,6 +5,7 @@ import {z} from 'zod';
 import {useGetAccount} from '@/features/accounts/api/use-get-account';
 import {AccountsBreadcrumb} from '@/features/accounts/components/accounts-breadcrumb';
 import {useGetAllBankStatements} from '@/features/bank-statements/api/use-get-all-bank-statements';
+import {BankStatementCalendarView} from '@/features/bank-statements/components/bank-statement-calendar-view';
 import {BankStatementTable} from '@/features/bank-statements/components/bank-statement-table';
 import {BankStatementUploadDialog} from '@/features/bank-statements/components/bank-statement-upload-dialog';
 
@@ -37,6 +38,7 @@ function BankStatementsIndex() {
     <>
       {isAccountPending && <AccountsBreadcrumb />}
       {account && <AccountsBreadcrumb account={account} bankStatements />}
+      {data && <BankStatementCalendarView bankStatements={data.bankStatements} />}
       <div className='flex flex-col gap-4'>
         {data && data.total > 0 && <BankStatementUploadDialog pagination={pagination} />}
         <BankStatementTable
