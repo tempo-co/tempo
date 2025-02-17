@@ -10,30 +10,38 @@ export function mergePeriods(bankStatements: BankStatement[]) {
     .map((statement) => statement.period)
     .map((period) => ({start: new Date(period.start), end: new Date(period.end)}));
 
-  const sorted = [...periods].sort((a, b) => a.start.getTime() - b.start.getTime());
-  const merged: BankStatement['period'][] = [sorted[0]];
-  for (let i = 1; i < sorted.length; i++) {
+  if (periods.length === 0) return [];
+
+  periods.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  const merged: BankStatement['period'][] = [periods[0]];
+
+  periods.forEach((currentPeriod) => {
     const last = merged[merged.length - 1];
-    if (sorted[i].start.getTime() <= addDays(last.end, 1).getTime()) {
-      last.end = new Date(Math.max(last.end.getTime(), sorted[i].end.getTime()));
+
+    // If current period is contiguous or overlaps with the last merged period
+    if (currentPeriod.start.getTime() <= addDays(last.end, 1).getTime()) {
+      last.end = new Date(Math.max(last.end.getTime(), currentPeriod.end.getTime()));
     } else {
-      merged.push(sorted[i]);
+      merged.push(currentPeriod);
     }
-  }
+  });
+
   return merged;
 }
 
 /**
- * Generates modifier functions for Calendar to style days based on bank statement periods.
+ * Returns modifier functions for Calendar to style days based on bank statement periods.
  */
 export function getModifiers(mergedPeriods: BankStatement['period'][]) {
+  const periodSet = new Set(mergedPeriods.map((period) => period.start.getTime()));
+  const endSet = new Set(mergedPeriods.map((period) => period.end.getTime()));
+
   return {
     bankStatement: (date: Date) =>
       mergedPeriods.some((period) => date >= period.start && date <= period.end),
-    bankStatementStart: (date: Date) =>
-      mergedPeriods.some((period) => date.getTime() === period.start.getTime()),
-    bankStatementEnd: (date: Date) =>
-      mergedPeriods.some((period) => date.getTime() === period.end.getTime()),
+    bankStatementStart: (date: Date) => periodSet.has(date.getTime()),
+    bankStatementEnd: (date: Date) => endSet.has(date.getTime()),
     bankStatementMonday: (date: Date) =>
       date.getDay() === 1 &&
       mergedPeriods.some((period) => date >= period.start && date <= period.end),
