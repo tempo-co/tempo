@@ -79,7 +79,7 @@ export function FileViewer({file, bankStatementId}: FileViewerProps) {
         <p>{data.rowCount} rows</p>
       </div>
       <Table>
-        <TableHeader>
+        <TableHeader className='bg-card'>
           <TableRow>
             {data.headers.map((header, index) => (
               <TableHead className='p-2 md:p-3' key={index}>
@@ -88,7 +88,7 @@ export function FileViewer({file, bankStatementId}: FileViewerProps) {
             ))}
           </TableRow>
         </TableHeader>
-        <TableBody verticalScrollBarClassName='pt-[2.4rem] md:pt-[2.9rem]'>
+        <TableBody>
           {data.records.map((row, rowIndex) => (
             <TableRow key={rowIndex}>
               {data.headers.map((header, colIndex) => (
