@@ -1,4 +1,4 @@
-import {Link} from '@tanstack/react-router';
+import {Link, useMatchRoute} from '@tanstack/react-router';
 import {
   BadgeCheck,
   ChevronsUpDown,
@@ -32,8 +32,9 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import {User} from '@/types/user';
+import {cn} from '@/utils/cn';
 
-const items = [
+const links = [
   {
     title: 'Home',
     url: '/',
@@ -57,24 +58,28 @@ type AppSidebarProps = {
 
 export function AppSidebar({user}: AppSidebarProps) {
   const {isMobile} = useSidebar();
+  const matchRoute = useMatchRoute();
 
   return (
     <Sidebar collapsible='icon'>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Application</SidebarGroupLabel>
+          <SidebarGroupLabel>Flair</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <Link to={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {links.map((item) => {
+                const isActive = matchRoute({to: item.url});
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild>
+                      <Link to={item.url} className={cn(isActive && 'bg-sidebar-accent')}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
