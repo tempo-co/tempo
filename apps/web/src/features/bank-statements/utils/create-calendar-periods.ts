@@ -9,7 +9,6 @@ export function mergePeriods(bankStatements: BankStatement[]) {
   const periods = bankStatements
     .map((statement) => statement.period)
     .map((period) => ({start: new Date(period.start), end: new Date(period.end)}));
-
   if (periods.length === 0) return [];
 
   periods.sort((a, b) => a.start.getTime() - b.start.getTime());
