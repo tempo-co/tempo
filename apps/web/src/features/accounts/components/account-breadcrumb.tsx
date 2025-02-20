@@ -11,19 +11,19 @@ import {
 import {Account} from '@/types/account';
 import {BankStatement} from '@/types/bank-statement';
 
-type AccountsBreadcrumbProps = {
+type AccountBreadcrumbProps = {
   account?: Account;
   bankStatements?: boolean;
   bankStatement?: BankStatement;
 };
 
-export function AccountsBreadcrumb({account, bankStatements}: AccountsBreadcrumbProps) {
+export function AccountBreadcrumb({account, bankStatements}: AccountBreadcrumbProps) {
   return (
-    <Breadcrumb className='pb-5'>
+    <Breadcrumb>
       <BreadcrumbList>
         <BreadcrumbItem>
           <BreadcrumbLink asChild>
-            <Link to='/dashboard'>Dashboard</Link>
+            <Link to='/home'>Home</Link>
           </BreadcrumbLink>
         </BreadcrumbItem>
         <BreadcrumbSeparator />

@@ -8,9 +8,9 @@ import {useMediaQuery} from '@/hooks/use-media-query';
 import {BankStatement} from '@/types/bank-statement';
 import {cn} from '@/utils/cn';
 
-import {useGetFile} from '../api/use-get-file';
-import {FileData} from '../types/file-data';
-import {parseFile} from '../utils/parse-file';
+import {useGetFile} from '../../api/use-get-file';
+import {FileData} from '../../types/file-data';
+import {parseFile} from '../../utils/parse-file';
 
 type FileViewerProps = {
   file?: File;

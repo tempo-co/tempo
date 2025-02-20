@@ -26,7 +26,7 @@ import {useGetFile} from '../api/use-get-file';
 import {truncateFileName} from '../utils/truncate-file-name';
 import {DeleteBankStatementDialog} from './delete-bank-statement/delete-bank-statement-dialog';
 import {FileMetadata} from './file-metadata';
-import {FileViewerDialog} from './file-viewer-dialog';
+import {FileViewerDialog} from './file-viewer/file-viewer-dialog';
 
 type FileActionsDropdownProps = {
   bankStatement?: BankStatement;

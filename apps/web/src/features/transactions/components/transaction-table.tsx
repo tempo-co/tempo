@@ -16,7 +16,7 @@ import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/c
 import {Transaction} from '@/types/transaction';
 import {cn} from '@/utils/cn';
 
-import {TablePagination} from './table-pagination';
+import {TablePagination} from '../../../components/shared/table-pagination';
 import {transactionsTableColumns} from './transaction-table-columns';
 
 type TransactionsTableProps = {

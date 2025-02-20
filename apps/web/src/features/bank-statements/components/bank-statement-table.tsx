@@ -14,9 +14,9 @@ import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/c
 import {BankStatement} from '@/types/bank-statement';
 import {cn} from '@/utils/cn';
 
+import {TablePagination} from '../../../components/shared/table-pagination';
 import {bankStatementTableColumns} from './bank-statement-table-columns';
 import {BankStatementUploadDialog} from './bank-statement-upload-dialog';
-import {TablePagination} from './table-pagination';
 
 type BankStatementTableProps = {
   bankStatements: BankStatement[];

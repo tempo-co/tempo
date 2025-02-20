@@ -23,8 +23,8 @@ import {useMediaQuery} from '@/hooks/use-media-query';
 import {BankStatement} from '@/types/bank-statement';
 import {cn} from '@/utils/cn';
 
-import {truncateFileName} from '../utils/truncate-file-name';
-import {FileMetadata} from './file-metadata';
+import {truncateFileName} from '../../utils/truncate-file-name';
+import {FileMetadata} from '../file-metadata';
 import {FileViewer} from './file-viewer';
 
 type FileViewerDialogProps = {
