@@ -7,9 +7,5 @@ export const Route = createFileRoute(
 });
 
 function BankStatements() {
-  return (
-    <div className='p-10'>
-      <Outlet />
-    </div>
-  );
+  return <Outlet />;
 }

@@ -2,8 +2,10 @@ import {createFileRoute} from '@tanstack/react-router';
 import {fallback, zodValidator} from '@tanstack/zod-adapter';
 import {z} from 'zod';
 
+import {AppBody} from '@/components/shared/layout/app-body';
+import {AppHeader} from '@/components/shared/layout/app-header';
 import {useGetAccount} from '@/features/accounts/api/use-get-account';
-import {AccountsBreadcrumb} from '@/features/accounts/components/accounts-breadcrumb';
+import {AccountBreadcrumb} from '@/features/accounts/components/account-breadcrumb';
 import {useGetAllBankStatements} from '@/features/bank-statements/api/use-get-all-bank-statements';
 import {BankStatementCalendarView} from '@/features/bank-statements/components/bank-statement-calendar-view';
 import {BankStatementTable} from '@/features/bank-statements/components/bank-statement-table';
@@ -36,20 +38,24 @@ function BankStatementsIndex() {
 
   return (
     <>
-      {isAccountPending && <AccountsBreadcrumb />}
-      {account && <AccountsBreadcrumb account={account} bankStatements />}
-      {data && <BankStatementCalendarView bankStatements={data.bankStatements} />}
-      <div className='flex flex-col gap-4'>
-        {data && data.total > 0 && <BankStatementUploadDialog pagination={pagination} />}
-        <BankStatementTable
-          bankStatements={data ? data.bankStatements : []}
-          totalBankStatements={data ? data.total : 0}
-          pagination={pagination}
-          setPagination={setPagination}
-          isPlaceholderData={isPlaceholderData}
-          isPending={isBankStatementsPending}
-        />
-      </div>
+      <AppHeader>
+        {isAccountPending && <AccountBreadcrumb />}
+        {account && <AccountBreadcrumb account={account} bankStatements />}
+      </AppHeader>
+      <AppBody>
+        {data && <BankStatementCalendarView bankStatements={data.bankStatements} />}
+        <div className='flex flex-col gap-4'>
+          {data && data.total > 0 && <BankStatementUploadDialog pagination={pagination} />}
+          <BankStatementTable
+            bankStatements={data ? data.bankStatements : []}
+            totalBankStatements={data ? data.total : 0}
+            pagination={pagination}
+            setPagination={setPagination}
+            isPlaceholderData={isPlaceholderData}
+            isPending={isBankStatementsPending}
+          />
+        </div>
+      </AppBody>
     </>
   );
 }

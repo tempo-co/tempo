@@ -22,7 +22,7 @@ export const useLogIn = () => {
     mutationFn: async (logInDto: LogInDto) => {
       const response = await api.post('/auth/login', JSON.stringify(logInDto));
       await queryClient.setQueryData(['currentUser'], response.json());
-      return navigate({to: '/dashboard'});
+      return navigate({to: '/home'});
     },
     onError: (error) => {
       if (isLogInHttpError(error)) {

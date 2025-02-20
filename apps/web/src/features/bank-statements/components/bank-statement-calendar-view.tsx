@@ -18,7 +18,7 @@ export function BankStatementCalendarView({bankStatements}: BankStatementCalenda
       defaultMonth={mergedPeriods[0]?.start ?? new Date()}
       numberOfMonths={1}
       disabled={(date) => date > new Date() || date < new Date('1900-01-01')}
-      className='rounded-md border shadow-sm'
+      className='my-10 rounded-md border shadow-sm'
       modifiers={modifiers}
       modifiersClassNames={modifiersClassNames}
     />
