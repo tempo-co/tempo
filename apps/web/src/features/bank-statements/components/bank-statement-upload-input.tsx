@@ -31,9 +31,7 @@ export function BankStatementUploadInput({
   files,
   setFiles,
 }: BankStatementUploadInputProps) {
-  const {accountId} = useParams({
-    from: '/(accounts)/(statements)/accounts_/$accountId/bank-statements',
-  });
+  const {accountId} = useParams({from: '/accounts/$accountId/bank-statements/'});
 
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const formattedFileTypes = useMemo(() => Object.keys(MimeType).join(', '), []);

@@ -27,7 +27,7 @@ export function TablePagination<T>({
   pagination,
   setPagination,
 }: TablePaginationProps<T>) {
-  const navigate = useNavigate({from: '/transactions/'});
+  const navigate = useNavigate({from: '/transactions'});
 
   useEffect(() => {
     const totalPages = Math.ceil(totalItems / pagination.pageSize);

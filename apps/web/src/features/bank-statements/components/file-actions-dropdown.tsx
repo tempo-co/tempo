@@ -43,9 +43,7 @@ export function FileActionsDropdown({
   error,
   isSuccess,
 }: FileActionsDropdownProps) {
-  const {accountId} = useParams({
-    from: '/(accounts)/(statements)/accounts_/$accountId/bank-statements',
-  });
+  const {accountId} = useParams({from: '/accounts/$accountId/bank-statements/'});
 
   const [isDropdownMenuOpen, setIsDropdownMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
