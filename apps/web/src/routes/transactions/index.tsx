@@ -1,4 +1,4 @@
-import {createFileRoute} from '@tanstack/react-router';
+import {createFileRoute, redirect} from '@tanstack/react-router';
 import {fallback, zodValidator} from '@tanstack/zod-adapter';
 import {z} from 'zod';
 
@@ -13,9 +13,14 @@ const paginationSchema = z.object({
   pageSize: fallback(z.number(), 10).default(10),
 });
 
-export const Route = createFileRoute('/(transactions)/transactions/')({
+export const Route = createFileRoute('/transactions/')({
   component: TransactionsIndex,
   validateSearch: zodValidator(paginationSchema),
+  beforeLoad: ({context}) => {
+    if (!context.isAuthenticated) {
+      throw redirect({to: '/login', search: {redirect: location.href}});
+    }
+  },
 });
 
 function TransactionsIndex() {

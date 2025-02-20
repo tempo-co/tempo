@@ -1,4 +1,4 @@
-import {createFileRoute} from '@tanstack/react-router';
+import {createFileRoute, redirect} from '@tanstack/react-router';
 import {fallback, zodValidator} from '@tanstack/zod-adapter';
 import {z} from 'zod';
 
@@ -16,11 +16,14 @@ const paginationSchema = z.object({
   pageSize: fallback(z.number(), 10).default(10),
 });
 
-export const Route = createFileRoute(
-  '/(accounts)/(statements)/accounts_/$accountId/bank-statements/',
-)({
+export const Route = createFileRoute('/accounts/$accountId/bank-statements/')({
   component: BankStatementsIndex,
   validateSearch: zodValidator(paginationSchema),
+  beforeLoad: ({context}) => {
+    if (!context.isAuthenticated) {
+      throw redirect({to: '/login'});
+    }
+  },
 });
 
 function BankStatementsIndex() {
