@@ -12,6 +12,7 @@ const router = createRouter({
   routeTree,
   context: {
     isAuthenticated: undefined!,
+    currentUser: undefined!,
   },
 });
 
@@ -22,7 +23,7 @@ declare module '@tanstack/react-router' {
 }
 
 export function App() {
-  const {isAuthenticated, isPending} = useCurrentUser();
+  const {isAuthenticated, isPending, currentUser} = useCurrentUser();
 
   if (isPending) {
     return <LoadingScreen />;
@@ -31,7 +32,7 @@ export function App() {
   return (
     <React.Suspense fallback={<LoadingScreen />}>
       <ThemeProvider defaultTheme='dark' storageKey='vite-ui-theme'>
-        <RouterProvider router={router} context={{isAuthenticated}} />
+        <RouterProvider router={router} context={{isAuthenticated, currentUser}} />
         <Toaster expand duration={5000} />
       </ThemeProvider>
     </React.Suspense>
