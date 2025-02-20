@@ -7,9 +7,10 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import {CreditCard} from 'lucide-react';
-import {Dispatch, SetStateAction, useState} from 'react';
+import {Dispatch, SetStateAction, useEffect, useState} from 'react';
 
 import {Button} from '@/components/ui/button';
+import {Progress} from '@/components/ui/progress';
 import {Skeleton} from '@/components/ui/skeleton';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {Transaction} from '@/types/transaction';
@@ -21,10 +22,10 @@ import {transactionsTableColumns} from './transaction-table-columns';
 type TransactionsTableProps = {
   transactions: Transaction[];
   totalTransactions: number;
-  pagination?: PaginationState;
-  setPagination?: Dispatch<SetStateAction<PaginationState>>;
-  isPlaceholderData?: boolean;
-  isPending?: boolean;
+  pagination: PaginationState;
+  setPagination: Dispatch<SetStateAction<PaginationState>>;
+  isPlaceholderData: boolean;
+  isPending: boolean;
 };
 
 export function TransactionsTable({
@@ -36,6 +37,11 @@ export function TransactionsTable({
   isPending,
 }: TransactionsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    isPlaceholderData ? setProgress(100) : setProgress(0);
+  }, [isPlaceholderData]);
 
   const table = useReactTable({
     data: transactions,
@@ -65,25 +71,27 @@ export function TransactionsTable({
   }
 
   return (
-    <>
+    <div className='relative'>
+      <Progress
+        value={progress}
+        className='absolute left-0 right-0 top-0 z-10 h-[2px] rounded-b-none rounded-t-md bg-transparent'
+      />
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => {
-                return (
-                  <TableHead key={header.id} className='p-0'>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </TableHead>
-                );
-              })}
+              {headerGroup.headers.map((header) => (
+                <TableHead key={header.id} className='p-0'>
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                </TableHead>
+              ))}
             </TableRow>
           ))}
         </TableHeader>
         <TableBody>
-          {(isPlaceholderData || isPending) && pagination
+          {isPending
             ? Array.from({length: pagination.pageSize}).map((_, index) => (
                 <TableRow key={index}>
                   {transactionsTableColumns.map((column, colIndex) => (
@@ -116,7 +124,7 @@ export function TransactionsTable({
               ))}
         </TableBody>
       </Table>
-      {pagination && setPagination && totalTransactions > 0 && (
+      {totalTransactions > 0 && (
         <TablePagination
           table={table}
           totalItems={totalTransactions}
@@ -124,6 +132,6 @@ export function TransactionsTable({
           setPagination={setPagination}
         />
       )}
-    </>
+    </div>
   );
 }
