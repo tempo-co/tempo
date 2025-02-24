@@ -83,7 +83,7 @@ export const transactionsTableColumns: ColumnDef<Transaction>[] = [
     },
     cell: ({row}) => {
       return (
-        <p className='max-w-[5rem] overflow-hidden text-ellipsis whitespace-nowrap lg:max-w-[10rem] xl:max-w-[29rem] 2xl:max-w-[44rem]'>
+        <p className='max-w-[6rem] overflow-hidden text-ellipsis whitespace-nowrap xl:max-w-[22rem] 2xl:max-w-[38rem]'>
           {row.original.description}
         </p>
       );
