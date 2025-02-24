@@ -3,23 +3,39 @@ import {PaginationState} from '@tanstack/react-table';
 import {useState} from 'react';
 import {toast} from 'sonner';
 
+import {Category} from '@/types/category';
 import {Transaction} from '@/types/transaction';
 import {api} from '@/utils/api';
 
-type PaginatedTransactionsResponse = {
+type TransactionsResponse = {
   transactions: Transaction[];
   total: number;
 };
 
-export const useGetAllTransactions = ({pageIndex = 0, pageSize = 10}: PaginationState) => {
-  const [pagination, setPagination] = useState<PaginationState>({pageIndex, pageSize});
+export type TransactionFilter = {
+  categories?: Category[];
+};
 
-  const {data, isPending, isError, isPlaceholderData} = useQuery<PaginatedTransactionsResponse>({
-    queryKey: ['transactions', pagination.pageIndex, pagination.pageSize],
+export const useGetAllTransactions = (
+  {pageIndex = 0, pageSize = 10}: PaginationState,
+  {categories}: TransactionFilter = {},
+) => {
+  const [pagination, setPagination] = useState<PaginationState>({pageIndex, pageSize});
+  const [filters, setFilters] = useState<TransactionFilter>({categories});
+
+  const {data, isPending, isError, isPlaceholderData} = useQuery<TransactionsResponse>({
+    queryKey: ['transactions', pagination, filters],
     queryFn: async () => {
-      const response = await api.get(
-        `/transactions?pageIndex=${pagination.pageIndex}&pageSize=${pagination.pageSize}`,
-      );
+      const params = new URLSearchParams({
+        pageIndex: pagination.pageIndex.toString(),
+        pageSize: pagination.pageSize.toString(),
+      });
+
+      if (filters.categories) {
+        filters.categories.forEach((category) => params.append('categories[]', category));
+      }
+
+      const response = await api.get(`/transactions?${params.toString()}`);
       return response.json();
     },
     placeholderData: keepPreviousData,
@@ -31,5 +47,13 @@ export const useGetAllTransactions = ({pageIndex = 0, pageSize = 10}: Pagination
     });
   }
 
-  return {data, isPending, isPlaceholderData, pagination, setPagination};
+  return {
+    data,
+    isPending,
+    isPlaceholderData,
+    pagination,
+    setPagination,
+    filters,
+    setFilters,
+  };
 };
