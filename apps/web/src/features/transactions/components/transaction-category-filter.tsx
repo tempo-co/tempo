@@ -37,12 +37,17 @@ export function TransactionCategoryFilter({filters, setFilters}: TransactionCate
       ? selectedValues.filter((value) => value !== option)
       : [...selectedValues, option];
 
-    await navigate({search: (prev) => ({...prev, categories: newSelectedValues})});
+    await navigate({
+      search: (prev) => ({
+        ...prev,
+        categories: newSelectedValues.length === 0 ? undefined : newSelectedValues,
+      }),
+    });
     setFilters((prev) => ({...prev, categories: newSelectedValues}));
   };
 
   const handleClear = async () => {
-    await navigate({search: (prev) => ({...prev, categories: []})});
+    await navigate({search: (prev) => ({...prev, categories: undefined})});
     setFilters((prev) => ({...prev, categories: []}));
   };
 

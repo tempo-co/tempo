@@ -7,6 +7,8 @@ import {Category} from '@/types/category';
 import {Transaction} from '@/types/transaction';
 import {api} from '@/utils/api';
 
+import {SearchParams} from '../types/search-params';
+
 type TransactionsResponse = {
   transactions: Transaction[];
   total: number;
@@ -16,12 +18,9 @@ export type TransactionFilter = {
   categories?: Category[];
 };
 
-export const useGetAllTransactions = (
-  {pageIndex = 0, pageSize = 10}: PaginationState,
-  {categories}: TransactionFilter = {},
-) => {
-  const [pagination, setPagination] = useState<PaginationState>({pageIndex, pageSize});
-  const [filters, setFilters] = useState<TransactionFilter>({categories});
+export const useGetAllTransactions = (searchParams: SearchParams) => {
+  const [pagination, setPagination] = useState<PaginationState>(searchParams);
+  const [filters, setFilters] = useState<TransactionFilter>(searchParams);
 
   const {data, isPending, isError, isPlaceholderData} = useQuery<TransactionsResponse>({
     queryKey: ['transactions', pagination, filters],
