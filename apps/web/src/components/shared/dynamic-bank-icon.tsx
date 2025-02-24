@@ -9,7 +9,7 @@ type DynamicBankIconProps = {
 
 export function DynamicBankIcon({bank, ...props}: DynamicBankIconProps) {
   const fileName = bank.replace(' ', '-').toLowerCase();
-  const IconComponent = lazy(
+  const BankIcon = lazy(
     () =>
       import(`@/components/shared/bank-icons/${fileName}.tsx`) as Promise<{
         default: ComponentType<SVGProps<SVGSVGElement>>;
@@ -18,7 +18,7 @@ export function DynamicBankIcon({bank, ...props}: DynamicBankIconProps) {
 
   return (
     <Suspense fallback={<div {...props}></div>}>
-      <IconComponent {...props} />
+      <BankIcon {...props} />
     </Suspense>
   );
 }
