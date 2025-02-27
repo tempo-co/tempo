@@ -1,5 +1,5 @@
 import {useNavigate} from '@tanstack/react-router';
-import {Check, PlusCircle} from 'lucide-react';
+import {Check, Shapes} from 'lucide-react';
 import * as React from 'react';
 
 import {CategoryBadge} from '@/components/shared/category-badge';
@@ -55,7 +55,7 @@ export function TransactionCategoryFilter({filters, setFilters}: TransactionCate
     <Popover>
       <PopoverTrigger asChild>
         <Button variant='outline' size='sm' className='h-8 border-dashed'>
-          <PlusCircle />
+          <Shapes />
           Category
           {selectedValues.length > 0 && (
             <>
@@ -64,7 +64,7 @@ export function TransactionCategoryFilter({filters, setFilters}: TransactionCate
                 {selectedValues.length}
               </Badge>
               <div className='hidden space-x-1 lg:flex'>
-                {selectedValues.length > 2 ? (
+                {selectedValues.length > 3 ? (
                   <Badge variant='secondary' className='rounded-sm px-2 font-normal'>
                     {selectedValues.length} selected
                   </Badge>

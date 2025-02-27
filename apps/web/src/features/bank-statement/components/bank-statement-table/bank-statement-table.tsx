@@ -9,14 +9,14 @@ import {
 import {FileText} from 'lucide-react';
 import {Dispatch, SetStateAction, useState} from 'react';
 
+import {TablePagination} from '@/components/shared/table-pagination';
 import {Skeleton} from '@/components/ui/skeleton';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {BankStatement} from '@/types/bank-statement';
 import {cn} from '@/utils/cn';
 
-import {TablePagination} from '../../../components/shared/table-pagination';
+import {BankStatementUploadDialog} from '../bank-statement-upload/bank-statement-upload-dialog';
 import {bankStatementTableColumns} from './bank-statement-table-columns';
-import {BankStatementUploadDialog} from './bank-statement-upload-dialog';
 
 type BankStatementTableProps = {
   bankStatements: BankStatement[];
@@ -118,6 +118,7 @@ export function BankStatementTable({
           totalItems={totalBankStatements}
           pagination={pagination}
           setPagination={setPagination}
+          navigateOptions={{from: '/accounts/$accountId/bank-statements'}}
         />
       )}
     </>

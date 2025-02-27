@@ -8,8 +8,8 @@ import {useMediaQuery} from '@/hooks/use-media-query';
 import {MimeType} from '@/types/mime-type';
 import {cn} from '@/utils/cn';
 
-import {formatDate} from '../utils/format-date';
-import {formatFileType} from '../utils/format-file-type';
+import {formatDate} from '../../utils/format-date';
+import {formatFileType} from '../../utils/format-file-type';
 
 dayjs.extend(relativeTime);
 

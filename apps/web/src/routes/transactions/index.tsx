@@ -3,14 +3,14 @@ import {zodValidator} from '@tanstack/zod-adapter';
 
 import {AppBody} from '@/components/shared/layout/app-body';
 import {AppHeader} from '@/components/shared/layout/app-header';
-import {useGetAllTransactions} from '@/features/transactions/api/use-get-all-transactions';
-import {TransactionBreadcrumb} from '@/features/transactions/components/transaction-breadcrumb';
-import {TransactionsTable} from '@/features/transactions/components/transaction-table';
-import {searchParamsSchema} from '@/features/transactions/types/search-params';
+import {useGetAllTransactions} from '@/features/transaction/api/use-get-all-transactions';
+import {TransactionBreadcrumb} from '@/features/transaction/components/transaction-breadcrumb';
+import {TransactionsTable} from '@/features/transaction/components/transaction-table';
+import {transactionSearchParamsSchema} from '@/features/transaction/types/search-params';
 
 export const Route = createFileRoute('/transactions/')({
   component: TransactionsIndex,
-  validateSearch: zodValidator(searchParamsSchema),
+  validateSearch: zodValidator(transactionSearchParamsSchema),
   beforeLoad: ({context}) => {
     if (!context.isAuthenticated) {
       throw redirect({to: '/login', search: {redirect: location.href}});

@@ -15,15 +15,16 @@ import {
 import {Input} from '@/components/ui/input';
 import {cn} from '@/utils/cn';
 
-import {useCreateAccount} from '../api/use-create-account';
-import {AccountCreateDto, accountCreateDtoSchema} from '../types/account-create.dto';
+import {useCreateAccount} from '../../api/use-create-account';
+import {AccountCreateDto, accountCreateDtoSchema} from '../../types/account-create.dto';
 import {BankComboBox} from './bank-combo-box';
 
-interface AddAccountFormProps extends React.ComponentProps<'form'> {
-  setOpen: (open: boolean) => void;
-}
+type AccountAddFormProps = {
+  className?: string;
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+};
 
-export function AddAccountForm({className, setOpen}: AddAccountFormProps) {
+export function AccountAddForm({className, setOpen}: AccountAddFormProps) {
   const {createAccount, isPending} = useCreateAccount();
 
   const form = useForm<AccountCreateDto>({

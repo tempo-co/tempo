@@ -2,7 +2,7 @@ import {MimeTypeIcon} from '@/components/shared/mime-type-icon';
 import {Card} from '@/components/ui/card';
 import {BankStatement} from '@/types/bank-statement';
 
-import {FileMetadata} from '../file-metadata';
+import {FileMetadata} from '../file/file-metadata';
 
 type BankStatementCardProps = {
   bankStatement: BankStatement;

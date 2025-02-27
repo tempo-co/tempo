@@ -5,9 +5,9 @@ import {MimeTypeIcon} from '@/components/shared/mime-type-icon';
 import {Button} from '@/components/ui/button';
 import {BankStatement} from '@/types/bank-statement';
 
-import {formatPeriod} from '../utils/format-period';
-import {FileActionsDropdown} from './file-actions-dropdown';
-import {FileMetadata} from './file-metadata';
+import {formatPeriod} from '../../utils/format-period';
+import {FileActionsDropdown} from '../file/file-actions-dropdown';
+import {FileMetadata} from '../file/file-metadata';
 
 export const bankStatementTableColumns: ColumnDef<BankStatement>[] = [
   {

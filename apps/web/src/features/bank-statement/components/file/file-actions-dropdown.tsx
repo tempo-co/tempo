@@ -22,11 +22,11 @@ import {useMediaQuery} from '@/hooks/use-media-query';
 import {BankStatement} from '@/types/bank-statement';
 import {cn} from '@/utils/cn';
 
-import {useGetFile} from '../api/use-get-file';
-import {truncateFileName} from '../utils/truncate-file-name';
-import {DeleteBankStatementDialog} from './delete-bank-statement/delete-bank-statement-dialog';
+import {useGetFile} from '../../api/use-get-file';
+import {truncateFileName} from '../../utils/truncate-file-name';
+import {BankStatementDeleteDialog} from '../bank-statement-delete/bank-statement-delete-dialog';
 import {FileMetadata} from './file-metadata';
-import {FileViewerDialog} from './file-viewer/file-viewer-dialog';
+import {FileViewerDialog} from './file-viewer-dialog';
 
 type FileActionsDropdownProps = {
   bankStatement?: BankStatement;
@@ -76,7 +76,7 @@ export function FileActionsDropdown({
         isSuccess={isSuccess}
       />
       {bankStatement && (
-        <DeleteBankStatementDialog
+        <BankStatementDeleteDialog
           bankStatement={bankStatement}
           open={isDeleteDialogOpen}
           setOpen={setIsDeleteDialogOpen}

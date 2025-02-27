@@ -2,15 +2,15 @@ import {BankStatement} from '@/types/bank-statement';
 
 import {formatPeriod} from '../../utils/format-period';
 
-type DeleteBankStatementDialogDescriptionProps = {
+type BankStatementDeleteDialogDescriptionProps = {
   transactionsCount: number;
   period: BankStatement['period'];
 };
 
-export function DeleteBankStatementDialogDescription({
+export function BankStatementDeleteDialogDescription({
   transactionsCount,
   period,
-}: DeleteBankStatementDialogDescriptionProps) {
+}: BankStatementDeleteDialogDescriptionProps) {
   return (
     <>
       Are you sure you want to delete this bank statement

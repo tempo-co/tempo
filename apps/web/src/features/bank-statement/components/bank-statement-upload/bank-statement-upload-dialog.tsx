@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import {useMediaQuery} from '@/hooks/use-media-query';
 
-import {FileState} from '../types/file-state';
+import {FileState} from '../../types/file-state';
 import {BankStatementUploadInput} from './bank-statement-upload-input';
 
 type BankStatementUploadDialogProps = {

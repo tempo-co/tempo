@@ -77,7 +77,7 @@ export function FileViewer({file, bankStatementId}: FileViewerProps) {
         <p>{data.rowCount} rows</p>
       </div>
       <Table>
-        <TableHeader className='bg-card'>
+        <TableHeader>
           <TableRow>
             {data.headers.map((header, index) => (
               <TableHead className='p-2 md:p-3' key={index}>

@@ -19,9 +19,9 @@ import {
 } from '@/components/ui/drawer';
 import {useMediaQuery} from '@/hooks/use-media-query';
 
-import {AddAccountForm} from './add-account-form';
+import {AccountAddForm} from './account-add-form';
 
-export function AddAccountDialog() {
+export function AccountAddDialog() {
   const [open, setOpen] = useState(false);
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
@@ -35,7 +35,7 @@ export function AddAccountDialog() {
           <DialogHeader>
             <DialogTitle>Add account</DialogTitle>
           </DialogHeader>
-          <AddAccountForm setOpen={setOpen} />
+          <AccountAddForm setOpen={setOpen} />
         </DialogContent>
       </Dialog>
     );
@@ -50,7 +50,7 @@ export function AddAccountDialog() {
         <DrawerHeader className='text-left'>
           <DrawerTitle>Add account</DrawerTitle>
         </DrawerHeader>
-        <AddAccountForm className='px-4' setOpen={setOpen} />
+        <AccountAddForm className='px-4' setOpen={setOpen} />
         <DrawerFooter className='pt-4'>
           <DrawerClose asChild>
             <Button variant='outline'>Cancel</Button>

@@ -6,7 +6,7 @@ import {BankStatement} from '@/types/bank-statement';
 import {MimeType} from '@/types/mime-type';
 import {cn} from '@/utils/cn';
 
-import {truncateFileName} from '../utils/truncate-file-name';
+import {truncateFileName} from '../../utils/truncate-file-name';
 import {FileActionsDropdown} from './file-actions-dropdown';
 import {FileMetadata} from './file-metadata';
 

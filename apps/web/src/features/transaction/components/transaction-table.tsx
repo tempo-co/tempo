@@ -19,6 +19,8 @@ import {cn} from '@/utils/cn';
 
 import {TransactionFilter} from '../api/use-get-all-transactions';
 import {TransactionCategoryFilter} from './transaction-category-filter';
+import {TransactionClearAllFilters} from './transaction-clear-all-filters';
+import {TransactionDateFilter} from './transaction-date-filter';
 import {transactionsTableColumns} from './transaction-table-columns';
 
 type TransactionsTableProps = {
@@ -61,12 +63,13 @@ export function TransactionsTable({
     rowCount: totalTransactions,
   });
 
-  if (
-    totalTransactions === 0 &&
-    !isPending &&
-    !isPlaceholderData &&
-    Object.keys(filters).length === 0
-  ) {
+  const isFilteringApplied = Object.values(filters).some((filter) => {
+    return Array.isArray(filter) ? filter.length > 0 : !!filter;
+  });
+  const isEmptyState =
+    totalTransactions === 0 && !isPending && !isPlaceholderData && !isFilteringApplied;
+
+  if (isEmptyState) {
     return (
       <div className='flex flex-col items-center gap-4'>
         <div className='flex flex-col items-center'>
@@ -83,8 +86,10 @@ export function TransactionsTable({
 
   return (
     <>
-      <div className='my-4'>
+      <div className='my-4 flex gap-4'>
         <TransactionCategoryFilter filters={filters} setFilters={setFilters} />
+        <TransactionDateFilter />
+        {isFilteringApplied && <TransactionClearAllFilters setFilters={setFilters} />}
       </div>
       <div className='relative mb-10'>
         <Progress
@@ -155,6 +160,7 @@ export function TransactionsTable({
             totalItems={totalTransactions}
             pagination={pagination}
             setPagination={setPagination}
+            navigateOptions={{from: '/transactions'}}
           />
         )}
       </div>

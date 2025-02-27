@@ -3,8 +3,8 @@ import React from 'react';
 import {Separator} from '@/components/ui/separator';
 import {Account} from '@/types/account';
 
+import {AccountAddDialog} from './account-add/account-add-dialog';
 import {AccountCard} from './account-card';
-import {AddAccountDialog} from './add-account-dialog';
 
 type AccountListProps = {
   accounts: Account[];
@@ -21,7 +21,7 @@ export function AccountList({accounts}: AccountListProps) {
           </React.Fragment>
         ))}
       </div>
-      <AddAccountDialog />
+      <AccountAddDialog />
     </>
   );
 }

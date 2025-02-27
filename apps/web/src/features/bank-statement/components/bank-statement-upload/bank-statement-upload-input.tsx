@@ -12,10 +12,10 @@ import {useMediaQuery} from '@/hooks/use-media-query';
 import {MimeType} from '@/types/mime-type';
 import {cn} from '@/utils/cn';
 
-import {useUploadBankStatement} from '../api/use-upload-bank-statement';
-import {FileState} from '../types/file-state';
-import {truncateFileName} from '../utils/truncate-file-name';
-import {FilePreviewCard} from './file-preview-card';
+import {useUploadBankStatement} from '../../api/use-upload-bank-statement';
+import {FileState} from '../../types/file-state';
+import {truncateFileName} from '../../utils/truncate-file-name';
+import {FilePreviewCard} from '../file/file-preview-card';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const acceptTypes = Object.fromEntries(Object.values(MimeType).map((type) => [type, []]));

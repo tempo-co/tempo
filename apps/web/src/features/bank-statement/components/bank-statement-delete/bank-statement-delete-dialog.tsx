@@ -25,19 +25,19 @@ import {BankStatement} from '@/types/bank-statement';
 
 import {useDeleteBankStatement} from '../../api/use-delete-bank-statement';
 import {BankStatementCard} from './bank-statement-card';
-import {DeleteBankStatementDialogDescription} from './delete-bank-statement-dialog-description';
+import {BankStatementDeleteDialogDescription} from './bank-statement-delete-dialog-description';
 
-type DeleteBankStatementDialogProps = {
+type BankStatementDeleteDialogProps = {
   bankStatement: BankStatement;
   open: boolean;
   setOpen: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
-export function DeleteBankStatementDialog({
+export function BankStatementDeleteDialog({
   bankStatement,
   open,
   setOpen,
-}: DeleteBankStatementDialogProps) {
+}: BankStatementDeleteDialogProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   const {accountId} = useParams({from: '/accounts/$accountId/bank-statements/'});
@@ -60,7 +60,7 @@ export function DeleteBankStatementDialog({
           <DialogHeader>
             <DialogTitle>Delete Bank Statement</DialogTitle>
             <DialogDescription className='pt-2'>
-              <DeleteBankStatementDialogDescription
+              <BankStatementDeleteDialogDescription
                 transactionsCount={bankStatement.transactions.length}
                 period={bankStatement.period}
               />
@@ -100,7 +100,7 @@ export function DeleteBankStatementDialog({
         <DrawerHeader className='text-left'>
           <DrawerTitle>Delete Bank Statement</DrawerTitle>
           <DrawerDescription className='pt-2'>
-            <DeleteBankStatementDialogDescription
+            <BankStatementDeleteDialogDescription
               transactionsCount={bankStatement.transactions.length}
               period={bankStatement.period}
             />

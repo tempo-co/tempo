@@ -4,12 +4,12 @@ import {z} from 'zod';
 
 import {AppBody} from '@/components/shared/layout/app-body';
 import {AppHeader} from '@/components/shared/layout/app-header';
-import {useGetAccount} from '@/features/accounts/api/use-get-account';
-import {AccountBreadcrumb} from '@/features/accounts/components/account-breadcrumb';
-import {useGetAllBankStatements} from '@/features/bank-statements/api/use-get-all-bank-statements';
-import {BankStatementCalendarView} from '@/features/bank-statements/components/bank-statement-calendar-view';
-import {BankStatementTable} from '@/features/bank-statements/components/bank-statement-table';
-import {BankStatementUploadDialog} from '@/features/bank-statements/components/bank-statement-upload-dialog';
+import {useGetAccount} from '@/features/account/api/use-get-account';
+import {AccountBreadcrumb} from '@/features/account/components/account-breadcrumb';
+import {useGetAllBankStatements} from '@/features/bank-statement/api/use-get-all-bank-statements';
+import {BankStatementCalendarView} from '@/features/bank-statement/components/bank-statement-calendar-view';
+import {BankStatementTable} from '@/features/bank-statement/components/bank-statement-table/bank-statement-table';
+import {BankStatementUploadDialog} from '@/features/bank-statement/components/bank-statement-upload/bank-statement-upload-dialog';
 
 const paginationSchema = z.object({
   pageIndex: fallback(z.number(), 0).default(0),
