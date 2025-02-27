@@ -12,11 +12,9 @@ import {cn} from '@/utils/cn';
 
 import {useSignUp} from '../api/use-signup';
 import {SignUpDto, signUpDtoSchema} from '../types/signup.dto';
-import {PasswordStrengthIndicator} from './password-strength-indicator';
 
 export function SignUpForm() {
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
-  const [passwordStrength, setPasswordStrength] = useState<number>(0);
 
   const {signUp, isPending} = useSignUp();
 
@@ -28,11 +26,6 @@ export function SignUpForm() {
   });
 
   function onSubmit(formData: SignUpDto) {
-    if (passwordStrength <= 25) {
-      form.setError('password', {message: ''}, {shouldFocus: true});
-      return;
-    }
-
     signUp(formData, {
       onError: (error) => {
         if (error.status === 409) {
@@ -118,8 +111,7 @@ export function SignUpForm() {
                       className={cn(
                         'z-10',
                         field.value && 'rounded-r-none border-r-0',
-                        (fieldState.error || (fieldState.isTouched && passwordStrength <= 25)) &&
-                          'border-destructive',
+                        fieldState.error && 'border-destructive',
                       )}
                     />
                     {field.value && (
@@ -132,9 +124,7 @@ export function SignUpForm() {
                               type='button'
                               className={cn(
                                 'rounded-l-none border-l-0',
-                                (fieldState.error ||
-                                  (fieldState.isTouched && passwordStrength <= 25)) &&
-                                  'border-destructive',
+                                fieldState.error && 'border-destructive',
                               )}
                             >
                               {isPasswordVisible ? (
@@ -153,13 +143,6 @@ export function SignUpForm() {
                   </div>
                 </FormControl>
                 <FormMessage />
-                {field.value.length >= 8 && field.value.length < 256 && (
-                  <PasswordStrengthIndicator
-                    value={field.value}
-                    passwordStrength={passwordStrength}
-                    setPasswordStrength={setPasswordStrength}
-                  />
-                )}
               </FormItem>
             )}
           />

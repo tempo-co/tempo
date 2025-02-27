@@ -3,7 +3,7 @@ import * as React from 'react';
 
 import {cn} from '@/utils/cn';
 
-const TooltipProvider: typeof TooltipPrimitive.Provider = TooltipPrimitive.Provider;
+const TooltipProvider = TooltipPrimitive.Provider;
 
 const Tooltip = TooltipPrimitive.Root;
 

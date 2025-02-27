@@ -1,13 +1,14 @@
 import * as React from 'react';
 
+import {ScrollArea, ScrollBar} from '@/components/ui/scroll-area';
 import {cn} from '@/utils/cn';
-
-import {ScrollArea, ScrollBar} from './scroll-area';
 
 const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
   ({className, ...props}, ref) => (
-    <ScrollArea className='h-full rounded-md border' disableScrollbar type='auto'>
+    <ScrollArea className='relative w-full rounded-md border'>
       <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
+      <ScrollBar orientation='vertical' />
+      <ScrollBar orientation='horizontal' />
     </ScrollArea>
   ),
 );
@@ -19,7 +20,7 @@ const TableHeader = React.forwardRef<
 >(({className, ...props}, ref) => (
   <thead
     ref={ref}
-    className={cn('sticky top-0 whitespace-nowrap bg-background [&_tr]:border-b', className)}
+    className={cn('whitespace-nowrap bg-card [&_tr]:border-b', className)}
     {...props}
   />
 ));
@@ -27,20 +28,9 @@ TableHeader.displayName = 'TableHeader';
 
 const TableBody = React.forwardRef<
   HTMLTableSectionElement,
-  React.HTMLAttributes<HTMLTableSectionElement> & {verticalScrollBarClassName?: string}
->(({className, children, verticalScrollBarClassName, ...props}, ref) => (
-  <tbody ref={ref} className={cn('[&_tr:last-child]:border-0', className)} {...props}>
-    {children}
-    <tr>
-      <td>
-        <ScrollBar
-          className={cn('pt-[calc(3rem+1px)]', verticalScrollBarClassName)}
-          orientation='vertical'
-        />
-        <ScrollBar orientation='horizontal' />
-      </td>
-    </tr>
-  </tbody>
+  React.HTMLAttributes<HTMLTableSectionElement>
+>(({className, ...props}, ref) => (
+  <tbody ref={ref} className={cn('[&_tr:last-child]:border-0', className)} {...props} />
 ));
 TableBody.displayName = 'TableBody';
 
@@ -60,10 +50,7 @@ const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTML
   ({className, ...props}, ref) => (
     <tr
       ref={ref}
-      className={cn(
-        'border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted',
-        className,
-      )}
+      className={cn('border-b transition-colors data-[state=selected]:bg-muted', className)}
       {...props}
     />
   ),
@@ -77,7 +64,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      'px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0',
+      'px-4 text-left align-middle font-medium [&:has([role=checkbox])]:pr-0',
       className,
     )}
     {...props}

@@ -1,7 +1,9 @@
 export class HttpError extends Error {
-  constructor(public status: number) {
-    super();
-    this.status = status;
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
   }
 }
 
@@ -14,7 +16,8 @@ const request = async (resource: string, init?: RequestInit) => {
 
   const response = await fetch(url, {headers, credentials: 'include', ...init});
   if (!response.ok) {
-    throw new HttpError(response.status);
+    const error = (await response.json()) as Error;
+    throw new HttpError(response.status, error.message);
   }
   return response;
 };

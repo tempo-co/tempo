@@ -22,7 +22,7 @@ export const useSignUp = () => {
     mutationFn: async (signUpDto: SignUpDto) => {
       const response = await api.post('/auth/signup', JSON.stringify(signUpDto));
       await queryClient.setQueryData(['currentUser'], response.json());
-      return navigate({to: '/dashboard'});
+      return navigate({to: '/home'});
     },
     onError: (error) => {
       if (isSignUpHttpError(error)) {

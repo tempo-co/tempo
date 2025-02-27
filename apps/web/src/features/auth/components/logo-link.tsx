@@ -1,10 +1,12 @@
 import {Link} from '@tanstack/react-router';
 
+import logo from '@/assets/logo.png';
+
 export function LogoLink() {
   return (
     <Link to='/' className='group mb-8 flex w-fit items-center p-4'>
       <img
-        src='/src/assets/logo.png'
+        src={logo}
         alt='Flair logo'
         className='w-8 transition-transform duration-300 group-hover:rotate-90'
       />

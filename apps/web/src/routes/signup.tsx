@@ -8,7 +8,7 @@ export const Route = createFileRoute('/signup')({
   component: SignUp,
   beforeLoad: ({context}) => {
     if (context.isAuthenticated) {
-      throw redirect({to: '/dashboard'});
+      throw redirect({to: '/home'});
     }
   },
 });

@@ -2,7 +2,7 @@ import {Account} from './account';
 import {File} from './file';
 import {Transaction} from './transaction';
 
-type Period = {start: Date; end: Date} | null;
+type Period = {start: Date; end: Date};
 
 export type BankStatement = {
   id: string;

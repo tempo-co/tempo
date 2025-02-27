@@ -1,23 +1,37 @@
-import {Outlet, createRootRouteWithContext} from '@tanstack/react-router';
+import {Outlet, createRootRouteWithContext, useRouteContext} from '@tanstack/react-router';
 import {TanStackRouterDevtools} from '@tanstack/router-devtools';
 
-import {SideBar} from '@/components/shared/sidebar';
-import {useCurrentUser} from '@/hooks/use-current-user';
+import {AppSidebar} from '@/components/shared/layout/app-sidebar';
+import {SidebarProvider} from '@/components/ui/sidebar';
+import {User} from '@/types/user';
 
-export const Route = createRootRouteWithContext<{isAuthenticated: boolean}>()({
+export const Route = createRootRouteWithContext<{isAuthenticated: boolean; currentUser: User}>()({
   component: Root,
 });
 
 function Root() {
-  const {isAuthenticated} = useCurrentUser();
+  const {isAuthenticated, currentUser} = useRouteContext({from: '__root__'});
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        <main>
+          <Outlet />
+        </main>
+        {import.meta.env.DEV && <TanStackRouterDevtools position='bottom-right' />}
+      </>
+    );
+  }
 
   return (
-    <div className='flex h-screen overflow-hidden'>
-      {isAuthenticated && <SideBar />}
-      <div className='flex-1 overflow-auto'>
-        <Outlet />
-      </div>
+    <>
+      <SidebarProvider>
+        <AppSidebar user={currentUser} />
+        <main className='flex-1'>
+          <Outlet />
+        </main>
+      </SidebarProvider>
       {import.meta.env.DEV && <TanStackRouterDevtools position='bottom-right' />}
-    </div>
+    </>
   );
 }
