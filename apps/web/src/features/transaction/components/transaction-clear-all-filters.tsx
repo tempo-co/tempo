@@ -12,8 +12,8 @@ export function TransactionClearAllFilters({setFilters}: TransactionClearAllFilt
   const navigate = useNavigate({from: '/transactions'});
 
   const handleClear = async () => {
-    await navigate({search: (prev) => ({...prev, categories: undefined})});
-    setFilters((prev) => ({...prev, categories: []}));
+    await navigate({search: (prev) => ({...prev, categories: undefined, startedAt: undefined})});
+    setFilters((prev) => ({...prev, categories: [], startedAt: undefined}));
   };
 
   return (

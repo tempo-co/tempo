@@ -1,15 +1,18 @@
-import {fallback} from '@tanstack/zod-adapter';
 import {z} from 'zod';
 
 import {Category} from '@/types/category';
+import {paginationSearchParamsSchema} from '@/types/pagination';
 
-const DEFAULT_PAGE_INDEX = 0;
-const DEFAULT_PAGE_SIZE = 10;
+const toDate = (val: unknown) => (typeof val === 'string' ? new Date(val) : val);
 
-export const transactionSearchParamsSchema = z.object({
-  pageIndex: fallback(z.number(), DEFAULT_PAGE_INDEX).default(DEFAULT_PAGE_INDEX),
-  pageSize: fallback(z.number(), DEFAULT_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
+export const transactionSearchParamsSchema = paginationSearchParamsSchema.extend({
   categories: z.array(z.nativeEnum(Category)).optional(),
+  startedAt: z
+    .object({
+      from: z.preprocess(toDate, z.date()),
+      to: z.preprocess(toDate, z.date()).optional(),
+    })
+    .optional(),
 });
 
 export type TransactionSearchParams = z.infer<typeof transactionSearchParamsSchema>;

@@ -88,7 +88,7 @@ export function TransactionsTable({
     <>
       <div className='my-4 flex gap-4'>
         <TransactionCategoryFilter filters={filters} setFilters={setFilters} />
-        <TransactionDateFilter />
+        <TransactionDateFilter filters={filters} setFilters={setFilters} />
         {isFilteringApplied && <TransactionClearAllFilters setFilters={setFilters} />}
       </div>
       <div className='relative mb-10'>

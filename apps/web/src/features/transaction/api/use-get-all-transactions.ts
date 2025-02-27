@@ -9,23 +9,30 @@ import {api} from '@/utils/api';
 
 import {TransactionSearchParams} from '../types/search-params';
 
-type TransactionsResponse = {
-  transactions: Transaction[];
-  total: number;
+export type DateRangeDto = {
+  from: Date;
+  to?: Date;
 };
 
 export type TransactionFilter = {
   categories?: Category[];
+  startedAt?: DateRangeDto;
 };
 
 export const useGetAllTransactions = (searchParams: TransactionSearchParams) => {
-  const {pageIndex, pageSize} = searchParams;
-  const {categories} = searchParams;
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: searchParams.pageIndex,
+    pageSize: searchParams.pageSize,
+  });
+  const [filters, setFilters] = useState<TransactionFilter>({
+    categories: searchParams.categories,
+    startedAt: searchParams.startedAt,
+  });
 
-  const [pagination, setPagination] = useState<PaginationState>({pageIndex, pageSize});
-  const [filters, setFilters] = useState<TransactionFilter>({categories});
-
-  const {data, isPending, isError, isPlaceholderData} = useQuery<TransactionsResponse>({
+  const {data, isPending, isError, isPlaceholderData} = useQuery<{
+    transactions: Transaction[];
+    total: number;
+  }>({
     queryKey: ['transactions', pagination, filters],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -35,6 +42,13 @@ export const useGetAllTransactions = (searchParams: TransactionSearchParams) => 
 
       if (filters.categories) {
         filters.categories.forEach((category) => params.append('categories[]', category));
+      }
+
+      if (filters.startedAt) {
+        params.append('startedAt[from]', filters.startedAt.from.toISOString());
+        if (filters.startedAt.to) {
+          params.append('startedAt[to]', filters.startedAt.to.toISOString());
+        }
       }
 
       const response = await api.get(`/transactions?${params.toString()}`);

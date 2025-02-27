@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {PAGE_SIZE_OPTIONS} from '@/types/pagination';
 
 type TablePaginationProps<T> = {
   table: Table<T>;
@@ -19,8 +20,6 @@ type TablePaginationProps<T> = {
   setPagination: Dispatch<SetStateAction<Required<PaginationState>>>;
   navigateOptions: NavigateOptions;
 };
-
-const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
 
 export function TablePagination<T>({
   table,
