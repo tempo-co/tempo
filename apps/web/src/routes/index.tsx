@@ -1,11 +1,11 @@
-import {createFileRoute, redirect} from '@tanstack/react-router';
+import {createFileRoute} from '@tanstack/react-router';
+
+import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/')({
   component: Index,
   beforeLoad: ({context}) => {
-    if (context.isAuthenticated) {
-      throw redirect({to: '/home'});
-    }
+    handleAuthenticatedRedirect(context);
   },
 });
 

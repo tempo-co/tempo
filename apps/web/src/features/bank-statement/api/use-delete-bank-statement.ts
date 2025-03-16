@@ -1,36 +1,30 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import {PaginationState} from '@tanstack/react-table';
-import {toast} from 'sonner';
 
-import {Account} from '@/types/account';
+import {BankAccount} from '@/types/bank-account';
 import {BankStatement} from '@/types/bank-statement';
+import {PaginationParams} from '@/types/pagination';
 import {api} from '@/utils/api';
 
 export const useDeleteBankStatement = (
-  accountId: Account['id'],
+  bankAccountId: BankAccount['id'],
   bankStatementId: BankStatement['id'],
-  pagination: PaginationState,
+  pagination: PaginationParams,
 ) => {
   const queryClient = useQueryClient();
 
-  const {mutateAsync, isPending, isError} = useMutation({
+  const {mutateAsync, isPending} = useMutation({
     mutationFn: async () => {
-      await api.delete(`/accounts/${accountId}/bank-statements/${bankStatementId}`);
+      await api.delete(`/bank-accounts/${bankAccountId}/bank-statements/${bankStatementId}`);
       queryClient.setQueryData(
-        ['bank-statements', pagination, accountId],
+        ['bank-statements', pagination, bankAccountId],
         (prevData: {bankStatements: BankStatement[]; total: number}) => ({
           bankStatements: prevData?.bankStatements.filter((bs) => bs.id !== bankStatementId) ?? [],
           total: (prevData?.total ?? 1) - 1,
         }),
       );
     },
-    onError: () => {
-      toast.error('There was a problem with your request.', {
-        description: 'Bank statement could not be deleted. Please try again.',
-      });
-    },
     retry: false,
   });
 
-  return {mutateAsync, isPending, isError};
+  return {mutateAsync, isPending};
 };

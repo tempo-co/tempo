@@ -1,13 +1,14 @@
 import {ComponentType, SVGProps, Suspense, lazy} from 'react';
 
 import {Bank} from '@/types/bank';
+import {cn} from '@/utils/cn';
 
 type DynamicBankIconProps = {
   bank: Bank;
   className?: string;
 };
 
-export function DynamicBankIcon({bank, ...props}: DynamicBankIconProps) {
+export function DynamicBankIcon({bank, className}: DynamicBankIconProps) {
   const fileName = bank.replace(' ', '-').toLowerCase();
   const BankIcon = lazy(
     () =>
@@ -17,8 +18,8 @@ export function DynamicBankIcon({bank, ...props}: DynamicBankIconProps) {
   );
 
   return (
-    <Suspense fallback={<div {...props}></div>}>
-      <BankIcon {...props} />
+    <Suspense fallback={<div className={cn('fill-foreground', className)}></div>}>
+      <BankIcon className={cn('fill-foreground', className)} />
     </Suspense>
   );
 }

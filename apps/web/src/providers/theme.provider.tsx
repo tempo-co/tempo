@@ -1,6 +1,8 @@
+/* eslint-disable react-refresh/only-export-components */
 import {ReactNode, createContext, useEffect, useState} from 'react';
 
-type Theme = 'dark' | 'light' | 'system';
+export const themes = ['light', 'dark', 'system'] as const;
+export type Theme = (typeof themes)[number];
 
 type ThemeContextState = {
   theme: Theme;

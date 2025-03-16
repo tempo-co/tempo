@@ -1,15 +1,15 @@
 import {useParams} from '@tanstack/react-router';
-import {PaginationState} from '@tanstack/react-table';
-import {FileUp} from 'lucide-react';
-import {useCallback, useMemo} from 'react';
+import {useCallback, useEffect, useMemo, useRef} from 'react';
 import {ErrorCode, FileRejection, useDropzone} from 'react-dropzone';
 import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {Separator} from '@/components/ui/separator';
+import {UploadIcon, UploadIconHandle} from '@/components/ui/upload-icon';
 import {useMediaQuery} from '@/hooks/use-media-query';
 import {MimeType} from '@/types/mime-type';
+import {PaginationParams} from '@/types/pagination';
 import {cn} from '@/utils/cn';
 
 import {useUploadBankStatement} from '../../api/use-upload-bank-statement';
@@ -21,7 +21,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const acceptTypes = Object.fromEntries(Object.values(MimeType).map((type) => [type, []]));
 
 type BankStatementUploadInputProps = {
-  pagination: PaginationState;
+  pagination: PaginationParams;
   files: FileState[];
   setFiles: React.Dispatch<React.SetStateAction<FileState[]>>;
 };
@@ -31,11 +31,11 @@ export function BankStatementUploadInput({
   files,
   setFiles,
 }: BankStatementUploadInputProps) {
-  const {accountId} = useParams({from: '/accounts/$accountId/bank-statements/'});
+  const {bankAccountId} = useParams({from: '/bank-accounts/$bankAccountId/bank-statements/'});
 
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const formattedFileTypes = useMemo(() => Object.keys(MimeType).join(', '), []);
-  const {upload} = useUploadBankStatement(accountId, pagination, setFiles);
+  const {upload} = useUploadBankStatement(bankAccountId, pagination, setFiles);
 
   const onDrop = useCallback(
     (acceptedFiles: File[], fileRejections: FileRejection[]) => {
@@ -80,6 +80,23 @@ export function BankStatementUploadInput({
     maxFiles: 10,
   });
 
+  const uploadIconRef = useRef<UploadIconHandle>(null);
+
+  const handleParentMouseEnter = () => {
+    uploadIconRef.current?.startAnimation();
+  };
+  const handleParentMouseLeave = () => {
+    uploadIconRef.current?.stopAnimation();
+  };
+
+  useEffect(() => {
+    if (dropzone.isDragAccept) {
+      uploadIconRef.current?.startAnimation();
+    } else if (!dropzone.isDragActive) {
+      uploadIconRef.current?.stopAnimation();
+    }
+  }, [dropzone.isDragAccept, dropzone.isDragActive]);
+
   if (isDesktop) {
     return (
       <>
@@ -89,15 +106,12 @@ export function BankStatementUploadInput({
             'flex h-52 cursor-pointer select-none items-center justify-center rounded-md border-2 border-dashed border-border transition-all hover:bg-accent',
             dropzone.isDragActive && 'bg-accent',
           )}
+          onMouseEnter={handleParentMouseEnter}
+          onMouseLeave={handleParentMouseLeave}
         >
           <input {...dropzone.getInputProps()} />
           <div className='flex flex-col items-center'>
-            <FileUp
-              className={cn(
-                'h-8 w-8 text-muted-foreground',
-                dropzone.isDragAccept && 'animate-bounce',
-              )}
-            />
+            <UploadIcon ref={uploadIconRef} className='text-muted-foreground' />
             <div>
               {dropzone.isDragAccept ? (
                 'Drop the file here!'

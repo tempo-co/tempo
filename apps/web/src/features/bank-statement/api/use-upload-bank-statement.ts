@@ -1,38 +1,36 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import {PaginationState} from '@tanstack/react-table';
 import {toast} from 'sonner';
 
-import {Account} from '@/types/account';
+import {BankAccount} from '@/types/bank-account';
 import {BankStatement} from '@/types/bank-statement';
+import {PaginationParams} from '@/types/pagination';
 import {HttpError, api} from '@/utils/api';
 
 import {FileState} from '../types/file-state';
 import {PaginatedBankStatementsResponse} from './use-get-all-bank-statements';
 
-type UploadBankStatementHttpError = HttpError & {
-  status: 400 | 401 | 409 | 422;
-};
-
 export const useUploadBankStatement = (
-  accountId: Account['id'],
-  pagination: PaginationState,
+  bankAccountId: BankAccount['id'],
+  pagination: PaginationParams,
   setFiles: React.Dispatch<React.SetStateAction<FileState[]>>,
 ) => {
   const queryClient = useQueryClient();
 
-  const {mutateAsync} = useMutation<BankStatement, UploadBankStatementHttpError, File>({
+  const {mutateAsync} = useMutation<BankStatement, HttpError, File>({
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await api.post(`/accounts/${accountId}/bank-statements/upload`, formData, {
-        headers: {},
-      });
+      const response = await api.post(
+        `/bank-accounts/${bankAccountId}/bank-statements/upload`,
+        formData,
+        {headers: {}},
+      );
       const bankStatement = (await response.json()) as BankStatement;
 
-      queryClient.setQueryData(
-        ['bank-statements', pagination, accountId],
-        (prevData: PaginatedBankStatementsResponse) => ({
+      queryClient.setQueryData<PaginatedBankStatementsResponse>(
+        ['bank-statements', pagination, bankAccountId],
+        (prevData) => ({
           bankStatements: [...(prevData?.bankStatements ?? []), bankStatement],
           total: (prevData?.total ?? 0) + 1,
         }),
@@ -54,7 +52,7 @@ export const useUploadBankStatement = (
           );
           return bankStatement;
         })
-        .catch((error: UploadBankStatementHttpError) => {
+        .catch((error: HttpError) => {
           setFiles((prev) =>
             prev.map((fs) =>
               fs.file === file ? {...fs, isPending: false, error: error.message} : fs,
@@ -64,8 +62,8 @@ export const useUploadBankStatement = (
         }),
       {
         loading: 'Uploading file...',
-        success: 'Bank statement uploaded successfully',
-        error: (error: UploadBankStatementHttpError) => error.message || 'Error uploading file',
+        success: 'Bank statement uploaded.',
+        error: (error: HttpError) => error.message || 'Error uploading file',
       },
     );
   };

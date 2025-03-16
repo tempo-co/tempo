@@ -1,5 +1,3 @@
-import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
 import {CircleAlert, CircleCheck, Loader} from 'lucide-react';
 import prettyBytes from 'pretty-bytes';
 import {useMemo} from 'react';
@@ -10,8 +8,6 @@ import {cn} from '@/utils/cn';
 
 import {formatDate} from '../../utils/format-date';
 import {formatFileType} from '../../utils/format-file-type';
-
-dayjs.extend(relativeTime);
 
 type FileMetadataProps = {
   fileSize: number;

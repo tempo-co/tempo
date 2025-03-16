@@ -1,18 +1,20 @@
-import {Outlet, createRootRouteWithContext, useRouteContext} from '@tanstack/react-router';
+import {Outlet, createRootRouteWithContext} from '@tanstack/react-router';
 import {TanStackRouterDevtools} from '@tanstack/router-devtools';
 
 import {AppSidebar} from '@/components/shared/layout/app-sidebar';
 import {SidebarProvider} from '@/components/ui/sidebar';
-import {User} from '@/types/user';
 
-export const Route = createRootRouteWithContext<{isAuthenticated: boolean; currentUser: User}>()({
+export const Route = createRootRouteWithContext<{
+  isAuthenticated: boolean;
+  isEmailVerified: boolean;
+}>()({
   component: Root,
 });
 
 function Root() {
-  const {isAuthenticated, currentUser} = useRouteContext({from: '__root__'});
+  const {isAuthenticated, isEmailVerified} = Route.useRouteContext();
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !isEmailVerified) {
     return (
       <>
         <main>
@@ -26,7 +28,7 @@ function Root() {
   return (
     <>
       <SidebarProvider>
-        <AppSidebar user={currentUser} />
+        <AppSidebar />
         <main className='flex-1'>
           <Outlet />
         </main>

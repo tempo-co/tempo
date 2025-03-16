@@ -18,7 +18,7 @@ type FileViewerProps = {
 };
 
 export function FileViewer({file, bankStatementId}: FileViewerProps) {
-  const {accountId} = useParams({from: '/accounts/$accountId/bank-statements/'});
+  const {bankAccountId} = useParams({from: '/bank-accounts/$bankAccountId/bank-statements/'});
 
   const [error, setError] = useState<Error | null>(null);
   const [data, setData] = useState<FileData>({
@@ -30,7 +30,11 @@ export function FileViewer({file, bankStatementId}: FileViewerProps) {
 
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  const {fetchFile, file: fetchedFile, isLoading} = useGetFile(accountId, bankStatementId || '');
+  const {
+    fetchFile,
+    file: fetchedFile,
+    isLoading,
+  } = useGetFile(bankAccountId, bankStatementId || '');
 
   useEffect(() => {
     async function fetchData() {

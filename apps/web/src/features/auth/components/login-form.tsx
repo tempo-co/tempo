@@ -3,7 +3,6 @@ import {Link} from '@tanstack/react-router';
 import {Eye, EyeOff, Loader} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {useForm} from 'react-hook-form';
-import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
@@ -14,11 +13,15 @@ import {cn} from '@/utils/cn';
 import {useLogIn} from '../api/use-login';
 import {LogInDto, logInDtoSchema} from '../types/login.dto';
 
-export function LogInForm() {
+type LogInFormProps = {
+  returnTo?: string;
+};
+
+export function LogInForm({returnTo}: LogInFormProps) {
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
   const [hasUnauthorizedError, setHasUnauthorizedError] = useState<boolean>(false);
 
-  const {logIn, isPending} = useLogIn();
+  const {logIn, isPending} = useLogIn({returnTo});
 
   const form = useForm<LogInDto>({
     resolver: zodResolver(logInDtoSchema),
@@ -43,12 +46,8 @@ export function LogInForm() {
       onError: (error) => {
         if (error.status === 401) {
           form.setError('email', {message: ''});
-          form.setError('password', {message: 'Invalid email or password. Please try again.'});
+          form.setError('password', {message: 'Invalid email or password.'});
           setHasUnauthorizedError(true);
-        } else if (error.status === 400) {
-          toast.error('Validation failed.', {
-            description: 'Please check your input and try again.',
-          });
         }
       },
     });
@@ -89,7 +88,7 @@ export function LogInForm() {
                 <div className='flex w-full items-center justify-between'>
                   <FormLabel>Password</FormLabel>
                   <Link
-                    to='/accounts'
+                    to='/'
                     className='text-sm font-medium underline decoration-accent underline-offset-4 hover:decoration-foreground'
                   >
                     Forgot your password?
@@ -123,6 +122,7 @@ export function LogInForm() {
                                 'rounded-l-none border-l-0',
                                 fieldState.error && 'border-destructive',
                               )}
+                              disabled={isPending}
                             >
                               {isPasswordVisible ? (
                                 <EyeOff className='w-4 text-muted-foreground' />

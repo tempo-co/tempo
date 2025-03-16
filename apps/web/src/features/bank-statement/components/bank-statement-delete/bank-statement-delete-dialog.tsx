@@ -40,10 +40,10 @@ export function BankStatementDeleteDialog({
 }: BankStatementDeleteDialogProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  const {accountId} = useParams({from: '/accounts/$accountId/bank-statements/'});
-  const {pageIndex, pageSize} = useSearch({from: '/accounts/$accountId/bank-statements/'});
+  const {bankAccountId} = useParams({from: '/bank-accounts/$bankAccountId/bank-statements/'});
+  const {pageIndex, pageSize} = useSearch({from: '/bank-accounts/$bankAccountId/bank-statements/'});
 
-  const {mutateAsync, isPending} = useDeleteBankStatement(accountId, bankStatement.id, {
+  const {mutateAsync, isPending} = useDeleteBankStatement(bankAccountId, bankStatement.id, {
     pageIndex,
     pageSize,
   });

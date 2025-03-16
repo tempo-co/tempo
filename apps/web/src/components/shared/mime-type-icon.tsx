@@ -1,9 +1,9 @@
 import {MimeType} from '@/types/mime-type';
 
-import Csv from './file-types-icons/csv';
-import File from './file-types-icons/file';
-import Xls from './file-types-icons/xls';
-import Xlsx from './file-types-icons/xlsx';
+import Csv from './file-type-icons/csv';
+import File from './file-type-icons/file';
+import Xls from './file-type-icons/xls';
+import Xlsx from './file-type-icons/xlsx';
 
 type MimeTypeIconProps = {
   mimeType: MimeType;

@@ -43,7 +43,7 @@ export function FileActionsDropdown({
   error,
   isSuccess,
 }: FileActionsDropdownProps) {
-  const {accountId} = useParams({from: '/accounts/$accountId/bank-statements/'});
+  const {bankAccountId} = useParams({from: '/bank-accounts/$bankAccountId/bank-statements/'});
 
   const [isDropdownMenuOpen, setIsDropdownMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -54,7 +54,7 @@ export function FileActionsDropdown({
     file: fetchedFile,
     isLoading,
     setDownloadReady,
-  } = useGetFile(accountId, bankStatement?.id || '');
+  } = useGetFile(bankAccountId, bankStatement?.id || '');
 
   const isDesktop = useMediaQuery('(min-width: 768px)');
 

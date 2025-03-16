@@ -1,4 +1,3 @@
-import {PaginationState} from '@tanstack/react-table';
 import {useState} from 'react';
 
 import {Button} from '@/components/ui/button';
@@ -12,12 +11,13 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {useMediaQuery} from '@/hooks/use-media-query';
+import {PaginationParams} from '@/types/pagination';
 
 import {FileState} from '../../types/file-state';
 import {BankStatementUploadInput} from './bank-statement-upload-input';
 
 type BankStatementUploadDialogProps = {
-  pagination: PaginationState;
+  pagination: PaginationParams;
 };
 
 export function BankStatementUploadDialog({pagination}: BankStatementUploadDialogProps) {

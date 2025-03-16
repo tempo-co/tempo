@@ -27,7 +27,9 @@ jobs:
           echo "
           VITE_API_URL=${{ secrets.VITE_API_URL }}
           " >> $GITHUB_ENV
+
       - run: npm ci
+      - run: npm run generate-routes
       - run: npm run lint:check
       - run: npm run format:check
       - run: npm run build

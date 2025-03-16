@@ -2,9 +2,7 @@ import {addDays} from 'date-fns';
 
 import {BankStatement} from '@/types/bank-statement';
 
-/**
- * Merges contiguous periods into one continuous block.
- */
+/** Merges adjacent periods into one continuous block. */
 export function mergePeriods(bankStatements: BankStatement[]) {
   const periods = bankStatements
     .map((statement) => statement.period)
@@ -13,50 +11,56 @@ export function mergePeriods(bankStatements: BankStatement[]) {
 
   periods.sort((a, b) => a.start.getTime() - b.start.getTime());
 
-  const merged: BankStatement['period'][] = [periods[0]];
+  const mergedPeriods: BankStatement['period'][] = [periods[0]];
 
   periods.forEach((currentPeriod) => {
-    const last = merged[merged.length - 1];
+    const lastMergedPeriod = mergedPeriods[mergedPeriods.length - 1];
 
-    // If current period is contiguous or overlaps with the last merged period
-    if (currentPeriod.start.getTime() <= addDays(last.end, 1).getTime()) {
-      last.end = new Date(Math.max(last.end.getTime(), currentPeriod.end.getTime()));
+    const isAdjacentOrOverlapping =
+      currentPeriod.start.getTime() <= addDays(lastMergedPeriod.end, 1).getTime();
+
+    if (isAdjacentOrOverlapping) {
+      lastMergedPeriod.end = new Date(
+        Math.max(lastMergedPeriod.end.getTime(), currentPeriod.end.getTime()),
+      );
     } else {
-      merged.push(currentPeriod);
+      mergedPeriods.push(currentPeriod);
     }
   });
 
-  return merged;
+  return mergedPeriods;
 }
 
-/**
- * Returns modifier functions for Calendar to style days based on bank statement periods.
- */
+/** Returns modifier functions for Calendar to style days based on bank statement periods. */
 export function getModifiers(mergedPeriods: BankStatement['period'][]) {
-  const periodSet = new Set(mergedPeriods.map((period) => period.start.getTime()));
-  const endSet = new Set(mergedPeriods.map((period) => period.end.getTime()));
+  const normalizedPeriods = mergedPeriods.map((period) => ({
+    start: normalizeDate(period.start),
+    end: normalizeDate(period.end),
+  }));
+
+  const periodStartSet = new Set(normalizedPeriods.map((p) => p.start));
+  const periodEndSet = new Set(normalizedPeriods.map((p) => p.end));
 
   return {
-    bankStatement: (date: Date) =>
-      mergedPeriods.some((period) => date >= period.start && date <= period.end),
-    bankStatementStart: (date: Date) => periodSet.has(date.getTime()),
-    bankStatementEnd: (date: Date) => endSet.has(date.getTime()),
-    bankStatementMonday: (date: Date) =>
-      date.getDay() === 1 &&
-      mergedPeriods.some((period) => date >= period.start && date <= period.end),
-    bankStatementSunday: (date: Date) =>
-      date.getDay() === 0 &&
-      mergedPeriods.some((period) => date >= period.start && date <= period.end),
+    bankStatement: (date: Date) => isInPeriod(date, normalizedPeriods),
+    bankStatementStart: (date: Date) => periodStartSet.has(normalizeDate(date)),
+    bankStatementEnd: (date: Date) => periodEndSet.has(normalizeDate(date)),
+    bankStatementMonday: (date: Date) => date.getDay() === 1 && isInPeriod(date, normalizedPeriods),
+    bankStatementSunday: (date: Date) => date.getDay() === 0 && isInPeriod(date, normalizedPeriods),
   };
 }
 
-/**
- * CSS class names for the modifiers.
- */
-export const modifiersClassNames = {
-  bankStatement: 'bg-success-foreground text-success rounded-none',
-  bankStatementStart: 'rounded-l-md',
-  bankStatementEnd: 'rounded-r-md',
-  bankStatementMonday: 'rounded-l-md',
-  bankStatementSunday: 'rounded-r-md',
-};
+/** Normalize date to midnight and return time value in milliseconds. */
+function normalizeDate(date: Date): number {
+  const normalized = new Date(date.getTime());
+  normalized.setHours(0, 0, 0, 0);
+  return normalized.getTime();
+}
+
+type NormalizedPeriod = {start: number; end: number};
+
+/** Check if a date falls within any normalized period. */
+function isInPeriod(date: Date, normalizedPeriod: NormalizedPeriod[]): boolean {
+  const timestamp = normalizeDate(date);
+  return normalizedPeriod.some((period) => timestamp >= period.start && timestamp <= period.end);
+}

@@ -1,5 +1,5 @@
 import {NavigateOptions, useNavigate} from '@tanstack/react-router';
-import {PaginationState, Table} from '@tanstack/react-table';
+import {Table} from '@tanstack/react-table';
 import {ChevronFirst, ChevronLast, ChevronLeft, ChevronRight} from 'lucide-react';
 import {Dispatch, SetStateAction, useCallback, useEffect, useMemo} from 'react';
 
@@ -11,13 +11,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {PAGE_SIZE_OPTIONS} from '@/types/pagination';
+import {PAGE_SIZE_OPTIONS, PaginationParams} from '@/types/pagination';
 
 type TablePaginationProps<T> = {
   table: Table<T>;
   totalItems: number;
-  pagination: Required<PaginationState>;
-  setPagination: Dispatch<SetStateAction<Required<PaginationState>>>;
+  pagination: PaginationParams;
+  setPagination: Dispatch<SetStateAction<PaginationParams>>;
   navigateOptions: NavigateOptions;
 };
 

@@ -1,19 +1,28 @@
-import {Link, createFileRoute, redirect} from '@tanstack/react-router';
+import {Link, createFileRoute} from '@tanstack/react-router';
+import {zodValidator} from '@tanstack/zod-adapter';
+import {Info} from 'lucide-react';
+import {z} from 'zod';
 
 import {Separator} from '@/components/ui/separator';
 import {LogInForm} from '@/features/auth/components/login-form';
 import {LogoLink} from '@/features/auth/components/logo-link';
+import {handleUnauthenticatedRedirect} from '@/utils/handle-redirect';
+
+const searchParamsSchema = z.object({
+  returnTo: z.string().optional(),
+});
 
 export const Route = createFileRoute('/login')({
   component: LogIn,
+  validateSearch: zodValidator(searchParamsSchema),
   beforeLoad: ({context}) => {
-    if (context.isAuthenticated) {
-      throw redirect({to: '/home'});
-    }
+    handleUnauthenticatedRedirect(context);
   },
 });
 
 function LogIn() {
+  const searchParams = Route.useSearch();
+
   return (
     <div className='mx-6 flex h-screen items-center justify-center'>
       <div className='mx-auto flex w-full max-w-96 flex-col justify-center'>
@@ -21,7 +30,13 @@ function LogIn() {
           <LogoLink />
           <h1 className='mb-12 text-center text-2xl font-semibold'>Log in</h1>
         </div>
-        <LogInForm />
+        {searchParams.returnTo && searchParams.returnTo == '/verify' && (
+          <div className='mb-6 flex items-center rounded-md border border-info bg-info-foreground p-3 text-sm'>
+            <Info className='mr-2 h-4 w-4' />
+            <span>Please log in to send a new verification code.</span>
+          </div>
+        )}
+        <LogInForm returnTo={searchParams.returnTo} />
         <div className='mt-6 space-y-6 text-sm'>
           <div className='flex justify-center'>
             <Separator className='w-1/5' />

@@ -1,15 +1,14 @@
-import {Link, createFileRoute, redirect} from '@tanstack/react-router';
+import {Link, createFileRoute} from '@tanstack/react-router';
 
 import {Separator} from '@/components/ui/separator';
 import {LogoLink} from '@/features/auth/components/logo-link';
 import {SignUpForm} from '@/features/auth/components/signup-form';
+import {handleUnauthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/signup')({
   component: SignUp,
   beforeLoad: ({context}) => {
-    if (context.isAuthenticated) {
-      throw redirect({to: '/home'});
-    }
+    handleUnauthenticatedRedirect(context);
   },
 });
 

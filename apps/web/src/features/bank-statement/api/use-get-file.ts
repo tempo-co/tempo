@@ -2,25 +2,28 @@ import {useQuery} from '@tanstack/react-query';
 import {useEffect, useState} from 'react';
 import {toast} from 'sonner';
 
-import {Account} from '@/types/account';
+import {BankAccount} from '@/types/bank-account';
 import {BankStatement} from '@/types/bank-statement';
 import {MimeType, getMimeTypeKey} from '@/types/mime-type';
-import {api} from '@/utils/api';
+import {HttpError, api} from '@/utils/api';
 
 import {truncateFileName} from '../utils/truncate-file-name';
 
-export const useGetFile = (accountId: Account['id'], bankStatementId: BankStatement['id']) => {
+export const useGetFile = (
+  bankAccountId: BankAccount['id'],
+  bankStatementId: BankStatement['id'],
+) => {
   const [downloadReady, setDownloadReady] = useState(false);
   const {
     refetch: fetchFile,
     data: file,
     isLoading,
     isError,
-  } = useQuery<File, Error>({
-    queryKey: ['file', accountId, bankStatementId],
+  } = useQuery<File, HttpError>({
+    queryKey: ['file', bankAccountId, bankStatementId],
     queryFn: async () => {
       const response = await api.get(
-        `/accounts/${accountId}/bank-statements/${bankStatementId}/file`,
+        `/bank-accounts/${bankAccountId}/bank-statements/${bankStatementId}/file`,
       );
       const arrayBuffer = await response.arrayBuffer();
 

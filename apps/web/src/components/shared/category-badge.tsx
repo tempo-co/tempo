@@ -81,15 +81,25 @@ const categories: Record<Category, CategoryProps> = {
 
 type CategoryBadgeProps = {
   category: Category;
+  variant?: 'badge' | 'lg';
 };
 
-export function CategoryBadge({category}: CategoryBadgeProps) {
-  const badge = categories[category] || categories[Category.OTHER];
-
+export function CategoryBadge({category, variant = 'badge'}: CategoryBadgeProps) {
+  const {icon: Icon, className, label} = categories[category] || categories[Category.OTHER];
+  if (variant === 'badge') {
+    return (
+      <Badge variant='outline' className={cn('h-fit whitespace-nowrap text-foreground', className)}>
+        <Icon className='mr-1 h-4 w-4' />
+        {label}
+      </Badge>
+    );
+  }
   return (
-    <Badge variant='outline' className={cn('whitespace-nowrap text-foreground', badge.className)}>
-      <badge.icon className='mr-1 h-4 w-4'></badge.icon>
-      {badge.label}
-    </Badge>
+    <div className='flex items-center'>
+      <div className={cn('mr-2 rounded-full p-2', className)}>
+        <Icon className={cn('h-4 w-4')} />
+      </div>
+      <span>{label}</span>
+    </div>
   );
 }

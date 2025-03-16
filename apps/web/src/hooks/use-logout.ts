@@ -19,6 +19,7 @@ export const useLogOut = () => {
     onError: async () => {
       return navigate({to: '/'});
     },
+    retry: false,
   });
 
   return logOut;

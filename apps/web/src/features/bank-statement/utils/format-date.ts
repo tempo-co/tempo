@@ -1,24 +1,21 @@
-import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
-
-dayjs.extend(relativeTime);
+import {differenceInMinutes, format, isSameDay, startOfToday, subDays} from 'date-fns';
 
 export function formatDate(date: Date, isDesktop: boolean) {
-  const now = dayjs();
-  const uploadDate = dayjs(date);
+  const now = new Date();
+  const uploadDate = new Date(date);
 
-  if (now.diff(uploadDate, 'minute') < 1) {
+  if (differenceInMinutes(now, uploadDate) < 1) {
     return 'moments ago';
   }
 
-  const startOfToday = now.startOf('day');
-  const startOfYesterday = startOfToday.subtract(1, 'day');
+  const startOfTodayDate = startOfToday();
+  const startOfYesterdayDate = subDays(startOfTodayDate, 1);
 
-  if (uploadDate.isSame(startOfToday, 'day')) {
-    return `today at ${uploadDate.format('HH:mm')}`;
-  } else if (uploadDate.isSame(startOfYesterday, 'day')) {
-    return `yesterday at ${uploadDate.format('HH:mm')}`;
+  if (isSameDay(uploadDate, startOfTodayDate)) {
+    return `today at ${format(uploadDate, 'HH:mm')}`;
+  } else if (isSameDay(uploadDate, startOfYesterdayDate)) {
+    return `yesterday at ${format(uploadDate, 'HH:mm')}`;
   } else {
-    return `${isDesktop ? 'on' : ''} ${uploadDate.format('DD/MM/YYYY HH:mm')}`;
+    return `${isDesktop ? 'on' : ''} ${format(uploadDate, 'dd/MM/yyyy HH:mm')}`;
   }
 }

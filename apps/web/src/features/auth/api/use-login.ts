@@ -1,38 +1,52 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import {useNavigate} from '@tanstack/react-router';
+import {useNavigate, useRouter} from '@tanstack/react-router';
 import {toast} from 'sonner';
 
+import {User} from '@/types/user';
 import {HttpError, api} from '@/utils/api';
 
 import {LogInDto} from '../types/login.dto';
 
-type LogInHttpError = HttpError & {
-  status: 400 | 401;
+type useLogInProps = {
+  returnTo?: string;
 };
 
-const isLogInHttpError = (error: unknown): error is LogInHttpError => {
-  return error instanceof HttpError && (error.status === 400 || error.status === 401);
-};
-
-export const useLogIn = () => {
+export const useLogIn = ({returnTo}: useLogInProps) => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const router = useRouter();
 
-  const {mutate: logIn, isPending} = useMutation<void, LogInHttpError, LogInDto>({
+  const {mutate: logIn, isPending} = useMutation<User, HttpError, LogInDto>({
     mutationFn: async (logInDto: LogInDto) => {
       const response = await api.post('/auth/login', JSON.stringify(logInDto));
-      await queryClient.setQueryData(['currentUser'], response.json());
+      const user = (await response.json()) as User;
+      return user;
+    },
+    onSuccess: (user) => {
+      queryClient.setQueryData(['currentUser'], user);
+      router.update({context: {isAuthenticated: true, isEmailVerified: user.isEmailVerified}});
+      if (!user.isEmailVerified) {
+        return navigate({to: '/verify'});
+      }
+      if (returnTo) {
+        if (returnTo == '/verify') {
+          toast.info('Your email has already been verified.');
+        }
+        return navigate({to: returnTo});
+      }
       return navigate({to: '/home'});
     },
     onError: (error) => {
-      if (isLogInHttpError(error)) {
-        throw error;
-      } else {
-        toast.error('There was a problem with your request.', {
-          description: 'You could not be logged in. Please try again.',
+      if (error.status === 400) {
+        return toast.error('Validation failed', {
+          description: 'Please input a valid email and password.',
         });
       }
+      if (error.status === 401) {
+        throw error;
+      }
     },
+    retry: false,
   });
   return {logIn, isPending};
 };

@@ -8,8 +8,13 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
+import {Transaction} from '@/types/transaction';
 
-export function TransactionBreadcrumb() {
+type TransactionBreadcrumb = {
+  transaction?: Transaction;
+};
+
+export function TransactionBreadcrumb({transaction}: TransactionBreadcrumb) {
   return (
     <Breadcrumb>
       <BreadcrumbList>
@@ -20,10 +25,22 @@ export function TransactionBreadcrumb() {
         </BreadcrumbItem>
         <BreadcrumbSeparator />
         <BreadcrumbItem>
-          <BreadcrumbItem>
+          {transaction ? (
+            <BreadcrumbLink asChild>
+              <Link to='/transactions'>Transactions</Link>
+            </BreadcrumbLink>
+          ) : (
             <BreadcrumbPage>Transactions</BreadcrumbPage>
-          </BreadcrumbItem>
+          )}
         </BreadcrumbItem>
+        {transaction && (
+          <>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{transaction.description}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </>
+        )}
       </BreadcrumbList>
     </Breadcrumb>
   );

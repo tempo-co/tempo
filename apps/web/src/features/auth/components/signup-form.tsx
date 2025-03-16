@@ -2,7 +2,6 @@ import {zodResolver} from '@hookform/resolvers/zod';
 import {Eye, EyeOff, Loader} from 'lucide-react';
 import {useState} from 'react';
 import {useForm} from 'react-hook-form';
-import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
@@ -25,19 +24,11 @@ export function SignUpForm() {
     defaultValues: {email: '', name: '', password: ''},
   });
 
-  function onSubmit(formData: SignUpDto) {
-    signUp(formData, {
+  async function onSubmit(formData: SignUpDto) {
+    await signUp(formData, {
       onError: (error) => {
         if (error.status === 409) {
-          form.setError(
-            'email',
-            {message: 'This email address is already in use.'},
-            {shouldFocus: true},
-          );
-        } else if (error.status === 400) {
-          toast.error('Validation failed.', {
-            description: 'Please check your input and try again.',
-          });
+          form.setError('email', {message: 'This email is already in use.'}, {shouldFocus: true});
         }
       },
     });
@@ -126,6 +117,7 @@ export function SignUpForm() {
                                 'rounded-l-none border-l-0',
                                 fieldState.error && 'border-destructive',
                               )}
+                              disabled={isPending}
                             >
                               {isPasswordVisible ? (
                                 <EyeOff className='w-4 text-muted-foreground' />

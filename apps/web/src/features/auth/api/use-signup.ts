@@ -1,38 +1,39 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import {useNavigate} from '@tanstack/react-router';
+import {useNavigate, useRouter} from '@tanstack/react-router';
 import {toast} from 'sonner';
 
+import {User} from '@/types/user';
 import {HttpError, api} from '@/utils/api';
 
 import {SignUpDto} from '../types/signup.dto';
 
-type SignUpHttpError = HttpError & {
-  status: 400 | 409;
-};
-
-const isSignUpHttpError = (error: unknown): error is SignUpHttpError => {
-  return error instanceof HttpError && (error.status === 400 || error.status === 409);
-};
-
 export const useSignUp = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const router = useRouter();
 
-  const {mutate: signUp, isPending} = useMutation<void, SignUpHttpError, SignUpDto>({
+  const {mutateAsync: signUp, isPending} = useMutation<User, HttpError, SignUpDto>({
     mutationFn: async (signUpDto: SignUpDto) => {
       const response = await api.post('/auth/signup', JSON.stringify(signUpDto));
-      await queryClient.setQueryData(['currentUser'], response.json());
-      return navigate({to: '/home'});
+      const user = (await response.json()) as User;
+      return user;
+    },
+    onSuccess: (user) => {
+      queryClient.setQueryData(['currentUser'], user);
+      router.update({context: {isAuthenticated: true, isEmailVerified: user.isEmailVerified}});
+      return navigate({to: '/verify'});
     },
     onError: (error) => {
-      if (isSignUpHttpError(error)) {
-        throw error;
-      } else {
-        toast.error('There was a problem with your request.', {
-          description: 'Your account could not be created. Please try again.',
+      if (error.status === 400) {
+        return toast.error('Validation failed', {
+          description: 'Please check your input and try again.',
         });
       }
+      if (error.status === 409) {
+        throw error;
+      }
     },
+    retry: false,
   });
   return {signUp, isPending};
 };

@@ -1,10 +1,9 @@
 import {keepPreviousData, useQuery} from '@tanstack/react-query';
-import {PaginationState} from '@tanstack/react-table';
 import {useState} from 'react';
-import {toast} from 'sonner';
 
-import {Account} from '@/types/account';
+import {BankAccount} from '@/types/bank-account';
 import {BankStatement} from '@/types/bank-statement';
+import {PaginationParams} from '@/types/pagination';
 import {api} from '@/utils/api';
 
 export type PaginatedBankStatementsResponse = {
@@ -13,27 +12,21 @@ export type PaginatedBankStatementsResponse = {
 };
 
 export const useGetAllBankStatements = (
-  accountId: Account['id'],
-  {pageIndex = 0, pageSize = 10}: PaginationState,
+  bankAccountId: BankAccount['id'],
+  {pageIndex = 0, pageSize = 10}: PaginationParams,
 ) => {
-  const [pagination, setPagination] = useState<PaginationState>({pageIndex, pageSize});
+  const [pagination, setPagination] = useState<PaginationParams>({pageIndex, pageSize});
 
-  const {data, isPending, isError, isPlaceholderData} = useQuery<PaginatedBankStatementsResponse>({
-    queryKey: ['bank-statements', pagination, accountId],
+  const {data, isPending, isPlaceholderData} = useQuery<PaginatedBankStatementsResponse>({
+    queryKey: ['bank-statements', pagination, bankAccountId],
     queryFn: async () => {
       const response = await api.get(
-        `/accounts/${accountId}/bank-statements?pageIndex=${pagination.pageIndex}&pageSize=${pagination.pageSize}`,
+        `/bank-accounts/${bankAccountId}/bank-statements?pageIndex=${pagination.pageIndex}&pageSize=${pagination.pageSize}`,
       );
       return response.json();
     },
     placeholderData: keepPreviousData,
   });
-
-  if (isError) {
-    toast.error('There was a problem with your request.', {
-      description: 'Your bank statements could not be loaded. Please try again.',
-    });
-  }
 
   return {data, isPending, isPlaceholderData, pagination, setPagination};
 };

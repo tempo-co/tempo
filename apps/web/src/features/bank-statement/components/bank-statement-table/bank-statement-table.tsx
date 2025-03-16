@@ -1,5 +1,4 @@
 import {
-  PaginationState,
   SortingState,
   flexRender,
   getCoreRowModel,
@@ -13,6 +12,7 @@ import {TablePagination} from '@/components/shared/table-pagination';
 import {Skeleton} from '@/components/ui/skeleton';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {BankStatement} from '@/types/bank-statement';
+import {PaginationParams} from '@/types/pagination';
 import {cn} from '@/utils/cn';
 
 import {BankStatementUploadDialog} from '../bank-statement-upload/bank-statement-upload-dialog';
@@ -21,8 +21,8 @@ import {bankStatementTableColumns} from './bank-statement-table-columns';
 type BankStatementTableProps = {
   bankStatements: BankStatement[];
   totalBankStatements: number;
-  pagination: PaginationState;
-  setPagination: Dispatch<SetStateAction<PaginationState>>;
+  pagination: PaginationParams;
+  setPagination: Dispatch<SetStateAction<PaginationParams>>;
   isPlaceholderData: boolean;
   isPending: boolean;
 };
@@ -118,7 +118,7 @@ export function BankStatementTable({
           totalItems={totalBankStatements}
           pagination={pagination}
           setPagination={setPagination}
-          navigateOptions={{from: '/accounts/$accountId/bank-statements'}}
+          navigateOptions={{from: '/bank-accounts/$bankAccountId/bank-statements'}}
         />
       )}
     </>

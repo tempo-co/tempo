@@ -11,3 +11,5 @@ export const paginationSearchParamsSchema = z.object({
     .refine((val) => PAGE_SIZE_OPTIONS.includes(val))
     .default(DEFAULT_PAGE_SIZE),
 });
+
+export type PaginationParams = z.infer<typeof paginationSearchParamsSchema>;
