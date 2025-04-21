@@ -68,7 +68,11 @@ export function NameChangeForm({currentName}: NameChangeFormProps) {
             </FormItem>
           )}
         />
-        <Button type='submit' disabled={isPending} className='mt-2 w-full sm:mt-0 sm:w-fit'>
+        <Button
+          type='submit'
+          disabled={isPending || form.watch('name') === currentName}
+          className='mt-2 w-full sm:mt-0 sm:w-fit'
+        >
           {isPending ? (
             <>
               <span>Saving...</span>

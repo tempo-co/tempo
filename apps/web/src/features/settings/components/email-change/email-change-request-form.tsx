@@ -10,8 +10,8 @@ import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/compon
 import {useMediaQuery} from '@/hooks/use-media-query';
 import {cn} from '@/utils/cn';
 
-import {useChangeEmailRequest} from '../api/use-change-email-request';
-import {EmailChangeDto} from '../types/email-change.dto';
+import {useChangeEmailRequest} from '../../api/use-change-email-request';
+import {EmailChangeDto} from '../../types/email-change.dto';
 import {EmailChangeVerifyForm} from './email-change-verify-form';
 
 type EmailChangeRequestFormProps = {

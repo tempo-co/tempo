@@ -14,8 +14,7 @@ export const useCreateBankAccount = () => {
     BankAccountCreateDto
   >({
     mutationFn: async (dto: BankAccountCreateDto) => {
-      const response = await api.post('/bank-accounts', JSON.stringify(dto));
-      const bankAccount = (await response.json()) as BankAccount;
+      const bankAccount = await api.post<BankAccount>('/bank-accounts', JSON.stringify(dto));
 
       queryClient.setQueryData(['bank-accounts'], (prevBankAccounts: BankAccount[]) => [
         ...prevBankAccounts,

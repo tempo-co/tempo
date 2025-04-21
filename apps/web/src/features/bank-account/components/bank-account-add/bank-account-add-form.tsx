@@ -13,6 +13,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
+import {useMediaQuery} from '@/hooks/use-media-query';
 import {cn} from '@/utils/cn';
 
 import {useCreateBankAccount} from '../../api/use-create-bank-account';
@@ -23,11 +24,11 @@ import {
 import {BankComboBox} from './bank-combo-box';
 
 type BankAccountAddFormProps = {
-  className?: string;
   setOpen: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
-export function BankAccountAddForm({className, setOpen}: BankAccountAddFormProps) {
+export function BankAccountAddForm({setOpen}: BankAccountAddFormProps) {
+  const isDesktop = useMediaQuery('(min-width: 768px)');
   const {createBankAccount, isPending} = useCreateBankAccount();
 
   const form = useForm<BankAccountCreateDto>({
@@ -44,7 +45,7 @@ export function BankAccountAddForm({className, setOpen}: BankAccountAddFormProps
   return (
     <Form {...form}>
       <form
-        className={cn('grid items-start gap-4', className)}
+        className={cn('grid items-start gap-4', !isDesktop && 'px-4')}
         onSubmit={form.handleSubmit(onSubmit)}
         noValidate
       >

@@ -8,8 +8,7 @@ export const useChangeEmailRequest = () => {
   const {mutateAsync: changeEmailRequest, isPending} = useMutation<void, HttpError, EmailChangeDto>(
     {
       mutationFn: async (dto) => {
-        const response = await api.post('/auth/change-email/request', JSON.stringify(dto));
-        return response.json();
+        await api.post('/auth/change-email/request', JSON.stringify(dto));
       },
     },
   );

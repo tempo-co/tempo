@@ -11,8 +11,7 @@ export const usePatchUser = () => {
 
   const {mutateAsync, isPending} = useMutation<User, HttpError, NameChangeDto>({
     mutationFn: async (dto) => {
-      const response = await api.patch('/users/me', JSON.stringify(dto));
-      return response.json();
+      return await api.patch<User>('/users/me', JSON.stringify(dto));
     },
     onSuccess: (updatedUser) => {
       queryClient.setQueryData(['currentUser'], updatedUser);

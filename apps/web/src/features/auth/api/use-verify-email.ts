@@ -14,9 +14,7 @@ export const useVerifyEmail = () => {
 
   const {mutateAsync: verifyEmail, isPending} = useMutation<User, HttpError, EmailVerifyDto>({
     mutationFn: async (dto: EmailVerifyDto) => {
-      const response = await api.post('/auth/signup/verify', JSON.stringify(dto));
-      const user = (await response.json()) as User;
-      return user;
+      return await api.post<User>('/auth/signup/verify', JSON.stringify(dto));
     },
     onSuccess: async (user) => {
       toast.success('Welcome to Flair!', {

@@ -11,8 +11,7 @@ export const useCurrentUser = ({skipFetch = false} = {}) => {
   } = useQuery<User, HttpError>({
     queryKey: ['currentUser'],
     queryFn: async () => {
-      const response = await api.get('/users/me');
-      return response.json();
+      return await api.get<User>('/users/me');
     },
     enabled: !skipFetch,
     retry: false,

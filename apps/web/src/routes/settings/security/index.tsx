@@ -1,10 +1,12 @@
 import {createFileRoute} from '@tanstack/react-router';
-import {PencilLine, Trash2} from 'lucide-react';
+import {Trash2} from 'lucide-react';
 
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Separator} from '@/components/ui/separator';
 import {Skeleton} from '@/components/ui/skeleton';
+import {PasswordChangeDialog} from '@/features/settings/components/password-change/password-change-dialog';
+import {SessionList} from '@/features/settings/components/session/session-list';
 import {useCurrentUser} from '@/hooks/use-current-user';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
@@ -30,15 +32,17 @@ function SettingsSecurityIndex() {
       </CardHeader>
       <CardContent>
         <Separator className='mb-6 bg-muted' />
+        <SessionList />
+        <Separator className='my-6 bg-muted' />
         <div className='mt-4'>
           <div className='flex flex-col items-start justify-between sm:flex-row sm:items-center'>
             <div>
-              <h2 className='text-lg font-medium'>Password</h2>
+              <h2 className='mb-1 text-lg font-medium'>Password</h2>
+              <p className='mr-8 text-sm text-muted-foreground'>
+                Change your account&apos;s password.
+              </p>
             </div>
-            <Button variant='outline' className='mt-4 w-full sm:mt-0 sm:w-fit'>
-              <PencilLine />
-              Change password
-            </Button>
+            <PasswordChangeDialog />
           </div>
         </div>
         <Separator className='my-6 bg-muted' />

@@ -18,13 +18,12 @@ export const useLogIn = ({returnTo}: useLogInProps) => {
 
   const {mutate: logIn, isPending} = useMutation<User, HttpError, LogInDto>({
     mutationFn: async (logInDto: LogInDto) => {
-      const response = await api.post('/auth/login', JSON.stringify(logInDto));
-      const user = (await response.json()) as User;
-      return user;
+      return await api.post<User>('/auth/login', JSON.stringify(logInDto));
     },
     onSuccess: (user) => {
       queryClient.setQueryData(['currentUser'], user);
       router.update({context: {isAuthenticated: true, isEmailVerified: user.isEmailVerified}});
+
       if (!user.isEmailVerified) {
         return navigate({to: '/verify'});
       }

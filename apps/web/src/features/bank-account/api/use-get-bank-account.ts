@@ -7,8 +7,7 @@ export const useGetBankAccount = (id: BankAccount['id']) => {
   const {data: bankAccount, isPending} = useQuery<BankAccount>({
     queryKey: ['bank-account', id],
     queryFn: async () => {
-      const response = await api.get(`/bank-accounts/${id}`);
-      return response.json();
+      return await api.get<BankAccount>(`/bank-accounts/${id}`);
     },
   });
   return {bankAccount, isPending};

@@ -7,8 +7,7 @@ export const useGetTransaction = (id: Transaction['id']) => {
   const {data: transaction, isPending} = useQuery<Transaction>({
     queryKey: ['transaction', id],
     queryFn: async () => {
-      const response = await api.get(`/transactions/${id}`);
-      return response.json();
+      return await api.get<Transaction>(`/transactions/${id}`);
     },
   });
 

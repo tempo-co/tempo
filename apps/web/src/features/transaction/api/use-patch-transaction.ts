@@ -14,8 +14,7 @@ export const usePatchTransaction = () => {
 
   const {mutateAsync} = useMutation<Transaction, HttpError, PatchTransactionVariables>({
     mutationFn: async ({id, patchDto}) => {
-      const response = await api.patch(`/transactions/${id}`, JSON.stringify(patchDto));
-      return response.json();
+      return await api.patch<Transaction>(`/transactions/${id}`, JSON.stringify(patchDto));
     },
     onSuccess: (updatedTransaction) => {
       queryClient.setQueryData(['transaction', updatedTransaction.id], updatedTransaction);

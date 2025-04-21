@@ -4,9 +4,10 @@ import {toast} from 'sonner';
 
 import {BankAccount} from '@/types/bank-account';
 import {BankStatement} from '@/types/bank-statement';
-import {MimeType, getMimeTypeKey} from '@/types/mime-type';
 import {HttpError, api} from '@/utils/api';
 
+import {downloadFile} from '../utils/download-file';
+import {extractFileMetadata} from '../utils/extract-file-metadata';
 import {truncateFileName} from '../utils/truncate-file-name';
 
 export const useGetFile = (
@@ -24,26 +25,12 @@ export const useGetFile = (
     queryFn: async () => {
       const response = await api.get(
         `/bank-accounts/${bankAccountId}/bank-statements/${bankStatementId}/file`,
+        {parseJson: false},
       );
       const arrayBuffer = await response.arrayBuffer();
+      const {fileName, mimeType} = extractFileMetadata(response.headers);
 
-      let name = response.headers.get('Content-Disposition')?.split('filename=')[1];
-      if (name) {
-        name = name.replace(/"/g, '').trim();
-      } else {
-        name = 'file';
-      }
-
-      let type = response.headers.get('Content-Type') || 'application/octet-stream';
-      type = type.split(';')[0].trim();
-
-      if (!name.includes('.')) {
-        const mimeTypeKey = getMimeTypeKey(type as MimeType);
-        const extension = mimeTypeKey ? mimeTypeKey.toLowerCase() : 'bin';
-        name = `${name}.${extension}`;
-      }
-
-      return new File([arrayBuffer], name, {type});
+      return new File([arrayBuffer], fileName, {type: mimeType});
     },
     enabled: false,
     gcTime: 60000,
@@ -57,15 +44,7 @@ export const useGetFile = (
 
   useEffect(() => {
     if (downloadReady && file) {
-      const url = URL.createObjectURL(file);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = file.name;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadFile(file);
 
       toast.success('File download successful.', {
         description: `${truncateFileName(file.name)} has been downloaded.`,

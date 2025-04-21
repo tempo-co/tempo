@@ -9,8 +9,7 @@ export const useChangeEmailVerify = () => {
   const queryClient = useQueryClient();
   const {mutateAsync: changeEmailVerify, isPending} = useMutation<User, HttpError, EmailVerifyDto>({
     mutationFn: async (dto) => {
-      const response = await api.post('/auth/change-email/verify', JSON.stringify(dto));
-      return response.json();
+      return await api.post<User>('/auth/change-email/verify', JSON.stringify(dto));
     },
     onSuccess: (user) => {
       queryClient.setQueryData(['currentUser'], user);

@@ -14,9 +14,7 @@ export const useSignUp = () => {
 
   const {mutateAsync: signUp, isPending} = useMutation<User, HttpError, SignUpDto>({
     mutationFn: async (signUpDto: SignUpDto) => {
-      const response = await api.post('/auth/signup', JSON.stringify(signUpDto));
-      const user = (await response.json()) as User;
-      return user;
+      return await api.post<User>('/auth/signup', JSON.stringify(signUpDto));
     },
     onSuccess: (user) => {
       queryClient.setQueryData(['currentUser'], user);

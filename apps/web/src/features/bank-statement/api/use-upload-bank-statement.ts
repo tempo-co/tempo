@@ -21,12 +21,11 @@ export const useUploadBankStatement = (
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await api.post(
+      const bankStatement = await api.post<BankStatement>(
         `/bank-accounts/${bankAccountId}/bank-statements/upload`,
         formData,
         {headers: {}},
       );
-      const bankStatement = (await response.json()) as BankStatement;
 
       queryClient.setQueryData<PaginatedBankStatementsResponse>(
         ['bank-statements', pagination, bankAccountId],

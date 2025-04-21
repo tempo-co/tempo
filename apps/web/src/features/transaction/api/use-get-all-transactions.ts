@@ -11,6 +11,11 @@ import {
   TransactionSortParams,
 } from '../types/search-params';
 
+type PaginatedTransactionsResponse = {
+  transactions: Transaction[];
+  total: number;
+};
+
 export const useGetAllTransactions = (searchParams: TransactionSearchParams) => {
   const [pagination, setPagination] = useState<PaginationParams>({
     pageIndex: searchParams.pageIndex,
@@ -22,10 +27,7 @@ export const useGetAllTransactions = (searchParams: TransactionSearchParams) => 
   });
   const [sort, setSort] = useState<TransactionSortParams>(searchParams.sort);
 
-  const {data, isPending, isPlaceholderData} = useQuery<{
-    transactions: Transaction[];
-    total: number;
-  }>({
+  const {data, isPending, isPlaceholderData} = useQuery<PaginatedTransactionsResponse>({
     queryKey: ['transactions', pagination, filters, sort],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -48,8 +50,7 @@ export const useGetAllTransactions = (searchParams: TransactionSearchParams) => 
         params.append('sort[order]', sort.order);
       }
 
-      const response = await api.get(`/transactions?${params.toString()}`);
-      return response.json();
+      return await api.get<PaginatedTransactionsResponse>(`/transactions?${params.toString()}`);
     },
     placeholderData: keepPreviousData,
   });

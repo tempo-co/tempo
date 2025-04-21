@@ -1,25 +1,22 @@
 import {zodResolver} from '@hookform/resolvers/zod';
-import {Eye, EyeOff, Loader} from 'lucide-react';
-import {useState} from 'react';
+import {Loader} from 'lucide-react';
 import {useForm} from 'react-hook-form';
 
 import {Button} from '@/components/ui/button';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
-import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
+import {PasswordInputField} from '@/components/ui/password-input-field';
 import {cn} from '@/utils/cn';
 
 import {useSignUp} from '../api/use-signup';
 import {SignUpDto, signUpDtoSchema} from '../types/signup.dto';
 
 export function SignUpForm() {
-  const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
-
   const {signUp, isPending} = useSignUp();
 
   const form = useForm<SignUpDto>({
     resolver: zodResolver(signUpDtoSchema),
-    mode: 'onTouched',
+    mode: 'onBlur',
     reValidateMode: 'onChange',
     defaultValues: {email: '', name: '', password: ''},
   });
@@ -87,55 +84,14 @@ export function SignUpForm() {
             control={form.control}
             name='password'
             render={({field, fieldState}) => (
-              <FormItem>
-                <FormLabel>Password</FormLabel>
-                <FormControl>
-                  <div className='flex'>
-                    <Input
-                      {...field}
-                      id='password'
-                      type={isPasswordVisible ? 'text' : 'password'}
-                      autoCapitalize='none'
-                      autoComplete='current-password'
-                      autoCorrect='off'
-                      disabled={isPending}
-                      className={cn(
-                        'z-10',
-                        field.value && 'rounded-r-none border-r-0',
-                        fieldState.error && 'border-destructive',
-                      )}
-                    />
-                    {field.value && (
-                      <TooltipProvider delayDuration={500}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              onClick={() => setIsPasswordVisible(!isPasswordVisible)}
-                              variant='outline'
-                              type='button'
-                              className={cn(
-                                'rounded-l-none border-l-0',
-                                fieldState.error && 'border-destructive',
-                              )}
-                              disabled={isPending}
-                            >
-                              {isPasswordVisible ? (
-                                <EyeOff className='w-4 text-muted-foreground' />
-                              ) : (
-                                <Eye className='w-4 text-muted-foreground' />
-                              )}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>{isPasswordVisible ? 'Hide password' : 'Show password'}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
+              <PasswordInputField<SignUpDto, 'password'>
+                field={field}
+                fieldState={fieldState}
+                label='Password'
+                id='password'
+                autoComplete='new-password'
+                disabled={isPending}
+              />
             )}
           />
           <Button type='submit' disabled={isPending}>

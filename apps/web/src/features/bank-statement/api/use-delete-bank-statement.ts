@@ -5,6 +5,8 @@ import {BankStatement} from '@/types/bank-statement';
 import {PaginationParams} from '@/types/pagination';
 import {api} from '@/utils/api';
 
+import {PaginatedBankStatementsResponse} from './use-get-all-bank-statements';
+
 export const useDeleteBankStatement = (
   bankAccountId: BankAccount['id'],
   bankStatementId: BankStatement['id'],
@@ -15,9 +17,9 @@ export const useDeleteBankStatement = (
   const {mutateAsync, isPending} = useMutation({
     mutationFn: async () => {
       await api.delete(`/bank-accounts/${bankAccountId}/bank-statements/${bankStatementId}`);
-      queryClient.setQueryData(
+      queryClient.setQueryData<PaginatedBankStatementsResponse>(
         ['bank-statements', pagination, bankAccountId],
-        (prevData: {bankStatements: BankStatement[]; total: number}) => ({
+        (prevData) => ({
           bankStatements: prevData?.bankStatements.filter((bs) => bs.id !== bankStatementId) ?? [],
           total: (prevData?.total ?? 1) - 1,
         }),

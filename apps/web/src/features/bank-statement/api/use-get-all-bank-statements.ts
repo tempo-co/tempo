@@ -20,10 +20,9 @@ export const useGetAllBankStatements = (
   const {data, isPending, isPlaceholderData} = useQuery<PaginatedBankStatementsResponse>({
     queryKey: ['bank-statements', pagination, bankAccountId],
     queryFn: async () => {
-      const response = await api.get(
+      return await api.get<PaginatedBankStatementsResponse>(
         `/bank-accounts/${bankAccountId}/bank-statements?pageIndex=${pagination.pageIndex}&pageSize=${pagination.pageSize}`,
       );
-      return response.json();
     },
     placeholderData: keepPreviousData,
   });

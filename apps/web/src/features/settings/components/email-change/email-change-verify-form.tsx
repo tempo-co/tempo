@@ -10,9 +10,9 @@ import {Form, FormControl, FormField, FormItem, FormMessage} from '@/components/
 import {InputOTP, InputOTPGroup, InputOTPSlot} from '@/components/ui/input-otp';
 import {EmailVerifyDto, emailVerifyDtoSchema} from '@/features/auth/types/email-verify.dto';
 
-import {useChangeEmailRequest} from '../api/use-change-email-request';
-import {useChangeEmailVerify} from '../api/use-change-email-verify';
-import {EmailChangeDto} from '../types/email-change.dto';
+import {useChangeEmailRequest} from '../../api/use-change-email-request';
+import {useChangeEmailVerify} from '../../api/use-change-email-verify';
+import {EmailChangeDto} from '../../types/email-change.dto';
 
 type EmailChangeVerifyFormProps = {
   setOpen: React.Dispatch<React.SetStateAction<boolean>>;
