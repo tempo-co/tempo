@@ -8,9 +8,10 @@ jobs:
   lint-format:
     name: Lint & Format
     runs-on: ubuntu-latest
+    environment: development
     steps:
       - name: Checkout Repository
-        uses: actions/setup-node@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v3
@@ -30,6 +31,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    environment: development
     needs: [lint-format]
     steps:
       - name: Checkout Repository
