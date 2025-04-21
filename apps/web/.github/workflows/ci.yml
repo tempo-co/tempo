@@ -1,4 +1,4 @@
-name: React web CI
+name: Web CI
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: development
 
     steps:
       - uses: actions/checkout@v4
@@ -15,13 +16,6 @@ jobs:
         with:
           node-version: 20.x
           cache: 'npm'
-
-      - name: Set up environment variables
-        run: |
-          echo "
-          VITE_API_URL=${{ secrets.VITE_API_URL }}
-          " >> $GITHUB_ENV
-
       - run: npm ci
       - run: npm run generate-routes
       - run: npm run lint:check
