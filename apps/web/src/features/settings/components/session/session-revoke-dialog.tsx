@@ -37,7 +37,7 @@ export function SessionRevokeDialog({session}: SessionRevokeDialogProps) {
     return (
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogTrigger asChild>
-          <Button variant='outline' className='text-foreground' size='sm'>
+          <Button variant='outline' className='w-full text-foreground sm:w-fit' size='sm'>
             <Trash2 />
             Revoke
           </Button>
@@ -49,7 +49,7 @@ export function SessionRevokeDialog({session}: SessionRevokeDialogProps) {
               Are you sure you want to revoke this session?
             </DialogDescription>
           </DialogHeader>
-          <SessionCard session={session} hideRevokeButton />
+          <SessionCard session={session} hideRevokeButton forceStackedLayout />
           <SessionRevokeForm session={session} setIsOpen={setIsOpen} />
         </DialogContent>
       </Dialog>
@@ -59,7 +59,7 @@ export function SessionRevokeDialog({session}: SessionRevokeDialogProps) {
   return (
     <Drawer open={isOpen} onOpenChange={setIsOpen}>
       <DrawerTrigger asChild>
-        <Button variant='destructive' className='text-foreground' size='sm'>
+        <Button variant='outline' className='w-full text-foreground sm:w-fit' size='sm'>
           <Trash2 />
           Revoke
         </Button>
@@ -72,7 +72,7 @@ export function SessionRevokeDialog({session}: SessionRevokeDialogProps) {
           </DrawerDescription>
         </DrawerHeader>
         <div className='px-4'>
-          <SessionCard session={session} hideRevokeButton />
+          <SessionCard session={session} hideRevokeButton forceStackedLayout />
           <SessionRevokeForm session={session} setIsOpen={setIsOpen} />
         </div>
         <DrawerFooter className='pt-4'>

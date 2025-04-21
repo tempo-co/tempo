@@ -50,7 +50,7 @@ export function SessionRevokeForm({session, setIsOpen}: SessionRevokeFormProps) 
   return (
     <Form {...form}>
       <form
-        className={cn('grid items-start gap-4')}
+        className={cn('grid items-start gap-4', !isDesktop && 'mt-4')}
         onSubmit={form.handleSubmit(onSubmit)}
         noValidate
       >
