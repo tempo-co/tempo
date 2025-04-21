@@ -11,8 +11,7 @@
     "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx}\"",
     "lint": "eslint \"{src,test}/**/*.ts\" --report-unused-disable-directives --max-warnings 0 --fix",
     "lint:check": "eslint \"{src,test}/**/*.ts\" --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview",
-    "prepare": "husky"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.6.0",
