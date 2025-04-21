@@ -14,12 +14,6 @@
     "preview": "vite preview",
     "prepare": "husky"
   },
-  "lint-staged": {
-    "**/*.{ts,tsx,js,jsx}": [
-      "eslint \"{src,test}/**/*.ts\" --fix",
-      "prettier --write --ignore-unknown"
-    ]
-  },
   "dependencies": {
     "@hookform/resolvers": "^3.6.0",
     "@radix-ui/react-avatar": "^1.1.0",
@@ -84,8 +78,6 @@
     "eslint-plugin-react": "^7.34.3",
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.7",
-    "husky": "^9.0.11",
-    "lint-staged": "^15.2.7",
     "postcss": "^8.4.38",
     "prettier": "^3.3.2",
     "prettier-plugin-tailwindcss": "^0.6.5",
