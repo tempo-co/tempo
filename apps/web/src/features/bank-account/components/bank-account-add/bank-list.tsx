@@ -1,6 +1,6 @@
 import {useMemo} from 'react';
 
-import {DynamicBankIcon} from '@/components/shared/dynamic-bank-icon';
+import {BankIcon} from '@/components/shared/bank-icon';
 import {
   Command,
   CommandEmpty,
@@ -35,7 +35,7 @@ export function BankList({setOpen, setSelectedBank}: BankListProps) {
               }}
             >
               <div className='mr-2 rounded-md bg-muted p-[0.35rem]'>
-                <DynamicBankIcon bank={bank} className='w-4' />
+                <BankIcon bank={bank} className='w-4' />
               </div>
               {bank}
             </CommandItem>

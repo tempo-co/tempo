@@ -2,7 +2,7 @@ import {VisuallyHidden} from '@radix-ui/react-visually-hidden';
 import {ChevronDown} from 'lucide-react';
 import {useState} from 'react';
 
-import {DynamicBankIcon} from '@/components/shared/dynamic-bank-icon';
+import {BankIcon} from '@/components/shared/bank-icon';
 import {Button} from '@/components/ui/button';
 import {Drawer, DrawerContent, DrawerTitle, DrawerTrigger} from '@/components/ui/drawer';
 import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
@@ -44,7 +44,7 @@ export function BankComboBox({onChange, isPending, error}: BankComboBoxProps) {
               {selectedBank ? (
                 <div className='flex items-center'>
                   <div className='mr-2 rounded-md bg-muted p-[0.35rem]'>
-                    <DynamicBankIcon bank={selectedBank} className='w-4' />
+                    <BankIcon bank={selectedBank} className='w-4' />
                   </div>
                   <p>{selectedBank}</p>
                 </div>
@@ -71,7 +71,7 @@ export function BankComboBox({onChange, isPending, error}: BankComboBoxProps) {
         <Button variant='outline' disabled={isPending} className='justify-start'>
           {selectedBank ? (
             <>
-              <DynamicBankIcon bank={selectedBank} className='mr-2 w-4' />
+              <BankIcon bank={selectedBank} className='mr-2 w-4' />
               {selectedBank}
             </>
           ) : (

@@ -59,7 +59,7 @@ export function TransactionDateFilter({filters, setFilters}: TransactionDateFilt
               </span>
             </>
           )}
-          <ChevronDown />
+          <ChevronDown className='text-muted-foreground' />
         </Button>
       </PopoverTrigger>
       <PopoverContent className='w-auto p-0' align='start'>

@@ -24,6 +24,7 @@ export const useGetAllTransactions = (searchParams: TransactionSearchParams) => 
   const [filters, setFilters] = useState<TransactionFilterParams>({
     categories: searchParams.categories,
     startedAt: searchParams.startedAt,
+    banks: searchParams.banks,
   });
   const [sort, setSort] = useState<TransactionSortParams>(searchParams.sort);
 
@@ -38,11 +39,16 @@ export const useGetAllTransactions = (searchParams: TransactionSearchParams) => 
       if (filters.categories) {
         filters.categories.forEach((category) => params.append('filter[categories][]', category));
       }
+
       if (filters.startedAt) {
         params.append('filter[startedAt][from]', filters.startedAt.from.toISOString());
         if (filters.startedAt.to) {
           params.append('filter[startedAt][to]', filters.startedAt.to.toISOString());
         }
+      }
+
+      if (filters.banks && filters.banks.length > 0) {
+        filters.banks.forEach((bank) => params.append('filter[banks][]', bank));
       }
 
       if (sort && sort.by && sort.order) {

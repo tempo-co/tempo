@@ -1,6 +1,6 @@
 import {Link} from '@tanstack/react-router';
 
-import {DynamicBankIcon} from '@/components/shared/dynamic-bank-icon';
+import {BankIcon} from '@/components/shared/bank-icon';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -43,7 +43,7 @@ export function BankAccountBreadcrumb({bankAccount, bankStatements}: BankAccount
             <BreadcrumbItem>
               <BreadcrumbPage className='flex items-center'>
                 <div className='mr-1 rounded-md bg-muted p-[0.2rem]'>
-                  <DynamicBankIcon bank={bankAccount.bank} className='h-3 w-3' />
+                  <BankIcon bank={bankAccount.bank} className='h-3 w-3' />
                 </div>
                 {bankAccount.alias ? bankAccount.alias : bankAccount.bank}
               </BreadcrumbPage>
@@ -61,7 +61,7 @@ export function BankAccountBreadcrumb({bankAccount, bankStatements}: BankAccount
                   className='flex items-center'
                 >
                   <div className='mr-1 rounded-md bg-muted p-[0.2rem]'>
-                    <DynamicBankIcon bank={bankAccount.bank} className='h-3 w-3' />
+                    <BankIcon bank={bankAccount.bank} className='h-3 w-3' />
                   </div>
                   {bankAccount.alias ? bankAccount.alias : bankAccount.bank}
                 </Link>

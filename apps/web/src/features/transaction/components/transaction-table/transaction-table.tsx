@@ -14,6 +14,7 @@ import {cn} from '@/utils/cn';
 
 import {TransactionFilterParams, TransactionSortParams} from '../../types/search-params';
 import {createSortingHandler, mapSortToSortingState} from '../../utils/handle-sort';
+import {TransactionBankFilter} from './transaction-bank-filter';
 import {TransactionCategoryFilter} from './transaction-category-filter';
 import {TransactionClearAllFiltersButton} from './transaction-clear-all-filters';
 import {TransactionDateFilter} from './transaction-date-filter';
@@ -81,6 +82,7 @@ export function TransactionsTable({
       <div className='my-4 flex gap-4'>
         <TransactionCategoryFilter filters={filters} setFilters={setFilters} />
         <TransactionDateFilter filters={filters} setFilters={setFilters} />
+        <TransactionBankFilter filters={filters} setFilters={setFilters} />
         {isFilteringApplied && (
           <TransactionClearAllFiltersButton
             setFilters={setFilters}

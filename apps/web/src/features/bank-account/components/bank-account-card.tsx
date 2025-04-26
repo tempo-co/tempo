@@ -1,7 +1,7 @@
 import {Link} from '@tanstack/react-router';
 
+import {BankIcon} from '@/components/shared/bank-icon';
 import {CurrencyAmount} from '@/components/shared/currency-amount';
-import {DynamicBankIcon} from '@/components/shared/dynamic-bank-icon';
 import {Card} from '@/components/ui/card';
 import {BankAccount} from '@/types/bank-account';
 
@@ -15,7 +15,7 @@ export function BankAccountCard({bankAccount}: AccountCardProps) {
       <Card className='flex items-center justify-between p-4 hover:bg-accent'>
         <div className='flex items-center'>
           <div className='rounded-md bg-muted p-2'>
-            <DynamicBankIcon bank={bankAccount.bank} className='w-7' />
+            <BankIcon bank={bankAccount.bank} className='w-7' />
           </div>
           <div className='ml-4 flex flex-col'>
             <p>

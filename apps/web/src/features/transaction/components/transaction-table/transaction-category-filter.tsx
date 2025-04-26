@@ -21,10 +21,10 @@ import {cn} from '@/utils/cn';
 
 import {TransactionFilterParams} from '../../types/search-params';
 
-interface TransactionCategoryFilterProps {
+type TransactionCategoryFilterProps = {
   filters: TransactionFilterParams;
   setFilters: React.Dispatch<React.SetStateAction<TransactionFilterParams>>;
-}
+};
 
 export function TransactionCategoryFilter({filters, setFilters}: TransactionCategoryFilterProps) {
   const navigate = useNavigate({from: '/transactions'});
@@ -80,7 +80,7 @@ export function TransactionCategoryFilter({filters, setFilters}: TransactionCate
               </div>
             </>
           )}
-          <ChevronDown />
+          <ChevronDown className='text-muted-foreground' />
         </Button>
       </PopoverTrigger>
       <PopoverContent className='w-[14rem] p-0' align='start'>
