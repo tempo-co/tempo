@@ -1,7 +1,6 @@
 import {zodResolver} from '@hookform/resolvers/zod';
 import {REGEXP_ONLY_DIGITS} from 'input-otp';
 import {Loader} from 'lucide-react';
-import {useCallback, useEffect} from 'react';
 import {useForm} from 'react-hook-form';
 
 import {Button} from '@/components/ui/button';
@@ -12,48 +11,27 @@ import {useVerifyEmail} from '../api/use-verify-email';
 import {EmailVerifyDto, emailVerifyDtoSchema} from '../types/email-verify.dto';
 import {ResendCodeButton} from './resend-code-button';
 
-type VerifyFormProps = {
-  code: string | undefined;
-};
-
-export function VerifyForm({code}: VerifyFormProps) {
+export function VerifyForm() {
   const {verifyEmail, isPending: isVerifying} = useVerifyEmail();
 
   const form = useForm<EmailVerifyDto>({
     resolver: zodResolver(emailVerifyDtoSchema),
     mode: 'onSubmit',
-    defaultValues: {code: code || ''},
   });
 
-  const handleVerifyEmail = useCallback(
-    async (data: EmailVerifyDto) => {
-      await verifyEmail(data, {
-        onError: (error) => {
-          if (error.status === 400) {
-            form.setError(
-              'code',
-              {message: 'This code is invalid or has expired.'},
-              {shouldFocus: true},
-            );
-          }
-        },
-      });
-    },
-    [verifyEmail, form],
-  );
-
-  useEffect(() => {
-    const verifyEmailWithCode = async () => {
-      if (code) {
-        await handleVerifyEmail({code});
-      }
-    };
-    void verifyEmailWithCode();
-  }, [handleVerifyEmail, code]);
+  async function onSubmit(data: EmailVerifyDto) {
+    await verifyEmail(data, {
+      onError: (error) => {
+        if (error.status === 400) {
+          form.setError('code', {message: 'This code is invalid or has expired.'});
+        }
+      },
+    });
+  }
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleVerifyEmail)} noValidate className='space-y-4'>
+      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className='space-y-4'>
         <FormField
           control={form.control}
           name='code'

@@ -1,10 +1,12 @@
 import {createFileRoute, redirect} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
 import {AnimatePresence, motion} from 'framer-motion';
-import {useState} from 'react';
+import {Loader2} from 'lucide-react';
+import {useEffect, useState} from 'react';
 import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
+import {useVerifyEmail} from '@/features/auth/api/use-verify-email';
 import {AuthLayout} from '@/features/auth/components/auth-layout';
 import {VerifyForm} from '@/features/auth/components/verify-form';
 import {switchContentVariants} from '@/features/auth/constants/animations';
@@ -26,14 +28,33 @@ export const Route = createFileRoute('/verify')({
 function VerifyIndex() {
   const searchParams = Route.useSearch();
   const code = searchParams.code ? String(searchParams.code) : undefined;
+  const email = searchParams.email;
 
-  const {logOut, isPending} = useLogOut();
+  const {logOut, isPending: isLoggingOut} = useLogOut();
   const {currentUser} = useCurrentUser({skipFetch: true});
   const [showForm, setShowForm] = useState(false);
+  const {verifyEmail, isPending: isVerifying} = useVerifyEmail();
+
+  useEffect(() => {
+    if (currentUser && code && email) {
+      void verifyEmail({code});
+    }
+  }, [code, currentUser, email, verifyEmail]);
 
   const handleLogout = async () => {
     await logOut();
   };
+
+  if (isVerifying)
+    return (
+      <div className='flex h-screen w-screen items-center justify-center bg-background'>
+        <div className='flex flex-col items-center space-y-4 text-center'>
+          <Loader2 className='h-14 w-14 animate-spin text-primary' />
+
+          <p className='text-xl font-medium text-foreground'>Verifying your email...</p>
+        </div>
+      </div>
+    );
 
   return (
     <AuthLayout title='Check your email'>
@@ -57,6 +78,11 @@ function VerifyIndex() {
                     {' at '}
                     <span className='font-medium text-foreground'>{currentUser.email}</span>
                   </>
+                ) : email ? (
+                  <>
+                    {' at '}
+                    <span className='font-medium text-foreground'>{email}</span>
+                  </>
                 ) : (
                   '.'
                 )}
@@ -74,7 +100,7 @@ function VerifyIndex() {
                     exit='exit'
                     className='w-full'
                   >
-                    <VerifyForm code={code} />
+                    <VerifyForm />
                   </motion.div>
                 ) : (
                   <motion.div
@@ -89,8 +115,9 @@ function VerifyIndex() {
                       variant='secondary'
                       className='mt-4 w-full'
                       onClick={() => setShowForm(true)}
+                      disabled={isVerifying}
                     >
-                      Enter code manually
+                      {isVerifying ? 'Verifying...' : 'Enter code manually'}
                     </Button>
                   </motion.div>
                 )}
@@ -103,9 +130,9 @@ function VerifyIndex() {
                 variant='link'
                 className='h-auto p-0 text-foreground underline-offset-4 hover:underline'
                 onClick={handleLogout}
-                disabled={isPending}
+                disabled={isLoggingOut || isVerifying}
               >
-                {isPending ? 'Logging out...' : 'Log out'}
+                {isLoggingOut ? 'Logging out...' : 'Log out'}
               </Button>
             </p>
           </motion.div>
