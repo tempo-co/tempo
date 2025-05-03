@@ -6,7 +6,7 @@ import {useCurrentUser} from '@/hooks/use-current-user';
 import {HttpError, api} from '@/utils/api';
 
 export const useResendVerificationEmail = () => {
-  const {isAuthenticated, isEmailVerified} = useCurrentUser({skipFetch: true});
+  const {isAuthenticated, isEmailVerified, currentUser} = useCurrentUser({skipFetch: true});
   const navigate = useNavigate();
 
   const {mutateAsync: resendVerificationEmail, isPending} = useMutation<void, HttpError, void>({
@@ -21,8 +21,8 @@ export const useResendVerificationEmail = () => {
       await api.post('/auth/signup/resend');
     },
     onSuccess: () => {
-      toast.success('New verification code sent', {
-        description: 'Please check your email.',
+      toast.success('New verification email sent', {
+        description: `Please check your inbox at ${currentUser?.email}.`,
       });
     },
     retry: false,
