@@ -1,11 +1,12 @@
 import {RouterProvider, createRouter} from '@tanstack/react-router';
-import {Loader} from 'lucide-react';
+import {motion} from 'framer-motion';
 import React from 'react';
 
 import {Toaster} from '@/components/ui/sonner';
 import {useCurrentUser} from '@/hooks/use-current-user';
 import {ThemeProvider} from '@/providers/theme.provider';
 
+import Logo from './assets/logo';
 import {routeTree} from './routeTree.gen';
 
 const router = createRouter({
@@ -44,7 +45,13 @@ function LoadingScreen() {
   return (
     <ThemeProvider defaultTheme='dark' storageKey='vite-ui-theme'>
       <div className='flex h-screen w-screen items-center justify-center bg-background'>
-        <Loader className='h-14 w-14 animate-spin' />
+        <motion.div
+          initial={{scale: 0.9, opacity: 0}}
+          animate={{scale: 1.3, opacity: 1}}
+          transition={{duration: 3, ease: 'easeOut', delay: 0.5}}
+        >
+          <Logo className='h-16 w-16 text-primary' />
+        </motion.div>
       </div>
     </ThemeProvider>
   );
