@@ -1,6 +1,6 @@
 import React from 'react';
 
-import Wallet from '@/components/shared/illustrations/wallet';
+import Wallet from '@/assets/illustrations/wallet';
 import {Skeleton} from '@/components/ui/skeleton';
 import {BankAccount} from '@/types/bank-account';
 

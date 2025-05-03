@@ -4,18 +4,13 @@ import {toast} from 'sonner';
 import {HttpError, api} from '@/utils/api';
 
 import {Session} from '../types/session';
-import {SessionRevokeDto} from '../types/session-revoke.dto';
 
 export const useRevokeSession = () => {
   const queryClient = useQueryClient();
 
-  const {mutateAsync, isPending} = useMutation<
-    void,
-    HttpError,
-    {id: Session['id']; dto: SessionRevokeDto}
-  >({
-    mutationFn: async ({id, dto}) => {
-      await api.delete<Session>(`/auth/sessions/${id}`, {body: JSON.stringify(dto)});
+  const {mutateAsync, isPending} = useMutation<void, HttpError, {id: Session['id']}>({
+    mutationFn: async ({id}) => {
+      await api.delete<Session>(`/auth/sessions/${id}`);
     },
 
     onSuccess: (_data, data) => {

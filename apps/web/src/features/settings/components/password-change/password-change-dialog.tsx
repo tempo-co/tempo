@@ -1,4 +1,3 @@
-import {PencilLine} from 'lucide-react';
 import {useState} from 'react';
 
 import {Button} from '@/components/ui/button';
@@ -30,10 +29,7 @@ export function PasswordChangeDialog() {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <Button variant='outline' className='mt-4 w-full sm:mt-0 sm:w-fit'>
-            <PencilLine />
-            Change password
-          </Button>
+          <Button variant='ghost'>Change</Button>
         </DialogTrigger>
         <DialogContent className='w-[26rem]' aria-describedby='Change password'>
           <DialogHeader>
@@ -48,10 +44,7 @@ export function PasswordChangeDialog() {
   return (
     <Drawer open={open} onOpenChange={setOpen}>
       <DrawerTrigger asChild>
-        <Button variant='outline' className='mt-4 w-full sm:mt-0 sm:w-fit'>
-          <PencilLine />
-          Change password
-        </Button>
+        <Button variant='ghost'>Change</Button>
       </DrawerTrigger>
       <DrawerContent aria-describedby='Change password'>
         <DrawerHeader className='text-left'>

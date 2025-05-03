@@ -25,7 +25,6 @@ export function LogInForm({returnTo}: LogInFormProps) {
     resolver: zodResolver(logInDtoSchema),
     mode: 'onBlur',
     reValidateMode: 'onChange',
-    defaultValues: {email: '', password: ''},
   });
 
   useEffect(() => {
@@ -54,7 +53,7 @@ export function LogInForm({returnTo}: LogInFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
-        <div className='grid gap-6'>
+        <div className='grid gap-4'>
           <FormField
             control={form.control}
             name='email'
@@ -92,7 +91,7 @@ export function LogInForm({returnTo}: LogInFormProps) {
               />
             )}
           />
-          <Button type='submit' disabled={isPending}>
+          <Button type='submit' disabled={isPending} className='mt-2'>
             {isPending ? (
               <>
                 <span>Logging in...</span>

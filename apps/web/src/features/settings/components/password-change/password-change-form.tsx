@@ -80,31 +80,20 @@ export function PasswordChangeForm({setOpen}: PasswordChangeFormProps) {
               />
             )}
           />
-          <FormField
-            control={form.control}
-            name='confirmNewPassword'
-            render={({field, fieldState}) => (
-              <PasswordInputField<PasswordChangeDto, 'confirmNewPassword'>
-                field={field}
-                fieldState={fieldState}
-                label='Confirm new password'
-                id='confirm-new-password'
-                autoComplete='new-password'
-                disabled={isPending}
-              />
-            )}
-          />
+          <p className='text-xs text-muted-foreground'>
+            Your password should be at least 8 characters long.
+          </p>
           <div className='mt-4 flex w-full gap-4'>
             {isDesktop && (
               <DialogFooter className='w-full'>
                 <DialogClose asChild>
-                  <Button variant='outline' type='button' className='w-full'>
+                  <Button variant='outline' type='button'>
                     Cancel
                   </Button>
                 </DialogClose>
               </DialogFooter>
             )}
-            <Button type='submit' disabled={isPending} className='w-full'>
+            <Button type='submit' disabled={isPending}>
               {isPending ? (
                 <>
                   <span>Changing password...</span>

@@ -3,7 +3,7 @@ import {flexRender, getCoreRowModel, useReactTable} from '@tanstack/react-table'
 import {SearchX} from 'lucide-react';
 import {Dispatch, SetStateAction} from 'react';
 
-import CreditCards from '@/components/shared/illustrations/credit-cards';
+import CreditCards from '@/assets/illustrations/credit-cards';
 import {LoadingBar} from '@/components/shared/loading-bar';
 import {TablePagination} from '@/components/shared/table-pagination';
 import {Skeleton} from '@/components/ui/skeleton';

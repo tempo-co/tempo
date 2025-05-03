@@ -17,8 +17,8 @@ export const Route = createFileRoute('/settings')({
 
 const navItems = [
   {label: 'Account', route: '/settings/account', icon: User},
-  {label: 'Security', route: '/settings/security', icon: Shield},
-  {label: 'Theme', route: '/settings/theme', icon: SunMoon},
+  {label: 'Security & access', route: '/settings/security', icon: Shield},
+  {label: 'Appearance', route: '/settings/appearance', icon: SunMoon},
 ];
 
 function SettingsIndex() {
@@ -30,33 +30,43 @@ function SettingsIndex() {
         <SettingsBreadcrumb route='/account' />
       </AppHeader>
       <AppBody>
-        <div className='mt-4 flex flex-col gap-4 xl:flex-row'>
-          <div className='flex w-full flex-row gap-1 md:w-auto md:items-start xl:flex-col'>
+        <div className='mt-4 flex w-full flex-row gap-1 px-4 md:w-auto md:items-start xl:hidden'>
+          {navItems.map((item) => {
+            const isActive = matchRoute({to: item.route, fuzzy: true}) as boolean;
+            return (
+              <Button key={item.label} variant='ghost' size='sm' asChild className='flex-1'>
+                <Link to={item.route} className={cn(isActive && 'bg-sidebar-accent')}>
+                  <item.icon />
+                  <span>{item.label}</span>
+                </Link>
+              </Button>
+            );
+          })}
+        </div>
+        <div className='relative mx-auto mt-4 w-full max-w-[40rem] px-4 xl:mt-20'>
+          <div className='absolute right-full top-0 mr-6 hidden h-full xl:flex xl:w-[11rem] xl:flex-col xl:gap-1'>
             {navItems.map((item) => {
               const isActive = matchRoute({to: item.route, fuzzy: true}) as boolean;
               return (
                 <Button
                   key={item.label}
-                  className='h-fit flex-1 p-3 md:w-32 md:flex-none'
+                  className='h-fit w-full px-3 py-2'
                   variant='ghost'
                   size='lg'
                   asChild
                 >
                   <Link
                     to={item.route}
-                    className={cn(
-                      'flex items-center justify-center md:flex-row md:!justify-start',
-                      isActive && 'bg-sidebar-accent',
-                    )}
+                    className={cn('flex flex-row !justify-start', isActive && 'bg-sidebar-accent')}
                   >
-                    <item.icon className='mb-1 md:mb-0 md:mr-2' />
+                    <item.icon className='mr-2' />
                     <span>{item.label}</span>
                   </Link>
                 </Button>
               );
             })}
           </div>
-          <div className='w-full'>
+          <div className='mt-10 xl:mt-0'>
             <Outlet />
           </div>
         </div>

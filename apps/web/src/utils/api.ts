@@ -65,6 +65,9 @@ async function request<T = unknown>(
       });
     }
 
+    if (init?.parseJson === false) {
+      throw new HttpError(response.status, response.statusText);
+    }
     const error = (await response.json()) as Error;
     throw new HttpError(response.status, error.message);
   }
@@ -74,6 +77,25 @@ async function request<T = unknown>(
   }
 
   return (await response.json()) as T;
+}
+
+//
+// HEAD overloads
+//
+
+/**
+ * HEAD request with parseJson disabled; returns a Response.
+ */
+function head(resource: string, init?: RequestOptions & {parseJson?: false}): Promise<Response>;
+/**
+ * HEAD request with parseJson enabled (or default); returns parsed JSON of type T.
+ */
+function head<T = unknown>(resource: string, init?: RequestOptions): Promise<T>;
+/**
+ * Implementation of HEAD request.
+ */
+function head<T = unknown>(resource: string, init: RequestOptions = {}): Promise<T | Response> {
+  return request<T>(resource, {...init, method: 'HEAD', parseJson: false});
 }
 
 //
@@ -168,4 +190,4 @@ function _delete<T = unknown>(
   return request<T>(resource, {...init, method: 'DELETE'});
 }
 
-export const api = {get, post, put, patch, delete: _delete};
+export const api = {head, get, post, put, patch, delete: _delete};

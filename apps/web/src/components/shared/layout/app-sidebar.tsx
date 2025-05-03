@@ -33,7 +33,7 @@ const navItems = [
 
 export function AppSidebar() {
   const {isMobile} = useSidebar();
-  const logOut = useLogOut();
+  const {logOut, isPending} = useLogOut();
   const matchRoute = useMatchRoute();
 
   const {currentUser} = useCurrentUser({skipFetch: true});
@@ -76,7 +76,7 @@ export function AppSidebar() {
                       <AvatarFallback className='rounded-lg'>CN</AvatarFallback>
                     </Avatar>
                     <div className='grid flex-1 text-left text-sm leading-tight'>
-                      <span className='truncate font-semibold'>{currentUser.name}</span>
+                      <span className='truncate font-semibold'>{currentUser.username}</span>
                       <span className='truncate text-xs'>{currentUser.email}</span>
                     </div>
                     <ChevronsUpDown className='ml-auto size-4' />
@@ -96,7 +96,11 @@ export function AppSidebar() {
                       </Link>
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => logOut()} className='cursor-pointer'>
+                  <DropdownMenuItem
+                    onClick={() => logOut()}
+                    className='cursor-pointer'
+                    disabled={isPending}
+                  >
                     <LogOut className='mr-2 h-4 w-4' />
                     Log out
                   </DropdownMenuItem>

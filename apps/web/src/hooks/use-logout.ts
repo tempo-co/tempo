@@ -7,7 +7,7 @@ export const useLogOut = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const {mutate: logOut} = useMutation({
+  const {mutateAsync: logOut, isPending} = useMutation({
     mutationFn: async () => {
       await api.post('/auth/logout');
       await queryClient.setQueryData(['currentUser'], null);
@@ -22,5 +22,5 @@ export const useLogOut = () => {
     retry: false,
   });
 
-  return logOut;
+  return {logOut, isPending};
 };

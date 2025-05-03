@@ -1,8 +1,9 @@
 import {Link, createFileRoute} from '@tanstack/react-router';
+import {AnimatePresence, motion} from 'framer-motion';
 
-import {Separator} from '@/components/ui/separator';
-import {LogoLink} from '@/features/auth/components/logo-link';
+import {AuthLayout} from '@/features/auth/components/auth-layout';
 import {SignUpForm} from '@/features/auth/components/signup-form';
+import {switchContentVariants} from '@/features/auth/constants/animations';
 import {handleUnauthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/signup')({
@@ -14,47 +15,43 @@ export const Route = createFileRoute('/signup')({
 
 function SignUp() {
   return (
-    <div className='mx-6 flex h-screen items-center justify-center'>
-      <div className='mx-auto flex w-full max-w-96 flex-col justify-center'>
-        <div className='flex flex-col items-center'>
-          <LogoLink />
-          <h1 className='mb-12 text-center text-2xl font-semibold'>Create your account</h1>
-        </div>
-        <SignUpForm />
-        <div className='mt-6 space-y-6 text-center text-sm'>
-          <div>
-            <p>By signing up, you agree to our </p>
-            <p>
-              <Link
-                to='/signup'
-                className='text-sm font-medium underline decoration-accent underline-offset-4 hover:decoration-foreground'
-              >
-                Terms of Service
-              </Link>{' '}
-              and{' '}
-              <Link
-                to='/signup'
-                className='text-sm font-medium underline decoration-accent underline-offset-4 hover:decoration-foreground'
-              >
-                Privacy Policy
+    <AuthLayout title='Create your Flair account'>
+      <div className='relative flex min-h-[220px] flex-col'>
+        <AnimatePresence mode='wait' initial={false}>
+          <motion.div
+            key='initial-signup-options'
+            variants={switchContentVariants}
+            initial='hidden'
+            animate='visible'
+            exit='exit'
+            layout
+            className='flex w-full flex-col space-y-4'
+          >
+            <SignUpForm />
+
+            <div className='space-y-1 px-4 pt-4 text-center text-sm text-muted-foreground'>
+              <p>By signing up, you agree to our </p>
+              <p>
+                <Link to='/signup' className='text-foreground underline-offset-4 hover:underline'>
+                  Terms of Service
+                </Link>{' '}
+                and{' '}
+                <Link to='/signup' className='text-foreground underline-offset-4 hover:underline'>
+                  Privacy Policy
+                </Link>
+                .
+              </p>
+            </div>
+
+            <p className='pt-4 text-center text-sm text-muted-foreground'>
+              Already have an account?{' '}
+              <Link to='/login' className='text-foreground underline-offset-4 hover:underline'>
+                Log in
               </Link>
-              .
             </p>
-          </div>
-          <div className='flex justify-center'>
-            <Separator className='w-1/5' />
-          </div>
-          <p className='text-sm'>
-            Already have an account?{' '}
-            <Link
-              to='/login'
-              className='text-sm font-medium underline decoration-accent underline-offset-4 hover:decoration-foreground'
-            >
-              Log in
-            </Link>
-          </p>
-        </div>
+          </motion.div>
+        </AnimatePresence>
       </div>
-    </div>
+    </AuthLayout>
   );
 }

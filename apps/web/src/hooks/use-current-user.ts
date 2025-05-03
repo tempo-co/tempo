@@ -17,7 +17,7 @@ export const useCurrentUser = ({skipFetch = false} = {}) => {
     retry: false,
   });
   const isAuthenticated = !isPending && !!currentUser && !error;
-  const isEmailVerified = !isPending && !!currentUser && !error && currentUser?.isEmailVerified;
+  const isEmailVerified = isAuthenticated && currentUser?.isEmailVerified;
 
   return {currentUser, isPending, isAuthenticated, isEmailVerified};
 };

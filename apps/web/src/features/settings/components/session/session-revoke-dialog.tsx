@@ -1,11 +1,13 @@
-import {Trash2} from 'lucide-react';
+import {Loader} from 'lucide-react';
 import {useState} from 'react';
 
-import {Button} from '@/components/ui/button';
+import {Button, ButtonProps} from '@/components/ui/button';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -22,35 +24,64 @@ import {
 } from '@/components/ui/drawer';
 import {useMediaQuery} from '@/hooks/use-media-query';
 
+import {useRevokeSession} from '../../api/use-revoke-session';
 import {Session} from '../../types/session';
-import {SessionCard} from './session-card';
-import {SessionRevokeForm} from './session-revoke-form';
 
 type SessionRevokeDialogProps = {
   session: Session;
+  triggerVariant?: ButtonProps['variant'];
 };
 
-export function SessionRevokeDialog({session}: SessionRevokeDialogProps) {
+export function SessionRevokeDialog({session, triggerVariant = 'ghost'}: SessionRevokeDialogProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const [isOpen, setIsOpen] = useState(false);
+
+  const {revokeSession, isPending} = useRevokeSession();
+
+  const handleRevoke = async () => {
+    await revokeSession({id: session.id});
+    setIsOpen(false);
+  };
+
   if (isDesktop) {
     return (
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogTrigger asChild>
-          <Button variant='outline' className='w-full text-foreground sm:w-fit' size='sm'>
-            <Trash2 />
-            Revoke
+          <Button variant={triggerVariant} className='w-full text-foreground sm:w-fit' size='sm'>
+            Revoke access
           </Button>
         </DialogTrigger>
-        <DialogContent aria-describedby='Revoke session' className='max-w-[33rem]'>
+        <DialogContent aria-describedby='Revoke access' className='max-w-[33rem]'>
           <DialogHeader>
-            <DialogTitle>Revoke session</DialogTitle>
+            <DialogTitle>Revoke access</DialogTitle>
             <DialogDescription className='pt-2'>
-              Are you sure you want to revoke this session?
+              Revoke <span className='text-foreground'>{session.clientDescription}</span>? This
+              cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <SessionCard session={session} hideRevokeButton forceStackedLayout />
-          <SessionRevokeForm session={session} setIsOpen={setIsOpen} />
+          <DialogFooter className='flex gap-2'>
+            <DialogClose asChild>
+              <Button variant='outline' type='button'>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type='submit'
+              disabled={isPending}
+              className='text-foreground'
+              variant='destructive'
+              onClick={handleRevoke}
+            >
+              {isPending ? (
+                <>
+                  <span>Revoking...</span>
+                  <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
+                </>
+              ) : (
+                <span>Revoke</span>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     );
@@ -59,23 +90,35 @@ export function SessionRevokeDialog({session}: SessionRevokeDialogProps) {
   return (
     <Drawer open={isOpen} onOpenChange={setIsOpen}>
       <DrawerTrigger asChild>
-        <Button variant='outline' className='w-full text-foreground sm:w-fit' size='sm'>
-          <Trash2 />
+        <Button variant={triggerVariant} className='w-full text-foreground sm:w-fit' size='sm'>
           Revoke
         </Button>
       </DrawerTrigger>
-      <DrawerContent aria-describedby='Revoke session'>
+      <DrawerContent aria-describedby='Revoke access'>
         <DrawerHeader className='text-left'>
-          <DrawerTitle>Revoke session</DrawerTitle>
+          <DrawerTitle>Revoke access</DrawerTitle>
           <DrawerDescription className='pt-2'>
-            Are you sure you want to revoke this session?
+            Revoke <span className='text-foreground'>{session.clientDescription}</span>? This cannot
+            be undone.
           </DrawerDescription>
         </DrawerHeader>
-        <div className='px-4'>
-          <SessionCard session={session} hideRevokeButton forceStackedLayout />
-          <SessionRevokeForm session={session} setIsOpen={setIsOpen} />
-        </div>
         <DrawerFooter className='pt-4'>
+          <Button
+            type='submit'
+            disabled={isPending}
+            className='w-full text-foreground'
+            variant='destructive'
+            onClick={handleRevoke}
+          >
+            {isPending ? (
+              <>
+                <span>Revoking...</span>
+                <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
+              </>
+            ) : (
+              <span>Revoke</span>
+            )}
+          </Button>
           <DrawerClose asChild>
             <Button variant='outline'>Cancel</Button>
           </DrawerClose>

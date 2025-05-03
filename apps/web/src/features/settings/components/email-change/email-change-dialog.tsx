@@ -1,5 +1,4 @@
 import {zodResolver} from '@hookform/resolvers/zod';
-import {PencilLine} from 'lucide-react';
 import {useState} from 'react';
 import {useForm} from 'react-hook-form';
 
@@ -24,9 +23,9 @@ import {
 } from '@/components/ui/drawer';
 import {useMediaQuery} from '@/hooks/use-media-query';
 import {User} from '@/types/user';
-import {cn} from '@/utils/cn';
 
 import {EmailChangeDto, emailChangeDtoSchema} from '../../types/email-change.dto';
+import {EmailChangeCheckForm} from './email-change-check-form';
 import {EmailChangeRequestForm} from './email-change-request-form';
 
 type EmailChangeDialogProps = {
@@ -34,16 +33,9 @@ type EmailChangeDialogProps = {
 };
 
 export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
-  const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<'change' | 'verify'>('change');
-  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isOpen, setIsOpen] = useState(false);
+  const [step, setStep] = useState<'check' | 'request'>('check');
   const isDesktop = useMediaQuery('(min-width: 768px)');
-
-  const resetAfterSuccess = () => {
-    form.reset();
-    setStep('change');
-    setResendCooldown(0);
-  };
 
   const form = useForm<EmailChangeDto>({
     resolver: zodResolver(emailChangeDtoSchema),
@@ -51,48 +43,55 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
     reValidateMode: 'onChange',
   });
 
-  const triggerButton = (
-    <Button variant='outline' className='w-full md:w-fit'>
-      <PencilLine />
-      Change email
-    </Button>
-  );
+  const triggerButton = <Button variant='ghost'>Change</Button>;
+
+  const formContent =
+    step === 'check' ? (
+      <EmailChangeCheckForm form={form} currentEmail={currentEmail} setStep={setStep} />
+    ) : (
+      <EmailChangeRequestForm form={form} setIsOpen={setIsOpen} setStep={setStep} />
+    );
 
   const headerContent = {
-    title: step === 'change' ? 'Change email' : 'Verify new email',
+    title: 'Change email',
     description:
-      step === 'change' ? (
+      step === 'check' ? (
         <>
-          Your current email is <span className='text-foreground'>{currentEmail}</span>
+          <p className='mb-3'>
+            To change your account email, we&apos;ll send a verification link to the new address.
+          </p>
+          <p className='mb-3'>
+            Please check if the new email is tied to an existing account before proceeding with the
+            change.
+          </p>
         </>
       ) : (
         <>
-          We&apos;ve sent a 6-digit verification code to{' '}
-          <span className='text-foreground'>{currentEmail}</span>
+          <p className='mb-3'>
+            We did not find an existing account for{' '}
+            <span className='text-foreground'>{form.getValues('newEmail')}</span>.
+          </p>
+          <p>You can safely proceed with the email change.</p>
         </>
       ),
   };
 
-  const formContent = (
-    <EmailChangeRequestForm
-      form={form}
-      setOpen={setOpen}
-      step={step}
-      setStep={setStep}
-      resendCooldown={resendCooldown}
-      setResendCooldown={setResendCooldown}
-      resetAfterSuccess={resetAfterSuccess}
-    />
-  );
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) {
+      setStep('check');
+      form.reset();
+    }
+  };
 
   if (isDesktop) {
     return (
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         <DialogTrigger asChild>{triggerButton}</DialogTrigger>
         <DialogContent aria-describedby='Change email' className='max-w-fit'>
-          <DialogHeader className={cn(step === 'change' ? 'w-[24rem]' : 'max-w-[18rem]')}>
+          <DialogHeader className='w-[26rem]'>
             <DialogTitle className='mb-1'>{headerContent.title}</DialogTitle>
-            <DialogDescription>{headerContent.description}</DialogDescription>
+            <DialogDescription className='pt-2'>{headerContent.description}</DialogDescription>
           </DialogHeader>
           {formContent}
         </DialogContent>
@@ -101,21 +100,19 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
   }
 
   return (
-    <Drawer open={open} onOpenChange={setOpen}>
+    <Drawer open={isOpen} onOpenChange={handleOpenChange}>
       <DrawerTrigger asChild>{triggerButton}</DrawerTrigger>
       <DrawerContent aria-describedby='Change email'>
         <DrawerHeader className='text-left'>
           <DrawerTitle className='mb-1'>{headerContent.title}</DrawerTitle>
-          <DrawerDescription>{headerContent.description}</DrawerDescription>
+          <DrawerDescription className='pt-2'>{headerContent.description}</DrawerDescription>
         </DrawerHeader>
         {formContent}
-        {step === 'change' && (
-          <DrawerFooter className='pt-4'>
-            <DrawerClose asChild>
-              <Button variant='outline'>Cancel</Button>
-            </DrawerClose>
-          </DrawerFooter>
-        )}
+        <DrawerFooter className='pt-4'>
+          <DrawerClose asChild>
+            <Button variant='outline'>Cancel</Button>
+          </DrawerClose>
+        </DrawerFooter>
       </DrawerContent>
     </Drawer>
   );
