@@ -8,9 +8,9 @@ import {Button} from '@/components/ui/button';
 import {Form, FormControl, FormField, FormItem, FormMessage} from '@/components/ui/form';
 import {InputOTP, InputOTPGroup, InputOTPSlot} from '@/components/ui/input-otp';
 
-import {useResendVerificationEmail} from '../api/use-resend-verification-email';
 import {useVerifyEmail} from '../api/use-verify-email';
 import {EmailVerifyDto, emailVerifyDtoSchema} from '../types/email-verify.dto';
+import {ResendCodeButton} from './resend-code-button';
 
 type VerifyFormProps = {
   code: string | undefined;
@@ -18,7 +18,6 @@ type VerifyFormProps = {
 
 export function VerifyForm({code}: VerifyFormProps) {
   const {verifyEmail, isPending: isVerifying} = useVerifyEmail();
-  const {resendVerificationEmail, isPending: isResending} = useResendVerificationEmail();
 
   const form = useForm<EmailVerifyDto>({
     resolver: zodResolver(emailVerifyDtoSchema),
@@ -54,13 +53,13 @@ export function VerifyForm({code}: VerifyFormProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleVerifyEmail)} noValidate>
+      <form onSubmit={form.handleSubmit(handleVerifyEmail)} noValidate className='space-y-4'>
         <FormField
           control={form.control}
           name='code'
           render={({field}) => (
-            <FormItem className='flex flex-col justify-center'>
-              <FormControl className='w-fit'>
+            <FormItem className='flex flex-col items-center'>
+              <FormControl>
                 <InputOTP
                   maxLength={6}
                   {...field}
@@ -68,7 +67,7 @@ export function VerifyForm({code}: VerifyFormProps) {
                   pattern={REGEXP_ONLY_DIGITS}
                   disabled={isVerifying}
                 >
-                  <InputOTPGroup className='gap-3'>
+                  <InputOTPGroup className='gap-[0.6rem]'>
                     <InputOTPSlot index={0} className='rounded-md' />
                     <InputOTPSlot index={1} className='rounded-md border-l' />
                     <InputOTPSlot index={2} className='rounded-md border-l' />
@@ -78,40 +77,21 @@ export function VerifyForm({code}: VerifyFormProps) {
                   </InputOTPGroup>
                 </InputOTP>
               </FormControl>
-              <FormMessage />
+              <FormMessage className='pt-1' />
             </FormItem>
           )}
         />
-        <Button
-          type='submit'
-          disabled={isVerifying || !form.formState.isValid}
-          className='mt-4 w-full'
-        >
+        <Button type='submit' disabled={isVerifying || !form.formState.isValid} className='w-full'>
           {isVerifying ? (
             <>
               <span>Verifying...</span>
-              <Loader className='h-4 w-4 animate-slow-spin' />
+              <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
             </>
           ) : (
-            <span>Verify</span>
+            <span>Verify email</span>
           )}
         </Button>
-        <Button
-          className='mt-4 w-full'
-          type='button'
-          variant='ghost'
-          onClick={() => resendVerificationEmail()}
-          disabled={isResending}
-        >
-          {isResending ? (
-            <>
-              <span>Sending new code...</span>
-              <Loader className='h-4 w-4 animate-slow-spin' />
-            </>
-          ) : (
-            <span>Send new code</span>
-          )}
-        </Button>
+        <ResendCodeButton />
       </form>
     </Form>
   );
