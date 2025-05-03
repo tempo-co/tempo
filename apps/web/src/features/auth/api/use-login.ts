@@ -27,6 +27,7 @@ export const useLogIn = ({returnTo}: useLogInProps) => {
       if (!user.isEmailVerified) {
         return navigate({to: '/verify'});
       }
+
       if (returnTo) {
         if (returnTo == '/verify') {
           toast.info('Your email has already been verified.');
@@ -34,16 +35,6 @@ export const useLogIn = ({returnTo}: useLogInProps) => {
         return navigate({to: returnTo});
       }
       return navigate({to: '/home'});
-    },
-    onError: (error) => {
-      if (error.status === 400) {
-        return toast.error('Validation failed', {
-          description: 'Please input a valid email and password.',
-        });
-      }
-      if (error.status === 401) {
-        throw error;
-      }
     },
     retry: false,
   });
