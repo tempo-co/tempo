@@ -25,16 +25,16 @@ export const useLogIn = ({returnTo}: useLogInProps) => {
       router.update({context: {isAuthenticated: true, isEmailVerified: user.isEmailVerified}});
 
       if (!user.isEmailVerified) {
-        return navigate({to: '/verify'});
+        return navigate({to: '/verify', replace: true});
       }
 
       if (returnTo) {
         if (returnTo == '/verify') {
           toast.info('Your email has already been verified.');
         }
-        return navigate({to: returnTo});
+        return navigate({to: returnTo, replace: true});
       }
-      return navigate({to: '/home'});
+      return navigate({to: '/home', replace: true});
     },
     retry: false,
   });

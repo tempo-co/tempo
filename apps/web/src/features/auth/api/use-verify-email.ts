@@ -17,13 +17,14 @@ export const useVerifyEmail = () => {
       return await api.post<User>('/auth/signup/verify', JSON.stringify(dto));
     },
     onSuccess: async (user) => {
+      queryClient.setQueryData(['currentUser'], user);
+      router.update({context: {isAuthenticated: true, isEmailVerified: true}});
+
+      await navigate({to: '/home', replace: true});
+
       toast.success('Welcome to Flair!', {
         description: 'Your email has been verified.',
       });
-
-      queryClient.setQueryData(['currentUser'], user);
-      router.update({context: {isAuthenticated: true, isEmailVerified: user.isEmailVerified}});
-      return navigate({to: '/home'});
     },
     retry: false,
   });

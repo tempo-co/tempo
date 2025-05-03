@@ -18,7 +18,7 @@ export const useSignUp = () => {
     onSuccess: (user) => {
       queryClient.setQueryData(['currentUser'], user);
       router.update({context: {isAuthenticated: true, isEmailVerified: user.isEmailVerified}});
-      return navigate({to: '/verify'});
+      return navigate({to: '/verify', replace: true});
     },
     retry: false,
   });

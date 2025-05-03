@@ -28,7 +28,6 @@ function SignUp() {
             className='flex w-full flex-col space-y-4'
           >
             <SignUpForm />
-
             <div className='space-y-1 px-4 pt-4 text-center text-sm text-muted-foreground'>
               <p>By signing up, you agree to our </p>
               <p>
@@ -42,7 +41,6 @@ function SignUp() {
                 .
               </p>
             </div>
-
             <p className='pt-4 text-center text-sm text-muted-foreground'>
               Already have an account?{' '}
               <Link to='/login' className='text-foreground underline-offset-4 hover:underline'>
