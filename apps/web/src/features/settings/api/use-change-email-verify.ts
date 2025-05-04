@@ -2,19 +2,24 @@ import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {toast} from 'sonner';
 
 import {EmailVerifyDto} from '@/features/auth/types/email-verify.dto';
-import {User} from '@/types/user';
+import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
+import {Account} from '@/types/account';
 import {HttpError, api} from '@/utils/api';
 
 export const useChangeEmailVerify = () => {
   const queryClient = useQueryClient();
-  const {mutateAsync: changeEmailVerify, isPending} = useMutation<User, HttpError, EmailVerifyDto>({
+  const {mutateAsync: changeEmailVerify, isPending} = useMutation<
+    Account,
+    HttpError,
+    EmailVerifyDto
+  >({
     mutationFn: async (dto) => {
-      return await api.post<User>('/auth/change-email/verify', JSON.stringify(dto));
+      return await api.post<Account>('/auth/change-email/verify', JSON.stringify(dto));
     },
-    onSuccess: (user) => {
-      queryClient.setQueryData(['currentUser'], user);
+    onSuccess: (account) => {
+      queryClient.setQueryData(CURRENT_ACCOUNT_KEY, account);
       toast.success('Email verified', {
-        description: `Your email has been changed to ${user.email}.`,
+        description: `Your email has been changed to ${account.email}.`,
       });
     },
   });

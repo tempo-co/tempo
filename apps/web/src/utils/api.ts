@@ -16,7 +16,7 @@ const shouldRedirect = (resource: string, method?: string) => {
   if (resource === '/auth/login') return false;
   if (resource === '/auth/change-email/request') return false;
   if (resource === '/auth/change-password') return false;
-  if (resource === '/users/me' && method === 'GET') return false;
+  if (resource === '/accounts/me' && method === 'GET') return false;
   if (resource.startsWith('/auth/sessions') && method === 'DELETE') return false;
   return true;
 };
@@ -48,7 +48,7 @@ async function request<T = unknown>(
       });
       throw redirect({to: '/login'});
     }
-    if (response.status === 403 && resource === '/users/me') {
+    if (response.status === 403 && resource === '/accounts/me') {
       toast.error('Email not verified', {
         description: 'Please verify your email to continue using the app.',
       });

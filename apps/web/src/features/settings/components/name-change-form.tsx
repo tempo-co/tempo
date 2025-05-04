@@ -11,36 +11,36 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
-import {User} from '@/types/user';
+import {Account} from '@/types/account';
 import {cn} from '@/utils/cn';
 
-import {usePatchUser} from '../api/use-patch-user';
-import {UsernameChangeDto, usernameChangeDtoSchema} from '../types/username-change.dto';
+import {usePatchAccount} from '../api/use-patch-account';
+import {NameChangeDto, nameChangeDtoSchema} from '../types/name-change.dto';
 
-type UsernameChangeFormProps = {
-  currentUsername: User['username'];
+type NameChangeFormProps = {
+  currentName: Account['name'];
 };
 
-export function UsernameChangeForm({currentUsername}: UsernameChangeFormProps) {
-  const {patchUser, isPending} = usePatchUser();
+export function NameChangeForm({currentName}: NameChangeFormProps) {
+  const {patchAccount, isPending} = usePatchAccount();
 
-  const form = useForm<UsernameChangeDto>({
-    resolver: zodResolver(usernameChangeDtoSchema),
+  const form = useForm<NameChangeDto>({
+    resolver: zodResolver(nameChangeDtoSchema),
     mode: 'onChange',
-    defaultValues: {username: currentUsername},
+    defaultValues: {name: currentName},
   });
 
-  const watchedUsername = form.watch('username');
+  const watchedName = form.watch('name');
 
   const handleBlur = async () => {
-    const isValid = await form.trigger('username');
+    const isValid = await form.trigger('name');
 
-    const hasNameChanged = watchedUsername.trim() !== currentUsername.trim();
-    const isValidName = isValid && watchedUsername.trim() !== '';
+    const hasNameChanged = watchedName.trim() !== currentName.trim();
+    const isValidName = isValid && watchedName.trim() !== '';
 
     if (hasNameChanged && isValidName) {
-      const trimmedName = {username: form.getValues().username.trim()};
-      patchUser(trimmedName);
+      const trimmedName = {name: form.getValues().name.trim()};
+      patchAccount(trimmedName);
     }
   };
 
@@ -49,32 +49,32 @@ export function UsernameChangeForm({currentUsername}: UsernameChangeFormProps) {
       form.formState.isSubmitted && !isPending && !form.formState.isSubmitSuccessful;
 
     if (submissionAttemptFailed) {
-      form.reset({username: currentUsername});
+      form.reset({name: currentName});
     }
-  }, [form, currentUsername, isPending]);
+  }, [form, currentName, isPending]);
 
   return (
     <Form {...form}>
       <form className='flex flex-col gap-2' noValidate>
         <FormField
           control={form.control}
-          name='username'
+          name='name'
           render={({field, fieldState}) => (
             <FormItem>
               <FormControl>
                 <Input
                   {...field}
-                  id='username'
-                  placeholder='Enter your username'
+                  id='name'
+                  placeholder='Enter your name'
                   type='text'
                   autoCapitalize='none'
-                  autoComplete='username'
+                  autoComplete='name'
                   autoCorrect='off'
                   disabled={isPending}
                   className={cn(fieldState.error && 'border-destructive')}
                   onChange={async (e) => {
                     field.onChange(e);
-                    await form.trigger('username');
+                    await form.trigger('name');
                   }}
                   onBlur={async () => {
                     field.onBlur();

@@ -6,7 +6,7 @@ import {DialogClose, DialogFooter} from '@/components/ui/dialog';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
 import {useMediaQuery} from '@/hooks/use-media-query';
-import {User} from '@/types/user';
+import {Account} from '@/types/account';
 import {cn} from '@/utils/cn';
 
 import {useCheckEmailAvailability} from '../../api/use-check-email-availability';
@@ -14,7 +14,7 @@ import {EmailChangeDto} from '../../types/email-change.dto';
 
 type EmailChangeCheckFormProps = {
   form: UseFormReturn<EmailChangeDto>;
-  currentEmail: User['email'];
+  currentEmail: Account['email'];
   setStep: React.Dispatch<React.SetStateAction<'check' | 'request'>>;
 };
 

@@ -59,17 +59,17 @@ export function SignUpForm() {
           />
           <FormField
             control={form.control}
-            name='username'
+            name='name'
             render={({field, fieldState}) => (
               <FormItem>
-                <FormLabel>Username</FormLabel>
+                <FormLabel>Name</FormLabel>
                 <FormControl>
                   <Input
                     {...field}
-                    id='username'
+                    id='name'
                     type='text'
                     autoCapitalize='none'
-                    autoComplete='username'
+                    autoComplete='name'
                     autoCorrect='off'
                     disabled={isPending}
                     className={cn(fieldState.error && 'border-destructive')}

@@ -21,7 +21,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
-import {useCurrentUser} from '@/hooks/use-current-user';
+import {useCurrentAccount} from '@/hooks/use-current-account';
 import {useLogOut} from '@/hooks/use-logout';
 import {cn} from '@/utils/cn';
 
@@ -36,9 +36,9 @@ export function AppSidebar() {
   const {logOut, isPending} = useLogOut();
   const matchRoute = useMatchRoute();
 
-  const {currentUser} = useCurrentUser({skipFetch: true});
+  const {currentAccount} = useCurrentAccount({skipFetch: true});
 
-  if (currentUser) {
+  if (currentAccount) {
     return (
       <Sidebar collapsible='icon'>
         <SidebarContent>
@@ -76,8 +76,8 @@ export function AppSidebar() {
                       <AvatarFallback className='rounded-lg'>CN</AvatarFallback>
                     </Avatar>
                     <div className='grid flex-1 text-left text-sm leading-tight'>
-                      <span className='truncate font-semibold'>{currentUser.username}</span>
-                      <span className='truncate text-xs'>{currentUser.email}</span>
+                      <span className='truncate font-semibold'>{currentAccount.name}</span>
+                      <span className='truncate text-xs'>{currentAccount.email}</span>
                     </div>
                     <ChevronsUpDown className='ml-auto size-4' />
                   </SidebarMenuButton>

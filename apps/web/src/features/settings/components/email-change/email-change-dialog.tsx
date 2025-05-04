@@ -22,14 +22,14 @@ import {
   DrawerTrigger,
 } from '@/components/ui/drawer';
 import {useMediaQuery} from '@/hooks/use-media-query';
-import {User} from '@/types/user';
+import {Account} from '@/types/account';
 
 import {EmailChangeDto, emailChangeDtoSchema} from '../../types/email-change.dto';
 import {EmailChangeCheckForm} from './email-change-check-form';
 import {EmailChangeRequestForm} from './email-change-request-form';
 
 type EmailChangeDialogProps = {
-  currentEmail: User['email'];
+  currentEmail: Account['email'];
 };
 
 export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {

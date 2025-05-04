@@ -3,8 +3,8 @@ import {createFileRoute} from '@tanstack/react-router';
 import {Card} from '@/components/ui/card';
 import {Skeleton} from '@/components/ui/skeleton';
 import {EmailChangeDialog} from '@/features/settings/components/email-change/email-change-dialog';
-import {UsernameChangeForm} from '@/features/settings/components/username-change-form';
-import {useCurrentUser} from '@/hooks/use-current-user';
+import {NameChangeForm} from '@/features/settings/components/name-change-form';
+import {useCurrentAccount} from '@/hooks/use-current-account';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/settings/account/')({
@@ -15,9 +15,9 @@ export const Route = createFileRoute('/settings/account/')({
 });
 
 function SettingsAccountIndex() {
-  const {currentUser} = useCurrentUser({skipFetch: true});
+  const {currentAccount} = useCurrentAccount({skipFetch: true});
 
-  if (!currentUser) {
+  if (!currentAccount) {
     return <Skeleton className='h-[18rem] w-full rounded-lg bg-card' />;
   }
 
@@ -27,13 +27,13 @@ function SettingsAccountIndex() {
       <div className='space-y-8'>
         <div>
           <div className='mb-4'>
-            <h2 className='mb-1 text-lg font-medium'>Username</h2>
+            <h2 className='mb-1 text-lg font-medium'>Name</h2>
             <p className='mr-8 text-sm text-muted-foreground'>
               Your display name as it appears in the application.
             </p>
           </div>
           <Card className='p-4'>
-            <UsernameChangeForm currentUsername={currentUser.username} />
+            <NameChangeForm currentName={currentAccount.name} />
           </Card>
         </div>
 
@@ -46,13 +46,13 @@ function SettingsAccountIndex() {
           </div>
           <div className='flex items-center justify-between gap-4 rounded-lg border bg-card p-4 sm:items-center'>
             <div>
-              <p className='text-sm font-medium'>{currentUser.email}</p>
+              <p className='text-sm font-medium'>{currentAccount.email}</p>
               <p className='mt-1 text-xs text-muted-foreground'>
                 Primary contact for account recovery and important notifications.
               </p>
             </div>
             <div className='flex-shrink-0'>
-              <EmailChangeDialog currentEmail={currentUser.email} />
+              <EmailChangeDialog currentEmail={currentAccount.email} />
             </div>
           </div>
         </div>

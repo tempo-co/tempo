@@ -11,7 +11,7 @@ import {AuthLayout} from '@/features/auth/components/auth-layout';
 import {VerifyForm} from '@/features/auth/components/verify-form';
 import {switchContentVariants} from '@/features/auth/constants/animations';
 import {searchParamsSchema} from '@/features/auth/types/email-verify.dto';
-import {useCurrentUser} from '@/hooks/use-current-user';
+import {useCurrentAccount} from '@/hooks/use-current-account';
 import {useLogOut} from '@/hooks/use-logout';
 
 export const Route = createFileRoute('/verify')({
@@ -31,15 +31,15 @@ function VerifyIndex() {
   const email = searchParams.email;
 
   const {logOut, isPending: isLoggingOut} = useLogOut();
-  const {currentUser} = useCurrentUser({skipFetch: true});
+  const {currentAccount} = useCurrentAccount({skipFetch: true});
   const [showForm, setShowForm] = useState(false);
   const {verifyEmail, isPending: isVerifying} = useVerifyEmail();
 
   useEffect(() => {
-    if (currentUser && code && email) {
+    if (currentAccount && code && email) {
       void verifyEmail({code});
     }
-  }, [code, currentUser, email, verifyEmail]);
+  }, [code, currentAccount, email, verifyEmail]);
 
   const handleLogout = async () => {
     await logOut();
@@ -73,10 +73,10 @@ function VerifyIndex() {
               <p>We&apos;ve sent you a verification link.</p>
               <p className='mt-1 max-w-[21rem] px-4'>
                 Please check your inbox
-                {currentUser?.email ? (
+                {currentAccount?.email ? (
                   <>
                     {' at '}
-                    <span className='font-medium text-foreground'>{currentUser.email}</span>
+                    <span className='font-medium text-foreground'>{currentAccount.email}</span>
                   </>
                 ) : email ? (
                   <>

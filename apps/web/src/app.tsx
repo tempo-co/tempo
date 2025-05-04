@@ -3,7 +3,7 @@ import {motion} from 'framer-motion';
 import React from 'react';
 
 import {Toaster} from '@/components/ui/sonner';
-import {useCurrentUser} from '@/hooks/use-current-user';
+import {useCurrentAccount} from '@/hooks/use-current-account';
 import {ThemeProvider} from '@/providers/theme.provider';
 
 import Logo from './assets/logo';
@@ -25,7 +25,7 @@ declare module '@tanstack/react-router' {
 }
 
 export function App() {
-  const {isAuthenticated, isPending, isEmailVerified} = useCurrentUser();
+  const {isAuthenticated, isPending, isEmailVerified} = useCurrentAccount();
 
   if (isPending) {
     return <LoadingScreen />;

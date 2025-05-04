@@ -4,7 +4,7 @@ import {Skeleton} from '@/components/ui/skeleton';
 import {AccountDelete} from '@/features/settings/components/account-delete/account-delete';
 import {PasswordChangeCard} from '@/features/settings/components/password-change/password-change-card';
 import {SessionList} from '@/features/settings/components/session/session-list';
-import {useCurrentUser} from '@/hooks/use-current-user';
+import {useCurrentAccount} from '@/hooks/use-current-account';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/settings/security/')({
@@ -15,9 +15,9 @@ export const Route = createFileRoute('/settings/security/')({
 });
 
 function SettingsSecurityIndex() {
-  const {currentUser} = useCurrentUser({skipFetch: true});
+  const {currentAccount} = useCurrentAccount({skipFetch: true});
 
-  if (!currentUser) {
+  if (!currentAccount) {
     return <Skeleton className='h-[28rem] w-full rounded-lg bg-card' />;
   }
 

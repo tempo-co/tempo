@@ -2,11 +2,11 @@ import {useMutation} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
 import {toast} from 'sonner';
 
-import {useCurrentUser} from '@/hooks/use-current-user';
+import {useCurrentAccount} from '@/hooks/use-current-account';
 import {HttpError, api} from '@/utils/api';
 
 export const useResendVerificationEmail = () => {
-  const {isAuthenticated, isEmailVerified, currentUser} = useCurrentUser({skipFetch: true});
+  const {isAuthenticated, isEmailVerified, currentAccount} = useCurrentAccount({skipFetch: true});
   const navigate = useNavigate();
 
   const {mutateAsync: resendVerificationEmail, isPending} = useMutation<void, HttpError, void>({
@@ -22,7 +22,7 @@ export const useResendVerificationEmail = () => {
     },
     onSuccess: () => {
       toast.success('New verification email sent', {
-        description: `Please check your inbox at ${currentUser?.email}.`,
+        description: `Please check your inbox at ${currentAccount?.email}.`,
       });
     },
     retry: false,

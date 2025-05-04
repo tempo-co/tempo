@@ -33,7 +33,7 @@ export function TransactionBankFilter({filters, setFilters}: TransactionBankFilt
 
   const {bankAccounts, isPending} = useGetAllBankAccounts();
 
-  const userBanks = useMemo(() => {
+  const accountBanks = useMemo(() => {
     if (!bankAccounts) return [];
     const banks = new Set(bankAccounts.map((account) => account.bank));
 
@@ -62,7 +62,7 @@ export function TransactionBankFilter({filters, setFilters}: TransactionBankFilt
     setFilters((prev) => ({...prev, banks: []}));
   };
 
-  const isDisabled = isPending || userBanks.length === 0;
+  const isDisabled = isPending || accountBanks.length === 0;
 
   return (
     <Popover>
@@ -117,7 +117,7 @@ export function TransactionBankFilter({filters, setFilters}: TransactionBankFilt
             <CommandList>
               <CommandEmpty>No banks found.</CommandEmpty>
               <CommandGroup>
-                {userBanks.map((bank) => {
+                {accountBanks.map((bank) => {
                   const isSelected = selectedValues.includes(bank);
                   return (
                     <CommandItem key={bank} onSelect={() => handleSelect(bank)}>

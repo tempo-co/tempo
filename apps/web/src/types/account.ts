@@ -1,6 +1,6 @@
-export type User = {
+export type Account = {
   id: string;
-  username: string;
+  name: string;
   email: string;
   isEmailVerified: boolean;
   createdAt: Date;
