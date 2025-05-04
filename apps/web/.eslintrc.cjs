@@ -33,6 +33,7 @@ module.exports = {
   rules: {
     '@typescript-eslint/no-misused-promises': 'off',
     'react-refresh/only-export-components': ['warn', {allowConstantExport: true}],
+    '@typescript-eslint/no-unused-vars': ['error', {argsIgnorePattern: '^_'}],
     'react/prop-types': 'off',
     'no-console': 'off',
   },
