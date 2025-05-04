@@ -1,8 +1,8 @@
 import {createFileRoute} from '@tanstack/react-router';
 
 import {BackButton} from '@/components/shared/back-button';
-import {AppBody} from '@/components/shared/layout/app-body';
-import {AppHeader} from '@/components/shared/layout/app-header';
+import {AppBodyLayout} from '@/components/shared/layout/app-body';
+import {AppHeaderLayout} from '@/components/shared/layout/app-header-layout';
 import {LoadingBar} from '@/components/shared/loading-bar';
 import {useGetTransaction} from '@/features/transaction/api/use-get-transaction';
 import {TransactionBreadcrumb} from '@/features/transaction/components/transaction-breadcrumb';
@@ -23,13 +23,13 @@ function TransactionIndex() {
   return (
     <>
       <LoadingBar isPending={isPending} />
-      <AppHeader>
+      <AppHeaderLayout>
         <TransactionBreadcrumb transaction={transaction} />
-      </AppHeader>
-      <AppBody>
+      </AppHeaderLayout>
+      <AppBodyLayout>
         <BackButton className='mt-4' />
         <TransactionCard transaction={transaction} isPending={isPending} />
-      </AppBody>
+      </AppBodyLayout>
     </>
   );
 }

@@ -17,6 +17,7 @@ export const useCurrentAccount = ({skipFetch = false} = {}) => {
     },
     enabled: !skipFetch,
     retry: false,
+    refetchOnWindowFocus: false,
   });
   const isAuthenticated = !isPending && !!currentAccount && !error;
   const isEmailVerified = isAuthenticated && currentAccount?.isEmailVerified;

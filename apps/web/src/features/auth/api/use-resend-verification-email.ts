@@ -13,10 +13,10 @@ export const useResendVerificationEmail = () => {
     mutationFn: async () => {
       if (isEmailVerified) {
         toast.info('Your email has already been verified.');
-        throw navigate({to: '/home'});
+        throw navigate({to: '/'});
       }
       if (!isAuthenticated) {
-        throw navigate({to: '/login', search: {returnTo: location.pathname}});
+        throw navigate({to: '/login'});
       }
       await api.post('/auth/signup/resend');
     },

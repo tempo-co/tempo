@@ -1,7 +1,7 @@
 import {Outlet, createRootRouteWithContext} from '@tanstack/react-router';
 import {TanStackRouterDevtools} from '@tanstack/router-devtools';
 
-import {AppSidebar} from '@/components/shared/layout/app-sidebar';
+import {AppSidebarLayout} from '@/components/shared/layout/app-sidebar-layout';
 import {SidebarProvider} from '@/components/ui/sidebar';
 
 export const Route = createRootRouteWithContext<{
@@ -28,7 +28,7 @@ function Root() {
   return (
     <>
       <SidebarProvider>
-        <AppSidebar />
+        <AppSidebarLayout />
         <main className='flex-1'>
           <Outlet />
         </main>

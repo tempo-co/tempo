@@ -7,6 +7,7 @@ import {useCurrentAccount} from '@/hooks/use-current-account';
 import {ThemeProvider} from '@/providers/theme.provider';
 
 import Logo from './assets/logo';
+import {NotFound} from './components/shared/layout/not-found';
 import {routeTree} from './routeTree.gen';
 
 const router = createRouter({
@@ -16,6 +17,7 @@ const router = createRouter({
     isEmailVerified: undefined!,
   },
   notFoundMode: 'root',
+  defaultNotFoundComponent: NotFound,
 });
 
 declare module '@tanstack/react-router' {

@@ -13,15 +13,19 @@ export const useVerifyEmail = () => {
   const router = useRouter();
   const navigate = useNavigate();
 
-  const {mutateAsync: verifyEmail, isPending} = useMutation<Account, HttpError, EmailVerifyDto>({
+  const {
+    mutateAsync: verifyEmail,
+    isPending,
+    error,
+  } = useMutation<Account, HttpError, EmailVerifyDto>({
     mutationFn: async (dto: EmailVerifyDto) => {
       return await api.post<Account>('/auth/signup/verify', JSON.stringify(dto));
     },
-    onSuccess: async (account) => {
-      queryClient.setQueryData(CURRENT_ACCOUNT_KEY, account);
+    onSuccess: async () => {
       router.update({context: {isAuthenticated: true, isEmailVerified: true}});
+      await queryClient.invalidateQueries({queryKey: CURRENT_ACCOUNT_KEY});
 
-      await navigate({to: '/home', replace: true});
+      await navigate({to: '/', replace: true});
 
       toast.success('Welcome to Flair!', {
         description: 'Your email has been verified.',
@@ -30,5 +34,5 @@ export const useVerifyEmail = () => {
     retry: false,
   });
 
-  return {verifyEmail, isPending};
+  return {verifyEmail, isPending, error};
 };

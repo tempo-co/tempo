@@ -6,17 +6,20 @@ import {useForm} from 'react-hook-form';
 import {Button} from '@/components/ui/button';
 import {Form, FormControl, FormField, FormItem, FormMessage} from '@/components/ui/form';
 import {InputOTP, InputOTPGroup, InputOTPSlot} from '@/components/ui/input-otp';
+import {useCurrentAccount} from '@/hooks/use-current-account';
 
-import {useVerifyEmail} from '../api/use-verify-email';
-import {EmailVerifyDto, emailVerifyDtoSchema} from '../types/email-verify.dto';
-import {ResendCodeButton} from './resend-code-button';
+import {useVerifyEmail} from '../../api/use-verify-email';
+import {EmailVerifyDto, emailVerifyDtoSchema} from '../../types/email-verify.dto';
+import {ResendCodeButton} from '../resend-code-button';
 
-export function VerifyForm() {
+export function VerifyEmailForm() {
   const {verifyEmail, isPending: isVerifying} = useVerifyEmail();
+  const {currentAccount} = useCurrentAccount({skipFetch: true});
 
   const form = useForm<EmailVerifyDto>({
     resolver: zodResolver(emailVerifyDtoSchema),
     mode: 'onSubmit',
+    defaultValues: {email: currentAccount?.email},
   });
 
   async function onSubmit(data: EmailVerifyDto) {

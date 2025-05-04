@@ -27,7 +27,7 @@ export function SettingsBreadcrumb({route}: SettingsBreadcrumbProps) {
       <BreadcrumbList>
         <BreadcrumbItem>
           <BreadcrumbLink asChild>
-            <Link to='/home'>Home</Link>
+            <Link to='/'>Home</Link>
           </BreadcrumbLink>
         </BreadcrumbItem>
         <BreadcrumbSeparator />

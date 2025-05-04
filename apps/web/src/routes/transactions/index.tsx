@@ -1,8 +1,8 @@
 import {createFileRoute} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
 
-import {AppBody} from '@/components/shared/layout/app-body';
-import {AppHeader} from '@/components/shared/layout/app-header';
+import {AppBodyLayout} from '@/components/shared/layout/app-body';
+import {AppHeaderLayout} from '@/components/shared/layout/app-header-layout';
 import {LoadingBar} from '@/components/shared/loading-bar';
 import {useGetAllTransactions} from '@/features/transaction/api/use-get-all-transactions';
 import {TransactionBreadcrumb} from '@/features/transaction/components/transaction-breadcrumb';
@@ -35,10 +35,10 @@ function TransactionsIndex() {
   return (
     <>
       <LoadingBar isPending={isPending} />
-      <AppHeader>
+      <AppHeaderLayout>
         <TransactionBreadcrumb />
-      </AppHeader>
-      <AppBody>
+      </AppHeaderLayout>
+      <AppBodyLayout>
         <TransactionsTable
           transactions={data ? data.transactions : []}
           totalTransactions={data ? data.total : 0}
@@ -51,7 +51,7 @@ function TransactionsIndex() {
           sort={sort}
           setSort={setSort}
         />
-      </AppBody>
+      </AppBodyLayout>
     </>
   );
 }

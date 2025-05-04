@@ -52,12 +52,13 @@ async function request<T = unknown>(
       toast.error('Email not verified', {
         description: 'Please verify your email to continue using the app.',
       });
-      throw redirect({to: '/verify'});
+      throw redirect({to: '/verify-email'});
     }
     if (response.status === 429) {
-      throw toast.error('Rate limit exceeded', {
+      toast.error('Rate limit exceeded', {
         description: 'Too many requests. Please try again later.',
       });
+      throw new HttpError(response.status, response.statusText);
     }
     if (response.status === 500) {
       throw toast.error('Server error', {

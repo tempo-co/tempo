@@ -1,31 +1,39 @@
-import {createFileRoute, redirect} from '@tanstack/react-router';
+import {Link, createFileRoute, redirect} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
 import {AnimatePresence, motion} from 'framer-motion';
-import {Loader2} from 'lucide-react';
+import {Hourglass, Loader2, MailX} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
 import {useVerifyEmail} from '@/features/auth/api/use-verify-email';
 import {AuthLayout} from '@/features/auth/components/auth-layout';
-import {VerifyForm} from '@/features/auth/components/verify-form';
+import {VerifyEmailForm} from '@/features/auth/components/verify-email/verify-email-form';
+import {VerifyEmailStatusLayout} from '@/features/auth/components/verify-email/verify-email-status-layout';
 import {switchContentVariants} from '@/features/auth/constants/animations';
 import {searchParamsSchema} from '@/features/auth/types/email-verify.dto';
 import {useCurrentAccount} from '@/hooks/use-current-account';
 import {useLogOut} from '@/hooks/use-logout';
 
-export const Route = createFileRoute('/verify')({
-  component: VerifyIndex,
+export const Route = createFileRoute('/verify-email')({
+  component: VerifyEmailIndex,
   validateSearch: zodValidator(searchParamsSchema),
-  beforeLoad: ({context}) => {
+  beforeLoad: ({context, search}) => {
+    if (!context.isAuthenticated && (!search.code || !search.email)) {
+      toast.warning('Invalid verification link', {
+        description: 'Please log in to send a new verification email.',
+      });
+      throw redirect({to: '/login'});
+    }
+
     if (context.isAuthenticated && context.isEmailVerified) {
       toast.info('Your email has already been verified.');
-      throw redirect({to: '/home'});
+      throw redirect({to: '/'});
     }
   },
 });
 
-function VerifyIndex() {
+function VerifyEmailIndex() {
   const searchParams = Route.useSearch();
   const code = searchParams.code ? String(searchParams.code) : undefined;
   const email = searchParams.email;
@@ -33,28 +41,67 @@ function VerifyIndex() {
   const {logOut, isPending: isLoggingOut} = useLogOut();
   const {currentAccount} = useCurrentAccount({skipFetch: true});
   const [showForm, setShowForm] = useState(false);
-  const {verifyEmail, isPending: isVerifying} = useVerifyEmail();
+  const {verifyEmail, isPending: isVerifying, error: verifyError} = useVerifyEmail();
 
   useEffect(() => {
-    if (currentAccount && code && email) {
-      void verifyEmail({code});
+    if (code && email) {
+      void verifyEmail({code, email});
     }
-  }, [code, currentAccount, email, verifyEmail]);
+  }, [code, email, verifyEmail]);
 
   const handleLogout = async () => {
     await logOut();
   };
 
-  if (isVerifying)
+  if (isVerifying) {
     return (
-      <div className='flex h-screen w-screen items-center justify-center bg-background'>
-        <div className='flex flex-col items-center space-y-4 text-center'>
-          <Loader2 className='h-14 w-14 animate-spin text-primary' />
-
-          <p className='text-xl font-medium text-foreground'>Verifying your email...</p>
-        </div>
-      </div>
+      <VerifyEmailStatusLayout
+        icon={<Loader2 className='h-14 w-14 animate-spin text-primary' />}
+        title={<span className='text-xl font-medium text-foreground'>Verifying your email...</span>}
+      />
     );
+  }
+
+  if (verifyError) {
+    if (verifyError.status === 429) {
+      return (
+        <VerifyEmailStatusLayout
+          icon={<Hourglass className='h-14 w-14 text-destructive' />}
+          title='Too many attempts'
+          description="You're trying to verify your email too often. Please try again later."
+          action={
+            <Link to='/' className='text-sm text-foreground underline-offset-4 hover:underline'>
+              Go back home
+            </Link>
+          }
+          maxWidth='max-w-[20rem]'
+        />
+      );
+    } else {
+      const emailContext = email ? <span className='text-foreground'>{email}</span> : 'your email';
+      return (
+        <VerifyEmailStatusLayout
+          icon={<MailX className='h-14 w-14 text-destructive' />}
+          title='Invalid or expired verification link.'
+          description={
+            <>
+              We couldn&apos;t verify {emailContext} using this link. Please request a new
+              verification email by logging in.
+            </>
+          }
+          action={
+            <Link
+              to='/login'
+              className='text-sm text-foreground underline-offset-4 hover:underline'
+            >
+              Log in
+            </Link>
+          }
+          maxWidth='max-w-[28rem]'
+        />
+      );
+    }
+  }
 
   return (
     <AuthLayout title='Check your email'>
@@ -72,23 +119,12 @@ function VerifyIndex() {
             <div className='max-w-[21rem] text-center text-sm text-muted-foreground'>
               <p>We&apos;ve sent you a verification link.</p>
               <p className='mt-1 max-w-[21rem] px-4'>
-                Please check your inbox
-                {currentAccount?.email ? (
-                  <>
-                    {' at '}
-                    <span className='font-medium text-foreground'>{currentAccount.email}</span>
-                  </>
-                ) : email ? (
-                  <>
-                    {' at '}
-                    <span className='font-medium text-foreground'>{email}</span>
-                  </>
-                ) : (
-                  '.'
-                )}
+                Please check your inbox at{' '}
+                <span className='inline-block max-w-full truncate align-bottom font-medium text-foreground'>
+                  {currentAccount?.email}.
+                </span>
               </p>
             </div>
-
             <div className='w-full px-4'>
               <AnimatePresence mode='wait' initial={false}>
                 {showForm ? (
@@ -100,7 +136,7 @@ function VerifyIndex() {
                     exit='exit'
                     className='w-full'
                   >
-                    <VerifyForm />
+                    <VerifyEmailForm />
                   </motion.div>
                 ) : (
                   <motion.div
@@ -115,15 +151,13 @@ function VerifyIndex() {
                       variant='secondary'
                       className='mt-4 w-full'
                       onClick={() => setShowForm(true)}
-                      disabled={isVerifying}
                     >
-                      {isVerifying ? 'Verifying...' : 'Enter code manually'}
+                      Enter code manually
                     </Button>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
-
             <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>
               Need to start over?{' '}
               <Button

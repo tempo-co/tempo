@@ -24,7 +24,7 @@ export function BankAccountBreadcrumb({bankAccount, bankStatements}: BankAccount
       <BreadcrumbList>
         <BreadcrumbItem>
           <BreadcrumbLink asChild>
-            <Link to='/home'>Home</Link>
+            <Link to='/'>Home</Link>
           </BreadcrumbLink>
         </BreadcrumbItem>
         <BreadcrumbSeparator />

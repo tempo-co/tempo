@@ -1,8 +1,8 @@
 import {Link, Outlet, createFileRoute, useMatchRoute} from '@tanstack/react-router';
 import {Shield, SunMoon, User} from 'lucide-react';
 
-import {AppBody} from '@/components/shared/layout/app-body';
-import {AppHeader} from '@/components/shared/layout/app-header';
+import {AppBodyLayout} from '@/components/shared/layout/app-body';
+import {AppHeaderLayout} from '@/components/shared/layout/app-header-layout';
 import {Button} from '@/components/ui/button';
 import {SettingsBreadcrumb} from '@/features/settings/components/settings-breadcrumb';
 import {cn} from '@/utils/cn';
@@ -26,10 +26,10 @@ function SettingsIndex() {
 
   return (
     <>
-      <AppHeader>
+      <AppHeaderLayout>
         <SettingsBreadcrumb route='/account' />
-      </AppHeader>
-      <AppBody>
+      </AppHeaderLayout>
+      <AppBodyLayout>
         <div className='mt-4 flex w-full flex-row gap-1 px-4 md:w-auto md:items-start xl:hidden'>
           {navItems.map((item) => {
             const isActive = matchRoute({to: item.route, fuzzy: true}) as boolean;
@@ -70,7 +70,7 @@ function SettingsIndex() {
             <Outlet />
           </div>
         </div>
-      </AppBody>
+      </AppBodyLayout>
     </>
   );
 }

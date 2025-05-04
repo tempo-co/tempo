@@ -1,8 +1,8 @@
 import {createFileRoute} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
 
-import {AppBody} from '@/components/shared/layout/app-body';
-import {AppHeader} from '@/components/shared/layout/app-header';
+import {AppBodyLayout} from '@/components/shared/layout/app-body';
+import {AppHeaderLayout} from '@/components/shared/layout/app-header-layout';
 import {useGetBankAccount} from '@/features/bank-account/api/use-get-bank-account';
 import {BankAccountBreadcrumb} from '@/features/bank-account/components/bank-account-breadcrumb';
 import {useGetAllBankStatements} from '@/features/bank-statement/api/use-get-all-bank-statements';
@@ -35,11 +35,11 @@ function BankStatementsIndex() {
 
   return (
     <>
-      <AppHeader>
+      <AppHeaderLayout>
         {isBankAccountPending && <BankAccountBreadcrumb />}
         {bankAccount && <BankAccountBreadcrumb bankAccount={bankAccount} bankStatements />}
-      </AppHeader>
-      <AppBody>
+      </AppHeaderLayout>
+      <AppBodyLayout>
         {data && <BankStatementCalendarView bankStatements={data.bankStatements} />}
         <div className='flex flex-col gap-4'>
           {data && data.total > 0 && <BankStatementUploadDialog pagination={pagination} />}
@@ -52,7 +52,7 @@ function BankStatementsIndex() {
             isPending={isBankStatementsPending}
           />
         </div>
-      </AppBody>
+      </AppBodyLayout>
     </>
   );
 }

@@ -7,19 +7,19 @@ type Context = {
 
 export function handleAuthenticatedRedirect(context: Context) {
   if (!context.isAuthenticated) {
-    throw redirect({to: '/login', search: {returnTo: getFullPath()}});
+    throw redirect({to: '/login'});
   }
   if (!context.isEmailVerified) {
-    throw redirect({to: '/verify'});
+    throw redirect({to: '/verify-email'});
   }
 }
 
 export function handleUnauthenticatedRedirect(context: Context) {
   if (context.isAuthenticated) {
     if (context.isEmailVerified) {
-      throw redirect({to: '/home', search: {returnTo: getFullPath()}});
+      throw redirect({to: '/', search: {returnTo: getFullPath()}});
     }
-    throw redirect({to: '/verify'});
+    throw redirect({to: '/verify-email'});
   }
 }
 

@@ -12,6 +12,7 @@ export const searchParamsSchema = z.object({
 
 export const emailVerifyDtoSchema = z.object({
   code: z.string().regex(CODE_REGEX, {message: 'Please enter the 6-digit verification code.'}),
+  email: z.string().email(),
 });
 
 export type EmailVerifyDto = z.infer<typeof emailVerifyDtoSchema>;

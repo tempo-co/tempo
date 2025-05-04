@@ -31,7 +31,7 @@ const navItems = [
   {label: 'Transactions', route: '/transactions', icon: CreditCard},
 ];
 
-export function AppSidebar() {
+export function AppSidebarLayout() {
   const {isMobile} = useSidebar();
   const {logOut, isPending} = useLogOut();
   const matchRoute = useMatchRoute();

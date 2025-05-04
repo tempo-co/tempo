@@ -1,11 +1,11 @@
 import {Separator} from '@/components/ui/separator';
 import {SidebarTrigger} from '@/components/ui/sidebar';
 
-type AppHeaderProps = {
+type AppHeaderLayoutProps = {
   children: React.ReactNode;
 };
 
-export function AppHeader({children}: AppHeaderProps) {
+export function AppHeaderLayout({children}: AppHeaderLayoutProps) {
   return (
     <header className='flex items-center gap-2 border-b p-2'>
       <SidebarTrigger />

@@ -1,7 +1,7 @@
 import {createFileRoute} from '@tanstack/react-router';
 
-import {AppBody} from '@/components/shared/layout/app-body';
-import {AppHeader} from '@/components/shared/layout/app-header';
+import {AppBodyLayout} from '@/components/shared/layout/app-body';
+import {AppHeaderLayout} from '@/components/shared/layout/app-header-layout';
 import {useGetBankAccount} from '@/features/bank-account/api/use-get-bank-account';
 import {BankAccountBreadcrumb} from '@/features/bank-account/components/bank-account-breadcrumb';
 import {BankAccountDetails} from '@/features/bank-account/components/bank-account-details';
@@ -20,10 +20,12 @@ function BankAccountIndex() {
 
   return (
     <>
-      <AppHeader>
+      <AppHeaderLayout>
         <BankAccountBreadcrumb bankAccount={bankAccount} />
-      </AppHeader>
-      <AppBody>{bankAccount && <BankAccountDetails bankAccount={bankAccount} />}</AppBody>
+      </AppHeaderLayout>
+      <AppBodyLayout>
+        {bankAccount && <BankAccountDetails bankAccount={bankAccount} />}
+      </AppBodyLayout>
     </>
   );
 }
