@@ -50,7 +50,7 @@ export function EmailChangeCheckForm({form, currentEmail, setStep}: EmailChangeC
   }
 
   return (
-    <div className={cn(!isDesktop && 'px-4')}>
+    <div className={cn(!isDesktop && 'mb-8 px-4')}>
       <Form {...form}>
         <form
           className={cn('grid items-start gap-4')}

@@ -13,10 +13,8 @@ import {
 } from '@/components/ui/dialog';
 import {
   Drawer,
-  DrawerClose,
   DrawerContent,
   DrawerDescription,
-  DrawerFooter,
   DrawerHeader,
   DrawerTitle,
   DrawerTrigger,
@@ -108,11 +106,6 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
           <DrawerDescription className='pt-2'>{headerContent.description}</DrawerDescription>
         </DrawerHeader>
         {formContent}
-        <DrawerFooter className='pt-4'>
-          <DrawerClose asChild>
-            <Button variant='outline'>Cancel</Button>
-          </DrawerClose>
-        </DrawerFooter>
       </DrawerContent>
     </Drawer>
   );

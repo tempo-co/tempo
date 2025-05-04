@@ -3,7 +3,6 @@ import {UseFormReturn} from 'react-hook-form';
 import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
-import {DialogClose, DialogFooter} from '@/components/ui/dialog';
 import {useMediaQuery} from '@/hooks/use-media-query';
 import {cn} from '@/utils/cn';
 
@@ -20,7 +19,7 @@ export function EmailChangeRequestForm({form, setIsOpen, setStep}: EmailChangeRe
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const {changeEmailRequest, isPending} = useChangeEmailRequest();
 
-  async function handleClick() {
+  async function handleSendVerification() {
     const formData = form.getValues();
     await changeEmailRequest(formData, {
       onSuccess: () => {
@@ -54,19 +53,24 @@ export function EmailChangeRequestForm({form, setIsOpen, setStep}: EmailChangeRe
     });
   }
 
+  function handleBack() {
+    setStep('check');
+    form.resetField('newEmail');
+  }
+
   return (
-    <div className={cn(!isDesktop && 'px-4')}>
-      <div className='mt-4 flex w-full gap-4'>
-        {isDesktop && (
-          <DialogFooter className='w-full'>
-            <DialogClose asChild>
-              <Button variant='outline' type='button'>
-                Cancel
-              </Button>
-            </DialogClose>
-          </DialogFooter>
-        )}
-        <Button onClick={handleClick} disabled={isPending} className={cn(!isDesktop && 'w-full')}>
+    <div className={cn(isDesktop ? 'w-[26rem]' : 'mb-8 px-4')}>
+      <div className='mt-4 flex w-full flex-col-reverse gap-4 md:flex-row md:justify-end'>
+        <Button
+          variant='outline'
+          type='button'
+          onClick={handleBack}
+          disabled={isPending}
+          className='w-full md:w-auto'
+        >
+          Back
+        </Button>
+        <Button onClick={handleSendVerification} disabled={isPending} className='w-full md:w-auto'>
           {isPending ? (
             <>
               <span>Sending...</span>
