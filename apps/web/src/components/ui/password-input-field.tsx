@@ -11,7 +11,7 @@ import {cn} from '@/utils/cn';
 type PasswordInputFieldProps<T extends FieldValues, K extends FieldPath<T>> = {
   field: ControllerRenderProps<T, K>;
   fieldState: ControllerFieldState;
-  label: string;
+  label?: string;
   id: string;
   autoComplete: string;
   disabled?: boolean;
@@ -29,7 +29,7 @@ export function PasswordInputField<T extends FieldValues, K extends FieldPath<T>
 
   return (
     <FormItem>
-      <FormLabel>{label}</FormLabel>
+      {label && <FormLabel>{label}</FormLabel>}
       <FormControl>
         <div className='flex'>
           <Input

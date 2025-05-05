@@ -67,7 +67,7 @@ export function EmailChangeCheckForm({form, currentEmail, setStep}: EmailChangeC
                   <Input
                     {...field}
                     id='newEmail'
-                    placeholder='New email'
+                    placeholder='example@domain.com'
                     type='email'
                     autoCapitalize='none'
                     autoComplete='email'

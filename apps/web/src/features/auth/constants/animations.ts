@@ -3,7 +3,6 @@ import {Variants} from 'framer-motion';
 export const switchContentVariants: Variants = {
   hidden: {
     opacity: 0,
-    y: 8,
     transition: {
       duration: 0.25,
       ease: [0.4, 0.0, 0.2, 1],
@@ -11,7 +10,6 @@ export const switchContentVariants: Variants = {
   },
   visible: {
     opacity: 1,
-    y: 0,
     transition: {
       duration: 0.35,
       ease: [0.2, 0.0, 0.0, 1],
@@ -19,7 +17,6 @@ export const switchContentVariants: Variants = {
   },
   exit: {
     opacity: 0,
-    y: -8,
     transition: {
       duration: 0.25,
       ease: [0.4, 0.0, 0.2, 1],

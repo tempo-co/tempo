@@ -1,4 +1,5 @@
 import {zodResolver} from '@hookform/resolvers/zod';
+import {Link} from '@tanstack/react-router';
 import {Loader} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {useForm} from 'react-hook-form';
@@ -81,14 +82,24 @@ export function LogInForm({returnTo}: LogInFormProps) {
             control={form.control}
             name='password'
             render={({field, fieldState}) => (
-              <PasswordInputField<LogInDto, 'password'>
-                field={field}
-                fieldState={fieldState}
-                label='Password'
-                id='password'
-                autoComplete='current-password'
-                disabled={isPending}
-              />
+              <FormItem>
+                <div className='flex items-center justify-between'>
+                  <FormLabel htmlFor='password'>Password</FormLabel>
+                  <Link to='/reset-password' className='text-sm text-primary hover:underline'>
+                    Forgot your password?
+                  </Link>
+                </div>
+                <FormControl>
+                  <PasswordInputField<LogInDto, 'password'>
+                    field={field}
+                    fieldState={fieldState}
+                    id='password'
+                    autoComplete='current-password'
+                    disabled={isPending}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
             )}
           />
           <Button type='submit' disabled={isPending} className='mt-2'>
