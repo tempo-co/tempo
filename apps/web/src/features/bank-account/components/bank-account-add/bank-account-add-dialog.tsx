@@ -4,9 +4,7 @@ import {Button} from '@/components/ui/button';
 import {
   ResponsiveDialog,
   ResponsiveDialogBody,
-  ResponsiveDialogClose,
   ResponsiveDialogContent,
-  ResponsiveDialogFooter,
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
   ResponsiveDialogTrigger,
@@ -31,11 +29,6 @@ export function BankAccountAddDialog() {
         <ResponsiveDialogBody>
           <BankAccountAddForm setIsOpen={setIsOpen} />
         </ResponsiveDialogBody>
-        <ResponsiveDialogFooter>
-          <ResponsiveDialogClose asChild>
-            <Button variant='outline'>Close</Button>
-          </ResponsiveDialogClose>
-        </ResponsiveDialogFooter>
       </ResponsiveDialogContent>
     </ResponsiveDialog>
   );

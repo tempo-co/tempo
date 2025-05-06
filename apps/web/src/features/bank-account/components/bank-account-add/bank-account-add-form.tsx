@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
 import {ResponsiveDialogClose} from '@/components/ui/responsive-dialog';
-import {useMediaQuery} from '@/hooks/use-media-query';
 import {cn} from '@/utils/cn';
 
 import {useCreateBankAccount} from '../../api/use-create-bank-account';
@@ -29,7 +28,6 @@ type BankAccountAddFormProps = {
 };
 
 export function BankAccountAddForm({setIsOpen}: BankAccountAddFormProps) {
-  const isDesktop = useMediaQuery('(min-width: 768px)');
   const {createBankAccount, isPending} = useCreateBankAccount();
 
   const form = useForm<BankAccountCreateDto>({
@@ -87,13 +85,8 @@ export function BankAccountAddForm({setIsOpen}: BankAccountAddFormProps) {
             </FormItem>
           )}
         />
-        <div className='flex justify-end gap-4'>
-          {isDesktop && (
-            <ResponsiveDialogClose asChild>
-              <Button variant='outline'>Close</Button>
-            </ResponsiveDialogClose>
-          )}
-          <Button type='submit' disabled={isPending} className='w-full md:w-fit'>
+        <div className='flex flex-col justify-end gap-4 md:flex-row'>
+          <Button type='submit' disabled={isPending} className='order-1 md:order-2'>
             {isPending ? (
               <div className='flex items-center justify-center'>
                 <span>Adding bank account...</span>
@@ -103,6 +96,9 @@ export function BankAccountAddForm({setIsOpen}: BankAccountAddFormProps) {
               'Add bank account'
             )}
           </Button>
+          <ResponsiveDialogClose asChild className='order-2 mb-4 md:order-1 md:mb-0'>
+            <Button variant='outline'>Close</Button>
+          </ResponsiveDialogClose>
         </div>
       </form>
     </Form>
