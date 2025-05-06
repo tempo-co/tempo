@@ -13,10 +13,10 @@ import {
 import {PasswordChangeForm} from './password-change-form';
 
 export function PasswordChangeDialog() {
-  const [open, setOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <ResponsiveDialog open={open} onOpenChange={setOpen}>
+    <ResponsiveDialog open={isOpen} onOpenChange={setIsOpen}>
       <ResponsiveDialogTrigger asChild>
         <Button variant='ghost'>Change</Button>
       </ResponsiveDialogTrigger>
@@ -25,7 +25,7 @@ export function PasswordChangeDialog() {
           <DialogTitle className='mb-1'>Change password</DialogTitle>
         </ResponsiveDialogHeader>
         <ResponsiveDialogBody>
-          <PasswordChangeForm setOpen={setOpen} />
+          <PasswordChangeForm setIsOpen={setIsOpen} />
         </ResponsiveDialogBody>
       </ResponsiveDialogContent>
     </ResponsiveDialog>

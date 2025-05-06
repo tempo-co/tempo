@@ -1,5 +1,4 @@
 import {Loader} from 'lucide-react';
-import {useState} from 'react';
 
 import {Button, ButtonProps} from '@/components/ui/button';
 import {
@@ -19,8 +18,6 @@ type LogOutDialogProps = {
 };
 
 export function LogOutDialog({triggerVariant = 'ghost'}: LogOutDialogProps) {
-  const [isOpen, setIsOpen] = useState(false);
-
   const {logOut, isPending} = useLogOut();
 
   const handleLogOut = async () => {
@@ -28,7 +25,7 @@ export function LogOutDialog({triggerVariant = 'ghost'}: LogOutDialogProps) {
   };
 
   return (
-    <ResponsiveDialog open={isOpen} onOpenChange={setIsOpen}>
+    <ResponsiveDialog>
       <ResponsiveDialogTrigger asChild>
         <Button variant={triggerVariant} className='w-full text-foreground sm:w-fit' size='sm'>
           Log out

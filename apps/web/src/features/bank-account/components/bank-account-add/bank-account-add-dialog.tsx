@@ -15,12 +15,12 @@ import {
 import {BankAccountAddForm} from './bank-account-add-form';
 
 export function BankAccountAddDialog() {
-  const [open, setOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   const title = 'Add bank account';
 
   return (
-    <ResponsiveDialog open={open} onOpenChange={setOpen}>
+    <ResponsiveDialog open={isOpen} onOpenChange={setIsOpen}>
       <ResponsiveDialogTrigger asChild>
         <Button>{title}</Button>
       </ResponsiveDialogTrigger>
@@ -29,7 +29,7 @@ export function BankAccountAddDialog() {
           <ResponsiveDialogTitle>{title}</ResponsiveDialogTitle>
         </ResponsiveDialogHeader>
         <ResponsiveDialogBody>
-          <BankAccountAddForm setOpen={setOpen} />
+          <BankAccountAddForm setIsOpen={setIsOpen} />
         </ResponsiveDialogBody>
         <ResponsiveDialogFooter>
           <ResponsiveDialogClose asChild>

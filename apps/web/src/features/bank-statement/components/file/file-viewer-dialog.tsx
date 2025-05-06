@@ -18,7 +18,7 @@ import {FileViewer} from './file-viewer';
 
 type FileViewerDialogProps = {
   open: boolean;
-  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
   file?: File;
   bankStatement?: BankStatement;
   isPending?: boolean;
@@ -28,7 +28,7 @@ type FileViewerDialogProps = {
 
 export function FileViewerDialog({
   open,
-  setOpen,
+  setIsOpen,
   file,
   bankStatement,
   isPending,
@@ -44,7 +44,7 @@ export function FileViewerDialog({
   }, [file, bankStatement]);
 
   return (
-    <ResponsiveDialog open={open} onOpenChange={setOpen}>
+    <ResponsiveDialog open={open} onOpenChange={setIsOpen}>
       <ResponsiveDialogContent
         className={cn('h-[80%] gap-0 px-4 md:max-w-[70%]', error && 'border-destructive')}
       >

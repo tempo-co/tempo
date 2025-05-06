@@ -22,14 +22,13 @@ type BankStatementUploadDialogProps = {
 
 export function BankStatementUploadDialog({pagination}: BankStatementUploadDialogProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
-  const [open, setOpen] = useState(false);
   const [files, setFiles] = useState<FileState[]>([]);
 
   const title = 'Upload bank statement';
 
   if (isDesktop) {
     return (
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog>
         <DialogTrigger asChild>
           <Button className='w-fit items-end'>{title}</Button>
         </DialogTrigger>

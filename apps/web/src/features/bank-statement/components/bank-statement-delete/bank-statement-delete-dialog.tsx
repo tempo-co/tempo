@@ -20,14 +20,14 @@ import {BankStatementDeleteDialogDescription} from './bank-statement-delete-dial
 
 type BankStatementDeleteDialogProps = {
   bankStatement: BankStatement;
-  open: boolean;
-  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  isOpen: boolean;
+  setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 export function BankStatementDeleteDialog({
   bankStatement,
-  open,
-  setOpen,
+  isOpen,
+  setIsOpen,
 }: BankStatementDeleteDialogProps) {
   const {bankAccountId} = useParams({from: '/bank-accounts/$bankAccountId/bank-statements/'});
   const {pageIndex, pageSize} = useSearch({from: '/bank-accounts/$bankAccountId/bank-statements/'});
@@ -39,11 +39,11 @@ export function BankStatementDeleteDialog({
 
   const handleDelete = async () => {
     await mutateAsync();
-    setOpen(false);
+    setIsOpen(false);
   };
 
   return (
-    <ResponsiveDialog open={open} onOpenChange={setOpen}>
+    <ResponsiveDialog open={isOpen} onOpenChange={setIsOpen}>
       <ResponsiveDialogContent className='md:max-w-[33rem]'>
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>Delete Bank Statement</ResponsiveDialogTitle>

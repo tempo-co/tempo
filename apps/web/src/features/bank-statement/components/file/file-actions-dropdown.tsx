@@ -70,7 +70,7 @@ export function FileActionsDropdown({
         bankStatement={bankStatement}
         file={file || fetchedFile}
         open={isFileViewerDialogOpen}
-        setOpen={setIsFileViewerDialogOpen}
+        setIsOpen={setIsFileViewerDialogOpen}
         isPending={isPending}
         error={error}
         isSuccess={isSuccess}
@@ -78,8 +78,8 @@ export function FileActionsDropdown({
       {bankStatement && (
         <BankStatementDeleteDialog
           bankStatement={bankStatement}
-          open={isDeleteDialogOpen}
-          setOpen={setIsDeleteDialogOpen}
+          isOpen={isDeleteDialogOpen}
+          setIsOpen={setIsDeleteDialogOpen}
         />
       )}
       {isDesktop ? (

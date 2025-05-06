@@ -11,10 +11,10 @@ import {useChangePassword} from '../../api/use-change-password';
 import {PasswordChangeDto, passwordChangeDtoSchema} from '../../types/password-change.dto';
 
 type PasswordChangeFormProps = {
-  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
-export function PasswordChangeForm({setOpen}: PasswordChangeFormProps) {
+export function PasswordChangeForm({setIsOpen}: PasswordChangeFormProps) {
   const form = useForm<PasswordChangeDto>({
     resolver: zodResolver(passwordChangeDtoSchema),
     mode: 'onBlur',
@@ -35,7 +35,7 @@ export function PasswordChangeForm({setOpen}: PasswordChangeFormProps) {
         }
       },
       onSuccess: () => {
-        setOpen(false);
+        setIsOpen(false);
       },
     });
   }

@@ -25,10 +25,10 @@ import {
 import {BankComboBox} from './bank-combo-box';
 
 type BankAccountAddFormProps = {
-  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
-export function BankAccountAddForm({setOpen}: BankAccountAddFormProps) {
+export function BankAccountAddForm({setIsOpen}: BankAccountAddFormProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const {createBankAccount, isPending} = useCreateBankAccount();
 
@@ -40,7 +40,7 @@ export function BankAccountAddForm({setOpen}: BankAccountAddFormProps) {
 
   async function onSubmit(formData: BankAccountCreateDto) {
     await createBankAccount(formData);
-    setOpen(false);
+    setIsOpen(false);
   }
 
   return (
