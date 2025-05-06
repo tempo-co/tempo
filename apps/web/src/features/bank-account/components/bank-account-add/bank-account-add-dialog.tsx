@@ -2,61 +2,41 @@ import {useState} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from '@/components/ui/drawer';
-import {useMediaQuery} from '@/hooks/use-media-query';
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogTrigger,
+} from '@/components/ui/responsive-dialog';
 
 import {BankAccountAddForm} from './bank-account-add-form';
 
 export function BankAccountAddDialog() {
   const [open, setOpen] = useState(false);
-  const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button>Add bank account</Button>
-        </DialogTrigger>
-        <DialogContent className='max-w-96' aria-describedby='Add bank account'>
-          <DialogHeader>
-            <DialogTitle>Add bank account</DialogTitle>
-          </DialogHeader>
-          <BankAccountAddForm setOpen={setOpen} />
-        </DialogContent>
-      </Dialog>
-    );
-  }
+  const title = 'Add bank account';
 
   return (
-    <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerTrigger asChild>
-        <Button>Add bank account</Button>
-      </DrawerTrigger>
-      <DrawerContent aria-describedby='Add bank account'>
-        <DrawerHeader className='text-left'>
-          <DrawerTitle>Add bank account</DrawerTitle>
-        </DrawerHeader>
-        <BankAccountAddForm setOpen={setOpen} />
-        <DrawerFooter className='pt-4'>
-          <DrawerClose asChild>
-            <Button variant='outline'>Cancel</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+    <ResponsiveDialog open={open} onOpenChange={setOpen}>
+      <ResponsiveDialogTrigger asChild>
+        <Button>{title}</Button>
+      </ResponsiveDialogTrigger>
+      <ResponsiveDialogContent className='md:max-w-96'>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>{title}</ResponsiveDialogTitle>
+        </ResponsiveDialogHeader>
+        <ResponsiveDialogBody>
+          <BankAccountAddForm setOpen={setOpen} />
+        </ResponsiveDialogBody>
+        <ResponsiveDialogFooter>
+          <ResponsiveDialogClose asChild>
+            <Button variant='outline'>Close</Button>
+          </ResponsiveDialogClose>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

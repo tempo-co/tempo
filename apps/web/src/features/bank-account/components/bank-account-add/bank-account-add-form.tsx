@@ -13,6 +13,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
+import {ResponsiveDialogClose} from '@/components/ui/responsive-dialog';
 import {useMediaQuery} from '@/hooks/use-media-query';
 import {cn} from '@/utils/cn';
 
@@ -44,11 +45,7 @@ export function BankAccountAddForm({setOpen}: BankAccountAddFormProps) {
 
   return (
     <Form {...form}>
-      <form
-        className={cn('grid items-start gap-4', !isDesktop && 'px-4')}
-        onSubmit={form.handleSubmit(onSubmit)}
-        noValidate
-      >
+      <form className='grid items-start gap-4' onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <FormField
           control={form.control}
           name='bank'
@@ -90,16 +87,23 @@ export function BankAccountAddForm({setOpen}: BankAccountAddFormProps) {
             </FormItem>
           )}
         />
-        <Button type='submit' disabled={isPending} className='mt-4'>
-          {isPending ? (
-            <>
-              <span>Adding bank account...</span>
-              <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
-            </>
-          ) : (
-            <span>Add bank account</span>
+        <div className='flex justify-end gap-4'>
+          {isDesktop && (
+            <ResponsiveDialogClose asChild>
+              <Button variant='outline'>Close</Button>
+            </ResponsiveDialogClose>
           )}
-        </Button>
+          <Button type='submit' disabled={isPending} className='w-full md:w-fit'>
+            {isPending ? (
+              <div className='flex items-center justify-center'>
+                <span>Adding bank account...</span>
+                <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
+              </div>
+            ) : (
+              'Add bank account'
+            )}
+          </Button>
+        </div>
       </form>
     </Form>
   );

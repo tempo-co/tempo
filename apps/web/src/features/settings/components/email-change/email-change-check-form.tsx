@@ -2,10 +2,9 @@ import {Loader} from 'lucide-react';
 import {UseFormReturn} from 'react-hook-form';
 
 import {Button} from '@/components/ui/button';
-import {DialogClose, DialogFooter} from '@/components/ui/dialog';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
-import {useMediaQuery} from '@/hooks/use-media-query';
+import {ResponsiveDialogClose} from '@/components/ui/responsive-dialog';
 import {Account} from '@/types/account';
 import {cn} from '@/utils/cn';
 
@@ -19,8 +18,6 @@ type EmailChangeCheckFormProps = {
 };
 
 export function EmailChangeCheckForm({form, currentEmail, setStep}: EmailChangeCheckFormProps) {
-  const isDesktop = useMediaQuery('(min-width: 768px)');
-
   const {checkEmailAvailability, isPending} = useCheckEmailAvailability();
 
   async function onSubmit(formData: EmailChangeDto) {
@@ -50,7 +47,7 @@ export function EmailChangeCheckForm({form, currentEmail, setStep}: EmailChangeC
   }
 
   return (
-    <div className={cn(!isDesktop && 'mb-8 px-4')}>
+    <div>
       <Form {...form}>
         <form
           className={cn('grid items-start gap-4')}
@@ -80,26 +77,22 @@ export function EmailChangeCheckForm({form, currentEmail, setStep}: EmailChangeC
               </FormItem>
             )}
           />
-          <div className='mt-4 flex w-full gap-4'>
-            {isDesktop && (
-              <DialogFooter className='w-full'>
-                <DialogClose asChild>
-                  <Button variant='outline' type='button'>
-                    Cancel
-                  </Button>
-                </DialogClose>
-              </DialogFooter>
-            )}
-            <Button type='submit' disabled={isPending} className={cn(!isDesktop && 'w-full')}>
+          <div className='mb-4 mt-4 flex flex-col justify-end gap-4 md:mb-0 md:flex-row'>
+            <Button type='submit' disabled={isPending} className='order-1 md:order-2'>
               {isPending ? (
                 <>
                   <span>Checking...</span>
                   <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
                 </>
               ) : (
-                <span>Check for existing account</span>
+                'Check for existing account'
               )}
             </Button>
+            <ResponsiveDialogClose asChild className='order-2 md:order-1'>
+              <Button variant='outline' type='button'>
+                Cancel
+              </Button>
+            </ResponsiveDialogClose>
           </div>
         </form>
       </Form>

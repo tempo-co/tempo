@@ -3,24 +3,15 @@ import {Loader} from 'lucide-react';
 
 import {Button} from '@/components/ui/button';
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from '@/components/ui/drawer';
-import {useMediaQuery} from '@/hooks/use-media-query';
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
 import {BankStatement} from '@/types/bank-statement';
 
 import {useDeleteBankStatement} from '../../api/use-delete-bank-statement';
@@ -38,8 +29,6 @@ export function BankStatementDeleteDialog({
   open,
   setOpen,
 }: BankStatementDeleteDialogProps) {
-  const isDesktop = useMediaQuery('(min-width: 768px)');
-
   const {bankAccountId} = useParams({from: '/bank-accounts/$bankAccountId/bank-statements/'});
   const {pageIndex, pageSize} = useSearch({from: '/bank-accounts/$bankAccountId/bank-statements/'});
 
@@ -53,83 +42,44 @@ export function BankStatementDeleteDialog({
     setOpen(false);
   };
 
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent aria-describedby='Delete Bank Statement' className='max-w-[33rem]'>
-          <DialogHeader>
-            <DialogTitle>Delete Bank Statement</DialogTitle>
-            <DialogDescription className='pt-2'>
-              <BankStatementDeleteDialogDescription
-                transactionsCount={bankStatement.transactions.length}
-                period={bankStatement.period}
-              />
-            </DialogDescription>
-          </DialogHeader>
-          <BankStatementCard bankStatement={bankStatement} />
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type='button' variant='outline' className='mr-2'>
-                Cancel
-              </Button>
-            </DialogClose>
-            <Button
-              variant='destructive'
-              className='text-foreground'
-              onClick={handleDelete}
-              disabled={isPending}
-            >
-              {isPending ? (
-                <>
-                  <span>Deleting...</span>
-                  <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
-                </>
-              ) : (
-                <span>Delete</span>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
-    <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerContent aria-describedby='Delete Bank Statement'>
-        <DrawerHeader className='text-left'>
-          <DrawerTitle>Delete Bank Statement</DrawerTitle>
-          <DrawerDescription className='pt-2'>
+    <ResponsiveDialog open={open} onOpenChange={setOpen}>
+      <ResponsiveDialogContent className='md:max-w-[33rem]'>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>Delete Bank Statement</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription className='pt-2'>
             <BankStatementDeleteDialogDescription
               transactionsCount={bankStatement.transactions.length}
               period={bankStatement.period}
             />
-          </DrawerDescription>
-        </DrawerHeader>
-        <div className='px-4'>
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+        <ResponsiveDialogBody>
           <BankStatementCard bankStatement={bankStatement} />
-        </div>
-        <DrawerFooter className='pt-4'>
+        </ResponsiveDialogBody>
+        <ResponsiveDialogFooter className='mt-4 flex gap-4'>
           <Button
             variant='destructive'
-            className='text-foreground'
+            className='order-1 text-foreground md:order-2'
             onClick={handleDelete}
             disabled={isPending}
           >
             {isPending ? (
-              <>
-                <span>Deleting...</span>
+              <div className='flex items-center justify-center'>
+                <span>Deleting bank statement...</span>
                 <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
-              </>
+              </div>
             ) : (
-              <span>Delete</span>
+              'Delete bank statement'
             )}
           </Button>
-          <DrawerClose asChild>
-            <Button variant='outline'>Cancel</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+          <ResponsiveDialogClose asChild>
+            <Button type='button' variant='outline' className='order-2 md:order-1'>
+              Cancel
+            </Button>
+          </ResponsiveDialogClose>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

@@ -3,8 +3,6 @@ import {UseFormReturn} from 'react-hook-form';
 import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
-import {useMediaQuery} from '@/hooks/use-media-query';
-import {cn} from '@/utils/cn';
 
 import {useChangeEmailRequest} from '../../api/use-change-email-request';
 import {EmailChangeDto} from '../../types/email-change.dto';
@@ -16,7 +14,6 @@ type EmailChangeRequestFormProps = {
 };
 
 export function EmailChangeRequestForm({form, setIsOpen, setStep}: EmailChangeRequestFormProps) {
-  const isDesktop = useMediaQuery('(min-width: 768px)');
   const {changeEmailRequest, isPending} = useChangeEmailRequest();
 
   async function handleSendVerification() {
@@ -59,14 +56,14 @@ export function EmailChangeRequestForm({form, setIsOpen, setStep}: EmailChangeRe
   }
 
   return (
-    <div className={cn(isDesktop ? 'w-[26rem]' : 'mb-8 px-4')}>
+    <div>
       <div className='mt-4 flex w-full flex-col-reverse gap-4 md:flex-row md:justify-end'>
         <Button
           variant='outline'
           type='button'
           onClick={handleBack}
           disabled={isPending}
-          className='w-full md:w-auto'
+          className='mb-4 w-full md:mb-0 md:w-auto'
         >
           Back
         </Button>

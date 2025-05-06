@@ -31,14 +31,12 @@ export function BankAccountList({bankAccounts, isPending}: BankAccountListProps)
   }
 
   return (
-    <>
-      <div className='mt-4 flex flex-col gap-3'>
-        {bankAccounts?.map((bankAccount) => (
-          <React.Fragment key={bankAccount.id}>
-            <BankAccountCard bankAccount={bankAccount} />
-          </React.Fragment>
-        ))}
-      </div>
-    </>
+    <div className='mt-4 flex flex-col gap-3'>
+      {bankAccounts?.map((bankAccount) => (
+        <React.Fragment key={bankAccount.id}>
+          <BankAccountCard bankAccount={bankAccount} />
+        </React.Fragment>
+      ))}
+    </div>
   );
 }

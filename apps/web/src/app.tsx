@@ -36,8 +36,11 @@ export function App() {
   return (
     <React.Suspense fallback={<LoadingScreen />}>
       <ThemeProvider defaultTheme='dark' storageKey='vite-ui-theme'>
-        <RouterProvider router={router} context={{isAuthenticated, isEmailVerified}} />
-        <Toaster expand duration={5000} />
+        {/* eslint-disable-next-line react/no-unknown-property */}
+        <div vaul-drawer-wrapper=''>
+          <RouterProvider router={router} context={{isAuthenticated, isEmailVerified}} />
+          <Toaster expand duration={5000} />
+        </div>
       </ThemeProvider>
     </React.Suspense>
   );

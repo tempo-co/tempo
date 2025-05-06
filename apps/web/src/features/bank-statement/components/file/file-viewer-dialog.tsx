@@ -2,28 +2,17 @@ import {useMemo} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from '@/components/ui/drawer';
-import {useMediaQuery} from '@/hooks/use-media-query';
+  ResponsiveDialog,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
 import {BankStatement} from '@/types/bank-statement';
 import {cn} from '@/utils/cn';
 
-import {truncateFileName} from '../../utils/truncate-file-name';
 import {FileMetadata} from './file-metadata';
 import {FileViewer} from './file-viewer';
 
@@ -46,58 +35,24 @@ export function FileViewerDialog({
   error,
   isSuccess,
 }: FileViewerDialogProps) {
-  const isDesktop = useMediaQuery('(min-width: 768px)');
-
-  const {truncatedFileName, fileSize, fileType} = useMemo(() => {
+  const {fileName, fileSize, fileType} = useMemo(() => {
     const fileName = file?.name || bankStatement?.file.name;
-    const size = file?.size || bankStatement?.file.size;
-    const type = file?.type || bankStatement?.file.type;
-    const truncatedName = fileName ? truncateFileName(fileName) : '';
+    const fileSize = file?.size || bankStatement?.file.size;
+    const fileType = file?.type || bankStatement?.file.type;
 
-    return {truncatedFileName: truncatedName, fileSize: size, fileType: type};
+    return {fileName, fileSize, fileType};
   }, [file, bankStatement]);
 
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent
-          aria-describedby='View file'
-          className={cn('h-[80%] max-w-[70%] gap-0', error && 'border-destructive')}
-        >
-          <DialogHeader>
-            <DialogTitle>{truncatedFileName}</DialogTitle>
-            <DialogDescription>
-              {fileSize && fileType && (
-                <FileMetadata
-                  fileSize={fileSize}
-                  fileType={fileType}
-                  fileUploadedAt={bankStatement?.uploadedAt}
-                  isPending={isPending}
-                  error={error}
-                  isSuccess={isSuccess}
-                />
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <FileViewer file={file} bankStatementId={bankStatement?.id} />
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type='button' variant='outline' className='mt-4 w-full'>
-                Close
-              </Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
-    <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerContent aria-describedby='File' className='h-[100%] px-4'>
-        <DrawerHeader className='px-0 text-left'>
-          <DrawerTitle>{truncatedFileName}</DrawerTitle>
-          <DrawerDescription>
+    <ResponsiveDialog open={open} onOpenChange={setOpen}>
+      <ResponsiveDialogContent
+        className={cn('h-[80%] gap-0 px-4 md:max-w-[70%]', error && 'border-destructive')}
+      >
+        <ResponsiveDialogHeader className='min-w-0 px-0 text-start'>
+          <ResponsiveDialogTitle className='quotes-none w-full truncate pr-10'>
+            {fileName}
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
             {fileSize && fileType && (
               <FileMetadata
                 fileSize={fileSize}
@@ -108,15 +63,17 @@ export function FileViewerDialog({
                 isSuccess={isSuccess}
               />
             )}
-          </DrawerDescription>
-        </DrawerHeader>
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
         <FileViewer file={file} bankStatementId={bankStatement?.id} />
-        <DrawerFooter className='px-0 pt-4'>
-          <DrawerClose asChild>
-            <Button variant='outline'>Close</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+        <ResponsiveDialogFooter className='px-0'>
+          <ResponsiveDialogClose asChild>
+            <Button type='button' variant='outline' className='mt-4 w-full'>
+              Close
+            </Button>
+          </ResponsiveDialogClose>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

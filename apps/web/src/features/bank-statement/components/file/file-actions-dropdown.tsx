@@ -142,7 +142,7 @@ export function FileActionsDropdown({
               </Button>
             </DrawerTrigger>
           )}
-          <DrawerContent aria-describedby='File'>
+          <DrawerContent>
             <DrawerHeader className='m-5 p-0 text-left'>
               <DrawerTitle className='flex flex-col overflow-hidden p-0 text-base font-normal'>
                 {bankStatement && !file && (

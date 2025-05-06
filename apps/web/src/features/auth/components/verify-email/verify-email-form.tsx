@@ -48,7 +48,7 @@ export function VerifyEmailForm() {
                   pattern={REGEXP_ONLY_DIGITS}
                   disabled={isVerifying}
                 >
-                  <InputOTPGroup className='gap-[0.6rem]'>
+                  <InputOTPGroup className='gap-4'>
                     <InputOTPSlot index={0} className='rounded-md' />
                     <InputOTPSlot index={1} className='rounded-md border-l' />
                     <InputOTPSlot index={2} className='rounded-md border-l' />

@@ -1,10 +1,10 @@
 export type Session = {
   id: string;
   ip: string;
-  userAgent: string;
   deviceType: string;
-  clientDescription: string;
-  clientLocation: string;
+  browserType: string;
+  name: string;
+  location: string;
   createdAt: string;
   lastSeenAt: string;
   isCurrent: boolean;

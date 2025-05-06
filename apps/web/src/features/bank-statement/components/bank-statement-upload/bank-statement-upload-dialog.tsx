@@ -25,15 +25,17 @@ export function BankStatementUploadDialog({pagination}: BankStatementUploadDialo
   const [open, setOpen] = useState(false);
   const [files, setFiles] = useState<FileState[]>([]);
 
+  const title = 'Upload bank statement';
+
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <Button className='w-fit items-end'>Upload bank statement</Button>
+          <Button className='w-fit items-end'>{title}</Button>
         </DialogTrigger>
-        <DialogContent className='mx-10 max-w-[50rem]' aria-describedby='Upload bank statement'>
+        <DialogContent className='mx-10 max-w-[50rem]'>
           <DialogHeader>
-            <DialogTitle>Upload bank statement</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
           <BankStatementUploadInput pagination={pagination} files={files} setFiles={setFiles} />
           <DialogFooter>

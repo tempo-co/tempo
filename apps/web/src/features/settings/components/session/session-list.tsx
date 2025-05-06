@@ -10,9 +10,9 @@ export function SessionList() {
   const {sessions, isPending} = useGetSessions();
 
   const {currentSession, otherSessions} = useMemo(() => {
-    const current = sessions?.find((s) => s.isCurrent);
-    const others = sessions?.filter((s) => !s.isCurrent);
-    return {currentSession: current, otherSessions: others};
+    const currentSession = sessions?.find((s) => s.isCurrent);
+    const otherSessions = sessions?.filter((s) => !s.isCurrent);
+    return {currentSession, otherSessions};
   }, [sessions]);
 
   return (
