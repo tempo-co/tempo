@@ -38,7 +38,7 @@ export function FileViewerDialog({
   const {fileName, fileSize, fileType} = useMemo(() => {
     const fileName = file?.name || bankStatement?.file.name;
     const fileSize = file?.size || bankStatement?.file.size;
-    const fileType = file?.type || bankStatement?.file.type;
+    const fileType = file?.type || bankStatement?.file.mimeType;
 
     return {fileName, fileSize, fileType};
   }, [file, bankStatement]);
@@ -65,7 +65,7 @@ export function FileViewerDialog({
             )}
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
-        <FileViewer file={file} bankStatementId={bankStatement?.id} />
+        <FileViewer file={file} bankStatement={bankStatement} />
         <ResponsiveDialogFooter className='px-0'>
           <ResponsiveDialogClose asChild>
             <Button type='button' variant='outline' className='mt-4 w-full'>

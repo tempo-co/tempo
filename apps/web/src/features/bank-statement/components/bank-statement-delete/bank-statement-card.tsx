@@ -12,7 +12,7 @@ export function BankStatementCard({bankStatement}: BankStatementCardProps) {
   return (
     <Card className='flex items-center p-4'>
       <div className='mr-4 rounded-md bg-muted p-3'>
-        <MimeTypeIcon mimeType={bankStatement.file.type} />
+        <MimeTypeIcon mimeType={bankStatement.file.mimeType} />
       </div>
       <div className='overflow-hidden'>
         <p className='mb-1 max-w-[35rem] truncate text-base text-foreground md:max-w-[23.5rem]'>
@@ -20,7 +20,7 @@ export function BankStatementCard({bankStatement}: BankStatementCardProps) {
         </p>
         <FileMetadata
           fileSize={bankStatement.file.size}
-          fileType={bankStatement.file.type}
+          fileType={bankStatement.file.mimeType}
           fileUploadedAt={bankStatement.uploadedAt}
         />
       </div>

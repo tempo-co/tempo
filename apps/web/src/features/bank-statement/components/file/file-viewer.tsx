@@ -1,4 +1,3 @@
-import {useParams} from '@tanstack/react-router';
 import {FileWarning} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
@@ -14,12 +13,10 @@ import {parseFile} from '../../utils/parse-file';
 
 type FileViewerProps = {
   file?: File;
-  bankStatementId?: BankStatement['id'];
+  bankStatement?: BankStatement;
 };
 
-export function FileViewer({file, bankStatementId}: FileViewerProps) {
-  const {bankAccountId} = useParams({from: '/bank-accounts/$bankAccountId/bank-statements/'});
-
+export function FileViewer({file, bankStatement}: FileViewerProps) {
   const [error, setError] = useState<Error | null>(null);
   const [data, setData] = useState<FileData>({
     headers: [],
@@ -30,11 +27,7 @@ export function FileViewer({file, bankStatementId}: FileViewerProps) {
 
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  const {
-    fetchFile,
-    file: fetchedFile,
-    isLoading,
-  } = useGetFile(bankAccountId, bankStatementId || '');
+  const {fetchFile, file: fetchedFile, isLoading} = useGetFile(bankStatement?.file.id || '');
 
   useEffect(() => {
     async function fetchData() {

@@ -1,4 +1,3 @@
-import {useParams} from '@tanstack/react-router';
 import {Download, EllipsisVertical, FileScan, Trash2} from 'lucide-react';
 import {useState} from 'react';
 
@@ -43,8 +42,6 @@ export function FileActionsDropdown({
   error,
   isSuccess,
 }: FileActionsDropdownProps) {
-  const {bankAccountId} = useParams({from: '/bank-accounts/$bankAccountId/bank-statements/'});
-
   const [isDropdownMenuOpen, setIsDropdownMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isFileViewerDialogOpen, setIsFileViewerDialogOpen] = useState(false);
@@ -54,7 +51,7 @@ export function FileActionsDropdown({
     file: fetchedFile,
     isLoading,
     setDownloadReady,
-  } = useGetFile(bankAccountId, bankStatement?.id || '');
+  } = useGetFile(bankStatement?.file.id || '');
 
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
@@ -112,7 +109,7 @@ export function FileActionsDropdown({
                   disabled={isLoading}
                   onClick={handleDownload}
                 >
-                  <Download className='mr-2 h-4 w-4' />
+                  <Download className='h-4 w-4' />
                   <span>{isLoading ? 'Downloading...' : 'Download File'}</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -150,7 +147,7 @@ export function FileActionsDropdown({
                     {truncateFileName(bankStatement.file.name)}
                     <FileMetadata
                       fileSize={bankStatement.file.size}
-                      fileType={bankStatement.file.type}
+                      fileType={bankStatement.file.mimeType}
                       fileUploadedAt={bankStatement.uploadedAt}
                     />
                   </>

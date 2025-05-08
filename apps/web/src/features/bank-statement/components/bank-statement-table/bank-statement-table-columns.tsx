@@ -28,13 +28,13 @@ export const bankStatementTableColumns: ColumnDef<BankStatement>[] = [
       return (
         <div className='flex items-center px-3 py-2'>
           <div className='mr-3 rounded-md bg-muted p-2'>
-            <MimeTypeIcon mimeType={row.original.file.type} />
+            <MimeTypeIcon mimeType={row.original.file.mimeType} />
           </div>
           <div className='overflow-hidden'>
             <p className='mb-1 max-w-full text-base text-foreground'>{row.original.file.name}</p>
             <FileMetadata
               fileSize={row.original.file.size}
-              fileType={row.original.file.type}
+              fileType={row.original.file.mimeType}
               fileUploadedAt={row.original.uploadedAt}
             />
           </div>

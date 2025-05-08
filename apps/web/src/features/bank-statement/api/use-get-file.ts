@@ -2,18 +2,14 @@ import {useQuery} from '@tanstack/react-query';
 import {useEffect, useState} from 'react';
 import {toast} from 'sonner';
 
-import {BankAccount} from '@/types/bank-account';
-import {BankStatement} from '@/types/bank-statement';
+import {File as FileEntity} from '@/types/file';
 import {HttpError, api} from '@/utils/api';
 
 import {downloadFile} from '../utils/download-file';
 import {extractFileMetadata} from '../utils/extract-file-metadata';
 import {truncateFileName} from '../utils/truncate-file-name';
 
-export const useGetFile = (
-  bankAccountId: BankAccount['id'],
-  bankStatementId: BankStatement['id'],
-) => {
+export const useGetFile = (id: FileEntity['id']) => {
   const [downloadReady, setDownloadReady] = useState(false);
   const {
     refetch: fetchFile,
@@ -21,12 +17,11 @@ export const useGetFile = (
     isLoading,
     isError,
   } = useQuery<File, HttpError>({
-    queryKey: ['file', bankAccountId, bankStatementId],
+    queryKey: ['file', id],
     queryFn: async () => {
-      const response = await api.get(
-        `/bank-accounts/${bankAccountId}/bank-statements/${bankStatementId}/file`,
-        {parseJson: false},
-      );
+      const {url} = await api.get(`/files/${id}`);
+
+      const response = await fetch(url);
       const arrayBuffer = await response.arrayBuffer();
       const {fileName, mimeType} = extractFileMetadata(response.headers);
 
