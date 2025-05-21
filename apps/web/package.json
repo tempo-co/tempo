@@ -14,8 +14,8 @@
     "preview": "vite preview",
     "test:e2e": "npx playwright test",
     "test:e2e:local": "npm run docker:test:down && npm run docker:test:up && npx playwright test",
-    "docker:test:up": "docker compose -f docker-compose.e2e.yml --env-file .env.test pull api && docker compose -f docker-compose.e2e.yml --env-file .env.test up -d",
-    "docker:test:down": "docker compose -f docker-compose.e2e.yml --env-file .env.test down -v --remove-orphans"
+    "docker:test:up": "docker compose -f docker-compose.e2e.yml pull api && docker compose -f docker-compose.e2e.yml up -d",
+    "docker:test:down": "docker compose -f docker-compose.e2e.yml down -v --remove-orphans"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

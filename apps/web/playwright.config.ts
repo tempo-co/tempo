@@ -1,7 +1,7 @@
 import {defineConfig, devices} from '@playwright/test';
 import {loadEnv} from 'vite';
 
-const env = loadEnv('test', process.cwd(), '');
+const env = loadEnv('development', process.cwd(), '');
 
 export default defineConfig({
   webServer: {
@@ -20,6 +20,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [
+    /* Test against different browsers */
     {
       name: 'chromium',
       use: {...devices['Desktop Chrome']},
@@ -32,25 +33,14 @@ export default defineConfig({
       name: 'webkit',
       use: {...devices['Desktop Safari']},
     },
-
-    /* Test against mobile viewports. */
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
-
-    /* Test against branded browsers. */
-    // {
-    //   name: 'Microsoft Edge',
-    //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-    // },
-    // {
-    //   name: 'Google Chrome',
-    //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    // },
+    /* Test against mobile viewports */
+    {
+      name: 'Mobile Chrome',
+      use: {...devices['Pixel 5']},
+    },
+    {
+      name: 'Mobile Safari',
+      use: {...devices['iPhone 12']},
+    },
   ],
 });

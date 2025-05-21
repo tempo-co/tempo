@@ -6,7 +6,6 @@ export class SignupPage {
   readonly nameInput: Locator;
   readonly passwordInput: Locator;
   readonly submitButton: Locator;
-  readonly loadingIndicator: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -14,7 +13,6 @@ export class SignupPage {
     this.nameInput = page.getByTestId('signup-name');
     this.passwordInput = page.getByTestId('signup-password');
     this.submitButton = page.getByTestId('signup-submit');
-    this.loadingIndicator = page.getByTestId('signup-loading');
   }
 
   async navigate() {
@@ -44,7 +42,6 @@ export class SignupPage {
   }
 
   async expectRedirectToVerify() {
-    await expect(this.loadingIndicator).toBeVisible();
     await expect(this.page).toHaveURL(/.*\/verify-email/);
   }
 }

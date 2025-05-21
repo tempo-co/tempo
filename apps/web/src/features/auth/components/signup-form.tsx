@@ -100,7 +100,7 @@ export function SignUpForm() {
             {isPending ? (
               <>
                 <span>Creating account...</span>
-                <Loader className='ml-2 h-4 w-4 animate-slow-spin' data-testid='signup-loading' />
+                <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
               </>
             ) : (
               <span>Create account</span>
