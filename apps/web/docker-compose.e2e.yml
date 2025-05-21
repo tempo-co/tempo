@@ -1,7 +1,7 @@
 services:
-  mailhog:
-    image: mailhog/mailhog
-    container_name: mailhog_test
+  mailpit:
+    image: axllent/mailpit
+    container_name: mailpit_test
     ports:
       - "1025:1025"
       - "8025:8025"
@@ -31,8 +31,8 @@ services:
       NODE_ENV: test
       DB_HOST: postgres
       REDIS_URL: redis://redis:6379
-      EMAIL_HOST: mailhog
+      EMAIL_HOST: mailpit
     depends_on:
-      - mailhog
+      - mailpit
       - redis
       - postgres
