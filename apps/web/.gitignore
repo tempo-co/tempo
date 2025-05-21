@@ -25,3 +25,9 @@ dist-ssr
 
 # TanStack Router auto-generated file
 routeTree.gen.ts
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

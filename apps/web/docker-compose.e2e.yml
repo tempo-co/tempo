@@ -1,0 +1,49 @@
+services:
+  mailhog:
+    image: mailhog/mailhog
+    container_name: mailhog_test
+    ports:
+      - "${EMAIL_PORT}:${EMAIL_PORT}"
+      - "${EMAIL_UI_PORT}:${EMAIL_UI_PORT}"
+    networks:
+      - e2e-network
+
+  redis:
+    image: redis
+    container_name: redis_test
+    ports:
+      - "${REDIS_PORT}:${REDIS_PORT}"
+    networks:
+      - e2e-network
+
+  postgres:
+    image: postgres
+    container_name: postgres_test
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT}:${DB_PORT}"
+    networks:
+      - e2e-network
+
+  api:
+    image: ghcr.io/flair-co/flair-api:latest
+    container_name: api
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.test
+    depends_on:
+      - mailhog
+      - redis
+      - postgres
+    networks:
+      - e2e-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "${API_URL}/health || exit 0"]
+
+networks:
+  e2e-network:
+    driver: bridge

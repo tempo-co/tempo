@@ -24,6 +24,7 @@ export function PasswordInputField<T extends FieldValues, K extends FieldPath<T>
   id,
   autoComplete,
   disabled = false,
+  ...inputProps
 }: PasswordInputFieldProps<T, K>) {
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
 
@@ -34,7 +35,9 @@ export function PasswordInputField<T extends FieldValues, K extends FieldPath<T>
         <div className='flex'>
           <Input
             {...field}
+            {...inputProps}
             id={id}
+            data-testid='signup-password'
             type={isPasswordVisible ? 'text' : 'password'}
             autoCapitalize='none'
             autoComplete={autoComplete}

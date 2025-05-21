@@ -44,6 +44,7 @@ export function SignUpForm() {
                   <Input
                     {...field}
                     id='email'
+                    data-testid='signup-email'
                     placeholder='example@domain.com'
                     type='email'
                     autoCapitalize='none'
@@ -67,6 +68,7 @@ export function SignUpForm() {
                   <Input
                     {...field}
                     id='name'
+                    data-testid='signup-name'
                     type='text'
                     autoCapitalize='none'
                     autoComplete='name'
@@ -84,6 +86,7 @@ export function SignUpForm() {
             name='password'
             render={({field, fieldState}) => (
               <PasswordInputField<SignUpDto, 'password'>
+                data-testid='signup-password'
                 field={field}
                 fieldState={fieldState}
                 label='Password'
@@ -93,11 +96,11 @@ export function SignUpForm() {
               />
             )}
           />
-          <Button type='submit' disabled={isPending} className='mt-2'>
+          <Button type='submit' data-testid='signup-submit' disabled={isPending} className='mt-2'>
             {isPending ? (
               <>
                 <span>Creating account...</span>
-                <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
+                <Loader className='ml-2 h-4 w-4 animate-slow-spin' data-testid='signup-loading' />
               </>
             ) : (
               <span>Create account</span>
