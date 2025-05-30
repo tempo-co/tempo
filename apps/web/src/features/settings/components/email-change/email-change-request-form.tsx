@@ -74,7 +74,7 @@ export function EmailChangeRequestForm({form, setIsOpen, setStep}: EmailChangeRe
               <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
             </>
           ) : (
-            <span>Send verification code</span>
+            <span>Send verification link</span>
           )}
         </Button>
       </div>

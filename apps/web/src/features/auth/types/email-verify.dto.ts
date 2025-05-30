@@ -1,5 +1,7 @@
 import {z} from 'zod';
 
+import {FLOWS} from './flow';
+
 const CODE_REGEX = /^[0-9]{6}$/;
 
 export const searchParamsSchema = z.object({
@@ -8,6 +10,7 @@ export const searchParamsSchema = z.object({
     .optional()
     .catch(undefined),
   email: z.string().email().optional().catch(undefined),
+  flow: z.enum(FLOWS).optional().catch(undefined),
 });
 
 export const emailVerifyDtoSchema = z.object({

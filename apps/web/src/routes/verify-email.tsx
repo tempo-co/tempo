@@ -7,6 +7,7 @@ import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
 import {useVerifyEmail} from '@/features/auth/api/use-verify-email';
+import {useVerifyEmailChange} from '@/features/auth/api/use-verify-email-change';
 import {AuthLayout} from '@/features/auth/components/auth-layout';
 import {VerifyEmailForm} from '@/features/auth/components/verify-email/verify-email-form';
 import {VerifyEmailStatusLayout} from '@/features/auth/components/verify-email/verify-email-status-layout';
@@ -19,16 +20,26 @@ export const Route = createFileRoute('/verify-email')({
   component: VerifyEmailIndex,
   validateSearch: zodValidator(searchParamsSchema),
   beforeLoad: ({context, search}) => {
-    if (!context.isAuthenticated && (!search.code || !search.email)) {
-      toast.warning('Invalid verification link', {
-        description: 'Please log in to send a new verification email.',
-      });
-      throw redirect({to: '/login'});
-    }
-
-    if (context.isAuthenticated && context.isEmailVerified) {
-      toast.info('Your email has already been verified.');
-      throw redirect({to: '/'});
+    const {code, email, flow} = search;
+    if (!context.isAuthenticated) {
+      if (!code || !email || !flow) {
+        toast.warning('Invalid verification link', {
+          description: 'Please log in to send a new verification email.',
+        });
+        throw redirect({to: '/login'});
+      } else {
+        if (flow === 'email-change') {
+          toast.warning('Please log in', {
+            description: 'Please log in to verify your new email.',
+          });
+          throw redirect({to: '/login'});
+        }
+      }
+    } else {
+      if (flow !== 'email-change' && context.isEmailVerified) {
+        toast.info('Your email has already been verified.');
+        throw redirect({to: '/'});
+      }
     }
   },
 });
@@ -37,27 +48,35 @@ function VerifyEmailIndex() {
   const searchParams = Route.useSearch();
   const code = searchParams.code ? String(searchParams.code) : undefined;
   const email = searchParams.email;
+  const flow = searchParams.flow;
 
   const {logOut, isPending: isLoggingOut} = useLogOut();
   const {currentAccount} = useCurrentAccount({skipFetch: true});
   const [showForm, setShowForm] = useState(false);
   const {verifyEmail, isPending: isVerifying, error: verifyError} = useVerifyEmail();
 
+  const {verifyEmailChange, isPending: isVerifyingChange} = useVerifyEmailChange();
+
   useEffect(() => {
-    if (code && email) {
+    if (!code || !email || !flow) return;
+
+    if (flow === 'onboarding') {
       void verifyEmail({code, email});
+    } else {
+      void verifyEmailChange({code, email});
     }
-  }, [code, email, verifyEmail]);
+  }, [code, email, flow, verifyEmail, verifyEmailChange]);
 
   const handleLogout = async () => {
     await logOut();
   };
 
-  if (isVerifying) {
+  if (isVerifying || isVerifyingChange) {
     return (
       <VerifyEmailStatusLayout
         icon={<Loader2 className='h-14 w-14 animate-spin text-primary' />}
         title={<span className='text-xl font-medium text-foreground'>Verifying your email...</span>}
+        flow={flow}
       />
     );
   }
@@ -164,7 +183,7 @@ function VerifyEmailIndex() {
                 variant='link'
                 className='h-auto p-0 text-foreground underline-offset-4 hover:underline'
                 onClick={handleLogout}
-                disabled={isLoggingOut || isVerifying}
+                disabled={isLoggingOut}
               >
                 {isLoggingOut ? 'Logging out...' : 'Log out'}
               </Button>
