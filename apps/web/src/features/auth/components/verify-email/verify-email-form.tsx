@@ -42,6 +42,7 @@ export function VerifyEmailForm() {
             <FormItem className='flex flex-col items-center'>
               <FormControl>
                 <InputOTP
+                  data-testid='input-otp'
                   maxLength={6}
                   {...field}
                   value={String(field.value || '')}
@@ -62,7 +63,12 @@ export function VerifyEmailForm() {
             </FormItem>
           )}
         />
-        <Button type='submit' disabled={isVerifying || !form.formState.isValid} className='w-full'>
+        <Button
+          type='submit'
+          disabled={isVerifying || !form.formState.isValid}
+          className='w-full'
+          data-testid='verify-button'
+        >
           {isVerifying ? (
             <>
               <span>Verifying...</span>

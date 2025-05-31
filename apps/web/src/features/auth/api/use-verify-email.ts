@@ -27,9 +27,7 @@ export const useVerifyEmail = () => {
 
       await navigate({to: '/', replace: true});
 
-      toast.success('Welcome to Flair!', {
-        description: 'Your email has been verified.',
-      });
+      toast.success('Welcome to Flair!', {description: 'Your email has been verified.'});
     },
     retry: false,
   });

@@ -75,6 +75,7 @@ jobs:
         run: |
           cp docker-compose.e2e.yml docker-compose.yml
           docker compose -f docker-compose.yml up -d --build
+          npm run db:seed:e2e
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -86,7 +87,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps
+        run: npx playwright install chromium --with-deps
 
       - name: Run E2E tests
         run: npm run test:e2e

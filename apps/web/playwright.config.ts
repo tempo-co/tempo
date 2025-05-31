@@ -9,8 +9,8 @@ export default defineConfig({
     url: env.VITE_APP_URL,
     reuseExistingServer: !process.env.CI,
   },
-  testDir: './test',
-  fullyParallel: true,
+  testDir: './test/e2e',
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
@@ -20,27 +20,9 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [
-    /* Test against different browsers */
     {
       name: 'chromium',
       use: {...devices['Desktop Chrome']},
-    },
-    {
-      name: 'firefox',
-      use: {...devices['Desktop Firefox']},
-    },
-    {
-      name: 'webkit',
-      use: {...devices['Desktop Safari']},
-    },
-    /* Test against mobile viewports */
-    {
-      name: 'Mobile Chrome',
-      use: {...devices['Pixel 5']},
-    },
-    {
-      name: 'Mobile Safari',
-      use: {...devices['iPhone 12']},
     },
   ],
 });

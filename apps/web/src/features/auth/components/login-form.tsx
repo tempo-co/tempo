@@ -24,8 +24,7 @@ export function LogInForm({returnTo}: LogInFormProps) {
 
   const form = useForm<LogInDto>({
     resolver: zodResolver(logInDtoSchema),
-    mode: 'onBlur',
-    reValidateMode: 'onChange',
+    mode: 'onSubmit',
   });
 
   useEffect(() => {

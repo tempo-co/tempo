@@ -12,8 +12,9 @@
     "lint": "eslint \"{src,test}/**/*.ts\" --report-unused-disable-directives --max-warnings 0 --fix",
     "lint:check": "eslint \"{src,test}/**/*.ts\" --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
+    "db:seed:e2e": "docker compose -f docker-compose.e2e.yml exec -T api node ./dist/scripts/seed.js",
     "test:e2e": "npx playwright test",
-    "test:e2e:local": "npm run docker:test:down && npm run docker:test:up && npx playwright test",
+    "test:e2e:local": "npm run docker:test:down && npm run docker:test:up && npm run db:seed:e2e && npx playwright test",
     "docker:test:up": "docker compose -f docker-compose.e2e.yml pull api && docker compose -f docker-compose.e2e.yml up -d",
     "docker:test:down": "docker compose -f docker-compose.e2e.yml down -v --remove-orphans"
   },

@@ -16,8 +16,7 @@ export function SignUpForm() {
 
   const form = useForm<SignUpDto>({
     resolver: zodResolver(signUpDtoSchema),
-    mode: 'onBlur',
-    reValidateMode: 'onChange',
+    mode: 'onSubmit',
   });
 
   async function onSubmit(formData: SignUpDto) {

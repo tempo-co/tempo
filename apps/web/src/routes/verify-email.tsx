@@ -167,6 +167,7 @@ function VerifyEmailIndex() {
                     className='w-full'
                   >
                     <Button
+                      data-testid='enter-code-manually-button'
                       variant='secondary'
                       className='mt-4 w-full'
                       onClick={() => setShowForm(true)}

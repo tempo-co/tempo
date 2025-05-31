@@ -10,5 +10,5 @@ export const Route = createFileRoute('/')({
 });
 
 function Index() {
-  return <p>Welcome to Flair!</p>;
+  return <p>index</p>;
 }
