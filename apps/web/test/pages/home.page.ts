@@ -6,6 +6,7 @@ export class HomePage {
   readonly sidebarAccountEmail: Locator;
   readonly welcomeToastTitle: Locator;
   readonly welcomeToastDescription: Locator;
+  readonly alreadyVerifiedToastTitle: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -13,6 +14,7 @@ export class HomePage {
     this.sidebarAccountEmail = page.getByTestId('sidebar-current-account-email');
     this.welcomeToastTitle = page.getByText('Welcome to Flair!');
     this.welcomeToastDescription = page.getByText('Your email has been verified.');
+    this.alreadyVerifiedToastTitle = page.getByText('Your email has already been verified.');
   }
 
   async expectToBeOnPage() {

@@ -37,7 +37,7 @@ export function PasswordInputField<T extends FieldValues, K extends FieldPath<T>
             {...field}
             {...inputProps}
             id={id}
-            data-testid='signup-password'
+            data-testid='password-input'
             type={isPasswordVisible ? 'text' : 'password'}
             autoCapitalize='none'
             autoComplete={autoComplete}

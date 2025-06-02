@@ -17,14 +17,8 @@ export function handleAuthenticatedRedirect(context: Context) {
 export function handleUnauthenticatedRedirect(context: Context) {
   if (context.isAuthenticated) {
     if (context.isEmailVerified) {
-      throw redirect({to: '/', search: {returnTo: getFullPath()}});
+      throw redirect({to: '/'});
     }
     throw redirect({to: '/verify-email'});
   }
-}
-
-function getFullPath() {
-  const currentPath = location.pathname;
-  const currentSearch = location.search;
-  return currentSearch ? `${currentPath}${currentSearch}` : currentPath;
 }

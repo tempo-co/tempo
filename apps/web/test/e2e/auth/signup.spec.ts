@@ -1,13 +1,16 @@
 import {faker} from '@faker-js/faker';
 import {expect, test} from '@playwright/test';
-import {EmailUtils} from 'test/utils/email-utils';
 import {HomePage} from 'test/pages/home.page';
+import {LoginPage} from 'test/pages/login.page';
+import {EmailUtils} from 'test/utils/email-utils';
+import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from 'test/utils/seed.constants';
 
 import {SignupPage} from '../../pages/signup.page';
 import {VerifyEmailPage} from '../../pages/verify-email.page';
 
 test.describe.serial('Signup', () => {
   let signupPage: SignupPage;
+  let loginPage: LoginPage;
   let verifyEmailPage: VerifyEmailPage;
   let homePage: HomePage;
 
@@ -15,6 +18,7 @@ test.describe.serial('Signup', () => {
     signupPage = new SignupPage(page);
     verifyEmailPage = new VerifyEmailPage(page);
     homePage = new HomePage(page);
+    loginPage = new LoginPage(page);
     await signupPage.navigate();
   });
 
@@ -22,7 +26,8 @@ test.describe.serial('Signup', () => {
     const email = await signupPage.fillAndSubmitForm();
 
     await verifyEmailPage.expectToBeOnPage();
-    const code = await EmailUtils.extractCodeFromEmail(email);
+    const message = await EmailUtils.findEmailByRecipient(email);
+    const code = EmailUtils.extractCode(message?.Text);
     await verifyEmailPage.inputCodeAndSubmit(code);
 
     await homePage.expectToBeOnPage();
@@ -30,16 +35,46 @@ test.describe.serial('Signup', () => {
     await homePage.expectUserLoggedIn();
   });
 
-  test('should create account, verify email via LINK, and land on home page', async () => {
+  test('should create account, verify email via LINK, and land on home page', async ({page}) => {
     const email = await signupPage.fillAndSubmitForm();
 
     await verifyEmailPage.expectToBeOnPage();
-    const link = await EmailUtils.extractLinkFromEmail(email);
-    await verifyEmailPage.page.goto(link);
+    const message = await EmailUtils.findEmailByRecipient(email);
+    const verificationLink = EmailUtils.extractVerifyEmailLink(message?.Text);
+    await page.goto(verificationLink);
 
     await homePage.expectToBeOnPage();
     await homePage.expectWelcomeMessage();
     await homePage.expectUserLoggedIn();
+
+    // Try reusing the link
+    await page.goto(verificationLink);
+    await homePage.expectToBeOnPage();
+    await homePage.expectUserLoggedIn();
+    await expect(homePage.alreadyVerifiedToastTitle).toBeVisible();
+
+    // Try navigating to /signup as a logged in user
+    await signupPage.navigate();
+    await homePage.expectToBeOnPage();
+    await homePage.expectUserLoggedIn();
+    expect(page.url()).not.toContain('/signup');
+  });
+
+  test('should redirect to home page if a logged in user navigates to /signup', async ({page}) => {
+    await loginPage.navigate();
+    await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
+    await homePage.expectToBeOnPage();
+
+    await signupPage.navigate();
+
+    await homePage.expectToBeOnPage();
+    await homePage.expectUserLoggedIn();
+    expect(page.url()).not.toContain('/signup');
+  });
+
+  test('should redirect to login on link click', async ({page}) => {
+    await signupPage.loginLink.click();
+    expect(page.url()).toContain('/login');
   });
 
   test('should show error for email already in use', async () => {
@@ -55,19 +90,16 @@ test.describe.serial('Signup', () => {
   });
 
   test('should show error for empty email', async () => {
-    await signupPage.emailInput.focus();
     await signupPage.submitButton.click();
     await expect(signupPage.requiredError.first()).toBeVisible();
   });
 
   test('should show error for empty name', async () => {
-    await signupPage.nameInput.focus();
     await signupPage.submitButton.click();
     await expect(signupPage.requiredError.first()).toBeVisible();
   });
 
   test('should show error for empty password', async () => {
-    await signupPage.passwordInput.focus();
     await signupPage.submitButton.click();
     await expect(signupPage.requiredError.first()).toBeVisible();
   });

@@ -37,7 +37,11 @@ function LogIn() {
             <LogInForm />
             <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>
               Don&apos;t have an account?{' '}
-              <Link to='/signup' className='text-foreground underline-offset-4 hover:underline'>
+              <Link
+                to='/signup'
+                className='text-foreground underline-offset-4 hover:underline'
+                data-testid='signup-link'
+              >
                 Sign up
               </Link>
             </p>

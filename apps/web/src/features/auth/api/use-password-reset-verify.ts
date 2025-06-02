@@ -9,6 +9,7 @@ export const usePasswordResetVerify = () => {
     mutateAsync: verifyPasswordReset,
     isPending,
     isSuccess,
+    error,
   } = useMutation<void, HttpError, PasswordResetVerifyDto>({
     mutationFn: async (dto: PasswordResetVerifyDto) => {
       return await api.post<void>('/auth/reset-password/verify', JSON.stringify(dto));
@@ -16,5 +17,5 @@ export const usePasswordResetVerify = () => {
     retry: false,
   });
 
-  return {verifyPasswordReset, isPending, isSuccess};
+  return {verifyPasswordReset, isPending, isSuccess, error};
 };

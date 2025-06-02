@@ -43,7 +43,11 @@ function SignUp() {
             </div>
             <p className='pt-4 text-center text-sm text-muted-foreground'>
               Already have an account?{' '}
-              <Link to='/login' className='text-foreground underline-offset-4 hover:underline'>
+              <Link
+                to='/login'
+                className='text-foreground underline-offset-4 hover:underline'
+                data-testid='login-link'
+              >
                 Log in
               </Link>
             </p>

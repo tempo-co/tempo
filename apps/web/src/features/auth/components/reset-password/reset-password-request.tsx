@@ -80,6 +80,7 @@ export function ResetPasswordRequest() {
                       variant='link'
                       onClick={handleResend}
                       className='h-auto p-0 text-primary hover:underline'
+                      data-testid='resend-button'
                     >
                       resend
                     </Button>
@@ -90,6 +91,7 @@ export function ResetPasswordRequest() {
                   variant='link'
                   onClick={handleTryAgain}
                   className='h-auto p-0 text-primary hover:underline'
+                  data-testid='use-different-email-button'
                 >
                   use a different email
                 </Button>
@@ -100,12 +102,17 @@ export function ResetPasswordRequest() {
                   onClick={openGmail}
                   variant='secondary'
                   className='mt-4 flex h-auto items-center gap-2'
+                  data-testid='open-gmail-button'
                 >
                   Open Gmail <ExternalLink size={16} />
                 </Button>
               </div>
               <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>
-                <Link to='/login' className='text-foreground underline-offset-4 hover:underline'>
+                <Link
+                  to='/login'
+                  className='text-foreground underline-offset-4 hover:underline'
+                  data-testid='return-to-login-link'
+                >
                   Return to log in
                 </Link>
               </p>
@@ -140,19 +147,29 @@ export function ResetPasswordRequest() {
                             autoComplete='email'
                             autoCorrect='off'
                             disabled={isPending}
+                            data-testid='email-input'
                           />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <Button type='submit' className='mt-2 w-full' disabled={isPending}>
+                  <Button
+                    type='submit'
+                    className='mt-2 w-full'
+                    disabled={isPending}
+                    data-testid='continue-button'
+                  >
                     {isPending ? 'Continuing...' : 'Continue'}
                   </Button>
                 </form>
               </Form>
               <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>
-                <Link to='/login' className='text-foreground underline-offset-4 hover:underline'>
+                <Link
+                  to='/login'
+                  className='text-foreground underline-offset-4 hover:underline'
+                  data-testid='return-to-login-link'
+                >
                   Return to log in
                 </Link>
               </p>

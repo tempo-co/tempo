@@ -112,6 +112,7 @@ function VerifyEmailIndex() {
             <Link
               to='/login'
               className='text-sm text-foreground underline-offset-4 hover:underline'
+              data-test-id='return-to-login-link'
             >
               Log in
             </Link>

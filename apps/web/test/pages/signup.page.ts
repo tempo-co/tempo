@@ -13,12 +13,13 @@ export class SignupPage {
   readonly nameTooLongError: Locator;
   readonly passwordTooShortError: Locator;
   readonly passwordTooLongError: Locator;
+  readonly loginLink: Locator;
 
   constructor(page: Page) {
     this.page = page;
-    this.emailInput = page.getByTestId('signup-email');
-    this.nameInput = page.getByTestId('signup-name');
-    this.passwordInput = page.getByTestId('signup-password');
+    this.emailInput = page.getByTestId('signup-email-input');
+    this.nameInput = page.getByTestId('signup-name-input');
+    this.passwordInput = page.getByTestId('password-input');
     this.submitButton = page.getByTestId('signup-submit');
     this.requiredError = page.getByText('Required');
     this.emailInvalidError = page.getByText('Please enter a valid email address.');
@@ -26,6 +27,7 @@ export class SignupPage {
     this.nameTooLongError = page.getByText('Name must be less than 256 characters.');
     this.passwordTooShortError = page.getByText('Too short. Must be at least 8 characters.');
     this.passwordTooLongError = page.getByText('Too long. Must be less than 256 characters.');
+    this.loginLink = page.getByTestId('login-link');
   }
 
   async navigate() {
