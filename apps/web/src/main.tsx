@@ -5,15 +5,25 @@ import ReactDOM from 'react-dom/client';
 import {App} from './app';
 import './index.css';
 
-const root = document.getElementById('root');
-if (!root) throw new Error('No root element found');
+const rootElement = document.getElementById('root');
+if (!rootElement) throw new Error('No root element found');
 
 const queryClient = new QueryClient();
 
-ReactDOM.createRoot(root).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </React.StrictMode>,
+export const AppRoot = () => (
+  <QueryClientProvider client={queryClient}>
+    <App />
+  </QueryClientProvider>
 );
+
+const root = ReactDOM.createRoot(rootElement);
+
+if (import.meta.env.DEV) {
+  root.render(
+    <React.StrictMode>
+      <AppRoot />
+    </React.StrictMode>,
+  );
+} else {
+  root.render(<AppRoot />);
+}

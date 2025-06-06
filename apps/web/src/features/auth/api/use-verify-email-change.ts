@@ -30,7 +30,7 @@ export const useVerifyEmailChange = () => {
       });
     },
     onError: () => {
-      toast.warning('Invalid verification link', {
+      toast.error('Invalid verification link', {
         description: 'Please request a new link.',
       });
       throw navigate({to: '/'});

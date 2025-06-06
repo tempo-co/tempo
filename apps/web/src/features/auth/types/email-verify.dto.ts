@@ -13,6 +13,8 @@ export const searchParamsSchema = z.object({
   flow: z.enum(FLOWS).optional().catch(undefined),
 });
 
+export type EmailVerifySearchParams = z.infer<typeof searchParamsSchema>;
+
 export const emailVerifyDtoSchema = z.object({
   code: z.string().regex(CODE_REGEX, {message: 'Please enter the 6-digit verification code.'}),
   email: z.string().email(),

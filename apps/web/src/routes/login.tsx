@@ -3,6 +3,7 @@ import {zodValidator} from '@tanstack/zod-adapter';
 import {AnimatePresence, motion} from 'framer-motion';
 import {z} from 'zod';
 
+import {Button} from '@/components/ui/button';
 import {AuthLayout} from '@/features/auth/components/auth-layout';
 import {LogInForm} from '@/features/auth/components/login-form';
 import {switchContentVariants} from '@/features/auth/constants/animations';
@@ -37,13 +38,11 @@ function LogIn() {
             <LogInForm />
             <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>
               Don&apos;t have an account?{' '}
-              <Link
-                to='/signup'
-                className='text-foreground underline-offset-4 hover:underline'
-                data-testid='signup-link'
-              >
-                Sign up
-              </Link>
+              <Button variant='link' asChild className='h-fit px-1 py-0'>
+                <Link to='/signup' className='text-foreground' data-testid='signup-link'>
+                  Sign up
+                </Link>
+              </Button>
             </p>
           </motion.div>
         </AnimatePresence>

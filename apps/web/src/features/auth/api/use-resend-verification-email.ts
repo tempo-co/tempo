@@ -22,7 +22,7 @@ export const useResendVerificationEmail = () => {
     },
     onSuccess: () => {
       toast.success('New verification email sent', {
-        description: `Please check your inbox at ${currentAccount?.email}.`,
+        description: `Please check your inbox at ${currentAccount?.email}`,
       });
     },
     retry: false,

@@ -1,6 +1,7 @@
 import {Link, createFileRoute} from '@tanstack/react-router';
 import {AnimatePresence, motion} from 'framer-motion';
 
+import {Button} from '@/components/ui/button';
 import {AuthLayout} from '@/features/auth/components/auth-layout';
 import {SignUpForm} from '@/features/auth/components/signup-form';
 import {switchContentVariants} from '@/features/auth/constants/animations';
@@ -31,25 +32,26 @@ function SignUp() {
             <div className='space-y-1 px-4 pt-4 text-center text-sm text-muted-foreground'>
               <p>By signing up, you agree to our </p>
               <p>
-                <Link to='/signup' className='text-foreground underline-offset-4 hover:underline'>
-                  Terms of Service
-                </Link>{' '}
+                <Button variant='link' asChild className='h-fit px-1 py-0'>
+                  <Link to='/signup' className='text-foreground'>
+                    Terms of Service
+                  </Link>
+                </Button>{' '}
                 and{' '}
-                <Link to='/signup' className='text-foreground underline-offset-4 hover:underline'>
-                  Privacy Policy
-                </Link>
-                .
+                <Button variant='link' asChild className='h-fit px-1 py-0'>
+                  <Link to='/signup' className='text-foreground'>
+                    Privacy Policy
+                  </Link>
+                </Button>
               </p>
             </div>
             <p className='pt-4 text-center text-sm text-muted-foreground'>
               Already have an account?{' '}
-              <Link
-                to='/login'
-                className='text-foreground underline-offset-4 hover:underline'
-                data-testid='login-link'
-              >
-                Log in
-              </Link>
+              <Button variant='link' asChild className='h-fit px-1 py-0'>
+                <Link to='/login' className='text-foreground' data-testid='login-link'>
+                  Log in
+                </Link>
+              </Button>
             </p>
           </motion.div>
         </AnimatePresence>

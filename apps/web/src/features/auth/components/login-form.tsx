@@ -85,13 +85,11 @@ export function LogInForm({returnTo}: LogInFormProps) {
               <FormItem>
                 <div className='flex items-center justify-between'>
                   <FormLabel htmlFor='password'>Password</FormLabel>
-                  <Link
-                    to='/reset-password'
-                    className='text-sm text-primary hover:underline'
-                    data-testid='forgot-password-link'
-                  >
-                    Forgot your password?
-                  </Link>
+                  <Button variant='link' asChild className='h-fit p-0 pl-1'>
+                    <Link to='/reset-password' data-testid='forgot-password-link'>
+                      Forgot your password?
+                    </Link>
+                  </Button>
                 </div>
                 <FormControl>
                   <PasswordInputField<LogInDto, 'password'>

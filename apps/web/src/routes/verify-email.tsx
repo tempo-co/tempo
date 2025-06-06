@@ -9,6 +9,7 @@ import {Button} from '@/components/ui/button';
 import {useVerifyEmail} from '@/features/auth/api/use-verify-email';
 import {useVerifyEmailChange} from '@/features/auth/api/use-verify-email-change';
 import {AuthLayout} from '@/features/auth/components/auth-layout';
+import {ResendCodeButton} from '@/features/auth/components/resend-code-button';
 import {VerifyEmailForm} from '@/features/auth/components/verify-email/verify-email-form';
 import {VerifyEmailStatusLayout} from '@/features/auth/components/verify-email/verify-email-status-layout';
 import {switchContentVariants} from '@/features/auth/constants/animations';
@@ -23,20 +24,28 @@ export const Route = createFileRoute('/verify-email')({
     const {code, email, flow} = search;
     if (!context.isAuthenticated) {
       if (!code || !email || !flow) {
-        toast.warning('Invalid verification link', {
-          description: 'Please log in to send a new verification email.',
+        toast.error('Invalid verification link', {
+          description: 'Please log in to request a new link.',
+          id: 'invalid-verification-link',
         });
         throw redirect({to: '/login'});
       } else {
-        if (flow === 'email-change') {
-          toast.warning('Please log in', {
-            description: 'Please log in to verify your new email.',
+        if (search.flow === 'email-change') {
+          toast.info('Please log in', {
+            description: 'You must be authenticated to verify your new email.',
           });
           throw redirect({to: '/login'});
         }
       }
     } else {
-      if (flow !== 'email-change' && context.isEmailVerified) {
+      if ((!code || !email || !flow) && context.isEmailVerified) {
+        toast.error('Invalid verification link', {
+          description: 'The link you accessed is invalid or incomplete.',
+          id: 'invalid-verification-link',
+        });
+        throw redirect({to: '/'});
+      }
+      if (search.flow === 'onboarding' && context.isEmailVerified) {
         toast.info('Your email has already been verified.');
         throw redirect({to: '/'});
       }
@@ -62,7 +71,7 @@ function VerifyEmailIndex() {
 
     if (flow === 'onboarding') {
       void verifyEmail({code, email});
-    } else {
+    } else if (flow === 'email-change') {
       void verifyEmailChange({code, email});
     }
   }, [code, email, flow, verifyEmail, verifyEmailChange]);
@@ -74,9 +83,8 @@ function VerifyEmailIndex() {
   if (isVerifying || isVerifyingChange) {
     return (
       <VerifyEmailStatusLayout
-        icon={<Loader2 className='h-14 w-14 animate-spin text-primary' />}
-        title={<span className='text-xl font-medium text-foreground'>Verifying your email...</span>}
-        flow={flow}
+        icon={<Loader2 className='h-12 w-12 animate-spin text-primary' />}
+        title='Verifying your email...'
       />
     );
   }
@@ -85,11 +93,15 @@ function VerifyEmailIndex() {
     if (verifyError.status === 429) {
       return (
         <VerifyEmailStatusLayout
-          icon={<Hourglass className='h-14 w-14 text-destructive' />}
+          icon={<Hourglass className='h-12 w-12 text-destructive' />}
           title='Too many attempts'
           description="You're trying to verify your email too often. Please try again later."
           action={
-            <Link to='/' className='text-sm text-foreground underline-offset-4 hover:underline'>
+            <Link
+              to='/'
+              className='text-sm text-foreground underline-offset-4 hover:underline'
+              data-testid='go-home-link'
+            >
               Go back home
             </Link>
           }
@@ -100,7 +112,7 @@ function VerifyEmailIndex() {
       const emailContext = email ? <span className='text-foreground'>{email}</span> : 'your email';
       return (
         <VerifyEmailStatusLayout
-          icon={<MailX className='h-14 w-14 text-destructive' />}
+          icon={<MailX className='h-12 w-12 text-destructive' />}
           title='Invalid or expired verification link.'
           description={
             <>
@@ -141,32 +153,23 @@ function VerifyEmailIndex() {
               <p className='mt-1 max-w-[21rem] px-4'>
                 Please check your inbox at{' '}
                 <span className='inline-block max-w-full truncate align-bottom font-medium text-foreground'>
-                  {currentAccount?.email}.
+                  {currentAccount?.email}
                 </span>
               </p>
             </div>
             <div className='w-full px-4'>
               <AnimatePresence mode='wait' initial={false}>
-                {showForm ? (
-                  <motion.div
-                    key='verify-form'
-                    variants={switchContentVariants}
-                    initial='hidden'
-                    animate='visible'
-                    exit='exit'
-                    className='w-full'
-                  >
+                <motion.div
+                  key='verify-button'
+                  variants={switchContentVariants}
+                  initial='hidden'
+                  animate='visible'
+                  exit='exit'
+                  className='flex w-full flex-col gap-4'
+                >
+                  {showForm ? (
                     <VerifyEmailForm />
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key='verify-button'
-                    variants={switchContentVariants}
-                    initial='hidden'
-                    animate='visible'
-                    exit='exit'
-                    className='w-full'
-                  >
+                  ) : (
                     <Button
                       data-testid='enter-code-manually-button'
                       variant='secondary'
@@ -175,8 +178,9 @@ function VerifyEmailIndex() {
                     >
                       Enter code manually
                     </Button>
-                  </motion.div>
-                )}
+                  )}
+                  <ResendCodeButton />
+                </motion.div>
               </AnimatePresence>
             </div>
             <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>

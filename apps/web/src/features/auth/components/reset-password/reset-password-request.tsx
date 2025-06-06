@@ -40,10 +40,7 @@ export function ResetPasswordRequest() {
     setHasResent(false);
   };
 
-  const openGmail = () => {
-    const searchQuery = encodeURIComponent('from:no-reply@flair.com');
-    window.open(`https://mail.google.com/mail/u/0/#search/${searchQuery}`, '_blank');
-  };
+  const gmailUrl = `https://mail.google.com/mail/u/0/#search/${encodeURIComponent('from:no-reply@flair.com')}`;
 
   return (
     <AuthLayout title={isSuccess ? 'Check your email' : 'Reset your password'}>
@@ -79,7 +76,7 @@ export function ResetPasswordRequest() {
                     <Button
                       variant='link'
                       onClick={handleResend}
-                      className='h-auto p-0 text-primary hover:underline'
+                      className='h-auto p-0 text-foreground'
                       data-testid='resend-button'
                     >
                       resend
@@ -90,7 +87,7 @@ export function ResetPasswordRequest() {
                 <Button
                   variant='link'
                   onClick={handleTryAgain}
-                  className='h-auto p-0 text-primary hover:underline'
+                  className='h-auto p-0 text-foreground'
                   data-testid='use-different-email-button'
                 >
                   use a different email
@@ -99,22 +96,21 @@ export function ResetPasswordRequest() {
               </p>
               <div className='flex justify-center'>
                 <Button
-                  onClick={openGmail}
-                  variant='secondary'
+                  asChild
                   className='mt-4 flex h-auto items-center gap-2'
                   data-testid='open-gmail-button'
                 >
-                  Open Gmail <ExternalLink size={16} />
+                  <Link to={gmailUrl} target='_blank' rel='noopener noreferrer'>
+                    Open Gmail <ExternalLink size={16} />
+                  </Link>
                 </Button>
               </div>
               <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>
-                <Link
-                  to='/login'
-                  className='text-foreground underline-offset-4 hover:underline'
-                  data-testid='return-to-login-link'
-                >
-                  Return to log in
-                </Link>
+                <Button variant='link' asChild>
+                  <Link to='/login' className='text-foreground' data-testid='return-to-login-link'>
+                    Log in
+                  </Link>
+                </Button>
               </p>
             </motion.div>
           ) : (
@@ -165,13 +161,11 @@ export function ResetPasswordRequest() {
                 </form>
               </Form>
               <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>
-                <Link
-                  to='/login'
-                  className='text-foreground underline-offset-4 hover:underline'
-                  data-testid='return-to-login-link'
-                >
-                  Return to log in
-                </Link>
+                <Button variant='link' asChild>
+                  <Link to='/login' className='text-foreground' data-testid='return-to-login-link'>
+                    Log in
+                  </Link>
+                </Button>
               </p>
             </motion.div>
           )}

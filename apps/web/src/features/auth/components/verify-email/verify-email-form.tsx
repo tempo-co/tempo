@@ -10,7 +10,6 @@ import {useCurrentAccount} from '@/hooks/use-current-account';
 
 import {useVerifyEmail} from '../../api/use-verify-email';
 import {EmailVerifyDto, emailVerifyDtoSchema} from '../../types/email-verify.dto';
-import {ResendCodeButton} from '../resend-code-button';
 
 export function VerifyEmailForm() {
   const {verifyEmail, isPending: isVerifying} = useVerifyEmail();
@@ -78,7 +77,6 @@ export function VerifyEmailForm() {
             <span>Verify email</span>
           )}
         </Button>
-        <ResendCodeButton />
       </form>
     </Form>
   );
