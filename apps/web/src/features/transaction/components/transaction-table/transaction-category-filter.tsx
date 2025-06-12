@@ -14,7 +14,6 @@ import {
   CommandSeparator,
 } from '@/components/ui/command';
 import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
-import {ScrollArea} from '@/components/ui/scroll-area';
 import {Separator} from '@/components/ui/separator';
 import {Category} from '@/types/category';
 import {cn} from '@/utils/cn';
@@ -83,43 +82,41 @@ export function TransactionCategoryFilter({filters, setFilters}: TransactionCate
           <ChevronDown className='text-muted-foreground' />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className='w-[14rem] p-0' align='start'>
+      <PopoverContent className='w-fit p-0' align='start'>
         <Command>
-          <ScrollArea className='h-fit'>
-            <CommandList>
-              <CommandEmpty>No results found.</CommandEmpty>
-              <CommandGroup>
-                {Object.values(Category).map((category) => {
-                  const isSelected = selectedValues.includes(category);
-                  return (
-                    <CommandItem key={category} onSelect={() => handleSelect(category)}>
-                      <div
-                        className={cn(
-                          'mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary',
-                          isSelected
-                            ? 'bg-primary text-primary-foreground'
-                            : 'opacity-50 [&_svg]:invisible',
-                        )}
-                      >
-                        <Check />
-                      </div>
-                      <CategoryBadge category={category} />
-                    </CommandItem>
-                  );
-                })}
-              </CommandGroup>
-              {selectedValues.length > 0 && (
-                <>
-                  <CommandSeparator />
-                  <CommandGroup>
-                    <CommandItem onSelect={handleReset} className='justify-center text-center'>
-                      Reset
-                    </CommandItem>
-                  </CommandGroup>
-                </>
-              )}
-            </CommandList>
-          </ScrollArea>
+          <CommandList className='max-h-fit'>
+            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandGroup>
+              {Object.values(Category).map((category) => {
+                const isSelected = selectedValues.includes(category);
+                return (
+                  <CommandItem key={category} onSelect={() => handleSelect(category)}>
+                    <div
+                      className={cn(
+                        'mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary',
+                        isSelected
+                          ? 'bg-primary text-primary-foreground'
+                          : 'opacity-50 [&_svg]:invisible',
+                      )}
+                    >
+                      <Check />
+                    </div>
+                    <CategoryBadge category={category} />
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+            {selectedValues.length > 0 && (
+              <>
+                <CommandSeparator />
+                <CommandGroup>
+                  <CommandItem onSelect={handleReset} className='justify-center text-center'>
+                    Reset
+                  </CommandItem>
+                </CommandGroup>
+              </>
+            )}
+          </CommandList>
         </Command>
       </PopoverContent>
     </Popover>

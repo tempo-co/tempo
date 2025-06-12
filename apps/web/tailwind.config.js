@@ -13,7 +13,7 @@ export default {
     },
     extend: {
       fontFamily: {
-        geist: ['Geist', 'sans-serif'],
+        lexend: ['Lexend', 'sans-serif'],
       },
       colors: {
         border: 'hsl(var(--border))',
