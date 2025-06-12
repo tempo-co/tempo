@@ -7,7 +7,7 @@ type Params = {
   params: EmailVerifySearchParams | Record<string, string>;
 };
 
-export const invalidVerifyEmailSearchParams: Array<Params> = [
+export const invalidEmailVerifySearchParams: Array<Params> = [
   {
     name: 'no param',
     params: {},
@@ -21,40 +21,24 @@ export const invalidVerifyEmailSearchParams: Array<Params> = [
     params: {email: faker.internet.email()},
   },
   {
-    name: 'only flow (onboarding) param',
-    params: {flow: 'onboarding'},
+    name: 'code but missing email',
+    params: {code: faker.string.numeric(6)},
   },
   {
-    name: 'only flow (email-change) param',
-    params: {flow: 'email-change'},
+    name: 'email but missing code',
+    params: {email: faker.internet.email()},
   },
   {
-    name: 'code and email, missing flow',
-    params: {code: faker.string.numeric(6), email: faker.internet.email()},
+    name: 'email and code but invalid email format',
+    params: {email: 'invalid-email', code: faker.string.numeric(6)},
   },
   {
-    name: 'code and flow, missing email',
-    params: {code: faker.string.numeric(6), flow: 'onboarding'},
+    name: 'email and code but invalid code format (non-numeric)',
+    params: {email: faker.internet.email(), code: 'abcdef'},
   },
   {
-    name: 'email and flow, missing code',
-    params: {email: faker.internet.email(), flow: 'email-change'},
-  },
-  {
-    name: 'all params but invalid email format',
-    params: {email: 'invalid-email', code: faker.string.numeric(6), flow: 'onboarding'},
-  },
-  {
-    name: 'all params but invalid code format (non-numeric)',
-    params: {email: faker.internet.email(), code: 'abcdef', flow: 'email-change'},
-  },
-  {
-    name: 'all params but invalid code format (wrong length)',
-    params: {email: faker.internet.email(), code: '123', flow: 'onboarding'},
-  },
-  {
-    name: 'all params but invalid flow value',
-    params: {email: faker.internet.email(), code: faker.string.numeric(6), flow: 'invalidflow'},
+    name: 'email and code but invalid code format (wrong length)',
+    params: {email: faker.internet.email(), code: '123'},
   },
   {
     name: 'unexpected param and missing required ones',
@@ -62,14 +46,10 @@ export const invalidVerifyEmailSearchParams: Array<Params> = [
   },
   {
     name: 'param with no value (email)',
-    params: {email: '', code: faker.string.numeric(6), flow: 'onboarding'},
+    params: {email: '', code: faker.string.numeric(6)},
   },
   {
     name: 'param with no value (code)',
-    params: {email: faker.internet.email(), code: '', flow: 'email-change'},
-  },
-  {
-    name: 'param with no value (flow)',
-    params: {email: faker.internet.email(), code: faker.string.numeric(6), flow: ''},
+    params: {email: faker.internet.email(), code: ''},
   },
 ];

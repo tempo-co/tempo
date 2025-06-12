@@ -35,22 +35,45 @@ export class EmailUtils {
     }
   }
 
-  static async countEmailsByRecipient(recipientEmail: string, initialDelayMs: number = 1000) {
-    await this._sleep(initialDelayMs);
+  static async countEmailsByRecipient(
+    recipientEmail: string,
+    expectedCount: number,
+    retries: number = 10,
+    delayMs: number = 200,
+  ) {
+    let lastKnownCount = 0;
+    for (let i = 0; i < retries; i++) {
+      const res = await fetch(`${this.EMAIL_UI_URL}/api/v1/messages`);
+      const data = (await res.json()) as {messages: Message[]};
 
-    const res = await fetch(`${this.EMAIL_UI_URL}/api/v1/messages`);
-    const data = (await res.json()) as {messages: Message[]};
+      const currentCount = data.messages.filter((msg) =>
+        msg.To.some((r) => r.Address && r.Address.toLowerCase() === recipientEmail.toLowerCase()),
+      ).length;
 
-    const count = data.messages.filter((msg) =>
-      msg.To.some((r) => r.Address && r.Address.toLowerCase() === recipientEmail.toLowerCase()),
-    ).length;
-    return count;
+      lastKnownCount = currentCount;
+      if (currentCount === expectedCount) {
+        return currentCount;
+      }
+
+      if (i < retries - 1) {
+        await this._sleep(delayMs);
+      }
+    }
+    return lastKnownCount;
   }
 
-  static extractVerifyEmailLink(body?: string) {
+  static extractOnboardingVerifyEmailLink(body?: string) {
     if (!body) return '';
     const linkRegex =
-      /\(\s*((?:https?:\/\/)[^\s)]+\/verify-email\?email=[^&"]+&code=\d{6}&flow=onboarding[^\s)]*)\s*\)/i;
+      /\(\s*((?:https?:\/\/)[^\s)]+\/verify-email\?email=[^&"]+&code=\d{6}[^\s)]*)\s*\)/i;
+    const match = body.match(linkRegex);
+    return match ? match[1] : '';
+  }
+
+  static extractEmailChangeLink(body?: string) {
+    if (!body) return '';
+    const linkRegex =
+      /(https?:\/\/[^\s"'<>]*\/verify-email-change\?email=[^&"\s<>]+&token=[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}[^\s"'<>]*)/i;
     const match = body.match(linkRegex);
     return match ? match[1] : '';
   }
@@ -68,7 +91,7 @@ export class EmailUtils {
     if (!body) return '';
     const SIX_DIGIT_REGEX = /(\d{6})/i;
     const pattern = new RegExp(
-      `You can also manually enter the code below:?\\s*(${SIX_DIGIT_REGEX.source})`,
+      `You can also manually enter the code below.?\\s*(${SIX_DIGIT_REGEX.source})`,
       'i',
     );
     const match = body.match(pattern);

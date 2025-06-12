@@ -15,11 +15,10 @@ test.describe('Login', () => {
   let homePage: HomePage;
   let verifyEmailPage: VerifyEmailPage;
 
-  test.beforeEach(async ({page}) => {
+  test.beforeEach(({page}) => {
     loginPage = new LoginPage(page);
     homePage = new HomePage(page);
     verifyEmailPage = new VerifyEmailPage(page);
-    await loginPage.navigate();
   });
 
   test.describe('Successful login flow', () => {
@@ -30,7 +29,6 @@ test.describe('Login', () => {
     });
 
     test('should redirect to home page if a logged in user navigates to /login', async ({page}) => {
-      await loginPage.navigate();
       await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
       await homePage.expectToBeOnPage();
 
@@ -47,11 +45,13 @@ test.describe('Login', () => {
     });
 
     test('should navigate to signup on link click', async ({page}) => {
+      await loginPage.navigate();
       await loginPage.signupLink.click();
       expect(page.url()).toContain('/signup');
     });
 
     test('should navigate to reset password page when link is clicked', async ({page}) => {
+      await loginPage.navigate();
       await loginPage.forgotPasswordLink.click();
       await expect(page).toHaveURL('/reset-password');
     });

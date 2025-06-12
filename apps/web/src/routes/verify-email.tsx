@@ -1,17 +1,15 @@
-import {Link, createFileRoute, redirect} from '@tanstack/react-router';
+import {Link, createFileRoute, redirect, useRouter} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
 import {AnimatePresence, motion} from 'framer-motion';
-import {Hourglass, Loader2, MailX} from 'lucide-react';
+import {Loader2} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
 import {useVerifyEmail} from '@/features/auth/api/use-verify-email';
-import {useVerifyEmailChange} from '@/features/auth/api/use-verify-email-change';
 import {AuthLayout} from '@/features/auth/components/auth-layout';
 import {ResendCodeButton} from '@/features/auth/components/resend-code-button';
 import {VerifyEmailForm} from '@/features/auth/components/verify-email/verify-email-form';
-import {VerifyEmailStatusLayout} from '@/features/auth/components/verify-email/verify-email-status-layout';
 import {switchContentVariants} from '@/features/auth/constants/animations';
 import {searchParamsSchema} from '@/features/auth/types/email-verify.dto';
 import {useCurrentAccount} from '@/hooks/use-current-account';
@@ -21,118 +19,137 @@ export const Route = createFileRoute('/verify-email')({
   component: VerifyEmailIndex,
   validateSearch: zodValidator(searchParamsSchema),
   beforeLoad: ({context, search}) => {
-    const {code, email, flow} = search;
+    const hasValidParams = !!(search.code && search.email);
+
+    if (context.isAuthenticated && context.isEmailVerified) {
+      toast.info('Your email has already been verified.', {id: 'email-already-verified'});
+      throw redirect({to: '/'});
+    }
+
     if (!context.isAuthenticated) {
-      if (!code || !email || !flow) {
+      if (!hasValidParams) {
         toast.error('Invalid verification link', {
           description: 'Please log in to request a new link.',
           id: 'invalid-verification-link',
         });
         throw redirect({to: '/login'});
-      } else {
-        if (search.flow === 'email-change') {
-          toast.info('Please log in', {
-            description: 'You must be authenticated to verify your new email.',
-          });
-          throw redirect({to: '/login'});
-        }
       }
-    } else {
-      if ((!code || !email || !flow) && context.isEmailVerified) {
-        toast.error('Invalid verification link', {
-          description: 'The link you accessed is invalid or incomplete.',
-          id: 'invalid-verification-link',
-        });
-        throw redirect({to: '/'});
-      }
-      if (search.flow === 'onboarding' && context.isEmailVerified) {
-        toast.info('Your email has already been verified.');
-        throw redirect({to: '/'});
-      }
+      return;
     }
   },
 });
 
 function VerifyEmailIndex() {
+  const router = useRouter();
   const searchParams = Route.useSearch();
   const code = searchParams.code ? String(searchParams.code) : undefined;
   const email = searchParams.email;
-  const flow = searchParams.flow;
 
   const {logOut, isPending: isLoggingOut} = useLogOut();
-  const {currentAccount} = useCurrentAccount({skipFetch: true});
+  const {currentAccount, isAuthenticated} = useCurrentAccount({skipFetch: true});
   const [showForm, setShowForm] = useState(false);
-  const {verifyEmail, isPending: isVerifying, error: verifyError} = useVerifyEmail();
+  const {verifyEmail, isPending, error, reset} = useVerifyEmail();
 
-  const {verifyEmailChange, isPending: isVerifyingChange} = useVerifyEmailChange();
-
+  const hasValidParams = !!(code && email);
   useEffect(() => {
-    if (!code || !email || !flow) return;
-
-    if (flow === 'onboarding') {
+    if (hasValidParams) {
       void verifyEmail({code, email});
-    } else if (flow === 'email-change') {
-      void verifyEmailChange({code, email});
     }
-  }, [code, email, flow, verifyEmail, verifyEmailChange]);
+  }, [code, email, verifyEmail, hasValidParams]);
 
   const handleLogout = async () => {
     await logOut();
   };
 
-  if (isVerifying || isVerifyingChange) {
+  if (error && error.status === 400) {
     return (
-      <VerifyEmailStatusLayout
-        icon={<Loader2 className='h-12 w-12 animate-spin text-primary' />}
-        title='Verifying your email...'
-      />
+      <AuthLayout title={'Invalid or expired verification link'}>
+        <div className='relative flex flex-col'>
+          <AnimatePresence initial={false} mode='wait'>
+            <motion.div
+              key='error-view-fade'
+              variants={switchContentVariants}
+              initial='hidden'
+              animate='visible'
+              exit='exit'
+              className='flex w-full flex-col text-center'
+            >
+              <p className='text-sm text-muted-foreground'>
+                We couldn&apos;t verify{' '}
+                {email ? <span className='text-foreground'>{email}</span> : 'your email'} using this
+                link.{!isAuthenticated && ' Please request a new link by logging in.'}
+              </p>
+              <div className='!mt-8 text-foreground'>
+                {isAuthenticated ? (
+                  <ResendCodeButton
+                    variant='default'
+                    className='w-fit'
+                    onSuccess={() => {
+                      void router.navigate({to: '/verify-email', search: {}});
+                      reset();
+                    }}
+                  />
+                ) : (
+                  <Button asChild>
+                    <Link to='/login' data-testid='log-in-button'>
+                      Log in
+                    </Link>
+                  </Button>
+                )}
+              </div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </AuthLayout>
     );
   }
 
-  if (verifyError) {
-    if (verifyError.status === 429) {
-      return (
-        <VerifyEmailStatusLayout
-          icon={<Hourglass className='h-12 w-12 text-destructive' />}
-          title='Too many attempts'
-          description="You're trying to verify your email too often. Please try again later."
-          action={
-            <Link
-              to='/'
-              className='text-sm text-foreground underline-offset-4 hover:underline'
-              data-testid='go-home-link'
+  if (error && error.status === 429) {
+    return (
+      <AuthLayout title={'Rate limit exceeded'}>
+        <div className='relative flex flex-col'>
+          <AnimatePresence initial={false} mode='wait'>
+            <motion.div
+              key='error-view-fade'
+              variants={switchContentVariants}
+              initial='hidden'
+              animate='visible'
+              exit='exit'
+              className='flex w-full flex-col space-y-4 text-center text-sm text-muted-foreground'
             >
-              Go back home
-            </Link>
-          }
-          maxWidth='max-w-[20rem]'
-        />
-      );
-    } else {
-      const emailContext = email ? <span className='text-foreground'>{email}</span> : 'your email';
-      return (
-        <VerifyEmailStatusLayout
-          icon={<MailX className='h-12 w-12 text-destructive' />}
-          title='Invalid or expired verification link.'
-          description={
-            <>
-              We couldn&apos;t verify {emailContext} using this link. Please request a new
-              verification email by logging in.
-            </>
-          }
-          action={
-            <Link
-              to='/login'
-              className='text-sm text-foreground underline-offset-4 hover:underline'
-              data-test-id='return-to-login-link'
+              <p>You&apos;re trying to verify your email too often.</p>
+              <p className='!mt-0 mb-2'>Please try again later.</p>
+              <div className='text-foreground'>
+                <Button variant='link' asChild className='mt-4'>
+                  <Link to='/'>Go home</Link>
+                </Button>
+              </div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </AuthLayout>
+    );
+  }
+
+  if (hasValidParams || isPending) {
+    return (
+      <AuthLayout title={'Verifying your email...'} disabledLogoLink>
+        <div className='relative flex flex-col'>
+          <AnimatePresence initial={false} mode='wait'>
+            <motion.div
+              key='loading-view-fade'
+              variants={switchContentVariants}
+              initial='hidden'
+              animate='visible'
+              exit='exit'
+              className='flex w-full flex-col items-center space-y-4 text-sm text-muted-foreground'
             >
-              Log in
-            </Link>
-          }
-          maxWidth='max-w-[28rem]'
-        />
-      );
-    }
+              <Loader2 className='h-12 w-12 animate-spin text-primary' />
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </AuthLayout>
+    );
   }
 
   return (
@@ -146,7 +163,7 @@ function VerifyEmailIndex() {
             animate='visible'
             exit='exit'
             layout
-            className='flex w-full flex-col items-center space-y-4'
+            className='flex w-full flex-col items-center'
           >
             <div className='max-w-[21rem] text-center text-sm text-muted-foreground'>
               <p>We&apos;ve sent you a verification link.</p>

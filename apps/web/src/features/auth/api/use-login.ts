@@ -1,6 +1,5 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {useNavigate, useRouter} from '@tanstack/react-router';
-import {toast} from 'sonner';
 
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
 import {Account} from '@/types/account';
@@ -8,11 +7,7 @@ import {HttpError, api} from '@/utils/api';
 
 import {LogInDto} from '../types/login.dto';
 
-type useLogInProps = {
-  returnTo?: string;
-};
-
-export const useLogIn = ({returnTo}: useLogInProps) => {
+export const useLogIn = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const router = useRouter();
@@ -27,13 +22,6 @@ export const useLogIn = ({returnTo}: useLogInProps) => {
 
       if (!account.isEmailVerified) {
         return navigate({to: '/verify-email', replace: true});
-      }
-
-      if (returnTo) {
-        if (returnTo == '/verify-email') {
-          toast.info('Your email has already been verified.');
-        }
-        return navigate({to: returnTo, replace: true});
       }
       return navigate({to: '/', replace: true});
     },

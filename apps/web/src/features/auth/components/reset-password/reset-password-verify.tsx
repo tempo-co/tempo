@@ -26,8 +26,7 @@ type ResetPasswordVerifyProps = {
 export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
   const form = useForm<PasswordResetVerifyDto>({
     resolver: zodResolver(passwordResetVerifyDtoSchema),
-    mode: 'onBlur',
-    reValidateMode: 'onChange',
+    mode: 'onSubmit',
     defaultValues: {token},
   });
 
@@ -63,7 +62,7 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
     );
   }
 
-  if (error?.status === 400) {
+  if (error && error.status === 400) {
     return (
       <AuthLayout title={'Invalid or expired token'}>
         <div className='relative flex flex-col'>

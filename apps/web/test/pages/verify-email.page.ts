@@ -9,9 +9,11 @@ export class VerifyEmailPage {
   readonly logOutButton: Locator;
   readonly invalidOrExpiredCodeError: Locator;
   readonly invalidLinkToastTitle: Locator;
+  readonly invalidOrExpiredLinkError: Locator;
   readonly emailAlreadyVerifiedToast: Locator;
-  readonly emailChangeLoginRequiredToast: Locator;
-  readonly goHomeLink: Locator;
+  readonly resendSuccessToastTitle: Locator;
+  readonly resendCodeButton: Locator;
+  readonly logInButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -21,14 +23,12 @@ export class VerifyEmailPage {
     this.pageTitle = page.getByText('Check your email');
     this.logOutButton = page.getByRole('button', {name: 'Log out'});
     this.invalidOrExpiredCodeError = page.getByText('This code is invalid or has expired.');
+    this.invalidOrExpiredLinkError = page.getByText('Invalid or expired verification link');
     this.invalidLinkToastTitle = page.getByText('Invalid verification link');
     this.emailAlreadyVerifiedToast = page.getByText('Your email has already been verified');
-    this.emailChangeLoginRequiredToast = page.getByText('Please log in');
-    this.goHomeLink = page.getByTestId('go-home-link');
-  }
-
-  async navigate() {
-    await this.page.goto('/verify-email');
+    this.resendSuccessToastTitle = page.getByText('New verification email sent');
+    this.resendCodeButton = page.getByTestId('resend-code-button');
+    this.logInButton = page.getByTestId('log-in-button');
   }
 
   async expectToBeOnPage() {

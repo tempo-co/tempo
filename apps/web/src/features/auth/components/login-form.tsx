@@ -13,14 +13,10 @@ import {cn} from '@/utils/cn';
 import {useLogIn} from '../api/use-login';
 import {LogInDto, logInDtoSchema} from '../types/login.dto';
 
-type LogInFormProps = {
-  returnTo?: string;
-};
-
-export function LogInForm({returnTo}: LogInFormProps) {
+export function LogInForm() {
   const [hasUnauthorizedError, setHasUnauthorizedError] = useState<boolean>(false);
 
-  const {logIn, isPending} = useLogIn({returnTo});
+  const {logIn, isPending} = useLogIn();
 
   const form = useForm<LogInDto>({
     resolver: zodResolver(logInDtoSchema),
@@ -39,6 +35,10 @@ export function LogInForm({returnTo}: LogInFormProps) {
   }, [form, hasUnauthorizedError]);
 
   function onSubmit(formData: LogInDto) {
+    if (hasUnauthorizedError) {
+      setHasUnauthorizedError(false);
+    }
+
     logIn(formData, {
       onError: (error) => {
         if (error.status === 401) {

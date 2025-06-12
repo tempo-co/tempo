@@ -5,7 +5,7 @@ const env = loadEnv('development', process.cwd(), '');
 
 export default defineConfig({
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run build && npm run preview',
     url: env.VITE_APP_URL,
     reuseExistingServer: !process.env.CI,
   },

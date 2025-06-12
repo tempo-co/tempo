@@ -71,6 +71,7 @@ export function EmailChangeCheckForm({form, currentEmail, setStep}: EmailChangeC
                     autoCorrect='off'
                     disabled={isPending}
                     className={cn(fieldState.error && 'border-destructive')}
+                    data-testid='new-email-input'
                   />
                 </FormControl>
                 <FormMessage />
@@ -78,7 +79,12 @@ export function EmailChangeCheckForm({form, currentEmail, setStep}: EmailChangeC
             )}
           />
           <div className='mb-4 mt-4 flex flex-col justify-end gap-4 md:mb-0 md:flex-row'>
-            <Button type='submit' disabled={isPending} className='order-1 md:order-2'>
+            <Button
+              type='submit'
+              disabled={isPending}
+              className='order-1 md:order-2'
+              data-testid='check-email-button'
+            >
               {isPending ? (
                 <>
                   <span>Checking...</span>

@@ -1,6 +1,6 @@
 import {faker} from '@faker-js/faker';
 import {expect, test} from '@playwright/test';
-import {invalidVerifyEmailSearchParams} from 'test/data/verify-email-params.data';
+import {invalidEmailVerifySearchParams} from 'test/data/verify-email-params.data';
 import {HomePage} from 'test/pages/home.page';
 import {LoginPage} from 'test/pages/login.page';
 import {SignupPage} from 'test/pages/signup.page';
@@ -27,7 +27,11 @@ test.describe('Email Verification', () => {
     await EmailUtils.clearEmails();
   });
 
-  test.describe('Onboarding flow', () => {
+  test.describe.serial('Verify email during signup flow', () => {
+    test.beforeEach(async () => {
+      await EmailUtils.clearEmails();
+    });
+
     test('should show error for invalid verification code', async () => {
       await signupPage.navigate();
       const email = await signupPage.fillAndSubmitForm();
@@ -39,34 +43,45 @@ test.describe('Email Verification', () => {
       await expect(verifyEmailPage.invalidOrExpiredCodeError).toBeVisible();
     });
 
-    test('should redirect to /verify-email after logging in with an unverified account', async () => {
-      await loginPage.navigate();
+    test('should log out successfully', async ({page}) => {
       await loginPage.login(UNVERIFIED_ACCOUNT_EMAIL, UNVERIFIED_ACCOUNT_PASSWORD);
       await verifyEmailPage.expectToBeOnPage();
-    });
-  });
 
-  test.describe('Email Change Flow', () => {
-    test('should redirect unauthenticated user to Login and show toast', async ({page}) => {
-      const params = new URLSearchParams({
-        flow: 'email-change',
-        email: faker.internet.email(),
-        code: faker.string.numeric(6),
-      });
-      await page.goto(`/verify-email?${params.toString()}`);
-
+      await verifyEmailPage.logOutButton.click();
       await loginPage.expectToBeOnPage();
-      await expect(verifyEmailPage.emailChangeLoginRequiredToast).toBeVisible();
+      expect(page.url()).not.toContain('/verify-email');
+    });
+
+    test('should resend verification email successfully', async () => {
+      await loginPage.login(UNVERIFIED_ACCOUNT_EMAIL, UNVERIFIED_ACCOUNT_PASSWORD);
+      await verifyEmailPage.expectToBeOnPage();
+
+      await verifyEmailPage.resendCodeButton.click();
+      await expect(verifyEmailPage.resendSuccessToastTitle).toBeVisible();
+      const emails = await EmailUtils.countEmailsByRecipient(UNVERIFIED_ACCOUNT_EMAIL, 1);
+      expect(emails).toBe(1);
     });
   });
 
-  test.describe('Invalid search params', () => {
+  test.describe('Invalid or incorrect search params', () => {
     test.describe('Authenticated + Verified', () => {
-      for (const testCase of invalidVerifyEmailSearchParams) {
-        test(`should redirect to Home and show "Invalid verification link" with ${testCase.name}`, async ({
+      test('should redirect to Home with "Invalid or expired verification link" for valid but incorrect params', async ({
+        page,
+      }) => {
+        await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
+        await homePage.expectToBeOnPage();
+        const searchParams = new URLSearchParams({email: faker.internet.email(), code: '000000'});
+        const verificationUrl = `/verify-email?${searchParams.toString()}`;
+        await page.goto(verificationUrl);
+
+        await expect(verifyEmailPage.emailAlreadyVerifiedToast).toBeVisible();
+        await homePage.expectToBeOnPage();
+      });
+
+      for (const testCase of invalidEmailVerifySearchParams) {
+        test(`should redirect to Home with "Invalid verification link" for ${testCase.name}`, async ({
           page,
         }) => {
-          await loginPage.navigate();
           await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
           await homePage.expectToBeOnPage();
 
@@ -77,16 +92,31 @@ test.describe('Email Verification', () => {
           const url = `/verify-email?${searchParams.toString()}`;
 
           await page.goto(url);
+          await expect(verifyEmailPage.emailAlreadyVerifiedToast).toBeVisible();
           await homePage.expectToBeOnPage();
-          await expect(verifyEmailPage.invalidLinkToastTitle).toBeVisible();
         });
       }
     });
 
     test.describe('Authenticated + Unverified', () => {
-      for (const testCase of invalidVerifyEmailSearchParams) {
+      test('should show "Invalid or expired verification link" error for valid but incorrect params', async ({
+        page,
+      }) => {
+        await loginPage.login(UNVERIFIED_ACCOUNT_EMAIL, UNVERIFIED_ACCOUNT_PASSWORD);
+        await verifyEmailPage.expectToBeOnPage();
+        const searchParams = new URLSearchParams({email: faker.internet.email(), code: '000000'});
+        const verificationUrl = `/verify-email?${searchParams.toString()}`;
+        await page.goto(verificationUrl);
+
+        await expect(verifyEmailPage.invalidOrExpiredLinkError).toBeVisible();
+
+        await verifyEmailPage.resendCodeButton.click();
+        await expect(verifyEmailPage.resendSuccessToastTitle).toBeVisible();
+        await verifyEmailPage.expectToBeOnPage();
+      });
+
+      for (const testCase of invalidEmailVerifySearchParams) {
         test(`should not navigate away from /verify-email for ${testCase.name}`, async ({page}) => {
-          await loginPage.navigate();
           await loginPage.login(UNVERIFIED_ACCOUNT_EMAIL, UNVERIFIED_ACCOUNT_PASSWORD);
           await verifyEmailPage.expectToBeOnPage();
 
@@ -103,8 +133,22 @@ test.describe('Email Verification', () => {
     });
 
     test.describe('Unauthenticated', () => {
-      for (const testCase of invalidVerifyEmailSearchParams) {
-        test(`should redirect to Login and show "Invalid verification link" with ${testCase.name}`, async ({
+      test('should redirect to Login with "Invalid or expired verification link" for valid but incorrect params', async ({
+        page,
+      }) => {
+        const params = new URLSearchParams({
+          email: faker.internet.email(),
+          code: faker.string.numeric(6),
+        });
+        await page.goto(`/verify-email?${params.toString()}`);
+
+        await expect(verifyEmailPage.invalidOrExpiredLinkError).toBeVisible();
+        await verifyEmailPage.logInButton.click();
+        await loginPage.expectToBeOnPage();
+      });
+
+      for (const testCase of invalidEmailVerifySearchParams) {
+        test(`should redirect to Login with "Invalid verification link" for ${testCase.name}`, async ({
           page,
         }) => {
           const searchParams = new URLSearchParams();

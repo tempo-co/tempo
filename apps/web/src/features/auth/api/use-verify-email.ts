@@ -17,6 +17,7 @@ export const useVerifyEmail = () => {
     mutateAsync: verifyEmail,
     isPending,
     error,
+    reset,
   } = useMutation<Account, HttpError, EmailVerifyDto>({
     mutationFn: async (dto: EmailVerifyDto) => {
       return await api.post<Account>('/auth/signup/verify', JSON.stringify(dto));
@@ -26,11 +27,10 @@ export const useVerifyEmail = () => {
       await queryClient.invalidateQueries({queryKey: CURRENT_ACCOUNT_KEY});
 
       await navigate({to: '/', replace: true});
-
       toast.success('Welcome to Flair!', {description: 'Your email has been verified.'});
     },
     retry: false,
   });
 
-  return {verifyEmail, isPending, error};
+  return {verifyEmail, isPending, error, reset};
 };

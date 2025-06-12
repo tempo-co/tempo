@@ -28,8 +28,7 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
 
   const form = useForm<EmailChangeDto>({
     resolver: zodResolver(emailChangeDtoSchema),
-    mode: 'onBlur',
-    reValidateMode: 'onChange',
+    mode: 'onSubmit',
   });
 
   const handleOpenChange = (open: boolean) => {
@@ -43,7 +42,9 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
   return (
     <ResponsiveDialog open={isOpen} onOpenChange={handleOpenChange}>
       <ResponsiveDialogTrigger asChild>
-        <Button variant='ghost'>Change</Button>
+        <Button variant='ghost' data-testid='change-email-button'>
+          Change
+        </Button>
       </ResponsiveDialogTrigger>
       <ResponsiveDialogContent>
         <ResponsiveDialogHeader className='text-start md:w-[26rem]'>
@@ -52,7 +53,7 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
             {step === 'check' ? (
               <>
                 <p className='mb-3'>
-                  To change your account email, we&apos;ll send a verification link to the new
+                  To change your account&apos;s email, we will send a verification link to your new
                   address.
                 </p>
                 <p className='mb-3'>

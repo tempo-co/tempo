@@ -5,11 +5,12 @@ import Logo from '@/assets/logo';
 
 type LogoLinkProps = {
   className?: string;
+  disabled?: boolean;
 };
 
-export function LogoLink({className}: LogoLinkProps) {
+export function LogoLink({className, disabled = false}: LogoLinkProps) {
   return (
-    <Link to='/' className={className}>
+    <Link to='/' className={className} disabled={disabled}>
       <motion.div
         whileHover={{scale: 1.07}}
         whileTap={{scale: 0.95}}

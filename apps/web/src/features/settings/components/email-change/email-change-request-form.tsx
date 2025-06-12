@@ -67,7 +67,12 @@ export function EmailChangeRequestForm({form, setIsOpen, setStep}: EmailChangeRe
         >
           Back
         </Button>
-        <Button onClick={handleSendVerification} disabled={isPending} className='w-full md:w-auto'>
+        <Button
+          onClick={handleSendVerification}
+          disabled={isPending}
+          className='w-full md:w-auto'
+          data-testid='send-verification-link-button'
+        >
           {isPending ? (
             <>
               <span>Sending...</span>

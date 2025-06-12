@@ -1,5 +1,4 @@
 import {faker} from '@faker-js/faker';
-import {PW_CHANGE_ACCOUNT_EMAIL} from 'test/utils/seed.constants';
 
 import {PasswordResetSearchParams} from '@/features/auth/types/token.dto';
 
@@ -13,7 +12,7 @@ type Params = {
 export const invalidResetPasswordSearchParams: Array<Params> = [
   {
     name: 'token is missing from URL',
-    params: {email: PW_CHANGE_ACCOUNT_EMAIL},
+    params: {email: faker.internet.email()},
   },
   {
     name: 'email is missing from URL',
@@ -21,7 +20,7 @@ export const invalidResetPasswordSearchParams: Array<Params> = [
   },
   {
     name: 'token is not a valid UUID in URL',
-    params: {token: 'not-a-valid-uuid', email: PW_CHANGE_ACCOUNT_EMAIL},
+    params: {token: 'not-a-valid-uuid', email: faker.string.uuid()},
   },
   {
     name: 'email format is invalid in URL',
@@ -29,7 +28,7 @@ export const invalidResetPasswordSearchParams: Array<Params> = [
   },
   {
     name: 'token is empty in URL',
-    params: {token: '', email: PW_CHANGE_ACCOUNT_EMAIL},
+    params: {token: '', email: faker.internet.email()},
   },
   {
     name: 'email is empty in URL',

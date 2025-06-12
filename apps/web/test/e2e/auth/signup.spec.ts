@@ -22,7 +22,7 @@ test.describe.serial('Signup', () => {
     await signupPage.navigate();
   });
 
-  test.describe('Successful onboarding flow', () => {
+  test.describe('Successful signup flow', () => {
     test('should create account, verify email via CODE, and land on home page', async () => {
       const email = await signupPage.fillAndSubmitForm();
 
@@ -41,7 +41,7 @@ test.describe.serial('Signup', () => {
 
       await verifyEmailPage.expectToBeOnPage();
       const message = await EmailUtils.findEmailByRecipient(email);
-      const verificationLink = EmailUtils.extractVerifyEmailLink(message?.Text);
+      const verificationLink = EmailUtils.extractOnboardingVerifyEmailLink(message?.Text);
       await page.goto(verificationLink);
 
       await homePage.expectToBeOnPage();
@@ -58,7 +58,6 @@ test.describe.serial('Signup', () => {
     test('should redirect to home page if a logged in user navigates to /signup', async ({
       page,
     }) => {
-      await loginPage.navigate();
       await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
       await homePage.expectToBeOnPage();
 
