@@ -27,7 +27,12 @@ export function LogOutDialog({triggerVariant = 'ghost'}: LogOutDialogProps) {
   return (
     <ResponsiveDialog>
       <ResponsiveDialogTrigger asChild>
-        <Button variant={triggerVariant} className='w-full text-foreground sm:w-fit' size='sm'>
+        <Button
+          variant={triggerVariant}
+          className='w-full text-foreground sm:w-fit'
+          size='sm'
+          data-testid='log-out-button-session'
+        >
           Log out
         </Button>
       </ResponsiveDialogTrigger>
@@ -44,6 +49,7 @@ export function LogOutDialog({triggerVariant = 'ghost'}: LogOutDialogProps) {
             disabled={isPending}
             onClick={handleLogOut}
             className='order-1 md:order-2'
+            data-testid='log-out-button-session-confirm'
           >
             {isPending ? (
               <>

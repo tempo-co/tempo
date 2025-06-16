@@ -28,7 +28,12 @@ export function SessionRevokeAllDialog() {
   return (
     <ResponsiveDialog open={isOpen} onOpenChange={setIsOpen}>
       <ResponsiveDialogTrigger asChild>
-        <Button variant='ghost' className='w-full text-foreground sm:w-fit' size='sm'>
+        <Button
+          variant='ghost'
+          className='w-fit text-foreground sm:w-fit'
+          size='sm'
+          data-testid='revoke-all-sessions-button'
+        >
           Revoke all
         </Button>
       </ResponsiveDialogTrigger>
@@ -46,6 +51,7 @@ export function SessionRevokeAllDialog() {
             className='order-1 text-foreground md:order-2'
             variant='destructive'
             onClick={handleRevoke}
+            data-testid='revoke-all-sessions-button-confirm'
           >
             {isPending ? (
               <>

@@ -80,6 +80,7 @@ export function NameChangeForm({currentName}: NameChangeFormProps) {
                     field.onBlur();
                     await handleBlur();
                   }}
+                  data-testid='name-input'
                 />
               </FormControl>
               <FormMessage />

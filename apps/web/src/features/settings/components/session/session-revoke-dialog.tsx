@@ -34,7 +34,12 @@ export function SessionRevokeDialog({session, triggerVariant = 'ghost'}: Session
   return (
     <ResponsiveDialog open={isOpen} onOpenChange={setIsOpen}>
       <ResponsiveDialogTrigger asChild>
-        <Button variant={triggerVariant} className='w-full text-foreground sm:w-fit' size='sm'>
+        <Button
+          variant={triggerVariant}
+          className='w-full text-foreground sm:w-fit'
+          size='sm'
+          data-testid='revoke-session-button'
+        >
           Revoke
         </Button>
       </ResponsiveDialogTrigger>
@@ -52,6 +57,7 @@ export function SessionRevokeDialog({session, triggerVariant = 'ghost'}: Session
             className='order-1 text-foreground md:order-2'
             variant='destructive'
             onClick={handleRevoke}
+            data-testid='revoke-session-button-confirm'
           >
             {isPending ? (
               <>

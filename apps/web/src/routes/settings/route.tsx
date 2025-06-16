@@ -17,7 +17,7 @@ export const Route = createFileRoute('/settings')({
 
 const navItems = [
   {label: 'Account', route: '/settings/account', icon: User},
-  {label: 'Security & access', route: '/settings/security', icon: Shield},
+  {label: 'Security', route: '/settings/security', icon: Shield},
   {label: 'Appearance', route: '/settings/appearance', icon: SunMoon},
 ];
 
@@ -30,20 +30,22 @@ function SettingsIndex() {
         <SettingsBreadcrumb route='/account' />
       </AppHeaderLayout>
       <AppBodyLayout>
-        <div className='mt-4 flex w-full flex-row gap-1 px-4 md:w-auto md:items-start xl:hidden'>
-          {navItems.map((item) => {
-            const isActive = matchRoute({to: item.route, fuzzy: true}) as boolean;
-            return (
-              <Button key={item.label} variant='ghost' size='sm' asChild className='flex-1'>
-                <Link to={item.route} className={cn(isActive && 'bg-sidebar-accent')}>
-                  <item.icon />
-                  <span>{item.label}</span>
-                </Link>
-              </Button>
-            );
-          })}
+        <div className='mx-auto max-w-[40rem] xl:hidden'>
+          <div className='mt-4 flex w-full flex-row gap-2 md:w-auto md:items-start'>
+            {navItems.map((item) => {
+              const isActive = matchRoute({to: item.route, fuzzy: true}) as boolean;
+              return (
+                <Button key={item.label} variant='ghost' size='sm' asChild className='flex-1'>
+                  <Link to={item.route} className={cn(isActive && 'bg-sidebar-accent')}>
+                    <item.icon />
+                    <span>{item.label}</span>
+                  </Link>
+                </Button>
+              );
+            })}
+          </div>
         </div>
-        <div className='relative mx-auto mt-4 w-full max-w-[40rem] px-4 xl:mt-20'>
+        <div className='relative mx-auto mt-4 w-full max-w-[40rem] xl:mt-20'>
           <div className='absolute right-full top-0 mr-6 hidden h-full xl:flex xl:w-[11rem] xl:flex-col xl:gap-1'>
             {navItems.map((item) => {
               const isActive = matchRoute({to: item.route, fuzzy: true}) as boolean;

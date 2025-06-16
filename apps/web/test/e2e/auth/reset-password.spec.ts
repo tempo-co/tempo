@@ -6,7 +6,7 @@ import {LoginPage} from 'test/pages/login.page';
 import {ResetPasswordPage} from 'test/pages/reset-password.page';
 import {EmailUtils} from 'test/utils/email-utils';
 import {
-  PW_CHANGE_ACCOUNT_EMAIL,
+  PW_RESET_ACCOUNT_EMAIL,
   VERIFIED_ACCOUNT_EMAIL,
   VERIFIED_ACCOUNT_PASSWORD,
 } from 'test/utils/seed.constants';
@@ -28,8 +28,8 @@ test.describe.serial('Password Reset', () => {
     });
 
     test('should successfully reset password', async ({page}) => {
-      await resetPasswordPage.requestPasswordReset(PW_CHANGE_ACCOUNT_EMAIL);
-      const message = await EmailUtils.findEmailByRecipient(PW_CHANGE_ACCOUNT_EMAIL);
+      await resetPasswordPage.requestPasswordReset(PW_RESET_ACCOUNT_EMAIL);
+      const message = await EmailUtils.findEmailByRecipient(PW_RESET_ACCOUNT_EMAIL);
       const link = EmailUtils.extractResetPasswordLink(message?.Text);
       await page.goto(link);
 
@@ -38,7 +38,7 @@ test.describe.serial('Password Reset', () => {
       await expect(resetPasswordPage.verifySuccessMessage).toBeVisible();
 
       await resetPasswordPage.returnToLoginLink.click();
-      await loginPage.login(PW_CHANGE_ACCOUNT_EMAIL, newPassword);
+      await loginPage.login(PW_RESET_ACCOUNT_EMAIL, newPassword);
       await homePage.expectToBeOnPage();
       await homePage.expectUserLoggedIn();
     });

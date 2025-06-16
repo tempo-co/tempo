@@ -24,6 +24,7 @@ test.describe('Email Verification', () => {
     verifyEmailPage = new VerifyEmailPage(page);
     loginPage = new LoginPage(page);
     homePage = new HomePage(page);
+
     await EmailUtils.clearEmails();
   });
 

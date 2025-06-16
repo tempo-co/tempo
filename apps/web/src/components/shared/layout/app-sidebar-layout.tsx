@@ -71,6 +71,7 @@ export function AppSidebarLayout() {
                   <SidebarMenuButton
                     size='lg'
                     className='data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
+                    data-testid='account-menu-trigger'
                   >
                     <Avatar className='h-8 w-8 rounded-lg'>
                       <AvatarFallback className='rounded-lg'>CN</AvatarFallback>
@@ -110,6 +111,7 @@ export function AppSidebarLayout() {
                     onClick={() => logOut()}
                     className='cursor-pointer'
                     disabled={isPending}
+                    data-testid='log-out-button'
                   >
                     <LogOut className='mr-2 h-4 w-4' />
                     Log out

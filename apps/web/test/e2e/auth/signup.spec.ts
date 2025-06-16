@@ -19,6 +19,7 @@ test.describe.serial('Signup', () => {
     verifyEmailPage = new VerifyEmailPage(page);
     homePage = new HomePage(page);
     loginPage = new LoginPage(page);
+
     await signupPage.navigate();
   });
 

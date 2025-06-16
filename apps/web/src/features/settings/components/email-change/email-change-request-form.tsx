@@ -64,6 +64,7 @@ export function EmailChangeRequestForm({form, setIsOpen, setStep}: EmailChangeRe
           onClick={handleBack}
           disabled={isPending}
           className='mb-4 w-full md:mb-0 md:w-auto'
+          data-testid='back-button'
         >
           Back
         </Button>

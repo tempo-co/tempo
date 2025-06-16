@@ -31,9 +31,13 @@ export function SessionCard({session, hideRevokeButton = false}: SessionCardProp
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Card className='group cursor-pointer transition-colors hover:bg-accent/70'>
-          <div className='flex flex-row items-start justify-between gap-4 p-4 sm:items-center'>
-            <div className='flex min-w-0 flex-grow items-center gap-4'>
+        <Card
+          className='group cursor-pointer transition-colors hover:bg-accent/70'
+          data-testid='session-card'
+          data-current-session={session.isCurrent}
+        >
+          <div className='flex flex-row items-center justify-between gap-2 p-4 sm:items-center'>
+            <div className='flex min-w-0 flex-grow items-center gap-2'>
               <div className='flex-shrink-0 rounded-lg bg-accent p-2 text-muted-foreground'>
                 <Icon className='h-5 w-5 text-muted-foreground' />
               </div>
@@ -46,13 +50,14 @@ export function SessionCard({session, hideRevokeButton = false}: SessionCardProp
                         <span className='block h-2 w-2 rounded-full bg-success'></span>
                         <span className='font-medium text-success'>Current session</span>
                       </div>
-                      <span>·</span>
-                      <span>{session.location}</span>
+                      <span className='invisible sm:visible'>·</span>
+                      <span className='invisible sm:visible'>{session.location}</span>
                     </div>
                   ) : (
                     <div className='mt-1 flex gap-1.5' title={lastSeenAt}>
-                      <span>{`Last seen ${lastSeenAtRelative}`}</span> <span>·</span>{' '}
-                      <span>{session.location}</span>
+                      <span>{`Last seen ${lastSeenAtRelative}`}</span>{' '}
+                      <span className='invisible sm:visible'>·</span>{' '}
+                      <span className='invisible sm:visible'>{session.location}</span>
                     </div>
                   )}
                 </div>

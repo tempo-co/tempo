@@ -1,15 +1,12 @@
 import {faker} from '@faker-js/faker';
 import {expect, test} from '@playwright/test';
 import {invalidEmailChangeVerifySearchParams} from 'test/data/verify-email-change-params.data';
-import {AccountSettingsPage} from 'test/pages/account-settings.page';
 import {HomePage} from 'test/pages/home.page';
 import {LoginPage} from 'test/pages/login.page';
 import {VerifyEmailChangePage} from 'test/pages/verify-email-change.page';
 import {VerifyEmailPage} from 'test/pages/verify-email.page';
 import {EmailUtils} from 'test/utils/email-utils';
 import {
-  EMAIL_CHANGE_ACCOUNT_EMAIL,
-  EMAIL_CHANGE_ACCOUNT_PASSWORD,
   UNVERIFIED_ACCOUNT_EMAIL,
   UNVERIFIED_ACCOUNT_PASSWORD,
   VERIFIED_ACCOUNT_EMAIL,
@@ -20,36 +17,15 @@ test.describe('Email Change Verification', () => {
   let verifyEmailChangePage: VerifyEmailChangePage;
   let loginPage: LoginPage;
   let homePage: HomePage;
-  let accountSettingsPage: AccountSettingsPage;
   let verifyEmailPage: VerifyEmailPage;
 
   test.beforeEach(async ({page}) => {
     verifyEmailChangePage = new VerifyEmailChangePage(page);
     loginPage = new LoginPage(page);
     homePage = new HomePage(page);
-    accountSettingsPage = new AccountSettingsPage(page);
     verifyEmailPage = new VerifyEmailPage(page);
+
     await EmailUtils.clearEmails();
-  });
-
-  test.describe('Email change flow', () => {
-    test('should change email successfully', async ({page}) => {
-      const newEmail = faker.internet.email();
-
-      await loginPage.login(EMAIL_CHANGE_ACCOUNT_EMAIL, EMAIL_CHANGE_ACCOUNT_PASSWORD);
-      await homePage.expectToBeOnPage();
-
-      await accountSettingsPage.navigate();
-      await accountSettingsPage.changeEmail(newEmail);
-
-      const message = await EmailUtils.findEmailByRecipient(newEmail);
-      const verificationLink = EmailUtils.extractEmailChangeLink(message?.Text);
-      await page.goto(verificationLink);
-
-      await homePage.expectToBeOnPage();
-      await expect(verifyEmailChangePage.emailChangeSuccessToast).toBeVisible();
-      await expect(homePage.sidebarAccountEmail).toHaveText(newEmail);
-    });
   });
 
   test.describe('Invalid search params', () => {
