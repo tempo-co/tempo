@@ -31,6 +31,10 @@ export class VerifyEmailPage {
     this.logInButton = page.getByTestId('log-in-button');
   }
 
+  async navigate() {
+    await this.page.goto('/verify-email');
+  }
+
   async expectToBeOnPage() {
     const url = /.*\/verify-email/;
     await this.page.waitForURL(url);

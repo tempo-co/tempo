@@ -17,8 +17,7 @@ type PasswordChangeFormProps = {
 export function PasswordChangeForm({setIsOpen}: PasswordChangeFormProps) {
   const form = useForm<PasswordChangeDto>({
     resolver: zodResolver(passwordChangeDtoSchema),
-    mode: 'onBlur',
-    reValidateMode: 'onChange',
+    mode: 'onSubmit',
   });
 
   const {changePassword, isPending} = useChangePassword();

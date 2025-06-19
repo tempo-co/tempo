@@ -1,15 +1,17 @@
 import {Page, expect, test} from '@playwright/test';
-import {SESSION_TEST_ACCOUNT_EMAIL, SESSION_TEST_ACCOUNT_PASSWORD} from 'test/utils/seed.constants';
+import {HomePage} from 'test/pages/home.page';
+import {
+  SESSION_TEST_ACCOUNT_EMAIL,
+  SESSION_TEST_ACCOUNT_PASSWORD,
+  SESSION_TEST_USER_AUTH_FILE,
+} from 'test/utils/seed.constants';
 
-import {HomePage} from '../../pages/home.page';
 import {LoginPage} from '../../pages/login.page';
 import {SecuritySettingsPage} from '../../pages/security-settings.page';
 
 test.describe.serial('Account Settings: Sessions', () => {
   let page1: Page;
   let loginPage1: LoginPage;
-  let homePage1: HomePage;
-
   let page2: Page;
   let loginPage2: LoginPage;
   let homePage2: HomePage;
@@ -17,22 +19,18 @@ test.describe.serial('Account Settings: Sessions', () => {
   let securitySettingsPage: SecuritySettingsPage;
 
   test.beforeEach(async ({browser}) => {
-    page1 = await (await browser.newContext()).newPage();
+    const context1 = await browser.newContext({storageState: SESSION_TEST_USER_AUTH_FILE});
+    page1 = await context1.newPage();
     loginPage1 = new LoginPage(page1);
-    homePage1 = new HomePage(page1);
 
-    page2 = await (await browser.newContext()).newPage();
+    const context2 = await browser.newContext();
+    page2 = await context2.newPage();
     loginPage2 = new LoginPage(page2);
     homePage2 = new HomePage(page2);
-
-    securitySettingsPage = new SecuritySettingsPage(page1);
-
-    await loginPage1.login(SESSION_TEST_ACCOUNT_EMAIL, SESSION_TEST_ACCOUNT_PASSWORD);
-    await homePage1.expectToBeOnPage();
-
     await loginPage2.login(SESSION_TEST_ACCOUNT_EMAIL, SESSION_TEST_ACCOUNT_PASSWORD);
     await homePage2.expectToBeOnPage();
 
+    securitySettingsPage = new SecuritySettingsPage(page1);
     await securitySettingsPage.navigate();
   });
 

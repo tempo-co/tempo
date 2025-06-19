@@ -32,8 +32,7 @@ export function BankAccountAddForm({setIsOpen}: BankAccountAddFormProps) {
 
   const form = useForm<BankAccountCreateDto>({
     resolver: zodResolver(bankAccountCreateDtoSchema),
-    mode: 'onTouched',
-    reValidateMode: 'onChange',
+    mode: 'onSubmit',
   });
 
   async function onSubmit(formData: BankAccountCreateDto) {

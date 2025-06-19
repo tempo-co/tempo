@@ -5,13 +5,7 @@ import {HomePage} from 'test/pages/home.page';
 import {LoginPage} from 'test/pages/login.page';
 import {VerifyEmailChangePage} from 'test/pages/verify-email-change.page';
 import {VerifyEmailPage} from 'test/pages/verify-email.page';
-import {EmailUtils} from 'test/utils/email-utils';
-import {
-  UNVERIFIED_ACCOUNT_EMAIL,
-  UNVERIFIED_ACCOUNT_PASSWORD,
-  VERIFIED_ACCOUNT_EMAIL,
-  VERIFIED_ACCOUNT_PASSWORD,
-} from 'test/utils/seed.constants';
+import {UNVERIFIED_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from 'test/utils/seed.constants';
 
 test.describe('Email Change Verification', () => {
   let verifyEmailChangePage: VerifyEmailChangePage;
@@ -19,22 +13,20 @@ test.describe('Email Change Verification', () => {
   let homePage: HomePage;
   let verifyEmailPage: VerifyEmailPage;
 
-  test.beforeEach(async ({page}) => {
+  test.beforeEach(({page}) => {
     verifyEmailChangePage = new VerifyEmailChangePage(page);
     loginPage = new LoginPage(page);
     homePage = new HomePage(page);
     verifyEmailPage = new VerifyEmailPage(page);
-
-    await EmailUtils.clearEmails();
   });
 
   test.describe('Invalid search params', () => {
     test.describe('Authenticated + Verified', () => {
+      test.use({storageState: VERIFIED_USER_AUTH_FILE});
+
       test('should redirect to Home with "Invalid or expired verification link" for valid but incorrect params', async ({
         page,
       }) => {
-        await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
-        await homePage.expectToBeOnPage();
         const searchParams = new URLSearchParams({
           email: faker.internet.email(),
           token: faker.string.uuid(),
@@ -50,9 +42,6 @@ test.describe('Email Change Verification', () => {
         test(`should redirect to Home and show "Invalid verification link" with ${testCase.name}`, async ({
           page,
         }) => {
-          await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
-          await homePage.expectToBeOnPage();
-
           const searchParams = new URLSearchParams();
           for (const [key, value] of Object.entries(testCase.params)) {
             searchParams.set(key, String(value));
@@ -67,11 +56,10 @@ test.describe('Email Change Verification', () => {
     });
 
     test.describe('Authenticated + Unverified', () => {
+      test.use({storageState: UNVERIFIED_USER_AUTH_FILE});
+
       for (const testCase of invalidEmailChangeVerifySearchParams) {
         test(`should not navigate away from /verify-email for ${testCase.name}`, async ({page}) => {
-          await loginPage.login(UNVERIFIED_ACCOUNT_EMAIL, UNVERIFIED_ACCOUNT_PASSWORD);
-          await verifyEmailPage.expectToBeOnPage();
-
           const searchParams = new URLSearchParams();
           for (const [key, value] of Object.entries(testCase.params)) {
             searchParams.set(key, String(value));

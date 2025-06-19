@@ -26,7 +26,7 @@ export function NameChangeForm({currentName}: NameChangeFormProps) {
 
   const form = useForm<NameChangeDto>({
     resolver: zodResolver(nameChangeDtoSchema),
-    mode: 'onChange',
+    mode: 'onSubmit',
     defaultValues: {name: currentName},
   });
 

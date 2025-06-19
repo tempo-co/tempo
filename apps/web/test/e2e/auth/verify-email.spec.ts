@@ -8,28 +8,18 @@ import {VerifyEmailPage} from 'test/pages/verify-email.page';
 import {EmailUtils} from 'test/utils/email-utils';
 import {
   UNVERIFIED_ACCOUNT_EMAIL,
-  UNVERIFIED_ACCOUNT_PASSWORD,
-  VERIFIED_ACCOUNT_EMAIL,
-  VERIFIED_ACCOUNT_PASSWORD,
+  UNVERIFIED_USER_AUTH_FILE,
+  VERIFIED_USER_AUTH_FILE,
 } from 'test/utils/seed.constants';
 
 test.describe('Email Verification', () => {
-  let signupPage: SignupPage;
-  let verifyEmailPage: VerifyEmailPage;
-  let loginPage: LoginPage;
-  let homePage: HomePage;
+  test.describe('Signup Flow', () => {
+    let signupPage: SignupPage;
+    let verifyEmailPage: VerifyEmailPage;
 
-  test.beforeEach(async ({page}) => {
-    signupPage = new SignupPage(page);
-    verifyEmailPage = new VerifyEmailPage(page);
-    loginPage = new LoginPage(page);
-    homePage = new HomePage(page);
-
-    await EmailUtils.clearEmails();
-  });
-
-  test.describe.serial('Verify email during signup flow', () => {
-    test.beforeEach(async () => {
+    test.beforeEach(async ({page}) => {
+      signupPage = new SignupPage(page);
+      verifyEmailPage = new VerifyEmailPage(page);
       await EmailUtils.clearEmails();
     });
 
@@ -43,34 +33,22 @@ test.describe('Email Verification', () => {
       await verifyEmailPage.inputCodeAndSubmit(wrongCode);
       await expect(verifyEmailPage.invalidOrExpiredCodeError).toBeVisible();
     });
-
-    test('should log out successfully', async ({page}) => {
-      await loginPage.login(UNVERIFIED_ACCOUNT_EMAIL, UNVERIFIED_ACCOUNT_PASSWORD);
-      await verifyEmailPage.expectToBeOnPage();
-
-      await verifyEmailPage.logOutButton.click();
-      await loginPage.expectToBeOnPage();
-      expect(page.url()).not.toContain('/verify-email');
-    });
-
-    test('should resend verification email successfully', async () => {
-      await loginPage.login(UNVERIFIED_ACCOUNT_EMAIL, UNVERIFIED_ACCOUNT_PASSWORD);
-      await verifyEmailPage.expectToBeOnPage();
-
-      await verifyEmailPage.resendCodeButton.click();
-      await expect(verifyEmailPage.resendSuccessToastTitle).toBeVisible();
-      const emails = await EmailUtils.countEmailsByRecipient(UNVERIFIED_ACCOUNT_EMAIL, 1);
-      expect(emails).toBe(1);
-    });
   });
 
-  test.describe('Invalid or incorrect search params', () => {
+  test.describe('Invalid URL Search Params', () => {
     test.describe('Authenticated + Verified', () => {
-      test('should redirect to Home with "Invalid or expired verification link" for valid but incorrect params', async ({
+      test.use({storageState: VERIFIED_USER_AUTH_FILE});
+      let verifyEmailPage: VerifyEmailPage;
+      let homePage: HomePage;
+
+      test.beforeEach(({page}) => {
+        verifyEmailPage = new VerifyEmailPage(page);
+        homePage = new HomePage(page);
+      });
+
+      test('should redirect to Home with "already been verified" toast for valid but incorrect params', async ({
         page,
       }) => {
-        await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
-        await homePage.expectToBeOnPage();
         const searchParams = new URLSearchParams({email: faker.internet.email(), code: '000000'});
         const verificationUrl = `/verify-email?${searchParams.toString()}`;
         await page.goto(verificationUrl);
@@ -80,12 +58,9 @@ test.describe('Email Verification', () => {
       });
 
       for (const testCase of invalidEmailVerifySearchParams) {
-        test(`should redirect to Home with "Invalid verification link" for ${testCase.name}`, async ({
+        test(`should redirect to Home with "already been verified" for ${testCase.name}`, async ({
           page,
         }) => {
-          await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
-          await homePage.expectToBeOnPage();
-
           const searchParams = new URLSearchParams();
           for (const [key, value] of Object.entries(testCase.params)) {
             searchParams.set(key, String(value));
@@ -100,11 +75,16 @@ test.describe('Email Verification', () => {
     });
 
     test.describe('Authenticated + Unverified', () => {
+      test.use({storageState: UNVERIFIED_USER_AUTH_FILE});
+      let verifyEmailPage: VerifyEmailPage;
+
+      test.beforeEach(({page}) => {
+        verifyEmailPage = new VerifyEmailPage(page);
+      });
+
       test('should show "Invalid or expired verification link" error for valid but incorrect params', async ({
         page,
       }) => {
-        await loginPage.login(UNVERIFIED_ACCOUNT_EMAIL, UNVERIFIED_ACCOUNT_PASSWORD);
-        await verifyEmailPage.expectToBeOnPage();
         const searchParams = new URLSearchParams({email: faker.internet.email(), code: '000000'});
         const verificationUrl = `/verify-email?${searchParams.toString()}`;
         await page.goto(verificationUrl);
@@ -118,9 +98,6 @@ test.describe('Email Verification', () => {
 
       for (const testCase of invalidEmailVerifySearchParams) {
         test(`should not navigate away from /verify-email for ${testCase.name}`, async ({page}) => {
-          await loginPage.login(UNVERIFIED_ACCOUNT_EMAIL, UNVERIFIED_ACCOUNT_PASSWORD);
-          await verifyEmailPage.expectToBeOnPage();
-
           const searchParams = new URLSearchParams();
           for (const [key, value] of Object.entries(testCase.params)) {
             searchParams.set(key, String(value));
@@ -134,6 +111,14 @@ test.describe('Email Verification', () => {
     });
 
     test.describe('Unauthenticated', () => {
+      let verifyEmailPage: VerifyEmailPage;
+      let loginPage: LoginPage;
+
+      test.beforeEach(({page}) => {
+        verifyEmailPage = new VerifyEmailPage(page);
+        loginPage = new LoginPage(page);
+      });
+
       test('should redirect to Login with "Invalid or expired verification link" for valid but incorrect params', async ({
         page,
       }) => {
@@ -163,6 +148,34 @@ test.describe('Email Verification', () => {
           await expect(verifyEmailPage.invalidLinkToastTitle).toBeVisible();
         });
       }
+    });
+
+    test.describe.serial('Page Actions (Authenticated + Unverified)', () => {
+      test.use({storageState: UNVERIFIED_USER_AUTH_FILE});
+
+      let verifyEmailPage: VerifyEmailPage;
+      let loginPage: LoginPage;
+
+      test.beforeEach(async ({page}) => {
+        verifyEmailPage = new VerifyEmailPage(page);
+        loginPage = new LoginPage(page);
+        await page.goto('/verify-email');
+        await verifyEmailPage.expectToBeOnPage();
+      });
+
+      test('should resend verification email successfully', async () => {
+        await EmailUtils.clearEmails();
+        await verifyEmailPage.resendCodeButton.click();
+        await expect(verifyEmailPage.resendSuccessToastTitle).toBeVisible();
+        const emails = await EmailUtils.countEmailsByRecipient(UNVERIFIED_ACCOUNT_EMAIL, 1);
+        expect(emails).toBe(1);
+      });
+
+      test('should log out successfully', async ({page}) => {
+        await verifyEmailPage.logOutButton.click();
+        await loginPage.expectToBeOnPage();
+        expect(page.url()).not.toContain('/verify-email');
+      });
     });
   });
 });

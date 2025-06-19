@@ -2,25 +2,23 @@ import {faker} from '@faker-js/faker';
 import {expect, test} from '@playwright/test';
 import {AccountSettingsPage} from 'test/pages/account-settings.page';
 import {HomePage} from 'test/pages/home.page';
-import {LoginPage} from 'test/pages/login.page';
 import {VerifyEmailChangePage} from 'test/pages/verify-email-change.page';
 import {EmailUtils} from 'test/utils/email-utils';
 import {
-  EMAIL_CHANGE_ACCOUNT_EMAIL,
-  EMAIL_CHANGE_ACCOUNT_PASSWORD,
+  EMAIL_CHANGE_USER_AUTH_FILE,
   UNVERIFIED_ACCOUNT_EMAIL,
   VERIFIED_ACCOUNT_EMAIL,
-  VERIFIED_ACCOUNT_PASSWORD,
+  VERIFIED_USER_AUTH_FILE,
 } from 'test/utils/seed.constants';
 
+test.use({storageState: EMAIL_CHANGE_USER_AUTH_FILE});
+
 test.describe('Account Settings: Email change', () => {
-  let loginPage: LoginPage;
   let homePage: HomePage;
   let accountSettingsPage: AccountSettingsPage;
   let verifyEmailChangePage: VerifyEmailChangePage;
 
   test.beforeEach(({page}) => {
-    loginPage = new LoginPage(page);
     homePage = new HomePage(page);
     accountSettingsPage = new AccountSettingsPage(page);
     verifyEmailChangePage = new VerifyEmailChangePage(page);
@@ -28,9 +26,6 @@ test.describe('Account Settings: Email change', () => {
 
   test('should change email successfully', async ({page}) => {
     const newEmail = faker.internet.email();
-
-    await loginPage.login(EMAIL_CHANGE_ACCOUNT_EMAIL, EMAIL_CHANGE_ACCOUNT_PASSWORD);
-    await homePage.expectToBeOnPage();
 
     await accountSettingsPage.checkEmailAvailability(newEmail);
     await accountSettingsPage.sendVerificationLinkButton.click();
@@ -45,9 +40,6 @@ test.describe('Account Settings: Email change', () => {
   });
 
   test('should allow navigating back to step 1 from step 2', async () => {
-    await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
-    await homePage.expectToBeOnPage();
-
     const newEmail = faker.internet.email();
     await accountSettingsPage.checkEmailAvailability(newEmail);
 
@@ -59,10 +51,7 @@ test.describe('Account Settings: Email change', () => {
   });
 
   test.describe('Validation errors', () => {
-    test.beforeEach(async () => {
-      await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
-      await homePage.expectToBeOnPage();
-    });
+    test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
     test('should show error for email already in use', async () => {
       await accountSettingsPage.checkEmailAvailability(UNVERIFIED_ACCOUNT_EMAIL);

@@ -9,12 +9,12 @@ export default defineConfig({
     url: env.VITE_APP_URL,
     reuseExistingServer: !process.env.CI,
   },
-  testDir: './test/e2e',
-  timeout: 15000,
-  fullyParallel: false,
+  testDir: './test',
+  timeout: 10000,
+  fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: process.env.CI ? '50%' : undefined,
   reporter: [['list'], ['html']],
   use: {
     baseURL: env.VITE_APP_URL,
@@ -22,8 +22,13 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'setup',
+      testMatch: 'auth.setup.ts',
+    },
+    {
       name: 'chromium',
       use: {...devices['Desktop Chrome']},
+      dependencies: ['setup'],
     },
   ],
 });

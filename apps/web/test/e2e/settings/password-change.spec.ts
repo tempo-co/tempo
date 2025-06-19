@@ -5,26 +5,25 @@ import {SecuritySettingsPage} from 'test/pages/security-settings.page';
 import {
   PW_CHANGE_ACCOUNT_EMAIL,
   PW_CHANGE_ACCOUNT_PASSWORD,
-  VERIFIED_ACCOUNT_EMAIL,
-  VERIFIED_ACCOUNT_PASSWORD,
+  PW_CHANGE_USER_AUTH_FILE,
+  VERIFIED_USER_AUTH_FILE,
 } from 'test/utils/seed.constants';
+
+test.use({storageState: PW_CHANGE_USER_AUTH_FILE});
 
 test.describe('Account Settings: Password change', () => {
   let loginPage: LoginPage;
   let homePage: HomePage;
   let securitySettingsPage: SecuritySettingsPage;
 
-  test.beforeEach(({page}) => {
+  test.beforeEach(async ({page}) => {
     loginPage = new LoginPage(page);
     homePage = new HomePage(page);
     securitySettingsPage = new SecuritySettingsPage(page);
+    await securitySettingsPage.navigate();
   });
 
   test('should change password successfully', async () => {
-    await loginPage.login(PW_CHANGE_ACCOUNT_EMAIL, PW_CHANGE_ACCOUNT_PASSWORD);
-    await homePage.expectToBeOnPage();
-    await securitySettingsPage.navigate();
-
     const newPassword = 'newSecurePassword123';
     await securitySettingsPage.changePassword(PW_CHANGE_ACCOUNT_PASSWORD, newPassword);
     await expect(securitySettingsPage.passwordChangedSuccessToast).toBeVisible();
@@ -37,11 +36,7 @@ test.describe('Account Settings: Password change', () => {
   });
 
   test.describe('Validation errors', () => {
-    test.beforeEach(async () => {
-      await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
-      await homePage.expectToBeOnPage();
-      await securitySettingsPage.navigate();
-    });
+    test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
     test('should show error for incorrect current password', async () => {
       await securitySettingsPage.changePassword('wrongpassword', 'newSecurePassword123');
@@ -60,7 +55,7 @@ test.describe('Account Settings: Password change', () => {
       await securitySettingsPage.changePasswordButton.click();
       await securitySettingsPage.currentPasswordInput.fill(PW_CHANGE_ACCOUNT_PASSWORD);
       await securitySettingsPage.confirmPasswordButton.click();
-      
+
       await expect(securitySettingsPage.requiredError.last()).toBeVisible();
     });
 

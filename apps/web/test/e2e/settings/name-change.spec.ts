@@ -2,21 +2,18 @@ import {faker} from '@faker-js/faker';
 import {expect, test} from '@playwright/test';
 import {AccountSettingsPage} from 'test/pages/account-settings.page';
 import {HomePage} from 'test/pages/home.page';
-import {LoginPage} from 'test/pages/login.page';
-import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from 'test/utils/seed.constants';
+import {VERIFIED_USER_AUTH_FILE} from 'test/utils/seed.constants';
+
+test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
 test.describe('Account Settings: Name change', () => {
-  let loginPage: LoginPage;
   let homePage: HomePage;
   let accountSettingsPage: AccountSettingsPage;
 
   test.beforeEach(async ({page}) => {
-    loginPage = new LoginPage(page);
     homePage = new HomePage(page);
     accountSettingsPage = new AccountSettingsPage(page);
 
-    await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
-    await homePage.expectToBeOnPage();
     await accountSettingsPage.navigate();
   });
 
