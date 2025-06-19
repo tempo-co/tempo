@@ -38,7 +38,7 @@ export class EmailUtils {
   static async countEmailsByRecipient(
     recipientEmail: string,
     expectedCount: number,
-    retries: number = 10,
+    retries: number = 20,
     delayMs: number = 200,
   ) {
     let lastKnownCount = 0;

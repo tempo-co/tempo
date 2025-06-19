@@ -1,8 +1,8 @@
 import {faker} from '@faker-js/faker';
 import {expect, test} from '@playwright/test';
+import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
 import {HomePage} from 'test/pages/home.page';
 import {EmailUtils} from 'test/utils/email-utils';
-import {VERIFIED_USER_AUTH_FILE} from 'test/utils/seed.constants';
 
 import {SignupPage} from '../../pages/signup.page';
 import {VerifyEmailPage} from '../../pages/verify-email.page';

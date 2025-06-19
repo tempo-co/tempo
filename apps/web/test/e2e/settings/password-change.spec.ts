@@ -1,13 +1,9 @@
 import {expect, test} from '@playwright/test';
+import {PW_CHANGE_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
+import {PW_CHANGE_ACCOUNT_EMAIL, PW_CHANGE_ACCOUNT_PASSWORD} from 'test/constants/seed.constants';
 import {HomePage} from 'test/pages/home.page';
 import {LoginPage} from 'test/pages/login.page';
 import {SecuritySettingsPage} from 'test/pages/security-settings.page';
-import {
-  PW_CHANGE_ACCOUNT_EMAIL,
-  PW_CHANGE_ACCOUNT_PASSWORD,
-  PW_CHANGE_USER_AUTH_FILE,
-  VERIFIED_USER_AUTH_FILE,
-} from 'test/utils/seed.constants';
 
 test.use({storageState: PW_CHANGE_USER_AUTH_FILE});
 

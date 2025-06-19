@@ -1,15 +1,12 @@
 import {faker} from '@faker-js/faker';
 import {expect, test} from '@playwright/test';
+import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
+import {PW_RESET_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_EMAIL} from 'test/constants/seed.constants';
 import {invalidResetPasswordSearchParams} from 'test/data/reset-password-params.data';
 import {HomePage} from 'test/pages/home.page';
 import {LoginPage} from 'test/pages/login.page';
 import {ResetPasswordPage} from 'test/pages/reset-password.page';
 import {EmailUtils} from 'test/utils/email-utils';
-import {
-  PW_RESET_ACCOUNT_EMAIL,
-  VERIFIED_ACCOUNT_EMAIL,
-  VERIFIED_USER_AUTH_FILE,
-} from 'test/utils/seed.constants';
 
 test.describe.serial('Password Reset', () => {
   test.describe('Successful Flow', () => {

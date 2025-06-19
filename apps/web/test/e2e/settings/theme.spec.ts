@@ -1,6 +1,6 @@
 import {expect, test} from '@playwright/test';
+import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
 import {AppearanceSettingsPage} from 'test/pages/appearance-settings.page';
-import {VERIFIED_USER_AUTH_FILE} from 'test/utils/seed.constants';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE});
 

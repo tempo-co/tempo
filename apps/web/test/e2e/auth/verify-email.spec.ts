@@ -1,16 +1,13 @@
 import {faker} from '@faker-js/faker';
 import {expect, test} from '@playwright/test';
+import {UNVERIFIED_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
+import {UNVERIFIED_ACCOUNT_EMAIL} from 'test/constants/seed.constants';
 import {invalidEmailVerifySearchParams} from 'test/data/verify-email-params.data';
 import {HomePage} from 'test/pages/home.page';
 import {LoginPage} from 'test/pages/login.page';
 import {SignupPage} from 'test/pages/signup.page';
 import {VerifyEmailPage} from 'test/pages/verify-email.page';
 import {EmailUtils} from 'test/utils/email-utils';
-import {
-  UNVERIFIED_ACCOUNT_EMAIL,
-  UNVERIFIED_USER_AUTH_FILE,
-  VERIFIED_USER_AUTH_FILE,
-} from 'test/utils/seed.constants';
 
 test.describe('Email Verification', () => {
   test.describe('Signup Flow', () => {

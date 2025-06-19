@@ -1,11 +1,11 @@
 import {faker} from '@faker-js/faker';
 import {expect, test} from '@playwright/test';
+import {UNVERIFIED_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
 import {invalidEmailChangeVerifySearchParams} from 'test/data/verify-email-change-params.data';
 import {HomePage} from 'test/pages/home.page';
 import {LoginPage} from 'test/pages/login.page';
 import {VerifyEmailChangePage} from 'test/pages/verify-email-change.page';
 import {VerifyEmailPage} from 'test/pages/verify-email.page';
-import {UNVERIFIED_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from 'test/utils/seed.constants';
 
 test.describe('Email Change Verification', () => {
   let verifyEmailChangePage: VerifyEmailChangePage;

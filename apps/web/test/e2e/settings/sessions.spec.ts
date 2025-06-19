@@ -1,10 +1,10 @@
 import {Page, expect, test} from '@playwright/test';
-import {HomePage} from 'test/pages/home.page';
+import {SESSION_TEST_USER_AUTH_FILE} from 'test/constants/auth.constants';
 import {
   SESSION_TEST_ACCOUNT_EMAIL,
   SESSION_TEST_ACCOUNT_PASSWORD,
-  SESSION_TEST_USER_AUTH_FILE,
-} from 'test/utils/seed.constants';
+} from 'test/constants/seed.constants';
+import {HomePage} from 'test/pages/home.page';
 
 import {LoginPage} from '../../pages/login.page';
 import {SecuritySettingsPage} from '../../pages/security-settings.page';

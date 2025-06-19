@@ -4,7 +4,7 @@ import {
   UNVERIFIED_ACCOUNT_PASSWORD,
   VERIFIED_ACCOUNT_EMAIL,
   VERIFIED_ACCOUNT_PASSWORD,
-} from 'test/utils/seed.constants';
+} from 'test/constants/seed.constants';
 
 import {HomePage} from '../../pages/home.page';
 import {LoginPage} from '../../pages/login.page';

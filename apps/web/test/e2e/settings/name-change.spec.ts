@@ -1,8 +1,8 @@
 import {faker} from '@faker-js/faker';
 import {expect, test} from '@playwright/test';
+import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
 import {AccountSettingsPage} from 'test/pages/account-settings.page';
 import {HomePage} from 'test/pages/home.page';
-import {VERIFIED_USER_AUTH_FILE} from 'test/utils/seed.constants';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE});
 

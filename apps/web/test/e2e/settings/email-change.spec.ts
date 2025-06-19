@@ -1,15 +1,11 @@
 import {faker} from '@faker-js/faker';
 import {expect, test} from '@playwright/test';
+import {EMAIL_CHANGE_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
+import {UNVERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_EMAIL} from 'test/constants/seed.constants';
 import {AccountSettingsPage} from 'test/pages/account-settings.page';
 import {HomePage} from 'test/pages/home.page';
 import {VerifyEmailChangePage} from 'test/pages/verify-email-change.page';
 import {EmailUtils} from 'test/utils/email-utils';
-import {
-  EMAIL_CHANGE_USER_AUTH_FILE,
-  UNVERIFIED_ACCOUNT_EMAIL,
-  VERIFIED_ACCOUNT_EMAIL,
-  VERIFIED_USER_AUTH_FILE,
-} from 'test/utils/seed.constants';
 
 test.use({storageState: EMAIL_CHANGE_USER_AUTH_FILE});
 
