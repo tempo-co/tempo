@@ -21,7 +21,8 @@ import {
   BankAccountCreateDto,
   bankAccountCreateDtoSchema,
 } from '../../types/bank-account-create.dto';
-import {BankComboBox} from './bank-combo-box';
+import {BankPicker} from './bank-picker';
+import {CurrencyPicker} from './currency-picker';
 
 type BankAccountAddFormProps = {
   setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -33,6 +34,7 @@ export function BankAccountAddForm({setIsOpen}: BankAccountAddFormProps) {
   const form = useForm<BankAccountCreateDto>({
     resolver: zodResolver(bankAccountCreateDtoSchema),
     mode: 'onSubmit',
+    defaultValues: {currency: ''},
   });
 
   async function onSubmit(formData: BankAccountCreateDto) {
@@ -50,7 +52,24 @@ export function BankAccountAddForm({setIsOpen}: BankAccountAddFormProps) {
             <FormItem className='flex flex-col'>
               <FormLabel>Bank</FormLabel>
               <FormControl>
-                <BankComboBox
+                <BankPicker
+                  onChange={field.onChange}
+                  isPending={isPending}
+                  error={fieldState.invalid}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name='currency'
+          render={({field, fieldState}) => (
+            <FormItem className='flex flex-col'>
+              <FormLabel>Currency</FormLabel>
+              <FormControl>
+                <CurrencyPicker
                   onChange={field.onChange}
                   isPending={isPending}
                   error={fieldState.invalid}
@@ -79,12 +98,14 @@ export function BankAccountAddForm({setIsOpen}: BankAccountAddFormProps) {
                   className={cn(fieldState.invalid && 'border-destructive')}
                 />
               </FormControl>
-              <FormDescription>A unique name to easily identify this bank account.</FormDescription>
+              <FormDescription className='text-xs'>
+                A unique name to easily identify this bank account.
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
-        <div className='flex flex-col justify-end gap-4 md:flex-row'>
+        <div className='mt-4 flex flex-col justify-end gap-4 md:flex-row'>
           <Button type='submit' disabled={isPending} className='order-1 md:order-2'>
             {isPending ? (
               <div className='flex items-center justify-center'>

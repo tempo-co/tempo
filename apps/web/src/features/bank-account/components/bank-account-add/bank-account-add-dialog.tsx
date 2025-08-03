@@ -22,7 +22,7 @@ export function BankAccountAddDialog() {
       <ResponsiveDialogTrigger asChild>
         <Button>{title}</Button>
       </ResponsiveDialogTrigger>
-      <ResponsiveDialogContent className='md:max-w-96'>
+      <ResponsiveDialogContent className='md:max-w-[26rem]'>
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>{title}</ResponsiveDialogTitle>
         </ResponsiveDialogHeader>
