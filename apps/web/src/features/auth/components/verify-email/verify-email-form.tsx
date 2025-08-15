@@ -33,7 +33,7 @@ export function VerifyEmailForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className='space-y-4'>
+      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className='mt-6 space-y-4'>
         <FormField
           control={form.control}
           name='code'

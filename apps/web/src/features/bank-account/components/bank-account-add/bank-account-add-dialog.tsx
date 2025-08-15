@@ -1,3 +1,4 @@
+import {Plus} from 'lucide-react';
 import {useState} from 'react';
 
 import {Button} from '@/components/ui/button';
@@ -20,7 +21,10 @@ export function BankAccountAddDialog() {
   return (
     <ResponsiveDialog open={isOpen} onOpenChange={setIsOpen}>
       <ResponsiveDialogTrigger asChild>
-        <Button>{title}</Button>
+        <Button>
+          <Plus className='h-4 w-4' />
+          {title}
+        </Button>
       </ResponsiveDialogTrigger>
       <ResponsiveDialogContent className='md:max-w-[26rem]'>
         <ResponsiveDialogHeader>

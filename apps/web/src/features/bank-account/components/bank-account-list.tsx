@@ -1,6 +1,6 @@
-import React from 'react';
+import {Landmark} from 'lucide-react';
 
-import Wallet from '@/assets/illustrations/wallet';
+import {EmptyState} from '@/components/shared/layout/app-empty-state';
 import {Skeleton} from '@/components/ui/skeleton';
 import {BankAccount} from '@/types/bank-account';
 
@@ -14,28 +14,29 @@ type BankAccountListProps = {
 
 export function BankAccountList({bankAccounts, isPending}: BankAccountListProps) {
   if (isPending) {
-    return <Skeleton className='mt-[5.5rem] h-[5.1rem] w-full rounded-lg bg-card' />;
+    return <Skeleton className='h-[22rem] w-full rounded-lg bg-card' />;
   }
 
   if (!isPending && bankAccounts.length === 0) {
     return (
-      <div className='mt-8 flex flex-col items-center'>
-        <Wallet className='h-60' />
-        <div className='mb-4 flex flex-col items-center text-base'>
-          <p className='mb-2 text-2xl'>No bank accounts</p>
-          <p className='text-muted-foreground'>You do not have any bank accounts yet.</p>
-        </div>
+      <EmptyState
+        icon={Landmark}
+        title='Add your first bank account'
+        description='Create a bank account to upload statements and begin tracking your transactions.'
+      >
         <BankAccountAddDialog />
-      </div>
+      </EmptyState>
     );
   }
 
   return (
-    <div className='mt-4 flex flex-col gap-3'>
+    <div className='flex flex-col gap-3'>
+      <div className='mb-4 flex items-end justify-between'>
+        <h1 className='text-2xl font-semibold'>Bank Accounts</h1>
+        {bankAccounts && bankAccounts.length !== 0 && <BankAccountAddDialog />}
+      </div>
       {bankAccounts?.map((bankAccount) => (
-        <React.Fragment key={bankAccount.id}>
-          <BankAccountCard bankAccount={bankAccount} />
-        </React.Fragment>
+        <BankAccountCard key={bankAccount.id} bankAccount={bankAccount} />
       ))}
     </div>
   );

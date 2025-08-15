@@ -1,5 +1,5 @@
 import {Link, useMatchRoute} from '@tanstack/react-router';
-import {ChevronsUpDown, CreditCard, Home, LogOut, Settings, WalletCards} from 'lucide-react';
+import {ChevronsUpDown, CreditCard, Home, Landmark, LogOut, Settings} from 'lucide-react';
 
 import {Avatar, AvatarFallback} from '@/components/ui/avatar';
 import {
@@ -27,7 +27,7 @@ import {cn} from '@/utils/cn';
 
 const navItems = [
   {label: 'Home', route: '/', icon: Home},
-  {label: 'Bank Accounts', route: '/bank-accounts', icon: WalletCards},
+  {label: 'Bank Accounts', route: '/bank-accounts', icon: Landmark},
   {label: 'Transactions', route: '/transactions', icon: CreditCard},
 ];
 
@@ -84,7 +84,7 @@ export function AppSidebarLayout() {
                         {currentAccount.name}
                       </span>
                       <span
-                        className='truncate text-xs'
+                        className='truncate text-xs text-muted-foreground'
                         data-testid='sidebar-current-account-email'
                       >
                         {currentAccount.email}

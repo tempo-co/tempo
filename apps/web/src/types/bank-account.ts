@@ -6,4 +6,5 @@ export type BankAccount = {
   balance: number;
   bank: Bank;
   currency: string;
+  transactionsCount?: number;
 };

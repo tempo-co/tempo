@@ -190,7 +190,7 @@ function VerifyEmailIndex() {
                     <Button
                       data-testid='enter-code-manually-button'
                       variant='secondary'
-                      className='mt-4 w-full'
+                      className='mt-6 w-full'
                       onClick={() => setShowForm(true)}
                     >
                       Enter code manually

@@ -1,23 +1,25 @@
-import {Transaction} from '@/types/transaction';
 import {cn} from '@/utils/cn';
 
-const currencySymbols: {[key: string]: string} = {
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-};
-
 type CurrencyAmountProps = {
-  amount: Transaction['amount'];
-  currency: Transaction['currency'];
+  amount: number;
+  currency: string;
 };
 
 export function CurrencyAmount({amount, currency}: CurrencyAmountProps) {
-  const symbol = currencySymbols[currency] || currency;
-  const formattedAmount = amount < 0 ? `-${symbol}${Math.abs(amount)}` : `${symbol}${amount}`;
+  const formattedAmount = new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: currency,
+    currencyDisplay: 'symbol',
+  }).format(amount);
 
   return (
-    <span className={cn('whitespace-nowrap font-mono', amount > 0 && 'text-success')}>
+    <span
+      className={cn(
+        'whitespace-nowrap font-mono',
+        amount > 0 && 'text-success',
+        amount < 0 && 'text-destructive',
+      )}
+    >
       {formattedAmount}
     </span>
   );

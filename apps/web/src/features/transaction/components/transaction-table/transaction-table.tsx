@@ -1,16 +1,15 @@
 import {Link, useNavigate} from '@tanstack/react-router';
 import {flexRender, getCoreRowModel, useReactTable} from '@tanstack/react-table';
-import {SearchX} from 'lucide-react';
+import {CreditCard, SearchX} from 'lucide-react';
 import {Dispatch, SetStateAction} from 'react';
 
-import CreditCards from '@/assets/illustrations/credit-cards';
+import {EmptyState} from '@/components/shared/layout/app-empty-state';
 import {LoadingBar} from '@/components/shared/loading-bar';
 import {TablePagination} from '@/components/shared/table-pagination';
 import {Skeleton} from '@/components/ui/skeleton';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {PaginationParams} from '@/types/pagination';
 import {Transaction} from '@/types/transaction';
-import {cn} from '@/utils/cn';
 
 import {TransactionFilterParams, TransactionSortParams} from '../../types/search-params';
 import {createSortingHandler, mapSortToSortingState} from '../../utils/handle-sort';
@@ -59,6 +58,10 @@ export function TransactionsTable({
     onSortingChange: createSortingHandler(setSort, navigate),
   });
 
+  if (isPending) {
+    return <Skeleton className='h-[22rem] w-full rounded-lg bg-card' />;
+  }
+
   const isFilteringApplied = Object.values(filters).some((filter) => {
     return Array.isArray(filter) ? filter.length > 0 : !!filter;
   });
@@ -67,13 +70,11 @@ export function TransactionsTable({
 
   if (isEmptyState) {
     return (
-      <div className='mt-8 flex flex-col items-center'>
-        <CreditCards className='h-60' />
-        <div className='flex flex-col items-center text-base'>
-          <p className='mb-2 text-2xl'>No transactions</p>
-          <p className='text-muted-foreground'>You do not have any transactions yet.</p>
-        </div>
-      </div>
+      <EmptyState
+        icon={CreditCard}
+        title='No transactions found'
+        description='Once you upload a statement from a bank account, your transactions will appear here.'
+      />
     );
   }
 
@@ -109,30 +110,6 @@ export function TransactionsTable({
             ))}
           </TableHeader>
           <TableBody>
-            {isPending &&
-              Array.from({length: pagination.pageSize}).map((_, index) => (
-                <TableRow key={index}>
-                  {transactionsTableColumns.map((column, colIndex) => (
-                    <TableCell
-                      key={colIndex}
-                      className={cn(
-                        'px-3 py-4',
-                        (column as {accessorKey: string}).accessorKey === 'amount' &&
-                          'flex justify-end',
-                      )}
-                    >
-                      <Skeleton
-                        className={cn(
-                          'h-[1.25rem] w-[8rem] rounded-full',
-                          (column as {accessorKey: string}).accessorKey === 'amount' && 'w-[5rem]',
-                          (column as {accessorKey: string}).accessorKey === 'description' &&
-                            'w-[20rem]',
-                        )}
-                      />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
             {totalTransactions === 0 && isFilteringApplied ? (
               <TableRow>
                 <TableCell colSpan={transactionsTableColumns.length} className='h-24 text-center'>

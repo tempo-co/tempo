@@ -1,6 +1,5 @@
 import {createFileRoute} from '@tanstack/react-router';
 
-import {BackButton} from '@/components/shared/back-button';
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {AppHeaderLayout} from '@/components/shared/layout/app-header-layout';
 import {LoadingBar} from '@/components/shared/loading-bar';
@@ -27,7 +26,6 @@ function TransactionIndex() {
         <TransactionBreadcrumb transaction={transaction} />
       </AppHeaderLayout>
       <AppBodyLayout>
-        <BackButton className='mt-4' />
         <TransactionCard transaction={transaction} isPending={isPending} />
       </AppBodyLayout>
     </>
