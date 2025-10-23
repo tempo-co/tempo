@@ -24,7 +24,7 @@ export const useGetAllTransactions = (searchParams: TransactionSearchParams) => 
   const [filters, setFilters] = useState<TransactionFilterParams>({
     categories: searchParams.categories,
     startedAt: searchParams.startedAt,
-    banks: searchParams.banks,
+    bankAccountIds: searchParams.bankAccountIds,
   });
   const [sort, setSort] = useState<TransactionSortParams>(searchParams.sort);
 
@@ -47,8 +47,8 @@ export const useGetAllTransactions = (searchParams: TransactionSearchParams) => 
         }
       }
 
-      if (filters.banks && filters.banks.length > 0) {
-        filters.banks.forEach((bank) => params.append('filter[banks][]', bank));
+      if (filters.bankAccountIds && filters.bankAccountIds.length > 0) {
+        filters.bankAccountIds.forEach((id) => params.append('filter[bankAccountIds][]', id));
       }
 
       if (sort && sort.by && sort.order) {

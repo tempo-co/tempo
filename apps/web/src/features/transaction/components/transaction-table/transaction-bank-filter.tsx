@@ -1,7 +1,6 @@
 import {useNavigate} from '@tanstack/react-router';
-import {Check, ChevronDown, Landmark, Loader2} from 'lucide-react';
+import {Check, ChevronDown, Landmark, Loader} from 'lucide-react';
 import * as React from 'react';
-import {useMemo} from 'react';
 
 import {BankIcon} from '@/components/shared/bank-icon';
 import {Badge} from '@/components/ui/badge';
@@ -18,51 +17,49 @@ import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {Separator} from '@/components/ui/separator';
 import {useGetAllBankAccounts} from '@/features/bank-account/api/use-get-all-accounts';
-import {Bank} from '@/types/bank';
+import {BankAccount} from '@/types/bank-account';
 import {cn} from '@/utils/cn';
 
 import {TransactionFilterParams} from '../../types/search-params';
 
-type TransactionBankFilterProps = {
+type TransactionBankAccountFilterProps = {
   filters: TransactionFilterParams;
   setFilters: React.Dispatch<React.SetStateAction<TransactionFilterParams>>;
 };
 
-export function TransactionBankFilter({filters, setFilters}: TransactionBankFilterProps) {
+export function TransactionBankAccountFilter({
+  filters,
+  setFilters,
+}: TransactionBankAccountFilterProps) {
   const navigate = useNavigate({from: '/transactions'});
 
   const {bankAccounts, isPending} = useGetAllBankAccounts();
 
-  const accountBanks = useMemo(() => {
-    if (!bankAccounts) return [];
-    const banks = new Set(bankAccounts.map((account) => account.bank));
+  const selectedValues = filters.bankAccountIds || [];
 
-    return Array.from(banks);
-  }, [bankAccounts]);
-
-  const selectedValues = filters.banks || [];
-
-  const handleSelect = async (option: Bank) => {
-    const isSelected = selectedValues.includes(option);
+  const handleSelect = async (account: BankAccount) => {
+    const isSelected = selectedValues.includes(account.id);
     const newSelectedValues = isSelected
-      ? selectedValues.filter((value) => value !== option)
-      : [...selectedValues, option];
+      ? selectedValues.filter((id) => id !== account.id)
+      : [...selectedValues, account.id];
 
     await navigate({
       search: (prev) => ({
         ...prev,
-        banks: newSelectedValues.length === 0 ? undefined : newSelectedValues,
+        bankAccountIds: newSelectedValues.length === 0 ? undefined : newSelectedValues,
       }),
     });
-    setFilters((prev) => ({...prev, banks: newSelectedValues}));
+    setFilters((prev) => ({...prev, bankAccountIds: newSelectedValues}));
   };
 
   const handleReset = async () => {
-    await navigate({search: (prev) => ({...prev, banks: undefined})});
-    setFilters((prev) => ({...prev, banks: []}));
+    await navigate({search: (prev) => ({...prev, bankAccountIds: undefined})});
+    setFilters((prev) => ({...prev, bankAccountIds: []}));
   };
 
-  const isDisabled = isPending || accountBanks.length === 0;
+  const isDisabled = isPending || !bankAccounts || bankAccounts.length === 0;
+
+  const selectedAccounts = bankAccounts?.filter((acc) => selectedValues.includes(acc.id)) || [];
 
   return (
     <Popover>
@@ -78,30 +75,30 @@ export function TransactionBankFilter({filters, setFilters}: TransactionBankFilt
           )}
         >
           {isPending ? (
-            <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+            <Loader className='mr-2 h-4 w-4 animate-slow-spin' />
           ) : (
             <Landmark className='mr-2 h-4 w-4' />
           )}
-          Bank
-          {selectedValues.length > 0 && !isDisabled && (
+          Bank accounts
+          {selectedAccounts.length > 0 && !isDisabled && (
             <>
               <Separator orientation='vertical' className='mx-2 h-4' />
               <Badge variant='secondary' className='rounded-sm px-1 font-normal lg:hidden'>
-                {selectedValues.length}
+                {selectedAccounts.length}
               </Badge>
               <div className='hidden space-x-1 lg:flex'>
-                {selectedValues.length > 2 ? (
+                {selectedAccounts.length > 2 ? (
                   <Badge variant='secondary' className='rounded-sm px-2 font-normal'>
-                    {selectedValues.length} selected
+                    {selectedAccounts.length} selected
                   </Badge>
                 ) : (
-                  selectedValues.map((bank) => (
+                  selectedAccounts.map((account) => (
                     <div
                       className='flex items-center rounded bg-accent px-[6px] py-[3px]'
-                      key={bank}
+                      key={account.id}
                     >
-                      <BankIcon key={bank} bank={bank} className='mr-1 w-10' />{' '}
-                      <span className='text-xs'>{bank}</span>
+                      <BankIcon bank={account.bank} className='mr-1 h-4 w-4' />
+                      <span className='text-xs'>{account.alias || account.bank}</span>
                     </div>
                   ))
                 )}
@@ -111,16 +108,20 @@ export function TransactionBankFilter({filters, setFilters}: TransactionBankFilt
           <ChevronDown className='text-muted-foreground' />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className='w-[180px] p-0' align='start'>
+      <PopoverContent className='w-[220px] p-0' align='start'>
         <Command>
           <ScrollArea className='h-fit max-h-[200px]'>
             <CommandList>
-              <CommandEmpty>No banks found.</CommandEmpty>
+              <CommandEmpty>No bank accounts found.</CommandEmpty>
               <CommandGroup>
-                {accountBanks.map((bank) => {
-                  const isSelected = selectedValues.includes(bank);
+                {bankAccounts?.map((account) => {
+                  const isSelected = selectedValues.includes(account.id);
                   return (
-                    <CommandItem key={bank} onSelect={() => handleSelect(bank)}>
+                    <CommandItem
+                      key={account.id}
+                      value={account.id}
+                      onSelect={() => handleSelect(account)}
+                    >
                       <div
                         className={cn(
                           'mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary',
@@ -131,8 +132,8 @@ export function TransactionBankFilter({filters, setFilters}: TransactionBankFilt
                       >
                         <Check />
                       </div>
-                      <BankIcon key={bank} bank={bank} className='mr-2 w-4' />
-                      {bank}
+                      <BankIcon bank={account.bank} className='mr-1 h-4 w-4' />
+                      <span>{account.alias || account.bank}</span>
                     </CommandItem>
                   );
                 })}

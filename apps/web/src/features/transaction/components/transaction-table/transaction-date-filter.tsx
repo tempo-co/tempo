@@ -54,8 +54,8 @@ export function TransactionDateFilter({filters, setFilters}: TransactionDateFilt
               <Separator orientation='vertical' className='mx-2 h-4' />
               <span className='text-secondary-foreground'>
                 {' '}
-                {format(filters?.startedAt?.from, 'LLL dd, y')}
-                {filters?.startedAt?.to && <> - {format(filters?.startedAt?.to, 'LLL dd, y')}</>}
+                {format(filters?.startedAt?.from, 'MMM dd, y')}
+                {filters?.startedAt?.to && <> - {format(filters?.startedAt?.to, 'MMM dd, y')}</>}
               </span>
             </>
           )}

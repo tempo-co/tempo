@@ -2,7 +2,7 @@ import {useQuery} from '@tanstack/react-query';
 import {useEffect, useState} from 'react';
 import {toast} from 'sonner';
 
-import {File as FileEntity} from '@/types/file';
+import {FileEntity} from '@/types/file';
 import {HttpError, api} from '@/utils/api';
 
 import {downloadFile} from '../utils/download-file';
@@ -11,12 +11,7 @@ import {truncateFileName} from '../utils/truncate-file-name';
 
 export const useGetFile = (id: FileEntity['id']) => {
   const [downloadReady, setDownloadReady] = useState(false);
-  const {
-    refetch: fetchFile,
-    data: file,
-    isLoading,
-    isError,
-  } = useQuery<File, HttpError>({
+  const {refetch, data, isLoading, isError} = useQuery<File, HttpError>({
     queryKey: ['file', id],
     queryFn: async () => {
       const {url} = await api.get(`/files/${id}`);
@@ -38,15 +33,15 @@ export const useGetFile = (id: FileEntity['id']) => {
   }
 
   useEffect(() => {
-    if (downloadReady && file) {
-      downloadFile(file);
+    if (downloadReady && data) {
+      downloadFile(data);
 
       toast.success('File download successful.', {
-        description: `${truncateFileName(file.name)} has been downloaded.`,
+        description: `${truncateFileName(data.name)} has been downloaded.`,
       });
       setDownloadReady(false);
     }
-  }, [file, downloadReady, setDownloadReady]);
+  }, [data, downloadReady, setDownloadReady]);
 
-  return {fetchFile, file, isLoading, setDownloadReady};
+  return {fetchFile: refetch, file: data, isLoading, setDownloadReady};
 };

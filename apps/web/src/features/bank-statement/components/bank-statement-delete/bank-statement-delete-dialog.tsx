@@ -4,7 +4,6 @@ import {Loader} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {
   ResponsiveDialog,
-  ResponsiveDialogBody,
   ResponsiveDialogClose,
   ResponsiveDialogContent,
   ResponsiveDialogDescription,
@@ -15,7 +14,6 @@ import {
 import {BankStatement} from '@/types/bank-statement';
 
 import {useDeleteBankStatement} from '../../api/use-delete-bank-statement';
-import {BankStatementCard} from './bank-statement-card';
 import {BankStatementDeleteDialogDescription} from './bank-statement-delete-dialog-description';
 
 type BankStatementDeleteDialogProps = {
@@ -54,9 +52,6 @@ export function BankStatementDeleteDialog({
             />
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
-        <ResponsiveDialogBody>
-          <BankStatementCard bankStatement={bankStatement} />
-        </ResponsiveDialogBody>
         <ResponsiveDialogFooter className='mt-4 flex gap-4'>
           <Button
             variant='destructive'

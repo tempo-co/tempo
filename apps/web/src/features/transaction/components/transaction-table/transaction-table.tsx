@@ -5,7 +5,7 @@ import {Dispatch, SetStateAction} from 'react';
 
 import {EmptyState} from '@/components/shared/layout/app-empty-state';
 import {LoadingBar} from '@/components/shared/loading-bar';
-import {TablePagination} from '@/components/shared/table-pagination';
+import {Pagination} from '@/components/shared/pagination';
 import {Skeleton} from '@/components/ui/skeleton';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {PaginationParams} from '@/types/pagination';
@@ -13,7 +13,7 @@ import {Transaction} from '@/types/transaction';
 
 import {TransactionFilterParams, TransactionSortParams} from '../../types/search-params';
 import {createSortingHandler, mapSortToSortingState} from '../../utils/handle-sort';
-import {TransactionBankFilter} from './transaction-bank-filter';
+import {TransactionBankAccountFilter} from './transaction-bank-filter';
 import {TransactionCategoryFilter} from './transaction-category-filter';
 import {TransactionClearAllFiltersButton} from './transaction-clear-all-filters';
 import {TransactionDateFilter} from './transaction-date-filter';
@@ -83,7 +83,7 @@ export function TransactionsTable({
       <div className='my-4 flex gap-4'>
         <TransactionCategoryFilter filters={filters} setFilters={setFilters} />
         <TransactionDateFilter filters={filters} setFilters={setFilters} />
-        <TransactionBankFilter filters={filters} setFilters={setFilters} />
+        <TransactionBankAccountFilter filters={filters} setFilters={setFilters} />
         {isFilteringApplied && (
           <TransactionClearAllFiltersButton
             setFilters={setFilters}
@@ -149,8 +149,7 @@ export function TransactionsTable({
           </TableBody>
         </Table>
         {totalTransactions > 0 && (
-          <TablePagination
-            table={table}
+          <Pagination
             totalItems={totalTransactions}
             pagination={pagination}
             setPagination={setPagination}

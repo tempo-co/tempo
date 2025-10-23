@@ -1,7 +1,7 @@
 import {Link, createFileRoute, redirect, useRouter} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
 import {AnimatePresence, motion} from 'framer-motion';
-import {Loader2} from 'lucide-react';
+import {Loader} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {toast} from 'sonner';
 
@@ -144,7 +144,7 @@ function VerifyEmailIndex() {
               exit='exit'
               className='flex w-full flex-col items-center space-y-4 text-sm text-muted-foreground'
             >
-              <Loader2 className='h-12 w-12 animate-spin text-primary' />
+              <Loader className='h-12 w-12 animate-slow-spin text-primary' />
             </motion.div>
           </AnimatePresence>
         </div>

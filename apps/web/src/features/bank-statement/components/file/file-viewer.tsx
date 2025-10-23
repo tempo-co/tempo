@@ -4,7 +4,7 @@ import {useEffect, useState} from 'react';
 import {Skeleton} from '@/components/ui/skeleton';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {useMediaQuery} from '@/hooks/use-media-query';
-import {BankStatement} from '@/types/bank-statement';
+import {FileEntity} from '@/types/file';
 import {cn} from '@/utils/cn';
 
 import {useGetFile} from '../../api/use-get-file';
@@ -12,11 +12,10 @@ import {FileData} from '../../types/file-data';
 import {parseFile} from '../../utils/parse-file';
 
 type FileViewerProps = {
-  file?: File;
-  bankStatement?: BankStatement;
+  fileId: FileEntity['id'];
 };
 
-export function FileViewer({file, bankStatement}: FileViewerProps) {
+export function FileViewer({fileId}: FileViewerProps) {
   const [error, setError] = useState<Error | null>(null);
   const [data, setData] = useState<FileData>({
     headers: [],
@@ -27,23 +26,18 @@ export function FileViewer({file, bankStatement}: FileViewerProps) {
 
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  const {fetchFile, file: fetchedFile, isLoading} = useGetFile(bankStatement?.file.id || '');
+  const {fetchFile, file: fetchedFile, isLoading} = useGetFile(fileId);
 
   useEffect(() => {
     async function fetchData() {
-      if (file) {
-        const data = await parseFile(file);
+      await fetchFile();
+      if (fetchedFile) {
+        const data = await parseFile(fetchedFile);
         setData(data);
-      } else {
-        await fetchFile();
-        if (fetchedFile) {
-          const data = await parseFile(fetchedFile);
-          setData(data);
-        }
       }
     }
     fetchData().catch(setError);
-  }, [file, fetchFile, fetchedFile]);
+  }, [fetchFile, fetchedFile]);
 
   if (error) {
     return (

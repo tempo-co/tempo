@@ -3,18 +3,20 @@ import {zodValidator} from '@tanstack/zod-adapter';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {AppHeaderLayout} from '@/components/shared/layout/app-header-layout';
+import {Pagination} from '@/components/shared/pagination';
 import {useGetBankAccount} from '@/features/bank-account/api/use-get-bank-account';
 import {BankAccountBreadcrumb} from '@/features/bank-account/components/bank-account-breadcrumb';
 import {useGetAllBankStatements} from '@/features/bank-statement/api/use-get-all-bank-statements';
-import {BankStatementCalendarView} from '@/features/bank-statement/components/bank-statement-calendar-view';
-import {BankStatementTable} from '@/features/bank-statement/components/bank-statement-table/bank-statement-table';
-import {BankStatementUploadDialog} from '@/features/bank-statement/components/bank-statement-upload/bank-statement-upload-dialog';
-import {paginationSearchParamsSchema} from '@/types/pagination';
+import {BankStatementGrid} from '@/features/bank-statement/components/bank-statement-grid';
+import {
+  BANK_STATEMENT_PAGE_SIZE_OPTIONS,
+  bankStatementPaginationSearchParamsSchema,
+} from '@/features/bank-statement/types/bank-statement-pagination';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/bank-accounts/$bankAccountId/bank-statements/')({
   component: BankStatementsIndex,
-  validateSearch: zodValidator(paginationSearchParamsSchema),
+  validateSearch: zodValidator(bankStatementPaginationSearchParamsSchema),
   beforeLoad: ({context}) => {
     handleAuthenticatedRedirect(context);
   },
@@ -22,8 +24,7 @@ export const Route = createFileRoute('/bank-accounts/$bankAccountId/bank-stateme
 
 function BankStatementsIndex() {
   const {bankAccountId} = Route.useParams();
-  const {pageIndex, pageSize} = Route.useSearch();
-
+  const searchParams = Route.useSearch();
   const {bankAccount, isPending: isBankAccountPending} = useGetBankAccount(bankAccountId);
   const {
     data,
@@ -31,7 +32,7 @@ function BankStatementsIndex() {
     pagination,
     setPagination,
     isPlaceholderData,
-  } = useGetAllBankStatements(bankAccountId, {pageIndex, pageSize});
+  } = useGetAllBankStatements(bankAccountId, searchParams);
 
   return (
     <>
@@ -40,18 +41,20 @@ function BankStatementsIndex() {
         {bankAccount && <BankAccountBreadcrumb bankAccount={bankAccount} bankStatements />}
       </AppHeaderLayout>
       <AppBodyLayout>
-        {data && <BankStatementCalendarView bankStatements={data.bankStatements} />}
-        <div className='flex flex-col gap-4'>
-          {data && data.total > 0 && <BankStatementUploadDialog pagination={pagination} />}
-          <BankStatementTable
-            bankStatements={data ? data.bankStatements : []}
-            totalBankStatements={data ? data.total : 0}
+        <BankStatementGrid
+          bankStatements={data?.bankStatements || []}
+          isPending={isBankStatementsPending}
+          isPlaceholderData={isPlaceholderData}
+        />
+        {data && data.total > 0 && (
+          <Pagination
+            totalItems={data.total}
             pagination={pagination}
             setPagination={setPagination}
-            isPlaceholderData={isPlaceholderData}
-            isPending={isBankStatementsPending}
+            navigateOptions={{from: '/bank-accounts/$bankAccountId/bank-statements'}}
+            pageSizeOptions={BANK_STATEMENT_PAGE_SIZE_OPTIONS}
           />
-        </div>
+        )}
       </AppBodyLayout>
     </>
   );

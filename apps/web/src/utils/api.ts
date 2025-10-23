@@ -79,6 +79,10 @@ async function request<T = unknown>(
     throw new HttpError(response.status, error.message);
   }
 
+  if (response.status === 204) {
+    return null as T;
+  }
+
   if (init?.parseJson === false) {
     return response;
   }

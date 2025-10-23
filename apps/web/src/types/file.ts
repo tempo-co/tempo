@@ -1,6 +1,6 @@
 import {MimeType} from './mime-type';
 
-export type File = {
+export type FileEntity = {
   id: string;
   name: string;
   size: number;

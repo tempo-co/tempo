@@ -1,5 +1,4 @@
 import {NavigateOptions, useNavigate} from '@tanstack/react-router';
-import {Table} from '@tanstack/react-table';
 import {ChevronFirst, ChevronLast, ChevronLeft, ChevronRight} from 'lucide-react';
 import {Dispatch, SetStateAction, useCallback, useEffect, useMemo} from 'react';
 
@@ -13,29 +12,33 @@ import {
 } from '@/components/ui/select';
 import {PAGE_SIZE_OPTIONS, PaginationParams} from '@/types/pagination';
 
-type TablePaginationProps<T> = {
-  table: Table<T>;
+type PaginationProps = {
   totalItems: number;
   pagination: PaginationParams;
   setPagination: Dispatch<SetStateAction<PaginationParams>>;
   navigateOptions: NavigateOptions;
+  pageSizeOptions?: number[];
 };
 
-export function TablePagination<T>({
-  table,
+export function Pagination({
   totalItems,
   pagination,
   setPagination,
   navigateOptions,
-}: TablePaginationProps<T>) {
+  pageSizeOptions = PAGE_SIZE_OPTIONS,
+}: PaginationProps) {
   const navigate = useNavigate(navigateOptions);
 
+  const totalPages = useMemo(
+    () => Math.ceil(totalItems / pagination.pageSize),
+    [totalItems, pagination.pageSize],
+  );
+
   useEffect(() => {
-    const totalPages = Math.ceil(totalItems / pagination.pageSize);
     if (pagination.pageIndex >= totalPages) {
       setPagination((prev) => ({...prev, pageIndex: Math.max(totalPages - 1, 0)}));
     }
-  }, [pagination.pageIndex, pagination.pageSize, totalItems, setPagination]);
+  }, [pagination.pageIndex, totalPages, setPagination]);
 
   const startIndex = useMemo(
     () => pagination.pageIndex * pagination.pageSize + 1,
@@ -45,48 +48,41 @@ export function TablePagination<T>({
     () => Math.min((pagination.pageIndex + 1) * pagination.pageSize, totalItems),
     [pagination.pageIndex, pagination.pageSize, totalItems],
   );
-  const totalPages = useMemo(
-    () => Math.ceil(totalItems / pagination.pageSize),
-    [totalItems, pagination.pageSize],
+
+  const canGoNext = useMemo(
+    () => pagination.pageIndex < totalPages - 1,
+    [pagination.pageIndex, totalPages],
   );
 
   const handlePageSizeChange = useCallback(
     async (pageSize: string) => {
-      await navigate({search: (prev) => ({...prev, pageSize: Number(pageSize)})});
-      setPagination((prev) => ({...prev, pageSize: Number(pageSize)}));
+      await navigate({search: (prev) => ({...prev, pageSize: Number(pageSize), pageIndex: 0})});
+      setPagination({pageIndex: 0, pageSize: Number(pageSize)});
     },
     [navigate, setPagination],
   );
 
   const handleFirstPage = useCallback(async () => {
     await navigate({search: (prev) => ({...prev, pageIndex: 0})});
-
     setPagination((prev) => ({...prev, pageIndex: 0}));
   }, [navigate, setPagination]);
 
   const handlePreviousPage = useCallback(async () => {
-    await navigate({
-      search: (prev) => ({
-        ...prev,
-        pageIndex: Math.max('pageIndex' in prev ? prev.pageIndex - 1 : 0, 0),
-      }),
-    });
-
-    setPagination((prev) => ({...prev, pageIndex: Math.max(prev.pageIndex - 1, 0)}));
-  }, [navigate, setPagination]);
+    const newPageIndex = Math.max(pagination.pageIndex - 1, 0);
+    await navigate({search: (prev) => ({...prev, pageIndex: newPageIndex})});
+    setPagination((prev) => ({...prev, pageIndex: newPageIndex}));
+  }, [navigate, pagination.pageIndex, setPagination]);
 
   const handleNextPage = useCallback(async () => {
-    await navigate({
-      search: (prev) => ({...prev, pageIndex: 'pageIndex' in prev ? prev.pageIndex + 1 : 0}),
-    });
-
-    setPagination((prev) => ({...prev, pageIndex: prev.pageIndex + 1}));
-  }, [navigate, setPagination]);
+    const newPageIndex = pagination.pageIndex + 1;
+    await navigate({search: (prev) => ({...prev, pageIndex: newPageIndex})});
+    setPagination((prev) => ({...prev, pageIndex: newPageIndex}));
+  }, [navigate, pagination.pageIndex, setPagination]);
 
   const handleLastPage = useCallback(async () => {
-    await navigate({search: (prev) => ({...prev, pageIndex: totalPages - 1})});
-
-    setPagination((prev) => ({...prev, pageIndex: totalPages - 1}));
+    const newPageIndex = totalPages - 1;
+    await navigate({search: (prev) => ({...prev, pageIndex: newPageIndex})});
+    setPagination((prev) => ({...prev, pageIndex: newPageIndex}));
   }, [navigate, setPagination, totalPages]);
 
   return (
@@ -94,15 +90,12 @@ export function TablePagination<T>({
       <div className='flex items-center space-x-6 lg:space-x-8'>
         <div className='flex items-center space-x-2'>
           <p className='text-sm font-medium'>Rows per page</p>
-          <Select
-            value={`${table.getState().pagination.pageSize}`}
-            onValueChange={handlePageSizeChange}
-          >
+          <Select value={`${pagination.pageSize}`} onValueChange={handlePageSizeChange}>
             <SelectTrigger className='h-8 w-[70px]'>
-              <SelectValue placeholder={table.getState().pagination.pageSize} />
+              <SelectValue placeholder={pagination.pageSize} />
             </SelectTrigger>
             <SelectContent side='top'>
-              {PAGE_SIZE_OPTIONS.map((pageSize) => (
+              {pageSizeOptions.map((pageSize) => (
                 <SelectItem key={pageSize} value={`${pageSize}`}>
                   {pageSize}
                 </SelectItem>
@@ -135,7 +128,7 @@ export function TablePagination<T>({
         </Button>
         <Button
           onClick={handleNextPage}
-          disabled={!table.getCanNextPage()}
+          disabled={!canGoNext}
           variant='outline'
           className='h-8 w-8 p-0'
         >
@@ -144,7 +137,7 @@ export function TablePagination<T>({
         </Button>
         <Button
           onClick={handleLastPage}
-          disabled={!table.getCanNextPage()}
+          disabled={!canGoNext}
           variant='outline'
           className='h-8 w-8 p-0'
         >

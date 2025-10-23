@@ -13,13 +13,7 @@ export function CurrencyAmount({amount, currency}: CurrencyAmountProps) {
   }).format(amount);
 
   return (
-    <span
-      className={cn(
-        'whitespace-nowrap font-mono',
-        amount > 0 && 'text-success',
-        amount < 0 && 'text-destructive',
-      )}
-    >
+    <span className={cn('whitespace-nowrap font-mono', amount > 0 && 'text-success')}>
       {formattedAmount}
     </span>
   );

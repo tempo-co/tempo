@@ -21,9 +21,14 @@ export function TransactionClearAllFiltersButton({
 
   const handleClear = async () => {
     await navigate({
-      search: (prev) => ({...prev, categories: undefined, startedAt: undefined, banks: undefined}),
+      search: (prev) => ({
+        ...prev,
+        categories: undefined,
+        startedAt: undefined,
+        bankAccountIds: undefined,
+      }),
     });
-    setFilters((prev) => ({...prev, categories: [], startedAt: undefined, banks: []}));
+    setFilters((prev) => ({...prev, categories: [], startedAt: undefined, bankAccountIds: []}));
   };
 
   return (

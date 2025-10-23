@@ -1,6 +1,5 @@
 import {z} from 'zod';
 
-import {Bank} from '@/types/bank';
 import {Category} from '@/types/category';
 import {paginationSearchParamsSchema} from '@/types/pagination';
 
@@ -24,7 +23,7 @@ export const transactionSearchParamsSchema = paginationSearchParamsSchema.extend
       to: z.preprocess(toDate, z.date()).optional(),
     })
     .optional(),
-  banks: z.array(z.nativeEnum(Bank)).optional(),
+  bankAccountIds: z.array(z.string().uuid()).optional(),
   sort: z
     .object({
       by: z.nativeEnum(SortField),
@@ -37,7 +36,7 @@ export type TransactionSearchParams = z.infer<typeof transactionSearchParamsSche
 
 export type TransactionFilterParams = Pick<
   TransactionSearchParams,
-  'categories' | 'startedAt' | 'banks'
+  'categories' | 'startedAt' | 'bankAccountIds'
 >;
 
 export type TransactionSortParams = TransactionSearchParams['sort'];
