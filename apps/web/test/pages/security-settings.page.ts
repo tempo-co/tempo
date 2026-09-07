@@ -7,7 +7,6 @@ export class SecuritySettingsPage {
   readonly currentSessionCard: Locator;
   readonly revokeAllButton: Locator;
   readonly revokeAllButtonConfirm: Locator;
-  readonly revokeButton: Locator;
   readonly revokeButtonConfirm: Locator;
   readonly sessionRevokeSuccessToast: Locator;
   readonly logOutButton: Locator;
@@ -33,7 +32,6 @@ export class SecuritySettingsPage {
       .and(page.locator('[data-current-session="true"]'));
     this.revokeAllButton = this.page.getByTestId('revoke-all-sessions-button');
     this.revokeAllButtonConfirm = this.page.getByTestId('revoke-all-sessions-button-confirm');
-    this.revokeButton = this.page.getByTestId('revoke-session-button');
     this.revokeButtonConfirm = this.page.getByTestId('revoke-session-button-confirm');
     this.sessionRevokeSuccessToast = this.page.getByText('Session revoked.');
     this.logOutButton = this.page.getByTestId('log-out-button-session');
@@ -47,6 +45,10 @@ export class SecuritySettingsPage {
     this.invalidCurrentPasswordError = page.getByText('Invalid current password.');
     this.requiredError = page.getByText('Required');
     this.passwordTooShortError = page.getByText('Too short. Must be at least 8 characters.');
+  }
+
+  getRevokeButton(sessionCard: Locator) {
+    return sessionCard.getByTestId('revoke-session-button');
   }
 
   async navigate() {

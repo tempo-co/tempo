@@ -4,7 +4,7 @@ export const useLocalStorage = <T>(key: string, initialValue: T) => {
   const parse = useCallback((item: string | null, defaultValue: T): T => {
     try {
       return item ? (JSON.parse(item) as T) : defaultValue;
-    } catch (err) {
+    } catch {
       return defaultValue;
     }
   }, []);
@@ -20,7 +20,7 @@ export const useLocalStorage = <T>(key: string, initialValue: T) => {
         const valueToStore = value instanceof Function ? value(storedValue) : value;
         setStoredValue(valueToStore);
         window.localStorage.setItem(key, JSON.stringify(valueToStore));
-      } catch (err) {
+      } catch {
         return;
       }
     },

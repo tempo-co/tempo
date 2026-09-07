@@ -3,8 +3,6 @@ import {TanStackRouterDevtools} from '@tanstack/router-devtools';
 
 import {AppSidebarLayout} from '@/components/shared/layout/app-sidebar-layout';
 import {SidebarProvider} from '@/components/ui/sidebar';
-import {UploadsPanel} from '@/features/bank-statement/components/bank-statement-upload/uploads-panel';
-import {UploadsProvider} from '@/providers/uploads.provider';
 
 export const Route = createRootRouteWithContext<{
   isAuthenticated: boolean;
@@ -28,15 +26,12 @@ function Root() {
   }
 
   return (
-    <UploadsProvider>
-      <SidebarProvider>
-        <AppSidebarLayout />
-        <main className='flex-1'>
-          <Outlet />
-        </main>
-        <UploadsPanel />
-      </SidebarProvider>
+    <SidebarProvider>
+      <AppSidebarLayout />
+      <main className='min-w-0 flex-1'>
+        <Outlet />
+      </main>
       {import.meta.env.DEV && <TanStackRouterDevtools position='bottom-right' />}
-    </UploadsProvider>
+    </SidebarProvider>
   );
 }

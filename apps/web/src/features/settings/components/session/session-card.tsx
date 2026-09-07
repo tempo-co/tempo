@@ -1,4 +1,5 @@
 import {format, formatDistanceToNow} from 'date-fns';
+import {createElement} from 'react';
 
 import {Card} from '@/components/ui/card';
 import {
@@ -26,8 +27,6 @@ export function SessionCard({session, hideRevokeButton = false}: SessionCardProp
   const lastSeenAt = format(session.lastSeenAt, 'MMM d, yyyy HH:mm');
   const lastSeenAtRelative = formatDistanceToNow(lastSeenAt, {addSuffix: true});
 
-  const Icon = getSessionIcon(session);
-
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -39,7 +38,9 @@ export function SessionCard({session, hideRevokeButton = false}: SessionCardProp
           <div className='flex flex-row items-center justify-between gap-2 p-4 sm:items-center'>
             <div className='flex min-w-0 flex-grow items-center gap-2'>
               <div className='flex-shrink-0 rounded-lg bg-accent p-2 text-muted-foreground'>
-                <Icon className='h-5 w-5 text-muted-foreground' />
+                {createElement(getSessionIcon(session), {
+                  className: 'h-5 w-5 text-muted-foreground',
+                })}
               </div>
               <div className='min-w-0 flex-grow'>
                 <p className='truncate text-sm font-medium'>{session.name}</p>

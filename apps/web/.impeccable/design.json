@@ -1,0 +1,253 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-04T16:07:20+02:00",
+  "title": "Design System: Flair",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Quiet Indigo",
+        "canonical": "hsl(240 60% 60%)",
+        "tonalRamp": [
+          "hsl(240 60% 15%)",
+          "hsl(240 60% 25%)",
+          "hsl(240 60% 35%)",
+          "hsl(240 60% 45%)",
+          "hsl(240 60% 55%)",
+          "hsl(240 60% 65%)",
+          "hsl(240 60% 80%)",
+          "hsl(240 60% 95%)"
+        ]
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "Night Field",
+        "canonical": "hsl(240 6% 7%)",
+        "tonalRamp": [
+          "hsl(240 6% 7%)",
+          "hsl(240 6% 12%)",
+          "hsl(240 6% 18%)",
+          "hsl(240 6% 28%)",
+          "hsl(240 6% 42%)",
+          "hsl(240 6% 58%)",
+          "hsl(240 6% 76%)",
+          "hsl(240 6% 94%)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Night Surface",
+        "canonical": "hsl(220 6% 10%)",
+        "tonalRamp": [
+          "hsl(220 6% 10%)",
+          "hsl(220 6% 15%)",
+          "hsl(220 6% 22%)",
+          "hsl(220 6% 32%)",
+          "hsl(220 6% 45%)",
+          "hsl(220 6% 60%)",
+          "hsl(220 6% 78%)",
+          "hsl(220 6% 95%)"
+        ]
+      },
+      "accent": {
+        "role": "neutral",
+        "displayName": "Night Accent Wash",
+        "canonical": "hsl(225 6% 14%)",
+        "tonalRamp": [
+          "hsl(225 6% 14%)",
+          "hsl(225 6% 20%)",
+          "hsl(225 6% 28%)",
+          "hsl(225 6% 38%)",
+          "hsl(225 6% 50%)",
+          "hsl(225 6% 64%)",
+          "hsl(225 6% 80%)",
+          "hsl(225 6% 95%)"
+        ]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "Confirmed Green",
+        "canonical": "hsl(142 76% 36%)",
+        "tonalRamp": [
+          "hsl(142 76% 15%)",
+          "hsl(142 76% 25%)",
+          "hsl(142 76% 35%)",
+          "hsl(142 76% 45%)",
+          "hsl(142 76% 55%)",
+          "hsl(142 76% 65%)",
+          "hsl(142 76% 80%)",
+          "hsl(142 76% 95%)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "page-title": {
+        "displayName": "Page title",
+        "purpose": "Major authenticated surface titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Primary explanatory copy and comfortable reading text."
+      },
+      "numeric": {
+        "displayName": "Numeric / technical",
+        "purpose": "Currency amounts, transaction IDs, rates, and exact values."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-resting",
+        "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "purpose": "Existing restrained separation for resting shared cards. Prefer tonal separation for new surfaces."
+      },
+      {
+        "name": "overlay",
+        "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+        "purpose": "Temporary elevation for dialogs, popovers, dropdowns, and sheets."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-state",
+        "value": "transition-colors 200ms ease-out",
+        "purpose": "Default hover, focus, active, and selected-state changes."
+      },
+      {
+        "name": "auth-layout",
+        "value": "300ms ease-out",
+        "purpose": "Subtle authentication title and card transitions."
+      },
+      {
+        "name": "logo-affordance",
+        "value": "200ms ease-out",
+        "purpose": "Small hover/tap response for the logo link."
+      },
+      {
+        "name": "loading-indicator",
+        "value": "1.6s linear infinite",
+        "purpose": "Existing sync and connection spinner motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single most important local action.",
+      "html": "<button class=\"ds-btn-primary\">Sync now</button>",
+      "css": ".ds-btn-primary { background: hsl(240 60% 60%); color: hsl(0 0% 93%); padding: 8px 16px; min-height: 40px; border: 0; border-radius: 2.8px; font: 500 14px/20px Lexend, sans-serif; transition: background 200ms ease-out, box-shadow 200ms ease-out; } .ds-btn-primary:hover { background: hsl(240 60% 54%); } .ds-btn-primary:focus-visible { outline: 2px solid hsl(240 60% 60%); outline-offset: 2px; }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A quiet field for search and filters.",
+      "html": "<input class=\"ds-input-search\" placeholder=\"Search transactions...\" aria-label=\"Search transactions\" />",
+      "css": ".ds-input-search { width: 100%; height: 40px; padding: 8px 12px; border: 1px solid hsl(213 8% 28%); border-radius: 2.8px; background: hsl(240 6% 7%); color: hsl(220 9% 94%); font: 400 14px/20px Lexend, sans-serif; } .ds-input-search::placeholder { color: hsl(220 9% 70%); } .ds-input-search:focus-visible { outline: 2px solid hsl(240 60% 60%); outline-offset: 2px; }"
+    },
+    {
+      "name": "Grouped Surface",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "A bordered, quiet surface for information that belongs together.",
+      "html": "<section class=\"ds-card\"><h2>Connected bank</h2><p>Last synchronized recently</p></section>",
+      "css": ".ds-card { padding: 24px; border: 1px solid hsl(213 8% 28%); border-radius: 4.8px; background: hsl(220 6% 10%); color: hsl(220 9% 94%); box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); font-family: Lexend, sans-serif; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "Compact text-first context for a categorical state.",
+      "html": "<span class=\"ds-status-badge\">AUTHORIZED</span>",
+      "css": ".ds-status-badge { display: inline-flex; align-items: center; padding: 2px 10px; border: 1px solid hsl(213 8% 28%); border-radius: 9999px; background: transparent; color: hsl(220 9% 94%); font: 500 12px/16px Lexend, sans-serif; }"
+    },
+    {
+      "name": "Quiet Navigation Item",
+      "kind": "nav",
+      "refersTo": "button-ghost",
+      "description": "A sidebar route with a modest active wash and clear label.",
+      "html": "<a class=\"ds-nav-item\" href=\"#transactions\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h14M13 6l6 6-6 6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" /></svg><span>Bank Transactions</span></a>",
+      "css": ".ds-nav-item { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 8px; border-radius: 2.8px; color: hsl(220 9% 94%); font: 400 14px/20px Lexend, sans-serif; text-decoration: none; transition: background 200ms ease-out, color 200ms ease-out; } .ds-nav-item:hover, .ds-nav-item:focus-visible, .ds-nav-item[aria-current=\"page\"] { background: hsl(225 6% 14%); color: hsl(220 9% 94%); } .ds-nav-item:focus-visible { outline: 2px solid hsl(240 60% 60%); outline-offset: 2px; } .ds-nav-item svg { width: 16px; height: 16px; flex: none; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Ledger",
+    "overview": "Flair should feel like a private record that can be trusted: calm, legible, and deliberate. It is an instrument for understanding real personal finances, not a finance-themed marketing dashboard. The interface should reduce noise around high-stakes data and help someone understand state quickly without feeling surveilled, gamified, or pressured.\n\nPreserve and sharpen the incumbent identity: dark-first with fully supported light and system themes, Lexend typography, indigo as the interaction signal, compact geometry, and shadcn/Radix primitives. Make the product feel distinctive through hierarchy, information architecture, copy, state design, and meaningful whitespace—not through decorative effects.",
+    "keyCharacteristics": [
+      "Quiet, private, and trustworthy.",
+      "Data-forward without being dense for its own sake.",
+      "Indigo signal on a neutral field.",
+      "Mostly flat tonal layers with transient elevation.",
+      "Precise numbers paired with plain-language status.",
+      "Product-specific structure instead of generic SaaS decoration."
+    ],
+    "rules": [
+      {
+        "name": "The Quiet Signal Rule",
+        "body": "Flair earns attention with hierarchy and relevance first. Color, motion, and ornament are supporting signals, never the content of the screen.",
+        "section": "overview"
+      },
+      {
+        "name": "The One Accent Rule",
+        "body": "Quiet Indigo is scarce enough to remain meaningful. Do not tint every card, icon, badge, link, and chart with it.",
+        "section": "colors"
+      },
+      {
+        "name": "The Plain Number Rule",
+        "body": "Monetary values and dates should be easy to scan, compare, and copy. Do not sacrifice legibility for a fashionable display treatment.",
+        "section": "typography"
+      },
+      {
+        "name": "The Record Before Ornament Rule",
+        "body": "The user's financial record is the visual subject. Do not spend the first viewport on decorative headers, generic statistic-card mosaics, or empty hero space when the task is to inspect or act on data.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat-at-Rest Rule",
+        "body": "Resting content stays quiet. Elevation is reserved for interaction, containment that genuinely needs separation, and temporary surfaces.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do design for the Operate mode: make state, task, and next action clear before adding visual personality.",
+      "Do use Quiet Indigo as a scarce, meaningful signal rather than a decorative palette wash.",
+      "Do preserve Lexend, the compact radius vocabulary, and the dark/light/system theme model unless a deliberate identity change is approved.",
+      "Do use tonal layering, whitespace, typography, and content structure to create distinction.",
+      "Do make real financial data feel calm and inspectable: clear dates, aligned amounts, explicit status, and useful detail.",
+      "Do design loading, empty, filtered-empty, error, unauthorized, syncing, partial, and success states as part of the feature.",
+      "Do verify dark, light, and system themes, keyboard focus, reduced motion, and narrow mobile widths before considering a surface finished.",
+      "Do use real product terminology and honest data states. If demonstration data is synthetic, label it rather than inventing financial claims.",
+      "Do run a screenshot-based critique and a technical audit after implementation; fix the highest-impact findings in a bounded pass."
+    ],
+    "donts": [
+      "Don't produce the recognizable AI-finance starter kit: purple/blue gradients, glassmorphism, oversized rounded cards, glowing borders, and a row of interchangeable metric tiles.",
+      "Don't make every section a card or every action a pill. Containers must earn their boundaries.",
+      "Don't introduce a second accent color, ornamental gradient, or decorative illustration without a product-specific reason.",
+      "Don't use huge marketing-style hero sections inside authenticated workflows.",
+      "Don't use color alone to communicate positive/negative amounts, transaction direction, bank status, errors, or warnings.",
+      "Don't hide important information behind hover-only behavior, especially on transaction rows and mobile layouts.",
+      "Don't fabricate balances, transactions, financial claims, customers, benchmarks, or synchronization outcomes.",
+      "Don't change the product's typography, indigo identity, radius language, or theme behavior as a side effect of making one screen more interesting.",
+      "Don't add motion, charts, gamification, or decorative density unless it improves a real user task."
+    ]
+  }
+}

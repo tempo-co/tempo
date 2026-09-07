@@ -1,10 +1,13 @@
 import {redirect} from '@tanstack/react-router';
 import {toast} from 'sonner';
 
+import {formatRetryAfter, parseRetryAfter} from './retry-after';
+
 export class HttpError extends Error {
   constructor(
     public status: number,
     message: string,
+    public retryAfterSeconds?: number,
   ) {
     super(message);
   }
@@ -59,11 +62,12 @@ async function request<T = unknown>(
       throw redirect({to: '/verify-email'});
     }
     if (response.status === 429) {
+      const retryAfterSeconds = parseRetryAfter(response);
       toast.error('Rate limit exceeded', {
-        description: 'Too many requests. Please try again later.',
+        description: formatRetryAfter(retryAfterSeconds),
         id: 'rate-limit-exceeded',
       });
-      throw new HttpError(response.status, response.statusText);
+      throw new HttpError(response.status, response.statusText, retryAfterSeconds);
     }
     if (response.status === 500) {
       throw toast.error('Server error', {

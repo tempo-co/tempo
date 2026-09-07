@@ -37,7 +37,7 @@ test.describe.serial('Account Settings: Sessions', () => {
   test('should revoke another session successfully', async () => {
     const otherSessionCard = securitySettingsPage.otherSessionCards.first();
     await otherSessionCard.hover();
-    await securitySettingsPage.revokeButton.click();
+    await securitySettingsPage.getRevokeButton(otherSessionCard).click();
     await securitySettingsPage.revokeButtonConfirm.click();
 
     await expect(securitySettingsPage.sessionRevokeSuccessToast).toBeVisible();
