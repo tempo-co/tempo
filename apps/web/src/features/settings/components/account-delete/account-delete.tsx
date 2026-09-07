@@ -1,5 +1,7 @@
 import {Button} from '@/components/ui/button';
 
+import {AccountDeleteDialog} from './account-delete-dialog';
+
 export function AccountDelete() {
   return (
     <div className='mt-8'>
@@ -13,9 +15,15 @@ export function AccountDelete() {
             Deleting your account cannot be undone. Please be certain.
           </p>
         </div>
-        <Button variant='destructive' className='w-full shrink-0 text-foreground sm:w-fit'>
-          Delete account
-        </Button>
+        <AccountDeleteDialog>
+          <Button
+            variant='destructive'
+            className='w-full shrink-0 text-foreground sm:w-fit'
+            data-testid='delete-account-button'
+          >
+            Delete account
+          </Button>
+        </AccountDeleteDialog>
       </div>
     </div>
   );

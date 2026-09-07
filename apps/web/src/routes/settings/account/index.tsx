@@ -2,6 +2,7 @@ import {createFileRoute} from '@tanstack/react-router';
 
 import {Card} from '@/components/ui/card';
 import {Skeleton} from '@/components/ui/skeleton';
+import {AccountDelete} from '@/features/settings/components/account-delete/account-delete';
 import {EmailChangeDialog} from '@/features/settings/components/email-change/email-change-dialog';
 import {NameChangeForm} from '@/features/settings/components/name-change-form';
 import {useCurrentAccount} from '@/hooks/use-current-account';
@@ -56,6 +57,8 @@ function SettingsAccountIndex() {
             </div>
           </div>
         </div>
+
+        <AccountDelete />
       </div>
     </div>
   );

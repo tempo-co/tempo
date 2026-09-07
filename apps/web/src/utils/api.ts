@@ -21,6 +21,7 @@ const shouldRedirect = (resource: string, method?: string) => {
   if (resource === '/auth/change-password') return false;
   if (resource === '/auth/change-email/verify') return false;
   if (resource === '/accounts/me' && method === 'GET') return false;
+  if (resource === '/accounts/me' && method === 'DELETE') return false;
   if (resource.startsWith('/auth/sessions') && method === 'DELETE') return false;
   return true;
 };

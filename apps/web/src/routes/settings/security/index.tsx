@@ -1,7 +1,6 @@
 import {createFileRoute} from '@tanstack/react-router';
 
 import {Skeleton} from '@/components/ui/skeleton';
-import {AccountDelete} from '@/features/settings/components/account-delete/account-delete';
 import {PasswordChangeCard} from '@/features/settings/components/password-change/password-change-card';
 import {SessionList} from '@/features/settings/components/session/session-list';
 import {useCurrentAccount} from '@/hooks/use-current-account';
@@ -27,7 +26,6 @@ function SettingsSecurityIndex() {
       <div className='space-y-8'>
         <SessionList />
         <PasswordChangeCard />
-        <AccountDelete />
       </div>
     </div>
   );
