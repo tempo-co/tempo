@@ -27,7 +27,7 @@ export const useVerifyEmail = () => {
       await queryClient.invalidateQueries({queryKey: CURRENT_ACCOUNT_KEY});
 
       await navigate({to: '/', replace: true});
-      toast.success('Welcome to Flair!', {
+      toast.success('Welcome to Tempo!', {
         description: 'Your email has been verified.',
         id: 'welcome',
       });

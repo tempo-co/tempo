@@ -16,7 +16,7 @@ export class HomePage {
     this.sidebarAccountEmail = page.getByTestId('sidebar-current-account-email');
     this.sidebarAccountMenuTrigger = page.getByTestId('account-menu-trigger');
     this.sidebarLogOutButton = page.getByTestId('log-out-button');
-    this.welcomeToastTitle = page.getByText('Welcome to Flair!');
+    this.welcomeToastTitle = page.getByText('Welcome to Tempo!');
     this.welcomeToastDescription = page.getByText('Your email has been verified.');
     this.alreadyVerifiedToastTitle = page.getByText('Your email has already been verified.');
   }

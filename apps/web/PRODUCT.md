@@ -8,17 +8,17 @@ web
 
 ## Users
 
-The primary user is the individual owner of the instance. Flair is used for personal finances across multiple bank accounts and multiple devices. Success means being able to pull up current banking information whenever needed and use it to understand spending and financial habits.
+The primary user is the individual owner of the instance. Tempo is used for personal finances across multiple bank accounts and multiple devices. Success means being able to pull up current banking information whenever needed and use it to understand spending and financial habits.
 
 ## Product Purpose
 
-Flair is a personal finance application for tracking real financial data across connected bank accounts. It should make current account information, balances, and transactions easy to retrieve and inspect, then support richer understanding through transaction categorization, spending and habit statistics, and future predictions.
+Tempo is a personal finance application for tracking real financial data across connected bank accounts. It should make current account information, balances, and transactions easy to retrieve and inspect, then support richer understanding through transaction categorization, spending and habit statistics, and future predictions.
 
 The product is useful when it gives the owner a dependable, always-available view of their finances without requiring manual statement files or a broad-market financial product workflow.
 
 ## Positioning
 
-Flair is intended to be a private, read-only financial record for one person: real bank data is synchronized through Enable Banking rather than uploaded as statements, and the app is intended to run continuously under the owner's control and remain accessible from their own devices.
+Tempo is intended to be a private, read-only financial record for one person: real bank data is synchronized through Enable Banking rather than uploaded as statements, and the app is intended to run continuously under the owner's control and remain accessible from their own devices.
 
 ## Operating Context
 
@@ -39,14 +39,14 @@ Flair is intended to be a private, read-only financial record for one person: re
 
 ## Brand Commitments
 
-- Flair is the current working name.
-- The existing product identity is not yet binding; the name and identity may change soon.
+- The product is named **Tempo**.
+- The brand identity (name, logo, palette, typography) is defined in `DESIGN.md`, which is the binding reference for visual work.
 - No legal, testimonial, customer, benchmark, or other proof assets were confirmed. Future work must not fabricate them.
 
 ## Evidence on Hand
 
 - The implemented frontend feature areas are under `src/features/auth`, `src/features/banking`, and `src/features/settings`, with routes under `src/routes`.
-- The adjacent backend contains the Enable Banking integration and bank connection, account, balance, synchronization, and transaction services under `../flair-api/src/app/modules`.
+- The adjacent backend contains the Enable Banking integration and bank connection, account, balance, synchronization, and transaction services under `../tempo-api/src/app/modules`.
 - The current repository contains working authentication, bank connection, synchronization, balance, transaction review, and settings flows; planned categorization, insights, and prediction features are not yet evidence of shipped functionality.
 
 ## Product Principles

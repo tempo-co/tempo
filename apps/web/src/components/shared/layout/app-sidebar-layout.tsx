@@ -43,7 +43,7 @@ export function AppSidebarLayout() {
       <Sidebar collapsible='icon'>
         <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel>Flair</SidebarGroupLabel>
+            <SidebarGroupLabel>Tempo</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {navItems.map((item) => {

@@ -40,7 +40,7 @@ export function ResetPasswordRequest() {
     setHasResent(false);
   };
 
-  const gmailUrl = `https://mail.google.com/mail/u/0/#search/${encodeURIComponent('from:no-reply@flair.com')}`;
+  const gmailUrl = `https://mail.google.com/mail/u/0/#search/${encodeURIComponent('from:no-reply@localhost')}`;
 
   return (
     <AuthLayout title={isSuccess ? 'Check your email' : 'Reset your password'}>

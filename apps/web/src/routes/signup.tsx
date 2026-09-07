@@ -16,7 +16,7 @@ export const Route = createFileRoute('/signup')({
 
 function SignUp() {
   return (
-    <AuthLayout title='Create your Flair account'>
+    <AuthLayout title='Create your Tempo account'>
       <div className='relative flex min-h-[220px] flex-col'>
         <AnimatePresence mode='wait' initial={false}>
           <motion.div

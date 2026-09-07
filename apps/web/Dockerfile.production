@@ -9,8 +9,8 @@ RUN npm ci
 
 COPY . ./
 
-ARG VITE_API_URL=/flair/api
-ARG VITE_BASE_PATH=/flair/
+ARG VITE_API_URL=/tempo/api
+ARG VITE_BASE_PATH=/tempo/
 ARG VITE_EMAIL_UI_URL=http://127.0.0.1:8025
 ENV VITE_API_URL=$VITE_API_URL \
     VITE_APP_URL=$VITE_APP_URL \
@@ -21,6 +21,6 @@ RUN npm run build
 
 FROM nginx:alpine
 COPY --from=builder /usr/src/app/dist /usr/share/nginx/html
-COPY nginx/flair.conf /etc/nginx/conf.d/default.conf
+COPY nginx/tempo.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 8080

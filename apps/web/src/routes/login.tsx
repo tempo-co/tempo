@@ -23,7 +23,7 @@ export const Route = createFileRoute('/login')({
 
 function LogIn() {
   return (
-    <AuthLayout title='Log in to Flair'>
+    <AuthLayout title='Log in to Tempo'>
       <div className='relative flex min-h-[180px] flex-col'>
         <AnimatePresence mode='wait' initial={false}>
           <motion.div
