@@ -6,8 +6,8 @@
   "start_url": "/tempo/",
   "scope": "/tempo/",
   "display": "standalone",
-  "background_color": "#F6F1E8",
-  "theme_color": "#F6F1E8",
+  "background_color": "#17161B",
+  "theme_color": "#17161B",
   "icons": [
     {
       "src": "/tempo/pwa-icon-192.png",
