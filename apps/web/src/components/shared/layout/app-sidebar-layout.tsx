@@ -32,9 +32,15 @@ const navItems = [
 ];
 
 export function AppSidebarLayout() {
-  const {isMobile} = useSidebar();
+  const {isMobile, setOpenMobile} = useSidebar();
   const {logOut, isPending} = useLogOut();
   const matchRoute = useMatchRoute();
+
+  const closeMobileSidebar = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   const {currentAccount} = useCurrentAccount({skipFetch: true});
 
@@ -51,7 +57,11 @@ export function AppSidebarLayout() {
                   return (
                     <SidebarMenuItem key={item.label}>
                       <SidebarMenuButton asChild>
-                        <Link to={item.route} className={cn(isActive && 'bg-sidebar-accent')}>
+                        <Link
+                          to={item.route}
+                          className={cn(isActive && 'bg-sidebar-accent')}
+                          onClick={closeMobileSidebar}
+                        >
                           <item.icon />
                           <span>{item.label}</span>
                         </Link>
@@ -101,7 +111,11 @@ export function AppSidebarLayout() {
                 >
                   <DropdownMenuGroup>
                     <DropdownMenuItem asChild>
-                      <Link to='/settings/account' className='cursor-pointer'>
+                      <Link
+                        to='/settings/account'
+                        className='cursor-pointer'
+                        onClick={closeMobileSidebar}
+                      >
                         <Settings className='mr-2 h-4 w-4' />
                         Settings
                       </Link>
