@@ -3,9 +3,13 @@ import * as React from 'react';
 import {ScrollArea, ScrollBar} from '@/components/ui/scroll-area';
 import {cn} from '@/utils/cn';
 
-const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
-  ({className, ...props}, ref) => (
-    <ScrollArea className='relative w-full rounded-md border'>
+type TableProps = React.HTMLAttributes<HTMLTableElement> & {
+  wrapperClassName?: string;
+};
+
+const Table = React.forwardRef<HTMLTableElement, TableProps>(
+  ({className, wrapperClassName, ...props}, ref) => (
+    <ScrollArea className={cn('relative w-full rounded-md border', wrapperClassName)}>
       <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
       <ScrollBar orientation='vertical' />
       <ScrollBar orientation='horizontal' />

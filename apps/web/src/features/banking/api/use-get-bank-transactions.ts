@@ -27,40 +27,47 @@ export const useGetBankTransactions = (searchParams: BankTransactionSearchParams
     searchParams.sort ?? DEFAULT_BANK_TRANSACTION_SORT,
   );
 
-  const {data, isPending, isPlaceholderData} = useQuery<BankTransactionsResponse>({
-    queryKey: ['bank-transactions', pagination, filters, sort],
-    queryFn: async () => {
-      const params = new URLSearchParams();
+  const {data, isPending, isPlaceholderData, isError, refetch} = useQuery<BankTransactionsResponse>(
+    {
+      queryKey: ['bank-transactions', pagination, filters, sort],
+      queryFn: async () => {
+        const params = new URLSearchParams();
 
-      params.append('pagination[pageIndex]', pagination.pageIndex.toString());
-      params.append('pagination[pageSize]', pagination.pageSize.toString());
+        params.append('pagination[pageIndex]', pagination.pageIndex.toString());
+        params.append('pagination[pageSize]', pagination.pageSize.toString());
 
-      if (filters.bookingDate?.from) {
-        params.append('filter[bookingDate][from]', format(filters.bookingDate.from, 'yyyy-MM-dd'));
-      }
-      if (filters.bookingDate?.to) {
-        params.append('filter[bookingDate][to]', format(filters.bookingDate.to, 'yyyy-MM-dd'));
-      }
-      if (filters.bankAccountIds && filters.bankAccountIds.length > 0) {
-        filters.bankAccountIds.forEach((id) => params.append('filter[bankAccountIds][]', id));
-      }
-      if (filters.search?.trim()) {
-        params.append('filter[search]', filters.search.trim());
-      }
-      if (sort?.by && sort.order) {
-        params.append('sort[by]', sort.by);
-        params.append('sort[order]', sort.order);
-      }
+        if (filters.bookingDate?.from) {
+          params.append(
+            'filter[bookingDate][from]',
+            format(filters.bookingDate.from, 'yyyy-MM-dd'),
+          );
+        }
+        if (filters.bookingDate?.to) {
+          params.append('filter[bookingDate][to]', format(filters.bookingDate.to, 'yyyy-MM-dd'));
+        }
+        if (filters.bankAccountIds && filters.bankAccountIds.length > 0) {
+          filters.bankAccountIds.forEach((id) => params.append('filter[bankAccountIds][]', id));
+        }
+        if (filters.search?.trim()) {
+          params.append('filter[search]', filters.search.trim());
+        }
+        if (sort?.by && sort.order) {
+          params.append('sort[by]', sort.by);
+          params.append('sort[order]', sort.order);
+        }
 
-      return await api.get<BankTransactionsResponse>(`/bank-transactions?${params.toString()}`);
+        return await api.get<BankTransactionsResponse>(`/bank-transactions?${params.toString()}`);
+      },
+      placeholderData: keepPreviousData,
     },
-    placeholderData: keepPreviousData,
-  });
+  );
 
   return {
     data,
     isPending,
     isPlaceholderData,
+    isError,
+    refetch,
     pagination,
     setPagination,
     filters,

@@ -15,9 +15,14 @@ import {BankTransactionFilterParams} from '../types/bank-transaction';
 type BankTransactionDateFilterProps = {
   filters: BankTransactionFilterParams;
   setFilters: React.Dispatch<React.SetStateAction<BankTransactionFilterParams>>;
+  className?: string;
 };
 
-export function BankTransactionDateFilter({filters, setFilters}: BankTransactionDateFilterProps) {
+export function BankTransactionDateFilter({
+  filters,
+  setFilters,
+  className,
+}: BankTransactionDateFilterProps) {
   const navigate = useNavigate({from: '/bank-transactions/'});
 
   const handleSelect = async (range: DateRange | undefined) => {
@@ -33,22 +38,44 @@ export function BankTransactionDateFilter({filters, setFilters}: BankTransaction
     setFilters((prev) => ({...prev, bookingDate: undefined}));
   };
 
+  const bookingDateFrom = filters.bookingDate?.from;
+  const bookingDateTo = filters.bookingDate?.to;
+  const fullBookingDateLabel = bookingDateFrom
+    ? `${format(bookingDateFrom, 'MMM dd, y')}${
+        bookingDateTo ? ` - ${format(bookingDateTo, 'MMM dd, y')}` : ''
+      }`
+    : undefined;
+  const compactBookingDateLabel = bookingDateFrom
+    ? `${format(bookingDateFrom, 'MMM d')}${
+        bookingDateTo
+          ? `–${format(
+              bookingDateTo,
+              bookingDateFrom.getFullYear() === bookingDateTo.getFullYear() &&
+                bookingDateFrom.getMonth() === bookingDateTo.getMonth()
+                ? 'd'
+                : 'MMM d',
+            )}`
+          : ''
+      }`
+    : undefined;
+
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button
           variant='outline'
           size='sm'
-          className={cn('h-8', filters.bookingDate ? 'border' : 'border-dashed')}
+          className={cn('h-10 sm:h-8', filters.bookingDate ? 'border' : 'border-dashed', className)}
+          aria-label={fullBookingDateLabel ? `Booking date: ${fullBookingDateLabel}` : undefined}
         >
           <CalendarIcon />
           Booking date
-          {filters.bookingDate?.from && (
+          {fullBookingDateLabel && (
             <>
               <Separator orientation='vertical' className='mx-2 h-4' />
-              <span className='text-secondary-foreground'>
-                {format(filters.bookingDate.from, 'MMM dd, y')}
-                {filters.bookingDate.to && <> - {format(filters.bookingDate.to, 'MMM dd, y')}</>}
+              <span className='min-w-0 truncate text-secondary-foreground max-md:flex-1'>
+                <span className='max-md:hidden'>{fullBookingDateLabel}</span>
+                <span className='hidden max-md:inline'>{compactBookingDateLabel}</span>
               </span>
             </>
           )}
@@ -68,7 +95,11 @@ export function BankTransactionDateFilter({filters, setFilters}: BankTransaction
           <>
             <Separator className='w-full' />
             <div className='p-1'>
-              <Button className='h-8 w-full rounded-sm' variant='ghost' onClick={handleReset}>
+              <Button
+                className='h-10 w-full rounded-sm sm:h-8'
+                variant='ghost'
+                onClick={handleReset}
+              >
                 Reset
               </Button>
             </div>

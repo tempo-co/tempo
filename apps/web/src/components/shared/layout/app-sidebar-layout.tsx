@@ -1,7 +1,6 @@
 import {Link, useMatchRoute} from '@tanstack/react-router';
 import {Building2, ChevronsUpDown, Home, List, LogOut, Settings} from 'lucide-react';
 
-import {Avatar, AvatarFallback} from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -83,9 +82,6 @@ export function AppSidebarLayout() {
                     className='data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
                     data-testid='account-menu-trigger'
                   >
-                    <Avatar className='h-8 w-8 rounded-lg'>
-                      <AvatarFallback className='rounded-lg'>CN</AvatarFallback>
-                    </Avatar>
                     <div className='grid flex-1 text-left text-sm leading-tight'>
                       <span
                         className='truncate font-semibold'

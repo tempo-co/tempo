@@ -9,15 +9,7 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 
-import {BankTransaction} from '../types/bank-transaction';
-
-type BankTransactionBreadcrumbProps = {
-  transaction?: BankTransaction;
-};
-
-export function BankTransactionBreadcrumb({transaction}: BankTransactionBreadcrumbProps) {
-  const label = transaction?.description || transaction?.counterpartyName || 'Transaction';
-
+export function BankTransactionBreadcrumb() {
   return (
     <Breadcrumb>
       <BreadcrumbList>
@@ -28,22 +20,8 @@ export function BankTransactionBreadcrumb({transaction}: BankTransactionBreadcru
         </BreadcrumbItem>
         <BreadcrumbSeparator />
         <BreadcrumbItem>
-          {transaction ? (
-            <BreadcrumbLink asChild>
-              <Link to='/bank-transactions'>Bank Transactions</Link>
-            </BreadcrumbLink>
-          ) : (
-            <BreadcrumbPage>Bank Transactions</BreadcrumbPage>
-          )}
+          <BreadcrumbPage>Bank transactions</BreadcrumbPage>
         </BreadcrumbItem>
-        {transaction && (
-          <>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{label}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </>
-        )}
       </BreadcrumbList>
     </Breadcrumb>
   );

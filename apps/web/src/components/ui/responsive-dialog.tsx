@@ -35,6 +35,8 @@ interface RootResponsiveDialogProps extends BaseProps {
 interface ResponsiveDialogProps extends BaseProps {
   className?: string;
   asChild?: true;
+  'aria-label'?: string;
+  'data-testid'?: string;
 }
 
 const ResponsiveDialogContext = React.createContext<{isDesktop: boolean}>({

@@ -9,10 +9,13 @@ import {AppHeaderLayout} from '@/components/shared/layout/app-header-layout';
 import {LoadingBar} from '@/components/shared/loading-bar';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
 import {BankConnectionList} from '@/features/banking/components/bank-connection-list';
+import {BankTransactionDetailsDialog} from '@/features/banking/components/bank-transaction-details-dialog';
+import {useBankTransactionInspector} from '@/hooks/use-bank-transaction-inspector';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 const searchSchema = z.object({
   result: z.enum(['connected', 'cancelled', 'error']).optional(),
+  transactionId: z.string().optional(),
 });
 
 export const Route = createFileRoute('/bank-connections/')({
@@ -25,8 +28,9 @@ export const Route = createFileRoute('/bank-connections/')({
 
 function BankConnectionsIndex() {
   const navigate = useNavigate();
-  const {result} = Route.useSearch();
-  const {bankConnections, isPending} = useGetAllBankConnections();
+  const {result, transactionId} = Route.useSearch();
+  const {openTransaction, closeTransaction} = useBankTransactionInspector('/bank-connections/');
+  const {bankConnections, isPending, isError, refetch} = useGetAllBankConnections();
 
   useEffect(() => {
     if (!result) return;
@@ -51,9 +55,20 @@ function BankConnectionsIndex() {
       <AppHeaderLayout>
         <span className='text-sm font-medium'>Bank connections</span>
       </AppHeaderLayout>
-      <AppBodyLayout>
-        <BankConnectionList bankConnections={bankConnections || []} isPending={isPending} />
+      <AppBodyLayout className='max-md:my-6'>
+        <BankConnectionList
+          bankConnections={bankConnections || []}
+          isPending={isPending}
+          isError={isError}
+          onRetry={() => void refetch()}
+          onTransactionSelect={openTransaction}
+        />
       </AppBodyLayout>
+      <BankTransactionDetailsDialog
+        transactionId={transactionId ?? ''}
+        open={Boolean(transactionId)}
+        onOpenChange={closeTransaction}
+      />
     </>
   );
 }

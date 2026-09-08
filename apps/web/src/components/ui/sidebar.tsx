@@ -27,6 +27,7 @@ type SidebarContextProps = {
   setOpen: (open: boolean) => void;
   openMobile: boolean;
   setOpenMobile: (open: boolean) => void;
+  mobileTriggerRef: React.MutableRefObject<HTMLButtonElement | null>;
   isMobile: boolean;
   toggleSidebar: () => void;
 };
@@ -64,6 +65,7 @@ const SidebarProvider = React.forwardRef<
   ) => {
     const isMobile = useIsMobile();
     const [openMobile, setOpenMobile] = React.useState(false);
+    const mobileTriggerRef = React.useRef<HTMLButtonElement | null>(null);
 
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for control from outside the component.
@@ -114,9 +116,10 @@ const SidebarProvider = React.forwardRef<
         isMobile,
         openMobile,
         setOpenMobile,
+        mobileTriggerRef,
         toggleSidebar,
       }),
-      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar],
+      [state, open, setOpen, isMobile, openMobile, setOpenMobile, mobileTriggerRef, toggleSidebar],
     );
 
     return (
@@ -158,7 +161,7 @@ const Sidebar = React.forwardRef<
     {side = 'left', variant = 'sidebar', collapsible = 'offcanvas', className, children, ...props},
     ref,
   ) => {
-    const {isMobile, state, openMobile, setOpenMobile} = useSidebar();
+    const {isMobile, state, openMobile, setOpenMobile, mobileTriggerRef} = useSidebar();
 
     if (collapsible === 'none') {
       return (
@@ -182,6 +185,10 @@ const Sidebar = React.forwardRef<
             data-sidebar='sidebar'
             data-mobile='true'
             className='w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden'
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              mobileTriggerRef.current?.focus();
+            }}
             style={
               {
                 '--sidebar-width': SIDEBAR_WIDTH_MOBILE,
@@ -250,15 +257,27 @@ const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
   React.ComponentProps<typeof Button>
 >(({className, onClick, ...props}, ref) => {
-  const {toggleSidebar} = useSidebar();
+  const {toggleSidebar, isMobile, mobileTriggerRef} = useSidebar();
+  const composedRef = React.useCallback(
+    (node: HTMLButtonElement | null) => {
+      if (isMobile) mobileTriggerRef.current = node;
+
+      if (typeof ref === 'function') {
+        ref(node);
+      } else if (ref) {
+        ref.current = node;
+      }
+    },
+    [isMobile, mobileTriggerRef, ref],
+  );
 
   return (
     <Button
-      ref={ref}
+      ref={composedRef}
       data-sidebar='trigger'
       variant='ghost'
       size='icon'
-      className={cn('h-7 w-7', className)}
+      className={cn('h-7 w-7 max-md:h-11 max-md:w-11', className)}
       onClick={(event) => {
         onClick?.(event);
         toggleSidebar();

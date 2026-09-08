@@ -86,33 +86,48 @@ export function Pagination({
   }, [navigate, setPagination, totalPages]);
 
   return (
-    <div className='mt-4 flex items-center justify-end gap-10'>
-      <div className='flex items-center space-x-6 lg:space-x-8'>
-        <div className='flex items-center space-x-2'>
-          <p className='text-sm font-medium'>Rows per page</p>
-          <Select value={`${pagination.pageSize}`} onValueChange={handlePageSizeChange}>
-            <SelectTrigger className='h-8 w-[70px]'>
-              <SelectValue placeholder={pagination.pageSize} />
-            </SelectTrigger>
-            <SelectContent side='top'>
-              {pageSizeOptions.map((pageSize) => (
-                <SelectItem key={pageSize} value={`${pageSize}`}>
-                  {pageSize}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+    <div
+      data-testid='pagination'
+      className='mt-4 flex w-full flex-nowrap items-center justify-between gap-2 sm:justify-end sm:gap-10'
+    >
+      <div className='flex items-center space-x-2'>
+        <p className='whitespace-nowrap text-sm font-medium'>
+          <span className='sm:hidden'>Rows</span>
+          <span className='hidden sm:inline'>Rows per page</span>
+        </p>
+        <Select value={`${pagination.pageSize}`} onValueChange={handlePageSizeChange}>
+          <SelectTrigger
+            aria-label='Rows per page'
+            className='h-11 w-[4.5rem] gap-2 sm:h-8 sm:w-[70px]'
+          >
+            <SelectValue placeholder={pagination.pageSize} />
+          </SelectTrigger>
+          <SelectContent side='top'>
+            {pageSizeOptions.map((pageSize) => (
+              <SelectItem key={pageSize} value={`${pageSize}`}>
+                {pageSize}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
-      <p className='text-sm'>
-        {startIndex}-{endIndex} of {totalItems}
+      <p
+        aria-label={`Showing ${startIndex}-${endIndex} of ${totalItems} rows`}
+        className='whitespace-nowrap text-sm'
+      >
+        <span className='sm:hidden'>
+          {startIndex}-{endIndex} / {totalItems}
+        </span>
+        <span className='hidden sm:inline'>
+          {startIndex}-{endIndex} of {totalItems}
+        </span>
       </p>
-      <div className='space-x-2'>
+      <div className='flex shrink-0 space-x-2'>
         <Button
           onClick={handleFirstPage}
           disabled={pagination.pageIndex < 1}
           variant='outline'
-          className='h-8 w-8 p-0'
+          className='hidden h-11 w-11 p-0 sm:inline-flex sm:h-8 sm:w-8'
         >
           <span className='sr-only'>Go to first page</span>
           <ChevronFirst className='h-4 w-4' />
@@ -121,7 +136,7 @@ export function Pagination({
           onClick={handlePreviousPage}
           disabled={pagination.pageIndex < 1}
           variant='outline'
-          className='h-8 w-8 p-0'
+          className='h-11 w-11 p-0 sm:h-8 sm:w-8'
         >
           <span className='sr-only'>Go to previous page</span>
           <ChevronLeft className='h-4 w-4' />
@@ -130,7 +145,7 @@ export function Pagination({
           onClick={handleNextPage}
           disabled={!canGoNext}
           variant='outline'
-          className='h-8 w-8 p-0'
+          className='h-11 w-11 p-0 sm:h-8 sm:w-8'
         >
           <span className='sr-only'>Go to next page</span>
           <ChevronRight className='h-4 w-4' />
@@ -139,7 +154,7 @@ export function Pagination({
           onClick={handleLastPage}
           disabled={!canGoNext}
           variant='outline'
-          className='h-8 w-8 p-0'
+          className='hidden h-11 w-11 p-0 sm:inline-flex sm:h-8 sm:w-8'
         >
           <span className='sr-only'>Go to last page</span>
           <ChevronLast className='h-4 w-4' />

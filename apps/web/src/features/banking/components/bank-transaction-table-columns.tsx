@@ -16,18 +16,23 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
   {
     id: 'valueDate',
     header: () => <p className='px-3'>Value date</p>,
-    cell: ({row}) => <p>{formatBankTransactionDate(row.original.valueDate)}</p>,
+    cell: ({row}) => (
+      <p>
+        <span className='mr-1 hidden text-muted-foreground max-md:inline'>Value</span>
+        {formatBankTransactionDate(row.original.valueDate)}
+      </p>
+    ),
   },
   {
     id: 'description',
     header: () => <p className='px-3'>Description</p>,
     cell: ({row}) => (
-      <div className='w-full max-w-[10rem] sm:max-w-[14rem] lg:max-w-[16rem] xl:max-w-[20rem] min-[1320px]:max-w-[24rem]'>
+      <div className='w-full max-w-[10rem] max-md:max-w-none sm:max-w-[14rem] lg:max-w-[16rem] xl:max-w-[20rem] min-[1320px]:max-w-[24rem]'>
         <p className='overflow-hidden text-ellipsis whitespace-nowrap'>
           {row.original.description || row.original.counterpartyName || 'Transaction'}
         </p>
         {row.original.counterpartyName && row.original.description && (
-          <p className='overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground'>
+          <p className='overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground max-md:hidden'>
             {row.original.counterpartyName}
           </p>
         )}

@@ -29,6 +29,7 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
     .optional(),
   bankAccountIds: z.array(z.string().uuid()).optional(),
   search: z.string().max(100).optional(),
+  transactionId: z.string().optional(),
   sort: z
     .object({
       by: z.nativeEnum(BankTransactionSortField),

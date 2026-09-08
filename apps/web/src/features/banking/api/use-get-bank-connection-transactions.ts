@@ -4,7 +4,7 @@ import {BankTransactionsResponse} from '@/features/banking/types/bank-connection
 import {api} from '@/utils/api';
 
 export const useGetBankConnectionTransactions = (connectionId: string, enabled: boolean) => {
-  const {data, isPending} = useQuery<BankTransactionsResponse>({
+  const {data, isPending, isError, refetch} = useQuery<BankTransactionsResponse>({
     queryKey: ['bank-connection-transactions', connectionId],
     queryFn: async () => {
       return await api.get<BankTransactionsResponse>(
@@ -12,7 +12,14 @@ export const useGetBankConnectionTransactions = (connectionId: string, enabled: 
       );
     },
     enabled,
+    retry: false,
   });
 
-  return {transactions: data?.transactions ?? [], total: data?.total ?? 0, isPending};
+  return {
+    transactions: data?.transactions ?? [],
+    total: data?.total ?? 0,
+    isPending,
+    isError,
+    refetch,
+  };
 };
