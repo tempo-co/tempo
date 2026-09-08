@@ -40,27 +40,27 @@ colors:
   light-secondary-foreground: "hsl(9 48.2% 37.8%)"
 typography:
   page-title:
-    fontFamily: "Lexend, sans-serif"
+    fontFamily: "Inter Variable, Inter, sans-serif"
     fontSize: "1.5rem"
     fontWeight: 600
     lineHeight: 1.25
   section-title:
-    fontFamily: "Lexend, sans-serif"
+    fontFamily: "Inter Variable, Inter, sans-serif"
     fontSize: "1.125rem"
     fontWeight: 600
     lineHeight: 1.35
   body:
-    fontFamily: "Lexend, sans-serif"
+    fontFamily: "Inter Variable, Inter, sans-serif"
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.5
   body-sm:
-    fontFamily: "Lexend, sans-serif"
+    fontFamily: "Inter Variable, Inter, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.5
   label:
-    fontFamily: "Lexend, sans-serif"
+    fontFamily: "Inter Variable, Inter, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 500
     lineHeight: 1.333
@@ -70,8 +70,8 @@ typography:
     fontWeight: 400
     lineHeight: 1.5
 rounded:
-  control: "10px"
-  surface: "14px"
+  control: "0px"
+  surface: "0px"
   pill: "9999px"
 spacing:
   xs: "4px"
@@ -169,7 +169,8 @@ primary action or active state, not a clay wash.
 
 ## Typography
 
-Lexend is the product typeface, loaded locally at weights 100–900. UI copy uses Lexend; the
+Inter is the product typeface, self-hosted as a variable font at weights 100–900. UI copy and
+headings use Inter; the
 system monospace stack covers identifiers and currency amounts.
 
 - **Page title** (`600`, `1.5rem`, ~`1.25`): major authenticated surfaces.
@@ -204,9 +205,9 @@ emphasis. No glow, glass, backdrop blur, or nested shadows. Resting content stay
 
 ## Shapes
 
-Two radius families: controls `10px` (`--radius`), cards `14px` (`rounded-card`). Pills are
-reserved for badges, compact statuses, and avatars. Use 1px borders where a boundary improves
-scanning. Keep corners consistent within a component family.
+Controls and surfaces use the theme's square `0px` radius. Pills remain reserved for badges,
+compact statuses, and avatars. Use 1px borders where a boundary improves scanning. Keep corners
+consistent within a component family.
 
 ## Logo
 

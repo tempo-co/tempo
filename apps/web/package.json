@@ -22,6 +22,7 @@
     "docker:test:down": "docker compose -p tempo-web -f docker-compose.e2e.yml down -v --remove-orphans"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
     "@hookform/resolvers": "^5.9.1",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-dropdown-menu": "^2.1.24",

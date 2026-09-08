@@ -391,7 +391,7 @@
       "refersTo": "button-primary",
       "description": "The single most important local action. Clay-on-dark fill on the dark canvas; Clay strong on light.",
       "html": "<button class=\"ds-btn-primary\">Sync now</button>",
-      "css": ".ds-btn-primary { background: hsl(17.5 67.1% 69%); color: hsl(252 10.2% 9.6%); padding: 8px 16px; min-height: 40px; border: 0; border-radius: 10px; font: 500 14px/20px Lexend, sans-serif; transition: background 200ms ease-out; } .ds-btn-primary:hover { background: hsl(17.5 67.1% 63%); } .ds-btn-primary:focus-visible { outline: 2px solid hsl(17.5 67.1% 69%); outline-offset: 2px; }"
+      "css": ".ds-btn-primary { background: hsl(17.5 67.1% 69%); color: hsl(252 10.2% 9.6%); padding: 8px 16px; min-height: 40px; border: 0; border-radius: 0; font: 500 14px/20px Inter Variable, Inter, sans-serif; transition: background 200ms ease-out; } .ds-btn-primary:hover { background: hsl(17.5 67.1% 63%); } .ds-btn-primary:focus-visible { outline: 2px solid hsl(17.5 67.1% 69%); outline-offset: 2px; }"
     },
     {
       "name": "Search Input",
@@ -399,7 +399,7 @@
       "refersTo": "input",
       "description": "A quiet field for search and filters.",
       "html": "<input class=\"ds-input-search\" placeholder=\"Search transactions...\" aria-label=\"Search transactions\" />",
-      "css": ".ds-input-search { width: 100%; height: 40px; padding: 8px 12px; border: 1px solid hsl(270 6.9% 22.7%); border-radius: 10px; background: hsl(252 10.2% 9.6%); color: hsl(38.6 31.8% 91.4%); font: 400 14px/20px Lexend, sans-serif; } .ds-input-search::placeholder { color: hsl(36 9.2% 68%); } .ds-input-search:focus-visible { outline: 2px solid hsl(17.5 67.1% 69%); outline-offset: 2px; }"
+      "css": ".ds-input-search { width: 100%; height: 40px; padding: 8px 12px; border: 1px solid hsl(270 6.9% 22.7%); border-radius: 0; background: hsl(252 10.2% 9.6%); color: hsl(38.6 31.8% 91.4%); font: 400 14px/20px Inter Variable, Inter, sans-serif; } .ds-input-search::placeholder { color: hsl(36 9.2% 68%); } .ds-input-search:focus-visible { outline: 2px solid hsl(17.5 67.1% 69%); outline-offset: 2px; }"
     },
     {
       "name": "Grouped Surface",
@@ -407,7 +407,7 @@
       "refersTo": "card",
       "description": "A bordered, quiet surface for information that belongs together.",
       "html": "<section class=\"ds-card\"><h2>Connected bank</h2><p>Last synchronized recently</p></section>",
-      "css": ".ds-card { padding: 24px; border: 1px solid hsl(270 6.9% 22.7%); border-radius: 14px; background: hsl(260 9.1% 12.9%); color: hsl(38.6 31.8% 91.4%); box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); font-family: Lexend, sans-serif; } .ds-card h2 { font-size: 16px; font-weight: 600; margin: 0 0 4px; } .ds-card p { font-size: 14px; color: hsl(36 9.2% 68%); margin: 0; }"
+      "css": ".ds-card { padding: 24px; border: 1px solid hsl(270 6.9% 22.7%); border-radius: 0; background: hsl(260 9.1% 12.9%); color: hsl(38.6 31.8% 91.4%); box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); font-family: Inter Variable, Inter, sans-serif; } .ds-card h2 { font-size: 16px; font-weight: 600; margin: 0 0 4px; } .ds-card p { font-size: 14px; color: hsl(36 9.2% 68%); margin: 0; }"
     },
     {
       "name": "Status Badge",
@@ -415,7 +415,7 @@
       "refersTo": "status-badge",
       "description": "Compact text-first context for a categorical state.",
       "html": "<span class=\"ds-status-badge\">AUTHORIZED</span>",
-      "css": ".ds-status-badge { display: inline-flex; align-items: center; padding: 2px 10px; border: 1px solid hsl(270 6.9% 22.7%); border-radius: 9999px; background: transparent; color: hsl(38.6 31.8% 91.4%); font: 500 12px/16px Lexend, sans-serif; letter-spacing: 0.02em; }"
+      "css": ".ds-status-badge { display: inline-flex; align-items: center; padding: 2px 10px; border: 1px solid hsl(270 6.9% 22.7%); border-radius: 9999px; background: transparent; color: hsl(38.6 31.8% 91.4%); font: 500 12px/16px Inter Variable, Inter, sans-serif; letter-spacing: 0.02em; }"
     },
     {
       "name": "Quiet Navigation Item",
@@ -423,7 +423,7 @@
       "refersTo": "button-ghost",
       "description": "A sidebar route with a modest active wash and clear label.",
       "html": "<a class=\"ds-nav-item\" href=\"#transactions\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h14M13 6l6 6-6 6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" /></svg><span>Bank Transactions</span></a>",
-      "css": ".ds-nav-item { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 8px; border-radius: 10px; color: hsl(38.6 31.8% 91.4%); font: 400 14px/20px Lexend, sans-serif; text-decoration: none; transition: background 200ms ease-out, color 200ms ease-out; } .ds-nav-item:hover, .ds-nav-item:focus-visible, .ds-nav-item[aria-current=\"page\"] { background: hsl(262.5 9.1% 17.3%); } .ds-nav-item:focus-visible { outline: 2px solid hsl(17.5 67.1% 69%); outline-offset: 2px; } .ds-nav-item svg { width: 16px; height: 16px; flex: none; }"
+      "css": ".ds-nav-item { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 8px; border-radius: 0; color: hsl(38.6 31.8% 91.4%); font: 400 14px/20px Inter Variable, Inter, sans-serif; text-decoration: none; transition: background 200ms ease-out, color 200ms ease-out; } .ds-nav-item:hover, .ds-nav-item:focus-visible, .ds-nav-item[aria-current=\"page\"] { background: hsl(262.5 9.1% 17.3%); } .ds-nav-item:focus-visible { outline: 2px solid hsl(17.5 67.1% 69%); outline-offset: 2px; } .ds-nav-item svg { width: 16px; height: 16px; flex: none; }"
     }
   ],
   "narrative": {
