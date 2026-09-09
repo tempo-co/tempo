@@ -105,6 +105,79 @@ test.describe('bank connections', () => {
     expect(new URL(page.url()).searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
   });
 
+  test('keeps the installed app open while bank authorization runs', async ({page, context}) => {
+    await page.addInitScript(() => {
+      const nativeMatchMedia = window.matchMedia.bind(window);
+      window.matchMedia = (query) => {
+        if (query === '(display-mode: standalone)') {
+          return {
+            matches: true,
+            media: query,
+            onchange: null,
+            addListener: () => undefined,
+            removeListener: () => undefined,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+            dispatchEvent: () => false,
+          } as MediaQueryList;
+        }
+        return nativeMatchMedia(query);
+      };
+    });
+
+    await page.goto('/bank-connections');
+    const authorizationUrl = new URL('/mock-bank-authorization', page.url()).toString();
+    await page.route('**/bank-connections/authorize', async (route) => {
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({authorizationUrl}),
+      });
+    });
+    await context.route('**/mock-bank-authorization', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<title>Mock bank authorization</title>',
+      });
+    });
+
+    const popupPromise = page.waitForEvent('popup');
+    await page.getByTestId('connect-abn-amro-button').click();
+    const popup = await popupPromise;
+    await popup.waitForLoadState();
+
+    await expect(popup).toHaveURL(authorizationUrl);
+    expect(new URL(page.url()).pathname).toBe('/bank-connections');
+  });
+
+  test('returns the callback result to the original app window', async ({page, context}) => {
+    await page.goto('/bank-connections');
+
+    let popupConnectionListRequests = 0;
+    context.on('request', (request) => {
+      const url = new URL(request.url());
+      if (
+        request.method() === 'GET' &&
+        request.resourceType() !== 'document' &&
+        url.pathname === '/bank-connections' &&
+        request.frame().page() !== page
+      ) {
+        popupConnectionListRequests += 1;
+      }
+    });
+
+    const popupPromise = page.waitForEvent('popup');
+    await page.evaluate(() => {
+      window.open('/bank-connections?result=connected', 'tempo-bank-authorization');
+    });
+    const popup = await popupPromise;
+
+    await expect(page.getByText('Bank connection added')).toBeVisible();
+    await expect.poll(() => popup.isClosed()).toBe(true);
+    expect(popupConnectionListRequests).toBe(0);
+  });
+
   test('keeps the connection overview usable at phone widths', async ({page}) => {
     await page.setViewportSize({width: 393, height: 852});
     await page.goto('/bank-connections');

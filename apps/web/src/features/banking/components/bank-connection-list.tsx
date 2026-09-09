@@ -43,6 +43,13 @@ const MOCK_ASPSP = {
 
 const targetBank = import.meta.env.MODE === 'development' ? MOCK_ASPSP : ABN_AMRO;
 
+function isStandaloneApp() {
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    document.referrer.startsWith('android-app://')
+  );
+}
+
 type ConnectBankButtonProps = {
   onClick: () => void;
   isPending: boolean;
@@ -122,10 +129,19 @@ export function BankConnectionList({
   const {startBankConnection, isPending: isStarting} = useStartBankConnection();
 
   const connectBank = async () => {
+    const authorizationWindow = isStandaloneApp()
+      ? window.open('about:blank', 'tempo-bank-authorization')
+      : null;
+
     try {
       const {authorizationUrl} = await startBankConnection(targetBank.request);
-      window.location.assign(authorizationUrl);
+      if (authorizationWindow && !authorizationWindow.closed) {
+        authorizationWindow.location.assign(authorizationUrl);
+      } else {
+        window.location.assign(authorizationUrl);
+      }
     } catch (error) {
+      authorizationWindow?.close();
       if (error instanceof HttpError && error.status === 429) return;
       toast.error('Unable to add bank connection', {
         description: 'Please try again in a moment.',
