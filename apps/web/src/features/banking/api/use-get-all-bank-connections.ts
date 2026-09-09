@@ -3,7 +3,7 @@ import {useQuery} from '@tanstack/react-query';
 import {BankConnection} from '@/features/banking/types/bank-connection';
 import {api} from '@/utils/api';
 
-export const useGetAllBankConnections = (enabled = true) => {
+export const useGetAllBankConnections = () => {
   const {
     data: bankConnections,
     isPending,
@@ -15,7 +15,6 @@ export const useGetAllBankConnections = (enabled = true) => {
       return await api.get<BankConnection[]>('/bank-connections');
     },
     retry: false,
-    enabled,
   });
 
   return {bankConnections, isPending, isError, refetch};
