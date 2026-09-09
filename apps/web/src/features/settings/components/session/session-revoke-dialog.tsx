@@ -36,7 +36,7 @@ export function SessionRevokeDialog({session, triggerVariant = 'ghost'}: Session
       <ResponsiveDialogTrigger asChild>
         <Button
           variant={triggerVariant}
-          className='w-full text-foreground sm:w-fit'
+          className='min-h-11 w-fit text-foreground'
           size='sm'
           data-testid='revoke-session-button'
         >

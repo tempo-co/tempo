@@ -4,27 +4,29 @@ import {AccountDeleteDialog} from './account-delete-dialog';
 
 export function AccountDelete() {
   return (
-    <div className='mt-8'>
-      <div className='mb-4'>
-        <h2 className='mb-1 text-lg font-medium'>Danger zone</h2>
+    <section aria-labelledby='danger-zone-heading' className='space-y-3 pt-2'>
+      <div className='space-y-1'>
+        <h2 id='danger-zone-heading' className='text-lg font-semibold'>
+          Danger zone
+        </h2>
       </div>
-      <div className='flex flex-col items-start justify-between gap-4 rounded-lg border border-destructive/50 bg-destructive-foreground/20 p-4 sm:flex-row sm:items-center'>
-        <div>
+      <div className='flex flex-col items-start justify-between gap-4 rounded-card border border-destructive/50 bg-destructive/10 p-4 sm:flex-row sm:items-center sm:p-5'>
+        <div className='min-w-0'>
           <p className='mb-1 text-sm font-medium'>Permanently delete your account</p>
-          <p className='mr-8 text-xs text-muted-foreground'>
+          <p className='max-w-[34rem] text-xs text-muted-foreground'>
             Deleting your account cannot be undone. Please be certain.
           </p>
         </div>
         <AccountDeleteDialog>
           <Button
             variant='destructive'
-            className='w-full shrink-0 text-foreground sm:w-fit'
+            className='min-h-11 w-full shrink-0 text-foreground sm:w-fit'
             data-testid='delete-account-button'
           >
             Delete account
           </Button>
         </AccountDeleteDialog>
       </div>
-    </div>
+    </section>
   );
 }

@@ -29,7 +29,7 @@ export function LogOutDialog({triggerVariant = 'ghost'}: LogOutDialogProps) {
       <ResponsiveDialogTrigger asChild>
         <Button
           variant={triggerVariant}
-          className='w-full text-foreground sm:w-fit'
+          className='min-h-11 w-fit text-foreground'
           size='sm'
           data-testid='log-out-button-session'
         >

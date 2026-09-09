@@ -24,39 +24,43 @@ function SettingsAccountIndex() {
 
   return (
     <div className='w-full'>
-      <h1 className='mb-6 text-2xl font-medium'>Account</h1>
-      <div className='space-y-8'>
-        <div>
-          <div className='mb-4'>
-            <h2 className='mb-1 text-lg font-medium'>Name</h2>
-            <p className='mr-8 text-sm text-muted-foreground'>
+      <h1 className='mb-8 text-2xl font-semibold tracking-tight'>Account</h1>
+      <div className='space-y-10'>
+        <section aria-labelledby='name-heading' className='space-y-3'>
+          <div className='space-y-1'>
+            <h2 id='name-heading' className='text-lg font-semibold'>
+              Name
+            </h2>
+            <p className='max-w-[34rem] text-sm text-muted-foreground'>
               Your display name as it appears in the application.
             </p>
           </div>
-          <Card className='p-4'>
+          <Card className='p-4 sm:p-5'>
             <NameChangeForm currentName={currentAccount.name} />
           </Card>
-        </div>
+        </section>
 
-        <div>
-          <div className='mb-4'>
-            <h2 className='mb-1 text-lg font-medium'>Email</h2>
-            <p className='mr-8 text-sm text-muted-foreground'>
+        <section aria-labelledby='email-heading' className='space-y-3'>
+          <div className='space-y-1'>
+            <h2 id='email-heading' className='text-lg font-semibold'>
+              Email
+            </h2>
+            <p className='max-w-[34rem] text-sm text-muted-foreground'>
               The email address associated with your account.
             </p>
           </div>
-          <div className='flex items-center justify-between gap-4 rounded-lg border bg-card p-4 sm:items-center'>
-            <div>
-              <p className='text-sm font-medium'>{currentAccount.email}</p>
+          <div className='flex flex-col gap-4 rounded-card border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5'>
+            <div className='min-w-0'>
+              <p className='truncate text-sm font-medium'>{currentAccount.email}</p>
               <p className='mt-1 text-xs text-muted-foreground'>
                 Primary contact for account recovery and important notifications.
               </p>
             </div>
-            <div className='flex-shrink-0'>
+            <div className='w-full shrink-0 sm:w-auto'>
               <EmailChangeDialog currentEmail={currentAccount.email} />
             </div>
           </div>
-        </div>
+        </section>
 
         <AccountDelete />
       </div>

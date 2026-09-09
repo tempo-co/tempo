@@ -42,7 +42,11 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
   return (
     <ResponsiveDialog open={isOpen} onOpenChange={handleOpenChange}>
       <ResponsiveDialogTrigger asChild>
-        <Button variant='ghost' data-testid='change-email-button'>
+        <Button
+          variant='ghost'
+          className='min-h-11 w-full sm:w-auto'
+          data-testid='change-email-button'
+        >
           Change
         </Button>
       </ResponsiveDialogTrigger>

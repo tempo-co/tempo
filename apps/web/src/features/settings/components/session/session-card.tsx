@@ -1,7 +1,6 @@
 import {format, formatDistanceToNow} from 'date-fns';
 import {createElement} from 'react';
 
-import {Card} from '@/components/ui/card';
 import {
   Dialog,
   DialogClose,
@@ -23,59 +22,66 @@ type SessionCardProps = {
 };
 
 export function SessionCard({session, hideRevokeButton = false}: SessionCardProps) {
-  const createdAt = format(session.lastSeenAt, 'MMM d, yyyy HH:mm');
+  const createdAt = format(session.createdAt, 'MMM d, yyyy HH:mm');
   const lastSeenAt = format(session.lastSeenAt, 'MMM d, yyyy HH:mm');
-  const lastSeenAtRelative = formatDistanceToNow(lastSeenAt, {addSuffix: true});
+  const lastSeenAtRelative = formatDistanceToNow(session.lastSeenAt, {addSuffix: true});
+  const hasAction = session.isCurrent || !hideRevokeButton;
 
   return (
     <Dialog>
-      <DialogTrigger asChild>
-        <Card
-          className='group cursor-pointer transition-colors hover:bg-accent/70'
-          data-testid='session-card'
-          data-current-session={session.isCurrent}
-        >
-          <div className='flex flex-row items-center justify-between gap-2 p-4 sm:items-center'>
-            <div className='flex min-w-0 flex-grow items-center gap-2'>
-              <div className='flex-shrink-0 rounded-lg bg-accent p-2 text-muted-foreground'>
+      <div
+        className='group relative rounded-card border bg-card text-card-foreground shadow-sm'
+        data-testid='session-card'
+        data-current-session={session.isCurrent}
+      >
+        <DialogTrigger asChild>
+          <button
+            type='button'
+            className={`flex min-h-[4.5rem] w-full items-center rounded-card p-4 text-left transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${hasAction ? 'pr-24' : ''}`}
+          >
+            <span className='flex min-w-0 flex-1 items-center gap-3'>
+              <span className='flex-shrink-0 rounded-lg bg-accent p-2 text-muted-foreground'>
                 {createElement(getSessionIcon(session), {
                   className: 'h-5 w-5 text-muted-foreground',
                 })}
-              </div>
-              <div className='min-w-0 flex-grow'>
-                <p className='truncate text-sm font-medium'>{session.name}</p>
-                <div className='text-xs text-muted-foreground'>
+              </span>
+              <span className='min-w-0 flex-1'>
+                <span className='block truncate text-sm font-medium'>{session.name}</span>
+                <span className='block text-xs text-muted-foreground'>
                   {session.isCurrent ? (
-                    <div className='mt-1 flex gap-1.5'>
-                      <div className='flex items-center gap-1.5'>
-                        <span className='block h-2 w-2 rounded-full bg-success'></span>
-                        <span className='font-medium text-success'>Current session</span>
-                      </div>
-                      <span className='invisible sm:visible'>·</span>
-                      <span className='invisible sm:visible'>{session.location}</span>
-                    </div>
+                    <span className='mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1'>
+                      <span className='inline-flex items-center gap-1.5 font-medium text-success'>
+                        <span
+                          aria-hidden='true'
+                          className='block h-2 w-2 rounded-full bg-success'
+                        ></span>
+                        Current session
+                      </span>
+                      <span className='hidden sm:inline'>·</span>
+                      <span className='hidden sm:inline'>{session.location}</span>
+                    </span>
                   ) : (
-                    <div className='mt-1 flex gap-1.5' title={lastSeenAt}>
-                      <span>{`Last seen ${lastSeenAtRelative}`}</span>{' '}
-                      <span className='invisible sm:visible'>·</span>{' '}
-                      <span className='invisible sm:visible'>{session.location}</span>
-                    </div>
+                    <span
+                      className='mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1'
+                      title={lastSeenAt}
+                    >
+                      <span>{`Last seen ${lastSeenAtRelative}`}</span>
+                      <span className='hidden sm:inline'>·</span>
+                      <span className='hidden sm:inline'>{session.location}</span>
+                    </span>
                   )}
-                </div>
-              </div>
-            </div>
-            <div
-              className='invisible flex-shrink-0 opacity-0 transition-opacity duration-150 ease-in-out group-hover:visible group-hover:opacity-100'
-              onClick={(e) => e.stopPropagation()}
-            >
-              {session.isCurrent && <LogOutDialog />}
-              {!(hideRevokeButton || session.isCurrent) && (
-                <SessionRevokeDialog session={session} />
-              )}
-            </div>
+                </span>
+              </span>
+            </span>
+          </button>
+        </DialogTrigger>
+        {hasAction && (
+          <div className='absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1 sm:invisible sm:opacity-0 sm:transition-opacity sm:duration-150 sm:ease-in-out sm:group-hover:visible sm:group-hover:opacity-100'>
+            {session.isCurrent && <LogOutDialog />}
+            {!(hideRevokeButton || session.isCurrent) && <SessionRevokeDialog session={session} />}
           </div>
-        </Card>
-      </DialogTrigger>
+        )}
+      </div>
       <DialogContent className='sm:max-w-[28rem]'>
         <DialogHeader>
           <DialogTitle>{session.name}</DialogTitle>

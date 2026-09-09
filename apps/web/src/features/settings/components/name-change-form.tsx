@@ -65,6 +65,7 @@ export function NameChangeForm({currentName}: NameChangeFormProps) {
                 <Input
                   {...field}
                   id='name'
+                  aria-labelledby='name-heading'
                   placeholder='Enter your name'
                   type='text'
                   autoCapitalize='none'

@@ -30,7 +30,7 @@ export function SessionRevokeAllDialog() {
       <ResponsiveDialogTrigger asChild>
         <Button
           variant='ghost'
-          className='w-fit text-foreground sm:w-fit'
+          className='min-h-11 w-fit text-foreground sm:min-h-9'
           size='sm'
           data-testid='revoke-all-sessions-button'
         >

@@ -11,8 +11,8 @@ import {
 
 const ROUTE_LABELS = {
   '/account': 'Account',
-  '/theme': 'Theme',
   '/security': 'Security',
+  '/appearance': 'Appearance',
 } as const;
 
 type SettingsBreadcrumbProps = {
@@ -31,9 +31,11 @@ export function SettingsBreadcrumb({route}: SettingsBreadcrumbProps) {
           </BreadcrumbLink>
         </BreadcrumbItem>
         <BreadcrumbSeparator />
-        <BreadcrumbLink asChild>
-          <Link to='/settings/account'>Settings</Link>
-        </BreadcrumbLink>
+        <BreadcrumbItem>
+          <BreadcrumbLink asChild>
+            <Link to='/settings/account'>Settings</Link>
+          </BreadcrumbLink>
+        </BreadcrumbItem>
         <BreadcrumbSeparator />
         <BreadcrumbItem>
           <BreadcrumbPage>{pageTitle}</BreadcrumbPage>

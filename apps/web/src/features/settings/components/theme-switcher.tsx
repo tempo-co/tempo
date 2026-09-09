@@ -21,13 +21,20 @@ export function ThemeSwitcher() {
   });
 
   return (
-    <Tabs value={theme} onValueChange={(v) => setTheme(v as Theme)} className='w-full'>
-      <TabsList className='w-full md:w-auto'>
+    <Tabs
+      value={theme}
+      onValueChange={(v) => setTheme(v as Theme)}
+      className='w-full rounded-card border bg-card p-2 shadow-sm sm:p-3'
+    >
+      <TabsList
+        aria-label='Theme'
+        className='flex h-auto w-full gap-1 rounded-lg border bg-muted/60 p-1 md:w-auto'
+      >
         {themeOptions.map((opt) => (
           <TabsTrigger
             key={opt.value}
             value={opt.value}
-            className='flex w-full items-center gap-2 rounded-md md:w-auto'
+            className='min-h-11 flex-1 gap-2 px-3 py-2 text-xs sm:text-sm md:min-w-[7rem] md:flex-none'
           >
             <opt.icon className='h-4 w-4' />
             <span>{opt.label}</span>
