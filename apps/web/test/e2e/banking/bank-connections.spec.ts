@@ -52,6 +52,41 @@ test.describe('bank connections', () => {
     await expect(page).toHaveURL(/\/bank-connections$/);
   });
 
+  test('reports when synchronization finds no new transactions', async ({page}) => {
+    await page.route('**/bank-connections/*/sync', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: '00000000-0000-4000-8000-000000000099',
+          status: 'SUCCEEDED',
+          startedAt: '2026-09-09T00:00:00.000Z',
+          finishedAt: '2026-09-09T00:00:01.000Z',
+          requestedFrom: '2026-09-02',
+          requestedTo: '2026-09-09',
+          accountsFetched: 1,
+          balancesFetched: 1,
+          transactionsFetched: 17,
+          transactionsAdded: 0,
+          errorMessage: null,
+          rateLimitSource: null,
+          retryAfterSeconds: null,
+        }),
+      });
+    });
+
+    await page.goto('/bank-connections');
+    await page.getByRole('button', {name: 'Sync now'}).click();
+
+    await expect(page.getByText('Sync complete', {exact: true})).toBeVisible();
+    await expect(page.getByText('No new transactions found.', {exact: true})).toBeVisible();
+  });
+
   test('reopens a connection transaction inspector from its shareable URL', async ({page}) => {
     await page.goto('/bank-connections');
 

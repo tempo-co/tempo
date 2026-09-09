@@ -217,11 +217,15 @@ function BankConnectionCard({
           id: `bank-sync-rate-limit-${connection.id}`,
         });
       } else if (run.status === 'SUCCEEDED') {
-        const transactionLabel = run.transactionsFetched === 1 ? 'transaction' : 'transactions';
-        const balanceLabel = run.balancesFetched === 1 ? 'balance' : 'balances';
+        const description =
+          run.transactionsAdded === undefined
+            ? 'Synchronization completed.'
+            : run.transactionsAdded === 0
+              ? 'No new transactions found.'
+              : `${run.transactionsAdded} new ${run.transactionsAdded === 1 ? 'transaction' : 'transactions'} added.`;
 
-        toast.success('Bank connection synchronized', {
-          description: `${run.transactionsFetched} ${transactionLabel} and ${run.balancesFetched} ${balanceLabel} fetched.`,
+        toast.success('Sync complete', {
+          description,
           id: `bank-sync-success-${connection.id}`,
         });
       } else if (run.status === 'PARTIAL') {
