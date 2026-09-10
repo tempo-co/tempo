@@ -37,7 +37,7 @@ export function ResendCodeButton({variant = 'ghost', className, onSuccess}: Rese
 
   return (
     <Button
-      className={cn('w-full', className)}
+      className={cn('w-full whitespace-normal', className)}
       type='button'
       variant={variant}
       onClick={handleResendClick}

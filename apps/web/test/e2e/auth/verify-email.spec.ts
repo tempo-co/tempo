@@ -10,6 +10,32 @@ import {VerifyEmailPage} from 'test/pages/verify-email.page';
 import {EmailUtils} from 'test/utils/email-utils';
 
 test.describe('Email Verification', () => {
+  test.describe('Verification request errors', () => {
+    test('should show a retry state instead of an indefinite spinner', async ({page}) => {
+      let attempts = 0;
+      await page.route('**/auth/signup/verify', async (route) => {
+        attempts++;
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({message: 'Verification service unavailable'}),
+        });
+      });
+
+      await page.goto('/verify-email?email=retry@test.com&code=123456');
+
+      await expect(page.getByRole('heading', {name: 'Verification failed'})).toBeVisible();
+      await expect(page.getByTestId('retry-verification-button')).toBeVisible();
+      await expect(page.getByRole('heading', {name: 'Verifying your email...'})).toHaveCount(0);
+      await expect(page.getByRole('link', {name: 'Log in instead'})).toBeVisible();
+
+      const attemptsBeforeRetry = attempts;
+      await page.getByTestId('retry-verification-button').click();
+      await expect(page.getByRole('heading', {name: 'Verification failed'})).toBeVisible();
+      expect(attempts).toBeGreaterThan(attemptsBeforeRetry);
+    });
+  });
+
   test.describe('Signup Flow', () => {
     let signupPage: SignupPage;
     let verifyEmailPage: VerifyEmailPage;

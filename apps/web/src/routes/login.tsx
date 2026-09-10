@@ -24,7 +24,7 @@ export const Route = createFileRoute('/login')({
 function LogIn() {
   return (
     <AuthLayout title='Log in to Tempo'>
-      <div className='relative flex min-h-[180px] flex-col'>
+      <div className='relative flex flex-col space-y-3'>
         <AnimatePresence mode='wait' initial={false}>
           <motion.div
             key='initial-options'
@@ -33,10 +33,10 @@ function LogIn() {
             animate='visible'
             exit='exit'
             layout
-            className='flex w-full flex-col space-y-4'
+            className='flex w-full flex-col'
           >
             <LogInForm />
-            <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>
+            <p className='pt-3 text-center text-sm text-muted-foreground'>
               Don&apos;t have an account?{' '}
               <Button variant='link' asChild className='h-fit px-1 py-0'>
                 <Link to='/signup' className='text-foreground' data-testid='signup-link'>

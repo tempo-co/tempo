@@ -61,6 +61,13 @@ function VerifyEmailIndex() {
     await logOut();
   };
 
+  const handleRetryVerification = () => {
+    if (!code || !email) return;
+
+    reset();
+    void verifyEmail({code, email});
+  };
+
   if (error && error.status === 400) {
     return (
       <AuthLayout title={'Invalid or expired verification link'}>
@@ -72,25 +79,27 @@ function VerifyEmailIndex() {
               initial='hidden'
               animate='visible'
               exit='exit'
-              className='flex w-full flex-col text-center'
+              role='alert'
+              aria-live='assertive'
+              className='flex w-full flex-col gap-4 text-center text-sm'
             >
-              <p className='text-sm text-muted-foreground'>
+              <p className='leading-6 text-muted-foreground'>
                 We couldn&apos;t verify{' '}
                 {email ? <span className='text-foreground'>{email}</span> : 'your email'} using this
                 link.{!isAuthenticated && ' Please request a new link by logging in.'}
               </p>
-              <div className='!mt-8 text-foreground'>
+              <div className='text-foreground'>
                 {isAuthenticated ? (
                   <ResendCodeButton
-                    variant='default'
-                    className='w-fit'
+                    variant='outline'
+                    className='w-full'
                     onSuccess={() => {
                       void router.navigate({to: '/verify-email', search: {}});
                       reset();
                     }}
                   />
                 ) : (
-                  <Button asChild>
+                  <Button asChild className='w-full'>
                     <Link to='/login' data-testid='log-in-button'>
                       Log in
                     </Link>
@@ -115,15 +124,65 @@ function VerifyEmailIndex() {
               initial='hidden'
               animate='visible'
               exit='exit'
-              className='flex w-full flex-col space-y-4 text-center text-sm text-muted-foreground'
+              role='status'
+              aria-live='polite'
+              className='flex w-full flex-col gap-4 text-center text-sm text-muted-foreground'
             >
               <p>You&apos;re trying to verify your email too often.</p>
-              <p className='!mt-0 mb-2'>Please try again later.</p>
+              <p>Please try again later.</p>
               <div className='text-foreground'>
-                <Button variant='link' asChild className='mt-4'>
+                <Button variant='link' asChild>
                   <Link to='/'>Go home</Link>
                 </Button>
               </div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </AuthLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AuthLayout title='Verification failed'>
+        <div className='relative flex flex-col'>
+          <AnimatePresence initial={false} mode='wait'>
+            <motion.div
+              key='unknown-error-view-fade'
+              variants={switchContentVariants}
+              initial='hidden'
+              animate='visible'
+              exit='exit'
+              role='alert'
+              aria-live='assertive'
+              className='flex w-full flex-col gap-4 text-center text-sm'
+            >
+              <p className='leading-6 text-muted-foreground'>
+                We couldn&apos;t verify your email right now. Please try again.
+              </p>
+              <Button
+                type='button'
+                className='w-full'
+                onClick={handleRetryVerification}
+                disabled={isPending}
+                data-testid='retry-verification-button'
+              >
+                Try again
+              </Button>
+              <p className='text-muted-foreground'>
+                {isAuthenticated ? (
+                  <Link
+                    to='/verify-email'
+                    className='text-foreground underline-offset-4 hover:underline'
+                  >
+                    Return to verification
+                  </Link>
+                ) : (
+                  <Link to='/login' className='text-foreground underline-offset-4 hover:underline'>
+                    Log in instead
+                  </Link>
+                )}
+              </p>
             </motion.div>
           </AnimatePresence>
         </div>
@@ -142,9 +201,11 @@ function VerifyEmailIndex() {
               initial='hidden'
               animate='visible'
               exit='exit'
-              className='flex w-full flex-col items-center space-y-4 text-sm text-muted-foreground'
+              role='status'
+              aria-live='polite'
+              className='flex w-full flex-col items-center gap-4 text-sm text-muted-foreground'
             >
-              <Loader className='h-12 w-12 animate-slow-spin text-primary' />
+              <Loader aria-hidden className='h-10 w-10 animate-slow-spin text-primary' />
             </motion.div>
           </AnimatePresence>
         </div>
@@ -153,8 +214,8 @@ function VerifyEmailIndex() {
   }
 
   return (
-    <AuthLayout title='Check your email'>
-      <div className='relative flex min-h-[180px] flex-col'>
+    <AuthLayout title={showForm ? 'Enter your verification code' : 'Check your email'}>
+      <div className='relative flex flex-col'>
         <AnimatePresence mode='wait' initial={false}>
           <motion.div
             key='verify-content'
@@ -163,18 +224,18 @@ function VerifyEmailIndex() {
             animate='visible'
             exit='exit'
             layout
-            className='flex w-full flex-col items-center'
+            className='flex w-full flex-col items-center gap-4'
           >
-            <div className='max-w-[21rem] text-center text-sm text-muted-foreground'>
-              <p>We&apos;ve sent you a verification link.</p>
-              <p className='mt-1 max-w-[21rem] px-4'>
-                Please check your inbox at{' '}
-                <span className='inline-block max-w-full truncate align-bottom font-medium text-foreground'>
-                  {currentAccount?.email}
-                </span>
+            <div className='w-full text-center text-sm text-muted-foreground'>
+              <p>We sent a verification email to</p>
+              <p className='mt-1 break-words font-medium text-foreground'>
+                {currentAccount?.email ?? 'your email address'}
+              </p>
+              <p className='mt-3 text-xs leading-5'>
+                Click the link in the email, or enter the 6-digit code manually.
               </p>
             </div>
-            <div className='w-full px-4'>
+            <div className='w-full'>
               <AnimatePresence mode='wait' initial={false}>
                 <motion.div
                   key='verify-button'
@@ -182,7 +243,7 @@ function VerifyEmailIndex() {
                   initial='hidden'
                   animate='visible'
                   exit='exit'
-                  className='flex w-full flex-col gap-4'
+                  className='flex w-full flex-col gap-2'
                 >
                   {showForm ? (
                     <VerifyEmailForm />
@@ -190,17 +251,17 @@ function VerifyEmailIndex() {
                     <Button
                       data-testid='enter-code-manually-button'
                       variant='secondary'
-                      className='mt-6 w-full'
+                      className='w-full'
                       onClick={() => setShowForm(true)}
                     >
                       Enter code manually
                     </Button>
                   )}
-                  <ResendCodeButton />
+                  <ResendCodeButton variant='outline' />
                 </motion.div>
               </AnimatePresence>
             </div>
-            <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>
+            <p className='pt-0 text-center text-sm text-muted-foreground'>
               Need to start over?{' '}
               <Button
                 variant='link'

@@ -53,16 +53,17 @@ export function LogInForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
-        <div className='grid gap-4'>
+        <div className='grid gap-3'>
           <FormField
             control={form.control}
             name='email'
             render={({field, fieldState}) => (
               <FormItem>
-                <FormLabel>Email</FormLabel>
+                <FormLabel htmlFor='email'>Email</FormLabel>
                 <FormControl>
                   <Input
                     {...field}
+                    value={field.value ?? ''}
                     id='email'
                     placeholder='example@domain.com'
                     type='email'
@@ -103,11 +104,11 @@ export function LogInForm() {
               </FormItem>
             )}
           />
-          <Button type='submit' disabled={isPending} className='mt-2' data-testid='login-submit'>
+          <Button type='submit' disabled={isPending} className='mt-1' data-testid='login-submit'>
             {isPending ? (
               <>
                 <span>Logging in...</span>
-                <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
+                <Loader className='h-4 w-4 animate-slow-spin' />
               </>
             ) : (
               <span>Log in</span>

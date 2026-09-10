@@ -17,7 +17,7 @@ export function VerifyEmailForm() {
 
   const form = useForm<EmailVerifyDto>({
     resolver: zodResolver(emailVerifyDtoSchema),
-    mode: 'onSubmit',
+    mode: 'onChange',
     defaultValues: {email: currentAccount?.email},
   });
 
@@ -33,7 +33,10 @@ export function VerifyEmailForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className='mt-6 space-y-4'>
+      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className='mt-4 flex flex-col gap-3'>
+        <p className='text-center text-xs leading-5 text-muted-foreground'>
+          Enter the 6-digit code from the email.
+        </p>
         <FormField
           control={form.control}
           name='code'
@@ -46,26 +49,30 @@ export function VerifyEmailForm() {
                   {...field}
                   value={String(field.value || '')}
                   pattern={REGEXP_ONLY_DIGITS}
+                  inputMode='numeric'
+                  autoComplete='one-time-code'
+                  aria-label='6-digit verification code'
+                  containerClassName='w-full justify-center'
                   disabled={isVerifying}
                 >
-                  <InputOTPGroup className='gap-4'>
-                    <InputOTPSlot index={0} className='rounded-md' />
-                    <InputOTPSlot index={1} className='rounded-md border-l' />
-                    <InputOTPSlot index={2} className='rounded-md border-l' />
-                    <InputOTPSlot index={3} className='rounded-md border-l' />
-                    <InputOTPSlot index={4} className='rounded-md border-l' />
-                    <InputOTPSlot index={5} className='rounded-md border-l' />
+                  <InputOTPGroup className='grid w-full max-w-[20rem] grid-cols-6 gap-1'>
+                    <InputOTPSlot index={0} className='h-11 w-full rounded-md border' />
+                    <InputOTPSlot index={1} className='h-11 w-full rounded-md border' />
+                    <InputOTPSlot index={2} className='h-11 w-full rounded-md border' />
+                    <InputOTPSlot index={3} className='h-11 w-full rounded-md border' />
+                    <InputOTPSlot index={4} className='h-11 w-full rounded-md border' />
+                    <InputOTPSlot index={5} className='h-11 w-full rounded-md border' />
                   </InputOTPGroup>
                 </InputOTP>
               </FormControl>
-              <FormMessage className='pt-1' />
+              <FormMessage className='pt-1 text-center' />
             </FormItem>
           )}
         />
         <Button
           type='submit'
           disabled={isVerifying || !form.formState.isValid}
-          className='w-full'
+          className='mt-1 w-full'
           data-testid='verify-button'
         >
           {isVerifying ? (

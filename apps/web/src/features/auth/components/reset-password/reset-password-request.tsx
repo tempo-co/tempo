@@ -8,6 +8,7 @@ import {useForm} from 'react-hook-form';
 import {Button} from '@/components/ui/button';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
+import {cn} from '@/utils/cn';
 
 import {usePasswordResetRequest} from '../../api/use-password-reset-request';
 import {switchContentVariants} from '../../constants/animations';
@@ -30,8 +31,12 @@ export function ResetPasswordRequest() {
   };
 
   const handleResend = async () => {
-    setHasResent(true);
-    await requestPasswordReset(form.getValues());
+    try {
+      await requestPasswordReset(form.getValues());
+      setHasResent(true);
+    } catch {
+      // The mutation surfaces its own network and server feedback.
+    }
   };
 
   const handleTryAgain = () => {
@@ -53,61 +58,62 @@ export function ResetPasswordRequest() {
               initial='hidden'
               animate='visible'
               exit='exit'
-              className='flex w-full flex-col space-y-4 text-sm text-muted-foreground'
+              role='status'
+              aria-live='polite'
+              className='flex w-full flex-col gap-4 text-sm'
             >
-              {hasResent ? (
-                <p>
-                  We&apos;ve resent an email to{' '}
-                  <span className='text-foreground'>{form.getValues('email')}</span> with
-                  instructions to reset your password.
+              <div className='space-y-2'>
+                <p className='leading-6 text-muted-foreground'>
+                  {hasResent ? (
+                    <>
+                      We sent a new reset link to{' '}
+                      <span className='break-words font-medium text-foreground'>
+                        {form.getValues('email')}
+                      </span>
+                      .
+                    </>
+                  ) : (
+                    <>
+                      If{' '}
+                      <span className='break-words font-medium text-foreground'>
+                        {form.getValues('email')}
+                      </span>{' '}
+                      matches an account, we&apos;ve sent a link to reset your password.
+                    </>
+                  )}
                 </p>
-              ) : (
-                <p>
-                  If <span className='text-foreground'>{form.getValues('email')}</span> matches an
-                  email in our system, then we&apos;ve sent you an email with further instructions
-                  to reset your password.
+                <p className='text-xs leading-5 text-muted-foreground'>
+                  It can take a few minutes. Check your spam folder if it doesn&apos;t arrive.
                 </p>
-              )}
-              <p>
-                If you don&apos;t see the email within 5 minutes, check your spam folder
+              </div>
+              <div className='flex flex-col gap-2'>
                 {!hasResent && (
-                  <>
-                    ,{' '}
-                    <Button
-                      variant='link'
-                      onClick={handleResend}
-                      className='h-auto p-0 text-foreground'
-                      data-testid='resend-button'
-                    >
-                      resend
-                    </Button>
-                  </>
+                  <Button
+                    variant='outline'
+                    onClick={handleResend}
+                    className='w-full'
+                    data-testid='resend-button'
+                  >
+                    Resend email
+                  </Button>
                 )}
-                , or{' '}
                 <Button
-                  variant='link'
+                  variant='ghost'
                   onClick={handleTryAgain}
-                  className='h-auto p-0 text-foreground'
+                  className='w-full text-foreground'
                   data-testid='use-different-email-button'
                 >
-                  use a different email
-                </Button>
-                .
-              </p>
-              <div className='flex justify-center'>
-                <Button
-                  asChild
-                  className='mt-4 flex h-auto items-center gap-2'
-                  data-testid='open-gmail-button'
-                >
-                  <Link to={gmailUrl} target='_blank' rel='noopener noreferrer'>
-                    Open Gmail <ExternalLink size={16} />
-                  </Link>
+                  Use a different email
                 </Button>
               </div>
-              <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>
-                <Button variant='link' asChild>
-                  <Link to='/login' className='text-foreground' data-testid='return-to-login-link'>
+              <Button asChild className='w-full' data-testid='open-gmail-button'>
+                <Link to={gmailUrl} target='_blank' rel='noopener noreferrer'>
+                  Open Gmail <ExternalLink />
+                </Link>
+              </Button>
+              <p className='text-center text-sm text-muted-foreground'>
+                <Button variant='link' asChild className='h-auto p-0 text-foreground'>
+                  <Link to='/login' data-testid='return-to-login-link'>
                     Log in
                   </Link>
                 </Button>
@@ -120,29 +126,32 @@ export function ResetPasswordRequest() {
               initial='hidden'
               animate='visible'
               exit='exit'
-              className='flex w-full flex-col space-y-4'
+              className='flex w-full flex-col gap-4'
             >
-              <p className='text-sm text-muted-foreground'>
+              <p className='text-sm leading-6 text-muted-foreground'>
                 Enter your account&apos;s email address, and we&apos;ll send you a link to reset
                 your password.
               </p>
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className='grid gap-4'>
+                <form onSubmit={form.handleSubmit(onSubmit)} noValidate className='grid gap-3'>
                   <FormField
                     control={form.control}
                     name='email'
-                    render={({field}) => (
+                    render={({field, fieldState}) => (
                       <FormItem>
-                        <FormLabel>Email</FormLabel>
+                        <FormLabel htmlFor='email'>Email</FormLabel>
                         <FormControl>
                           <Input
+                            id='email'
                             placeholder='example@domain.com'
                             {...field}
+                            value={field.value ?? ''}
                             type='email'
                             autoCapitalize='none'
                             autoComplete='email'
                             autoCorrect='off'
                             disabled={isPending}
+                            className={cn(fieldState.error && 'border-destructive')}
                             data-testid='email-input'
                           />
                         </FormControl>
@@ -152,17 +161,17 @@ export function ResetPasswordRequest() {
                   />
                   <Button
                     type='submit'
-                    className='mt-2 w-full'
+                    className='mt-1 w-full'
                     disabled={isPending}
                     data-testid='continue-button'
                   >
-                    {isPending ? 'Continuing...' : 'Continue'}
+                    {isPending ? 'Sending link...' : 'Send reset link'}
                   </Button>
                 </form>
               </Form>
-              <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>
-                <Button variant='link' asChild>
-                  <Link to='/login' className='text-foreground' data-testid='return-to-login-link'>
+              <p className='pt-0 text-center text-sm text-muted-foreground'>
+                <Button variant='link' asChild className='h-auto p-0 text-foreground'>
+                  <Link to='/login' data-testid='return-to-login-link'>
                     Log in
                   </Link>
                 </Button>

@@ -32,16 +32,17 @@ export function SignUpForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
-        <div className='grid gap-4'>
+        <div className='grid gap-3'>
           <FormField
             control={form.control}
             name='email'
             render={({field, fieldState}) => (
               <FormItem>
-                <FormLabel>Email</FormLabel>
+                <FormLabel htmlFor='email'>Email</FormLabel>
                 <FormControl>
                   <Input
                     {...field}
+                    value={field.value ?? ''}
                     id='email'
                     data-testid='signup-email-input'
                     placeholder='example@domain.com'
@@ -62,10 +63,11 @@ export function SignUpForm() {
             name='name'
             render={({field, fieldState}) => (
               <FormItem>
-                <FormLabel>Name</FormLabel>
+                <FormLabel htmlFor='name'>Name</FormLabel>
                 <FormControl>
                   <Input
                     {...field}
+                    value={field.value ?? ''}
                     id='name'
                     data-testid='signup-name-input'
                     type='text'
@@ -94,11 +96,11 @@ export function SignUpForm() {
               />
             )}
           />
-          <Button type='submit' data-testid='signup-submit' disabled={isPending} className='mt-2'>
+          <Button type='submit' data-testid='signup-submit' disabled={isPending} className='mt-1'>
             {isPending ? (
               <>
                 <span>Creating account...</span>
-                <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
+                <Loader className='h-4 w-4 animate-slow-spin' />
               </>
             ) : (
               <span>Create account</span>

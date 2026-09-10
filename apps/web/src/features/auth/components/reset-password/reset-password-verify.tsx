@@ -8,7 +8,7 @@ import {Button} from '@/components/ui/button';
 import {Form, FormField} from '@/components/ui/form';
 import {PasswordInputField} from '@/components/ui/password-input-field';
 import {Account} from '@/types/account';
-import {cn} from '@/utils/cn';
+import {HttpError} from '@/utils/api';
 
 import {usePasswordResetVerify} from '../../api/use-password-reset-verify';
 import {switchContentVariants} from '../../constants/animations';
@@ -31,14 +31,29 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
   });
 
   const {verifyPasswordReset, isPending, isSuccess, error} = usePasswordResetVerify();
+  const isInvalidToken =
+    error?.status === 400 && error.message.includes('Invalid or expired password reset token');
 
   async function onSubmit(formData: PasswordResetVerifyDto) {
-    await verifyPasswordReset(formData);
+    form.clearErrors('newPassword');
+
+    try {
+      await verifyPasswordReset(formData);
+    } catch (submitError) {
+      if (submitError instanceof HttpError && submitError.status === 400) {
+        form.setError('newPassword', {
+          type: 'server',
+          message: submitError.message.includes('same as the current password')
+            ? 'Choose a different password from your current one.'
+            : "We couldn't reset your password. Please try again.",
+        });
+      }
+    }
   }
 
   if (isSuccess) {
     return (
-      <AuthLayout title={'Password reset successful'}>
+      <AuthLayout title='Password reset successful'>
         <div className='relative flex flex-col'>
           <AnimatePresence initial={false} mode='wait'>
             <motion.div
@@ -47,10 +62,14 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
               initial='hidden'
               animate='visible'
               exit='exit'
-              className='flex w-full flex-col space-y-4 text-sm text-muted-foreground'
+              role='status'
+              aria-live='polite'
+              className='flex w-full flex-col gap-4 text-sm'
             >
-              <p className='mb-2'>You can now use your new password to log in to your account.</p>
-              <Button asChild>
+              <p className='leading-6 text-muted-foreground'>
+                Your new password is ready. You can now log in to your Tempo account.
+              </p>
+              <Button asChild className='w-full'>
                 <Link to='/login' data-testid='return-to-login-link'>
                   Go to log in
                 </Link>
@@ -62,29 +81,30 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
     );
   }
 
-  if (error && error.status === 400) {
+  if (isInvalidToken) {
     return (
-      <AuthLayout title={'Invalid or expired token'}>
+      <AuthLayout title='Invalid or expired token'>
         <div className='relative flex flex-col'>
           <AnimatePresence initial={false} mode='wait'>
             <motion.div
-              key='success-view-fade'
+              key='error-view-fade'
               variants={switchContentVariants}
               initial='hidden'
               animate='visible'
               exit='exit'
-              className='flex w-full flex-col space-y-4 text-sm text-muted-foreground'
+              role='alert'
+              aria-live='assertive'
+              className='flex w-full flex-col gap-4 text-sm'
             >
-              <p className='mb-2'>
-                Your password reset token is invalid or has expired. Please try requesting a new
-                link.
+              <p className='leading-6 text-muted-foreground'>
+                This reset link is no longer valid. Request a new link to choose another password.
               </p>
-              <Button asChild>
+              <Button asChild className='w-full'>
                 <Link to='/reset-password' data-testid='request-new-link'>
                   Request a new link
                 </Link>
               </Button>
-              <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>
+              <p className='text-center text-sm text-muted-foreground'>
                 <Link
                   to='/login'
                   className='text-foreground underline-offset-4 hover:underline'
@@ -101,7 +121,7 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
   }
 
   return (
-    <AuthLayout title={'Reset password'}>
+    <AuthLayout title='Choose a new password'>
       <div className='relative flex flex-col'>
         <AnimatePresence initial={false} mode='wait'>
           <motion.div
@@ -110,15 +130,15 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
             initial='hidden'
             animate='visible'
             exit='exit'
-            className='flex w-full flex-col space-y-4'
+            className='flex w-full flex-col gap-4'
           >
-            <p className='text-sm text-muted-foreground'>
-              Set a new password for the account associated with{' '}
-              <span className='text-foreground'>{email}</span>.
+            <p className='text-sm leading-6 text-muted-foreground'>
+              Choose a new password for the account associated with{' '}
+              <span className='break-words font-medium text-foreground'>{email}</span>.
             </p>
             <Form {...form}>
               <form
-                className={cn('grid items-start gap-4')}
+                className='grid items-start gap-3'
                 onSubmit={form.handleSubmit(onSubmit)}
                 noValidate
               >
@@ -132,6 +152,7 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
                       label='New password'
                       id='new-password'
                       autoComplete='new-password'
+                      description='Use at least 8 characters.'
                       disabled={isPending}
                     />
                   )}
@@ -139,13 +160,13 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
                 <Button
                   type='submit'
                   disabled={isPending}
-                  className='mt-2'
+                  className='mt-1 w-full'
                   data-testid='reset-button'
                 >
                   {isPending ? (
                     <>
                       <span>Resetting password...</span>
-                      <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
+                      <Loader className='h-4 w-4 animate-slow-spin' />
                     </>
                   ) : (
                     <span>Reset password</span>
@@ -153,7 +174,7 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
                 </Button>
               </form>
             </Form>
-            <p className='px-8 pt-4 text-center text-sm text-muted-foreground'>
+            <p className='pt-0 text-center text-sm text-muted-foreground'>
               <Link
                 to='/login'
                 className='text-foreground underline-offset-4 hover:underline'

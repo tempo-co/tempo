@@ -3,7 +3,7 @@ import {useState} from 'react';
 import {ControllerFieldState, ControllerRenderProps, FieldPath, FieldValues} from 'react-hook-form';
 
 import {Button} from '@/components/ui/button';
-import {FormControl, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
+import {FormControl, FormDescription, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
 import {cn} from '@/utils/cn';
@@ -14,6 +14,7 @@ type PasswordInputFieldProps<T extends FieldValues, K extends FieldPath<T>> = {
   label?: string;
   id: string;
   autoComplete: string;
+  description?: string;
   disabled?: boolean;
 };
 
@@ -23,6 +24,7 @@ export function PasswordInputField<T extends FieldValues, K extends FieldPath<T>
   label,
   id,
   autoComplete,
+  description,
   disabled = false,
   ...inputProps
 }: PasswordInputFieldProps<T, K>) {
@@ -30,12 +32,13 @@ export function PasswordInputField<T extends FieldValues, K extends FieldPath<T>
 
   return (
     <FormItem>
-      {label && <FormLabel>{label}</FormLabel>}
-      <FormControl>
-        <div className='flex'>
+      {label && <FormLabel htmlFor={id}>{label}</FormLabel>}
+      <div className='flex'>
+        <FormControl>
           <Input
             {...field}
             {...inputProps}
+            value={field.value ?? ''}
             id={id}
             data-testid='password-input'
             type={isPasswordVisible ? 'text' : 'password'}
@@ -49,35 +52,37 @@ export function PasswordInputField<T extends FieldValues, K extends FieldPath<T>
               fieldState.error && 'border-destructive',
             )}
           />
-          {field.value && (
-            <TooltipProvider delayDuration={500}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={() => setIsPasswordVisible(!isPasswordVisible)}
-                    variant='outline'
-                    type='button'
-                    className={cn(
-                      'rounded-l-none border-l-0',
-                      fieldState.error && 'border-destructive',
-                    )}
-                    disabled={disabled}
-                  >
-                    {isPasswordVisible ? (
-                      <EyeOff className='w-4 text-muted-foreground' />
-                    ) : (
-                      <Eye className='w-4 text-muted-foreground' />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{isPasswordVisible ? 'Hide password' : 'Show password'}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </div>
-      </FormControl>
+        </FormControl>
+        {field.value && (
+          <TooltipProvider delayDuration={500}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+                  onClick={() => setIsPasswordVisible(!isPasswordVisible)}
+                  variant='outline'
+                  type='button'
+                  className={cn(
+                    'rounded-l-none border-l-0',
+                    fieldState.error && 'border-destructive',
+                  )}
+                  disabled={disabled}
+                >
+                  {isPasswordVisible ? (
+                    <EyeOff className='w-4 text-muted-foreground' />
+                  ) : (
+                    <Eye className='w-4 text-muted-foreground' />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{isPasswordVisible ? 'Hide password' : 'Show password'}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
+      {description && <FormDescription>{description}</FormDescription>}
       <FormMessage />
     </FormItem>
   );
