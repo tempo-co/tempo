@@ -16,6 +16,7 @@ import {HttpError} from '@/utils/api';
 
 import {useGetBankTransaction} from '../api/use-get-bank-transaction';
 import {BankTransaction} from '../types/bank-transaction';
+import {resolveBankTransactionDisplayTitle} from '../utils/formatters';
 import {BankTransactionDetails} from './bank-transaction-details';
 
 type BankTransactionDetailsDialogProps = {
@@ -35,7 +36,7 @@ export function BankTransactionDetailsDialog({
   );
   const isNotFound = error instanceof HttpError && error.status === 404;
   const transactionTitle = transaction
-    ? transaction.description || transaction.counterpartyName || 'Transaction'
+    ? resolveBankTransactionDisplayTitle(transaction)
     : 'Transaction details';
 
   return (

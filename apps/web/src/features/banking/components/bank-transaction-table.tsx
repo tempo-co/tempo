@@ -29,7 +29,11 @@ import {
   BankTransactionSortParams,
   DEFAULT_BANK_TRANSACTION_SORT,
 } from '../types/bank-transaction';
-import {formatBankTransactionCompactDate, formatBankTransactionType} from '../utils/formatters';
+import {
+  formatBankTransactionCompactDate,
+  formatBankTransactionType,
+  resolveBankTransactionDisplayTitle,
+} from '../utils/formatters';
 import {BankTransactionAccountFilter} from './bank-transaction-account-filter';
 import {BankTransactionDateFilter} from './bank-transaction-date-filter';
 import {bankTransactionTableColumns} from './bank-transaction-table-columns';
@@ -361,7 +365,7 @@ export function BankTransactionTable({
 }
 
 function getTransactionLabel(transaction: BankTransaction) {
-  return transaction.description || transaction.counterpartyName || 'bank transaction';
+  return resolveBankTransactionDisplayTitle(transaction);
 }
 
 function getMobileTransactionAccount(transaction: BankTransaction) {

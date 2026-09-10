@@ -25,6 +25,13 @@ export function formatBankTransactionType(value: string | null) {
     .join(' ');
 }
 
+export function resolveBankTransactionDisplayTitle(transaction: {
+  displayDescription?: string | null;
+  description: string | null;
+}) {
+  return transaction.displayDescription || transaction.description || 'Transaction';
+}
+
 export function formatBankingWords(value: string) {
   return value
     .toLowerCase()

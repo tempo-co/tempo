@@ -10,6 +10,7 @@ import {
   formatBankTransactionDirection,
   formatBankTransactionStatus,
   formatBankTransactionType,
+  resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
 
 type BankTransactionDetailsProps = {
@@ -17,14 +18,13 @@ type BankTransactionDetailsProps = {
 };
 
 export function BankTransactionDetails({transaction}: BankTransactionDetailsProps) {
-  const transactionTitle = transaction.description || transaction.counterpartyName || 'Transaction';
+  const transactionTitle = resolveBankTransactionDisplayTitle(transaction);
   const detailsHeadingId = `transaction-${transaction.id}-details-heading`;
   const datesHeadingId = `transaction-${transaction.id}-dates-heading`;
   const accountHeadingId = `transaction-${transaction.id}-account-heading`;
   const classificationHeadingId = `transaction-${transaction.id}-classification-heading`;
   const settlementHeadingId = `transaction-${transaction.id}-settlement-heading`;
   const referenceHeadingId = `transaction-${transaction.id}-reference-heading`;
-  const notesHeadingId = `transaction-${transaction.id}-notes-heading`;
 
   return (
     <div data-testid='bank-transaction-details' className='min-w-0'>
@@ -59,6 +59,11 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
             Transaction details
           </h2>
           <div className='mt-5 grid gap-6 md:grid-cols-2 md:gap-8'>
+            <Detail
+              label='Description'
+              value={transaction.description || '—'}
+              className='col-span-2'
+            />
             <DetailGroup id={datesHeadingId} title='Dates'>
               <Detail
                 label='Transaction date'
@@ -131,19 +136,6 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
               />
             </DetailGroup>
           </div>
-        </section>
-
-        <section aria-labelledby={notesHeadingId} className='border-t pt-6'>
-          <h2 id={notesHeadingId} className='text-lg font-semibold tracking-tight'>
-            Notes
-          </h2>
-          <dl className='mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2'>
-            <Detail label='Description' value={transaction.description || '—'} />
-            <Detail
-              label='Remittance information'
-              value={transaction.remittanceInformation || '—'}
-            />
-          </dl>
         </section>
       </div>
     </div>

@@ -5,7 +5,11 @@ import {SortButton} from '@/components/shared/sort-button';
 import {Badge} from '@/components/ui/badge';
 
 import {BankTransaction, BankTransactionSortField} from '../types/bank-transaction';
-import {formatBankTransactionDate, formatBankTransactionType} from '../utils/formatters';
+import {
+  formatBankTransactionDate,
+  formatBankTransactionType,
+  resolveBankTransactionDisplayTitle,
+} from '../utils/formatters';
 
 export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
   {
@@ -26,18 +30,23 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
   {
     id: 'description',
     header: () => <p className='px-3'>Description</p>,
-    cell: ({row}) => (
-      <div className='w-full max-w-[10rem] max-md:max-w-none sm:max-w-[14rem] lg:max-w-[16rem] xl:max-w-[20rem] min-[1320px]:max-w-[24rem]'>
-        <p className='overflow-hidden text-ellipsis whitespace-nowrap'>
-          {row.original.description || row.original.counterpartyName || 'Transaction'}
-        </p>
-        {row.original.counterpartyName && row.original.description && (
-          <p className='overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground max-md:hidden'>
-            {row.original.counterpartyName}
-          </p>
-        )}
-      </div>
-    ),
+    cell: ({row}) => {
+      const displayDescription = resolveBankTransactionDisplayTitle(row.original);
+      const counterpartyName = row.original.counterpartyName?.trim();
+
+      return (
+        <div className='w-full max-w-[10rem] max-md:max-w-none sm:max-w-[14rem] lg:max-w-[16rem] xl:max-w-[20rem] min-[1320px]:max-w-[24rem]'>
+          <p className='overflow-hidden text-ellipsis whitespace-nowrap'>{displayDescription}</p>
+          {counterpartyName &&
+            row.original.description &&
+            displayDescription !== counterpartyName.replace(/\s+/g, ' ').trim() && (
+              <p className='overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground max-md:hidden'>
+                {counterpartyName}
+              </p>
+            )}
+        </div>
+      );
+    },
   },
   {
     id: 'transactionType',
