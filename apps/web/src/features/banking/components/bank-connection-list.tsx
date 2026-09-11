@@ -1,4 +1,5 @@
-import {AlertTriangle, Building2, Loader, Plus, RefreshCw} from 'lucide-react';
+import {AlertTriangle, Building2, Loader, Plus, RefreshCw, Trash2} from 'lucide-react';
+import {useState} from 'react';
 import {toast} from 'sonner';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
@@ -6,11 +7,23 @@ import {EmptyState} from '@/components/shared/layout/app-empty-state';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardHeader} from '@/components/ui/card';
+import {Input} from '@/components/ui/input';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogTrigger,
+} from '@/components/ui/responsive-dialog';
 import {Skeleton} from '@/components/ui/skeleton';
 import {HttpError} from '@/utils/api';
 import {cn} from '@/utils/cn';
 import {formatRetryAfter} from '@/utils/retry-after';
 
+import {useDeleteBankConnection} from '../api/use-delete-bank-connection';
 import {useGetBankConnectionTransactions} from '../api/use-get-bank-connection-transactions';
 import {useStartBankConnection} from '../api/use-start-bank-connection';
 import {useSyncBankConnection} from '../api/use-sync-bank-connection';
@@ -43,6 +56,14 @@ const MOCK_ASPSP = {
 };
 
 const targetBank = import.meta.env.MODE === 'development' ? MOCK_ASPSP : ABN_AMRO;
+
+const DESTRUCTIVE_CONNECTION_STATUSES = ['AUTHORIZED', 'EXPIRED'] as const;
+const REMOVABLE_CONNECTION_STATUSES = [
+  'PENDING_AUTHORIZATION',
+  'FAILED',
+  'CANCELLED',
+  ...DESTRUCTIVE_CONNECTION_STATUSES,
+] as const;
 
 type ConnectBankButtonProps = {
   onClick: () => void;
@@ -197,10 +218,13 @@ function BankConnectionCard({
   onTransactionSelect: BankConnectionListProps['onTransactionSelect'];
 }) {
   const isAuthorized = connection.status === 'AUTHORIZED';
+  const isRemovable = isRemovableConnection(connection.status);
+  const isDestructive = isDestructiveConnection(connection.status);
   const connectionHeadingId = `bank-connection-${connection.id}-heading`;
   const accountsHeadingId = `bank-connection-${connection.id}-accounts`;
   const transactionsHeadingId = `bank-connection-${connection.id}-transactions`;
   const {syncBankConnection, isPending: isSyncing} = useSyncBankConnection();
+  const {deleteBankConnection, isPending: isRemoving} = useDeleteBankConnection();
   const {
     transactions,
     total,
@@ -249,6 +273,22 @@ function BankConnectionCard({
     }
   };
 
+  const removeBank = async (): Promise<boolean> => {
+    try {
+      await deleteBankConnection(connection.id, isDestructive ? 'DELETE' : undefined);
+      toast.success('Bank connection removed', {
+        id: `bank-connection-removed-${connection.id}`,
+      });
+      return true;
+    } catch {
+      toast.error('Unable to remove bank connection', {
+        description: 'Please try again in a moment.',
+        id: `bank-connection-remove-failed-${connection.id}`,
+      });
+      return false;
+    }
+  };
+
   return (
     <Card
       className='overflow-hidden'
@@ -289,6 +329,26 @@ function BankConnectionCard({
               {isSyncing ? 'Syncing...' : 'Sync now'}
             </Button>
           )}
+          {isRemovable &&
+            (isDestructive ? (
+              <DestructiveBankConnectionDialog
+                connection={connection}
+                isPending={isRemoving}
+                onConfirm={removeBank}
+              />
+            ) : (
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => void removeBank()}
+                disabled={isRemoving}
+                data-testid={`remove-bank-${connection.id}`}
+                className='max-sm:min-h-11 max-sm:gap-1 max-sm:px-2'
+              >
+                <Trash2 />
+                {isRemoving ? 'Removing...' : 'Remove'}
+              </Button>
+            ))}
         </div>
       </CardHeader>
       <CardContent className='space-y-6 px-5 py-5 sm:p-6'>
@@ -389,6 +449,105 @@ function BankConnectionCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function DestructiveBankConnectionDialog({
+  connection,
+  isPending,
+  onConfirm,
+}: {
+  connection: BankConnection;
+  isPending: boolean;
+  onConfirm: () => Promise<boolean>;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState('');
+  const canConfirm = confirmation === 'DELETE' && !isPending;
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) setConfirmation('');
+  };
+
+  const handleConfirm = async () => {
+    if (!canConfirm) return;
+    if (await onConfirm()) handleOpenChange(false);
+  };
+
+  return (
+    <ResponsiveDialog open={isOpen} onOpenChange={handleOpenChange}>
+      <ResponsiveDialogTrigger asChild>
+        <Button
+          variant='outline'
+          size='sm'
+          disabled={isPending}
+          data-testid={`remove-bank-${connection.id}`}
+          className='max-sm:min-h-11 max-sm:gap-1 max-sm:px-2'
+        >
+          <Trash2 />
+          {isPending ? 'Removing...' : 'Remove'}
+        </Button>
+      </ResponsiveDialogTrigger>
+      <ResponsiveDialogContent className='md:w-[30rem]'>
+        <ResponsiveDialogHeader className='text-start'>
+          <ResponsiveDialogTitle>Remove connected bank?</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription className='pt-2'>
+            This permanently deletes the {connection.aspspName} connection, all linked bank
+            accounts, and all transactions. This cannot be undone.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+        <ResponsiveDialogBody>
+          <form
+            className='grid items-start gap-4'
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleConfirm();
+            }}
+          >
+            <div className='grid gap-2'>
+              <label
+                htmlFor={`remove-bank-confirmation-${connection.id}`}
+                className='text-sm font-medium'
+              >
+                Type DELETE to confirm
+              </label>
+              <Input
+                id={`remove-bank-confirmation-${connection.id}`}
+                value={confirmation}
+                onChange={(event) => setConfirmation(event.target.value)}
+                autoComplete='off'
+                disabled={isPending}
+                data-testid={`remove-bank-confirmation-${connection.id}`}
+              />
+            </div>
+            <div className='mt-2 flex flex-col justify-end gap-4 md:flex-row'>
+              <Button
+                type='submit'
+                variant='destructive'
+                disabled={!canConfirm}
+                className='order-1 text-foreground md:order-2'
+                data-testid={`remove-bank-confirm-${connection.id}`}
+              >
+                {isPending ? (
+                  <>
+                    <span>Removing...</span>
+                    <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
+                  </>
+                ) : (
+                  'Remove permanently'
+                )}
+              </Button>
+              <ResponsiveDialogClose asChild className='order-2 md:order-1'>
+                <Button variant='outline' type='button'>
+                  Cancel
+                </Button>
+              </ResponsiveDialogClose>
+            </div>
+          </form>
+        </ResponsiveDialogBody>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
 
@@ -556,6 +715,18 @@ function formatConnectionStatus(value: string) {
   if (normalized === 'PENDING') return 'Pending';
   if (normalized === 'EXPIRED') return 'Expired';
   return formatBankingWords(value);
+}
+
+function isRemovableConnection(status: string) {
+  return REMOVABLE_CONNECTION_STATUSES.includes(
+    status.toUpperCase() as (typeof REMOVABLE_CONNECTION_STATUSES)[number],
+  );
+}
+
+function isDestructiveConnection(status: string) {
+  return DESTRUCTIVE_CONNECTION_STATUSES.includes(
+    status.toUpperCase() as (typeof DESTRUCTIVE_CONNECTION_STATUSES)[number],
+  );
 }
 
 function formatProvider(value: string) {

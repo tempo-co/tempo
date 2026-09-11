@@ -41,18 +41,20 @@ export function BankTransactionAccountFilter({
   className,
 }: BankTransactionAccountFilterProps) {
   const navigate = useNavigate({from: '/bank-transactions/'});
-  const {bankConnections, isPending} = useGetAllBankConnections();
+  const {bankConnections, isPending, isError} = useGetAllBankConnections();
   const selectedValues = filters.bankAccountIds || [];
 
   const accounts = useMemo<AccountOption[]>(
     () =>
       bankConnections?.flatMap((connection) =>
-        connection.bankAccounts.map((account) => ({
-          id: account.id,
-          label: account.alias || account.name || 'Bank account',
-          bankName: connection.aspspName,
-          currency: account.currency,
-        })),
+        connection.bankAccounts
+          .filter((account) => account.isActive)
+          .map((account) => ({
+            id: account.id,
+            label: account.alias || account.name || 'Bank account',
+            bankName: connection.aspspName,
+            currency: account.currency,
+          })),
       ) || [],
     [bankConnections],
   );
@@ -79,8 +81,9 @@ export function BankTransactionAccountFilter({
     setFilters((prev) => ({...prev, bankAccountIds: []}));
   };
 
-  const isDisabled = isPending || accounts.length === 0;
-  const hideOnMobile = !isPending && accounts.length <= 1 && selectedValues.length === 0;
+  if (!isPending && !isError && accounts.length <= 1) return null;
+
+  const isDisabled = isPending || isError || accounts.length === 0;
 
   return (
     <Popover>
@@ -93,7 +96,6 @@ export function BankTransactionAccountFilter({
             'h-10 sm:h-8',
             selectedValues.length === 0 && !isDisabled ? 'border-dashed' : 'border',
             isDisabled && 'cursor-not-allowed opacity-50',
-            hideOnMobile && 'max-md:hidden',
             className,
           )}
         >
