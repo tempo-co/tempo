@@ -18,6 +18,67 @@ export enum BankTransactionDirection {
   UNKNOWN = 'UNKNOWN',
 }
 
+export const BANK_TRANSACTION_CATEGORIES = [
+  'HOUSING_AND_UTILITIES',
+  'FOOD_AND_DRINK',
+  'TRANSPORTATION',
+  'SHOPPING',
+  'SUBSCRIPTIONS',
+  'HEALTH',
+  'TRAVEL',
+  'ENTERTAINMENT',
+  'PERSONAL_CARE',
+  'EDUCATION',
+  'INSURANCE',
+  'TAXES',
+  'FEES',
+  'CASH_WITHDRAWAL',
+  'INCOME',
+  'REFUND',
+  'TRANSFER_IN',
+  'TRANSFER_OUT',
+  'OTHER',
+] as const;
+
+export type BankTransactionCategory = (typeof BANK_TRANSACTION_CATEGORIES)[number];
+
+export const BANK_TRANSACTION_CATEGORY_LABELS: Record<BankTransactionCategory, string> = {
+  HOUSING_AND_UTILITIES: 'Housing and utilities',
+  FOOD_AND_DRINK: 'Food and drink',
+  TRANSPORTATION: 'Transportation',
+  SHOPPING: 'Shopping',
+  SUBSCRIPTIONS: 'Subscriptions',
+  HEALTH: 'Health',
+  TRAVEL: 'Travel',
+  ENTERTAINMENT: 'Entertainment',
+  PERSONAL_CARE: 'Personal care',
+  EDUCATION: 'Education',
+  INSURANCE: 'Insurance',
+  TAXES: 'Taxes',
+  FEES: 'Fees',
+  CASH_WITHDRAWAL: 'Cash withdrawal',
+  INCOME: 'Income',
+  REFUND: 'Refund',
+  TRANSFER_IN: 'Transfer in',
+  TRANSFER_OUT: 'Transfer out',
+  OTHER: 'Other',
+};
+
+export const BANK_TRANSACTION_CATEGORIZATION_STATUSES = [
+  'PENDING',
+  'PROCESSING',
+  'COMPLETED',
+  'FAILED',
+] as const;
+
+export type BankTransactionCategorizationStatus =
+  (typeof BANK_TRANSACTION_CATEGORIZATION_STATUSES)[number];
+
+export const BANK_TRANSACTION_CATEGORIZATION_SOURCES = ['AI', 'MANUAL'] as const;
+
+export type BankTransactionCategorizationSource =
+  (typeof BANK_TRANSACTION_CATEGORIZATION_SOURCES)[number];
+
 const toDate = (value: unknown) => (typeof value === 'string' ? new Date(value) : value);
 
 export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.extend({
@@ -52,7 +113,14 @@ export const DEFAULT_BANK_TRANSACTION_SORT: NonNullable<BankTransactionSortParam
   order: BankTransactionSortOrder.DESC,
 };
 
-export type BankTransaction = {
+export type BankTransactionCategorizationFields = {
+  category: BankTransactionCategory | null;
+  categoryStatus: BankTransactionCategorizationStatus;
+  categorySource: BankTransactionCategorizationSource | null;
+  categoryConfidence: string | null;
+};
+
+export type BankTransaction = BankTransactionCategorizationFields & {
   id: string;
   transactionDate: string | null;
   bookingDate: string | null;

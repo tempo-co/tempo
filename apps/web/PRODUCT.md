@@ -12,7 +12,7 @@ The primary user is the individual owner of the instance. Tempo is used for pers
 
 ## Product Purpose
 
-Tempo is a personal finance application for tracking real financial data across connected bank accounts. It should make current account information, balances, and transactions easy to retrieve and inspect, then support richer understanding through transaction categorization, spending and habit statistics, and future predictions.
+Tempo is a personal finance application for tracking real financial data across connected bank accounts. It should make current account information, balances, and transactions easy to retrieve and inspect, then support richer understanding through transaction categorization with owner-controlled manual correction, spending and habit statistics, and future predictions.
 
 The product is useful when it gives the owner a dependable, always-available view of their finances without requiring manual statement files or a broad-market financial product workflow.
 
@@ -30,10 +30,10 @@ Tempo is intended to be a private, read-only financial record for one person: re
 ## Capabilities and Constraints
 
 - The current frontend supports email/password authentication, email verification, password recovery, account details, security/session controls, and appearance settings.
-- The current banking flow connects real bank accounts through Enable Banking, retrieves accounts and balances, allows manual synchronization, and provides searchable, filterable, sortable, paginated, read-only transaction lists and detail views.
-- The application is read-only. It must not initiate payments or mutate bank-account data.
+- The current banking flow connects real bank accounts through Enable Banking, retrieves accounts and balances, allows manual synchronization, and provides searchable, filterable, sortable, paginated, read-only transaction lists and detail views with automatic category suggestions and manual correction.
+- The application is read-only toward banks. Transaction categories are Tempo metadata and may be suggested automatically or corrected manually; Tempo must not initiate payments or mutate bank-account data.
 - Bank-statement upload was removed because Enable Banking synchronization replaces that workflow. Do not reintroduce statement upload as a default solution.
-- AI transaction categorization, spending insights, statistics about habits, and future predictions are future direction rather than current implemented capability.
+- Spending insights, statistics about habits, and future predictions are future direction rather than current implemented capability.
 - Privacy, security, and financial-data correctness take priority over growth or multi-tenant SaaS concerns.
 - Exact long-term hosting, supported bank/country coverage, currency scope, and the accessibility target remain open decisions where the provider or product has not yet established them.
 
@@ -47,7 +47,7 @@ Tempo is intended to be a private, read-only financial record for one person: re
 
 - The implemented frontend feature areas are under `src/features/auth`, `src/features/banking`, and `src/features/settings`, with routes under `src/routes`.
 - The adjacent backend contains the Enable Banking integration and bank connection, account, balance, synchronization, and transaction services under `../tempo-api/src/app/modules`.
-- The current repository contains working authentication, bank connection, synchronization, balance, transaction review, and settings flows; planned categorization, insights, and prediction features are not yet evidence of shipped functionality.
+- The current repository contains working authentication, bank connection, synchronization, balance, transaction review, and transaction categorization flows; spending insights and prediction features are not yet evidence of shipped functionality.
 
 ## Product Principles
 

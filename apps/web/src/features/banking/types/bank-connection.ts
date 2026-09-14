@@ -1,3 +1,5 @@
+import type {BankTransactionCategorizationFields} from './bank-transaction';
+
 export type BankConnectionAuthorizationRequest = {
   aspspName: string;
   aspspCountry: string;
@@ -45,7 +47,7 @@ export type BankConnection = {
   bankAccounts: BankAccount[];
 };
 
-export type BankTransaction = {
+export type BankTransaction = BankTransactionCategorizationFields & {
   id: string;
   bookingDate: string | null;
   valueDate: string | null;

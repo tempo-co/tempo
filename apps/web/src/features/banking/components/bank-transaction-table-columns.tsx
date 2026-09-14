@@ -6,10 +6,15 @@ import {Badge} from '@/components/ui/badge';
 
 import {BankTransaction, BankTransactionSortField} from '../types/bank-transaction';
 import {
+  formatBankTransactionCategory,
+  formatBankTransactionCategorySource,
+  formatBankTransactionCategoryStatus,
   formatBankTransactionDate,
   formatBankTransactionType,
+  isBankTransactionCategory,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
+import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 
 export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
   {
@@ -44,6 +49,32 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
                 {counterpartyName}
               </p>
             )}
+        </div>
+      );
+    },
+  },
+  {
+    id: 'category',
+    header: () => <p className='px-3'>Category</p>,
+    cell: ({row}) => {
+      const category =
+        row.original.category && isBankTransactionCategory(row.original.category)
+          ? row.original.category
+          : null;
+      const source = formatBankTransactionCategorySource(row.original.categorySource);
+
+      return (
+        <div className='max-w-[14rem]'>
+          <div className='flex min-w-0 items-center gap-2'>
+            {category && <BankTransactionCategoryIcon category={category} />}
+            <p className='overflow-hidden text-ellipsis whitespace-nowrap'>
+              {formatBankTransactionCategory(row.original.category)}
+            </p>
+          </div>
+          <p className='overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground'>
+            {formatBankTransactionCategoryStatus(row.original.categoryStatus)}
+            {source && ` · ${source}`}
+          </p>
         </div>
       );
     },

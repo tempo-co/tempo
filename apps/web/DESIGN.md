@@ -164,6 +164,10 @@ Semantic colors are separate from the brand palette and must be paired with text
 another non-color cue. Never communicate transaction direction, synchronization state, or
 error state by hue alone.
 
+For transaction categorization, the category label, source (`Suggested by AI` or `Manual`), and
+pending/failed status are secondary text signals. Always render those cues as
+understandable text; never communicate a category or categorization state through color alone.
+
 **The One Accent Rule.** Clay is scarce enough to remain meaningful. A screen has a clear
 primary action or active state, not a clay wash.
 

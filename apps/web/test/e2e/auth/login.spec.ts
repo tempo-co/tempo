@@ -1,5 +1,7 @@
 import {expect, test} from '@playwright/test';
 import {
+  PW_CHANGE_ACCOUNT_EMAIL,
+  PW_CHANGE_ACCOUNT_PASSWORD,
   UNVERIFIED_ACCOUNT_EMAIL,
   UNVERIFIED_ACCOUNT_PASSWORD,
   VERIFIED_ACCOUNT_EMAIL,
@@ -26,6 +28,27 @@ test.describe('Login', () => {
       await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
       await homePage.expectToBeOnPage();
       await homePage.expectUserLoggedIn();
+    });
+
+    test('should isolate transaction cache when switching accounts', async ({page}) => {
+      const transactionUrl =
+        '/bank-transactions?transactionId=00000000-0000-4000-8000-000000000011';
+
+      await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
+      await homePage.expectToBeOnPage();
+      await page.goto(transactionUrl);
+      const inspector = page.getByTestId('bank-transaction-inspector');
+      await expect(inspector.getByRole('heading', {name: 'Coffee shop'})).toBeVisible();
+      await inspector.getByRole('button', {name: 'Close transaction details'}).click();
+      await expect(inspector).toBeHidden();
+
+      await homePage.logOut();
+      await loginPage.expectToBeOnPage();
+      await loginPage.login(PW_CHANGE_ACCOUNT_EMAIL, PW_CHANGE_ACCOUNT_PASSWORD);
+      await homePage.expectToBeOnPage();
+
+      await page.goto(transactionUrl);
+      await expect(page.getByRole('heading', {name: 'Transaction not found'})).toBeVisible();
     });
 
     test('should redirect to home page if a logged in user navigates to /login', async ({page}) => {

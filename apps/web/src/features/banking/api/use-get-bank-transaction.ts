@@ -18,6 +18,7 @@ export const useGetBankTransaction = (id: BankTransaction['id'], enabled = true)
       return await api.get<BankTransaction>(`/bank-transactions/${id}`);
     },
     enabled: enabled && Boolean(id),
+    staleTime: 30_000,
     retry: false,
   });
 

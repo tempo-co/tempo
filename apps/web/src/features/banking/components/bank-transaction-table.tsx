@@ -296,7 +296,8 @@ export function BankTransactionTable({
                               'max-md:order-2 max-md:block max-md:self-start max-md:justify-self-end max-md:border-0 max-md:p-0',
                             isDescriptionCell &&
                               'max-md:order-1 max-md:col-span-1 max-md:block max-md:min-w-0 max-md:border-0 max-md:p-0',
-                            (cell.column.id === 'valueDate' ||
+                            (cell.column.id === 'category' ||
+                              cell.column.id === 'valueDate' ||
                               cell.column.id === 'transactionType' ||
                               cell.column.id === 'source') &&
                               'max-md:hidden',

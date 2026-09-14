@@ -12,6 +12,7 @@ import {
   formatBankTransactionType,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
+import {BankTransactionCategorySelect} from './bank-transaction-category-select';
 
 type BankTransactionDetailsProps = {
   transaction: BankTransaction;
@@ -88,6 +89,7 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
             </DetailGroup>
 
             <DetailGroup id={classificationHeadingId} title='Classification'>
+              <BankTransactionCategorySelect transaction={transaction} />
               <Detail
                 label='Transaction type'
                 value={formatBankTransactionType(transaction.transactionType)}

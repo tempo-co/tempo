@@ -28,7 +28,27 @@
     --accent: 37.1 36.8% 88.8%;
     --accent-foreground: 270 7.5% 15.7%;
 
-    --clay: 13.7 46.3% 51.8%;       /* Clay #BD654B — large accents and logo plane */
+    --clay: 13.7 46.3% 51.8%; /* Clay #BD654B — large accents and logo plane */
+
+    --category-housing: 138 103 18;
+    --category-food-and-drink: 169 79 55;
+    --category-transportation: 23 108 116;
+    --category-shopping: 104 71 143;
+    --category-subscriptions: 75 95 134;
+    --category-health: 46 116 76;
+    --category-travel: 45 98 151;
+    --category-entertainment: 142 63 109;
+    --category-personal-care: 152 75 108;
+    --category-education: 85 74 142;
+    --category-insurance: 63 92 115;
+    --category-taxes: 118 82 29;
+    --category-fees: 142 58 53;
+    --category-cash-withdrawal: 75 95 93;
+    --category-income: 36 106 74;
+    --category-refund: 91 119 46;
+    --category-transfer-in: 29 111 124;
+    --category-transfer-out: 153 74 47;
+    --category-other: 98 94 102;
 
     --destructive: 8 87% 51%;
     --destructive-foreground: 8 87% 96%;
@@ -83,6 +103,26 @@
     --accent-foreground: 38.6 31.8% 91.4%;
 
     --clay: 17.5 67.1% 69%;         /* Clay on dark — logo accent plane */
+
+    --category-housing: 214 176 75;
+    --category-food-and-drink: 225 138 110;
+    --category-transportation: 110 195 201;
+    --category-shopping: 181 154 212;
+    --category-subscriptions: 166 183 217;
+    --category-health: 124 199 149;
+    --category-travel: 131 183 229;
+    --category-entertainment: 208 140 177;
+    --category-personal-care: 224 161 187;
+    --category-education: 169 161 227;
+    --category-insurance: 157 183 204;
+    --category-taxes: 211 168 95;
+    --category-fees: 227 140 130;
+    --category-cash-withdrawal: 166 193 190;
+    --category-income: 125 210 163;
+    --category-refund: 183 212 122;
+    --category-transfer-in: 119 210 220;
+    --category-transfer-out: 227 160 126;
+    --category-other: 183 176 186;
 
     --destructive: 2 84% 31%;
     --destructive-foreground: 0 70% 13%;

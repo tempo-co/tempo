@@ -1,6 +1,13 @@
 import {format, parseISO} from 'date-fns';
 
-import {BankTransactionDirection} from '../types/bank-transaction';
+import {
+  BANK_TRANSACTION_CATEGORIES,
+  BANK_TRANSACTION_CATEGORY_LABELS,
+  BankTransactionCategorizationSource,
+  BankTransactionCategorizationStatus,
+  BankTransactionCategory,
+  BankTransactionDirection,
+} from '../types/bank-transaction';
 
 export function formatBankTransactionDate(value: string | null) {
   return formatBankTransactionDateValue(value, 'MMM d, yyyy');
@@ -56,4 +63,33 @@ export function formatBankTransactionStatus(value: string | null) {
   if (normalized === 'REJECTED') return 'Rejected';
   if (normalized === 'DELETED') return 'Removed';
   return formatBankingWords(value);
+}
+
+export function isBankTransactionCategory(value: string): value is BankTransactionCategory {
+  return (BANK_TRANSACTION_CATEGORIES as readonly string[]).includes(value);
+}
+
+export function formatBankTransactionCategory(value: string | null | undefined) {
+  return value && isBankTransactionCategory(value)
+    ? BANK_TRANSACTION_CATEGORY_LABELS[value]
+    : 'Not categorized';
+}
+
+export function formatBankTransactionCategoryStatus(
+  value: BankTransactionCategorizationStatus | null | undefined,
+) {
+  const normalized = value?.toUpperCase();
+  if (normalized === 'PENDING' || normalized === 'PROCESSING') return 'Categorizing…';
+  if (normalized === 'FAILED') return 'Categorization failed. Choose a category manually.';
+  if (normalized === 'COMPLETED') return 'Categorized';
+  return 'Not categorized';
+}
+
+export function formatBankTransactionCategorySource(
+  value: BankTransactionCategorizationSource | null | undefined,
+) {
+  const normalized = value?.toUpperCase();
+  if (normalized === 'AI') return 'Suggested by AI';
+  if (normalized === 'MANUAL') return 'Manual';
+  return null;
 }

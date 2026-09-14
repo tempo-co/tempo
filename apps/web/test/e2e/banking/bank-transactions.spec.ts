@@ -25,7 +25,11 @@ test.describe('bank transactions', () => {
       page.getByTestId('bank-transactions-table').getByRole('columnheader', {name: 'Status'}),
     ).not.toBeVisible();
     await expect(
-      firstTransactionRow.getByRole('cell').nth(3).getByText('Card Payment', {exact: true}),
+      page.getByTestId('bank-transactions-table').getByRole('columnheader', {name: 'Category'}),
+    ).toBeVisible();
+    await expect(firstTransactionRow.getByRole('cell').nth(3)).toContainText('Not categorized');
+    await expect(
+      firstTransactionRow.getByRole('cell').nth(4).getByText('Card Payment', {exact: true}),
     ).toBeVisible();
     await expect(firstTransactionRow.getByRole('cell').nth(1)).toContainText('Aug 25, 2026');
 
@@ -64,12 +68,84 @@ test.describe('bank transactions', () => {
     ).not.toBeVisible();
     await expect(inspector.getByText('reference-coffee (RF)')).toBeVisible();
     await expect(inspector.getByTestId('bank-transaction-id-row')).toHaveCount(0);
-    await expect(inspector.getByText('Category', {exact: true})).not.toBeVisible();
+    await expect(inspector.getByTestId('bank-transaction-category-control')).toBeVisible();
 
     const closeButton = inspector.getByRole('button', {name: 'Close transaction details'});
     await closeButton.click();
     await expect(inspector).toBeHidden();
     expect(new URL(page.url()).searchParams.has('transactionId')).toBe(false);
+  });
+
+  test('classifies a transaction from the detail inspector', async ({page}) => {
+    await page.goto('/bank-transactions');
+    const firstTransactionRow = page
+      .getByTestId(/^bank-transaction-row-/)
+      .filter({hasText: 'Coffee shop'});
+    await expect(
+      page.getByTestId('bank-transactions-table').getByRole('columnheader', {name: 'Category'}),
+    ).toBeVisible();
+    await expect(firstTransactionRow.getByRole('cell').nth(3)).toContainText('Not categorized');
+
+    await firstTransactionRow
+      .getByRole('button', {name: 'View Coffee shop transaction details'})
+      .click();
+
+    const inspector = page.getByTestId('bank-transaction-inspector');
+    await expect(inspector.getByTestId('bank-transaction-category-status')).toHaveText(
+      'Categorizing…',
+    );
+    const categorySelect = inspector.getByRole('combobox', {name: 'Transaction category'});
+    await expect(categorySelect).toBeVisible();
+    await categorySelect.click();
+    await expect(page.getByRole('option')).toHaveCount(19);
+    await expect(page.getByRole('option')).toHaveText([
+      'Housing and utilities',
+      'Food and drink',
+      'Transportation',
+      'Shopping',
+      'Subscriptions',
+      'Health',
+      'Travel',
+      'Entertainment',
+      'Personal care',
+      'Education',
+      'Insurance',
+      'Taxes',
+      'Fees',
+      'Cash withdrawal',
+      'Income',
+      'Refund',
+      'Transfer in',
+      'Transfer out',
+      'Other',
+    ]);
+    await expect(page.getByRole('option').locator('svg')).toHaveCount(19);
+    await expect(
+      page.getByRole('option', {name: 'Food and drink', exact: true}).locator('svg').locator('..'),
+    ).toHaveClass(/text-category-food-and-drink/);
+    await page.getByRole('option', {name: 'Food and drink', exact: true}).click();
+
+    await expect(categorySelect).toHaveText('Food and drink');
+    await expect(categorySelect.locator('svg.lucide-utensils').locator('..')).toHaveClass(
+      /text-category-food-and-drink/,
+    );
+    await expect(inspector.getByText('Manual', {exact: true})).toBeVisible();
+
+    await inspector.getByRole('button', {name: 'Close transaction details'}).click();
+    await expect(inspector).toBeHidden();
+    await expect(
+      firstTransactionRow.getByRole('cell').nth(3).locator('svg').locator('..'),
+    ).toHaveClass(/text-category-food-and-drink/);
+    await firstTransactionRow
+      .getByRole('button', {name: 'View Coffee shop transaction details'})
+      .click();
+    await expect(page.getByTestId('bank-transaction-inspector')).toBeVisible();
+    await expect(
+      page.getByTestId('bank-transaction-inspector').getByRole('combobox', {
+        name: 'Transaction category',
+      }),
+    ).toHaveText('Food and drink');
+    await expect(page.getByTestId('bank-transaction-inspector').getByText('Manual')).toBeVisible();
   });
 
   test('does not show the bank account filter when there is one account', async ({page}) => {
@@ -427,6 +503,7 @@ test.describe('bank transactions', () => {
     expect(bookingDateBox).not.toBeNull();
     expect(bookingDateBox!.width).toBe(361);
     await expect(firstTransactionRow).toBeVisible();
+    await expect(firstTransactionRow.getByRole('cell').nth(3)).toBeHidden();
     const [tableBox, firstTransactionRowBox] = await Promise.all([
       table.boundingBox(),
       firstTransactionRow.boundingBox(),

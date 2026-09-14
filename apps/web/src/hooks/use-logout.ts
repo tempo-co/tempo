@@ -15,6 +15,9 @@ export const useLogOut = () => {
       await queryClient.setQueryData(CURRENT_ACCOUNT_KEY, null);
     },
     onSuccess: async () => {
+      queryClient.removeQueries({
+        predicate: ({queryKey}) => queryKey[0] !== CURRENT_ACCOUNT_KEY[0],
+      });
       await queryClient.invalidateQueries({queryKey: CURRENT_ACCOUNT_KEY});
       return navigate({to: '/'});
     },

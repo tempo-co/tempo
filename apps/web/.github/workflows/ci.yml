@@ -73,8 +73,7 @@ jobs:
 
       - name: Setup Docker E2E environment
         run: |
-          cp docker-compose.e2e.yml docker-compose.yml
-          docker compose -f docker-compose.yml up -d
+          docker compose -f docker-compose.e2e.yml up -d
           npm run db:seed:e2e
 
       - name: Setup Node.js
