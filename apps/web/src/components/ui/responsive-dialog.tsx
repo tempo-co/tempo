@@ -20,7 +20,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from '@/components/ui/drawer';
-import {useMediaQuery} from '@/hooks/use-media-query';
+import {useIsMobile} from '@/hooks/use-is-mobile';
 import {cn} from '@/utils/cn';
 
 interface BaseProps {
@@ -54,7 +54,7 @@ const useResponsiveDialogContext = () => {
 };
 
 const ResponsiveDialog = ({children, ...props}: RootResponsiveDialogProps) => {
-  const isDesktop = useMediaQuery('(min-width: 768px)');
+  const isDesktop = !useIsMobile();
   const ResponsiveDialog = isDesktop ? Dialog : Drawer;
 
   return (

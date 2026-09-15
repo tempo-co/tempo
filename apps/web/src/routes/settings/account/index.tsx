@@ -6,13 +6,9 @@ import {AccountDelete} from '@/features/settings/components/account-delete/accou
 import {EmailChangeDialog} from '@/features/settings/components/email-change/email-change-dialog';
 import {NameChangeForm} from '@/features/settings/components/name-change-form';
 import {useCurrentAccount} from '@/hooks/use-current-account';
-import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/settings/account/')({
   component: SettingsAccountIndex,
-  beforeLoad: ({context}) => {
-    handleAuthenticatedRedirect(context);
-  },
 });
 
 function SettingsAccountIndex() {

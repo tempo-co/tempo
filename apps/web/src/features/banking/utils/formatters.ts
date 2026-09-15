@@ -38,6 +38,13 @@ export function resolveBankTransactionDisplayTitle(transaction: {
   return transaction.displayDescription || transaction.description || 'Transaction';
 }
 
+export function resolveBankTransactionAccountLabel(transaction: {
+  bankAccountAlias: string | null;
+  bankAccountName: string | null;
+}) {
+  return transaction.bankAccountAlias || transaction.bankAccountName || 'Bank account';
+}
+
 export function formatBankingWords(value: string) {
   return value
     .toLowerCase()

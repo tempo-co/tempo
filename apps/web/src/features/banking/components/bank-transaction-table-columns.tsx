@@ -10,6 +10,7 @@ import {
   formatBankTransactionCategoryStatus,
   formatBankTransactionDate,
   isBankTransactionCategory,
+  resolveBankTransactionAccountLabel,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
@@ -75,7 +76,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
       <div className='w-full min-w-0'>
         <p className='overflow-hidden text-ellipsis whitespace-nowrap'>{row.original.bankName}</p>
         <p className='overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground'>
-          {row.original.bankAccountAlias || row.original.bankAccountName || 'Bank account'}
+          {resolveBankTransactionAccountLabel(row.original)}
         </p>
       </div>
     ),

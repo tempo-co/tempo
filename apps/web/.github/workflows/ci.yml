@@ -124,8 +124,6 @@ jobs:
           context: .
           file: Dockerfile.production
           push: true
-          build-args: |
-            VITE_APP_URL=http://127.0.0.1/tempo/
           tags: |
             ghcr.io/${{ github.repository_owner }}/tempo-web:latest
             ghcr.io/${{ github.repository_owner }}/tempo-web:${{ github.sha }}

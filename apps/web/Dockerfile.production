@@ -1,9 +1,6 @@
 FROM node:20-alpine AS builder
 WORKDIR /usr/src/app
 
-ARG VITE_APP_URL
-RUN test -n "$VITE_APP_URL" || (echo "VITE_APP_URL must be provided as a build argument" >&2 && exit 1)
-
 COPY package*.json ./
 RUN npm ci
 
@@ -11,11 +8,8 @@ COPY . ./
 
 ARG VITE_API_URL=/tempo/api
 ARG VITE_BASE_PATH=/tempo/
-ARG VITE_EMAIL_UI_URL=http://127.0.0.1:8025
 ENV VITE_API_URL=$VITE_API_URL \
-    VITE_APP_URL=$VITE_APP_URL \
-    VITE_BASE_PATH=$VITE_BASE_PATH \
-    VITE_EMAIL_UI_URL=$VITE_EMAIL_UI_URL
+    VITE_BASE_PATH=$VITE_BASE_PATH
 
 RUN npm run build
 

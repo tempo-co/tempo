@@ -1,13 +1,9 @@
 import {createFileRoute} from '@tanstack/react-router';
 
 import {ThemeSwitcher} from '@/features/settings/components/theme-switcher';
-import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/settings/appearance/')({
   component: SettingsAppearanceIndex,
-  beforeLoad: ({context}) => {
-    handleAuthenticatedRedirect(context);
-  },
 });
 
 function SettingsAppearanceIndex() {

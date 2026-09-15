@@ -4,6 +4,7 @@ import {toast} from 'sonner';
 import {HttpError, api} from '@/utils/api';
 
 import {Session} from '../types/session';
+import {SESSIONS_QUERY_KEY} from './query-keys';
 
 export const useRevokeSession = () => {
   const queryClient = useQueryClient();
@@ -16,14 +17,14 @@ export const useRevokeSession = () => {
     onSuccess: (_data, data) => {
       toast.success('Session revoked.');
 
-      queryClient.setQueryData<Session[]>(['sessions'], (prevSessions) => {
+      queryClient.setQueryData<Session[]>(SESSIONS_QUERY_KEY, (prevSessions) => {
         return prevSessions?.filter((session) => session.id !== data.id);
       });
     },
     onError: async (error) => {
       if (error.status === 404) {
         toast.error('Session not found or expired.');
-        await queryClient.invalidateQueries({queryKey: ['sessions']});
+        await queryClient.invalidateQueries({queryKey: SESSIONS_QUERY_KEY});
         throw error;
       }
     },

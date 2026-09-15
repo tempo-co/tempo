@@ -2,6 +2,8 @@ import {useMutation, useQueryClient} from '@tanstack/react-query';
 
 import {HttpError, api} from '@/utils/api';
 
+import {bankQueryKeys} from './query-keys';
+
 export const useDeleteBankConnection = () => {
   const queryClient = useQueryClient();
 
@@ -16,7 +18,7 @@ export const useDeleteBankConnection = () => {
       });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({queryKey: ['bank-connections']});
+      await queryClient.invalidateQueries({queryKey: bankQueryKeys.connections});
     },
     retry: false,
   });

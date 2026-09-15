@@ -12,6 +12,7 @@ import {
   BankTransactionsResponse,
   DEFAULT_BANK_TRANSACTION_SORT,
 } from '../types/bank-transaction';
+import {bankQueryKeys} from './query-keys';
 
 export const useGetBankTransactions = (searchParams: BankTransactionSearchParams) => {
   const [pagination, setPagination] = useState<PaginationParams>({
@@ -31,7 +32,7 @@ export const useGetBankTransactions = (searchParams: BankTransactionSearchParams
 
   const {data, isPending, isPlaceholderData, isError, refetch} = useQuery<BankTransactionsResponse>(
     {
-      queryKey: ['bank-transactions', pagination, filters, sort],
+      queryKey: bankQueryKeys.transactions(pagination, filters, sort),
       queryFn: async () => {
         const params = new URLSearchParams();
 

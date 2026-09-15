@@ -18,11 +18,8 @@ export class EmailUtils {
     delayMs: number = 200,
   ) {
     while (retries > 0) {
-      const res = await fetch(`${this.EMAIL_UI_URL}/api/v1/messages`);
-      const data = (await res.json()) as {messages: Message[]};
-      const email = data.messages.find((msg) =>
-        msg.To.some((r) => r.Address.toLowerCase() === recipientEmail.toLowerCase()),
-      );
+      const messages = await this._fetchMessages();
+      const email = messages.find((msg) => this._hasRecipient(msg, recipientEmail));
 
       if (email) {
         const res = await fetch(`${this.EMAIL_UI_URL}/api/v1/message/${email.ID}`);
@@ -43,12 +40,8 @@ export class EmailUtils {
   ) {
     let lastKnownCount = 0;
     for (let i = 0; i < retries; i++) {
-      const res = await fetch(`${this.EMAIL_UI_URL}/api/v1/messages`);
-      const data = (await res.json()) as {messages: Message[]};
-
-      const currentCount = data.messages.filter((msg) =>
-        msg.To.some((r) => r.Address && r.Address.toLowerCase() === recipientEmail.toLowerCase()),
-      ).length;
+      const messages = await this._fetchMessages();
+      const currentCount = messages.filter((msg) => this._hasRecipient(msg, recipientEmail)).length;
 
       lastKnownCount = currentCount;
       if (currentCount === expectedCount) {
@@ -96,6 +89,17 @@ export class EmailUtils {
     );
     const match = body.match(pattern);
     return match ? match[1] : '';
+  }
+
+  private static async _fetchMessages() {
+    const res = await fetch(`${this.EMAIL_UI_URL}/api/v1/messages`);
+    const data = (await res.json()) as {messages: Message[]};
+    return data.messages;
+  }
+
+  private static _hasRecipient(message: Message, recipientEmail: string) {
+    const normalizedRecipient = recipientEmail.toLowerCase();
+    return message.To.some((recipient) => recipient.Address.toLowerCase() === normalizedRecipient);
   }
 
   private static _sleep(ms: number = 250) {

@@ -11,7 +11,6 @@ const Table = React.forwardRef<HTMLTableElement, TableProps>(
   ({className, wrapperClassName, ...props}, ref) => (
     <ScrollArea className={cn('relative w-full rounded-md border', wrapperClassName)}>
       <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
-      <ScrollBar orientation='vertical' />
       <ScrollBar orientation='horizontal' />
     </ScrollArea>
   ),

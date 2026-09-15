@@ -31,6 +31,7 @@ import {
 } from '../types/bank-transaction';
 import {
   formatBankTransactionCompactDate,
+  resolveBankTransactionAccountLabel,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
 import {BankTransactionAccountFilter} from './bank-transaction-account-filter';
@@ -372,7 +373,7 @@ export function BankTransactionTable({
                         <span className='min-w-0 flex-1 truncate'>
                           {formatBankTransactionCompactDate(row.original.bookingDate)}
                           <span aria-hidden='true'> · </span>
-                          {getMobileTransactionAccount(row.original)}
+                          {resolveBankTransactionAccountLabel(row.original)}
                         </span>
                         <span
                           data-testid='bank-transaction-mobile-meta-right'
@@ -403,10 +404,6 @@ export function BankTransactionTable({
 
 function getTransactionLabel(transaction: BankTransaction) {
   return resolveBankTransactionDisplayTitle(transaction);
-}
-
-function getMobileTransactionAccount(transaction: BankTransaction) {
-  return transaction.bankAccountAlias || transaction.bankAccountName || 'Bank account';
 }
 
 function isBankTransactionSortField(value: string): value is BankTransactionSortField {

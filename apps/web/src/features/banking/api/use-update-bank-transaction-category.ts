@@ -8,6 +8,7 @@ import {
   BankTransactionCategory,
   BankTransactionsResponse,
 } from '../types/bank-transaction';
+import {bankQueryKeys} from './query-keys';
 
 type UpdateBankTransactionCategoryInput = {
   id: BankTransaction['id'];
@@ -28,9 +29,9 @@ export const useUpdateBankTransactionCategory = () => {
       );
     },
     onSuccess: (updatedTransaction, {id}) => {
-      queryClient.setQueryData(['bank-transaction', id], updatedTransaction);
+      queryClient.setQueryData(bankQueryKeys.transaction(id), updatedTransaction);
       queryClient.setQueriesData<BankTransactionsResponse>(
-        {queryKey: ['bank-transactions']},
+        {queryKey: bankQueryKeys.transactionsRoot},
         (current) => {
           if (
             !current ||

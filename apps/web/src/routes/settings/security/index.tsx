@@ -4,13 +4,9 @@ import {Skeleton} from '@/components/ui/skeleton';
 import {PasswordChangeCard} from '@/features/settings/components/password-change/password-change-card';
 import {SessionList} from '@/features/settings/components/session/session-list';
 import {useCurrentAccount} from '@/hooks/use-current-account';
-import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/settings/security/')({
   component: SettingsSecurityIndex,
-  beforeLoad: ({context}) => {
-    handleAuthenticatedRedirect(context);
-  },
 });
 
 function SettingsSecurityIndex() {

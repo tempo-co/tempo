@@ -30,35 +30,33 @@ declare module '@tanstack/react-router' {
 export function App() {
   const {isAuthenticated, isPending, isEmailVerified} = useCurrentAccount();
 
-  if (isPending) {
-    return <LoadingScreen />;
-  }
-
   return (
-    <React.Suspense fallback={<LoadingScreen />}>
-      <ThemeProvider defaultTheme='dark' storageKey='vite-ui-theme'>
-        {/* eslint-disable-next-line react/no-unknown-property */}
-        <div vaul-drawer-wrapper=''>
-          <RouterProvider router={router} context={{isAuthenticated, isEmailVerified}} />
-          <Toaster expand duration={5000} />
-        </div>
-      </ThemeProvider>
-    </React.Suspense>
+    <ThemeProvider defaultTheme='dark' storageKey='vite-ui-theme'>
+      {isPending ? (
+        <LoadingScreen />
+      ) : (
+        <React.Suspense fallback={<LoadingScreen />}>
+          {/* eslint-disable-next-line react/no-unknown-property */}
+          <div vaul-drawer-wrapper=''>
+            <RouterProvider router={router} context={{isAuthenticated, isEmailVerified}} />
+            <Toaster expand duration={5000} />
+          </div>
+        </React.Suspense>
+      )}
+    </ThemeProvider>
   );
 }
 
 function LoadingScreen() {
   return (
-    <ThemeProvider defaultTheme='dark' storageKey='vite-ui-theme'>
-      <div className='flex h-screen w-screen items-center justify-center bg-background'>
-        <motion.div
-          initial={{scale: 0.9, opacity: 0}}
-          animate={{scale: 1.3, opacity: 1}}
-          transition={{duration: 3, ease: 'easeOut', delay: 0.5}}
-        >
-          <Logo className='h-16 w-16 text-primary' />
-        </motion.div>
-      </div>
-    </ThemeProvider>
+    <div className='flex h-screen w-screen items-center justify-center bg-background'>
+      <motion.div
+        initial={{scale: 0.9, opacity: 0}}
+        animate={{scale: 1.3, opacity: 1}}
+        transition={{duration: 3, ease: 'easeOut', delay: 0.5}}
+      >
+        <Logo className='h-16 w-16 text-primary' />
+      </motion.div>
+    </div>
   );
 }

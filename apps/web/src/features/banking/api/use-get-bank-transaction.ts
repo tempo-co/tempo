@@ -3,6 +3,7 @@ import {useQuery} from '@tanstack/react-query';
 import {api} from '@/utils/api';
 
 import {BankTransaction} from '../types/bank-transaction';
+import {bankQueryKeys} from './query-keys';
 
 export const useGetBankTransaction = (id: BankTransaction['id'], enabled = true) => {
   const {
@@ -13,7 +14,7 @@ export const useGetBankTransaction = (id: BankTransaction['id'], enabled = true)
     error,
     refetch,
   } = useQuery<BankTransaction>({
-    queryKey: ['bank-transaction', id],
+    queryKey: bankQueryKeys.transaction(id),
     queryFn: async () => {
       return await api.get<BankTransaction>(`/bank-transactions/${id}`);
     },

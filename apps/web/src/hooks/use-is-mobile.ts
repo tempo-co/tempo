@@ -1,6 +1,8 @@
 import {useEffect, useState} from 'react';
 
-export const useMediaQuery = (query: string) => {
+const MOBILE_BREAKPOINT = 768;
+
+export const useIsMobile = () => {
   const [value, setValue] = useState(false);
 
   useEffect(() => {
@@ -8,12 +10,12 @@ export const useMediaQuery = (query: string) => {
       setValue(event.matches);
     }
 
-    const result = matchMedia(query);
+    const result = matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
     result.addEventListener('change', onChange);
     setValue(result.matches);
 
     return () => result.removeEventListener('change', onChange);
-  }, [query]);
+  }, []);
 
   return value;
 };

@@ -4,6 +4,7 @@ import {toast} from 'sonner';
 import {HttpError, api} from '@/utils/api';
 
 import {Session} from '../types/session';
+import {SESSIONS_QUERY_KEY} from './query-keys';
 
 export const useRevokeAllSessions = () => {
   const queryClient = useQueryClient();
@@ -16,7 +17,7 @@ export const useRevokeAllSessions = () => {
     onSuccess: () => {
       toast.success('All other sessions have been revoked.');
 
-      queryClient.setQueryData<Session[]>(['sessions'], (prevSessions) => {
+      queryClient.setQueryData<Session[]>(SESSIONS_QUERY_KEY, (prevSessions) => {
         return prevSessions?.filter((session) => session.isCurrent === true);
       });
     },

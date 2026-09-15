@@ -3,6 +3,8 @@ import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {BankSyncRun} from '@/features/banking/types/bank-connection';
 import {HttpError, api} from '@/utils/api';
 
+import {bankQueryKeys} from './query-keys';
+
 export const useSyncBankConnection = () => {
   const queryClient = useQueryClient();
   const {mutateAsync: syncBankConnection, isPending} = useMutation<BankSyncRun, HttpError, string>({
@@ -11,8 +13,10 @@ export const useSyncBankConnection = () => {
     },
     onSuccess: async (_, connectionId) => {
       await Promise.all([
-        queryClient.invalidateQueries({queryKey: ['bank-connections']}),
-        queryClient.invalidateQueries({queryKey: ['bank-connection-transactions', connectionId]}),
+        queryClient.invalidateQueries({queryKey: bankQueryKeys.connections}),
+        queryClient.invalidateQueries({
+          queryKey: bankQueryKeys.connectionTransactions(connectionId),
+        }),
       ]);
     },
     retry: false,

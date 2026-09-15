@@ -7,6 +7,7 @@ import {BankTransaction} from '../types/bank-transaction';
 import {
   formatBankTransactionDate,
   formatBankTransactionType,
+  resolveBankTransactionAccountLabel,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
 import {BankTransactionCategorySelect} from './bank-transaction-category-select';
@@ -78,9 +79,7 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
             <DetailGroup id={accountHeadingId} title='Account'>
               <Detail
                 label='Bank account'
-                value={
-                  transaction.bankAccountAlias || transaction.bankAccountName || 'Bank account'
-                }
+                value={resolveBankTransactionAccountLabel(transaction)}
               />
               <Detail label='Bank' value={`${transaction.bankName} (${transaction.bankCountry})`} />
               <Detail label='Counterparty' value={transaction.counterpartyName || '—'} />
