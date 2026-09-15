@@ -33,9 +33,6 @@ routeTree.gen.ts
 /playwright/.cache/
 /playwright/.auth/
 
-# Local agent instructions
-AGENTS.md
-
 # Impeccable runtime state
 /.impeccable/live/roots.json
 /.impeccable/live/inject-journal.json
