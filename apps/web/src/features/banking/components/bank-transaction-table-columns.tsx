@@ -2,7 +2,6 @@ import {ColumnDef} from '@tanstack/react-table';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {SortButton} from '@/components/shared/sort-button';
-import {Badge} from '@/components/ui/badge';
 
 import {BankTransaction, BankTransactionSortField} from '../types/bank-transaction';
 import {
@@ -10,7 +9,6 @@ import {
   formatBankTransactionCategorySource,
   formatBankTransactionCategoryStatus,
   formatBankTransactionDate,
-  formatBankTransactionType,
   isBankTransactionCategory,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
@@ -23,16 +21,6 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
     cell: ({row}) => <p>{formatBankTransactionDate(row.original.bookingDate)}</p>,
   },
   {
-    id: 'valueDate',
-    header: () => <p className='px-3'>Value date</p>,
-    cell: ({row}) => (
-      <p>
-        <span className='mr-1 hidden text-muted-foreground max-md:inline'>Value</span>
-        {formatBankTransactionDate(row.original.valueDate)}
-      </p>
-    ),
-  },
-  {
     id: 'description',
     header: () => <p className='px-3'>Description</p>,
     cell: ({row}) => {
@@ -40,7 +28,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
       const counterpartyName = row.original.counterpartyName?.trim();
 
       return (
-        <div className='w-full max-w-[10rem] max-md:max-w-none sm:max-w-[14rem] lg:max-w-[16rem] xl:max-w-[20rem] min-[1320px]:max-w-[24rem]'>
+        <div className='w-full min-w-0'>
           <p className='overflow-hidden text-ellipsis whitespace-nowrap'>{displayDescription}</p>
           {counterpartyName &&
             row.original.description &&
@@ -55,7 +43,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
   },
   {
     id: 'category',
-    header: () => <p className='px-3'>Category</p>,
+    header: ({column}) => <SortButton column={column}>Category</SortButton>,
     cell: ({row}) => {
       const category =
         row.original.category && isBankTransactionCategory(row.original.category)
@@ -64,8 +52,8 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
       const source = formatBankTransactionCategorySource(row.original.categorySource);
 
       return (
-        <div className='max-w-[14rem]'>
-          <div className='flex min-w-0 items-center gap-2'>
+        <div className='w-full min-w-0'>
+          <div className='flex h-6 min-w-0 items-center gap-2'>
             {category && <BankTransactionCategoryIcon category={category} />}
             <p className='overflow-hidden text-ellipsis whitespace-nowrap'>
               {formatBankTransactionCategory(row.original.category)}
@@ -79,18 +67,12 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
       );
     },
   },
-  {
-    id: 'transactionType',
-    header: () => <p className='px-3'>Type</p>,
-    cell: ({row}) => (
-      <Badge variant='outline'>{formatBankTransactionType(row.original.transactionType)}</Badge>
-    ),
-  },
+
   {
     id: 'source',
-    header: () => <p className='px-3'>Source</p>,
+    header: ({column}) => <SortButton column={column}>Source</SortButton>,
     cell: ({row}) => (
-      <div className='max-w-[12rem]'>
+      <div className='w-full min-w-0'>
         <p className='overflow-hidden text-ellipsis whitespace-nowrap'>{row.original.bankName}</p>
         <p className='overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground'>
           {row.original.bankAccountAlias || row.original.bankAccountName || 'Bank account'}
@@ -100,7 +82,11 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
   },
   {
     accessorKey: BankTransactionSortField.AMOUNT,
-    header: ({column}) => <SortButton column={column}>Amount</SortButton>,
+    header: ({column}) => (
+      <SortButton column={column} className='justify-end text-right'>
+        Amount
+      </SortButton>
+    ),
     cell: ({row}) => (
       <div className='text-right'>
         <CurrencyAmount amount={Number(row.original.amount)} currency={row.original.currency} />

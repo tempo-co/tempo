@@ -20,18 +20,12 @@ test.describe('bank transactions', () => {
 
     await expect(page.getByText('Coffee shop')).toBeVisible();
     await expect(firstTransactionRow.getByText('Daily spending', {exact: true})).toBeVisible();
-    await expect(firstTransactionRow.getByText('Expense', {exact: true})).not.toBeVisible();
-    await expect(
-      page.getByTestId('bank-transactions-table').getByRole('columnheader', {name: 'Status'}),
-    ).not.toBeVisible();
     await expect(
       page.getByTestId('bank-transactions-table').getByRole('columnheader', {name: 'Category'}),
     ).toBeVisible();
-    await expect(firstTransactionRow.getByRole('cell').nth(3)).toContainText('Not categorized');
-    await expect(
-      firstTransactionRow.getByRole('cell').nth(4).getByText('Card Payment', {exact: true}),
-    ).toBeVisible();
-    await expect(firstTransactionRow.getByRole('cell').nth(1)).toContainText('Aug 25, 2026');
+    await expect(firstTransactionRow.getByRole('cell')).toHaveCount(5);
+    await expect(firstTransactionRow.getByRole('cell').nth(2)).toContainText('Not categorized');
+    await expect(firstTransactionRow.getByRole('cell').nth(0)).toContainText('Aug 26, 2026');
 
     await page.getByTestId('bank-transactions-search').fill('does not exist');
     await expect(page.getByText('No bank transactions found')).toBeVisible();
@@ -84,7 +78,7 @@ test.describe('bank transactions', () => {
     await expect(
       page.getByTestId('bank-transactions-table').getByRole('columnheader', {name: 'Category'}),
     ).toBeVisible();
-    await expect(firstTransactionRow.getByRole('cell').nth(3)).toContainText('Not categorized');
+    await expect(firstTransactionRow.getByRole('cell').nth(2)).toContainText('Not categorized');
 
     await firstTransactionRow
       .getByRole('button', {name: 'View Coffee shop transaction details'})
@@ -134,7 +128,7 @@ test.describe('bank transactions', () => {
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
     await expect(inspector).toBeHidden();
     await expect(
-      firstTransactionRow.getByRole('cell').nth(3).locator('svg').locator('..'),
+      firstTransactionRow.getByRole('cell').nth(2).locator('svg').locator('..'),
     ).toHaveClass(/text-category-food-and-drink/);
     await firstTransactionRow
       .getByRole('button', {name: 'View Coffee shop transaction details'})
@@ -367,6 +361,44 @@ test.describe('bank transactions', () => {
       ).toBeVisible();
       await expect(inspector.getByRole('heading', {level: 3, name: 'Dates'})).toBeVisible();
       await expect(inspector.getByRole('heading', {level: 3, name: 'Account'})).toBeVisible();
+      const amount = inspector.getByTestId('bank-transaction-detail-amount');
+      const currency = inspector.getByTestId('bank-transaction-detail-currency');
+      await expect(amount).toBeVisible();
+      await expect(currency).toHaveText('EUR');
+      const [amountBox, currencyBox] = await Promise.all([
+        amount.boundingBox(),
+        currency.boundingBox(),
+      ]);
+      expect(amountBox).not.toBeNull();
+      expect(currencyBox).not.toBeNull();
+      expect(currencyBox!.x).toBeGreaterThan(amountBox!.x + amountBox!.width);
+      expect(currencyBox!.y).toBeLessThan(amountBox!.y + amountBox!.height);
+      expect(currencyBox!.y + currencyBox!.height).toBeGreaterThan(amountBox!.y);
+
+      if (viewport.width < 768) {
+        const detailGrid = inspector
+          .getByTestId('bank-transaction-details-sections')
+          .locator(':scope > div');
+        const detailGridColumns = await detailGrid.evaluate(
+          (element) => getComputedStyle(element).gridTemplateColumns.split(' ').length,
+        );
+        expect(detailGridColumns).toBe(1);
+        const datesGrid = inspector
+          .getByRole('heading', {name: 'Dates'})
+          .locator('..')
+          .locator('dl');
+        const datesGridColumns = await datesGrid.evaluate(
+          (element) => getComputedStyle(element).gridTemplateColumns.split(' ').length,
+        );
+        expect(datesGridColumns).toBe(2);
+        const detailFieldWrapping = await inspector
+          .getByTestId('bank-transaction-details-sections')
+          .locator('dl dt, dl dd')
+          .evaluateAll((elements) =>
+            elements.map((element) => getComputedStyle(element).whiteSpace),
+          );
+        expect(detailFieldWrapping.every((whiteSpace) => whiteSpace === 'nowrap')).toBe(true);
+      }
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
         .toBe(true);
@@ -475,6 +507,139 @@ test.describe('bank transactions', () => {
     await expect(page.getByText('Provider purchase')).not.toBeVisible();
   });
 
+  test('filters transactions by one or multiple categories', async ({page}) => {
+    await page.route('**/bank-transactions?*', async (route) => {
+      const requestUrl = new URL(route.request().url());
+      const categoryValues = requestUrl.searchParams.getAll('filter[categories][]');
+      const categorySourceValues = requestUrl.searchParams.getAll('filter[categorySources][]');
+      requestUrl.searchParams.delete('filter[categories][]');
+      requestUrl.searchParams.delete('filter[categorySources][]');
+      const response = await route.fetch({url: requestUrl.toString()});
+      const payload = (await response.json()) as {
+        transactions: Array<Record<string, unknown>>;
+        total: number;
+      };
+      const categorizedTransactions = payload.transactions.map((transaction, index) => ({
+        ...transaction,
+        category: index === 0 ? 'FOOD_AND_DRINK' : index === 1 ? 'SHOPPING' : null,
+        categoryStatus: index < 2 ? 'COMPLETED' : 'PENDING',
+        categorySource: index === 0 ? 'MANUAL' : index === 1 ? 'AI' : null,
+      }));
+      const transactions =
+        categoryValues.length > 0
+          ? categorizedTransactions.filter((transaction) =>
+              categoryValues.includes(
+                transaction.category === null ? 'UNCATEGORIZED' : String(transaction.category),
+              ),
+            )
+          : categorizedTransactions;
+      const sourceFilteredTransactions =
+        categorySourceValues.length > 0
+          ? transactions.filter((transaction) =>
+              categorySourceValues.includes(String(transaction.categorySource)),
+            )
+          : transactions;
+
+      await route.fulfill({
+        response,
+        json: {
+          ...payload,
+          transactions: sourceFilteredTransactions,
+          total: sourceFilteredTransactions.length,
+        },
+      });
+    });
+    await page.goto('/bank-transactions');
+
+    const categoryFilter = page.getByRole('button', {name: 'Categories', exact: true});
+    await expect(categoryFilter).toBeVisible();
+    await categoryFilter.click();
+    await expect(page.getByRole('option')).toHaveCount(20);
+    await page.getByRole('option', {name: 'Food and drink', exact: true}).click();
+
+    const singleCategoryParam = new URL(page.url()).searchParams.get('categories');
+    expect(singleCategoryParam).not.toBeNull();
+    expect(JSON.parse(singleCategoryParam!)).toEqual(['FOOD_AND_DRINK']);
+    await expect(page.getByText('Coffee shop', {exact: true})).toBeVisible();
+    await expect(page.getByText('Salary', {exact: true})).not.toBeVisible();
+
+    const shoppingOption = page.getByRole('option', {name: 'Shopping', exact: true});
+    await expect(shoppingOption).toHaveAttribute('aria-selected', 'false');
+    await shoppingOption.click();
+
+    const multipleCategoryParam = new URL(page.url()).searchParams.get('categories');
+    expect(multipleCategoryParam).not.toBeNull();
+    expect(JSON.parse(multipleCategoryParam!)).toEqual(['FOOD_AND_DRINK', 'SHOPPING']);
+    await expect(page.getByText('Coffee shop', {exact: true})).toBeVisible();
+    await expect(
+      page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Salary'}),
+    ).toBeVisible();
+
+    await page.getByRole('option', {name: 'Not categorized', exact: true}).click();
+    const categoryWithUncategorizedParam = new URL(page.url()).searchParams.get('categories');
+    expect(categoryWithUncategorizedParam).not.toBeNull();
+    expect(JSON.parse(categoryWithUncategorizedParam!)).toEqual([
+      'FOOD_AND_DRINK',
+      'SHOPPING',
+      'UNCATEGORIZED',
+    ]);
+    await expect(
+      page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Salary'}),
+    ).toBeVisible();
+
+    const categorySourceFilter = page.getByRole('button', {
+      name: 'Category source',
+      exact: true,
+    });
+    await categorySourceFilter.click();
+    await expect(page.getByRole('option')).toHaveCount(2);
+    await page.getByRole('option', {name: 'Manual', exact: true}).click();
+
+    const manualSourceParam = new URL(page.url()).searchParams.get('categorySources');
+    expect(manualSourceParam).not.toBeNull();
+    expect(JSON.parse(manualSourceParam!)).toEqual(['MANUAL']);
+    await expect(page.getByText('Coffee shop', {exact: true})).toBeVisible();
+    await expect(page.getByText('Salary', {exact: true})).not.toBeVisible();
+
+    await page.getByRole('button', {name: 'Clear filters'}).first().click();
+    const clearedUrl = new URL(page.url());
+    expect(clearedUrl.searchParams.has('categories')).toBe(false);
+    expect(clearedUrl.searchParams.has('categorySources')).toBe(false);
+    await expect(page.getByText('Salary', {exact: true})).toBeVisible();
+  });
+
+  test('filters from the responsive mobile drawer and clears all values', async ({page}) => {
+    await page.setViewportSize({width: 393, height: 852});
+    await page.goto('/bank-transactions');
+
+    await page.getByTestId('bank-transaction-mobile-filters-trigger').click();
+    const mobileFilters = page.getByTestId('bank-transaction-mobile-filters');
+    const categoriesSection = mobileFilters
+      .getByRole('heading', {name: 'Categories'})
+      .locator('..');
+    const categorySourceSection = mobileFilters
+      .getByRole('heading', {name: 'Category source'})
+      .locator('..');
+
+    await categoriesSection.getByRole('option', {name: 'Not categorized', exact: true}).click();
+    expect(JSON.parse(new URL(page.url()).searchParams.get('categories')!)).toEqual([
+      'UNCATEGORIZED',
+    ]);
+    await categorySourceSection.getByRole('option', {name: 'Manual', exact: true}).click();
+    expect(JSON.parse(new URL(page.url()).searchParams.get('categorySources')!)).toEqual([
+      'MANUAL',
+    ]);
+    await expect(
+      page.getByTestId('bank-transaction-mobile-filters-trigger').getByText('2', {exact: true}),
+    ).toBeVisible();
+
+    await mobileFilters.getByRole('button', {name: 'Clear all', exact: true}).click();
+    const clearedUrl = new URL(page.url());
+    expect(clearedUrl.searchParams.has('categories')).toBe(false);
+    expect(clearedUrl.searchParams.has('categorySources')).toBe(false);
+    await expect(page.getByText('Salary', {exact: true})).toBeVisible();
+  });
+
   test('reflows transaction records for a phone viewport', async ({page}) => {
     await page.setViewportSize({width: 393, height: 852});
     await page.goto('/bank-transactions');
@@ -497,13 +662,71 @@ test.describe('bank transactions', () => {
     expect(summaryBox).not.toBeNull();
     expect(summaryBox!.y).toBeLessThan(headingBox!.y + headingBox!.height);
     await expect(page.getByRole('button', {name: 'Bank accounts', exact: true})).not.toBeVisible();
-    const bookingDateFilter = page.getByRole('button', {name: 'Booking date', exact: true}).first();
-    await expect(bookingDateFilter).toBeVisible();
-    const bookingDateBox = await bookingDateFilter.boundingBox();
-    expect(bookingDateBox).not.toBeNull();
-    expect(bookingDateBox!.width).toBe(361);
+    await expect(page.getByTestId('bank-transaction-desktop-filters')).toBeHidden();
+    const mobileFiltersTrigger = page.getByTestId('bank-transaction-mobile-filters-trigger');
+    await expect(mobileFiltersTrigger).toBeVisible();
+    const mobileFiltersTriggerBox = await mobileFiltersTrigger.boundingBox();
+    expect(mobileFiltersTriggerBox).not.toBeNull();
+    expect(mobileFiltersTriggerBox!.width).toBeGreaterThanOrEqual(88);
+    await expect(mobileFiltersTrigger).toHaveCSS('height', '48px');
+    await mobileFiltersTrigger.click();
+    const mobileFilters = page.getByTestId('bank-transaction-mobile-filters');
+    await expect(mobileFilters).toBeVisible();
+    await expect(mobileFilters.getByRole('heading', {name: 'Filters'})).toBeVisible();
+    await expect(mobileFilters.getByRole('heading', {name: 'Booking date'})).toBeVisible();
+    await expect(mobileFilters.getByRole('heading', {name: 'Categories'})).toBeVisible();
+    await expect(mobileFilters.getByRole('heading', {name: 'Category source'})).toBeVisible();
+    const mobileFiltersBody = page.getByTestId('bank-transaction-mobile-filters-body');
+    await expect.poll(() => mobileFiltersBody.evaluate((element) => element.scrollTop)).toBe(0);
+    await expect(mobileFiltersBody).toHaveCSS('padding-top', '16px');
+    await expect(mobileFiltersBody).toHaveCSS('padding-bottom', '16px');
+    const mobileFiltersScrollArea = page.getByTestId('bank-transaction-mobile-filters-scroll-area');
+    const mobileFiltersViewport = mobileFiltersScrollArea.locator(
+      ':scope > [data-radix-scroll-area-viewport]',
+    );
+    const mobileFiltersScrollbar = mobileFiltersScrollArea.locator(
+      ':scope > [data-orientation="vertical"]',
+    );
+    await expect(mobileFiltersScrollbar).toBeVisible();
+    await expect(mobileFiltersScrollbar.locator('.bg-border')).toBeVisible();
+    const mobileFiltersViewportMetrics = await mobileFiltersViewport.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+    }));
+    expect(mobileFiltersViewportMetrics.scrollHeight).toBeGreaterThan(
+      mobileFiltersViewportMetrics.clientHeight,
+    );
+    const calendarFrame = mobileFilters.getByTestId('bank-transaction-mobile-calendar');
+    const calendarTable = calendarFrame.locator('table');
+    const firstCalendarWeek = calendarTable.locator('tbody tr').first();
+    const [calendarTableBox, lastCalendarCellBox] = await Promise.all([
+      calendarTable.boundingBox(),
+      firstCalendarWeek.locator('td').last().boundingBox(),
+    ]);
+    expect(calendarTableBox).not.toBeNull();
+    expect(lastCalendarCellBox).not.toBeNull();
+    expect(lastCalendarCellBox!.width).toBeGreaterThan(40);
+    expect(lastCalendarCellBox!.x + lastCalendarCellBox!.width).toBeGreaterThan(
+      calendarTableBox!.x + calendarTableBox!.width - 24,
+    );
+    const categoriesSection = mobileFilters
+      .getByRole('heading', {name: 'Categories'})
+      .locator('..');
+    const categorySourceSection = mobileFilters
+      .getByRole('heading', {name: 'Category source'})
+      .locator('..');
+    await expect(categoriesSection.getByPlaceholder('Search categories...')).toBeVisible();
+    await expect(categorySourceSection.getByRole('option')).toHaveCount(2);
+    await expect(mobileFilters.getByRole('button', {name: 'Done', exact: true})).toBeVisible();
+    await mobileFilters.getByRole('button', {name: 'Done', exact: true}).click();
+    await expect(mobileFilters).toBeHidden();
     await expect(firstTransactionRow).toBeVisible();
-    await expect(firstTransactionRow.getByRole('cell').nth(3)).toBeHidden();
+    const lastTransactionRow = table
+      .locator('tbody tr[data-testid^="bank-transaction-row-"]')
+      .last();
+    await expect(lastTransactionRow).toBeVisible();
+    await expect(lastTransactionRow).toHaveCSS('border-top-width', '1px');
+    await expect(firstTransactionRow.locator('td').nth(2)).toBeHidden();
     const [tableBox, firstTransactionRowBox] = await Promise.all([
       table.boundingBox(),
       firstTransactionRow.boundingBox(),
@@ -521,8 +744,6 @@ test.describe('bank transactions', () => {
     await expect(mobileMeta).toContainText('26 Aug');
     await expect(mobileMeta).toContainText('Daily spending');
     await expect(mobileMeta).toContainText('ABN AMRO');
-    await expect(mobileMeta).toContainText('Card Payment');
-    await expect(firstTransactionRow.getByText('Aug 25, 2026', {exact: true})).not.toBeVisible();
     const pagination = page.getByTestId('pagination');
     await expect(pagination).toBeVisible();
     await expect(pagination).toHaveCSS('width', '361px');
@@ -583,20 +804,21 @@ test.describe('bank transactions', () => {
     await page.setViewportSize({width: 320, height: 852});
     await page.goto('/bank-transactions');
 
-    await page.getByRole('button', {name: 'Booking date', exact: true}).first().click();
-    const dialog = page.getByRole('dialog');
-    let dayButtons = dialog.locator('button[name="day"]:not([disabled]):not(.day-outside)');
+    await page.getByTestId('bank-transaction-mobile-filters-trigger').click();
+    const mobileFilters = page.getByTestId('bank-transaction-mobile-filters');
+    await expect(mobileFilters).toBeVisible();
+    let dayButtons = mobileFilters.locator('button[name="day"]:not([disabled]):not(.day-outside)');
     if ((await dayButtons.count()) < 2) {
-      await dialog.getByRole('button', {name: 'Go to previous month'}).click();
-      dayButtons = dialog.locator('button[name="day"]:not([disabled]):not(.day-outside)');
+      await mobileFilters.getByRole('button', {name: 'Go to previous month'}).click();
+      dayButtons = mobileFilters.locator('button[name="day"]:not([disabled]):not(.day-outside)');
     }
     await dayButtons.nth(0).click();
     await dayButtons.nth(1).click();
 
-    const bookingDate = page.getByRole('button', {name: /^Booking date/}).first();
-    await expect(bookingDate).toContainText(' - ');
-    await expect(bookingDate).toHaveAttribute('aria-label', /^Booking date: .+ - .+$/);
-    const metrics = await bookingDate.evaluate((element) => ({
+    const bookingDateSection = mobileFilters
+      .getByRole('heading', {name: 'Booking date'})
+      .locator('..');
+    const metrics = await bookingDateSection.evaluate((element) => ({
       scrollWidth: element.scrollWidth,
       clientWidth: element.clientWidth,
     }));
@@ -607,11 +829,66 @@ test.describe('bank transactions', () => {
   });
 
   test('sorts and paginates with the shared table controls', async ({page}) => {
-    await page.goto('/bank-transactions');
+    await page.setViewportSize({width: 1280, height: 720});
+    await page.goto('/bank-transactions?pageIndex=0&pageSize=10');
 
-    const bookingDateButton = page
-      .getByTestId('bank-transactions-table')
-      .getByRole('button', {name: 'Booking date'});
+    const table = page.getByTestId('bank-transactions-table');
+    await expect(page.getByText('Coffee shop', {exact: true})).toBeVisible();
+    const readColumnBoxes = () =>
+      table.locator('thead th').evaluateAll((headers) =>
+        headers.map((header) => {
+          const box = header.getBoundingClientRect();
+          return {
+            text: header.textContent?.replace(/\\s+/g, ' ').trim(),
+            x: box.x,
+            width: box.width,
+          };
+        }),
+      );
+    const firstPageColumns = await readColumnBoxes();
+    expect(firstPageColumns.map(({text}) => text)).toEqual([
+      'Booking date',
+      'Description',
+      'Category',
+      'Source',
+      'Amount',
+    ]);
+    expect(firstPageColumns[1].width).toBeGreaterThan(
+      Math.max(...firstPageColumns.filter((_, index) => index !== 1).map(({width}) => width)),
+    );
+
+    const amountHeaderButton = table
+      .getByRole('columnheader', {name: 'Amount'})
+      .getByRole('button', {name: 'Amount'});
+    await expect(amountHeaderButton).toHaveCSS('justify-content', 'flex-end');
+    const [amountHeaderBox, amountCellBox, amountHeaderContentRight, amountCellContentBox] =
+      await Promise.all([
+        amountHeaderButton.boundingBox(),
+        table.locator('tbody tr').first().locator('td').nth(4).boundingBox(),
+        amountHeaderButton.evaluate((element) => {
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          return range.getBoundingClientRect().right;
+        }),
+        table.locator('tbody tr').first().locator('td').nth(4).locator('div').boundingBox(),
+      ]);
+    expect(amountHeaderBox).not.toBeNull();
+    expect(amountCellBox).not.toBeNull();
+    expect(amountCellContentBox).not.toBeNull();
+    expect(amountHeaderBox!.x + amountHeaderBox!.width).toBeCloseTo(
+      amountCellBox!.x + amountCellBox!.width,
+      0,
+    );
+    expect(amountHeaderContentRight).toBeCloseTo(
+      amountCellContentBox!.x + amountCellContentBox!.width,
+      0,
+    );
+
+    const bookingDateButton = table
+      .getByRole('columnheader', {name: 'Booking date'})
+      .getByRole('button', {
+        name: 'Booking date',
+      });
     await bookingDateButton.click();
     let sort = new URL(page.url()).searchParams.get('sort');
     expect(sort).toBe(JSON.stringify({by: 'bookingDate', order: 'ASC'}));
@@ -622,6 +899,42 @@ test.describe('bank transactions', () => {
     await page.getByRole('button', {name: 'Go to next page'}).click();
     await expect(page).toHaveURL(/pageIndex=1/);
     await expect(page.getByText('Extra transaction 9')).toBeVisible();
+    const secondPageColumns = await readColumnBoxes();
+    expect(secondPageColumns).toHaveLength(firstPageColumns.length);
+    secondPageColumns.forEach((column, index) => {
+      expect(column.x).toBeCloseTo(firstPageColumns[index].x, 0);
+      expect(column.width).toBeCloseTo(firstPageColumns[index].width, 0);
+    });
+  });
+
+  test('sorts the category and source columns', async ({page}) => {
+    await page.goto('/bank-transactions?pageIndex=0&pageSize=10');
+
+    const table = page.getByTestId('bank-transactions-table');
+    await expect(table.locator('tbody tr').first()).toBeVisible();
+
+    const categorySortButton = table
+      .getByRole('columnheader', {name: 'Category'})
+      .getByRole('button', {name: 'Category'});
+    await categorySortButton.click();
+    expect(JSON.parse(new URL(page.url()).searchParams.get('sort')!)).toEqual({
+      by: 'category',
+      order: 'DESC',
+    });
+    await categorySortButton.click();
+    expect(JSON.parse(new URL(page.url()).searchParams.get('sort')!)).toEqual({
+      by: 'category',
+      order: 'ASC',
+    });
+
+    const sourceSortButton = table
+      .getByRole('columnheader', {name: 'Source'})
+      .getByRole('button', {name: 'Source'});
+    await sourceSortButton.click();
+    expect(JSON.parse(new URL(page.url()).searchParams.get('sort')!)).toEqual({
+      by: 'source',
+      order: 'DESC',
+    });
   });
 });
 

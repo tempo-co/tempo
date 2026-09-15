@@ -30,7 +30,6 @@ import {useSyncBankConnection} from '../api/use-sync-bank-connection';
 import {BankConnection, BankTransaction} from '../types/bank-connection';
 import {
   formatBankTransactionCompactDate,
-  formatBankTransactionStatus,
   formatBankingWords,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
@@ -679,13 +678,9 @@ function BankTransactionRow({
   onTransactionSelect: BankConnectionListProps['onTransactionSelect'];
 }) {
   const description = resolveBankTransactionDisplayTitle(transaction);
-  const date = formatBankTransactionCompactDate(transaction.bookingDate || transaction.valueDate);
-  const metadata = [
-    date,
-    transaction.transactionStatus && formatBankTransactionStatus(transaction.transactionStatus),
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const metadata = formatBankTransactionCompactDate(
+    transaction.bookingDate || transaction.valueDate,
+  );
 
   return (
     <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 p-3 sm:p-4'>

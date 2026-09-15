@@ -21,10 +21,12 @@ import {cn} from '@/utils/cn';
 
 import {useGetAllBankConnections} from '../api/use-get-all-bank-connections';
 import {BankTransactionFilterParams} from '../types/bank-transaction';
+import {BankTransactionFilterSection} from './bank-transaction-filter-section';
 
 type BankTransactionAccountFilterProps = {
   filters: BankTransactionFilterParams;
   setFilters: React.Dispatch<React.SetStateAction<BankTransactionFilterParams>>;
+  variant?: 'popover' | 'mobile';
   className?: string;
 };
 
@@ -38,6 +40,7 @@ type AccountOption = {
 export function BankTransactionAccountFilter({
   filters,
   setFilters,
+  variant = 'popover',
   className,
 }: BankTransactionAccountFilterProps) {
   const navigate = useNavigate({from: '/bank-transactions/'});
@@ -84,6 +87,69 @@ export function BankTransactionAccountFilter({
   if (!isPending && !isError && accounts.length <= 1) return null;
 
   const isDisabled = isPending || isError || accounts.length === 0;
+  const accountCommand = (
+    <Command>
+      <CommandInput placeholder='Search bank accounts...' />
+      <ScrollArea className='h-fit max-h-[240px]'>
+        <CommandList>
+          <CommandEmpty>No bank accounts found.</CommandEmpty>
+          <CommandGroup>
+            {accounts.map((account) => {
+              const isSelected = selectedValues.includes(account.id);
+              return (
+                <CommandItem
+                  key={account.id}
+                  value={`${account.label} ${account.bankName} ${account.currency}`}
+                  onSelect={() => handleSelect(account.id)}
+                >
+                  <div
+                    className={cn(
+                      'mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary',
+                      isSelected
+                        ? 'bg-primary text-primary-foreground'
+                        : 'opacity-50 [&_svg]:invisible',
+                    )}
+                  >
+                    <Check />
+                  </div>
+                  <div className='min-w-0'>
+                    <p className='truncate'>{account.label}</p>
+                    <p className='truncate text-xs text-muted-foreground'>
+                      {account.bankName} | {account.currency}
+                    </p>
+                  </div>
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+          {selectedValues.length > 0 && (
+            <>
+              <CommandSeparator />
+              <CommandGroup>
+                <CommandItem onSelect={handleReset} className='justify-center text-center'>
+                  Reset
+                </CommandItem>
+              </CommandGroup>
+            </>
+          )}
+        </CommandList>
+      </ScrollArea>
+    </Command>
+  );
+
+  if (variant === 'mobile') {
+    return (
+      <BankTransactionFilterSection label='Bank accounts'>
+        {isDisabled ? (
+          <p className='text-sm text-muted-foreground'>
+            {isPending ? 'Loading bank accounts...' : 'Bank accounts are unavailable.'}
+          </p>
+        ) : (
+          <div className='overflow-hidden rounded-md border bg-background'>{accountCommand}</div>
+        )}
+      </BankTransactionFilterSection>
+    );
+  }
 
   return (
     <Popover>
@@ -93,7 +159,7 @@ export function BankTransactionAccountFilter({
           size='sm'
           disabled={isDisabled}
           className={cn(
-            'h-10 sm:h-8',
+            'h-12 sm:h-8',
             selectedValues.length === 0 && !isDisabled ? 'border-dashed' : 'border',
             isDisabled && 'cursor-not-allowed opacity-50',
             className,
@@ -130,53 +196,7 @@ export function BankTransactionAccountFilter({
         </Button>
       </PopoverTrigger>
       <PopoverContent className='w-[260px] p-0' align='start'>
-        <Command>
-          <CommandInput placeholder='Search bank accounts...' />
-          <ScrollArea className='h-fit max-h-[240px]'>
-            <CommandList>
-              <CommandEmpty>No bank accounts found.</CommandEmpty>
-              <CommandGroup>
-                {accounts.map((account) => {
-                  const isSelected = selectedValues.includes(account.id);
-                  return (
-                    <CommandItem
-                      key={account.id}
-                      value={`${account.label} ${account.bankName} ${account.currency}`}
-                      onSelect={() => handleSelect(account.id)}
-                    >
-                      <div
-                        className={cn(
-                          'mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary',
-                          isSelected
-                            ? 'bg-primary text-primary-foreground'
-                            : 'opacity-50 [&_svg]:invisible',
-                        )}
-                      >
-                        <Check />
-                      </div>
-                      <div className='min-w-0'>
-                        <p className='truncate'>{account.label}</p>
-                        <p className='truncate text-xs text-muted-foreground'>
-                          {account.bankName} | {account.currency}
-                        </p>
-                      </div>
-                    </CommandItem>
-                  );
-                })}
-              </CommandGroup>
-              {selectedValues.length > 0 && (
-                <>
-                  <CommandSeparator />
-                  <CommandGroup>
-                    <CommandItem onSelect={handleReset} className='justify-center text-center'>
-                      Reset
-                    </CommandItem>
-                  </CommandGroup>
-                </>
-              )}
-            </CommandList>
-          </ScrollArea>
-        </Command>
+        {accountCommand}
       </PopoverContent>
     </Popover>
   );

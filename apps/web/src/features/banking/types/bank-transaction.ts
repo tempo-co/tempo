@@ -5,6 +5,8 @@ import {paginationSearchParamsSchema} from '@/types/pagination';
 export enum BankTransactionSortField {
   BOOKING_DATE = 'bookingDate',
   AMOUNT = 'amount',
+  CATEGORY = 'category',
+  SOURCE = 'source',
 }
 
 export enum BankTransactionSortOrder {
@@ -41,6 +43,14 @@ export const BANK_TRANSACTION_CATEGORIES = [
 ] as const;
 
 export type BankTransactionCategory = (typeof BANK_TRANSACTION_CATEGORIES)[number];
+
+export const BANK_TRANSACTION_UNCATEGORIZED = 'UNCATEGORIZED' as const;
+export const BANK_TRANSACTION_CATEGORY_FILTER_VALUES = [
+  ...BANK_TRANSACTION_CATEGORIES,
+  BANK_TRANSACTION_UNCATEGORIZED,
+] as const;
+export type BankTransactionCategoryFilterValue =
+  (typeof BANK_TRANSACTION_CATEGORY_FILTER_VALUES)[number];
 
 export const BANK_TRANSACTION_CATEGORY_LABELS: Record<BankTransactionCategory, string> = {
   HOUSING_AND_UTILITIES: 'Housing and utilities',
@@ -89,6 +99,8 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
     })
     .optional(),
   bankAccountIds: z.array(z.string().uuid()).optional(),
+  categories: z.array(z.enum(BANK_TRANSACTION_CATEGORY_FILTER_VALUES)).optional(),
+  categorySources: z.array(z.enum(BANK_TRANSACTION_CATEGORIZATION_SOURCES)).optional(),
   search: z.string().max(100).optional(),
   transactionId: z.string().optional(),
   sort: z
@@ -103,7 +115,7 @@ export type BankTransactionSearchParams = z.infer<typeof bankTransactionSearchPa
 
 export type BankTransactionFilterParams = Pick<
   BankTransactionSearchParams,
-  'bookingDate' | 'bankAccountIds' | 'search'
+  'bookingDate' | 'bankAccountIds' | 'categories' | 'categorySources' | 'search'
 >;
 
 export type BankTransactionSortParams = BankTransactionSearchParams['sort'];

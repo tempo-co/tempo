@@ -39,6 +39,7 @@ test.describe('bank connections', () => {
       name: 'View transaction details for Provider purchase',
     });
     await expect(transactionTrigger).toBeVisible();
+    await expect(transactionTrigger.locator('..').locator('p')).toHaveText('18 Aug');
     await transactionTrigger.click();
     const inspector = page.getByTestId('bank-transaction-inspector');
     await expect(inspector).toBeVisible();

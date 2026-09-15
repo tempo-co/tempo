@@ -1,14 +1,11 @@
 import * as React from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
-import {Badge} from '@/components/ui/badge';
 import {cn} from '@/utils/cn';
 
 import {BankTransaction} from '../types/bank-transaction';
 import {
   formatBankTransactionDate,
-  formatBankTransactionDirection,
-  formatBankTransactionStatus,
   formatBankTransactionType,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
@@ -30,27 +27,27 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
   return (
     <div data-testid='bank-transaction-details' className='min-w-0'>
       <section
-        aria-label={`${transactionTitle} amount and status`}
+        aria-label={`${transactionTitle} amount and currency`}
         className='border-b px-5 py-5 sm:px-6 sm:py-6'
       >
-        <div className='flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between'>
-          <div className='min-w-0'>
+        <div className='flex items-end justify-between gap-3 sm:gap-4'>
+          <div className='min-w-0 flex-1'>
             <p className='text-xs font-medium uppercase tracking-wide text-muted-foreground'>
               Amount
             </p>
-            <p className='mt-1 break-words text-3xl font-medium tracking-tight'>
+            <p
+              data-testid='bank-transaction-detail-amount'
+              className='mt-1 w-fit max-w-full whitespace-nowrap text-3xl font-medium tracking-tight'
+            >
               <CurrencyAmount amount={Number(transaction.amount)} currency={transaction.currency} />
             </p>
-            <p className='mt-1 text-sm text-muted-foreground'>
-              {formatBankTransactionDirection(transaction.direction)}
-            </p>
           </div>
-          <div className='flex items-center justify-between gap-3 sm:flex-col sm:items-end sm:gap-1'>
-            <Badge variant='outline'>
-              {formatBankTransactionStatus(transaction.transactionStatus)}
-            </Badge>
-            <span className='text-sm text-muted-foreground'>{transaction.currency}</span>
-          </div>
+          <span
+            data-testid='bank-transaction-detail-currency'
+            className='shrink-0 pb-1 text-sm text-muted-foreground'
+          >
+            {transaction.currency}
+          </span>
         </div>
       </section>
 
@@ -59,11 +56,12 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
           <h2 id={detailsHeadingId} className='text-lg font-semibold tracking-tight'>
             Transaction details
           </h2>
-          <div className='mt-5 grid gap-6 md:grid-cols-2 md:gap-8'>
+          <div className='mt-5 grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-8'>
             <Detail
               label='Description'
               value={transaction.description || '—'}
-              className='col-span-2'
+              className='col-span-1 md:col-span-2'
+              wrap
             />
             <DetailGroup id={datesHeadingId} title='Dates'>
               <Detail
@@ -93,10 +91,6 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
               <Detail
                 label='Transaction type'
                 value={formatBankTransactionType(transaction.transactionType)}
-              />
-              <Detail
-                label='Direction'
-                value={formatBankTransactionDirection(transaction.direction)}
               />
               <Detail
                 label='Merchant category code'
@@ -154,7 +148,10 @@ function DetailGroup({
   children: React.ReactNode;
 }) {
   return (
-    <section aria-labelledby={id} className='min-w-0'>
+    <section
+      aria-labelledby={id}
+      className='min-w-0 [&_dd]:truncate [&_dd]:whitespace-nowrap [&_dt]:truncate [&_dt]:whitespace-nowrap'
+    >
       <h3 id={id} className='text-sm font-semibold'>
         {title}
       </h3>
@@ -189,11 +186,31 @@ function formatReference(referenceNumber: string | null, referenceNumberScheme: 
   return referenceNumberScheme ? `${referenceNumber} (${referenceNumberScheme})` : referenceNumber;
 }
 
-function Detail({label, value, className}: {label: string; value: string; className?: string}) {
+function Detail({
+  label,
+  value,
+  className,
+  wrap = false,
+}: {
+  label: string;
+  value: string;
+  className?: string;
+  wrap?: boolean;
+}) {
   return (
     <div className={cn('min-w-0', className)}>
-      <dt className='text-xs font-medium text-muted-foreground'>{label}</dt>
-      <dd className='mt-1 break-words text-sm [overflow-wrap:anywhere] sm:text-base'>{value}</dd>
+      <dt title={label} className='text-xs font-medium text-muted-foreground'>
+        {label}
+      </dt>
+      <dd
+        title={value}
+        className={cn(
+          'mt-1 text-sm sm:text-base',
+          wrap ? 'break-words [overflow-wrap:anywhere]' : 'truncate whitespace-nowrap',
+        )}
+      >
+        {value}
+      </dd>
     </div>
   );
 }
