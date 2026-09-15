@@ -4,22 +4,96 @@ import type {BankConnection} from '../../../src/features/banking/types/bank-conn
 import {PW_CHANGE_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 
 const DETAIL_TRANSACTION_ID = '00000000-0000-4000-8000-000000000014';
+const MOCK_PROVIDER_ORIGIN = 'https://enablebanking.test';
+const TARGET_ASPSP = {name: 'Mock ASPSP', country: 'NL'};
+const MOCK_CONNECTION: BankConnection = {
+  id: '00000000-0000-4000-8000-000000000096',
+  provider: 'enable-banking',
+  aspspName: TARGET_ASPSP.name,
+  aspspCountry: TARGET_ASPSP.country,
+  status: 'AUTHORIZED',
+  consentValidUntil: '2030-01-01T00:00:00.000Z',
+  lastSyncedAt: null,
+  bankAccounts: [
+    {
+      id: '00000000-0000-4000-8000-000000000097',
+      name: 'Mock current account',
+      details: 'Mock ASPSP checking account',
+      alias: null,
+      currency: 'EUR',
+      cashAccountType: 'CACC',
+      usage: 'PRIV',
+      maskedIdentifier: '****1234',
+      currentBalanceAmount: '1234.56',
+      currentBalanceType: 'AVAILABLE',
+      balanceUpdatedAt: null,
+      isActive: true,
+      latestBalances: [],
+    },
+  ],
+};
 
 test.describe('bank connections', () => {
   test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
-  test('shows seeded connection data and callback success feedback', async ({page}) => {
+  test('shows seeded connection data, callback feedback, and provider logo', async ({page}) => {
+    await page.route('**/bank-connections/aspsps', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            name: 'ABN AMRO',
+            country: 'NL',
+            logoUrl: 'https://enablebanking.com/brands/NL/ABN-AMRO/',
+          },
+        ]),
+      });
+    });
+
+    await page.route('**/bank-connections', async (route) => {
+      if (route.request().resourceType() === 'document') {
+        await route.continue();
+        return;
+      }
+
+      const response = await route.fetch();
+      const connections = (await response.json()) as BankConnection[];
+      const seededConnection = connections.find(
+        (connection) => connection.aspspName === 'ABN AMRO',
+      );
+      if (!seededConnection) throw new Error('Expected a seeded ABN AMRO connection');
+
+      await route.fulfill({response, json: [seededConnection]});
+    });
+
     await page.goto('/bank-connections?result=connected');
 
     await expect(page.getByRole('heading', {name: 'Bank connections'})).toBeVisible();
-    await expect(page.getByRole('heading', {name: 'ABN AMRO'})).toBeVisible();
-    await expect(page.getByRole('heading', {name: 'Accounts'})).toBeVisible();
-    await expect(page.getByRole('heading', {name: 'Recent transactions'})).toBeVisible();
-    await expect(page.getByText('Connected', {exact: true})).toBeVisible();
-    await expect(page.getByTestId('bank-connection-freshness')).toContainText('Updated');
-    const status = page.getByTestId('bank-connection-status');
-    const freshness = page.getByTestId('bank-connection-freshness');
-    const syncButton = page.getByRole('button', {name: 'Sync now'});
+    await expect(page.getByText('1 connection', {exact: true})).toBeVisible();
+    const connectionCard = page
+      .locator('[data-testid^="bank-connection-"]')
+      .filter({has: page.getByRole('heading', {name: 'ABN AMRO'})});
+    await expect(connectionCard).toBeVisible();
+    await expect(connectionCard.getByRole('heading', {name: 'Accounts'})).toBeVisible();
+    await expect(connectionCard.getByRole('heading', {name: 'Recent transactions'})).toBeVisible();
+    await expect(connectionCard.getByText('Connected', {exact: true})).toBeVisible();
+    await expect(connectionCard.getByTestId('bank-connection-freshness')).toContainText('Updated');
+
+    const bankLogo = connectionCard.getByTestId('bank-connection-logo');
+    await expect(bankLogo).toBeVisible();
+    await expect(bankLogo.locator('img')).toHaveAttribute(
+      'src',
+      'https://enablebanking.com/brands/NL/ABN-AMRO/',
+    );
+    await expect(bankLogo).toHaveClass(/border-border/);
+    await expect(bankLogo).toHaveClass(/bg-background/);
+    await expect(bankLogo).toHaveCSS('width', '52px');
+    await expect(bankLogo).toHaveCSS('height', '52px');
+
+    const status = connectionCard.getByTestId('bank-connection-status');
+    const freshness = connectionCard.getByTestId('bank-connection-freshness');
+    const syncButton = connectionCard.getByRole('button', {name: 'Sync now'});
     const [statusBox, freshnessBox, syncButtonBox] = await Promise.all([
       status.boundingBox(),
       freshness.boundingBox(),
@@ -32,10 +106,10 @@ test.describe('bank connections', () => {
       (box) => box.y + box.height / 2,
     );
     expect(Math.max(...verticalCenters) - Math.min(...verticalCenters)).toBeLessThan(1);
-    await expect(page.getByText('Daily spending', {exact: true})).toBeVisible();
-    await expect(page.getByText('available · primary')).toBeVisible();
-    await expect(page.getByText('Provider purchase')).toBeVisible();
-    const transactionTrigger = page.getByRole('button', {
+    await expect(connectionCard.getByText('Daily spending', {exact: true})).toBeVisible();
+    await expect(connectionCard.getByText('available · primary')).toBeVisible();
+    await expect(connectionCard.getByText('Provider purchase')).toBeVisible();
+    const transactionTrigger = connectionCard.getByRole('button', {
       name: 'View transaction details for Provider purchase',
     });
     await expect(transactionTrigger).toBeVisible();
@@ -51,7 +125,7 @@ test.describe('bank connections', () => {
     await expect(transactionTrigger).toBeFocused();
     expect(new URL(page.url()).searchParams.has('transactionId')).toBe(false);
     await expect(page.getByText('Bank connection added')).toBeVisible();
-    await expect(page).toHaveURL(/\/bank-connections$/);
+    await expect(page).toHaveURL(new RegExp('/bank-connections$'));
   });
 
   test('reports when synchronization finds no new transactions', async ({page}) => {
@@ -195,6 +269,93 @@ test.describe('bank connections', () => {
     await expect(connectedCard).toHaveCount(0);
   });
 
+  test('keeps selectors visible while loading and lets the user choose a supported bank', async ({
+    page,
+  }) => {
+    let releaseResponse!: () => void;
+    const responseHeld = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    let authorizationRequest: {aspspName: string; aspspCountry: string} | undefined;
+
+    await page.route('**/bank-connections/aspsps', async (route) => {
+      await responseHeld;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            name: 'ABN AMRO',
+            country: 'NL',
+            logoUrl: 'https://enablebanking.com/brands/NL/ABN-AMRO/',
+          },
+          {name: 'Nordea', country: 'FI', logoUrl: 'https://enablebanking.com/brands/FI/Nordea/'},
+          {name: 'Revolut', country: 'NL', logoUrl: 'https://enablebanking.com/brands/NL/Revolut/'},
+        ]),
+      });
+    });
+    await page.route('**/bank-connections/authorize', async (route) => {
+      authorizationRequest = JSON.parse(route.request().postData() || '{}') as {
+        aspspName: string;
+        aspspCountry: string;
+      };
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({authorizationUrl: 'https://auth.example.test/revolut'}),
+      });
+    });
+    await page.route('https://auth.example.test/revolut', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<p>Enable Banking authorization</p>',
+      });
+    });
+
+    await page.goto('/bank-connections');
+    await page.getByRole('button', {name: 'Connect a bank'}).click();
+
+    const picker = page.getByTestId('bank-connection-picker');
+    const countrySelector = picker.getByTestId('bank-connection-country-selector');
+    const bankSelector = picker.getByTestId('bank-connection-bank-selector');
+    await expect(picker).toBeVisible();
+    await expect(picker.getByText(/personal account-information access/)).toHaveCount(0);
+    await expect(countrySelector).toBeVisible();
+    await expect(countrySelector).toBeDisabled();
+    await expect(bankSelector).toBeVisible();
+    await expect(bankSelector).toBeDisabled();
+    await expect(picker.getByRole('status')).toHaveCount(0);
+
+    releaseResponse();
+    await expect(countrySelector).toBeEnabled();
+    await expect(bankSelector).toBeDisabled();
+    await countrySelector.click();
+    await page.getByPlaceholder('Search countries...').fill('NL');
+    await expect(page.getByRole('option', {name: /Netherlands.*2 banks/})).toBeVisible();
+    await page.getByPlaceholder('Search countries...').fill('');
+    await expect(page.getByRole('option', {name: /Netherlands.*2 banks/})).toBeVisible();
+    await page.getByRole('option', {name: /Netherlands.*2 banks/}).click();
+
+    await expect(bankSelector).toBeEnabled();
+    await bankSelector.click();
+    const revolutOption = page.getByRole('option', {name: /Revolut.*NL/});
+    await expect(revolutOption).toBeVisible();
+    const bankLogo = revolutOption.getByTestId('bank-logo');
+    await expect(bankLogo).toBeVisible();
+    await expect(bankLogo).toHaveClass(/border-border/);
+    await expect(bankLogo).toHaveClass(/bg-background/);
+    await expect(bankLogo).toHaveCSS('width', '48px');
+    await expect(bankLogo).toHaveCSS('height', '48px');
+    await expect(page.getByRole('option', {name: /Nordea.*FI/})).toHaveCount(0);
+    await revolutOption.click();
+
+    await expect
+      .poll(() => authorizationRequest)
+      .toEqual({aspspName: 'Revolut', aspspCountry: 'NL'});
+    await expect(page).toHaveURL('https://auth.example.test/revolut');
+  });
+
   test('reopens a connection transaction inspector from its shareable URL', async ({page}) => {
     await page.goto('/bank-connections');
 
@@ -217,6 +378,19 @@ test.describe('bank connections', () => {
     await page.goto('/bank-connections');
     const authorizationUrl = 'https://bank.example.test/mock-bank-authorization';
     const callbackUrl = new URL('./bank-connections?result=connected', page.url()).toString();
+    await page.route('**/bank-connections/aspsps', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            name: 'Mock ASPSP',
+            country: 'NL',
+            logoUrl: 'https://enablebanking.com/brands/NL/Mock-ASPSP/',
+          },
+        ]),
+      });
+    });
     await page.route('**/bank-connections/authorize', async (route) => {
       await route.fulfill({
         status: 201,
@@ -233,7 +407,12 @@ test.describe('bank connections', () => {
       popupOpened = true;
     });
 
-    await page.getByTestId('connect-abn-amro-button').click();
+    await page.getByRole('button', {name: 'Connect a bank'}).click();
+    const picker = page.getByTestId('bank-connection-picker');
+    await picker.getByTestId('bank-connection-country-selector').click();
+    await page.getByRole('option', {name: /Netherlands.*1 bank/}).click();
+    await picker.getByTestId('bank-connection-bank-selector').click();
+    await page.getByRole('option', {name: /Mock ASPSP.*NL/}).click();
 
     await expect(page.getByText('Bank connection added')).toBeVisible();
     await expect(page).toHaveURL(/\/bank-connections$/);
@@ -246,9 +425,7 @@ test.describe('bank connections', () => {
 
     const heading = page.getByRole('heading', {name: 'Bank connections'});
     const headingGroup = page.getByTestId('bank-connections-heading');
-    const connectButton = page
-      .getByRole('button', {name: /^Connect (ABN AMRO|Mock ASPSP)$/})
-      .first();
+    const connectButton = page.getByRole('button', {name: 'Connect a bank'}).first();
     const syncButton = page.getByRole('button', {name: 'Sync now'});
     const status = page.getByTestId('bank-connection-status');
     const freshness = page.getByTestId('bank-connection-freshness');
@@ -333,9 +510,7 @@ test.describe('bank connections', () => {
       document.documentElement.style.fontSize = '200%';
     });
 
-    const connectButton = page
-      .getByRole('button', {name: /^Connect (ABN AMRO|Mock ASPSP)$/})
-      .first();
+    const connectButton = page.getByRole('button', {name: 'Connect a bank'}).first();
     const connectButtonBox = await connectButton.boundingBox();
 
     expect(connectButtonBox).not.toBeNull();
@@ -343,6 +518,181 @@ test.describe('bank connections', () => {
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true);
+  });
+});
+
+test.describe('mocked Enable Banking bank connection', () => {
+  test.use({storageState: VERIFIED_USER_AUTH_FILE});
+
+  test('connects a mock account through the complete authorization callback', async ({page}) => {
+    let connectionPersisted = false;
+    let connectionDeleted = false;
+    let authorizationRequest: {aspspName: string; aspspCountry: string} | undefined;
+    let callbackRequest: URL | undefined;
+    let callbackRedirectUrl = '';
+    let providerCallbackUrl = '';
+
+    await page.route('**/bank-connections/aspsps', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            ...TARGET_ASPSP,
+            logoUrl: 'https://enablebanking.com/brands/NL/Mock-ASPSP/',
+          },
+        ]),
+      });
+    });
+
+    await page.route('**/bank-connections', async (route) => {
+      if (route.request().resourceType() === 'document') {
+        await route.continue();
+        return;
+      }
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(connectionPersisted && !connectionDeleted ? [MOCK_CONNECTION] : []),
+      });
+    });
+
+    await page.route('**/bank-connections/authorize', async (route) => {
+      authorizationRequest = route.request().postDataJSON() as {
+        aspspName: string;
+        aspspCountry: string;
+      };
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({authorizationUrl: `${MOCK_PROVIDER_ORIGIN}/consent`}),
+      });
+    });
+
+    await page.route('**/bank-connections/callback**', async (route) => {
+      callbackRequest = new URL(route.request().url());
+      connectionPersisted = true;
+      await route.fulfill({
+        status: 302,
+        headers: {location: callbackRedirectUrl},
+      });
+    });
+
+    await page.route(`${MOCK_PROVIDER_ORIGIN}/consent`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: `<!doctype html>
+<html>
+  <body>
+    <h1>Enable Banking</h1>
+    <p>Mock ASPSP authorization</p>
+    <button type="button" id="continue">Continue with authentication</button>
+    <script>
+      document.querySelector('#continue').addEventListener('click', () => {
+        window.location.href = ${JSON.stringify(`${MOCK_PROVIDER_ORIGIN}/accounts`)};
+      });
+    </script>
+  </body>
+</html>`,
+      });
+    });
+
+    await page.route(`${MOCK_PROVIDER_ORIGIN}/accounts`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: `<!doctype html>
+<html>
+  <body>
+    <h1>Please select the account</h1>
+    <label>
+      <input type="checkbox" name="account" value="mock-account" />
+      Mock current account
+    </label>
+    <button type="button" id="authorize">Authorize</button>
+    <script>
+      document.querySelector('#authorize').addEventListener('click', () => {
+        window.location.href = ${JSON.stringify(providerCallbackUrl)};
+      });
+    </script>
+  </body>
+</html>`,
+      });
+    });
+
+    await page.route(`**/bank-connections/${MOCK_CONNECTION.id}`, async (route) => {
+      if (route.request().method() !== 'DELETE') {
+        await route.continue();
+        return;
+      }
+
+      expect(route.request().postDataJSON()).toEqual({confirmation: 'DELETE'});
+      connectionDeleted = true;
+      await route.fulfill({status: 204, body: ''});
+    });
+
+    await page.goto('/bank-connections');
+    callbackRedirectUrl = new URL('/bank-connections?result=connected', page.url()).toString();
+    const providerCallback = new URL('/bank-connections/callback', page.url());
+    providerCallback.searchParams.set('state', 'mock-authorization-state');
+    providerCallback.searchParams.set('code', 'mock-provider-code');
+    providerCallbackUrl = providerCallback.toString();
+    await expect(page.getByText('0 connections', {exact: true})).toBeVisible();
+
+    await page.getByRole('button', {name: 'Connect a bank'}).click();
+    const picker = page.getByTestId('bank-connection-picker');
+
+    await picker.getByTestId('bank-connection-country-selector').click();
+    await page.getByPlaceholder('Search countries...').fill(TARGET_ASPSP.country);
+    await page.getByRole('option', {name: /Netherlands.*1 bank/}).click();
+
+    await picker.getByTestId('bank-connection-bank-selector').click();
+    await page.getByRole('option', {name: /Mock ASPSP.*NL/}).click();
+
+    await expect
+      .poll(() => authorizationRequest)
+      .toEqual({
+        aspspName: TARGET_ASPSP.name,
+        aspspCountry: TARGET_ASPSP.country,
+      });
+    await expect(page).toHaveURL(`${MOCK_PROVIDER_ORIGIN}/consent`);
+    await page.getByRole('button', {name: 'Continue with authentication'}).click();
+
+    await expect(page).toHaveURL(`${MOCK_PROVIDER_ORIGIN}/accounts`);
+    await expect(page.getByRole('heading', {name: 'Please select the account'})).toBeVisible();
+    await page.getByRole('checkbox', {name: 'Mock current account'}).check();
+    await page.getByRole('button', {name: 'Authorize', exact: true}).click();
+
+    await expect(page.getByText('Bank connection added', {exact: true})).toBeVisible();
+    await expect(page).toHaveURL(/\/bank-connections$/);
+    await expect.poll(() => callbackRequest?.searchParams.get('code')).toBe('mock-provider-code');
+    expect(callbackRequest?.searchParams.get('state')).toBe('mock-authorization-state');
+    expect(connectionPersisted).toBe(true);
+
+    const connectionCard = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
+    await expect(page.getByText('1 connection', {exact: true})).toBeVisible();
+    await expect(connectionCard).toBeVisible();
+    await expect(connectionCard.getByRole('heading', {name: TARGET_ASPSP.name})).toBeVisible();
+    await expect(connectionCard.getByText('Connected', {exact: true})).toBeVisible();
+    await expect(connectionCard.getByRole('heading', {name: 'Accounts'})).toBeVisible();
+    await expect(connectionCard.getByText('Mock current account', {exact: true})).toBeVisible();
+    await expect(connectionCard.getByText('Valid until', {exact: false})).toBeVisible();
+
+    await connectionCard.getByRole('button', {name: 'Remove'}).click();
+    await expect(page.getByRole('heading', {name: 'Remove connected bank?'})).toBeVisible();
+    await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
+    await page.getByTestId(`remove-bank-confirm-${MOCK_CONNECTION.id}`).click();
+
+    await expect(page.getByText('Bank connection removed', {exact: true})).toBeVisible();
+    await expect.poll(() => connectionDeleted).toBe(true);
+    await expect(connectionCard).toHaveCount(0);
+    await expect(page.getByText('0 connections', {exact: true})).toBeVisible();
   });
 });
 
@@ -388,8 +738,6 @@ test.describe('bank connections without bank connections', () => {
     await page.goto('/bank-connections');
 
     await expect(page.getByRole('heading', {name: 'No bank connections'})).toBeVisible();
-    await expect(page.getByRole('button', {name: /^Connect (ABN AMRO|Mock ASPSP)$/})).toHaveCount(
-      1,
-    );
+    await expect(page.getByRole('button', {name: 'Connect a bank'})).toHaveCount(1);
   });
 });
