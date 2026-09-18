@@ -1,4 +1,7 @@
-import type {BankTransactionCategorizationFields} from './bank-transaction';
+import type {
+  BankTransactionCategorizationFields,
+  BankTransactionFinancialEventFields,
+} from './bank-transaction';
 
 export type BankConnectionAuthorizationRequest = {
   aspspName: string;
@@ -53,20 +56,21 @@ export type BankConnection = {
   bankAccounts: BankAccount[];
 };
 
-export type BankTransaction = BankTransactionCategorizationFields & {
-  id: string;
-  bookingDate: string | null;
-  valueDate: string | null;
-  amount: string;
-  currency: string;
-  creditDebitIndicator: string | null;
-  transactionStatus: string | null;
-  description: string | null;
-  displayDescription?: string | null;
-  counterpartyName: string | null;
-  merchantCategoryCode: string | null;
-  remittanceInformation: string | null;
-};
+export type BankTransaction = BankTransactionCategorizationFields &
+  BankTransactionFinancialEventFields & {
+    id: string;
+    bookingDate: string | null;
+    valueDate: string | null;
+    amount: string;
+    currency: string;
+    creditDebitIndicator: string | null;
+    transactionStatus: string | null;
+    description: string | null;
+    displayDescription?: string | null;
+    counterpartyName: string | null;
+    merchantCategoryCode: string | null;
+    remittanceInformation: string | null;
+  };
 
 export type BankTransactionsResponse = {
   transactions: BankTransaction[];

@@ -70,6 +70,165 @@ test.describe('bank transactions', () => {
     expect(new URL(page.url()).searchParams.has('transactionId')).toBe(false);
   });
 
+  test('renders currency exchanges as internal activity rather than categories', async ({page}) => {
+    let exchangeTransaction: Record<string, unknown> | undefined;
+
+    await page.route('**/bank-transactions/currency-exchange-fixture', async (route) => {
+      if (!exchangeTransaction) {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(exchangeTransaction),
+      });
+    });
+
+    await page.route('**/bank-transactions?*', async (route) => {
+      if (!['fetch', 'xhr'].includes(route.request().resourceType())) {
+        await route.continue();
+        return;
+      }
+      const url = new URL(route.request().url());
+
+      if (url.searchParams.get('filter[financialEventTypes][]') === 'CURRENCY_EXCHANGE') {
+        const pageIndex = url.searchParams.get('pagination[pageIndex]');
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            transactions: pageIndex === '0' ? [exchangeTransaction] : [],
+            total: 1,
+          }),
+        });
+        return;
+      }
+
+      const response = await route.fetch();
+      const payload = (await response.json()) as {
+        transactions: Array<Record<string, unknown>>;
+        total: number;
+      };
+      const existingExchangeTransaction = payload.transactions.find(
+        (transaction) => transaction.financialEventType === 'CURRENCY_EXCHANGE',
+      );
+      exchangeTransaction = existingExchangeTransaction ?? {
+        ...payload.transactions[0],
+        id: 'currency-exchange-fixture',
+        description: 'Exchanged to GBP',
+        displayDescription: 'Exchanged to GBP',
+        amount: '-10.00000000',
+        currency: 'EUR',
+        creditDebitIndicator: 'DBIT',
+        direction: 'EXPENSE',
+        category: null,
+        categoryStatus: 'NOT_APPLICABLE',
+        categorySource: null,
+        financialEventType: 'CURRENCY_EXCHANGE',
+        financialEventSource: 'RULE',
+        financialEventRuleVersion: 'revolut-currency-exchange-v1',
+        cashFlowTreatment: 'INTERNAL',
+        exchangeRate: null,
+        instructedAmount: null,
+        instructedCurrency: null,
+      };
+      const pageIndex = url.searchParams.get('pagination[pageIndex]');
+      const shouldInjectExchange = pageIndex === '0' || pageIndex === '1';
+      await route.fulfill({
+        response,
+        json: {
+          ...payload,
+          transactions:
+            existingExchangeTransaction || !shouldInjectExchange
+              ? payload.transactions
+              : [exchangeTransaction, ...payload.transactions],
+          total: existingExchangeTransaction ? payload.total : payload.total + 1,
+        },
+      });
+    });
+
+    await page.goto('/bank-transactions?pageIndex=1&pageSize=10');
+
+    const exchangeRow = page
+      .getByTestId(/^bank-transaction-row-/)
+      .filter({hasText: 'Currency exchange'});
+    await expect(exchangeRow).toHaveCount(1);
+    await expect(exchangeRow.getByRole('cell').nth(2)).toContainText('Currency exchange');
+    await expect(exchangeRow.getByRole('cell').nth(2)).toContainText('Category not applicable');
+    await expect(exchangeRow.getByRole('cell').nth(2)).toContainText('Internal movement');
+
+    await exchangeRow
+      .getByRole('button', {name: 'View Exchanged to GBP transaction details'})
+      .click();
+    const inspector = page.getByTestId('bank-transaction-inspector');
+    await expect(inspector).toBeVisible();
+    await expect(inspector.getByText('Currency exchange', {exact: true}).first()).toBeVisible();
+    await expect(inspector.getByText('Internal movement', {exact: true})).toBeVisible();
+    await expect(
+      inspector.getByText('Category not applicable', {exact: true}).first(),
+    ).toBeVisible();
+    await expect(inspector.getByRole('combobox', {name: 'Transaction category'})).toHaveCount(0);
+    await expect(inspector.getByText('Rate unavailable', {exact: true})).toBeVisible();
+    await inspector.getByRole('button', {name: 'Close transaction details'}).click();
+
+    await page.getByRole('button', {name: 'Activity'}).click();
+    const activityOption = page.getByRole('option', {name: 'Currency exchange', exact: true});
+    await expect(activityOption).toHaveAttribute('data-filter-selected', 'false');
+    await activityOption.click();
+    await expect(activityOption).toHaveAttribute('data-filter-selected', 'true');
+    await expect(page.getByTestId(/^bank-transaction-row-/)).toHaveCount(1);
+    await expect(
+      page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Currency exchange'}),
+    ).toHaveCount(1);
+    expect(new URL(page.url()).searchParams.get('pageIndex')).toBe('0');
+
+    await page.goto(
+      '/bank-transactions?pageIndex=1&pageSize=10&financialEventTypes=%5B%22CURRENCY_EXCHANGE%22%5D',
+    );
+    await page.getByRole('button', {name: 'Clear filters', exact: true}).first().click();
+    await expect(
+      page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Coffee shop'}),
+    ).toBeVisible();
+    expect(new URL(page.url()).searchParams.get('pageIndex')).toBe('0');
+
+    await page.goto(
+      '/bank-transactions?pageIndex=1&pageSize=10&financialEventTypes=%5B%22CURRENCY_EXCHANGE%22%5D',
+    );
+    await page.getByRole('button', {name: /Activity/}).click();
+    await page.getByRole('option', {name: 'Reset', exact: true}).click();
+    await expect(
+      page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Coffee shop'}),
+    ).toBeVisible();
+    expect(new URL(page.url()).searchParams.get('pageIndex')).toBe('0');
+
+    await page.goto('/bank-transactions?pageIndex=99&pageSize=50');
+    await expect(page).toHaveURL(/pageIndex=0/);
+    await expect(
+      page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Coffee shop'}),
+    ).toBeVisible();
+
+    await page.goto('/bank-transactions');
+    await page.getByRole('button', {name: 'Activity', exact: true}).click();
+    await page.getByRole('option', {name: 'Currency exchange', exact: true}).click();
+    await expect(page.getByTestId(/^bank-transaction-row-/)).toHaveCount(1);
+    await page.goBack();
+    await expect(page.getByRole('button', {name: 'Activity', exact: true})).toBeVisible();
+    await expect(
+      page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Coffee shop'}),
+    ).toBeVisible();
+
+    await page.setViewportSize({width: 393, height: 852});
+    await page.goto('/bank-transactions');
+    await page.getByTestId('bank-transaction-mobile-filters-trigger').click();
+    const mobileFilters = page.getByTestId('bank-transaction-mobile-filters');
+    const activitySection = mobileFilters.getByRole('heading', {name: 'Activity'}).locator('..');
+    await activitySection.getByRole('option', {name: 'Currency exchange', exact: true}).click();
+    await expect(page.getByTestId('bank-transaction-mobile-meta')).toContainText(
+      'Currency exchange · Internal movement',
+    );
+  });
+
   test('classifies a transaction from the detail inspector', async ({page}) => {
     await page.goto('/bank-transactions');
     const firstTransactionRow = page
@@ -513,6 +672,10 @@ test.describe('bank transactions', () => {
       const requestUrl = new URL(route.request().url());
       const categoryValues = requestUrl.searchParams.getAll('filter[categories][]');
       const categorySourceValues = requestUrl.searchParams.getAll('filter[categorySources][]');
+      if (categoryValues.length === 0 && categorySourceValues.length === 0) {
+        await route.continue();
+        return;
+      }
       requestUrl.searchParams.delete('filter[categories][]');
       requestUrl.searchParams.delete('filter[categorySources][]');
       const response = await route.fetch({url: requestUrl.toString()});
@@ -709,6 +872,7 @@ test.describe('bank transactions', () => {
     await expect(mobileFilters.getByRole('heading', {name: 'Booking date'})).toBeVisible();
     await expect(mobileFilters.getByRole('heading', {name: 'Categories'})).toBeVisible();
     await expect(mobileFilters.getByRole('heading', {name: 'Category source'})).toBeVisible();
+    await expect(mobileFilters.getByRole('heading', {name: 'Activity'})).toBeVisible();
     const mobileFiltersBody = page.getByTestId('bank-transaction-mobile-filters-body');
     await expect.poll(() => mobileFiltersBody.evaluate((element) => element.scrollTop)).toBe(0);
     await expect(mobileFiltersBody).toHaveCSS('padding-top', '16px');

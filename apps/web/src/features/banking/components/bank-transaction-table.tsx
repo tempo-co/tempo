@@ -1,7 +1,7 @@
 import {useNavigate} from '@tanstack/react-router';
 import {SortingState, flexRender, getCoreRowModel, useReactTable} from '@tanstack/react-table';
 import {RefreshCw, Search, SearchX} from 'lucide-react';
-import {Dispatch, SetStateAction, useEffect, useState} from 'react';
+import {useEffect, useState} from 'react';
 
 import {EmptyState} from '@/components/shared/layout/app-empty-state';
 import {LoadingBar} from '@/components/shared/loading-bar';
@@ -30,7 +30,9 @@ import {
   DEFAULT_BANK_TRANSACTION_SORT,
 } from '../types/bank-transaction';
 import {
+  formatBankTransactionCashFlowTreatment,
   formatBankTransactionCompactDate,
+  formatBankTransactionFinancialEvent,
   resolveBankTransactionAccountLabel,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
@@ -38,6 +40,7 @@ import {BankTransactionAccountFilter} from './bank-transaction-account-filter';
 import {BankTransactionCategoryFilter} from './bank-transaction-category-filter';
 import {BankTransactionCategorySourceFilter} from './bank-transaction-category-source-filter';
 import {BankTransactionDateFilter} from './bank-transaction-date-filter';
+import {BankTransactionFinancialEventFilter} from './bank-transaction-financial-event-filter';
 import {BankTransactionMobileFilters} from './bank-transaction-mobile-filters';
 import {bankTransactionTableColumns} from './bank-transaction-table-columns';
 
@@ -47,7 +50,6 @@ type BankTransactionTableProps = {
   isPending: boolean;
   isPlaceholderData: boolean;
   pagination: PaginationParams;
-  setPagination: Dispatch<SetStateAction<PaginationParams>>;
   filters: BankTransactionFilterParams;
   setFilters: React.Dispatch<React.SetStateAction<BankTransactionFilterParams>>;
   sort: BankTransactionSortParams;
@@ -63,7 +65,6 @@ export function BankTransactionTable({
   isPending,
   isPlaceholderData,
   pagination,
-  setPagination,
   filters,
   setFilters,
   sort,
@@ -79,6 +80,7 @@ export function BankTransactionTable({
     (filters.bankAccountIds?.length ?? 0) > 0 ||
     (filters.categories?.length ?? 0) > 0 ||
     (filters.categorySources?.length ?? 0) > 0 ||
+    (filters.financialEventTypes?.length ?? 0) > 0 ||
     !!filters.search?.trim();
 
   useEffect(() => {
@@ -143,16 +145,10 @@ export function BankTransactionTable({
         bankAccountIds: undefined,
         categories: undefined,
         categorySources: undefined,
+        financialEventTypes: undefined,
         search: undefined,
         pageIndex: 0,
       }),
-    });
-    setFilters({
-      bookingDate: undefined,
-      bankAccountIds: [],
-      categories: [],
-      categorySources: [],
-      search: undefined,
     });
   };
 
@@ -221,6 +217,11 @@ export function BankTransactionTable({
             className='max-md:w-full max-md:min-w-0'
           />
           <BankTransactionCategorySourceFilter
+            filters={filters}
+            setFilters={setFilters}
+            className='max-md:w-full max-md:min-w-0'
+          />
+          <BankTransactionFinancialEventFilter
             filters={filters}
             setFilters={setFilters}
             className='max-md:w-full max-md:min-w-0'
@@ -374,6 +375,15 @@ export function BankTransactionTable({
                           {formatBankTransactionCompactDate(row.original.bookingDate)}
                           <span aria-hidden='true'> · </span>
                           {resolveBankTransactionAccountLabel(row.original)}
+                          {formatBankTransactionFinancialEvent(row.original.financialEventType) && (
+                            <span className='block truncate text-foreground'>
+                              {formatBankTransactionFinancialEvent(row.original.financialEventType)}
+                              <span aria-hidden='true'> · </span>
+                              {formatBankTransactionCashFlowTreatment(
+                                row.original.cashFlowTreatment,
+                              )}
+                            </span>
+                          )}
                         </span>
                         <span
                           data-testid='bank-transaction-mobile-meta-right'
@@ -393,7 +403,6 @@ export function BankTransactionTable({
           <Pagination
             totalItems={totalTransactions}
             pagination={pagination}
-            setPagination={setPagination}
             navigateOptions={{from: '/bank-transactions/'}}
           />
         )}

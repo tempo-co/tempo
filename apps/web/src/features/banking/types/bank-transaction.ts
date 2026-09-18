@@ -20,6 +20,30 @@ export enum BankTransactionDirection {
   UNKNOWN = 'UNKNOWN',
 }
 
+export const BANK_TRANSACTION_FINANCIAL_EVENT_TYPES = ['CURRENCY_EXCHANGE'] as const;
+export type BankTransactionFinancialEventType =
+  (typeof BANK_TRANSACTION_FINANCIAL_EVENT_TYPES)[number];
+
+export const BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES = ['RULE'] as const;
+export type BankTransactionFinancialEventSource =
+  (typeof BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES)[number];
+
+export const BANK_TRANSACTION_FINANCIAL_EVENT_LABELS: Record<
+  BankTransactionFinancialEventType,
+  string
+> = {
+  CURRENCY_EXCHANGE: 'Currency exchange',
+};
+
+export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = [
+  'INCOME',
+  'EXPENSE',
+  'INTERNAL',
+  'UNKNOWN',
+] as const;
+export type BankTransactionCashFlowTreatment =
+  (typeof BANK_TRANSACTION_CASH_FLOW_TREATMENTS)[number];
+
 export const BANK_TRANSACTION_CATEGORIES = [
   'HOUSING_AND_UTILITIES',
   'FOOD_AND_DRINK',
@@ -81,6 +105,7 @@ export const BANK_TRANSACTION_CATEGORIZATION_STATUSES = [
   'PROCESSING',
   'COMPLETED',
   'FAILED',
+  'NOT_APPLICABLE',
 ] as const;
 
 export type BankTransactionCategorizationStatus =
@@ -103,6 +128,7 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
   bankAccountIds: z.array(z.string().uuid()).optional(),
   categories: z.array(z.enum(BANK_TRANSACTION_CATEGORY_FILTER_VALUES)).optional(),
   categorySources: z.array(z.enum(BANK_TRANSACTION_CATEGORIZATION_SOURCES)).optional(),
+  financialEventTypes: z.array(z.enum(BANK_TRANSACTION_FINANCIAL_EVENT_TYPES)).optional(),
   search: z.string().max(100).optional(),
   transactionId: z.string().optional(),
   sort: z
@@ -117,7 +143,12 @@ export type BankTransactionSearchParams = z.infer<typeof bankTransactionSearchPa
 
 export type BankTransactionFilterParams = Pick<
   BankTransactionSearchParams,
-  'bookingDate' | 'bankAccountIds' | 'categories' | 'categorySources' | 'search'
+  | 'bookingDate'
+  | 'bankAccountIds'
+  | 'categories'
+  | 'categorySources'
+  | 'financialEventTypes'
+  | 'search'
 >;
 
 export type BankTransactionSortParams = BankTransactionSearchParams['sort'];
@@ -134,37 +165,45 @@ export type BankTransactionCategorizationFields = {
   categoryConfidence: string | null;
 };
 
-export type BankTransaction = BankTransactionCategorizationFields & {
-  id: string;
-  transactionDate: string | null;
-  bookingDate: string | null;
-  valueDate: string | null;
-  description: string | null;
-  displayDescription?: string | null;
-  counterpartyName: string | null;
-  amount: string;
-  currency: string;
-  creditDebitIndicator: string | null;
-  direction: BankTransactionDirection;
-  transactionType: string;
-  transactionStatus: string | null;
-  providerTransactionDescription: string | null;
-  merchantCategoryCode: string | null;
-  remittanceInformation: string | null;
-  balanceAfterAmount: string | null;
-  balanceAfterCurrency: string | null;
-  instructedAmount: string | null;
-  instructedCurrency: string | null;
-  exchangeRate: string | null;
-  exchangeRateUnitCurrency: string | null;
-  exchangeRateType: string | null;
-  referenceNumber: string | null;
-  referenceNumberScheme: string | null;
-  bankName: string;
-  bankCountry: string;
-  bankAccountName: string | null;
-  bankAccountAlias: string | null;
+export type BankTransactionFinancialEventFields = {
+  financialEventType: BankTransactionFinancialEventType | null;
+  financialEventSource: BankTransactionFinancialEventSource | null;
+  financialEventRuleVersion: string | null;
+  cashFlowTreatment: BankTransactionCashFlowTreatment;
 };
+
+export type BankTransaction = BankTransactionCategorizationFields &
+  BankTransactionFinancialEventFields & {
+    id: string;
+    transactionDate: string | null;
+    bookingDate: string | null;
+    valueDate: string | null;
+    description: string | null;
+    displayDescription?: string | null;
+    counterpartyName: string | null;
+    amount: string;
+    currency: string;
+    creditDebitIndicator: string | null;
+    direction: BankTransactionDirection;
+    transactionType: string;
+    transactionStatus: string | null;
+    providerTransactionDescription: string | null;
+    merchantCategoryCode: string | null;
+    remittanceInformation: string | null;
+    balanceAfterAmount: string | null;
+    balanceAfterCurrency: string | null;
+    instructedAmount: string | null;
+    instructedCurrency: string | null;
+    exchangeRate: string | null;
+    exchangeRateUnitCurrency: string | null;
+    exchangeRateType: string | null;
+    referenceNumber: string | null;
+    referenceNumberScheme: string | null;
+    bankName: string;
+    bankCountry: string;
+    bankAccountName: string | null;
+    bankAccountAlias: string | null;
+  };
 
 export type BankTransactionsResponse = {
   transactions: BankTransaction[];

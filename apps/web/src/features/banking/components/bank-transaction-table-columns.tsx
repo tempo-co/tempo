@@ -1,14 +1,17 @@
 import {ColumnDef} from '@tanstack/react-table';
+import {RefreshCw} from 'lucide-react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {SortButton} from '@/components/shared/sort-button';
 
 import {BankTransaction, BankTransactionSortField} from '../types/bank-transaction';
 import {
+  formatBankTransactionCashFlowTreatment,
   formatBankTransactionCategory,
   formatBankTransactionCategorySource,
   formatBankTransactionCategoryStatus,
   formatBankTransactionDate,
+  formatBankTransactionFinancialEvent,
   isBankTransactionCategory,
   resolveBankTransactionAccountLabel,
   resolveBankTransactionDisplayTitle,
@@ -46,23 +49,38 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
     id: 'category',
     header: ({column}) => <SortButton column={column}>Category</SortButton>,
     cell: ({row}) => {
+      const financialEvent = formatBankTransactionFinancialEvent(row.original.financialEventType);
       const category =
-        row.original.category && isBankTransactionCategory(row.original.category)
-          ? row.original.category
-          : null;
+        !row.original.category || !isBankTransactionCategory(row.original.category)
+          ? null
+          : row.original.category;
+      const hasManualCategory = Boolean(
+        financialEvent && category && row.original.categorySource === 'MANUAL',
+      );
       const source = formatBankTransactionCategorySource(row.original.categorySource);
+      const cashFlowTreatment = formatBankTransactionCashFlowTreatment(
+        row.original.cashFlowTreatment,
+      );
 
       return (
         <div className='w-full min-w-0'>
           <div className='flex h-6 min-w-0 items-center gap-2'>
-            {category && <BankTransactionCategoryIcon category={category} />}
+            {financialEvent ? (
+              <RefreshCw className='h-4 w-4 shrink-0 text-muted-foreground' aria-hidden='true' />
+            ) : (
+              category && <BankTransactionCategoryIcon category={category} />
+            )}
             <p className='overflow-hidden text-ellipsis whitespace-nowrap'>
-              {formatBankTransactionCategory(row.original.category)}
+              {financialEvent || formatBankTransactionCategory(row.original.category)}
             </p>
           </div>
           <p className='overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground'>
-            {formatBankTransactionCategoryStatus(row.original.categoryStatus)}
-            {source && ` · ${source}`}
+            {financialEvent
+              ? hasManualCategory
+                ? `Category: ${formatBankTransactionCategory(category)}${source ? ` · ${source}` : ''} · ${cashFlowTreatment}`
+                : `${formatBankTransactionCategoryStatus(row.original.categoryStatus)} · ${cashFlowTreatment}`
+              : formatBankTransactionCategoryStatus(row.original.categoryStatus)}
+            {!financialEvent && source && ` · ${source}`}
           </p>
         </div>
       );

@@ -31,7 +31,6 @@ function BankTransactionsIndex() {
     isError,
     refetch,
     pagination,
-    setPagination,
     filters,
     setFilters,
     sort,
@@ -68,7 +67,6 @@ function BankTransactionsIndex() {
             isPending={isPending}
             isPlaceholderData={isPlaceholderData}
             pagination={pagination}
-            setPagination={setPagination}
             filters={filters}
             setFilters={setFilters}
             sort={sort}

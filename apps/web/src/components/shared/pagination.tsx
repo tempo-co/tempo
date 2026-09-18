@@ -1,6 +1,6 @@
 import {NavigateOptions, useNavigate} from '@tanstack/react-router';
 import {ChevronFirst, ChevronLast, ChevronLeft, ChevronRight} from 'lucide-react';
-import {Dispatch, SetStateAction, useCallback, useEffect, useMemo} from 'react';
+import {useCallback, useMemo} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {
@@ -15,7 +15,6 @@ import {PAGE_SIZE_OPTIONS, PaginationParams} from '@/types/pagination';
 type PaginationProps = {
   totalItems: number;
   pagination: PaginationParams;
-  setPagination: Dispatch<SetStateAction<PaginationParams>>;
   navigateOptions: NavigateOptions;
   pageSizeOptions?: number[];
 };
@@ -23,7 +22,6 @@ type PaginationProps = {
 export function Pagination({
   totalItems,
   pagination,
-  setPagination,
   navigateOptions,
   pageSizeOptions = PAGE_SIZE_OPTIONS,
 }: PaginationProps) {
@@ -33,12 +31,6 @@ export function Pagination({
     () => Math.ceil(totalItems / pagination.pageSize),
     [totalItems, pagination.pageSize],
   );
-
-  useEffect(() => {
-    if (pagination.pageIndex >= totalPages) {
-      setPagination((prev) => ({...prev, pageIndex: Math.max(totalPages - 1, 0)}));
-    }
-  }, [pagination.pageIndex, totalPages, setPagination]);
 
   const startIndex = useMemo(
     () => pagination.pageIndex * pagination.pageSize + 1,
@@ -57,33 +49,28 @@ export function Pagination({
   const handlePageSizeChange = useCallback(
     async (pageSize: string) => {
       await navigate({search: (prev) => ({...prev, pageSize: Number(pageSize), pageIndex: 0})});
-      setPagination({pageIndex: 0, pageSize: Number(pageSize)});
     },
-    [navigate, setPagination],
+    [navigate],
   );
 
   const handleFirstPage = useCallback(async () => {
     await navigate({search: (prev) => ({...prev, pageIndex: 0})});
-    setPagination((prev) => ({...prev, pageIndex: 0}));
-  }, [navigate, setPagination]);
+  }, [navigate]);
 
   const handlePreviousPage = useCallback(async () => {
     const newPageIndex = Math.max(pagination.pageIndex - 1, 0);
     await navigate({search: (prev) => ({...prev, pageIndex: newPageIndex})});
-    setPagination((prev) => ({...prev, pageIndex: newPageIndex}));
-  }, [navigate, pagination.pageIndex, setPagination]);
+  }, [navigate, pagination.pageIndex]);
 
   const handleNextPage = useCallback(async () => {
     const newPageIndex = pagination.pageIndex + 1;
     await navigate({search: (prev) => ({...prev, pageIndex: newPageIndex})});
-    setPagination((prev) => ({...prev, pageIndex: newPageIndex}));
-  }, [navigate, pagination.pageIndex, setPagination]);
+  }, [navigate, pagination.pageIndex]);
 
   const handleLastPage = useCallback(async () => {
     const newPageIndex = totalPages - 1;
     await navigate({search: (prev) => ({...prev, pageIndex: newPageIndex})});
-    setPagination((prev) => ({...prev, pageIndex: newPageIndex}));
-  }, [navigate, setPagination, totalPages]);
+  }, [navigate, totalPages]);
 
   return (
     <div

@@ -5,7 +5,10 @@ import {cn} from '@/utils/cn';
 
 import {BankTransaction} from '../types/bank-transaction';
 import {
+  formatBankTransactionCashFlowTreatment,
+  formatBankTransactionCategoryStatus,
   formatBankTransactionDate,
+  formatBankTransactionFinancialEvent,
   formatBankTransactionType,
   resolveBankTransactionAccountLabel,
   resolveBankTransactionDisplayTitle,
@@ -18,6 +21,8 @@ type BankTransactionDetailsProps = {
 
 export function BankTransactionDetails({transaction}: BankTransactionDetailsProps) {
   const transactionTitle = resolveBankTransactionDisplayTitle(transaction);
+  const financialEvent = formatBankTransactionFinancialEvent(transaction.financialEventType);
+  const hasManualCategory = Boolean(financialEvent && transaction.categorySource === 'MANUAL');
   const detailsHeadingId = `transaction-${transaction.id}-details-heading`;
   const datesHeadingId = `transaction-${transaction.id}-dates-heading`;
   const accountHeadingId = `transaction-${transaction.id}-account-heading`;
@@ -86,7 +91,25 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
             </DetailGroup>
 
             <DetailGroup id={classificationHeadingId} title='Classification'>
-              <BankTransactionCategorySelect transaction={transaction} />
+              {financialEvent ? (
+                <>
+                  <Detail label='Activity' value={financialEvent} />
+                  {hasManualCategory ? (
+                    <BankTransactionCategorySelect transaction={transaction} />
+                  ) : (
+                    <Detail
+                      label='Category'
+                      value={formatBankTransactionCategoryStatus(transaction.categoryStatus)}
+                    />
+                  )}
+                  <Detail
+                    label='Cash-flow treatment'
+                    value={formatBankTransactionCashFlowTreatment(transaction.cashFlowTreatment)}
+                  />
+                </>
+              ) : (
+                <BankTransactionCategorySelect transaction={transaction} />
+              )}
               <Detail
                 label='Transaction type'
                 value={formatBankTransactionType(transaction.transactionType)}
@@ -168,7 +191,9 @@ function formatAmount(amount: string | null, currency: string | null) {
 }
 
 function formatExchangeRate(transaction: BankTransaction) {
-  if (!transaction.exchangeRate) return '—';
+  if (!transaction.exchangeRate) {
+    return transaction.financialEventType === 'CURRENCY_EXCHANGE' ? 'Rate unavailable' : '—';
+  }
   const numericRate = Number(transaction.exchangeRate);
   const rate = Number.isFinite(numericRate)
     ? numericRate.toFixed(4).replace(/\.?0+$/, '')

@@ -3,9 +3,12 @@ import {format, parseISO} from 'date-fns';
 import {
   BANK_TRANSACTION_CATEGORIES,
   BANK_TRANSACTION_CATEGORY_LABELS,
+  BANK_TRANSACTION_FINANCIAL_EVENT_LABELS,
+  BankTransactionCashFlowTreatment,
   BankTransactionCategorizationSource,
   BankTransactionCategorizationStatus,
   BankTransactionCategory,
+  BankTransactionFinancialEventType,
 } from '../types/bank-transaction';
 
 export function formatBankTransactionDate(value: string | null) {
@@ -20,6 +23,21 @@ function formatBankTransactionDateValue(value: string | null, pattern: string) {
   if (!value) return '—';
   const date = parseISO(value);
   return Number.isNaN(date.getTime()) ? value : format(date, pattern);
+}
+
+export function formatBankTransactionFinancialEvent(
+  value: BankTransactionFinancialEventType | null | undefined,
+) {
+  return value ? BANK_TRANSACTION_FINANCIAL_EVENT_LABELS[value] : null;
+}
+
+export function formatBankTransactionCashFlowTreatment(
+  value: BankTransactionCashFlowTreatment | null | undefined,
+) {
+  if (value === 'INCOME') return 'Income';
+  if (value === 'EXPENSE') return 'Expense';
+  if (value === 'INTERNAL') return 'Internal movement';
+  return 'Unknown';
 }
 
 export function formatBankTransactionType(value: string | null) {
@@ -71,6 +89,7 @@ export function formatBankTransactionCategoryStatus(
   if (normalized === 'PENDING' || normalized === 'PROCESSING') return 'Categorizing…';
   if (normalized === 'FAILED') return 'Categorization failed. Choose a category manually.';
   if (normalized === 'COMPLETED') return 'Categorized';
+  if (normalized === 'NOT_APPLICABLE') return 'Category not applicable';
   return 'Not categorized';
 }
 

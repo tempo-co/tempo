@@ -30,7 +30,9 @@ import {useStartBankConnection} from '../api/use-start-bank-connection';
 import {useSyncBankConnection} from '../api/use-sync-bank-connection';
 import {BankConnection, BankConnectionAspsp, BankTransaction} from '../types/bank-connection';
 import {
+  formatBankTransactionCashFlowTreatment,
   formatBankTransactionCompactDate,
+  formatBankTransactionFinancialEvent,
   formatBankingWords,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
@@ -661,6 +663,7 @@ function BankTransactionRow({
   const metadata = formatBankTransactionCompactDate(
     transaction.bookingDate || transaction.valueDate,
   );
+  const financialEvent = formatBankTransactionFinancialEvent(transaction.financialEventType);
 
   return (
     <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 p-3 sm:p-4'>
@@ -675,6 +678,13 @@ function BankTransactionRow({
           {description}
         </button>
         <p className='truncate text-xs text-muted-foreground'>{metadata}</p>
+        {financialEvent && (
+          <p className='truncate text-xs text-foreground'>
+            {financialEvent}
+            <span aria-hidden='true'> · </span>
+            {formatBankTransactionCashFlowTreatment(transaction.cashFlowTreatment)}
+          </p>
+        )}
       </div>
       <div className='text-right'>
         <CurrencyAmount amount={Number(transaction.amount)} currency={transaction.currency} />

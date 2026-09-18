@@ -20,6 +20,7 @@ import {BankTransactionAccountFilter} from './bank-transaction-account-filter';
 import {BankTransactionCategoryFilter} from './bank-transaction-category-filter';
 import {BankTransactionCategorySourceFilter} from './bank-transaction-category-source-filter';
 import {BankTransactionDateFilter} from './bank-transaction-date-filter';
+import {BankTransactionFinancialEventFilter} from './bank-transaction-financial-event-filter';
 
 type BankTransactionMobileFiltersProps = {
   filters: BankTransactionFilterParams;
@@ -43,6 +44,7 @@ export function BankTransactionMobileFilters({
     (filters.bankAccountIds?.length ?? 0) > 0,
     (filters.categories?.length ?? 0) > 0,
     (filters.categorySources?.length ?? 0) > 0,
+    (filters.financialEventTypes?.length ?? 0) > 0,
   ].filter(Boolean).length;
 
   React.useEffect(() => {
@@ -98,6 +100,11 @@ export function BankTransactionMobileFilters({
               variant='mobile'
             />
             <BankTransactionCategorySourceFilter
+              filters={filters}
+              setFilters={setFilters}
+              variant='mobile'
+            />
+            <BankTransactionFinancialEventFilter
               filters={filters}
               setFilters={setFilters}
               variant='mobile'

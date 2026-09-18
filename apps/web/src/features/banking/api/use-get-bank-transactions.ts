@@ -1,6 +1,7 @@
 import {keepPreviousData, useQuery} from '@tanstack/react-query';
+import {useNavigate} from '@tanstack/react-router';
 import {format} from 'date-fns';
-import {useEffect, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 
 import {PaginationParams} from '@/types/pagination';
 import {api} from '@/utils/api';
@@ -14,36 +15,60 @@ import {
 } from '../types/bank-transaction';
 import {bankQueryKeys} from './query-keys';
 
+const appendArrayFilter = (
+  params: URLSearchParams,
+  key: string,
+  values: readonly string[] | undefined,
+) => {
+  values?.forEach((value) => params.append(key, value));
+};
+
 export const useGetBankTransactions = (searchParams: BankTransactionSearchParams) => {
-  const [pagination, setPagination] = useState<PaginationParams>({
+  const navigate = useNavigate({from: '/bank-transactions/'});
+  const pagination: PaginationParams = {
     pageIndex: searchParams.pageIndex,
     pageSize: searchParams.pageSize,
-  });
-  const [filters, setFilters] = useState<BankTransactionFilterParams>({
-    bookingDate: searchParams.bookingDate,
-    bankAccountIds: searchParams.bankAccountIds,
-    categories: searchParams.categories,
-    categorySources: searchParams.categorySources,
-    search: searchParams.search,
-  });
-  const [sort, setSort] = useState<BankTransactionSortParams>(
-    searchParams.sort ?? DEFAULT_BANK_TRANSACTION_SORT,
-  );
-
-  useEffect(() => {
-    setPagination({
-      pageIndex: searchParams.pageIndex,
-      pageSize: searchParams.pageSize,
-    });
-    setFilters({
+  };
+  const routeFilters = useMemo<BankTransactionFilterParams>(
+    () => ({
       bookingDate: searchParams.bookingDate,
       bankAccountIds: searchParams.bankAccountIds,
       categories: searchParams.categories,
       categorySources: searchParams.categorySources,
+      financialEventTypes: searchParams.financialEventTypes,
       search: searchParams.search,
-    });
-    setSort(searchParams.sort ?? DEFAULT_BANK_TRANSACTION_SORT);
-  }, [searchParams]);
+    }),
+    [
+      searchParams.bankAccountIds,
+      searchParams.bookingDate,
+      searchParams.categories,
+      searchParams.categorySources,
+      searchParams.financialEventTypes,
+      searchParams.search,
+    ],
+  );
+  const [localFilters, setFilters] = useState<BankTransactionFilterParams>(routeFilters);
+  const routeFilterKey = JSON.stringify(routeFilters);
+  const localFilterKey = JSON.stringify(localFilters);
+  const filters = localFilterKey === routeFilterKey ? localFilters : routeFilters;
+
+  useEffect(() => {
+    if (localFilterKey !== routeFilterKey) {
+      setFilters(routeFilters);
+    }
+  }, [localFilterKey, routeFilterKey, routeFilters]);
+
+  const routeSort = searchParams.sort ?? DEFAULT_BANK_TRANSACTION_SORT;
+  const [localSort, setSort] = useState<BankTransactionSortParams>(routeSort);
+  const routeSortKey = JSON.stringify(routeSort);
+  const localSortKey = JSON.stringify(localSort);
+  const sort = localSortKey === routeSortKey ? localSort : routeSort;
+
+  useEffect(() => {
+    if (localSortKey !== routeSortKey) {
+      setSort(routeSort);
+    }
+  }, [localSortKey, routeSort, routeSortKey]);
 
   const {data, isPending, isPlaceholderData, isError, refetch} = useQuery<BankTransactionsResponse>(
     {
@@ -63,17 +88,10 @@ export const useGetBankTransactions = (searchParams: BankTransactionSearchParams
         if (filters.bookingDate?.to) {
           params.append('filter[bookingDate][to]', format(filters.bookingDate.to, 'yyyy-MM-dd'));
         }
-        if (filters.bankAccountIds && filters.bankAccountIds.length > 0) {
-          filters.bankAccountIds.forEach((id) => params.append('filter[bankAccountIds][]', id));
-        }
-        if (filters.categories && filters.categories.length > 0) {
-          filters.categories.forEach((category) => params.append('filter[categories][]', category));
-        }
-        if (filters.categorySources && filters.categorySources.length > 0) {
-          filters.categorySources.forEach((source) =>
-            params.append('filter[categorySources][]', source),
-          );
-        }
+        appendArrayFilter(params, 'filter[bankAccountIds][]', filters.bankAccountIds);
+        appendArrayFilter(params, 'filter[categories][]', filters.categories);
+        appendArrayFilter(params, 'filter[categorySources][]', filters.categorySources);
+        appendArrayFilter(params, 'filter[financialEventTypes][]', filters.financialEventTypes);
         if (filters.search?.trim()) {
           params.append('filter[search]', filters.search.trim());
         }
@@ -88,6 +106,24 @@ export const useGetBankTransactions = (searchParams: BankTransactionSearchParams
     },
   );
 
+  const totalPages = data ? Math.ceil(data.total / pagination.pageSize) : null;
+  const canonicalPageIndex = totalPages === null ? null : Math.max(totalPages - 1, 0);
+
+  useEffect(() => {
+    if (
+      !isPlaceholderData &&
+      canonicalPageIndex !== null &&
+      totalPages !== null &&
+      pagination.pageIndex >= totalPages &&
+      pagination.pageIndex !== canonicalPageIndex
+    ) {
+      void navigate({
+        replace: true,
+        search: (prev) => ({...prev, pageIndex: canonicalPageIndex}),
+      });
+    }
+  }, [canonicalPageIndex, isPlaceholderData, navigate, pagination.pageIndex, totalPages]);
+
   return {
     data,
     isPending,
@@ -95,7 +131,6 @@ export const useGetBankTransactions = (searchParams: BankTransactionSearchParams
     isError,
     refetch,
     pagination,
-    setPagination,
     filters,
     setFilters,
     sort,

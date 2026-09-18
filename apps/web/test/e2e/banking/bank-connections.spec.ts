@@ -67,6 +67,36 @@ test.describe('bank connections', () => {
       await route.fulfill({response, json: [seededConnection]});
     });
 
+    await page.route('**/bank-connections/*/transactions**', async (route) => {
+      const response = await route.fetch();
+      const payload = (await response.json()) as {
+        transactions: Array<Record<string, unknown>>;
+        total: number;
+      };
+      const [recentTransaction, ...remainingTransactions] = payload.transactions;
+      if (!recentTransaction) throw new Error('Expected a seeded recent bank transaction');
+
+      await route.fulfill({
+        response,
+        json: {
+          ...payload,
+          transactions: [
+            {
+              ...recentTransaction,
+              category: null,
+              categoryStatus: 'NOT_APPLICABLE',
+              categorySource: null,
+              financialEventType: 'CURRENCY_EXCHANGE',
+              financialEventSource: 'RULE',
+              financialEventRuleVersion: 'revolut-currency-exchange-v1',
+              cashFlowTreatment: 'INTERNAL',
+            },
+            ...remainingTransactions,
+          ],
+        },
+      });
+    });
+
     await page.goto('/bank-connections?result=connected');
 
     await expect(page.getByRole('heading', {name: 'Bank connections'})).toBeVisible();
@@ -109,6 +139,8 @@ test.describe('bank connections', () => {
     await expect(connectionCard.getByText('Daily spending', {exact: true})).toBeVisible();
     await expect(connectionCard.getByText('available · primary')).toBeVisible();
     await expect(connectionCard.getByText('Provider purchase')).toBeVisible();
+    await expect(connectionCard).toContainText('Currency exchange');
+    await expect(connectionCard).toContainText('Internal movement');
     const transactionTrigger = connectionCard.getByRole('button', {
       name: 'View transaction details for Provider purchase',
     });
