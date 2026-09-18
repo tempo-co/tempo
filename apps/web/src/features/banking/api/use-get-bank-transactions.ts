@@ -1,6 +1,6 @@
 import {keepPreviousData, useQuery} from '@tanstack/react-query';
 import {format} from 'date-fns';
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 
 import {PaginationParams} from '@/types/pagination';
 import {api} from '@/utils/api';
@@ -29,6 +29,21 @@ export const useGetBankTransactions = (searchParams: BankTransactionSearchParams
   const [sort, setSort] = useState<BankTransactionSortParams>(
     searchParams.sort ?? DEFAULT_BANK_TRANSACTION_SORT,
   );
+
+  useEffect(() => {
+    setPagination({
+      pageIndex: searchParams.pageIndex,
+      pageSize: searchParams.pageSize,
+    });
+    setFilters({
+      bookingDate: searchParams.bookingDate,
+      bankAccountIds: searchParams.bankAccountIds,
+      categories: searchParams.categories,
+      categorySources: searchParams.categorySources,
+      search: searchParams.search,
+    });
+    setSort(searchParams.sort ?? DEFAULT_BANK_TRANSACTION_SORT);
+  }, [searchParams]);
 
   const {data, isPending, isPlaceholderData, isError, refetch} = useQuery<BankTransactionsResponse>(
     {

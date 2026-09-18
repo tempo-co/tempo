@@ -91,7 +91,7 @@ test.describe('bank transactions', () => {
     const categorySelect = inspector.getByRole('combobox', {name: 'Transaction category'});
     await expect(categorySelect).toBeVisible();
     await categorySelect.click();
-    await expect(page.getByRole('option')).toHaveCount(19);
+    await expect(page.getByRole('option')).toHaveCount(20);
     await expect(page.getByRole('option')).toHaveText([
       'Housing and utilities',
       'Food and drink',
@@ -111,9 +111,10 @@ test.describe('bank transactions', () => {
       'Refund',
       'Transfer in',
       'Transfer out',
+      'Needs review',
       'Other',
     ]);
-    await expect(page.getByRole('option').locator('svg')).toHaveCount(19);
+    await expect(page.getByRole('option').locator('svg')).toHaveCount(20);
     await expect(
       page.getByRole('option', {name: 'Food and drink', exact: true}).locator('svg').locator('..'),
     ).toHaveClass(/text-category-food-and-drink/);
@@ -519,12 +520,23 @@ test.describe('bank transactions', () => {
         transactions: Array<Record<string, unknown>>;
         total: number;
       };
-      const categorizedTransactions = payload.transactions.map((transaction, index) => ({
-        ...transaction,
-        category: index === 0 ? 'FOOD_AND_DRINK' : index === 1 ? 'SHOPPING' : null,
-        categoryStatus: index < 2 ? 'COMPLETED' : 'PENDING',
-        categorySource: index === 0 ? 'MANUAL' : index === 1 ? 'AI' : null,
-      }));
+      const categorizedTransactions = [
+        ...payload.transactions.map((transaction, index) => ({
+          ...transaction,
+          category: index === 0 ? 'FOOD_AND_DRINK' : index === 1 ? 'SHOPPING' : 'NEEDS_REVIEW',
+          categoryStatus: 'COMPLETED',
+          categorySource: index === 0 ? 'MANUAL' : 'AI',
+        })),
+        {
+          ...payload.transactions[payload.transactions.length - 1],
+          id: '00000000-0000-4000-8000-000000000099',
+          description: 'Uncategorized purchase',
+          displayDescription: 'Uncategorized purchase',
+          category: null,
+          categoryStatus: 'PENDING',
+          categorySource: null,
+        },
+      ];
       const transactions =
         categoryValues.length > 0
           ? categorizedTransactions.filter((transaction) =>
@@ -554,7 +566,7 @@ test.describe('bank transactions', () => {
     const categoryFilter = page.getByRole('button', {name: 'Categories', exact: true});
     await expect(categoryFilter).toBeVisible();
     await categoryFilter.click();
-    await expect(page.getByRole('option')).toHaveCount(20);
+    await expect(page.getByRole('option')).toHaveCount(21);
     await page.getByRole('option', {name: 'Food and drink', exact: true}).click();
 
     const singleCategoryParam = new URL(page.url()).searchParams.get('categories');
@@ -575,17 +587,32 @@ test.describe('bank transactions', () => {
       page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Salary'}),
     ).toBeVisible();
 
+    await page.getByRole('option', {name: 'Needs review', exact: true}).click();
+    const categoryWithNeedsReviewParam = new URL(page.url()).searchParams.get('categories');
+    expect(categoryWithNeedsReviewParam).not.toBeNull();
+    expect(JSON.parse(categoryWithNeedsReviewParam!)).toEqual([
+      'FOOD_AND_DRINK',
+      'SHOPPING',
+      'NEEDS_REVIEW',
+    ]);
+    const reviewRow = page
+      .getByTestId(/^bank-transaction-row-/)
+      .filter({hasText: 'Provider purchase'});
+    await expect(reviewRow).toContainText('Needs review');
+
     await page.getByRole('option', {name: 'Not categorized', exact: true}).click();
     const categoryWithUncategorizedParam = new URL(page.url()).searchParams.get('categories');
     expect(categoryWithUncategorizedParam).not.toBeNull();
     expect(JSON.parse(categoryWithUncategorizedParam!)).toEqual([
       'FOOD_AND_DRINK',
       'SHOPPING',
+      'NEEDS_REVIEW',
       'UNCATEGORIZED',
     ]);
     await expect(
       page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Salary'}),
     ).toBeVisible();
+    await expect(page.getByText('Uncategorized purchase', {exact: true})).toBeVisible();
 
     const categorySourceFilter = page.getByRole('button', {
       name: 'Category source',
@@ -606,6 +633,7 @@ test.describe('bank transactions', () => {
     expect(clearedUrl.searchParams.has('categories')).toBe(false);
     expect(clearedUrl.searchParams.has('categorySources')).toBe(false);
     await expect(page.getByText('Salary', {exact: true})).toBeVisible();
+    await page.unrouteAll({behavior: 'ignoreErrors'});
   });
 
   test('filters from the responsive mobile drawer and clears all values', async ({page}) => {
@@ -624,6 +652,11 @@ test.describe('bank transactions', () => {
     await categoriesSection.getByRole('option', {name: 'Not categorized', exact: true}).click();
     expect(JSON.parse(new URL(page.url()).searchParams.get('categories')!)).toEqual([
       'UNCATEGORIZED',
+    ]);
+    await categoriesSection.getByRole('option', {name: 'Needs review', exact: true}).click();
+    expect(JSON.parse(new URL(page.url()).searchParams.get('categories')!)).toEqual([
+      'UNCATEGORIZED',
+      'NEEDS_REVIEW',
     ]);
     await categorySourceSection.getByRole('option', {name: 'Manual', exact: true}).click();
     expect(JSON.parse(new URL(page.url()).searchParams.get('categorySources')!)).toEqual([

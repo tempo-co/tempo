@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   Banknote,
   BusFront,
+  CircleAlert,
   CircleHelp,
   Clapperboard,
   GraduationCap,
@@ -134,6 +135,11 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
     'TRANSFER_OUT',
     ArrowUpRight,
     'border-category-transfer-out/30 bg-category-transfer-out/10 text-category-transfer-out',
+  ),
+  NEEDS_REVIEW: createCategoryMeta(
+    'NEEDS_REVIEW',
+    CircleAlert,
+    'border-muted-foreground/30 bg-muted text-muted-foreground',
   ),
   OTHER: createCategoryMeta(
     'OTHER',

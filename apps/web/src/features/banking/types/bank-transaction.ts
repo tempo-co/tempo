@@ -39,6 +39,7 @@ export const BANK_TRANSACTION_CATEGORIES = [
   'REFUND',
   'TRANSFER_IN',
   'TRANSFER_OUT',
+  'NEEDS_REVIEW',
   'OTHER',
 ] as const;
 
@@ -71,6 +72,7 @@ export const BANK_TRANSACTION_CATEGORY_LABELS: Record<BankTransactionCategory, s
   REFUND: 'Refund',
   TRANSFER_IN: 'Transfer in',
   TRANSFER_OUT: 'Transfer out',
+  NEEDS_REVIEW: 'Needs review',
   OTHER: 'Other',
 };
 
