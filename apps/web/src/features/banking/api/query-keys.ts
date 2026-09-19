@@ -7,8 +7,8 @@ import type {
 
 export const bankQueryKeys = {
   connections: ['bank-connections'] as const,
-  connectionTransactions: (connectionId: string) =>
-    ['bank-connection-transactions', connectionId] as const,
+  connectionTransactions: (connectionId: string, syncVersion: string | null) =>
+    ['bank-connection-transactions', connectionId, syncVersion] as const,
   transaction: (id: string) => ['bank-transaction', id] as const,
   transactions: (
     pagination: PaginationParams,

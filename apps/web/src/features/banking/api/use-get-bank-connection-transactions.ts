@@ -5,9 +5,13 @@ import {api} from '@/utils/api';
 
 import {bankQueryKeys} from './query-keys';
 
-export const useGetBankConnectionTransactions = (connectionId: string, enabled: boolean) => {
+export const useGetBankConnectionTransactions = (
+  connectionId: string,
+  enabled: boolean,
+  syncVersion: string | null = null,
+) => {
   const {data, isPending, isError, refetch} = useQuery<BankTransactionsResponse>({
-    queryKey: bankQueryKeys.connectionTransactions(connectionId),
+    queryKey: bankQueryKeys.connectionTransactions(connectionId, syncVersion),
     queryFn: async () => {
       return await api.get<BankTransactionsResponse>(
         `/bank-connections/${connectionId}/transactions?limit=5`,

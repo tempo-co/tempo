@@ -53,6 +53,10 @@ export type BankConnection = {
   status: string;
   consentValidUntil: string | null;
   lastSyncedAt: string | null;
+  lastSyncError: string | null;
+  nextSyncAt: string | null;
+  syncStatus:
+    'IDLE' | 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'PARTIAL' | 'FAILED' | 'RATE_LIMITED' | 'EXPIRED';
   bankAccounts: BankAccount[];
 };
 
@@ -75,20 +79,4 @@ export type BankTransaction = BankTransactionCategorizationFields &
 export type BankTransactionsResponse = {
   transactions: BankTransaction[];
   total: number;
-};
-
-export type BankSyncRun = {
-  id: string;
-  status: string;
-  startedAt: string;
-  finishedAt: string | null;
-  requestedFrom: string | null;
-  requestedTo: string | null;
-  accountsFetched: number;
-  balancesFetched: number;
-  transactionsFetched: number;
-  transactionsAdded?: number;
-  errorMessage: string | null;
-  rateLimitSource: 'enable-banking' | null;
-  retryAfterSeconds: number | null;
 };

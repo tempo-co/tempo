@@ -21,14 +21,17 @@ import {
 import {Skeleton} from '@/components/ui/skeleton';
 import {HttpError} from '@/utils/api';
 import {cn} from '@/utils/cn';
-import {formatRetryAfter} from '@/utils/retry-after';
 
 import {useDeleteBankConnection} from '../api/use-delete-bank-connection';
 import {useGetBankConnectionTransactions} from '../api/use-get-bank-connection-transactions';
 import {useGetSupportedBanks} from '../api/use-get-supported-banks';
 import {useStartBankConnection} from '../api/use-start-bank-connection';
-import {useSyncBankConnection} from '../api/use-sync-bank-connection';
 import {BankConnection, BankConnectionAspsp, BankTransaction} from '../types/bank-connection';
+import {
+  getAutomaticSyncDetails,
+  isReauthorizationRequired,
+  isStaleAutomaticSync,
+} from '../utils/bank-sync-status';
 import {
   formatBankTransactionCashFlowTreatment,
   formatBankTransactionCompactDate,
@@ -134,6 +137,9 @@ export function BankConnectionList({
     }
   };
 
+  const reauthorizeBank = (connection: BankConnection) =>
+    connectBank({name: connection.aspspName, country: connection.aspspCountry});
+
   return (
     <ConnectionPageFrame
       connectBank={connectBank}
@@ -182,6 +188,8 @@ export function BankConnectionList({
             key={connection.id}
             connection={connection}
             logoUrl={bankLogos.get(aspspKey(connection.aspspName, connection.aspspCountry))}
+            isStarting={isStarting}
+            onReauthorize={reauthorizeBank}
             onTransactionSelect={onTransactionSelect}
           />
         ))
@@ -193,10 +201,14 @@ export function BankConnectionList({
 function BankConnectionCard({
   connection,
   logoUrl,
+  isStarting,
+  onReauthorize,
   onTransactionSelect,
 }: {
   connection: BankConnection;
   logoUrl?: string;
+  isStarting: boolean;
+  onReauthorize: (connection: BankConnection) => void | Promise<void>;
   onTransactionSelect: BankConnectionListProps['onTransactionSelect'];
 }) {
   const isAuthorized = connection.status === 'AUTHORIZED';
@@ -205,7 +217,6 @@ function BankConnectionCard({
   const connectionHeadingId = `bank-connection-${connection.id}-heading`;
   const accountsHeadingId = `bank-connection-${connection.id}-accounts`;
   const transactionsHeadingId = `bank-connection-${connection.id}-transactions`;
-  const {syncBankConnection, isPending: isSyncing} = useSyncBankConnection();
   const {deleteBankConnection, isPending: isRemoving} = useDeleteBankConnection();
   const {
     transactions,
@@ -213,47 +224,11 @@ function BankConnectionCard({
     isPending: areTransactionsPending,
     isError: areTransactionsError,
     refetch: refetchTransactions,
-  } = useGetBankConnectionTransactions(connection.id, isAuthorized && !!connection.lastSyncedAt);
-
-  const syncBank = async () => {
-    try {
-      const run = await syncBankConnection(connection.id);
-      if (run.rateLimitSource === 'enable-banking') {
-        toast.warning('Bank connection sync rate-limited', {
-          description: `The bank connection is temporarily limiting background access. ${formatRetryAfter(run.retryAfterSeconds)}`,
-          id: `bank-sync-rate-limit-${connection.id}`,
-        });
-      } else if (run.status === 'SUCCEEDED') {
-        const description =
-          run.transactionsAdded === undefined
-            ? 'Synchronization completed.'
-            : run.transactionsAdded === 0
-              ? 'No new transactions found.'
-              : `${run.transactionsAdded} new ${run.transactionsAdded === 1 ? 'transaction' : 'transactions'} added.`;
-
-        toast.success('Sync complete', {
-          description,
-          id: `bank-sync-success-${connection.id}`,
-        });
-      } else if (run.status === 'PARTIAL') {
-        toast.warning('Bank connection partially synchronized', {
-          description: 'Some bank connection data could not be synchronized.',
-          id: `bank-sync-partial-${connection.id}`,
-        });
-      } else {
-        toast.error('Bank connection synchronization failed', {
-          description: 'Please try again later.',
-          id: `bank-sync-failed-${connection.id}`,
-        });
-      }
-    } catch (error) {
-      if (error instanceof HttpError && error.status === 429) return;
-      toast.error('Unable to synchronize bank connection', {
-        description: 'Please try again in a moment.',
-        id: `bank-sync-request-failed-${connection.id}`,
-      });
-    }
-  };
+  } = useGetBankConnectionTransactions(
+    connection.id,
+    isAuthorized && !!connection.lastSyncedAt,
+    connection.lastSyncedAt,
+  );
 
   const removeBank = async (): Promise<boolean> => {
     try {
@@ -297,17 +272,15 @@ function BankConnectionCard({
         <div className='flex w-full flex-wrap items-center justify-end gap-x-2 gap-y-2 sm:w-auto'>
           <ConnectionStatus status={connection.status} />
           {connection.lastSyncedAt && <FreshnessLabel value={connection.lastSyncedAt} />}
-          {isAuthorized && (
+          {isReauthorizationRequired(connection) && (
             <Button
-              variant='secondary'
+              variant='outline'
               size='sm'
-              onClick={syncBank}
-              disabled={isSyncing}
-              data-testid={`sync-bank-${connection.id}`}
+              onClick={() => void onReauthorize(connection)}
+              disabled={isStarting}
               className='max-sm:min-h-11 max-sm:gap-1 max-sm:px-2'
             >
-              <RefreshCw className={isSyncing ? 'animate-slow-spin' : undefined} />
-              {isSyncing ? 'Syncing...' : 'Sync now'}
+              {isStarting ? 'Starting...' : 'Re-authorize'}
             </Button>
           )}
           {isRemovable &&
@@ -333,6 +306,7 @@ function BankConnectionCard({
         </div>
       </CardHeader>
       <CardContent className='space-y-6 px-5 py-5 sm:p-6'>
+        <AutomaticSyncStatus connection={connection} />
         <div className='grid gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]'>
           <section aria-labelledby={accountsHeadingId} className='min-w-0'>
             <SectionHeading
@@ -529,6 +503,50 @@ function DestructiveBankConnectionDialog({
         </ResponsiveDialogBody>
       </ResponsiveDialogContent>
     </ResponsiveDialog>
+  );
+}
+
+function AutomaticSyncStatus({connection}: {connection: BankConnection}) {
+  if (connection.status !== 'AUTHORIZED' && connection.status !== 'EXPIRED') {
+    return (
+      <div
+        data-testid='bank-connection-sync-status'
+        className='rounded-md border px-3 py-3 text-sm'
+      >
+        <p className='font-medium'>Automatic sync is not available</p>
+        <p className='mt-1 text-muted-foreground'>
+          Complete bank authorization before background refresh can run.
+        </p>
+      </div>
+    );
+  }
+
+  const status = isReauthorizationRequired(connection) ? 'EXPIRED' : connection.syncStatus;
+  const isStale = isStaleAutomaticSync(connection, status);
+  const details = getAutomaticSyncDetails(
+    status,
+    connection.lastSyncError,
+    connection.lastSyncedAt,
+    isStale,
+  );
+
+  return (
+    <div
+      data-testid='bank-connection-sync-status'
+      role={details.isProblem ? 'alert' : undefined}
+      className={cn(
+        'rounded-md border px-3 py-3 text-sm',
+        details.isProblem ? 'border-warning/40 bg-warning/5' : 'bg-muted/20',
+      )}
+    >
+      <p className='font-medium'>{details.title}</p>
+      <p className='mt-1 text-muted-foreground'>{details.description}</p>
+      {connection.nextSyncAt && status !== 'EXPIRED' && status !== 'RUNNING' && !isStale && (
+        <p className='mt-1 text-xs text-muted-foreground'>
+          Next attempt {formatDate(connection.nextSyncAt)}
+        </p>
+      )}
+    </div>
   );
 }
 

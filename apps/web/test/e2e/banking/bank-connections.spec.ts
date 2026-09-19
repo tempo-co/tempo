@@ -14,6 +14,9 @@ const MOCK_CONNECTION: BankConnection = {
   status: 'AUTHORIZED',
   consentValidUntil: '2030-01-01T00:00:00.000Z',
   lastSyncedAt: null,
+  lastSyncError: null,
+  nextSyncAt: '2030-01-01T00:00:00.000Z',
+  syncStatus: 'SUCCEEDED',
   bankAccounts: [
     {
       id: '00000000-0000-4000-8000-000000000097',
@@ -35,6 +38,73 @@ const MOCK_CONNECTION: BankConnection = {
 
 test.describe('bank connections', () => {
   test.use({storageState: VERIFIED_USER_AUTH_FILE});
+
+  test('polls while an automatic synchronization is queued', async ({page}) => {
+    let requestCount = 0;
+    await page.route('**/bank-connections', async (route) => {
+      if (route.request().resourceType() === 'document') {
+        await route.continue();
+        return;
+      }
+
+      requestCount += 1;
+      const connection =
+        requestCount === 1
+          ? {
+              ...MOCK_CONNECTION,
+              syncStatus: 'QUEUED' as const,
+              nextSyncAt: new Date(Date.now() + 60_000).toISOString(),
+            }
+          : MOCK_CONNECTION;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([connection]),
+      });
+    });
+
+    await page.goto('/bank-connections');
+    await expect(page.getByTestId('bank-connection-sync-status')).toContainText('queued');
+    await expect.poll(() => requestCount, {timeout: 12_000}).toBeGreaterThan(1);
+    await expect(page.getByTestId('bank-connection-sync-status')).toContainText('Automatic sync');
+  });
+
+  test('refreshes transactions after a later automatic synchronization', async ({page}) => {
+    let connectionRequestCount = 0;
+    let transactionRequestCount = 0;
+    await page.route('**/bank-connections', async (route) => {
+      if (route.request().resourceType() === 'document') {
+        await route.continue();
+        return;
+      }
+
+      connectionRequestCount += 1;
+      const connection = {
+        ...MOCK_CONNECTION,
+        syncStatus: connectionRequestCount === 1 ? ('QUEUED' as const) : ('SUCCEEDED' as const),
+        lastSyncedAt:
+          connectionRequestCount === 1 ? '2026-09-01T00:00:00.000Z' : '2026-09-02T00:00:00.000Z',
+      };
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([connection]),
+      });
+    });
+    await page.route('**/bank-connections/*/transactions*', async (route) => {
+      transactionRequestCount += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({transactions: [], total: transactionRequestCount}),
+      });
+    });
+
+    await page.goto('/bank-connections');
+    await expect(page.getByTestId('bank-connection-sync-status')).toContainText('queued');
+    await expect.poll(() => connectionRequestCount, {timeout: 12_000}).toBeGreaterThan(1);
+    await expect.poll(() => transactionRequestCount, {timeout: 12_000}).toBeGreaterThan(1);
+  });
 
   test('shows seeded connection data, callback feedback, and provider logo', async ({page}) => {
     await page.route('**/bank-connections/aspsps', async (route) => {
@@ -123,19 +193,11 @@ test.describe('bank connections', () => {
 
     const status = connectionCard.getByTestId('bank-connection-status');
     const freshness = connectionCard.getByTestId('bank-connection-freshness');
-    const syncButton = connectionCard.getByRole('button', {name: 'Sync now'});
-    const [statusBox, freshnessBox, syncButtonBox] = await Promise.all([
-      status.boundingBox(),
-      freshness.boundingBox(),
-      syncButton.boundingBox(),
-    ]);
-    expect(statusBox).not.toBeNull();
-    expect(freshnessBox).not.toBeNull();
-    expect(syncButtonBox).not.toBeNull();
-    const verticalCenters = [statusBox!, freshnessBox!, syncButtonBox!].map(
-      (box) => box.y + box.height / 2,
-    );
-    expect(Math.max(...verticalCenters) - Math.min(...verticalCenters)).toBeLessThan(1);
+    const syncStatus = connectionCard.getByTestId('bank-connection-sync-status');
+    await expect(status).toBeVisible();
+    await expect(freshness).toBeVisible();
+    await expect(syncStatus).toContainText('Automatic sync');
+    await expect(connectionCard.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
     await expect(connectionCard.getByText('Daily spending', {exact: true})).toBeVisible();
     await expect(connectionCard.getByText('available · primary')).toBeVisible();
     await expect(connectionCard.getByText('Provider purchase')).toBeVisible();
@@ -160,9 +222,62 @@ test.describe('bank connections', () => {
     await expect(page).toHaveURL(new RegExp('/bank-connections$'));
   });
 
-  test('reports when synchronization finds no new transactions', async ({page}) => {
-    await page.route('**/bank-connections/*/sync', async (route) => {
-      if (route.request().method() !== 'POST') {
+  test('shows throttled automatic sync state without a manual endpoint', async ({page}) => {
+    await page.route('**/bank-connections', async (route) => {
+      if (route.request().resourceType() === 'document') {
+        await route.continue();
+        return;
+      }
+
+      const response = await route.fetch();
+      const connections = (await response.json()) as BankConnection[];
+      await route.fulfill({
+        response,
+        json: connections.map((connection) => ({
+          ...connection,
+          syncStatus: 'RATE_LIMITED',
+          lastSyncError: 'Bank data access is temporarily rate-limited.',
+          nextSyncAt: '2030-01-01T01:00:00.000Z',
+        })),
+      });
+    });
+
+    await page.goto('/bank-connections');
+
+    const syncStatus = page.getByTestId('bank-connection-sync-status').first();
+    await expect(syncStatus).toContainText('Automatic sync is rate-limited');
+    await expect(syncStatus).toContainText('temporarily');
+    await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
+  });
+
+  test('shows overdue persisted data while automatic sync is catching up', async ({page}) => {
+    await page.route('**/bank-connections', async (route) => {
+      if (route.request().resourceType() === 'document') {
+        await route.continue();
+        return;
+      }
+
+      const response = await route.fetch();
+      const connections = (await response.json()) as BankConnection[];
+      await route.fulfill({
+        response,
+        json: connections.map((connection) => ({
+          ...connection,
+          lastSyncedAt: '2020-01-01T00:00:00.000Z',
+          nextSyncAt: '2020-01-02T00:00:00.000Z',
+          syncStatus: 'SUCCEEDED',
+        })),
+      });
+    });
+
+    await page.goto('/bank-connections');
+    await expect(page.getByTestId('bank-connection-sync-status')).toContainText('overdue');
+    await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
+  });
+
+  test('requires re-authorization when consent is missing', async ({page}) => {
+    await page.route('**/bank-connections', async (route) => {
+      if (route.request().resourceType() === 'document') {
         await route.continue();
         return;
       }
@@ -170,31 +285,74 @@ test.describe('bank connections', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          id: '00000000-0000-4000-8000-000000000099',
-          status: 'SUCCEEDED',
-          startedAt: '2026-09-09T00:00:00.000Z',
-          finishedAt: '2026-09-09T00:00:01.000Z',
-          requestedFrom: '2026-09-02',
-          requestedTo: '2026-09-09',
-          accountsFetched: 1,
-          balancesFetched: 1,
-          transactionsFetched: 17,
-          transactionsAdded: 0,
-          errorMessage: null,
-          rateLimitSource: null,
-          retryAfterSeconds: null,
-        }),
+        body: JSON.stringify([{...MOCK_CONNECTION, consentValidUntil: null}]),
       });
     });
 
     await page.goto('/bank-connections');
-    await page.getByRole('button', {name: 'Sync now'}).click();
-
-    await expect(page.getByText('Sync complete', {exact: true})).toBeVisible();
-    await expect(page.getByText('No new transactions found.', {exact: true})).toBeVisible();
+    await expect(page.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
+    await expect(page.getByTestId('bank-connection-sync-status')).toContainText(
+      'Re-authorization required',
+    );
   });
 
+  test('requires re-authorization when persisted consent has expired', async ({page}) => {
+    await page.route('**/bank-connections', async (route) => {
+      if (route.request().resourceType() === 'document') {
+        await route.continue();
+        return;
+      }
+
+      const response = await route.fetch();
+      const connections = (await response.json()) as BankConnection[];
+      await route.fulfill({
+        response,
+        json: connections.map((connection) => ({
+          ...connection,
+          status: 'AUTHORIZED',
+          consentValidUntil: '2020-01-01T00:00:00.000Z',
+          syncStatus: 'SUCCEEDED',
+          nextSyncAt: '2030-01-01T00:00:00.000Z',
+        })),
+      });
+    });
+
+    await page.goto('/bank-connections');
+
+    const syncStatus = page.getByTestId('bank-connection-sync-status').first();
+    await expect(syncStatus).toContainText('Re-authorization required');
+    await expect(page.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
+  });
+
+  test('does not present background sync for an incomplete authorization', async ({page}) => {
+    await page.route('**/bank-connections', async (route) => {
+      if (route.request().resourceType() === 'document') {
+        await route.continue();
+        return;
+      }
+
+      const response = await route.fetch();
+      const connections = (await response.json()) as BankConnection[];
+      await route.fulfill({
+        response,
+        json: connections.map((connection) => ({
+          ...connection,
+          status: 'PENDING_AUTHORIZATION',
+          consentValidUntil: null,
+          lastSyncedAt: null,
+          nextSyncAt: null,
+          syncStatus: 'IDLE',
+        })),
+      });
+    });
+
+    await page.goto('/bank-connections');
+
+    await expect(page.getByTestId('bank-connection-sync-status')).toContainText('not available');
+    await expect(page.getByTestId('bank-connection-sync-status')).not.toContainText(
+      'first bank refresh',
+    );
+  });
   test('removes an incomplete bank connection', async ({page}) => {
     const pendingConnectionId = '00000000-0000-4000-8000-000000000098';
     let pendingConnectionVisible = true;
@@ -206,6 +364,9 @@ test.describe('bank connections', () => {
       status: 'PENDING_AUTHORIZATION',
       consentValidUntil: null,
       lastSyncedAt: null,
+      lastSyncError: null,
+      nextSyncAt: null,
+      syncStatus: 'IDLE',
       bankAccounts: [],
     };
 
@@ -458,41 +619,34 @@ test.describe('bank connections', () => {
     const heading = page.getByRole('heading', {name: 'Bank connections'});
     const headingGroup = page.getByTestId('bank-connections-heading');
     const connectButton = page.getByRole('button', {name: 'Connect a bank'}).first();
-    const syncButton = page.getByRole('button', {name: 'Sync now'});
+    const syncStatus = page.getByTestId('bank-connection-sync-status');
     const status = page.getByTestId('bank-connection-status');
     const freshness = page.getByTestId('bank-connection-freshness');
 
     await expect(heading).toBeVisible();
     await expect(connectButton).toBeVisible();
-    await expect(syncButton).toBeVisible();
+    await expect(syncStatus).toContainText('Automatic sync');
+    await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
     await expect(page.getByText('Daily spending', {exact: true})).toBeVisible();
 
-    const [headingBox, headingGroupBox, connectButtonBox, syncButtonBox, statusBox, freshnessBox] =
+    const [headingBox, headingGroupBox, connectButtonBox, statusBox, freshnessBox, syncStatusBox] =
       await Promise.all([
         heading.boundingBox(),
         headingGroup.boundingBox(),
         connectButton.boundingBox(),
-        syncButton.boundingBox(),
         status.boundingBox(),
         freshness.boundingBox(),
+        syncStatus.boundingBox(),
       ]);
     expect(headingBox).not.toBeNull();
     expect(headingGroupBox).not.toBeNull();
     expect(connectButtonBox).not.toBeNull();
-    expect(syncButtonBox).not.toBeNull();
     expect(statusBox).not.toBeNull();
     expect(freshnessBox).not.toBeNull();
+    expect(syncStatusBox).not.toBeNull();
     expect(headingBox!.height).toBe(32);
     expect(headingGroupBox!.height).toBeLessThan(120);
     expect(connectButtonBox!.x).toBe(16);
-    expect(syncButtonBox!.height).toBeGreaterThanOrEqual(44);
-    const statusCenter = statusBox!.y + statusBox!.height / 2;
-    const freshnessCenter = freshnessBox!.y + freshnessBox!.height / 2;
-    const syncCenter = syncButtonBox!.y + syncButtonBox!.height / 2;
-    expect(
-      Math.max(statusCenter, freshnessCenter, syncCenter) -
-        Math.min(statusCenter, freshnessCenter, syncCenter),
-    ).toBeLessThan(1);
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true);
@@ -511,24 +665,24 @@ test.describe('bank connections', () => {
     await page.goto('/bank-connections');
 
     const connectionCard = page.locator('[data-testid^="bank-connection-"]').first();
-    const syncButton = page.getByRole('button', {name: 'Sync now'});
+    const syncStatus = page.getByTestId('bank-connection-sync-status');
     const sidebarTrigger = page.locator('[data-sidebar="trigger"]');
 
     await expect(page.getByRole('heading', {name: 'Accounts'})).toBeVisible();
     await expect(page.getByRole('heading', {name: 'Transactions'})).toBeVisible();
-    await expect(syncButton).toBeVisible();
+    await expect(syncStatus).toContainText('Automatic sync');
+    await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
     await expect(sidebarTrigger).toBeVisible();
 
-    const [connectionCardBox, syncButtonBox, sidebarTriggerBox] = await Promise.all([
+    const [connectionCardBox, syncStatusBox, sidebarTriggerBox] = await Promise.all([
       connectionCard.boundingBox(),
-      syncButton.boundingBox(),
+      syncStatus.boundingBox(),
       sidebarTrigger.boundingBox(),
     ]);
     expect(connectionCardBox).not.toBeNull();
-    expect(syncButtonBox).not.toBeNull();
+    expect(syncStatusBox).not.toBeNull();
     expect(sidebarTriggerBox).not.toBeNull();
     expect(connectionCardBox!.x + connectionCardBox!.width).toBeLessThanOrEqual(320);
-    expect(syncButtonBox!.height).toBeGreaterThanOrEqual(44);
     expect(sidebarTriggerBox!.height).toBeGreaterThanOrEqual(44);
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))

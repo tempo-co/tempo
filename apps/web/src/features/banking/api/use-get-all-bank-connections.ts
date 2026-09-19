@@ -5,6 +5,8 @@ import {api} from '@/utils/api';
 
 import {bankQueryKeys} from './query-keys';
 
+const AUTOMATIC_SYNC_POLL_INTERVAL_MS = 5_000;
+
 export const useGetAllBankConnections = () => {
   const {
     data: bankConnections,
@@ -17,6 +19,12 @@ export const useGetAllBankConnections = () => {
       return await api.get<BankConnection[]>('/bank-connections');
     },
     retry: false,
+    refetchInterval: (query) =>
+      query.state.data?.some(
+        (connection) => connection.syncStatus === 'QUEUED' || connection.syncStatus === 'RUNNING',
+      )
+        ? AUTOMATIC_SYNC_POLL_INTERVAL_MS
+        : false,
   });
 
   return {bankConnections, isPending, isError, refetch};
