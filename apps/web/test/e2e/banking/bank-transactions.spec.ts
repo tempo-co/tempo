@@ -127,7 +127,7 @@ test.describe('bank transactions', () => {
         categorySource: null,
         financialEventType: 'CURRENCY_EXCHANGE',
         financialEventSource: 'RULE',
-        financialEventRuleVersion: 'revolut-currency-exchange-v1',
+        financialEventRuleVersion: 'provider-currency-exchange-v1',
         cashFlowTreatment: 'INTERNAL',
         exchangeRate: null,
         instructedAmount: null,

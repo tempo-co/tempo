@@ -6,6 +6,12 @@ import {PW_CHANGE_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from '../../constants
 const DETAIL_TRANSACTION_ID = '00000000-0000-4000-8000-000000000014';
 const MOCK_PROVIDER_ORIGIN = 'https://enablebanking.test';
 const TARGET_ASPSP = {name: 'Mock ASPSP', country: 'NL'};
+const MONOCHROME_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40"><text x="8" y="28" font-family="Arial" font-size="24" font-weight="700" fill="#000">MONO</text></svg>',
+)}`;
+const COLORED_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40"><rect width="80" height="40" fill="#ef4444"/><rect x="80" width="80" height="40" fill="#2563eb"/></svg>',
+)}`;
 const MOCK_CONNECTION: BankConnection = {
   id: '00000000-0000-4000-8000-000000000096',
   provider: 'enable-banking',
@@ -158,7 +164,7 @@ test.describe('bank connections', () => {
               categorySource: null,
               financialEventType: 'CURRENCY_EXCHANGE',
               financialEventSource: 'RULE',
-              financialEventRuleVersion: 'revolut-currency-exchange-v1',
+              financialEventRuleVersion: 'provider-currency-exchange-v1',
               cashFlowTreatment: 'INTERNAL',
             },
             ...remainingTransactions,
@@ -477,13 +483,9 @@ test.describe('bank connections', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([
-          {
-            name: 'ABN AMRO',
-            country: 'NL',
-            logoUrl: 'https://enablebanking.com/brands/NL/ABN-AMRO/',
-          },
-          {name: 'Nordea', country: 'FI', logoUrl: 'https://enablebanking.com/brands/FI/Nordea/'},
-          {name: 'Revolut', country: 'NL', logoUrl: 'https://enablebanking.com/brands/NL/Revolut/'},
+          {name: 'Colorful Bank', country: 'NL', logoUrl: COLORED_LOGO_URL},
+          {name: 'Monochrome Bank', country: 'NL', logoUrl: MONOCHROME_LOGO_URL},
+          {name: 'Other Bank', country: 'FI', logoUrl: COLORED_LOGO_URL},
         ]),
       });
     });
@@ -495,10 +497,10 @@ test.describe('bank connections', () => {
       await route.fulfill({
         status: 201,
         contentType: 'application/json',
-        body: JSON.stringify({authorizationUrl: 'https://auth.example.test/revolut'}),
+        body: JSON.stringify({authorizationUrl: 'https://auth.example.test/monochrome-bank'}),
       });
     });
-    await page.route('https://auth.example.test/revolut', async (route) => {
+    await page.route('https://auth.example.test/monochrome-bank', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'text/html',
@@ -532,21 +534,30 @@ test.describe('bank connections', () => {
 
     await expect(bankSelector).toBeEnabled();
     await bankSelector.click();
-    const revolutOption = page.getByRole('option', {name: /Revolut.*NL/});
-    await expect(revolutOption).toBeVisible();
-    const bankLogo = revolutOption.getByTestId('bank-logo');
-    await expect(bankLogo).toBeVisible();
-    await expect(bankLogo).toHaveClass(/border-border/);
-    await expect(bankLogo).toHaveClass(/bg-background/);
-    await expect(bankLogo).toHaveCSS('width', '48px');
-    await expect(bankLogo).toHaveCSS('height', '48px');
-    await expect(page.getByRole('option', {name: /Nordea.*FI/})).toHaveCount(0);
-    await revolutOption.click();
+    const monochromeOption = page.getByRole('option', {name: /Monochrome Bank.*NL/});
+    await expect(monochromeOption).toBeVisible();
+    const monochromeLogo = monochromeOption.getByTestId('bank-logo');
+    await expect(monochromeLogo).toBeVisible();
+    await expect(monochromeLogo).toHaveAttribute('data-logo-analysis', 'monochrome');
+    await expect(monochromeLogo).toHaveClass(/border-border/);
+    await expect(monochromeLogo).toHaveClass(/bg-background/);
+    await expect(monochromeLogo).toHaveCSS('width', '48px');
+    await expect(monochromeLogo).toHaveCSS('height', '48px');
+    await page.evaluate(() => document.documentElement.classList.remove('dark'));
+    await expect(monochromeLogo.locator('img')).toHaveCSS('filter', 'none');
+    await page.evaluate(() => document.documentElement.classList.add('dark'));
+    await expect(monochromeLogo.locator('img')).toHaveCSS('filter', 'brightness(0) invert(1)');
+
+    const coloredOption = page.getByRole('option', {name: /Colorful Bank.*NL/});
+    const coloredLogo = coloredOption.getByTestId('bank-logo');
+    await expect(coloredLogo).toHaveAttribute('data-logo-analysis', 'color');
+    await expect(coloredLogo.locator('img')).toHaveCSS('filter', 'none');
+    await monochromeOption.click();
 
     await expect
       .poll(() => authorizationRequest)
-      .toEqual({aspspName: 'Revolut', aspspCountry: 'NL'});
-    await expect(page).toHaveURL('https://auth.example.test/revolut');
+      .toEqual({aspspName: 'Monochrome Bank', aspspCountry: 'NL'});
+    await expect(page).toHaveURL('https://auth.example.test/monochrome-bank');
   });
 
   test('reopens a connection transaction inspector from its shareable URL', async ({page}) => {
