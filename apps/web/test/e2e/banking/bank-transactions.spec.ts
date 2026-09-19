@@ -1081,13 +1081,57 @@ test.describe('bank transactions', () => {
       0,
     );
 
+    let sort: string | null;
+    const readSortedTransactions = async (order: 'ASC' | 'DESC') => {
+      const matchesAmountSort = (rawUrl: string) => {
+        const url = new URL(rawUrl);
+        return (
+          url.pathname.endsWith('/bank-transactions') &&
+          url.searchParams.get('sort[by]') === 'amount' &&
+          url.searchParams.get('sort[order]') === order
+        );
+      };
+      const requestPromise = page.waitForRequest((request) => matchesAmountSort(request.url()));
+      const responsePromise = page.waitForResponse((response) => matchesAmountSort(response.url()));
+      await amountHeaderButton.click();
+      const [request, response] = await Promise.all([requestPromise, responsePromise]);
+      expect(new URL(request.url()).searchParams.get('sort[by]')).toBe('amount');
+      expect(new URL(request.url()).searchParams.get('sort[order]')).toBe(order);
+      expect(response.ok()).toBe(true);
+      const responseUrl = new URL(response.url());
+      expect(responseUrl.searchParams.get('sort[by]')).toBe('amount');
+      expect(responseUrl.searchParams.get('sort[order]')).toBe(order);
+      const payload = (await response.json()) as {
+        transactions: Array<{id: string; description: string; amount: string; currency: string}>;
+        total: number;
+      };
+      await expect(table.locator('tbody tr').first()).toHaveAttribute(
+        'data-testid',
+        `bank-transaction-row-${payload.transactions[0].id}`,
+      );
+      return payload;
+    };
+
+    const descendingPayload = await readSortedTransactions('DESC');
+    sort = new URL(page.url()).searchParams.get('sort');
+    expect(sort).toBe(JSON.stringify({by: 'amount', order: 'DESC'}));
+
+    const ascendingPayload = await readSortedTransactions('ASC');
+    sort = new URL(page.url()).searchParams.get('sort');
+    expect(sort).toBe(JSON.stringify({by: 'amount', order: 'ASC'}));
+
+    expect(descendingPayload.transactions[0].id).not.toBe(ascendingPayload.transactions[0].id);
+
+    await page.goto('/bank-transactions?pageIndex=0&pageSize=10');
+    await expect(table.locator('tbody tr').first()).toBeVisible();
+
     const bookingDateButton = table
       .getByRole('columnheader', {name: 'Booking date'})
       .getByRole('button', {
         name: 'Booking date',
       });
     await bookingDateButton.click();
-    let sort = new URL(page.url()).searchParams.get('sort');
+    sort = new URL(page.url()).searchParams.get('sort');
     expect(sort).toBe(JSON.stringify({by: 'bookingDate', order: 'ASC'}));
     await bookingDateButton.click();
     sort = new URL(page.url()).searchParams.get('sort');
@@ -1102,6 +1146,72 @@ test.describe('bank transactions', () => {
       expect(column.x).toBeCloseTo(firstPageColumns[index].x, 0);
       expect(column.width).toBeCloseTo(firstPageColumns[index].width, 0);
     });
+  });
+
+  test('preserves original values for mixed-currency amount results', async ({page}) => {
+    await page.route('**/bank-transactions?*', async (route) => {
+      if (!['fetch', 'xhr'].includes(route.request().resourceType())) {
+        await route.continue();
+        return;
+      }
+
+      const url = new URL(route.request().url());
+      const sortBy = url.searchParams.get('sort[by]');
+      const sortOrder = url.searchParams.get('sort[order]') as 'ASC' | 'DESC' | null;
+      if (sortBy !== 'amount' || !sortOrder) {
+        await route.continue();
+        return;
+      }
+
+      const response = await route.fetch();
+      const payload = (await response.json()) as {
+        transactions: Array<Record<string, unknown>>;
+        total: number;
+      };
+      const template = payload.transactions[0];
+      const ronTransaction = {
+        ...template,
+        id: '00000000-0000-4000-8000-000000000201',
+        description: 'Synthetic RON purchase',
+        displayDescription: 'Synthetic RON purchase',
+        amount: '100.00000000',
+        currency: 'RON',
+      };
+      const eurTransaction = {
+        ...template,
+        id: '00000000-0000-4000-8000-000000000202',
+        description: 'Synthetic EUR purchase',
+        displayDescription: 'Synthetic EUR purchase',
+        amount: '30.00000000',
+        currency: 'EUR',
+      };
+      await route.fulfill({
+        response,
+        json: {
+          ...payload,
+          transactions:
+            sortOrder === 'DESC'
+              ? [eurTransaction, ronTransaction]
+              : [ronTransaction, eurTransaction],
+          total: 2,
+        },
+      });
+    });
+
+    await page.goto('/bank-transactions?pageIndex=0&pageSize=10');
+    const table = page.getByTestId('bank-transactions-table');
+    const amountHeaderButton = table
+      .getByRole('columnheader', {name: 'Amount'})
+      .getByRole('button', {name: 'Amount'});
+    await amountHeaderButton.click();
+
+    const rows = table.getByTestId(/^bank-transaction-row-/);
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText('Synthetic EUR purchase');
+    await expect(rows.nth(0).locator('td').nth(4)).toHaveText('€30.00');
+    await expect(rows.nth(1)).toContainText('Synthetic RON purchase');
+    await expect(rows.nth(1).locator('td').nth(4)).toContainText('RON');
+    await expect(rows.nth(1).locator('td').nth(4)).toContainText('100.00');
   });
 
   test('sorts the category and source columns', async ({page}) => {
