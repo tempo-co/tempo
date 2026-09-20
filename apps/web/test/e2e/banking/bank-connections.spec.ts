@@ -39,6 +39,21 @@ const MOCK_CONNECTION: BankConnection = {
       isActive: true,
       latestBalances: [],
     },
+    {
+      id: '00000000-0000-4000-8000-000000000098',
+      name: 'Mock savings account',
+      details: 'Mock ASPSP savings account',
+      alias: null,
+      currency: 'EUR',
+      cashAccountType: 'SVGS',
+      usage: 'PRIV',
+      maskedIdentifier: '****5678',
+      currentBalanceAmount: '100.44',
+      currentBalanceType: 'AVAILABLE',
+      balanceUpdatedAt: null,
+      isActive: true,
+      latestBalances: [],
+    },
   ],
 };
 
@@ -70,9 +85,10 @@ test.describe('bank connections', () => {
     });
 
     await page.goto('/bank-connections');
-    await expect(page.getByTestId('bank-connection-sync-status')).toContainText('queued');
+    await expect(page.getByTestId('bank-connection-total')).toContainText('1,335.00');
+    await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
     await expect.poll(() => requestCount, {timeout: 12_000}).toBeGreaterThan(1);
-    await expect(page.getByTestId('bank-connection-sync-status')).toContainText('Automatic sync');
+    await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
   });
 
   test('refreshes transactions after a later automatic synchronization', async ({page}) => {
@@ -107,7 +123,8 @@ test.describe('bank connections', () => {
     });
 
     await page.goto('/bank-connections');
-    await expect(page.getByTestId('bank-connection-sync-status')).toContainText('queued');
+    await expect(page.getByTestId('bank-connection-total')).toContainText('1,335.00');
+    await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
     await expect.poll(() => connectionRequestCount, {timeout: 12_000}).toBeGreaterThan(1);
     await expect.poll(() => transactionRequestCount, {timeout: 12_000}).toBeGreaterThan(1);
   });
@@ -181,6 +198,7 @@ test.describe('bank connections', () => {
       .locator('[data-testid^="bank-connection-"]')
       .filter({has: page.getByRole('heading', {name: 'ABN AMRO'})});
     await expect(connectionCard).toBeVisible();
+    await connectionCard.getByRole('button', {name: /ABN AMRO/}).click();
     await expect(connectionCard.getByRole('heading', {name: 'Accounts'})).toBeVisible();
     await expect(connectionCard.getByRole('heading', {name: 'Recent transactions'})).toBeVisible();
     await expect(connectionCard.getByText('Connected', {exact: true})).toBeVisible();
@@ -194,18 +212,16 @@ test.describe('bank connections', () => {
     );
     await expect(bankLogo).toHaveClass(/border-border/);
     await expect(bankLogo).toHaveClass(/bg-background/);
-    await expect(bankLogo).toHaveCSS('width', '52px');
-    await expect(bankLogo).toHaveCSS('height', '52px');
+    await expect(bankLogo).toHaveCSS('width', '64px');
+    await expect(bankLogo).toHaveCSS('height', '64px');
 
     const status = connectionCard.getByTestId('bank-connection-status');
     const freshness = connectionCard.getByTestId('bank-connection-freshness');
-    const syncStatus = connectionCard.getByTestId('bank-connection-sync-status');
     await expect(status).toBeVisible();
     await expect(freshness).toBeVisible();
-    await expect(syncStatus).toContainText('Automatic sync');
+    await expect(connectionCard.getByTestId('bank-connection-sync-status')).toHaveCount(0);
     await expect(connectionCard.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
     await expect(connectionCard.getByText('Daily spending', {exact: true})).toBeVisible();
-    await expect(connectionCard.getByText('available · primary')).toBeVisible();
     await expect(connectionCard.getByText('Provider purchase')).toBeVisible();
     await expect(connectionCard).toContainText('Currency exchange');
     await expect(connectionCard).toContainText('Internal movement');
@@ -213,7 +229,7 @@ test.describe('bank connections', () => {
       name: 'View transaction details for Provider purchase',
     });
     await expect(transactionTrigger).toBeVisible();
-    await expect(transactionTrigger.locator('..').locator('p')).toHaveText('18 Aug');
+    await expect(transactionTrigger.getByText('18 Aug', {exact: true})).toHaveText('18 Aug');
     await transactionTrigger.click();
     const inspector = page.getByTestId('bank-transaction-inspector');
     await expect(inspector).toBeVisible();
@@ -354,10 +370,7 @@ test.describe('bank connections', () => {
 
     await page.goto('/bank-connections');
 
-    await expect(page.getByTestId('bank-connection-sync-status')).toContainText('not available');
-    await expect(page.getByTestId('bank-connection-sync-status')).not.toContainText(
-      'first bank refresh',
-    );
+    await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
   });
   test('removes an incomplete bank connection', async ({page}) => {
     const pendingConnectionId = '00000000-0000-4000-8000-000000000098';
@@ -413,6 +426,7 @@ test.describe('bank connections', () => {
   test('requires explicit confirmation before removing a connected bank connection', async ({
     page,
   }) => {
+    await page.setViewportSize({width: 393, height: 852});
     const connectedConnectionId = '00000000-0000-4000-8000-000000000097';
     let connectedConnectionVisible = true;
     let deleteCalled = false;
@@ -452,8 +466,16 @@ test.describe('bank connections', () => {
 
     const connectedCard = page.getByTestId(`bank-connection-${connectedConnectionId}`);
     await expect(connectedCard).toBeVisible();
+    await connectedCard.getByTestId(/^connection-card-toggle-/).click();
     await connectedCard.getByRole('button', {name: 'Remove'}).click();
     await expect(page.getByRole('heading', {name: 'Remove connected bank?'})).toBeVisible();
+    const removeCancelButton = page.getByRole('button', {name: 'Cancel'});
+    await expect(removeCancelButton).toBeVisible();
+    expect(
+      await removeCancelButton.evaluate(
+        (element) => getComputedStyle(element.parentElement!).paddingBottom,
+      ),
+    ).toBe('16px');
     await expect(page.getByText(/all linked bank accounts, and all transactions/)).toBeVisible();
     expect(deleteCalled).toBe(false);
 
@@ -471,6 +493,7 @@ test.describe('bank connections', () => {
   test('keeps selectors visible while loading and lets the user choose a supported bank', async ({
     page,
   }) => {
+    await page.setViewportSize({width: 393, height: 852});
     let releaseResponse!: () => void;
     const responseHeld = new Promise<void>((resolve) => {
       releaseResponse = resolve;
@@ -520,6 +543,16 @@ test.describe('bank connections', () => {
     await expect(countrySelector).toBeDisabled();
     await expect(bankSelector).toBeVisible();
     await expect(bankSelector).toBeDisabled();
+    const [pickerBox, countrySelectorBox] = await Promise.all([
+      picker.boundingBox(),
+      countrySelector.boundingBox(),
+    ]);
+    expect(pickerBox).not.toBeNull();
+    expect(countrySelectorBox).not.toBeNull();
+    expect(countrySelectorBox!.x).toBeGreaterThanOrEqual(pickerBox!.x + 16);
+    expect(countrySelectorBox!.x + countrySelectorBox!.width).toBeLessThanOrEqual(
+      pickerBox!.x + pickerBox!.width - 16,
+    );
     await expect(picker.getByRole('status')).toHaveCount(0);
 
     releaseResponse();
@@ -554,6 +587,27 @@ test.describe('bank connections', () => {
     await expect(coloredLogo.locator('img')).toHaveCSS('filter', 'none');
     await monochromeOption.click();
 
+    const confirmButton = picker.getByTestId('bank-connection-confirm');
+    await expect(confirmButton).toBeEnabled();
+    await expect(confirmButton).toContainText('Continue with Monochrome Bank');
+    const redirectHint = picker.getByText(
+      'You will be redirected to Monochrome Bank to approve access.',
+      {exact: true},
+    );
+    await expect(redirectHint).toBeVisible();
+    expect(
+      await redirectHint.evaluate(
+        (element) => getComputedStyle(element.parentElement!).paddingBottom,
+      ),
+    ).toBe('16px');
+    const confirmButtonBox = await confirmButton.boundingBox();
+    expect(confirmButtonBox).not.toBeNull();
+    expect(confirmButtonBox!.x).toBeGreaterThanOrEqual(pickerBox!.x + 16);
+    expect(confirmButtonBox!.x + confirmButtonBox!.width).toBeLessThanOrEqual(
+      pickerBox!.x + pickerBox!.width - 16,
+    );
+    await confirmButton.click();
+
     await expect
       .poll(() => authorizationRequest)
       .toEqual({aspspName: 'Monochrome Bank', aspspCountry: 'NL'});
@@ -562,6 +616,13 @@ test.describe('bank connections', () => {
 
   test('reopens a connection transaction inspector from its shareable URL', async ({page}) => {
     await page.goto('/bank-connections');
+
+    const card = page
+      .locator('[data-testid^="bank-connection-"][aria-labelledby]')
+      .filter({has: page.getByRole('heading', {name: /ABN AMRO|Mock ASPSP/})})
+      .first();
+    await expect(card).toBeVisible();
+    await card.getByTestId(/^connection-card-toggle-/).click();
 
     const transactionTrigger = page.getByRole('button', {
       name: 'View transaction details for Provider purchase',
@@ -617,6 +678,7 @@ test.describe('bank connections', () => {
     await page.getByRole('option', {name: /Netherlands.*1 bank/}).click();
     await picker.getByTestId('bank-connection-bank-selector').click();
     await page.getByRole('option', {name: /Mock ASPSP.*NL/}).click();
+    await picker.getByTestId('bank-connection-confirm').click();
 
     await expect(page.getByText('Bank connection added')).toBeVisible();
     await expect(page).toHaveURL(/\/bank-connections$/);
@@ -630,31 +692,48 @@ test.describe('bank connections', () => {
     const heading = page.getByRole('heading', {name: 'Bank connections'});
     const headingGroup = page.getByTestId('bank-connections-heading');
     const connectButton = page.getByRole('button', {name: 'Connect a bank'}).first();
-    const syncStatus = page.getByTestId('bank-connection-sync-status');
+    const connectionCard = page
+      .locator('[data-testid^="bank-connection-"][aria-labelledby]')
+      .first();
     const status = page.getByTestId('bank-connection-status');
     const freshness = page.getByTestId('bank-connection-freshness');
+    const totalBalance = page.getByTestId('bank-connection-total');
+    const connectionTitle = connectionCard.getByRole('heading', {name: 'ABN AMRO'});
 
     await expect(heading).toBeVisible();
     await expect(connectButton).toBeVisible();
-    await expect(syncStatus).toContainText('Automatic sync');
+    await expect(connectionCard).toBeVisible();
+    await expect(totalBalance).toBeVisible();
+    await expect(totalBalance).toHaveAttribute('aria-label', /^Total balance /);
+    const [closedCardBox, titleBox, totalBox] = await Promise.all([
+      connectionCard.boundingBox(),
+      connectionTitle.boundingBox(),
+      totalBalance.boundingBox(),
+    ]);
+    expect(closedCardBox).not.toBeNull();
+    expect(titleBox).not.toBeNull();
+    expect(totalBox).not.toBeNull();
+    expect(closedCardBox!.height).toBeLessThan(120);
+    expect(totalBox!.y).toBeLessThanOrEqual(titleBox!.y + titleBox!.height + 4);
+    expect(totalBox!.x).toBeGreaterThan(titleBox!.x + titleBox!.width);
+    await connectionCard.getByTestId(/^connection-card-toggle-/).click();
+    await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
     await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
     await expect(page.getByText('Daily spending', {exact: true})).toBeVisible();
 
-    const [headingBox, headingGroupBox, connectButtonBox, statusBox, freshnessBox, syncStatusBox] =
+    const [headingBox, headingGroupBox, connectButtonBox, statusBox, freshnessBox] =
       await Promise.all([
         heading.boundingBox(),
         headingGroup.boundingBox(),
         connectButton.boundingBox(),
         status.boundingBox(),
         freshness.boundingBox(),
-        syncStatus.boundingBox(),
       ]);
     expect(headingBox).not.toBeNull();
     expect(headingGroupBox).not.toBeNull();
     expect(connectButtonBox).not.toBeNull();
     expect(statusBox).not.toBeNull();
     expect(freshnessBox).not.toBeNull();
-    expect(syncStatusBox).not.toBeNull();
     expect(headingBox!.height).toBe(32);
     expect(headingGroupBox!.height).toBeLessThan(120);
     expect(connectButtonBox!.x).toBe(16);
@@ -671,27 +750,75 @@ test.describe('bank connections', () => {
     await expect(sidebarTrigger).toBeFocused();
   });
 
+  test('wraps multiple currency totals without phone overflow', async ({page}) => {
+    const multiCurrencyConnection: BankConnection = {
+      ...MOCK_CONNECTION,
+      bankAccounts: [
+        ...MOCK_CONNECTION.bankAccounts,
+        {
+          ...MOCK_CONNECTION.bankAccounts[0],
+          id: '00000000-0000-4000-8000-000000000099',
+          name: 'Mock USD account',
+          currency: 'USD',
+          currentBalanceAmount: '50.00',
+          maskedIdentifier: '****9012',
+        },
+      ],
+    };
+    await page.setViewportSize({width: 320, height: 852});
+    await page.route('**/bank-connections', async (route) => {
+      if (route.request().resourceType() === 'document') {
+        await route.continue();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([multiCurrencyConnection]),
+      });
+    });
+    await page.goto('/bank-connections');
+
+    const connectionCard = page
+      .locator('[data-testid^="bank-connection-"][aria-labelledby]')
+      .first();
+    const totalBalance = connectionCard.getByTestId('bank-connection-total');
+    await expect(totalBalance).toHaveAttribute('aria-label', /EUR.*USD/);
+    const [cardBox, totalBox] = await Promise.all([
+      connectionCard.boundingBox(),
+      totalBalance.boundingBox(),
+    ]);
+    expect(cardBox).not.toBeNull();
+    expect(totalBox).not.toBeNull();
+    expect(totalBox!.x + totalBox!.width).toBeLessThanOrEqual(cardBox!.x + cardBox!.width);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+      .toBe(true);
+  });
+
   test('keeps the connection overview within a narrow phone viewport', async ({page}) => {
     await page.setViewportSize({width: 320, height: 852});
     await page.goto('/bank-connections');
 
-    const connectionCard = page.locator('[data-testid^="bank-connection-"]').first();
-    const syncStatus = page.getByTestId('bank-connection-sync-status');
+    const connectionCard = page
+      .locator('[data-testid^="bank-connection-"][aria-labelledby]')
+      .first();
     const sidebarTrigger = page.locator('[data-sidebar="trigger"]');
 
+    await expect(connectionCard).toBeVisible();
+    await connectionCard.getByTestId(/^connection-card-toggle-/).click();
     await expect(page.getByRole('heading', {name: 'Accounts'})).toBeVisible();
     await expect(page.getByRole('heading', {name: 'Transactions'})).toBeVisible();
-    await expect(syncStatus).toContainText('Automatic sync');
+    await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
     await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
     await expect(sidebarTrigger).toBeVisible();
 
-    const [connectionCardBox, syncStatusBox, sidebarTriggerBox] = await Promise.all([
+    const [connectionCardBox, sidebarTriggerBox] = await Promise.all([
       connectionCard.boundingBox(),
-      syncStatus.boundingBox(),
       sidebarTrigger.boundingBox(),
     ]);
     expect(connectionCardBox).not.toBeNull();
-    expect(syncStatusBox).not.toBeNull();
     expect(sidebarTriggerBox).not.toBeNull();
     expect(connectionCardBox!.x + connectionCardBox!.width).toBeLessThanOrEqual(320);
     expect(sidebarTriggerBox!.height).toBeGreaterThanOrEqual(44);
@@ -851,6 +978,7 @@ test.describe('mocked Enable Banking bank connection', () => {
 
     await picker.getByTestId('bank-connection-bank-selector').click();
     await page.getByRole('option', {name: /Mock ASPSP.*NL/}).click();
+    await picker.getByTestId('bank-connection-confirm').click();
 
     await expect
       .poll(() => authorizationRequest)
@@ -877,10 +1005,12 @@ test.describe('mocked Enable Banking bank connection', () => {
     await expect(connectionCard).toBeVisible();
     await expect(connectionCard.getByRole('heading', {name: TARGET_ASPSP.name})).toBeVisible();
     await expect(connectionCard.getByText('Connected', {exact: true})).toBeVisible();
+    await expect(connectionCard.getByText('Consent valid until', {exact: false})).toBeHidden();
+    await connectionCard.getByTestId(/^connection-card-toggle-/).click();
     await expect(connectionCard.getByRole('heading', {name: 'Accounts'})).toBeVisible();
     await expect(connectionCard.getByText('Mock current account', {exact: true})).toBeVisible();
-    await expect(connectionCard.getByText('Valid until', {exact: false})).toBeVisible();
-
+    await expect(connectionCard.getByText('Consent valid until', {exact: false})).toBeVisible();
+    await expect(connectionCard.getByRole('button', {name: 'Remove'})).toBeVisible();
     await connectionCard.getByRole('button', {name: 'Remove'}).click();
     await expect(page.getByRole('heading', {name: 'Remove connected bank?'})).toBeVisible();
     await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
@@ -890,6 +1020,55 @@ test.describe('mocked Enable Banking bank connection', () => {
     await expect.poll(() => connectionDeleted).toBe(true);
     await expect(connectionCard).toHaveCount(0);
     await expect(page.getByText('0 connections', {exact: true})).toBeVisible();
+  });
+});
+
+test.describe('bank connection card layout', () => {
+  test.use({storageState: VERIFIED_USER_AUTH_FILE});
+
+  test('shows footer actions only while a connection card is expanded', async ({page}) => {
+    await page.goto('/bank-connections');
+
+    const card = page.locator('[data-testid^="bank-connection-"][aria-labelledby]').first();
+    const toggle = card.getByTestId(/^connection-card-toggle-/);
+    const accounts = card.getByTestId(/^bank-accounts-/);
+    const transactions = card.getByTestId(/^bank-transactions-/);
+    const removeButton = card.getByTestId(/^remove-bank-/);
+    const consentText = card.getByText(/Consent valid until/);
+
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(accounts).toBeHidden();
+    await expect(transactions).toBeHidden();
+    await expect(removeButton).toBeHidden();
+    await expect(consentText).toBeHidden();
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(accounts).toBeVisible();
+    await expect(transactions).toBeVisible();
+    await expect(removeButton).toBeVisible();
+    await expect(consentText).toBeVisible();
+
+    const [cardBox, expandedConsentBox, expandedRemoveBox] = await Promise.all([
+      card.boundingBox(),
+      consentText.boundingBox(),
+      removeButton.boundingBox(),
+    ]);
+    expect(cardBox).not.toBeNull();
+    expect(expandedConsentBox).not.toBeNull();
+    expect(expandedRemoveBox).not.toBeNull();
+    expect(expandedRemoveBox!.width).toBe(44);
+    expect(expandedRemoveBox!.height).toBe(44);
+    expect(
+      cardBox!.x + cardBox!.width - (expandedRemoveBox!.x + expandedRemoveBox!.width),
+    ).toBeGreaterThanOrEqual(16);
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(accounts).toBeHidden();
+    await expect(transactions).toBeHidden();
+    await expect(removeButton).toBeHidden();
+    await expect(consentText).toBeHidden();
   });
 });
 

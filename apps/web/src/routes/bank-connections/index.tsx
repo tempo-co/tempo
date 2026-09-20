@@ -10,6 +10,7 @@ import {LoadingBar} from '@/components/shared/loading-bar';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
 import {BankConnectionList} from '@/features/banking/components/bank-connection-list';
 import {BankTransactionDetailsDialog} from '@/features/banking/components/bank-transaction-details-dialog';
+import {BankingBreadcrumb} from '@/features/banking/components/banking-breadcrumb';
 import {useBankTransactionInspector} from '@/hooks/use-bank-transaction-inspector';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
@@ -60,7 +61,7 @@ function BankConnectionsIndex() {
     <>
       <LoadingBar isPending={isPending} />
       <AppHeaderLayout>
-        <span className='text-sm font-medium'>Bank connections</span>
+        <BankingBreadcrumb pageLabel='Bank connections' />
       </AppHeaderLayout>
       <AppBodyLayout className='max-md:my-6'>
         <BankConnectionList

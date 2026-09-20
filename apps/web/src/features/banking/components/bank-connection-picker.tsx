@@ -75,7 +75,7 @@ export function BankConnectionPicker({
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
-    if (!nextOpen) {
+    if (!nextOpen && !isStarting) {
       setSelectedCountryCode(undefined);
       setSelectedBank(undefined);
     }
@@ -88,9 +88,15 @@ export function BankConnectionPicker({
 
   const selectBank = (bank: BankConnectionAspsp) => {
     setSelectedBank(bank);
-    setOpen(false);
-    void onBankSelect(bank);
   };
+
+  const confirmBank = () => {
+    if (!selectedBank) return;
+    void onBankSelect(selectedBank);
+  };
+
+  const isConfirming = isStarting;
+  const isConfirmDisabled = !selectedBank || isConfirming;
 
   return (
     <ResponsiveDialog open={open} onOpenChange={handleOpenChange}>
@@ -114,7 +120,7 @@ export function BankConnectionPicker({
         <ResponsiveDialogHeader className='text-start'>
           <ResponsiveDialogTitle>Choose a bank</ResponsiveDialogTitle>
         </ResponsiveDialogHeader>
-        <ResponsiveDialogBody className='min-h-0 px-0'>
+        <ResponsiveDialogBody className='min-h-0'>
           <div className='grid gap-4'>
             <SearchableSelector
               label='Country'
@@ -179,6 +185,29 @@ export function BankConnectionPicker({
                 </Button>
               </div>
             )}
+
+            <div className='flex flex-col gap-2 pb-4 md:pb-0'>
+              <Button
+                onClick={confirmBank}
+                disabled={isConfirmDisabled}
+                data-testid='bank-connection-confirm'
+                className='min-h-11 w-full'
+              >
+                {isConfirming ? (
+                  <>
+                    <span>Taking you to {selectedBank?.name ?? 'your bank'}...</span>
+                    <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
+                  </>
+                ) : selectedBank ? (
+                  `Continue with ${selectedBank.name}`
+                ) : (
+                  'Continue'
+                )}
+              </Button>
+              <p className='text-center text-xs text-muted-foreground'>
+                You will be redirected to {selectedBank?.name ?? 'your bank'} to approve access.
+              </p>
+            </div>
           </div>
         </ResponsiveDialogBody>
       </ResponsiveDialogContent>

@@ -123,7 +123,7 @@ export function AccountDeleteDialog({children}: AccountDeleteDialogProps) {
                   />
                 )}
               />
-              <div className='mt-2 flex flex-col justify-end gap-4 md:flex-row'>
+              <div className='mt-2 flex flex-col justify-end gap-4 pb-4 md:flex-row md:pb-0'>
                 <Button
                   type='submit'
                   variant='destructive'

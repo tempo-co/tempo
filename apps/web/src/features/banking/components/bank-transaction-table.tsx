@@ -30,14 +30,15 @@ import {
   DEFAULT_BANK_TRANSACTION_SORT,
 } from '../types/bank-transaction';
 import {
-  formatBankTransactionCashFlowTreatment,
+  formatBankTransactionCategory,
   formatBankTransactionCompactDate,
   formatBankTransactionFinancialEvent,
-  resolveBankTransactionAccountLabel,
+  isBankTransactionCategory,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
 import {BankTransactionAccountFilter} from './bank-transaction-account-filter';
 import {BankTransactionCategoryFilter} from './bank-transaction-category-filter';
+import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 import {BankTransactionCategorySourceFilter} from './bank-transaction-category-source-filter';
 import {BankTransactionDateFilter} from './bank-transaction-date-filter';
 import {BankTransactionFinancialEventFilter} from './bank-transaction-financial-event-filter';
@@ -312,6 +313,13 @@ export function BankTransactionTable({
             ) : (
               table.getRowModel().rows.map((row) => {
                 const transactionLabel = getTransactionLabel(row.original);
+                const financialEvent = formatBankTransactionFinancialEvent(
+                  row.original.financialEventType,
+                );
+                const category =
+                  !row.original.category || !isBankTransactionCategory(row.original.category)
+                    ? null
+                    : row.original.category;
 
                 return (
                   <TableRow
@@ -371,19 +379,32 @@ export function BankTransactionTable({
                         data-testid='bank-transaction-mobile-meta'
                         className='flex min-w-0 items-center justify-between gap-3 text-xs text-muted-foreground'
                       >
-                        <span className='min-w-0 flex-1 truncate'>
-                          {formatBankTransactionCompactDate(row.original.bookingDate)}
-                          <span aria-hidden='true'> · </span>
-                          {resolveBankTransactionAccountLabel(row.original)}
-                          {formatBankTransactionFinancialEvent(row.original.financialEventType) && (
-                            <span className='block truncate text-foreground'>
-                              {formatBankTransactionFinancialEvent(row.original.financialEventType)}
-                              <span aria-hidden='true'> · </span>
-                              {formatBankTransactionCashFlowTreatment(
-                                row.original.cashFlowTreatment,
-                              )}
-                            </span>
+                        <span className='flex min-w-0 flex-1 items-center gap-1.5 truncate'>
+                          <span className='shrink-0'>
+                            {formatBankTransactionCompactDate(row.original.bookingDate)}
+                          </span>
+                          <span aria-hidden='true' className='shrink-0'>
+                            ·
+                          </span>
+                          {financialEvent ? (
+                            <RefreshCw
+                              aria-hidden='true'
+                              className='h-3.5 w-3.5 shrink-0 text-muted-foreground'
+                            />
+                          ) : (
+                            category && (
+                              <BankTransactionCategoryIcon
+                                category={category}
+                                className='h-5 w-5'
+                              />
+                            )
                           )}
+                          <span
+                            data-testid='bank-transaction-mobile-meta-label'
+                            className='truncate'
+                          >
+                            {financialEvent || formatBankTransactionCategory(row.original.category)}
+                          </span>
                         </span>
                         <span
                           data-testid='bank-transaction-mobile-meta-right'

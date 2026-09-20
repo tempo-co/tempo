@@ -44,10 +44,18 @@ test.describe.serial('Account Settings: Delete account', () => {
     await homePage.expectToBeOnPage();
     await homePage.expectUserLoggedIn();
 
+    await page.setViewportSize({width: 393, height: 852});
     await accountSettingsPage.navigate();
 
     // The destructive action stays disabled until the email matches exactly.
     await accountSettingsPage.deleteAccountButton.click();
+    const deleteCancelButton = page.getByRole('button', {name: 'Cancel'});
+    await expect(deleteCancelButton).toBeVisible();
+    expect(
+      await deleteCancelButton.evaluate(
+        (element) => getComputedStyle(element.parentElement!).paddingBottom,
+      ),
+    ).toBe('16px');
     await expect(accountSettingsPage.deleteConfirmButton).toBeDisabled();
     await accountSettingsPage.deleteEmailInput.fill(email);
     await expect(accountSettingsPage.deleteConfirmButton).toBeDisabled();

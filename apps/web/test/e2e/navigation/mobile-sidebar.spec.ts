@@ -13,7 +13,7 @@ test('closes the mobile sidebar after selecting a navigation item', async ({page
   const mobileSidebar = page.locator('[data-sidebar="sidebar"][data-mobile="true"]');
   await expect(mobileSidebar).toBeVisible();
 
-  await mobileSidebar.getByRole('link', {name: 'Bank connections'}).click();
+  await mobileSidebar.getByRole('link', {name: 'Connections'}).click();
 
   await expect(page).toHaveURL(/\/bank-connections$/);
   await expect(mobileSidebar).toBeHidden();

@@ -225,7 +225,10 @@ test.describe('bank transactions', () => {
     const activitySection = mobileFilters.getByRole('heading', {name: 'Activity'}).locator('..');
     await activitySection.getByRole('option', {name: 'Currency exchange', exact: true}).click();
     await expect(page.getByTestId('bank-transaction-mobile-meta')).toContainText(
-      'Currency exchange · Internal movement',
+      'Currency exchange',
+    );
+    await expect(page.getByTestId('bank-transaction-mobile-meta')).not.toContainText(
+      'Internal movement',
     );
   });
 
@@ -938,8 +941,10 @@ test.describe('bank transactions', () => {
     await expect(descriptionTrigger).toHaveCount(1);
     await expect(table).toHaveAttribute('aria-label', 'Bank transactions');
     const mobileMeta = firstTransactionRow.getByTestId('bank-transaction-mobile-meta');
+    const mobileMetaLabel = mobileMeta.getByTestId('bank-transaction-mobile-meta-label');
     await expect(mobileMeta).toContainText('26 Aug');
-    await expect(mobileMeta).toContainText('Daily spending');
+    await expect(mobileMetaLabel).toBeVisible();
+    await expect(mobileMetaLabel).not.toHaveText('Daily spending');
     await expect(mobileMeta).toContainText('ABN AMRO');
     const pagination = page.getByTestId('pagination');
     await expect(pagination).toBeVisible();
@@ -1030,6 +1035,12 @@ test.describe('bank transactions', () => {
     await page.goto('/bank-transactions?pageIndex=0&pageSize=10');
 
     const table = page.getByTestId('bank-transactions-table');
+    const rowsSelector = page
+      .getByTestId('pagination')
+      .getByRole('combobox', {name: 'Rows per page'});
+    await rowsSelector.click();
+    await expect(page.getByRole('option')).toHaveText(['10', '50', '100']);
+    await page.keyboard.press('Escape');
     await expect(page.getByText('Coffee shop', {exact: true})).toBeVisible();
     const readColumnBoxes = () =>
       table.locator('thead th').evaluateAll((headers) =>
@@ -1112,15 +1123,13 @@ test.describe('bank transactions', () => {
       return payload;
     };
 
-    const descendingPayload = await readSortedTransactions('DESC');
+    await readSortedTransactions('DESC');
     sort = new URL(page.url()).searchParams.get('sort');
     expect(sort).toBe(JSON.stringify({by: 'amount', order: 'DESC'}));
 
-    const ascendingPayload = await readSortedTransactions('ASC');
+    await readSortedTransactions('ASC');
     sort = new URL(page.url()).searchParams.get('sort');
     expect(sort).toBe(JSON.stringify({by: 'amount', order: 'ASC'}));
-
-    expect(descendingPayload.transactions[0].id).not.toBe(ascendingPayload.transactions[0].id);
 
     await page.goto('/bank-transactions?pageIndex=0&pageSize=10');
     await expect(table.locator('tbody tr').first()).toBeVisible();

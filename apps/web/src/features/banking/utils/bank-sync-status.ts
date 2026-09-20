@@ -104,3 +104,17 @@ export function getAutomaticSyncDetails(
       };
   }
 }
+
+export function getAutomaticSyncDetailsForConnection(
+  connection: BankConnection,
+): AutomaticSyncDetails | null {
+  if (connection.status !== 'AUTHORIZED' && connection.status !== 'EXPIRED') return null;
+
+  const status = isReauthorizationRequired(connection) ? 'EXPIRED' : connection.syncStatus;
+  return getAutomaticSyncDetails(
+    status,
+    connection.lastSyncError,
+    connection.lastSyncedAt,
+    isStaleAutomaticSync(connection, status),
+  );
+}

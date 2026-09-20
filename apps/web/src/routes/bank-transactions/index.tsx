@@ -5,9 +5,9 @@ import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {AppHeaderLayout} from '@/components/shared/layout/app-header-layout';
 import {LoadingBar} from '@/components/shared/loading-bar';
 import {useGetBankTransactions} from '@/features/banking/api/use-get-bank-transactions';
-import {BankTransactionBreadcrumb} from '@/features/banking/components/bank-transaction-breadcrumb';
 import {BankTransactionDetailsDialog} from '@/features/banking/components/bank-transaction-details-dialog';
 import {BankTransactionTable} from '@/features/banking/components/bank-transaction-table';
+import {BankingBreadcrumb} from '@/features/banking/components/banking-breadcrumb';
 import {bankTransactionSearchParamsSchema} from '@/features/banking/types/bank-transaction';
 import {useBankTransactionInspector} from '@/hooks/use-bank-transaction-inspector';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
@@ -48,7 +48,7 @@ function BankTransactionsIndex() {
     <>
       <LoadingBar isPending={isPending} />
       <AppHeaderLayout>
-        <BankTransactionBreadcrumb />
+        <BankingBreadcrumb pageLabel='Bank transactions' />
       </AppHeaderLayout>
       <AppBodyLayout className='max-md:my-6'>
         <div className='space-y-6 max-md:space-y-4'>
