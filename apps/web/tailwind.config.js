@@ -66,7 +66,6 @@ export default {
           'personal-care': 'rgb(var(--category-personal-care) / <alpha-value>)',
           education: 'rgb(var(--category-education) / <alpha-value>)',
           insurance: 'rgb(var(--category-insurance) / <alpha-value>)',
-          taxes: 'rgb(var(--category-taxes) / <alpha-value>)',
           fees: 'rgb(var(--category-fees) / <alpha-value>)',
           'cash-withdrawal': 'rgb(var(--category-cash-withdrawal) / <alpha-value>)',
           income: 'rgb(var(--category-income) / <alpha-value>)',

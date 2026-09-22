@@ -9,7 +9,6 @@ import {
   GraduationCap,
   HeartPulse,
   House,
-  Landmark,
   Plane,
   ReceiptText,
   RefreshCw,
@@ -100,11 +99,6 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
     'INSURANCE',
     ShieldCheck,
     'border-category-insurance/30 bg-category-insurance/10 text-category-insurance',
-  ),
-  TAXES: createCategoryMeta(
-    'TAXES',
-    Landmark,
-    'border-category-taxes/30 bg-category-taxes/10 text-category-taxes',
   ),
   FEES: createCategoryMeta(
     'FEES',

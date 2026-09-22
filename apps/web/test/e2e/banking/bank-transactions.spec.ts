@@ -253,7 +253,7 @@ test.describe('bank transactions', () => {
     const categorySelect = inspector.getByRole('combobox', {name: 'Transaction category'});
     await expect(categorySelect).toBeVisible();
     await categorySelect.click();
-    await expect(page.getByRole('option')).toHaveCount(20);
+    await expect(page.getByRole('option')).toHaveCount(19);
     await expect(page.getByRole('option')).toHaveText([
       'Housing and utilities',
       'Food and drink',
@@ -266,7 +266,6 @@ test.describe('bank transactions', () => {
       'Personal care',
       'Education',
       'Insurance',
-      'Taxes',
       'Fees',
       'Cash withdrawal',
       'Income',
@@ -276,7 +275,7 @@ test.describe('bank transactions', () => {
       'Needs review',
       'Other',
     ]);
-    await expect(page.getByRole('option').locator('svg')).toHaveCount(20);
+    await expect(page.getByRole('option').locator('svg')).toHaveCount(19);
     await expect(
       page.getByRole('option', {name: 'Food and drink', exact: true}).locator('svg').locator('..'),
     ).toHaveClass(/text-category-food-and-drink/);
@@ -732,7 +731,7 @@ test.describe('bank transactions', () => {
     const categoryFilter = page.getByRole('button', {name: 'Categories', exact: true});
     await expect(categoryFilter).toBeVisible();
     await categoryFilter.click();
-    await expect(page.getByRole('option')).toHaveCount(21);
+    await expect(page.getByRole('option')).toHaveCount(20);
     await page.getByRole('option', {name: 'Food and drink', exact: true}).click();
 
     const singleCategoryParam = new URL(page.url()).searchParams.get('categories');
