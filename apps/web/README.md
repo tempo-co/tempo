@@ -55,7 +55,7 @@ $ docker build --tag tempo-api-e2e /path/to/tempo-api-categorization-checkout
 $ TEMPO_API_E2E_IMAGE=tempo-api-e2e npm run test:e2e:local
 ```
 
-Without `TEMPO_API_E2E_IMAGE`, the Docker stack uses the published API image for legacy E2E coverage. CI checks out and builds the API categorization branch before running this suite.
+Every E2E run must set `TEMPO_API_E2E_IMAGE` explicitly. CI requires an immutable GHCR digest; local runs may use the freshly built image shown above.
 
 CI runs the same suite on every push (`npx playwright test` against fresh services).
 

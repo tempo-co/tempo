@@ -7,12 +7,24 @@ services:
     ports:
       - '1025:1025'
       - '8025:8025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   redis:
     image: redis
     container_name: redis_test
     ports:
       - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   postgres:
     image: postgres
@@ -31,7 +43,8 @@ services:
       start_period: 5s
 
   api:
-    image: ${TEMPO_API_E2E_IMAGE:-ghcr.io/tempo-co/tempo-api:latest}
+    image: ${TEMPO_API_E2E_IMAGE:?TEMPO_API_E2E_IMAGE must be set to an explicit API image}
+    pull_policy: never
     container_name: api
     ports:
       - '3000:3000'
@@ -44,9 +57,9 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       mailpit:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3000/health']
       interval: 30s
