@@ -1,37 +1,17 @@
 {
   "name": "Tempo",
   "short_name": "Tempo",
-  "id": "/tempo/",
+  "id": "/",
   "description": "Personal finance overview and bank account tracker",
-  "start_url": "/tempo/",
-  "scope": "/tempo/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#17161B",
   "theme_color": "#17161B",
   "icons": [
-    {
-      "src": "/tempo/pwa-icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/tempo/pwa-icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/tempo/maskable-icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/tempo/maskable-icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
+    {"src": "/pwa-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/pwa-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/maskable-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+    {"src": "/maskable-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
   ]
 }
