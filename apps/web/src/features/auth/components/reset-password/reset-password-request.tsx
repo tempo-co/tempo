@@ -1,7 +1,6 @@
 import {zodResolver} from '@hookform/resolvers/zod';
 import {Link} from '@tanstack/react-router';
 import {AnimatePresence, motion} from 'framer-motion';
-import {ExternalLink} from 'lucide-react';
 import {useState} from 'react';
 import {useForm} from 'react-hook-form';
 
@@ -44,8 +43,6 @@ export function ResetPasswordRequest() {
     form.reset();
     setHasResent(false);
   };
-
-  const gmailUrl = `https://mail.google.com/mail/u/0/#search/${encodeURIComponent('from:no-reply@localhost')}`;
 
   return (
     <AuthLayout title={isSuccess ? 'Check your email' : 'Reset your password'}>
@@ -106,11 +103,6 @@ export function ResetPasswordRequest() {
                   Use a different email
                 </Button>
               </div>
-              <Button asChild className='w-full' data-testid='open-gmail-button'>
-                <Link to={gmailUrl} target='_blank' rel='noopener noreferrer'>
-                  Open Gmail <ExternalLink />
-                </Link>
-              </Button>
               <p className='text-center text-sm text-muted-foreground'>
                 <Button variant='link' asChild className='h-auto p-0 text-foreground'>
                   <Link to='/login' data-testid='return-to-login-link'>

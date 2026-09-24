@@ -87,7 +87,6 @@ test.describe.serial('Password Reset', () => {
       await resetPasswordPage.requestPasswordReset(VERIFIED_ACCOUNT_EMAIL);
       await resetPasswordPage.useDifferentEmailButton.click();
       await expect(resetPasswordPage.useDifferentEmailButton).toBeHidden();
-      await expect(resetPasswordPage.openGmailButton).toBeHidden();
       await expect(resetPasswordPage.resendButton).toBeHidden();
 
       await resetPasswordPage.expectRequestFormIsVisible();

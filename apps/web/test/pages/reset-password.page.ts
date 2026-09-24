@@ -10,7 +10,6 @@ export class ResetPasswordPage {
   readonly verifySuccessMessage: Locator;
   readonly passwordTooShortError: Locator;
   readonly requiredError: Locator;
-  readonly openGmailButton: Locator;
   readonly resendButton: Locator;
   readonly useDifferentEmailButton: Locator;
   readonly invalidTokenError: Locator;
@@ -23,7 +22,6 @@ export class ResetPasswordPage {
     this.emailInput = page.getByTestId('email-input');
     this.continueButton = page.getByTestId('continue-button');
     this.returnToLoginLink = page.getByTestId('return-to-login-link');
-    this.openGmailButton = page.getByTestId('open-gmail-button');
     this.resendButton = page.getByTestId('resend-button');
     this.useDifferentEmailButton = page.getByTestId('use-different-email-button');
 
@@ -65,7 +63,6 @@ export class ResetPasswordPage {
     await expect(this.page.getByText(email)).toBeVisible();
     await expect(this.resendButton).toBeVisible();
     await expect(this.useDifferentEmailButton).toBeVisible();
-    await expect(this.openGmailButton).toBeVisible();
     await expect(this.returnToLoginLink).toBeVisible();
   }
 }
