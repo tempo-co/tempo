@@ -466,7 +466,7 @@ function ConnectionCardHeaderContent({
         testId='bank-connection-logo'
       />
       <span className='min-w-0 flex-1'>
-        <div className='flex min-w-0 items-baseline justify-between gap-3'>
+        <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 max-sm:grid-cols-1 max-sm:gap-y-1'>
           <h2
             id={connectionHeadingId}
             className='min-w-0 break-words text-lg font-semibold leading-tight'
@@ -475,7 +475,7 @@ function ConnectionCardHeaderContent({
           </h2>
           <ConnectionBalanceSummary
             accounts={connection.bankAccounts}
-            className='justify-end text-right max-sm:max-w-[60%] max-sm:shrink sm:shrink-0'
+            className='justify-end text-right max-sm:justify-start max-sm:text-left sm:shrink-0'
           />
         </div>
         <p className='mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground'>
@@ -705,24 +705,15 @@ function ConnectionBalanceSummary({
   return (
     <span
       className={cn(
-        'flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 text-sm max-sm:gap-x-1 max-sm:text-xs',
+        'flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 text-sm max-sm:gap-x-4 max-sm:text-xs',
         className,
       )}
       data-testid='bank-connection-total'
-      aria-label={`Total balance ${totals.map(({currency, amount}) => `${amount} ${currency}`).join(', ')}`}
-      title='Total balance'
+      role='group'
+      aria-label={`Connection balances: ${totals.map(({currency, amount}) => `${amount} ${currency}`).join(', ')}`}
     >
-      <span className='shrink-0 text-muted-foreground'>
-        <span className='max-sm:hidden'>Total balance</span>
-        <span className='hidden max-sm:inline'>Total</span>
-      </span>
-      {totals.map(({currency, amount}, index) => (
-        <span key={currency} className='inline-flex min-w-0 items-baseline gap-2 max-sm:gap-1'>
-          {index > 0 && (
-            <span aria-hidden='true' className='text-muted-foreground'>
-              ·
-            </span>
-          )}
+      {totals.map(({currency, amount}) => (
+        <span key={currency} className='inline-flex shrink-0 items-baseline'>
           <CurrencyAmount amount={amount} currency={currency} />
         </span>
       ))}
@@ -808,12 +799,10 @@ function BankAccountRow({account}: {account: BankConnection['bankAccounts'][numb
         </Badge>
       </div>
       {primaryBalance && (
-        <dl className='mt-4 grid min-w-0 grid-cols-2 gap-x-4 gap-y-3'>
+        <dl className='mt-4 min-w-0'>
           <div className='min-w-0'>
-            <dt className='text-xs uppercase text-muted-foreground'>
-              {formatBalanceType(primaryBalance.balanceType)}
-            </dt>
-            <dd className='mt-1 text-sm'>
+            <dt className='sr-only'>Account balance</dt>
+            <dd className='text-sm'>
               <CurrencyAmount
                 amount={Number(primaryBalance.amount)}
                 currency={primaryBalance.currency}
@@ -906,13 +895,6 @@ function formatAccountUsage(value: string | null) {
   if (normalized === 'PRIV') return 'Personal';
   if (normalized === 'ORGA') return 'Business';
   return formatBankingWords(value);
-}
-
-function formatBalanceType(value: string) {
-  return value
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/[_-]/g, ' ')
-    .toLowerCase();
 }
 
 function formatDate(value: string) {
