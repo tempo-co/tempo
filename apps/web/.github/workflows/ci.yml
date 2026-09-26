@@ -82,13 +82,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Export environment variables
-        run: |
-          echo '${{ toJson(vars) }}' | jq -c '.' | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' >> $GITHUB_ENV
-          echo 'VITE_EMAIL_UI_URL=http://localhost:8025' >> $GITHUB_ENV
-
       - name: Validate immutable API E2E image
         shell: bash
+        env:
+          TEMPO_API_E2E_IMAGE: ${{ vars.TEMPO_API_E2E_IMAGE }}
         run: |
           test -n "${TEMPO_API_E2E_IMAGE:-}"
           [[ "$TEMPO_API_E2E_IMAGE" =~ ^ghcr\.io/tempo-co/tempo-api@sha256:[0-9a-f]{64}$ ]]
@@ -101,12 +98,16 @@ jobs:
           password: ${{ github.token }}
 
       - name: Pull immutable API E2E image and clear registry credentials
+        env:
+          TEMPO_API_E2E_IMAGE: ${{ vars.TEMPO_API_E2E_IMAGE }}
         run: |
           set -euo pipefail
           docker pull "$TEMPO_API_E2E_IMAGE"
           docker logout ghcr.io
 
       - name: Setup Docker E2E environment
+        env:
+          TEMPO_API_E2E_IMAGE: ${{ vars.TEMPO_API_E2E_IMAGE }}
         run: |
           docker compose -f docker-compose.e2e.yml up -d --wait
           npm run db:seed:e2e
@@ -124,6 +125,10 @@ jobs:
         run: npx playwright install chromium --with-deps
 
       - name: Run E2E tests
+        env:
+          VITE_API_URL: http://localhost:3000
+          VITE_APP_URL: http://localhost:5173
+          VITE_EMAIL_UI_URL: http://localhost:8025
         run: npx playwright test
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
