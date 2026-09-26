@@ -68,6 +68,9 @@ jobs:
       - name: Build application
         run: npm run build
 
+      - name: Probe Nginx security headers
+        run: bash ops/tests/tempo-web-security-headers-test.sh
+
   e2e-test:
     name: E2E Tests
     timeout-minutes: 60
