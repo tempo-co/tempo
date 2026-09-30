@@ -35,6 +35,7 @@ export function BankTransactionDetailsDialog({
     open,
   );
   const isNotFound = error instanceof HttpError && error.status === 404;
+  const isLoading = isPending || (isFetching && !transaction);
   const transactionTitle = transaction
     ? resolveBankTransactionDisplayTitle(transaction)
     : 'Transaction details';
@@ -67,7 +68,7 @@ export function BankTransactionDetailsDialog({
           className='min-h-0 flex-1'
           aria-busy={isPending || isFetching}
         >
-          {isPending || isFetching ? (
+          {isLoading ? (
             <div role='status' aria-label='Loading bank transaction' className='p-5 sm:p-6'>
               <Skeleton className='h-80 w-full rounded-lg bg-card sm:h-96' />
             </div>

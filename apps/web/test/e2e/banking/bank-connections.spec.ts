@@ -125,6 +125,11 @@ test.describe('bank connections', () => {
     await page.goto('/bank-connections');
     await expect(page.getByTestId('bank-connection-total')).toContainText('1,335.00');
     await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
+    // Recent transactions are only loaded once the card is expanded.
+    expect(transactionRequestCount).toBe(0);
+
+    await page.getByTestId(`connection-card-toggle-${MOCK_CONNECTION.id}`).click();
+    await expect.poll(() => transactionRequestCount).toBe(1);
     await expect.poll(() => connectionRequestCount, {timeout: 12_000}).toBeGreaterThan(1);
     await expect.poll(() => transactionRequestCount, {timeout: 12_000}).toBeGreaterThan(1);
   });

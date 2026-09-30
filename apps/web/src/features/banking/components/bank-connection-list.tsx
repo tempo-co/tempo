@@ -225,6 +225,9 @@ function BankConnectionCard({
   // Collapsed by default: the header already carries state, so the body is opt-in.
   // Cards without a collapsible body render expanded without a toggle.
   const [isExpanded, setIsExpanded] = useState(false);
+  // Recent transactions only render in the expanded body, so load them on first expand and
+  // keep the query enabled afterwards so later syncs still refresh them.
+  const [hasBeenExpanded, setHasBeenExpanded] = useState(false);
   const connectionHeadingId = `bank-connection-${connection.id}-heading`;
   const accountsHeadingId = `bank-connection-${connection.id}-accounts`;
   const transactionsHeadingId = `bank-connection-${connection.id}-transactions`;
@@ -239,7 +242,11 @@ function BankConnectionCard({
     isPending: areTransactionsPending,
     isError: areTransactionsError,
     refetch: refetchTransactions,
-  } = useGetBankConnectionTransactions(connection.id, hasSynced, connection.lastSyncedAt);
+  } = useGetBankConnectionTransactions(
+    connection.id,
+    hasSynced && hasBeenExpanded,
+    connection.lastSyncedAt,
+  );
 
   const hasBodyContent =
     connection.bankAccounts.length > 0 || hasSynced || Boolean(connection.consentValidUntil);
@@ -281,7 +288,10 @@ function BankConnectionCard({
         {hasBodyContent ? (
           <button
             type='button'
-            onClick={() => setIsExpanded((open) => !open)}
+            onClick={() => {
+              setIsExpanded((open) => !open);
+              setHasBeenExpanded(true);
+            }}
             aria-expanded={isExpanded}
             aria-controls={disclosureContentId}
             data-testid={`connection-card-toggle-${connection.id}`}
