@@ -25,7 +25,14 @@ const handleAuthError = (error: Error) => {
   }
 };
 
+const isAuthError = (error: Error) =>
+  error instanceof SessionExpiredError || error instanceof EmailNotVerifiedError;
+
 export const queryClient = new QueryClient({
   queryCache: new QueryCache({onError: handleAuthError}),
   mutationCache: new MutationCache({onError: handleAuthError}),
+  defaultOptions: {
+    // Retrying cannot fix an auth error and would delay the redirect until retries run out.
+    queries: {retry: (failureCount, error) => !isAuthError(error) && failureCount < 3},
+  },
 });
