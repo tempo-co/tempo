@@ -3,6 +3,7 @@ import {useQuery} from '@tanstack/react-query';
 import {api} from '@/utils/api';
 
 import {BankConnectionAspsp} from '../types/bank-connection';
+import {bankQueryKeys} from './query-keys';
 
 export const useGetSupportedBanks = (enabled: boolean) => {
   const {
@@ -11,7 +12,7 @@ export const useGetSupportedBanks = (enabled: boolean) => {
     isError,
     refetch,
   } = useQuery<BankConnectionAspsp[]>({
-    queryKey: ['bank-connections', 'supported-banks'],
+    queryKey: bankQueryKeys.supportedBanks,
     queryFn: async () => {
       return await api.get<BankConnectionAspsp[]>('/bank-connections/aspsps');
     },

@@ -1,11 +1,9 @@
 import {z} from 'zod';
 
+import {passwordSchema} from '@/types/validation';
+
 export const passwordResetVerifyDtoSchema = z.object({
-  newPassword: z
-    .string()
-    .min(1, 'Please enter your new password.')
-    .min(8, 'Too short. Must be at least 8 characters.')
-    .max(255, 'Too long. Must be less than 256 characters.'),
+  newPassword: passwordSchema('Please enter your new password.'),
   token: z.string().uuid(),
 });
 

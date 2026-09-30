@@ -1,6 +1,5 @@
 import {NavigateOptions, useNavigate} from '@tanstack/react-router';
 import {ChevronFirst, ChevronLast, ChevronLeft, ChevronRight} from 'lucide-react';
-import {useCallback, useMemo} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {
@@ -16,61 +15,20 @@ type PaginationProps = {
   totalItems: number;
   pagination: PaginationParams;
   navigateOptions: NavigateOptions;
-  pageSizeOptions?: number[];
 };
 
-export function Pagination({
-  totalItems,
-  pagination,
-  navigateOptions,
-  pageSizeOptions = PAGE_SIZE_OPTIONS,
-}: PaginationProps) {
+export function Pagination({totalItems, pagination, navigateOptions}: PaginationProps) {
   const navigate = useNavigate(navigateOptions);
 
-  const totalPages = useMemo(
-    () => Math.ceil(totalItems / pagination.pageSize),
-    [totalItems, pagination.pageSize],
-  );
+  const totalPages = Math.ceil(totalItems / pagination.pageSize);
+  const startIndex = pagination.pageIndex * pagination.pageSize + 1;
+  const endIndex = Math.min((pagination.pageIndex + 1) * pagination.pageSize, totalItems);
+  const canGoNext = pagination.pageIndex < totalPages - 1;
 
-  const startIndex = useMemo(
-    () => pagination.pageIndex * pagination.pageSize + 1,
-    [pagination.pageIndex, pagination.pageSize],
-  );
-  const endIndex = useMemo(
-    () => Math.min((pagination.pageIndex + 1) * pagination.pageSize, totalItems),
-    [pagination.pageIndex, pagination.pageSize, totalItems],
-  );
+  const goToPage = (pageIndex: number) => navigate({search: (prev) => ({...prev, pageIndex})});
 
-  const canGoNext = useMemo(
-    () => pagination.pageIndex < totalPages - 1,
-    [pagination.pageIndex, totalPages],
-  );
-
-  const handlePageSizeChange = useCallback(
-    async (pageSize: string) => {
-      await navigate({search: (prev) => ({...prev, pageSize: Number(pageSize), pageIndex: 0})});
-    },
-    [navigate],
-  );
-
-  const handleFirstPage = useCallback(async () => {
-    await navigate({search: (prev) => ({...prev, pageIndex: 0})});
-  }, [navigate]);
-
-  const handlePreviousPage = useCallback(async () => {
-    const newPageIndex = Math.max(pagination.pageIndex - 1, 0);
-    await navigate({search: (prev) => ({...prev, pageIndex: newPageIndex})});
-  }, [navigate, pagination.pageIndex]);
-
-  const handleNextPage = useCallback(async () => {
-    const newPageIndex = pagination.pageIndex + 1;
-    await navigate({search: (prev) => ({...prev, pageIndex: newPageIndex})});
-  }, [navigate, pagination.pageIndex]);
-
-  const handleLastPage = useCallback(async () => {
-    const newPageIndex = totalPages - 1;
-    await navigate({search: (prev) => ({...prev, pageIndex: newPageIndex})});
-  }, [navigate, totalPages]);
+  const handlePageSizeChange = (pageSize: string) =>
+    navigate({search: (prev) => ({...prev, pageSize: Number(pageSize), pageIndex: 0})});
 
   return (
     <div
@@ -90,7 +48,7 @@ export function Pagination({
             <SelectValue placeholder={pagination.pageSize} />
           </SelectTrigger>
           <SelectContent side='top'>
-            {pageSizeOptions.map((pageSize) => (
+            {PAGE_SIZE_OPTIONS.map((pageSize) => (
               <SelectItem key={pageSize} value={`${pageSize}`}>
                 {pageSize}
               </SelectItem>
@@ -111,7 +69,7 @@ export function Pagination({
       </p>
       <div className='flex shrink-0 space-x-2'>
         <Button
-          onClick={handleFirstPage}
+          onClick={() => goToPage(0)}
           disabled={pagination.pageIndex < 1}
           variant='outline'
           className='hidden h-11 w-11 p-0 sm:inline-flex sm:h-8 sm:w-8'
@@ -120,7 +78,7 @@ export function Pagination({
           <ChevronFirst className='h-4 w-4' />
         </Button>
         <Button
-          onClick={handlePreviousPage}
+          onClick={() => goToPage(Math.max(pagination.pageIndex - 1, 0))}
           disabled={pagination.pageIndex < 1}
           variant='outline'
           className='h-11 w-11 p-0 sm:h-8 sm:w-8'
@@ -129,7 +87,7 @@ export function Pagination({
           <ChevronLeft className='h-4 w-4' />
         </Button>
         <Button
-          onClick={handleNextPage}
+          onClick={() => goToPage(pagination.pageIndex + 1)}
           disabled={!canGoNext}
           variant='outline'
           className='h-11 w-11 p-0 sm:h-8 sm:w-8'
@@ -138,7 +96,7 @@ export function Pagination({
           <ChevronRight className='h-4 w-4' />
         </Button>
         <Button
-          onClick={handleLastPage}
+          onClick={() => goToPage(totalPages - 1)}
           disabled={!canGoNext}
           variant='outline'
           className='hidden h-11 w-11 p-0 sm:inline-flex sm:h-8 sm:w-8'

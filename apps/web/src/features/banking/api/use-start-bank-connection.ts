@@ -19,7 +19,6 @@ export const useStartBankConnection = () => {
         JSON.stringify(request),
       );
     },
-    retry: false,
   });
 
   return {startBankConnection, isPending};

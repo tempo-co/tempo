@@ -20,7 +20,6 @@ export const useDeleteBankConnection = () => {
     onSuccess: async () => {
       await queryClient.invalidateQueries({queryKey: bankQueryKeys.connections});
     },
-    retry: false,
   });
 
   const deleteBankConnection = (connectionId: string, confirmation?: string) =>

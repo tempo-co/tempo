@@ -6,17 +6,13 @@ import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
 import {Account} from '@/types/account';
 import {HttpError, api} from '@/utils/api';
 
-import {EmailChangeVerifySearchParams} from '../types/email-change-verify.dto';
+import {TokenSearchParams} from '../types/token.dto';
 
 export const useVerifyEmailChange = () => {
   const queryClient = useQueryClient();
 
-  const {mutateAsync, isPending, isSuccess} = useMutation<
-    void,
-    HttpError,
-    EmailChangeVerifySearchParams
-  >({
-    mutationFn: async (dto: EmailChangeVerifySearchParams) => {
+  const {mutateAsync, isPending, isSuccess} = useMutation<void, HttpError, TokenSearchParams>({
+    mutationFn: async (dto: TokenSearchParams) => {
       await api.post('/auth/change-email/verify', JSON.stringify(dto));
     },
     onSuccess: async (_data, variables) => {
@@ -26,11 +22,10 @@ export const useVerifyEmailChange = () => {
         email: variables.email,
       }));
     },
-    retry: false,
   });
 
   const verifyEmailChange = useCallback(
-    (dto: EmailChangeVerifySearchParams) => {
+    (dto: TokenSearchParams) => {
       return toast.promise(mutateAsync(dto), {
         loading: 'Verifying your new email...',
         success: 'Your new email has been verified.',

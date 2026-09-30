@@ -14,7 +14,6 @@ export const usePasswordResetVerify = () => {
     mutationFn: async (dto: PasswordResetVerifyDto) => {
       return await api.post<void>('/auth/reset-password/verify', JSON.stringify(dto));
     },
-    retry: false,
   });
 
   return {verifyPasswordReset, isPending, isSuccess, error};

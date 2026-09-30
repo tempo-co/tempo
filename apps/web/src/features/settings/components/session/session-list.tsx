@@ -1,5 +1,3 @@
-import {useMemo} from 'react';
-
 import {Button} from '@/components/ui/button';
 import {Skeleton} from '@/components/ui/skeleton';
 
@@ -10,11 +8,8 @@ import {SessionRevokeAllDialog} from './session-revoke-all-dialog';
 export function SessionList() {
   const {sessions, isError, isPending, refetch} = useGetSessions();
 
-  const {currentSession, otherSessions} = useMemo(() => {
-    const currentSession = sessions?.find((s) => s.isCurrent);
-    const otherSessions = sessions?.filter((s) => !s.isCurrent);
-    return {currentSession, otherSessions};
-  }, [sessions]);
+  const currentSession = sessions?.find((s) => s.isCurrent);
+  const otherSessions = sessions?.filter((s) => !s.isCurrent);
 
   return (
     <section aria-labelledby='active-sessions-heading' className='space-y-4'>
@@ -27,44 +22,20 @@ export function SessionList() {
         </p>
       </div>
       {isError && sessions === undefined ? (
-        <div className='flex flex-col gap-3 rounded-card border border-destructive/50 bg-destructive/10 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5'>
-          <div>
-            <p className='text-sm font-medium'>Sessions could not be loaded.</p>
-            <p className='mt-1 text-xs text-muted-foreground'>
-              Check your connection and try again.
-            </p>
-          </div>
-          <Button
-            variant='outline'
-            size='sm'
-            className='min-h-11 sm:min-h-9'
-            onClick={() => void refetch()}
-          >
-            Try again
-          </Button>
-        </div>
+        <SessionsErrorBanner
+          title='Sessions could not be loaded.'
+          description='Check your connection and try again.'
+          onRetry={() => void refetch()}
+        />
       ) : (
         <div className='space-y-4'>
           {isError && sessions !== undefined && (
-            <div
+            <SessionsErrorBanner
               role='status'
-              className='flex flex-col gap-3 rounded-card border border-destructive/50 bg-destructive/10 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5'
-            >
-              <div>
-                <p className='text-sm font-medium'>Sessions could not be refreshed.</p>
-                <p className='mt-1 text-xs text-muted-foreground'>
-                  Showing the last loaded list. Try again to refresh it.
-                </p>
-              </div>
-              <Button
-                variant='outline'
-                size='sm'
-                className='min-h-11 sm:min-h-9'
-                onClick={() => void refetch()}
-              >
-                Try again
-              </Button>
-            </div>
+              title='Sessions could not be refreshed.'
+              description='Showing the last loaded list. Try again to refresh it.'
+              onRetry={() => void refetch()}
+            />
           )}
           {isPending && <Skeleton className='h-[4.5rem] w-full rounded-lg border bg-background' />}
           {currentSession && <SessionCard key={currentSession.id} session={currentSession} />}
@@ -88,5 +59,29 @@ export function SessionList() {
         </div>
       )}
     </section>
+  );
+}
+
+type SessionsErrorBannerProps = {
+  title: string;
+  description: string;
+  role?: 'status';
+  onRetry: () => void;
+};
+
+function SessionsErrorBanner({title, description, role, onRetry}: SessionsErrorBannerProps) {
+  return (
+    <div
+      role={role}
+      className='flex flex-col gap-3 rounded-card border border-destructive/50 bg-destructive/10 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5'
+    >
+      <div>
+        <p className='text-sm font-medium'>{title}</p>
+        <p className='mt-1 text-xs text-muted-foreground'>{description}</p>
+      </div>
+      <Button variant='outline' size='sm' className='min-h-11 sm:min-h-9' onClick={onRetry}>
+        Try again
+      </Button>
+    </div>
   );
 }

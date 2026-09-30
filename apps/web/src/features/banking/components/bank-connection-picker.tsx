@@ -86,17 +86,12 @@ export function BankConnectionPicker({
     setSelectedBank(undefined);
   };
 
-  const selectBank = (bank: BankConnectionAspsp) => {
-    setSelectedBank(bank);
-  };
-
   const confirmBank = () => {
     if (!selectedBank) return;
     void onBankSelect(selectedBank);
   };
 
-  const isConfirming = isStarting;
-  const isConfirmDisabled = !selectedBank || isConfirming;
+  const isConfirmDisabled = !selectedBank || isStarting;
 
   return (
     <ResponsiveDialog open={open} onOpenChange={handleOpenChange}>
@@ -165,7 +160,7 @@ export function BankConnectionPicker({
                   </span>
                 </>
               )}
-              onSelect={selectBank}
+              onSelect={setSelectedBank}
               disabled={isStarting || isPending || !selectedCountry}
               testId='bank-connection-bank-selector'
             />
@@ -193,7 +188,7 @@ export function BankConnectionPicker({
                 data-testid='bank-connection-confirm'
                 className='min-h-11 w-full'
               >
-                {isConfirming ? (
+                {isStarting ? (
                   <>
                     <span>Taking you to {selectedBank?.name ?? 'your bank'}...</span>
                     <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
@@ -345,10 +340,12 @@ function countryFlag(country: string) {
     .join('');
 }
 
+let regionNames: Intl.DisplayNames | undefined;
+
 function formatCountry(country: string) {
   try {
-    const label = new Intl.DisplayNames(undefined, {type: 'region'}).of(country);
-    return label ?? country;
+    regionNames ??= new Intl.DisplayNames(undefined, {type: 'region'});
+    return regionNames.of(country) ?? country;
   } catch {
     return country;
   }

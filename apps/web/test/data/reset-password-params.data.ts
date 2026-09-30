@@ -1,10 +1,10 @@
 import {faker} from '@faker-js/faker';
 
-import {PasswordResetSearchParams} from '@/features/auth/types/token.dto';
+import {TokenSearchParams} from '@/features/auth/types/token.dto';
 
 type Params = {
   name: string;
-  params: PasswordResetSearchParams & {
+  params: TokenSearchParams & {
     [key: string]: string | undefined;
   };
 };

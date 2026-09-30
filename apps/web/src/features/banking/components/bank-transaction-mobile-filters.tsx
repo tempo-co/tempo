@@ -24,7 +24,6 @@ import {BankTransactionFinancialEventFilter} from './bank-transaction-financial-
 
 type BankTransactionMobileFiltersProps = {
   filters: BankTransactionFilterParams;
-  setFilters: React.Dispatch<React.SetStateAction<BankTransactionFilterParams>>;
   isFilteringApplied: boolean;
   onClearFilters: () => void;
   className?: string;
@@ -32,7 +31,6 @@ type BankTransactionMobileFiltersProps = {
 
 export function BankTransactionMobileFilters({
   filters,
-  setFilters,
   isFilteringApplied,
   onClearFilters,
   className,
@@ -93,27 +91,11 @@ export function BankTransactionMobileFilters({
           ref={mobileFiltersScrollAreaRef}
         >
           <div className='px-4 py-4' data-testid='bank-transaction-mobile-filters-body'>
-            <BankTransactionDateFilter filters={filters} setFilters={setFilters} variant='mobile' />
-            <BankTransactionCategoryFilter
-              filters={filters}
-              setFilters={setFilters}
-              variant='mobile'
-            />
-            <BankTransactionCategorySourceFilter
-              filters={filters}
-              setFilters={setFilters}
-              variant='mobile'
-            />
-            <BankTransactionFinancialEventFilter
-              filters={filters}
-              setFilters={setFilters}
-              variant='mobile'
-            />
-            <BankTransactionAccountFilter
-              filters={filters}
-              setFilters={setFilters}
-              variant='mobile'
-            />
+            <BankTransactionDateFilter filters={filters} variant='mobile' />
+            <BankTransactionCategoryFilter filters={filters} variant='mobile' />
+            <BankTransactionCategorySourceFilter filters={filters} variant='mobile' />
+            <BankTransactionFinancialEventFilter filters={filters} variant='mobile' />
+            <BankTransactionAccountFilter filters={filters} variant='mobile' />
           </div>
         </ScrollArea>
         <DrawerFooter className='mt-0 flex-row items-center justify-end gap-2 border-t px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>

@@ -52,9 +52,7 @@ type BankTransactionTableProps = {
   isPlaceholderData: boolean;
   pagination: PaginationParams;
   filters: BankTransactionFilterParams;
-  setFilters: React.Dispatch<React.SetStateAction<BankTransactionFilterParams>>;
   sort: BankTransactionSortParams;
-  setSort: React.Dispatch<React.SetStateAction<BankTransactionSortParams>>;
   isError: boolean;
   onRetry: () => void;
   onTransactionSelect: (transactionId: BankTransaction['id'], trigger: HTMLButtonElement) => void;
@@ -67,9 +65,7 @@ export function BankTransactionTable({
   isPlaceholderData,
   pagination,
   filters,
-  setFilters,
   sort,
-  setSort,
   isError,
   onRetry,
   onTransactionSelect,
@@ -96,20 +92,20 @@ export function BankTransactionTable({
 
     const timeoutId = window.setTimeout(() => {
       void navigate({search: (prev) => ({...prev, search, pageIndex: 0})});
-      setFilters((previousFilters) => ({...previousFilters, search}));
     }, 300);
 
     return () => window.clearTimeout(timeoutId);
-  }, [filters.search, navigate, searchInput, setFilters]);
+  }, [filters.search, navigate, searchInput]);
+
+  const sorting: SortingState = sort
+    ? [{id: sort.by, desc: sort.order === BankTransactionSortOrder.DESC}]
+    : [];
 
   const handleSortingChange = (
     updaterOrValue: SortingState | ((prev: SortingState) => SortingState),
   ) => {
-    const currentSorting: SortingState = sort
-      ? [{id: sort.by, desc: sort.order === BankTransactionSortOrder.DESC}]
-      : [];
     const updatedSorting =
-      typeof updaterOrValue === 'function' ? updaterOrValue(currentSorting) : updaterOrValue;
+      typeof updaterOrValue === 'function' ? updaterOrValue(sorting) : updaterOrValue;
     const firstSort = updatedSorting[0];
     const nextSort =
       firstSort && isBankTransactionSortField(firstSort.id)
@@ -120,7 +116,6 @@ export function BankTransactionTable({
         : DEFAULT_BANK_TRANSACTION_SORT;
 
     void navigate({search: (prev) => ({...prev, sort: nextSort, pageIndex: 0})});
-    setSort(nextSort);
   };
 
   const table = useReactTable({
@@ -132,7 +127,7 @@ export function BankTransactionTable({
     manualPagination: true,
     state: {
       pagination,
-      sorting: sort ? [{id: sort.by, desc: sort.order === BankTransactionSortOrder.DESC}] : [],
+      sorting,
     },
     rowCount: totalTransactions,
     onSortingChange: handleSortingChange,
@@ -198,7 +193,6 @@ export function BankTransactionTable({
         </div>
         <BankTransactionMobileFilters
           filters={filters}
-          setFilters={setFilters}
           isFilteringApplied={isFilteringApplied}
           onClearFilters={clearFilters}
           className='md:hidden'
@@ -207,29 +201,21 @@ export function BankTransactionTable({
           className='hidden w-full flex-col gap-2 md:contents'
           data-testid='bank-transaction-desktop-filters'
         >
-          <BankTransactionDateFilter
-            filters={filters}
-            setFilters={setFilters}
-            className='max-md:w-full max-md:min-w-0'
-          />
+          <BankTransactionDateFilter filters={filters} className='max-md:w-full max-md:min-w-0' />
           <BankTransactionCategoryFilter
             filters={filters}
-            setFilters={setFilters}
             className='max-md:w-full max-md:min-w-0'
           />
           <BankTransactionCategorySourceFilter
             filters={filters}
-            setFilters={setFilters}
             className='max-md:w-full max-md:min-w-0'
           />
           <BankTransactionFinancialEventFilter
             filters={filters}
-            setFilters={setFilters}
             className='max-md:w-full max-md:min-w-0'
           />
           <BankTransactionAccountFilter
             filters={filters}
-            setFilters={setFilters}
             className='max-md:w-full max-md:min-w-0'
           />
         </div>
@@ -312,7 +298,7 @@ export function BankTransactionTable({
               </TableRow>
             ) : (
               table.getRowModel().rows.map((row) => {
-                const transactionLabel = getTransactionLabel(row.original);
+                const transactionLabel = resolveBankTransactionDisplayTitle(row.original);
                 const financialEvent = formatBankTransactionFinancialEvent(
                   row.original.financialEventType,
                 );
@@ -430,10 +416,6 @@ export function BankTransactionTable({
       </div>
     </>
   );
-}
-
-function getTransactionLabel(transaction: BankTransaction) {
-  return resolveBankTransactionDisplayTitle(transaction);
 }
 
 function isBankTransactionSortField(value: string): value is BankTransactionSortField {

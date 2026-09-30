@@ -1,7 +1,7 @@
 import type {BankConnection} from '../types/bank-connection';
 
 /** True when the ISO timestamp parses to a real moment that is not in the future. */
-export function isPastTimestamp(value: string | null | undefined, now = Date.now()): boolean {
+function isPastTimestamp(value: string | null | undefined, now = Date.now()): boolean {
   if (!value) return true;
 
   const timestamp = Date.parse(value);
@@ -12,12 +12,12 @@ export function isReauthorizationRequired(connection: BankConnection) {
   if (connection.status === 'EXPIRED' || connection.syncStatus === 'EXPIRED') return true;
   if (connection.status !== 'AUTHORIZED') return false;
 
-  return isPastTimestamp(connection.consentValidUntil ?? null);
+  return isPastTimestamp(connection.consentValidUntil);
 }
 
-export function isStaleAutomaticSync(
+function isStaleAutomaticSync(
   connection: BankConnection,
-  status: BankConnection['syncStatus'] | 'EXPIRED',
+  status: AutomaticSyncStatus,
   now = Date.now(),
 ) {
   return (
@@ -29,7 +29,7 @@ export function isStaleAutomaticSync(
   );
 }
 
-export type AutomaticSyncStatus = BankConnection['syncStatus'] | 'EXPIRED';
+export type AutomaticSyncStatus = BankConnection['syncStatus'];
 
 export type AutomaticSyncDetails = {
   title: string;
@@ -37,7 +37,7 @@ export type AutomaticSyncDetails = {
   isProblem: boolean;
 };
 
-export function getAutomaticSyncDetails(
+function getAutomaticSyncDetails(
   status: AutomaticSyncStatus,
   error: string | null,
   lastSyncedAt: string | null,

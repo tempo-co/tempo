@@ -4,11 +4,11 @@ import {useEffect} from 'react';
 import {toast} from 'sonner';
 
 import {useVerifyEmailChange} from '@/features/auth/api/use-verify-email-change';
-import {searchParamsSchema} from '@/features/auth/types/email-change-verify.dto';
+import {tokenSearchParamsSchema} from '@/features/auth/types/token.dto';
 
 export const Route = createFileRoute('/verify-email-change')({
   component: VerifyEmailChangeIndex,
-  validateSearch: zodValidator(searchParamsSchema),
+  validateSearch: zodValidator(tokenSearchParamsSchema),
   beforeLoad: ({search}) => {
     const hasValidParams = !!(search.token && search.email);
     if (!hasValidParams) {

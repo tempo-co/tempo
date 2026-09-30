@@ -32,7 +32,6 @@ export const useVerifyEmail = () => {
         id: 'welcome',
       });
     },
-    retry: false,
   });
 
   return {verifyEmail, isPending, error, reset};

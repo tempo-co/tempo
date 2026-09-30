@@ -26,7 +26,11 @@ import {useDeleteBankConnection} from '../api/use-delete-bank-connection';
 import {useGetBankConnectionTransactions} from '../api/use-get-bank-connection-transactions';
 import {useGetSupportedBanks} from '../api/use-get-supported-banks';
 import {useStartBankConnection} from '../api/use-start-bank-connection';
-import {BankConnection, BankConnectionAspsp, BankTransaction} from '../types/bank-connection';
+import {
+  BankConnection,
+  BankConnectionAspsp,
+  BankConnectionTransaction,
+} from '../types/bank-connection';
 import {
   type AutomaticSyncDetails,
   getAutomaticSyncDetailsForConnection,
@@ -37,6 +41,7 @@ import {
   formatBankTransactionCompactDate,
   formatBankTransactionFinancialEvent,
   formatBankingWords,
+  resolveBankAccountLabel,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
 import {BankConnectionPicker} from './bank-connection-picker';
@@ -47,7 +52,10 @@ type BankConnectionListProps = {
   isPending: boolean;
   isError: boolean;
   onRetry: () => void;
-  onTransactionSelect: (transactionId: BankTransaction['id'], trigger: HTMLButtonElement) => void;
+  onTransactionSelect: (
+    transactionId: BankConnectionTransaction['id'],
+    trigger: HTMLButtonElement,
+  ) => void;
 };
 
 function aspspKey(name: string, country: string) {
@@ -223,22 +231,18 @@ function BankConnectionCard({
   const disclosureContentId = `bank-connection-${connection.id}-content`;
   const metadataHeadingId = `bank-connection-${connection.id}-meta`;
   const {deleteBankConnection, isPending: isRemoving} = useDeleteBankConnection();
+  const hasSynced = isAuthorized && !!connection.lastSyncedAt;
+  const needsReauth = isReauthorizationRequired(connection);
   const {
     transactions,
     total,
     isPending: areTransactionsPending,
     isError: areTransactionsError,
     refetch: refetchTransactions,
-  } = useGetBankConnectionTransactions(
-    connection.id,
-    isAuthorized && !!connection.lastSyncedAt,
-    connection.lastSyncedAt,
-  );
+  } = useGetBankConnectionTransactions(connection.id, hasSynced, connection.lastSyncedAt);
 
   const hasBodyContent =
-    connection.bankAccounts.length > 0 ||
-    (isAuthorized && !!connection.lastSyncedAt) ||
-    Boolean(connection.consentValidUntil);
+    connection.bankAccounts.length > 0 || hasSynced || Boolean(connection.consentValidUntil);
 
   // Sync status is only a card when it needs attention; that warning must stay
   // discoverable even while the card is collapsed, so it renders as a strip
@@ -273,12 +277,7 @@ function BankConnectionCard({
       data-testid={`bank-connection-${connection.id}`}
       aria-labelledby={connectionHeadingId}
     >
-      <CardHeader
-        className={cn(
-          'relative flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-0',
-          hasBodyContent && 'sm:flex-row sm:gap-0',
-        )}
-      >
+      <CardHeader className='relative flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-0'>
         {hasBodyContent ? (
           <button
             type='button'
@@ -288,7 +287,7 @@ function BankConnectionCard({
             data-testid={`connection-card-toggle-${connection.id}`}
             className={cn(
               'flex w-full min-w-0 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card sm:self-auto',
-              isReauthorizationRequired(connection) && 'sm:w-[calc(100%-8.5rem)] sm:shrink',
+              needsReauth && 'sm:w-[calc(100%-8.5rem)] sm:shrink',
             )}
           >
             <ConnectionCardHeaderContent
@@ -301,7 +300,7 @@ function BankConnectionCard({
               aria-hidden='true'
               className={cn(
                 'ml-2 mr-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
-                isReauthorizationRequired(connection) ? 'sm:ml-1' : 'text-muted-foreground',
+                needsReauth && 'sm:ml-1',
                 !isExpanded && '-rotate-90',
               )}
             />
@@ -316,7 +315,7 @@ function BankConnectionCard({
             />
           </div>
         )}
-        {isReauthorizationRequired(connection) && (
+        {needsReauth && (
           <Button
             variant='outline'
             size='sm'
@@ -328,7 +327,7 @@ function BankConnectionCard({
           </Button>
         )}
       </CardHeader>
-      {!isExpanded && syncDetails?.isProblem && <AutomaticSyncStatus details={syncDetails} />}
+      {!isExpanded && <AutomaticSyncStatus details={syncDetails} />}
       {isExpanded && (
         <CardContent
           id={disclosureContentId}
@@ -337,7 +336,7 @@ function BankConnectionCard({
           }
           className='space-y-6 px-4 pb-5 pt-4'
         >
-          {syncDetails?.isProblem && <AutomaticSyncStatus details={syncDetails} />}
+          <AutomaticSyncStatus details={syncDetails} />
           <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
             <section aria-labelledby={accountsHeadingId} className='min-w-0'>
               <SectionHeading
@@ -362,7 +361,7 @@ function BankConnectionCard({
               )}
             </section>
 
-            {isAuthorized && connection.lastSyncedAt && (
+            {hasSynced && (
               <section aria-labelledby={transactionsHeadingId} className='min-w-0'>
                 <SectionHeading
                   headingId={transactionsHeadingId}
@@ -492,6 +491,7 @@ function ConnectionCardHeaderContent({
 
 function ConsentBadge({value}: {value: string}) {
   const isExpiringSoon = isExpiringWithinThirtyDays(value);
+  const label = `Consent valid until ${formatDate(value)}`;
 
   return (
     <span
@@ -499,7 +499,7 @@ function ConsentBadge({value}: {value: string}) {
         'inline-flex min-w-0 items-center gap-2 text-xs',
         isExpiringSoon && 'text-warning',
       )}
-      title={`Consent valid until ${formatDate(value)}`}
+      title={label}
     >
       {isExpiringSoon && (
         <span
@@ -507,7 +507,7 @@ function ConsentBadge({value}: {value: string}) {
           className='inline-block h-2 w-2 shrink-0 rounded-full bg-warning'
         />
       )}
-      Consent valid until {formatDate(value)}
+      {label}
     </span>
   );
 }
@@ -630,16 +630,11 @@ function DestructiveBankConnectionFooterButton({
 function ConnectionStatus({status}: {status: string}) {
   const isAuthorized = status === 'AUTHORIZED';
   const label = formatConnectionStatus(status);
-  const textClassName = isAuthorized
-    ? 'text-success'
+  const tone = isAuthorized
+    ? {text: 'text-success', dot: 'bg-success'}
     : status === 'PENDING'
-      ? 'text-warning'
-      : 'text-muted-foreground';
-  const dotClassName = isAuthorized
-    ? 'bg-success'
-    : status === 'PENDING'
-      ? 'bg-warning'
-      : 'bg-muted-foreground';
+      ? {text: 'text-warning', dot: 'bg-warning'}
+      : {text: 'text-muted-foreground', dot: 'bg-muted-foreground'};
 
   return (
     <span
@@ -647,14 +642,14 @@ function ConnectionStatus({status}: {status: string}) {
       aria-label={`Connection status: ${label}`}
       className={cn(
         'inline-flex shrink-0 items-center gap-1.5 font-medium max-sm:text-xs',
-        textClassName,
+        tone.text,
       )}
     >
       <span className='relative flex h-2 w-2 shrink-0' aria-hidden='true'>
         {isAuthorized && (
           <span className='absolute inline-flex h-full w-full animate-ping rounded-full bg-success/70 motion-reduce:animate-none' />
         )}
-        <span className={cn('relative inline-flex h-2 w-2 rounded-full', dotClassName)} />
+        <span className={cn('relative inline-flex h-2 w-2 rounded-full', tone.dot)} />
       </span>
       <span>{label}</span>
     </span>
@@ -786,9 +781,7 @@ function BankAccountRow({account}: {account: BankConnection['bankAccounts'][numb
     <div className='min-w-0 p-4'>
       <div className='flex items-start justify-between gap-3'>
         <div className='min-w-0'>
-          <p className='break-words font-medium'>
-            {account.alias || account.name || 'Bank account'}
-          </p>
+          <p className='break-words font-medium'>{resolveBankAccountLabel(account)}</p>
           <p className='mt-1 break-words text-sm text-muted-foreground'>
             {accountDetails.join(' · ') ||
               'Bank account details will appear after synchronization.'}
@@ -819,7 +812,7 @@ function BankTransactionRow({
   transaction,
   onTransactionSelect,
 }: {
-  transaction: BankTransaction;
+  transaction: BankConnectionTransaction;
   onTransactionSelect: BankConnectionListProps['onTransactionSelect'];
 }) {
   const description = resolveBankTransactionDisplayTitle(transaction);
@@ -897,11 +890,14 @@ function formatAccountUsage(value: string | null) {
   return formatBankingWords(value);
 }
 
+const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
 function formatDate(value: string) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? 'an unknown date'
-    : new Intl.DateTimeFormat(undefined, {dateStyle: 'medium', timeStyle: 'short'}).format(date);
+  return Number.isNaN(date.getTime()) ? 'an unknown date' : dateTimeFormatter.format(date);
 }
 
 function isOlderThan(value: string, milliseconds: number) {

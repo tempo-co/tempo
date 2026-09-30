@@ -56,11 +56,18 @@ export function resolveBankTransactionDisplayTitle(transaction: {
   return transaction.displayDescription || transaction.description || 'Transaction';
 }
 
+export function resolveBankAccountLabel(account: {alias: string | null; name: string | null}) {
+  return account.alias || account.name || 'Bank account';
+}
+
 export function resolveBankTransactionAccountLabel(transaction: {
   bankAccountAlias: string | null;
   bankAccountName: string | null;
 }) {
-  return transaction.bankAccountAlias || transaction.bankAccountName || 'Bank account';
+  return resolveBankAccountLabel({
+    alias: transaction.bankAccountAlias,
+    name: transaction.bankAccountName,
+  });
 }
 
 export function formatBankingWords(value: string) {

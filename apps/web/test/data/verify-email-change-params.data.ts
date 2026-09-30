@@ -1,10 +1,10 @@
 import {faker} from '@faker-js/faker';
 
-import {EmailChangeVerifySearchParams} from '@/features/auth/types/email-change-verify.dto';
+import {TokenSearchParams} from '@/features/auth/types/token.dto';
 
 type Params = {
   name: string;
-  params: EmailChangeVerifySearchParams | Record<string, string>;
+  params: TokenSearchParams | Record<string, string>;
 };
 
 export const invalidEmailChangeVerifySearchParams: Array<Params> = [

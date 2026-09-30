@@ -24,18 +24,8 @@ function BankTransactionsIndex() {
   const searchParams = Route.useSearch();
   const transactionId = searchParams.transactionId;
   const {openTransaction, closeTransaction} = useBankTransactionInspector('/bank-transactions/');
-  const {
-    data,
-    isPending,
-    isPlaceholderData,
-    isError,
-    refetch,
-    pagination,
-    filters,
-    setFilters,
-    sort,
-    setSort,
-  } = useGetBankTransactions(searchParams);
+  const {data, isPending, isPlaceholderData, isError, refetch, pagination, filters, sort} =
+    useGetBankTransactions(searchParams);
   const totalTransactions = data?.total ?? 0;
   const transactionCountLabel = totalTransactions === 1 ? 'transaction' : 'transactions';
   const resultSummary = isPending
@@ -68,9 +58,7 @@ function BankTransactionsIndex() {
             isPlaceholderData={isPlaceholderData}
             pagination={pagination}
             filters={filters}
-            setFilters={setFilters}
             sort={sort}
-            setSort={setSort}
             isError={isError}
             onRetry={() => void refetch()}
             onTransactionSelect={openTransaction}

@@ -1,10 +1,9 @@
 import {z} from 'zod';
 
+import {nameSchema} from '@/types/validation';
+
 export const nameChangeDtoSchema = z.object({
-  name: z
-    .string()
-    .min(1, 'Please enter your name.')
-    .max(255, 'Name must be less than 256 characters.'),
+  name: nameSchema,
 });
 
 export type NameChangeDto = z.infer<typeof nameChangeDtoSchema>;

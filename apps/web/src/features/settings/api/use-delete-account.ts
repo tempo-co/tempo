@@ -18,7 +18,6 @@ export const useDeleteAccount = () => {
       queryClient.removeQueries();
       await queryClient.setQueryData(CURRENT_ACCOUNT_KEY, null);
     },
-    retry: false,
   });
 
   return {deleteAccount, isPending};

@@ -34,7 +34,6 @@ export const useResendVerificationEmail = () => {
       });
       if (variables?.onSuccess) variables.onSuccess();
     },
-    retry: false,
   });
 
   return {resendVerificationEmail, isPending};

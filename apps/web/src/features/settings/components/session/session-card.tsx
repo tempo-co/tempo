@@ -18,14 +18,12 @@ import {SessionRevokeDialog} from './session-revoke-dialog';
 
 type SessionCardProps = {
   session: Session;
-  hideRevokeButton?: boolean;
 };
 
-export function SessionCard({session, hideRevokeButton = false}: SessionCardProps) {
+export function SessionCard({session}: SessionCardProps) {
   const createdAt = format(session.createdAt, 'MMM d, yyyy HH:mm');
   const lastSeenAt = format(session.lastSeenAt, 'MMM d, yyyy HH:mm');
   const lastSeenAtRelative = formatDistanceToNow(session.lastSeenAt, {addSuffix: true});
-  const hasAction = session.isCurrent || !hideRevokeButton;
 
   return (
     <Dialog>
@@ -37,7 +35,7 @@ export function SessionCard({session, hideRevokeButton = false}: SessionCardProp
         <DialogTrigger asChild>
           <button
             type='button'
-            className={`flex min-h-[4.5rem] w-full items-center rounded-card p-4 text-left transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${hasAction ? 'pr-24' : ''}`}
+            className='flex min-h-[4.5rem] w-full items-center rounded-card p-4 pr-24 text-left transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
           >
             <span className='flex min-w-0 flex-1 items-center gap-3'>
               <span className='flex-shrink-0 rounded-lg bg-accent p-2 text-muted-foreground'>
@@ -75,12 +73,9 @@ export function SessionCard({session, hideRevokeButton = false}: SessionCardProp
             </span>
           </button>
         </DialogTrigger>
-        {hasAction && (
-          <div className='absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1 sm:invisible sm:opacity-0 sm:transition-opacity sm:duration-150 sm:ease-in-out sm:group-hover:visible sm:group-hover:opacity-100'>
-            {session.isCurrent && <LogOutDialog />}
-            {!(hideRevokeButton || session.isCurrent) && <SessionRevokeDialog session={session} />}
-          </div>
-        )}
+        <div className='absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1 sm:invisible sm:opacity-0 sm:transition-opacity sm:duration-150 sm:ease-in-out sm:group-hover:visible sm:group-hover:opacity-100'>
+          {session.isCurrent ? <LogOutDialog /> : <SessionRevokeDialog session={session} />}
+        </div>
       </div>
       <DialogContent className='sm:max-w-[28rem]'>
         <DialogHeader>

@@ -3,12 +3,12 @@ import {zodValidator} from '@tanstack/zod-adapter';
 
 import {ResetPasswordRequest} from '@/features/auth/components/reset-password/reset-password-request';
 import {ResetPasswordVerify} from '@/features/auth/components/reset-password/reset-password-verify';
-import {passwordResetSearchParamsSchema} from '@/features/auth/types/token.dto';
+import {tokenSearchParamsSchema} from '@/features/auth/types/token.dto';
 import {handleUnauthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/reset-password')({
   component: ResetPasswordIndex,
-  validateSearch: zodValidator(passwordResetSearchParamsSchema),
+  validateSearch: zodValidator(tokenSearchParamsSchema),
   beforeLoad: ({context}) => {
     handleUnauthenticatedRedirect(context);
   },

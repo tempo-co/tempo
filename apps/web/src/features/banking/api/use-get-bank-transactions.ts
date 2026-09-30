@@ -1,7 +1,7 @@
 import {keepPreviousData, useQuery} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
 import {format} from 'date-fns';
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo} from 'react';
 
 import {PaginationParams} from '@/types/pagination';
 import {api} from '@/utils/api';
@@ -9,7 +9,6 @@ import {api} from '@/utils/api';
 import {
   BankTransactionFilterParams,
   BankTransactionSearchParams,
-  BankTransactionSortParams,
   BankTransactionsResponse,
   DEFAULT_BANK_TRANSACTION_SORT,
 } from '../types/bank-transaction';
@@ -29,7 +28,7 @@ export const useGetBankTransactions = (searchParams: BankTransactionSearchParams
     pageIndex: searchParams.pageIndex,
     pageSize: searchParams.pageSize,
   };
-  const routeFilters = useMemo<BankTransactionFilterParams>(
+  const filters = useMemo<BankTransactionFilterParams>(
     () => ({
       bookingDate: searchParams.bookingDate,
       bankAccountIds: searchParams.bankAccountIds,
@@ -47,28 +46,7 @@ export const useGetBankTransactions = (searchParams: BankTransactionSearchParams
       searchParams.search,
     ],
   );
-  const [localFilters, setFilters] = useState<BankTransactionFilterParams>(routeFilters);
-  const routeFilterKey = JSON.stringify(routeFilters);
-  const localFilterKey = JSON.stringify(localFilters);
-  const filters = localFilterKey === routeFilterKey ? localFilters : routeFilters;
-
-  useEffect(() => {
-    if (localFilterKey !== routeFilterKey) {
-      setFilters(routeFilters);
-    }
-  }, [localFilterKey, routeFilterKey, routeFilters]);
-
-  const routeSort = searchParams.sort ?? DEFAULT_BANK_TRANSACTION_SORT;
-  const [localSort, setSort] = useState<BankTransactionSortParams>(routeSort);
-  const routeSortKey = JSON.stringify(routeSort);
-  const localSortKey = JSON.stringify(localSort);
-  const sort = localSortKey === routeSortKey ? localSort : routeSort;
-
-  useEffect(() => {
-    if (localSortKey !== routeSortKey) {
-      setSort(routeSort);
-    }
-  }, [localSortKey, routeSort, routeSortKey]);
+  const sort = searchParams.sort ?? DEFAULT_BANK_TRANSACTION_SORT;
 
   const {data, isPending, isPlaceholderData, isError, refetch} = useQuery<BankTransactionsResponse>(
     {
@@ -132,8 +110,6 @@ export const useGetBankTransactions = (searchParams: BankTransactionSearchParams
     refetch,
     pagination,
     filters,
-    setFilters,
     sort,
-    setSort,
   };
 };

@@ -21,7 +21,6 @@ export const useSignUp = () => {
       router.update({context: {isAuthenticated: true, isEmailVerified: account.isEmailVerified}});
       return navigate({to: '/verify-email', replace: true});
     },
-    retry: false,
   });
   return {signUp, isPending};
 };

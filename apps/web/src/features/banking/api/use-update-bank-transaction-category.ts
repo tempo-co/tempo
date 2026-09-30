@@ -63,7 +63,6 @@ export const useUpdateBankTransactionCategory = () => {
         }
       }
     },
-    retry: false,
   });
 
   const updateBankTransactionCategory = (input: UpdateBankTransactionCategoryInput) =>

@@ -95,115 +95,25 @@ async function request<T = unknown>(
   return (await response.json()) as T;
 }
 
-//
-// HEAD overloads
-//
-
-/**
- * HEAD request with parseJson disabled; returns a Response.
- */
-function head(resource: string, init?: RequestOptions & {parseJson?: false}): Promise<Response>;
-/**
- * HEAD request with parseJson enabled (or default); returns parsed JSON of type T.
- */
-function head<T = unknown>(resource: string, init?: RequestOptions): Promise<T>;
-/**
- * Implementation of HEAD request.
- */
-function head<T = unknown>(resource: string, init: RequestOptions = {}): Promise<T | Response> {
-  return request<T>(resource, {...init, method: 'HEAD', parseJson: false});
+/** HEAD request; returns the raw Response. */
+function head(resource: string, init: RequestOptions = {}): Promise<Response> {
+  return request(resource, {...init, method: 'HEAD', parseJson: false});
 }
 
-//
-// GET overloads
-//
-
-/** GET request with parseJson disabled; returns a Response. */
-function get(resource: string, init?: RequestOptions & {parseJson: false}): Promise<Response>;
-/** GET request with parseJson enabled (or default); returns parsed JSON of type T. */
-function get<T = unknown>(resource: string, init?: RequestOptions): Promise<T>;
-/** Implementation of GET request. */
-function get<T = unknown>(resource: string, init?: RequestOptions): Promise<T | Response> {
+function get<T = unknown>(resource: string, init?: RequestOptions): Promise<T> {
   return request<T>(resource, {...init, method: 'GET'});
 }
 
-//
-// POST overloads
-//
-
-/** POST request with parseJson disabled; returns a Response. */
-function post(
-  resource: string,
-  body?: BodyInit,
-  init?: RequestOptions & {parseJson: false},
-): Promise<Response>;
-/** POST request with parseJson enabled (or default); returns parsed JSON of type T. */
-function post<T = unknown>(resource: string, body?: BodyInit, init?: RequestOptions): Promise<T>;
-/** Implementation of POST request. */
-function post<T = unknown>(
-  resource: string,
-  body?: BodyInit,
-  init?: RequestOptions,
-): Promise<T | Response> {
+function post<T = unknown>(resource: string, body?: BodyInit, init?: RequestOptions): Promise<T> {
   return request<T>(resource, {...init, method: 'POST', body});
 }
 
-//
-// PUT overloads
-//
-
-/** PUT request with parseJson disabled; returns a Response. */
-function put(
-  resource: string,
-  body?: BodyInit,
-  init?: RequestOptions & {parseJson: false},
-): Promise<Response>;
-/** PUT request with parseJson enabled (or default); returns parsed JSON of type T. */
-function put<T = unknown>(resource: string, body?: BodyInit, init?: RequestOptions): Promise<T>;
-/** Implementation of PUT request. */
-function put<T = unknown>(
-  resource: string,
-  body?: BodyInit,
-  init?: RequestOptions,
-): Promise<T | Response> {
-  return request<T>(resource, {...init, method: 'PUT', body});
-}
-
-//
-// PATCH overloads
-//
-
-/** PATCH request with parseJson disabled; returns a Response. */
-function patch(
-  resource: string,
-  body?: BodyInit,
-  init?: RequestOptions & {parseJson: false},
-): Promise<Response>;
-/** PATCH request with parseJson enabled (or default); returns parsed JSON of type T. */
-function patch<T = unknown>(resource: string, body?: BodyInit, init?: RequestOptions): Promise<T>;
-/** Implementation of PATCH request. */
-function patch<T = unknown>(
-  resource: string,
-  body?: BodyInit,
-  init?: RequestOptions,
-): Promise<T | Response> {
+function patch<T = unknown>(resource: string, body?: BodyInit, init?: RequestOptions): Promise<T> {
   return request<T>(resource, {...init, method: 'PATCH', body});
 }
 
-//
-// DELETE overloads
-//
-
-/** DELETE request with parseJson disabled; returns a Response. */
-function _delete(resource: string, init?: RequestOptions & {parseJson: false}): Promise<Response>;
-/** DELETE request with parseJson enabled (or default); returns parsed JSON of type T. */
-function _delete<T = unknown>(resource: string, init?: RequestOptions | null): Promise<T>;
-/** Implementation of DELETE request. */
-function _delete<T = unknown>(
-  resource: string,
-  init?: RequestOptions | null,
-): Promise<T | Response> {
+function _delete<T = unknown>(resource: string, init?: RequestOptions | null): Promise<T> {
   return request<T>(resource, {...init, method: 'DELETE'});
 }
 
-export const api = {head, get, post, put, patch, delete: _delete};
+export const api = {head, get, post, patch, delete: _delete};

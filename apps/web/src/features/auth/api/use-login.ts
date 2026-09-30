@@ -25,7 +25,6 @@ export const useLogIn = () => {
       }
       return navigate({to: '/', replace: true});
     },
-    retry: false,
   });
   return {logIn, isPending};
 };

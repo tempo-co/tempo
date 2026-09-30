@@ -1,7 +1,6 @@
 import {useNavigate} from '@tanstack/react-router';
 import {format} from 'date-fns';
 import {CalendarIcon, ChevronDown} from 'lucide-react';
-import * as React from 'react';
 import {DateRange} from 'react-day-picker';
 
 import {Button, buttonVariants} from '@/components/ui/button';
@@ -15,14 +14,12 @@ import {BankTransactionFilterSection} from './bank-transaction-filter-section';
 
 type BankTransactionDateFilterProps = {
   filters: BankTransactionFilterParams;
-  setFilters: React.Dispatch<React.SetStateAction<BankTransactionFilterParams>>;
   variant?: 'popover' | 'mobile';
   className?: string;
 };
 
 export function BankTransactionDateFilter({
   filters,
-  setFilters,
   variant = 'popover',
   className,
 }: BankTransactionDateFilterProps) {
@@ -33,12 +30,10 @@ export function BankTransactionDateFilter({
     await navigate({
       search: (prev) => ({...prev, bookingDate, pageIndex: 0}),
     });
-    setFilters((prev) => ({...prev, bookingDate}));
   };
 
   const handleReset = async () => {
     await navigate({search: (prev) => ({...prev, bookingDate: undefined, pageIndex: 0})});
-    setFilters((prev) => ({...prev, bookingDate: undefined}));
   };
 
   const bookingDateFrom = filters.bookingDate?.from;

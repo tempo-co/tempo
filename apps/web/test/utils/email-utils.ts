@@ -64,18 +64,19 @@ export class EmailUtils {
   }
 
   static extractEmailChangeLink(body?: string) {
-    if (!body) return '';
-    const linkRegex =
-      /(https?:\/\/[^\s"'<>]*\/verify-email-change\?email=[^&"\s<>]+&token=[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}[^\s"'<>]*)/i;
-    const match = body.match(linkRegex);
-    return match ? match[1] : '';
+    return this._extractTokenLink('verify-email-change', body);
   }
 
   static extractResetPasswordLink(body?: string) {
-    if (!body) return '';
+    return this._extractTokenLink('reset-password', body);
+  }
 
-    const linkRegex =
-      /(https?:\/\/[^\s"'<>]*\/reset-password\?email=[^&"\s<>]+&token=[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}[^\s"'<>]*)/i;
+  private static _extractTokenLink(path: string, body?: string) {
+    if (!body) return '';
+    const linkRegex = new RegExp(
+      `(https?:\\/\\/[^\\s"'<>]*\\/${path}\\?email=[^&"\\s<>]+&token=[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}[^\\s"'<>]*)`,
+      'i',
+    );
     const match = body.match(linkRegex);
     return match ? match[1] : '';
   }
