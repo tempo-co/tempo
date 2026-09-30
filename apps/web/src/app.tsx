@@ -1,4 +1,4 @@
-import {RouterProvider, createRouter} from '@tanstack/react-router';
+import {RouterProvider} from '@tanstack/react-router';
 import {motion} from 'framer-motion';
 import React from 'react';
 
@@ -7,25 +7,7 @@ import {useCurrentAccount} from '@/hooks/use-current-account';
 import {ThemeProvider} from '@/providers/theme.provider';
 
 import Logo from './assets/logo';
-import {NotFound} from './components/shared/layout/not-found';
-import {routeTree} from './routeTree.gen';
-
-const router = createRouter({
-  routeTree,
-  basepath: import.meta.env.BASE_URL.replace(/\/$/, '') || '/',
-  context: {
-    isAuthenticated: undefined!,
-    isEmailVerified: undefined!,
-  },
-  notFoundMode: 'root',
-  defaultNotFoundComponent: NotFound,
-});
-
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router;
-  }
-}
+import {router} from './router';
 
 export function App() {
   const {isAuthenticated, isPending, isEmailVerified} = useCurrentAccount();

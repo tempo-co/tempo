@@ -1,4 +1,3 @@
-import {redirect} from '@tanstack/react-router';
 import {toast} from 'sonner';
 
 import {formatRetryAfter, parseRetryAfter} from './retry-after';
@@ -12,6 +11,15 @@ export class HttpError extends Error {
     super(message);
   }
 }
+
+/** The session is gone (401); handled app-wide by sending the user to /login. */
+export class SessionExpiredError extends HttpError {}
+
+/** The API refused the request until the email is verified; handled app-wide via /verify-email. */
+export class EmailNotVerifiedError extends HttpError {}
+
+/** Message the API's auth guard sends with a 403 for accounts that have not verified their email. */
+const EMAIL_NOT_VERIFIED_MESSAGE = 'Email not verified.';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -53,14 +61,7 @@ async function request<T = unknown>(
         description: 'Please log in again to continue using the app.',
         id: 'session-expired',
       });
-      throw redirect({to: '/login'});
-    }
-    if (response.status === 403 && resource === '/accounts/me') {
-      toast.error('Email not verified', {
-        description: 'Please verify your email to continue using the app.',
-        id: 'email-not-verified',
-      });
-      throw redirect({to: '/verify-email'});
+      throw new SessionExpiredError(response.status, response.statusText);
     }
     if (response.status === 429) {
       const retryAfterSeconds = parseRetryAfter(response);
@@ -81,6 +82,13 @@ async function request<T = unknown>(
       throw new HttpError(response.status, response.statusText);
     }
     const error = (await response.json()) as Error;
+    if (response.status === 403 && error.message === EMAIL_NOT_VERIFIED_MESSAGE) {
+      toast.error('Email not verified', {
+        description: 'Please verify your email to continue using the app.',
+        id: 'email-not-verified',
+      });
+      throw new EmailNotVerifiedError(response.status, error.message);
+    }
     throw new HttpError(response.status, error.message);
   }
 
