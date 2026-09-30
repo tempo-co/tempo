@@ -1,14 +1,13 @@
-import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
+import {QueryClientProvider} from '@tanstack/react-query';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
 import {App} from './app';
 import './index.css';
+import {queryClient} from './query-client';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('No root element found');
-
-const queryClient = new QueryClient();
 
 export const AppRoot = () => (
   <QueryClientProvider client={queryClient}>
