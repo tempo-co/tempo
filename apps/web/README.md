@@ -6,7 +6,7 @@ Tempo Web is the frontend of [Tempo](https://github.com/tempo-co/tempo-api): a p
 
 Make sure you have the following installed on your system:
 
-- [Node.js](https://nodejs.org/) (20.x)
+- [Node.js](https://nodejs.org/) (22.x)
 - [Docker](https://www.docker.com/) (for the E2E stack)
 
 ## Installation
