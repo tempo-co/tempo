@@ -188,8 +188,9 @@ test.describe('bank connections', () => {
     );
     await expect(bankLogo).toHaveClass(/border-border/);
     await expect(bankLogo).toHaveClass(/bg-background/);
-    await expect(bankLogo).toHaveCSS('width', '64px');
-    await expect(bankLogo).toHaveCSS('height', '64px');
+    await expect(bankLogo).toHaveCSS('width', '72px');
+    await expect(bankLogo).toHaveCSS('height', '72px');
+    await expect(bankLogo.locator('img')).toHaveCSS('padding', '6px');
 
     const status = connectionCard.getByTestId('bank-connection-status');
     const freshness = connectionCard.getByTestId('bank-connection-freshness');

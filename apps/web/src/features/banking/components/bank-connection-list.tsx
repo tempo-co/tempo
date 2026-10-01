@@ -275,7 +275,6 @@ function BankConnectionCard({
   const headerMeta = [
     formatCountry(connection.aspspCountry),
     <ConnectionStatus key='status' status={connection.status} />,
-    connection.lastSyncedAt && <FreshnessLabel key='freshness' value={connection.lastSyncedAt} />,
   ].filter(Boolean) as React.ReactNode[];
 
   return (
@@ -425,33 +424,44 @@ function BankConnectionCard({
           </div>
         </CardContent>
       )}
-      {(connection.consentValidUntil || isRemovable) && (!hasBodyContent || isExpanded) && (
-        <footer
-          aria-labelledby={connection.consentValidUntil ? metadataHeadingId : undefined}
-          className='flex min-w-0 items-center justify-between gap-2 border-t px-4 pt-3 pb-4 text-xs text-muted-foreground'
-        >
-          {connection.consentValidUntil && (
-            <h3 id={metadataHeadingId} className='sr-only'>
-              Bank connection details
-            </h3>
-          )}
-          {connection.consentValidUntil && <ConsentBadge value={connection.consentValidUntil} />}
-          {isRemovable &&
-            (isDestructive ? (
-              <DestructiveBankConnectionFooterButton
-                connection={connection}
-                isPending={isRemoving}
-                onConfirm={removeBank}
-              />
-            ) : (
-              <RemoveConnectionButton
-                connectionId={connection.id}
-                isPending={isRemoving}
-                onClick={() => void removeBank()}
-              />
-            ))}
-        </footer>
-      )}
+      {(connection.consentValidUntil || connection.lastSyncedAt || isRemovable) &&
+        (!hasBodyContent || isExpanded) && (
+          <footer
+            aria-labelledby={connection.consentValidUntil ? metadataHeadingId : undefined}
+            className='flex min-w-0 items-center justify-between gap-2 border-t px-4 pt-3 pb-4 text-xs text-muted-foreground'
+          >
+            {connection.consentValidUntil && (
+              <h3 id={metadataHeadingId} className='sr-only'>
+                Bank connection details
+              </h3>
+            )}
+            <div className='flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1'>
+              {connection.consentValidUntil && (
+                <ConsentBadge value={connection.consentValidUntil} />
+              )}
+              {connection.lastSyncedAt && (
+                <span className='inline-flex min-w-0 items-center gap-2'>
+                  {connection.consentValidUntil && <span aria-hidden='true'>·</span>}
+                  <FreshnessLabel value={connection.lastSyncedAt} />
+                </span>
+              )}
+            </div>
+            {isRemovable &&
+              (isDestructive ? (
+                <DestructiveBankConnectionFooterButton
+                  connection={connection}
+                  isPending={isRemoving}
+                  onConfirm={removeBank}
+                />
+              ) : (
+                <RemoveConnectionButton
+                  connectionId={connection.id}
+                  isPending={isRemoving}
+                  onClick={() => void removeBank()}
+                />
+              ))}
+          </footer>
+        )}
     </Card>
   );
 }
@@ -471,7 +481,8 @@ function ConnectionCardHeaderContent({
     <>
       <BankLogo
         bank={{name: connection.aspspName, logoUrl}}
-        className='h-[64px] w-[64px]'
+        className='h-18 w-18'
+        imageClassName='p-1.5'
         testId='bank-connection-logo'
       />
       <span className='min-w-0 flex-1'>

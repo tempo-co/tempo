@@ -8,6 +8,7 @@ import type {BankConnectionAspsp} from '../types/bank-connection';
 type BankLogoProps = {
   bank: Pick<BankConnectionAspsp, 'name' | 'logoUrl'>;
   className?: string;
+  imageClassName?: string;
   testId?: string;
 };
 
@@ -16,7 +17,7 @@ type LogoAnalysisResult = Exclude<LogoAnalysis, 'pending'>;
 type LogoAnalysisState = {url: string | null; value: LogoAnalysis};
 type ImageState = {url: string | null; failed: boolean};
 
-export function BankLogo({bank, className, testId = 'bank-logo'}: BankLogoProps) {
+export function BankLogo({bank, className, imageClassName, testId = 'bank-logo'}: BankLogoProps) {
   const logoUrl = bank.logoUrl ?? null;
   const [imageState, setImageState] = useState<ImageState>(() => ({
     url: logoUrl,
@@ -64,6 +65,7 @@ export function BankLogo({bank, className, testId = 'bank-logo'}: BankLogoProps)
           className={cn(
             'h-full w-full object-contain p-1',
             logoAnalysis === 'monochrome' && 'dark:brightness-0 dark:invert',
+            imageClassName,
           )}
           loading='lazy'
           referrerPolicy='no-referrer'
