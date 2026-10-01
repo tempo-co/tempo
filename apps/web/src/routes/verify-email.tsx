@@ -228,7 +228,7 @@ function VerifyEmailIndex() {
           >
             <div className='w-full text-center text-sm text-muted-foreground'>
               <p>We sent a verification email to</p>
-              <p className='mt-1 break-words font-medium text-foreground'>
+              <p className='mt-1 font-medium wrap-break-word text-foreground'>
                 {currentAccount?.email ?? 'your email address'}
               </p>
               <p className='mt-3 text-xs leading-5'>

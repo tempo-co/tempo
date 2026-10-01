@@ -35,16 +35,13 @@ export function Pagination({totalItems, pagination, navigateOptions}: Pagination
       data-testid='pagination'
       className='mt-4 flex w-full flex-nowrap items-center justify-between gap-2 sm:justify-end sm:gap-10'
     >
-      <div className='flex items-center space-x-2'>
-        <p className='whitespace-nowrap text-sm font-medium'>
+      <div className='flex items-center gap-2'>
+        <p className='text-sm font-medium whitespace-nowrap'>
           <span className='sm:hidden'>Rows</span>
           <span className='hidden sm:inline'>Rows per page</span>
         </p>
         <Select value={`${pagination.pageSize}`} onValueChange={handlePageSizeChange}>
-          <SelectTrigger
-            aria-label='Rows per page'
-            className='h-11 w-[4.5rem] gap-2 sm:h-8 sm:w-[70px]'
-          >
+          <SelectTrigger aria-label='Rows per page' className='h-11 w-18 gap-2 sm:h-8 sm:w-[70px]'>
             <SelectValue placeholder={pagination.pageSize} />
           </SelectTrigger>
           <SelectContent side='top'>
@@ -58,7 +55,7 @@ export function Pagination({totalItems, pagination, navigateOptions}: Pagination
       </div>
       <p
         aria-label={`Showing ${startIndex}-${endIndex} of ${totalItems} rows`}
-        className='whitespace-nowrap text-sm'
+        className='text-sm whitespace-nowrap'
       >
         <span className='sm:hidden'>
           {startIndex}-{endIndex} / {totalItems}
@@ -67,7 +64,7 @@ export function Pagination({totalItems, pagination, navigateOptions}: Pagination
           {startIndex}-{endIndex} of {totalItems}
         </span>
       </p>
-      <div className='flex shrink-0 space-x-2'>
+      <div className='flex shrink-0 gap-2'>
         <Button
           onClick={() => goToPage(0)}
           disabled={pagination.pageIndex < 1}

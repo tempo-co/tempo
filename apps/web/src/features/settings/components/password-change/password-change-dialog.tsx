@@ -22,7 +22,7 @@ export function PasswordChangeDialog() {
           Change
         </Button>
       </ResponsiveDialogTrigger>
-      <ResponsiveDialogContent className='md:w-[26rem]'>
+      <ResponsiveDialogContent className='md:w-104'>
         <ResponsiveDialogHeader className='text-start'>
           <DialogTitle className='mb-1'>Change password</DialogTitle>
         </ResponsiveDialogHeader>

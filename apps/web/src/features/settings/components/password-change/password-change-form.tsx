@@ -73,7 +73,7 @@ export function PasswordChangeForm({setIsOpen}: PasswordChangeFormProps) {
         <p className='text-xs text-muted-foreground'>
           Your password should be at least 8 characters long.
         </p>
-        <div className='mb-4 mt-4 flex flex-col justify-end gap-4 md:mb-0 md:flex-row'>
+        <div className='mt-4 mb-4 flex flex-col justify-end gap-4 md:mb-0 md:flex-row'>
           <Button
             type='submit'
             disabled={isPending}

@@ -6,5 +6,5 @@ type AppBodyLayoutProps = {
 };
 
 export function AppBodyLayout({children, className}: AppBodyLayoutProps) {
-  return <div className={cn('mx-auto my-8 max-w-[80rem] px-4', className)}>{children}</div>;
+  return <div className={cn('mx-auto my-8 max-w-7xl px-4', className)}>{children}</div>;
 }

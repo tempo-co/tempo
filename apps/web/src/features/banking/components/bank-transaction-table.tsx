@@ -149,7 +149,7 @@ export function BankTransactionTable({
   };
 
   if (isPending) {
-    return <Skeleton className='h-[22rem] w-full rounded-lg bg-card' />;
+    return <Skeleton className='h-88 w-full rounded-lg bg-card' />;
   }
 
   if (isError) {
@@ -179,9 +179,9 @@ export function BankTransactionTable({
 
   return (
     <>
-      <div className='mb-5 flex flex-wrap items-center gap-3 max-md:mb-4 max-md:gap-2'>
-        <div className='relative min-w-0 flex-1 md:min-w-[14rem] md:max-w-sm'>
-          <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
+      <div className='flex flex-wrap items-center gap-3 max-md:gap-2'>
+        <div className='relative min-w-0 flex-1 md:max-w-sm md:min-w-56'>
+          <Search className='absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
           <Input
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
@@ -230,7 +230,7 @@ export function BankTransactionTable({
           </Button>
         )}
       </div>
-      <div className='relative mb-10'>
+      <div className='relative'>
         <LoadingBar isPending={isPlaceholderData} />
         <Table
           data-testid='bank-transactions-table'
@@ -310,7 +310,7 @@ export function BankTransactionTable({
                 return (
                   <TableRow
                     key={row.id}
-                    className='cursor-pointer focus-within:bg-accent hover:bg-card max-md:mb-1.5 max-md:grid max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-x-3 max-md:gap-y-0.5 max-md:rounded-md max-md:!border max-md:bg-card max-md:p-2'
+                    className='cursor-pointer focus-within:bg-accent hover:bg-card max-md:mb-1.5 max-md:grid max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-x-3 max-md:gap-y-0.5 max-md:rounded-md max-md:border! max-md:bg-card max-md:p-2'
                     data-testid={`bank-transaction-row-${row.original.id}`}
                     onClick={(event) => {
                       if (event.target instanceof Element && event.target.closest('a,button')) {
@@ -346,7 +346,7 @@ export function BankTransactionTable({
                               type='button'
                               data-bank-transaction-detail-trigger
                               aria-label={`View ${transactionLabel} transaction details`}
-                              className='block w-full truncate rounded-sm text-left focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+                              className='block w-full truncate rounded-sm text-left focus-visible:relative focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden'
                               title={transactionLabel}
                               onClick={(event) =>
                                 onTransactionSelect(row.original.id, event.currentTarget)
@@ -394,7 +394,7 @@ export function BankTransactionTable({
                         </span>
                         <span
                           data-testid='bank-transaction-mobile-meta-right'
-                          className='flex min-w-0 max-w-[55%] shrink-0 items-center justify-end gap-1.5 text-right'
+                          className='flex max-w-[55%] min-w-0 shrink-0 items-center justify-end gap-1.5 text-right'
                         >
                           <span className='truncate'>{row.original.bankName}</span>
                         </span>

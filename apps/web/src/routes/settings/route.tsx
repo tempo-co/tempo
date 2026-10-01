@@ -31,7 +31,7 @@ function SettingsIndex() {
         <SettingsBreadcrumb route={activeNavItem?.breadcrumb ?? '/account'} />
       </AppHeaderLayout>
       <AppBodyLayout>
-        <nav aria-label='Settings sections' className='mx-auto max-w-[40rem] xl:hidden'>
+        <nav aria-label='Settings sections' className='mx-auto max-w-160 xl:hidden'>
           <div className='mt-4 flex w-full gap-1 rounded-lg border bg-muted/60 p-1'>
             {navItems.map((item) => {
               const isActive = matchRoute({to: item.route, fuzzy: true}) as boolean;
@@ -43,7 +43,7 @@ function SettingsIndex() {
                   asChild
                   className={cn(
                     'min-h-11 min-w-0 flex-1 px-2 text-xs sm:px-3 sm:text-sm',
-                    isActive && 'bg-card font-medium shadow-sm',
+                    isActive && 'bg-card font-medium shadow-xs',
                   )}
                 >
                   <Link
@@ -59,10 +59,10 @@ function SettingsIndex() {
             })}
           </div>
         </nav>
-        <div className='relative mx-auto mt-8 w-full max-w-[40rem] xl:mt-12'>
+        <div className='relative mx-auto mt-8 w-full max-w-160 xl:mt-12'>
           <nav
             aria-label='Settings sections'
-            className='absolute right-full top-0 mr-8 hidden h-full xl:flex xl:w-[11rem] xl:flex-col xl:gap-1'
+            className='absolute top-0 right-full mr-8 hidden h-full xl:flex xl:w-44 xl:flex-col xl:gap-1'
           >
             {navItems.map((item) => {
               const isActive = matchRoute({to: item.route, fuzzy: true}) as boolean;
@@ -77,7 +77,7 @@ function SettingsIndex() {
                   <Link
                     to={item.route}
                     aria-current={isActive ? 'page' : undefined}
-                    className='flex flex-row !justify-start'
+                    className='flex flex-row justify-start!'
                   >
                     <item.icon className='mr-2' />
                     <span>{item.label}</span>

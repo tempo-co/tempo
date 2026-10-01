@@ -51,7 +51,7 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
         </Button>
       </ResponsiveDialogTrigger>
       <ResponsiveDialogContent>
-        <ResponsiveDialogHeader className='text-start md:w-[26rem]'>
+        <ResponsiveDialogHeader className='text-start md:w-104'>
           <ResponsiveDialogTitle className='mb-1'>Change email</ResponsiveDialogTitle>
           <ResponsiveDialogDescription className='min-w-0 pt-2'>
             {step === 'check' ? (

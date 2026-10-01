@@ -64,7 +64,7 @@ export function ResetPasswordRequest() {
                   {hasResent ? (
                     <>
                       We sent a new reset link to{' '}
-                      <span className='break-words font-medium text-foreground'>
+                      <span className='font-medium wrap-break-word text-foreground'>
                         {form.getValues('email')}
                       </span>
                       .
@@ -72,7 +72,7 @@ export function ResetPasswordRequest() {
                   ) : (
                     <>
                       If{' '}
-                      <span className='break-words font-medium text-foreground'>
+                      <span className='font-medium wrap-break-word text-foreground'>
                         {form.getValues('email')}
                       </span>{' '}
                       matches an account, we&apos;ve sent a link to reset your password.

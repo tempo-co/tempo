@@ -38,12 +38,12 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
       >
         <div className='flex items-end justify-between gap-3 sm:gap-4'>
           <div className='min-w-0 flex-1'>
-            <p className='text-xs font-medium uppercase tracking-wide text-muted-foreground'>
+            <p className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>
               Amount
             </p>
             <p
               data-testid='bank-transaction-detail-amount'
-              className='mt-1 w-fit max-w-full whitespace-nowrap text-3xl font-medium tracking-tight'
+              className='mt-1 w-fit max-w-full text-3xl font-medium tracking-tight whitespace-nowrap'
             >
               <CurrencyAmount amount={Number(transaction.amount)} currency={transaction.currency} />
             </p>
@@ -230,7 +230,7 @@ function Detail({
         title={value}
         className={cn(
           'mt-1 text-sm sm:text-base',
-          wrap ? 'break-words [overflow-wrap:anywhere]' : 'truncate whitespace-nowrap',
+          wrap ? 'wrap-anywhere wrap-break-word' : 'truncate whitespace-nowrap',
         )}
       >
         {value}

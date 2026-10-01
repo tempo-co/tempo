@@ -78,7 +78,7 @@ export function EmailChangeCheckForm({form, currentEmail, setStep}: EmailChangeC
               </FormItem>
             )}
           />
-          <div className='mb-4 mt-4 flex flex-col justify-end gap-4 md:mb-0 md:flex-row'>
+          <div className='mt-4 mb-4 flex flex-col justify-end gap-4 md:mb-0 md:flex-row'>
             <Button
               type='submit'
               disabled={isPending}

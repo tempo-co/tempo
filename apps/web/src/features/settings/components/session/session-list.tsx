@@ -17,7 +17,7 @@ export function SessionList() {
         <h2 id='active-sessions-heading' className='text-lg font-semibold'>
           Active sessions
         </h2>
-        <p className='max-w-[34rem] text-sm text-muted-foreground'>
+        <p className='max-w-136 text-sm text-muted-foreground'>
           The devices currently logged into your account.
         </p>
       </div>
@@ -37,7 +37,7 @@ export function SessionList() {
               onRetry={() => void refetch()}
             />
           )}
-          {isPending && <Skeleton className='h-[4.5rem] w-full rounded-lg border bg-background' />}
+          {isPending && <Skeleton className='h-18 w-full rounded-lg border bg-background' />}
           {currentSession && <SessionCard key={currentSession.id} session={currentSession} />}
           {otherSessions && otherSessions.length > 0 && (
             <div>

@@ -48,16 +48,16 @@ export function BankTransactionDetailsDialog({
       >
         <ResponsiveDialogClose
           aria-label='Close transaction details'
-          className='absolute right-3 top-3 z-20 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+          className='absolute top-3 right-3 z-20 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden'
         >
           <X className='h-4 w-4' aria-hidden='true' />
           <span className='sr-only'>Close transaction details</span>
         </ResponsiveDialogClose>
-        <ResponsiveDialogHeader className='shrink-0 border-b px-5 pb-4 pr-16 pt-5 text-left sm:px-6'>
-          <ResponsiveDialogTitle className='break-words text-xl leading-tight sm:text-2xl'>
+        <ResponsiveDialogHeader className='shrink-0 border-b px-5 pt-5 pr-16 pb-4 text-left sm:px-6'>
+          <ResponsiveDialogTitle className='text-xl leading-tight wrap-break-word sm:text-2xl sm:leading-8'>
             {transactionTitle}
           </ResponsiveDialogTitle>
-          <ResponsiveDialogDescription className='mt-1'>
+          <ResponsiveDialogDescription className='mt-1 md:mt-0'>
             {transaction ? 'Bank transaction' : 'Transaction details'}
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>

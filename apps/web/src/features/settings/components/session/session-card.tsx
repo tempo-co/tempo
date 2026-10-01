@@ -28,17 +28,17 @@ export function SessionCard({session}: SessionCardProps) {
   return (
     <Dialog>
       <div
-        className='group relative rounded-card border bg-card text-card-foreground shadow-sm'
+        className='group relative rounded-card border bg-card text-card-foreground shadow-xs'
         data-testid='session-card'
         data-current-session={session.isCurrent}
       >
         <DialogTrigger asChild>
           <button
             type='button'
-            className='flex min-h-[4.5rem] w-full items-center rounded-card p-4 pr-24 text-left transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+            className='flex min-h-18 w-full items-center rounded-card p-4 pr-24 text-left transition-colors hover:bg-accent/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden'
           >
             <span className='flex min-w-0 flex-1 items-center gap-3'>
-              <span className='flex-shrink-0 rounded-lg bg-accent p-2 text-muted-foreground'>
+              <span className='shrink-0 rounded-lg bg-accent p-2 text-muted-foreground'>
                 {createElement(getSessionIcon(session), {
                   className: 'h-5 w-5 text-muted-foreground',
                 })}
@@ -73,11 +73,11 @@ export function SessionCard({session}: SessionCardProps) {
             </span>
           </button>
         </DialogTrigger>
-        <div className='absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1 sm:invisible sm:opacity-0 sm:transition-opacity sm:duration-150 sm:ease-in-out sm:group-hover:visible sm:group-hover:opacity-100'>
+        <div className='absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-1 sm:invisible sm:opacity-0 sm:transition-opacity sm:duration-150 sm:ease-in-out sm:group-hover:visible sm:group-hover:opacity-100'>
           {session.isCurrent ? <LogOutDialog /> : <SessionRevokeDialog session={session} />}
         </div>
       </div>
-      <DialogContent className='sm:max-w-[28rem]'>
+      <DialogContent className='sm:max-w-md'>
         <DialogHeader>
           <DialogTitle>{session.name}</DialogTitle>
         </DialogHeader>

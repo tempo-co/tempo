@@ -46,7 +46,7 @@ export function LoadingBar({isPending}: LoadingBarProps) {
   if (!visible) return null;
 
   return (
-    <div className='absolute left-0 right-0 top-0 z-10 h-[2px] rounded-b-none rounded-t-md bg-transparent'>
+    <div className='absolute top-0 right-0 left-0 z-10 h-[2px] rounded-t-md rounded-b-none bg-transparent'>
       <div
         className='h-full bg-primary transition-all duration-300 ease-out'
         style={{width: `${width}%`, opacity: !isPending && width >= 100 ? 0 : 1}}

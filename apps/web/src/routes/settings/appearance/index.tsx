@@ -15,7 +15,7 @@ function SettingsAppearanceIndex() {
           <h2 id='theme-heading' className='text-lg font-semibold'>
             Theme
           </h2>
-          <p className='max-w-[34rem] text-sm text-muted-foreground'>
+          <p className='max-w-136 text-sm text-muted-foreground'>
             Choose the appearance of the application.
           </p>
         </div>

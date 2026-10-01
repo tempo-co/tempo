@@ -13,7 +13,7 @@ function SettingsSecurityIndex() {
   const {currentAccount} = useCurrentAccount({skipFetch: true});
 
   if (!currentAccount) {
-    return <Skeleton className='h-[28rem] w-full rounded-lg bg-card' />;
+    return <Skeleton className='h-112 w-full rounded-lg bg-card' />;
   }
 
   return (

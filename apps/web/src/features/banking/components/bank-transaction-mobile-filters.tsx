@@ -81,12 +81,12 @@ export function BankTransactionMobileFilters({
         </Button>
       </DrawerTrigger>
       <DrawerContent data-testid='bank-transaction-mobile-filters' className='max-h-[90vh] p-0'>
-        <DrawerHeader className='border-b px-4 pb-4 pt-3 text-left'>
+        <DrawerHeader className='border-b px-4 pt-3 pb-4 text-left'>
           <DrawerTitle>Filters</DrawerTitle>
         </DrawerHeader>
         <ScrollArea
           type='always'
-          className='flex h-full min-h-0 flex-1 flex-col [&>[data-radix-scroll-area-viewport]]:h-auto [&>[data-radix-scroll-area-viewport]]:min-h-0 [&>[data-radix-scroll-area-viewport]]:flex-1'
+          className='flex h-full min-h-0 flex-1 flex-col *:data-radix-scroll-area-viewport:h-auto *:data-radix-scroll-area-viewport:min-h-0 *:data-radix-scroll-area-viewport:flex-1'
           data-testid='bank-transaction-mobile-filters-scroll-area'
           ref={mobileFiltersScrollAreaRef}
         >

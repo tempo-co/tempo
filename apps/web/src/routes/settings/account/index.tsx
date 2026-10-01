@@ -15,7 +15,7 @@ function SettingsAccountIndex() {
   const {currentAccount} = useCurrentAccount({skipFetch: true});
 
   if (!currentAccount) {
-    return <Skeleton className='h-[18rem] w-full rounded-lg bg-card' />;
+    return <Skeleton className='h-72 w-full rounded-lg bg-card' />;
   }
 
   return (
@@ -27,7 +27,7 @@ function SettingsAccountIndex() {
             <h2 id='name-heading' className='text-lg font-semibold'>
               Name
             </h2>
-            <p className='max-w-[34rem] text-sm text-muted-foreground'>
+            <p className='max-w-136 text-sm text-muted-foreground'>
               Your display name as it appears in the application.
             </p>
           </div>
@@ -41,7 +41,7 @@ function SettingsAccountIndex() {
             <h2 id='email-heading' className='text-lg font-semibold'>
               Email
             </h2>
-            <p className='max-w-[34rem] text-sm text-muted-foreground'>
+            <p className='max-w-136 text-sm text-muted-foreground'>
               The email address associated with your account.
             </p>
           </div>

@@ -37,7 +37,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
           {counterpartyName &&
             row.original.description &&
             displayDescription !== counterpartyName.replace(/\s+/g, ' ').trim() && (
-              <p className='overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground max-md:hidden'>
+              <p className='overflow-hidden text-xs text-ellipsis whitespace-nowrap text-muted-foreground max-md:hidden'>
                 {counterpartyName}
               </p>
             )}
@@ -74,7 +74,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
               {financialEvent || formatBankTransactionCategory(row.original.category)}
             </p>
           </div>
-          <p className='overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground'>
+          <p className='overflow-hidden text-xs text-ellipsis whitespace-nowrap text-muted-foreground'>
             {financialEvent
               ? hasManualCategory
                 ? `Category: ${formatBankTransactionCategory(category)}${source ? ` · ${source}` : ''} · ${cashFlowTreatment}`
@@ -93,7 +93,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
     cell: ({row}) => (
       <div className='w-full min-w-0'>
         <p className='overflow-hidden text-ellipsis whitespace-nowrap'>{row.original.bankName}</p>
-        <p className='overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground'>
+        <p className='overflow-hidden text-xs text-ellipsis whitespace-nowrap text-muted-foreground'>
           {resolveBankTransactionAccountLabel(row.original)}
         </p>
       </div>

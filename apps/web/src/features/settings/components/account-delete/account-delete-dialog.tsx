@@ -72,7 +72,7 @@ export function AccountDeleteDialog({children}: AccountDeleteDialogProps) {
       <ResponsiveDialogTrigger asChild>
         {isValidElement(children) ? children : null}
       </ResponsiveDialogTrigger>
-      <ResponsiveDialogContent className='md:w-[26rem]'>
+      <ResponsiveDialogContent className='md:w-104'>
         <ResponsiveDialogHeader className='text-start'>
           <ResponsiveDialogTitle>Delete account</ResponsiveDialogTitle>
           <ResponsiveDialogDescription className='pt-2'>

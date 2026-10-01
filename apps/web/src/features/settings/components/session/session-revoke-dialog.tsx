@@ -30,7 +30,7 @@ export function SessionRevokeDialog({session, triggerVariant = 'ghost'}: Session
           Revoke <span className='text-foreground'>{session.name}</span>? This cannot be undone.
         </>
       }
-      contentClassName='md:max-w-[33rem]'
+      contentClassName='md:max-w-132'
       confirmLabel='Revoke'
       pendingLabel='Revoking...'
       confirmVariant='destructive'

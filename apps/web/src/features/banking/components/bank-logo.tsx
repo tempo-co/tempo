@@ -49,7 +49,7 @@ export function BankLogo({bank, className, testId = 'bank-logo'}: BankLogoProps)
   return (
     <span
       className={cn(
-        'flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background text-sm font-semibold text-foreground shadow-sm',
+        'flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background text-sm font-semibold text-foreground shadow-xs',
         className,
       )}
       aria-hidden='true'

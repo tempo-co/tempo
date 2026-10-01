@@ -24,7 +24,7 @@ export function CurrencyAmount({amount, currency}: CurrencyAmountProps) {
   const formattedAmount = getCurrencyFormatter(currency).format(amount);
 
   return (
-    <span className={cn('whitespace-nowrap font-mono', amount > 0 && 'text-success')}>
+    <span className={cn('font-mono whitespace-nowrap', amount > 0 && 'text-success')}>
       {formattedAmount}
     </span>
   );

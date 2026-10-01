@@ -35,7 +35,7 @@ export function ConfirmActionDialog({
   pendingLabel,
   confirmTestId,
   confirmVariant,
-  contentClassName = 'md:max-w-[30rem]',
+  contentClassName = 'md:max-w-120',
   isPending,
   onConfirm,
 }: ConfirmActionDialogProps) {

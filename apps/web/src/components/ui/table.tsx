@@ -23,7 +23,7 @@ const TableHeader = React.forwardRef<
 >(({className, ...props}, ref) => (
   <thead
     ref={ref}
-    className={cn('whitespace-nowrap bg-card [&_tr]:border-b', className)}
+    className={cn('bg-card whitespace-nowrap [&_tr]:border-b', className)}
     {...props}
   />
 ));
@@ -43,7 +43,7 @@ const TableFooter = React.forwardRef<
 >(({className, ...props}, ref) => (
   <tfoot
     ref={ref}
-    className={cn('border-t bg-muted/50 font-medium [&>tr]:last:border-b-0', className)}
+    className={cn('border-t bg-muted/50 font-medium last:[&>tr]:border-b-0', className)}
     {...props}
   />
 ));
@@ -66,10 +66,7 @@ const TableHead = React.forwardRef<
 >(({className, ...props}, ref) => (
   <th
     ref={ref}
-    className={cn(
-      'px-4 text-left align-middle font-medium [&:has([role=checkbox])]:pr-0',
-      className,
-    )}
+    className={cn('px-4 text-left align-middle font-medium has-[[role=checkbox]]:pr-0', className)}
     {...props}
   />
 ));
@@ -81,7 +78,7 @@ const TableCell = React.forwardRef<
 >(({className, ...props}, ref) => (
   <td
     ref={ref}
-    className={cn('p-4 align-middle [&:has([role=checkbox])]:pr-0', className)}
+    className={cn('p-4 align-middle has-[[role=checkbox]]:pr-0', className)}
     {...props}
   />
 ));

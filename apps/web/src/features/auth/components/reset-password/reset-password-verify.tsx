@@ -134,7 +134,7 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
           >
             <p className='text-sm leading-6 text-muted-foreground'>
               Choose a new password for the account associated with{' '}
-              <span className='break-words font-medium text-foreground'>{email}</span>.
+              <span className='font-medium wrap-break-word text-foreground'>{email}</span>.
             </p>
             <Form {...form}>
               <form

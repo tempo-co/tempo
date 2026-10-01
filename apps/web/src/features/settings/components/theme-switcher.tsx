@@ -24,7 +24,7 @@ export function ThemeSwitcher() {
     <Tabs
       value={theme}
       onValueChange={(v) => setTheme(v as Theme)}
-      className='w-full rounded-card border bg-card p-2 shadow-sm sm:p-3'
+      className='w-full rounded-card border bg-card p-2 shadow-xs sm:p-3'
     >
       <TabsList
         aria-label='Theme'
@@ -34,7 +34,7 @@ export function ThemeSwitcher() {
           <TabsTrigger
             key={opt.value}
             value={opt.value}
-            className='min-h-11 flex-1 gap-2 px-3 py-2 text-xs sm:text-sm md:min-w-[7rem] md:flex-none'
+            className='min-h-11 flex-1 gap-2 px-3 py-2 text-xs sm:text-sm md:min-w-28 md:flex-none'
           >
             <opt.icon className='h-4 w-4' />
             <span>{opt.label}</span>

@@ -157,7 +157,7 @@ export function BankConnectionList({
     >
       {isPending ? (
         <Skeleton
-          className='h-[22rem] w-full rounded-lg bg-card'
+          className='h-88 w-full rounded-lg bg-card'
           role='status'
           aria-label='Loading bank connections'
           data-testid='bank-connections-loading'
@@ -296,7 +296,7 @@ function BankConnectionCard({
             aria-controls={disclosureContentId}
             data-testid={`connection-card-toggle-${connection.id}`}
             className={cn(
-              'flex w-full min-w-0 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card sm:self-auto',
+              'flex w-full min-w-0 items-center gap-3 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline-hidden sm:self-auto',
               needsReauth && 'sm:w-[calc(100%-8.5rem)] sm:shrink',
             )}
           >
@@ -309,7 +309,7 @@ function BankConnectionCard({
             <ChevronDown
               aria-hidden='true'
               className={cn(
-                'ml-2 mr-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
+                'mr-2 ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
                 needsReauth && 'sm:ml-1',
                 !isExpanded && '-rotate-90',
               )}
@@ -344,7 +344,7 @@ function BankConnectionCard({
           aria-labelledby={
             connection.consentValidUntil || connection.lastSyncedAt ? metadataHeadingId : undefined
           }
-          className='space-y-6 px-4 pb-5 pt-4'
+          className='space-y-6 px-4 pt-4 pb-5'
         >
           <AutomaticSyncStatus details={syncDetails} />
           <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
@@ -428,7 +428,7 @@ function BankConnectionCard({
       {(connection.consentValidUntil || isRemovable) && (!hasBodyContent || isExpanded) && (
         <footer
           aria-labelledby={connection.consentValidUntil ? metadataHeadingId : undefined}
-          className='flex min-w-0 items-center justify-between gap-2 border-t px-4 pb-4 pt-3 text-xs text-muted-foreground'
+          className='flex min-w-0 items-center justify-between gap-2 border-t px-4 pt-3 pb-4 text-xs text-muted-foreground'
         >
           {connection.consentValidUntil && (
             <h3 id={metadataHeadingId} className='sr-only'>
@@ -478,7 +478,7 @@ function ConnectionCardHeaderContent({
         <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 max-sm:grid-cols-1 max-sm:gap-y-1'>
           <h2
             id={connectionHeadingId}
-            className='min-w-0 break-words text-lg font-semibold leading-tight'
+            className='min-w-0 text-lg leading-tight font-semibold wrap-break-word'
           >
             {connection.aspspName}
           </h2>
@@ -575,7 +575,7 @@ function DestructiveBankConnectionFooterButton({
       <ResponsiveDialogTrigger asChild>
         <RemoveConnectionButton connectionId={connection.id} isPending={isPending} />
       </ResponsiveDialogTrigger>
-      <ResponsiveDialogContent className='md:w-[30rem]'>
+      <ResponsiveDialogContent className='md:w-120'>
         <ResponsiveDialogHeader className='text-start'>
           <ResponsiveDialogTitle>Remove connected bank?</ResponsiveDialogTitle>
           <ResponsiveDialogDescription className='pt-2'>
@@ -791,8 +791,8 @@ function BankAccountRow({account}: {account: BankConnection['bankAccounts'][numb
     <div className='min-w-0 p-4'>
       <div className='flex items-start justify-between gap-3'>
         <div className='min-w-0'>
-          <p className='break-words font-medium'>{resolveBankAccountLabel(account)}</p>
-          <p className='mt-1 break-words text-sm text-muted-foreground'>
+          <p className='font-medium wrap-break-word'>{resolveBankAccountLabel(account)}</p>
+          <p className='mt-1 text-sm wrap-break-word text-muted-foreground'>
             {accountDetails.join(' · ') ||
               'Bank account details will appear after synchronization.'}
           </p>
@@ -837,7 +837,7 @@ function BankTransactionRow({
       aria-label={`View transaction details for ${description}`}
       onClick={(event) => onTransactionSelect(transaction.id, event.currentTarget)}
       data-testid={`bank-transaction-row-${transaction.id}`}
-      className='grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-sm p-3 text-left transition-colors hover:bg-accent/70 focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring max-sm:min-h-11 sm:p-4'
+      className='grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-sm p-3 text-left transition-colors hover:bg-accent/70 focus-visible:relative focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset max-sm:min-h-11 sm:p-4'
     >
       <span className='block min-w-0'>
         <span className='block truncate text-sm font-medium'>{description}</span>
