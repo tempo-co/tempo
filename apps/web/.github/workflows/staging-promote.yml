@@ -3,9 +3,15 @@ name: Promote staging
 on:
   workflow_dispatch:
     inputs:
+      source:
+        description: Source to promote
+        required: true
+        type: choice
+        default: pr
+        options: [pr, main]
       pr_number:
         description: Same-repository PR number whose exact head should be promoted
-        required: true
+        required: false
         type: number
 
 permissions:
@@ -13,7 +19,7 @@ permissions:
 
 jobs:
   validate:
-    name: Validate selected PR head
+    name: Validate selected source
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -24,40 +30,53 @@ jobs:
     outputs:
       head_sha: ${{ steps.pr.outputs.head_sha }}
       pr_number: ${{ steps.pr.outputs.pr_number }}
+      source: ${{ steps.pr.outputs.source }}
     steps:
-      - name: Validate PR head and terminal checks
+      - name: Validate source and terminal checks
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ inputs.pr_number }}
+          SOURCE: ${{ inputs.source }}
         run: |
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
           pr="$PR_NUMBER"
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
           [[ "$GITHUB_REF" == refs/heads/main ]]
-          pr_json="$(gh api "repos/$repo/pulls/$pr")"
-          head_repo="$(jq -r '.head.repo.full_name // ""' <<<"$pr_json")"
-          head_sha="$(jq -r '.head.sha // ""' <<<"$pr_json")"
-          base_ref="$(jq -r '.base.ref // ""' <<<"$pr_json")"
-          state="$(jq -r '.state // ""' <<<"$pr_json")"
-          merged_at="$(jq -r '.merged_at // ""' <<<"$pr_json")"
-          draft="$(jq -r '.draft' <<<"$pr_json")"
-
           [[ "$repo" == tempo-co/tempo-web ]]
-          [[ "$head_repo" == "$repo" ]]
-          [[ "$base_ref" == main ]]
-          [[ "$draft" == false ]]
-          if [[ "$state" != open && ( "$state" != closed || -z "$merged_at" ) ]]; then
-            exit 1
-          fi
-          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SOURCE" == pr || "$SOURCE" == main ]]
+          if [[ "$SOURCE" == main ]]; then
+            [[ -z "$pr" || "$pr" == 0 ]]
+            head_sha="$GITHUB_SHA"
+            pr=null
+          else
+            [[ "$pr" =~ ^[1-9][0-9]*$ ]]
+            pr_json="$(gh api "repos/$repo/pulls/$pr")"
+            head_repo="$(jq -r '.head.repo.full_name // ""' <<<"$pr_json")"
+            head_sha="$(jq -r '.head.sha // ""' <<<"$pr_json")"
+            base_ref="$(jq -r '.base.ref // ""' <<<"$pr_json")"
+            state="$(jq -r '.state // ""' <<<"$pr_json")"
+            merged_at="$(jq -r '.merged_at // ""' <<<"$pr_json")"
+            draft="$(jq -r '.draft' <<<"$pr_json")"
 
-          main_ci_sha="$(gh api "repos/$repo/contents/.github/workflows/ci.yml?ref=main" --jq '.sha')"
-          head_ci_sha="$(gh api "repos/$repo/contents/.github/workflows/ci.yml?ref=$head_sha" --jq '.sha')"
-          [[ "$head_ci_sha" == "$main_ci_sha" ]]
+            [[ "$repo" == tempo-co/tempo-web ]]
+            [[ "$head_repo" == "$repo" ]]
+            [[ "$base_ref" == main ]]
+            [[ "$draft" == false ]]
+            if [[ "$state" != open && ( "$state" != closed || -z "$merged_at" ) ]]; then
+              exit 1
+            fi
+            [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]
+
+            main_ci_sha="$(gh api "repos/$repo/contents/.github/workflows/ci.yml?ref=main" --jq '.sha')"
+            head_ci_sha="$(gh api "repos/$repo/contents/.github/workflows/ci.yml?ref=$head_sha" --jq '.sha')"
+            [[ "$head_ci_sha" == "$main_ci_sha" ]]
+          fi
 
           runs_json="$(gh api --paginate "repos/$repo/actions/runs?head_sha=$head_sha&per_page=100" --jq '.workflow_runs[]' | jq -s '{workflow_runs: .}')"
-          trusted_run_json="$(jq -c --arg head_sha "$head_sha" '[.workflow_runs[] | select(.head_sha == $head_sha and .path == ".github/workflows/ci.yml" and .check_suite_id != null)] | max_by(.id) // empty' <<<"$runs_json")"
+          trusted_run_json="$(jq -c --arg head_sha "$head_sha" --arg source "$SOURCE" --arg repo "$repo" '[.workflow_runs[] | select(.head_sha == $head_sha and .path == ".github/workflows/ci.yml" and .check_suite_id != null) | select($source == "pr" or (.event == "push" and .head_branch == "main" and .head_repository.full_name == $repo))] | max_by(.id) // empty' <<<"$runs_json")"
           [[ -n "$trusted_run_json" ]]
           [[ "$(jq -r '.status' <<<"$trusted_run_json")" == completed ]]
           [[ "$(jq -r '.conclusion' <<<"$trusted_run_json")" == success ]]
@@ -75,16 +94,17 @@ jobs:
           (( failed_statuses == 0 ))
           [[ -z "$missing_checks" ]]
           printf 'head_sha=%s\n' "$head_sha" >> "$GITHUB_OUTPUT"
-          printf 'pr_number=%s\n' "$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          printf 'source=%s\n' "$SOURCE" >> "$GITHUB_OUTPUT"
+          printf 'pr_number=%s\n' "$pr" >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build exact PR image
+    name: Build exact source image
     runs-on: ubuntu-latest
     needs: validate
     permissions:
       contents: read
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout exact selected head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.validate.outputs.head_sha }}
@@ -150,7 +170,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish PR-head image and resolve digest
+      - name: Publish selected image and resolve digest
         id: image
         env:
           GH_TOKEN: ${{ github.token }}
@@ -171,6 +191,7 @@ jobs:
           HEAD_SHA: ${{ needs.validate.outputs.head_sha }}
           IMAGE_REF: ${{ steps.image.outputs.image_ref }}
           PR_NUMBER: ${{ needs.validate.outputs.pr_number }}
+          SOURCE: ${{ needs.validate.outputs.source }}
           IMAGE_TAG: ${{ steps.image.outputs.image_tag }}
         run: |
           set -euo pipefail
@@ -178,6 +199,7 @@ jobs:
           payload="$(jq -n \
             --arg repository "$repo" \
             --arg component web \
+            --arg source "$SOURCE" \
             --arg environment staging \
             --arg head_sha "$HEAD_SHA" \
             --arg image "$IMAGE_REF" \
@@ -185,11 +207,11 @@ jobs:
             --argjson pr_number "$PR_NUMBER" \
             --argjson run_id "$GITHUB_RUN_ID" \
             --arg dispatch_sha "$GITHUB_SHA" \
-            '{schema_version: 1, repository: $repository, component: $component, environment: $environment, pr_number: $pr_number, head_sha: $head_sha, image: $image, image_tag: $image_tag, workflow: {path: ".github/workflows/staging-promote.yml", ref: "refs/heads/main", event: "workflow_dispatch", run_id: $run_id, dispatch_sha: $dispatch_sha}}')"
+            '{schema_version: 2, repository: $repository, component: $component, environment: $environment, source: $source, pr_number: $pr_number, head_sha: $head_sha, image: $image, image_tag: $image_tag, workflow: {path: ".github/workflows/staging-promote.yml", ref: "refs/heads/main", event: "workflow_dispatch", run_id: $run_id, dispatch_sha: $dispatch_sha}}')"
           deployment_body="$(jq -n \
             --arg ref "$HEAD_SHA" \
             --argjson payload "$payload" \
-            '{ref: $ref, task: "deploy", auto_merge: false, required_contexts: [], environment: "staging", description: "Protected staging promotion for the exact selected PR head", payload: $payload, transient_environment: false, production_environment: false}')"
+            '{ref: $ref, task: "deploy", auto_merge: false, required_contexts: [], environment: "staging", description: "Protected staging promotion for the exact selected source", payload: $payload, transient_environment: false, production_environment: false}')"
           deployment_id="$(printf '%s' "$deployment_body" | gh api --method POST "repos/$repo/deployments" --input - --jq '.id')"
           [[ "$deployment_id" =~ ^[0-9]+$ ]]
           status_body="$(jq -n \

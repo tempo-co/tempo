@@ -38,7 +38,7 @@ required = {
     'required_contexts: []': 'explicit check verification boundary',
     'gh api --method POST "repos/$repo/deployments"': 'deployment intent creation',
     'gh api --method POST "repos/$repo/deployments/$deployment_id/statuses"': 'successful deployment status',
-    'schema_version: 1': 'versioned intent schema',
+    'schema_version: 2': 'versioned intent schema',
     'head_sha:': 'intent head SHA',
     'dispatch_sha': 'dispatch workflow revision',
     'image_tag:': 'intent publication tag',
@@ -60,9 +60,37 @@ if 'sha256:[0-9a-f]{64}' not in text or 'image_ref=ghcr.io/%s/tempo-web@%s' not 
 if 'payload' not in text or 'repository:' not in text or 'component:' not in text or 'environment:' not in text:
     raise SystemExit('deployment payload is incomplete')
 
+# Configuration wiring complements the executed shell and exact payload assertions.
+source_input = re.search(r'^      source:\n((?:        .*\n)+)', text, re.MULTILINE)
+if not source_input:
+    raise SystemExit('source selector is missing')
+source_fields = dict(line.strip().split(': ', 1) for line in source_input.group(1).splitlines())
+if any(source_fields.get(key) != value for key, value in {
+    'required': 'true', 'type': 'choice', 'default': 'pr', 'options': '[pr, main]',
+}.items()):
+    raise SystemExit('source selector must offer pr/main with default pr')
+pr_input = re.search(r'^      pr_number:\n((?:        .*\n)+)', text, re.MULTILINE)
+pr_fields = dict(line.strip().split(': ', 1) for line in pr_input.group(1).splitlines())
+if pr_fields.get('required') != 'false' or pr_fields.get('type') != 'number':
+    raise SystemExit('PR number must be an optional number in the dispatch UI')
+validate, build, publish = (text.split('  validate:', 1)[1].split('  build:', 1)[0],
+                            text.split('  build:', 1)[1].split('  publish:', 1)[0],
+                            text.split('  publish:', 1)[1])
+for section in (validate, build):
+    if re.search(r'^\s+\w+:\s+write$', section, re.MULTILINE):
+        raise SystemExit('only the protected publisher may have write permissions')
+if 'docker/login-action@' in build or 'secrets.' in build or 'docker push' in build:
+    raise SystemExit('build job must not receive registry credentials or publish')
+for needle in ('SOURCE: ${{ inputs.source }}', 'source: ${{ steps.pr.outputs.source }}'):
+    if needle not in validate:
+        raise SystemExit('source must be wired through validation outputs')
+if 'SOURCE: ${{ needs.validate.outputs.source }}' not in publish:
+    raise SystemExit('publisher must consume the validated source')
+
 top_level = text.split('jobs:', 1)[0]
 if re.search(r'^\s+packages:\s+write', top_level, re.MULTILINE):
     raise SystemExit('package write permission must not be global')
 PY
 
+python3 "$(dirname -- "${BASH_SOURCE[0]}")/tempo-staging-promotion-shell-test.py"
 printf 'PASS: staging promotion workflow contract\n'
