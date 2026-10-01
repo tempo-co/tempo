@@ -238,20 +238,73 @@ test.describe('bank connections', () => {
     await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
   });
 
-  test('shows overdue persisted data while automatic sync is catching up', async ({page}) => {
-    await transformBankConnections(page, (connections) =>
-      connections.map((connection) => ({
-        ...connection,
-        lastSyncedAt: '2020-01-01T00:00:00.000Z',
-        nextSyncAt: '2020-01-02T00:00:00.000Z',
-        syncStatus: 'SUCCEEDED',
-      })),
-    );
+  for (const {syncStatus, title, description} of [
+    {
+      syncStatus: 'FAILED',
+      title: 'Automatic sync needs attention',
+      description: 'Synthetic bank refresh failed.',
+    },
+    {
+      syncStatus: 'PARTIAL',
+      title: 'Automatic sync is partial',
+      description: 'Synthetic account refresh was incomplete.',
+    },
+    {
+      syncStatus: 'RATE_LIMITED',
+      title: 'Automatic sync is rate-limited',
+      description: 'The bank is temporarily limiting background access.',
+    },
+    {
+      syncStatus: 'EXPIRED',
+      title: 'Re-authorization required',
+      description: 'Consent expired.',
+    },
+  ] as const) {
+    test(`retains the ${syncStatus} automatic sync warning`, async ({page}) => {
+      await mockBankConnections(page, [
+        {
+          ...MOCK_CONNECTION,
+          syncStatus,
+          lastSyncedAt: '2020-01-01T00:00:00.000Z',
+          nextSyncAt: '2020-01-02T00:00:00.000Z',
+          lastSyncError: description,
+        },
+      ]);
 
-    await page.goto('/bank-connections');
-    await expect(page.getByTestId('bank-connection-sync-status')).toContainText('overdue');
-    await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
-  });
+      await page.goto('/bank-connections');
+      const warning = page.getByTestId('bank-connection-sync-status');
+      await expect(warning).toBeVisible();
+      await expect(warning).toHaveAttribute('role', 'alert');
+      await expect(warning).toContainText(title);
+      await expect(warning).toContainText(description);
+      await expect(page.getByRole('button', {name: 'Re-authorize'})).toHaveCount(
+        syncStatus === 'EXPIRED' ? 1 : 0,
+      );
+    });
+  }
+
+  for (const syncStatus of ['QUEUED', 'RUNNING'] as const) {
+    test(`keeps ${syncStatus} automatic sync silent while polling`, async ({page}) => {
+      let requestCount = 0;
+      await mockBankConnections(page, () => {
+        requestCount += 1;
+        return [
+          {
+            ...MOCK_CONNECTION,
+            syncStatus,
+            lastSyncedAt: '2020-01-01T00:00:00.000Z',
+            nextSyncAt: '2020-01-02T00:00:00.000Z',
+          },
+        ];
+      });
+
+      await page.goto('/bank-connections');
+      await expect(page.getByTestId('bank-connection-total')).toContainText('1,335.00');
+      await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
+      await expect.poll(() => requestCount, {timeout: 12_000}).toBeGreaterThan(1);
+      await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
+    });
+  }
 
   test('requires re-authorization when consent is missing', async ({page}) => {
     await mockBankConnections(page, [{...MOCK_CONNECTION, consentValidUntil: null}]);

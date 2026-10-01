@@ -15,20 +15,6 @@ export function isReauthorizationRequired(connection: BankConnection) {
   return isPastTimestamp(connection.consentValidUntil);
 }
 
-function isStaleAutomaticSync(
-  connection: BankConnection,
-  status: AutomaticSyncStatus,
-  now = Date.now(),
-) {
-  return (
-    connection.status === 'AUTHORIZED' &&
-    status === 'SUCCEEDED' &&
-    connection.lastSyncedAt !== null &&
-    connection.nextSyncAt !== null &&
-    Date.parse(connection.nextSyncAt) <= now
-  );
-}
-
 export type AutomaticSyncStatus = BankConnection['syncStatus'];
 
 export type AutomaticSyncDetails = {
@@ -41,16 +27,7 @@ function getAutomaticSyncDetails(
   status: AutomaticSyncStatus,
   error: string | null,
   lastSyncedAt: string | null,
-  isStale: boolean,
 ): AutomaticSyncDetails {
-  if (isStale) {
-    return {
-      title: 'Automatic sync is overdue',
-      description: 'Saved bank data may be stale while the next background refresh is queued.',
-      isProblem: true,
-    };
-  }
-
   switch (status) {
     case 'RATE_LIMITED':
       return {
@@ -111,10 +88,5 @@ export function getAutomaticSyncDetailsForConnection(
   if (connection.status !== 'AUTHORIZED' && connection.status !== 'EXPIRED') return null;
 
   const status = isReauthorizationRequired(connection) ? 'EXPIRED' : connection.syncStatus;
-  return getAutomaticSyncDetails(
-    status,
-    connection.lastSyncError,
-    connection.lastSyncedAt,
-    isStaleAutomaticSync(connection, status),
-  );
+  return getAutomaticSyncDetails(status, connection.lastSyncError, connection.lastSyncedAt);
 }
