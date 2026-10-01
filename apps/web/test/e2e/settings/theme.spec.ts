@@ -1,41 +1,34 @@
-import {expect, test} from '@playwright/test';
 import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
-import {AppearanceSettingsPage} from 'test/pages/appearance-settings.page';
+
+import {expect, test} from '../../fixtures';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
 test.describe('Theme Switcher', () => {
-  let appearanceSettingsPage: AppearanceSettingsPage;
-
-  test.beforeEach(async ({page}) => {
-    appearanceSettingsPage = new AppearanceSettingsPage(page);
-
+  test.beforeEach(async ({appearanceSettingsPage}) => {
     await appearanceSettingsPage.navigate();
   });
 
-  test('should switch to light theme', async () => {
+  test('should switch to light theme', async ({appearanceSettingsPage}) => {
     await appearanceSettingsPage.lightThemeButton.click();
 
     await expect(appearanceSettingsPage.htmlElement).toHaveClass(/light/);
-    const theme = await appearanceSettingsPage.getStoredTheme();
-    expect(theme).toBe('light');
+    expect(await appearanceSettingsPage.getStoredTheme()).toBe('light');
   });
 
-  test('should switch to dark theme', async () => {
+  test('should switch to dark theme', async ({appearanceSettingsPage}) => {
     // first switch to light to ensure a state change will occur
     await appearanceSettingsPage.lightThemeButton.click();
     await expect(appearanceSettingsPage.htmlElement).toHaveClass(/light/);
     await appearanceSettingsPage.darkThemeButton.click();
 
     await expect(appearanceSettingsPage.htmlElement).toHaveClass(/dark/);
-    const theme = await appearanceSettingsPage.getStoredTheme();
-    expect(theme).toBe('dark');
+    expect(await appearanceSettingsPage.getStoredTheme()).toBe('dark');
   });
 
-  test('should switch to system theme', async () => {
+  test('should switch to system theme', async ({appearanceSettingsPage}) => {
     await appearanceSettingsPage.systemThemeButton.click();
 
-    const theme = await appearanceSettingsPage.getStoredTheme();
-    expect(theme).toBe('system');
+    expect(await appearanceSettingsPage.getStoredTheme()).toBe('system');
   });
 });

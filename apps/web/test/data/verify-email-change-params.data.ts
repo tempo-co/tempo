@@ -21,14 +21,6 @@ export const invalidEmailChangeVerifySearchParams: Array<Params> = [
     params: {email: faker.internet.email()},
   },
   {
-    name: 'token but missing email',
-    params: {token: faker.string.uuid()},
-  },
-  {
-    name: 'email but missing token',
-    params: {email: faker.internet.email()},
-  },
-  {
     name: 'email and token but invalid email format',
     params: {email: 'invalid-email', token: faker.string.uuid()},
   },

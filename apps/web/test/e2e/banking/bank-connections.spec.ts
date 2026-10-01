@@ -1,7 +1,14 @@
-import {expect, test} from '@playwright/test';
-
 import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
-import {PW_CHANGE_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {expect, test} from '../../fixtures';
+import {
+  fulfillJson,
+  mockBankConnections,
+  mockJson,
+  routeBankConnectionsApi,
+  transformBankConnections,
+} from '../../utils/api-mocks';
+import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const DETAIL_TRANSACTION_ID = '00000000-0000-4000-8000-000000000014';
 const MOCK_PROVIDER_ORIGIN = 'https://enablebanking.test';
@@ -62,12 +69,7 @@ test.describe('bank connections', () => {
 
   test('polls while an automatic synchronization is queued', async ({page}) => {
     let requestCount = 0;
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
-
+    await mockBankConnections(page, () => {
       requestCount += 1;
       const connection =
         requestCount === 1
@@ -77,11 +79,7 @@ test.describe('bank connections', () => {
               nextSyncAt: new Date(Date.now() + 60_000).toISOString(),
             }
           : MOCK_CONNECTION;
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([connection]),
-      });
+      return [connection];
     });
 
     await page.goto('/bank-connections');
@@ -94,12 +92,7 @@ test.describe('bank connections', () => {
   test('refreshes transactions after a later automatic synchronization', async ({page}) => {
     let connectionRequestCount = 0;
     let transactionRequestCount = 0;
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
-
+    await mockBankConnections(page, () => {
       connectionRequestCount += 1;
       const connection = {
         ...MOCK_CONNECTION,
@@ -107,19 +100,11 @@ test.describe('bank connections', () => {
         lastSyncedAt:
           connectionRequestCount === 1 ? '2026-09-01T00:00:00.000Z' : '2026-09-02T00:00:00.000Z',
       };
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([connection]),
-      });
+      return [connection];
     });
     await page.route('**/bank-connections/*/transactions*', async (route) => {
       transactionRequestCount += 1;
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({transactions: [], total: transactionRequestCount}),
-      });
+      await fulfillJson(route, {transactions: [], total: transactionRequestCount});
     });
 
     await page.goto('/bank-connections');
@@ -135,34 +120,20 @@ test.describe('bank connections', () => {
   });
 
   test('shows seeded connection data, callback feedback, and provider logo', async ({page}) => {
-    await page.route('**/bank-connections/aspsps', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([
-          {
-            name: 'ABN AMRO',
-            country: 'NL',
-            logoUrl: 'https://enablebanking.com/brands/NL/ABN-AMRO/',
-          },
-        ]),
-      });
-    });
+    await mockJson(page, '**/bank-connections/aspsps', [
+      {
+        name: 'ABN AMRO',
+        country: 'NL',
+        logoUrl: 'https://enablebanking.com/brands/NL/ABN-AMRO/',
+      },
+    ]);
 
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
-
-      const response = await route.fetch();
-      const connections = (await response.json()) as BankConnection[];
+    await transformBankConnections(page, (connections) => {
       const seededConnection = connections.find(
         (connection) => connection.aspspName === 'ABN AMRO',
       );
       if (!seededConnection) throw new Error('Expected a seeded ABN AMRO connection');
-
-      await route.fulfill({response, json: [seededConnection]});
+      return [seededConnection];
     });
 
     await page.route('**/bank-connections/*/transactions**', async (route) => {
@@ -250,24 +221,14 @@ test.describe('bank connections', () => {
   });
 
   test('shows throttled automatic sync state without a manual endpoint', async ({page}) => {
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
-
-      const response = await route.fetch();
-      const connections = (await response.json()) as BankConnection[];
-      await route.fulfill({
-        response,
-        json: connections.map((connection) => ({
-          ...connection,
-          syncStatus: 'RATE_LIMITED',
-          lastSyncError: 'Bank data access is temporarily rate-limited.',
-          nextSyncAt: '2030-01-01T01:00:00.000Z',
-        })),
-      });
-    });
+    await transformBankConnections(page, (connections) =>
+      connections.map((connection) => ({
+        ...connection,
+        syncStatus: 'RATE_LIMITED',
+        lastSyncError: 'Bank data access is temporarily rate-limited.',
+        nextSyncAt: '2030-01-01T01:00:00.000Z',
+      })),
+    );
 
     await page.goto('/bank-connections');
 
@@ -278,24 +239,14 @@ test.describe('bank connections', () => {
   });
 
   test('shows overdue persisted data while automatic sync is catching up', async ({page}) => {
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
-
-      const response = await route.fetch();
-      const connections = (await response.json()) as BankConnection[];
-      await route.fulfill({
-        response,
-        json: connections.map((connection) => ({
-          ...connection,
-          lastSyncedAt: '2020-01-01T00:00:00.000Z',
-          nextSyncAt: '2020-01-02T00:00:00.000Z',
-          syncStatus: 'SUCCEEDED',
-        })),
-      });
-    });
+    await transformBankConnections(page, (connections) =>
+      connections.map((connection) => ({
+        ...connection,
+        lastSyncedAt: '2020-01-01T00:00:00.000Z',
+        nextSyncAt: '2020-01-02T00:00:00.000Z',
+        syncStatus: 'SUCCEEDED',
+      })),
+    );
 
     await page.goto('/bank-connections');
     await expect(page.getByTestId('bank-connection-sync-status')).toContainText('overdue');
@@ -303,18 +254,7 @@ test.describe('bank connections', () => {
   });
 
   test('requires re-authorization when consent is missing', async ({page}) => {
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([{...MOCK_CONNECTION, consentValidUntil: null}]),
-      });
-    });
+    await mockBankConnections(page, [{...MOCK_CONNECTION, consentValidUntil: null}]);
 
     await page.goto('/bank-connections');
     await expect(page.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
@@ -324,25 +264,15 @@ test.describe('bank connections', () => {
   });
 
   test('requires re-authorization when persisted consent has expired', async ({page}) => {
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
-
-      const response = await route.fetch();
-      const connections = (await response.json()) as BankConnection[];
-      await route.fulfill({
-        response,
-        json: connections.map((connection) => ({
-          ...connection,
-          status: 'AUTHORIZED',
-          consentValidUntil: '2020-01-01T00:00:00.000Z',
-          syncStatus: 'SUCCEEDED',
-          nextSyncAt: '2030-01-01T00:00:00.000Z',
-        })),
-      });
-    });
+    await transformBankConnections(page, (connections) =>
+      connections.map((connection) => ({
+        ...connection,
+        status: 'AUTHORIZED',
+        consentValidUntil: '2020-01-01T00:00:00.000Z',
+        syncStatus: 'SUCCEEDED',
+        nextSyncAt: '2030-01-01T00:00:00.000Z',
+      })),
+    );
 
     await page.goto('/bank-connections');
 
@@ -352,26 +282,16 @@ test.describe('bank connections', () => {
   });
 
   test('does not present background sync for an incomplete authorization', async ({page}) => {
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
-
-      const response = await route.fetch();
-      const connections = (await response.json()) as BankConnection[];
-      await route.fulfill({
-        response,
-        json: connections.map((connection) => ({
-          ...connection,
-          status: 'PENDING_AUTHORIZATION',
-          consentValidUntil: null,
-          lastSyncedAt: null,
-          nextSyncAt: null,
-          syncStatus: 'IDLE',
-        })),
-      });
-    });
+    await transformBankConnections(page, (connections) =>
+      connections.map((connection) => ({
+        ...connection,
+        status: 'PENDING_AUTHORIZATION',
+        consentValidUntil: null,
+        lastSyncedAt: null,
+        nextSyncAt: null,
+        syncStatus: 'IDLE',
+      })),
+    );
 
     await page.goto('/bank-connections');
 
@@ -394,19 +314,9 @@ test.describe('bank connections', () => {
       bankAccounts: [],
     };
 
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
-
-      const response = await route.fetch();
-      const connections = (await response.json()) as BankConnection[];
-      await route.fulfill({
-        response,
-        json: pendingConnectionVisible ? [...connections, pendingConnection] : connections,
-      });
-    });
+    await transformBankConnections(page, (connections) =>
+      pendingConnectionVisible ? [...connections, pendingConnection] : connections,
+    );
     await page.route(`**/bank-connections/${pendingConnectionId}`, async (route) => {
       if (route.request().method() !== 'DELETE') {
         await route.continue();
@@ -436,24 +346,14 @@ test.describe('bank connections', () => {
     let connectedConnectionVisible = true;
     let deleteCalled = false;
 
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
-
-      const response = await route.fetch();
-      const connections = (await response.json()) as BankConnection[];
+    await transformBankConnections(page, (connections) => {
       const connectedConnection = {
         ...connections[0],
         id: connectedConnectionId,
         status: 'AUTHORIZED',
         lastSyncedAt: null,
       };
-      await route.fulfill({
-        response,
-        json: connectedConnectionVisible ? [connectedConnection] : [],
-      });
+      return connectedConnectionVisible ? [connectedConnection] : [];
     });
     await page.route(`**/bank-connections/${connectedConnectionId}`, async (route) => {
       if (route.request().method() !== 'DELETE') {
@@ -507,26 +407,22 @@ test.describe('bank connections', () => {
 
     await page.route('**/bank-connections/aspsps', async (route) => {
       await responseHeld;
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([
-          {name: 'Colorful Bank', country: 'NL', logoUrl: COLORED_LOGO_URL},
-          {name: 'Monochrome Bank', country: 'NL', logoUrl: MONOCHROME_LOGO_URL},
-          {name: 'Other Bank', country: 'FI', logoUrl: COLORED_LOGO_URL},
-        ]),
-      });
+      await fulfillJson(route, [
+        {name: 'Colorful Bank', country: 'NL', logoUrl: COLORED_LOGO_URL},
+        {name: 'Monochrome Bank', country: 'NL', logoUrl: MONOCHROME_LOGO_URL},
+        {name: 'Other Bank', country: 'FI', logoUrl: COLORED_LOGO_URL},
+      ]);
     });
     await page.route('**/bank-connections/authorize', async (route) => {
       authorizationRequest = JSON.parse(route.request().postData() || '{}') as {
         aspspName: string;
         aspspCountry: string;
       };
-      await route.fulfill({
-        status: 201,
-        contentType: 'application/json',
-        body: JSON.stringify({authorizationUrl: 'https://auth.example.test/monochrome-bank'}),
-      });
+      await fulfillJson(
+        route,
+        {authorizationUrl: 'https://auth.example.test/monochrome-bank'},
+        201,
+      );
     });
     await page.route('https://auth.example.test/monochrome-bank', async (route) => {
       await route.fulfill({
@@ -549,14 +445,12 @@ test.describe('bank connections', () => {
     await expect(bankSelector).toBeVisible();
     await expect(bankSelector).toBeDisabled();
     const [pickerBox, countrySelectorBox] = await Promise.all([
-      picker.boundingBox(),
-      countrySelector.boundingBox(),
+      boxOf(picker),
+      boxOf(countrySelector),
     ]);
-    expect(pickerBox).not.toBeNull();
-    expect(countrySelectorBox).not.toBeNull();
-    expect(countrySelectorBox!.x).toBeGreaterThanOrEqual(pickerBox!.x + 16);
-    expect(countrySelectorBox!.x + countrySelectorBox!.width).toBeLessThanOrEqual(
-      pickerBox!.x + pickerBox!.width - 16,
+    expect(countrySelectorBox.x).toBeGreaterThanOrEqual(pickerBox.x + 16);
+    expect(countrySelectorBox.x + countrySelectorBox.width).toBeLessThanOrEqual(
+      pickerBox.x + pickerBox.width - 16,
     );
     await expect(picker.getByRole('status')).toHaveCount(0);
 
@@ -605,11 +499,10 @@ test.describe('bank connections', () => {
         (element) => getComputedStyle(element.parentElement!).paddingBottom,
       ),
     ).toBe('16px');
-    const confirmButtonBox = await confirmButton.boundingBox();
-    expect(confirmButtonBox).not.toBeNull();
-    expect(confirmButtonBox!.x).toBeGreaterThanOrEqual(pickerBox!.x + 16);
-    expect(confirmButtonBox!.x + confirmButtonBox!.width).toBeLessThanOrEqual(
-      pickerBox!.x + pickerBox!.width - 16,
+    const confirmButtonBox = await boxOf(confirmButton);
+    expect(confirmButtonBox.x).toBeGreaterThanOrEqual(pickerBox.x + 16);
+    expect(confirmButtonBox.x + confirmButtonBox.width).toBeLessThanOrEqual(
+      pickerBox.x + pickerBox.width - 16,
     );
     await confirmButton.click();
 
@@ -648,26 +541,14 @@ test.describe('bank connections', () => {
     await page.goto('/bank-connections');
     const authorizationUrl = 'https://bank.example.test/mock-bank-authorization';
     const callbackUrl = new URL('./bank-connections?result=connected', page.url()).toString();
-    await page.route('**/bank-connections/aspsps', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([
-          {
-            name: 'Mock ASPSP',
-            country: 'NL',
-            logoUrl: 'https://enablebanking.com/brands/NL/Mock-ASPSP/',
-          },
-        ]),
-      });
-    });
-    await page.route('**/bank-connections/authorize', async (route) => {
-      await route.fulfill({
-        status: 201,
-        contentType: 'application/json',
-        body: JSON.stringify({authorizationUrl}),
-      });
-    });
+    await mockJson(page, '**/bank-connections/aspsps', [
+      {
+        name: 'Mock ASPSP',
+        country: 'NL',
+        logoUrl: 'https://enablebanking.com/brands/NL/Mock-ASPSP/',
+      },
+    ]);
+    await mockJson(page, '**/bank-connections/authorize', {authorizationUrl}, 201);
     await context.route('**/mock-bank-authorization', async (route) => {
       await route.fulfill({status: 302, headers: {location: callbackUrl}});
     });
@@ -712,40 +593,29 @@ test.describe('bank connections', () => {
     await expect(totalBalance).toHaveAttribute('role', 'group');
     await expect(totalBalance).toHaveAttribute('aria-label', /^Connection balances:/);
     const [closedCardBox, titleBox, totalBox] = await Promise.all([
-      connectionCard.boundingBox(),
-      connectionTitle.boundingBox(),
-      totalBalance.boundingBox(),
+      boxOf(connectionCard),
+      boxOf(connectionTitle),
+      boxOf(totalBalance),
     ]);
-    expect(closedCardBox).not.toBeNull();
-    expect(titleBox).not.toBeNull();
-    expect(totalBox).not.toBeNull();
-    expect(closedCardBox!.height).toBeLessThan(130);
-    expect(totalBox!.y).toBeGreaterThanOrEqual(titleBox!.y + titleBox!.height);
-    expect(totalBox!.x).toBeCloseTo(titleBox!.x, 0);
+    expect(closedCardBox.height).toBeLessThan(130);
+    expect(totalBox.y).toBeGreaterThanOrEqual(titleBox.y + titleBox.height);
+    expect(totalBox.x).toBeCloseTo(titleBox.x, 0);
     await connectionCard.getByTestId(/^connection-card-toggle-/).click();
     await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
     await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
     await expect(page.getByText('Daily spending', {exact: true})).toBeVisible();
 
-    const [headingBox, headingGroupBox, connectButtonBox, statusBox, freshnessBox] =
-      await Promise.all([
-        heading.boundingBox(),
-        headingGroup.boundingBox(),
-        connectButton.boundingBox(),
-        status.boundingBox(),
-        freshness.boundingBox(),
-      ]);
-    expect(headingBox).not.toBeNull();
-    expect(headingGroupBox).not.toBeNull();
-    expect(connectButtonBox).not.toBeNull();
-    expect(statusBox).not.toBeNull();
-    expect(freshnessBox).not.toBeNull();
-    expect(headingBox!.height).toBe(32);
-    expect(headingGroupBox!.height).toBeLessThan(120);
-    expect(connectButtonBox!.x).toBe(16);
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-      .toBe(true);
+    const [headingBox, headingGroupBox, connectButtonBox] = await Promise.all([
+      boxOf(heading),
+      boxOf(headingGroup),
+      boxOf(connectButton),
+      boxOf(status),
+      boxOf(freshness),
+    ]);
+    expect(headingBox.height).toBe(32);
+    expect(headingGroupBox.height).toBeLessThan(120);
+    expect(connectButtonBox.x).toBe(16);
+    await expectNoHorizontalOverflow(page);
 
     const sidebarTrigger = page.locator('[data-sidebar="trigger"]');
     await sidebarTrigger.click();
@@ -772,18 +642,7 @@ test.describe('bank connections', () => {
       ],
     };
     await page.setViewportSize({width: 320, height: 852});
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([multiCurrencyConnection]),
-      });
-    });
+    await mockBankConnections(page, [multiCurrencyConnection]);
     await page.goto('/bank-connections');
 
     const connectionCard = page
@@ -791,16 +650,9 @@ test.describe('bank connections', () => {
       .first();
     const totalBalance = connectionCard.getByTestId('bank-connection-total');
     await expect(totalBalance).toHaveAttribute('aria-label', /EUR.*USD/);
-    const [cardBox, totalBox] = await Promise.all([
-      connectionCard.boundingBox(),
-      totalBalance.boundingBox(),
-    ]);
-    expect(cardBox).not.toBeNull();
-    expect(totalBox).not.toBeNull();
-    expect(totalBox!.x + totalBox!.width).toBeLessThanOrEqual(cardBox!.x + cardBox!.width);
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-      .toBe(true);
+    const [cardBox, totalBox] = await Promise.all([boxOf(connectionCard), boxOf(totalBalance)]);
+    expect(totalBox.x + totalBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+    await expectNoHorizontalOverflow(page);
   });
 
   test('keeps the connection overview within a narrow phone viewport', async ({page}) => {
@@ -821,16 +673,12 @@ test.describe('bank connections', () => {
     await expect(sidebarTrigger).toBeVisible();
 
     const [connectionCardBox, sidebarTriggerBox] = await Promise.all([
-      connectionCard.boundingBox(),
-      sidebarTrigger.boundingBox(),
+      boxOf(connectionCard),
+      boxOf(sidebarTrigger),
     ]);
-    expect(connectionCardBox).not.toBeNull();
-    expect(sidebarTriggerBox).not.toBeNull();
-    expect(connectionCardBox!.x + connectionCardBox!.width).toBeLessThanOrEqual(320);
-    expect(sidebarTriggerBox!.height).toBeGreaterThanOrEqual(44);
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-      .toBe(true);
+    expect(connectionCardBox.x + connectionCardBox.width).toBeLessThanOrEqual(320);
+    expect(sidebarTriggerBox.height).toBeGreaterThanOrEqual(44);
+    await expectNoHorizontalOverflow(page);
   });
 
   test('supports enlarged text without horizontal overflow', async ({page}) => {
@@ -841,13 +689,9 @@ test.describe('bank connections', () => {
     });
 
     const connectButton = page.getByRole('button', {name: 'Connect a bank'}).first();
-    const connectButtonBox = await connectButton.boundingBox();
-
-    expect(connectButtonBox).not.toBeNull();
-    expect(connectButtonBox!.x + connectButtonBox!.width).toBeLessThanOrEqual(320);
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-      .toBe(true);
+    const connectButtonBox = await boxOf(connectButton);
+    expect(connectButtonBox.x + connectButtonBox.width).toBeLessThanOrEqual(320);
+    await expectNoHorizontalOverflow(page);
   });
 });
 
@@ -862,34 +706,19 @@ test.describe('mocked Enable Banking bank connection', () => {
     let callbackRedirectUrl = '';
     let providerCallbackUrl = '';
 
-    await page.route('**/bank-connections/aspsps', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([
-          {
-            ...TARGET_ASPSP,
-            logoUrl: 'https://enablebanking.com/brands/NL/Mock-ASPSP/',
-          },
-        ]),
-      });
-    });
+    await mockJson(page, '**/bank-connections/aspsps', [
+      {
+        ...TARGET_ASPSP,
+        logoUrl: 'https://enablebanking.com/brands/NL/Mock-ASPSP/',
+      },
+    ]);
 
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
+    await routeBankConnectionsApi(page, async (route) => {
       if (route.request().method() !== 'GET') {
         await route.continue();
         return;
       }
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(connectionPersisted && !connectionDeleted ? [MOCK_CONNECTION] : []),
-      });
+      await fulfillJson(route, connectionPersisted && !connectionDeleted ? [MOCK_CONNECTION] : []);
     });
 
     await page.route('**/bank-connections/authorize', async (route) => {
@@ -897,11 +726,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         aspspName: string;
         aspspCountry: string;
       };
-      await route.fulfill({
-        status: 201,
-        contentType: 'application/json',
-        body: JSON.stringify({authorizationUrl: `${MOCK_PROVIDER_ORIGIN}/consent`}),
-      });
+      await fulfillJson(route, {authorizationUrl: `${MOCK_PROVIDER_ORIGIN}/consent`}, 201);
     });
 
     await page.route('**/bank-connections/callback**', async (route) => {
@@ -1055,18 +880,15 @@ test.describe('bank connection card layout', () => {
     await expect(removeButton).toBeVisible();
     await expect(consentText).toBeVisible();
 
-    const [cardBox, expandedConsentBox, expandedRemoveBox] = await Promise.all([
-      card.boundingBox(),
-      consentText.boundingBox(),
-      removeButton.boundingBox(),
+    const [cardBox, , expandedRemoveBox] = await Promise.all([
+      boxOf(card),
+      boxOf(consentText),
+      boxOf(removeButton),
     ]);
-    expect(cardBox).not.toBeNull();
-    expect(expandedConsentBox).not.toBeNull();
-    expect(expandedRemoveBox).not.toBeNull();
-    expect(expandedRemoveBox!.width).toBe(44);
-    expect(expandedRemoveBox!.height).toBe(44);
+    expect(expandedRemoveBox.width).toBe(44);
+    expect(expandedRemoveBox.height).toBe(44);
     expect(
-      cardBox!.x + cardBox!.width - (expandedRemoveBox!.x + expandedRemoveBox!.width),
+      cardBox.x + cardBox.width - (expandedRemoveBox.x + expandedRemoveBox.width),
     ).toBeGreaterThanOrEqual(16);
 
     await toggle.click();
@@ -1083,18 +905,9 @@ test.describe('bank connection loading errors', () => {
 
   test('shows a retryable error when connections cannot load', async ({page}) => {
     let connectionRequests = 0;
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
-
+    await routeBankConnectionsApi(page, async (route) => {
       connectionRequests += 1;
-      await route.fulfill({
-        status: 503,
-        contentType: 'application/json',
-        body: JSON.stringify({message: 'Service unavailable'}),
-      });
+      await fulfillJson(route, {message: 'Service unavailable'}, 503);
     });
 
     await page.goto('/bank-connections');
@@ -1106,18 +919,16 @@ test.describe('bank connection loading errors', () => {
     ).toBeVisible();
     const retryButton = page.getByTestId('bank-connections-retry');
     await expect(retryButton).toBeVisible();
-    const retryButtonBox = await retryButton.boundingBox();
-    expect(retryButtonBox).not.toBeNull();
-    expect(retryButtonBox!.height).toBeGreaterThanOrEqual(44);
+    const retryButtonBox = await boxOf(retryButton);
+    expect(retryButtonBox.height).toBeGreaterThanOrEqual(44);
     expect(connectionRequests).toBe(1);
   });
 });
 
 test.describe('bank connections without bank connections', () => {
-  test.use({storageState: PW_CHANGE_USER_AUTH_FILE});
-
-  test('shows the connect prompt without bank connections', async ({page}) => {
+  test('shows the connect prompt without bank connections', async ({page, freshAccount}) => {
     await page.goto('/bank-connections');
+    await expect(page.getByTestId('sidebar-current-account-email')).toHaveText(freshAccount.email);
 
     await expect(page.getByRole('heading', {name: 'No bank connections'})).toBeVisible();
     await expect(page.getByRole('button', {name: 'Connect a bank'})).toHaveCount(1);

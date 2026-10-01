@@ -1,5 +1,7 @@
 import {Locator, Page, expect} from '@playwright/test';
 
+import {EmailUtils} from '../utils/email-utils';
+
 export class ResetPasswordPage {
   readonly page: Page;
   readonly emailInput: Locator;
@@ -64,5 +66,13 @@ export class ResetPasswordPage {
     await expect(this.resendButton).toBeVisible();
     await expect(this.useDifferentEmailButton).toBeVisible();
     await expect(this.returnToLoginLink).toBeVisible();
+  }
+
+  /** Requests a reset for `email` and opens the link from the email it receives. */
+  async openResetLink(email: string) {
+    await EmailUtils.clearEmails();
+    await this.requestPasswordReset(email);
+    const message = await EmailUtils.findEmailByRecipient(email);
+    await this.page.goto(EmailUtils.extractResetPasswordLink(message?.Text));
   }
 }

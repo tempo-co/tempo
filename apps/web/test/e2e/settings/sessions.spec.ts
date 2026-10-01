@@ -1,4 +1,4 @@
-import {Page, expect, test} from '@playwright/test';
+import {BrowserContext, Page, expect, test} from '@playwright/test';
 import {SESSION_TEST_USER_AUTH_FILE} from 'test/constants/auth.constants';
 import {
   SESSION_TEST_ACCOUNT_EMAIL,
@@ -17,6 +17,7 @@ test.describe.serial('Account Settings: Sessions', () => {
   let homePage2: HomePage;
 
   let securitySettingsPage: SecuritySettingsPage;
+  let contexts: BrowserContext[] = [];
 
   test.beforeEach(async ({browser}) => {
     const context1 = await browser.newContext({storageState: SESSION_TEST_USER_AUTH_FILE});
@@ -24,6 +25,7 @@ test.describe.serial('Account Settings: Sessions', () => {
     loginPage1 = new LoginPage(page1);
 
     const context2 = await browser.newContext();
+    contexts = [context1, context2];
     page2 = await context2.newPage();
     loginPage2 = new LoginPage(page2);
     homePage2 = new HomePage(page2);
@@ -32,6 +34,10 @@ test.describe.serial('Account Settings: Sessions', () => {
 
     securitySettingsPage = new SecuritySettingsPage(page1);
     await securitySettingsPage.navigate();
+  });
+
+  test.afterEach(async () => {
+    await Promise.all(contexts.map((context) => context.close()));
   });
 
   test('should revoke another session successfully', async () => {

@@ -1,49 +1,13 @@
-import {faker} from '@faker-js/faker';
-import {expect, test} from '@playwright/test';
-import {HomePage} from 'test/pages/home.page';
-import {EmailUtils} from 'test/utils/email-utils';
+import {expect, test} from '../../fixtures';
 
-import {AccountSettingsPage} from '../../pages/account-settings.page';
-import {LoginPage} from '../../pages/login.page';
-import {SignupPage} from '../../pages/signup.page';
-import {VerifyEmailPage} from '../../pages/verify-email.page';
-
-test.describe.serial('Account Settings: Delete account', () => {
-  const password = faker.internet.password({length: 12});
-  let email: string;
-  let signupPage: SignupPage;
-  let verifyEmailPage: VerifyEmailPage;
-  let homePage: HomePage;
-  let accountSettingsPage: AccountSettingsPage;
-  let loginPage: LoginPage;
-
-  test.beforeEach(({page}) => {
-    signupPage = new SignupPage(page);
-    verifyEmailPage = new VerifyEmailPage(page);
-    homePage = new HomePage(page);
-    accountSettingsPage = new AccountSettingsPage(page);
-    loginPage = new LoginPage(page);
-  });
-
-  test('should delete the account after email and password confirmation', async ({page}) => {
-    await EmailUtils.clearEmails();
-    email = faker.internet.email().toLowerCase();
-    const name = faker.person.fullName();
-
-    await signupPage.navigate();
-    await signupPage.emailInput.fill(email);
-    await signupPage.nameInput.fill(name);
-    await signupPage.passwordInput.fill(password);
-    await signupPage.submitButton.click();
-
-    await verifyEmailPage.expectToBeOnPage();
-    const message = await EmailUtils.findEmailByRecipient(email);
-    const code = EmailUtils.extractCode(message?.Text);
-    await verifyEmailPage.inputCodeAndSubmit(code);
-
-    await homePage.expectToBeOnPage();
-    await homePage.expectUserLoggedIn();
-
+test.describe('Account Settings: Delete account', () => {
+  test('should delete the account after email and password confirmation', async ({
+    page,
+    freshAccount: {email, password},
+    accountSettingsPage,
+    homePage,
+    loginPage,
+  }) => {
     await page.setViewportSize({width: 393, height: 852});
     await accountSettingsPage.navigate();
 

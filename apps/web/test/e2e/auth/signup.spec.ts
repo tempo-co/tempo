@@ -1,41 +1,38 @@
 import {faker} from '@faker-js/faker';
-import {expect, test} from '@playwright/test';
 import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
-import {HomePage} from 'test/pages/home.page';
+import {VERIFIED_ACCOUNT_EMAIL} from 'test/constants/seed.constants';
 import {EmailUtils} from 'test/utils/email-utils';
 
-import {SignupPage} from '../../pages/signup.page';
-import {VerifyEmailPage} from '../../pages/verify-email.page';
+import {expect, test} from '../../fixtures';
 
-test.describe.serial('Signup', () => {
-  let signupPage: SignupPage;
-  let verifyEmailPage: VerifyEmailPage;
-  let homePage: HomePage;
-
-  test.beforeEach(async ({page}) => {
-    signupPage = new SignupPage(page);
-    verifyEmailPage = new VerifyEmailPage(page);
-    homePage = new HomePage(page);
-
+test.describe('Signup', () => {
+  test.beforeEach(async ({signupPage}) => {
     await EmailUtils.clearEmails();
     await signupPage.navigate();
   });
 
   test.describe('Successful signup flow', () => {
-    test('should create account, verify email via CODE, and land on home page', async () => {
+    test('should create account, verify email via CODE, and land on home page', async ({
+      signupPage,
+      verifyEmailPage,
+      homePage,
+    }) => {
       const email = await signupPage.fillAndSubmitForm();
 
       await verifyEmailPage.expectToBeOnPage();
-      const message = await EmailUtils.findEmailByRecipient(email);
-      const code = EmailUtils.extractCode(message?.Text);
-      await verifyEmailPage.inputCodeAndSubmit(code);
+      await verifyEmailPage.inputCodeAndSubmit(await EmailUtils.getVerificationCode(email));
 
       await homePage.expectToBeOnPage();
       await homePage.expectWelcomeMessage();
       await homePage.expectUserLoggedIn();
     });
 
-    test('should create account, verify email via LINK, and land on home page', async ({page}) => {
+    test('should create account, verify email via LINK, and land on home page', async ({
+      page,
+      signupPage,
+      verifyEmailPage,
+      homePage,
+    }) => {
       const email = await signupPage.fillAndSubmitForm();
 
       await verifyEmailPage.expectToBeOnPage();
@@ -54,7 +51,7 @@ test.describe.serial('Signup', () => {
       await expect(homePage.alreadyVerifiedToastTitle).toBeVisible();
     });
 
-    test('should redirect to login on link click', async ({page}) => {
+    test('should redirect to login on link click', async ({page, signupPage}) => {
       await signupPage.loginLink.click();
       expect(page.url()).toContain('/login');
     });
@@ -63,7 +60,11 @@ test.describe.serial('Signup', () => {
   test.describe('Signup (Authenticated)', () => {
     test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
-    test('should redirect to home if a logged in user navigates to /signup', async ({page}) => {
+    test('should redirect to home if a logged in user navigates to /signup', async ({
+      page,
+      signupPage,
+      homePage,
+    }) => {
       await signupPage.navigate();
       await homePage.expectToBeOnPage();
       await homePage.expectUserLoggedIn();
@@ -73,57 +74,51 @@ test.describe.serial('Signup', () => {
   });
 
   test.describe('Validation errors', () => {
-    test('should show error for email already in use', async () => {
-      const name = faker.person.fullName();
-      const password = faker.internet.password();
-
-      await signupPage.emailInput.fill('verified@test.com');
-      await signupPage.nameInput.fill(name);
-      await signupPage.passwordInput.fill(password);
+    test('should show error for email already in use', async ({signupPage}) => {
+      await signupPage.emailInput.fill(VERIFIED_ACCOUNT_EMAIL);
+      await signupPage.nameInput.fill(faker.person.fullName());
+      await signupPage.passwordInput.fill(faker.internet.password());
       await signupPage.submitButton.click();
 
       await expect(signupPage.emailAlreadyInUseError).toBeVisible();
     });
 
-    test('should show error for empty email', async () => {
+    test('should show a required error for each empty field', async ({signupPage}) => {
       await signupPage.submitButton.click();
-      await expect(signupPage.requiredError.first()).toBeVisible();
+      await expect(signupPage.requiredError).toHaveCount(3);
     });
 
-    test('should show error for empty name', async () => {
-      await signupPage.submitButton.click();
-      await expect(signupPage.requiredError.first()).toBeVisible();
-    });
-
-    test('should show error for empty password', async () => {
-      await signupPage.submitButton.click();
-      await expect(signupPage.requiredError.first()).toBeVisible();
-    });
-
-    test('should show error for password too short', async () => {
-      await signupPage.passwordInput.fill('123');
-      await signupPage.submitButton.click();
-      await expect(signupPage.passwordTooShortError).toBeVisible();
-    });
-
-    test('should show error for password too long', async () => {
-      const longPassword = faker.string.alphanumeric(256);
-      await signupPage.passwordInput.fill(longPassword);
-      await signupPage.submitButton.click();
-      await expect(signupPage.passwordTooLongError).toBeVisible();
-    });
-
-    test('should show error for invalid email format', async () => {
-      await signupPage.emailInput.fill('invalid-email');
-      await signupPage.submitButton.click();
-      await expect(signupPage.emailInvalidError).toBeVisible();
-    });
-
-    test('should show error for name too long', async () => {
-      const longName = faker.string.alphanumeric(256);
-      await signupPage.nameInput.fill(longName);
-      await signupPage.submitButton.click();
-      await expect(signupPage.nameTooLongError).toBeVisible();
-    });
+    for (const {name, field, value, error} of [
+      {
+        name: 'password too short',
+        field: 'passwordInput',
+        value: '123',
+        error: 'passwordTooShortError',
+      },
+      {
+        name: 'password too long',
+        field: 'passwordInput',
+        value: faker.string.alphanumeric(256),
+        error: 'passwordTooLongError',
+      },
+      {
+        name: 'invalid email format',
+        field: 'emailInput',
+        value: 'invalid-email',
+        error: 'emailInvalidError',
+      },
+      {
+        name: 'name too long',
+        field: 'nameInput',
+        value: faker.string.alphanumeric(256),
+        error: 'nameTooLongError',
+      },
+    ] as const) {
+      test(`should show error for ${name}`, async ({signupPage}) => {
+        await signupPage[field].fill(value);
+        await signupPage.submitButton.click();
+        await expect(signupPage[error]).toBeVisible();
+      });
+    }
   });
 });

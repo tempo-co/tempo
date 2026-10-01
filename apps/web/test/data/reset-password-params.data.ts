@@ -20,7 +20,7 @@ export const invalidResetPasswordSearchParams: Array<Params> = [
   },
   {
     name: 'token is not a valid UUID in URL',
-    params: {token: 'not-a-valid-uuid', email: faker.string.uuid()},
+    params: {token: 'not-a-valid-uuid', email: faker.internet.email()},
   },
   {
     name: 'email format is invalid in URL',

@@ -21,14 +21,6 @@ export const invalidEmailVerifySearchParams: Array<Params> = [
     params: {email: faker.internet.email()},
   },
   {
-    name: 'code but missing email',
-    params: {code: faker.string.numeric(6)},
-  },
-  {
-    name: 'email but missing code',
-    params: {email: faker.internet.email()},
-  },
-  {
     name: 'email and code but invalid email format',
     params: {email: 'invalid-email', code: faker.string.numeric(6)},
   },

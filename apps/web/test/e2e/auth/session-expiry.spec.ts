@@ -1,8 +1,6 @@
-import {expect, test} from '@playwright/test';
-
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
-import {LoginPage} from '../../pages/login.page';
-import {VerifyEmailPage} from '../../pages/verify-email.page';
+import {expect, test} from '../../fixtures';
+import {fulfillJson} from '../../utils/api-mocks';
 
 test.describe('auth errors during a session', () => {
   test.use({storageState: VERIFIED_USER_AUTH_FILE});
@@ -12,9 +10,11 @@ test.describe('auth errors during a session', () => {
     await expect(page.getByText('Coffee shop')).toBeVisible();
   });
 
-  test('redirects to login when the session expires mid-session', async ({page, context}) => {
-    const loginPage = new LoginPage(page);
-
+  test('redirects to login when the session expires mid-session', async ({
+    page,
+    context,
+    loginPage,
+  }) => {
     await context.clearCookies();
     await page.getByTestId('bank-transactions-search').fill('coffee');
 
@@ -23,19 +23,16 @@ test.describe('auth errors during a session', () => {
     await expect(loginPage.emailInput).toBeVisible();
   });
 
-  test('redirects to email verification when the API requires a verified email', async ({page}) => {
-    const verifyEmailPage = new VerifyEmailPage(page);
-
+  test('redirects to email verification when the API requires a verified email', async ({
+    page,
+    verifyEmailPage,
+  }) => {
     await page.route('**/bank-transactions?*', async (route) => {
       if (!['fetch', 'xhr'].includes(route.request().resourceType())) {
         await route.continue();
         return;
       }
-      await route.fulfill({
-        status: 403,
-        contentType: 'application/json',
-        body: JSON.stringify({message: 'Email not verified.', statusCode: 403}),
-      });
+      await fulfillJson(route, {message: 'Email not verified.', statusCode: 403}, 403);
     });
     await page.getByTestId('bank-transactions-search').fill('coffee');
 

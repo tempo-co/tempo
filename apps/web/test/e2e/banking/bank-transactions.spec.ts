@@ -1,16 +1,14 @@
-import {expect, test} from '@playwright/test';
-
-import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
-import {PW_CHANGE_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {expect, test} from '../../fixtures';
+import {fulfillJson, mockJson, transformBankConnections} from '../../utils/api-mocks';
+import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const DETAIL_TRANSACTION_ID = '00000000-0000-4000-8000-000000000011';
 
 test.describe('bank transactions', () => {
   test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
-  test('renders, searches, filters by bank account, and opens transaction detail inspector', async ({
-    page,
-  }) => {
+  test('renders, searches, and opens the transaction detail inspector', async ({page}) => {
     await page.setViewportSize({width: 1280, height: 720});
     await page.goto('/bank-transactions');
 
@@ -63,6 +61,9 @@ test.describe('bank transactions', () => {
     await expect(inspector.getByText('reference-coffee (RF)')).toBeVisible();
     await expect(inspector.getByTestId('bank-transaction-id-row')).toHaveCount(0);
     await expect(inspector.getByTestId('bank-transaction-category-control')).toBeVisible();
+    await expect(inspector.getByTestId('bank-transaction-category-status')).toHaveText(
+      'Categorizing…',
+    );
 
     const closeButton = inspector.getByRole('button', {name: 'Close transaction details'});
     await closeButton.click();
@@ -78,11 +79,7 @@ test.describe('bank transactions', () => {
         await route.continue();
         return;
       }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(exchangeTransaction),
-      });
+      await fulfillJson(route, exchangeTransaction);
     });
 
     await page.route('**/bank-transactions?*', async (route) => {
@@ -94,13 +91,9 @@ test.describe('bank transactions', () => {
 
       if (url.searchParams.get('filter[financialEventTypes][]') === 'CURRENCY_EXCHANGE') {
         const pageIndex = url.searchParams.get('pagination[pageIndex]');
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            transactions: pageIndex === '0' ? [exchangeTransaction] : [],
-            total: 1,
-          }),
+        await fulfillJson(route, {
+          transactions: pageIndex === '0' ? [exchangeTransaction] : [],
+          total: 1,
         });
         return;
       }
@@ -224,6 +217,7 @@ test.describe('bank transactions', () => {
     const mobileFilters = page.getByTestId('bank-transaction-mobile-filters');
     const activitySection = mobileFilters.getByRole('heading', {name: 'Activity'}).locator('..');
     await activitySection.getByRole('option', {name: 'Currency exchange', exact: true}).click();
+    await expect(page.getByTestId(/^bank-transaction-row-/)).toHaveCount(1);
     await expect(page.getByTestId('bank-transaction-mobile-meta')).toContainText(
       'Currency exchange',
     );
@@ -233,23 +227,30 @@ test.describe('bank transactions', () => {
   });
 
   test('classifies a transaction from the detail inspector', async ({page}) => {
+    // Only this test changes a category, and only on this seeded transaction, so no other test
+    // depends on it. Picking a category the row does not have yet keeps the test retry-safe.
+    const transactionName = 'Extra transaction 1';
     await page.goto('/bank-transactions');
-    const firstTransactionRow = page
+    const transactionRow = page
       .getByTestId(/^bank-transaction-row-/)
-      .filter({hasText: 'Coffee shop'});
+      .filter({hasText: transactionName});
     await expect(
       page.getByTestId('bank-transactions-table').getByRole('columnheader', {name: 'Category'}),
     ).toBeVisible();
-    await expect(firstTransactionRow.getByRole('cell').nth(2)).toContainText('Not categorized');
+    const currentCategory = await transactionRow.getByRole('cell').nth(2).textContent();
+    const target = currentCategory?.includes('Food and drink')
+      ? {name: 'Shopping', className: /text-category-shopping/, icon: 'svg.lucide-shopping-bag'}
+      : {
+          name: 'Food and drink',
+          className: /text-category-food-and-drink/,
+          icon: 'svg.lucide-utensils',
+        };
 
-    await firstTransactionRow
-      .getByRole('button', {name: 'View Coffee shop transaction details'})
+    await transactionRow
+      .getByRole('button', {name: `View ${transactionName} transaction details`})
       .click();
 
     const inspector = page.getByTestId('bank-transaction-inspector');
-    await expect(inspector.getByTestId('bank-transaction-category-status')).toHaveText(
-      'Categorizing…',
-    );
     const categorySelect = inspector.getByRole('combobox', {name: 'Transaction category'});
     await expect(categorySelect).toBeVisible();
     await categorySelect.click();
@@ -275,33 +276,27 @@ test.describe('bank transactions', () => {
       'Needs review',
       'Other',
     ]);
-    await expect(page.getByRole('option').locator('svg')).toHaveCount(19);
-    await expect(
-      page.getByRole('option', {name: 'Food and drink', exact: true}).locator('svg').locator('..'),
-    ).toHaveClass(/text-category-food-and-drink/);
-    await page.getByRole('option', {name: 'Food and drink', exact: true}).click();
+    // Every option has a category icon; the selected one also shows a check mark.
+    await expect(page.getByRole('option').filter({has: page.locator('svg')})).toHaveCount(19);
+    const targetOption = page.getByRole('option', {name: target.name, exact: true});
+    await expect(targetOption.locator('svg').locator('..')).toHaveClass(target.className);
+    await targetOption.click();
 
-    await expect(categorySelect).toHaveText('Food and drink');
-    await expect(categorySelect.locator('svg.lucide-utensils').locator('..')).toHaveClass(
-      /text-category-food-and-drink/,
-    );
+    await expect(categorySelect).toHaveText(target.name);
+    await expect(categorySelect.locator(target.icon).locator('..')).toHaveClass(target.className);
     await expect(inspector.getByText('Manual', {exact: true})).toBeVisible();
 
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
     await expect(inspector).toBeHidden();
-    await expect(
-      firstTransactionRow.getByRole('cell').nth(2).locator('svg').locator('..'),
-    ).toHaveClass(/text-category-food-and-drink/);
-    await firstTransactionRow
-      .getByRole('button', {name: 'View Coffee shop transaction details'})
+    await expect(transactionRow.getByRole('cell').nth(2).locator('svg').locator('..')).toHaveClass(
+      target.className,
+    );
+    await transactionRow
+      .getByRole('button', {name: `View ${transactionName} transaction details`})
       .click();
-    await expect(page.getByTestId('bank-transaction-inspector')).toBeVisible();
-    await expect(
-      page.getByTestId('bank-transaction-inspector').getByRole('combobox', {
-        name: 'Transaction category',
-      }),
-    ).toHaveText('Food and drink');
-    await expect(page.getByTestId('bank-transaction-inspector').getByText('Manual')).toBeVisible();
+    await expect(inspector).toBeVisible();
+    await expect(categorySelect).toHaveText(target.name);
+    await expect(inspector.getByText('Manual')).toBeVisible();
   });
 
   test('does not show the bank account filter when there is one account', async ({page}) => {
@@ -313,17 +308,12 @@ test.describe('bank transactions', () => {
   test('does not count inactive accounts when deciding whether to show the filter', async ({
     page,
   }) => {
-    await page.route('**/bank-connections', async (route) => {
-      const response = await route.fetch();
-      const connections = (await response.json()) as BankConnection[];
-      await route.fulfill({
-        response,
-        json: connections.map((connection) => ({
-          ...connection,
-          bankAccounts: connection.bankAccounts.map((account) => ({...account, isActive: false})),
-        })),
-      });
-    });
+    await transformBankConnections(page, (connections) =>
+      connections.map((connection) => ({
+        ...connection,
+        bankAccounts: connection.bankAccounts.map((account) => ({...account, isActive: false})),
+      })),
+    );
 
     await page.goto('/bank-transactions');
 
@@ -333,13 +323,7 @@ test.describe('bank transactions', () => {
   test('keeps the bank account filter visible but disabled when connections cannot be loaded', async ({
     page,
   }) => {
-    await page.route('**/bank-connections', (route) =>
-      route.fulfill({
-        status: 500,
-        contentType: 'application/json',
-        body: JSON.stringify({message: 'bank connections unavailable'}),
-      }),
-    );
+    await mockJson(page, '**/bank-connections', {message: 'bank connections unavailable'}, 500);
 
     await page.goto('/bank-transactions');
 
@@ -527,15 +511,10 @@ test.describe('bank transactions', () => {
       const currency = inspector.getByTestId('bank-transaction-detail-currency');
       await expect(amount).toBeVisible();
       await expect(currency).toHaveText('EUR');
-      const [amountBox, currencyBox] = await Promise.all([
-        amount.boundingBox(),
-        currency.boundingBox(),
-      ]);
-      expect(amountBox).not.toBeNull();
-      expect(currencyBox).not.toBeNull();
-      expect(currencyBox!.x).toBeGreaterThan(amountBox!.x + amountBox!.width);
-      expect(currencyBox!.y).toBeLessThan(amountBox!.y + amountBox!.height);
-      expect(currencyBox!.y + currencyBox!.height).toBeGreaterThan(amountBox!.y);
+      const [amountBox, currencyBox] = await Promise.all([boxOf(amount), boxOf(currency)]);
+      expect(currencyBox.x).toBeGreaterThan(amountBox.x + amountBox.width);
+      expect(currencyBox.y).toBeLessThan(amountBox.y + amountBox.height);
+      expect(currencyBox.y + currencyBox.height).toBeGreaterThan(amountBox.y);
 
       if (viewport.width < 768) {
         const detailGrid = inspector
@@ -561,13 +540,10 @@ test.describe('bank transactions', () => {
           );
         expect(detailFieldWrapping.every((whiteSpace) => whiteSpace === 'nowrap')).toBe(true);
       }
-      await expect
-        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-        .toBe(true);
+      await expectNoHorizontalOverflow(page);
 
-      const inspectorBox = await inspector.boundingBox();
-      expect(inspectorBox).not.toBeNull();
-      expect(inspectorBox!.width).toBeLessThanOrEqual(viewport.width);
+      const inspectorBox = await boxOf(inspector);
+      expect(inspectorBox.width).toBeLessThanOrEqual(viewport.width);
       const inspectorBody = inspector.getByTestId('bank-transaction-inspector-body');
       const inspectorViewport = inspectorBody.locator('[data-radix-scroll-area-viewport]');
       const inspectorScrollbar = inspectorBody.locator('[data-orientation="vertical"]');
@@ -585,13 +561,12 @@ test.describe('bank transactions', () => {
   });
 
   test('shows a retryable error state inside the transaction inspector', async ({page}) => {
-    await page.route(`**/bank-transactions/${DETAIL_TRANSACTION_ID}`, async (route) => {
-      await route.fulfill({
-        status: 500,
-        contentType: 'application/json',
-        body: JSON.stringify({message: 'Synthetic detail failure'}),
-      });
-    });
+    await mockJson(
+      page,
+      `**/bank-transactions/${DETAIL_TRANSACTION_ID}`,
+      {message: 'Synthetic detail failure'},
+      500,
+    );
     await page.goto('/bank-transactions');
 
     const transactionRow = page
@@ -608,13 +583,12 @@ test.describe('bank transactions', () => {
   });
 
   test('explains when a transaction no longer exists', async ({page}) => {
-    await page.route(`**/bank-transactions/${DETAIL_TRANSACTION_ID}`, async (route) => {
-      await route.fulfill({
-        status: 404,
-        contentType: 'application/json',
-        body: JSON.stringify({message: 'Transaction not found'}),
-      });
-    });
+    await mockJson(
+      page,
+      `**/bank-transactions/${DETAIL_TRANSACTION_ID}`,
+      {message: 'Transaction not found'},
+      404,
+    );
     await page.goto('/bank-transactions');
 
     const transactionRow = page
@@ -629,14 +603,7 @@ test.describe('bank transactions', () => {
   });
 
   test('filters seeded transactions by bank account and booking date', async ({page}) => {
-    await page.route('**/bank-connections', async (route) => {
-      if (route.request().resourceType() === 'document') {
-        await route.continue();
-        return;
-      }
-
-      const response = await route.fetch();
-      const connections = (await response.json()) as BankConnection[];
+    await transformBankConnections(page, (connections) => {
       const firstConnection = connections[0];
       firstConnection.bankAccounts = [
         ...firstConnection.bankAccounts,
@@ -647,7 +614,7 @@ test.describe('bank transactions', () => {
           alias: 'Secondary spending',
         },
       ];
-      await route.fulfill({response, json: connections});
+      return connections;
     });
     await page.goto('/bank-transactions');
 
@@ -853,19 +820,16 @@ test.describe('bank transactions', () => {
     await expect(page.getByRole('heading', {name: 'Bank transactions'})).toBeVisible();
     const headingGroup = page.getByTestId('bank-transactions-heading');
     const [headingBox, summaryBox] = await Promise.all([
-      headingGroup.getByRole('heading').boundingBox(),
-      headingGroup.locator('p').boundingBox(),
+      boxOf(headingGroup.getByRole('heading')),
+      boxOf(headingGroup.locator('p')),
     ]);
-    expect(headingBox).not.toBeNull();
-    expect(summaryBox).not.toBeNull();
-    expect(summaryBox!.y).toBeLessThan(headingBox!.y + headingBox!.height);
+    expect(summaryBox.y).toBeLessThan(headingBox.y + headingBox.height);
     await expect(page.getByRole('button', {name: 'Bank accounts', exact: true})).not.toBeVisible();
     await expect(page.getByTestId('bank-transaction-desktop-filters')).toBeHidden();
     const mobileFiltersTrigger = page.getByTestId('bank-transaction-mobile-filters-trigger');
     await expect(mobileFiltersTrigger).toBeVisible();
-    const mobileFiltersTriggerBox = await mobileFiltersTrigger.boundingBox();
-    expect(mobileFiltersTriggerBox).not.toBeNull();
-    expect(mobileFiltersTriggerBox!.width).toBeGreaterThanOrEqual(88);
+    const mobileFiltersTriggerBox = await boxOf(mobileFiltersTrigger);
+    expect(mobileFiltersTriggerBox.width).toBeGreaterThanOrEqual(88);
     await expect(mobileFiltersTrigger).toHaveCSS('height', '48px');
     await mobileFiltersTrigger.click();
     const mobileFilters = page.getByTestId('bank-transaction-mobile-filters');
@@ -899,14 +863,12 @@ test.describe('bank transactions', () => {
     const calendarTable = calendarFrame.locator('table');
     const firstCalendarWeek = calendarTable.locator('tbody tr').first();
     const [calendarTableBox, lastCalendarCellBox] = await Promise.all([
-      calendarTable.boundingBox(),
-      firstCalendarWeek.locator('td').last().boundingBox(),
+      boxOf(calendarTable),
+      boxOf(firstCalendarWeek.locator('td').last()),
     ]);
-    expect(calendarTableBox).not.toBeNull();
-    expect(lastCalendarCellBox).not.toBeNull();
-    expect(lastCalendarCellBox!.width).toBeGreaterThan(40);
-    expect(lastCalendarCellBox!.x + lastCalendarCellBox!.width).toBeGreaterThan(
-      calendarTableBox!.x + calendarTableBox!.width - 24,
+    expect(lastCalendarCellBox.width).toBeGreaterThan(40);
+    expect(lastCalendarCellBox.x + lastCalendarCellBox.width).toBeGreaterThan(
+      calendarTableBox.x + calendarTableBox.width - 24,
     );
     const categoriesSection = mobileFilters
       .getByRole('heading', {name: 'Categories'})
@@ -927,14 +889,12 @@ test.describe('bank transactions', () => {
     await expect(lastTransactionRow).toHaveCSS('border-top-width', '1px');
     await expect(firstTransactionRow.locator('td').nth(2)).toBeHidden();
     const [tableBox, firstTransactionRowBox] = await Promise.all([
-      table.boundingBox(),
-      firstTransactionRow.boundingBox(),
+      boxOf(table),
+      boxOf(firstTransactionRow),
     ]);
-    expect(tableBox).not.toBeNull();
-    expect(firstTransactionRowBox).not.toBeNull();
-    expect(firstTransactionRowBox!.x).toBeCloseTo(tableBox!.x, 0);
-    expect(firstTransactionRowBox!.x + firstTransactionRowBox!.width).toBeCloseTo(
-      tableBox!.x + tableBox!.width,
+    expect(firstTransactionRowBox.x).toBeCloseTo(tableBox.x, 0);
+    expect(firstTransactionRowBox.x + firstTransactionRowBox.width).toBeCloseTo(
+      tableBox.x + tableBox.width,
       0,
     );
     await expect(descriptionTrigger).toHaveCount(1);
@@ -956,12 +916,10 @@ test.describe('bank transactions', () => {
     const rowsValue = rowsSelector.locator(':scope > span');
     const rowsChevron = rowsSelector.locator('svg');
     const [rowsValueBox, rowsChevronBox] = await Promise.all([
-      rowsValue.boundingBox(),
-      rowsChevron.boundingBox(),
+      boxOf(rowsValue),
+      boxOf(rowsChevron),
     ]);
-    expect(rowsValueBox).not.toBeNull();
-    expect(rowsChevronBox).not.toBeNull();
-    expect(rowsChevronBox!.x - (rowsValueBox!.x + rowsValueBox!.width)).toBeGreaterThanOrEqual(8);
+    expect(rowsChevronBox.x - (rowsValueBox.x + rowsValueBox.width)).toBeGreaterThanOrEqual(8);
     await expect
       .poll(() => pagination.evaluate((element) => element.getBoundingClientRect().height))
       .toBeLessThan(52);
@@ -977,19 +935,14 @@ test.describe('bank transactions', () => {
     const mobileAmount = firstTransactionRow.locator('td').filter({hasText: '-€4.50'});
     await expect(mobileMetaRight).toBeVisible();
     await expect(mobileMetaRight).toHaveCSS('text-align', 'right');
-    const [metaBox, metaRightBox, amountBox] = await Promise.all([
-      mobileMetaContainer.boundingBox(),
-      mobileMetaRight.boundingBox(),
-      mobileAmount.boundingBox(),
+    const [, metaRightBox, amountBox] = await Promise.all([
+      boxOf(mobileMetaContainer),
+      boxOf(mobileMetaRight),
+      boxOf(mobileAmount),
     ]);
-    expect(metaBox).not.toBeNull();
-    expect(metaRightBox).not.toBeNull();
-    expect(amountBox).not.toBeNull();
-    expect(metaRightBox!.x + metaRightBox!.width).toBeCloseTo(amountBox!.x + amountBox!.width, 0);
-    expect(metaRightBox!.y).toBeGreaterThan(amountBox!.y);
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-      .toBe(true);
+    expect(metaRightBox.x + metaRightBox.width).toBeCloseTo(amountBox.x + amountBox.width, 0);
+    expect(metaRightBox.y).toBeGreaterThan(amountBox.y);
+    await expectNoHorizontalOverflow(page);
 
     await descriptionTrigger.focus();
     await expect(descriptionTrigger).toBeFocused();
@@ -1024,9 +977,7 @@ test.describe('bank transactions', () => {
       clientWidth: element.clientWidth,
     }));
     expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth);
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-      .toBe(true);
+    await expectNoHorizontalOverflow(page);
   });
 
   test('sorts and paginates with the shared table controls', async ({page}) => {
@@ -1070,24 +1021,21 @@ test.describe('bank transactions', () => {
     await expect(amountHeaderButton).toHaveCSS('justify-content', 'flex-end');
     const [amountHeaderBox, amountCellBox, amountHeaderContentRight, amountCellContentBox] =
       await Promise.all([
-        amountHeaderButton.boundingBox(),
-        table.locator('tbody tr').first().locator('td').nth(4).boundingBox(),
+        boxOf(amountHeaderButton),
+        boxOf(table.locator('tbody tr').first().locator('td').nth(4)),
         amountHeaderButton.evaluate((element) => {
           const range = document.createRange();
           range.selectNodeContents(element);
           return range.getBoundingClientRect().right;
         }),
-        table.locator('tbody tr').first().locator('td').nth(4).locator('div').boundingBox(),
+        boxOf(table.locator('tbody tr').first().locator('td').nth(4).locator('div')),
       ]);
-    expect(amountHeaderBox).not.toBeNull();
-    expect(amountCellBox).not.toBeNull();
-    expect(amountCellContentBox).not.toBeNull();
-    expect(amountHeaderBox!.x + amountHeaderBox!.width).toBeCloseTo(
-      amountCellBox!.x + amountCellBox!.width,
+    expect(amountHeaderBox.x + amountHeaderBox.width).toBeCloseTo(
+      amountCellBox.x + amountCellBox.width,
       0,
     );
     expect(amountHeaderContentRight).toBeCloseTo(
-      amountCellContentBox!.x + amountCellContentBox!.width,
+      amountCellContentBox.x + amountCellContentBox.width,
       0,
     );
 
@@ -1254,10 +1202,12 @@ test.describe('bank transactions', () => {
 });
 
 test.describe('bank transactions without synced data', () => {
-  test.use({storageState: PW_CHANGE_USER_AUTH_FILE});
-
-  test('shows the empty state for an account without transactions', async ({page}) => {
+  test('shows the empty state for an account without transactions', async ({
+    page,
+    freshAccount,
+  }) => {
     await page.goto('/bank-transactions');
+    await expect(page.getByTestId('sidebar-current-account-email')).toHaveText(freshAccount.email);
 
     await expect(page.getByRole('heading', {name: 'No bank transactions found'})).toBeVisible();
     await expect(

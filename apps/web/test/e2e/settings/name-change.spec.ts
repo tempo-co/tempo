@@ -1,23 +1,19 @@
 import {faker} from '@faker-js/faker';
-import {expect, test} from '@playwright/test';
-import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
-import {AccountSettingsPage} from 'test/pages/account-settings.page';
-import {HomePage} from 'test/pages/home.page';
 
-test.use({storageState: VERIFIED_USER_AUTH_FILE});
+import {expect, test} from '../../fixtures';
 
 test.describe('Account Settings: Name change', () => {
-  let homePage: HomePage;
-  let accountSettingsPage: AccountSettingsPage;
-
-  test.beforeEach(async ({page}) => {
-    homePage = new HomePage(page);
-    accountSettingsPage = new AccountSettingsPage(page);
-
+  // A fresh account per test, so renaming never touches the seeded accounts other specs use.
+  test.beforeEach(async ({freshAccount, accountSettingsPage, homePage}) => {
     await accountSettingsPage.navigate();
+    await expect(homePage.sidebarAccountEmail).toHaveText(freshAccount.email);
   });
 
-  test('should change name successfully and persist after reload', async ({page}) => {
+  test('should change name successfully and persist after reload', async ({
+    page,
+    accountSettingsPage,
+    homePage,
+  }) => {
     const newName = faker.person.fullName();
     await accountSettingsPage.changeName(newName);
 
@@ -28,12 +24,15 @@ test.describe('Account Settings: Name change', () => {
     await expect(homePage.sidebarAccountName).toHaveText(newName);
   });
 
-  test('should show error for empty name', async ({page}) => {
+  test('should show error for empty name', async ({page, accountSettingsPage}) => {
     await accountSettingsPage.changeName('');
     await expect(page.getByText('Please enter your name.')).toBeVisible();
   });
 
-  test('should show error for name longer than 255 characters', async ({page}) => {
+  test('should show error for name longer than 255 characters', async ({
+    page,
+    accountSettingsPage,
+  }) => {
     const longName = faker.string.alphanumeric(256);
     await accountSettingsPage.nameInput.fill(longName);
 

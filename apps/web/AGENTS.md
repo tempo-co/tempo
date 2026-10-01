@@ -45,6 +45,20 @@ The CI order is `npm ci`, `npm run generate-routes`, `npm run lint:check`, `npm 
 - Use Tailwind classes for styling and `cn` from `src/utils/cn.ts` when class merging is needed. Formatting is single-quoted, JSX uses single quotes, trailing commas are enabled, bracket spacing is disabled, and the print width is 100.
 - TypeScript is strict with unused locals/parameters and fallthrough cases disabled in `tsconfig.app.json`.
 
+## E2E test helpers
+
+Reuse these instead of re-creating setup inline:
+
+- `test/fixtures.ts`: import `test` and `expect` from here instead of `@playwright/test`. It provides the page objects as fixtures (`loginPage`, `homePage`, `signupPage`, `verifyEmailPage`, `verifyEmailChangePage`, `resetPasswordPage`, `accountSettingsPage`, `securitySettingsPage`, `appearanceSettingsPage`), plus:
+  - `freshAccount`: a new verified account with no bank data, with the test's browser context logged in as it.
+  - `createVerifiedAccount(request)`: the same account without logging in, for tests that log in through the UI.
+- Shared seeded data: tests that change account data or depend on an account having no bank data use `freshAccount` rather than a seeded account, so they do not depend on test order and stay safe to retry. Do not change seeded data another test reads.
+- `test/utils/api-mocks.ts`: `mockBankConnections`, `transformBankConnections` and `routeBankConnectionsApi` intercept the `GET /bank-connections` API call while letting navigations to `/bank-connections` through. `mockJson` and `fulfillJson` answer other routes with JSON.
+- `test/utils/layout.ts`: `boxOf(locator)` returns a rendered element's bounding box, and `expectNoHorizontalOverflow(page)` checks for horizontal scrolling.
+- `test/utils/url.ts`: `withSearchParams(path, params)` builds URLs for the invalid-search-param cases in `test/data`.
+- `test/utils/email-utils.ts`: `EmailUtils.getVerificationCode(email)` reads a verification code from Mailpit; `ResetPasswordPage.openResetLink(email)` requests a reset and opens the emailed link.
+- Write repeated validation cases as a `for` loop over a table of cases.
+
 ## E2E environment and pitfalls
 
 - `docker-compose.e2e.yml` requires Docker and reserves host ports 1025/8025 (Mailpit), 6379 (Redis), 5432 (Postgres), and 3000 (API). The Vite preview uses port 5173.

@@ -55,6 +55,12 @@ export class EmailUtils {
     return lastKnownCount;
   }
 
+  /** Reads the six-digit code from the latest verification email sent to `recipientEmail`. */
+  static async getVerificationCode(recipientEmail: string) {
+    const message = await this.findEmailByRecipient(recipientEmail);
+    return this.extractCode(message?.Text);
+  }
+
   static extractOnboardingVerifyEmailLink(body?: string) {
     if (!body) return '';
     const linkRegex =
