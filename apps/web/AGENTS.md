@@ -1,6 +1,6 @@
 # Tempo Web Agent Instructions
 
-Tempo Web is a React 19 + TypeScript single-page frontend built with Vite. It uses TanStack Router for file-based routing, TanStack Query for API state, Tailwind CSS/shadcn-style Radix components, and Playwright E2E tests. Main feature areas are authentication, bank accounts, bank-statement upload/processing, transactions, and settings.
+Tempo Web is a React 19 + TypeScript single-page frontend built with Vite. It uses TanStack Router for file-based routing, TanStack Query for API state, Tailwind CSS/shadcn-style Radix components, and Playwright E2E tests. Main feature areas (`src/features/{auth,banking,settings}`) are authentication, Enable Banking bank connections, bank transactions, and account settings.
 
 ## Product direction and cross-repo workflow
 
@@ -18,6 +18,7 @@ Tempo Web is a React 19 + TypeScript single-page frontend built with Vite. It us
   - `VITE_API_URL`: API base URL used by `src/utils/api.ts`.
   - `VITE_APP_URL`: app URL used by Playwright's web server and `baseURL`.
   - `VITE_EMAIL_UI_URL`: Mailpit URL used by `test/utils/email-utils.ts`.
+  - `VITE_BASE_PATH` (optional, default `/`): the base path `vite.config.ts` serves the app and PWA manifest under. `Dockerfile.production` builds with `/tempo/`.
 - `npm run dev` generates the TanStack route tree and starts Vite.
 
 ## Build, lint, format, and test
@@ -32,7 +33,12 @@ Tempo Web is a React 19 + TypeScript single-page frontend built with Vite. It us
 - `npm run test:e2e:local` — reset E2E Docker services, start them, seed the API, and run the full Playwright suite headlessly (always starts from a pristine database). CI runs the same suite via `npx playwright test` against fresh services.
 - `npm run docker:test:up` / `npm run db:seed:e2e` / `npm run docker:test:down` — start services, seed data, and clean up services respectively.
 
-The CI order is `npm ci`, `npm run generate-routes`, `npm run lint:check`, `npm run format:check`, and `npm run build`; the E2E job then starts the Docker services, seeds the API, and runs Playwright. There is no unit-test script; tests are under `test/e2e`.
+The CI order is `npm ci`, `npm run generate-routes`, `npm run lint:check`, `npm run format:check`, the `ops/tests` staging-promotion and E2E-environment contract checks, then `npm run build` followed by `ops/tests/tempo-web-security-headers-test.sh`; the E2E job then starts the Docker services, seeds the API, and runs Playwright. There is no unit-test script; Playwright tests are under `test/e2e`.
+
+## Deployment and ops checks
+
+- `ops/tests/*.sh` are bash contract tests for deployment configuration. They check `.github/workflows/staging-promote.yml`, the E2E Docker setup in `package.json`/`docker-compose.e2e.yml`/`ci.yml`, the security headers served by the production image (needs Docker), and the `/tempo/` and `/staging/` nginx paths in `nginx/` (`tempo-web-staging-path-test.sh`, not run in CI). Update the matching test when you change those files.
+- `.github/workflows/staging-promote.yml` is a manual `workflow_dispatch` that takes a same-repository PR number, checks that PR head's checks, builds the exact head, publishes it to GHCR, and records a staging deployment intent. Staging is served under `/staging/`; production is served under `/tempo/`.
 
 ## Repository layout and conventions
 
