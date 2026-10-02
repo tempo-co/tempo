@@ -3,19 +3,19 @@ import {
   ArrowUpRight,
   Banknote,
   BusFront,
+  CalendarSync,
   CircleAlert,
-  CircleHelp,
   Clapperboard,
   GraduationCap,
+  HandCoins,
   HeartPulse,
   House,
   Plane,
   ReceiptText,
-  RefreshCw,
+  Scissors,
+  Shapes,
   ShieldCheck,
   ShoppingBag,
-  Sparkles,
-  TrendingUp,
   Undo2,
   Utensils,
 } from 'lucide-react';
@@ -67,7 +67,7 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
   ),
   SUBSCRIPTIONS: createCategoryMeta(
     'SUBSCRIPTIONS',
-    RefreshCw,
+    CalendarSync,
     'border-category-subscriptions/30 bg-category-subscriptions/10 text-category-subscriptions',
   ),
   HEALTH: createCategoryMeta(
@@ -87,7 +87,7 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
   ),
   PERSONAL_CARE: createCategoryMeta(
     'PERSONAL_CARE',
-    Sparkles,
+    Scissors,
     'border-category-personal-care/30 bg-category-personal-care/10 text-category-personal-care',
   ),
   EDUCATION: createCategoryMeta(
@@ -112,7 +112,7 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
   ),
   INCOME: createCategoryMeta(
     'INCOME',
-    TrendingUp,
+    HandCoins,
     'border-category-income/30 bg-category-income/10 text-category-income',
   ),
   REFUND: createCategoryMeta(
@@ -137,7 +137,7 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
   ),
   OTHER: createCategoryMeta(
     'OTHER',
-    CircleHelp,
+    Shapes,
     'border-category-other/30 bg-category-other/10 text-category-other',
   ),
 };
