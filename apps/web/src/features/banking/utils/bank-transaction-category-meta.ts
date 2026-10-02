@@ -1,10 +1,11 @@
 import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
+  ArrowDownLeft,
+  ArrowUpRight,
   Banknote,
   BusFront,
   CalendarSync,
   CircleAlert,
+  CircleHelp,
   Clapperboard,
   GraduationCap,
   HeartPulse,
@@ -12,7 +13,6 @@ import {
   Plane,
   ReceiptText,
   Scissors,
-  Shapes,
   ShieldCheck,
   ShoppingBag,
   TrendingUp,
@@ -122,12 +122,12 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
   ),
   TRANSFER_IN: createCategoryMeta(
     'TRANSFER_IN',
-    ArrowDownToLine,
+    ArrowDownLeft,
     'border-category-transfer-in/30 bg-category-transfer-in/10 text-category-transfer-in',
   ),
   TRANSFER_OUT: createCategoryMeta(
     'TRANSFER_OUT',
-    ArrowUpFromLine,
+    ArrowUpRight,
     'border-category-transfer-out/30 bg-category-transfer-out/10 text-category-transfer-out',
   ),
   NEEDS_REVIEW: createCategoryMeta(
@@ -137,7 +137,7 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
   ),
   OTHER: createCategoryMeta(
     'OTHER',
-    Shapes,
+    CircleHelp,
     'border-category-other/30 bg-category-other/10 text-category-other',
   ),
 };
