@@ -6,10 +6,8 @@ import {SortButton} from '@/components/shared/sort-button';
 
 import {BankTransaction, BankTransactionSortField} from '../types/bank-transaction';
 import {
-  formatBankTransactionCashFlowTreatment,
   formatBankTransactionCategory,
-  formatBankTransactionCategorySource,
-  formatBankTransactionCategoryStatus,
+  formatBankTransactionCategorySubtitle,
   formatBankTransactionDate,
   formatBankTransactionFinancialEvent,
   isBankTransactionCategory,
@@ -54,24 +52,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
         !row.original.category || !isBankTransactionCategory(row.original.category)
           ? null
           : row.original.category;
-      const hasManualCategory = Boolean(
-        financialEvent && category && row.original.categorySource === 'MANUAL',
-      );
-      const source = formatBankTransactionCategorySource(row.original.categorySource);
-      const cashFlowTreatment = formatBankTransactionCashFlowTreatment(
-        row.original.cashFlowTreatment,
-      );
-      // Regular transactions only get a subtitle for manual categories, or while categorization
-      // is pending, failed or not applicable. AI categories need no subtitle.
-      const subtitle = financialEvent
-        ? hasManualCategory
-          ? `Category: ${formatBankTransactionCategory(category)}${source ? ` · ${source}` : ''} · ${cashFlowTreatment}`
-          : `${formatBankTransactionCategoryStatus(row.original.categoryStatus)} · ${cashFlowTreatment}`
-        : row.original.categorySource === 'MANUAL'
-          ? source
-          : row.original.categoryStatus === 'COMPLETED'
-            ? null
-            : formatBankTransactionCategoryStatus(row.original.categoryStatus);
+      const subtitle = formatBankTransactionCategorySubtitle(row.original);
 
       return (
         <div className='w-full min-w-0'>

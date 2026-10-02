@@ -4,6 +4,7 @@ import {
   BANK_TRANSACTION_CATEGORIES,
   BANK_TRANSACTION_CATEGORY_LABELS,
   BANK_TRANSACTION_FINANCIAL_EVENT_LABELS,
+  BankTransaction,
   BankTransactionCashFlowTreatment,
   BankTransactionCategorizationSource,
   BankTransactionCategorizationStatus,
@@ -107,4 +108,26 @@ export function formatBankTransactionCategorySource(
   if (normalized === 'AI') return 'Suggested by AI';
   if (normalized === 'MANUAL') return 'Manual';
   return null;
+}
+
+/**
+ * The muted line under a transaction's category. Regular transactions only get one for manual
+ * categories or while categorization is pending, failed or not applicable.
+ */
+export function formatBankTransactionCategorySubtitle(transaction: BankTransaction) {
+  const source = formatBankTransactionCategorySource(transaction.categorySource);
+  const isManual = transaction.categorySource === 'MANUAL';
+
+  if (formatBankTransactionFinancialEvent(transaction.financialEventType)) {
+    const cashFlowTreatment = formatBankTransactionCashFlowTreatment(transaction.cashFlowTreatment);
+    if (isManual && transaction.category && isBankTransactionCategory(transaction.category)) {
+      const category = `Category: ${formatBankTransactionCategory(transaction.category)}`;
+      return [category, source, cashFlowTreatment].join(' · ');
+    }
+    return `${formatBankTransactionCategoryStatus(transaction.categoryStatus)} · ${cashFlowTreatment}`;
+  }
+
+  if (isManual) return source;
+  if (transaction.categoryStatus === 'COMPLETED') return null;
+  return formatBankTransactionCategoryStatus(transaction.categoryStatus);
 }

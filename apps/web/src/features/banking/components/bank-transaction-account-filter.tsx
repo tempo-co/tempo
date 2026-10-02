@@ -1,5 +1,4 @@
 import {ChevronDown, Landmark, Loader} from 'lucide-react';
-import {useMemo} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {
@@ -16,14 +15,9 @@ import {ScrollArea} from '@/components/ui/scroll-area';
 import {useBankTransactionArrayFilter} from '@/hooks/use-bank-transaction-array-filter';
 import {cn} from '@/utils/cn';
 
-import {useGetAllBankConnections} from '../api/use-get-all-bank-connections';
+import {useActiveBankAccounts} from '../api/use-active-bank-accounts';
 import {BankTransactionFilterParams} from '../types/bank-transaction';
-import {
-  bankAccountLabelKey,
-  findAmbiguousBankAccountKeys,
-  formatBankAccountLabel,
-} from '../utils/bank-account-label';
-import {resolveBankAccountLabel} from '../utils/formatters';
+import {formatBankAccountLabel} from '../utils/bank-account-label';
 import {BankAccountLabel} from './bank-account-label';
 import {BankTransactionFilterSection} from './bank-transaction-filter-section';
 import {FilterCheckIndicator, SelectedFilterSummary} from './bank-transaction-multi-select-filter';
@@ -34,44 +28,19 @@ type BankTransactionAccountFilterProps = {
   className?: string;
 };
 
-type AccountOption = {
-  id: string;
-  label: string;
-  bankName: string;
-  currency: string;
-};
-
 export function BankTransactionAccountFilter({
   filters,
   variant = 'popover',
   className,
 }: BankTransactionAccountFilterProps) {
-  const {bankConnections, isPending, isError} = useGetAllBankConnections();
+  const {accounts, needsAccountName, isPending, isError} = useActiveBankAccounts();
   const {
     selectedValues,
     toggle: handleSelect,
     reset: handleReset,
   } = useBankTransactionArrayFilter(filters, 'bankAccountIds');
 
-  const accounts = useMemo<AccountOption[]>(
-    () =>
-      bankConnections?.flatMap((connection) =>
-        connection.bankAccounts
-          .filter((account) => account.isActive)
-          .map((account) => ({
-            id: account.id,
-            label: resolveBankAccountLabel(account),
-            bankName: connection.aspspName,
-            currency: account.currency,
-          })),
-      ) || [],
-    [bankConnections],
-  );
-
   const selectedAccounts = accounts.filter((account) => selectedValues.includes(account.id));
-  const ambiguousAccountKeys = useMemo(() => findAmbiguousBankAccountKeys(accounts), [accounts]);
-  const isAmbiguous = (account: AccountOption) =>
-    ambiguousAccountKeys.has(bankAccountLabelKey(account));
 
   if (!isPending && !isError && accounts.length <= 1) return null;
 
@@ -95,7 +64,7 @@ export function BankTransactionAccountFilter({
                   <BankAccountLabel
                     bankName={account.bankName}
                     currency={account.currency}
-                    accountName={isAmbiguous(account) ? account.label : undefined}
+                    accountName={needsAccountName(account) ? account.label : undefined}
                   />
                 </CommandItem>
               );
@@ -154,7 +123,7 @@ export function BankTransactionAccountFilter({
             <SelectedFilterSummary
               items={selectedAccounts.map((account) => ({
                 key: account.id,
-                label: isAmbiguous(account) ? account.label : formatBankAccountLabel(account),
+                label: needsAccountName(account) ? account.label : formatBankAccountLabel(account),
               }))}
             />
           )}
