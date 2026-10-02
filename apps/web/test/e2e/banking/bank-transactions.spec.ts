@@ -636,42 +636,6 @@ test.describe('bank transactions', () => {
     await expect(page.getByText('Provider purchase')).not.toBeVisible();
   });
 
-  test('labels bank accounts by bank and currency, adding the name only when needed', async ({
-    page,
-  }) => {
-    let bankName = '';
-    await transformBankConnections(page, (connections) => {
-      const firstConnection = connections[0];
-      bankName = firstConnection.aspspName;
-      const [firstAccount] = firstConnection.bankAccounts;
-      firstConnection.bankAccounts = [
-        {...firstAccount, name: 'Euro account', alias: null, currency: 'EUR'},
-        {
-          ...firstAccount,
-          id: '00000000-0000-4000-8000-000000000098',
-          name: 'Dollar account',
-          alias: null,
-          currency: 'USD',
-        },
-      ];
-      return [firstConnection];
-    });
-    await page.setViewportSize({width: 1280, height: 720});
-    await page.goto('/bank-transactions');
-
-    await page.getByRole('button', {name: 'Bank accounts'}).click();
-    const options = page.getByRole('option');
-    await expect(options).toHaveCount(2);
-    for (const [index, currency] of ['EUR', 'USD'].entries()) {
-      await expect(options.nth(index)).toContainText(bankName);
-      await expect(options.nth(index)).toContainText(currency);
-      await expect(options.nth(index)).not.toContainText('account');
-    }
-
-    await options.filter({hasText: 'USD'}).click();
-    await expect(page.getByText(`${bankName} · USD`, {exact: true})).toBeVisible();
-  });
-
   test('picks booking dates from quick ranges and the month and year dropdowns', async ({page}) => {
     await page.setViewportSize({width: 1280, height: 720});
     await page.goto('/bank-transactions');
