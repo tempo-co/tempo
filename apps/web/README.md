@@ -48,15 +48,14 @@ $ npm run format:check
 
 End-to-end tests use Playwright against a disposable Docker stack (PostgreSQL, Redis, Mailpit, and the API). Playwright builds and previews the app itself. The categorization flow uses the paired API branch image so the browser calls the real category endpoint; the only mocked boundary is the API's AI provider.
 
-For a fully deterministic local run (reset services, fresh database and seed) against the paired API image:
+For a fully deterministic local run (reset services, fresh database and seed):
 
 ```bash
-$ docker build --tag tempo-api-e2e /path/to/tempo-api-categorization-checkout
-$ TEMPO_API_E2E_IMAGE=tempo-api-e2e npm run test:e2e:local
+$ npm run test:e2e:local
 ```
 
-Every E2E run must set `TEMPO_API_E2E_IMAGE` explicitly. CI requires an immutable GHCR digest; local runs may use the freshly built image shown above.
+This uses `ghcr.io/tempo-co/tempo-api:main`. To test against an unmerged API change, set `TEMPO_API_E2E_IMAGE` to a locally built image or a PR image (`ghcr.io/tempo-co/tempo-api:pr-<n>`).
 
-CI runs the same suite on every push (`npx playwright test` against fresh services).
+CI runs the same suite on every push (`npx playwright test` against fresh services). A web PR whose body contains `Depends-on: tempo-api#<n>` runs against that API PR's image.
 
 `docker:test:up` / `docker:test:down` manage the E2E services; each E2E run starts from a pristine database, and the E2E setup authenticates seeded users via `test/auth.setup.ts`.

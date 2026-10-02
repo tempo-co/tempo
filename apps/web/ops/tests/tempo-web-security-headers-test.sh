@@ -33,11 +33,11 @@ def job_section(workflow: str, name: str) -> str:
 def test_security_header_probe_runs_before_publishing(workflow: str) -> None:
     build = job_section(workflow, "build")
     e2e = job_section(workflow, "e2e-test")
-    publish = job_section(workflow, "publish-image")
+    release = job_section(workflow, "release")
 
     assert "bash ops/tests/tempo-web-security-headers-test.sh" in build, "the existing build job must run the Nginx security-header probe"
     assert "needs: [build]" in e2e, "E2E must wait for the build job containing the Nginx probe"
-    assert "needs: [e2e-test]" in publish, "image publishing must wait for E2E and transitively for the Nginx probe"
+    assert "needs: [e2e-test, image]" in release, "the main release must wait for E2E and transitively for the Nginx probe"
 
 
 test_security_header_probe_runs_before_publishing(Path(sys.argv[1]).read_text(encoding="utf-8"))
