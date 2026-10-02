@@ -1,13 +1,12 @@
 import {
-  ArrowDownLeft,
-  ArrowUpRight,
+  ArrowDownToLine,
+  ArrowUpFromLine,
   Banknote,
   BusFront,
   CalendarSync,
   CircleAlert,
   Clapperboard,
   GraduationCap,
-  HandCoins,
   HeartPulse,
   House,
   Plane,
@@ -16,6 +15,7 @@ import {
   Shapes,
   ShieldCheck,
   ShoppingBag,
+  TrendingUp,
   Undo2,
   Utensils,
 } from 'lucide-react';
@@ -112,7 +112,7 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
   ),
   INCOME: createCategoryMeta(
     'INCOME',
-    HandCoins,
+    TrendingUp,
     'border-category-income/30 bg-category-income/10 text-category-income',
   ),
   REFUND: createCategoryMeta(
@@ -122,12 +122,12 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
   ),
   TRANSFER_IN: createCategoryMeta(
     'TRANSFER_IN',
-    ArrowDownLeft,
+    ArrowDownToLine,
     'border-category-transfer-in/30 bg-category-transfer-in/10 text-category-transfer-in',
   ),
   TRANSFER_OUT: createCategoryMeta(
     'TRANSFER_OUT',
-    ArrowUpRight,
+    ArrowUpFromLine,
     'border-category-transfer-out/30 bg-category-transfer-out/10 text-category-transfer-out',
   ),
   NEEDS_REVIEW: createCategoryMeta(
