@@ -44,12 +44,6 @@ jobs:
       - name: Run format check
         run: npm run format:check
 
-      - name: Test staging promotion workflow contract
-        run: bash ops/tests/tempo-staging-promotion-workflow-test.sh
-
-      - name: Test staging path and production isolation contract
-        run: bash ops/tests/tempo-web-staging-path-test.sh
-
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -246,15 +240,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Retag the tested image without rebuilding. `<sha>` and `latest` keep the current production poller working.
+      # Retag the tested image without rebuilding, so production runs exactly what was tested.
       - name: Tag tested image as main
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tags=(--tag "$IMAGE:$GITHUB_SHA")
-          # Only move the moving tags if no newer commit has landed on main since this run started.
-          if [[ "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" == "$GITHUB_SHA" ]]; then
-            tags+=(--tag "$IMAGE:main" --tag "$IMAGE:latest")
+          # Skip if a newer commit has landed on main since this run started, so :main never moves backwards.
+          if [[ "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" != "$GITHUB_SHA" ]]; then
+            echo "main has moved on; not tagging $GITHUB_SHA"
+            exit 0
           fi
-          docker buildx imagetools create "${tags[@]}" "$IMAGE:sha-$GITHUB_SHA"
+          docker buildx imagetools create --tag "$IMAGE:main" "$IMAGE:sha-$GITHUB_SHA"

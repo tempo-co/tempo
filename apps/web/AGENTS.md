@@ -33,13 +33,12 @@ Tempo Web is a React 19 + TypeScript single-page frontend built with Vite. It us
 - `npm run test:e2e:local` — reset E2E Docker services, start them, seed the API, and run the full Playwright suite headlessly (always starts from a pristine database). CI runs the same suite via `npx playwright test` against fresh services.
 - `npm run docker:test:up` / `npm run db:seed:e2e` / `npm run docker:test:down` — start services, seed data, and clean up services respectively.
 
-The CI order is `npm ci`, `npm run generate-routes`, `npm run lint:check`, `npm run format:check`, the `ops/tests` staging-promotion and staging-path contract checks, then `npm run build` followed by `ops/tests/tempo-web-security-headers-test.sh`; the E2E job then starts the Docker services, seeds the API, and runs Playwright. There is no unit-test script; Playwright tests are under `test/e2e`.
+The CI order is `npm ci`, `npm run generate-routes`, `npm run lint:check`, `npm run format:check`, then `npm run build` followed by `ops/tests/tempo-web-security-headers-test.sh`; the E2E job then starts the Docker services, seeds the API, and runs Playwright. There is no unit-test script; Playwright tests are under `test/e2e`.
 
 ## Deployment and ops checks
 
-- `ops/tests/*.sh` are bash contract tests for deployment configuration. They check `.github/workflows/staging-promote.yml`, the security headers served by the production image (needs Docker), and the `/tempo/` and `/staging/` nginx paths in `nginx/`. Update the matching test when you change those files.
-- `.github/workflows/staging-promote.yml` is a manual `workflow_dispatch`. In Actions, select **Promote staging**, choose branch `main`, and select `source`: `pr` (default) requires a positive same-repository PR number; `main` leaves the PR number empty (UI zero is also accepted) and selects the dispatch's exact `GITHUB_SHA`. Main requires that SHA's latest trusted main-push CI run to succeed, including Lint & Format, Build, and E2E Tests. PR promotion retains the same-repository/base-main, open-or-merged, non-draft, CI-file parity, and required-check guards. The workflow builds the exact selected SHA without registry credentials, then publishes the image and schema v2 staging intent in the protected staging job. Staging is served under `/staging/`; production is served under `/tempo/`.
-- Before activating schema v2 promotion, the separately reviewed API host deployment engine must be installed with v1/v2 intent compatibility. An old installed engine rejects v2 intents. Host installation and live promotion require separate authorization; this workflow change does not perform either or change the existing staging refresh/routing policy.
+- `ops/tests/tempo-web-security-headers-test.sh` builds the production image and probes the security headers Nginx serves (needs Docker). Update it when you change `nginx/tempo.conf`.
+- CI publishes `ghcr.io/tempo-co/tempo-web:pr-<n>` for every same-repo PR and tags `:main` after tests pass on `main`. Production deploys `:main` automatically; staging deploys any pair with `tempo-deploy staging --api <tag> --web <tag>` (see `tempo-api/ops/README.md`). Production and staging are both served under `/tempo/`.
 
 ## Repository layout and conventions
 

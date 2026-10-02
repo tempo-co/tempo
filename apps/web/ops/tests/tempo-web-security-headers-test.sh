@@ -181,22 +181,7 @@ run_variant() {
     curl -sS -D "$headers_file" -o /dev/null "http://127.0.0.1:$port/"
     assert_headers "$headers_file" spa
 
-    if [[ "$name" == staging ]]; then
-        headers_file="$tmp_dir/${name}-tempo-prefix.headers"
-        curl -sS -D "$headers_file" -o /dev/null "http://127.0.0.1:$port/tempo/"
-        assert_headers "$headers_file" spa
-
-        headers_file="$tmp_dir/${name}-tempo-asset.headers"
-        curl -sS -D "$headers_file" -o /dev/null "http://127.0.0.1:$port/tempo/favicon.svg"
-        assert_headers "$headers_file" spa
-    fi
-
-    if [[ "$name" == production ]]; then
-        assert_redirect_target "http://127.0.0.1:$port/tempo" /tempo/
-    else
-        assert_redirect_target "http://127.0.0.1:$port/tempo" /tempo/
-        assert_redirect_target "http://127.0.0.1:$port/staging" /staging/
-    fi
+    assert_redirect_target "http://127.0.0.1:$port/tempo" /tempo/
 
     headers_file="$tmp_dir/${name}-api.headers"
     curl -sS --max-time 5 -D "$headers_file" -o /dev/null "http://127.0.0.1:$port$api_path"
@@ -212,4 +197,3 @@ run_variant() {
 }
 
 run_variant production default /tempo/api /tempo/ /tempo/ /tempo/favicon.svg /tempo/api/health ''
-run_variant staging tempo-staging.conf /staging/api /staging/ /staging/ /staging/favicon.svg /staging/api/health /staging/mailpit/
