@@ -1,6 +1,7 @@
 import {useNavigate} from '@tanstack/react-router';
-import {format} from 'date-fns';
+import {format, isSameDay, startOfDay, startOfYear, subYears} from 'date-fns';
 import {CalendarIcon, ChevronDown} from 'lucide-react';
+import {useState} from 'react';
 import {DateRange} from 'react-day-picker';
 
 import {Button, buttonVariants} from '@/components/ui/button';
@@ -10,6 +11,11 @@ import {Separator} from '@/components/ui/separator';
 import {cn} from '@/utils/cn';
 
 import {BankTransactionFilterParams} from '../types/bank-transaction';
+import {
+  BOOKING_DATE_HISTORY_YEARS,
+  BOOKING_DATE_PRESETS,
+  BookingDateRange,
+} from '../utils/booking-date-presets';
 import {BankTransactionFilterSection} from './bank-transaction-filter-section';
 
 type BankTransactionDateFilterProps = {
@@ -24,12 +30,23 @@ export function BankTransactionDateFilter({
   className,
 }: BankTransactionDateFilterProps) {
   const navigate = useNavigate({from: '/bank-transactions/'});
+  const today = startOfDay(new Date());
+  const [month, setMonth] = useState(() => filters.bookingDate?.from ?? today);
 
   const handleSelect = async (range: DateRange | undefined) => {
     const bookingDate = range?.from ? {from: range.from, to: range.to} : undefined;
     await navigate({
       search: (prev) => ({...prev, bookingDate, pageIndex: 0}),
     });
+  };
+
+  const handlePresetSelect = async (range: BookingDateRange) => {
+    setMonth(range.from);
+    await handleSelect(range);
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    if (open) setMonth(filters.bookingDate?.from ?? today);
   };
 
   const handleReset = async () => {
@@ -57,6 +74,42 @@ export function BankTransactionDateFilter({
       }`
     : undefined;
 
+  const presets = (
+    <div
+      role='group'
+      aria-label='Quick ranges'
+      className={
+        variant === 'mobile'
+          ? 'grid grid-cols-2 gap-1 border-b p-2 min-[360px]:grid-cols-3'
+          : 'flex w-36 flex-col gap-0.5 border-r p-2'
+      }
+    >
+      {BOOKING_DATE_PRESETS.map((preset) => {
+        const range = preset.getRange(today);
+        const isActive =
+          filters.bookingDate?.from !== undefined &&
+          filters.bookingDate.to !== undefined &&
+          isSameDay(filters.bookingDate.from, range.from) &&
+          isSameDay(filters.bookingDate.to, range.to);
+        return (
+          <Button
+            key={preset.label}
+            variant={isActive ? 'secondary' : 'ghost'}
+            size='sm'
+            aria-pressed={isActive}
+            className={cn(
+              'font-normal',
+              variant === 'mobile' ? 'h-10 px-2 text-xs' : 'h-8 justify-start px-2',
+            )}
+            onClick={() => handlePresetSelect(range)}
+          >
+            {preset.label}
+          </Button>
+        );
+      })}
+    </div>
+  );
+
   const calendar = (
     <Calendar
       className={variant === 'mobile' ? 'w-full' : undefined}
@@ -77,10 +130,14 @@ export function BankTransactionDateFilter({
       }
       initialFocus
       mode='range'
-      defaultMonth={filters.bookingDate?.from}
+      captionLayout='dropdown-buttons'
+      fromDate={startOfYear(subYears(today, BOOKING_DATE_HISTORY_YEARS))}
+      toDate={today}
+      month={month}
+      onMonthChange={setMonth}
       selected={filters.bookingDate as DateRange | undefined}
       onSelect={handleSelect}
-      disabled={{after: new Date()}}
+      disabled={{after: today}}
     />
   );
 
@@ -91,6 +148,7 @@ export function BankTransactionDateFilter({
           className='overflow-hidden rounded-md border bg-background'
           data-testid='bank-transaction-mobile-calendar'
         >
+          {presets}
           {calendar}
           {filters.bookingDate !== undefined && (
             <>
@@ -108,7 +166,7 @@ export function BankTransactionDateFilter({
   }
 
   return (
-    <Popover>
+    <Popover onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant='outline'
@@ -131,7 +189,10 @@ export function BankTransactionDateFilter({
         </Button>
       </PopoverTrigger>
       <PopoverContent className='w-auto p-0' align='start'>
-        {calendar}
+        <div className='flex'>
+          {presets}
+          {calendar}
+        </div>
         {filters.bookingDate !== undefined && (
           <>
             <Separator className='w-full' />

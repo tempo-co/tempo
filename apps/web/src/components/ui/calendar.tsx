@@ -1,4 +1,4 @@
-import {ChevronLeft, ChevronRight} from 'lucide-react';
+import {ChevronDown, ChevronLeft, ChevronRight} from 'lucide-react';
 import * as React from 'react';
 import {DayPicker} from 'react-day-picker';
 
@@ -16,7 +16,16 @@ function Calendar({className, classNames, showOutsideDays = true, ...props}: Cal
         months: 'flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0',
         month: 'space-y-4',
         caption: 'flex justify-center pt-1 relative items-center',
-        caption_label: 'text-sm font-medium',
+        caption_label: 'flex items-center gap-1 text-sm font-medium',
+        caption_dropdowns: 'flex items-center justify-center gap-1',
+        dropdown_month:
+          'relative inline-flex h-7 items-center rounded-md border border-input bg-background px-2 hover:bg-accent has-[select:focus-visible]:ring-2 has-[select:focus-visible]:ring-ring',
+        dropdown_year:
+          'relative inline-flex h-7 items-center rounded-md border border-input bg-background px-2 hover:bg-accent has-[select:focus-visible]:ring-2 has-[select:focus-visible]:ring-ring',
+        dropdown:
+          'absolute inset-0 z-10 w-full cursor-pointer appearance-none bg-popover text-popover-foreground opacity-0',
+        dropdown_icon: 'h-3.5 w-3.5 text-muted-foreground',
+        vhidden: 'sr-only',
         nav: 'space-x-1 flex items-center',
         nav_button: cn(
           buttonVariants({variant: 'outline'}),
@@ -50,6 +59,9 @@ function Calendar({className, classNames, showOutsideDays = true, ...props}: Cal
         ),
         IconRight: ({className, ...props}) => (
           <ChevronRight className={cn('h-4 w-4', className)} {...props} />
+        ),
+        IconDropdown: ({className, ...props}) => (
+          <ChevronDown className={cn('h-3.5 w-3.5', className)} {...props} />
         ),
       }}
       {...props}

@@ -63,6 +63,17 @@ export function BankTransactionAccountFilter({
   );
 
   const selectedAccounts = accounts.filter((account) => selectedValues.includes(account.id));
+  // Accounts at the same bank in the same currency also show their name to stay distinguishable.
+  const ambiguousAccountKeys = useMemo(() => {
+    const counts = new Map<string, number>();
+    accounts.forEach((account) => {
+      const key = `${account.bankName}|${account.currency}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
+    return new Set([...counts].filter(([, count]) => count > 1).map(([key]) => key));
+  }, [accounts]);
+  const isAmbiguous = (account: AccountOption) =>
+    ambiguousAccountKeys.has(`${account.bankName}|${account.currency}`);
 
   if (!isPending && !isError && accounts.length <= 1) return null;
 
@@ -84,10 +95,16 @@ export function BankTransactionAccountFilter({
                 >
                   <FilterCheckIndicator isSelected={isSelected} />
                   <div className='min-w-0'>
-                    <p className='truncate'>{account.label}</p>
-                    <p className='truncate text-xs text-muted-foreground'>
-                      {account.bankName} | {account.currency}
+                    <p className='flex min-w-0 items-center gap-1.5'>
+                      <span className='truncate'>{account.bankName}</span>
+                      <span aria-hidden='true' className='text-muted-foreground'>
+                        ·
+                      </span>
+                      <span className='shrink-0 text-muted-foreground'>{account.currency}</span>
                     </p>
+                    {isAmbiguous(account) && (
+                      <p className='truncate text-xs text-muted-foreground'>{account.label}</p>
+                    )}
                   </div>
                 </CommandItem>
               );
@@ -144,7 +161,12 @@ export function BankTransactionAccountFilter({
           Bank accounts
           {!isDisabled && (
             <SelectedFilterSummary
-              items={selectedAccounts.map((account) => ({key: account.id, label: account.label}))}
+              items={selectedAccounts.map((account) => ({
+                key: account.id,
+                label: isAmbiguous(account)
+                  ? account.label
+                  : `${account.bankName} · ${account.currency}`,
+              }))}
             />
           )}
           <ChevronDown className='text-muted-foreground' />

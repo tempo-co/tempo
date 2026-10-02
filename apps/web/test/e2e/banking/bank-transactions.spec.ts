@@ -636,6 +636,78 @@ test.describe('bank transactions', () => {
     await expect(page.getByText('Provider purchase')).not.toBeVisible();
   });
 
+  test('labels bank accounts by bank and currency, adding the name only when needed', async ({
+    page,
+  }) => {
+    let bankName = '';
+    await transformBankConnections(page, (connections) => {
+      const firstConnection = connections[0];
+      bankName = firstConnection.aspspName;
+      const [firstAccount] = firstConnection.bankAccounts;
+      firstConnection.bankAccounts = [
+        {...firstAccount, name: 'Euro account', alias: null, currency: 'EUR'},
+        {
+          ...firstAccount,
+          id: '00000000-0000-4000-8000-000000000098',
+          name: 'Dollar account',
+          alias: null,
+          currency: 'USD',
+        },
+      ];
+      return [firstConnection];
+    });
+    await page.setViewportSize({width: 1280, height: 720});
+    await page.goto('/bank-transactions');
+
+    await page.getByRole('button', {name: 'Bank accounts'}).click();
+    const options = page.getByRole('option');
+    await expect(options).toHaveCount(2);
+    for (const [index, currency] of ['EUR', 'USD'].entries()) {
+      await expect(options.nth(index)).toContainText(bankName);
+      await expect(options.nth(index)).toContainText(currency);
+      await expect(options.nth(index)).not.toContainText('account');
+    }
+
+    await options.filter({hasText: 'USD'}).click();
+    await expect(page.getByText(`${bankName} · USD`, {exact: true})).toBeVisible();
+  });
+
+  test('picks booking dates from quick ranges and the month and year dropdowns', async ({page}) => {
+    await page.setViewportSize({width: 1280, height: 720});
+    await page.goto('/bank-transactions');
+
+    const trigger = page.getByRole('button', {name: /^Booking date/}).first();
+    await trigger.click();
+    const quickRanges = page.getByRole('group', {name: 'Quick ranges'});
+    await quickRanges.getByRole('button', {name: 'Last year'}).click();
+
+    const lastYear = new Date().getFullYear() - 1;
+    await expect(page).toHaveURL(/bookingDate/);
+    await expect(trigger).toHaveAccessibleName(
+      `Booking date: Jan 01, ${lastYear} - Dec 31, ${lastYear}`,
+    );
+    await expect(quickRanges.getByRole('button', {name: 'Last year'})).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.getByRole('combobox', {name: 'Year:'})).toHaveValue(String(lastYear));
+
+    const targetYear = lastYear - 2;
+    await page.getByRole('combobox', {name: 'Year:'}).selectOption(String(targetYear));
+    await page.getByRole('combobox', {name: 'Month:'}).selectOption({label: 'March'});
+    await expect(page.getByText(`March ${targetYear}`, {exact: true})).toBeAttached();
+    await page.getByRole('gridcell', {name: '10', exact: true}).click();
+    await page.getByRole('gridcell', {name: '20', exact: true}).click();
+
+    await expect(trigger).toHaveAccessibleName(
+      `Booking date: Mar 10, ${targetYear} - Mar 20, ${targetYear}`,
+    );
+    await expect(quickRanges.getByRole('button', {name: 'Last year'})).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
   test('filters transactions by one or multiple categories', async ({page}) => {
     await page.route('**/bank-transactions?*', async (route) => {
       const requestUrl = new URL(route.request().url());
