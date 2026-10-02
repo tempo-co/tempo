@@ -1,5 +1,4 @@
 import {ChevronDown, Landmark, Loader} from 'lucide-react';
-import {useMemo} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {
@@ -16,9 +15,10 @@ import {ScrollArea} from '@/components/ui/scroll-area';
 import {useBankTransactionArrayFilter} from '@/hooks/use-bank-transaction-array-filter';
 import {cn} from '@/utils/cn';
 
-import {useGetAllBankConnections} from '../api/use-get-all-bank-connections';
+import {useActiveBankAccounts} from '../api/use-active-bank-accounts';
 import {BankTransactionFilterParams} from '../types/bank-transaction';
-import {resolveBankAccountLabel} from '../utils/formatters';
+import {formatBankAccountLabel} from '../utils/bank-account-label';
+import {BankAccountLabel} from './bank-account-label';
 import {BankTransactionFilterSection} from './bank-transaction-filter-section';
 import {FilterCheckIndicator, SelectedFilterSummary} from './bank-transaction-multi-select-filter';
 
@@ -28,39 +28,17 @@ type BankTransactionAccountFilterProps = {
   className?: string;
 };
 
-type AccountOption = {
-  id: string;
-  label: string;
-  bankName: string;
-  currency: string;
-};
-
 export function BankTransactionAccountFilter({
   filters,
   variant = 'popover',
   className,
 }: BankTransactionAccountFilterProps) {
-  const {bankConnections, isPending, isError} = useGetAllBankConnections();
+  const {accounts, needsAccountName, isPending, isError} = useActiveBankAccounts();
   const {
     selectedValues,
     toggle: handleSelect,
     reset: handleReset,
   } = useBankTransactionArrayFilter(filters, 'bankAccountIds');
-
-  const accounts = useMemo<AccountOption[]>(
-    () =>
-      bankConnections?.flatMap((connection) =>
-        connection.bankAccounts
-          .filter((account) => account.isActive)
-          .map((account) => ({
-            id: account.id,
-            label: resolveBankAccountLabel(account),
-            bankName: connection.aspspName,
-            currency: account.currency,
-          })),
-      ) || [],
-    [bankConnections],
-  );
 
   const selectedAccounts = accounts.filter((account) => selectedValues.includes(account.id));
 
@@ -83,12 +61,11 @@ export function BankTransactionAccountFilter({
                   onSelect={() => handleSelect(account.id)}
                 >
                   <FilterCheckIndicator isSelected={isSelected} />
-                  <div className='min-w-0'>
-                    <p className='truncate'>{account.label}</p>
-                    <p className='truncate text-xs text-muted-foreground'>
-                      {account.bankName} | {account.currency}
-                    </p>
-                  </div>
+                  <BankAccountLabel
+                    bankName={account.bankName}
+                    currency={account.currency}
+                    accountName={needsAccountName(account) ? account.label : undefined}
+                  />
                 </CommandItem>
               );
             })}
@@ -144,7 +121,10 @@ export function BankTransactionAccountFilter({
           Bank accounts
           {!isDisabled && (
             <SelectedFilterSummary
-              items={selectedAccounts.map((account) => ({key: account.id, label: account.label}))}
+              items={selectedAccounts.map((account) => ({
+                key: account.id,
+                label: needsAccountName(account) ? account.label : formatBankAccountLabel(account),
+              }))}
             />
           )}
           <ChevronDown className='text-muted-foreground' />

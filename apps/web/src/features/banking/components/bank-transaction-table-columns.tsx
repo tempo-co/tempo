@@ -6,17 +6,15 @@ import {SortButton} from '@/components/shared/sort-button';
 
 import {BankTransaction, BankTransactionSortField} from '../types/bank-transaction';
 import {
-  formatBankTransactionCashFlowTreatment,
   formatBankTransactionCategory,
-  formatBankTransactionCategorySource,
-  formatBankTransactionCategoryStatus,
+  formatBankTransactionCategorySubtitle,
   formatBankTransactionDate,
   formatBankTransactionFinancialEvent,
   isBankTransactionCategory,
-  resolveBankTransactionAccountLabel,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
+import {BankTransactionSourceCell} from './bank-transaction-source-cell';
 
 export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
   {
@@ -54,13 +52,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
         !row.original.category || !isBankTransactionCategory(row.original.category)
           ? null
           : row.original.category;
-      const hasManualCategory = Boolean(
-        financialEvent && category && row.original.categorySource === 'MANUAL',
-      );
-      const source = formatBankTransactionCategorySource(row.original.categorySource);
-      const cashFlowTreatment = formatBankTransactionCashFlowTreatment(
-        row.original.cashFlowTreatment,
-      );
+      const subtitle = formatBankTransactionCategorySubtitle(row.original);
 
       return (
         <div className='w-full min-w-0'>
@@ -74,14 +66,11 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
               {financialEvent || formatBankTransactionCategory(row.original.category)}
             </p>
           </div>
-          <p className='overflow-hidden text-xs text-ellipsis whitespace-nowrap text-muted-foreground'>
-            {financialEvent
-              ? hasManualCategory
-                ? `Category: ${formatBankTransactionCategory(category)}${source ? ` · ${source}` : ''} · ${cashFlowTreatment}`
-                : `${formatBankTransactionCategoryStatus(row.original.categoryStatus)} · ${cashFlowTreatment}`
-              : formatBankTransactionCategoryStatus(row.original.categoryStatus)}
-            {!financialEvent && source && ` · ${source}`}
-          </p>
+          {subtitle && (
+            <p className='overflow-hidden text-xs text-ellipsis whitespace-nowrap text-muted-foreground'>
+              {subtitle}
+            </p>
+          )}
         </div>
       );
     },
@@ -90,14 +79,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
   {
     id: 'source',
     header: ({column}) => <SortButton column={column}>Source</SortButton>,
-    cell: ({row}) => (
-      <div className='w-full min-w-0'>
-        <p className='overflow-hidden text-ellipsis whitespace-nowrap'>{row.original.bankName}</p>
-        <p className='overflow-hidden text-xs text-ellipsis whitespace-nowrap text-muted-foreground'>
-          {resolveBankTransactionAccountLabel(row.original)}
-        </p>
-      </div>
-    ),
+    cell: ({row}) => <BankTransactionSourceCell transaction={row.original} />,
   },
   {
     accessorKey: BankTransactionSortField.AMOUNT,
