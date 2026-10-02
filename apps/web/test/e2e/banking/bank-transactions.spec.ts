@@ -150,7 +150,7 @@ test.describe('bank transactions', () => {
       .filter({hasText: 'Currency exchange'});
     await expect(exchangeRow).toHaveCount(1);
     await expect(exchangeRow.getByRole('cell').nth(2)).toContainText('Currency exchange');
-    await expect(exchangeRow.getByRole('cell').nth(2)).toContainText('Category not applicable');
+    await expect(exchangeRow.getByRole('cell').nth(2)).not.toContainText('Category not applicable');
     await expect(exchangeRow.getByRole('cell').nth(2)).toContainText('Internal movement');
 
     await exchangeRow

@@ -30,9 +30,9 @@ import {
   DEFAULT_BANK_TRANSACTION_SORT,
 } from '../types/bank-transaction';
 import {
+  formatBankTransactionActivity,
   formatBankTransactionCategory,
   formatBankTransactionCompactDate,
-  formatBankTransactionFinancialEvent,
   isBankTransactionCategory,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
@@ -299,9 +299,7 @@ export function BankTransactionTable({
             ) : (
               table.getRowModel().rows.map((row) => {
                 const transactionLabel = resolveBankTransactionDisplayTitle(row.original);
-                const financialEvent = formatBankTransactionFinancialEvent(
-                  row.original.financialEventType,
-                );
+                const financialEvent = formatBankTransactionActivity(row.original);
                 const category =
                   !row.original.category || !isBankTransactionCategory(row.original.category)
                     ? null

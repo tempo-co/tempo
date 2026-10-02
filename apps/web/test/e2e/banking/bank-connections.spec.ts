@@ -19,6 +19,12 @@ const MONOCHROME_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(
 const COLORED_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40"><rect width="80" height="40" fill="#ef4444"/><rect x="80" width="80" height="40" fill="#2563eb"/></svg>',
 )}`;
+const PROVIDER_LOGO_URL = 'https://enablebanking.com/brands/NL/ABN-AMRO/';
+// A 1x1 PNG served in place of the provider logo, so the test does not depend on the live CDN.
+const PROVIDER_LOGO_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
 const MOCK_CONNECTION: BankConnection = {
   id: '00000000-0000-4000-8000-000000000096',
   provider: 'enable-banking',
@@ -121,12 +127,11 @@ test.describe('bank connections', () => {
 
   test('shows seeded connection data, callback feedback, and provider logo', async ({page}) => {
     await mockJson(page, '**/bank-connections/aspsps', [
-      {
-        name: 'ABN AMRO',
-        country: 'NL',
-        logoUrl: 'https://enablebanking.com/brands/NL/ABN-AMRO/',
-      },
+      {name: 'ABN AMRO', country: 'NL', logoUrl: PROVIDER_LOGO_URL},
     ]);
+    await page.route(PROVIDER_LOGO_URL, (route) =>
+      route.fulfill({status: 200, contentType: 'image/png', body: PROVIDER_LOGO_PNG}),
+    );
 
     await transformBankConnections(page, (connections) => {
       const seededConnection = connections.find(
@@ -182,10 +187,7 @@ test.describe('bank connections', () => {
 
     const bankLogo = connectionCard.getByTestId('bank-connection-logo');
     await expect(bankLogo).toBeVisible();
-    await expect(bankLogo.locator('img')).toHaveAttribute(
-      'src',
-      'https://enablebanking.com/brands/NL/ABN-AMRO/',
-    );
+    await expect(bankLogo.locator('img')).toHaveAttribute('src', PROVIDER_LOGO_URL);
     await expect(bankLogo).toHaveClass(/border-border/);
     await expect(bankLogo).toHaveClass(/bg-background/);
     await expect(bankLogo).toHaveCSS('width', '72px');

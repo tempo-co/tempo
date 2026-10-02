@@ -14,10 +14,10 @@ import {useBankTransactionArrayFilter} from '@/hooks/use-bank-transaction-array-
 import {cn} from '@/utils/cn';
 
 import {
-  BANK_TRANSACTION_FINANCIAL_EVENT_LABELS,
-  BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
+  BANK_TRANSACTION_ACTIVITY_FILTER_VALUES,
+  BANK_TRANSACTION_ACTIVITY_LABELS,
+  BankTransactionActivityFilterValue,
   BankTransactionFilterParams,
-  BankTransactionFinancialEventType,
 } from '../types/bank-transaction';
 import {BankTransactionFilterSection} from './bank-transaction-filter-section';
 import {FilterCheckIndicator, SelectedFilterSummary} from './bank-transaction-multi-select-filter';
@@ -28,8 +28,8 @@ type BankTransactionFinancialEventFilterProps = {
   className?: string;
 };
 
-function getEventLabel(eventType: BankTransactionFinancialEventType) {
-  return BANK_TRANSACTION_FINANCIAL_EVENT_LABELS[eventType];
+function getEventLabel(eventType: BankTransactionActivityFilterValue) {
+  return BANK_TRANSACTION_ACTIVITY_LABELS[eventType];
 }
 
 export function BankTransactionFinancialEventFilter({
@@ -49,7 +49,7 @@ export function BankTransactionFinancialEventFilter({
     <Command>
       <CommandList>
         <CommandGroup>
-          {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.map((eventType) => {
+          {BANK_TRANSACTION_ACTIVITY_FILTER_VALUES.map((eventType) => {
             const isSelected = selectedValues.includes(eventType);
             return (
               <CommandItem
@@ -65,7 +65,7 @@ export function BankTransactionFinancialEventFilter({
             );
           })}
         </CommandGroup>
-        {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.map((eventType) => (
+        {BANK_TRANSACTION_ACTIVITY_FILTER_VALUES.map((eventType) => (
           <span key={eventType} id={`${selectionDescriptionId}-${eventType}`} className='sr-only'>
             {selectedValues.includes(eventType) ? 'Selected' : 'Not selected'}
           </span>

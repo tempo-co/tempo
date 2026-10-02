@@ -24,6 +24,15 @@ export const BANK_TRANSACTION_FINANCIAL_EVENT_TYPES = ['CURRENCY_EXCHANGE'] as c
 export type BankTransactionFinancialEventType =
   (typeof BANK_TRANSACTION_FINANCIAL_EVENT_TYPES)[number];
 
+/** Filter-only activity value for transfers between the owner's own accounts. */
+export const BANK_TRANSACTION_OWN_TRANSFER_FILTER = 'OWN_TRANSFER' as const;
+export const BANK_TRANSACTION_ACTIVITY_FILTER_VALUES = [
+  ...BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
+  BANK_TRANSACTION_OWN_TRANSFER_FILTER,
+] as const;
+export type BankTransactionActivityFilterValue =
+  (typeof BANK_TRANSACTION_ACTIVITY_FILTER_VALUES)[number];
+
 export const BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES = ['RULE'] as const;
 export type BankTransactionFinancialEventSource =
   (typeof BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES)[number];
@@ -33,6 +42,34 @@ export const BANK_TRANSACTION_FINANCIAL_EVENT_LABELS: Record<
   string
 > = {
   CURRENCY_EXCHANGE: 'Currency exchange',
+};
+
+export const BANK_TRANSACTION_ACTIVITY_LABELS: Record<BankTransactionActivityFilterValue, string> =
+  {
+    ...BANK_TRANSACTION_FINANCIAL_EVENT_LABELS,
+    OWN_TRANSFER: 'Own transfer',
+  };
+
+export const OWN_TRANSFER_EVIDENCE = ['IBAN', 'NAME', 'MANUAL'] as const;
+export type OwnTransferEvidence = (typeof OWN_TRANSFER_EVIDENCE)[number];
+
+export const OWN_TRANSFER_OVERRIDES = ['MARKED', 'UNMARKED'] as const;
+export type OwnTransferOverride = (typeof OWN_TRANSFER_OVERRIDES)[number];
+
+export type BankTransactionOwnTransferCounterpart = {
+  id: string;
+  bankName: string;
+  bankAccountName: string | null;
+  bankAccountAlias: string | null;
+  amount: string;
+  currency: string;
+  bookingDate: string | null;
+};
+
+export type BankTransactionOwnTransfer = {
+  evidence: OwnTransferEvidence;
+  /** The other leg, or null when no matching transaction is in the connected accounts. */
+  counterpart: BankTransactionOwnTransferCounterpart | null;
 };
 
 export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = [
@@ -126,7 +163,7 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
   bankAccountIds: z.array(z.string().uuid()).optional(),
   categories: z.array(z.enum(BANK_TRANSACTION_CATEGORY_FILTER_VALUES)).optional(),
   categorySources: z.array(z.enum(BANK_TRANSACTION_CATEGORIZATION_SOURCES)).optional(),
-  financialEventTypes: z.array(z.enum(BANK_TRANSACTION_FINANCIAL_EVENT_TYPES)).optional(),
+  financialEventTypes: z.array(z.enum(BANK_TRANSACTION_ACTIVITY_FILTER_VALUES)).optional(),
   search: z.string().max(100).optional(),
   transactionId: z.string().optional(),
   sort: z
@@ -170,8 +207,15 @@ export type BankTransactionFinancialEventFields = {
   cashFlowTreatment: BankTransactionCashFlowTreatment;
 };
 
+export type BankTransactionOwnTransferFields = {
+  /** Absent on connection summaries, which only carry the treatment. */
+  ownTransfer?: BankTransactionOwnTransfer | null;
+  ownTransferOverride?: OwnTransferOverride | null;
+};
+
 export type BankTransaction = BankTransactionCategorizationFields &
-  BankTransactionFinancialEventFields & {
+  BankTransactionFinancialEventFields &
+  BankTransactionOwnTransferFields & {
     id: string;
     transactionDate: string | null;
     bookingDate: string | null;

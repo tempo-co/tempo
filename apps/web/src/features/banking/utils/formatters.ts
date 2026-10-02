@@ -1,6 +1,7 @@
 import {format, parseISO} from 'date-fns';
 
 import {
+  BANK_TRANSACTION_ACTIVITY_LABELS,
   BANK_TRANSACTION_CATEGORIES,
   BANK_TRANSACTION_CATEGORY_LABELS,
   BANK_TRANSACTION_FINANCIAL_EVENT_LABELS,
@@ -10,6 +11,7 @@ import {
   BankTransactionCategorizationStatus,
   BankTransactionCategory,
   BankTransactionFinancialEventType,
+  OwnTransferEvidence,
 } from '../types/bank-transaction';
 
 export function formatBankTransactionDate(value: string | null) {
@@ -30,6 +32,28 @@ export function formatBankTransactionFinancialEvent(
   value: BankTransactionFinancialEventType | null | undefined,
 ) {
   return value ? BANK_TRANSACTION_FINANCIAL_EVENT_LABELS[value] : null;
+}
+
+/** Activity label for the table and details: a financial event, else an own transfer. */
+export function formatBankTransactionActivity(transaction: {
+  financialEventType: BankTransactionFinancialEventType | null | undefined;
+  ownTransfer?: {evidence: OwnTransferEvidence} | null;
+}) {
+  return (
+    formatBankTransactionFinancialEvent(transaction.financialEventType) ??
+    (transaction.ownTransfer ? BANK_TRANSACTION_ACTIVITY_LABELS.OWN_TRANSFER : null)
+  );
+}
+
+export function formatOwnTransferEvidence(value: OwnTransferEvidence) {
+  switch (value) {
+    case 'IBAN':
+      return 'Matched by IBAN';
+    case 'NAME':
+      return 'Matched by account holder name';
+    case 'MANUAL':
+      return 'Marked by you';
+  }
 }
 
 export function formatBankTransactionCashFlowTreatment(
@@ -69,6 +93,18 @@ export function resolveBankTransactionAccountLabel(transaction: {
     alias: transaction.bankAccountAlias,
     name: transaction.bankAccountName,
   });
+}
+
+/**
+ * Names the other leg's account. Provider account names are often the holder's name and repeat across
+ * a bank's currency accounts, so the bank and currency identify it unless the owner set an alias.
+ */
+export function formatOwnTransferCounterpartAccount(counterpart: {
+  bankName: string;
+  bankAccountAlias: string | null;
+  currency: string;
+}) {
+  return counterpart.bankAccountAlias || `${counterpart.bankName} · ${counterpart.currency}`;
 }
 
 export function formatBankingWords(value: string) {
@@ -118,13 +154,21 @@ export function formatBankTransactionCategorySubtitle(transaction: BankTransacti
   const source = formatBankTransactionCategorySource(transaction.categorySource);
   const isManual = transaction.categorySource === 'MANUAL';
 
-  if (formatBankTransactionFinancialEvent(transaction.financialEventType)) {
+  const isExchange = Boolean(formatBankTransactionFinancialEvent(transaction.financialEventType));
+  if (isExchange || transaction.ownTransfer) {
+    // Exchanges and own transfers keep no counted category, so only the treatment shows; an own
+    // transfer's manual category does not count either.
     const cashFlowTreatment = formatBankTransactionCashFlowTreatment(transaction.cashFlowTreatment);
-    if (isManual && transaction.category && isBankTransactionCategory(transaction.category)) {
+    if (
+      isExchange &&
+      isManual &&
+      transaction.category &&
+      isBankTransactionCategory(transaction.category)
+    ) {
       const category = `Category: ${formatBankTransactionCategory(transaction.category)}`;
       return [category, source, cashFlowTreatment].join(' · ');
     }
-    return `${formatBankTransactionCategoryStatus(transaction.categoryStatus)} · ${cashFlowTreatment}`;
+    return cashFlowTreatment;
   }
 
   if (isManual) return source;

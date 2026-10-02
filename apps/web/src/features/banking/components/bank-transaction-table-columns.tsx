@@ -6,10 +6,10 @@ import {SortButton} from '@/components/shared/sort-button';
 
 import {BankTransaction, BankTransactionSortField} from '../types/bank-transaction';
 import {
+  formatBankTransactionActivity,
   formatBankTransactionCategory,
   formatBankTransactionCategorySubtitle,
   formatBankTransactionDate,
-  formatBankTransactionFinancialEvent,
   isBankTransactionCategory,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
@@ -47,7 +47,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
     id: 'category',
     header: ({column}) => <SortButton column={column}>Category</SortButton>,
     cell: ({row}) => {
-      const financialEvent = formatBankTransactionFinancialEvent(row.original.financialEventType);
+      const financialEvent = formatBankTransactionActivity(row.original);
       const category =
         !row.original.category || !isBankTransactionCategory(row.original.category)
           ? null

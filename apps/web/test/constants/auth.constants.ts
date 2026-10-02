@@ -4,3 +4,4 @@ export const PW_CHANGE_USER_AUTH_FILE = 'playwright/.auth/pw-change-user.json';
 export const PW_RESET_USER_AUTH_FILE = 'playwright/.auth/pw-reset-user.json';
 export const SESSION_TEST_USER_AUTH_FILE = 'playwright/.auth/session-test-user.json';
 export const EMAIL_CHANGE_USER_AUTH_FILE = 'playwright/.auth/email-change-user.json';
+export const OWN_TRANSFER_USER_AUTH_FILE = 'playwright/.auth/own-transfer-user.json';

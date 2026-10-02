@@ -10,7 +10,9 @@ export const bankQueryKeys = {
   supportedBanks: ['bank-connections', 'supported-banks'] as const,
   connectionTransactions: (connectionId: string, syncVersion: string | null) =>
     ['bank-connection-transactions', connectionId, syncVersion] as const,
+  connectionTransactionsRoot: ['bank-connection-transactions'] as const,
   transaction: (id: string) => ['bank-transaction', id] as const,
+  transactionRoot: ['bank-transaction'] as const,
   transactions: (
     pagination: PaginationParams,
     filters: BankTransactionFilterParams,

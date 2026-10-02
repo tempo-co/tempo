@@ -14,6 +14,7 @@ import {
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
 import {BankTransactionCategorySelect} from './bank-transaction-category-select';
+import {BankTransactionOwnTransfer} from './bank-transaction-own-transfer';
 
 type BankTransactionDetailsProps = {
   transaction: BankTransaction;
@@ -102,14 +103,17 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
                       value={formatBankTransactionCategoryStatus(transaction.categoryStatus)}
                     />
                   )}
-                  <Detail
-                    label='Cash-flow treatment'
-                    value={formatBankTransactionCashFlowTreatment(transaction.cashFlowTreatment)}
-                  />
                 </>
-              ) : (
+              ) : transaction.ownTransfer ? null : (
                 <BankTransactionCategorySelect transaction={transaction} />
               )}
+              {financialEvent || transaction.ownTransfer ? (
+                <Detail
+                  label='Cash-flow treatment'
+                  value={formatBankTransactionCashFlowTreatment(transaction.cashFlowTreatment)}
+                />
+              ) : null}
+              {financialEvent ? null : <BankTransactionOwnTransfer transaction={transaction} />}
               <Detail
                 label='Transaction type'
                 value={formatBankTransactionType(transaction.transactionType)}

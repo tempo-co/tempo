@@ -16,3 +16,5 @@ export const EMAIL_CHANGE_ACCOUNT_PASSWORD = 'email-change';
 export const SESSION_TEST_ACCOUNT_EMAIL = 'session-test@test.com';
 export const SESSION_TEST_ACCOUNT_PASSWORD = 'session-test';
 
+export const OWN_TRANSFER_ACCOUNT_EMAIL = 'own-transfers@test.com';
+export const OWN_TRANSFER_ACCOUNT_PASSWORD = 'own-transfers';

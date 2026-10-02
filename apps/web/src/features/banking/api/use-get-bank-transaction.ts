@@ -16,6 +16,11 @@ const findListedBankTransaction = (queryClient: QueryClient, id: BankTransaction
   return undefined;
 };
 
+export const bankTransactionQueryOptions = (id: BankTransaction['id']) => ({
+  queryKey: bankQueryKeys.transaction(id),
+  queryFn: () => api.get<BankTransaction>(`/bank-transactions/${id}`),
+});
+
 export const useGetBankTransaction = (id: BankTransaction['id'], enabled = true) => {
   const queryClient = useQueryClient();
   const {
@@ -26,10 +31,7 @@ export const useGetBankTransaction = (id: BankTransaction['id'], enabled = true)
     error,
     refetch,
   } = useQuery<BankTransaction>({
-    queryKey: bankQueryKeys.transaction(id),
-    queryFn: async () => {
-      return await api.get<BankTransaction>(`/bank-transactions/${id}`);
-    },
+    ...bankTransactionQueryOptions(id),
     enabled: enabled && Boolean(id),
     // Show the row the list already loaded while the detail request re-validates it.
     placeholderData: () => findListedBankTransaction(queryClient, id),
