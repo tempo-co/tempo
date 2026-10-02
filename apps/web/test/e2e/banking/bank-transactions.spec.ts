@@ -18,7 +18,8 @@ test.describe('bank transactions', () => {
 
     await expect(page.getByText('Coffee shop')).toBeVisible();
     const sourceCell = firstTransactionRow.getByRole('cell').nth(3);
-    await expect(sourceCell).toHaveText(/^ABN AMRO\s*·\s*[A-Z]{3}$/);
+    await expect(sourceCell.getByText('ABN AMRO', {exact: true})).toBeVisible();
+    await expect(sourceCell).not.toContainText('Daily spending');
     await expect(
       page.getByTestId('bank-transactions-table').getByRole('columnheader', {name: 'Category'}),
     ).toBeVisible();

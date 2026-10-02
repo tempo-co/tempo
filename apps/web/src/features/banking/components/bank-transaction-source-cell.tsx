@@ -4,7 +4,6 @@ import {useGetAllBankConnections} from '../api/use-get-all-bank-connections';
 import {BankTransaction} from '../types/bank-transaction';
 import {bankAccountLabelKey, findAmbiguousBankAccountKeys} from '../utils/bank-account-label';
 import {resolveBankTransactionAccountLabel} from '../utils/formatters';
-import {BankAccountLabel} from './bank-account-label';
 
 type BankTransactionSourceCellProps = {
   transaction: BankTransaction;
@@ -28,10 +27,12 @@ export function BankTransactionSourceCell({transaction}: BankTransactionSourceCe
   );
 
   return (
-    <BankAccountLabel
-      bankName={transaction.bankName}
-      currency={transaction.currency}
-      accountName={isAmbiguous ? resolveBankTransactionAccountLabel(transaction) : undefined}
-    />
+    <div className='w-full min-w-0'>
+      <p className='truncate'>{transaction.bankName}</p>
+      <p className='truncate text-xs text-muted-foreground'>
+        {transaction.currency}
+        {isAmbiguous && ` · ${resolveBankTransactionAccountLabel(transaction)}`}
+      </p>
+    </div>
   );
 }
