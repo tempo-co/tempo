@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   Banknote,
   BusFront,
+  CalendarSync,
   CircleAlert,
   CircleHelp,
   Clapperboard,
@@ -11,10 +12,9 @@ import {
   House,
   Plane,
   ReceiptText,
-  RefreshCw,
+  Scissors,
   ShieldCheck,
   ShoppingBag,
-  Sparkles,
   TrendingUp,
   Undo2,
   Utensils,
@@ -67,7 +67,7 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
   ),
   SUBSCRIPTIONS: createCategoryMeta(
     'SUBSCRIPTIONS',
-    RefreshCw,
+    CalendarSync,
     'border-category-subscriptions/30 bg-category-subscriptions/10 text-category-subscriptions',
   ),
   HEALTH: createCategoryMeta(
@@ -87,7 +87,7 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
   ),
   PERSONAL_CARE: createCategoryMeta(
     'PERSONAL_CARE',
-    Sparkles,
+    Scissors,
     'border-category-personal-care/30 bg-category-personal-care/10 text-category-personal-care',
   ),
   EDUCATION: createCategoryMeta(
