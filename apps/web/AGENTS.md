@@ -11,6 +11,15 @@ Tempo Web is a React 19 + TypeScript single-page frontend built with Vite. It us
 - Frontend E2E runs against `ghcr.io/tempo-co/tempo-api:main` by default; `TEMPO_API_E2E_IMAGE` can point the stack at a different API image. In CI, a web PR whose body contains a line `Depends-on: tempo-api#<n>` runs E2E against that open API PR's `pr-<n>` image (published for same-repo, non-Dependabot API PRs); a merged or closed API PR falls back to `main`, which includes the change once the API main release job has finished. Editing the PR body reruns CI; pushing to the API PR does not, so rerun the web E2E job after the API PR's Image job finishes.
 - Prefer integration/E2E coverage against local services over mocks when testing external integrations.
 
+## Privacy
+
+This repository and everything attached to it (commits, PRs, comments, issues, CI logs, images) are public. Tempo handles real bank data, so none of it may appear there.
+
+- Never put real personal data in code, tests, fixtures, docs, commits, PR descriptions or comments: names, emails, addresses, locations, transaction details (merchants, amounts, dates, references), IBANs or card numbers, host names, IPs or home-directory paths.
+- Use obviously fake values: `user@example.com`, "Example Shop", `example.ts.net`, published example IBANs such as `NL91ABNA0417164300`.
+- Build fixtures from scratch; never copy a real payload. Refer to production rows by UUID only.
+- If you find real personal data, stop and tell the owner instead of fixing it in a PR: the diff would publish it again.
+
 ## Dev environment
 
 - CI uses Node.js 22.x and the committed npm lockfile. Install with `npm ci`.
