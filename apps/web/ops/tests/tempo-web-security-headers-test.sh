@@ -129,71 +129,47 @@ assert parsed.path == expected, f'expected redirect path {expected!r}, got {pars
 PY
 }
 
-run_variant() {
-    local name=$1 config=$2 api_url=$3 base_path=$4 spa_path=$5 asset_path=$6 api_path=$7 mailpit_path=$8
-    local image="tempo-web-security-headers:${suffix}-${name}"
-    local container="tempo-web-security-headers-${suffix}-${name}"
-    local port headers_file ready=0
-    local -a config_args=()
-    if [[ "$config" != default ]]; then
-        config_args+=(--build-arg "NGINX_CONFIG=$config")
+image="tempo-web-security-headers:${suffix}"
+container="tempo-web-security-headers-${suffix}"
+images+=("$image")
+containers+=("$container")
+
+docker build \
+    --file "$repo_root/Dockerfile.production" \
+    --tag "$image" \
+    "$repo_root" >/dev/null
+
+docker run --detach --name "$container" \
+    --publish 127.0.0.1::8080 \
+    --add-host api:127.0.0.1 \
+    "$image" >/dev/null
+port=$(docker port "$container" 8080/tcp | python3 -c 'import sys; print(sys.stdin.read().strip().rsplit(":", 1)[1])')
+
+ready=0
+for _ in $(seq 1 30); do
+    if curl -fsS "http://127.0.0.1:$port/tempo/" -o /dev/null 2>/dev/null; then
+        ready=1
+        break
     fi
-    images+=("$image")
-    containers+=("$container")
+    sleep 1
+done
+if [[ "$ready" != 1 ]]; then
+    docker logs "$container" >&2
+    echo 'Nginx image did not serve /tempo/' >&2
+    exit 1
+fi
 
-    docker build \
-        --file "$repo_root/Dockerfile.production" \
-        --tag "$image" \
-        "${config_args[@]}" \
-        --build-arg "VITE_API_URL=$api_url" \
-        --build-arg "VITE_BASE_PATH=$base_path" \
-        "$repo_root" >/dev/null
-
-    docker run --detach --name "$container" \
-        --publish 127.0.0.1::8080 \
-        --add-host api:127.0.0.1 \
-        --add-host mailpit:127.0.0.1 \
-        "$image" >/dev/null
-    port=$(docker port "$container" 8080/tcp | python3 -c 'import sys; print(sys.stdin.read().strip().rsplit(":", 1)[1])')
-
-    for _ in $(seq 1 30); do
-        if curl -fsS "http://127.0.0.1:$port$spa_path" -o /dev/null 2>/dev/null; then
-            ready=1
-            break
-        fi
-        sleep 1
-    done
-    if [[ "$ready" != 1 ]]; then
-        docker logs "$container" >&2
-        printf 'Nginx image %s did not serve %s\n' "$config" "$spa_path" >&2
-        return 1
-    fi
-
-    headers_file="$tmp_dir/${name}-spa.headers"
-    curl -sS -D "$headers_file" -o /dev/null "http://127.0.0.1:$port$spa_path"
-    assert_headers "$headers_file" spa
-
-    headers_file="$tmp_dir/${name}-asset.headers"
-    curl -sS -D "$headers_file" -o /dev/null "http://127.0.0.1:$port$asset_path"
-    assert_headers "$headers_file" spa
-
-    headers_file="$tmp_dir/${name}-root.headers"
-    curl -sS -D "$headers_file" -o /dev/null "http://127.0.0.1:$port/"
-    assert_headers "$headers_file" spa
-
-    assert_redirect_target "http://127.0.0.1:$port/tempo" /tempo/
-
-    headers_file="$tmp_dir/${name}-api.headers"
-    curl -sS --max-time 5 -D "$headers_file" -o /dev/null "http://127.0.0.1:$port$api_path"
-    assert_headers "$headers_file" proxy
-
-    if [[ -n "$mailpit_path" ]]; then
-        headers_file="$tmp_dir/${name}-mailpit.headers"
-        curl -sS --max-time 5 -D "$headers_file" -o /dev/null "http://127.0.0.1:$port$mailpit_path"
-        assert_headers "$headers_file" proxy
-    fi
-
-    printf 'tempo web security headers (%s): PASS\n' "$name"
+check() {
+    local name=$1 path=$2 kind=$3
+    curl -sS --max-time 5 -D "$tmp_dir/$name.headers" -o /dev/null "http://127.0.0.1:$port$path"
+    assert_headers "$tmp_dir/$name.headers" "$kind"
 }
+check spa /tempo/ spa
+check asset /tempo/favicon.svg spa
+check root / spa
+assert_redirect_target "http://127.0.0.1:$port/tempo" /tempo/
+check api /tempo/api/health proxy
+check api-root /api/health proxy
+check callback /tempo/bank-connections/callback proxy
 
-run_variant production default /tempo/api /tempo/ /tempo/ /tempo/favicon.svg /tempo/api/health ''
+echo 'tempo web security headers: PASS'
