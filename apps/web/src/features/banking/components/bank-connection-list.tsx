@@ -441,7 +441,11 @@ function BankConnectionCard({
               )}
               {connection.lastSyncedAt && (
                 <span className='inline-flex min-w-0 items-center gap-2'>
-                  {connection.consentValidUntil && <span aria-hidden='true'>·</span>}
+                  {connection.consentValidUntil && (
+                    <span aria-hidden='true' className='max-sm:hidden'>
+                      ·
+                    </span>
+                  )}
                   <FreshnessLabel value={connection.lastSyncedAt} />
                 </span>
               )}
