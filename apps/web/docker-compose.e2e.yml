@@ -44,7 +44,6 @@ services:
 
   api:
     image: ${TEMPO_API_E2E_IMAGE:-ghcr.io/tempo-co/tempo-api:main}
-    pull_policy: missing
     container_name: api
     ports:
       - '3000:3000'

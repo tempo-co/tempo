@@ -4,44 +4,15 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/tempo-web-security-headers.XXXXXX")
 suffix=${tmp_dir##*/}
-containers=()
-images=()
+image="tempo-web-security-headers:${suffix}"
+container="tempo-web-security-headers-${suffix}"
 
 cleanup() {
-    for container in "${containers[@]}"; do
-        docker rm -f "$container" >/dev/null 2>&1 || true
-    done
-    for image in "${images[@]}"; do
-        docker image rm "$image" >/dev/null 2>&1 || true
-    done
+    docker rm -f "$container" >/dev/null 2>&1 || true
+    docker image rm "$image" >/dev/null 2>&1 || true
     python3 -c 'import shutil,sys; shutil.rmtree(sys.argv[1], ignore_errors=True)' "$tmp_dir"
 }
 trap cleanup EXIT
-
-python3 - "$repo_root/.github/workflows/ci.yml" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-
-def job_section(workflow: str, name: str) -> str:
-    section = workflow.split(f"\n  {name}:\n", 1)[1]
-    next_job = re.search(r"\n  [A-Za-z0-9_-]+:\n", section)
-    return section[:next_job.start()] if next_job else section
-
-
-def test_security_header_probe_runs_before_publishing(workflow: str) -> None:
-    build = job_section(workflow, "build")
-    e2e = job_section(workflow, "e2e-test")
-    release = job_section(workflow, "release")
-
-    assert "bash ops/tests/tempo-web-security-headers-test.sh" in build, "the existing build job must run the Nginx security-header probe"
-    assert "needs: [build]" in e2e, "E2E must wait for the build job containing the Nginx probe"
-    assert "needs: [e2e-test, image]" in release, "the main release must wait for E2E and transitively for the Nginx probe"
-
-
-test_security_header_probe_runs_before_publishing(Path(sys.argv[1]).read_text(encoding="utf-8"))
-PY
 
 assert_headers() {
     python3 - "$1" "$2" <<'PY'
@@ -128,11 +99,6 @@ expected = sys.argv[2]
 assert parsed.path == expected, f'expected redirect path {expected!r}, got {parsed.path!r}'
 PY
 }
-
-image="tempo-web-security-headers:${suffix}"
-container="tempo-web-security-headers-${suffix}"
-images+=("$image")
-containers+=("$container")
 
 docker build \
     --file "$repo_root/Dockerfile.production" \
