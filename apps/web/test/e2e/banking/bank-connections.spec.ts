@@ -660,6 +660,8 @@ test.describe('bank connections', () => {
     await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
     await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
     await expect(page.getByText('Daily spending', {exact: true})).toBeVisible();
+    await expect(freshness).toBeVisible();
+    await expect(connectionCard.locator('footer')).not.toContainText('·', {useInnerText: true});
 
     const [headingBox, headingGroupBox, connectButtonBox] = await Promise.all([
       boxOf(heading),
