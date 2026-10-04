@@ -21,8 +21,21 @@ test.describe('Account Settings: Delete account', () => {
     ).toBe('16px');
 
     // An empty password is rejected before any request is made.
+    let deleteRequests = 0;
+    page.on('request', (request) => {
+      if (request.method() === 'DELETE' && request.url().endsWith('/accounts/me')) deleteRequests++;
+    });
     await accountSettingsPage.deleteConfirmButton.click();
     await expect(accountSettingsPage.deleteMissingPasswordError).toBeVisible();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    expect(deleteRequests).toBe(0);
+
+    // Cancelling clears the typed password.
+    await accountSettingsPage.deletePasswordInput.fill('typed-then-cancelled');
+    await deleteCancelButton.click();
+    await accountSettingsPage.deleteAccountButton.click();
+    await expect(accountSettingsPage.deletePasswordInput).toHaveValue('');
+    await expect(accountSettingsPage.deleteMissingPasswordError).not.toBeVisible();
 
     // Wrong password is rejected and the dialog stays open.
     await accountSettingsPage.deletePasswordInput.fill('wrong-password');

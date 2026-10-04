@@ -29,7 +29,7 @@ export function ThemeSwitcher() {
           <ToggleGroupItem
             key={value}
             value={value}
-            className='min-h-11 flex-1 data-[state=on]:border-primary data-[state=on]:font-semibold data-[state=on]:text-foreground sm:min-w-28 sm:flex-none'
+            className='min-h-11 flex-1 hover:bg-muted/60 data-[state=on]:border-primary data-[state=on]:font-semibold data-[state=on]:text-foreground data-[state=on]:hover:bg-accent sm:min-w-28 sm:flex-none'
           >
             <Icon />
             {value.charAt(0).toUpperCase() + value.slice(1)}

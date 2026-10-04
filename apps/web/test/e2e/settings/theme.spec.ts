@@ -1,8 +1,20 @@
 import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
 
 import {expect, test} from '../../fixtures';
+import {AppearanceSettingsPage} from '../../pages/appearance-settings.page';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE});
+
+async function expectSelected(page: AppearanceSettingsPage, selected: 'light' | 'dark' | 'system') {
+  const options = {
+    light: page.lightThemeButton,
+    dark: page.darkThemeButton,
+    system: page.systemThemeButton,
+  };
+  for (const [theme, option] of Object.entries(options)) {
+    await expect(option).toHaveAttribute('aria-checked', String(theme === selected));
+  }
+}
 
 test.describe('Theme Switcher', () => {
   test.beforeEach(async ({appearanceSettingsPage}) => {
@@ -14,11 +26,11 @@ test.describe('Theme Switcher', () => {
 
     await expect(appearanceSettingsPage.htmlElement).toHaveClass(/light/);
     expect(await appearanceSettingsPage.getStoredTheme()).toBe('light');
-    await expect(appearanceSettingsPage.lightThemeButton).toHaveAttribute('aria-checked', 'true');
+    await expectSelected(appearanceSettingsPage, 'light');
 
     // Clicking the active option again keeps it selected.
     await appearanceSettingsPage.lightThemeButton.click();
-    await expect(appearanceSettingsPage.lightThemeButton).toHaveAttribute('aria-checked', 'true');
+    await expectSelected(appearanceSettingsPage, 'light');
     expect(await appearanceSettingsPage.getStoredTheme()).toBe('light');
   });
 
@@ -30,11 +42,19 @@ test.describe('Theme Switcher', () => {
 
     await expect(appearanceSettingsPage.htmlElement).toHaveClass(/dark/);
     expect(await appearanceSettingsPage.getStoredTheme()).toBe('dark');
+    await expectSelected(appearanceSettingsPage, 'dark');
   });
 
-  test('should switch to system theme', async ({appearanceSettingsPage}) => {
+  test('should switch to system theme', async ({page, appearanceSettingsPage}) => {
+    // Start from dark with a light system preference, so following the system is observable.
+    await page.emulateMedia({colorScheme: 'light'});
+    await appearanceSettingsPage.darkThemeButton.click();
+    await expect(appearanceSettingsPage.htmlElement).toHaveClass(/dark/);
+
     await appearanceSettingsPage.systemThemeButton.click();
 
+    await expect(appearanceSettingsPage.htmlElement).toHaveClass(/light/);
     expect(await appearanceSettingsPage.getStoredTheme()).toBe('system');
+    await expectSelected(appearanceSettingsPage, 'system');
   });
 });

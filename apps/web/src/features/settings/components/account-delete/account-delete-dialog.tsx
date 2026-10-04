@@ -36,6 +36,12 @@ export function AccountDeleteDialog({children}: AccountDeleteDialogProps) {
     defaultValues: {password: ''},
   });
 
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    // Don't keep a typed password or a stale error around in a closed dialog.
+    if (!open) form.reset();
+  };
+
   const onSubmit = async (dto: AccountDeleteDto) => {
     await deleteAccount(dto, {
       onError: (error) => {
@@ -51,7 +57,7 @@ export function AccountDeleteDialog({children}: AccountDeleteDialogProps) {
   };
 
   return (
-    <ResponsiveDialog open={isOpen} onOpenChange={setIsOpen}>
+    <ResponsiveDialog open={isOpen} onOpenChange={handleOpenChange}>
       <ResponsiveDialogTrigger asChild>
         {isValidElement(children) ? children : null}
       </ResponsiveDialogTrigger>
