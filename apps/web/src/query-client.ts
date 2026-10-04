@@ -6,7 +6,7 @@ import {
   type QueryKey,
 } from '@tanstack/react-query';
 
-import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
+import {CURRENT_ACCOUNT_KEY, PAGE_LOADED_AT} from '@/hooks/use-current-account';
 import {Account} from '@/types/account';
 import {EmailNotVerifiedError, HttpError, SessionExpiredError, endSession} from '@/utils/api';
 import {OFFLINE_MAX_AGE, dropSavedData} from '@/utils/offline-storage';
@@ -47,7 +47,9 @@ const handleQueryError = (error: Error, query: Query<unknown, unknown, unknown, 
     query.queryKey[0] === CURRENT_ACCOUNT_KEY[0] &&
     query.state.data
   ) {
-    handleAuthError(new SessionExpiredError(error.status, error.message));
+    // A saved account this page load never confirmed was not on screen yet; the route decides.
+    if (query.state.dataUpdatedAt < PAGE_LOADED_AT) dropSavedData(queryClient);
+    else handleAuthError(new SessionExpiredError(error.status, error.message));
     return;
   }
   handleAuthError(error);

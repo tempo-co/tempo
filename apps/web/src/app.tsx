@@ -13,7 +13,14 @@ import {router} from './router';
 
 export function App() {
   const isOnline = useConnection();
-  const {isAuthenticated, isPending, isEmailVerified, isUnavailable, refetch} = useCurrentAccount();
+  const {
+    isAuthenticated,
+    isPending,
+    isEmailVerified,
+    isUnavailable,
+    isSavedSessionUnconfirmed,
+    refetch,
+  } = useCurrentAccount();
 
   return (
     <ThemeProvider storageKey='vite-ui-theme'>
@@ -26,7 +33,7 @@ export function App() {
           </p>
           <Button onClick={() => void refetch()}>Try again</Button>
         </div>
-      ) : isPending ? (
+      ) : isPending || (isSavedSessionUnconfirmed && isOnline) ? (
         <LoadingScreen />
       ) : (
         <React.Suspense fallback={<LoadingScreen />}>
