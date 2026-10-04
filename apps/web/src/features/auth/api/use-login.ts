@@ -4,7 +4,7 @@ import {useNavigate, useRouter} from '@tanstack/react-router';
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
 import {Account} from '@/types/account';
 import {HttpError, api} from '@/utils/api';
-import {clearOfflineCache} from '@/utils/offline-storage';
+import {dropSavedData} from '@/utils/offline-storage';
 
 import {LogInDto} from '../types/login.dto';
 
@@ -18,8 +18,7 @@ export const useLogIn = (redirectTo?: string) => {
       return await api.post<Account>('/auth/login', JSON.stringify(logInDto));
     },
     onSuccess: (account) => {
-      queryClient.removeQueries();
-      clearOfflineCache();
+      dropSavedData(queryClient);
       queryClient.setQueryData(CURRENT_ACCOUNT_KEY, account);
       router.update({context: {isAuthenticated: true, isEmailVerified: account.isEmailVerified}});
 

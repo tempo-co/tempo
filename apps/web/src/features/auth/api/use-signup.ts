@@ -4,7 +4,7 @@ import {useNavigate, useRouter} from '@tanstack/react-router';
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
 import {Account} from '@/types/account';
 import {HttpError, api} from '@/utils/api';
-import {clearOfflineCache} from '@/utils/offline-storage';
+import {dropSavedData} from '@/utils/offline-storage';
 
 import {SignUpDto} from '../types/signup.dto';
 
@@ -18,9 +18,7 @@ export const useSignUp = () => {
       return await api.post<Account>('/auth/signup', JSON.stringify(signUpDto));
     },
     onSuccess: (account) => {
-      // Like login: the new session must not inherit another account's loaded or saved data.
-      queryClient.removeQueries();
-      clearOfflineCache();
+      dropSavedData(queryClient);
       queryClient.setQueryData(CURRENT_ACCOUNT_KEY, account);
       router.update({context: {isAuthenticated: true, isEmailVerified: account.isEmailVerified}});
       return navigate({to: '/verify-email', replace: true});

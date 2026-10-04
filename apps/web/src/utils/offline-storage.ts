@@ -1,22 +1,30 @@
 import {createAsyncStoragePersister} from '@tanstack/query-async-storage-persister';
-import {type QueryClient, onlineManager} from '@tanstack/react-query';
-import {type PersistedClient, removeOldestQuery} from '@tanstack/react-query-persist-client';
+import {type QueryClient, type QueryKey, onlineManager} from '@tanstack/react-query';
+import {
+  type PersistQueryClientOptions,
+  type PersistedClient,
+  removeOldestQuery,
+} from '@tanstack/react-query-persist-client';
 
+import {bankQueryKeys} from '@/features/banking/api/query-keys';
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
 import type {Account} from '@/types/account';
 import {endSession} from '@/utils/api';
 
 const CACHE_KEY = 'tempo-offline-cache';
 export const OFFLINE_MAX_AGE = 24 * 60 * 60 * 1000;
-const savedQueryRoots = new Set([
+const savedQueryRoots = new Set<unknown>([
   CURRENT_ACCOUNT_KEY[0],
-  'bank-connections',
-  'bank-connection-transactions',
-  'bank-transactions',
-  'bank-transaction',
+  bankQueryKeys.connections[0],
+  bankQueryKeys.connectionTransactionsRoot[0],
+  bankQueryKeys.transactionsRoot[0],
+  bankQueryKeys.transactionRoot[0],
 ]);
 
-export function clearOfflineCache() {
+export const isAccountQuery = ({queryKey}: {queryKey: QueryKey}) =>
+  queryKey[0] === CURRENT_ACCOUNT_KEY[0];
+
+function clearOfflineCache() {
   try {
     localStorage.removeItem(CACHE_KEY);
   } catch {
@@ -26,12 +34,14 @@ export function clearOfflineCache() {
 
 /** Removes the account and all loaded data from this tab and from storage. */
 export function dropSavedData(queryClient: QueryClient) {
-  queryClient.removeQueries({predicate: ({queryKey}) => queryKey[0] !== CURRENT_ACCOUNT_KEY[0]});
+  queryClient.removeQueries({predicate: (query) => !isAccountQuery(query)});
   queryClient.setQueryData(CURRENT_ACCOUNT_KEY, null);
   clearOfflineCache();
 }
 
-export function createOfflinePersistence(queryClient: QueryClient) {
+export function createOfflinePersistence(
+  queryClient: QueryClient,
+): Omit<PersistQueryClientOptions, 'queryClient'> {
   window.addEventListener('storage', (event) => {
     // Another tab logged out or lost its session; replies to this tab's open requests are discarded.
     if (event.key === CACHE_KEY && event.newValue === null) {
@@ -57,9 +67,7 @@ export function createOfflinePersistence(queryClient: QueryClient) {
       saved.clientState.queries = saved.clientState.queries.filter(
         (query) => Date.now() - query.state.dataUpdatedAt < OFFLINE_MAX_AGE,
       );
-      if (
-        !saved.clientState.queries.some((query) => query.queryKey[0] === CURRENT_ACCOUNT_KEY[0])
-      ) {
+      if (!saved.clientState.queries.some(isAccountQuery)) {
         clearOfflineCache();
         saved.clientState.queries = [];
       }
@@ -78,9 +86,8 @@ export function createOfflinePersistence(queryClient: QueryClient) {
         // A throttled save from the previous login must not resurrect private data after logout.
         // Skip it without removing storage: another tab may still be signed in and own that data.
         const saved = JSON.parse(value) as PersistedClient;
-        const savedAccount = saved.clientState.queries.find(
-          (query) => query.queryKey[0] === CURRENT_ACCOUNT_KEY[0],
-        )?.state.data as Account | undefined;
+        const savedAccount = saved.clientState.queries.find(isAccountQuery)?.state.data as
+          Account | undefined;
         const account = queryClient.getQueryData<Account | null>(CURRENT_ACCOUNT_KEY);
         if (!account || account.id !== savedAccount?.id) return;
         localStorage.setItem(key, value);
@@ -105,11 +112,8 @@ export function createOfflinePersistence(queryClient: QueryClient) {
     buster: 'tempo-offline-v1',
     dehydrateOptions: {
       shouldDehydrateMutation: () => false,
-      shouldDehydrateQuery: (query: {
-        queryKey: readonly unknown[];
-        state: {data: unknown; dataUpdatedAt: number};
-      }) =>
-        savedQueryRoots.has(String(query.queryKey[0])) &&
+      shouldDehydrateQuery: (query) =>
+        savedQueryRoots.has(query.queryKey[0]) &&
         query.state.data != null &&
         Date.now() - query.state.dataUpdatedAt < OFFLINE_MAX_AGE,
     },

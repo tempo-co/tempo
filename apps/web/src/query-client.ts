@@ -9,7 +9,7 @@ import {
 import {CURRENT_ACCOUNT_KEY, PAGE_LOADED_AT} from '@/hooks/use-current-account';
 import {Account} from '@/types/account';
 import {EmailNotVerifiedError, HttpError, SessionExpiredError, endSession} from '@/utils/api';
-import {OFFLINE_MAX_AGE, dropSavedData} from '@/utils/offline-storage';
+import {OFFLINE_MAX_AGE, dropSavedData, isAccountQuery} from '@/utils/offline-storage';
 
 import {router} from './router';
 
@@ -44,7 +44,7 @@ const handleQueryError = (error: Error, query: Query<unknown, unknown, unknown, 
   if (
     error instanceof HttpError &&
     error.status === 401 &&
-    query.queryKey[0] === CURRENT_ACCOUNT_KEY[0] &&
+    isAccountQuery(query) &&
     query.state.data
   ) {
     // A saved account this page load never confirmed was not on screen yet; the route decides.

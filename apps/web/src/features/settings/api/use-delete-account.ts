@@ -1,9 +1,8 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {toast} from 'sonner';
 
-import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
 import {HttpError, api} from '@/utils/api';
-import {clearOfflineCache} from '@/utils/offline-storage';
+import {dropSavedData} from '@/utils/offline-storage';
 
 import {AccountDeleteDto} from '../types/account-delete.dto';
 
@@ -14,11 +13,9 @@ export const useDeleteAccount = () => {
     mutationFn: async (dto) => {
       await api.delete('/accounts/me', {body: JSON.stringify(dto)});
     },
-    onSuccess: async () => {
+    onSuccess: () => {
       toast.success('Account deleted.');
-      queryClient.removeQueries();
-      await queryClient.setQueryData(CURRENT_ACCOUNT_KEY, null);
-      clearOfflineCache();
+      dropSavedData(queryClient);
     },
   });
 

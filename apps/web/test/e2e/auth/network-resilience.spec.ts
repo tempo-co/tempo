@@ -5,7 +5,7 @@ import {API_URL, expect, test} from '../../fixtures';
 import {HomePage} from '../../pages/home.page';
 import {LoginPage} from '../../pages/login.page';
 import {SecuritySettingsPage} from '../../pages/security-settings.page';
-import {routeBankConnectionsApi} from '../../utils/api-mocks';
+import {fulfillJson, mockJson, routeBankConnectionsApi} from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
 
 const CACHE_KEY = 'tempo-offline-cache';
@@ -20,6 +20,9 @@ const readCache = (page: Page) =>
   );
 const savedStatus = (page: Page) =>
   page.getByRole('status').filter({hasText: 'Showing saved data'});
+const unreachableHeading = (page: Page) => page.getByRole('heading', {name: 'Cannot reach Tempo'});
+const serverSessionStatus = async (page: Page) =>
+  (await page.request.get(`${API_URL}/accounts/me`)).status();
 
 async function saveTransactions(page: Page) {
   await page.goto('/bank-transactions');
@@ -39,7 +42,7 @@ async function saveTransactions(page: Page) {
 test('does not send an unreachable session check to login', async ({page}) => {
   await page.route('**/accounts/me', (route) => route.abort('failed'));
   await page.goto('/bank-transactions');
-  await expect(page.getByRole('heading', {name: 'Cannot reach Tempo'})).toBeVisible();
+  await expect(unreachableHeading(page)).toBeVisible();
   await expect(page).toHaveURL(/\/bank-transactions(?:\?|$)/);
   await expect(page.getByRole('button', {name: 'Try again'})).toBeVisible();
 });
@@ -107,7 +110,7 @@ test.describe('saved app', () => {
   test('still reports a failed refresh when Tempo answers with an error', async ({page}) => {
     let requests = 0;
     await routeBankConnectionsApi(page, async (route) => {
-      if (requests++ > 0) return route.fulfill({status: 503, json: {message: 'Unavailable'}});
+      if (requests++ > 0) return fulfillJson(route, {message: 'Unavailable'}, 503);
       const connections = (await (await route.fetch()).json()) as {syncStatus: string}[];
       await route.fulfill({json: connections.map((c) => ({...c, syncStatus: 'QUEUED'}))});
     });
@@ -129,7 +132,7 @@ test.describe('saved app', () => {
     await context.setOffline(true);
     await expect(savedStatus(page)).toBeVisible();
     await page.clock.fastForward('25:00:00');
-    await expect(page.getByRole('heading', {name: 'Cannot reach Tempo'})).toBeVisible();
+    await expect(unreachableHeading(page)).toBeVisible();
     await expect(page.getByText('Coffee shop')).not.toBeVisible();
     await expect.poll(() => readCache(page)).toBe(null);
   });
@@ -147,7 +150,7 @@ test.describe('saved app', () => {
     }, CACHE_KEY);
     await context.setOffline(true);
     await page.reload();
-    await expect(page.getByRole('heading', {name: 'Cannot reach Tempo'})).toBeVisible();
+    await expect(unreachableHeading(page)).toBeVisible();
     await expect(page.getByText('Coffee shop')).not.toBeVisible();
   });
 
@@ -224,7 +227,7 @@ test('logging out while Tempo is unreachable still clears saved data', async ({
   await expect(page.getByText('Saved data was removed from this device')).toBeVisible();
   expect(errors).toEqual([]);
   await page.reload();
-  await expect(page.getByRole('heading', {name: 'Cannot reach Tempo'})).toBeVisible();
+  await expect(unreachableHeading(page)).toBeVisible();
 });
 
 test('a signed-out tab does not sign out a tab that logs in', async ({
@@ -270,7 +273,7 @@ test('a logout that could not reach Tempo is completed once it is reachable agai
   await context.setOffline(false);
   // The server session ends, so neither this tab nor a reload signs the user back in.
   await expect
-    .poll(async () => (await page.request.get(`${API_URL}/accounts/me`)).status(), {
+    .poll(() => serverSessionStatus(page), {
       timeout: 20_000,
     })
     .toBe(401);
@@ -308,7 +311,7 @@ test('logout clears private data even when its pending marker cannot be stored',
   await expect(homePage.sidebarAccountName).not.toBeVisible();
   await context.setOffline(false);
   await expect
-    .poll(async () => (await page.request.get(`${API_URL}/accounts/me`)).status(), {
+    .poll(() => serverSessionStatus(page), {
       timeout: 20_000,
     })
     .toBe(401);
@@ -324,8 +327,9 @@ test('two reconnecting tabs finish a pending logout only once', async ({
   await page.goto('/');
   await expect(homePage.sidebarAccountName).toHaveText(freshAccount.name);
   const other = await context.newPage();
+  const otherHome = new HomePage(other);
   await other.goto('/');
-  await expect(other.getByTestId('sidebar-current-account-name')).toHaveText(freshAccount.name);
+  await expect(otherHome.sidebarAccountName).toHaveText(freshAccount.name);
   await context.setOffline(true);
   await expect(savedStatus(page)).toBeVisible();
   await homePage.logOut();
@@ -348,11 +352,9 @@ test('two reconnecting tabs finish a pending logout only once', async ({
   const concurrentRequests = requests;
   release();
   expect(concurrentRequests).toBe(1);
-  await expect
-    .poll(async () => (await page.request.get(`${API_URL}/accounts/me`)).status())
-    .toBe(401);
+  await expect.poll(() => serverSessionStatus(page)).toBe(401);
   await expect(homePage.sidebarAccountName).not.toBeVisible();
-  await expect(other.getByTestId('sidebar-current-account-name')).not.toBeVisible();
+  await expect(otherHome.sidebarAccountName).not.toBeVisible();
 });
 
 test('an account save finishing after logout in another tab does not restore saved data', async ({
@@ -398,17 +400,16 @@ test('logout clears saved data in other open tabs too', async ({
   homePage,
 }) => {
   await page.goto('/');
-  await expect(page.getByTestId('sidebar-current-account-name')).toHaveText(freshAccount.name);
-  await expect
-    .poll(() => page.evaluate((key) => !!localStorage.getItem(key), CACHE_KEY))
-    .toBe(true);
+  await expect(homePage.sidebarAccountName).toHaveText(freshAccount.name);
+  await expect.poll(() => readCache(page)).not.toBe(null);
   const other = await context.newPage();
+  const otherHome = new HomePage(other);
   await other.goto('/');
-  await expect(other.getByTestId('sidebar-current-account-name')).toHaveText(freshAccount.name);
+  await expect(otherHome.sidebarAccountName).toHaveText(freshAccount.name);
   await homePage.logOut();
   await expect(page).toHaveURL(/\/login$/);
-  await expect(other.getByTestId('sidebar-current-account-name')).not.toBeVisible();
-  await expect.poll(() => other.evaluate((key) => localStorage.getItem(key), CACHE_KEY)).toBe(null);
+  await expect(otherHome.sidebarAccountName).not.toBeVisible();
+  await expect.poll(() => readCache(other)).toBe(null);
 });
 
 test('does not queue an offline account change for replay after reconnect', async ({
@@ -454,9 +455,7 @@ test('a session check started before a real 401 cannot restore saved data', asyn
     await new Promise<void>((resolve) => (releaseAccount = resolve));
     await route.fulfill({response});
   });
-  await page.route(`${API_URL}/bank-transactions?**`, (route) =>
-    route.fulfill({status: 401, json: {message: 'Unauthorized'}}),
-  );
+  await mockJson(page, `${API_URL}/bank-transactions?**`, {message: 'Unauthorized'}, 401);
   // Reconnecting refetches the session and the page together; the page's 401 lands first.
   await context.setOffline(true);
   await expect(savedStatus(page)).toBeVisible();
@@ -473,20 +472,19 @@ test('an actual revoked session clears saved data instead of granting offline ac
   page,
   context,
   freshAccount,
+  homePage,
 }) => {
   await page.goto('/');
-  await expect(page.getByTestId('sidebar-current-account-name')).toHaveText(freshAccount.name);
-  await expect
-    .poll(() => page.evaluate((key) => !!localStorage.getItem(key), CACHE_KEY))
-    .toBe(true);
+  await expect(homePage.sidebarAccountName).toHaveText(freshAccount.name);
+  await expect.poll(() => readCache(page)).not.toBe(null);
   const revoked = await page.request.post(`${API_URL}/auth/logout`);
   expect(revoked.status()).toBe(200);
   await page.reload();
   await expect(page).toHaveURL(/\/login$/);
-  await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), CACHE_KEY)).toBe(null);
+  await expect.poll(() => readCache(page)).toBe(null);
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByRole('heading', {name: 'Cannot reach Tempo'})).toBeVisible();
-  await expect(page.getByTestId('sidebar-current-account-name')).not.toBeVisible();
+  await expect(unreachableHeading(page)).toBeVisible();
+  await expect(homePage.sidebarAccountName).not.toBeVisible();
 });

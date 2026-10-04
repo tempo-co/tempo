@@ -35,14 +35,22 @@ const PENDING_LOGOUT_KEY = 'tempo-pending-logout';
 let logoutRequest: Promise<void> | undefined;
 let unpersistedLogout = false;
 
+function hasPendingLogout() {
+  try {
+    return unpersistedLogout || localStorage.getItem(PENDING_LOGOUT_KEY) === 'true';
+  } catch {
+    return unpersistedLogout;
+  }
+}
+
 /** Only logout is completed after reconnection. User changes are never queued or replayed. */
 export async function completePendingLogout() {
-  if (!unpersistedLogout && localStorage.getItem(PENDING_LOGOUT_KEY) !== 'true') return;
+  if (!hasPendingLogout()) return;
   if (logoutRequest) return logoutRequest;
   logoutRequest = (async () => {
     await navigator.locks.request('tempo-logout', async () => {
       // Another tab may have completed the logout while this tab waited for the lock.
-      if (!unpersistedLogout && localStorage.getItem(PENDING_LOGOUT_KEY) !== 'true') return;
+      if (!hasPendingLogout()) return;
       if (!onlineManager.isOnline()) throw new NetworkError();
       const response = await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
@@ -55,7 +63,11 @@ export async function completePendingLogout() {
       if (!response.ok && response.status !== 401) {
         throw new HttpError(response.status, 'Tempo could not confirm the logout.');
       }
-      localStorage.removeItem(PENDING_LOGOUT_KEY);
+      try {
+        localStorage.removeItem(PENDING_LOGOUT_KEY);
+      } catch {
+        /* Storage may be disabled; the marker was then never stored. */
+      }
       unpersistedLogout = false;
     });
   })();
@@ -83,6 +95,10 @@ export function beginLogout() {
  */
 export function endSession() {
   sessionEpoch++;
+}
+
+function assertSameSession(epoch: number) {
+  if (epoch !== sessionEpoch) throw new SessionExpiredError(401, 'Signed out');
 }
 
 const shouldRedirect = (resource: string, method?: string) => {
@@ -133,7 +149,7 @@ async function request<T = unknown>(
   // Any reply, including an error status, proves Tempo is reachable. The API itself answers 502/503
   // when the bank provider fails, so only a failed request means the connection is down.
   onlineManager.setOnline(true);
-  if (epoch !== sessionEpoch) throw new SessionExpiredError(401, 'Signed out');
+  assertSameSession(epoch);
 
   if (!response.ok) {
     if (response.status === 401 && shouldRedirect(resource, init?.method)) {
@@ -178,7 +194,7 @@ async function request<T = unknown>(
   }
 
   const body = (await response.json()) as T;
-  if (epoch !== sessionEpoch) throw new SessionExpiredError(401, 'Signed out');
+  assertSameSession(epoch);
   return body;
 }
 

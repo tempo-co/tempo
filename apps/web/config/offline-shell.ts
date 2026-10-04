@@ -3,6 +3,8 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import type {Plugin} from 'vite';
 
+import {PAGE_ICONS, PWA_ICONS} from './app-icons';
+
 export function offlineShellPlugin(base: string): Plugin {
   if (!/^\/(?:[a-zA-Z0-9_-]+\/)*$/.test(base)) {
     throw new Error('The offline shell requires a same-origin base path ending in /.');
@@ -26,17 +28,7 @@ export function offlineShellPlugin(base: string): Plugin {
         const output = bundle[name];
         hash.update(name).update(output.type === 'chunk' ? output.code : output.source);
       }
-      for (const name of [
-        'favicon.svg',
-        'favicon-16x16.png',
-        'favicon-32x32.png',
-        'favicon-48x48.png',
-        'apple-touch-icon.png',
-        'pwa-icon-192.png',
-        'pwa-icon-512.png',
-        'maskable-icon-192.png',
-        'maskable-icon-512.png',
-      ]) {
+      for (const name of [...PAGE_ICONS, ...PWA_ICONS.map((icon) => icon.file)]) {
         hash.update(name).update(readFileSync(path.resolve('public', name)));
         files.push(name);
       }
