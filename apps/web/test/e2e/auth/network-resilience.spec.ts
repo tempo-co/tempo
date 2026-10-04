@@ -438,6 +438,7 @@ test('an actual revoked session clears saved data instead of granting offline ac
   await page.reload();
   await expect(page).toHaveURL(/\/login$/);
   await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), CACHE_KEY)).toBe(null);
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
   await context.setOffline(true);
   await page.reload();
   await expect(page.getByRole('heading', {name: 'Cannot reach Tempo'})).toBeVisible();
