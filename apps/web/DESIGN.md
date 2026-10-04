@@ -230,7 +230,8 @@ Compact and action-oriented; default ~40px tall (36 small / 44 large), 16px icon
 gap, specific labels ("Connect a bank", "Re-authorize"). Primary uses Clay strong on light
 and Clay on dark on dark with Paper foreground. Ghost uses the accent wash only on
 hover/focus/active. Every interactive control has a visible `:focus-visible` ring using the
-ring token. Disabled and pending states preserve the label's meaning and pair motion with text ("Connecting...").
+ring token. Disabled and pending states preserve the label's meaning and pair motion with
+text ("Connecting...").
 
 ### Cards and grouped surfaces
 
