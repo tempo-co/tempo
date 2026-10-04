@@ -71,7 +71,8 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
       try {
-        const response = await fetch(request, {signal: AbortSignal.timeout(5000)});
+        // Revalidate: a stale index.html from the HTTP cache would point at deleted assets.
+        const response = await fetch(request, {cache: 'no-cache', signal: AbortSignal.timeout(5000)});
         if (response.ok) return response;
       } catch { /* Use the installed shell when the network is unavailable. */ }
       return (await caches.open(CACHE)).match(BASE + 'index.html');
