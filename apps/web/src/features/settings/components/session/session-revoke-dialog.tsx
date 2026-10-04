@@ -27,7 +27,7 @@ export function SessionRevokeDialog({session, triggerVariant = 'ghost'}: Session
       title='Revoke access'
       description={
         <>
-          Revoke <span className='text-foreground'>{session.name}</span>? This cannot be undone.
+          Revoke <span className='text-foreground'>{session.name}</span>?
         </>
       }
       contentClassName='md:max-w-132'

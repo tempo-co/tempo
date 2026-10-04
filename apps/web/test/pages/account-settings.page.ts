@@ -13,10 +13,10 @@ export class AccountSettingsPage {
   readonly emailAlreadyInUseError: Locator;
   readonly invalidEmailError: Locator;
   readonly deleteAccountButton: Locator;
-  readonly deleteEmailInput: Locator;
   readonly deletePasswordInput: Locator;
   readonly deleteConfirmButton: Locator;
   readonly deleteInvalidPasswordError: Locator;
+  readonly deleteMissingPasswordError: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -31,10 +31,10 @@ export class AccountSettingsPage {
     this.emailAlreadyInUseError = page.getByText('Another account already uses this email.');
     this.invalidEmailError = page.getByText('Please enter a valid email address.');
     this.deleteAccountButton = page.getByTestId('delete-account-button');
-    this.deleteEmailInput = page.getByTestId('delete-account-email-input');
     this.deletePasswordInput = page.getByTestId('password-input');
     this.deleteConfirmButton = page.getByTestId('delete-account-confirm');
     this.deleteInvalidPasswordError = page.getByText('Invalid password.');
+    this.deleteMissingPasswordError = page.getByText('Please enter your password.');
   }
 
   async navigate() {

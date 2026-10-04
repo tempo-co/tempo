@@ -19,7 +19,7 @@ export function SessionRevokeAllDialog() {
         </Button>
       }
       title='Revoke access'
-      description='Revoke all other sessions? This cannot be undone.'
+      description='Revoke all other sessions?'
       confirmLabel='Revoke'
       pendingLabel='Revoking...'
       confirmVariant='destructive'
