@@ -30,7 +30,7 @@ Tempo is intended to be a private, read-only financial record for one person: re
 ## Capabilities and Constraints
 
 - The current frontend supports email/password authentication, email verification, password recovery, account details, security/session controls, and appearance settings.
-- The current banking flow connects real bank accounts through Enable Banking, retrieves accounts and balances, allows manual synchronization, and provides searchable, filterable, sortable, paginated, read-only transaction lists and detail views with automatic category suggestions and manual correction.
+- The current banking flow connects real bank accounts through Enable Banking, retrieves accounts and balances, synchronizes them automatically in the background (right after authorization, then on a recurring schedule), and provides searchable, filterable, sortable, paginated, read-only transaction lists and detail views with automatic category suggestions and manual correction.
 - The application is read-only toward banks. Transaction categories are Tempo metadata and may be suggested automatically or corrected manually; Tempo must not initiate payments or mutate bank-account data.
 - Bank-statement upload was removed because Enable Banking synchronization replaces that workflow. Do not reintroduce statement upload as a default solution.
 - Spending insights, statistics about habits, and future predictions are future direction rather than current implemented capability.

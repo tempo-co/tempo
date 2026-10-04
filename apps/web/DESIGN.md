@@ -227,10 +227,10 @@ surface, or decorate it. Favicon and installed-app icons live under `public/` wi
 ### Buttons
 
 Compact and action-oriented; default ~40px tall (36 small / 44 large), 16px icons with 8px
-gap, specific labels ("Sync now", "Connect bank"). Primary uses Clay strong on light and Clay
-on dark on dark with Paper foreground. Ghost uses the accent wash only on hover/focus/active.
+gap, specific labels ("Connect a bank", "Re-authorize"). Primary uses Clay strong on light
+and Clay on dark on dark with Paper foreground. Ghost uses the accent wash only on hover/focus/active.
 Every interactive control has a visible `:focus-visible` ring using the ring token. Disabled
-and pending states preserve the label's meaning and pair motion with text ("Syncing...").
+and pending states preserve the label's meaning and pair motion with text ("Connecting...").
 
 ### Cards and grouped surfaces
 
