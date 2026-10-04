@@ -1,4 +1,4 @@
-import {format, parseISO} from 'date-fns';
+import {format, isThisYear, parseISO} from 'date-fns';
 
 import {
   BANK_TRANSACTION_ACTIVITY_LABELS,
@@ -18,14 +18,21 @@ export function formatBankTransactionDate(value: string | null) {
   return formatBankTransactionDateValue(value, 'MMM d, yyyy');
 }
 
+/** Day and month, with the year only when it is not the current one. */
 export function formatBankTransactionCompactDate(value: string | null) {
-  return formatBankTransactionDateValue(value, 'd MMM');
+  return formatBankTransactionDateValue(value, (date) =>
+    isThisYear(date) ? 'd MMM' : 'd MMM yyyy',
+  );
 }
 
-function formatBankTransactionDateValue(value: string | null, pattern: string) {
+function formatBankTransactionDateValue(
+  value: string | null,
+  pattern: string | ((date: Date) => string),
+) {
   if (!value) return '—';
   const date = parseISO(value);
-  return Number.isNaN(date.getTime()) ? value : format(date, pattern);
+  if (Number.isNaN(date.getTime())) return value;
+  return format(date, typeof pattern === 'string' ? pattern : pattern(date));
 }
 
 export function formatBankTransactionFinancialEvent(

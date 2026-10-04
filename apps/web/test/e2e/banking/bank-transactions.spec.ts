@@ -1,4 +1,8 @@
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {
+  AFTER_SEEDED_TRANSACTION_YEAR_NOW,
+  SEEDED_TRANSACTION_YEAR_NOW,
+} from '../../constants/seed.constants';
 import {expect, test} from '../../fixtures';
 import {fulfillJson, mockJson, transformBankConnections} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
@@ -844,6 +848,7 @@ test.describe('bank transactions', () => {
   });
 
   test('reflows transaction records for a phone viewport', async ({page}) => {
+    await page.clock.setFixedTime(SEEDED_TRANSACTION_YEAR_NOW);
     await page.setViewportSize({width: 393, height: 852});
     await page.goto('/bank-transactions');
 
@@ -939,7 +944,7 @@ test.describe('bank transactions', () => {
     await expect(table).toHaveAttribute('aria-label', 'Bank transactions');
     const mobileMeta = firstTransactionRow.getByTestId('bank-transaction-mobile-meta');
     const mobileMetaLabel = mobileMeta.getByTestId('bank-transaction-mobile-meta-label');
-    await expect(mobileMeta).toContainText('26 Aug');
+    await expect(mobileMeta).toContainText(/^26 Aug·/);
     await expect(mobileMetaLabel).toBeVisible();
     await expect(mobileMetaLabel).not.toHaveText('Daily spending');
     await expect(mobileMeta).toContainText('ABN AMRO');
@@ -990,6 +995,11 @@ test.describe('bank transactions', () => {
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
     await expect(inspector).toBeHidden();
     await expect(descriptionTrigger).toBeFocused();
+
+    await page.clock.setFixedTime(AFTER_SEEDED_TRANSACTION_YEAR_NOW);
+    await page.reload();
+    await expect(mobileMeta).toContainText(/^26 Aug 2026·/);
+    await expectNoHorizontalOverflow(page);
   });
 
   test('keeps a selected booking date range within a phone viewport', async ({page}) => {

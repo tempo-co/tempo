@@ -1,5 +1,6 @@
 import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {expect, test} from '../../fixtures';
 import {
   fulfillJson,
@@ -126,6 +127,7 @@ test.describe('bank connections', () => {
   });
 
   test('shows seeded connection data, callback feedback, and provider logo', async ({page}) => {
+    await page.clock.setFixedTime(SEEDED_TRANSACTION_YEAR_NOW);
     await mockJson(page, '**/bank-connections/aspsps', [
       {name: 'ABN AMRO', country: 'NL', logoUrl: PROVIDER_LOGO_URL},
     ]);

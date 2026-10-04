@@ -18,3 +18,7 @@ export const SESSION_TEST_ACCOUNT_PASSWORD = 'session-test';
 
 export const OWN_TRANSFER_ACCOUNT_EMAIL = 'own-transfers@test.com';
 export const OWN_TRANSFER_ACCOUNT_PASSWORD = 'own-transfers';
+
+/** Browser times in and after the year of the seeded transactions, for compact date checks. */
+export const SEEDED_TRANSACTION_YEAR_NOW = new Date('2026-10-01T12:00:00.000Z');
+export const AFTER_SEEDED_TRANSACTION_YEAR_NOW = new Date('2027-01-15T12:00:00.000Z');
