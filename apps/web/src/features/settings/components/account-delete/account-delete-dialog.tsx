@@ -3,11 +3,9 @@ import {useNavigate} from '@tanstack/react-router';
 import {Loader} from 'lucide-react';
 import {isValidElement, useState} from 'react';
 import {useForm} from 'react-hook-form';
-import {z} from 'zod';
 
 import {Button} from '@/components/ui/button';
-import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
-import {Input} from '@/components/ui/input';
+import {Form, FormField} from '@/components/ui/form';
 import {PasswordInputField} from '@/components/ui/password-input-field';
 import {
   ResponsiveDialog,
@@ -19,16 +17,9 @@ import {
   ResponsiveDialogTitle,
   ResponsiveDialogTrigger,
 } from '@/components/ui/responsive-dialog';
-import {useCurrentAccount} from '@/hooks/use-current-account';
 
 import {useDeleteAccount} from '../../api/use-delete-account';
 import {AccountDeleteDto, accountDeleteDtoSchema} from '../../types/account-delete.dto';
-
-const accountDeleteFormSchema = accountDeleteDtoSchema.extend({
-  email: z.string().min(1, 'Please type your email to confirm.'),
-});
-
-type AccountDeleteFormValues = z.infer<typeof accountDeleteFormSchema>;
 
 type AccountDeleteDialogProps = {
   children: React.ReactNode;
@@ -37,23 +28,15 @@ type AccountDeleteDialogProps = {
 export function AccountDeleteDialog({children}: AccountDeleteDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
-  const {currentAccount} = useCurrentAccount({skipFetch: true});
   const {deleteAccount, isPending} = useDeleteAccount();
 
-  const form = useForm<AccountDeleteFormValues>({
-    resolver: zodResolver(accountDeleteFormSchema),
+  const form = useForm<AccountDeleteDto>({
+    resolver: zodResolver(accountDeleteDtoSchema),
     mode: 'onSubmit',
-    defaultValues: {email: '', password: ''},
+    defaultValues: {password: ''},
   });
 
-  const confirmEmail = currentAccount?.email ?? '';
-  const emailValue = form.watch('email');
-  const passwordValue = form.watch('password');
-  const emailMatches = confirmEmail !== '' && emailValue === confirmEmail;
-  const canSubmit = emailMatches && passwordValue.length > 0 && !isPending;
-
-  const onSubmit = async (formData: AccountDeleteFormValues) => {
-    const dto: AccountDeleteDto = {password: formData.password};
+  const onSubmit = async (dto: AccountDeleteDto) => {
     await deleteAccount(dto, {
       onError: (error) => {
         if (error.status === 401) {
@@ -76,14 +59,11 @@ export function AccountDeleteDialog({children}: AccountDeleteDialogProps) {
         <ResponsiveDialogHeader className='text-start'>
           <ResponsiveDialogTitle>Delete account</ResponsiveDialogTitle>
           <ResponsiveDialogDescription className='pt-2'>
-            This permanently deletes your account and all data, including connected banks and
-            transactions. This cannot be undone.
+            This permanently deletes your Tempo account and all of its bank connections, bank
+            accounts and transaction history. This can&apos;t be undone.
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
         <ResponsiveDialogBody>
-          <p className='mb-4 text-sm text-muted-foreground'>
-            Type <span className='text-foreground'>{confirmEmail}</span> to confirm.
-          </p>
           <Form {...form}>
             <form
               className='grid items-start gap-4'
@@ -92,31 +72,12 @@ export function AccountDeleteDialog({children}: AccountDeleteDialogProps) {
             >
               <FormField
                 control={form.control}
-                name='email'
-                render={({field}) => (
-                  <FormItem>
-                    <FormLabel>Email confirmation</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        id='delete-account-email'
-                        data-testid='delete-account-email-input'
-                        autoComplete='off'
-                        disabled={isPending}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
                 name='password'
                 render={({field, fieldState}) => (
-                  <PasswordInputField<AccountDeleteFormValues, 'password'>
+                  <PasswordInputField<AccountDeleteDto, 'password'>
                     field={field}
                     fieldState={fieldState}
-                    label='Password'
+                    label='Enter your password to confirm'
                     id='delete-account-password'
                     autoComplete='current-password'
                     disabled={isPending}
@@ -127,8 +88,8 @@ export function AccountDeleteDialog({children}: AccountDeleteDialogProps) {
                 <Button
                   type='submit'
                   variant='destructive'
-                  disabled={!canSubmit}
-                  className='order-1 text-foreground md:order-2'
+                  disabled={isPending}
+                  className='order-1 md:order-2'
                   data-testid='delete-account-confirm'
                 >
                   {isPending ? (

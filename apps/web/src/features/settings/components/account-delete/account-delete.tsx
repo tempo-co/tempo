@@ -10,17 +10,17 @@ export function AccountDelete() {
           Danger zone
         </h2>
       </div>
-      <div className='flex flex-col items-start justify-between gap-4 rounded-card border border-destructive/50 bg-destructive/10 p-4 sm:flex-row sm:items-center sm:p-5'>
+      <div className='flex flex-col items-start justify-between gap-4 rounded-card border border-destructive/50 bg-card p-4 sm:flex-row sm:items-center sm:p-5'>
         <div className='min-w-0'>
           <p className='mb-1 text-sm font-medium'>Permanently delete your account</p>
           <p className='max-w-136 text-xs text-muted-foreground'>
-            Deleting your account cannot be undone. Please be certain.
+            This also deletes your bank connections and transaction history.
           </p>
         </div>
         <AccountDeleteDialog>
           <Button
             variant='destructive'
-            className='min-h-11 w-full shrink-0 text-foreground sm:w-fit'
+            className='min-h-11 w-full shrink-0 sm:w-fit'
             data-testid='delete-account-button'
           >
             Delete account
