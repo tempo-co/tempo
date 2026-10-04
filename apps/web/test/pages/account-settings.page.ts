@@ -13,10 +13,10 @@ export class AccountSettingsPage {
   readonly invalidEmailError: Locator;
   readonly emailChangeStep1Description: Locator;
   readonly deleteAccountButton: Locator;
-  readonly deleteEmailInput: Locator;
   readonly deletePasswordInput: Locator;
   readonly deleteConfirmButton: Locator;
   readonly deleteInvalidPasswordError: Locator;
+  readonly deleteMissingPasswordError: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -33,10 +33,10 @@ export class AccountSettingsPage {
       "To change your account's email, we will send a verification link to your new address.",
     );
     this.deleteAccountButton = page.getByTestId('delete-account-button');
-    this.deleteEmailInput = page.getByTestId('delete-account-email-input');
     this.deletePasswordInput = page.getByTestId('password-input');
     this.deleteConfirmButton = page.getByTestId('delete-account-confirm');
     this.deleteInvalidPasswordError = page.getByText('Invalid password.');
+    this.deleteMissingPasswordError = page.getByText('Please enter your password.');
   }
 
   getStep2DescriptionLocator(email: string) {

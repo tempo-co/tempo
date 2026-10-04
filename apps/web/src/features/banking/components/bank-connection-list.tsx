@@ -627,7 +627,7 @@ function DestructiveBankConnectionFooterButton({
                 type='submit'
                 variant='destructive'
                 disabled={!canConfirm}
-                className='order-1 text-foreground md:order-2'
+                className='order-1 md:order-2'
                 data-testid={`remove-bank-confirm-${connection.id}`}
               >
                 {isPending ? (

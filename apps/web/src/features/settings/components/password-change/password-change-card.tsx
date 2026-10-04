@@ -18,7 +18,6 @@ export function PasswordChangeCard() {
           </div>
           <div className='min-w-0 grow'>
             <p className='truncate text-sm font-medium'>Password</p>
-            <p className='mt-1 text-xs text-muted-foreground'>Keep it unique and hard to guess.</p>
           </div>
         </div>
         <div className='shrink-0'>
