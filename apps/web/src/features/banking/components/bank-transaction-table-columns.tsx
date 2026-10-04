@@ -1,5 +1,4 @@
 import {ColumnDef} from '@tanstack/react-table';
-import {RefreshCw} from 'lucide-react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {SortButton} from '@/components/shared/sort-button';
@@ -57,11 +56,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
       return (
         <div className='w-full min-w-0'>
           <div className='flex h-6 min-w-0 items-center gap-2'>
-            {financialEvent ? (
-              <RefreshCw className='h-4 w-4 shrink-0 text-muted-foreground' aria-hidden='true' />
-            ) : (
-              <BankTransactionCategoryIcon category={category} />
-            )}
+            <BankTransactionCategoryIcon category={category} activity={Boolean(financialEvent)} />
             <p className='overflow-hidden text-ellipsis whitespace-nowrap'>
               {financialEvent || formatBankTransactionCategory(row.original.category)}
             </p>

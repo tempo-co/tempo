@@ -1304,7 +1304,10 @@ test.describe('bank transactions', () => {
       await expect(page.getByTestId('bank-transactions-heading')).toContainText(
         '1,284 transactions',
       );
-      await expect(page.getByLabel('Showing 1-10 of 1,284 rows')).toBeVisible();
+      // Screen readers get one plain sentence; the compact visual range is hidden from them.
+      await expect(
+        page.getByTestId('pagination').getByRole('paragraph').filter({hasText: 'Showing'}),
+      ).toMatchAriaSnapshot('- paragraph: Showing 1-10 of 1,284 rows');
       await expect(rows.nth(0)).toContainText('-€12,345,678.90');
       await expect(rows.nth(1)).toContainText('-CHF 12,345,678.90');
       await expect(rows.nth(3)).toContainText('€0.00');

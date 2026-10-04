@@ -56,14 +56,12 @@ export function Pagination({totalItems, pagination, navigateOptions}: Pagination
           </SelectContent>
         </Select>
       </div>
-      <p
-        aria-label={`Showing ${start}-${end} of ${total} rows`}
-        className='text-sm whitespace-nowrap'
-      >
-        <span className='sm:hidden'>
+      <p className='text-sm whitespace-nowrap'>
+        <span className='sr-only'>{`Showing ${start}-${end} of ${total} rows`}</span>
+        <span aria-hidden='true' className='sm:hidden'>
           {start}-{end} / {total}
         </span>
-        <span className='hidden sm:inline'>
+        <span aria-hidden='true' className='hidden sm:inline'>
           {start}-{end} of {total}
         </span>
       </p>

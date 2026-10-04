@@ -38,6 +38,13 @@ test.describe('own transfers', () => {
     const ibanRow = page.getByTestId(`bank-transaction-row-${IBAN_PAIR_OUTGOING_ID}`);
     await expect(ibanRow.getByRole('cell').nth(2)).toContainText('Own transfer');
     await expect(ibanRow.getByRole('cell').nth(2)).toContainText('Internal movement');
+    // The activity icon uses the same boxed tile as category icons, so labels line up.
+    const activityTile = ibanRow
+      .getByRole('cell')
+      .nth(2)
+      .locator('svg.lucide-refresh-cw')
+      .locator('..');
+    expect(await boxOf(activityTile)).toMatchObject({width: 24, height: 24});
     const coincidenceRow = page.getByTestId(`bank-transaction-row-${COINCIDENCE_OUTGOING_ID}`);
     await expect(coincidenceRow.getByRole('cell').nth(2)).not.toContainText('Own transfer');
 

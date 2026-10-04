@@ -370,14 +370,11 @@ export function BankTransactionTable({
                           <span aria-hidden='true' className='shrink-0'>
                             ·
                           </span>
-                          {financialEvent ? (
-                            <RefreshCw
-                              aria-hidden='true'
-                              className='h-3.5 w-3.5 shrink-0 text-muted-foreground'
-                            />
-                          ) : (
-                            <BankTransactionCategoryIcon category={category} className='h-5 w-5' />
-                          )}
+                          <BankTransactionCategoryIcon
+                            category={category}
+                            activity={Boolean(financialEvent)}
+                            className='h-5 w-5'
+                          />
                           <span
                             data-testid='bank-transaction-mobile-meta-label'
                             className='truncate'
