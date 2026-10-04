@@ -35,7 +35,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
           {counterpartyName &&
             row.original.description &&
             displayDescription !== counterpartyName.replace(/\s+/g, ' ').trim() && (
-              <p className='overflow-hidden text-xs text-ellipsis whitespace-nowrap text-muted-foreground max-md:hidden'>
+              <p className='overflow-hidden text-xs text-ellipsis whitespace-nowrap text-muted-foreground max-lg:hidden'>
                 {counterpartyName}
               </p>
             )}
@@ -60,7 +60,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
             {financialEvent ? (
               <RefreshCw className='h-4 w-4 shrink-0 text-muted-foreground' aria-hidden='true' />
             ) : (
-              category && <BankTransactionCategoryIcon category={category} />
+              <BankTransactionCategoryIcon category={category} />
             )}
             <p className='overflow-hidden text-ellipsis whitespace-nowrap'>
               {financialEvent || formatBankTransactionCategory(row.original.category)}

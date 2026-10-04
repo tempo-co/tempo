@@ -1,10 +1,13 @@
+import {Tags} from 'lucide-react';
+
 import {cn} from '@/utils/cn';
 
 import {BankTransactionCategory} from '../types/bank-transaction';
 import {BANK_TRANSACTION_CATEGORY_META} from '../utils/bank-transaction-category-meta';
 
 type BankTransactionCategoryIconProps = {
-  category: BankTransactionCategory;
+  /** Null renders the neutral icon used for uncategorized transactions. */
+  category: BankTransactionCategory | null;
   className?: string;
 };
 
@@ -12,7 +15,9 @@ export function BankTransactionCategoryIcon({
   category,
   className,
 }: BankTransactionCategoryIconProps) {
-  const {icon: Icon, colorClassName} = BANK_TRANSACTION_CATEGORY_META[category];
+  const {icon: Icon, colorClassName} = category
+    ? BANK_TRANSACTION_CATEGORY_META[category]
+    : {icon: Tags, colorClassName: 'border-border text-muted-foreground'};
 
   return (
     <span

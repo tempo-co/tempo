@@ -1218,6 +1218,114 @@ test.describe('bank transactions', () => {
     await expect(rows.nth(1).locator('td').nth(4)).toContainText('100.00');
   });
 
+  test('keeps worst-case transaction values readable at every width', async ({page}) => {
+    const sepaReference =
+      '/TRTP/SEPA-TRANSFER/IBAN/NL91ABNA0417164300/BIC/ABNANL2A/NAME/EXAMPLE-SHOP-BV/REMI/INV-2026-000123456789';
+    let transactions: Array<Record<string, unknown>> = [];
+    await page.route('**/bank-transactions?*', async (route) => {
+      if (!['fetch', 'xhr'].includes(route.request().resourceType())) {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      const payload = (await response.json()) as {transactions: Array<Record<string, unknown>>};
+      const template = payload.transactions[0];
+      const synthetic = (id: number, overrides: Record<string, unknown>) => ({
+        ...template,
+        id: `00000000-0000-4000-8000-${String(300 + id).padStart(12, '0')}`,
+        financialEventType: null,
+        financialEventSource: null,
+        currencyExchangeCounterpart: null,
+        ownTransfer: null,
+        ownTransferOverride: null,
+        ...overrides,
+      });
+      transactions = [
+        synthetic(1, {
+          description: 'Synthetic large expense',
+          displayDescription: 'Synthetic large expense',
+          amount: '-12345678.90000000',
+          currency: 'EUR',
+        }),
+        synthetic(2, {
+          description: 'Synthetic large refund',
+          displayDescription: 'Synthetic large refund',
+          amount: '-12345678.90000000',
+          currency: 'CHF',
+        }),
+        synthetic(3, {
+          description: sepaReference,
+          displayDescription: sepaReference,
+          amount: '-250.00000000',
+          currency: 'EUR',
+        }),
+        synthetic(4, {
+          description: 'Synthetic rounding remainder',
+          displayDescription: 'Synthetic rounding remainder',
+          amount: '-0.00400000',
+          currency: 'EUR',
+        }),
+      ];
+      await route.fulfill({response, json: {transactions, total: 1284}});
+    });
+    await page.route('**/bank-transactions/00000000-0000-4000-8000-0000000003*', async (route) => {
+      const transaction = transactions.find((candidate) =>
+        new URL(route.request().url()).pathname.endsWith(`/${String(candidate.id)}`),
+      );
+      if (transaction) await fulfillJson(route, transaction);
+      else await route.continue();
+    });
+
+    const rows = page.getByTestId(/^bank-transaction-row-/);
+    const readClippedAmounts = () =>
+      rows.evaluateAll((elements) =>
+        elements.flatMap((row) => {
+          const amount = row.querySelector('.font-mono');
+          const cell = amount?.closest('td');
+          if (!amount || !cell) return [];
+          const cellBox = cell.getBoundingClientRect();
+          const amountBox = amount.getBoundingClientRect();
+          const padding = parseFloat(getComputedStyle(cell).paddingRight);
+          return amountBox.right > cellBox.right - padding + 1 || amountBox.left < cellBox.left
+            ? [amount.textContent]
+            : [];
+        }),
+      );
+
+    for (const viewport of [
+      {width: 1440, height: 900},
+      {width: 1024, height: 768},
+      {width: 768, height: 1024},
+      {width: 320, height: 852},
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto('/bank-transactions');
+      await expect(rows).toHaveCount(4);
+      await expect(page.getByTestId('bank-transactions-heading')).toContainText(
+        '1,284 transactions',
+      );
+      await expect(page.getByLabel('Showing 1-10 of 1,284 rows')).toBeVisible();
+      await expect(rows.nth(0)).toContainText('-€12,345,678.90');
+      await expect(rows.nth(1)).toContainText('-CHF 12,345,678.90');
+      await expect(rows.nth(3)).toContainText('€0.00');
+      await expect(rows.nth(3)).not.toContainText('-€0.00');
+      expect(await readClippedAmounts()).toEqual([]);
+      await expectNoHorizontalOverflow(page);
+    }
+
+    await page.setViewportSize({width: 393, height: 852});
+    await page.goto('/bank-transactions');
+    await rows
+      .nth(2)
+      .getByRole('button', {name: /^View .* transaction details$/})
+      .click();
+    const inspector = page.getByTestId('bank-transaction-inspector');
+    const title = inspector.getByRole('heading', {name: sepaReference});
+    await expect(title).toBeVisible();
+    const [inspectorBox, titleBox] = await Promise.all([boxOf(inspector), boxOf(title)]);
+    expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(inspectorBox.x + inspectorBox.width);
+  });
+
   test('sorts the category and source columns', async ({page}) => {
     await page.goto('/bank-transactions?pageIndex=0&pageSize=10');
 

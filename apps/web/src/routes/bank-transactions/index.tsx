@@ -32,7 +32,7 @@ function BankTransactionsIndex() {
     ? 'Loading synchronized records...'
     : isError
       ? 'Transaction data is unavailable right now'
-      : `${totalTransactions} ${transactionCountLabel}`;
+      : `${totalTransactions.toLocaleString()} ${transactionCountLabel}`;
 
   return (
     <>

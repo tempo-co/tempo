@@ -54,7 +54,7 @@ export function BankTransactionDetailsDialog({
           <span className='sr-only'>Close transaction details</span>
         </ResponsiveDialogClose>
         <ResponsiveDialogHeader className='shrink-0 border-b px-5 pt-5 pr-16 pb-4 text-left sm:px-6'>
-          <ResponsiveDialogTitle className='text-xl leading-tight wrap-break-word sm:text-2xl sm:leading-8'>
+          <ResponsiveDialogTitle className='text-xl leading-tight wrap-anywhere sm:text-2xl sm:leading-8'>
             {transactionTitle}
           </ResponsiveDialogTitle>
           <ResponsiveDialogDescription className='mt-1 md:mt-0'>

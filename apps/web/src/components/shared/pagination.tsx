@@ -24,6 +24,9 @@ export function Pagination({totalItems, pagination, navigateOptions}: Pagination
   const startIndex = pagination.pageIndex * pagination.pageSize + 1;
   const endIndex = Math.min((pagination.pageIndex + 1) * pagination.pageSize, totalItems);
   const canGoNext = pagination.pageIndex < totalPages - 1;
+  const [start, end, total] = [startIndex, endIndex, totalItems].map((value) =>
+    value.toLocaleString(),
+  );
 
   const goToPage = (pageIndex: number) => navigate({search: (prev) => ({...prev, pageIndex})});
 
@@ -33,7 +36,7 @@ export function Pagination({totalItems, pagination, navigateOptions}: Pagination
   return (
     <div
       data-testid='pagination'
-      className='mt-4 flex w-full flex-nowrap items-center justify-between gap-2 sm:justify-end sm:gap-10'
+      className='mt-4 flex w-full flex-nowrap items-center justify-between gap-1 sm:justify-end sm:gap-10'
     >
       <div className='flex items-center gap-2'>
         <p className='text-sm font-medium whitespace-nowrap'>
@@ -54,14 +57,14 @@ export function Pagination({totalItems, pagination, navigateOptions}: Pagination
         </Select>
       </div>
       <p
-        aria-label={`Showing ${startIndex}-${endIndex} of ${totalItems} rows`}
+        aria-label={`Showing ${start}-${end} of ${total} rows`}
         className='text-sm whitespace-nowrap'
       >
         <span className='sm:hidden'>
-          {startIndex}-{endIndex} / {totalItems}
+          {start}-{end} / {total}
         </span>
         <span className='hidden sm:inline'>
-          {startIndex}-{endIndex} of {totalItems}
+          {start}-{end} of {total}
         </span>
       </p>
       <div className='flex shrink-0 gap-2'>

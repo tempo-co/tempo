@@ -185,7 +185,7 @@ export function BankTransactionTable({
           <Input
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
-            placeholder='Search transactions...'
+            placeholder='Search...'
             aria-label='Search transactions'
             className='h-12 pl-9 sm:h-8'
             data-testid='bank-transactions-search'
@@ -235,20 +235,20 @@ export function BankTransactionTable({
         <Table
           data-testid='bank-transactions-table'
           aria-label='Bank transactions'
-          wrapperClassName='max-md:rounded-none max-md:border-0'
-          className='table-fixed max-md:block max-md:w-full'
+          wrapperClassName='max-lg:rounded-none max-lg:border-0'
+          className='table-fixed max-lg:block max-lg:w-full'
         >
           <colgroup>
-            <col className='w-[13%]' />
-            <col className='w-[37%]' />
+            <col className='w-32' />
+            <col />
             <col className='w-[22%]' />
             <col className='w-[18%]' />
-            <col className='w-[10%]' />
+            <col className='w-48' />
           </colgroup>
           <TableCaption className='sr-only'>
             Bank transaction records. Select a transaction description to view its full details.
           </TableCaption>
-          <TableHeader className='max-md:sr-only'>
+          <TableHeader className='max-lg:sr-only'>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
@@ -275,12 +275,12 @@ export function BankTransactionTable({
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody className='max-md:block'>
+          <TableBody className='max-lg:block'>
             {totalTransactions === 0 && isFilteringApplied ? (
-              <TableRow>
+              <TableRow className='max-lg:block'>
                 <TableCell
                   colSpan={bankTransactionTableColumns.length}
-                  className='h-24 text-center'
+                  className='h-24 text-center max-lg:block'
                 >
                   <div className='my-4 flex flex-col items-center gap-4'>
                     <SearchX className='h-12 w-12 text-muted-foreground' />
@@ -308,7 +308,7 @@ export function BankTransactionTable({
                 return (
                   <TableRow
                     key={row.id}
-                    className='cursor-pointer focus-within:bg-accent hover:bg-card max-md:mb-1.5 max-md:grid max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-x-3 max-md:gap-y-0.5 max-md:rounded-md max-md:border! max-md:bg-card max-md:p-2'
+                    className='cursor-pointer focus-within:bg-accent hover:bg-card max-lg:mb-1.5 max-lg:grid max-lg:grid-cols-[minmax(0,1fr)_auto] max-lg:gap-x-3 max-lg:gap-y-0.5 max-lg:rounded-md max-lg:border! max-lg:bg-card max-lg:p-2'
                     data-testid={`bank-transaction-row-${row.original.id}`}
                     onClick={(event) => {
                       if (event.target instanceof Element && event.target.closest('a,button')) {
@@ -330,13 +330,13 @@ export function BankTransactionTable({
                           key={cell.id}
                           className={cn(
                             'p-3',
-                            cell.column.id === 'bookingDate' && 'max-md:hidden',
+                            cell.column.id === 'bookingDate' && 'max-lg:hidden',
                             cell.column.id === 'amount' &&
-                              'max-md:order-2 max-md:block max-md:self-start max-md:justify-self-end max-md:border-0 max-md:p-0',
+                              'max-lg:order-2 max-lg:block max-lg:self-start max-lg:justify-self-end max-lg:border-0 max-lg:p-0',
                             isDescriptionCell &&
-                              'max-md:order-1 max-md:col-span-1 max-md:block max-md:min-w-0 max-md:border-0 max-md:p-0',
+                              'max-lg:order-1 max-lg:col-span-1 max-lg:block max-lg:min-w-0 max-lg:border-0 max-lg:p-0',
                             (cell.column.id === 'category' || cell.column.id === 'source') &&
-                              'max-md:hidden',
+                              'max-lg:hidden',
                           )}
                         >
                           {isDescriptionCell ? (
@@ -358,7 +358,7 @@ export function BankTransactionTable({
                         </TableCell>
                       );
                     })}
-                    <TableCell className='hidden max-md:order-3 max-md:col-span-2 max-md:block max-md:border-0 max-md:p-0'>
+                    <TableCell className='hidden max-lg:order-3 max-lg:col-span-2 max-lg:block max-lg:border-0 max-lg:p-0'>
                       <div
                         data-testid='bank-transaction-mobile-meta'
                         className='flex min-w-0 items-center justify-between gap-3 text-xs text-muted-foreground'
@@ -376,12 +376,7 @@ export function BankTransactionTable({
                               className='h-3.5 w-3.5 shrink-0 text-muted-foreground'
                             />
                           ) : (
-                            category && (
-                              <BankTransactionCategoryIcon
-                                category={category}
-                                className='h-5 w-5'
-                              />
-                            )
+                            <BankTransactionCategoryIcon category={category} className='h-5 w-5' />
                           )}
                           <span
                             data-testid='bank-transaction-mobile-meta-label'
@@ -392,7 +387,7 @@ export function BankTransactionTable({
                         </span>
                         <span
                           data-testid='bank-transaction-mobile-meta-right'
-                          className='flex max-w-[55%] min-w-0 shrink-0 items-center justify-end gap-1.5 text-right'
+                          className='flex max-w-[40%] min-w-0 shrink-0 items-center justify-end gap-1.5 text-right'
                         >
                           <span className='truncate'>{row.original.bankName}</span>
                         </span>
