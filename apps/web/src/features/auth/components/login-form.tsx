@@ -13,10 +13,14 @@ import {cn} from '@/utils/cn';
 import {useLogIn} from '../api/use-login';
 import {LogInDto, logInDtoSchema} from '../types/login.dto';
 
-export function LogInForm() {
+type LogInFormProps = {
+  redirectTo?: string;
+};
+
+export function LogInForm({redirectTo}: LogInFormProps) {
   const [hasUnauthorizedError, setHasUnauthorizedError] = useState<boolean>(false);
 
-  const {logIn, isPending} = useLogIn();
+  const {logIn, isPending} = useLogIn(redirectTo);
 
   const form = useForm<LogInDto>({
     resolver: zodResolver(logInDtoSchema),

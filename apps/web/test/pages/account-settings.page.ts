@@ -4,14 +4,14 @@ export class AccountSettingsPage {
   readonly page: Page;
   readonly changeEmailButton: Locator;
   readonly newEmailInput: Locator;
-  readonly checkEmailButton: Locator;
   readonly sendVerificationLinkButton: Locator;
-  readonly backButton: Locator;
+  readonly emailChangeSentTo: Locator;
+  readonly useDifferentEmailButton: Locator;
+  readonly emailChangeDoneButton: Locator;
   readonly nameInput: Locator;
   readonly sameEmailError: Locator;
   readonly emailAlreadyInUseError: Locator;
   readonly invalidEmailError: Locator;
-  readonly emailChangeStep1Description: Locator;
   readonly deleteAccountButton: Locator;
   readonly deletePasswordInput: Locator;
   readonly deleteConfirmButton: Locator;
@@ -22,25 +22,19 @@ export class AccountSettingsPage {
     this.page = page;
     this.changeEmailButton = page.getByTestId('change-email-button');
     this.newEmailInput = page.getByTestId('new-email-input');
-    this.checkEmailButton = page.getByTestId('check-email-button');
     this.sendVerificationLinkButton = page.getByTestId('send-verification-link-button');
-    this.backButton = page.getByTestId('back-button');
+    this.emailChangeSentTo = page.getByTestId('email-change-sent-to');
+    this.useDifferentEmailButton = page.getByTestId('use-different-email-button');
+    this.emailChangeDoneButton = page.getByTestId('email-change-done-button');
     this.nameInput = page.getByTestId('name-input');
-    this.sameEmailError = page.getByText('Please enter a different email from your current one.');
-    this.emailAlreadyInUseError = page.getByText('This email is already in use.');
+    this.sameEmailError = page.getByText('This is already your email.');
+    this.emailAlreadyInUseError = page.getByText('Another account already uses this email.');
     this.invalidEmailError = page.getByText('Please enter a valid email address.');
-    this.emailChangeStep1Description = page.getByText(
-      "To change your account's email, we will send a verification link to your new address.",
-    );
     this.deleteAccountButton = page.getByTestId('delete-account-button');
     this.deletePasswordInput = page.getByTestId('password-input');
     this.deleteConfirmButton = page.getByTestId('delete-account-confirm');
     this.deleteInvalidPasswordError = page.getByText('Invalid password.');
     this.deleteMissingPasswordError = page.getByText('Please enter your password.');
-  }
-
-  getStep2DescriptionLocator(email: string) {
-    return this.page.getByText(`We did not find an existing account for ${email}`);
   }
 
   async navigate() {
@@ -52,10 +46,14 @@ export class AccountSettingsPage {
     await this.page.keyboard.press('Tab'); // triggers a blur event
   }
 
-  async checkEmailAvailability(newEmail: string) {
+  async requestEmailChange(newEmail: string) {
     await this.navigate();
     await this.changeEmailButton.click();
     await this.newEmailInput.fill(newEmail);
-    await this.checkEmailButton.click();
+    await this.sendVerificationLinkButton.click();
+  }
+
+  async expectToBeOnPage() {
+    await this.page.waitForURL('/settings/account');
   }
 }
