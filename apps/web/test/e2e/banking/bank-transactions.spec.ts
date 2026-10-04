@@ -995,18 +995,10 @@ test.describe('bank transactions', () => {
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
     await expect(inspector).toBeHidden();
     await expect(descriptionTrigger).toBeFocused();
-  });
 
-  test('shows the year on phone dates outside the current year', async ({page}) => {
     await page.clock.setFixedTime(AFTER_SEEDED_TRANSACTION_YEAR_NOW);
-    await page.setViewportSize({width: 393, height: 852});
-    await page.goto('/bank-transactions');
-
-    const mobileMeta = page
-      .getByTestId(/^bank-transaction-row-/)
-      .filter({hasText: 'Coffee shop'})
-      .getByTestId('bank-transaction-mobile-meta');
-    await expect(mobileMeta).toContainText('26 Aug 2026');
+    await page.reload();
+    await expect(mobileMeta).toContainText(/^26 Aug 2026·/);
     await expectNoHorizontalOverflow(page);
   });
 
