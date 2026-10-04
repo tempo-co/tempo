@@ -399,6 +399,7 @@ test('does not queue an offline account change for replay after reconnect', asyn
 
 test('a session check started before a real 401 cannot restore saved data', async ({
   page,
+  context,
   freshAccount,
   homePage,
 }) => {
@@ -414,7 +415,10 @@ test('a session check started before a real 401 cannot restore saved data', asyn
   await page.route(`${API_URL}/bank-transactions?**`, (route) =>
     route.fulfill({status: 401, json: {message: 'Unauthorized'}}),
   );
-  await page.reload();
+  // Reconnecting refetches the session and the page together; the page's 401 lands first.
+  await context.setOffline(true);
+  await expect(savedStatus(page)).toBeVisible();
+  await context.setOffline(false);
   await expect(page).toHaveURL(/\/login$/);
   await expect.poll(() => readCache(page)).toBe(null);
   releaseAccount();
