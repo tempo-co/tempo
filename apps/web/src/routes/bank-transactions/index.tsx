@@ -10,6 +10,7 @@ import {BankTransactionTable} from '@/features/banking/components/bank-transacti
 import {BankingBreadcrumb} from '@/features/banking/components/banking-breadcrumb';
 import {bankTransactionSearchParamsSchema} from '@/features/banking/types/bank-transaction';
 import {useBankTransactionInspector} from '@/hooks/use-bank-transaction-inspector';
+import {useIsOnline} from '@/hooks/use-connection';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/bank-transactions/')({
@@ -26,11 +27,14 @@ function BankTransactionsIndex() {
   const {openTransaction, closeTransaction} = useBankTransactionInspector('/bank-transactions/');
   const {data, isPending, isPlaceholderData, isError, refetch, pagination, filters, sort} =
     useGetBankTransactions(searchParams);
+  const isOnline = useIsOnline();
+  // While Tempo is unreachable, keep showing the last loaded page instead of the failed refresh.
+  const showError = isError && (isOnline || !data);
   const totalTransactions = data?.total ?? 0;
   const transactionCountLabel = totalTransactions === 1 ? 'transaction' : 'transactions';
   const resultSummary = isPending
     ? 'Loading synchronized records...'
-    : isError
+    : showError
       ? 'Transaction data is unavailable right now'
       : `${totalTransactions} ${transactionCountLabel}`;
 
@@ -59,7 +63,7 @@ function BankTransactionsIndex() {
             pagination={pagination}
             filters={filters}
             sort={sort}
-            isError={isError}
+            isError={showError}
             onRetry={() => void refetch()}
             onTransactionSelect={openTransaction}
           />

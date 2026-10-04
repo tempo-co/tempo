@@ -3,6 +3,7 @@ import {toast} from 'sonner';
 
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
 import {HttpError, api} from '@/utils/api';
+import {clearOfflineCache} from '@/utils/offline-storage';
 
 import {AccountDeleteDto} from '../types/account-delete.dto';
 
@@ -17,6 +18,7 @@ export const useDeleteAccount = () => {
       toast.success('Account deleted.');
       queryClient.removeQueries();
       await queryClient.setQueryData(CURRENT_ACCOUNT_KEY, null);
+      clearOfflineCache();
     },
   });
 

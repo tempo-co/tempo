@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react-swc';
 import path from 'path';
 import {type Plugin, defineConfig, loadEnv} from 'vite';
 
+import {offlineShellPlugin} from './config/offline-shell';
+
 function pwaManifestPlugin(basePath: string): Plugin {
   return {
     name: 'tempo-pwa-manifest',
@@ -51,7 +53,12 @@ export default defineConfig(({mode}) => {
 
   return {
     base: basePath,
-    plugins: [react(), TanStackRouterVite(), pwaManifestPlugin(basePath)],
+    plugins: [
+      react(),
+      TanStackRouterVite(),
+      pwaManifestPlugin(basePath),
+      offlineShellPlugin(basePath),
+    ],
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, './src'),

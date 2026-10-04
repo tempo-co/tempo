@@ -1,19 +1,24 @@
 import '@fontsource-variable/inter';
-import {QueryClientProvider} from '@tanstack/react-query';
+import {PersistQueryClientProvider} from '@tanstack/react-query-persist-client';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
 import {App} from './app';
 import './index.css';
 import {queryClient} from './query-client';
+import {createOfflinePersistence} from './utils/offline-storage';
+import {registerOfflineShell} from './utils/register-offline-shell';
+
+const persistOptions = createOfflinePersistence(queryClient);
+registerOfflineShell();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('No root element found');
 
 export const AppRoot = () => (
-  <QueryClientProvider client={queryClient}>
+  <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
     <App />
-  </QueryClientProvider>
+  </PersistQueryClientProvider>
 );
 
 const root = ReactDOM.createRoot(rootElement);

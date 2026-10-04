@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/responsive-dialog';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {Skeleton} from '@/components/ui/skeleton';
+import {useIsOnline} from '@/hooks/use-connection';
 import {HttpError} from '@/utils/api';
 
 import {useGetBankTransaction} from '../api/use-get-bank-transaction';
@@ -30,6 +31,7 @@ export function BankTransactionDetailsDialog({
   open,
   onOpenChange,
 }: BankTransactionDetailsDialogProps) {
+  const isOnline = useIsOnline();
   const {transaction, isPending, isFetching, isError, error, refetch} = useGetBankTransaction(
     transactionId,
     open,
@@ -72,7 +74,7 @@ export function BankTransactionDetailsDialog({
             <div role='status' aria-label='Loading bank transaction' className='p-5 sm:p-6'>
               <Skeleton className='h-80 w-full rounded-lg bg-card sm:h-96' />
             </div>
-          ) : isError || !transaction ? (
+          ) : !transaction || (isError && isOnline) ? (
             <div role='alert' className='p-5 sm:p-6'>
               {isNotFound ? (
                 <EmptyState

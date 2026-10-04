@@ -44,6 +44,14 @@ $ npm run lint:check
 $ npm run format:check
 ```
 
+## Offline use
+
+Production builds install a service worker for the app shell. After one successful visit, saved account and banking views can reopen during a connection outage. Previously loaded query results are stored in this browser's local storage for up to 24 hours. Only loaded pages and filter combinations are available; cached data is not a new live balance or authorization check. Use Tempo only in a trusted browser profile.
+
+An unreachable API shows a reconnecting state, not a login redirect. Changes are not queued or automatically replayed while disconnected. Logout, account deletion and an observed expired/revoked session clear saved data. An unconfirmed logout is completed before trusting the session again after reconnection; only logout is retried. If the browser cannot store that intention, keep the app open until logout is confirmed. Revocation on another device can only be detected when this browser reconnects. Session identifiers are not persisted, and the service worker never caches API responses or bank authorization callbacks.
+
+Shell updates wait until the previous worker's tabs close; there is no automatic reload of an open form. Close all Tempo windows and reopen online to activate a waiting update. Development mode does not install a worker.
+
 ## Test
 
 End-to-end tests use Playwright against a disposable Docker stack (PostgreSQL, Redis, Mailpit, and the API). Playwright builds and previews the app itself. The categorization flow uses the paired API branch image so the browser calls the real category endpoint; the only mocked boundary is the API's AI provider.
