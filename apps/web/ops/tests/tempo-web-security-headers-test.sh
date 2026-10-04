@@ -138,4 +138,20 @@ check api /tempo/api/health proxy
 check api-root /api/health proxy
 check callback /tempo/bank-connections/callback proxy
 
+# Requests arrive through the container network gateway; the forwarded client address must replace it.
+curl -sS --max-time 5 -o /dev/null -H 'X-Forwarded-For: 203.0.113.10' "http://127.0.0.1:$port/tempo/?real-ip-check"
+real_ip_logged=0
+for _ in $(seq 1 10); do
+    if [[ "$(docker logs "$container" 2>/dev/null)" =~ (^|$'\n')203\.0\.113\.10\ [^$'\n']*real-ip-check ]]; then
+        real_ip_logged=1
+        break
+    fi
+    sleep 0.5
+done
+if [[ "$real_ip_logged" != 1 ]]; then
+    docker logs "$container" >&2
+    echo 'Nginx did not use the forwarded client address' >&2
+    exit 1
+fi
+
 echo 'tempo web security headers: PASS'
