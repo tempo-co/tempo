@@ -1,7 +1,9 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
+import {toast} from 'sonner';
 
-import {api} from '@/utils/api';
+import {beginLogout, completePendingLogout, endSession} from '@/utils/api';
+import {dropSavedData} from '@/utils/offline-storage';
 
 import {CURRENT_ACCOUNT_KEY} from './use-current-account';
 
@@ -10,18 +12,27 @@ export const useLogOut = () => {
   const navigate = useNavigate();
 
   const {mutateAsync: logOut, isPending} = useMutation({
+    // Resolves whether or not Tempo confirmed the logout; an unconfirmed one is retried later.
     mutationFn: async () => {
-      await api.post('/auth/logout');
-      await queryClient.setQueryData(CURRENT_ACCOUNT_KEY, null);
+      try {
+        beginLogout();
+        await completePendingLogout();
+        return true;
+      } catch {
+        return false;
+      } finally {
+        // Private data leaves this device even when the server cannot confirm the logout.
+        endSession();
+        dropSavedData(queryClient);
+      }
     },
-    onSuccess: async () => {
-      queryClient.removeQueries({
-        predicate: ({queryKey}) => queryKey[0] !== CURRENT_ACCOUNT_KEY[0],
-      });
-      await queryClient.invalidateQueries({queryKey: CURRENT_ACCOUNT_KEY});
-      return navigate({to: '/'});
-    },
-    onError: async () => {
+    onSuccess: async (confirmed) => {
+      if (confirmed) await queryClient.invalidateQueries({queryKey: CURRENT_ACCOUNT_KEY});
+      else
+        toast.error('Saved data was removed from this device', {
+          description: 'Tempo will finish logging out once it is reachable.',
+          id: 'logout-unconfirmed',
+        });
       return navigate({to: '/'});
     },
   });

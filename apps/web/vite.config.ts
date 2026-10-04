@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react-swc';
 import path from 'path';
 import {type Plugin, defineConfig, loadEnv} from 'vite';
 
+import {PWA_ICONS} from './config/app-icons';
+import {offlineShellPlugin} from './config/offline-shell';
+
 function pwaManifestPlugin(basePath: string): Plugin {
   return {
     name: 'tempo-pwa-manifest',
@@ -18,22 +21,12 @@ function pwaManifestPlugin(basePath: string): Plugin {
         display: 'standalone',
         background_color: '#17161B',
         theme_color: '#17161B',
-        icons: [
-          {src: icon('pwa-icon-192.png'), sizes: '192x192', type: 'image/png', purpose: 'any'},
-          {src: icon('pwa-icon-512.png'), sizes: '512x512', type: 'image/png', purpose: 'any'},
-          {
-            src: icon('maskable-icon-192.png'),
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'maskable',
-          },
-          {
-            src: icon('maskable-icon-512.png'),
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable',
-          },
-        ],
+        icons: PWA_ICONS.map(({file, sizes, purpose}) => ({
+          src: icon(file),
+          sizes,
+          type: 'image/png',
+          purpose,
+        })),
       };
 
       this.emitFile({
@@ -51,7 +44,12 @@ export default defineConfig(({mode}) => {
 
   return {
     base: basePath,
-    plugins: [react(), TanStackRouterVite(), pwaManifestPlugin(basePath)],
+    plugins: [
+      react(),
+      TanStackRouterVite(),
+      pwaManifestPlugin(basePath),
+      offlineShellPlugin(basePath),
+    ],
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, './src'),

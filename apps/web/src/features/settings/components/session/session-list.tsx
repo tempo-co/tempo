@@ -18,7 +18,7 @@ export function SessionList() {
           Active sessions
         </h2>
         <p className='max-w-136 text-sm text-muted-foreground'>
-          The devices currently logged into your account.
+          Valid sign-ins to your account. One device can have more than one session.
         </p>
       </div>
       {isError && sessions === undefined ? (

@@ -1,3 +1,4 @@
+import {onlineManager} from '@tanstack/react-query';
 import {toast} from 'sonner';
 
 import {formatRetryAfter, parseRetryAfter} from './retry-after';
@@ -12,6 +13,12 @@ export class HttpError extends Error {
   }
 }
 
+export class NetworkError extends HttpError {
+  constructor() {
+    super(0, 'Cannot reach Tempo. Please try again when the connection returns.');
+  }
+}
+
 /** The session is gone (401); handled app-wide by sending the user to /login. */
 export class SessionExpiredError extends HttpError {}
 
@@ -22,6 +29,77 @@ export class EmailNotVerifiedError extends HttpError {}
 const EMAIL_NOT_VERIFIED_MESSAGE = 'Email not verified.';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
+
+let sessionEpoch = 0;
+const PENDING_LOGOUT_KEY = 'tempo-pending-logout';
+let logoutRequest: Promise<void> | undefined;
+let unpersistedLogout = false;
+
+function hasPendingLogout() {
+  try {
+    return unpersistedLogout || localStorage.getItem(PENDING_LOGOUT_KEY) === 'true';
+  } catch {
+    return unpersistedLogout;
+  }
+}
+
+/** Only logout is completed after reconnection. User changes are never queued or replayed. */
+export async function completePendingLogout() {
+  if (!hasPendingLogout()) return;
+  if (logoutRequest) return logoutRequest;
+  logoutRequest = (async () => {
+    await navigator.locks.request('tempo-logout', async () => {
+      // Another tab may have completed the logout while this tab waited for the lock.
+      if (!hasPendingLogout()) return;
+      if (!onlineManager.isOnline()) throw new NetworkError();
+      const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+        signal: AbortSignal.timeout(15000),
+      }).catch(() => {
+        onlineManager.setOnline(false);
+        throw new NetworkError();
+      });
+      if (!response.ok && response.status !== 401) {
+        throw new HttpError(response.status, 'Tempo could not confirm the logout.');
+      }
+      try {
+        localStorage.removeItem(PENDING_LOGOUT_KEY);
+      } catch {
+        /* Storage may be disabled; the marker was then never stored. */
+      }
+      unpersistedLogout = false;
+    });
+  })();
+  try {
+    await logoutRequest;
+  } finally {
+    logoutRequest = undefined;
+  }
+}
+
+export function beginLogout() {
+  try {
+    localStorage.setItem(PENDING_LOGOUT_KEY, 'true');
+  } catch {
+    unpersistedLogout = true;
+    toast.warning('Keep Tempo open until logout is confirmed', {
+      description: 'This browser could not remember the unfinished logout.',
+    });
+  }
+}
+
+/**
+ * Ends the signed-in session in this tab. Responses to requests started before this call are
+ * discarded, so a late reply cannot restore an account or its data after logout.
+ */
+export function endSession() {
+  sessionEpoch++;
+}
+
+function assertSameSession(epoch: number) {
+  if (epoch !== sessionEpoch) throw new SessionExpiredError(401, 'Signed out');
+}
 
 const shouldRedirect = (resource: string, method?: string) => {
   if (resource === '/auth/login') return false;
@@ -45,15 +123,33 @@ async function request<T = unknown>(
   resource: string,
   init?: RequestOptions,
 ): Promise<T | Response> {
+  await completePendingLogout();
   const url = API_BASE_URL + resource;
   const headers = {'Content-Type': 'application/json', ...init?.headers};
 
-  const response = await fetch(url, {headers, credentials: 'include', ...init}).catch(() => {
-    throw toast.error('No network connection', {
-      description: 'Please check your internet connection and try again.',
-      id: 'no-network-oconnection',
-    });
+  const epoch = sessionEpoch;
+  const isWrite = !['GET', 'HEAD'].includes(init?.method ?? 'GET');
+  if (isWrite && !onlineManager.isOnline()) {
+    toast.error('Changes cannot be saved while Tempo is unreachable.');
+    throw new NetworkError();
+  }
+  const response = await fetch(url, {
+    headers,
+    credentials: 'include',
+    ...init,
+    signal: init?.signal ?? (!isWrite ? AbortSignal.timeout(15000) : undefined),
+  }).catch(() => {
+    onlineManager.setOnline(false);
+    if (isWrite)
+      toast.error(
+        'Cannot reach Tempo. Your change was not confirmed. Please check before trying again.',
+      );
+    throw new NetworkError();
   });
+  // Any reply, including an error status, proves Tempo is reachable. The API itself answers 502/503
+  // when the bank provider fails, so only a failed request means the connection is down.
+  onlineManager.setOnline(true);
+  assertSameSession(epoch);
 
   if (!response.ok) {
     if (response.status === 401 && shouldRedirect(resource, init?.method)) {
@@ -71,11 +167,8 @@ async function request<T = unknown>(
       });
       throw new HttpError(response.status, response.statusText, retryAfterSeconds);
     }
-    if (response.status === 500) {
-      throw toast.error('Server error', {
-        description: 'Your request could not be completed. Please try again.',
-        id: 'server-error',
-      });
+    if (response.status >= 500) {
+      throw new HttpError(response.status, 'Tempo is temporarily unavailable. Please try again.');
     }
 
     if (init?.parseJson === false) {
@@ -100,7 +193,9 @@ async function request<T = unknown>(
     return response;
   }
 
-  return (await response.json()) as T;
+  const body = (await response.json()) as T;
+  assertSameSession(epoch);
+  return body;
 }
 
 /** HEAD request; returns the raw Response. */

@@ -12,6 +12,7 @@ import {BankConnectionList} from '@/features/banking/components/bank-connection-
 import {BankTransactionDetailsDialog} from '@/features/banking/components/bank-transaction-details-dialog';
 import {BankingBreadcrumb} from '@/features/banking/components/banking-breadcrumb';
 import {useBankTransactionInspector} from '@/hooks/use-bank-transaction-inspector';
+import {useIsOnline} from '@/hooks/use-connection';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 const bankConnectionResultSchema = z.enum(['connected', 'cancelled', 'error']);
@@ -49,6 +50,7 @@ function BankConnectionsIndex() {
   const {result, transactionId} = Route.useSearch();
   const {openTransaction, closeTransaction} = useBankTransactionInspector('/bank-connections/');
   const {bankConnections, isPending, isError, refetch} = useGetAllBankConnections();
+  const isOnline = useIsOnline();
 
   useEffect(() => {
     if (!result) return;
@@ -67,7 +69,7 @@ function BankConnectionsIndex() {
         <BankConnectionList
           bankConnections={bankConnections || []}
           isPending={isPending}
-          isError={isError}
+          isError={isError && (isOnline || !bankConnections)}
           onRetry={() => void refetch()}
           onTransactionSelect={openTransaction}
         />
