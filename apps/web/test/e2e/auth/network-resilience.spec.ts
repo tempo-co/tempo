@@ -3,11 +3,14 @@ import type {Page} from '@playwright/test';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, expect, test} from '../../fixtures';
 import {HomePage} from '../../pages/home.page';
+import {LoginPage} from '../../pages/login.page';
+import {SecuritySettingsPage} from '../../pages/security-settings.page';
 import {routeBankConnectionsApi} from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
 
 const CACHE_KEY = 'tempo-offline-cache';
 type SavedCache = {
+  timestamp: number;
   clientState: {queries: {queryKey: string[]; state: {dataUpdatedAt: number}}[]};
 };
 const readCache = (page: Page) =>
@@ -153,8 +156,18 @@ test.describe('saved app', () => {
     context,
   }) => {
     await saveTransactions(page);
+    let sessionsLoadedAt = Infinity;
+    await page.route('**/auth/sessions', async (route) => {
+      const response = await route.fetch();
+      sessionsLoadedAt = Date.now();
+      await route.fulfill({response});
+    });
     await page.goto('/settings/security');
-    await expect(page.getByRole('heading', {name: 'Security & access', exact: true})).toBeVisible();
+    await expect(new SecuritySettingsPage(page).currentSessionCard).toBeVisible();
+    // Wait for a save made after the sessions loaded, so their absence is not just a stale snapshot.
+    await expect
+      .poll(async () => ((await readCache(page))?.timestamp ?? 0) > sessionsLoadedAt)
+      .toBe(true);
     const cachedPaths = await page.evaluate(async () => {
       const paths: string[] = [];
       for (const name of await caches.keys()) {
@@ -198,6 +211,8 @@ test('logging out while Tempo is unreachable still clears saved data', async ({
   freshAccount,
   homePage,
 }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
   await expect(homePage.sidebarAccountName).toHaveText(freshAccount.name);
   await expect.poll(() => readCache(page)).not.toBe(null);
@@ -206,8 +221,35 @@ test('logging out while Tempo is unreachable still clears saved data', async ({
   await homePage.logOut();
   await expect.poll(() => readCache(page)).toBe(null);
   await expect(homePage.sidebarAccountName).not.toBeVisible();
+  await expect(page.getByText('Saved data was removed from this device')).toBeVisible();
+  expect(errors).toEqual([]);
   await page.reload();
   await expect(page.getByRole('heading', {name: 'Cannot reach Tempo'})).toBeVisible();
+});
+
+test('a signed-out tab does not sign out a tab that logs in', async ({
+  page,
+  context,
+  freshAccount,
+  homePage,
+}) => {
+  await context.clearCookies();
+  const other = await context.newPage();
+  const otherLogin = new LoginPage(other);
+  await otherLogin.navigate();
+  await expect(otherLogin.submitButton).toBeVisible();
+  await new LoginPage(page).login(freshAccount.email, freshAccount.password);
+  await expect(homePage.sidebarAccountName).toHaveText(freshAccount.name);
+  await expect.poll(() => readCache(page)).not.toBe(null);
+
+  // Any activity in the signed-out tab, such as a failed sign-in, saves its own (empty) state.
+  await otherLogin.emailInput.fill('nobody@example.com');
+  await otherLogin.passwordInput.fill('not-the-password');
+  await otherLogin.submitButton.click();
+  await expect(otherLogin.invalidCredentialsError).toBeVisible();
+  await page.waitForTimeout(1500);
+  expect(await readCache(page)).not.toBe(null);
+  await expect(homePage.sidebarAccountName).toHaveText(freshAccount.name);
 });
 
 test('a logout that could not reach Tempo is completed once it is reachable again', async ({

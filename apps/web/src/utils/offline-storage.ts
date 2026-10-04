@@ -76,15 +76,13 @@ export function createOfflinePersistence(queryClient: QueryClient) {
       removeItem: clearOfflineCache,
       setItem: (key, value) => {
         // A throttled save from the previous login must not resurrect private data after logout.
+        // Skip it without removing storage: another tab may still be signed in and own that data.
         const saved = JSON.parse(value) as PersistedClient;
         const savedAccount = saved.clientState.queries.find(
           (query) => query.queryKey[0] === CURRENT_ACCOUNT_KEY[0],
         )?.state.data as Account | undefined;
         const account = queryClient.getQueryData<Account | null>(CURRENT_ACCOUNT_KEY);
-        if (!account || account.id !== savedAccount?.id) {
-          clearOfflineCache();
-          return;
-        }
+        if (!account || account.id !== savedAccount?.id) return;
         localStorage.setItem(key, value);
       },
     },

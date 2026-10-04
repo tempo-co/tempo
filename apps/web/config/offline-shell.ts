@@ -51,7 +51,8 @@ const PREFIX = ${JSON.stringify(prefix)};
 const CACHE = ${JSON.stringify(cacheName)};
 const FILES = ${JSON.stringify(files.map((file) => base + file))};
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES)));
+  // Bypass the HTTP cache: an old index.html stored there would point at assets this cache lacks.
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES.map((file) => new Request(file, {cache: 'reload'})))));
 });
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {

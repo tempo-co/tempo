@@ -48,10 +48,10 @@ export function App() {
               </div>
             )}
             <RouterProvider router={router} context={{isAuthenticated, isEmailVerified}} />
-            <Toaster expand duration={5000} />
           </div>
         </React.Suspense>
       )}
+      <Toaster expand duration={5000} />
     </ThemeProvider>
   );
 }

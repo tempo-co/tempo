@@ -12,25 +12,27 @@ export const useLogOut = () => {
   const navigate = useNavigate();
 
   const {mutateAsync: logOut, isPending} = useMutation({
+    // Resolves whether or not Tempo confirmed the logout; an unconfirmed one is retried later.
     mutationFn: async () => {
       try {
         beginLogout();
         await completePendingLogout();
+        return true;
+      } catch {
+        return false;
       } finally {
         // Private data leaves this device even when the server cannot confirm the logout.
         endSession();
         dropSavedData(queryClient);
       }
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({queryKey: CURRENT_ACCOUNT_KEY});
-      return navigate({to: '/'});
-    },
-    onError: async () => {
-      toast.error('Saved data was removed from this device', {
-        description: 'Tempo will finish logging out once it is reachable.',
-        id: 'logout-unconfirmed',
-      });
+    onSuccess: async (confirmed) => {
+      if (confirmed) await queryClient.invalidateQueries({queryKey: CURRENT_ACCOUNT_KEY});
+      else
+        toast.error('Saved data was removed from this device', {
+          description: 'Tempo will finish logging out once it is reachable.',
+          id: 'logout-unconfirmed',
+        });
       return navigate({to: '/'});
     },
   });
