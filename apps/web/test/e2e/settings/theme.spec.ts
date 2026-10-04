@@ -14,6 +14,12 @@ test.describe('Theme Switcher', () => {
 
     await expect(appearanceSettingsPage.htmlElement).toHaveClass(/light/);
     expect(await appearanceSettingsPage.getStoredTheme()).toBe('light');
+    await expect(appearanceSettingsPage.lightThemeButton).toHaveAttribute('aria-checked', 'true');
+
+    // Clicking the active option again keeps it selected.
+    await appearanceSettingsPage.lightThemeButton.click();
+    await expect(appearanceSettingsPage.lightThemeButton).toHaveAttribute('aria-checked', 'true');
+    expect(await appearanceSettingsPage.getStoredTheme()).toBe('light');
   });
 
   test('should switch to dark theme', async ({appearanceSettingsPage}) => {
