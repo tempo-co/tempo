@@ -13,7 +13,7 @@ export function App() {
   const {isAuthenticated, isPending, isEmailVerified} = useCurrentAccount();
 
   return (
-    <ThemeProvider defaultTheme='dark' storageKey='vite-ui-theme'>
+    <ThemeProvider storageKey='vite-ui-theme'>
       {isPending ? (
         <LoadingScreen />
       ) : (

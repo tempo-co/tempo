@@ -133,7 +133,7 @@ motion, and ornament are supporting signals, never the content of the screen.
 
 ## Colors
 
-Dark, light, and system themes are first-class (`ThemeProvider` defaults to dark). Dark is a
+Dark, light, and system themes are first-class (`ThemeProvider` follows the system by default). Dark is a
 warm Night canvas; light is warm Paper — the same clay identity in both, never a separate
 product per theme.
 

@@ -21,6 +21,16 @@ test.describe('Theme Switcher', () => {
     await appearanceSettingsPage.navigate();
   });
 
+  test('should follow the system theme by default', async ({page, appearanceSettingsPage}) => {
+    await page.evaluate(() => localStorage.removeItem('vite-ui-theme'));
+    await page.emulateMedia({colorScheme: 'light'});
+    await page.reload();
+
+    await expect(appearanceSettingsPage.htmlElement).toHaveClass(/light/);
+    await expectSelected(appearanceSettingsPage, 'system');
+    await expect(page.getByRole('radio')).toHaveText(['System', 'Dark', 'Light']);
+  });
+
   test('should switch to light theme', async ({appearanceSettingsPage}) => {
     await appearanceSettingsPage.lightThemeButton.click();
 
