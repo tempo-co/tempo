@@ -42,7 +42,7 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
 - `npm run test:e2e:local` — reset E2E Docker services, start them, seed the API, and run the full Playwright suite headlessly (always starts from a pristine database). CI runs the same suite via `npx playwright test` against fresh services.
 - `npm run docker:test:up` / `npm run db:seed:e2e` / `npm run docker:test:down` — start services, seed data, and clean up services respectively.
 
-CI runs these jobs in parallel: lint/format (`npm run generate-routes`, `npm run lint:check`, `npm run format:check`), build (`npm run build`, then `ops/tests/tempo-web-security-headers-test.sh`), E2E (starts the Docker services, seeds the API, runs Playwright) and the image build. The main-image release waits for all of them. There is no unit-test script; Playwright tests are under `test/e2e`.
+CI runs these jobs in parallel: lint/format (`npm run generate-routes`, `npm run lint:check`, `npm run format:check`), build (`npm run build`, then `ops/tests/tempo-web-security-headers-test.sh`) and E2E (starts the Docker services, seeds the API, runs Playwright). The image build starts after lint/format passes, and the main-image release waits for all of them. There is no unit-test script; Playwright tests are under `test/e2e`.
 
 ## Deployment and ops checks
 

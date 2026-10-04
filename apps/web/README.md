@@ -22,6 +22,7 @@ Vite environment values are declared in `vite-env.d.ts`:
 - `VITE_API_URL`: API base URL used by `src/utils/api.ts`
 - `VITE_APP_URL`: app URL used by Playwright's web server and `baseURL`
 - `VITE_EMAIL_UI_URL`: Mailpit URL used by `test/utils/email-utils.ts`
+- `VITE_BASE_PATH` (optional, default `/`): base path the app and PWA manifest are served under
 
 ## Development
 
@@ -46,7 +47,7 @@ $ npm run format:check
 
 ## Test
 
-End-to-end tests use Playwright against a disposable Docker stack (PostgreSQL, Redis, Mailpit, and the API). Playwright builds and previews the app itself. The categorization flow uses the paired API branch image so the browser calls the real category endpoint; the only mocked boundary is the API's AI provider.
+End-to-end tests use Playwright against a disposable Docker stack (PostgreSQL, Redis, Mailpit, and the API). Playwright builds and previews the app itself.
 
 For a fully deterministic local run (reset services, fresh database and seed):
 
@@ -56,6 +57,6 @@ $ npm run test:e2e:local
 
 This uses `ghcr.io/tempo-co/tempo-api:main`. To test against an unmerged API change, set `TEMPO_API_E2E_IMAGE` to a locally built image or a PR image (`ghcr.io/tempo-co/tempo-api:pr-<n>`).
 
-CI runs the same suite on every push (`npx playwright test` against fresh services). A web PR whose body contains `Depends-on: tempo-api#<n>` runs against that API PR's image.
+CI runs the same suite on every pull request and on `main` (`npx playwright test` against fresh services). A web PR whose body contains `Depends-on: tempo-api#<n>` runs against that API PR's image.
 
 `docker:test:up` / `docker:test:down` manage the E2E services; each E2E run starts from a pristine database, and the E2E setup authenticates seeded users via `test/auth.setup.ts`.

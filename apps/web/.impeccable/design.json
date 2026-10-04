@@ -362,7 +362,7 @@
       {
         "name": "loading-indicator",
         "value": "1.6s linear infinite",
-        "purpose": "Existing sync and connection spinner motion."
+        "purpose": "Pending-action loading spinner."
       }
     ],
     "breakpoints": [
@@ -390,7 +390,7 @@
       "kind": "button",
       "refersTo": "button-primary",
       "description": "The single most important local action. Clay-on-dark fill on the dark canvas; Clay strong on light.",
-      "html": "<button class=\"ds-btn-primary\">Sync now</button>",
+      "html": "<button class=\"ds-btn-primary\">Connect a bank</button>",
       "css": ".ds-btn-primary { background: hsl(17.5 67.1% 69%); color: hsl(252 10.2% 9.6%); padding: 8px 16px; min-height: 40px; border: 0; border-radius: 0; font: 500 14px/20px Inter Variable, Inter, sans-serif; transition: background 200ms ease-out; } .ds-btn-primary:hover { background: hsl(17.5 67.1% 63%); } .ds-btn-primary:focus-visible { outline: 2px solid hsl(17.5 67.1% 69%); outline-offset: 2px; }"
     },
     {
