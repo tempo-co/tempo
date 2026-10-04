@@ -2,6 +2,7 @@ import {faker} from '@faker-js/faker';
 import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
 import {UNVERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_EMAIL} from 'test/constants/seed.constants';
 import {EmailUtils} from 'test/utils/email-utils';
+import {boxOf} from 'test/utils/layout';
 
 import {expect, test} from '../../fixtures';
 
@@ -113,6 +114,52 @@ test.describe('Account Settings: Email change', () => {
     await expect(accountSettingsPage.newEmailInput).toBeEmpty();
     await expect(accountSettingsPage.emailChangeSentTo).toBeHidden();
   });
+
+  for (const {name, viewport} of [
+    {name: 'desktop', viewport: {width: 1280, height: 900}},
+    {name: 'mobile', viewport: {width: 390, height: 844}},
+  ]) {
+    test.describe(`${name} dialog actions`, () => {
+      test.use({viewport});
+
+      test('should right-align desktop actions and stack primary-first on mobile', async ({
+        page,
+        freshAccount,
+        accountSettingsPage,
+      }) => {
+        await accountSettingsPage.navigate();
+        await accountSettingsPage.changeEmailButton.click();
+        const cancelButton = page.getByRole('button', {name: 'Cancel', exact: true});
+        // Poll geometry while the dialog/drawer opening animation settles.
+        await expect
+          .poll(async () => {
+            const input = await boxOf(accountSettingsPage.newEmailInput);
+            const primary = await boxOf(accountSettingsPage.sendVerificationLinkButton);
+            const cancel = await boxOf(cancelButton);
+            return name === 'desktop'
+              ? primary.x > cancel.x &&
+                  Math.abs(primary.x + primary.width - input.x - input.width) < 1
+              : primary.y < cancel.y && Math.abs(primary.width - input.width) < 1;
+          })
+          .toBe(true);
+        const input = await boxOf(accountSettingsPage.newEmailInput);
+
+        await accountSettingsPage.newEmailInput.fill(`new-${freshAccount.email}`);
+        await accountSettingsPage.sendVerificationLinkButton.click();
+        await expect(accountSettingsPage.emailChangeSentTo).toBeVisible();
+        await expect
+          .poll(async () => {
+            const done = await boxOf(accountSettingsPage.emailChangeDoneButton);
+            const different = await boxOf(accountSettingsPage.useDifferentEmailButton);
+            return name === 'desktop'
+              ? done.x > different.x && Math.abs(done.x + done.width - input.x - input.width) < 1
+              : done.y < different.y && Math.abs(done.width - input.width) < 1;
+          })
+          .toBe(true);
+        await expect(page.getByRole('dialog')).not.toContainText('Until then, keep signing in');
+      });
+    });
+  }
 
   test.describe('Validation errors', () => {
     test.use({storageState: VERIFIED_USER_AUTH_FILE});

@@ -103,14 +103,11 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
               >
                 {sentTo}
               </p>
-              <p>
-                Your email changes when you open it. Until then, keep signing in with{' '}
-                <span className='break-all text-foreground'>{currentEmail}</span>.
-              </p>
+              <p>Your email changes when you open the link.</p>
             </ResponsiveDialogBody>
-            <ResponsiveDialogFooter className='gap-2 md:flex-row-reverse'>
+            <ResponsiveDialogFooter className='gap-2'>
               <ResponsiveDialogClose asChild>
-                <Button type='button' data-testid='email-change-done-button'>
+                <Button type='button' className='md:order-2' data-testid='email-change-done-button'>
                   Done
                 </Button>
               </ResponsiveDialogClose>
@@ -118,6 +115,7 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
                 variant='outline'
                 type='button'
                 onClick={useDifferentEmail}
+                className='md:order-1'
                 data-testid='use-different-email-button'
               >
                 Use a different email
@@ -162,10 +160,11 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
                     )}
                   />
                 </ResponsiveDialogBody>
-                <ResponsiveDialogFooter className='gap-2 md:flex-row-reverse'>
+                <ResponsiveDialogFooter className='gap-2'>
                   <Button
                     type='submit'
                     disabled={isPending}
+                    className='md:order-2'
                     data-testid='send-verification-link-button'
                   >
                     {isPending ? (
@@ -178,7 +177,12 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
                     )}
                   </Button>
                   <ResponsiveDialogClose asChild>
-                    <Button variant='outline' type='button' disabled={isPending}>
+                    <Button
+                      variant='outline'
+                      type='button'
+                      disabled={isPending}
+                      className='md:order-1'
+                    >
                       Cancel
                     </Button>
                   </ResponsiveDialogClose>
