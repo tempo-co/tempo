@@ -2,7 +2,7 @@ import {faker} from '@faker-js/faker';
 import {UNVERIFIED_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
 import {invalidEmailChangeVerifySearchParams} from 'test/data/verify-email-change-params.data';
 
-import {expect, test} from '../../fixtures';
+import {createVerifiedAccount, expect, test} from '../../fixtures';
 import {withSearchParams} from '../../utils/url';
 
 const verifyEmailChangeUrl = (params: object) => withSearchParams('/verify-email-change', params);
@@ -12,17 +12,17 @@ test.describe('Email Change Verification', () => {
     test.describe('Authenticated + Verified', () => {
       test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
-      test('should redirect to Home with "Invalid or expired verification link" for valid but incorrect params', async ({
+      test('should redirect to Account settings with "Invalid or expired verification link" for valid but incorrect params', async ({
         page,
         verifyEmailChangePage,
-        homePage,
+        accountSettingsPage,
       }) => {
         await page.goto(
           verifyEmailChangeUrl({email: faker.internet.email(), token: faker.string.uuid()}),
         );
 
         await expect(verifyEmailChangePage.invalidOrExpiredLinkError).toBeVisible();
-        await homePage.expectToBeOnPage();
+        await accountSettingsPage.expectToBeOnPage();
       });
 
       for (const {name, params} of invalidEmailChangeVerifySearchParams) {
@@ -53,17 +53,29 @@ test.describe('Email Change Verification', () => {
     });
 
     test.describe('Unauthenticated', () => {
-      test('should redirect to Login with "Invalid or expired verification link" for valid but incorrect params', async ({
+      test('should ask to log in and keep the link to resume afterwards', async ({
         page,
         verifyEmailChangePage,
-        loginPage,
       }) => {
-        await page.goto(
-          verifyEmailChangeUrl({email: faker.internet.email(), token: faker.string.uuid()}),
-        );
+        const params = {email: faker.internet.email().toLowerCase(), token: faker.string.uuid()};
+        await page.goto(verifyEmailChangeUrl(params));
 
-        await expect(verifyEmailChangePage.invalidOrExpiredLinkError).toBeVisible();
-        await loginPage.expectToBeOnPage();
+        await expect(verifyEmailChangePage.loginRequiredToast).toBeVisible();
+        await page.waitForURL((url) => url.pathname === '/login');
+        const redirect = new URL(page.url()).searchParams.get('redirect');
+        expect(redirect).toBe(verifyEmailChangeUrl(params));
+      });
+
+      test('should ignore an off-site redirect after login', async ({page, loginPage}) => {
+        const account = await createVerifiedAccount(page.request);
+        await page.context().clearCookies();
+
+        await page.goto('/login?redirect=%2F%2Fevil.example%2Fsteal');
+        await loginPage.emailInput.fill(account.email);
+        await loginPage.passwordInput.fill(account.password);
+        await loginPage.submitButton.click();
+
+        await page.waitForURL('/');
       });
 
       for (const {name, params} of invalidEmailChangeVerifySearchParams) {

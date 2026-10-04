@@ -11,6 +11,12 @@ import {handleUnauthenticatedRedirect} from '@/utils/handle-redirect';
 
 const searchParamsSchema = z.object({
   showVerifyMessage: z.boolean().optional(),
+  // Same-origin path to resume after login; protocol-relative and backslash tricks are dropped.
+  redirect: z
+    .string()
+    .regex(/^\/(?![/\\])/)
+    .optional()
+    .catch(undefined),
 });
 
 export const Route = createFileRoute('/login')({
@@ -22,6 +28,8 @@ export const Route = createFileRoute('/login')({
 });
 
 function LogIn() {
+  const {redirect} = Route.useSearch();
+
   return (
     <AuthLayout title='Log in to Tempo'>
       <div className='relative flex flex-col space-y-3'>
@@ -35,7 +43,7 @@ function LogIn() {
             layout
             className='flex w-full flex-col'
           >
-            <LogInForm />
+            <LogInForm redirectTo={redirect} />
             <p className='pt-3 text-center text-sm text-muted-foreground'>
               Don&apos;t have an account?{' '}
               <Button variant='link' asChild className='h-fit px-1 py-0'>
