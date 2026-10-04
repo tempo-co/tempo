@@ -9,9 +9,9 @@ export class AppearanceSettingsPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.lightThemeButton = page.getByRole('tab', {name: 'Light'});
-    this.darkThemeButton = page.getByRole('tab', {name: 'Dark'});
-    this.systemThemeButton = page.getByRole('tab', {name: 'System'});
+    this.lightThemeButton = page.getByRole('radio', {name: 'Light'});
+    this.darkThemeButton = page.getByRole('radio', {name: 'Dark'});
+    this.systemThemeButton = page.getByRole('radio', {name: 'System'});
     this.htmlElement = page.locator('html');
   }
 

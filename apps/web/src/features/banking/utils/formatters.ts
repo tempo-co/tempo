@@ -103,10 +103,10 @@ export function resolveBankTransactionAccountLabel(transaction: {
 }
 
 /**
- * Names the other leg's account. Provider account names are often the holder's name and repeat across
+ * Names the other leg's account of an own transfer or currency exchange. Provider account names are often the holder's name and repeat across
  * a bank's currency accounts, so the bank and currency identify it unless the owner set an alias.
  */
-export function formatOwnTransferCounterpartAccount(counterpart: {
+export function formatCounterpartAccount(counterpart: {
   bankName: string;
   bankAccountAlias: string | null;
   currency: string;

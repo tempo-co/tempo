@@ -16,7 +16,7 @@ export function App() {
   const {isAuthenticated, isPending, isEmailVerified, isUnavailable, refetch} = useCurrentAccount();
 
   return (
-    <ThemeProvider defaultTheme='dark' storageKey='vite-ui-theme'>
+    <ThemeProvider storageKey='vite-ui-theme'>
       {isUnavailable || (!isOnline && !isAuthenticated) ? (
         <div className='flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center'>
           <Logo className='h-12 w-12 text-primary' />

@@ -56,7 +56,8 @@ export type OwnTransferEvidence = (typeof OWN_TRANSFER_EVIDENCE)[number];
 export const OWN_TRANSFER_OVERRIDES = ['MARKED', 'UNMARKED'] as const;
 export type OwnTransferOverride = (typeof OWN_TRANSFER_OVERRIDES)[number];
 
-export type BankTransactionOwnTransferCounterpart = {
+/** The other leg of an own transfer or currency exchange. */
+export type BankTransactionCounterpart = {
   id: string;
   bankName: string;
   bankAccountName: string | null;
@@ -69,7 +70,7 @@ export type BankTransactionOwnTransferCounterpart = {
 export type BankTransactionOwnTransfer = {
   evidence: OwnTransferEvidence;
   /** The other leg, or null when no matching transaction is in the connected accounts. */
-  counterpart: BankTransactionOwnTransferCounterpart | null;
+  counterpart: BankTransactionCounterpart | null;
 };
 
 export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = [
@@ -205,6 +206,11 @@ export type BankTransactionFinancialEventFields = {
   financialEventSource: BankTransactionFinancialEventSource | null;
   financialEventRuleVersion: string | null;
   cashFlowTreatment: BankTransactionCashFlowTreatment;
+  /**
+   * The other leg of a currency exchange, or null when the legs could not be matched. Absent on
+   * connection summaries.
+   */
+  currencyExchangeCounterpart?: BankTransactionCounterpart | null;
 };
 
 export type BankTransactionOwnTransferFields = {

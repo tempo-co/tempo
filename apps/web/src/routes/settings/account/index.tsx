@@ -42,15 +42,12 @@ function SettingsAccountIndex() {
               Email
             </h2>
             <p className='max-w-136 text-sm text-muted-foreground'>
-              The email address associated with your account.
+              Primary contact for account recovery and important notifications.
             </p>
           </div>
           <div className='flex flex-col gap-4 rounded-card border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5'>
             <div className='min-w-0'>
               <p className='truncate text-sm font-medium'>{currentAccount.email}</p>
-              <p className='mt-1 text-xs text-muted-foreground'>
-                Primary contact for account recovery and important notifications.
-              </p>
             </div>
             <div className='w-full shrink-0 sm:w-auto'>
               <EmailChangeDialog currentEmail={currentAccount.email} />

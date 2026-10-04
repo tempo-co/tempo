@@ -2,14 +2,7 @@ import {zodResolver} from '@hookform/resolvers/zod';
 import {useEffect} from 'react';
 import {useForm} from 'react-hook-form';
 
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormMessage,
-} from '@/components/ui/form';
+import {Form, FormControl, FormField, FormItem, FormMessage} from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
 import {Account} from '@/types/account';
 import {cn} from '@/utils/cn';
@@ -85,9 +78,6 @@ export function NameChangeForm({currentName}: NameChangeFormProps) {
                 />
               </FormControl>
               <FormMessage />
-              <FormDescription className='text-xs'>
-                {isPending ? 'Saving changes...' : 'This can be a nickname or your real name.'}
-              </FormDescription>
             </FormItem>
           )}
         />

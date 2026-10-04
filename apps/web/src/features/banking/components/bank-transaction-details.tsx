@@ -14,6 +14,7 @@ import {
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
 import {BankTransactionCategorySelect} from './bank-transaction-category-select';
+import {BankTransactionCurrencyExchange} from './bank-transaction-currency-exchange';
 import {BankTransactionOwnTransfer} from './bank-transaction-own-transfer';
 
 type BankTransactionDetailsProps = {
@@ -113,7 +114,11 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
                   value={formatBankTransactionCashFlowTreatment(transaction.cashFlowTreatment)}
                 />
               ) : null}
-              {financialEvent ? null : <BankTransactionOwnTransfer transaction={transaction} />}
+              {transaction.financialEventType === 'CURRENCY_EXCHANGE' ? (
+                <BankTransactionCurrencyExchange transaction={transaction} />
+              ) : financialEvent ? null : (
+                <BankTransactionOwnTransfer transaction={transaction} />
+              )}
               <Detail
                 label='Transaction type'
                 value={formatBankTransactionType(transaction.transactionType)}

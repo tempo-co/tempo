@@ -1,7 +1,7 @@
 import {expect, test} from '../../fixtures';
 
 test.describe('Account Settings: Delete account', () => {
-  test('should delete the account after email and password confirmation', async ({
+  test('should delete the account after password confirmation', async ({
     page,
     freshAccount: {email, password},
     accountSettingsPage,
@@ -11,7 +11,6 @@ test.describe('Account Settings: Delete account', () => {
     await page.setViewportSize({width: 393, height: 852});
     await accountSettingsPage.navigate();
 
-    // The destructive action stays disabled until the email matches exactly.
     await accountSettingsPage.deleteAccountButton.click();
     const deleteCancelButton = page.getByRole('button', {name: 'Cancel'});
     await expect(deleteCancelButton).toBeVisible();
@@ -20,9 +19,23 @@ test.describe('Account Settings: Delete account', () => {
         (element) => getComputedStyle(element.parentElement!).paddingBottom,
       ),
     ).toBe('16px');
-    await expect(accountSettingsPage.deleteConfirmButton).toBeDisabled();
-    await accountSettingsPage.deleteEmailInput.fill(email);
-    await expect(accountSettingsPage.deleteConfirmButton).toBeDisabled();
+
+    // An empty password is rejected before any request is made.
+    let deleteRequests = 0;
+    page.on('request', (request) => {
+      if (request.method() === 'DELETE' && request.url().endsWith('/accounts/me')) deleteRequests++;
+    });
+    await accountSettingsPage.deleteConfirmButton.click();
+    await expect(accountSettingsPage.deleteMissingPasswordError).toBeVisible();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    expect(deleteRequests).toBe(0);
+
+    // Cancelling clears the typed password.
+    await accountSettingsPage.deletePasswordInput.fill('typed-then-cancelled');
+    await deleteCancelButton.click();
+    await accountSettingsPage.deleteAccountButton.click();
+    await expect(accountSettingsPage.deletePasswordInput).toHaveValue('');
+    await expect(accountSettingsPage.deleteMissingPasswordError).not.toBeVisible();
 
     // Wrong password is rejected and the dialog stays open.
     await accountSettingsPage.deletePasswordInput.fill('wrong-password');
