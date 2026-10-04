@@ -12,10 +12,7 @@ export function AccountDelete() {
       </div>
       <div className='flex flex-col items-start justify-between gap-4 rounded-card border border-destructive/50 bg-card p-4 sm:flex-row sm:items-center sm:p-5'>
         <div className='min-w-0'>
-          <p className='mb-1 text-sm font-medium'>Permanently delete your account</p>
-          <p className='max-w-136 text-xs text-muted-foreground'>
-            This also deletes your bank connections and transaction history.
-          </p>
+          <p className='text-sm font-medium'>Permanently delete your account</p>
         </div>
         <AccountDeleteDialog>
           <Button
