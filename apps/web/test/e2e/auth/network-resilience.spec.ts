@@ -244,6 +244,32 @@ test('logging out while Tempo is unreachable still clears saved data', async ({
   await expect(unreachableHeading(page)).toBeVisible();
 });
 
+test('asks for a secure connection where the browser has no Web Locks', async ({
+  page,
+  freshAccount,
+  homePage,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/');
+  await expect(homePage.sidebarAccountName).toHaveText(freshAccount.name);
+  await expect.poll(() => readCache(page)).not.toBe(null);
+  // Browsers withhold Web Locks on plain HTTP origins other than localhost.
+  await page.addInitScript(() => {
+    delete (Navigator.prototype as {locks?: unknown}).locks;
+  });
+  const apiRequests: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().startsWith(API_URL)) apiRequests.push(request.url());
+  });
+  await page.reload();
+  await expect(page.getByRole('heading', {name: 'Tempo needs a secure connection'})).toBeVisible();
+  await expect(homePage.sidebarAccountName).not.toBeVisible();
+  await expect(page.getByText(freshAccount.name)).not.toBeVisible();
+  expect(apiRequests).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 test('a signed-out tab does not sign out a tab that logs in', async ({
   page,
   context,

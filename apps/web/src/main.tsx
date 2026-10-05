@@ -3,32 +3,35 @@ import {PersistQueryClientProvider} from '@tanstack/react-query-persist-client';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
+import {SecureConnectionRequired} from '@/components/shared/layout/secure-connection-required';
+import {ThemeProvider} from '@/providers/theme.provider';
+
 import {App} from './app';
 import './index.css';
 import {queryClient, signOut} from './query-client';
 import {createOfflinePersistence} from './utils/offline-storage';
 import {registerOfflineShell} from './utils/register-offline-shell';
 
-const persistOptions = createOfflinePersistence(queryClient, signOut);
-registerOfflineShell();
-
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('No root element found');
-
-export const AppRoot = () => (
-  <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
-    <App />
-  </PersistQueryClientProvider>
-);
-
 const root = ReactDOM.createRoot(rootElement);
 
-if (import.meta.env.DEV) {
+// Logout is coordinated across tabs with Web Locks, which browsers expose only on HTTPS and
+// localhost. Without them a signed-out session could be trusted again, so the app does not start.
+if (!('locks' in navigator)) {
   root.render(
-    <React.StrictMode>
-      <AppRoot />
-    </React.StrictMode>,
+    <ThemeProvider storageKey='vite-ui-theme'>
+      <SecureConnectionRequired />
+    </ThemeProvider>,
   );
 } else {
-  root.render(<AppRoot />);
+  const persistOptions = createOfflinePersistence(queryClient, signOut);
+  registerOfflineShell();
+
+  const appRoot = (
+    <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
+      <App />
+    </PersistQueryClientProvider>
+  );
+  root.render(import.meta.env.DEV ? <React.StrictMode>{appRoot}</React.StrictMode> : appRoot);
 }
