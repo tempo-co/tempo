@@ -1,3 +1,4 @@
+import {OfflineStatus} from '@/components/shared/offline-status';
 import {Separator} from '@/components/ui/separator';
 import {SidebarTrigger} from '@/components/ui/sidebar';
 
@@ -11,6 +12,7 @@ export function AppHeaderLayout({children}: AppHeaderLayoutProps) {
       <SidebarTrigger />
       <Separator orientation='vertical' className='h-4' />
       {children}
+      <OfflineStatus />
     </header>
   );
 }

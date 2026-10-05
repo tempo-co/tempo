@@ -39,14 +39,6 @@ export function App() {
         <React.Suspense fallback={<LoadingScreen />}>
           {/* eslint-disable-next-line react/no-unknown-property */}
           <div vaul-drawer-wrapper=''>
-            {!isOnline && (
-              <div
-                role='status'
-                className='pointer-events-none fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-40 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-full border bg-card px-4 py-2 text-center text-sm shadow-sm'
-              >
-                Showing saved data. Reconnecting… Changes cannot be saved.
-              </div>
-            )}
             <RouterProvider router={router} context={{isAuthenticated, isEmailVerified}} />
           </div>
         </React.Suspense>

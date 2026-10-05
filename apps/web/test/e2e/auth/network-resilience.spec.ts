@@ -19,8 +19,7 @@ const readCache = (page: Page) =>
     (key) => JSON.parse(localStorage.getItem(key) ?? 'null') as SavedCache | null,
     CACHE_KEY,
   );
-const savedStatus = (page: Page) =>
-  page.getByRole('status').filter({hasText: 'Showing saved data'});
+const savedStatus = (page: Page) => page.getByRole('status').filter({hasText: /^Offline/});
 const unreachableHeading = (page: Page) => page.getByRole('heading', {name: 'Cannot reach Tempo'});
 const serverSessionStatus = async (page: Page) =>
   (await page.request.get(`${API_URL}/accounts/me`)).status();
