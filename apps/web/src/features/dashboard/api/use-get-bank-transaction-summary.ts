@@ -1,9 +1,9 @@
 import {useQuery} from '@tanstack/react-query';
 
+import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {api} from '@/utils/api';
 
 import type {BankTransactionSummary} from '../types/bank-transaction-summary';
-import {dashboardQueryKeys} from './query-keys';
 import {HOME_REFRESH_INTERVAL_MS} from './refresh-interval';
 
 /** Spending pace and categories for `month` (YYYY-MM), cut at the local date `asOf`. */

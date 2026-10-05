@@ -1,8 +1,8 @@
 import {QueryObserver} from '@tanstack/react-query';
 
+import {dashboardQueryKeys} from '../../../src/features/banking/api/aggregate-query-keys';
 import {bankQueryKeys} from '../../../src/features/banking/api/query-keys';
 import type {BankTransactionFilterParams} from '../../../src/features/banking/types/bank-transaction';
-import {dashboardQueryKeys} from '../../../src/features/dashboard/api/query-keys';
 import {expect, test} from '../../fixtures';
 import {createHookHarness} from '../../utils/hook-harness';
 

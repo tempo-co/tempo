@@ -1,8 +1,9 @@
 import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
+import {septemberSummary} from '../../data/home-summary.data';
 import {expect, test} from '../../fixtures';
-import {mockBankConnections, transformBankConnections} from '../../utils/api-mocks';
+import {mockBankConnections, mockJson, transformBankConnections} from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.describe('Home without banks', () => {
@@ -96,6 +97,66 @@ test.describe('Home', () => {
     await expect(homePage.syncStatus).toContainText('ABN AMRO has not synced since 26 Aug');
     await expect(homePage.syncStatus).toContainText('Totals may be missing recent activity.');
     await homePage.syncStatus.getByRole('link', {name: 'Reconnect'}).click();
+    await expect(page).toHaveURL(/\/bank-connections$/);
+  });
+
+  test('retains totals for a sanitized expired connection and offers reconnect', async ({
+    page,
+    homePage,
+  }) => {
+    await mockBankConnections(page, [
+      {
+        id: '00000000-0000-4000-8000-0000000000bb',
+        provider: 'enable-banking',
+        aspspName: 'Sample Bank',
+        aspspCountry: 'NL',
+        status: 'EXPIRED',
+        syncStatus: 'IDLE',
+        consentValidUntil: null,
+        lastSyncedAt: null,
+        lastSyncError: null,
+        nextSyncAt: null,
+        baseCurrency: 'EUR',
+        bankAccounts: [
+          {
+            id: '00000000-0000-4000-8000-0000000000cc',
+            name: 'Sample retained account',
+            details: null,
+            alias: null,
+            currency: 'EUR',
+            cashAccountType: null,
+            usage: null,
+            maskedIdentifier: null,
+            currentBalanceAmount: '100.00',
+            currentBalanceInBaseCurrency: '100.00',
+            baseCurrencyRateDate: null,
+            currentBalanceType: 'CLBD',
+            balanceUpdatedAt: '2026-09-30T10:00:00.000Z',
+            isActive: true,
+            latestBalances: [],
+          },
+        ],
+      },
+    ]);
+    await mockJson(page, '**/bank-transactions/summary**', septemberSummary);
+    await page.goto('/?month=2026-09');
+
+    await expect(homePage.monthHeading).toHaveText('September 2026');
+    await expect(homePage.emptyStateTitle).toBeHidden();
+    const totals = page.getByTestId('spending-summary');
+    await expect(totals.getByRole('link', {name: '€1,200.00', exact: true})).toBeVisible();
+    await expect(totals.getByRole('link', {name: '€2,500.00', exact: true})).toBeVisible();
+    await expect(totals.getByText('€1,300.00', {exact: true})).toBeVisible();
+    const balances = page.getByRole('region', {name: 'Balances'});
+    await expect(
+      balances
+        .getByRole('link', {name: /Sample retained account/})
+        .getByText('€100.00', {exact: true}),
+    ).toBeVisible();
+    await expect(balances.getByText('Total', {exact: true}).locator('..')).toContainText('€100.00');
+    await expect(homePage.syncStatus).toContainText('Sample Bank has not synced yet');
+    await expect(homePage.syncStatus).toContainText('Totals may be missing recent activity.');
+    await homePage.syncStatus.getByRole('link', {name: 'Reconnect', exact: true}).click();
     await expect(page).toHaveURL(/\/bank-connections$/);
   });
 

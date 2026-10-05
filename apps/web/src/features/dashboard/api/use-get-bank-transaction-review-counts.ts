@@ -1,9 +1,9 @@
 import {useQuery} from '@tanstack/react-query';
 
+import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {api} from '@/utils/api';
 
 import type {BankTransactionReviewCounts} from '../types/bank-transaction-summary';
-import {dashboardQueryKeys} from './query-keys';
 import {HOME_REFRESH_INTERVAL_MS} from './refresh-interval';
 
 /** Transactions across all months that still need the owner's attention. */
