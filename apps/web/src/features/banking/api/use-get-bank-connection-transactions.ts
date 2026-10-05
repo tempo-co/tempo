@@ -2,6 +2,7 @@ import {useQuery} from '@tanstack/react-query';
 
 import {BankConnectionTransactionsResponse} from '@/features/banking/types/bank-connection';
 import {api} from '@/utils/api';
+import {savedDataStatus} from '@/utils/query-status';
 
 import {bankQueryKeys} from './query-keys';
 
@@ -10,7 +11,7 @@ export const useGetBankConnectionTransactions = (
   enabled: boolean,
   syncVersion: string | null = null,
 ) => {
-  const {data, isPending, isError, refetch} = useQuery<BankConnectionTransactionsResponse>({
+  const query = useQuery<BankConnectionTransactionsResponse>({
     queryKey: bankQueryKeys.connectionTransactions(connectionId, syncVersion),
     queryFn: async () => {
       return await api.get<BankConnectionTransactionsResponse>(
@@ -22,10 +23,9 @@ export const useGetBankConnectionTransactions = (
   });
 
   return {
-    transactions: data?.transactions ?? [],
-    total: data?.total ?? 0,
-    isPending,
-    isError,
-    refetch,
+    transactions: query.data?.transactions ?? [],
+    total: query.data?.total ?? 0,
+    ...savedDataStatus(query),
+    refetch: query.refetch,
   };
 };

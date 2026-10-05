@@ -1,5 +1,7 @@
 import {useMemo} from 'react';
 
+import {savedDataStatus} from '@/utils/query-status';
+
 import {bankAccountLabelKey, findAmbiguousBankAccountKeys} from '../utils/bank-account-label';
 import {resolveBankAccountLabel} from '../utils/formatters';
 import {useGetAllBankConnections} from './use-get-all-bank-connections';
@@ -16,7 +18,8 @@ export type ActiveBankAccount = {
  * by several accounts and therefore needs the account name to be told apart.
  */
 export const useActiveBankAccounts = () => {
-  const {bankConnections, isPending, isError} = useGetAllBankConnections();
+  const {bankConnections, ...query} = useGetAllBankConnections();
+  const {isPending, isError} = savedDataStatus({...query, data: bankConnections});
 
   const accounts = useMemo<ActiveBankAccount[]>(
     () =>

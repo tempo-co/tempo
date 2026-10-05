@@ -10,8 +10,8 @@ import {BankTransactionTable} from '@/features/banking/components/bank-transacti
 import {BankingBreadcrumb} from '@/features/banking/components/banking-breadcrumb';
 import {bankTransactionSearchParamsSchema} from '@/features/banking/types/bank-transaction';
 import {useBankTransactionInspector} from '@/hooks/use-bank-transaction-inspector';
-import {useIsOnline} from '@/hooks/use-connection';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
+import {savedDataStatus} from '@/utils/query-status';
 
 export const Route = createFileRoute('/bank-transactions/')({
   component: BankTransactionsIndex,
@@ -25,11 +25,9 @@ function BankTransactionsIndex() {
   const searchParams = Route.useSearch();
   const transactionId = searchParams.transactionId;
   const {openTransaction, closeTransaction} = useBankTransactionInspector('/bank-transactions/');
-  const {data, isPending, isPlaceholderData, isError, refetch, pagination, filters, sort} =
+  const {data, isPlaceholderData, refetch, pagination, filters, sort, ...query} =
     useGetBankTransactions(searchParams);
-  const isOnline = useIsOnline();
-  // While Tempo is unreachable, keep showing the last loaded page instead of the failed refresh.
-  const showError = isError && (isOnline || !data);
+  const {isPending, isError: showError} = savedDataStatus({...query, data});
   const totalTransactions = data?.total ?? 0;
   const transactionCountLabel = totalTransactions === 1 ? 'transaction' : 'transactions';
   const resultSummary = isPending

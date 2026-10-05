@@ -1,12 +1,18 @@
-import type {Page, Request} from '@playwright/test';
+import type {Page, Request, Route} from '@playwright/test';
 
+import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, createVerifiedAccount, expect, test} from '../../fixtures';
 import {HomePage} from '../../pages/home.page';
 import {LoginPage} from '../../pages/login.page';
 import {SecuritySettingsPage} from '../../pages/security-settings.page';
 import {SignupPage} from '../../pages/signup.page';
-import {fulfillJson, routeBankConnectionsApi} from '../../utils/api-mocks';
+import {
+  fulfillJson,
+  mockJson,
+  routeBankConnectionsApi,
+  transformBankConnections,
+} from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
 
 const CACHE_KEY = 'tempo-offline-cache';
@@ -36,6 +42,30 @@ const logoutLocks = (page: Page) =>
   });
 const nameSaveOutcome = (page: Page) =>
   page.getByText(/^(Name saved\.|Your name could not be saved\. Please try again)$/);
+
+/** Brings the tab back into view, which refetches the page's data as switching apps does. */
+const refocus = (page: Page) =>
+  page.evaluate(() => {
+    for (const state of ['hidden', 'visible']) {
+      Object.defineProperty(document, 'visibilityState', {value: state, configurable: true});
+      window.dispatchEvent(new Event('visibilitychange'));
+    }
+  });
+
+/** Adds a second account to the first connection, so the bank account filter is shown. */
+function withSecondAccount(connections: BankConnection[]) {
+  const [first] = connections;
+  first.bankAccounts = [
+    ...first.bankAccounts,
+    {
+      ...first.bankAccounts[0],
+      id: '00000000-0000-4000-8000-000000000097',
+      name: 'Secondary account',
+      alias: 'Secondary spending',
+    },
+  ];
+  return connections;
+}
 
 async function saveTransactions(page: Page) {
   await page.goto('/bank-transactions');
@@ -134,6 +164,161 @@ test.describe('saved app', () => {
       page.getByRole('heading', {name: 'Could not load bank connections'}),
     ).toBeVisible();
     await expect(savedStatus(page)).not.toBeVisible();
+  });
+
+  test.describe('when Tempo stops answering', () => {
+    let failedRequests: string[] = [];
+    const apiRequests = `${API_URL}/**`;
+    const failRequest = (route: Route) => {
+      failedRequests.push(new URL(route.request().url()).pathname);
+      return route.abort('failed');
+    };
+    /** Fails every API request without a response. Added last, so it overrides the test's routes. */
+    const loseConnection = async (page: Page) => {
+      failedRequests = [];
+      await page.route(apiRequests, failRequest);
+      await refocus(page);
+    };
+    const restoreConnection = (page: Page) => page.unroute(apiRequests, failRequest);
+
+    const abnAmroCard = (page: Page) =>
+      page
+        .locator('[data-testid^="bank-connection-"]')
+        .filter({has: page.getByRole('heading', {name: 'ABN AMRO'})});
+    const unavailableTransactions = (page: Page) =>
+      page.getByText(/Recent transactions are unavailable/);
+    const failedTransactionRequests = () =>
+      failedRequests.filter((path) => path.endsWith('/transactions')).length;
+
+    test('keeps the recent transactions of an expanded card and refreshes them on reconnect', async ({
+      page,
+    }) => {
+      test.setTimeout(25000);
+      await page.goto('/bank-connections');
+      const card = abnAmroCard(page);
+      await card.getByRole('button', {name: /ABN AMRO/}).click();
+      await expect(card.getByText('Provider purchase')).toBeVisible();
+      let refreshed = false;
+      await page.route('**/bank-connections/*/transactions**', async (route) => {
+        refreshed = true;
+        await route.continue();
+      });
+
+      await loseConnection(page);
+      await expect.poll(failedTransactionRequests).toBeGreaterThan(0);
+      await expect(savedStatus(page)).toBeVisible();
+      await expect(card.getByText('Provider purchase')).toBeVisible();
+      await expect(unavailableTransactions(page)).not.toBeVisible();
+
+      await restoreConnection(page);
+      await expect(savedStatus(page)).not.toBeVisible({timeout: 15000});
+      await expect.poll(() => refreshed).toBe(true);
+      await expect(card.getByText('Provider purchase')).toBeVisible();
+      await expect(unavailableTransactions(page)).not.toBeVisible();
+    });
+
+    test('reports transactions that were never loaded as unavailable until Tempo answers', async ({
+      page,
+    }) => {
+      test.setTimeout(25000);
+      await page.goto('/bank-connections');
+      const card = abnAmroCard(page);
+      await expect(card).toBeVisible();
+
+      await loseConnection(page);
+      await expect(savedStatus(page)).toBeVisible();
+      await card.getByRole('button', {name: /ABN AMRO/}).click();
+      await expect(unavailableTransactions(page)).toBeVisible();
+      await expect(card.getByRole('status', {name: 'Loading recent transactions'})).toHaveCount(0);
+      await expect(card.getByText('Provider purchase')).not.toBeVisible();
+
+      await restoreConnection(page);
+      await expect(savedStatus(page)).not.toBeVisible({timeout: 15000});
+      await expect(card.getByText('Provider purchase')).toBeVisible();
+      await expect(unavailableTransactions(page)).not.toBeVisible();
+    });
+
+    test('still reports a failed transaction refresh when Tempo answers with an error', async ({
+      page,
+    }) => {
+      await page.goto('/bank-connections');
+      const card = abnAmroCard(page);
+      await card.getByRole('button', {name: /ABN AMRO/}).click();
+      await expect(card.getByText('Provider purchase')).toBeVisible();
+      await mockJson(page, '**/bank-connections/*/transactions**', {message: 'Unavailable'}, 503);
+
+      await refocus(page);
+      await expect(unavailableTransactions(page)).toBeVisible();
+      await expect(card.getByRole('button', {name: 'Try again'})).toBeVisible();
+      await expect(card.getByText('Provider purchase')).not.toBeVisible();
+      await expect(savedStatus(page)).not.toBeVisible();
+    });
+
+    test('keeps the loaded bank account filter usable and refreshes it on reconnect', async ({
+      page,
+    }) => {
+      test.setTimeout(25000);
+      let connectionRequests = 0;
+      await transformBankConnections(page, (connections) => {
+        connectionRequests++;
+        return withSecondAccount(connections);
+      });
+      await page.goto('/bank-transactions');
+      const filter = page.getByRole('button', {name: /^Bank accounts/});
+      await filter.click();
+      await page.getByRole('option', {name: /Daily spending/}).click();
+      await expect(page).toHaveURL(/bankAccountIds/);
+      await page.keyboard.press('Escape');
+      await expect(filter).toContainText('Daily spending');
+      const loadedRequests = connectionRequests;
+
+      await loseConnection(page);
+      await expect.poll(() => failedRequests).toContain('/bank-connections');
+      await expect(savedStatus(page)).toBeVisible();
+      await expect(filter).toBeEnabled();
+      await expect(filter).toContainText('Daily spending');
+      await filter.click();
+      await expect(page.getByRole('option', {name: /Secondary spending/})).toBeVisible();
+      await page.keyboard.press('Escape');
+
+      await restoreConnection(page);
+      await expect(savedStatus(page)).not.toBeVisible({timeout: 15000});
+      await expect.poll(() => connectionRequests).toBeGreaterThan(loadedRequests);
+      await expect(filter).toBeEnabled();
+      await expect(filter).toContainText('Daily spending');
+    });
+
+    test('keeps the bank account filter unavailable when accounts never loaded', async ({page}) => {
+      await routeBankConnectionsApi(page, (route) => route.abort('failed'));
+      // Keep the reconnect probe failing too, so the app does not come back online mid-test.
+      await page.route('**/health', (route) => route.abort('failed'));
+      await page.goto('/bank-transactions');
+      await expect(page.getByText('Coffee shop')).toBeVisible();
+      await expect(savedStatus(page)).toBeVisible();
+      await expect(page.getByRole('button', {name: /^Bank accounts/})).toBeDisabled();
+    });
+
+    test('disables the loaded bank account filter when Tempo answers with an error', async ({
+      page,
+    }) => {
+      let failing = false;
+      await routeBankConnectionsApi(page, async (route) => {
+        if (failing) return fulfillJson(route, {message: 'Unavailable'}, 503);
+        const response = await route.fetch();
+        await route.fulfill({
+          response,
+          json: withSecondAccount((await response.json()) as BankConnection[]),
+        });
+      });
+      await page.goto('/bank-transactions');
+      const filter = page.getByRole('button', {name: /^Bank accounts/});
+      await expect(filter).toBeEnabled();
+
+      failing = true;
+      await refocus(page);
+      await expect(filter).toBeDisabled();
+      await expect(savedStatus(page)).not.toBeVisible();
+    });
   });
 
   test('removes saved data from a tab left offline past the saved-data limit', async ({

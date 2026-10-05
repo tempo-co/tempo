@@ -84,13 +84,15 @@ test('Home refreshes spending, review counts and recent transactions when a poll
   await expect(recent).toContainText('No transactions this month.');
   expect(reads).toEqual({summary: 1, review: 1, recent: 1});
 
+  // Let timers continue while responses and derived-data invalidation finish. A request count
+  // alone does not mean the query has settled and re-armed its polling timer.
+  test.setTimeout(40_000);
+  await page.clock.resume();
   current = {...connection, syncStatus: 'RUNNING'};
-  await page.clock.runFor(5_100);
-  await expect.poll(() => connectionReads).toBe(2);
+  await expect.poll(() => connectionReads, {timeout: 15_000}).toBe(2);
   completed = true;
   current = {...connection, syncStatus: 'SUCCEEDED', lastSyncedAt: '2026-10-01T00:00:00Z'};
-  await page.clock.runFor(5_100);
-  await expect.poll(() => connectionReads).toBe(3);
+  await expect.poll(() => connectionReads, {timeout: 15_000}).toBe(3);
   await expect(spending.getByRole('link', {name: '€1,400.00', exact: true})).toBeVisible();
   await expect(attention).toContainText('2 transactions · all months');
   await expect(recent).toContainText('Example synced shop');

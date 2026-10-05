@@ -84,7 +84,7 @@ test.describe('offline retention', () => {
     }
     expect(await savedSearches(page)).toEqual(['Extra', 'Provider', 'Salary']);
     await page.goto('/bank-transactions?search=Coffee');
-    await expect(page.getByText('Loading synchronized records...')).toBeVisible();
+    await expect(page.getByText('Transaction data is unavailable right now')).toBeVisible();
     await expect(page.getByText('Coffee shop', {exact: true})).not.toBeVisible();
 
     await context.setOffline(false);
