@@ -16,6 +16,7 @@ import {ScrollArea} from '@/components/ui/scroll-area';
 import {cn} from '@/utils/cn';
 
 import {BankTransactionFilterParams} from '../types/bank-transaction';
+import {hasDrillFilters} from '../utils/drill-filters';
 import {BankTransactionAccountFilter} from './bank-transaction-account-filter';
 import {BankTransactionCategoryFilter} from './bank-transaction-category-filter';
 import {BankTransactionCategorySourceFilter} from './bank-transaction-category-source-filter';
@@ -43,6 +44,7 @@ export function BankTransactionMobileFilters({
     (filters.categories?.length ?? 0) > 0,
     (filters.categorySources?.length ?? 0) > 0,
     (filters.financialEventTypes?.length ?? 0) > 0,
+    hasDrillFilters(filters),
   ].filter(Boolean).length;
 
   React.useEffect(() => {

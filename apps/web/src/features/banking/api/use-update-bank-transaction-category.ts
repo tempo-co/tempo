@@ -1,6 +1,7 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {toast} from 'sonner';
 
+import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {HttpError, api} from '@/utils/api';
 
 import {
@@ -30,7 +31,7 @@ export const useUpdateBankTransactionCategory = () => {
         JSON.stringify({category}),
       );
     },
-    onSuccess: (updatedTransaction, {id}) => {
+    onSuccess: async (updatedTransaction, {id}) => {
       queryClient.setQueryData(bankQueryKeys.transaction(id), updatedTransaction);
       for (const [queryKey, current] of queryClient.getQueriesData<BankTransactionsResponse>({
         queryKey: bankQueryKeys.transactionsRoot,
@@ -62,6 +63,18 @@ export const useUpdateBankTransactionCategory = () => {
           });
         }
       }
+      // Home's Attention and "Not in totals" links filter on server-derived cash-flow and
+      // categorization predicates. Refetch those lists, including pages that lacked the row.
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: bankQueryKeys.transactionsRoot,
+          predicate: ({queryKey}) => {
+            const filters = queryKey[2] as BankTransactionFilterParams | undefined;
+            return Boolean(filters?.cashFlows?.length || filters?.categoryStatuses?.length);
+          },
+        }),
+        queryClient.invalidateQueries({queryKey: dashboardQueryKeys.root}),
+      ]);
     },
   });
 

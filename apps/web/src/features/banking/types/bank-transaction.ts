@@ -152,6 +152,24 @@ export const BANK_TRANSACTION_CATEGORIZATION_SOURCES = ['AI', 'MANUAL'] as const
 export type BankTransactionCategorizationSource =
   (typeof BANK_TRANSACTION_CATEGORIZATION_SOURCES)[number];
 
+/** Filter-only values the Home dashboard drills through with; they have no list control. */
+export const BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES = [
+  'SPENDING',
+  'INCOME',
+  'INTERNAL',
+  'UNKNOWN',
+] as const;
+export type BankTransactionCashFlowFilterValue =
+  (typeof BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES)[number];
+
+export const BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES = ['PRESENT', 'MISSING'] as const;
+export type BankTransactionBaseAmountFilterValue =
+  (typeof BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES)[number];
+
+export const BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES = ['FAILED', 'CATEGORIZING'] as const;
+export type BankTransactionCategoryStatusFilterValue =
+  (typeof BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES)[number];
+
 const toDate = (value: unknown) => (typeof value === 'string' ? new Date(value) : value);
 
 export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.extend({
@@ -165,6 +183,9 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
   categories: z.array(z.enum(BANK_TRANSACTION_CATEGORY_FILTER_VALUES)).optional(),
   categorySources: z.array(z.enum(BANK_TRANSACTION_CATEGORIZATION_SOURCES)).optional(),
   financialEventTypes: z.array(z.enum(BANK_TRANSACTION_ACTIVITY_FILTER_VALUES)).optional(),
+  cashFlows: z.array(z.enum(BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES)).optional(),
+  baseAmount: z.enum(BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES).optional(),
+  categoryStatuses: z.array(z.enum(BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES)).optional(),
   search: z.string().max(100).optional(),
   transactionId: z.string().optional(),
   sort: z
@@ -184,6 +205,9 @@ export type BankTransactionFilterParams = Pick<
   | 'categories'
   | 'categorySources'
   | 'financialEventTypes'
+  | 'cashFlows'
+  | 'baseAmount'
+  | 'categoryStatuses'
   | 'search'
 >;
 

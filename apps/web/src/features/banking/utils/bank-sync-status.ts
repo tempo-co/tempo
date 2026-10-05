@@ -8,6 +8,15 @@ function isPastTimestamp(value: string | null | undefined, now = Date.now()): bo
   return !Number.isFinite(timestamp) || timestamp <= now;
 }
 
+/** Connections that can hold accounts: authorized now or authorized before their consent ended. */
+export function isConnectedBank(connection: BankConnection) {
+  return connection.status === 'AUTHORIZED' || connection.status === 'EXPIRED';
+}
+
+export function isSyncInProgress(connection: BankConnection) {
+  return connection.syncStatus === 'QUEUED' || connection.syncStatus === 'RUNNING';
+}
+
 export function isReauthorizationRequired(connection: BankConnection) {
   if (connection.status === 'EXPIRED' || connection.syncStatus === 'EXPIRED') return true;
   if (connection.status !== 'AUTHORIZED') return false;
@@ -85,7 +94,7 @@ function getAutomaticSyncDetails(
 export function getAutomaticSyncDetailsForConnection(
   connection: BankConnection,
 ): AutomaticSyncDetails | null {
-  if (connection.status !== 'AUTHORIZED' && connection.status !== 'EXPIRED') return null;
+  if (!isConnectedBank(connection)) return null;
 
   const status = isReauthorizationRequired(connection) ? 'EXPIRED' : connection.syncStatus;
   return getAutomaticSyncDetails(status, connection.lastSyncError, connection.lastSyncedAt);

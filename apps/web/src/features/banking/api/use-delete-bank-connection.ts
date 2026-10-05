@@ -1,5 +1,6 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 
+import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {HttpError, api} from '@/utils/api';
 
 import {bankQueryKeys} from './query-keys';
@@ -18,7 +19,10 @@ export const useDeleteBankConnection = () => {
       });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({queryKey: bankQueryKeys.connections});
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey: bankQueryKeys.connections}),
+        queryClient.invalidateQueries({queryKey: dashboardQueryKeys.root}),
+      ]);
     },
   });
 

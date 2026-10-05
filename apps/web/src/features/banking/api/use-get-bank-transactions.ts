@@ -22,7 +22,10 @@ const appendArrayFilter = (
   values?.forEach((value) => params.append(key, value));
 };
 
-export const useGetBankTransactions = (searchParams: BankTransactionSearchParams) => {
+export const useGetBankTransactions = (
+  searchParams: BankTransactionSearchParams,
+  {refetchInterval}: {refetchInterval?: number} = {},
+) => {
   const navigate = useNavigate({from: '/bank-transactions/'});
   const pagination: PaginationParams = {
     pageIndex: searchParams.pageIndex,
@@ -35,6 +38,9 @@ export const useGetBankTransactions = (searchParams: BankTransactionSearchParams
       categories: searchParams.categories,
       categorySources: searchParams.categorySources,
       financialEventTypes: searchParams.financialEventTypes,
+      cashFlows: searchParams.cashFlows,
+      baseAmount: searchParams.baseAmount,
+      categoryStatuses: searchParams.categoryStatuses,
       search: searchParams.search,
     }),
     [
@@ -43,6 +49,9 @@ export const useGetBankTransactions = (searchParams: BankTransactionSearchParams
       searchParams.categories,
       searchParams.categorySources,
       searchParams.financialEventTypes,
+      searchParams.cashFlows,
+      searchParams.baseAmount,
+      searchParams.categoryStatuses,
       searchParams.search,
     ],
   );
@@ -70,6 +79,11 @@ export const useGetBankTransactions = (searchParams: BankTransactionSearchParams
         appendArrayFilter(params, 'filter[categories][]', filters.categories);
         appendArrayFilter(params, 'filter[categorySources][]', filters.categorySources);
         appendArrayFilter(params, 'filter[financialEventTypes][]', filters.financialEventTypes);
+        appendArrayFilter(params, 'filter[cashFlows][]', filters.cashFlows);
+        if (filters.baseAmount) {
+          params.append('filter[baseAmount]', filters.baseAmount);
+        }
+        appendArrayFilter(params, 'filter[categoryStatuses][]', filters.categoryStatuses);
         if (filters.search?.trim()) {
           params.append('filter[search]', filters.search.trim());
         }
@@ -81,6 +95,7 @@ export const useGetBankTransactions = (searchParams: BankTransactionSearchParams
         return await api.get<BankTransactionsResponse>(`/bank-transactions?${params.toString()}`);
       },
       placeholderData: keepPreviousData,
+      refetchInterval,
     },
   );
 

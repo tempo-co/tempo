@@ -29,6 +29,7 @@ import {
   BankTransactionSortParams,
   DEFAULT_BANK_TRANSACTION_SORT,
 } from '../types/bank-transaction';
+import {hasDrillFilters} from '../utils/drill-filters';
 import {
   formatBankTransactionActivity,
   formatBankTransactionCategory,
@@ -41,6 +42,7 @@ import {BankTransactionCategoryFilter} from './bank-transaction-category-filter'
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 import {BankTransactionCategorySourceFilter} from './bank-transaction-category-source-filter';
 import {BankTransactionDateFilter} from './bank-transaction-date-filter';
+import {BankTransactionDrillFilters} from './bank-transaction-drill-filters';
 import {BankTransactionFinancialEventFilter} from './bank-transaction-financial-event-filter';
 import {BankTransactionMobileFilters} from './bank-transaction-mobile-filters';
 import {bankTransactionTableColumns} from './bank-transaction-table-columns';
@@ -78,6 +80,7 @@ export function BankTransactionTable({
     (filters.categories?.length ?? 0) > 0 ||
     (filters.categorySources?.length ?? 0) > 0 ||
     (filters.financialEventTypes?.length ?? 0) > 0 ||
+    hasDrillFilters(filters) ||
     !!filters.search?.trim();
 
   useEffect(() => {
@@ -142,6 +145,9 @@ export function BankTransactionTable({
         categories: undefined,
         categorySources: undefined,
         financialEventTypes: undefined,
+        cashFlows: undefined,
+        baseAmount: undefined,
+        categoryStatuses: undefined,
         search: undefined,
         pageIndex: 0,
       }),
@@ -219,6 +225,7 @@ export function BankTransactionTable({
             className='max-md:w-full max-md:min-w-0'
           />
         </div>
+        <BankTransactionDrillFilters filters={filters} />
         {isFilteringApplied && (
           <Button
             variant='secondary'

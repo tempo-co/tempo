@@ -29,6 +29,9 @@ export type BankAccount = {
   usage: string | null;
   maskedIdentifier: string | null;
   currentBalanceAmount: string | null;
+  /** Present in the dashboard API; optional while older fixtures migrate. */
+  currentBalanceInBaseCurrency?: string | null;
+  baseCurrencyRateDate?: string | null;
   currentBalanceType: string | null;
   balanceUpdatedAt: string | null;
   isActive: boolean;
@@ -58,6 +61,7 @@ export type BankConnection = {
   nextSyncAt: string | null;
   syncStatus:
     'IDLE' | 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'PARTIAL' | 'FAILED' | 'RATE_LIMITED' | 'EXPIRED';
+  baseCurrency?: string | null;
   bankAccounts: BankAccount[];
 };
 
