@@ -87,6 +87,48 @@ test('Home refreshes derived financial data every 30 seconds while visible', asy
   await expect(page.getByLabel('Loading spending')).toHaveCount(0);
 });
 
+test('Home reuses a month viewed in the last 30 seconds', async ({page, homePage}) => {
+  const state = await mockDerivedData(page);
+  await page.goto('/?month=2026-09');
+  await expect(homePage.monthHeading).toHaveText('September 2026');
+  await expect.poll(() => state.reads).toEqual({summary: 1, review: 1, recent: 1});
+
+  await homePage.previousMonthLink.click();
+  await expect(homePage.monthHeading).toHaveText('August 2026');
+  await expect.poll(() => state.reads).toEqual({summary: 2, review: 1, recent: 2});
+
+  await homePage.nextMonthLink.click();
+  await expect(homePage.monthHeading).toHaveText('September 2026');
+  await expect(
+    page.getByTestId('spending-summary').getByRole('link', {name: '€1,200.00', exact: true}),
+  ).toBeVisible();
+  await page.clock.runFor(10_000);
+  expect(state.reads).toEqual({summary: 2, review: 1, recent: 2});
+});
+
+test('Home does not retry a rate-limited request before the next refresh', async ({page}) => {
+  const state = await mockDerivedData(page);
+  let summaryReads = 0;
+  await page.route('**/bank-transactions/summary**', (route) => {
+    summaryReads++;
+    return route.fulfill({
+      status: 429,
+      headers: {'Retry-After': '60'},
+      contentType: 'application/json',
+      body: JSON.stringify({statusCode: 429, message: 'ThrottlerException: Too Many Requests'}),
+    });
+  });
+  await page.goto('/?month=2026-09');
+  await expect(page.getByText('Could not load spending.')).toBeVisible();
+  await expect(page.getByText('Rate limit exceeded')).toBeVisible();
+
+  // Past every retry delay (1, 2 and 4 seconds) but well before the next 30-second refresh.
+  await page.clock.runFor(10_000);
+  expect(summaryReads).toBe(1);
+  // Other Home sections are unaffected.
+  expect(state.reads.recent).toBe(1);
+});
+
 test('Home does not refresh while the tab is hidden', async ({page}) => {
   const state = await mockDerivedData(page);
   await page.goto('/?month=2026-09');

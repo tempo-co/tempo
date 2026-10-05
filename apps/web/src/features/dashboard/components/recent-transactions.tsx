@@ -26,7 +26,7 @@ export function RecentTransactions({
   const bookingDate = {from: parseCalendarDate(dates.from), to: parseCalendarDate(dates.to)};
   const {data, isPending, isPlaceholderData, isError, refetch} = useGetBankTransactions(
     {pageIndex: 0, pageSize: 10, bookingDate},
-    {refetchInterval: HOME_REFRESH_INTERVAL_MS},
+    {refetchInterval: HOME_REFRESH_INTERVAL_MS, staleTime: HOME_REFRESH_INTERVAL_MS},
   );
   const title = isCurrentMonth ? 'Recent' : `Latest in ${formatMonth(month)}`;
   return (
