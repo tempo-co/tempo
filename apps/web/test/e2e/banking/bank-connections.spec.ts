@@ -715,6 +715,44 @@ test.describe('bank connections', () => {
     await expectNoHorizontalOverflow(page);
   });
 
+  const zeroBalanceCases = [
+    {
+      name: 'hides zero currency totals next to a non-zero total',
+      balances: [
+        {currency: 'EUR', amount: '25.00'},
+        {currency: 'GBP', amount: '0.00'},
+        {currency: 'USD', amount: '0'},
+      ],
+      expectedLabel: 'Connection balances: 25 EUR',
+    },
+    {
+      name: 'keeps a single zero currency total',
+      balances: [{currency: 'EUR', amount: '0.00'}],
+      expectedLabel: 'Connection balances: 0 EUR',
+    },
+  ];
+
+  for (const {name, balances, expectedLabel} of zeroBalanceCases) {
+    test(name, async ({page}) => {
+      await mockBankConnections(page, [
+        {
+          ...MOCK_CONNECTION,
+          bankAccounts: balances.map(({currency, amount}, index) => ({
+            ...MOCK_CONNECTION.bankAccounts[0],
+            id: `00000000-0000-4000-8000-00000000010${index}`,
+            currency,
+            currentBalanceAmount: amount,
+          })),
+        },
+      ]);
+      await page.goto('/bank-connections');
+
+      const totalBalance = page.getByTestId('bank-connection-total');
+      await expect(totalBalance).toHaveAttribute('aria-label', expectedLabel);
+      await expect(totalBalance.locator(':scope > span')).toHaveCount(1);
+    });
+  }
+
   test('keeps the connection overview within a narrow phone viewport', async ({page}) => {
     await page.setViewportSize({width: 320, height: 852});
     await page.goto('/bank-connections');

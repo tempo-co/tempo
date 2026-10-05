@@ -764,7 +764,9 @@ function summarizeConnectionBalances(accounts: BankConnection['bankAccounts']) {
     totals.set(currency, (totals.get(currency) ?? 0) + amount);
   }
 
-  return Array.from(totals, ([currency, amount]) => ({currency, amount}));
+  const summary = Array.from(totals, ([currency, amount]) => ({currency, amount}));
+  const nonZero = summary.filter(({amount}) => amount !== 0);
+  return nonZero.length > 0 ? nonZero : summary.slice(0, 1);
 }
 
 function SectionHeading({
