@@ -19,21 +19,39 @@ function bookingRange(from: string, to: string) {
   return {from: parseCalendarDate(from), to: parseCalendarDate(to)};
 }
 
-/**
- * Every transaction booked between two calendar dates. Totals and period links only set filters
- * the list can show and change, so the list may also hold rows a total leaves out.
- */
+/** Every transaction booked between two calendar dates. */
 export function periodDrill(from: string, to: string): BankTransactionDrillSearch {
   return {bookingDate: bookingRange(from, to)};
 }
 
-/** One category's transactions between two calendar dates. */
-export function categoryDrill(
-  category: BankTransactionCategoryFilterValue,
+/**
+ * Exactly the rows behind a spending or income total between two dates: that cash flow, and, when the period
+ * has rows still waiting for a base-currency amount, only rows that have one, since totals leave the rest out.
+ */
+export function flowDrill(
+  flow: 'SPENDING' | 'INCOME',
   from: string,
   to: string,
+  hasMissingBaseAmounts: boolean,
 ): BankTransactionDrillSearch {
-  return {...periodDrill(from, to), categories: [category]};
+  return {
+    ...periodDrill(from, to),
+    cashFlows: [flow],
+    ...(hasMissingBaseAmounts ? {baseAmount: 'PRESENT' as const} : {}),
+  };
+}
+
+/** Exactly the spending rows behind one or more category totals between two dates. */
+export function categoryDrill(
+  categories: BankTransactionCategoryFilterValue | BankTransactionCategoryFilterValue[],
+  from: string,
+  to: string,
+  hasMissingBaseAmounts: boolean,
+): BankTransactionDrillSearch {
+  return {
+    ...flowDrill('SPENDING', from, to, hasMissingBaseAmounts),
+    categories: Array.isArray(categories) ? categories : [categories],
+  };
 }
 
 /** All-time rows behind each review count. */

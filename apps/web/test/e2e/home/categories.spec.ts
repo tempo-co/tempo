@@ -41,8 +41,8 @@ test('drills to the exact category and booking range', async ({page}) => {
   expect(href).not.toBeNull();
   const search = new URL(href!, page.url()).searchParams;
   expect(JSON.parse(search.get('categories')!)).toEqual(['FOOD_AND_DRINK']);
-  expect(search.has('cashFlows')).toBe(false);
-  expect(search.has('baseAmount')).toBe(false);
+  expect(JSON.parse(search.get('cashFlows')!)).toEqual(['SPENDING']);
+  expect(search.get('baseAmount')).toBe('PRESENT');
   const range = JSON.parse(search.get('bookingDate')!) as {from: string; to: string};
   expect(new Date(range.from).getDate()).toBe(1);
   expect(new Date(range.to).getDate()).toBe(30);
@@ -62,8 +62,8 @@ test('remaining categories drill excludes the top six and refunds', async ({page
   expect(href).not.toBeNull();
   const search = new URL(href!, page.url()).searchParams;
   expect(JSON.parse(search.get('categories')!)).toEqual(['TRANSFER_OUT', 'OTHER']);
-  expect(search.has('cashFlows')).toBe(false);
-  expect(search.has('baseAmount')).toBe(false);
+  expect(JSON.parse(search.get('cashFlows')!)).toEqual(['SPENDING']);
+  expect(search.get('baseAmount')).toBe('PRESENT');
 });
 
 test('shows counts, threshold comparisons and the usual tick', async ({page}) => {

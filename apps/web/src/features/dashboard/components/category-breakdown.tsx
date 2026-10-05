@@ -9,7 +9,7 @@ import type {
   BankTransactionSummary,
   BankTransactionSummaryCategory,
 } from '../types/bank-transaction-summary';
-import {categoryDrill, periodDrill} from '../utils/drill-links';
+import {categoryDrill} from '../utils/drill-links';
 import {formatMoney, toCents} from '../utils/money';
 import {monthDates} from '../utils/month';
 
@@ -22,6 +22,7 @@ type CategoryBreakdownProps = {
 export function CategoryBreakdown({summary, isCurrentMonth}: CategoryBreakdownProps) {
   const {categories, baseCurrency, through} = summary;
   const {from} = monthDates(summary.month);
+  const hasMissing = summary.excluded.missingBaseAmount > 0;
   // The API lists REFUND last; a positive refund bucket ranks with the other spending here.
   const spending = categories
     .filter((row) => toCents(row.spending) > 0)
@@ -44,7 +45,7 @@ export function CategoryBreakdown({summary, isCurrentMonth}: CategoryBreakdownPr
           <p className='mt-1 text-xs text-muted-foreground'>
             {isCurrentMonth
               ? 'Compared with usual by this day of the month.'
-              : `Compared with usual through day ${Number(through.slice(-2))} of each month.`}
+              : 'Compared with usual for a full month.'}
           </p>
         )}
       </div>
@@ -65,7 +66,7 @@ export function CategoryBreakdown({summary, isCurrentMonth}: CategoryBreakdownPr
             <Link
               key={row.category}
               to='/bank-transactions'
-              search={categoryDrill(row.category, from, through)}
+              search={categoryDrill(row.category, from, through, hasMissing)}
               className='group block outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring'
             >
               <div className='flex items-baseline justify-between gap-3 text-sm'>
@@ -104,10 +105,12 @@ export function CategoryBreakdown({summary, isCurrentMonth}: CategoryBreakdownPr
         {remaining.length > 0 && (
           <Link
             to='/bank-transactions'
-            search={{
-              ...periodDrill(from, through),
-              categories: remaining.map((row) => row.category),
-            }}
+            search={categoryDrill(
+              remaining.map((row) => row.category),
+              from,
+              through,
+              hasMissing,
+            )}
             className='w-fit text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
           >
             {remaining.length} more {remaining.length === 1 ? 'category' : 'categories'}{' '}
@@ -117,7 +120,7 @@ export function CategoryBreakdown({summary, isCurrentMonth}: CategoryBreakdownPr
         {refund && (
           <Link
             to='/bank-transactions'
-            search={categoryDrill('REFUND', from, through)}
+            search={categoryDrill('REFUND', from, through, hasMissing)}
             className='border-t pt-4 text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
           >
             <div className='flex items-baseline justify-between gap-3'>

@@ -152,12 +152,18 @@ export const BANK_TRANSACTION_CATEGORIZATION_SOURCES = ['AI', 'MANUAL'] as const
 export type BankTransactionCategorizationSource =
   (typeof BANK_TRANSACTION_CATEGORIZATION_SOURCES)[number];
 
-/** Filter-only values the Home dashboard drills through with; they have no list control. */
+/** Cash flows, in picker order. Currency exchanges and own transfers are the two kinds of internal movement. */
 export const BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES = [
   'SPENDING',
   'INCOME',
   'INTERNAL',
+  'CURRENCY_EXCHANGE',
+  BANK_TRANSACTION_OWN_TRANSFER_FILTER,
   'UNKNOWN',
+] as const;
+export const BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS = [
+  'CURRENCY_EXCHANGE',
+  'OWN_TRANSFER',
 ] as const;
 export type BankTransactionCashFlowFilterValue =
   (typeof BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES)[number];
@@ -182,8 +188,21 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
   bankAccountIds: z.array(z.string().uuid()).optional(),
   categories: z.array(z.enum(BANK_TRANSACTION_CATEGORY_FILTER_VALUES)).optional(),
   categorySources: z.array(z.enum(BANK_TRANSACTION_CATEGORIZATION_SOURCES)).optional(),
-  financialEventTypes: z.array(z.enum(BANK_TRANSACTION_ACTIVITY_FILTER_VALUES)).optional(),
-  cashFlows: z.array(z.enum(BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES)).optional(),
+  cashFlows: z
+    .array(z.enum(BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES))
+    .transform((values) => {
+      const allInternal =
+        values.includes('INTERNAL') ||
+        BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS.every((kind) => values.includes(kind));
+      return BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES.filter((value) =>
+        value === 'INTERNAL'
+          ? allInternal
+          : (BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS as readonly string[]).includes(value)
+            ? !allInternal && values.includes(value)
+            : values.includes(value),
+      );
+    })
+    .optional(),
   baseAmount: z.enum(BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES).optional(),
   categoryStatuses: z.array(z.enum(BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES)).optional(),
   search: z.string().max(100).optional(),
@@ -198,13 +217,25 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
 
 export type BankTransactionSearchParams = z.infer<typeof bankTransactionSearchParamsSchema>;
 
+/**
+ * The route schema. Links from before the Activity filter merged into Cash flow carry `financialEventTypes`;
+ * their values are cash flows now, so they keep filtering the same rows.
+ */
+export const bankTransactionRouteSearchSchema = z.preprocess((search) => {
+  if (!search || typeof search !== 'object' || !('financialEventTypes' in search)) return search;
+  const {financialEventTypes, ...rest} = search as Record<string, unknown>;
+  const legacy: unknown[] = Array.isArray(financialEventTypes) ? financialEventTypes : [];
+  const current: unknown[] = Array.isArray(rest.cashFlows) ? rest.cashFlows : [];
+  const cashFlows = [...new Set([...current, ...legacy])];
+  return cashFlows.length > 0 ? {...rest, cashFlows} : rest;
+}, bankTransactionSearchParamsSchema) as unknown as typeof bankTransactionSearchParamsSchema;
+
 export type BankTransactionFilterParams = Pick<
   BankTransactionSearchParams,
   | 'bookingDate'
   | 'bankAccountIds'
   | 'categories'
   | 'categorySources'
-  | 'financialEventTypes'
   | 'cashFlows'
   | 'baseAmount'
   | 'categoryStatuses'

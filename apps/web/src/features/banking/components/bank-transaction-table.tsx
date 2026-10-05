@@ -38,12 +38,13 @@ import {
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
 import {BankTransactionAccountFilter} from './bank-transaction-account-filter';
+import {BankTransactionBaseAmountFilter} from './bank-transaction-base-amount-filter';
+import {BankTransactionCashFlowFilter} from './bank-transaction-cash-flow-filter';
 import {BankTransactionCategoryFilter} from './bank-transaction-category-filter';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 import {BankTransactionCategorySourceFilter} from './bank-transaction-category-source-filter';
 import {BankTransactionDateFilter} from './bank-transaction-date-filter';
 import {BankTransactionDrillFilters} from './bank-transaction-drill-filters';
-import {BankTransactionFinancialEventFilter} from './bank-transaction-financial-event-filter';
 import {BankTransactionMobileFilters} from './bank-transaction-mobile-filters';
 import {bankTransactionTableColumns} from './bank-transaction-table-columns';
 
@@ -79,7 +80,6 @@ export function BankTransactionTable({
     (filters.bankAccountIds?.length ?? 0) > 0 ||
     (filters.categories?.length ?? 0) > 0 ||
     (filters.categorySources?.length ?? 0) > 0 ||
-    (filters.financialEventTypes?.length ?? 0) > 0 ||
     hasDrillFilters(filters) ||
     !!filters.search?.trim();
 
@@ -144,7 +144,6 @@ export function BankTransactionTable({
         bankAccountIds: undefined,
         categories: undefined,
         categorySources: undefined,
-        financialEventTypes: undefined,
         cashFlows: undefined,
         baseAmount: undefined,
         categoryStatuses: undefined,
@@ -216,10 +215,8 @@ export function BankTransactionTable({
             filters={filters}
             className='max-md:w-full max-md:min-w-0'
           />
-          <BankTransactionFinancialEventFilter
-            filters={filters}
-            className='max-md:w-full max-md:min-w-0'
-          />
+          <BankTransactionCashFlowFilter filters={filters} />
+          <BankTransactionBaseAmountFilter filters={filters} />
           <BankTransactionAccountFilter
             filters={filters}
             className='max-md:w-full max-md:min-w-0'

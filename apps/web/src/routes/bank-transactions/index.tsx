@@ -1,4 +1,4 @@
-import {createFileRoute} from '@tanstack/react-router';
+import {createFileRoute, stripSearchParams} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
@@ -8,14 +8,16 @@ import {useGetBankTransactions} from '@/features/banking/api/use-get-bank-transa
 import {BankTransactionDetailsDialog} from '@/features/banking/components/bank-transaction-details-dialog';
 import {BankTransactionTable} from '@/features/banking/components/bank-transaction-table';
 import {BankingBreadcrumb} from '@/features/banking/components/banking-breadcrumb';
-import {bankTransactionSearchParamsSchema} from '@/features/banking/types/bank-transaction';
+import {bankTransactionRouteSearchSchema} from '@/features/banking/types/bank-transaction';
 import {useBankTransactionInspector} from '@/hooks/use-bank-transaction-inspector';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 import {savedDataStatus} from '@/utils/query-status';
 
 export const Route = createFileRoute('/bank-transactions/')({
   component: BankTransactionsIndex,
-  validateSearch: zodValidator(bankTransactionSearchParamsSchema),
+  validateSearch: zodValidator(bankTransactionRouteSearchSchema),
+  // The schema folds the former Activity filter into Cash flow; drop its key so clearing Cash flow clears it.
+  search: {middlewares: [stripSearchParams(['financialEventTypes'] as never)]},
   beforeLoad: ({context}) => {
     handleAuthenticatedRedirect(context);
   },

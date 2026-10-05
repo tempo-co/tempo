@@ -27,6 +27,8 @@ export type BankTransactionSummary = {
     months: string[];
     daily: BaselineDay[];
     spendingByThrough: string | null;
+    /** Same-day range for the current month; full-month range for completed months. */
+    spendingRangeByThrough: {low: string; high: string} | null;
     incomeByThrough: string | null;
   };
   categories: BankTransactionSummaryCategory[];

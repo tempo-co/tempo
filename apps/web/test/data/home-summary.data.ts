@@ -24,6 +24,7 @@ export const septemberSummary: BankTransactionSummary = {
       high: money(5500 * day),
     })),
     spendingByThrough: '1350.00',
+    spendingRangeByThrough: {low: '1050.00', high: '1650.00'},
     incomeByThrough: '2400.00',
   },
   categories: [],
@@ -39,7 +40,13 @@ export const septemberAboveRangeSummary: BankTransactionSummary = {
 export const firstMonthSummary: BankTransactionSummary = {
   ...septemberSummary,
   excluded: {unknownDirection: 0, missingBaseAmount: 0},
-  baseline: {months: [], daily: [], spendingByThrough: null, incomeByThrough: null},
+  baseline: {
+    months: [],
+    daily: [],
+    spendingByThrough: null,
+    spendingRangeByThrough: null,
+    incomeByThrough: null,
+  },
 };
 
 /** One month of history only, so there is an average but no range. */
@@ -48,6 +55,7 @@ export const oneBaselineMonthSummary: BankTransactionSummary = {
   baseline: {
     ...septemberSummary.baseline,
     months: ['2026-08'],
+    spendingRangeByThrough: null,
     daily: septemberSummary.baseline.daily.map((day) => ({...day, low: null, high: null})),
   },
 };
@@ -69,6 +77,7 @@ export const octoberFirstSummary: BankTransactionSummary = {
       high: money(5500 * day),
     })),
     spendingByThrough: '45.00',
+    spendingRangeByThrough: {low: '35.00', high: '55.00'},
     incomeByThrough: '0.00',
   },
 };

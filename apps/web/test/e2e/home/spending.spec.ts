@@ -16,7 +16,9 @@ test('shows exact spending and an accessible pace alternative', async ({page}) =
   await expect(card.getByRole('link', {name: '€1,200.00', exact: true})).toBeVisible();
   const comparison = card.getByTestId('spending-comparison');
   await expect(comparison).toContainText('€150.00 less than usual');
-  await expect(comparison).toContainText('Usual by the 30th: €1,350.00 · within range');
+  await expect(comparison).toContainText(
+    'Jun–Aug average: €1,350.00 · within your previous 3 months',
+  );
   await expect(card).not.toContainText('Usual is the average of');
   // The comparison sits beside the headline on wide screens instead of below it.
   const headline = await card.getByRole('link', {name: '€1,200.00', exact: true}).boundingBox();
@@ -35,9 +37,13 @@ test('shows exact spending and an accessible pace alternative', async ({page}) =
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/bank-transactions/);
   const search = new URL(page.url()).searchParams;
-  expect(search.has('cashFlows')).toBe(false);
-  expect(search.has('baseAmount')).toBe(false);
-  await expect(page.getByTestId('bank-transaction-drill-filters')).toHaveCount(0);
+  // Exactly the day's counted spending: the fixture month has rows still missing a base amount.
+  expect(JSON.parse(search.get('cashFlows')!)).toEqual(['SPENDING']);
+  expect(search.get('baseAmount')).toBe('PRESENT');
+  const range = JSON.parse(search.get('bookingDate')!) as {from: string; to: string};
+  expect(new Date(range.from).getDate()).toBe(18);
+  expect(new Date(range.to).getDate()).toBe(18);
+  await expect(page.getByRole('button', {name: 'Cash flow: Spending', exact: true})).toBeVisible();
 });
 
 test('explains missing history without inventing a range', async ({page}) => {

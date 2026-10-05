@@ -5,9 +5,9 @@ import {Card} from '@/components/ui/card';
 import {cn} from '@/utils/cn';
 
 import type {BankTransactionSummary} from '../types/bank-transaction-summary';
-import {excludedDrill, parseCalendarDate, periodDrill} from '../utils/drill-links';
+import {excludedDrill, flowDrill, parseCalendarDate} from '../utils/drill-links';
 import {formatMoney, toCents} from '../utils/money';
-import {formatMonth, monthDates} from '../utils/month';
+import {formatMonth, formatMonthRange, monthDates} from '../utils/month';
 import {SpendingPaceChart} from './spending-pace-chart';
 
 const BASELINE_MONTHS = 3;
@@ -26,6 +26,7 @@ export function SpendingSummaryCard({summary, isCurrentMonth}: SpendingSummaryCa
   const {through, baseCurrency, totals} = summary;
   const throughDate = parseCalendarDate(through);
   const monthName = formatMonth(summary.month);
+  const hasMissing = summary.excluded.missingBaseAmount > 0;
   const period = !isCurrentMonth
     ? `spent in ${monthName}`
     : throughDate.getDate() === 1
@@ -33,12 +34,12 @@ export function SpendingSummaryCard({summary, isCurrentMonth}: SpendingSummaryCa
       : `spent 1–${format(throughDate, 'd MMMM')}`;
 
   return (
-    <Card className='min-w-0 p-5 sm:p-6' data-testid='spending-summary'>
-      <div className='flex flex-wrap items-start justify-between gap-x-6 gap-y-3'>
+    <Card className='@container min-w-0 p-5 sm:p-6' data-testid='spending-summary'>
+      <div className='grid grid-cols-1 items-start gap-x-6 gap-y-3 @min-[500px]:grid-cols-[auto_minmax(0,1fr)]'>
         <div>
           <Link
             to='/bank-transactions'
-            search={periodDrill(from, through)}
+            search={flowDrill('SPENDING', from, through, hasMissing)}
             className={cn(
               'font-mono text-[1.75rem] leading-tight font-semibold tracking-tight tabular-nums',
               linkClassName,
@@ -48,7 +49,7 @@ export function SpendingSummaryCard({summary, isCurrentMonth}: SpendingSummaryCa
           </Link>
           <p className='mt-1 text-sm text-muted-foreground'>{period}</p>
         </div>
-        <SpendingComparison summary={summary} />
+        <SpendingComparison summary={summary} isCurrentMonth={isCurrentMonth} />
       </div>
       <dl className='mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm'>
         <div className='flex items-baseline gap-1.5'>
@@ -56,7 +57,7 @@ export function SpendingSummaryCard({summary, isCurrentMonth}: SpendingSummaryCa
           <dd>
             <Link
               to='/bank-transactions'
-              search={periodDrill(from, through)}
+              search={flowDrill('INCOME', from, through, hasMissing)}
               className={cn('font-mono tabular-nums', linkClassName)}
             >
               {formatMoney(totals.income, baseCurrency)}
@@ -76,11 +77,11 @@ export function SpendingSummaryCard({summary, isCurrentMonth}: SpendingSummaryCa
   );
 }
 
-function SpendingComparison({summary}: Pick<SpendingSummaryCardProps, 'summary'>) {
+function SpendingComparison({summary, isCurrentMonth}: SpendingSummaryCardProps) {
   const {baseline, baseCurrency} = summary;
   if (baseline.spendingByThrough === null || baseline.months.length === 0) {
     return (
-      <p className='text-sm text-muted-foreground sm:pt-2 sm:text-right'>
+      <p className='text-sm text-muted-foreground @min-[500px]:pt-2 @min-[500px]:text-right'>
         No earlier months to compare with yet.
       </p>
     );
@@ -95,28 +96,33 @@ function SpendingComparison({summary}: Pick<SpendingSummaryCardProps, 'summary'>
       ? 'The same as usual'
       : `${formatMoney(Math.abs(difference) / 100, baseCurrency)} ${difference > 0 ? 'more' : 'less'} than usual`;
 
-  const range = baseline.daily[throughDate.getDate() - 1];
-  const isAboveRange = range?.high != null && spent > toCents(range.high);
+  const range = baseline.spendingRangeByThrough;
+  const isAboveRange = range !== null && spent > toCents(range.high);
   const verdict =
-    range?.low == null || range.high == null
+    range === null
       ? null
       : isAboveRange
-        ? 'above range'
+        ? `more than any of those months${isCurrentMonth ? ' by this day' : ''}`
         : spent < toCents(range.low)
-          ? 'below range'
-          : 'within range';
+          ? `less than any of those months${isCurrentMonth ? ' by this day' : ''}`
+          : `within your previous ${baseline.months.length} months${isCurrentMonth ? ' by this day' : ''}`;
   const history =
     baseline.months.length < BASELINE_MONTHS
       ? `only ${baseline.months.length} ${baseline.months.length === 1 ? 'month' : 'months'} of history`
       : null;
   const details = [
-    `Usual by the ${format(throughDate, 'do')}: ${formatMoney(baseline.spendingByThrough, baseCurrency)}`,
+    isCurrentMonth
+      ? `Usual by the ${format(throughDate, 'do')}: ${formatMoney(baseline.spendingByThrough, baseCurrency)}`
+      : `${formatMonthRange(baseline.months)} average: ${formatMoney(baseline.spendingByThrough, baseCurrency)}`,
     verdict,
     history,
   ].filter(Boolean);
 
   return (
-    <div className='text-sm sm:pt-1 sm:text-right' data-testid='spending-comparison'>
+    <div
+      className='min-w-0 text-sm @min-[500px]:pt-1 @min-[500px]:text-right'
+      data-testid='spending-comparison'
+    >
       <p className={cn('font-medium', isAboveRange && 'text-primary')}>{comparison}</p>
       <p className='mt-0.5 text-xs text-muted-foreground'>{details.join(' · ')}</p>
     </div>

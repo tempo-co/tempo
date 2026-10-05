@@ -95,7 +95,7 @@ test.describe('bank transactions', () => {
       }
       const url = new URL(route.request().url());
 
-      if (url.searchParams.get('filter[financialEventTypes][]') === 'CURRENCY_EXCHANGE') {
+      if (url.searchParams.get('filter[cashFlows][]') === 'CURRENCY_EXCHANGE') {
         const pageIndex = url.searchParams.get('pagination[pageIndex]');
         await fulfillJson(route, {
           transactions: pageIndex === '0' ? [exchangeTransaction] : [],
@@ -171,7 +171,7 @@ test.describe('bank transactions', () => {
     await expect(inspector.getByText('Rate unavailable', {exact: true})).toBeVisible();
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
 
-    await page.getByRole('button', {name: 'Activity'}).click();
+    await page.getByRole('button', {name: 'Cash flow', exact: true}).click();
     const activityOption = page.getByRole('option', {name: 'Currency exchange', exact: true});
     await expect(activityOption).toHaveAttribute('data-filter-selected', 'false');
     await activityOption.click();
@@ -182,9 +182,14 @@ test.describe('bank transactions', () => {
     ).toHaveCount(1);
     expect(new URL(page.url()).searchParams.get('pageIndex')).toBe('0');
 
+    // Links from before Activity merged into Cash flow keep filtering the same rows.
     await page.goto(
       '/bank-transactions?pageIndex=1&pageSize=10&financialEventTypes=%5B%22CURRENCY_EXCHANGE%22%5D',
     );
+    await expect(
+      page.getByRole('button', {name: 'Cash flow: Currency exchange', exact: true}),
+    ).toBeVisible();
+    await expect(page.getByTestId(/^bank-transaction-row-/)).toHaveCount(1);
     await page.getByRole('button', {name: 'Clear filters', exact: true}).first().click();
     await expect(
       page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Coffee shop'}),
@@ -194,7 +199,7 @@ test.describe('bank transactions', () => {
     await page.goto(
       '/bank-transactions?pageIndex=1&pageSize=10&financialEventTypes=%5B%22CURRENCY_EXCHANGE%22%5D',
     );
-    await page.getByRole('button', {name: /Activity/}).click();
+    await page.getByRole('button', {name: /^Cash flow/}).click();
     await page.getByRole('option', {name: 'Reset', exact: true}).click();
     await expect(
       page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Coffee shop'}),
@@ -208,11 +213,13 @@ test.describe('bank transactions', () => {
     ).toBeVisible();
 
     await page.goto('/bank-transactions');
-    await page.getByRole('button', {name: 'Activity', exact: true}).click();
+    await page.getByRole('button', {name: 'Cash flow', exact: true}).click();
     await page.getByRole('option', {name: 'Currency exchange', exact: true}).click();
     await expect(page.getByTestId(/^bank-transaction-row-/)).toHaveCount(1);
+    await page.keyboard.press('Escape');
     await page.goBack();
-    await expect(page.getByRole('button', {name: 'Activity', exact: true})).toBeVisible();
+    await expect(page.getByRole('button', {name: 'Cash flow', exact: true})).toBeVisible();
+    await expect(page.getByRole('button', {name: 'Activity'})).toHaveCount(0);
     await expect(
       page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Coffee shop'}),
     ).toBeVisible();
@@ -221,7 +228,9 @@ test.describe('bank transactions', () => {
     await page.goto('/bank-transactions');
     await page.getByTestId('bank-transaction-mobile-filters-trigger').click();
     const mobileFilters = page.getByTestId('bank-transaction-mobile-filters');
-    const activitySection = mobileFilters.getByRole('heading', {name: 'Activity'}).locator('..');
+    const activitySection = mobileFilters
+      .locator('section')
+      .filter({has: page.getByRole('heading', {name: 'Cash flow', exact: true})});
     await activitySection.getByRole('option', {name: 'Currency exchange', exact: true}).click();
     await expect(page.getByTestId(/^bank-transaction-row-/)).toHaveCount(1);
     await expect(page.getByTestId('bank-transaction-mobile-meta')).toContainText(
@@ -881,7 +890,8 @@ test.describe('bank transactions', () => {
     await expect(mobileFilters.getByRole('heading', {name: 'Booking date'})).toBeVisible();
     await expect(mobileFilters.getByRole('heading', {name: 'Categories'})).toBeVisible();
     await expect(mobileFilters.getByRole('heading', {name: 'Category source'})).toBeVisible();
-    await expect(mobileFilters.getByRole('heading', {name: 'Activity'})).toBeVisible();
+    await expect(mobileFilters.getByRole('heading', {name: 'Cash flow'})).toBeVisible();
+    await expect(mobileFilters.getByRole('heading', {name: 'Activity'})).toHaveCount(0);
     const mobileFiltersBody = page.getByTestId('bank-transaction-mobile-filters-body');
     await expect.poll(() => mobileFiltersBody.evaluate((element) => element.scrollTop)).toBe(0);
     await expect(mobileFiltersBody).toHaveCSS('padding-top', '16px');

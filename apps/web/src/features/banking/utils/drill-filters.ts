@@ -1,21 +1,17 @@
 import type {
-  BankTransactionBaseAmountFilterValue,
   BankTransactionCashFlowFilterValue,
   BankTransactionCategoryStatusFilterValue,
   BankTransactionFilterParams,
 } from '../types/bank-transaction';
 
-/** Chip labels for the filters Home links apply; Home's Attention rows reuse them. */
+/** Labels shared by the Transactions filters and Home's attention rows. */
 export const CASH_FLOW_LABELS: Record<BankTransactionCashFlowFilterValue, string> = {
   SPENDING: 'Spending',
   INCOME: 'Income',
-  INTERNAL: 'Internal',
+  INTERNAL: 'Internal movements',
+  CURRENCY_EXCHANGE: 'Currency exchange',
+  OWN_TRANSFER: 'Own transfer',
   UNKNOWN: 'Unknown direction',
-};
-
-export const BASE_AMOUNT_LABELS: Record<BankTransactionBaseAmountFilterValue, string> = {
-  PRESENT: 'Converted amount',
-  MISSING: 'No converted amount yet',
 };
 
 export const CATEGORY_STATUS_LABELS: Record<BankTransactionCategoryStatusFilterValue, string> = {
@@ -23,7 +19,7 @@ export const CATEGORY_STATUS_LABELS: Record<BankTransactionCategoryStatusFilterV
   CATEGORIZING: 'Categorizing',
 };
 
-/** True when the list carries a filter only the Home dashboard sets. */
+/** True when the list carries a filter Home's drill links can set. */
 export function hasDrillFilters(filters: BankTransactionFilterParams) {
   return (
     (filters.cashFlows?.length ?? 0) > 0 ||

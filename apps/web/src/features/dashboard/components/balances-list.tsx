@@ -2,6 +2,8 @@ import {Link} from '@tanstack/react-router';
 import {format} from 'date-fns';
 
 import {Card} from '@/components/ui/card';
+import {useGetSupportedBanks} from '@/features/banking/api/use-get-supported-banks';
+import {BankLogo} from '@/features/banking/components/bank-logo';
 import type {BankConnection} from '@/features/banking/types/bank-connection';
 import {getAutomaticSyncDetailsForConnection} from '@/features/banking/utils/bank-sync-status';
 import {resolveBankAccountLabel} from '@/features/banking/utils/formatters';
@@ -18,6 +20,7 @@ export function BalancesList({
   connections: BankConnection[];
   isCurrentMonth: boolean;
 }) {
+  const {supportedBanks} = useGetSupportedBanks(connections.length > 0);
   const accounts = connections.flatMap((connection) =>
     connection.bankAccounts
       .filter((account) => account.isActive)
@@ -59,8 +62,28 @@ export function BalancesList({
                 className='grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-3 py-3 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
               >
                 <div className='min-w-0'>
-                  <p className='text-sm break-words'>{resolveBankAccountLabel(account)}</p>
-                  <p className='text-xs text-muted-foreground'>{connection.aspspName}</p>
+                  <div className='flex items-center gap-3'>
+                    <BankLogo
+                      bank={{
+                        name: connection.aspspName,
+                        logoUrl: supportedBanks?.find(
+                          (bank) =>
+                            bank.name === connection.aspspName &&
+                            bank.country === connection.aspspCountry,
+                        )?.logoUrl,
+                      }}
+                      className='h-14 w-14'
+                      imageClassName='p-1.5'
+                      testId='bank-balance-logo'
+                    />
+                    <div className='min-w-0'>
+                      <p className='text-sm font-medium break-words'>{connection.aspspName}</p>
+                      <p className='mt-0.5 text-xs break-words text-muted-foreground'>
+                        {[account.name, account.alias].filter(Boolean).join(' · ') ||
+                          'Bank account'}
+                      </p>
+                    </div>
+                  </div>
                   {stale && (
                     <p className='text-xs text-muted-foreground'>
                       {formatNotSyncedSince(connection)}

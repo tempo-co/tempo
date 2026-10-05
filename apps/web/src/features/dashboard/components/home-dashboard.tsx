@@ -10,7 +10,7 @@ import {isConnectedBank} from '@/features/banking/utils/bank-sync-status';
 
 import {useGetBankTransactionReviewCounts} from '../api/use-get-bank-transaction-review-counts';
 import {useGetBankTransactionSummary} from '../api/use-get-bank-transaction-summary';
-import {localDate, monthDates} from '../utils/month';
+import {localDate, shiftMonth} from '../utils/month';
 import {AttentionList} from './attention-list';
 import {BalancesList} from './balances-list';
 import {CategoryBreakdown} from './category-breakdown';
@@ -65,8 +65,8 @@ export function HomeDashboard({month, isCurrentMonth}: HomeDashboardProps) {
 }
 
 function MonthlySpending({month, isCurrentMonth}: HomeDashboardProps) {
-  // The API cuts a past month at its last day, so a stable date keeps that month's cache key.
-  const asOf = isCurrentMonth ? localDate() : monthDates(month).to;
+  // A stable date after a past month ends selects whole-month history without changing its cache key each day.
+  const asOf = isCurrentMonth ? localDate() : `${shiftMonth(month, 1)}-01`;
   const {summary, isPending, isError, refetch} = useGetBankTransactionSummary(month, asOf);
   if (isPending) return <Skeleton className='h-96' aria-label='Loading spending' />;
   if (isError || !summary)

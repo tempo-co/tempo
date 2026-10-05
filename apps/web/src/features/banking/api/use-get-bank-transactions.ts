@@ -37,7 +37,6 @@ export const useGetBankTransactions = (
       bankAccountIds: searchParams.bankAccountIds,
       categories: searchParams.categories,
       categorySources: searchParams.categorySources,
-      financialEventTypes: searchParams.financialEventTypes,
       cashFlows: searchParams.cashFlows,
       baseAmount: searchParams.baseAmount,
       categoryStatuses: searchParams.categoryStatuses,
@@ -48,7 +47,6 @@ export const useGetBankTransactions = (
       searchParams.bookingDate,
       searchParams.categories,
       searchParams.categorySources,
-      searchParams.financialEventTypes,
       searchParams.cashFlows,
       searchParams.baseAmount,
       searchParams.categoryStatuses,
@@ -78,7 +76,6 @@ export const useGetBankTransactions = (
         appendArrayFilter(params, 'filter[bankAccountIds][]', filters.bankAccountIds);
         appendArrayFilter(params, 'filter[categories][]', filters.categories);
         appendArrayFilter(params, 'filter[categorySources][]', filters.categorySources);
-        appendArrayFilter(params, 'filter[financialEventTypes][]', filters.financialEventTypes);
         appendArrayFilter(params, 'filter[cashFlows][]', filters.cashFlows);
         if (filters.baseAmount) {
           params.append('filter[baseAmount]', filters.baseAmount);

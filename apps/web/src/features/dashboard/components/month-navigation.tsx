@@ -26,7 +26,7 @@ export function MonthNavigation({month, isCurrentMonth}: MonthNavigationProps) {
             <ChevronLeft aria-hidden='true' />
           </Link>
         </Button>
-        <h1 className='min-w-[9.5ch] text-center text-xl leading-tight font-semibold min-[360px]:text-2xl'>
+        <h1 className='w-[13ch] shrink-0 text-center text-xl leading-tight font-semibold whitespace-nowrap min-[360px]:text-2xl'>
           {formatMonth(month)}
         </h1>
         {isCurrentMonth ? (

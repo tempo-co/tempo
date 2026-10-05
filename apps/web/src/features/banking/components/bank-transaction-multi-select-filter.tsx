@@ -1,4 +1,4 @@
-import {Check} from 'lucide-react';
+import {Check, Minus} from 'lucide-react';
 
 import {Badge} from '@/components/ui/badge';
 import {Separator} from '@/components/ui/separator';
@@ -6,19 +6,26 @@ import {cn} from '@/utils/cn';
 
 type FilterCheckIndicatorProps = {
   isSelected: boolean;
+  isMixed?: boolean;
   className?: string;
 };
 
-export function FilterCheckIndicator({isSelected, className = 'mr-2'}: FilterCheckIndicatorProps) {
+export function FilterCheckIndicator({
+  isSelected,
+  isMixed = false,
+  className = 'mr-2',
+}: FilterCheckIndicatorProps) {
   return (
     <div
       className={cn(
         'flex h-4 w-4 items-center justify-center rounded-sm border border-primary',
         className,
-        isSelected ? 'bg-primary text-primary-foreground' : 'opacity-50 [&_svg]:invisible',
+        isSelected || isMixed
+          ? 'bg-primary text-primary-foreground'
+          : 'opacity-50 [&_svg]:invisible',
       )}
     >
-      <Check />
+      {isMixed ? <Minus /> : <Check />}
     </div>
   );
 }

@@ -5,6 +5,49 @@ import {API_URL, expect, test} from '../../fixtures';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
+for (const [flow, label, sign] of [
+  ['SPENDING', 'spending', -1],
+  ['INCOME', 'income', 1],
+] as const) {
+  test(`real ${label} total reconciles with its transaction drill`, async ({page}) => {
+    const response = await page.request.get(
+      `${API_URL}/bank-transactions/summary?month=2026-08&asOf=2026-10-04`,
+    );
+    const summary = (await response.json()) as BankTransactionSummary;
+    const totalCents = Math.round(Number(summary.totals[label]) * 100);
+    await page.goto('/?month=2026-08');
+    const card = page.getByTestId('spending-summary');
+    const link = card.getByRole('link', {
+      name: new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: summary.baseCurrency!,
+      }).format(Number(summary.totals[label])),
+      exact: true,
+    });
+    const listRequest = page.waitForRequest(
+      (request) =>
+        request.url().includes('/bank-transactions?') &&
+        request.url().includes(`filter%5BcashFlows%5D%5B%5D=${flow}`),
+    );
+    await link.first().click();
+    // Re-request every row the list asked for, so the sum covers all pages.
+    const url = new URL((await listRequest).url());
+    url.searchParams.set('pagination[pageIndex]', '0');
+    url.searchParams.set('pagination[pageSize]', '100');
+    const list = (await (await page.request.get(url.toString())).json()) as {
+      total: number;
+      transactions: {amountInBaseCurrency: string | null}[];
+    };
+    expect(list.total).toBeLessThanOrEqual(100);
+    expect(
+      list.transactions.reduce(
+        (sum, row) => sum + sign * Math.round(Number(row.amountInBaseCurrency) * 100),
+        0,
+      ),
+    ).toBe(totalCents);
+  });
+}
+
 test('real category count and amount reconcile with its transaction drill', async ({page}) => {
   const response = await page.request.get(
     `${API_URL}/bank-transactions/summary?month=2026-08&asOf=2026-10-04`,
@@ -29,8 +72,9 @@ test('real category count and amount reconcile with its transaction drill', asyn
   await row.click();
   const search = new URL(page.url()).searchParams;
   expect(JSON.parse(search.get('categories')!)).toEqual(['UNCATEGORIZED']);
-  expect(search.has('cashFlows')).toBe(false);
-  expect(search.has('baseAmount')).toBe(false);
+  // The link applies exactly the filters behind the total, so its list holds exactly the counted rows.
+  expect(JSON.parse(search.get('cashFlows')!)).toEqual(['SPENDING']);
+  expect(search.get('baseAmount')).toBe(summary.excluded.missingBaseAmount > 0 ? 'PRESENT' : null);
   const params = new URLSearchParams({
     'filter[bookingDate][from]': '2026-08-01',
     'filter[bookingDate][to]': '2026-08-31',
@@ -52,11 +96,8 @@ test('real category count and amount reconcile with its transaction drill', asyn
       0,
     ),
   ).toBe(spendingCents);
-  // The link only sets date and category, so the list may also hold rows spending leaves out.
-  params.delete('filter[cashFlows][]');
-  params.delete('filter[baseAmount]');
-  const drillResponse = await page.request.get(`${API_URL}/bank-transactions?${params}`);
-  const drill = (await drillResponse.json()) as {total: number};
-  expect(drill.total).toBeGreaterThanOrEqual(category.count);
-  await expect(page.getByText(`${drill.total} transactions`, {exact: true})).toBeVisible();
+  const countLabel = `${category.count} ${category.count === 1 ? 'transaction' : 'transactions'}`;
+  await expect(page.getByRole('heading', {name: 'Bank transactions'}).locator('..')).toContainText(
+    countLabel,
+  );
 });

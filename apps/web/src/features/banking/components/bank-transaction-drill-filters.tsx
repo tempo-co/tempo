@@ -4,26 +4,17 @@ import {X} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 
 import {BankTransactionFilterParams} from '../types/bank-transaction';
-import {BASE_AMOUNT_LABELS, CASH_FLOW_LABELS, CATEGORY_STATUS_LABELS} from '../utils/drill-filters';
+import {CATEGORY_STATUS_LABELS} from '../utils/drill-filters';
 
-type DrillFilterKey = 'cashFlows' | 'baseAmount' | 'categoryStatuses';
+type DrillFilterKey = 'categoryStatuses';
 
 function describeDrillFilters(filters: BankTransactionFilterParams) {
   const chips: {key: DrillFilterKey; label: string}[] = [];
-  if (filters.cashFlows?.length) {
-    chips.push({
-      key: 'cashFlows',
-      label: filters.cashFlows.map((value) => CASH_FLOW_LABELS[value]).join(' or '),
-    });
-  }
   if (filters.categoryStatuses?.length) {
     chips.push({
       key: 'categoryStatuses',
       label: filters.categoryStatuses.map((value) => CATEGORY_STATUS_LABELS[value]).join(' or '),
     });
-  }
-  if (filters.baseAmount) {
-    chips.push({key: 'baseAmount', label: BASE_AMOUNT_LABELS[filters.baseAmount]});
   }
   return chips;
 }
@@ -33,8 +24,7 @@ type BankTransactionDrillFiltersProps = {
 };
 
 /**
- * The filters a Home dashboard link applied, shown so the list explains itself and each can be
- * removed. They have no picker of their own.
+ * Categorization-status drills remain removable chips until they have a picker of their own.
  */
 export function BankTransactionDrillFilters({filters}: BankTransactionDrillFiltersProps) {
   const navigate = useNavigate({from: '/bank-transactions/'});

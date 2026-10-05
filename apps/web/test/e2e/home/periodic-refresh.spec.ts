@@ -70,9 +70,9 @@ test('Home refreshes derived financial data every 30 seconds while visible', asy
   const state = await mockDerivedData(page);
   await page.goto('/?month=2026-09');
   const spending = page.getByTestId('spending-summary');
-  const attention = page.getByRole('region', {name: 'Needs attention', exact: true});
+  const processing = page.getByRole('region', {name: 'Processing', exact: true});
   await expect(spending.getByRole('link', {name: '€1,200.00', exact: true})).toBeVisible();
-  await expect(attention).toContainText('3 transactions');
+  await expect(processing).toContainText('3 transactions');
   expect(state.reads).toEqual({summary: 1, review: 1, recent: 1});
 
   state.enriched = true;
@@ -81,7 +81,7 @@ test('Home refreshes derived financial data every 30 seconds while visible', asy
   await page.clock.runFor(1_500);
   await expect(spending.getByRole('link', {name: '€1,400.00', exact: true})).toBeVisible();
   // Every count is now zero, so the card disappears.
-  await expect(attention).toHaveCount(0);
+  await expect(processing).toHaveCount(0);
   await expect.poll(() => state.reads).toEqual({summary: 2, review: 2, recent: 2});
   // A background refresh keeps the rendered data instead of flashing skeletons.
   await expect(page.getByLabel('Loading spending')).toHaveCount(0);

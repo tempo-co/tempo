@@ -5,7 +5,7 @@ import {Area, CartesianGrid, ComposedChart, Line, ReferenceLine, XAxis, YAxis} f
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 
 import type {BankTransactionSummary} from '../types/bank-transaction-summary';
-import {parseCalendarDate, periodDrill} from '../utils/drill-links';
+import {flowDrill, parseCalendarDate} from '../utils/drill-links';
 import {formatMoney, formatWholeNumber} from '../utils/money';
 import {formatMonth, formatMonthRange} from '../utils/month';
 
@@ -14,6 +14,8 @@ type Props = {summary: BankTransactionSummary; isCurrentMonth: boolean};
 export function SpendingPaceChart({summary, isCurrentMonth}: Props) {
   const navigate = useNavigate();
   const {month, daily, baseline, baseCurrency, daysInMonth} = summary;
+  const hasMissing = summary.excluded.missingBaseAmount > 0;
+  const dayDrill = (date: string) => flowDrill('SPENDING', date, date, hasMissing);
   const hasBaseline = baseline.months.length > 0;
   const hasRange = baseline.months.length >= 2;
   const dateFor = (day: number) => `${month}-${String(day).padStart(2, '0')}`;
@@ -48,7 +50,7 @@ export function SpendingPaceChart({summary, isCurrentMonth}: Props) {
             const day = Number(state.activeLabel);
             if (day >= 1 && day <= daily.length) {
               const date = dateFor(day);
-              void navigate({to: '/bank-transactions', search: periodDrill(date, date)});
+              void navigate({to: '/bank-transactions', search: dayDrill(date)});
             }
           }}
         >
@@ -140,7 +142,12 @@ export function SpendingPaceChart({summary, isCurrentMonth}: Props) {
             Lowest to highest
           </span>
         )}
-        <span className='basis-full'>Hover a day for exact values · click to open it</span>
+        {hasBaseline && !isCurrentMonth && (
+          <span className='basis-full'>
+            Chart compares spending by the same day of each month; the headline compares full
+            months.
+          </span>
+        )}
       </div>
       <div className='sr-only focus-within:not-sr-only focus-within:mt-4 focus-within:max-w-full focus-within:overflow-x-auto'>
         <table
@@ -161,7 +168,7 @@ export function SpendingPaceChart({summary, isCurrentMonth}: Props) {
                 <td>
                   <Link
                     to='/bank-transactions'
-                    search={periodDrill(dateFor(day.day), dateFor(day.day))}
+                    search={dayDrill(dateFor(day.day))}
                     className='underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
                   >
                     {labelFor(day.day)}

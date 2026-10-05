@@ -76,7 +76,7 @@ test.describe('own transfers', () => {
     );
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
 
-    await page.getByRole('button', {name: 'Activity', exact: true}).click();
+    await page.getByRole('button', {name: 'Cash flow', exact: true}).click();
     await page.getByRole('option', {name: 'Own transfer', exact: true}).click();
     await expect(page.getByTestId(/^bank-transaction-row-/)).toHaveCount(5);
     await expect(page).toHaveURL(/OWN_TRANSFER/);

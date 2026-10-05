@@ -25,7 +25,7 @@ export function RecentTransactions({
   const dates = monthDates(month);
   const bookingDate = {from: parseCalendarDate(dates.from), to: parseCalendarDate(dates.to)};
   const {data, isPending, isPlaceholderData, isError, refetch} = useGetBankTransactions(
-    {pageIndex: 0, pageSize: 10, bookingDate},
+    {pageIndex: 0, pageSize: 5, bookingDate},
     {refetchInterval: HOME_REFRESH_INTERVAL_MS, staleTime: HOME_REFRESH_INTERVAL_MS},
   );
   const title = isCurrentMonth ? 'Recent' : `Latest in ${formatMonth(month)}`;
@@ -53,7 +53,7 @@ export function RecentTransactions({
       ) : !data?.transactions.length ? (
         <p className='text-sm text-muted-foreground'>No transactions this month.</p>
       ) : (
-        <ul className='-mx-3 divide-y divide-border/60'>
+        <ul className='-mx-3 -mb-3 divide-y divide-border/60'>
           {data.transactions.map((transaction) => (
             <li key={transaction.id}>
               <Link
