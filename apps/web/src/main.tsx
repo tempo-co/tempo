@@ -5,11 +5,11 @@ import ReactDOM from 'react-dom/client';
 
 import {App} from './app';
 import './index.css';
-import {queryClient} from './query-client';
+import {queryClient, signOut} from './query-client';
 import {createOfflinePersistence} from './utils/offline-storage';
 import {registerOfflineShell} from './utils/register-offline-shell';
 
-const persistOptions = createOfflinePersistence(queryClient);
+const persistOptions = createOfflinePersistence(queryClient, signOut);
 registerOfflineShell();
 
 const rootElement = document.getElementById('root');

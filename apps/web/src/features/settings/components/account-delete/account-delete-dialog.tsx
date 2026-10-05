@@ -1,5 +1,4 @@
 import {zodResolver} from '@hookform/resolvers/zod';
-import {useNavigate} from '@tanstack/react-router';
 import {Loader} from 'lucide-react';
 import {isValidElement, useState} from 'react';
 import {useForm} from 'react-hook-form';
@@ -27,7 +26,6 @@ type AccountDeleteDialogProps = {
 
 export function AccountDeleteDialog({children}: AccountDeleteDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const navigate = useNavigate();
   const {deleteAccount, isPending} = useDeleteAccount();
 
   const form = useForm<AccountDeleteDto>({
@@ -49,10 +47,7 @@ export function AccountDeleteDialog({children}: AccountDeleteDialogProps) {
           form.setError('password', {message: 'Invalid password.'}, {shouldFocus: true});
         }
       },
-      onSuccess: async () => {
-        setIsOpen(false);
-        await navigate({to: '/'});
-      },
+      onSuccess: () => setIsOpen(false),
     });
   };
 

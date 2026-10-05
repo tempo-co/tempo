@@ -42,12 +42,13 @@ test.describe('Account Settings: Delete account', () => {
     await accountSettingsPage.deleteConfirmButton.click();
     await expect(accountSettingsPage.deleteInvalidPasswordError).toBeVisible();
 
-    // Correct password deletes the account, signs the user out, and routes to '/'.
+    // Correct password deletes the account and signs the user out.
     await accountSettingsPage.deletePasswordInput.fill(password);
     await accountSettingsPage.deleteConfirmButton.click();
 
     await expect(page.getByText('Account deleted.')).toBeVisible();
-    await homePage.expectToBeOnPage();
+    await loginPage.expectToBeOnPage();
+    await expect(homePage.sidebarAccountName).not.toBeVisible();
 
     // The account is really gone: re-login fails.
     await loginPage.navigate();

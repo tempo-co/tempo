@@ -22,6 +22,9 @@ export class NetworkError extends HttpError {
 /** The session is gone (401); handled app-wide by sending the user to /login. */
 export class SessionExpiredError extends HttpError {}
 
+/** The tab signed out or in while the request was open; its reply belongs to another session. */
+export class SessionChangedError extends Error {}
+
 /** The API refused the request until the email is verified; handled app-wide via /verify-email. */
 export class EmailNotVerifiedError extends HttpError {}
 
@@ -90,15 +93,15 @@ export function beginLogout() {
 }
 
 /**
- * Ends the signed-in session in this tab. Responses to requests started before this call are
- * discarded, so a late reply cannot restore an account or its data after logout.
+ * Starts a new session in this tab. Responses to requests started before this call are discarded,
+ * so a late reply can neither restore a signed-out account nor sign out the next one.
  */
-export function endSession() {
+export function changeSession() {
   sessionEpoch++;
 }
 
 function assertSameSession(epoch: number) {
-  if (epoch !== sessionEpoch) throw new SessionExpiredError(401, 'Signed out');
+  if (epoch !== sessionEpoch) throw new SessionChangedError('Session changed');
 }
 
 const shouldRedirect = (resource: string, method?: string) => {
