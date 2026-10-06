@@ -32,6 +32,8 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
 
 ## Build, lint, format, and test
 
+- Size local verification to the change: run relevant static checks and focused tests, including regression proof where appropriate. Let PR CI run the full suite on fresh services. Run the full suite locally for cross-cutting changes, gaps in CI, or failures requiring reproduction. A complete passing CI run on the current head is the delivery gate.
+
 - `npm run generate-routes` — regenerate the route tree.
 - `npm run build` — generate routes, run `tsc -b`, then run `vite build`.
 - `npm run lint:check` — CI lint check; does not modify files.
