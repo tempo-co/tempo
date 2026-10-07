@@ -99,6 +99,7 @@ export function BalancesList({
                 </div>
                 {account.currency !== baseCurrency &&
                   account.currentBalanceInBaseCurrency != null &&
+                  toCents(account.currentBalanceInBaseCurrency) !== 0 &&
                   baseCurrency && (
                     <p className='col-span-2 text-right text-xs text-muted-foreground'>
                       ≈ {formatMoney(account.currentBalanceInBaseCurrency, baseCurrency)}

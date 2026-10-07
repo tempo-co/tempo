@@ -30,6 +30,15 @@ test('shows foreign balance provenance and excludes missing conversions', async 
           currentBalanceInBaseCurrency: null,
           baseCurrencyRateDate: null,
         },
+        {
+          ...connection.bankAccounts[0],
+          id: '00000000-0000-4000-8000-000000000098',
+          alias: 'Empty wallet',
+          currency: 'GBP',
+          currentBalanceAmount: '0.00',
+          currentBalanceInBaseCurrency: '0.00',
+          baseCurrencyRateDate: '2026-09-30',
+        },
       ],
     })),
   );
@@ -38,6 +47,9 @@ test('shows foreign balance provenance and excludes missing conversions', async 
   const balances = page.getByRole('region', {name: 'Balances'});
   await expect(balances).toContainText('≈ €100.00 · ECB rate of 30 Sep 2026');
   await expect(balances).toContainText('€100.00 excluding Travel wallet');
+  await expect(balances.getByRole('listitem').filter({hasText: 'Empty wallet'})).not.toContainText(
+    'ECB rate',
+  );
   await expect(balances).toContainText('not synced since 26 Aug');
   await expect(balances).toContainText('today');
   await expectNoHorizontalOverflow(page);
