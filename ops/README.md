@@ -39,7 +39,7 @@ PostgreSQL, Redis and the API share the `default` network. The API also joins th
 
 ## Staging
 
-An isolated rootless Docker daemon (`tempo-staging-docker.service`) runs a separate copy of the stack on `http://127.0.0.1:8119/tempo/`. Deploy any API/web pair with one command; an omitted component keeps its current image:
+An isolated rootless Docker daemon (`tempo-staging-docker.service`) runs a separate copy of the stack on `http://127.0.0.1:8119/`. Deploy any API/web pair with one command; an omitted component keeps its current image:
 
 ```bash
 ops/install.sh staging                         # after changing ops/

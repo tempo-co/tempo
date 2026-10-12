@@ -20,7 +20,7 @@ export DOCKER_CONFIG=$CONFIG_DIR/docker-config
 TEMP_DB=tempo_staging_refresh
 PREVIOUS_DB=tempo_staging_previous
 DUMP_PATH=/tmp/tempo-staging-refresh.dump
-HEALTH_URLS=(http://127.0.0.1:8119/tempo/api/health http://127.0.0.1:8119/tempo/)
+HEALTH_URLS=(http://127.0.0.1:8119/api/health http://127.0.0.1:8119/)
 
 log() { echo "tempo-staging-refresh: $*"; }
 die() {
