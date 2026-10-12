@@ -4,6 +4,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       tanstack-query:
         patterns:
@@ -12,3 +14,13 @@ updates:
         patterns:
           - '@tanstack/*router*'
           - '@tanstack/zod-adapter'
+      # Radix packages share internals (layers, focus scope); bump them together to keep one copy.
+      radix:
+        patterns:
+          - '@radix-ui/*'
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # date-fns 4 needs react-day-picker 9, which changes the calendar component's API.
+      - dependency-name: date-fns
+        update-types: ['version-update:semver-major']
