@@ -84,7 +84,7 @@ services:
         restart: unless-stopped
         environment:
             NODE_ENV: production
-            WEB_BASE_URL: http://127.0.0.1:8119/tempo
+            WEB_BASE_URL: http://127.0.0.1:8119
             API_URL: http://api:3000
             PORT: '3000'
             DB_HOST: postgres
@@ -108,7 +108,7 @@ services:
             BANKING_INTEGRATION_ENABLED: 'false'
             ENABLE_BANKING_API_URL: https://disabled.invalid
             ENABLE_BANKING_APPLICATION_ID: tempo-staging-disabled
-            ENABLE_BANKING_REDIRECT_URL: http://127.0.0.1:8119/tempo/bank-connections/callback
+            ENABLE_BANKING_REDIRECT_URL: http://127.0.0.1:8119/bank-connections/callback
             BANKING_SESSION_ENCRYPTION_KEY_B64: ${BANKING_SESSION_ENCRYPTION_KEY_B64:?BANKING_SESSION_ENCRYPTION_KEY_B64 must be set}
             BANKING_SYNC_INTERVAL: 6h
             BANKING_SYNC_DISPATCH_INTERVAL: 10m
@@ -161,7 +161,7 @@ services:
             api:
                 condition: service_healthy
         healthcheck:
-            test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:8080/tempo/']
+            test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:8080/']
             interval: 30s
             timeout: 5s
             retries: 5

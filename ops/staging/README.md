@@ -8,7 +8,7 @@ Staging is a separate copy of Tempo on this host, deployed with `tempo-deploy st
 - Compose project `tempo-staging`: its own PostgreSQL, Redis, Mailpit, API, web, volumes and networks
 - Config: `~/.config/tempo-staging/staging.compose.yml` and `staging.env` (secrets plus the deployed image digests; template in `staging.env.example`)
 - State: `~/.local/state/tempo-staging/`
-- URLs: app `http://127.0.0.1:8119/tempo/`, Mailpit `http://127.0.0.1:8125/`, both loopback only
+- URLs: app `http://127.0.0.1:8119/`, Mailpit `http://127.0.0.1:8125/`, both loopback only
 - Web images built before the staging Nginx config was removed (before tempo-web#98) proxy `/tempo/mailpit/` and no longer start on staging; deploy a newer web tag instead.
 
 ## Safety
