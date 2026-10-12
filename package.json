@@ -50,7 +50,7 @@
 		"connect-redis": "^8.1.0",
 		"express-session": "^1.19.0",
 		"fast-geoip": "^1.1.88",
-		"handlebars": "^4.7.9",
+		"handlebars": "^4.7.10",
 		"helmet": "^8.3.0",
 		"ioredis": "^5.11.1",
 		"ms": "^2.1.3",
