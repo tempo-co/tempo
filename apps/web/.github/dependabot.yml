@@ -4,3 +4,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      tanstack-query:
+        patterns:
+          - '@tanstack/*query*'
+      tanstack-router:
+        patterns:
+          - '@tanstack/*router*'
+          - '@tanstack/zod-adapter'
