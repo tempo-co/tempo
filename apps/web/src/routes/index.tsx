@@ -3,7 +3,6 @@ import {zodValidator} from '@tanstack/zod-adapter';
 import {z} from 'zod';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
-import {AppHeaderLayout} from '@/components/shared/layout/app-header-layout';
 import {HomeDashboard} from '@/features/dashboard/components/home-dashboard';
 import {MONTH_PATTERN, currentMonth} from '@/features/dashboard/utils/month';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
@@ -27,13 +26,8 @@ function Index() {
   const month = search.month && search.month < thisMonth ? search.month : thisMonth;
 
   return (
-    <>
-      <AppHeaderLayout>
-        <span className='text-sm font-medium'>Home</span>
-      </AppHeaderLayout>
-      <AppBodyLayout>
-        <HomeDashboard month={month} isCurrentMonth={month === thisMonth} />
-      </AppBodyLayout>
-    </>
+    <AppBodyLayout>
+      <HomeDashboard month={month} isCurrentMonth={month === thisMonth} />
+    </AppBodyLayout>
   );
 }

@@ -1,4 +1,4 @@
-import {format, formatDistanceToNow} from 'date-fns';
+import {format, formatDistanceToNowStrict} from 'date-fns';
 import {createElement} from 'react';
 
 import {
@@ -20,85 +20,79 @@ type SessionCardProps = {
   session: Session;
 };
 
+/** One row of the sessions list. The action stays visible: rows must work without hover. */
 export function SessionCard({session}: SessionCardProps) {
   const createdAt = format(session.createdAt, 'MMM d, yyyy HH:mm');
   const lastSeenAt = format(session.lastSeenAt, 'MMM d, yyyy HH:mm');
-  const lastSeenAtRelative = formatDistanceToNow(session.lastSeenAt, {addSuffix: true});
+  const lastSeenAtRelative = formatDistanceToNowStrict(session.lastSeenAt, {addSuffix: true});
 
   return (
     <Dialog>
       <div
-        className='group relative rounded-card border bg-card text-card-foreground shadow-xs'
+        className='flex min-h-16 items-center gap-2 pr-4'
         data-testid='session-card'
         data-current-session={session.isCurrent}
       >
         <DialogTrigger asChild>
           <button
             type='button'
-            className='flex min-h-18 w-full items-center rounded-card p-4 pr-24 text-left transition-colors hover:bg-accent/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden'
+            className='flex min-w-0 flex-1 items-center gap-3 self-stretch py-3 pl-4 text-left transition-colors hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset'
           >
-            <span className='flex min-w-0 flex-1 items-center gap-3'>
-              <span className='shrink-0 rounded-lg bg-accent p-2 text-muted-foreground'>
-                {createElement(getSessionIcon(session), {
-                  className: 'h-5 w-5 text-muted-foreground',
-                })}
-              </span>
-              <span className='min-w-0 flex-1'>
-                <span className='block truncate text-sm font-medium'>{session.name}</span>
-                <span className='block text-xs text-muted-foreground'>
-                  {session.isCurrent ? (
-                    <span className='mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1'>
-                      <span className='inline-flex items-center gap-1.5 font-medium text-success'>
-                        <span
-                          aria-hidden='true'
-                          className='block h-2 w-2 rounded-full bg-success'
-                        ></span>
-                        Current session
-                      </span>
-                      <span className='hidden sm:inline'>·</span>
-                      <span className='hidden sm:inline'>{session.location}</span>
+            {createElement(getSessionIcon(session), {
+              className: 'size-5 shrink-0 text-muted-foreground',
+              'aria-hidden': true,
+            })}
+            <span className='min-w-0 flex-1'>
+              <span className='block truncate text-sm font-medium'>{session.name}</span>
+              <span className='mt-0.5 flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground'>
+                {session.isCurrent ? (
+                  <span className='inline-flex items-center gap-1.5 font-medium text-success'>
+                    <span aria-hidden='true' className='block size-1.5 rounded-full bg-success' />
+                    This device
+                  </span>
+                ) : (
+                  <span title={lastSeenAt}>{`Active ${lastSeenAtRelative}`}</span>
+                )}
+                {session.location && (
+                  <>
+                    <span aria-hidden='true' className='max-sm:hidden'>
+                      ·
                     </span>
-                  ) : (
-                    <span
-                      className='mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1'
-                      title={lastSeenAt}
-                    >
-                      <span>{`Last seen ${lastSeenAtRelative}`}</span>
-                      <span className='hidden sm:inline'>·</span>
-                      <span className='hidden sm:inline'>{session.location}</span>
-                    </span>
-                  )}
-                </span>
+                    <span className='max-sm:hidden'>{session.location}</span>
+                  </>
+                )}
               </span>
             </span>
           </button>
         </DialogTrigger>
-        <div className='absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-1 sm:invisible sm:opacity-0 sm:transition-opacity sm:duration-150 sm:ease-in-out sm:group-hover:visible sm:group-hover:opacity-100'>
-          {session.isCurrent ? <LogOutDialog /> : <SessionRevokeDialog session={session} />}
-        </div>
+        {session.isCurrent ? <LogOutDialog /> : <SessionRevokeDialog session={session} />}
       </div>
       <DialogContent className='sm:max-w-md'>
         <DialogHeader>
-          <DialogTitle>{session.name}</DialogTitle>
+          <DialogTitle className='wrap-anywhere'>{session.name}</DialogTitle>
         </DialogHeader>
-        <div className='grid gap-4 py-4 text-sm'>
-          <div className='flex items-center justify-between border-b border-border/50 pb-4 capitalize'>
-            <span className='text-muted-foreground'>Device</span>
-            <span>{session.deviceType}</span>
+        <dl className='divide-y text-sm'>
+          <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3 capitalize'>
+            <dt className='text-muted-foreground'>Device</dt>
+            <dd className='text-right wrap-anywhere'>{session.deviceType}</dd>
           </div>
-          <div className='flex items-center justify-between border-b border-border/50 pb-4'>
-            <span className='text-muted-foreground'>IP Address</span>
-            <span className='font-mono'>{session.ip}</span>
+          <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3'>
+            <dt className='text-muted-foreground'>IP address</dt>
+            <dd className='text-right font-mono wrap-anywhere'>{session.ip}</dd>
           </div>
-          <div className='flex items-center justify-between border-b border-border/50 pb-4'>
-            <span className='text-muted-foreground'>Location</span>
-            <span>{session.location}</span>
+          <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3'>
+            <dt className='text-muted-foreground'>Location</dt>
+            <dd className='text-right wrap-anywhere'>{session.location}</dd>
           </div>
-          <div className='flex items-center justify-between pb-4'>
-            <span className='text-muted-foreground'>Signed in at</span>
-            <span>{createdAt}</span>
+          <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3'>
+            <dt className='text-muted-foreground'>Signed in</dt>
+            <dd className='text-right wrap-anywhere'>{createdAt}</dd>
           </div>
-        </div>
+          <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3'>
+            <dt className='text-muted-foreground'>Last active</dt>
+            <dd className='text-right wrap-anywhere'>{lastSeenAt}</dd>
+          </div>
+        </dl>
         <DialogFooter>
           <DialogClose asChild>
             {session.isCurrent ? (

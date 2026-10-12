@@ -80,8 +80,9 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
     <ResponsiveDialog open={isOpen} onOpenChange={handleOpenChange}>
       <ResponsiveDialogTrigger asChild>
         <Button
-          variant='ghost'
-          className='min-h-11 w-full sm:w-auto'
+          variant='outline'
+          size='sm'
+          className='min-w-20 max-sm:h-11'
           data-testid='change-email-button'
         >
           Change

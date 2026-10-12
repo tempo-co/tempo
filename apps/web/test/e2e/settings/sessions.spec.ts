@@ -42,7 +42,6 @@ test.describe.serial('Account Settings: Sessions', () => {
 
   test('should revoke another session successfully', async () => {
     const otherSessionCard = securitySettingsPage.otherSessionCards.first();
-    await otherSessionCard.hover();
     await securitySettingsPage.getRevokeButton(otherSessionCard).click();
     await securitySettingsPage.revokeButtonConfirm.click();
 
@@ -64,7 +63,6 @@ test.describe.serial('Account Settings: Sessions', () => {
   });
 
   test('should log out of the current session', async () => {
-    await securitySettingsPage.currentSessionCard.hover();
     await securitySettingsPage.logOutButton.click();
     await securitySettingsPage.logOutButtonConfirm.click();
 

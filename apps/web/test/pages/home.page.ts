@@ -2,10 +2,10 @@ import {Locator, Page, expect} from '@playwright/test';
 
 export class HomePage {
   readonly page: Page;
-  readonly sidebarAccountName: Locator;
-  readonly sidebarAccountEmail: Locator;
-  readonly sidebarAccountMenuTrigger: Locator;
-  readonly sidebarLogOutButton: Locator;
+  readonly accountName: Locator;
+  readonly accountEmail: Locator;
+  readonly accountMenuTrigger: Locator;
+  readonly logOutButton: Locator;
   readonly welcomeToastTitle: Locator;
   readonly welcomeToastDescription: Locator;
   readonly alreadyVerifiedToastTitle: Locator;
@@ -20,10 +20,10 @@ export class HomePage {
 
   constructor(page: Page) {
     this.page = page;
-    this.sidebarAccountName = page.getByTestId('sidebar-current-account-name');
-    this.sidebarAccountEmail = page.getByTestId('sidebar-current-account-email');
-    this.sidebarAccountMenuTrigger = page.getByTestId('account-menu-trigger');
-    this.sidebarLogOutButton = page.getByTestId('log-out-button');
+    this.accountName = page.getByTestId('current-account-name');
+    this.accountEmail = page.getByTestId('current-account-email');
+    this.accountMenuTrigger = page.getByTestId('account-menu-trigger');
+    this.logOutButton = page.getByTestId('log-out-button');
     this.welcomeToastTitle = page.getByText('Welcome to Tempo!');
     this.welcomeToastDescription = page.getByText('Your email has been verified.');
     this.alreadyVerifiedToastTitle = page.getByText('Your email has already been verified.');
@@ -49,12 +49,12 @@ export class HomePage {
   }
 
   async expectUserLoggedIn() {
-    await expect(this.sidebarAccountName).toBeVisible();
-    await expect(this.sidebarAccountEmail).toBeVisible();
+    await expect(this.accountName).toBeVisible();
+    await expect(this.accountEmail).toBeVisible();
   }
 
   async logOut() {
-    await this.sidebarAccountMenuTrigger.click();
-    await this.sidebarLogOutButton.click();
+    await this.accountMenuTrigger.click();
+    await this.logOutButton.click();
   }
 }

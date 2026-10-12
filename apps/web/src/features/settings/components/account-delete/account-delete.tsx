@@ -1,29 +1,31 @@
 import {Button} from '@/components/ui/button';
 
+import {SettingsList, SettingsRow} from '../settings-group';
 import {AccountDeleteDialog} from './account-delete-dialog';
 
+/** A separate one-row group; the confirmation dialog carries the full consequences. */
 export function AccountDelete() {
   return (
-    <section aria-labelledby='danger-zone-heading' className='space-y-3 pt-2'>
-      <div className='space-y-1'>
-        <h2 id='danger-zone-heading' className='text-lg font-semibold'>
-          Danger zone
-        </h2>
-      </div>
-      <div className='flex flex-col items-start justify-between gap-4 rounded-card border border-destructive/50 bg-card p-4 sm:flex-row sm:items-center sm:p-5'>
-        <div className='min-w-0'>
-          <p className='text-sm font-medium'>Permanently delete your account</p>
-        </div>
-        <AccountDeleteDialog>
-          <Button
-            variant='destructive'
-            className='min-h-11 w-full shrink-0 sm:w-fit'
-            data-testid='delete-account-button'
-          >
-            Delete account
-          </Button>
-        </AccountDeleteDialog>
-      </div>
+    <section aria-label='Delete account'>
+      <SettingsList>
+        <SettingsRow
+          label='Delete account'
+          value='Permanently removes all your bank data.'
+          action={
+            <AccountDeleteDialog>
+              {/* Red is reserved for the confirmation dialog, where the irreversible step happens. */}
+              <Button
+                variant='outline'
+                size='sm'
+                className='min-w-20 max-sm:h-11'
+                data-testid='delete-account-button'
+              >
+                Delete
+              </Button>
+            </AccountDeleteDialog>
+          }
+        />
+      </SettingsList>
     </section>
   );
 }

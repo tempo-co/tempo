@@ -48,7 +48,7 @@ test.describe('Account Settings: Delete account', () => {
 
     await expect(page.getByText('Account deleted.')).toBeVisible();
     await loginPage.expectToBeOnPage();
-    await expect(homePage.sidebarAccountName).not.toBeVisible();
+    await expect(homePage.accountName).not.toBeVisible();
 
     // The account is really gone: re-login fails.
     await loginPage.navigate();

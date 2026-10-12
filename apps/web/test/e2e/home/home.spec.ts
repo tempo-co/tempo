@@ -9,7 +9,7 @@ import {expectNoHorizontalOverflow} from '../../utils/layout';
 test.describe('Home without banks', () => {
   test('prompts to connect a bank', async ({page, homePage, freshAccount}) => {
     await page.goto('/');
-    await expect(homePage.sidebarAccountEmail).toHaveText(freshAccount.email);
+    await expect(homePage.accountEmail).toHaveText(freshAccount.email);
 
     await expect(homePage.emptyStateTitle).toBeVisible();
     await homePage.connectBankLink.click();

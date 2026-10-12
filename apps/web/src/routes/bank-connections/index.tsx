@@ -5,12 +5,10 @@ import {toast} from 'sonner';
 import {z} from 'zod';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
-import {AppHeaderLayout} from '@/components/shared/layout/app-header-layout';
 import {LoadingBar} from '@/components/shared/loading-bar';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
 import {BankConnectionList} from '@/features/banking/components/bank-connection-list';
 import {BankTransactionDetailsDialog} from '@/features/banking/components/bank-transaction-details-dialog';
-import {BankingBreadcrumb} from '@/features/banking/components/banking-breadcrumb';
 import {useBankTransactionInspector} from '@/hooks/use-bank-transaction-inspector';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 import {savedDataStatus} from '@/utils/query-status';
@@ -62,9 +60,6 @@ function BankConnectionsIndex() {
   return (
     <>
       <LoadingBar isPending={isPending} />
-      <AppHeaderLayout>
-        <BankingBreadcrumb pageLabel='Bank connections' />
-      </AppHeaderLayout>
       <AppBodyLayout className='max-md:my-6'>
         <BankConnectionList
           bankConnections={bankConnections || []}

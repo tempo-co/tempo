@@ -16,12 +16,11 @@ export function ThemeSwitcher() {
   return (
     <ToggleGroup
       type='single'
-      variant='outline'
       aria-labelledby='theme-heading'
       value={theme}
       // Radix clears the value when the active item is clicked again; keep a theme selected.
       onValueChange={(value) => value && setTheme(value as Theme)}
-      className='w-full sm:w-fit'
+      className='grid grid-cols-3 gap-0 divide-x rounded-card border bg-card'
     >
       {themes.map((value) => {
         const Icon = icons[value];
@@ -29,9 +28,10 @@ export function ThemeSwitcher() {
           <ToggleGroupItem
             key={value}
             value={value}
-            className='min-h-11 flex-1 hover:bg-muted/60 data-[state=on]:border-primary data-[state=on]:font-semibold data-[state=on]:text-foreground data-[state=on]:hover:bg-accent sm:min-w-28 sm:flex-none'
+            // A chosen value, not navigation: clay ring and icon instead of an underline.
+            className='h-auto min-h-16 flex-col gap-1.5 rounded-none py-3 text-muted-foreground hover:bg-accent/60 hover:text-foreground focus-visible:ring-offset-0 focus-visible:ring-inset data-[state=on]:bg-accent data-[state=on]:font-semibold data-[state=on]:text-foreground data-[state=on]:ring-2 data-[state=on]:ring-primary data-[state=on]:ring-inset [&_svg]:size-5 data-[state=on]:[&_svg]:text-primary'
           >
-            <Icon />
+            <Icon aria-hidden />
             {value.charAt(0).toUpperCase() + value.slice(1)}
           </ToggleGroupItem>
         );

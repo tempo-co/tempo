@@ -155,7 +155,7 @@ test('logout removes saved Home data and prevents an offline reload from reopeni
 }) => {
   await mockHome(page);
   await openSavedHome(page);
-  await expect(homePage.sidebarAccountName).toHaveText(freshAccount.name);
+  await expect(homePage.accountName).toHaveText(freshAccount.name);
   await expect
     .poll(async () =>
       (await readCache(page))?.clientState.queries.some(

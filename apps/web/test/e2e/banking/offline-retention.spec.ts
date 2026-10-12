@@ -133,7 +133,7 @@ test.describe('offline retention', () => {
     await search(page, 'Provider', 'Provider purchase');
     await expect(saveFailedToast(page)).toBeVisible();
     expect(await savedSearches(page)).toEqual(['Coffee', 'Salary']);
-    await expect(new HomePage(page).sidebarAccountName).toBeVisible();
+    await expect(new HomePage(page).accountName).toBeVisible();
     await expect(page).toHaveURL(/\/bank-transactions/);
 
     await page.evaluate(() => Reflect.deleteProperty(window, 'tempoStorageFull'));

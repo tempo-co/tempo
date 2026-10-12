@@ -18,7 +18,12 @@ export function PasswordChangeDialog() {
   return (
     <ResponsiveDialog open={isOpen} onOpenChange={setIsOpen}>
       <ResponsiveDialogTrigger asChild>
-        <Button variant='ghost' className='min-h-11' data-testid='change-password-button'>
+        <Button
+          variant='outline'
+          size='sm'
+          className='min-w-20 max-sm:h-11'
+          data-testid='change-password-button'
+        >
           Change
         </Button>
       </ResponsiveDialogTrigger>

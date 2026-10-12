@@ -17,12 +17,9 @@ function SettingsSecurityIndex() {
   }
 
   return (
-    <div className='w-full'>
-      <h1 className='mb-8 text-2xl font-semibold tracking-tight'>Security & access</h1>
-      <div className='space-y-10'>
-        <SessionList />
-        <PasswordChangeCard />
-      </div>
+    <div className='space-y-10'>
+      <PasswordChangeCard />
+      <SessionList />
     </div>
   );
 }

@@ -10,18 +10,18 @@ export function SessionRevokeAllDialog() {
     <ConfirmActionDialog
       trigger={
         <Button
-          variant='ghost'
-          className='min-h-11 w-fit text-foreground sm:min-h-9'
+          variant='outline'
+          className='min-w-20 max-sm:h-11'
           size='sm'
           data-testid='revoke-all-sessions-button'
         >
-          Revoke all
+          Log out others
         </Button>
       }
-      title='Revoke access'
-      description='Revoke all other sessions?'
-      confirmLabel='Revoke'
-      pendingLabel='Revoking...'
+      title='Log out other sessions'
+      description='Log out every session except this one?'
+      confirmLabel='Log out others'
+      pendingLabel='Logging out...'
       confirmVariant='destructive'
       confirmTestId='revoke-all-sessions-button-confirm'
       isPending={isPending}

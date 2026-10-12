@@ -1376,7 +1376,7 @@ test.describe('bank transactions without synced data', () => {
     freshAccount,
   }) => {
     await page.goto('/bank-transactions');
-    await expect(page.getByTestId('sidebar-current-account-email')).toHaveText(freshAccount.email);
+    await expect(page.getByTestId('current-account-email')).toHaveText(freshAccount.email);
 
     await expect(page.getByRole('heading', {name: 'No bank transactions found'})).toBeVisible();
     await expect(

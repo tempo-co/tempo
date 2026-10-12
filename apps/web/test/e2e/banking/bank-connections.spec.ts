@@ -676,14 +676,6 @@ test.describe('bank connections', () => {
     expect(headingGroupBox.height).toBeLessThan(120);
     expect(connectButtonBox.x).toBe(16);
     await expectNoHorizontalOverflow(page);
-
-    const sidebarTrigger = page.locator('[data-sidebar="trigger"]');
-    await sidebarTrigger.click();
-    const mobileSidebar = page.locator('[data-sidebar="sidebar"][data-mobile="true"]');
-    await expect(mobileSidebar).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(mobileSidebar).toBeHidden();
-    await expect(sidebarTrigger).toBeFocused();
   });
 
   test('wraps multiple currency totals without phone overflow', async ({page}) => {
@@ -760,7 +752,7 @@ test.describe('bank connections', () => {
     const connectionCard = page
       .locator('[data-testid^="bank-connection-"][aria-labelledby]')
       .first();
-    const sidebarTrigger = page.locator('[data-sidebar="trigger"]');
+    const activeTab = page.getByTestId('app-tab-bar').getByRole('link', {name: 'Connections'});
 
     await expect(connectionCard).toBeVisible();
     await connectionCard.getByTestId(/^connection-card-toggle-/).click();
@@ -768,14 +760,14 @@ test.describe('bank connections', () => {
     await expect(page.getByRole('heading', {name: 'Transactions'})).toBeVisible();
     await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
     await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
-    await expect(sidebarTrigger).toBeVisible();
+    await expect(activeTab).toHaveAttribute('aria-current', 'page');
 
-    const [connectionCardBox, sidebarTriggerBox] = await Promise.all([
+    const [connectionCardBox, activeTabBox] = await Promise.all([
       boxOf(connectionCard),
-      boxOf(sidebarTrigger),
+      boxOf(activeTab),
     ]);
     expect(connectionCardBox.x + connectionCardBox.width).toBeLessThanOrEqual(320);
-    expect(sidebarTriggerBox.height).toBeGreaterThanOrEqual(44);
+    expect(activeTabBox.height).toBeGreaterThanOrEqual(44);
     await expectNoHorizontalOverflow(page);
   });
 
@@ -1026,7 +1018,7 @@ test.describe('bank connection loading errors', () => {
 test.describe('bank connections without bank connections', () => {
   test('shows the connect prompt without bank connections', async ({page, freshAccount}) => {
     await page.goto('/bank-connections');
-    await expect(page.getByTestId('sidebar-current-account-email')).toHaveText(freshAccount.email);
+    await expect(page.getByTestId('current-account-email')).toHaveText(freshAccount.email);
 
     await expect(page.getByRole('heading', {name: 'No bank connections'})).toBeVisible();
     await expect(page.getByRole('button', {name: 'Connect a bank'})).toHaveCount(1);

@@ -1,10 +1,14 @@
 import {createFileRoute} from '@tanstack/react-router';
 
-import {Card} from '@/components/ui/card';
 import {Skeleton} from '@/components/ui/skeleton';
 import {AccountDelete} from '@/features/settings/components/account-delete/account-delete';
 import {EmailChangeDialog} from '@/features/settings/components/email-change/email-change-dialog';
-import {NameChangeForm} from '@/features/settings/components/name-change-form';
+import {NameChangeDialog} from '@/features/settings/components/name-change-dialog';
+import {
+  SettingsGroup,
+  SettingsList,
+  SettingsRow,
+} from '@/features/settings/components/settings-group';
 import {useCurrentAccount} from '@/hooks/use-current-account';
 
 export const Route = createFileRoute('/settings/account/')({
@@ -19,44 +23,23 @@ function SettingsAccountIndex() {
   }
 
   return (
-    <div className='w-full'>
-      <h1 className='mb-8 text-2xl font-semibold tracking-tight'>Account</h1>
-      <div className='space-y-10'>
-        <section aria-labelledby='name-heading' className='space-y-3'>
-          <div className='space-y-1'>
-            <h2 id='name-heading' className='text-lg font-semibold'>
-              Name
-            </h2>
-            <p className='max-w-136 text-sm text-muted-foreground'>
-              Your display name as it appears in the application.
-            </p>
-          </div>
-          <Card className='p-4 sm:p-5'>
-            <NameChangeForm currentName={currentAccount.name} />
-          </Card>
-        </section>
+    <div className='space-y-10'>
+      <SettingsGroup id='profile-heading' title='Profile'>
+        <SettingsList>
+          <SettingsRow
+            label='Name'
+            value={currentAccount.name}
+            action={<NameChangeDialog currentName={currentAccount.name} />}
+          />
+          <SettingsRow
+            label='Email'
+            value={currentAccount.email}
+            action={<EmailChangeDialog currentEmail={currentAccount.email} />}
+          />
+        </SettingsList>
+      </SettingsGroup>
 
-        <section aria-labelledby='email-heading' className='space-y-3'>
-          <div className='space-y-1'>
-            <h2 id='email-heading' className='text-lg font-semibold'>
-              Email
-            </h2>
-            <p className='max-w-136 text-sm text-muted-foreground'>
-              Primary contact for account recovery and important notifications.
-            </p>
-          </div>
-          <div className='flex flex-col gap-4 rounded-card border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5'>
-            <div className='min-w-0'>
-              <p className='truncate text-sm font-medium'>{currentAccount.email}</p>
-            </div>
-            <div className='w-full shrink-0 sm:w-auto'>
-              <EmailChangeDialog currentEmail={currentAccount.email} />
-            </div>
-          </div>
-        </section>
-
-        <AccountDelete />
-      </div>
+      <AccountDelete />
     </div>
   );
 }

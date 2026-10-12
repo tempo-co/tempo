@@ -9,7 +9,10 @@ type SessionRevokeDialogProps = {
   triggerVariant?: ButtonProps['variant'];
 };
 
-export function SessionRevokeDialog({session, triggerVariant = 'ghost'}: SessionRevokeDialogProps) {
+export function SessionRevokeDialog({
+  session,
+  triggerVariant = 'outline',
+}: SessionRevokeDialogProps) {
   const {revokeSession, isPending} = useRevokeSession();
 
   return (
@@ -17,7 +20,7 @@ export function SessionRevokeDialog({session, triggerVariant = 'ghost'}: Session
       trigger={
         <Button
           variant={triggerVariant}
-          className='min-h-11 w-fit text-foreground'
+          className='min-w-20 max-sm:h-11'
           size='sm'
           data-testid='revoke-session-button'
         >

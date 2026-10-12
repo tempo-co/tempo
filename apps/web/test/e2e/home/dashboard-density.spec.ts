@@ -12,6 +12,7 @@ test.beforeEach(async ({page}) => {
   await page.clock.setFixedTime(new Date('2026-10-01T12:00:00Z'));
   await mockJson(page, '**/accounts/me', {
     id: '00000000-0000-4000-8000-000000000001',
+    name: 'Example Owner',
     email: 'dashboard@example.com',
     isEmailVerified: true,
   });

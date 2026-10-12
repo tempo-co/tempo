@@ -20,14 +20,14 @@ test.describe('Account Settings: Email change', () => {
     await expect(accountSettingsPage.emailChangeSentTo).toHaveText(newEmail);
     await accountSettingsPage.emailChangeDoneButton.click();
     await expect(accountSettingsPage.emailChangeSentTo).toBeHidden();
-    await expect(homePage.sidebarAccountEmail).toHaveText(freshAccount.email);
+    await expect(homePage.accountEmail).toHaveText(freshAccount.email);
 
     const message = await EmailUtils.findEmailByRecipient(newEmail);
     await page.goto(EmailUtils.extractEmailChangeLink(message?.Text));
 
     await accountSettingsPage.expectToBeOnPage();
     await expect(verifyEmailChangePage.emailChangeSuccessToast).toBeVisible();
-    await expect(homePage.sidebarAccountEmail).toHaveText(newEmail);
+    await expect(homePage.accountEmail).toHaveText(newEmail);
   });
 
   test('should finish the change after logging in from a logged-out link', async ({
@@ -54,7 +54,7 @@ test.describe('Account Settings: Email change', () => {
 
     await accountSettingsPage.expectToBeOnPage();
     await expect(verifyEmailChangePage.emailChangeSuccessToast).toBeVisible();
-    await expect(homePage.sidebarAccountEmail).toHaveText(newEmail);
+    await expect(homePage.accountEmail).toHaveText(newEmail);
   });
 
   test('should go back to the form with "Use a different email"', async ({
