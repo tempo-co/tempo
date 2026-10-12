@@ -830,6 +830,76 @@ test('a session check started before a real 401 cannot restore saved data', asyn
   await expect(new LoginPage(page).submitButton).toBeVisible();
 });
 
+test('confirms a saved session before routing on an online reload', async ({
+  page,
+  freshAccount,
+  homePage,
+}) => {
+  await page.goto('/settings/appearance');
+  await expect(homePage.accountName).toHaveText(freshAccount.name);
+  await expect.poll(() => readCache(page)).not.toBe(null);
+  expect((await page.request.post(`${API_URL}/auth/logout`)).status()).toBe(200);
+
+  let releaseCheck!: () => void;
+  const checkReleased = new Promise<void>((resolve) => (releaseCheck = resolve));
+  let checkHeld = false;
+  await page.route(`${API_URL}/accounts/me`, async (route) => {
+    const response = await route.fetch();
+    checkHeld = true;
+    await checkReleased;
+    await route.fulfill({response});
+  });
+  await page.reload();
+  await expect.poll(() => checkHeld).toBe(true);
+  await expect(page.getByRole('heading', {name: 'Theme', exact: true})).toHaveCount(0);
+  await expect(homePage.accountName).not.toBeVisible();
+
+  releaseCheck();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(new LoginPage(page).submitButton).toBeVisible();
+  await expect.poll(() => readCache(page)).toBe(null);
+});
+
+for (const outage of ['browser offline', 'Tempo unreachable'] as const) {
+  test(`a saved session revoked while ${outage} redirects to login on reconnect`, async ({
+    page,
+    context,
+    freshAccount,
+    homePage,
+  }) => {
+    test.setTimeout(30000);
+    // Appearance has no data queries that could independently redirect on a 401.
+    await page.goto('/settings/appearance');
+    await expect(homePage.accountName).toHaveText(freshAccount.name);
+    await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+    await expect.poll(() => readCache(page)).not.toBe(null);
+
+    let unavailable = true;
+    if (outage === 'browser offline') await context.setOffline(true);
+    else
+      await page.route(`${API_URL}/**`, (route) =>
+        unavailable ? route.abort('failed') : route.fallback(),
+      );
+    await page.reload();
+    await expect(savedStatus(page)).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'Theme', exact: true})).toBeVisible();
+    expect(await page.evaluate(() => navigator.onLine)).toBe(outage !== 'browser offline');
+    expect((await page.request.post(`${API_URL}/auth/logout`)).status()).toBe(200);
+
+    const rejectedCheck = page.waitForResponse(
+      (response) => response.url() === `${API_URL}/accounts/me` && response.status() === 401,
+    );
+    unavailable = false;
+    if (outage === 'browser offline') await context.setOffline(false);
+    else await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await rejectedCheck;
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(new LoginPage(page).submitButton).toBeVisible();
+    await expect(homePage.accountName).not.toBeVisible();
+    await expect.poll(() => readCache(page)).toBe(null);
+  });
+}
+
 test('an actual revoked session clears saved data instead of granting offline access', async ({
   page,
   context,

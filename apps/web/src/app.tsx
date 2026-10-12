@@ -1,11 +1,15 @@
 import {RouterProvider} from '@tanstack/react-router';
 import {motion} from 'framer-motion';
-import React from 'react';
+import React, {useEffect} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {Toaster} from '@/components/ui/sonner';
 import {useConnection} from '@/hooks/use-connection';
-import {useCurrentAccount} from '@/hooks/use-current-account';
+import {
+  markSavedSessionShown,
+  useCurrentAccount,
+  wasSavedSessionShown,
+} from '@/hooks/use-current-account';
 import {useIsMobile} from '@/hooks/use-is-mobile';
 import {ThemeProvider} from '@/providers/theme.provider';
 
@@ -24,6 +28,10 @@ export function App() {
     isSavedSessionUnconfirmed,
     refetch,
   } = useCurrentAccount();
+  const isShowingSavedSession = isSavedSessionUnconfirmed && !isOnline;
+  useEffect(() => {
+    if (isShowingSavedSession) markSavedSessionShown();
+  }, [isShowingSavedSession]);
   // Below md, signed-in pages keep the tab bar at the bottom; toasts stay above it.
   const hasTabBar = useIsMobile() && isAuthenticated && !!isEmailVerified;
 
@@ -38,7 +46,7 @@ export function App() {
           </p>
           <Button onClick={() => void refetch()}>Try again</Button>
         </div>
-      ) : isPending || (isSavedSessionUnconfirmed && isOnline) ? (
+      ) : isPending || (isSavedSessionUnconfirmed && isOnline && !wasSavedSessionShown()) ? (
         <LoadingScreen />
       ) : (
         <React.Suspense fallback={<LoadingScreen />}>

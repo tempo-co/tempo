@@ -6,7 +6,11 @@ import {
   type QueryKey,
 } from '@tanstack/react-query';
 
-import {CURRENT_ACCOUNT_KEY, PAGE_LOADED_AT} from '@/hooks/use-current-account';
+import {
+  CURRENT_ACCOUNT_KEY,
+  PAGE_LOADED_AT,
+  wasSavedSessionShown,
+} from '@/hooks/use-current-account';
 import {Account} from '@/types/account';
 import {
   EmailNotVerifiedError,
@@ -72,7 +76,8 @@ const isFinalError = (error: Error) =>
 
 /**
  * A 401 from the signed-in check is how signed-out pages learn there is no session, so it must not
- * redirect. If this tab was showing a saved account, that account and its saved data are dropped.
+ * redirect. If this tab was showing a saved account, that account and its saved data are dropped,
+ * and a tab that showed it signs out.
  */
 const handleQueryError = (error: Error, query: Query<unknown, unknown, unknown, QueryKey>) => {
   if (
@@ -81,8 +86,10 @@ const handleQueryError = (error: Error, query: Query<unknown, unknown, unknown, 
     isAccountQuery(query) &&
     query.state.data
   ) {
-    // A saved account this page load never confirmed was not on screen yet; the route decides.
-    if (query.state.dataUpdatedAt < PAGE_LOADED_AT) dropSavedData(queryClient);
+    // A saved account this page load never confirmed is not on screen yet, unless it was shown while
+    // Tempo was unreachable; if not, the route decides.
+    if (query.state.dataUpdatedAt < PAGE_LOADED_AT && !wasSavedSessionShown())
+      dropSavedData(queryClient);
     else signOut();
     return;
   }
