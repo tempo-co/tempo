@@ -27,7 +27,7 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
   - `VITE_API_URL`: API base URL used by `src/utils/api.ts`.
   - `VITE_APP_URL`: app URL used by Playwright's web server and `baseURL`.
   - `VITE_EMAIL_UI_URL`: Mailpit URL used by `test/utils/email-utils.ts`.
-  - `VITE_BASE_PATH` (optional, default `/`): the base path `vite.config.ts` serves the app and PWA manifest under. `Dockerfile.production` builds with `/tempo/`.
+  - `VITE_BASE_PATH` (optional, default `/`): the base path `vite.config.ts` serves the app and PWA manifest under. `Dockerfile.production` builds with `/`.
 - `npm run dev` generates the TanStack route tree and starts Vite.
 
 ## Build, lint, format, and test
@@ -49,7 +49,7 @@ CI runs these jobs in parallel: lint/format (`npm run generate-routes`, `npm run
 ## Deployment and ops checks
 
 - `ops/tests/tempo-web-security-headers-test.sh` builds the production image and probes the security headers Nginx serves (needs Docker). Update it when you change `nginx/tempo.conf`.
-- CI publishes `ghcr.io/tempo-co/tempo-web:pr-<n>` for every same-repo PR and tags `:main` after tests pass on `main`. Production deploys `:main` automatically; staging deploys any pair with `tempo-deploy staging --api <tag> --web <tag>` (see `tempo-api/ops/README.md`). Production and staging are both served under `/tempo/`.
+- CI publishes `ghcr.io/tempo-co/tempo-web:pr-<n>` for every same-repo PR and tags `:main` after tests pass on `main`. Production deploys `:main` automatically; staging deploys any pair with `tempo-deploy staging --api <tag> --web <tag>` (see `tempo-api/ops/README.md`). Production and staging serve the app at the root.
 
 ## Repository layout and conventions
 
