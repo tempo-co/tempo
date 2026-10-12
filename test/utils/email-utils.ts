@@ -17,7 +17,7 @@ export class EmailUtils {
 		// retry briefly to allow BullMQ to process the job and send email to Mailpit
 		while (retries > 0) {
 			const res = await fetch(`${apiUrl}/api/v1/messages`);
-			const data: MailpitResponse = await res.json();
+			const data = (await res.json()) as MailpitResponse;
 			const email = data.messages.find((msg) => {
 				const isRecipient = msg.To.some((r) => r.Address.toLowerCase() === recipientEmail.toLowerCase());
 				return isRecipient && (!subject || msg.Subject === subject);
@@ -25,7 +25,7 @@ export class EmailUtils {
 
 			if (email) {
 				const res = await fetch(`${apiUrl}/api/v1/message/${email.ID}`);
-				const fullEmail: MailpitMessageSummaryResponse = await res.json();
+				const fullEmail = (await res.json()) as MailpitMessageSummaryResponse;
 				return fullEmail;
 			}
 

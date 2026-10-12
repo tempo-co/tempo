@@ -4,3 +4,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      nestjs:
+        patterns:
+          - '@nestjs/*'
+    ignore:
+      # Keep Node types on the runtime major (Node 22 in the Dockerfile and CI).
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
