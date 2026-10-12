@@ -4,11 +4,21 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       nestjs:
         patterns:
           - '@nestjs/*'
+      minor-and-patch:
+        update-types: [minor, patch]
     ignore:
       # Keep Node types on the runtime major (Node 22 in the Dockerfile and CI).
       - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      # Nest 12 waits until @nest-lab/throttler-storage-redis accepts it as a peer.
+      - dependency-name: '@nestjs/*'
+        update-types: ['version-update:semver-major']
+      # connect-redis 9+ dropped ioredis, which the session store uses.
+      - dependency-name: connect-redis
         update-types: ['version-update:semver-major']
