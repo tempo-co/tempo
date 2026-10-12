@@ -72,7 +72,7 @@
     "@tanstack/router-devtools": "^1.167.2",
     "@tanstack/router-plugin": "^1.168.43",
     "@trivago/prettier-plugin-sort-imports": "^6.0.2",
-    "@types/node": "^20.19.43",
+    "@types/node": "^26.6.4",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@typescript-eslint/eslint-plugin": "^8.71.0",
