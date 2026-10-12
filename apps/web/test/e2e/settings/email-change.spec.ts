@@ -129,8 +129,16 @@ test.describe('Account Settings: Email change', () => {
       }) => {
         await accountSettingsPage.navigate();
         await accountSettingsPage.changeEmailButton.click();
+        const dialog = page.getByRole('dialog');
+        await expect(dialog).toBeVisible();
+        // Relative alignment can pass while everything is still scaled by the opening animation.
+        // Settle it before saving input geometry for the confirmation-screen assertions.
+        await dialog.evaluate(async (element) => {
+          await Promise.all(
+            element.getAnimations({subtree: true}).map((animation) => animation.finished),
+          );
+        });
         const cancelButton = page.getByRole('button', {name: 'Cancel', exact: true});
-        // Poll geometry while the dialog/drawer opening animation settles.
         await expect
           .poll(async () => {
             const input = await boxOf(accountSettingsPage.newEmailInput);
