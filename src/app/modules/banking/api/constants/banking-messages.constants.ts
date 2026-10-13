@@ -22,4 +22,4 @@ export const BANKING_SYNC_ALREADY_IN_PROGRESS = 'A bank synchronization is alrea
 export const BANKING_TRANSACTION_NOT_FOUND = 'Bank transaction not found.';
 export const BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH = 'The summary month cannot start after the given date.';
 export const BANKING_TRANSACTION_CASH_FLOW_RANGE =
-	'The cash flow range must run forward, end by the given date and span at most 36 months.';
+	'The cash flow range must run forward and cover at most 104 weeks, 60 months or 10 years.';

@@ -370,20 +370,30 @@ describe('BankTransactionSummary', () => {
 	});
 
 	describe('cash flow', () => {
-		it('totals each month from the first booking, cutting the current month at the given day', async () => {
+		const period = (start: string, end: string, complete: boolean, spending: string, income: string) => ({
+			start,
+			end,
+			complete,
+			spending,
+			income,
+			net: formatCents(parseCents(income) - parseCents(spending)),
+		});
+
+		it('totals each month from the first booking, cutting the running month at the given day', async () => {
 			const {body} = await ownerAgent
 				.get(CASH_FLOW)
-				.query({from: '2026-05', to: '2026-10', asOf: '2026-10-18'})
+				.query({interval: 'month', from: '2026-05-20', to: '2026-10-18'})
 				.expect(200);
 
 			expect(body).toEqual({
 				baseCurrency: 'EUR',
-				through: '2026-10-18',
-				months: [
-					{month: '2026-07', spending: '120.00', income: '1000.00', net: '880.00'},
-					{month: '2026-08', spending: '330.00', income: '0.00', net: '-330.00'},
-					{month: '2026-09', spending: '75.00', income: '0.00', net: '-75.00'},
-					{month: '2026-10', spending: '79.60', income: '2000.00', net: '1920.40'},
+				interval: 'month',
+				periods: [
+					// History starts on 5 July, so July is a partial month.
+					period('2026-07-01', '2026-07-31', false, '120.00', '1000.00'),
+					period('2026-08-01', '2026-08-31', true, '330.00', '0.00'),
+					period('2026-09-01', '2026-09-30', true, '75.00', '0.00'),
+					period('2026-10-01', '2026-10-18', false, '79.60', '2000.00'),
 				],
 			});
 		});
@@ -391,51 +401,66 @@ describe('BankTransactionSummary', () => {
 		it('matches the monthly summary totals for every month', async () => {
 			const {body} = await ownerAgent
 				.get(CASH_FLOW)
-				.query({from: '2026-07', to: '2026-10', asOf: '2026-10-18'})
+				.query({interval: 'month', from: '2026-07-01', to: '2026-10-18'})
 				.expect(200);
-			for (const row of body.months) {
+			for (const row of body.periods) {
 				const {body: summary} = await ownerAgent
 					.get(SUMMARY)
-					.query({month: row.month, asOf: '2026-10-18'})
+					.query({month: row.start.slice(0, 7), asOf: '2026-10-18'})
 					.expect(200);
-				expect(row).toEqual({
-					month: row.month,
-					spending: summary.totals.spending,
-					income: summary.totals.income,
-					net: summary.totals.net,
-				});
+				expect([row.spending, row.income, row.net]).toEqual([
+					summary.totals.spending,
+					summary.totals.income,
+					summary.totals.net,
+				]);
 			}
 		});
 
-		it('keeps empty months after the first booking and ends a past range on its last day', async () => {
+		it('groups weeks from Monday and reconciles each with the filtered list', async () => {
+			const {body} = await ownerAgent
+				.get(CASH_FLOW)
+				.query({interval: 'week', from: '2026-09-30', to: '2026-10-18'})
+				.expect(200);
+
+			expect(body.periods).toEqual([
+				period('2026-09-28', '2026-10-04', true, '46.60', '0.00'),
+				period('2026-10-05', '2026-10-11', true, '48.00', '2000.00'),
+				period('2026-10-12', '2026-10-18', true, '0.00', '0.00'),
+			]);
+			for (const row of body.periods) {
+				expect((await listed('SPENDING', row.start, row.end)).amount).toBe(row.spending);
+				expect((await listed('INCOME', row.start, row.end)).amount).toBe(row.income);
+			}
+		});
+
+		it('totals whole years and leaves out another owner’s rows', async () => {
 			const {body} = await otherAgent
 				.get(CASH_FLOW)
-				.query({from: '2026-08', to: '2026-10', asOf: '2026-12-02'})
+				.query({interval: 'year', from: '2024-03-01', to: '2026-12-02'})
 				.expect(200);
 
 			expect(body).toEqual({
 				baseCurrency: null,
-				through: '2026-10-31',
-				months: [
-					{month: '2026-09', spending: '40.00', income: '0.00', net: '-40.00'},
-					{month: '2026-10', spending: '999.00', income: '0.00', net: '-999.00'},
-				],
+				interval: 'year',
+				periods: [period('2026-01-01', '2026-12-02', false, '1039.00', '0.00')],
 			});
 		});
 
 		it.each([
-			['a range that runs backwards', {from: '2026-10', to: '2026-09', asOf: '2026-10-18'}],
-			['more than 36 months', {from: '2023-10', to: '2026-10', asOf: '2026-10-18'}],
-			['a range ending after the given day', {from: '2026-10', to: '2026-11', asOf: '2026-10-18'}],
+			['a range that runs backwards', {interval: 'month', from: '2026-10-02', to: '2026-10-01'}],
+			['more than 104 weeks', {interval: 'week', from: '2024-10-01', to: '2026-10-18'}],
+			['more than 60 months', {interval: 'month', from: '2021-10-01', to: '2026-10-18'}],
+			['more than 10 years', {interval: 'year', from: '2016-12-31', to: '2026-10-18'}],
 		])('explains why it rejects %s', async (_case, query) => {
 			const {body} = await ownerAgent.get(CASH_FLOW).query(query).expect(400);
 			expect(body.message).toBe(BANKING_TRANSACTION_CASH_FLOW_RANGE);
 		});
 
 		it.each([
-			['a malformed month', {from: '2026-1', to: '2026-10', asOf: '2026-10-18'}],
-			['a missing end', {from: '2026-01', asOf: '2026-10-18'}],
-			['an impossible day', {from: '2026-01', to: '2026-02', asOf: '2026-02-30'}],
+			['an unknown interval', {interval: 'day', from: '2026-10-01', to: '2026-10-18'}],
+			['a month instead of a day', {interval: 'month', from: '2026-01', to: '2026-10-18'}],
+			['a missing end', {interval: 'month', from: '2026-01-01'}],
+			['an impossible day', {interval: 'month', from: '2026-01-01', to: '2026-02-30'}],
 		])('rejects %s', async (_case, query) => {
 			await ownerAgent.get(CASH_FLOW).query(query).expect(400);
 		});
