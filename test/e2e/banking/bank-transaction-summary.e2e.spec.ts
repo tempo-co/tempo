@@ -5,7 +5,10 @@ import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
-import {BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH} from '@modules/banking/api/constants/banking-messages.constants';
+import {
+	BANKING_TRANSACTION_CASH_FLOW_RANGE,
+	BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH,
+} from '@modules/banking/api/constants/banking-messages.constants';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {formatCents, parseCents} from '@modules/banking/summary/bank-transaction-summary';
 
@@ -19,6 +22,7 @@ import {
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 
 const SUMMARY = '/bank-transactions/summary';
+const CASH_FLOW = '/bank-transactions/cash-flow';
 const OCTOBER = {month: '2026-10', asOf: '2026-10-18'};
 
 describe('BankTransactionSummary', () => {
@@ -363,5 +367,77 @@ describe('BankTransactionSummary', () => {
 		} finally {
 			await fixtures.transactions.delete([...extra.map(({id}) => id), otherExtra.id]);
 		}
+	});
+
+	describe('cash flow', () => {
+		it('totals each month from the first booking, cutting the current month at the given day', async () => {
+			const {body} = await ownerAgent
+				.get(CASH_FLOW)
+				.query({from: '2026-05', to: '2026-10', asOf: '2026-10-18'})
+				.expect(200);
+
+			expect(body).toEqual({
+				baseCurrency: 'EUR',
+				through: '2026-10-18',
+				months: [
+					{month: '2026-07', spending: '120.00', income: '1000.00', net: '880.00'},
+					{month: '2026-08', spending: '330.00', income: '0.00', net: '-330.00'},
+					{month: '2026-09', spending: '75.00', income: '0.00', net: '-75.00'},
+					{month: '2026-10', spending: '79.60', income: '2000.00', net: '1920.40'},
+				],
+			});
+		});
+
+		it('matches the monthly summary totals for every month', async () => {
+			const {body} = await ownerAgent
+				.get(CASH_FLOW)
+				.query({from: '2026-07', to: '2026-10', asOf: '2026-10-18'})
+				.expect(200);
+			for (const row of body.months) {
+				const {body: summary} = await ownerAgent
+					.get(SUMMARY)
+					.query({month: row.month, asOf: '2026-10-18'})
+					.expect(200);
+				expect(row).toEqual({
+					month: row.month,
+					spending: summary.totals.spending,
+					income: summary.totals.income,
+					net: summary.totals.net,
+				});
+			}
+		});
+
+		it('keeps empty months after the first booking and ends a past range on its last day', async () => {
+			const {body} = await otherAgent
+				.get(CASH_FLOW)
+				.query({from: '2026-08', to: '2026-10', asOf: '2026-12-02'})
+				.expect(200);
+
+			expect(body).toEqual({
+				baseCurrency: null,
+				through: '2026-10-31',
+				months: [
+					{month: '2026-09', spending: '40.00', income: '0.00', net: '-40.00'},
+					{month: '2026-10', spending: '999.00', income: '0.00', net: '-999.00'},
+				],
+			});
+		});
+
+		it.each([
+			['a range that runs backwards', {from: '2026-10', to: '2026-09', asOf: '2026-10-18'}],
+			['more than 36 months', {from: '2023-10', to: '2026-10', asOf: '2026-10-18'}],
+			['a range ending after the given day', {from: '2026-10', to: '2026-11', asOf: '2026-10-18'}],
+		])('explains why it rejects %s', async (_case, query) => {
+			const {body} = await ownerAgent.get(CASH_FLOW).query(query).expect(400);
+			expect(body.message).toBe(BANKING_TRANSACTION_CASH_FLOW_RANGE);
+		});
+
+		it.each([
+			['a malformed month', {from: '2026-1', to: '2026-10', asOf: '2026-10-18'}],
+			['a missing end', {from: '2026-01', asOf: '2026-10-18'}],
+			['an impossible day', {from: '2026-01', to: '2026-02', asOf: '2026-02-30'}],
+		])('rejects %s', async (_case, query) => {
+			await ownerAgent.get(CASH_FLOW).query(query).expect(400);
+		});
 	});
 });

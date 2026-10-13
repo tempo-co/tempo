@@ -33,6 +33,15 @@ export class BankTransactionSummaryCategoryDto {
 	baselineAverage: string | null;
 }
 
+/** Monthly totals on the summary's definitions, oldest first. Money fields as in the summary. */
+export class BankTransactionCashFlowResponseDto {
+	baseCurrency: string | null;
+	/** The last day counted: `asOf`, or the end of `to` when that month is already over. */
+	through: string;
+	/** Every month from the first booked transaction (or `from`) to `to`, including empty ones. */
+	months: {month: string; spending: string; income: string; net: string}[];
+}
+
 export class BankTransactionReviewCountsResponseDto {
 	needsReview: number;
 	categorizationFailed: number;

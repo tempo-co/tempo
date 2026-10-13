@@ -4,9 +4,14 @@ import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 
-import {BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH} from '../api/constants/banking-messages.constants';
+import {
+	BANKING_TRANSACTION_CASH_FLOW_RANGE,
+	BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH,
+} from '../api/constants/banking-messages.constants';
+import type {BankTransactionCashFlowQueryDto} from '../api/dtos/bank-transaction-cash-flow-query.dto';
 import type {BankTransactionSummaryQueryDto} from '../api/dtos/bank-transaction-summary-query.dto';
 import type {
+	BankTransactionCashFlowResponseDto,
 	BankTransactionReviewCountsResponseDto,
 	BankTransactionSummaryCategoryDto,
 	BankTransactionSummaryResponseDto,
@@ -36,6 +41,7 @@ import {
 } from './bank-transaction-filters';
 
 const BASELINE_MONTHS = 3;
+const CASH_FLOW_MAX_MONTHS = 36;
 const BASE_AMOUNT = '"transaction"."amountInBaseCurrency"';
 /** Keys whose month-to-month average says nothing useful. */
 const NO_BASELINE_CATEGORIES = new Set<BankTransactionCategoryFilterValue>([
@@ -178,6 +184,39 @@ export class BankTransactionSummaryService {
 		};
 	}
 
+	async getCashFlow(
+		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
+		{from, to, asOf}: BankTransactionCashFlowQueryDto,
+	): Promise<BankTransactionCashFlowResponseDto> {
+		const span = monthIndex(to) - monthIndex(from) + 1;
+		if (span < 1 || span > CASH_FLOW_MAX_MONTHS || to > asOf.slice(0, 7)) {
+			throw new BadRequestException(BANKING_TRANSACTION_CASH_FLOW_RANGE);
+		}
+		const toEnd = `${to}-${daysInMonth(to)}`;
+		const through = asOf < toEnd ? asOf : toEnd;
+
+		const [firstBookingDate, rows] = await Promise.all([
+			this.findFirstBookingDate(accountId),
+			this.findMonthlyFlows(accountId, `${from}-01`, through),
+		]);
+		const totals = new Map(rows.map((row) => [row.month, row]));
+		const firstMonth = firstBookingDate?.slice(0, 7);
+		const months: BankTransactionCashFlowResponseDto['months'] = [];
+		for (let index = monthIndex(from); index <= monthIndex(to); index++) {
+			const month = monthFromIndex(index);
+			if (!firstMonth || month < firstMonth) continue;
+			const spending = -parseCents(totals.get(month)?.spending ?? '0');
+			const income = parseCents(totals.get(month)?.income ?? '0');
+			months.push({
+				month,
+				spending: formatCents(spending),
+				income: formatCents(income),
+				net: formatCents(income - spending),
+			});
+		}
+		return {baseCurrency, through, months};
+	}
+
 	async getReviewCounts(accountId: Account['id']): Promise<BankTransactionReviewCountsResponseDto> {
 		const counts = await this.createOwnerScopedQuery(accountId)
 			.select(`COUNT(*) FILTER (WHERE "transaction"."category" = 'NEEDS_REVIEW')::int`, 'needsReview')
@@ -212,6 +251,22 @@ export class BankTransactionSummaryService {
 			.getRawMany<FlowRow>();
 	}
 
+	/** Raw signed spending and income sums per month, on the same filters as {@link findFlows}. */
+	private findMonthlyFlows(accountId: string, from: string, to: string) {
+		const query = this.createOwnerScopedQuery(accountId);
+		applyBankTransactionFilters(query, {
+			bookingDate: {from, to},
+			baseAmount: 'PRESENT',
+			cashFlows: ['SPENDING', 'INCOME'],
+		});
+		return query
+			.select(`to_char("transaction"."bookingDate", 'YYYY-MM')`, 'month')
+			.addSelect(`ROUND(COALESCE(SUM(${BASE_AMOUNT}) FILTER (WHERE ${SQL_SPENDING}), 0), 2)::text`, 'spending')
+			.addSelect(`ROUND(COALESCE(SUM(${BASE_AMOUNT}) FILTER (WHERE NOT ${SQL_SPENDING}), 0), 2)::text`, 'income')
+			.groupBy('1')
+			.getRawMany<{month: string; spending: string; income: string}>();
+	}
+
 	private async findPeriodCounts(accountId: string, from: string, to: string) {
 		const query = this.createOwnerScopedQuery(accountId);
 		applyBankTransactionFilters(query, {bookingDate: {from, to}});
@@ -240,6 +295,14 @@ export class BankTransactionSummaryService {
 			.innerJoin('bankAccount.bankConnection', 'connection')
 			.where('connection.accountId = :accountId', {accountId});
 	}
+}
+
+function monthIndex(month: string): number {
+	return Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1;
+}
+
+function monthFromIndex(index: number): string {
+	return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`;
 }
 
 function addTo<K>(map: Map<K, bigint>, key: K, cents: bigint): Map<K, bigint> {
