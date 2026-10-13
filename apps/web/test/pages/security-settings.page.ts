@@ -5,6 +5,8 @@ export class SecuritySettingsPage {
   readonly sessionCards: Locator;
   readonly otherSessionCards: Locator;
   readonly currentSessionCard: Locator;
+  readonly otherSessionsHeading: Locator;
+  readonly otherSessionsSection: Locator;
   readonly revokeAllButton: Locator;
   readonly revokeAllButtonConfirm: Locator;
   readonly revokeButtonConfirm: Locator;
@@ -30,6 +32,8 @@ export class SecuritySettingsPage {
     this.currentSessionCard = page
       .getByTestId('session-card')
       .and(page.locator('[data-current-session="true"]'));
+    this.otherSessionsHeading = page.getByRole('heading', {name: /^Other sessions/});
+    this.otherSessionsSection = page.getByRole('region', {name: /^Other sessions/});
     this.revokeAllButton = this.page.getByTestId('revoke-all-sessions-button');
     this.revokeAllButtonConfirm = this.page.getByTestId('revoke-all-sessions-button-confirm');
     this.revokeButtonConfirm = this.page.getByTestId('revoke-session-button-confirm');

@@ -2,7 +2,7 @@ import {Button} from '@/components/ui/button';
 import {Skeleton} from '@/components/ui/skeleton';
 
 import {useGetSessions} from '../../api/use-get-sessions';
-import {SettingsGroup, SettingsList, SettingsRow} from '../settings-group';
+import {SettingsGroup, SettingsList} from '../settings-group';
 import {SessionCard} from './session-card';
 import {SessionRevokeAllDialog} from './session-revoke-all-dialog';
 
@@ -35,25 +35,28 @@ export function SessionList() {
             />
           )}
           {isPending && <Skeleton className='h-16 w-full rounded-card border bg-card' />}
-          {sessions && sessions.length > 0 && (
+          {currentSession && (
             <SettingsList>
-              {currentSession && <SessionCard key={currentSession.id} session={currentSession} />}
-              {otherSessions.map((session) => (
-                <SessionCard key={session.id} session={session} />
-              ))}
-              {otherSessions.length > 0 && (
-                <SettingsRow
-                  label={
-                    <span className='font-normal text-muted-foreground'>
-                      {otherSessions.length === 1
-                        ? '1 other session'
-                        : `${otherSessions.length} other sessions`}
-                    </span>
-                  }
-                  action={<SessionRevokeAllDialog />}
-                />
-              )}
+              <SessionCard key={currentSession.id} session={currentSession} />
             </SettingsList>
+          )}
+          {otherSessions.length > 0 && (
+            <section aria-labelledby='other-sessions-heading' className='pt-3'>
+              <div className='mb-3 flex items-center justify-between gap-3'>
+                <h3 id='other-sessions-heading' className='text-sm font-medium'>
+                  Other sessions{' '}
+                  <span className='font-normal text-muted-foreground'>
+                    ({otherSessions.length})
+                  </span>
+                </h3>
+                <SessionRevokeAllDialog />
+              </div>
+              <SettingsList>
+                {otherSessions.map((session) => (
+                  <SessionCard key={session.id} session={session} />
+                ))}
+              </SettingsList>
+            </section>
           )}
         </div>
       )}

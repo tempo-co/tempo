@@ -54,12 +54,22 @@ test.describe.serial('Account Settings: Sessions', () => {
   });
 
   test('should revoke all other sessions', async () => {
+    await expect(securitySettingsPage.otherSessionCards.first()).toBeVisible();
+    const otherSessionCount = await securitySettingsPage.otherSessionCards.count();
+    await expect(securitySettingsPage.otherSessionsHeading).toHaveText(
+      `Other sessions (${otherSessionCount})`,
+    );
+    const otherSessionsSection = securitySettingsPage.otherSessionsSection;
+    await expect(otherSessionsSection.getByTestId('session-card')).toHaveCount(otherSessionCount);
+    await expect(otherSessionsSection.locator('[data-current-session="true"]')).toHaveCount(0);
+
     await securitySettingsPage.revokeAllButton.click();
     await securitySettingsPage.revokeAllButtonConfirm.click();
 
     await expect(securitySettingsPage.currentSessionCard).toBeVisible();
     await expect(securitySettingsPage.sessionCards).toHaveCount(1);
     await expect(securitySettingsPage.revokeAllButton).not.toBeVisible();
+    await expect(securitySettingsPage.otherSessionsHeading).not.toBeVisible();
   });
 
   test('should log out of the current session', async () => {
