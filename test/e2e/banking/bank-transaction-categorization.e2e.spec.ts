@@ -215,6 +215,24 @@ describe('Bank transaction categorization integration', () => {
 		expect(categorizeSpy).not.toHaveBeenCalled();
 	});
 
+	it('sends history-filled rows back to the model when no reusable manual choice is left', async () => {
+		// The previous test left the repeat row filled from the owner's manual TRAVEL choice.
+		await verifiedAgent
+			.patch(`/bank-transactions/${CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID}/category`)
+			.send({category: 'NEEDS_REVIEW'})
+			.expect(200);
+
+		const sibling = await waitFor(
+			() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID}),
+			(value) => value.categoryStatus === 'COMPLETED' && value.categorySource === 'AI',
+		);
+		expect(sibling.category).toBe(AI_CATEGORY);
+		expect(categorizeSpy).toHaveBeenCalledTimes(1);
+		expect(categorizeSpy.mock.calls[0][0].map(({correlationId}) => correlationId)).toEqual([
+			CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
+		]);
+	});
+
 	it('runs one normal pass and one web-search fallback for an OTHER result', async () => {
 		const categorizationService = app.get(BankTransactionCategorizationService);
 		await categorizationService.enqueueForTransactions([CATEGORIZATION_E2E_WEB_TRANSACTION_ID]);

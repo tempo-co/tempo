@@ -79,6 +79,8 @@ type CategorizationUpdate = {
 const STALE_PROCESSING_AFTER_MS = 15 * 60 * 1000;
 const MAX_ERROR_LENGTH = 500;
 const CLAIMABLE_STATUSES = ['PENDING', 'FAILED'] as const;
+// PROCESSING rows belong to a worker and NOT_APPLICABLE rows are never categorized.
+const MERCHANT_REAPPLY_STATUSES = [...CLAIMABLE_STATUSES, 'COMPLETED'] as const;
 
 type ManualCategoryCounts = Map<BankTransactionCategory, number>;
 type CompletionValues = Pick<
@@ -237,8 +239,9 @@ export class BankTransactionCategorizationService {
 		const historyMatches: Promise<void>[] = [];
 		for (const claimed of claimedBatch) {
 			const counts = manualHistory.get(claimed.transaction.id);
-			if (counts?.size === 1) {
-				historyMatches.push(this.applyManualHistoryCategory(claimed, [...counts.keys()][0]));
+			const category = getUnanimousCategory(counts);
+			if (category) {
+				historyMatches.push(this.applyManualHistoryCategory(claimed, category));
 			} else {
 				activeBatch.push(
 					counts
@@ -395,24 +398,23 @@ export class BankTransactionCategorizationService {
 	private async loadManualCategoryHistory(
 		batch: readonly ClaimedTransaction[],
 	): Promise<Map<string, ManualCategoryCounts>> {
-		const batchByAccount = new Map<string, ClaimedTransaction[]>();
-		for (const claimed of batch) {
-			const accountId = claimed.transaction.bankAccount?.bankConnection?.accountId;
-			if (!accountId || !claimed.transaction.merchantKey) continue;
-			batchByAccount.set(accountId, [...(batchByAccount.get(accountId) ?? []), claimed]);
+		const batchByAccount = new Map<string, {id: string; merchantKey: string}[]>();
+		for (const {transaction} of batch) {
+			const accountId = transaction.bankAccount?.bankConnection?.accountId;
+			const {id, merchantKey} = transaction;
+			if (!accountId || !merchantKey) continue;
+			batchByAccount.set(accountId, [...(batchByAccount.get(accountId) ?? []), {id, merchantKey}]);
 		}
 
 		const countsByTransaction = new Map<string, ManualCategoryCounts>();
 		try {
 			await Promise.all(
 				[...batchByAccount].map(async ([accountId, entries]) => {
-					const merchantKeys = [
-						...new Set(entries.map(({transaction}) => transaction.merchantKey as string)),
-					];
+					const merchantKeys = [...new Set(entries.map(({merchantKey}) => merchantKey))];
 					const history = await this.loadAccountManualCategoryCounts(accountId, merchantKeys);
-					for (const {transaction} of entries) {
-						const counts = history.get(transaction.merchantKey as string);
-						if (counts) countsByTransaction.set(transaction.id, counts);
+					for (const {id, merchantKey} of entries) {
+						const counts = history.get(merchantKey);
+						if (counts) countsByTransaction.set(id, counts);
 					}
 				}),
 			);
@@ -459,12 +461,13 @@ export class BankTransactionCategorizationService {
 	/**
 	 * Called after the owner sets a category manually. When all of the owner's manual choices for this merchant agree,
 	 * the owner's other non-manual rows from the merchant take that category, without a model call. When the choices
-	 * disagree, rows that were filled from history go back to the model, which then sees the mixed choices.
+	 * disagree, or no reusable choice is left (for example after a correction to NEEDS_REVIEW), rows that were filled
+	 * from history go back to the model, which then sees any remaining choices. With AI categorization off they keep
+	 * their current category.
 	 */
 	async applyManualCategoryToMerchant(accountId: string, merchantKey: string | null): Promise<void> {
 		if (!merchantKey) return;
 		const counts = (await this.loadAccountManualCategoryCounts(accountId, [merchantKey])).get(merchantKey);
-		if (!counts) return;
 
 		const query = this.repository
 			.createQueryBuilder()
@@ -479,13 +482,13 @@ export class BankTransactionCategorizationService {
 				{accountId},
 			)
 			.andWhere(`"categorySource" IS DISTINCT FROM 'MANUAL'`)
-			.andWhere('"categoryStatus" IN (:...statuses)', {statuses: ['PENDING', 'COMPLETED', 'FAILED']})
+			.andWhere('"categoryStatus" IN (:...statuses)', {statuses: MERCHANT_REAPPLY_STATUSES})
 			.andWhere('"categoryInputHash" IS NOT NULL')
 			.andWhere('"ownTransferEvidence" IS NULL')
 			.andWhere('"financialEventType" IS NULL');
 
-		if (counts.size === 1) {
-			const [category] = [...counts.keys()];
+		const category = getUnanimousCategory(counts);
+		if (category) {
 			await query
 				.set({
 					...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
@@ -504,11 +507,8 @@ export class BankTransactionCategorizationService {
 
 		if (!this.isEnabled()) return;
 		const result = await query
-			.set({
-				...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-				categoryStatus: 'PENDING',
-				categoryUpdatedAt: new Date(),
-			})
+			// The category stays until the model replaces it, so a failed enqueue never leaves a row empty.
+			.set({categoryStatus: 'PENDING', categoryUpdatedAt: new Date()})
 			.andWhere(`"categorySource" = 'HISTORY'`)
 			.returning(['id'])
 			.execute();
@@ -765,6 +765,10 @@ export class BankTransactionCategorizationService {
 		}
 		return 'Transaction categorization failed.';
 	}
+}
+
+function getUnanimousCategory(counts: ManualCategoryCounts | undefined): BankTransactionCategory | null {
+	return counts?.size === 1 ? [...counts.keys()][0] : null;
 }
 
 function toPreviousManualCategories(

@@ -21,6 +21,9 @@ const PAYMENT_PROCESSOR_NAME_PATTERN =
  * Identifies "the same merchant, in the same direction" across a user's transactions, so a category the user chose
  * manually can be reused. Card lines drop wallet prefixes, card details, payment-processor prefixes and terminal
  * numbers; other rows use the counterparty name, then the plain description.
+ *
+ * The key is stored on each transaction. Changing its output needs a migration that backfills existing rows, or old
+ * and new rows from the same merchant stop matching.
  */
 export function getBankTransactionMerchantKey(transaction: MerchantKeyTransaction): string | null {
 	const description = normalizeBankTransactionText(transaction.description);
