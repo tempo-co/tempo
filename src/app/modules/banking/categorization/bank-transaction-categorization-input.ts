@@ -43,6 +43,9 @@ const OPAQUE_IDENTIFIER_PATTERN =
 // Four or more letters, so a short letter run at the start of a random ID ("Abc123DEF456") stays redacted.
 const GLUED_LEADING_WORD_PATTERN = /^([A-Z][a-z]{3,})(?=[A-Z0-9_-]+$)/;
 const LONG_DIGIT_PATTERN = /\b\d{4,}\b/g;
+// A whole merchant name that is one long upper-case code with a digit, like an 18-character transit card tap ID.
+// 16+ characters keeps one-word names with a short number ("PLAYSTATION5") searchable.
+const BARE_IDENTIFIER_PATTERN = /^(?=\S*\d)(?=\S*[A-Z])[A-Z0-9]{16,}$/;
 const LONG_NUMERIC_IDENTIFIER_PATTERN = /\b\d{6,}\b/g;
 const REDACTED_IDENTIFIER_LABEL_PATTERN =
 	/\b(?:iban|bic|swift|account|acct|rekening|reference|ref|order|invoice|mandate|identifier|id|pas|nr|card|phone|telephone|mobile|tel|fax)\b(?:\s+(?:no\.?|number|num|nr\.?))?\s*[:#=_-]?\s*\[REDACTED\]/gi;
@@ -239,7 +242,7 @@ function sanitizeUrlToHostname(value: string): string {
 
 function sanitizeWebSearchMerchantName(value: string | null | undefined): string | null {
 	const normalized = normalizeNullableText(value);
-	if (!normalized) return null;
+	if (!normalized || BARE_IDENTIFIER_PATTERN.test(normalized)) return null;
 
 	const paymentDomainMerchantName = normalized.match(
 		/^(?:https?:\/\/)?(?:www\.)?(?:payment|pay|checkout)\.([a-z][a-z-]*(?:\.[a-z][a-z-]*)*)$/i,

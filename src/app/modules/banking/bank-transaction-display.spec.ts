@@ -28,6 +28,12 @@ describe('getBankTransactionDisplayDescription', () => {
 			expected: 'Example Cafe',
 		},
 		{
+			name: 'drops card details written with a space after PAS',
+			description: 'BEA, Google Pay Example Supermarket,PAS 123 NR:ABC123, 04.09.26/19:00 CITY',
+			counterpartyName: null,
+			expected: 'Example Supermarket',
+		},
+		{
 			name: 'keeps the wallet name when a card line has no merchant',
 			description: 'BEA, Google Pay,PAS123 NR:ABC123, 04.09.26/19:00 CITY',
 			counterpartyName: null,

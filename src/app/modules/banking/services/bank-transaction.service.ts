@@ -1,4 +1,4 @@
-import {Injectable, Logger, NotFoundException} from '@nestjs/common';
+import {Injectable, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import {Repository} from 'typeorm';
 
@@ -24,9 +24,6 @@ import {toBankTransactionDirection} from '../bank-transaction-direction';
 import {getBankTransactionCashFlowTreatment} from '../bank-transaction-financial-event';
 import {BANK_TRANSACTION_TYPES} from '../bank-transaction-type';
 import {BankTransaction} from '../bank-transaction.entity';
-import {safeErrorName} from '../banking.utils';
-import {createBankTransactionCategorizationInputHash} from '../categorization/bank-transaction-categorization-input';
-import {BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES} from '../categorization/bank-transaction-categorization.constants';
 import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
@@ -35,8 +32,6 @@ import {OwnTransferService} from './own-transfer.service';
 
 @Injectable()
 export class BankTransactionService {
-	private readonly logger = new Logger(BankTransactionService.name);
-
 	constructor(
 		@InjectRepository(BankConnection)
 		private readonly bankConnectionRepository: Repository<BankConnection>,
@@ -119,26 +114,9 @@ export class BankTransactionService {
 		category: BankTransactionCategory,
 	): Promise<BankTransactionResponseDto> {
 		const transaction = await this.findOwnedTransaction(accountId, id);
-		const inputHash = createBankTransactionCategorizationInputHash(transaction);
-		const values = {
-			...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-			category,
-			categoryStatus: 'COMPLETED',
-			categorySource: 'MANUAL',
-			categoryInputHash: inputHash,
-			categoryAppliedInputHash: inputHash,
-			categoryUpdatedAt: new Date(),
-		};
-		const result = await this.bankTransactionRepository.update({id}, values);
-		if (result.affected === 0) throw new NotFoundException(BANKING_TRANSACTION_NOT_FOUND);
-		Object.assign(transaction, values);
-		try {
-			await this.categorizationService.applyManualCategoryToMerchant(accountId, transaction.merchantKey);
-		} catch (error) {
-			// The owner's choice is saved; same-merchant rows catch up on the next correction.
-			this.logger.warn(`Applying a manual category to the same merchant failed: ${safeErrorName(error)}`);
+		if (!(await this.categorizationService.setManualCategory(accountId, transaction, category))) {
+			throw new NotFoundException(BANKING_TRANSACTION_NOT_FOUND);
 		}
-
 		return this.toResponse(transaction);
 	}
 
