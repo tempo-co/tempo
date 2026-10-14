@@ -62,6 +62,7 @@ import {
 } from '../categorization/bank-transaction-categorization-input';
 import {BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES} from '../categorization/bank-transaction-categorization.constants';
 import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
+import {getBankTransactionMerchantKey} from '../categorization/bank-transaction-merchant-key';
 import {
 	EnableBankingBalance,
 	EnableBankingTransaction,
@@ -1053,6 +1054,7 @@ export class BankingSyncService {
 		const counterpartyName = truncate(transaction.counterpartyName, 255);
 		const counterpartyIban = transaction.counterpartyIban ?? null;
 		const displayDescription = getBankTransactionDisplayDescription({description, counterpartyName});
+		const merchantKey = getBankTransactionMerchantKey({description, counterpartyName, creditDebitIndicator});
 		const remittanceInformation = truncate(transaction.remittanceInformation, 10_000);
 		const transactionDate = this.toDateOnly(transaction.transactionDate);
 		const bookingDate = this.toDateOnly(transaction.bookingDate);
@@ -1171,6 +1173,7 @@ export class BankingSyncService {
 			bankTransactionDescription,
 			description,
 			displayDescription,
+			merchantKey,
 			counterpartyName,
 			counterpartyIban,
 			merchantCategoryCode,

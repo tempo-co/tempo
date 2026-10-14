@@ -9,6 +9,7 @@ import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
 } from '../bank-transaction-financial-event';
 import {BankTransaction} from '../bank-transaction.entity';
+import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
 import {BankTransactionService} from './bank-transaction.service';
 import {OwnTransferService} from './own-transfer.service';
 
@@ -55,17 +56,25 @@ function createQueryBuilder<T extends ObjectLiteral>(): SelectQueryBuilder<T> & 
 	};
 }
 
+function createService(
+	repository: unknown,
+	connectionRepository: Repository<BankConnection> = {} as Repository<BankConnection>,
+): BankTransactionService {
+	return new BankTransactionService(
+		connectionRepository,
+		repository as Repository<BankTransaction>,
+		{} as OwnTransferService,
+		{} as BankTransactionCategorizationService,
+	);
+}
+
 describe('BankTransactionService display descriptions', () => {
 	it('includes a concise display description in detailed responses while preserving raw text', async () => {
 		const transaction = createTransaction();
 		const queryBuilder = createQueryBuilder<BankTransaction>();
 		queryBuilder.getOne.mockResolvedValue(transaction);
 		const repository = {createQueryBuilder: jest.fn().mockReturnValue(queryBuilder)};
-		const service = new BankTransactionService(
-			{} as Repository<BankConnection>,
-			repository as unknown as Repository<BankTransaction>,
-			{} as OwnTransferService,
-		);
+		const service = createService(repository);
 
 		const response = await service.findById('account-id', transaction.id);
 
@@ -80,11 +89,9 @@ describe('BankTransactionService display descriptions', () => {
 		const queryBuilder = createQueryBuilder<BankTransaction>();
 		queryBuilder.getManyAndCount.mockResolvedValue([[transaction], 1]);
 		const repository = {createQueryBuilder: jest.fn().mockReturnValue(queryBuilder)};
-		const service = new BankTransactionService(
-			{findOne: jest.fn().mockResolvedValue({id: 'connection-id'})} as unknown as Repository<BankConnection>,
-			repository as unknown as Repository<BankTransaction>,
-			{} as OwnTransferService,
-		);
+		const service = createService(repository, {
+			findOne: jest.fn().mockResolvedValue({id: 'connection-id'}),
+		} as unknown as Repository<BankConnection>);
 
 		const response = await service.findAllByConnectionId('account-id', 'connection-id', 10);
 
@@ -108,11 +115,7 @@ describe('BankTransactionService display descriptions', () => {
 		const queryBuilder = createQueryBuilder<BankTransaction>();
 		queryBuilder.getOne.mockResolvedValue(transaction);
 		const repository = {createQueryBuilder: jest.fn().mockReturnValue(queryBuilder)};
-		const service = new BankTransactionService(
-			{} as Repository<BankConnection>,
-			repository as unknown as Repository<BankTransaction>,
-			{} as OwnTransferService,
-		);
+		const service = createService(repository);
 
 		const response = await service.findById('account-id', transaction.id);
 
@@ -137,11 +140,9 @@ describe('BankTransactionService display descriptions', () => {
 		const queryBuilder = createQueryBuilder<BankTransaction>();
 		queryBuilder.getManyAndCount.mockResolvedValue([[transaction], 1]);
 		const repository = {createQueryBuilder: jest.fn().mockReturnValue(queryBuilder)};
-		const service = new BankTransactionService(
-			{findOne: jest.fn().mockResolvedValue({id: 'connection-id'})} as unknown as Repository<BankConnection>,
-			repository as unknown as Repository<BankTransaction>,
-			{} as OwnTransferService,
-		);
+		const service = createService(repository, {
+			findOne: jest.fn().mockResolvedValue({id: 'connection-id'}),
+		} as unknown as Repository<BankConnection>);
 
 		const response = await service.findAllByConnectionId('account-id', 'connection-id', 10);
 
