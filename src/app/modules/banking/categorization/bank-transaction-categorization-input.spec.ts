@@ -216,6 +216,29 @@ describe('bank transaction categorization input', () => {
 		expect(input.merchantCategoryCode).toBe('5814');
 	});
 
+	it('keeps a merchant word glued to a reference and redacts the reference', () => {
+		const input = toBankTransactionCategorizationInput(
+			createTransaction({
+				description: 'Omschrijving: ExampleRFID000111222 XYZ Kenmerk: RFID000111222XYZ',
+				remittanceInformation: 'ExampleREF-0012-3456 refund',
+			}),
+		);
+
+		expect(input.description).toBe('Omschrijving: Example [REDACTED] XYZ Kenmerk: [REDACTED]');
+		expect(input.remittanceInformation).toBe('Example [REDACTED] refund');
+	});
+
+	it.each(['abc5123456789def01', 'Ab5123456789CDEF', 'TXN-20260918-ABCD', 'Example5511223344aa', 'Abc123DEF456'])(
+		'redacts the whole opaque identifier %s when no merchant word leads it',
+		(identifier) => {
+			const input = toBankTransactionCategorizationInput(
+				createTransaction({description: `Payment ${identifier}`}),
+			);
+
+			expect(input.description).toBe('Payment [REDACTED]');
+		},
+	);
+
 	it('does not hash changes to redacted transaction references', () => {
 		expect(
 			createBankTransactionCategorizationInputHash(createTransaction({description: 'Coffee order 1234567'})),

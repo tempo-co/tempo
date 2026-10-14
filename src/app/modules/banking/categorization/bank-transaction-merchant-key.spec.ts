@@ -37,6 +37,42 @@ describe('getBankTransactionMerchantKey', () => {
 	});
 
 	it.each([
+		['Example Games via Exam ple Pay', 'EXPENSE:example games'],
+		['Example Games via Ex', 'EXPENSE:example games'],
+		['Example Games via', 'EXPENSE:example games'],
+		['Example Games, via Example Pay', 'EXPENSE:example games'],
+		['Example Rail B.V. by Example Pay', 'EXPENSE:example rail b.v.'],
+		['EXAMPLE GAMES VIA EXAMPLE PAY', 'EXPENSE:example games'],
+		['Example Games', 'EXPENSE:example games'],
+		['Example by Night', 'EXPENSE:example by night'],
+		['Pizza by the Slice', 'EXPENSE:pizza by the slice'],
+		['Caffe via Example', 'EXPENSE:caffe via example'],
+		[', via Example Pay', 'EXPENSE:, via example pay'],
+	])('keys the counterparty %s without a payment-processor tail', (counterpartyName, expected) => {
+		expect(getBankTransactionMerchantKey({description: null, counterpartyName, creditDebitIndicator: 'DBIT'})).toBe(
+			expected,
+		);
+	});
+
+	it('drops the processor tail from a structured SEPA name but not from a plain description', () => {
+		expect(
+			getBankTransactionMerchantKey({
+				description:
+					'SEPA iDEAL IBAN: NL91ABNA0417164300 BIC: ABNANL2A Naam: Example Games via Ex Omschrijving: x',
+				counterpartyName: null,
+				creditDebitIndicator: 'DBIT',
+			}),
+		).toBe('EXPENSE:example games');
+		expect(
+			getBankTransactionMerchantKey({
+				description: 'Refund by Example Shop',
+				counterpartyName: null,
+				creditDebitIndicator: 'CRDT',
+			}),
+		).toBe('INCOME:refund by example shop');
+	});
+
+	it.each([
 		'PayPal Europe S.a.r.l.',
 		'PayPal (Europe) S.a r.l. et Cie, S.C.A.',
 		'Klarna Bank AB',
