@@ -33,6 +33,26 @@ export class BankTransactionSummaryCategoryDto {
 	baselineAverage: string | null;
 }
 
+/** Totals per week, month or year on the summary's definitions, oldest first. Money as in the summary. */
+export class BankTransactionCashFlowResponseDto {
+	baseCurrency: string | null;
+	interval: 'week' | 'month' | 'year';
+	/** Every period from the first booked transaction (or `from`) through `to`, including empty ones. */
+	periods: BankTransactionCashFlowPeriodDto[];
+}
+
+export class BankTransactionCashFlowPeriodDto {
+	/** First day of the period: a Monday, the 1st, or 1 January. */
+	start: string;
+	/** Last day counted: the period's last day, or `to` when the period is still running. */
+	end: string;
+	/** False when the period is cut at `to` or starts before the first booked transaction. */
+	complete: boolean;
+	spending: string;
+	income: string;
+	net: string;
+}
+
 export class BankTransactionReviewCountsResponseDto {
 	needsReview: number;
 	categorizationFailed: number;

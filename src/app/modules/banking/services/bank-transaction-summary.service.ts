@@ -4,9 +4,15 @@ import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 
-import {BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH} from '../api/constants/banking-messages.constants';
+import {
+	BANKING_TRANSACTION_CASH_FLOW_RANGE,
+	BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH,
+} from '../api/constants/banking-messages.constants';
+import type {BankTransactionCashFlowQueryDto, CashFlowInterval} from '../api/dtos/bank-transaction-cash-flow-query.dto';
 import type {BankTransactionSummaryQueryDto} from '../api/dtos/bank-transaction-summary-query.dto';
 import type {
+	BankTransactionCashFlowPeriodDto,
+	BankTransactionCashFlowResponseDto,
 	BankTransactionReviewCountsResponseDto,
 	BankTransactionSummaryCategoryDto,
 	BankTransactionSummaryResponseDto,
@@ -28,6 +34,7 @@ import {
 import {
 	SQL_CATEGORIZATION_FAILED,
 	SQL_CATEGORIZING,
+	SQL_INCOME,
 	SQL_MISSING_BASE_AMOUNT,
 	SQL_OWN_TRANSFER_DEBIT,
 	SQL_SPENDING,
@@ -36,6 +43,7 @@ import {
 } from './bank-transaction-filters';
 
 const BASELINE_MONTHS = 3;
+const CASH_FLOW_MAX_PERIODS: Record<CashFlowInterval, number> = {week: 104, month: 60, year: 10};
 const BASE_AMOUNT = '"transaction"."amountInBaseCurrency"';
 /** Keys whose month-to-month average says nothing useful. */
 const NO_BASELINE_CATEGORIES = new Set<BankTransactionCategoryFilterValue>([
@@ -178,6 +186,43 @@ export class BankTransactionSummaryService {
 		};
 	}
 
+	async getCashFlow(
+		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
+		{interval, from, to, asOf}: BankTransactionCashFlowQueryDto,
+	): Promise<BankTransactionCashFlowResponseDto> {
+		const starts: string[] = [];
+		for (let start = periodStart(from, interval); start <= to; start = nextPeriodStart(start, interval)) {
+			starts.push(start);
+			if (starts.length > CASH_FLOW_MAX_PERIODS[interval]) break;
+		}
+		if (from > to || to > asOf || starts.length > CASH_FLOW_MAX_PERIODS[interval]) {
+			throw new BadRequestException(BANKING_TRANSACTION_CASH_FLOW_RANGE);
+		}
+
+		const [firstBookingDate, rows] = await Promise.all([
+			this.findFirstBookingDate(accountId),
+			this.findPeriodFlows(accountId, interval, starts[0], to),
+		]);
+		const totals = new Map(rows.map((row) => [row.start, row]));
+		const periods: BankTransactionCashFlowPeriodDto[] = [];
+		for (const start of starts) {
+			const periodEnd = addDays(nextPeriodStart(start, interval), -1);
+			if (!firstBookingDate || periodEnd < firstBookingDate) continue;
+			const spending = -parseCents(totals.get(start)?.spending ?? '0');
+			const income = parseCents(totals.get(start)?.income ?? '0');
+			periods.push({
+				start,
+				end: periodEnd < to ? periodEnd : to,
+				// A period that ends today is still running; one cut by where history starts is partial.
+				complete: periodEnd < asOf && periodEnd <= to && start >= firstBookingDate,
+				spending: formatCents(spending),
+				income: formatCents(income),
+				net: formatCents(income - spending),
+			});
+		}
+		return {baseCurrency, interval, periods};
+	}
+
 	async getReviewCounts(accountId: Account['id']): Promise<BankTransactionReviewCountsResponseDto> {
 		const counts = await this.createOwnerScopedQuery(accountId)
 			.select(`COUNT(*) FILTER (WHERE "transaction"."category" = 'NEEDS_REVIEW')::int`, 'needsReview')
@@ -212,6 +257,23 @@ export class BankTransactionSummaryService {
 			.getRawMany<FlowRow>();
 	}
 
+	/** Raw signed spending and income sums per period, on the same filters as {@link findFlows}. */
+	private findPeriodFlows(accountId: string, interval: CashFlowInterval, from: string, to: string) {
+		const query = this.createOwnerScopedQuery(accountId);
+		applyBankTransactionFilters(query, {
+			bookingDate: {from, to},
+			baseAmount: 'PRESENT',
+			cashFlows: ['SPENDING', 'INCOME'],
+		});
+		return query
+			.select(`to_char(date_trunc(:interval, "transaction"."bookingDate"::timestamp), 'YYYY-MM-DD')`, 'start')
+			.addSelect(`ROUND(COALESCE(SUM(${BASE_AMOUNT}) FILTER (WHERE ${SQL_SPENDING}), 0), 2)::text`, 'spending')
+			.addSelect(`ROUND(COALESCE(SUM(${BASE_AMOUNT}) FILTER (WHERE ${SQL_INCOME}), 0), 2)::text`, 'income')
+			.setParameter('interval', interval)
+			.groupBy('1')
+			.getRawMany<{start: string; spending: string; income: string}>();
+	}
+
 	private async findPeriodCounts(accountId: string, from: string, to: string) {
 		const query = this.createOwnerScopedQuery(accountId);
 		applyBankTransactionFilters(query, {bookingDate: {from, to}});
@@ -240,6 +302,32 @@ export class BankTransactionSummaryService {
 			.innerJoin('bankAccount.bankConnection', 'connection')
 			.where('connection.accountId = :accountId', {accountId});
 	}
+}
+
+/** Calendar dates as `YYYY-MM-DD`, computed in UTC so no local offset shifts a day. */
+function toDate(value: string): Date {
+	return new Date(`${value}T00:00:00Z`);
+}
+
+function addDays(value: string, days: number): string {
+	const date = toDate(value);
+	date.setUTCDate(date.getUTCDate() + days);
+	return date.toISOString().slice(0, 10);
+}
+
+/** The Monday, 1st or 1 January on or before `value`, like Postgres `date_trunc`. */
+function periodStart(value: string, interval: CashFlowInterval): string {
+	if (interval === 'year') return `${value.slice(0, 4)}-01-01`;
+	if (interval === 'month') return `${value.slice(0, 7)}-01`;
+	return addDays(value, -((toDate(value).getUTCDay() + 6) % 7));
+}
+
+function nextPeriodStart(start: string, interval: CashFlowInterval): string {
+	if (interval === 'week') return addDays(start, 7);
+	const date = toDate(start);
+	if (interval === 'year') date.setUTCFullYear(date.getUTCFullYear() + 1);
+	else date.setUTCMonth(date.getUTCMonth() + 1);
+	return date.toISOString().slice(0, 10);
 }
 
 function addTo<K>(map: Map<K, bigint>, key: K, cents: bigint): Map<K, bigint> {
