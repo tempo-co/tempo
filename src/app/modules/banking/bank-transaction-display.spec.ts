@@ -13,7 +13,31 @@ describe('getBankTransactionDisplayDescription', () => {
 			name: 'extracts the useful part of a Google Pay card payment',
 			description: 'BEA, Google Pay Example Supermarket,PAS123 NR:ABC123, 04.09.26/19:00 CITY',
 			counterpartyName: null,
-			expected: 'Example Supermarket,PAS123',
+			expected: 'Example Supermarket',
+		},
+		{
+			name: 'drops Apple Pay, Betaalpas and payment-processor prefixes but keeps the terminal number',
+			description: 'BEA, Apple Pay BCK*Example Rail 201,PAS123 NR:ABC123, 04.09.26/19:00 CITY',
+			counterpartyName: null,
+			expected: 'Example Rail 201',
+		},
+		{
+			name: 'drops the Betaalpas prefix',
+			description: 'BEA, Betaalpas CCV*Example Cafe,PAS123 NR:ABC123, 04.09.26/19:00 CITY',
+			counterpartyName: null,
+			expected: 'Example Cafe',
+		},
+		{
+			name: 'keeps the wallet name when a card line has no merchant',
+			description: 'BEA, Google Pay,PAS123 NR:ABC123, 04.09.26/19:00 CITY',
+			counterpartyName: null,
+			expected: 'Google Pay',
+		},
+		{
+			name: 'falls back to the full line when nothing is left after stripping',
+			description: 'BEA, SQ*,PAS123',
+			counterpartyName: null,
+			expected: 'BEA, SQ*,PAS123',
 		},
 		{
 			name: 'extracts the useful part of an ordinary card payment',
