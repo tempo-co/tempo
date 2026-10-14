@@ -19,6 +19,9 @@ export class BankConnection {
 	@PrimaryGeneratedColumn('uuid')
 	id: string;
 
+	@Column({type: 'uuid'})
+	accountId: string;
+
 	@ManyToOne(() => Account, {onDelete: 'CASCADE', nullable: false})
 	@JoinColumn({name: 'accountId'})
 	account: Account;

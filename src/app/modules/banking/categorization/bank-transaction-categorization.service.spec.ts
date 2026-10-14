@@ -9,6 +9,8 @@ import {createBankTransaction} from '../../../../../test/fixtures/bank-transacti
 import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '../bank-transaction-financial-event';
 import {BankTransaction} from '../bank-transaction.entity';
 import {
+	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
+	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
 	BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION,
 	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION,
 	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
@@ -29,6 +31,9 @@ function createUpdateQueryBuilder(
 	const builder = {
 		update: jest.fn().mockReturnThis(),
 		select: jest.fn().mockReturnThis(),
+		addSelect: jest.fn().mockReturnThis(),
+		innerJoin: jest.fn().mockReturnThis(),
+		limit: jest.fn().mockReturnThis(),
 		set: jest.fn().mockReturnThis(),
 		where: jest.fn().mockReturnThis(),
 		andWhere: jest.fn().mockReturnThis(),
@@ -113,7 +118,7 @@ function createService({
 
 describe('BankTransactionCategorizationService provider behavior versions', () => {
 	it('versions sanitized transaction text separately from prior provider inputs', () => {
-		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v5');
+		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v6');
 		expect(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION).toBe(
 			'bank-transaction-categorization-web-search-v6',
 		);
@@ -706,6 +711,87 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(queue.addBulk).toHaveBeenCalledTimes(1);
 		expect(queue.addBulk.mock.calls[0][0]).toHaveLength(1);
 		expect(queue.addBulk.mock.calls[0][0][0].data).toEqual({transactionIds: [rows[50].id]});
+	});
+
+	it('applies a consistent manual category for the same merchant without calling the provider', async () => {
+		const transaction = createBankTransaction({
+			id: 'repeat-merchant',
+			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
+			description: 'BEA, Google Pay BCK*Example Rail 201,PAS123 NR:EX0001, 01.02.26/10:00 EXAMPLETOWN',
+			counterpartyName: null,
+		});
+		const queryBuilder = createUpdateQueryBuilder();
+		queryBuilder.getRawMany.mockResolvedValueOnce([
+			{
+				description: 'BEA, Betaalpas Example Rail 305,PAS123 NR:EX0002, 03.01.26/09:00 EXAMPLETOWN',
+				counterpartyName: null,
+				creditDebitIndicator: 'DBIT',
+				category: 'TRANSPORTATION',
+			},
+		] as never);
+		const {service, provider} = createService({rows: [transaction], queryBuilder});
+
+		await service.processTransactionJob([transaction.id]);
+
+		expect(provider.categorize).not.toHaveBeenCalled();
+		expect(transaction).toMatchObject({
+			category: 'TRANSPORTATION',
+			categoryStatus: 'COMPLETED',
+			categorySource: 'AI',
+			categoryProvider: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
+			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
+		});
+	});
+
+	it('passes mixed manual categories for the same merchant to the provider', async () => {
+		const transaction = createBankTransaction({
+			id: 'mixed-merchant',
+			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
+			counterpartyName: 'Example Rides',
+		});
+		const history = [
+			{
+				description: 'Example Rides',
+				counterpartyName: 'Example Rides',
+				creditDebitIndicator: 'DBIT',
+				category: 'FOOD_AND_DRINK',
+			},
+			{
+				description: 'Example Rides',
+				counterpartyName: 'Example Rides',
+				creditDebitIndicator: 'DBIT',
+				category: 'FOOD_AND_DRINK',
+			},
+			{
+				description: 'Example Rides',
+				counterpartyName: 'Example Rides',
+				creditDebitIndicator: 'DBIT',
+				category: 'TRANSPORTATION',
+			},
+			{
+				description: 'Example Rides',
+				counterpartyName: 'Example Rides',
+				creditDebitIndicator: 'CRDT',
+				category: 'REFUND',
+			},
+		];
+		const queryBuilder = createUpdateQueryBuilder();
+		queryBuilder.getRawMany.mockResolvedValueOnce(history as never);
+		const {service, provider} = createService({rows: [transaction], queryBuilder});
+
+		await service.processTransactionJob([transaction.id]);
+
+		expect(provider.categorize).toHaveBeenCalledTimes(1);
+		expect(provider.categorize.mock.calls[0][0][0].previousManualCategories).toEqual([
+			{category: 'FOOD_AND_DRINK', count: 2},
+			{category: 'TRANSPORTATION', count: 1},
+		]);
+		const [, categoryFilter] = queryBuilder.andWhere.mock.calls.find(([clause]) =>
+			String(clause).includes('reusableCategories'),
+		)!;
+		expect(categoryFilter.reusableCategories).not.toContain('NEEDS_REVIEW');
+		expect(categoryFilter.reusableCategories).toContain('TRANSPORTATION');
+		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION);
 	});
 
 	it('excludes manual rows from claims and provider calls', async () => {

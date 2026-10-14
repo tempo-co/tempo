@@ -7,6 +7,8 @@ import {Repository} from 'typeorm';
 import {ConfigurationService} from '@core/config/config.service';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {
+	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
+	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
 	BANK_TRANSACTION_CATEGORIZATION_PROVIDER_NAME,
 	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
 } from '@modules/banking/categorization/bank-transaction-categorization.constants';
@@ -23,6 +25,8 @@ import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from '../../../script
 import {
 	CATEGORIZATION_E2E_AI_TRANSACTION_ID,
 	CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID,
+	CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID,
+	CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_WEB_TRANSACTION_ID,
 	seedBankTransactionCategorizationData,
 } from '../../setup/e2e-categorization-data';
@@ -153,6 +157,40 @@ describe('Bank transaction categorization integration', () => {
 			categorySource: 'AI',
 			categoryConfidence: String(AI_CONFIDENCE),
 			categoryProvider: BANK_TRANSACTION_CATEGORIZATION_PROVIDER_NAME,
+		});
+	});
+
+	it("reuses the account owner's manual category for the same card merchant without calling the provider", async () => {
+		// Both accounts' rows go through one batch, as reconciliation does across users.
+		const categorizationService = app.get(BankTransactionCategorizationService);
+		await categorizationService.enqueueForTransactions([
+			CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
+			CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID,
+		]);
+
+		const response = await waitFor(
+			() => verifiedAgent.get(`/bank-transactions/${CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID}`),
+			(value) => value.status === 200 && value.body.categoryStatus === 'COMPLETED',
+		);
+
+		expect(response.body).toMatchObject({category: 'TRANSPORTATION', categorySource: 'AI'});
+		const otherAccountRow = await waitFor(
+			() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID}),
+			(value) => value.categoryStatus === 'COMPLETED',
+		);
+		expect(otherAccountRow).toMatchObject({
+			category: 'ENTERTAINMENT',
+			categoryProvider: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
+		});
+		expect(categorizeSpy).not.toHaveBeenCalled();
+		expect(categorizeWithWebSearchSpy).not.toHaveBeenCalled();
+		const persisted = await bankTransactionRepository.findOneByOrFail({
+			id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
+		});
+		expect(persisted).toMatchObject({
+			categoryProvider: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
+			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
+			categoryModel: null,
 		});
 	});
 
