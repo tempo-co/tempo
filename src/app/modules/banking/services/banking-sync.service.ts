@@ -290,9 +290,10 @@ export class BankingSyncService {
 					finishedAt,
 					syncStartedAt,
 				);
-				await this.enqueuePersistedTransactions(persistenceResult.persistedTransactionIds);
+				// Recompute first so new own transfers and exchanges are marked before the worker can claim them.
 				await this.ownTransferService.recomputeForOwnerSafely(accountId);
 				await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
+				await this.enqueuePersistedTransactions(persistenceResult.persistedTransactionIds);
 				lockLease.assertHealthy();
 
 				const completedRun = await this.bankSyncRunRepository.findOneBy({id: run.id});

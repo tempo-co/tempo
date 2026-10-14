@@ -23,6 +23,8 @@ export function notOwnTransferCategorizedSql(): string {
 		AND upper(COALESCE("creditDebitIndicator", '')) IN ('CRDT', 'DBIT'))`;
 }
 
+const TRANSFER_CATEGORY_SQL = `CASE upper("creditDebitIndicator") WHEN 'CRDT' THEN 'TRANSFER_IN' ELSE 'TRANSFER_OUT' END`;
+
 const OWNER_ACCOUNTS_SQL = `SELECT account."id" FROM "bank_accounts" account
 	JOIN "bank_connections" connection ON connection."id" = account."bankConnectionId"
 	WHERE connection."accountId" = $1`;
@@ -34,28 +36,24 @@ const OWNER_ACCOUNTS_SQL = `SELECT account."id" FROM "bank_accounts" account
  * which the caller enqueues after its transaction commits.
  */
 export async function applyOwnTransferCategories(executor: OwnTransferSqlExecutor, ownerId: string): Promise<string[]> {
+	// A single-table UPDATE keeps every condition on the target row, so Postgres re-checks all of them when a
+	// concurrent write (for example a manual category) commits first.
 	await executor.query(
-		`UPDATE "bank_transactions" AS transaction
-		SET "category" = change."category", "categoryStatus" = 'COMPLETED', "categorySource" = NULL,
+		`UPDATE "bank_transactions"
+		SET "category" = ${TRANSFER_CATEGORY_SQL}, "categoryStatus" = 'COMPLETED', "categorySource" = NULL,
 			"categoryConfidence" = '1', "categoryProvider" = $2, "categoryModel" = NULL, "categoryPromptVersion" = $3,
 			"categorySearchTrace" = NULL, "categoryLastError" = NULL,
-			"categoryAppliedInputHash" = transaction."categoryInputHash", "categoryUpdatedAt" = now()
-		FROM (
-			SELECT "id", CASE upper("creditDebitIndicator") WHEN 'CRDT' THEN 'TRANSFER_IN' ELSE 'TRANSFER_OUT' END
-				AS "category"
-			FROM "bank_transactions"
-			WHERE "bankAccountId" IN (${OWNER_ACCOUNTS_SQL})
-				AND "ownTransferEvidence" IS NOT NULL
-				AND upper("creditDebitIndicator") IN ('CRDT', 'DBIT')
-				AND "categorySource" IS DISTINCT FROM 'MANUAL'
-				AND "financialEventType" IS NULL
-		) AS change
-		WHERE transaction."id" = change."id"
+			"categoryAppliedInputHash" = "categoryInputHash", "categoryUpdatedAt" = now()
+		WHERE "bankAccountId" IN (${OWNER_ACCOUNTS_SQL})
+			AND "ownTransferEvidence" IS NOT NULL
+			AND upper("creditDebitIndicator") IN ('CRDT', 'DBIT')
+			AND "categorySource" IS DISTINCT FROM 'MANUAL'
+			AND "financialEventType" IS NULL
 			AND (
-				transaction."category" IS DISTINCT FROM change."category"
-				OR transaction."categoryStatus" IS DISTINCT FROM 'COMPLETED'
-				OR transaction."categorySource" IS NOT NULL
-				OR transaction."categoryProvider" IS DISTINCT FROM $2
+				"category" IS DISTINCT FROM ${TRANSFER_CATEGORY_SQL}
+				OR "categoryStatus" IS DISTINCT FROM 'COMPLETED'
+				OR "categorySource" IS NOT NULL
+				OR "categoryProvider" IS DISTINCT FROM $2
 			)`,
 		[ownerId, OWN_TRANSFER_CATEGORY_PROVIDER, OWN_TRANSFER_CATEGORY_RULE_VERSION],
 	);
@@ -68,6 +66,7 @@ export async function applyOwnTransferCategories(executor: OwnTransferSqlExecuto
 			"categoryUpdatedAt" = now()
 		WHERE "bankAccountId" IN (${OWNER_ACCOUNTS_SQL})
 			AND "ownTransferEvidence" IS NULL
+			AND "financialEventType" IS NULL
 			AND "categoryProvider" = $2
 			AND "categorySource" IS DISTINCT FROM 'MANUAL'
 		RETURNING "id"`,
