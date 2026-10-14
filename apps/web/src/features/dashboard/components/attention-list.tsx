@@ -20,7 +20,7 @@ type ReviewGroup = {key: keyof BankTransactionReviewCounts; label: string};
 export function AttentionList({reviewCounts, baseCurrency}: AttentionListProps) {
   const id = useId();
   const currency = baseCurrency ?? 'base-currency';
-  const sections: {title: string; groups: ReviewGroup[]; description: string}[] = [
+  const sections: {title: string; groups: ReviewGroup[]; description?: string}[] = [
     {
       title: 'Needs attention',
       groups: [
@@ -28,7 +28,6 @@ export function AttentionList({reviewCounts, baseCurrency}: AttentionListProps) 
         {key: 'categorizationFailed', label: CATEGORY_STATUS_LABELS.FAILED},
         {key: 'unknownDirection', label: CASH_FLOW_LABELS.UNKNOWN},
       ],
-      description: 'A transaction can appear in more than one group.',
     },
     {
       title: 'Processing',
@@ -84,7 +83,7 @@ export function AttentionList({reviewCounts, baseCurrency}: AttentionListProps) 
                 </li>
               ))}
             </ul>
-            <p className='text-xs text-muted-foreground'>{description}</p>
+            {description && <p className='text-xs text-muted-foreground'>{description}</p>}
           </Card>
         );
       })}

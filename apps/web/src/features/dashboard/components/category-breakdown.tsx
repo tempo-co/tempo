@@ -97,7 +97,7 @@ export function CategoryBreakdown({summary, isCurrentMonth}: CategoryBreakdownPr
               </div>
               <p className='mt-1.5 text-xs text-muted-foreground'>
                 {row.count} {row.count === 1 ? 'transaction' : 'transactions'}
-                {comparison && ` · ${comparison}`}
+                {comparison && <> · {comparison}</>}
               </p>
             </Link>
           );
@@ -142,7 +142,12 @@ export function CategoryBreakdown({summary, isCurrentMonth}: CategoryBreakdownPr
 function categoryComparison(row: BankTransactionSummaryCategory, currency: string | null) {
   if (row.baselineAverage === null) return null;
   const usual = toCents(row.baselineAverage);
-  if (usual < 2000) return `usually ${formatMoney(row.baselineAverage, currency)}`;
+  if (usual < 2000)
+    return (
+      <>
+        usually <span className='font-mono'>{formatMoney(row.baselineAverage, currency)}</span>
+      </>
+    );
   const difference = toCents(row.spending) - usual;
   if (Math.abs(difference) * 100 < usual * 25) return 'about usual';
   return `${difference > 0 ? '+' : '−'}${Math.round((Math.abs(difference) / usual) * 100)}%`;

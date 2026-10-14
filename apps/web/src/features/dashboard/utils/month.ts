@@ -25,12 +25,6 @@ export function formatMonth(month: string) {
   return format(parseMonth(month), 'MMMM yyyy');
 }
 
-/** "Jul–Sep" for consecutive months, oldest first; one month is just "Sep". */
-export function formatMonthRange(months: string[]) {
-  const names = months.map((month) => format(parseMonth(month), 'MMM'));
-  return names.length > 1 ? `${names[0]}–${names[names.length - 1]}` : (names[0] ?? '');
-}
-
 /** First and last calendar dates of the month, as `YYYY-MM-DD`. */
 export function monthDates(month: string) {
   return {from: `${month}-01`, to: format(endOfMonth(parseMonth(month)), 'yyyy-MM-dd')};

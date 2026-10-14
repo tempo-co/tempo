@@ -102,7 +102,10 @@ export function BalancesList({
                   toCents(account.currentBalanceInBaseCurrency) !== 0 &&
                   baseCurrency && (
                     <p className='col-span-2 text-right text-xs text-muted-foreground'>
-                      ≈ {formatMoney(account.currentBalanceInBaseCurrency, baseCurrency)}
+                      ≈{' '}
+                      <span className='font-mono'>
+                        {formatMoney(account.currentBalanceInBaseCurrency, baseCurrency)}
+                      </span>
                       {account.baseCurrencyRateDate &&
                         ` · ECB rate of ${format(parseCalendarDate(account.baseCurrencyRateDate), 'd MMM yyyy')}`}
                     </p>

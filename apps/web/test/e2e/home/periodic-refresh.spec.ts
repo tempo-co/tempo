@@ -3,7 +3,7 @@ import type {Page} from '@playwright/test';
 import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
-import {septemberSummary} from '../../data/home-summary.data';
+import {septemberSpending} from '../../data/home-summary.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections} from '../../utils/api-mocks';
 
@@ -31,10 +31,7 @@ async function mockDerivedData(page: Page) {
   await mockBankConnections(page, () => [connection]);
   await page.route('**/bank-transactions/summary**', (route) => {
     state.reads.summary++;
-    return fulfillJson(route, {
-      ...septemberSummary,
-      totals: {...septemberSummary.totals, spending: state.enriched ? '1400.00' : '1200.00'},
-    });
+    return fulfillJson(route, septemberSpending(state.enriched ? '1400.00' : '1200.00'));
   });
   await page.route('**/bank-transactions/review-counts', (route) => {
     state.reads.review++;
@@ -69,9 +66,9 @@ async function mockDerivedData(page: Page) {
 test('Home refreshes derived financial data every 30 seconds while visible', async ({page}) => {
   const state = await mockDerivedData(page);
   await page.goto('/?month=2026-09');
-  const spending = page.getByTestId('spending-summary');
+  const spending = page.getByTestId('category-breakdown');
   const processing = page.getByRole('region', {name: 'Processing', exact: true});
-  await expect(spending.getByRole('link', {name: '€1,200.00', exact: true})).toBeVisible();
+  await expect(spending.getByText('€1,200.00', {exact: true})).toBeVisible();
   await expect(processing).toContainText('3 transactions');
   expect(state.reads).toEqual({summary: 1, review: 1, recent: 1});
 
@@ -79,7 +76,7 @@ test('Home refreshes derived financial data every 30 seconds while visible', asy
   await page.clock.runFor(29_000);
   expect(state.reads).toEqual({summary: 1, review: 1, recent: 1});
   await page.clock.runFor(1_500);
-  await expect(spending.getByRole('link', {name: '€1,400.00', exact: true})).toBeVisible();
+  await expect(spending.getByText('€1,400.00', {exact: true})).toBeVisible();
   // Every count is now zero, so the card disappears.
   await expect(processing).toHaveCount(0);
   await expect.poll(() => state.reads).toEqual({summary: 2, review: 2, recent: 2});
@@ -100,7 +97,7 @@ test('Home reuses a month viewed in the last 30 seconds', async ({page, homePage
   await homePage.nextMonthLink.click();
   await expect(homePage.monthHeading).toHaveText('September 2026');
   await expect(
-    page.getByTestId('spending-summary').getByRole('link', {name: '€1,200.00', exact: true}),
+    page.getByTestId('category-breakdown').getByText('€1,200.00', {exact: true}),
   ).toBeVisible();
   await page.clock.runFor(10_000);
   expect(state.reads).toEqual({summary: 2, review: 1, recent: 2});
@@ -133,7 +130,7 @@ test('Home does not refresh while the tab is hidden', async ({page}) => {
   const state = await mockDerivedData(page);
   await page.goto('/?month=2026-09');
   await expect(
-    page.getByTestId('spending-summary').getByRole('link', {name: '€1,200.00', exact: true}),
+    page.getByTestId('category-breakdown').getByText('€1,200.00', {exact: true}),
   ).toBeVisible();
   await page.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', {configurable: true, get: () => 'hidden'});

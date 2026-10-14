@@ -5,7 +5,7 @@ import {bankQueryKeys} from '../../../src/features/banking/api/query-keys';
 import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
-import {septemberSummary} from '../../data/home-summary.data';
+import {septemberSpending} from '../../data/home-summary.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections} from '../../utils/api-mocks';
 import {createHookHarness} from '../../utils/hook-harness';
@@ -41,10 +41,7 @@ test('Home refreshes spending, review counts and recent transactions when a poll
   });
   await page.route('**/bank-transactions/summary**', (route) => {
     reads.summary++;
-    return fulfillJson(route, {
-      ...septemberSummary,
-      totals: {...septemberSummary.totals, spending: completed ? '1400.00' : '1200.00'},
-    });
+    return fulfillJson(route, septemberSpending(completed ? '1400.00' : '1200.00'));
   });
   await page.route('**/bank-transactions/review-counts', (route) => {
     reads.review++;
@@ -76,10 +73,10 @@ test('Home refreshes spending, review counts and recent transactions when a poll
     });
   });
   await page.goto('/?month=2026-09');
-  const spending = page.getByTestId('spending-summary');
+  const spending = page.getByTestId('category-breakdown');
   const attention = page.getByRole('region', {name: 'Needs attention', exact: true});
   const recent = page.getByRole('region', {name: 'Latest in September 2026'});
-  await expect(spending.getByRole('link', {name: '€1,200.00', exact: true})).toBeVisible();
+  await expect(spending.getByText('€1,200.00', {exact: true})).toBeVisible();
   await expect(attention).toContainText('1 transaction · all months');
   await expect(recent).toContainText('No transactions this month.');
   expect(reads).toEqual({summary: 1, review: 1, recent: 1});
@@ -93,7 +90,7 @@ test('Home refreshes spending, review counts and recent transactions when a poll
   completed = true;
   current = {...connection, syncStatus: 'SUCCEEDED', lastSyncedAt: '2026-10-01T00:00:00Z'};
   await expect.poll(() => connectionReads, {timeout: 15_000}).toBe(3);
-  await expect(spending.getByRole('link', {name: '€1,400.00', exact: true})).toBeVisible();
+  await expect(spending.getByText('€1,400.00', {exact: true})).toBeVisible();
   await expect(attention).toContainText('2 transactions · all months');
   await expect(recent).toContainText('Example synced shop');
   await expect(page).toHaveURL(/\?month=2026-09$/);

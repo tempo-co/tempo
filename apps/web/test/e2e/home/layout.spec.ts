@@ -4,7 +4,6 @@ import {join} from 'node:path';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {categorySummary} from '../../data/home-categories.data';
-import {firstMonthSummary} from '../../data/home-summary.data';
 import {expect, test} from '../../fixtures';
 import {mockJson, transformBankConnections} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
@@ -128,16 +127,6 @@ for (const {width, theme} of layouts) {
       expect((await boxOf(link)).height).toBeGreaterThanOrEqual(44);
     }
 
-    // The comparison is right-aligned only when it actually sits beside the headline.
-    const spending = page.getByTestId('spending-summary');
-    const comparison = spending.getByTestId('spending-comparison');
-    const headline = await boxOf(spending.getByRole('link').first());
-    const comparisonBox = await boxOf(comparison);
-    const beside = comparisonBox.y < headline.y + headline.height;
-    expect(await comparison.evaluate((element) => getComputedStyle(element).textAlign)).toBe(
-      beside ? 'right' : 'start',
-    );
-
     const month = await boxOf(page.getByRole('heading', {level: 1}));
     const previous = await boxOf(page.getByRole('link', {name: 'Previous month'}));
     const next = await boxOf(page.getByRole('link', {name: 'Next month'}));
@@ -150,61 +139,6 @@ for (const {width, theme} of layouts) {
     expect(errors).toEqual([]);
   });
 }
-
-test('the spending chart shows keyboard focus', async ({page}) => {
-  await page.clock.setFixedTime(SEEDED_TRANSACTION_YEAR_NOW);
-  await page.goto('/?month=2026-08');
-  const surface = page.getByTestId('spending-summary').locator('.recharts-surface[tabindex="0"]');
-  await surface.focus();
-  const outline = await surface.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {style: style.outlineStyle, width: parseFloat(style.outlineWidth)};
-  });
-  expect(outline.style).toBe('solid');
-  expect(outline.width).toBeGreaterThanOrEqual(2);
-});
-
-test('a narrow first-month view contains the hidden and keyboard-revealed daily table', async ({
-  page,
-}) => {
-  await page.setViewportSize({width: 320, height: 844});
-  await page.clock.setFixedTime(SEEDED_TRANSACTION_YEAR_NOW);
-  await mockJson(page, '**/bank-transactions/summary**', firstMonthSummary);
-  await page.goto('/?month=2026-09');
-  await expect(page.getByTestId('spending-summary')).toContainText(
-    'No earlier months to compare with yet.',
-  );
-  await expectNoHorizontalOverflow(page);
-  const table = page.getByRole('table', {name: 'Exact daily spending'});
-  const wrapper = table.locator('..');
-  const day = table.getByRole('link', {name: '1 Sep', exact: true});
-  const hiddenBox = await boxOf(wrapper);
-  expect(hiddenBox.width).toBe(1);
-  expect(hiddenBox.height).toBe(1);
-  expect(await wrapper.evaluate((element) => getComputedStyle(element).overflow)).toBe('hidden');
-  const surface = page.getByTestId('spending-summary').locator('.recharts-surface[tabindex="0"]');
-  await surface.focus();
-  await page.keyboard.press('Tab');
-  await expect(day).toBeFocused();
-  const revealedBox = await boxOf(wrapper);
-  expect(revealedBox.width).toBeGreaterThan(100);
-  expect(revealedBox.height).toBeGreaterThan(100);
-  expect(await wrapper.evaluate((element) => getComputedStyle(element).clip)).toBe('auto');
-  await expectNoHorizontalOverflow(page);
-  await page.getByRole('link', {name: 'Previous month'}).focus();
-  expect((await boxOf(wrapper)).height).toBe(1);
-  await surface.focus();
-  await page.keyboard.press('Tab');
-  await expect(day).toBeFocused();
-  await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/\/bank-transactions/);
-  const filter = JSON.parse(new URL(page.url()).searchParams.get('bookingDate')!) as {
-    from: string;
-    to: string;
-  };
-  const localMidnight = await page.evaluate(() => new Date(2026, 8, 1).toISOString());
-  expect(filter).toEqual({from: localMidnight, to: localMidnight});
-});
 
 for (const theme of ['light', 'dark']) {
   test(`sync-problem badges use readable foreground text in ${theme}`, async ({page}) => {
@@ -223,22 +157,5 @@ for (const theme of ['light', 'dark']) {
     expect(await badge.evaluate((element) => getComputedStyle(element).color)).toBe(
       await page.evaluate(() => getComputedStyle(document.body).color),
     );
-  });
-}
-
-for (const theme of ['light', 'dark']) {
-  test(`chart axes use readable theme text in ${theme}`, async ({page}) => {
-    await page.addInitScript((value) => localStorage.setItem('vite-ui-theme', value), theme);
-    await page.goto('/?month=2026-08');
-    const summary = page.getByTestId('spending-summary');
-    const period = summary.getByText('spent in August 2026', {exact: true});
-    await expect(period).toBeVisible();
-    const expectedColor = await period.evaluate((element) => getComputedStyle(element).color);
-    const labels = summary.locator('.recharts-cartesian-axis-tick-value');
-    expect(await labels.count()).toBeGreaterThan(0);
-    const fills = await labels.evaluateAll((elements) =>
-      elements.map((element) => getComputedStyle(element).fill),
-    );
-    for (const fill of fills) expect(fill).toBe(expectedColor);
   });
 }

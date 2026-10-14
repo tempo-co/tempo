@@ -16,7 +16,8 @@ for (const [flow, label, sign] of [
     const summary = (await response.json()) as BankTransactionSummary;
     const totalCents = Math.round(Number(summary.totals[label]) * 100);
     await page.goto('/?month=2026-08');
-    const card = page.getByTestId('spending-summary');
+    // The selected month's totals sit under the cash flow chart.
+    const card = page.getByTestId('cash-flow-selected-month');
     const link = card.getByRole('link', {
       name: new Intl.NumberFormat(undefined, {
         style: 'currency',

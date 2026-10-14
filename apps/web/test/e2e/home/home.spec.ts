@@ -1,7 +1,7 @@
 import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
-import {septemberSummary} from '../../data/home-summary.data';
+import {septemberSpending} from '../../data/home-summary.data';
 import {expect, test} from '../../fixtures';
 import {mockBankConnections, mockJson, transformBankConnections} from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
@@ -138,15 +138,14 @@ test.describe('Home', () => {
         ],
       },
     ]);
-    await mockJson(page, '**/bank-transactions/summary**', septemberSummary);
+    await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
     await page.goto('/?month=2026-09');
 
     await expect(homePage.monthHeading).toHaveText('September 2026');
     await expect(homePage.emptyStateTitle).toBeHidden();
-    const totals = page.getByTestId('spending-summary');
-    await expect(totals.getByRole('link', {name: '€1,200.00', exact: true})).toBeVisible();
-    await expect(totals.getByRole('link', {name: '€2,500.00', exact: true})).toBeVisible();
-    await expect(totals.getByText('€1,300.00', {exact: true})).toBeVisible();
+    await expect(
+      page.getByTestId('category-breakdown').getByText('€1,200.00', {exact: true}),
+    ).toBeVisible();
     const balances = page.getByRole('region', {name: 'Balances'});
     await expect(
       balances

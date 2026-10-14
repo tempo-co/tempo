@@ -55,6 +55,16 @@ test('shows foreign balance provenance and excludes missing conversions', async 
   await expectNoHorizontalOverflow(page);
 });
 
+test('recent transactions show only the booking date under each title', async ({page}) => {
+  await page.goto('/?month=2026-08');
+  const subtitles = page
+    .getByRole('region', {name: 'Latest in August 2026'})
+    .locator('li a p.text-xs');
+  await expect(subtitles.first()).toBeVisible();
+  for (const text of await subtitles.allInnerTexts())
+    expect(text).toMatch(/^\d{1,2} [A-Z][a-z]{2}$/);
+});
+
 test('recent transactions open the existing detail dialog', async ({page}) => {
   await page.goto('/?month=2026-08');
   const recent = page.getByRole('region', {name: 'Latest in August 2026'});

@@ -4,9 +4,9 @@ import {dashboardQueryKeys} from '../../../src/features/banking/api/aggregate-qu
 import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
-import {septemberSummary} from '../../data/home-summary.data';
+import {septemberSpending} from '../../data/home-summary.data';
 import {API_URL, expect, test} from '../../fixtures';
-import {fulfillJson, mockBankConnections} from '../../utils/api-mocks';
+import {fulfillJson, mockBankConnections, mockCashFlow} from '../../utils/api-mocks';
 
 const CACHE_KEY = 'tempo-offline-cache';
 type SavedCache = {
@@ -20,7 +20,7 @@ const readCache = (page: Page) =>
   );
 const offlineStatus = (page: Page) => page.getByRole('status').filter({hasText: /^Offline/});
 const spending = (page: Page, amount = '€1,200.00') =>
-  page.getByTestId('spending-summary').getByRole('link', {name: amount, exact: true});
+  page.getByTestId('category-breakdown').getByText(amount, {exact: true});
 const attention = (page: Page) => page.getByRole('region', {name: 'Needs attention', exact: true});
 const connection: BankConnection = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -41,13 +41,13 @@ async function mockHome(page: Page, padding = 0) {
   const state = {refreshed: false};
   await page.clock.install({time: SEEDED_TRANSACTION_YEAR_NOW});
   await mockBankConnections(page, () => [connection]);
+  await mockCashFlow(page);
   await page.route('**/bank-transactions/summary**', (route) => {
     const params = new URL(route.request().url()).searchParams;
     return fulfillJson(route, {
-      ...septemberSummary,
+      ...septemberSpending(state.refreshed ? '1400.00' : '1200.00'),
       month: params.get('month'),
       through: params.get('asOf'),
-      totals: {...septemberSummary.totals, spending: state.refreshed ? '1400.00' : '1200.00'},
       padding: 'x'.repeat(padding),
     });
   });
@@ -95,7 +95,7 @@ test.describe('saved Home', () => {
     await page.getByRole('link', {name: 'Previous month'}).click();
     await expect(page).toHaveURL(/month=2026-08/);
     await expect(page.getByLabel('Loading spending')).toBeVisible();
-    await expect(page.getByTestId('spending-summary')).toHaveCount(0);
+    await expect(page.getByTestId('category-breakdown')).toHaveCount(0);
     await expect(attention(page)).toContainText('3 transactions');
     await page.getByRole('link', {name: 'Next month'}).click();
     await expect(spending(page)).toBeVisible();
@@ -170,6 +170,6 @@ test('logout removes saved Home data and prevents an offline reload from reopeni
   await context.setOffline(true);
   await page.goto('/?month=2026-09');
   await expect(page.getByRole('heading', {name: 'Cannot reach Tempo'})).toBeVisible();
-  await expect(page.getByTestId('spending-summary')).toHaveCount(0);
+  await expect(page.getByTestId('category-breakdown')).toHaveCount(0);
   await expect(attention(page)).toHaveCount(0);
 });

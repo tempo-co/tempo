@@ -26,7 +26,3 @@ export function formatMoney(value: string | number, currency: string | null) {
     ? formatCurrency(amount, currency)
     : getFormatter('plain', {minimumFractionDigits: 2, maximumFractionDigits: 2}).format(amount);
 }
-
-export function formatWholeNumber(value: number) {
-  return getFormatter('whole', {maximumFractionDigits: 0}).format(value);
-}

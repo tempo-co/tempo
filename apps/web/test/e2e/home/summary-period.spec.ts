@@ -17,7 +17,7 @@ test('requests whole-month history for a completed month and today for the curre
   });
   await page.goto('/?month=2026-09');
   expect(new URL((await completed).url()).searchParams.get('asOf')).toBe('2026-10-01');
-  await expect(page.getByTestId('spending-summary')).toBeVisible();
+  await expect(page.getByTestId('category-breakdown')).toBeVisible();
   const current = page.waitForRequest((request) => {
     const url = new URL(request.url());
     return (
@@ -27,5 +27,5 @@ test('requests whole-month history for a completed month and today for the curre
   });
   await page.goto('/');
   expect(new URL((await current).url()).searchParams.get('asOf')).toBe('2026-10-01');
-  await expect(page.getByTestId('spending-summary')).toBeVisible();
+  await expect(page.getByTestId('category-breakdown')).toBeVisible();
 });

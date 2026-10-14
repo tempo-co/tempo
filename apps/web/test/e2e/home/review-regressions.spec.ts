@@ -1,6 +1,6 @@
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
-import {octoberFirstSummary, septemberSummary} from '../../data/home-summary.data';
+import {septemberSummary} from '../../data/home-summary.data';
 import {expect, test} from '../../fixtures';
 import {mockJson} from '../../utils/api-mocks';
 
@@ -48,14 +48,6 @@ test('ranks a positive refund bucket by its amount', async ({page}) => {
   const rows = page.getByTestId('category-breakdown').getByRole('link');
   await expect(rows.first()).toContainText('Refund');
   await expect(rows.first()).toContainText('€500.00');
-});
-
-test('shows a visible subject marker on the first day', async ({page}) => {
-  await mockJson(page, '**/bank-transactions/summary**', octoberFirstSummary);
-  await page.goto('/');
-  await expect(
-    page.getByTestId('spending-summary').locator('.recharts-line-dots circle'),
-  ).toHaveCount(1);
 });
 
 test('does not relabel previous month rows during loading', async ({page}) => {

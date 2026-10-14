@@ -6,7 +6,6 @@ import {Card} from '@/components/ui/card';
 import {Skeleton} from '@/components/ui/skeleton';
 import {useGetBankTransactions} from '@/features/banking/api/use-get-bank-transactions';
 import {
-  formatBankTransactionCategorySubtitle,
   formatBankTransactionCompactDate,
   resolveBankTransactionDisplayTitle,
 } from '@/features/banking/utils/formatters';
@@ -66,8 +65,7 @@ export function RecentTransactions({
                     {resolveBankTransactionDisplayTitle(transaction)}
                   </p>
                   <p className='truncate text-xs text-muted-foreground'>
-                    {formatBankTransactionCompactDate(transaction.bookingDate)} ·{' '}
-                    {formatBankTransactionCategorySubtitle(transaction)}
+                    {formatBankTransactionCompactDate(transaction.bookingDate)}
                   </p>
                 </div>
                 <span className='text-sm'>

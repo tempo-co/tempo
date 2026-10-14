@@ -6,6 +6,28 @@ export function fulfillJson(route: Route, body: unknown, status = 200) {
   return route.fulfill({status, contentType: 'application/json', body: JSON.stringify(body)});
 }
 
+/** Synthetic monthly totals for specs that mock Home without a real session. */
+export const syntheticCashFlow = {
+  baseCurrency: 'EUR',
+  interval: 'month',
+  periods: ['2026-07', '2026-08', '2026-09'].map((month, index) => ({
+    start: `${month}-01`,
+    end: `${month}-${month === '2026-09' ? '30' : '31'}`,
+    complete: true,
+    spending: `${1100 + index * 50}.00`,
+    income: '2500.00',
+    net: `${1400 - index * 50}.00`,
+  })),
+};
+
+/** Serves {@link syntheticCashFlow} for every interval, so the card never reaches the real API. */
+export function mockCashFlow(page: Page) {
+  return page.route('**/bank-transactions/cash-flow**', (route) => {
+    const interval = new URL(route.request().url()).searchParams.get('interval');
+    return fulfillJson(route, {...syntheticCashFlow, interval});
+  });
+}
+
 /** Answers every request to `url` with the same JSON response. */
 export function mockJson(page: Page, url: string, body: unknown, status = 200) {
   return page.route(url, (route) => fulfillJson(route, body, status));
