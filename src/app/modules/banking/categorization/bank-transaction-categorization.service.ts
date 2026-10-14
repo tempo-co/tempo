@@ -44,6 +44,8 @@ import {
 	BankTransactionCategorizationSearchTrace,
 	BankTransactionCategorizationSource,
 	BankTransactionCategorizationStatus,
+	isManualCategorySource,
+	notManualCategorySourceSql,
 } from './bank-transaction-categorization.types';
 import {
 	BANK_TRANSACTION_CATEGORIES,
@@ -175,7 +177,7 @@ export class BankTransactionCategorizationService {
 			});
 			const inputHash = createBankTransactionCategorizationInputHash(input);
 			if (!(await this.refreshInputHashAndResetStaleClassification(transaction, inputHash))) continue;
-			if (transaction.categorySource === 'MANUAL') continue;
+			if (isManualCategorySource(transaction.categorySource)) continue;
 
 			if (!this.isClaimable(transaction)) continue;
 			if (await this.claimTransaction(transaction.id, inputHash)) {
@@ -195,7 +197,7 @@ export class BankTransactionCategorizationService {
 			const rows = await this.repository
 				.createQueryBuilder('transaction')
 				.select('transaction.id', 'id')
-				.where(`transaction."categorySource" IS DISTINCT FROM 'MANUAL'`)
+				.where(notManualCategorySourceSql('transaction."categorySource"'))
 				.andWhere('transaction."financialEventType" IS DISTINCT FROM :financialEventType', {
 					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
 				})
@@ -366,7 +368,7 @@ export class BankTransactionCategorizationService {
 			transaction.categoryInputHash = inputHash;
 		}
 
-		if (transaction.categorySource === 'MANUAL') return true;
+		if (isManualCategorySource(transaction.categorySource)) return true;
 		if (transaction.categoryStatus === 'COMPLETED') return true;
 		const appliedHashIsStale =
 			transaction.categoryAppliedInputHash !== null && transaction.categoryAppliedInputHash !== inputHash;
@@ -459,13 +461,44 @@ export class BankTransactionCategorizationService {
 	}
 
 	/**
+	 * Saves the owner's manual category on an owned transaction, then applies it to the owner's other rows from the same
+	 * merchant. Returns false when the row no longer exists. The owner's choice is kept even when the follow-up fails;
+	 * same-merchant rows then catch up on the next correction for that merchant.
+	 */
+	async setManualCategory(
+		accountId: string,
+		transaction: BankTransaction,
+		category: BankTransactionCategory,
+	): Promise<boolean> {
+		const inputHash = createBankTransactionCategorizationInputHash(transaction);
+		const values: CategorizationUpdate & {categoryInputHash: string} = {
+			...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
+			category,
+			categoryStatus: 'COMPLETED',
+			categorySource: 'MANUAL',
+			categoryInputHash: inputHash,
+			categoryAppliedInputHash: inputHash,
+			categoryUpdatedAt: new Date(),
+		};
+		const result = await this.repository.update({id: transaction.id}, values);
+		if (result.affected === 0) return false;
+		Object.assign(transaction, values);
+		try {
+			await this.applyManualCategoryToMerchant(accountId, transaction.merchantKey);
+		} catch (error) {
+			this.logger.warn(`Applying a manual category to the same merchant failed: ${safeErrorName(error)}`);
+		}
+		return true;
+	}
+
+	/**
 	 * Called after the owner sets a category manually. When all of the owner's manual choices for this merchant agree,
 	 * the owner's other non-manual rows from the merchant take that category, without a model call. When the choices
 	 * disagree, or no reusable choice is left (for example after a correction to NEEDS_REVIEW), rows that were filled
 	 * from history go back to the model, which then sees any remaining choices. With AI categorization off they keep
 	 * their current category.
 	 */
-	async applyManualCategoryToMerchant(accountId: string, merchantKey: string | null): Promise<void> {
+	private async applyManualCategoryToMerchant(accountId: string, merchantKey: string | null): Promise<void> {
 		if (!merchantKey) return;
 		const counts = (await this.loadAccountManualCategoryCounts(accountId, [merchantKey])).get(merchantKey);
 
@@ -481,7 +514,7 @@ export class BankTransactionCategorizationService {
 				)`,
 				{accountId},
 			)
-			.andWhere(`"categorySource" IS DISTINCT FROM 'MANUAL'`)
+			.andWhere(notManualCategorySourceSql())
 			.andWhere('"categoryStatus" IN (:...statuses)', {statuses: MERCHANT_REAPPLY_STATUSES})
 			.andWhere('"categoryInputHash" IS NOT NULL')
 			.andWhere('"ownTransferEvidence" IS NULL')
@@ -575,7 +608,7 @@ export class BankTransactionCategorizationService {
 			.update(BankTransaction)
 			.set({categoryStatus: 'PROCESSING', categoryUpdatedAt: new Date()})
 			.where('id = :id', {id})
-			.andWhere(`"categorySource" IS DISTINCT FROM 'MANUAL'`)
+			.andWhere(notManualCategorySourceSql())
 			.andWhere('"categoryInputHash" = :inputHash', {inputHash})
 			.andWhere('"financialEventType" IS DISTINCT FROM :financialEventType', {
 				financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
@@ -610,7 +643,7 @@ export class BankTransactionCategorizationService {
 			.update(BankTransaction)
 			.set(values)
 			.where('id = :id', {id})
-			.andWhere(`"categorySource" IS DISTINCT FROM 'MANUAL'`)
+			.andWhere(notManualCategorySourceSql())
 			.andWhere('"categoryInputHash" = :inputHash', {inputHash})
 			.andWhere('"financialEventType" IS DISTINCT FROM :financialEventType', {
 				financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,

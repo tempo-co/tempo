@@ -408,6 +408,17 @@ describe('bank transaction categorization input', () => {
 		expect(toBankTransactionCategorizationWebSearchInput(input)?.merchantName).toBe('Known Merchant');
 	});
 
+	it('does not search the web for a card line whose merchant is only a card tap identifier', () => {
+		const input = toBankTransactionCategorizationInput(
+			createTransaction({
+				counterpartyName: null,
+				description: 'BEA, Google Pay NLOVABCDEFGHIJKL12,PAS999 NR:TEST12345, 12.03.26/20:53 transit.example',
+			}),
+		);
+
+		expect(toBankTransactionCategorizationWebSearchInput(input)).toBeNull();
+	});
+
 	it('falls back to the bank transaction description when the description is missing', () => {
 		const input = toBankTransactionCategorizationInput(
 			createTransaction({

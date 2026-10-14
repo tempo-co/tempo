@@ -1276,7 +1276,7 @@ describe('BankingSyncService transaction event persistence', () => {
 		expect(queryBuilder.where).toHaveBeenCalledWith('id IN (:...ids)', {
 			ids: ['existing-transaction-0', 'existing-transaction-1'],
 		});
-		expect(queryBuilder.andWhere).toHaveBeenCalledWith("categorySource IS DISTINCT FROM 'MANUAL'");
+		expect(queryBuilder.andWhere).toHaveBeenCalledWith(`"categorySource" IS DISTINCT FROM 'MANUAL'`);
 		expect(queryBuilder.andWhere).toHaveBeenCalledWith('"financialEventType" IS NULL');
 		expect(repository.createQueryBuilder).toHaveBeenCalledTimes(3);
 	});

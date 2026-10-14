@@ -15,6 +15,16 @@ export type BankTransactionCategorizationStatus = (typeof BANK_TRANSACTION_CATEG
 export const BANK_TRANSACTION_CATEGORIZATION_SOURCES = ['AI', 'HISTORY', 'MANUAL'] as const;
 export type BankTransactionCategorizationSource = (typeof BANK_TRANSACTION_CATEGORIZATION_SOURCES)[number];
 
+/** Manual categories belong to the owner: nothing automatic may overwrite them. */
+export function isManualCategorySource(source: string | null | undefined): boolean {
+	return source === 'MANUAL';
+}
+
+/** SQL condition for rows whose category automation may still change; `column` is the quoted categorySource. */
+export function notManualCategorySourceSql(column = '"categorySource"'): string {
+	return `${column} IS DISTINCT FROM 'MANUAL'`;
+}
+
 export type BankTransactionCategorizationInput = {
 	correlationId: string;
 	transactionDate: string | null;

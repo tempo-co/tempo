@@ -8,14 +8,13 @@ import {BankAccountBalance} from '@modules/banking/bank-account-balance.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {BankSyncRun} from '@modules/banking/bank-sync-run.entity';
-import {getBankTransactionDisplayDescription} from '@modules/banking/bank-transaction-display';
 import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION,
 	BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES,
 	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
 } from '@modules/banking/bank-transaction-financial-event';
+import {deriveBankTransactionTextColumns} from '@modules/banking/bank-transaction-text-columns';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
-import {getBankTransactionMerchantKey} from '@modules/banking/categorization/bank-transaction-merchant-key';
 
 export const CURRENCY_EXCHANGE_EVENT = {
 	financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
@@ -107,26 +106,18 @@ export class BankingFixtures {
 
 	createTransactions(bankAccount: Pick<BankAccount, 'id'>, overrides: DeepPartial<BankTransaction>[]) {
 		return this.transactions.save(
-			overrides.map((values) =>
-				this.transactions.create({
+			overrides.map((overrideValues) => {
+				const values = {
 					bankAccountId: bankAccount.id,
 					dedupeKey: randomUUID(),
 					amount: '-1.00',
 					currency: 'EUR',
 					creditDebitIndicator: 'DBIT',
 					transactionStatus: 'BOOK',
-					displayDescription: getBankTransactionDisplayDescription({
-						description: values.description,
-						counterpartyName: values.counterpartyName,
-					}),
-					merchantKey: getBankTransactionMerchantKey({
-						description: values.description,
-						counterpartyName: values.counterpartyName,
-						creditDebitIndicator: values.creditDebitIndicator ?? 'DBIT',
-					}),
-					...values,
-				}),
-			),
+					...overrideValues,
+				};
+				return this.transactions.create({...deriveBankTransactionTextColumns(values), ...values});
+			}),
 		);
 	}
 }

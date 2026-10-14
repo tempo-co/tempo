@@ -6,9 +6,9 @@ import {
 } from '../bank-transaction-display';
 
 type MerchantKeyTransaction = {
-	description: string | null | undefined;
-	counterpartyName: string | null | undefined;
-	creditDebitIndicator: string | null | undefined;
+	description?: string | null;
+	counterpartyName?: string | null;
+	creditDebitIndicator?: string | null;
 };
 
 const TRAILING_TERMINAL_NUMBER_PATTERN = /\s+\d{1,5}$/;

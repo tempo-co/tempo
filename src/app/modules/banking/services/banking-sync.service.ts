@@ -31,7 +31,6 @@ import {BankAccountBalance} from '../bank-account-balance.entity';
 import {BankAccount} from '../bank-account.entity';
 import {BankConnection} from '../bank-connection.entity';
 import {BankSyncRun} from '../bank-sync-run.entity';
-import {getBankTransactionDisplayDescription} from '../bank-transaction-display';
 import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
 	detectBankTransactionFinancialEvent,
@@ -44,6 +43,7 @@ import {
 	isLegacyBankTransactionDedupeKey,
 } from '../bank-transaction-identity';
 import {normalizeBankTransactionLocation} from '../bank-transaction-location';
+import {deriveBankTransactionTextColumns} from '../bank-transaction-text-columns';
 import {normalizeBankTransactionType} from '../bank-transaction-type';
 import {BankTransaction} from '../bank-transaction.entity';
 import {
@@ -62,7 +62,10 @@ import {
 } from '../categorization/bank-transaction-categorization-input';
 import {BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES} from '../categorization/bank-transaction-categorization.constants';
 import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
-import {getBankTransactionMerchantKey} from '../categorization/bank-transaction-merchant-key';
+import {
+	isManualCategorySource,
+	notManualCategorySourceSql,
+} from '../categorization/bank-transaction-categorization.types';
 import {
 	EnableBankingBalance,
 	EnableBankingTransaction,
@@ -887,7 +890,7 @@ export class BankingSyncService {
 			if (
 				!currentValue ||
 				currentValue.financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE ||
-				existingTransaction.categorySource === 'MANUAL' ||
+				isManualCategorySource(existingTransaction.categorySource) ||
 				existingTransaction.categoryStatus === 'COMPLETED' ||
 				existingTransaction.categoryInputHash === currentValue.categoryInputHash
 			) {
@@ -907,7 +910,7 @@ export class BankingSyncService {
 					categoryUpdatedAt: null,
 				})
 				.where('id IN (:...ids)', {ids})
-				.andWhere("categorySource IS DISTINCT FROM 'MANUAL'")
+				.andWhere(notManualCategorySourceSql())
 				.andWhere('categoryStatus IS DISTINCT FROM :completedCategoryStatus', {
 					completedCategoryStatus: 'COMPLETED',
 				})
@@ -1053,8 +1056,11 @@ export class BankingSyncService {
 		const description = truncate(transaction.description, 500);
 		const counterpartyName = truncate(transaction.counterpartyName, 255);
 		const counterpartyIban = transaction.counterpartyIban ?? null;
-		const displayDescription = getBankTransactionDisplayDescription({description, counterpartyName});
-		const merchantKey = getBankTransactionMerchantKey({description, counterpartyName, creditDebitIndicator});
+		const {displayDescription, merchantKey} = deriveBankTransactionTextColumns({
+			description,
+			counterpartyName,
+			creditDebitIndicator,
+		});
 		const remittanceInformation = truncate(transaction.remittanceInformation, 10_000);
 		const transactionDate = this.toDateOnly(transaction.transactionDate);
 		const bookingDate = this.toDateOnly(transaction.bookingDate);

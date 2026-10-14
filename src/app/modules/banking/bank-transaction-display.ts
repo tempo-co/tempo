@@ -2,8 +2,8 @@ export function getBankTransactionDisplayDescription({
 	description,
 	counterpartyName,
 }: {
-	description: string | null | undefined;
-	counterpartyName: string | null | undefined;
+	description?: string | null;
+	counterpartyName?: string | null;
 }): string {
 	const normalizedDescription = normalizeBankTransactionText(description);
 	const normalizedCounterpartyName = normalizeBankTransactionText(counterpartyName);
@@ -34,7 +34,7 @@ export function extractStructuredCounterpartyName(description: string): string |
 }
 
 const CARD_PREFIX_PATTERN = /^(?:bea|gea),\s*(?:(?:google|apple|garmin|fitbit)\s+pay\s+|betaalpas\s+)?/i;
-const CARD_DETAILS_PATTERN = /,\s*pas\d+.*$|\s+nr:.*$|,\s*\d{2}[./]\d{2}[./]\d{2}\/.*$/i;
+const CARD_DETAILS_PATTERN = /,\s*pas\s*\d+.*$|\s+nr:.*$|,\s*\d{2}[./]\d{2}[./]\d{2}\/.*$/i;
 const PAYMENT_PROCESSOR_PREFIX_PATTERN = /^(?:bck|ccv|sumup|sq|zettle|iz|msp)\s?\*\s*/i;
 
 /**
