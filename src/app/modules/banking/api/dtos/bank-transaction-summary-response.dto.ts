@@ -21,8 +21,6 @@ export class BankTransactionSummaryResponseDto {
 		spendingRangeByThrough: {low: string; high: string} | null;
 		/** Same-day average for the current month; whole-month average for a past month. */
 		incomeByThrough: string | null;
-		/** Average whole-month spending, every day of each baseline month counted; null without history. */
-		spendingFullMonth: string | null;
 	};
 	categories: BankTransactionSummaryCategoryDto[];
 }
