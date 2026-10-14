@@ -37,6 +37,28 @@ export function convertEcbAmountSql(amount: string, sourceRate: string, baseRate
 	return `ROUND(${amount} / ${sourceRate} * ${baseRate}, 2)`;
 }
 
+/**
+ * Subquery for the newest ECB rate date on or before `onOrBefore` at which both `currency` and `base`
+ * were published, selecting `rateDate`, `source` and `base`. Use as `LEFT JOIN LATERAL (...) rate ON TRUE`.
+ */
+export function newestEcbRatePairSql(currency: string, base: string, onOrBefore: string): string {
+	return `
+		SELECT dates."rateDate",
+			${ecbRateSql(currency, 'source."rateToEur"')} AS "source",
+			${ecbRateSql(base, 'base."rateToEur"')} AS "base"
+		FROM "bank_transaction_fx_rates" dates
+		LEFT JOIN "bank_transaction_fx_rates" source
+			ON source."currency" = ${currency} AND source."rateDate" = dates."rateDate"
+		LEFT JOIN "bank_transaction_fx_rates" base ON base."currency" = ${base} AND base."rateDate" = dates."rateDate"
+		WHERE ${currency} <> ${base}
+			AND dates."currency" IN (${currency}, ${base})
+			AND dates."rateDate" <= ${onOrBefore}
+			AND (${currency} = 'EUR' OR source."rateToEur" > 0)
+			AND (${base} = 'EUR' OR base."rateToEur" > 0)
+		ORDER BY dates."rateDate" DESC
+		LIMIT 1`;
+}
+
 /** ECB reference rates are published around 16:00 CET on TARGET business days. */
 const ECB_PUBLICATION_HOUR = 16;
 const ECB_TIME_ZONE = 'Europe/Berlin';
