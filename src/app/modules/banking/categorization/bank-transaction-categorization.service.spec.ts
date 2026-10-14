@@ -33,6 +33,8 @@ function createUpdateQueryBuilder(
 		select: jest.fn().mockReturnThis(),
 		addSelect: jest.fn().mockReturnThis(),
 		innerJoin: jest.fn().mockReturnThis(),
+		groupBy: jest.fn().mockReturnThis(),
+		addGroupBy: jest.fn().mockReturnThis(),
 		limit: jest.fn().mockReturnThis(),
 		set: jest.fn().mockReturnThis(),
 		where: jest.fn().mockReturnThis(),
@@ -775,17 +777,11 @@ describe('BankTransactionCategorizationService worker', () => {
 		const transaction = createBankTransaction({
 			id: 'repeat-merchant',
 			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
-			description: 'BEA, Google Pay BCK*Example Rail 201,PAS123 NR:EX0001, 01.02.26/10:00 EXAMPLETOWN',
-			counterpartyName: null,
+			merchantKey: 'EXPENSE:example rail',
 		});
 		const queryBuilder = createUpdateQueryBuilder();
 		queryBuilder.getRawMany.mockResolvedValueOnce([
-			{
-				description: 'BEA, Betaalpas Example Rail 305,PAS123 NR:EX0002, 03.01.26/09:00 EXAMPLETOWN',
-				counterpartyName: null,
-				creditDebitIndicator: 'DBIT',
-				category: 'TRANSPORTATION',
-			},
+			{merchantKey: 'EXPENSE:example rail', category: 'TRANSPORTATION', count: 3},
 		] as never);
 		const {service, provider} = createService({rows: [transaction], queryBuilder});
 
@@ -795,7 +791,7 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(transaction).toMatchObject({
 			category: 'TRANSPORTATION',
 			categoryStatus: 'COMPLETED',
-			categorySource: 'AI',
+			categorySource: 'HISTORY',
 			categoryProvider: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
 			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
 		});
@@ -805,36 +801,13 @@ describe('BankTransactionCategorizationService worker', () => {
 		const transaction = createBankTransaction({
 			id: 'mixed-merchant',
 			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
-			counterpartyName: 'Example Rides',
+			merchantKey: 'EXPENSE:example rides',
 		});
-		const history = [
-			{
-				description: 'Example Rides',
-				counterpartyName: 'Example Rides',
-				creditDebitIndicator: 'DBIT',
-				category: 'FOOD_AND_DRINK',
-			},
-			{
-				description: 'Example Rides',
-				counterpartyName: 'Example Rides',
-				creditDebitIndicator: 'DBIT',
-				category: 'FOOD_AND_DRINK',
-			},
-			{
-				description: 'Example Rides',
-				counterpartyName: 'Example Rides',
-				creditDebitIndicator: 'DBIT',
-				category: 'TRANSPORTATION',
-			},
-			{
-				description: 'Example Rides',
-				counterpartyName: 'Example Rides',
-				creditDebitIndicator: 'CRDT',
-				category: 'REFUND',
-			},
-		];
 		const queryBuilder = createUpdateQueryBuilder();
-		queryBuilder.getRawMany.mockResolvedValueOnce(history as never);
+		queryBuilder.getRawMany.mockResolvedValueOnce([
+			{merchantKey: 'EXPENSE:example rides', category: 'FOOD_AND_DRINK', count: 2},
+			{merchantKey: 'EXPENSE:example rides', category: 'TRANSPORTATION', count: 1},
+		] as never);
 		const {service, provider} = createService({rows: [transaction], queryBuilder});
 
 		await service.processTransactionJob([transaction.id]);

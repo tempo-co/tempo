@@ -49,7 +49,7 @@ describe('bank transaction categorization contract', () => {
 			'FAILED',
 			'NOT_APPLICABLE',
 		]);
-		expect(BANK_TRANSACTION_CATEGORIZATION_SOURCES).toEqual(['AI', 'MANUAL']);
+		expect(BANK_TRANSACTION_CATEGORIZATION_SOURCES).toEqual(['AI', 'HISTORY', 'MANUAL']);
 	});
 
 	it('makes grocery and convenience purchases explicit in Food and drink guidance', () => {

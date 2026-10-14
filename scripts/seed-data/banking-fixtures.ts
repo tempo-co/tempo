@@ -15,6 +15,7 @@ import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
 } from '@modules/banking/bank-transaction-financial-event';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {getBankTransactionMerchantKey} from '@modules/banking/categorization/bank-transaction-merchant-key';
 
 export const CURRENCY_EXCHANGE_EVENT = {
 	financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
@@ -117,6 +118,11 @@ export class BankingFixtures {
 					displayDescription: getBankTransactionDisplayDescription({
 						description: values.description,
 						counterpartyName: values.counterpartyName,
+					}),
+					merchantKey: getBankTransactionMerchantKey({
+						description: values.description,
+						counterpartyName: values.counterpartyName,
+						creditDebitIndicator: values.creditDebitIndicator ?? 'DBIT',
 					}),
 					...values,
 				}),

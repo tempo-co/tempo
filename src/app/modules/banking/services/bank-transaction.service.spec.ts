@@ -9,6 +9,7 @@ import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
 } from '../bank-transaction-financial-event';
 import {BankTransaction} from '../bank-transaction.entity';
+import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
 import {BankTransactionService} from './bank-transaction.service';
 import {OwnTransferService} from './own-transfer.service';
 
@@ -65,6 +66,7 @@ describe('BankTransactionService display descriptions', () => {
 			{} as Repository<BankConnection>,
 			repository as unknown as Repository<BankTransaction>,
 			{} as OwnTransferService,
+			{} as BankTransactionCategorizationService,
 		);
 
 		const response = await service.findById('account-id', transaction.id);
@@ -84,6 +86,7 @@ describe('BankTransactionService display descriptions', () => {
 			{findOne: jest.fn().mockResolvedValue({id: 'connection-id'})} as unknown as Repository<BankConnection>,
 			repository as unknown as Repository<BankTransaction>,
 			{} as OwnTransferService,
+			{} as BankTransactionCategorizationService,
 		);
 
 		const response = await service.findAllByConnectionId('account-id', 'connection-id', 10);
@@ -112,6 +115,7 @@ describe('BankTransactionService display descriptions', () => {
 			{} as Repository<BankConnection>,
 			repository as unknown as Repository<BankTransaction>,
 			{} as OwnTransferService,
+			{} as BankTransactionCategorizationService,
 		);
 
 		const response = await service.findById('account-id', transaction.id);
@@ -141,6 +145,7 @@ describe('BankTransactionService display descriptions', () => {
 			{findOne: jest.fn().mockResolvedValue({id: 'connection-id'})} as unknown as Repository<BankConnection>,
 			repository as unknown as Repository<BankTransaction>,
 			{} as OwnTransferService,
+			{} as BankTransactionCategorizationService,
 		);
 
 		const response = await service.findAllByConnectionId('account-id', 'connection-id', 10);

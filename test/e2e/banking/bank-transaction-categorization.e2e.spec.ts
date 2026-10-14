@@ -25,6 +25,7 @@ import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from '../../../script
 import {
 	CATEGORIZATION_E2E_AI_TRANSACTION_ID,
 	CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID,
+	CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID,
 	CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_WEB_TRANSACTION_ID,
@@ -173,13 +174,14 @@ describe('Bank transaction categorization integration', () => {
 			(value) => value.status === 200 && value.body.categoryStatus === 'COMPLETED',
 		);
 
-		expect(response.body).toMatchObject({category: 'TRANSPORTATION', categorySource: 'AI'});
+		expect(response.body).toMatchObject({category: 'TRANSPORTATION', categorySource: 'HISTORY'});
 		const otherAccountRow = await waitFor(
 			() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID}),
 			(value) => value.categoryStatus === 'COMPLETED',
 		);
 		expect(otherAccountRow).toMatchObject({
 			category: 'ENTERTAINMENT',
+			categorySource: 'HISTORY',
 			categoryProvider: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
 		});
 		expect(categorizeSpy).not.toHaveBeenCalled();
@@ -192,6 +194,25 @@ describe('Bank transaction categorization integration', () => {
 			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
 			categoryModel: null,
 		});
+	});
+
+	it("applies a manual correction to the owner's history-filled rows from the same merchant", async () => {
+		// The previous test filled the repeat row from the owner's manual TRANSPORTATION choice.
+		await verifiedAgent
+			.patch(`/bank-transactions/${CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID}/category`)
+			.send({category: 'TRAVEL'})
+			.expect(200);
+
+		const sibling = await bankTransactionRepository.findOneByOrFail({
+			id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
+		});
+		expect(sibling).toMatchObject({category: 'TRAVEL', categorySource: 'HISTORY', categoryStatus: 'COMPLETED'});
+		expect(sibling.categoryAppliedInputHash).toBe(sibling.categoryInputHash);
+		const otherAccountRow = await bankTransactionRepository.findOneByOrFail({
+			id: CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID,
+		});
+		expect(otherAccountRow.category).toBe('ENTERTAINMENT');
+		expect(categorizeSpy).not.toHaveBeenCalled();
 	});
 
 	it('runs one normal pass and one web-search fallback for an OTHER result', async () => {

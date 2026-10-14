@@ -11,7 +11,8 @@ export const BANK_TRANSACTION_CATEGORIZATION_STATUSES = [
 ] as const;
 export type BankTransactionCategorizationStatus = (typeof BANK_TRANSACTION_CATEGORIZATION_STATUSES)[number];
 
-export const BANK_TRANSACTION_CATEGORIZATION_SOURCES = ['AI', 'MANUAL'] as const;
+/** `HISTORY` rows reuse the owner's own manual category for the same merchant instead of asking the model. */
+export const BANK_TRANSACTION_CATEGORIZATION_SOURCES = ['AI', 'HISTORY', 'MANUAL'] as const;
 export type BankTransactionCategorizationSource = (typeof BANK_TRANSACTION_CATEGORIZATION_SOURCES)[number];
 
 export type BankTransactionCategorizationInput = {

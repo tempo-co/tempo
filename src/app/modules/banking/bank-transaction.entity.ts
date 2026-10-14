@@ -29,6 +29,7 @@ export type BankTransactionBaseAmountMethod = 'SAME' | 'INSTRUCTED' | 'ECB';
 @Index('idx_bank_transactions_account_stable_identity', ['bankAccountId', 'stableIdentityKey'], {unique: true})
 @Index('idx_bank_transactions_account_identity_group', ['bankAccountId', 'stableIdentityGroupKey'])
 @Index('idx_bank_transactions_account_booking_date', ['bankAccountId', 'bookingDate'])
+@Index('idx_bank_transactions_account_merchant_key', ['bankAccountId', 'merchantKey'])
 export class BankTransaction {
 	@PrimaryGeneratedColumn('uuid')
 	id: string;
@@ -107,6 +108,10 @@ export class BankTransaction {
 
 	@Column({type: 'varchar', length: 255, nullable: true})
 	counterpartyName: string | null;
+
+	/** Identifies the same merchant in the same direction; derived from description, counterparty and direction. */
+	@Column({type: 'text', nullable: true})
+	merchantKey: string | null;
 
 	@Column({type: 'varchar', length: 34, nullable: true})
 	counterpartyIban: string | null;
