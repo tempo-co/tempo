@@ -141,6 +141,7 @@ describe('BankTransactionSummary', () => {
 			spendingByThrough: '36.67',
 			spendingRangeByThrough: {low: '20.00', high: '60.00'},
 			incomeByThrough: '333.33',
+			spendingFullMonth: '175.00',
 		});
 		expect(body.baseline.daily).toHaveLength(31);
 		expect(body.baseline.daily[17]).toEqual({day: 18, average: '36.67', low: '20.00', high: '60.00'});
@@ -273,6 +274,8 @@ describe('BankTransactionSummary', () => {
 		expect(body.baseline).toMatchObject({
 			spendingByThrough: '75.00',
 			spendingRangeByThrough: {low: '30.00', high: '120.00'},
+			// A 30-day month projects against whole earlier months, August's 31st included.
+			spendingFullMonth: '225.00',
 		});
 	});
 
@@ -309,6 +312,7 @@ describe('BankTransactionSummary', () => {
 			spendingByThrough: null,
 			spendingRangeByThrough: null,
 			incomeByThrough: null,
+			spendingFullMonth: null,
 		});
 		expect(body.categories).toEqual([
 			{category: 'FOOD_AND_DRINK', spending: '120.00', count: 2, baselineAverage: null},

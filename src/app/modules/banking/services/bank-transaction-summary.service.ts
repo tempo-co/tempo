@@ -141,15 +141,14 @@ export class BankTransactionSummaryService {
 		const baselineAverage = (byMonth: ReadonlyMap<string, bigint> | undefined) =>
 			formatCents(averageCents(baselineMonths.map((baselineMonth) => byMonth?.get(baselineMonth) ?? 0n)));
 		const hasBaseline = baselineMonths.length > 0;
-		const usual = !hasBaseline
+		const fullMonths = !hasBaseline
 			? null
-			: isPastMonth
-				? summarizeBaseline(
-						baselineMonths.map((baselineMonth) =>
-							[...baselineDaily.get(baselineMonth)!.values()].reduce((sum, value) => sum + value, 0n),
-						),
-					)
-				: pace.baseline[throughDay - 1];
+			: summarizeBaseline(
+					baselineMonths.map((baselineMonth) =>
+						[...baselineDaily.get(baselineMonth)!.values()].reduce((sum, value) => sum + value, 0n),
+					),
+				);
+		const usual = isPastMonth ? fullMonths : hasBaseline ? pace.baseline[throughDay - 1] : null;
 
 		return {
 			month,
@@ -171,6 +170,7 @@ export class BankTransactionSummaryService {
 				spendingRangeByThrough:
 					usual?.low != null && usual.high != null ? {low: usual.low, high: usual.high} : null,
 				incomeByThrough: hasBaseline ? baselineAverage(baselineIncome) : null,
+				spendingFullMonth: fullMonths?.average ?? null,
 			},
 			categories: [...categories.entries()]
 				.sort(compareCategories)
