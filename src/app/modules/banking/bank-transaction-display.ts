@@ -13,8 +13,8 @@ export function getBankTransactionDisplayDescription({
 	const structuredCounterpartyName = extractStructuredCounterpartyName(normalizedDescription);
 	if (structuredCounterpartyName) return normalizedCounterpartyName || structuredCounterpartyName;
 
-	const cardDescription = extractCardDescription(normalizedDescription);
-	if (cardDescription) return cardDescription;
+	const cardMerchantName = extractCardMerchantName(normalizedDescription);
+	if (cardMerchantName) return cardMerchantName;
 
 	if (normalizedCounterpartyName && normalizedDescription.length > 80) {
 		return normalizedCounterpartyName;
@@ -33,17 +33,20 @@ export function extractStructuredCounterpartyName(description: string): string |
 	return match?.[1]?.trim() || null;
 }
 
-function extractCardDescription(description: string): string | null {
-	const googlePayMarker = description.match(/^(?:bea|gea),\s*google\s+pay\s+/i);
-	const cardMarker = description.match(/^(?:bea|gea),\s*/i);
-	const candidate = googlePayMarker
-		? description.slice(googlePayMarker.index! + googlePayMarker[0].length)
-		: cardMarker
-			? description.slice(cardMarker[0].length)
-			: null;
+const CARD_PREFIX_PATTERN = /^(?:bea|gea),\s*(?:(?:google|apple|garmin|fitbit)\s+pay\s+|betaalpas\s+)?/i;
+const CARD_DETAILS_PATTERN = /,\s*pas\d+.*$|\s+nr:.*$|,\s*\d{2}[./]\d{2}[./]\d{2}\/.*$/i;
+const PAYMENT_PROCESSOR_PREFIX_PATTERN = /^(?:bck|ccv|sumup|sq|zettle|iz|msp)\s?\*\s*/i;
 
-	if (!candidate) return null;
-
-	const merchant = candidate.match(/^(.+?)(?=\s+nr:|,\s*\d{2}[./]\d{2}[./]\d{2}\/|$)/i);
-	return merchant?.[1]?.trim() || null;
+/**
+ * Returns the merchant from an ABN AMRO card line ("BEA, Google Pay BCK*Example Rail 201,PAS123 NR:..., 01.02.26/10:00
+ * CITY" -> "Example Rail 201"): drops the wallet prefix, card details, booking time and payment-processor prefix.
+ */
+export function extractCardMerchantName(description: string): string | null {
+	if (!CARD_PREFIX_PATTERN.test(description)) return null;
+	return normalizeBankTransactionText(
+		description
+			.replace(CARD_PREFIX_PATTERN, '')
+			.replace(CARD_DETAILS_PATTERN, '')
+			.replace(PAYMENT_PROCESSOR_PREFIX_PATTERN, ''),
+	);
 }

@@ -1,5 +1,9 @@
 import {toBankTransactionDirection} from '../bank-transaction-direction';
-import {extractStructuredCounterpartyName, normalizeBankTransactionText} from '../bank-transaction-display';
+import {
+	extractCardMerchantName,
+	extractStructuredCounterpartyName,
+	normalizeBankTransactionText,
+} from '../bank-transaction-display';
 
 type MerchantKeyTransaction = {
 	description: string | null | undefined;
@@ -7,9 +11,6 @@ type MerchantKeyTransaction = {
 	creditDebitIndicator: string | null | undefined;
 };
 
-const CARD_PREFIX_PATTERN = /^(?:BEA|GEA),\s*(?:(?:Google|Apple|Garmin|Fitbit)\s+Pay\s+|Betaalpas\s+)?/i;
-const CARD_DETAILS_PATTERN = /,\s*PAS\d+.*$|\s+NR:.*$|,\s*\d{2}[./]\d{2}[./]\d{2}\/.*$/i;
-const PROCESSOR_PREFIX_PATTERN = /^(?:BCK|CCV|SUMUP|SQ|ZETTLE|IZ|MSP)\s?\*\s*/i;
 const TRAILING_TERMINAL_NUMBER_PATTERN = /\s+\d{1,5}$/;
 // Payment processors collect for many unrelated merchants, so their bare name does not identify a merchant.
 // Matching the leading name covers any legal suffix ("PayPal (Europe) S.a r.l. et Cie, S.C.A.", "Klarna Bank AB").
@@ -35,12 +36,8 @@ export function getBankTransactionMerchantKey(transaction: MerchantKeyTransactio
 	return `${direction}:${normalizedName}`;
 }
 
+// Card terminals append their number ("Example Rail 201"); drop it so every terminal of one merchant matches.
 function getCardMerchantName(description: string | null): string | null {
-	if (!description || !CARD_PREFIX_PATTERN.test(description)) return null;
-	const name = description
-		.replace(CARD_PREFIX_PATTERN, '')
-		.replace(CARD_DETAILS_PATTERN, '')
-		.replace(PROCESSOR_PREFIX_PATTERN, '')
-		.replace(TRAILING_TERMINAL_NUMBER_PATTERN, '');
-	return normalizeBankTransactionText(name);
+	const name = description ? extractCardMerchantName(description) : null;
+	return name ? normalizeBankTransactionText(name.replace(TRAILING_TERMINAL_NUMBER_PATTERN, '')) : null;
 }
