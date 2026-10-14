@@ -622,11 +622,7 @@ export class BankTransactionCategorizationService {
 
 	private normalizeWebSearchResult(result: BankTransactionCategorizationResult): BankTransactionCategorizationResult {
 		const evidenceType = result.searchTrace?.evidenceType;
-		if (
-			evidenceType === 'INSUFFICIENT' ||
-			evidenceType === 'CONFLICTING' ||
-			(result.category === 'TRANSPORTATION' && evidenceType !== 'PURCHASE_CONTEXT' && evidenceType !== 'MCC')
-		) {
+		if (evidenceType === 'INSUFFICIENT' || evidenceType === 'CONFLICTING') {
 			return {...result, category: 'NEEDS_REVIEW', confidence: 0};
 		}
 		return result;

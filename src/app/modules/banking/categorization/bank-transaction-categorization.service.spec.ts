@@ -120,7 +120,7 @@ describe('BankTransactionCategorizationService provider behavior versions', () =
 	it('versions sanitized transaction text separately from prior provider inputs', () => {
 		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v6');
 		expect(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION).toBe(
-			'bank-transaction-categorization-web-search-v6',
+			'bank-transaction-categorization-web-search-v7',
 		);
 		expect(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_SKIPPED_PROMPT_VERSION).toBe(
 			'bank-transaction-categorization-web-search-skipped-v5',
@@ -438,7 +438,7 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION);
 	});
 
-	it('marks web Transportation without purchase evidence for review', async () => {
+	it('accepts web Transportation from the identity of a transport merchant', async () => {
 		const transaction = createBankTransaction({id: 'web-transportation-transaction'});
 		const searchTrace = {
 			queries: ['Opaque merchant'],
@@ -461,10 +461,11 @@ describe('BankTransactionCategorizationService worker', () => {
 
 		await service.processTransactionJob([transaction.id]);
 
-		expect(transaction.category).toBe('NEEDS_REVIEW');
+		expect(transaction.category).toBe('TRANSPORTATION');
 		expect(transaction.categoryStatus).toBe('COMPLETED');
-		expect(transaction.categoryConfidence).toBe('0');
+		expect(transaction.categoryConfidence).toBe('0.91');
 		expect(transaction.categorySearchTrace).toEqual(searchTrace);
+		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION);
 	});
 
 	it('normalizes web results with insufficient or conflicting evidence to NEEDS_REVIEW', async () => {
