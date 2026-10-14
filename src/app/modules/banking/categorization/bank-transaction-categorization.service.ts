@@ -22,6 +22,9 @@ import {
 	toBankTransactionCategorizationWebSearchInput,
 } from './bank-transaction-categorization-input';
 import {
+	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
+	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
+	BANK_TRANSACTION_CATEGORIZATION_MAX_MANUAL_HISTORY_ROWS,
 	BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS,
 	BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH,
 	BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION,
@@ -41,7 +44,12 @@ import {
 	BankTransactionCategorizationResult,
 	BankTransactionCategorizationSearchTrace,
 } from './bank-transaction-categorization.types';
-import {BANK_TRANSACTION_CATEGORIES, BANK_TRANSACTION_CATEGORY_DEFINITIONS} from './bank-transaction-category';
+import {
+	BANK_TRANSACTION_CATEGORIES,
+	BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+	BankTransactionCategory,
+} from './bank-transaction-category';
+import {getBankTransactionMerchantKey} from './bank-transaction-merchant-key';
 
 export type BankTransactionCategorizationJobData = {
 	transactionIds: string[];
@@ -70,6 +78,8 @@ type CategorizationUpdate = {
 const STALE_PROCESSING_AFTER_MS = 15 * 60 * 1000;
 const MAX_ERROR_LENGTH = 500;
 const CLAIMABLE_STATUSES = ['PENDING', 'FAILED'] as const;
+
+type ManualCategoryCounts = Map<BankTransactionCategory, number>;
 
 @Injectable()
 export class BankTransactionCategorizationService {
@@ -206,7 +216,33 @@ export class BankTransactionCategorizationService {
 	}
 
 	private async categorizeClaimedBatch(batch: readonly ClaimedTransaction[]): Promise<void> {
-		const activeBatch = await this.getActiveClaimedTransactions(batch);
+		const claimedBatch = await this.getActiveClaimedTransactions(batch);
+		if (claimedBatch.length === 0) return;
+
+		// The user's own manual choices for the same merchant come before the model: a single consistent choice is
+		// applied directly, and mixed choices are passed to the model as context.
+		const manualHistory = await this.loadManualCategoryHistory(claimedBatch);
+		const activeBatch: ClaimedTransaction[] = [];
+		for (const claimed of claimedBatch) {
+			const merchantKey = getBankTransactionMerchantKey(claimed.transaction);
+			const counts = merchantKey ? manualHistory.get(merchantKey) : undefined;
+			if (counts?.size === 1) {
+				await this.applyManualHistoryCategory(claimed, [...counts.keys()][0]);
+				continue;
+			}
+			if (counts) {
+				claimed.input = {
+					...claimed.input,
+					previousManualCategories: [...counts]
+						.sort(
+							([leftCategory, left], [rightCategory, right]) =>
+								right - left || leftCategory.localeCompare(rightCategory),
+						)
+						.map(([category, count]) => ({category, count})),
+				};
+			}
+			activeBatch.push(claimed);
+		}
 		if (activeBatch.length === 0) return;
 
 		const inputs = activeBatch.map(({input}) => input);
@@ -355,6 +391,81 @@ export class BankTransactionCategorizationService {
 				categoryStatus: 'PENDING',
 			});
 		return true;
+	}
+
+	private async loadManualCategoryHistory(
+		batch: readonly ClaimedTransaction[],
+	): Promise<Map<string, ManualCategoryCounts>> {
+		const rows = await this.repository
+			.createQueryBuilder('transaction')
+			.innerJoin('transaction.bankAccount', 'bankAccount')
+			.innerJoin('bankAccount.bankConnection', 'connection')
+			.select('transaction.description', 'description')
+			.addSelect('transaction.counterpartyName', 'counterpartyName')
+			.addSelect('transaction.creditDebitIndicator', 'creditDebitIndicator')
+			.addSelect('transaction.category', 'category')
+			.where(`transaction."categorySource" = 'MANUAL'`)
+			.andWhere('transaction.category IS NOT NULL')
+			.andWhere('transaction."ownTransferEvidence" IS NULL')
+			.andWhere('transaction."financialEventType" IS NULL')
+			.andWhere(
+				`connection."accountId" IN (
+					SELECT "batchConnection"."accountId"
+					FROM "bank_transactions" "batchTransaction"
+					JOIN "bank_accounts" "batchAccount" ON "batchAccount"."id" = "batchTransaction"."bankAccountId"
+					JOIN "bank_connections" "batchConnection" ON "batchConnection"."id" = "batchAccount"."bankConnectionId"
+					WHERE "batchTransaction"."id" IN (:...batchIds)
+				)`,
+				{batchIds: batch.map(({transaction}) => transaction.id)},
+			)
+			.orderBy('transaction."categoryUpdatedAt"', 'DESC', 'NULLS LAST')
+			.limit(BANK_TRANSACTION_CATEGORIZATION_MAX_MANUAL_HISTORY_ROWS)
+			.getRawMany<{
+				description: string | null;
+				counterpartyName: string | null;
+				creditDebitIndicator: string | null;
+				category: string;
+			}>();
+
+		const history = new Map<string, ManualCategoryCounts>();
+		for (const row of rows) {
+			if (!this.isReusableManualCategory(row.category)) continue;
+			const merchantKey = getBankTransactionMerchantKey(row);
+			if (!merchantKey) continue;
+			const counts = history.get(merchantKey) ?? new Map<BankTransactionCategory, number>();
+			counts.set(row.category, (counts.get(row.category) ?? 0) + 1);
+			history.set(merchantKey, counts);
+		}
+		return history;
+	}
+
+	private isReusableManualCategory(category: string): category is BankTransactionCategory {
+		return category !== 'NEEDS_REVIEW' && (BANK_TRANSACTION_CATEGORIES as readonly string[]).includes(category);
+	}
+
+	private async applyManualHistoryCategory(
+		claimed: ClaimedTransaction,
+		category: BankTransactionCategory,
+	): Promise<void> {
+		const completionValues = {
+			category,
+			categoryStatus: 'COMPLETED',
+			categorySource: 'AI',
+			categoryConfidence: '1',
+			categoryAppliedInputHash: claimed.inputHash,
+			categoryProvider: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
+			categoryModel: null,
+			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
+			categorySearchTrace: null,
+			categoryLastError: null,
+		};
+		const applied = await this.updateCategorizationWithGuard(
+			claimed.transaction.id,
+			claimed.inputHash,
+			{...completionValues, categoryUpdatedAt: new Date()},
+			'PROCESSING',
+		);
+		if (applied) this.applyLocalUpdate(claimed.transaction, completionValues);
 	}
 
 	private async getActiveClaimedTransactions(batch: readonly ClaimedTransaction[]): Promise<ClaimedTransaction[]> {

@@ -11,6 +11,8 @@ import {VERIFIED_ACCOUNT_EMAIL} from '../../scripts/seed-data/seed.constants';
 export const CATEGORIZATION_E2E_AI_TRANSACTION_ID = '00000000-0000-4000-8000-000000000103';
 export const CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID = '00000000-0000-4000-8000-000000000104';
 export const CATEGORIZATION_E2E_WEB_TRANSACTION_ID = '00000000-0000-4000-8000-000000000105';
+export const CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID = '00000000-0000-4000-8000-000000000106';
+export const CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000107';
 
 export async function seedBankTransactionCategorizationData(app: INestApplicationContext): Promise<void> {
 	const account = await app
@@ -59,6 +61,29 @@ export async function seedBankTransactionCategorizationData(app: INestApplicatio
 			amount: '-23.00',
 			description: 'Synthetic ambiguous merchant',
 			counterpartyName: 'Synthetic ambiguous merchant',
+		},
+		{
+			...cardPurchase,
+			id: CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID,
+			transactionDate: '2026-09-04',
+			bookingDate: '2026-09-04',
+			valueDate: '2026-09-04',
+			amount: '-20.00',
+			description: 'BEA, Betaalpas BCK*Synthetic Rail 201,PAS001 NR:SY0001, 04.09.26/08:00 SYNTHTOWN',
+			counterpartyName: null,
+			category: 'TRANSPORTATION',
+			categoryStatus: 'COMPLETED',
+			categorySource: 'MANUAL',
+		},
+		{
+			...cardPurchase,
+			id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
+			transactionDate: '2026-09-05',
+			bookingDate: '2026-09-05',
+			valueDate: '2026-09-05',
+			amount: '-15.00',
+			description: 'BEA, Google Pay Synthetic Rail 305,PAS001 NR:SY0002, 05.09.26/17:30 SYNTHTOWN',
+			counterpartyName: null,
 		},
 	]);
 }

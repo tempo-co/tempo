@@ -114,6 +114,7 @@ const CATEGORIZATION_INSTRUCTIONS = [
 	'Do not treat missing merchantCategoryCode or counterpartyName as evidence for OTHER or any other category; use clear merchant text as evidence when available.',
 	ONE_CLASSIFICATION_INSTRUCTION,
 	'Use OTHER only when the available evidence supports that the transaction falls outside the other supplied categories.',
+	'previousManualCategories, when present, lists categories the user chose manually for the same merchant before; choose one of them when the transaction fits it, using the amount, date, and description to decide between them.',
 ].join(' ');
 
 const WEB_SEARCH_CATEGORIZATION_INSTRUCTIONS = [
@@ -443,6 +444,14 @@ export class OpenAiBankTransactionCategorizationProvider implements BankTransact
 			merchantCategoryCode: transaction.merchantCategoryCode,
 			remittanceInformation: transaction.remittanceInformation,
 			...(merchantLocation ? {merchantLocation} : {}),
+			...(transaction.previousManualCategories?.length
+				? {
+						previousManualCategories: transaction.previousManualCategories.map(({category, count}) => ({
+							category,
+							count,
+						})),
+					}
+				: {}),
 		};
 	}
 

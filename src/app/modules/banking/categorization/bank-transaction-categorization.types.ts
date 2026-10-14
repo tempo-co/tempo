@@ -32,6 +32,8 @@ export type BankTransactionCategorizationInput = {
 	bankTransactionDescription: string | null;
 	merchantCategoryCode: string | null;
 	remittanceInformation: string | null;
+	/** Categories the user chose manually for the same merchant, most frequent first. Not part of the input hash. */
+	previousManualCategories?: readonly {category: BankTransactionCategory; count: number}[];
 };
 
 export type BankTransactionCategorizationWebSearchInput = Pick<
