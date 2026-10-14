@@ -40,8 +40,9 @@ const UNLABELED_ALPHANUMERIC_IDENTIFIER_PATTERN =
 const OPAQUE_IDENTIFIER_PATTERN =
 	/\b(?=[A-Z0-9_-]{12,}\b)(?=[A-Z0-9_-]*[A-Z])(?=[A-Z0-9_-]*\d[A-Z0-9_-]*\d[A-Z0-9_-]*\d)[A-Z0-9_-]+\b/gi;
 const LONG_DIGIT_PATTERN = /\b\d{4,}\b/g;
-// A whole merchant name that is one long upper-case code with a digit, like a transit card tap ID.
-const BARE_IDENTIFIER_PATTERN = /^(?=\S*\d)(?=\S*[A-Z])[A-Z0-9]{12,}$/;
+// A whole merchant name that is one long upper-case code with a digit, like an 18-character transit card tap ID.
+// 16+ characters keeps one-word names with a short number ("PLAYSTATION5") searchable.
+const BARE_IDENTIFIER_PATTERN = /^(?=\S*\d)(?=\S*[A-Z])[A-Z0-9]{16,}$/;
 const LONG_NUMERIC_IDENTIFIER_PATTERN = /\b\d{6,}\b/g;
 const REDACTED_IDENTIFIER_LABEL_PATTERN =
 	/\b(?:iban|bic|swift|account|acct|rekening|reference|ref|order|invoice|mandate|identifier|id|pas|nr|card|phone|telephone|mobile|tel|fax)\b(?:\s+(?:no\.?|number|num|nr\.?))?\s*[:#=_-]?\s*\[REDACTED\]/gi;
