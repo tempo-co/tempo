@@ -12,6 +12,7 @@ import {useGetBankTransactionReviewCounts} from '../api/use-get-bank-transaction
 import {useGetBankTransactionSummary} from '../api/use-get-bank-transaction-summary';
 import {localDate, shiftMonth} from '../utils/month';
 import {AttentionList} from './attention-list';
+import {BalanceTrendCard} from './balance-trend-card';
 import {BalancesList} from './balances-list';
 import {CashFlowCard} from './cash-flow-card';
 import {CategoryBreakdown} from './category-breakdown';
@@ -55,6 +56,7 @@ export function HomeDashboard({month, isCurrentMonth}: HomeDashboardProps) {
       <div className='mt-6 grid gap-6 @[900px]:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]'>
         <div className='grid min-w-0 content-start gap-6'>
           <CashFlowCard month={month} />
+          <BalanceTrendCard connections={connections} />
           <MonthlySpending month={month} isCurrentMonth={isCurrentMonth} />
         </div>
         <div className='grid min-w-0 content-start gap-6'>

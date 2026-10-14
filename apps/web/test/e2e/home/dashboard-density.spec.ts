@@ -3,7 +3,13 @@ import {join} from 'node:path';
 
 import {septemberSummary} from '../../data/home-summary.data';
 import {expect, test} from '../../fixtures';
-import {fulfillJson, mockBankConnections, mockCashFlow, mockJson} from '../../utils/api-mocks';
+import {
+  fulfillJson,
+  mockBalanceTrend,
+  mockBankConnections,
+  mockCashFlow,
+  mockJson,
+} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 // Every response is synthetic: these checks never read or mutate a shared API stack.
@@ -64,6 +70,7 @@ test.beforeEach(async ({page}) => {
   );
   await mockJson(page, '**/bank-transactions/summary**', septemberSummary);
   await mockCashFlow(page);
+  await mockBalanceTrend(page);
   await mockJson(page, '**/bank-transactions/review-counts', {
     needsReview: 0,
     categorizationFailed: 0,

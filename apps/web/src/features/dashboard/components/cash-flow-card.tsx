@@ -1,31 +1,23 @@
 import {Link, useNavigate} from '@tanstack/react-router';
-import {format, startOfWeek, subWeeks} from 'date-fns';
-import {type ReactNode, useState} from 'react';
+import {format} from 'date-fns';
+import {useState} from 'react';
 import {Bar, BarChart, CartesianGrid, Cell, ReferenceArea, XAxis, YAxis} from 'recharts';
 
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {Skeleton} from '@/components/ui/skeleton';
-import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
 import {useIsMobile} from '@/hooks/use-is-mobile';
 import {cn} from '@/utils/cn';
 
 import {useGetBankTransactionCashFlow} from '../api/use-get-bank-transaction-cash-flow';
 import type {CashFlowInterval, CashFlowPeriod} from '../types/bank-transaction-cash-flow';
+import {axisFormatter, axisTicks} from '../utils/chart-axis';
 import {cashFlowDrill, flowDrill, parseCalendarDate} from '../utils/drill-links';
-import {formatMoney, toCents} from '../utils/money';
+import {formatMoney, formatWholeMoney, toCents} from '../utils/money';
 import {currentMonth, formatMonth, localDate, monthDates, shiftMonth} from '../utils/month';
-
-const INTERVALS: {value: CashFlowInterval; label: string; noun: string}[] = [
-  {value: 'week', label: 'Week', noun: 'week'},
-  {value: 'month', label: 'Month', noun: 'month'},
-  {value: 'year', label: 'Year', noun: 'year'},
-];
-const WEEKS_SHOWN = 26;
-const WEEKS_SHOWN_PHONE = 13;
-const MONTHS_SHOWN = 12;
-const YEARS_SHOWN = 10;
+import {MONTHS_SHOWN, latestWindow, shownWeeks} from '../utils/period-window';
+import {IntervalToggle} from './interval-toggle';
 
 const day = (value: string) => parseCalendarDate(value);
 const monthOf = (period: CashFlowPeriod) => period.start.slice(0, 7);
@@ -46,52 +38,26 @@ function periodName(period: CashFlowPeriod, interval: CashFlowInterval) {
   return period.start.slice(0, 4);
 }
 
-/** Four equal, round steps that cover the tallest bar, so gridlines read as a ruler. */
-function axisTicks(cents: number) {
-  const rough = (Math.max(cents / 100, 100) * 1.06) / 4;
-  const magnitude = 10 ** Math.floor(Math.log10(rough));
-  const step =
-    [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((s) => s * magnitude >= rough)! * magnitude;
-  return [0, 1, 2, 3, 4].map((index) => index * step);
-}
-
-/** "€4K" on the axis; a plain "4K" before the owner has a base currency. */
-function axisFormatter(currency: string | null) {
-  return new Intl.NumberFormat(undefined, {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-    ...(currency ? {style: 'currency', currency, currencyDisplay: 'narrowSymbol'} : {}),
-  });
-}
-
 /** Year totals read better without cents; weeks and months keep them so they match the list. */
 function moneyFor(interval: CashFlowInterval, currency: string | null) {
-  if (interval !== 'year') return (value: string | number) => formatMoney(value, currency);
-  const whole = new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 0,
-    ...(currency ? {style: 'currency', currency} : {}),
-  });
-  return (value: string | number) => whole.format(Number(value));
+  return interval === 'year'
+    ? (value: string | number) => formatWholeMoney(value, currency)
+    : (value: string | number) => formatMoney(value, currency);
 }
 
 /** Opaque, so the selected-month band never tints income into a different-looking series. */
 const incomeSwatch = 'bg-[hsl(37_16%_72%)] dark:bg-[hsl(36_6%_40%)]';
 
-/** The dates to load for each zoom level. Month loads a year more than it shows, for last year's month. */
+/** The dates to load for each zoom level. */
 function requestRange(interval: CashFlowInterval, month: string) {
+  if (interval !== 'month') return latestWindow(interval);
   const today = localDate();
-  if (interval === 'week') {
-    const thisWeek = startOfWeek(parseCalendarDate(today), {weekStartsOn: 1});
-    return {from: format(subWeeks(thisWeek, WEEKS_SHOWN - 1), 'yyyy-MM-dd'), to: today};
-  }
-  if (interval === 'year')
-    return {from: `${Number(today.slice(0, 4)) - (YEARS_SHOWN - 1)}-01-01`, to: today};
   const thisMonth = currentMonth();
   // The window ends at the current month, or at the selected month once it falls out of view.
   const windowEnd =
     month > shiftMonth(thisMonth, -MONTHS_SHOWN) ? thisMonth : shiftMonth(month, MONTHS_SHOWN - 1);
   return {
-    from: `${shiftMonth(windowEnd, -(MONTHS_SHOWN * 2 - 1))}-01`,
+    from: `${shiftMonth(windowEnd, -(MONTHS_SHOWN - 1))}-01`,
     to: windowEnd === thisMonth ? today : monthDates(windowEnd).to,
   };
 }
@@ -112,40 +78,17 @@ export function CashFlowCard({month}: {month: string}) {
   );
   const loaded = cashFlow?.interval === interval ? cashFlow : undefined;
 
-  const shown = (() => {
-    if (!loaded) return [];
-    const periods = loaded.periods;
-    if (interval === 'week') return periods.slice(-(isMobile ? WEEKS_SHOWN_PHONE : WEEKS_SHOWN));
-    if (interval === 'month') return periods.slice(-MONTHS_SHOWN);
-    return periods;
-  })();
-  const noun = INTERVALS.find((item) => item.value === interval)!.noun;
+  const periods = loaded?.periods ?? [];
+  const shown = interval === 'week' ? shownWeeks(periods, isMobile) : periods;
 
   return (
     <Card className='@container grid min-w-0 gap-5 p-5 sm:p-6' data-testid='cash-flow'>
       <header className='flex flex-wrap items-start justify-between gap-x-6 gap-y-3'>
         <div className='min-w-0'>
           <h2 className='text-base font-semibold'>Cash flow</h2>
-          {loaded && <Averages periods={shown} noun={noun} currency={loaded.baseCurrency} />}
+          {loaded && <Averages periods={shown} noun={interval} currency={loaded.baseCurrency} />}
         </div>
-        <ToggleGroup
-          type='single'
-          variant='outline'
-          size='sm'
-          value={interval}
-          onValueChange={(value) => value && setGrouping(value as CashFlowInterval)}
-          aria-label='Group cash flow by'
-        >
-          {INTERVALS.map((item) => (
-            <ToggleGroupItem
-              key={item.value}
-              value={item.value}
-              className='min-h-9 px-3 text-xs data-[state=on]:bg-secondary data-[state=on]:font-semibold data-[state=on]:text-secondary-foreground'
-            >
-              {item.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+        <IntervalToggle value={interval} onChange={setGrouping} label='Group cash flow by' />
       </header>
       {isError && !loaded ? (
         <div className='grid justify-items-start gap-3'>
@@ -172,12 +115,6 @@ export function CashFlowCard({month}: {month: string}) {
               currency={loaded.baseCurrency}
             />
           )}
-          <Comparison
-            periods={interval === 'week' ? shown : loaded.periods}
-            interval={interval}
-            selectedMonth={month}
-            currency={loaded.baseCurrency}
-          />
         </>
       )}
     </Card>
@@ -239,7 +176,7 @@ function Averages({
   currency: string | null;
 }) {
   const complete = periods.filter((period) => period.complete);
-  // A single full period is not an average; the comparison below already states it.
+  // A single full period is not an average.
   if (complete.length < 2) return null;
   const sum = (key: 'spending' | 'income') =>
     complete.reduce((total, period) => total + toCents(period[key]), 0);
@@ -290,6 +227,7 @@ function CashFlowChart({
   const axis = axisFormatter(currency);
   const money = moneyFor(interval, currency);
   const ticks = axisTicks(
+    0,
     Math.max(...periods.flatMap((period) => [toCents(period.spending), toCents(period.income)])),
   );
   const data = periods.map((period) => ({
@@ -335,10 +273,6 @@ function CashFlowChart({
     if (interval === 'month') void navigate({to: '/', search: monthSearch(monthOf(period))});
     else void navigate({to: '/bank-transactions', search: cashFlowDrill(period.start, period.end)});
   };
-  const hint =
-    interval === 'month'
-      ? 'Select a month to show it below.'
-      : `Select a ${interval} to see its transactions.`;
   // The running period reads as "so far"; a first period cut by where history starts is "partial".
   const partialCount = periods.filter((period) => !period.complete).length;
   const runningLabel =
@@ -496,7 +430,6 @@ function CashFlowChart({
             {runningLabel}
           </span>
         )}
-        <span className='ms-auto hidden sm:inline'>{hint}</span>
       </div>
       <div className='sr-only focus-within:not-sr-only focus-within:mt-4 focus-within:max-w-full focus-within:overflow-x-auto'>
         <table
@@ -561,162 +494,4 @@ function TooltipRow({
       <span className={cn('font-mono tabular-nums', className)}>{value}</span>
     </p>
   );
-}
-
-/**
- * One plain-language comparison under the chart. Month: the selected month against the same month
- * last year. Week: last full week against the average full week before it. Year: last full year
- * against the one before.
- */
-function Comparison({
-  periods,
-  interval,
-  selectedMonth,
-  currency,
-}: {
-  periods: CashFlowPeriod[];
-  interval: CashFlowInterval;
-  selectedMonth: string;
-  currency: string | null;
-}) {
-  const money = moneyFor(interval, currency);
-  if (interval === 'month') {
-    const byMonth = new Map(periods.map((period) => [monthOf(period), period]));
-    const previous = shiftMonth(selectedMonth, -12);
-    const current = byMonth.get(selectedMonth);
-    const lastYear = byMonth.get(previous);
-    if (!lastYear) return <Footnote>No {formatMonth(previous)} to compare with yet.</Footnote>;
-    // History starting partway through last year's month would make this month look dearer.
-    if (!lastYear.complete)
-      return (
-        <Footnote>
-          {formatMonth(previous)} is only partly synced, so there is nothing to compare.
-        </Footnote>
-      );
-    if (!current || !current.complete) {
-      return (
-        <Footnote>
-          Same month last year, {formatMonth(previous)}: spent{' '}
-          <Amount>{money(lastYear.spending)}</Amount>, income{' '}
-          <Amount>{money(lastYear.income)}</Amount>
-        </Footnote>
-      );
-    }
-    return (
-      <Difference
-        lead={`${formatMonth(selectedMonth)} vs ${formatMonth(previous)}`}
-        current={toCents(current.spending)}
-        reference={toCents(lastYear.spending)}
-        detail={
-          <>
-            {formatMonth(previous)}: <Amount>{money(lastYear.spending)}</Amount> spent ·{' '}
-            <Amount>{money(lastYear.income)}</Amount> income
-          </>
-        }
-        money={money}
-      />
-    );
-  }
-
-  const complete = periods.filter((period) => period.complete);
-  const latest = complete[complete.length - 1] as CashFlowPeriod | undefined;
-  if (!latest) return null;
-
-  if (interval === 'week') {
-    const earlier = complete.slice(0, -1);
-    if (earlier.length === 0) return null;
-    // The median, so the one week a month that carries rent doesn't make every other week look cheap.
-    const sorted = earlier.map((period) => toCents(period.spending)).sort((a, b) => a - b);
-    const middle = Math.floor(sorted.length / 2);
-    const typical =
-      sorted.length % 2 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
-    return (
-      <Difference
-        lead={`Last week (${formatWeek(latest)}) vs a typical week`}
-        current={toCents(latest.spending)}
-        reference={typical}
-        detail={
-          <>
-            <Amount>{money(latest.spending)}</Amount> spent · typical{' '}
-            <Amount>{money(typical / 100)}</Amount>, the median of the {earlier.length} weeks before
-          </>
-        }
-        money={money}
-      />
-    );
-  }
-
-  const before = complete[complete.length - 2] as CashFlowPeriod | undefined;
-  const year = latest.start.slice(0, 4);
-  if (!before) {
-    return (
-      <Footnote>
-        {year}: spent <Amount>{money(latest.spending)}</Amount>, income{' '}
-        <Amount>{money(latest.income)}</Amount>
-      </Footnote>
-    );
-  }
-  return (
-    <Difference
-      lead={`${year} vs ${before.start.slice(0, 4)}`}
-      current={toCents(latest.spending)}
-      reference={toCents(before.spending)}
-      detail={
-        <>
-          <Amount>{money(latest.spending)}</Amount> spent · <Amount>{money(latest.income)}</Amount>{' '}
-          income
-        </>
-      }
-      money={money}
-    />
-  );
-}
-
-function Difference({
-  lead,
-  current,
-  reference,
-  detail,
-  money,
-}: {
-  lead: string;
-  current: number;
-  reference: number;
-  detail: ReactNode;
-  money: (value: string | number) => string;
-}) {
-  const difference = current - reference;
-  const percent = Math.round((Math.abs(difference) / Math.max(1, reference)) * 100);
-  return (
-    <div className='flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t pt-4 text-sm'>
-      <p>
-        <span className='text-muted-foreground'>{lead}: </span>
-        <span
-          className={cn(
-            'font-medium',
-            difference > 0 ? 'text-primary' : difference < 0 && 'text-success',
-          )}
-        >
-          {difference === 0 ? (
-            'the same spending'
-          ) : (
-            <>
-              <span className='font-mono tabular-nums'>{money(Math.abs(difference) / 100)}</span>{' '}
-              {difference > 0 ? 'more' : 'less'} spent ({difference > 0 ? '+' : '−'}
-              {percent}%)
-            </>
-          )}
-        </span>
-      </p>
-      <p className='text-xs text-muted-foreground'>{detail}</p>
-    </div>
-  );
-}
-
-function Footnote({children}: {children: ReactNode}) {
-  return <p className='border-t pt-4 text-sm text-muted-foreground'>{children}</p>;
-}
-
-function Amount({children}: {children: ReactNode}) {
-  return <span className='font-mono font-medium text-foreground tabular-nums'>{children}</span>;
 }

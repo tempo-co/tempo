@@ -28,6 +28,28 @@ export function mockCashFlow(page: Page) {
   });
 }
 
+/** Synthetic month-end balances for specs that mock Home without a real session. */
+const syntheticBalanceTrend = {
+  baseCurrency: 'EUR',
+  interval: 'month',
+  accounts: [{id: '00000000-0000-4000-8000-000000000001', since: '2026-07-01'}],
+  periods: ['2026-07', '2026-08', '2026-09'].map((month, index) => ({
+    start: `${month}-01`,
+    end: `${month}-${month === '2026-09' ? '30' : '31'}`,
+    complete: true,
+    total: `${4000 + index * 250}.00`,
+    accounts: [{id: '00000000-0000-4000-8000-000000000001', balance: `${4000 + index * 250}.00`}],
+  })),
+};
+
+/** Serves {@link syntheticBalanceTrend} for every interval, so the card never reaches the real API. */
+export function mockBalanceTrend(page: Page) {
+  return page.route('**/bank-transactions/balance-trend**', (route) => {
+    const interval = new URL(route.request().url()).searchParams.get('interval');
+    return fulfillJson(route, {...syntheticBalanceTrend, interval});
+  });
+}
+
 /** Answers every request to `url` with the same JSON response. */
 export function mockJson(page: Page, url: string, body: unknown, status = 200) {
   return page.route(url, (route) => fulfillJson(route, body, status));

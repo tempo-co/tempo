@@ -92,7 +92,7 @@ const week = (start: string, end: string, spending: string, complete = true) => 
   net: `-${spending}`,
 });
 
-test('weeks compare last week with the median week, not the rent-skewed mean', async ({page}) => {
+test('weeks average full weeks only and mark the running week', async ({page}) => {
   await page.route('**/bank-transactions/cash-flow**', (route) =>
     fulfillJson(route, {
       baseCurrency: 'EUR',
@@ -109,14 +109,10 @@ test('weeks compare last week with the median week, not the rent-skewed mean', a
   await page.goto('/');
   await groupBy(page, 'Week');
   await expect(card(page)).toContainText('Average week (4 full weeks): €262.50 spent');
-  await expect(card(page)).toContainText(
-    'Last week (21–27 Sep) vs a typical week: €50.00 more spent (+20%)',
-  );
-  await expect(card(page)).toContainText('typical €250.00, the median of the 3 weeks before');
   await expect(card(page)).toContainText('This week so far');
 });
 
-test('years drop cents, mark partial years and compare only full ones', async ({page}) => {
+test('years drop cents and mark partial years', async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
   await page.route('**/bank-transactions/cash-flow**', (route) =>
     fulfillJson(route, {
@@ -131,7 +127,9 @@ test('years drop cents, mark partial years and compare only full ones', async ({
   );
   await page.goto('/');
   await groupBy(page, 'Year');
-  await expect(card(page)).toContainText('2025: spent €35,400, income €39,900');
+  await expect(
+    table(page, 'year').getByRole('row', {name: /2025/, includeHidden: true}),
+  ).toContainText('€35,400');
   await expect(card(page)).toContainText('Partial period');
   // One full year is not an average.
   await expect(card(page)).not.toContainText('Average year');

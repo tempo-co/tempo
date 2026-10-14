@@ -19,6 +19,14 @@ export function toCents(value: string) {
   return Math.round(Number(value) * 100);
 }
 
+/** A base-currency amount without cents, for chart labels and yearly totals. */
+export function formatWholeMoney(value: string | number, currency: string | null) {
+  return getFormatter(`whole:${currency ?? ''}`, {
+    maximumFractionDigits: 0,
+    ...(currency ? {style: 'currency', currency} : {}),
+  }).format(Number(value));
+}
+
 /** A base-currency amount; without a base currency yet the number shows without a symbol. */
 export function formatMoney(value: string | number, currency: string | null) {
   const amount = typeof value === 'number' ? value : Number(value);
