@@ -468,6 +468,63 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION);
 	});
 
+	it('routes a weak first-pass Transportation guess through web search, which can confirm it', async () => {
+		const transaction = createBankTransaction({
+			id: 'routed-transportation-transaction',
+			counterpartyName: null,
+			merchantCategoryCode: null,
+			transactionType: 'CARD_PAYMENT',
+		});
+		const {service, provider} = createService({
+			rows: [transaction],
+			webSearchEnabled: true,
+			providerResult: [{correlationId: transaction.id, category: 'TRANSPORTATION', confidence: 0.86}],
+			webSearchResult: [
+				{
+					correlationId: transaction.id,
+					category: 'TRANSPORTATION',
+					confidence: 0.9,
+					searchTrace: {
+						queries: ['Example Rail'],
+						sourceDomains: ['example.com'],
+						evidenceType: 'MERCHANT_IDENTITY_ONLY',
+					},
+				},
+			],
+		});
+
+		await service.processTransactionJob([transaction.id]);
+
+		expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(1);
+		expect(transaction.category).toBe('TRANSPORTATION');
+		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION);
+	});
+
+	it.each(['INSUFFICIENT', 'CONFLICTING'] as const)(
+		'keeps web Transportation with %s evidence in review',
+		async (evidenceType) => {
+			const transaction = createBankTransaction({id: `transportation-${evidenceType}`});
+			const {service} = createService({
+				rows: [transaction],
+				webSearchEnabled: true,
+				providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.5}],
+				webSearchResult: [
+					{
+						correlationId: transaction.id,
+						category: 'TRANSPORTATION',
+						confidence: 0.9,
+						searchTrace: {queries: ['Example Rides'], sourceDomains: ['example.com'], evidenceType},
+					},
+				],
+			});
+
+			await service.processTransactionJob([transaction.id]);
+
+			expect(transaction.category).toBe('NEEDS_REVIEW');
+			expect(transaction.categoryConfidence).toBe('0');
+		},
+	);
+
 	it('normalizes web results with insufficient or conflicting evidence to NEEDS_REVIEW', async () => {
 		const transaction = createBankTransaction({id: 'conflicting-web-result-transaction'});
 		const {service} = createService({
