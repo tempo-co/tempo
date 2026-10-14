@@ -46,6 +46,12 @@ export class BankTransactionController {
 		return this.bankTransactionSummaryService.getCashFlow(account, query);
 	}
 
+	@Get('balance-trend')
+	@Throttle(BROWSING_THROTTLE)
+	getBalanceTrend(@CurrentAccount() account: Account, @Query() query: BankTransactionCashFlowQueryDto) {
+		return this.bankTransactionSummaryService.getBalanceTrend(account, query);
+	}
+
 	@Get('review-counts')
 	getReviewCounts(@CurrentAccount() account: Account) {
 		return this.bankTransactionSummaryService.getReviewCounts(account.id);

@@ -5,12 +5,15 @@ import {Repository} from 'typeorm';
 import {Account} from '@modules/account/account.entity';
 
 import {
+	BANKING_BALANCE_TREND_RANGE,
 	BANKING_TRANSACTION_CASH_FLOW_RANGE,
 	BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH,
 } from '../api/constants/banking-messages.constants';
 import type {BankTransactionCashFlowQueryDto, CashFlowInterval} from '../api/dtos/bank-transaction-cash-flow-query.dto';
 import type {BankTransactionSummaryQueryDto} from '../api/dtos/bank-transaction-summary-query.dto';
 import type {
+	BankBalanceTrendPeriodDto,
+	BankBalanceTrendResponseDto,
 	BankTransactionCashFlowPeriodDto,
 	BankTransactionCashFlowResponseDto,
 	BankTransactionReviewCountsResponseDto,
@@ -31,6 +34,7 @@ import {
 	previousMonths,
 	summarizeBaseline,
 } from '../summary/bank-transaction-summary';
+import {convertEcbAmountSql, ecbRateSql} from './bank-transaction-amount-conversion.utils';
 import {
 	SQL_CATEGORIZATION_FAILED,
 	SQL_CATEGORIZING,
@@ -41,6 +45,7 @@ import {
 	SQL_UNKNOWN_DIRECTION,
 	applyBankTransactionFilters,
 } from './bank-transaction-filters';
+import {BANK_CONNECTION_STATUSES} from './banking-sync.constants';
 
 const BASELINE_MONTHS = 3;
 const CASH_FLOW_MAX_PERIODS: Record<CashFlowInterval, number> = {week: 104, month: 60, year: 10};
@@ -190,14 +195,8 @@ export class BankTransactionSummaryService {
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
 		{interval, from, to, asOf}: BankTransactionCashFlowQueryDto,
 	): Promise<BankTransactionCashFlowResponseDto> {
-		const starts: string[] = [];
-		for (let start = periodStart(from, interval); start <= to; start = nextPeriodStart(start, interval)) {
-			starts.push(start);
-			if (starts.length > CASH_FLOW_MAX_PERIODS[interval]) break;
-		}
-		if (from > to || to > asOf || starts.length > CASH_FLOW_MAX_PERIODS[interval]) {
-			throw new BadRequestException(BANKING_TRANSACTION_CASH_FLOW_RANGE);
-		}
+		const starts = periodStarts(interval, from, to, asOf);
+		if (!starts) throw new BadRequestException(BANKING_TRANSACTION_CASH_FLOW_RANGE);
 
 		const [firstBookingDate, rows] = await Promise.all([
 			this.findFirstBookingDate(accountId),
@@ -220,6 +219,97 @@ export class BankTransactionSummaryService {
 				net: formatCents(income - spending),
 			});
 		}
+		return {baseCurrency, interval, periods};
+	}
+
+	/**
+	 * Combined balance of the owner's connected accounts at the end of each period, rebuilt from each
+	 * account's current balance minus the transactions booked after that day. An account counts from its
+	 * first booked transaction (or when it was added, if earlier); before that its balance is null.
+	 * Foreign balances use the newest ECB rate on or before the period's end.
+	 */
+	async getBalanceTrend(
+		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
+		{interval, from, to, asOf}: BankTransactionCashFlowQueryDto,
+	): Promise<BankBalanceTrendResponseDto> {
+		const starts = periodStarts(interval, from, to, asOf);
+		if (!starts) throw new BadRequestException(BANKING_BALANCE_TREND_RANGE);
+		const ends = starts.map((start) => {
+			const periodEnd = addDays(nextPeriodStart(start, interval), -1);
+			return periodEnd < to ? periodEnd : to;
+		});
+
+		const rows: Array<{id: string; end: string; balance: string | null; included: boolean}> =
+			await this.bankTransactionRepository.manager.query(
+				`
+			WITH accounts AS (
+				SELECT a."id", a."currency", a."currentBalanceAmount" AS "current",
+					LEAST(
+						a."createdAt"::date,
+						(SELECT MIN(t."bookingDate") FROM "bank_transactions" t WHERE t."bankAccountId" = a."id")
+					) AS "first"
+				FROM "bank_accounts" a
+				JOIN "bank_connections" c ON c."id" = a."bankConnectionId"
+				WHERE c."accountId" = $1 AND c."status" = ANY($2::varchar[]) AND a."isActive"
+					AND a."currentBalanceAmount" IS NOT NULL
+			), native AS (
+				SELECT a."id", a."currency", ends."end", ends."end" >= a."first" AS "included",
+					a."current" - COALESCE((
+						SELECT SUM(t."amount") FROM "bank_transactions" t
+						WHERE t."bankAccountId" = a."id" AND t."bookingDate" > ends."end"
+					), 0) AS "amount"
+				FROM accounts a CROSS JOIN unnest($3::date[]) AS ends("end")
+			)
+			SELECT n."id", to_char(n."end", 'YYYY-MM-DD') AS "end", n."included",
+				CASE
+					WHEN NOT n."included" THEN NULL
+					WHEN n."currency" = $4::varchar THEN ROUND(n."amount", 2)
+					ELSE ${convertEcbAmountSql('n."amount"', 'rate."source"', 'rate."base"')}
+				END::text AS "balance"
+			FROM native n
+			LEFT JOIN LATERAL (
+				SELECT ${ecbRateSql('n."currency"', 'source."rateToEur"')} AS "source",
+					${ecbRateSql('$4::varchar', 'base."rateToEur"')} AS "base"
+				FROM "bank_transaction_fx_rates" dates
+				LEFT JOIN "bank_transaction_fx_rates" source
+					ON source."currency" = n."currency" AND source."rateDate" = dates."rateDate"
+				LEFT JOIN "bank_transaction_fx_rates" base ON base."currency" = $4::varchar AND base."rateDate" = dates."rateDate"
+				WHERE n."currency" <> $4::varchar
+					AND dates."currency" IN (n."currency", $4::varchar)
+					AND dates."rateDate" <= n."end"
+					AND (n."currency" = 'EUR' OR source."rateToEur" > 0)
+					AND ($4::varchar = 'EUR' OR base."rateToEur" > 0)
+				ORDER BY dates."rateDate" DESC
+				LIMIT 1
+			) rate ON TRUE
+			ORDER BY n."id"`,
+				[
+					accountId,
+					[BANK_CONNECTION_STATUSES.AUTHORIZED, BANK_CONNECTION_STATUSES.EXPIRED],
+					ends,
+					baseCurrency,
+				],
+			);
+
+		const byEnd = new Map<string, typeof rows>();
+		for (const row of rows) byEnd.set(row.end, [...(byEnd.get(row.end) ?? []), row]);
+		const periods: BankBalanceTrendPeriodDto[] = [];
+		starts.forEach((start, index) => {
+			const end = ends[index];
+			const accounts = byEnd.get(end) ?? [];
+			if (!accounts.some((row) => row.included)) return;
+			const periodEnd = addDays(nextPeriodStart(start, interval), -1);
+			const converted = accounts.filter((row) => row.balance !== null);
+			periods.push({
+				start,
+				end,
+				complete: periodEnd < asOf && periodEnd <= to,
+				total: converted.length
+					? formatCents(converted.reduce((sum, row) => sum + parseCents(row.balance!), 0n))
+					: null,
+				accounts: accounts.map((row) => ({id: row.id, balance: row.balance})),
+			});
+		});
 		return {baseCurrency, interval, periods};
 	}
 
@@ -302,6 +392,16 @@ export class BankTransactionSummaryService {
 			.innerJoin('bankAccount.bankConnection', 'connection')
 			.where('connection.accountId = :accountId', {accountId});
 	}
+}
+
+/** Period starts from `from` through `to`, or null when the range is backwards, ends after `asOf` or is too long. */
+function periodStarts(interval: CashFlowInterval, from: string, to: string, asOf: string): string[] | null {
+	const starts: string[] = [];
+	for (let start = periodStart(from, interval); start <= to; start = nextPeriodStart(start, interval)) {
+		starts.push(start);
+		if (starts.length > CASH_FLOW_MAX_PERIODS[interval]) break;
+	}
+	return from > to || to > asOf || starts.length > CASH_FLOW_MAX_PERIODS[interval] ? null : starts;
 }
 
 /** Calendar dates as `YYYY-MM-DD`, computed in UTC so no local offset shifts a day. */

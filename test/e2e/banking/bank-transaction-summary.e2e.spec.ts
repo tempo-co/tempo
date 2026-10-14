@@ -1,11 +1,12 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
 import TestAgent from 'supertest/lib/agent';
-import {Repository} from 'typeorm';
+import {DataSource, Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {
+	BANKING_BALANCE_TREND_RANGE,
 	BANKING_TRANSACTION_CASH_FLOW_RANGE,
 	BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH,
 } from '@modules/banking/api/constants/banking-messages.constants';
@@ -511,6 +512,118 @@ describe('BankTransactionSummary', () => {
 			['an impossible day', {interval: 'month', from: '2026-01-01', to: '2026-02-30', asOf: '2026-02-30'}],
 		])('rejects %s', async (_case, query) => {
 			await ownerAgent.get(CASH_FLOW).query(query).expect(400);
+		});
+	});
+	describe('balance trend', () => {
+		const TREND = '/bank-transactions/balance-trend';
+		let euroAccount: BankAccount;
+		let kronaAccount: BankAccount;
+
+		beforeAll(async () => {
+			const connection = await fixtures.createConnection(owner);
+			[euroAccount, kronaAccount] = await fixtures.createBankAccounts(connection, [
+				{currency: 'EUR', currentBalanceAmount: '1000.00'},
+				{currency: 'SEK', currentBalanceAmount: '10000.00'},
+			]);
+			// Left out: inactive, or on a connection that was cancelled.
+			const inactive = await fixtures.createBankAccount(connection, {
+				isActive: false,
+				currentBalanceAmount: '5.00',
+			});
+			const cancelled = await fixtures.createBankAccount(
+				await fixtures.createConnection(owner, {status: 'CANCELLED'}),
+				{currentBalanceAmount: '7.00'},
+			);
+			await fixtures.createTransactions(euroAccount, [
+				bookedRow('2019-01-10', '500.00'),
+				bookedRow('2019-02-05', '-200.00'),
+				bookedRow('2019-03-20', '300.00'),
+				// Pending rows have no booking day yet, so they never move a past balance.
+				bookedRow(null, '-50.00', {transactionStatus: 'PDNG'}),
+			]);
+			await fixtures.createTransactions(kronaAccount, [bookedRow('2019-02-15', '1000.00', {currency: 'SEK'})]);
+			await fixtures.createTransactions(inactive, [bookedRow('2018-06-01', '5.00')]);
+			await fixtures.createTransactions(cancelled, [bookedRow('2018-06-01', '7.00')]);
+			await app.get(DataSource).query(
+				`INSERT INTO "bank_transaction_fx_rates" ("currency", "rateDate", "rateToEur", "provider")
+				VALUES ('SEK', '2019-02-28', 10, 'ECB'), ('SEK', '2019-03-29', 11, 'ECB')
+				ON CONFLICT DO NOTHING`,
+			);
+		});
+
+		it('rebuilds each month-end balance from today’s balances and converts it at that month’s rate', async () => {
+			const {body} = await ownerAgent
+				.get(TREND)
+				.query({interval: 'month', from: '2018-12-01', to: '2019-03-31', asOf: '2026-10-18'})
+				.expect(200);
+			const balances = (euro: string | null, krona: string | null) =>
+				[
+					{id: euroAccount.id, balance: euro},
+					{id: kronaAccount.id, balance: krona},
+				].sort((a, b) => a.id.localeCompare(b.id));
+
+			expect(body.baseCurrency).toBe('EUR');
+			expect(body.interval).toBe('month');
+			// December comes before any history, so it is left out.
+			expect(
+				body.periods.map((period: {accounts: {id: string}[]}) => ({
+					...period,
+					accounts: [...period.accounts].sort((a, b) => a.id.localeCompare(b.id)),
+				})),
+			).toEqual([
+				// The krona account starts on 15 February.
+				{
+					start: '2019-01-01',
+					end: '2019-01-31',
+					complete: true,
+					total: '900.00',
+					accounts: balances('900.00', null),
+				},
+				{
+					start: '2019-02-01',
+					end: '2019-02-28',
+					complete: true,
+					total: '1700.00',
+					accounts: balances('700.00', '1000.00'),
+				},
+				{
+					start: '2019-03-01',
+					end: '2019-03-31',
+					complete: true,
+					total: '1909.09',
+					accounts: balances('1000.00', '909.09'),
+				},
+			]);
+		});
+
+		it('ends a running week at the given day, at the rate published by then', async () => {
+			const {body} = await ownerAgent
+				.get(TREND)
+				.query({interval: 'week', from: '2019-03-18', to: '2019-03-20', asOf: '2019-03-20'})
+				.expect(200);
+			expect(body.periods).toEqual([
+				expect.objectContaining({start: '2019-03-18', end: '2019-03-20', complete: false, total: '2000.00'}),
+			]);
+		});
+
+		it('leaves another owner’s accounts out', async () => {
+			const {body} = await otherAgent
+				.get(TREND)
+				.query({interval: 'year', from: '2019-01-01', to: '2019-12-31', asOf: '2026-10-18'})
+				.expect(200);
+			expect(body).toEqual({baseCurrency: null, interval: 'year', periods: []});
+		});
+
+		it.each([
+			['a backwards range', {interval: 'month', from: '2019-03-01', to: '2019-01-31', asOf: '2026-10-18'}],
+			[
+				'a range past the given day',
+				{interval: 'month', from: '2019-01-01', to: '2019-03-31', asOf: '2019-03-30'},
+			],
+			['more than 10 years', {interval: 'year', from: '2009-01-01', to: '2019-12-31', asOf: '2026-10-18'}],
+		])('rejects %s', async (_, query) => {
+			const response = await ownerAgent.get(TREND).query(query).expect(400);
+			expect(response.body.message).toBe(BANKING_BALANCE_TREND_RANGE);
 		});
 	});
 });

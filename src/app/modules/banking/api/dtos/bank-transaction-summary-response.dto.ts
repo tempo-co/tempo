@@ -60,3 +60,24 @@ export class BankTransactionReviewCountsResponseDto {
 	unknownDirection: number;
 	missingBaseAmount: number;
 }
+
+/** Combined balance at the end of each period, oldest first. Money as in the summary. */
+export class BankBalanceTrendResponseDto {
+	baseCurrency: string | null;
+	interval: 'week' | 'month' | 'year';
+	/** Every period from the first one any connected account covers through `to`. */
+	periods: BankBalanceTrendPeriodDto[];
+}
+
+export class BankBalanceTrendPeriodDto {
+	/** First day of the period: a Monday, the 1st, or 1 January. */
+	start: string;
+	/** The day the balances are for: the period's last day, or `to` while it is still running. */
+	end: string;
+	/** False while the period is still running. */
+	complete: boolean;
+	/** Sum of the converted account balances; null when none could be converted. */
+	total: string | null;
+	/** Every connected account; `balance` is null before its history starts or without a rate. */
+	accounts: Array<{id: string; balance: string | null}>;
+}
