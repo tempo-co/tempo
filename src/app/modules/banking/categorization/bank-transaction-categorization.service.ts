@@ -225,7 +225,7 @@ export class BankTransactionCategorizationService {
 		const activeBatch: ClaimedTransaction[] = [];
 		for (const claimed of claimedBatch) {
 			const merchantKey = getBankTransactionMerchantKey(claimed.transaction);
-			const counts = merchantKey ? manualHistory.get(merchantKey) : undefined;
+			const counts = merchantKey ? manualHistory.get(claimed.transaction.id)?.get(merchantKey) : undefined;
 			if (counts?.size === 1) {
 				await this.applyManualHistoryCategory(claimed, [...counts.keys()][0]);
 				continue;
@@ -393,9 +393,36 @@ export class BankTransactionCategorizationService {
 		return true;
 	}
 
+	/**
+	 * Loads manual category history per Tempo account and returns it per batch transaction id. Batches built by
+	 * reconciliation can contain several accounts, so history is never shared between accounts.
+	 */
 	private async loadManualCategoryHistory(
 		batch: readonly ClaimedTransaction[],
-	): Promise<Map<string, ManualCategoryCounts>> {
+	): Promise<Map<string, Map<string, ManualCategoryCounts>>> {
+		const owners = await this.repository
+			.createQueryBuilder('transaction')
+			.innerJoin('transaction.bankAccount', 'bankAccount')
+			.innerJoin('bankAccount.bankConnection', 'connection')
+			.select('transaction.id', 'id')
+			.addSelect('connection."accountId"', 'accountId')
+			.where('transaction.id IN (:...batchIds)', {batchIds: batch.map(({transaction}) => transaction.id)})
+			.getRawMany<{id: string; accountId: string | null}>();
+
+		const historyByAccount = new Map<string, Map<string, ManualCategoryCounts>>();
+		for (const accountId of new Set(owners.map((owner) => owner.accountId))) {
+			if (accountId) historyByAccount.set(accountId, await this.loadAccountManualCategoryHistory(accountId));
+		}
+
+		const historyByTransaction = new Map<string, Map<string, ManualCategoryCounts>>();
+		for (const {id, accountId} of owners) {
+			const history = accountId ? historyByAccount.get(accountId) : undefined;
+			if (history) historyByTransaction.set(id, history);
+		}
+		return historyByTransaction;
+	}
+
+	private async loadAccountManualCategoryHistory(accountId: string): Promise<Map<string, ManualCategoryCounts>> {
 		const rows = await this.repository
 			.createQueryBuilder('transaction')
 			.innerJoin('transaction.bankAccount', 'bankAccount')
@@ -408,16 +435,7 @@ export class BankTransactionCategorizationService {
 			.andWhere('transaction.category IS NOT NULL')
 			.andWhere('transaction."ownTransferEvidence" IS NULL')
 			.andWhere('transaction."financialEventType" IS NULL')
-			.andWhere(
-				`connection."accountId" IN (
-					SELECT "batchConnection"."accountId"
-					FROM "bank_transactions" "batchTransaction"
-					JOIN "bank_accounts" "batchAccount" ON "batchAccount"."id" = "batchTransaction"."bankAccountId"
-					JOIN "bank_connections" "batchConnection" ON "batchConnection"."id" = "batchAccount"."bankConnectionId"
-					WHERE "batchTransaction"."id" IN (:...batchIds)
-				)`,
-				{batchIds: batch.map(({transaction}) => transaction.id)},
-			)
+			.andWhere('connection."accountId" = :accountId', {accountId})
 			.orderBy('transaction."categoryUpdatedAt"', 'DESC', 'NULLS LAST')
 			.limit(BANK_TRANSACTION_CATEGORIZATION_MAX_MANUAL_HISTORY_ROWS)
 			.getRawMany<{

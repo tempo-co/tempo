@@ -11,6 +11,9 @@ const CARD_PREFIX_PATTERN = /^(?:BEA|GEA),\s*(?:(?:Google|Apple|Garmin|Fitbit)\s
 const CARD_DETAILS_PATTERN = /,\s*PAS\d+.*$|\s+NR:.*$|,\s*\d{2}[./]\d{2}[./]\d{2}\/.*$/i;
 const PROCESSOR_PREFIX_PATTERN = /^(?:BCK|CCV|SUMUP|SQ|ZETTLE|IZ|MSP)\s?\*\s*/i;
 const TRAILING_TERMINAL_NUMBER_PATTERN = /\s+\d{1,5}$/;
+// Payment processors collect for many unrelated merchants, so their bare name does not identify a merchant.
+const PAYMENT_PROCESSOR_NAME_PATTERN =
+	/^(?:stichting\s+)?(?:paypal|mollie|adyen|stripe|klarna|tikkie|buckaroo|sumup|worldline|ccv|multisafepay|pay\.nl|riverty|afterpay|ginger payments)\b(?:\s+(?:europe|payments?|b\.?v\.?|n\.?v\.?|s\.?a\.?(?:r\.?l\.?)?|ltd\.?|inc\.?))*\.?$/;
 
 /**
  * Identifies "the same merchant, in the same direction" across a user's transactions, so a category the user chose
@@ -25,7 +28,7 @@ export function getBankTransactionMerchantKey(transaction: MerchantKeyTransactio
 		(description ? extractStructuredCounterpartyName(description) : null) ??
 		description;
 	const normalizedName = name?.toLowerCase().replace(/\s+/g, ' ').trim();
-	if (!normalizedName) return null;
+	if (!normalizedName || PAYMENT_PROCESSOR_NAME_PATTERN.test(normalizedName)) return null;
 
 	const direction = toBankTransactionDirection(transaction.creditDebitIndicator?.trim().toUpperCase() ?? null);
 	return `${direction}:${normalizedName}`;
