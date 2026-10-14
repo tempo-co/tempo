@@ -226,7 +226,9 @@ export class BankTransactionSummaryService {
 	 * Combined balance of the owner's connected accounts at the end of each period, rebuilt from each
 	 * account's current balance minus the transactions booked after that day. An account counts from its
 	 * first booked transaction (or when it was added, if earlier); before that its balance is null.
-	 * Foreign balances use the newest ECB rate on or before the period's end.
+	 * Foreign balances use the newest ECB rate on or before the period's end. The total is null when an
+	 * account that has history by then cannot be converted, so a missing rate never reads as a drop.
+	 * Only bookings up to the day the balance was reported are subtracted; later ones are not in it yet.
 	 */
 	async getBalanceTrend(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
@@ -239,13 +241,14 @@ export class BankTransactionSummaryService {
 			return periodEnd < to ? periodEnd : to;
 		});
 
-		const rows: Array<{id: string; end: string; balance: string | null; included: boolean}> =
+		const rows: Array<{id: string; end: string; since: string; balance: string | null; included: boolean}> =
 			await this.bankTransactionRepository.manager.query(
 				`
 			WITH accounts AS (
 				SELECT a."id", a."currency", a."currentBalanceAmount" AS "current",
+					(a."balanceUpdatedAt" AT TIME ZONE 'UTC')::date AS "reported",
 					LEAST(
-						a."createdAt"::date,
+						(a."createdAt" AT TIME ZONE 'UTC')::date,
 						(SELECT MIN(t."bookingDate") FROM "bank_transactions" t WHERE t."bankAccountId" = a."id")
 					) AS "first"
 				FROM "bank_accounts" a
@@ -253,14 +256,16 @@ export class BankTransactionSummaryService {
 				WHERE c."accountId" = $1 AND c."status" = ANY($2::varchar[]) AND a."isActive"
 					AND a."currentBalanceAmount" IS NOT NULL
 			), native AS (
-				SELECT a."id", a."currency", ends."end", ends."end" >= a."first" AS "included",
+				SELECT a."id", a."currency", a."first", ends."end", ends."end" >= a."first" AS "included",
 					a."current" - COALESCE((
 						SELECT SUM(t."amount") FROM "bank_transactions" t
 						WHERE t."bankAccountId" = a."id" AND t."bookingDate" > ends."end"
+							AND (a."reported" IS NULL OR t."bookingDate" <= a."reported")
 					), 0) AS "amount"
 				FROM accounts a CROSS JOIN unnest($3::date[]) AS ends("end")
 			)
-			SELECT n."id", to_char(n."end", 'YYYY-MM-DD') AS "end", n."included",
+			SELECT n."id", to_char(n."end", 'YYYY-MM-DD') AS "end", to_char(n."first", 'YYYY-MM-DD') AS "since",
+				n."included",
 				CASE
 					WHEN NOT n."included" THEN NULL
 					WHEN n."currency" = $4::varchar THEN ROUND(n."amount", 2)
@@ -293,24 +298,30 @@ export class BankTransactionSummaryService {
 
 		const byEnd = new Map<string, typeof rows>();
 		for (const row of rows) byEnd.set(row.end, [...(byEnd.get(row.end) ?? []), row]);
+		const since = new Map(rows.map((row) => [row.id, row.since]));
 		const periods: BankBalanceTrendPeriodDto[] = [];
 		starts.forEach((start, index) => {
 			const end = ends[index];
 			const accounts = byEnd.get(end) ?? [];
 			if (!accounts.some((row) => row.included)) return;
 			const periodEnd = addDays(nextPeriodStart(start, interval), -1);
-			const converted = accounts.filter((row) => row.balance !== null);
+			const counted = accounts.filter((row) => row.included);
 			periods.push({
 				start,
 				end,
 				complete: periodEnd < asOf && periodEnd <= to,
-				total: converted.length
-					? formatCents(converted.reduce((sum, row) => sum + parseCents(row.balance!), 0n))
+				total: counted.every((row) => row.balance !== null)
+					? formatCents(counted.reduce((sum, row) => sum + parseCents(row.balance!), 0n))
 					: null,
 				accounts: accounts.map((row) => ({id: row.id, balance: row.balance})),
 			});
 		});
-		return {baseCurrency, interval, periods};
+		return {
+			baseCurrency,
+			interval,
+			accounts: [...since].map(([id, from]) => ({id, since: from})),
+			periods,
+		};
 	}
 
 	async getReviewCounts(accountId: Account['id']): Promise<BankTransactionReviewCountsResponseDto> {

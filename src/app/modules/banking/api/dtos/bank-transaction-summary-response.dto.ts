@@ -65,6 +65,8 @@ export class BankTransactionReviewCountsResponseDto {
 export class BankBalanceTrendResponseDto {
 	baseCurrency: string | null;
 	interval: 'week' | 'month' | 'year';
+	/** Each connected account and the day its history starts; its balance is null before then. */
+	accounts: Array<{id: string; since: string}>;
 	/** Every period from the first one any connected account covers through `to`. */
 	periods: BankBalanceTrendPeriodDto[];
 }
@@ -76,7 +78,7 @@ export class BankBalanceTrendPeriodDto {
 	end: string;
 	/** False while the period is still running. */
 	complete: boolean;
-	/** Sum of the converted account balances; null when none could be converted. */
+	/** Sum of the account balances; null when an account with history by then has no exchange rate. */
 	total: string | null;
 	/** Every connected account; `balance` is null before its history starts or without a rate. */
 	accounts: Array<{id: string; balance: string | null}>;

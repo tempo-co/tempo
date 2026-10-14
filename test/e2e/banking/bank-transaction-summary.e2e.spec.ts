@@ -564,6 +564,12 @@ describe('BankTransactionSummary', () => {
 
 			expect(body.baseCurrency).toBe('EUR');
 			expect(body.interval).toBe('month');
+			expect(body.accounts).toEqual(
+				expect.arrayContaining([
+					{id: euroAccount.id, since: '2019-01-10'},
+					{id: kronaAccount.id, since: '2019-02-15'},
+				]),
+			);
 			// December comes before any history, so it is left out.
 			expect(
 				body.periods.map((period: {accounts: {id: string}[]}) => ({
@@ -606,12 +612,21 @@ describe('BankTransactionSummary', () => {
 			]);
 		});
 
+		it('has no total where an account with history has no exchange rate yet', async () => {
+			const {body} = await ownerAgent
+				.get(TREND)
+				.query({interval: 'week', from: '2019-02-18', to: '2019-02-24', asOf: '2026-10-18'})
+				.expect(200);
+			// No SEK rate is published before 28 February.
+			expect(body.periods).toEqual([expect.objectContaining({end: '2019-02-24', total: null})]);
+		});
+
 		it('leaves another owner’s accounts out', async () => {
 			const {body} = await otherAgent
 				.get(TREND)
 				.query({interval: 'year', from: '2019-01-01', to: '2019-12-31', asOf: '2026-10-18'})
 				.expect(200);
-			expect(body).toEqual({baseCurrency: null, interval: 'year', periods: []});
+			expect(body).toEqual({baseCurrency: null, interval: 'year', accounts: [], periods: []});
 		});
 
 		it.each([
