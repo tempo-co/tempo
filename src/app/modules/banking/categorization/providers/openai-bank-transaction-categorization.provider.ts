@@ -127,6 +127,7 @@ const WEB_SEARCH_CATEGORIZATION_INSTRUCTIONS = [
 	'Use exactly the supplied searchQuery as the only search query. Do not rewrite it, broaden it, or add another query.',
 	'Classify the likely purchased product or service, not incidental corporate activities mentioned on a merchant website.',
 	SPECIALIZED_MERCHANT_INSTRUCTION,
+	'For TRANSPORTATION, merchant identity is enough only when the merchant primarily sells passenger transport, parking, vehicle charging, or bike or scooter rental, such as a railway operator, a public transport ticket machine, a taxi company, or a parking operator. Logistics, parcel, courier, freight, and food or grocery delivery services do not qualify. Platforms that sell both rides and delivery (such as ride-hailing apps with a food delivery arm) and fuel stations with a shop need descriptor or purchase evidence of a ride or of fuel; otherwise choose NEEDS_REVIEW.',
 	CATEGORY_BOUNDARIES_INSTRUCTION,
 	'Return evidenceType as PURCHASE_CONTEXT when the search identifies the likely purchased product or service, MERCHANT_IDENTITY_ONLY when it identifies only the merchant business, MCC when the merchant category code is decisive, INSUFFICIENT when evidence is missing, or CONFLICTING when sources disagree.',
 	'Choose NEEDS_REVIEW when the search evidence is insufficient or conflicting, including when it identifies only a broad merchant without purchase context.',

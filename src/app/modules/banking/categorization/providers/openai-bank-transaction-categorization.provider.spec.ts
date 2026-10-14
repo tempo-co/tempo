@@ -186,6 +186,11 @@ describe('OpenAiBankTransactionCategorizationProvider', () => {
 		expect(request.input).toContain('Example Merchant VOF');
 		expect(request.input).not.toContain('[REDACTED]');
 		expect(request.instructions).toContain('Use exactly the supplied searchQuery as the only search query.');
+		expect(request.instructions).toContain('For TRANSPORTATION, merchant identity is enough only when');
+		expect(request.instructions).toContain(
+			'Logistics, parcel, courier, freight, and food or grocery delivery services do not qualify.',
+		);
+		expect(request.instructions).toContain('need descriptor or purchase evidence of a ride or of fuel');
 	});
 
 	it('maps compact provider correlation IDs back to the original transaction IDs', async () => {

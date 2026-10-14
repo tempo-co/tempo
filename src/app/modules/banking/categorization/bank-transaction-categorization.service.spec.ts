@@ -120,7 +120,7 @@ describe('BankTransactionCategorizationService provider behavior versions', () =
 	it('versions sanitized transaction text separately from prior provider inputs', () => {
 		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v6');
 		expect(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION).toBe(
-			'bank-transaction-categorization-web-search-v6',
+			'bank-transaction-categorization-web-search-v7',
 		);
 		expect(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_SKIPPED_PROMPT_VERSION).toBe(
 			'bank-transaction-categorization-web-search-skipped-v5',
@@ -438,7 +438,7 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION);
 	});
 
-	it('marks web Transportation without purchase evidence for review', async () => {
+	it('accepts web Transportation from the identity of a transport merchant', async () => {
 		const transaction = createBankTransaction({id: 'web-transportation-transaction'});
 		const searchTrace = {
 			queries: ['Opaque merchant'],
@@ -461,11 +461,69 @@ describe('BankTransactionCategorizationService worker', () => {
 
 		await service.processTransactionJob([transaction.id]);
 
-		expect(transaction.category).toBe('NEEDS_REVIEW');
+		expect(transaction.category).toBe('TRANSPORTATION');
 		expect(transaction.categoryStatus).toBe('COMPLETED');
-		expect(transaction.categoryConfidence).toBe('0');
+		expect(transaction.categoryConfidence).toBe('0.91');
 		expect(transaction.categorySearchTrace).toEqual(searchTrace);
+		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION);
 	});
+
+	it('routes a weak first-pass Transportation guess through web search, which can confirm it', async () => {
+		const transaction = createBankTransaction({
+			id: 'routed-transportation-transaction',
+			counterpartyName: null,
+			merchantCategoryCode: null,
+			transactionType: 'CARD_PAYMENT',
+		});
+		const {service, provider} = createService({
+			rows: [transaction],
+			webSearchEnabled: true,
+			providerResult: [{correlationId: transaction.id, category: 'TRANSPORTATION', confidence: 0.86}],
+			webSearchResult: [
+				{
+					correlationId: transaction.id,
+					category: 'TRANSPORTATION',
+					confidence: 0.9,
+					searchTrace: {
+						queries: ['Example Rail'],
+						sourceDomains: ['example.com'],
+						evidenceType: 'MERCHANT_IDENTITY_ONLY',
+					},
+				},
+			],
+		});
+
+		await service.processTransactionJob([transaction.id]);
+
+		expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(1);
+		expect(transaction.category).toBe('TRANSPORTATION');
+		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION);
+	});
+
+	it.each(['INSUFFICIENT', 'CONFLICTING'] as const)(
+		'keeps web Transportation with %s evidence in review',
+		async (evidenceType) => {
+			const transaction = createBankTransaction({id: `transportation-${evidenceType}`});
+			const {service} = createService({
+				rows: [transaction],
+				webSearchEnabled: true,
+				providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.5}],
+				webSearchResult: [
+					{
+						correlationId: transaction.id,
+						category: 'TRANSPORTATION',
+						confidence: 0.9,
+						searchTrace: {queries: ['Example Rides'], sourceDomains: ['example.com'], evidenceType},
+					},
+				],
+			});
+
+			await service.processTransactionJob([transaction.id]);
+
+			expect(transaction.category).toBe('NEEDS_REVIEW');
+			expect(transaction.categoryConfidence).toBe('0');
+		},
+	);
 
 	it('normalizes web results with insufficient or conflicting evidence to NEEDS_REVIEW', async () => {
 		const transaction = createBankTransaction({id: 'conflicting-web-result-transaction'});
