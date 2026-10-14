@@ -15,6 +15,7 @@ import {
 import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '../bank-transaction-financial-event';
 import {BankTransaction} from '../bank-transaction.entity';
 import {safeErrorName} from '../banking.utils';
+import {isOwnTransferCategorized, notOwnTransferCategorizedSql} from '../own-transfer/own-transfer-category';
 import {
 	createBankTransactionCategorizationInputHash,
 	normalizeMerchantCategoryCode,
@@ -169,7 +170,8 @@ export class BankTransactionCategorizationService {
 
 		for (const id of batchIds) {
 			const transaction = transactionsById.get(id);
-			if (!transaction || this.isFinancialEvent(transaction)) continue;
+			// Own transfers get their transfer category from the own-transfer rule, without a model call.
+			if (!transaction || this.isFinancialEvent(transaction) || isOwnTransferCategorized(transaction)) continue;
 
 			const input = toBankTransactionCategorizationInput({
 				...transaction,
@@ -609,6 +611,7 @@ export class BankTransactionCategorizationService {
 			.set({categoryStatus: 'PROCESSING', categoryUpdatedAt: new Date()})
 			.where('id = :id', {id})
 			.andWhere(notManualCategorySourceSql())
+			.andWhere(notOwnTransferCategorizedSql())
 			.andWhere('"categoryInputHash" = :inputHash', {inputHash})
 			.andWhere('"financialEventType" IS DISTINCT FROM :financialEventType', {
 				financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
@@ -644,6 +647,7 @@ export class BankTransactionCategorizationService {
 			.set(values)
 			.where('id = :id', {id})
 			.andWhere(notManualCategorySourceSql())
+			.andWhere(notOwnTransferCategorizedSql())
 			.andWhere('"categoryInputHash" = :inputHash', {inputHash})
 			.andWhere('"financialEventType" IS DISTINCT FROM :financialEventType', {
 				financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,

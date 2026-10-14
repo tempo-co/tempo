@@ -626,7 +626,22 @@ describe('BankTransactionController', () => {
 				description: 'Payment from A Friend',
 			},
 		]);
+		const manualTransfer = await fixtures.createTransaction(fixtureBankAccount, {
+			bookingDate: '2026-08-14',
+			valueDate: '2026-08-14',
+			amount: '-20.00',
+			amountInBaseCurrency: '-20.00',
+			description: 'SEPA Overboeking Naam: Jane Example Omschrijving: Savings',
+			counterpartyName: 'Jane Example',
+			category: 'HOUSING_AND_UTILITIES',
+			categorySource: 'MANUAL',
+		});
 		await app.get(OwnTransferService).recomputeForOwner(account.id);
+		const categoryOf = async (id: string) =>
+			bankTransactionRepository.findOneOrFail({
+				where: {id},
+				select: ['id', 'category', 'categoryStatus', 'categorySource', 'categoryProvider'],
+			});
 
 		const pairOf = (id: string, counterpartId: string) =>
 			expect.objectContaining({
@@ -637,6 +652,21 @@ describe('BankTransactionController', () => {
 			});
 
 		try {
+			// Own transfers take the transfer category for their direction; a manual category is kept.
+			await expect(categoryOf(outgoing.id)).resolves.toMatchObject({
+				category: 'TRANSFER_OUT',
+				categoryStatus: 'COMPLETED',
+				categorySource: null,
+				categoryProvider: 'own-transfer',
+			});
+			await expect(categoryOf(incoming.id)).resolves.toMatchObject({category: 'TRANSFER_IN'});
+			await expect(categoryOf(manualTransfer.id)).resolves.toMatchObject({
+				category: 'HOUSING_AND_UTILITIES',
+				categorySource: 'MANUAL',
+			});
+			await expect(categoryOf(gift.id)).resolves.toMatchObject({category: null, categoryProvider: null});
+			await bankTransactionRepository.delete(manualTransfer.id);
+
 			const filtered = await verifiedAgent
 				.get('/bank-transactions')
 				.query({'filter[financialEventTypes][]': 'OWN_TRANSFER'})
@@ -690,6 +720,8 @@ describe('BankTransactionController', () => {
 				ownTransferOverride: 'UNMARKED',
 				cashFlowTreatment: 'EXPENSE',
 			});
+			// No longer an own transfer: the transfer category is dropped so the row is categorized normally again.
+			expect(unmarked.body).toMatchObject({category: null, categoryStatus: 'PENDING', categorySource: null});
 			// The other leg keeps its own name evidence, now without a counterpart.
 			const freed = await verifiedAgent.get(`/bank-transactions/${incoming.id}`).expect(200);
 			expect(freed.body.ownTransfer).toEqual({evidence: 'NAME', counterpart: null});
@@ -705,6 +737,7 @@ describe('BankTransactionController', () => {
 				ownTransfer: {evidence: 'MANUAL', counterpart: null},
 				ownTransferOverride: 'MARKED',
 				cashFlowTreatment: 'INTERNAL',
+				category: 'TRANSFER_IN',
 			});
 		} finally {
 			await bankConnectionRepository.delete(revolutConnection.id);

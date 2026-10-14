@@ -255,6 +255,20 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
 	});
 
+	it('does not send an own transfer to the provider', async () => {
+		const transaction = createBankTransaction({
+			id: 'own-transfer-transaction',
+			categoryStatus: 'PENDING',
+			ownTransferEvidence: 'NAME',
+		});
+		const {service, provider} = createService({rows: [transaction]});
+
+		await service.processTransactionJob([transaction.id]);
+
+		expect(provider.categorize).not.toHaveBeenCalled();
+		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
+	});
+
 	it('does not send a queued row that was deleted before provider invocation', async () => {
 		const transaction = createBankTransaction({id: 'deleted-transaction'});
 		const {service, provider, repository} = createService({rows: [transaction]});
