@@ -41,7 +41,7 @@ import {getBalancePreference, normalizeBankCode, truncate} from './banking.utils
 import {EnableBankingAccount, EnableBankingSession} from './enable-banking.types';
 import {BankingAuthorizationStateError} from './errors/banking-authorization-state.error';
 import {BankingEncryptionError} from './errors/banking-encryption.error';
-import {convertEcbAmountSql, ecbRateSql} from './services/bank-transaction-amount-conversion.utils';
+import {convertEcbAmountSql, newestEcbRatePairSql} from './services/bank-transaction-amount-conversion.utils';
 import {BankingAuthorizationStateService} from './services/banking-authorization-state.service';
 import {type BankingConnectionLock, BankingConnectionLockService} from './services/banking-connection-lock.service';
 import {BankingEncryptionService} from './services/banking-encryption.service';
@@ -673,23 +673,8 @@ export class BankingService {
 				END::text AS "amount",
 				CASE WHEN input."currency" <> $4 THEN to_char(rate."rateDate", 'YYYY-MM-DD') END AS "rateDate"
 			FROM unnest($1::uuid[], $2::varchar[], $3::numeric[]) AS input("id", "currency", "amount")
-			LEFT JOIN LATERAL (
-				SELECT dates."rateDate",
-					${ecbRateSql('input."currency"', 'source."rateToEur"')} AS "source",
-					${ecbRateSql('$4', 'base."rateToEur"')} AS "base"
-				FROM "bank_transaction_fx_rates" dates
-				LEFT JOIN "bank_transaction_fx_rates" source
-					ON source."currency" = input."currency" AND source."rateDate" = dates."rateDate"
-				LEFT JOIN "bank_transaction_fx_rates" base ON base."currency" = $4 AND base."rateDate" = dates."rateDate"
-				WHERE input."currency" <> $4
-					AND dates."currency" IN (input."currency", $4)
-					-- CURRENT_DATE follows the session time zone; just after midnight that may pick yesterday's rate.
-					AND dates."rateDate" <= CURRENT_DATE
-					AND (input."currency" = 'EUR' OR source."rateToEur" > 0)
-					AND ($4 = 'EUR' OR base."rateToEur" > 0)
-				ORDER BY dates."rateDate" DESC
-				LIMIT 1
-			) rate ON TRUE`,
+			-- CURRENT_DATE follows the session time zone; just after midnight that may pick yesterday's rate.
+			LEFT JOIN LATERAL (${newestEcbRatePairSql('input."currency"', '$4::varchar', 'CURRENT_DATE')}) rate ON TRUE`,
 			[
 				balances.map(({id}) => id),
 				balances.map(({currency}) => currency),

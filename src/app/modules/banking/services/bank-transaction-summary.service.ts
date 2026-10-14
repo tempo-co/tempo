@@ -34,7 +34,7 @@ import {
 	previousMonths,
 	summarizeBaseline,
 } from '../summary/bank-transaction-summary';
-import {convertEcbAmountSql, ecbRateSql} from './bank-transaction-amount-conversion.utils';
+import {convertEcbAmountSql, newestEcbRatePairSql} from './bank-transaction-amount-conversion.utils';
 import {
 	SQL_CATEGORIZATION_FAILED,
 	SQL_CATEGORIZING,
@@ -236,9 +236,9 @@ export class BankTransactionSummaryService {
 	): Promise<BankBalanceTrendResponseDto> {
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(BANKING_BALANCE_TREND_RANGE);
-		const ends = starts.map((start) => {
+		const windows = starts.map((start) => {
 			const periodEnd = addDays(nextPeriodStart(start, interval), -1);
-			return periodEnd < to ? periodEnd : to;
+			return {start, periodEnd, end: periodEnd < to ? periodEnd : to};
 		});
 
 		const rows: Array<{id: string; end: string; since: string; balance: string | null; included: boolean}> =
@@ -247,7 +247,9 @@ export class BankTransactionSummaryService {
 			WITH accounts AS (
 				SELECT a."id", a."currency", a."currentBalanceAmount" AS "current",
 					(a."balanceUpdatedAt" AT TIME ZONE 'UTC')::date AS "reported",
+					-- Capped at the owner's today, so an account added late in their day counts today.
 					LEAST(
+						$5::date,
 						(a."createdAt" AT TIME ZONE 'UTC')::date,
 						(SELECT MIN(t."bookingDate") FROM "bank_transactions" t WHERE t."bankAccountId" = a."id")
 					) AS "first"
@@ -272,54 +274,41 @@ export class BankTransactionSummaryService {
 					ELSE ${convertEcbAmountSql('n."amount"', 'rate."source"', 'rate."base"')}
 				END::text AS "balance"
 			FROM native n
-			LEFT JOIN LATERAL (
-				SELECT ${ecbRateSql('n."currency"', 'source."rateToEur"')} AS "source",
-					${ecbRateSql('$4::varchar', 'base."rateToEur"')} AS "base"
-				FROM "bank_transaction_fx_rates" dates
-				LEFT JOIN "bank_transaction_fx_rates" source
-					ON source."currency" = n."currency" AND source."rateDate" = dates."rateDate"
-				LEFT JOIN "bank_transaction_fx_rates" base ON base."currency" = $4::varchar AND base."rateDate" = dates."rateDate"
-				WHERE n."currency" <> $4::varchar
-					AND dates."currency" IN (n."currency", $4::varchar)
-					AND dates."rateDate" <= n."end"
-					AND (n."currency" = 'EUR' OR source."rateToEur" > 0)
-					AND ($4::varchar = 'EUR' OR base."rateToEur" > 0)
-				ORDER BY dates."rateDate" DESC
-				LIMIT 1
-			) rate ON TRUE
+			LEFT JOIN LATERAL (${newestEcbRatePairSql('n."currency"', '$4::varchar', 'n."end"')}) rate ON TRUE
 			ORDER BY n."id"`,
 				[
 					accountId,
 					[BANK_CONNECTION_STATUSES.AUTHORIZED, BANK_CONNECTION_STATUSES.EXPIRED],
-					ends,
+					windows.map(({end}) => end),
 					baseCurrency,
+					asOf,
 				],
 			);
 
 		const byEnd = new Map<string, typeof rows>();
-		for (const row of rows) byEnd.set(row.end, [...(byEnd.get(row.end) ?? []), row]);
-		const since = new Map(rows.map((row) => [row.id, row.since]));
+		for (const row of rows) {
+			const group = byEnd.get(row.end);
+			if (group) group.push(row);
+			else byEnd.set(row.end, [row]);
+		}
 		const periods: BankBalanceTrendPeriodDto[] = [];
-		starts.forEach((start, index) => {
-			const end = ends[index];
+		for (const {start, periodEnd, end} of windows) {
 			const accounts = byEnd.get(end) ?? [];
-			if (!accounts.some((row) => row.included)) return;
-			const periodEnd = addDays(nextPeriodStart(start, interval), -1);
 			const counted = accounts.filter((row) => row.included);
+			if (counted.length === 0) continue;
 			periods.push({
 				start,
 				end,
 				complete: periodEnd < asOf && periodEnd <= to,
-				total: counted.every((row) => row.balance !== null)
-					? formatCents(counted.reduce((sum, row) => sum + parseCents(row.balance!), 0n))
-					: null,
+				total: sumBalances(counted),
 				accounts: accounts.map((row) => ({id: row.id, balance: row.balance})),
 			});
-		});
+		}
+		const since = new Map(rows.map((row) => [row.id, row.since]));
 		return {
 			baseCurrency,
 			interval,
-			accounts: [...since].map(([id, from]) => ({id, since: from})),
+			accounts: [...since].map(([id, date]) => ({id, since: date})),
 			periods,
 		};
 	}
@@ -406,6 +395,16 @@ export class BankTransactionSummaryService {
 }
 
 /** Period starts from `from` through `to`, or null when the range is backwards, ends after `asOf` or is too long. */
+/** The sum of the balances, or null when any of them could not be converted. */
+function sumBalances(rows: Array<{balance: string | null}>): string | null {
+	let cents = 0n;
+	for (const {balance} of rows) {
+		if (balance === null) return null;
+		cents += parseCents(balance);
+	}
+	return formatCents(cents);
+}
+
 function periodStarts(interval: CashFlowInterval, from: string, to: string, asOf: string): string[] | null {
 	const starts: string[] = [];
 	for (let start = periodStart(from, interval); start <= to; start = nextPeriodStart(start, interval)) {
