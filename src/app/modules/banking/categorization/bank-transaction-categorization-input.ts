@@ -39,6 +39,9 @@ const UNLABELED_ALPHANUMERIC_IDENTIFIER_PATTERN =
 	/\b(?=[A-Z0-9_-]*[A-Z])(?=[A-Z0-9_-]*\d[A-Z0-9_-]*\d[A-Z0-9_-]*\d)[A-Z0-9_-]+\b/gi;
 const OPAQUE_IDENTIFIER_PATTERN =
 	/\b(?=[A-Z0-9_-]{12,}\b)(?=[A-Z0-9_-]*[A-Z])(?=[A-Z0-9_-]*\d[A-Z0-9_-]*\d[A-Z0-9_-]*\d)[A-Z0-9_-]+\b/gi;
+// Banks sometimes glue a merchant word to a reference ("ExampleREF0012345"); keep that word, redact the rest.
+// Four or more letters, so a short letter run at the start of a random ID ("Abc123DEF456") stays redacted.
+const GLUED_LEADING_WORD_PATTERN = /^([A-Z][a-z]{3,})(?=[A-Z0-9_-]+$)/;
 const LONG_DIGIT_PATTERN = /\b\d{4,}\b/g;
 const LONG_NUMERIC_IDENTIFIER_PATTERN = /\b\d{6,}\b/g;
 const REDACTED_IDENTIFIER_LABEL_PATTERN =
@@ -210,10 +213,15 @@ function sanitizeCategorizationText(value: string | null | undefined, maxLength?
 		.replace(INTERNATIONAL_PHONE_IDENTIFIER_PATTERN, '[REDACTED]')
 		.replace(LOCAL_PHONE_IDENTIFIER_PATTERN, '[REDACTED]')
 		.replace(FORMATTED_CARD_IDENTIFIER_PATTERN, '[REDACTED]')
-		.replace(OPAQUE_IDENTIFIER_PATTERN, '[REDACTED]')
+		.replace(OPAQUE_IDENTIFIER_PATTERN, redactOpaqueIdentifier)
 		.replace(LONG_NUMERIC_IDENTIFIER_PATTERN, '[REDACTED]');
 
 	return maxLength === undefined ? sanitized : truncate(sanitized, maxLength);
+}
+
+function redactOpaqueIdentifier(identifier: string): string {
+	const word = identifier.match(GLUED_LEADING_WORD_PATTERN)?.[1];
+	return word ? `${word} [REDACTED]` : '[REDACTED]';
 }
 
 function sanitizeUrlToHostname(value: string): string {
