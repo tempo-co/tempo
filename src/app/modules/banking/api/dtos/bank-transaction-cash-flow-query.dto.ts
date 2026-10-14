@@ -13,7 +13,11 @@ export class BankTransactionCashFlowQueryDto {
 	@IsCalendarDate()
 	from: string;
 
-	/** The client's local date or an earlier one; the last period is counted through this day. */
+	/** The last day to count, on or before `asOf`. */
 	@IsCalendarDate()
 	to: string;
+
+	/** The client's local date. A period is complete only once it has ended before this day. */
+	@IsCalendarDate()
+	asOf: string;
 }

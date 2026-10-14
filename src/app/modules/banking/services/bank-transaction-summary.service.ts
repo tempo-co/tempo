@@ -34,6 +34,7 @@ import {
 import {
 	SQL_CATEGORIZATION_FAILED,
 	SQL_CATEGORIZING,
+	SQL_INCOME,
 	SQL_MISSING_BASE_AMOUNT,
 	SQL_OWN_TRANSFER_DEBIT,
 	SQL_SPENDING,
@@ -187,14 +188,14 @@ export class BankTransactionSummaryService {
 
 	async getCashFlow(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
-		{interval, from, to}: BankTransactionCashFlowQueryDto,
+		{interval, from, to, asOf}: BankTransactionCashFlowQueryDto,
 	): Promise<BankTransactionCashFlowResponseDto> {
 		const starts: string[] = [];
 		for (let start = periodStart(from, interval); start <= to; start = nextPeriodStart(start, interval)) {
 			starts.push(start);
 			if (starts.length > CASH_FLOW_MAX_PERIODS[interval]) break;
 		}
-		if (from > to || starts.length > CASH_FLOW_MAX_PERIODS[interval]) {
+		if (from > to || to > asOf || starts.length > CASH_FLOW_MAX_PERIODS[interval]) {
 			throw new BadRequestException(BANKING_TRANSACTION_CASH_FLOW_RANGE);
 		}
 
@@ -212,7 +213,8 @@ export class BankTransactionSummaryService {
 			periods.push({
 				start,
 				end: periodEnd < to ? periodEnd : to,
-				complete: periodEnd <= to && start >= firstBookingDate,
+				// A period that ends today is still running; one cut by where history starts is partial.
+				complete: periodEnd < asOf && periodEnd <= to && start >= firstBookingDate,
 				spending: formatCents(spending),
 				income: formatCents(income),
 				net: formatCents(income - spending),
@@ -266,7 +268,7 @@ export class BankTransactionSummaryService {
 		return query
 			.select(`to_char(date_trunc(:interval, "transaction"."bookingDate"::timestamp), 'YYYY-MM-DD')`, 'start')
 			.addSelect(`ROUND(COALESCE(SUM(${BASE_AMOUNT}) FILTER (WHERE ${SQL_SPENDING}), 0), 2)::text`, 'spending')
-			.addSelect(`ROUND(COALESCE(SUM(${BASE_AMOUNT}) FILTER (WHERE NOT ${SQL_SPENDING}), 0), 2)::text`, 'income')
+			.addSelect(`ROUND(COALESCE(SUM(${BASE_AMOUNT}) FILTER (WHERE ${SQL_INCOME}), 0), 2)::text`, 'income')
 			.setParameter('interval', interval)
 			.groupBy('1')
 			.getRawMany<{start: string; spending: string; income: string}>();
