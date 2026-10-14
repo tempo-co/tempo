@@ -1,11 +1,18 @@
 import {Processor, WorkerHost} from '@nestjs/bullmq';
 import {Job} from 'bullmq';
 
-import {BANK_TRANSACTION_CATEGORIZATION_QUEUE, CATEGORIZE_BANK_TRANSACTIONS_JOB} from '@core/queue/queue.constants';
+import {
+	APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB,
+	BANK_TRANSACTION_CATEGORIZATION_QUEUE,
+	CATEGORIZE_BANK_TRANSACTIONS_JOB,
+	RECONCILE_BANK_TRANSACTION_CATEGORIZATION_JOB,
+} from '@core/queue/queue.constants';
 
 import {
 	BankTransactionCategorizationJobData,
+	BankTransactionCategorizationQueueData,
 	BankTransactionCategorizationService,
+	ManualCategoryFollowUpJobData,
 } from './bank-transaction-categorization.service';
 
 @Processor(BANK_TRANSACTION_CATEGORIZATION_QUEUE, {concurrency: 1})
@@ -14,8 +21,21 @@ export class BankTransactionCategorizationProcessor extends WorkerHost {
 		super();
 	}
 
-	async process(job: Job<BankTransactionCategorizationJobData>): Promise<void> {
-		if (job.name !== CATEGORIZE_BANK_TRANSACTIONS_JOB) return;
-		await this.categorizationService.processTransactionJob(job.data.transactionIds);
+	async process(job: Job<BankTransactionCategorizationQueueData>): Promise<void> {
+		switch (job.name) {
+			case CATEGORIZE_BANK_TRANSACTIONS_JOB:
+				await this.categorizationService.processTransactionJob(
+					(job.data as BankTransactionCategorizationJobData).transactionIds,
+				);
+				return;
+			case APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB:
+				await this.categorizationService.processManualCategoryFollowUp(
+					job.data as ManualCategoryFollowUpJobData,
+				);
+				return;
+			case RECONCILE_BANK_TRANSACTION_CATEGORIZATION_JOB:
+				await this.categorizationService.reconcilePendingTransactions({includeFailed: false});
+				return;
+		}
 	}
 }

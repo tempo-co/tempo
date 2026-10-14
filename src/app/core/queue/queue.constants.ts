@@ -4,6 +4,9 @@ export const SEND_EMAIL_JOB = 'send-email-job';
 export const BANK_TRANSACTION_CATEGORIZATION_QUEUE = 'bank-transaction-categorization';
 export const CATEGORIZE_BANK_TRANSACTIONS_JOB = 'categorize-bank-transactions';
 export const BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE = 50;
+export const APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB = 'apply-manual-category-to-merchant';
+export const RECONCILE_BANK_TRANSACTION_CATEGORIZATION_JOB = 'reconcile-bank-transaction-categorization';
+export const BANK_TRANSACTION_CATEGORIZATION_RECONCILE_SCHEDULER_ID = 'bank-transaction-categorization-reconciler';
 
 export const BANK_CONNECTION_SYNC_QUEUE = 'bank-connection-sync';
 export const DISPATCH_BANK_CONNECTION_SYNCS_JOB = 'dispatch-bank-connection-syncs';
