@@ -93,7 +93,9 @@ test('category save refreshes a drill that did not previously contain the transa
   }
 });
 
-test('category-only and source-only lists retain immediate cache updates without refetching', async () => {
+// A correction can also change the owner's other rows from the same merchant on the server, so every list is
+// refetched after the immediate update.
+test('category-only and source-only lists update immediately and are refetched', async () => {
   const updated = {id: 'example-transaction', category: 'OTHER', categorySource: 'MANUAL'};
   const {client, hook} = mutationHarness(updated);
   const pagination = {pageIndex: 0, pageSize: 10};
@@ -117,8 +119,8 @@ test('category-only and source-only lists retain immediate cache updates without
     await mutation.updateBankTransactionCategory({id: updated.id, category: 'OTHER'});
     expect(client.getQueryData(removedKey)).toEqual({transactions: [], total: 0});
     expect(client.getQueryData(retainedKey)).toEqual({transactions: [updated], total: 1});
-    expect(client.getQueryState(removedKey)?.isInvalidated).toBe(false);
-    expect(client.getQueryState(retainedKey)?.isInvalidated).toBe(false);
+    expect(client.getQueryState(removedKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(retainedKey)?.isInvalidated).toBe(true);
   } finally {
     client.clear();
   }

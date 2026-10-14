@@ -144,18 +144,21 @@ export function formatBankTransactionCategoryStatus(
   return 'Not categorized';
 }
 
+const CATEGORY_SOURCE_LABELS: Record<BankTransactionCategorizationSource, string> = {
+  AI: 'Suggested by AI',
+  HISTORY: 'From your history',
+  MANUAL: 'Manual',
+};
+
 export function formatBankTransactionCategorySource(
   value: BankTransactionCategorizationSource | null | undefined,
 ) {
-  const normalized = value?.toUpperCase();
-  if (normalized === 'AI') return 'Suggested by AI';
-  if (normalized === 'MANUAL') return 'Manual';
-  return null;
+  return value ? (CATEGORY_SOURCE_LABELS[value] ?? null) : null;
 }
 
 /**
- * The muted line under a transaction's category. Regular transactions only get one for manual
- * categories or while categorization is pending, failed or not applicable.
+ * The muted line under a transaction's category. Regular transactions only get one for manual or
+ * history categories or while categorization is pending, failed or not applicable.
  */
 export function formatBankTransactionCategorySubtitle(transaction: BankTransaction) {
   const source = formatBankTransactionCategorySource(transaction.categorySource);
@@ -178,7 +181,8 @@ export function formatBankTransactionCategorySubtitle(transaction: BankTransacti
     return cashFlowTreatment;
   }
 
-  if (isManual) return source;
+  // AI is the default, so only other sources get a subtitle.
+  if (transaction.categorySource && transaction.categorySource !== 'AI') return source;
   if (transaction.categoryStatus === 'COMPLETED') return null;
   return formatBankTransactionCategoryStatus(transaction.categoryStatus);
 }

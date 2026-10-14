@@ -63,15 +63,14 @@ export const useUpdateBankTransactionCategory = () => {
           });
         }
       }
-      // Home's Attention and "Not in totals" links filter on server-derived cash-flow and
-      // categorization predicates. Refetch those lists, including pages that lacked the row.
+      // The API also applies a manual category to the owner's other rows from the same merchant,
+      // so refetch every list and every other cached detail, not just the corrected row.
       await Promise.all([
+        queryClient.invalidateQueries({queryKey: bankQueryKeys.transactionsRoot}),
+        queryClient.invalidateQueries({queryKey: bankQueryKeys.connectionTransactionsRoot}),
         queryClient.invalidateQueries({
-          queryKey: bankQueryKeys.transactionsRoot,
-          predicate: ({queryKey}) => {
-            const filters = queryKey[2] as BankTransactionFilterParams | undefined;
-            return Boolean(filters?.cashFlows?.length || filters?.categoryStatuses?.length);
-          },
+          queryKey: bankQueryKeys.transactionRoot,
+          predicate: ({queryKey}) => queryKey[1] !== id,
         }),
         queryClient.invalidateQueries({queryKey: dashboardQueryKeys.root}),
       ]);

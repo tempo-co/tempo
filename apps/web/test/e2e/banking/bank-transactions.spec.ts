@@ -708,7 +708,7 @@ test.describe('bank transactions', () => {
           ...transaction,
           category: index === 0 ? 'FOOD_AND_DRINK' : index === 1 ? 'SHOPPING' : 'NEEDS_REVIEW',
           categoryStatus: 'COMPLETED',
-          categorySource: index === 0 ? 'MANUAL' : 'AI',
+          categorySource: index === 0 ? 'MANUAL' : index === 1 ? 'HISTORY' : 'AI',
         })),
         {
           ...payload.transactions[payload.transactions.length - 1],
@@ -802,7 +802,7 @@ test.describe('bank transactions', () => {
       exact: true,
     });
     await categorySourceFilter.click();
-    await expect(page.getByRole('option')).toHaveCount(2);
+    await expect(page.getByRole('option')).toHaveCount(3);
     await page.getByRole('option', {name: 'Manual', exact: true}).click();
 
     const manualSourceParam = new URL(page.url()).searchParams.get('categorySources');
@@ -810,6 +810,15 @@ test.describe('bank transactions', () => {
     expect(JSON.parse(manualSourceParam!)).toEqual(['MANUAL']);
     await expect(page.getByText('Coffee shop', {exact: true})).toBeVisible();
     await expect(page.getByText('Salary', {exact: true})).not.toBeVisible();
+
+    await page.getByRole('option', {name: 'Manual', exact: true}).click();
+    await page.getByRole('option', {name: 'From your history', exact: true}).click();
+    const historySourceParam = new URL(page.url()).searchParams.get('categorySources');
+    expect(historySourceParam).not.toBeNull();
+    expect(JSON.parse(historySourceParam!)).toEqual(['HISTORY']);
+    const historyRow = page.getByTestId(/^bank-transaction-row-/).first();
+    await expect(historyRow.getByText('From your history', {exact: true})).toBeVisible();
+    await expect(page.getByText('Coffee shop', {exact: true})).not.toBeVisible();
 
     await page.getByRole('button', {name: 'Clear filters'}).first().click();
     const clearedUrl = new URL(page.url());
@@ -930,7 +939,7 @@ test.describe('bank transactions', () => {
       .getByRole('heading', {name: 'Category source'})
       .locator('..');
     await expect(categoriesSection.getByPlaceholder('Search categories...')).toBeVisible();
-    await expect(categorySourceSection.getByRole('option')).toHaveCount(2);
+    await expect(categorySourceSection.getByRole('option')).toHaveCount(3);
     await expect(mobileFilters.getByRole('button', {name: 'Done', exact: true})).toBeVisible();
     await mobileFilters.getByRole('button', {name: 'Done', exact: true}).click();
     await expect(mobileFilters).toBeHidden();

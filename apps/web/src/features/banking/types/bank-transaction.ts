@@ -147,7 +147,7 @@ export const BANK_TRANSACTION_CATEGORIZATION_STATUSES = [
 export type BankTransactionCategorizationStatus =
   (typeof BANK_TRANSACTION_CATEGORIZATION_STATUSES)[number];
 
-export const BANK_TRANSACTION_CATEGORIZATION_SOURCES = ['AI', 'MANUAL'] as const;
+export const BANK_TRANSACTION_CATEGORIZATION_SOURCES = ['AI', 'HISTORY', 'MANUAL'] as const;
 
 export type BankTransactionCategorizationSource =
   (typeof BANK_TRANSACTION_CATEGORIZATION_SOURCES)[number];
