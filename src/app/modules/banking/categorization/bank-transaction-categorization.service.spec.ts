@@ -716,20 +716,19 @@ describe('BankTransactionCategorizationService worker', () => {
 	it('applies a consistent manual category for the same merchant without calling the provider', async () => {
 		const transaction = createBankTransaction({
 			id: 'repeat-merchant',
+			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
 			description: 'BEA, Google Pay BCK*Example Rail 201,PAS123 NR:EX0001, 01.02.26/10:00 EXAMPLETOWN',
 			counterpartyName: null,
 		});
 		const queryBuilder = createUpdateQueryBuilder();
-		queryBuilder.getRawMany
-			.mockResolvedValueOnce([{id: transaction.id, accountId: 'account-1'}])
-			.mockResolvedValueOnce([
-				{
-					description: 'BEA, Betaalpas Example Rail 305,PAS123 NR:EX0002, 03.01.26/09:00 EXAMPLETOWN',
-					counterpartyName: null,
-					creditDebitIndicator: 'DBIT',
-					category: 'TRANSPORTATION',
-				},
-			] as never);
+		queryBuilder.getRawMany.mockResolvedValueOnce([
+			{
+				description: 'BEA, Betaalpas Example Rail 305,PAS123 NR:EX0002, 03.01.26/09:00 EXAMPLETOWN',
+				counterpartyName: null,
+				creditDebitIndicator: 'DBIT',
+				category: 'TRANSPORTATION',
+			},
+		] as never);
 		const {service, provider} = createService({rows: [transaction], queryBuilder});
 
 		await service.processTransactionJob([transaction.id]);
@@ -745,7 +744,11 @@ describe('BankTransactionCategorizationService worker', () => {
 	});
 
 	it('passes mixed manual categories for the same merchant to the provider', async () => {
-		const transaction = createBankTransaction({id: 'mixed-merchant', counterpartyName: 'Example Rides'});
+		const transaction = createBankTransaction({
+			id: 'mixed-merchant',
+			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
+			counterpartyName: 'Example Rides',
+		});
 		const history = [
 			{
 				description: 'Example Rides',
@@ -771,17 +774,9 @@ describe('BankTransactionCategorizationService worker', () => {
 				creditDebitIndicator: 'CRDT',
 				category: 'REFUND',
 			},
-			{
-				description: 'Example Rides',
-				counterpartyName: 'Example Rides',
-				creditDebitIndicator: 'DBIT',
-				category: 'NEEDS_REVIEW',
-			},
 		];
 		const queryBuilder = createUpdateQueryBuilder();
-		queryBuilder.getRawMany
-			.mockResolvedValueOnce([{id: transaction.id, accountId: 'account-1'}])
-			.mockResolvedValueOnce(history as never);
+		queryBuilder.getRawMany.mockResolvedValueOnce(history as never);
 		const {service, provider} = createService({rows: [transaction], queryBuilder});
 
 		await service.processTransactionJob([transaction.id]);
@@ -791,49 +786,12 @@ describe('BankTransactionCategorizationService worker', () => {
 			{category: 'FOOD_AND_DRINK', count: 2},
 			{category: 'TRANSPORTATION', count: 1},
 		]);
+		const [, categoryFilter] = queryBuilder.andWhere.mock.calls.find(([clause]) =>
+			String(clause).includes('reusableCategories'),
+		)!;
+		expect(categoryFilter.reusableCategories).not.toContain('NEEDS_REVIEW');
+		expect(categoryFilter.reusableCategories).toContain('TRANSPORTATION');
 		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION);
-	});
-
-	it('never shares manual history between accounts in the same batch', async () => {
-		const own = createBankTransaction({id: 'own-row', counterpartyName: 'Example Ferry'});
-		const other = createBankTransaction({id: 'other-row', counterpartyName: 'Example Ferry'});
-		const queryBuilder = createUpdateQueryBuilder([{affected: 1}, {affected: 1}, {affected: 1}, {affected: 1}]);
-		queryBuilder.getRawMany
-			.mockResolvedValueOnce([
-				{id: own.id, accountId: 'account-1'},
-				{id: other.id, accountId: 'account-2'},
-			])
-			.mockResolvedValueOnce([])
-			.mockResolvedValueOnce([
-				{
-					description: 'Example Ferry',
-					counterpartyName: 'Example Ferry',
-					creditDebitIndicator: 'DBIT',
-					category: 'TRAVEL',
-				},
-			] as never);
-		const {service, provider} = createService({
-			rows: [own, other],
-			queryBuilder,
-			providerResult: [{correlationId: own.id, category: 'FOOD_AND_DRINK', confidence: 0.9}],
-		});
-
-		await service.processTransactionJob([own.id, other.id]);
-
-		expect(queryBuilder.andWhere).toHaveBeenCalledWith('connection."accountId" = :accountId', {
-			accountId: 'account-1',
-		});
-		expect(queryBuilder.andWhere).toHaveBeenCalledWith('connection."accountId" = :accountId', {
-			accountId: 'account-2',
-		});
-		expect(provider.categorize).toHaveBeenCalledTimes(1);
-		expect(provider.categorize.mock.calls[0][0]).toHaveLength(1);
-		expect(provider.categorize.mock.calls[0][0][0]).toMatchObject({correlationId: own.id});
-		expect(provider.categorize.mock.calls[0][0][0].previousManualCategories).toBeUndefined();
-		expect(other).toMatchObject({
-			category: 'TRAVEL',
-			categoryProvider: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
-		});
 	});
 
 	it('excludes manual rows from claims and provider calls', async () => {

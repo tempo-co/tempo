@@ -43,11 +43,14 @@ import {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
 	BankTransactionCategorizationSearchTrace,
+	BankTransactionCategorizationSource,
+	BankTransactionCategorizationStatus,
 } from './bank-transaction-categorization.types';
 import {
 	BANK_TRANSACTION_CATEGORIES,
 	BANK_TRANSACTION_CATEGORY_DEFINITIONS,
 	BankTransactionCategory,
+	isBankTransactionCategory,
 } from './bank-transaction-category';
 import {getBankTransactionMerchantKey} from './bank-transaction-merchant-key';
 
@@ -62,9 +65,9 @@ type ClaimedTransaction = {
 };
 
 type CategorizationUpdate = {
-	category?: string | null;
-	categoryStatus?: string;
-	categorySource?: string | null;
+	category?: BankTransactionCategory | null;
+	categoryStatus?: BankTransactionCategorizationStatus;
+	categorySource?: BankTransactionCategorizationSource | null;
 	categoryConfidence?: string | null;
 	categoryAppliedInputHash?: string | null;
 	categoryProvider?: string | null;
@@ -80,6 +83,16 @@ const MAX_ERROR_LENGTH = 500;
 const CLAIMABLE_STATUSES = ['PENDING', 'FAILED'] as const;
 
 type ManualCategoryCounts = Map<BankTransactionCategory, number>;
+type CompletionValues = Pick<
+	CategorizationUpdate,
+	| 'category'
+	| 'categoryConfidence'
+	| 'categoryProvider'
+	| 'categoryModel'
+	| 'categoryPromptVersion'
+	| 'categorySearchTrace'
+>;
+const REUSABLE_MANUAL_CATEGORIES = BANK_TRANSACTION_CATEGORIES.filter((category) => category !== 'NEEDS_REVIEW');
 
 @Injectable()
 export class BankTransactionCategorizationService {
@@ -223,26 +236,23 @@ export class BankTransactionCategorizationService {
 		// applied directly, and mixed choices are passed to the model as context.
 		const manualHistory = await this.loadManualCategoryHistory(claimedBatch);
 		const activeBatch: ClaimedTransaction[] = [];
+		const historyMatches: Promise<void>[] = [];
 		for (const claimed of claimedBatch) {
-			const merchantKey = getBankTransactionMerchantKey(claimed.transaction);
-			const counts = merchantKey ? manualHistory.get(claimed.transaction.id)?.get(merchantKey) : undefined;
+			const counts = manualHistory.get(claimed.transaction.id);
 			if (counts?.size === 1) {
-				await this.applyManualHistoryCategory(claimed, [...counts.keys()][0]);
-				continue;
+				historyMatches.push(this.applyManualHistoryCategory(claimed, [...counts.keys()][0]));
+			} else {
+				activeBatch.push(
+					counts
+						? {
+								...claimed,
+								input: {...claimed.input, previousManualCategories: toPreviousManualCategories(counts)},
+							}
+						: claimed,
+				);
 			}
-			if (counts) {
-				claimed.input = {
-					...claimed.input,
-					previousManualCategories: [...counts]
-						.sort(
-							([leftCategory, left], [rightCategory, right]) =>
-								right - left || leftCategory.localeCompare(rightCategory),
-						)
-						.map(([category, count]) => ({category, count})),
-				};
-			}
-			activeBatch.push(claimed);
 		}
+		await Promise.all(historyMatches);
 		if (activeBatch.length === 0) return;
 
 		const inputs = activeBatch.map(({input}) => input);
@@ -323,28 +333,14 @@ export class BankTransactionCategorizationService {
 						: failedWebSearchIds.has(claimed.input.correlationId)
 							? BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION
 							: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION;
-				const completionValues = {
+				await this.completeClaimed(claimed, {
 					category: result.category,
-					categoryStatus: 'COMPLETED',
-					categorySource: 'AI',
 					categoryConfidence: String(result.confidence),
-					categoryAppliedInputHash: claimed.inputHash,
 					categoryProvider: this.configurationService.get('AI_CATEGORIZATION_PROVIDER'),
 					categoryModel: this.configurationService.get('AI_CATEGORIZATION_MODEL'),
 					categoryPromptVersion: promptVersion,
 					categorySearchTrace: result.searchTrace ?? null,
-					categoryLastError: null,
-				};
-				const applied = await this.updateCategorizationWithGuard(
-					claimed.transaction.id,
-					claimed.inputHash,
-					{
-						...completionValues,
-						categoryUpdatedAt: new Date(),
-					},
-					'PROCESSING',
-				);
-				if (applied) this.applyLocalUpdate(claimed.transaction, completionValues);
+				});
 			}),
 		);
 	}
@@ -394,32 +390,37 @@ export class BankTransactionCategorizationService {
 	}
 
 	/**
-	 * Loads manual category history per Tempo account and returns it per batch transaction id. Batches built by
-	 * reconciliation can contain several accounts, so history is never shared between accounts.
+	 * Returns, per batch transaction id, the account owner's manual category counts for the same merchant. Batches
+	 * built by reconciliation can contain several accounts, so history is loaded and matched per account. A history
+	 * failure only disables reuse; the batch still goes to the model.
 	 */
 	private async loadManualCategoryHistory(
 		batch: readonly ClaimedTransaction[],
-	): Promise<Map<string, Map<string, ManualCategoryCounts>>> {
-		const owners = await this.repository
-			.createQueryBuilder('transaction')
-			.innerJoin('transaction.bankAccount', 'bankAccount')
-			.innerJoin('bankAccount.bankConnection', 'connection')
-			.select('transaction.id', 'id')
-			.addSelect('connection."accountId"', 'accountId')
-			.where('transaction.id IN (:...batchIds)', {batchIds: batch.map(({transaction}) => transaction.id)})
-			.getRawMany<{id: string; accountId: string | null}>();
-
-		const historyByAccount = new Map<string, Map<string, ManualCategoryCounts>>();
-		for (const accountId of new Set(owners.map((owner) => owner.accountId))) {
-			if (accountId) historyByAccount.set(accountId, await this.loadAccountManualCategoryHistory(accountId));
+	): Promise<Map<string, ManualCategoryCounts>> {
+		const batchByAccount = new Map<string, {claimed: ClaimedTransaction; merchantKey: string}[]>();
+		for (const claimed of batch) {
+			const accountId = claimed.transaction.bankAccount?.bankConnection?.accountId;
+			const merchantKey = getBankTransactionMerchantKey(claimed.transaction);
+			if (!accountId || !merchantKey) continue;
+			batchByAccount.set(accountId, [...(batchByAccount.get(accountId) ?? []), {claimed, merchantKey}]);
 		}
 
-		const historyByTransaction = new Map<string, Map<string, ManualCategoryCounts>>();
-		for (const {id, accountId} of owners) {
-			const history = accountId ? historyByAccount.get(accountId) : undefined;
-			if (history) historyByTransaction.set(id, history);
+		const countsByTransaction = new Map<string, ManualCategoryCounts>();
+		try {
+			await Promise.all(
+				[...batchByAccount].map(async ([accountId, entries]) => {
+					const history = await this.loadAccountManualCategoryHistory(accountId);
+					for (const {claimed, merchantKey} of entries) {
+						const counts = history.get(merchantKey);
+						if (counts) countsByTransaction.set(claimed.transaction.id, counts);
+					}
+				}),
+			);
+		} catch (error) {
+			this.logger.warn(`Manual category history lookup failed: ${safeErrorName(error)}`);
+			return new Map();
 		}
-		return historyByTransaction;
+		return countsByTransaction;
 	}
 
 	private async loadAccountManualCategoryHistory(accountId: string): Promise<Map<string, ManualCategoryCounts>> {
@@ -431,8 +432,10 @@ export class BankTransactionCategorizationService {
 			.addSelect('transaction.counterpartyName', 'counterpartyName')
 			.addSelect('transaction.creditDebitIndicator', 'creditDebitIndicator')
 			.addSelect('transaction.category', 'category')
-			.where(`transaction."categorySource" = 'MANUAL'`)
-			.andWhere('transaction.category IS NOT NULL')
+			.where('transaction."categorySource" = :manualSource', {manualSource: 'MANUAL'})
+			.andWhere('transaction.category IN (:...reusableCategories)', {
+				reusableCategories: REUSABLE_MANUAL_CATEGORIES,
+			})
 			.andWhere('transaction."ownTransferEvidence" IS NULL')
 			.andWhere('transaction."financialEventType" IS NULL')
 			.andWhere('connection."accountId" = :accountId', {accountId})
@@ -442,12 +445,11 @@ export class BankTransactionCategorizationService {
 				description: string | null;
 				counterpartyName: string | null;
 				creditDebitIndicator: string | null;
-				category: string;
+				category: BankTransactionCategory;
 			}>();
 
 		const history = new Map<string, ManualCategoryCounts>();
 		for (const row of rows) {
-			if (!this.isReusableManualCategory(row.category)) continue;
 			const merchantKey = getBankTransactionMerchantKey(row);
 			if (!merchantKey) continue;
 			const counts = history.get(merchantKey) ?? new Map<BankTransactionCategory, number>();
@@ -457,24 +459,23 @@ export class BankTransactionCategorizationService {
 		return history;
 	}
 
-	private isReusableManualCategory(category: string): category is BankTransactionCategory {
-		return category !== 'NEEDS_REVIEW' && (BANK_TRANSACTION_CATEGORIES as readonly string[]).includes(category);
-	}
-
-	private async applyManualHistoryCategory(
-		claimed: ClaimedTransaction,
-		category: BankTransactionCategory,
-	): Promise<void> {
-		const completionValues = {
+	private applyManualHistoryCategory(claimed: ClaimedTransaction, category: BankTransactionCategory): Promise<void> {
+		return this.completeClaimed(claimed, {
 			category,
-			categoryStatus: 'COMPLETED',
-			categorySource: 'AI',
 			categoryConfidence: '1',
-			categoryAppliedInputHash: claimed.inputHash,
 			categoryProvider: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
 			categoryModel: null,
 			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
 			categorySearchTrace: null,
+		});
+	}
+
+	private async completeClaimed(claimed: ClaimedTransaction, values: CompletionValues): Promise<void> {
+		const completionValues: CategorizationUpdate = {
+			...values,
+			categoryStatus: 'COMPLETED',
+			categorySource: 'AI',
+			categoryAppliedInputHash: claimed.inputHash,
 			categoryLastError: null,
 		};
 		const applied = await this.updateCategorizationWithGuard(
@@ -592,7 +593,7 @@ export class BankTransactionCategorizationService {
 			inputIds.some((id) => !resultIdSet.has(id)) ||
 			results.some(
 				(result) =>
-					!(BANK_TRANSACTION_CATEGORIES as readonly string[]).includes(result.category) ||
+					!isBankTransactionCategory(result.category) ||
 					!Number.isFinite(result.confidence) ||
 					result.confidence < 0 ||
 					result.confidence > 1 ||
@@ -703,4 +704,14 @@ export class BankTransactionCategorizationService {
 		}
 		return 'Transaction categorization failed.';
 	}
+}
+
+function toPreviousManualCategories(
+	counts: ManualCategoryCounts,
+): {category: BankTransactionCategory; count: number}[] {
+	return [...counts]
+		.sort(
+			([leftCategory, left], [rightCategory, right]) => right - left || leftCategory.localeCompare(rightCategory),
+		)
+		.map(([category, count]) => ({category, count}));
 }

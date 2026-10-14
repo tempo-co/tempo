@@ -24,6 +24,10 @@ export const BANK_TRANSACTION_CATEGORIES = [
 
 export type BankTransactionCategory = (typeof BANK_TRANSACTION_CATEGORIES)[number];
 
+export function isBankTransactionCategory(value: string): value is BankTransactionCategory {
+	return (BANK_TRANSACTION_CATEGORIES as readonly string[]).includes(value);
+}
+
 export const BANK_TRANSACTION_UNCATEGORIZED = 'UNCATEGORIZED' as const;
 export const BANK_TRANSACTION_CATEGORY_FILTER_VALUES = [
 	...BANK_TRANSACTION_CATEGORIES,

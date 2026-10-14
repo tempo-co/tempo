@@ -12,8 +12,9 @@ const CARD_DETAILS_PATTERN = /,\s*PAS\d+.*$|\s+NR:.*$|,\s*\d{2}[./]\d{2}[./]\d{2
 const PROCESSOR_PREFIX_PATTERN = /^(?:BCK|CCV|SUMUP|SQ|ZETTLE|IZ|MSP)\s?\*\s*/i;
 const TRAILING_TERMINAL_NUMBER_PATTERN = /\s+\d{1,5}$/;
 // Payment processors collect for many unrelated merchants, so their bare name does not identify a merchant.
+// Matching the leading name covers any legal suffix ("PayPal (Europe) S.a r.l. et Cie, S.C.A.", "Klarna Bank AB").
 const PAYMENT_PROCESSOR_NAME_PATTERN =
-	/^(?:stichting\s+)?(?:paypal|mollie|adyen|stripe|klarna|tikkie|buckaroo|sumup|worldline|ccv|multisafepay|pay\.nl|riverty|afterpay|ginger payments)\b(?:\s+(?:europe|payments?|b\.?v\.?|n\.?v\.?|s\.?a\.?(?:r\.?l\.?)?|ltd\.?|inc\.?))*\.?$/;
+	/^(?:stichting\s+)?(?:paypal|mollie|adyen|stripe|klarna|tikkie|buckaroo|sumup|worldline|ccv|multisafepay|pay\.nl|riverty|afterpay|ginger payments)\b/;
 
 /**
  * Identifies "the same merchant, in the same direction" across a user's transactions, so a category the user chose
@@ -27,10 +28,10 @@ export function getBankTransactionMerchantKey(transaction: MerchantKeyTransactio
 		normalizeBankTransactionText(transaction.counterpartyName) ??
 		(description ? extractStructuredCounterpartyName(description) : null) ??
 		description;
-	const normalizedName = name?.toLowerCase().replace(/\s+/g, ' ').trim();
+	const normalizedName = name?.toLowerCase();
 	if (!normalizedName || PAYMENT_PROCESSOR_NAME_PATTERN.test(normalizedName)) return null;
 
-	const direction = toBankTransactionDirection(transaction.creditDebitIndicator?.trim().toUpperCase() ?? null);
+	const direction = toBankTransactionDirection(transaction.creditDebitIndicator?.trim() ?? null);
 	return `${direction}:${normalizedName}`;
 }
 
@@ -40,7 +41,6 @@ function getCardMerchantName(description: string | null): string | null {
 		.replace(CARD_PREFIX_PATTERN, '')
 		.replace(CARD_DETAILS_PATTERN, '')
 		.replace(PROCESSOR_PREFIX_PATTERN, '')
-		.replace(TRAILING_TERMINAL_NUMBER_PATTERN, '')
-		.trim();
-	return name || null;
+		.replace(TRAILING_TERMINAL_NUMBER_PATTERN, '');
+	return normalizeBankTransactionText(name);
 }

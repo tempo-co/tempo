@@ -36,18 +36,24 @@ describe('getBankTransactionMerchantKey', () => {
 		).toBe('INCOME:example shop');
 	});
 
-	it.each(['PayPal Europe S.a.r.l.', 'Mollie B.V.', 'Stichting Mollie Payments', 'Adyen N.V.', 'Tikkie'])(
-		'does not treat the payment processor %s as a merchant',
-		(counterpartyName) => {
-			expect(
-				getBankTransactionMerchantKey({
-					description: 'order 123',
-					counterpartyName,
-					creditDebitIndicator: 'DBIT',
-				}),
-			).toBeNull();
-		},
-	);
+	it.each([
+		'PayPal Europe S.a.r.l.',
+		'PayPal (Europe) S.a r.l. et Cie, S.C.A.',
+		'Klarna Bank AB',
+		'Stripe Technology Europe Ltd',
+		'Mollie B.V.',
+		'Stichting Mollie Payments',
+		'Adyen N.V.',
+		'Tikkie',
+	])('does not treat the payment processor %s as a merchant', (counterpartyName) => {
+		expect(
+			getBankTransactionMerchantKey({
+				description: 'order 123',
+				counterpartyName,
+				creditDebitIndicator: 'DBIT',
+			}),
+		).toBeNull();
+	});
 
 	it('separates directions and rejects empty merchants', () => {
 		const base = {description: null, counterpartyName: 'Example Shop'};
