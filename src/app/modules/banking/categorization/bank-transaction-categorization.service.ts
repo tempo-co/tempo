@@ -52,7 +52,6 @@ import {
 	notManualCategorySourceSql,
 } from './bank-transaction-categorization.types';
 import {
-	BANK_TRANSACTION_CATEGORIES,
 	BANK_TRANSACTION_CATEGORY_DEFINITIONS,
 	BankTransactionCategory,
 	isBankTransactionCategory,
@@ -62,6 +61,16 @@ import {
 	BANK_TRANSACTION_CATEGORY_RULE_VERSION,
 	getRuleCategory,
 } from './bank-transaction-category-rules';
+import {
+	MAX_MANUAL_CATEGORY_FOLLOW_UP_TRANSACTIONS,
+	ManualCategoryCounts,
+	ManualCategoryFollowUp,
+	REUSABLE_MANUAL_CATEGORIES,
+	getUnanimousCategory,
+	planManualCategoryFollowUp,
+	whereManualCategoryFollowUpCandidates,
+	withManualCorrection,
+} from './manual-category-follow-up';
 
 export type BankTransactionCategorizationJobData = {
 	transactionIds: string[];
@@ -69,6 +78,11 @@ export type BankTransactionCategorizationJobData = {
 export type ManualCategoryFollowUpJobData = {
 	accountId: string;
 	merchantKey: string;
+	/**
+	 * The rows the owner selected in the correction preview; only these may change. Absent on retries queued before
+	 * the preview existed, which therefore change nothing.
+	 */
+	transactionIds?: string[];
 };
 export type BankTransactionCategorizationQueueData =
 	BankTransactionCategorizationJobData | ManualCategoryFollowUpJobData | Record<string, never>;
@@ -106,10 +120,14 @@ const FOLLOW_UP_JOB_OPTIONS = {
 const FOLLOW_UP_ENQUEUE_TIMEOUT_MS = 2_000;
 const MAX_ERROR_LENGTH = 500;
 const CLAIMABLE_STATUSES = ['PENDING', 'FAILED'] as const;
-// PROCESSING rows belong to a worker and NOT_APPLICABLE rows are never categorized.
-const MERCHANT_REAPPLY_STATUSES = [...CLAIMABLE_STATUSES, 'COMPLETED'] as const;
 
-type ManualCategoryCounts = Map<BankTransactionCategory, number>;
+/** The rows a correction would change on the owner's other transactions from the same merchant. */
+export type ManualCategoryPreview = {
+	followUp: ManualCategoryFollowUp | null;
+	transactions: BankTransaction[];
+	total: number;
+};
+
 type CompletionValues = Pick<
 	CategorizationUpdate,
 	| 'category'
@@ -119,8 +137,6 @@ type CompletionValues = Pick<
 	| 'categoryPromptVersion'
 	| 'categorySearchTrace'
 >;
-const REUSABLE_MANUAL_CATEGORIES = BANK_TRANSACTION_CATEGORIES.filter((category) => category !== 'NEEDS_REVIEW');
-
 @Injectable()
 export class BankTransactionCategorizationService {
 	private readonly logger = new Logger(BankTransactionCategorizationService.name);
@@ -483,12 +499,13 @@ export class BankTransactionCategorizationService {
 		return countsByTransaction;
 	}
 
-	/** Counts the owner's reusable manual categories per merchant key. */
+	/** Counts the owner's reusable manual categories per merchant key, optionally leaving one row out. */
 	private async loadAccountManualCategoryCounts(
 		accountId: string,
 		merchantKeys: readonly string[],
+		excludedTransactionId?: string,
 	): Promise<Map<string, ManualCategoryCounts>> {
-		const rows = await this.repository
+		const query = this.repository
 			.createQueryBuilder('transaction')
 			.innerJoin('transaction.bankAccount', 'bankAccount')
 			.innerJoin('bankAccount.bankConnection', 'connection')
@@ -504,8 +521,9 @@ export class BankTransactionCategorizationService {
 			.andWhere('transaction."merchantKey" IN (:...merchantKeys)', {merchantKeys})
 			.andWhere('connection."accountId" = :accountId', {accountId})
 			.groupBy('transaction."merchantKey"')
-			.addGroupBy('transaction.category')
-			.getRawMany<{merchantKey: string; category: BankTransactionCategory; count: number}>();
+			.addGroupBy('transaction.category');
+		if (excludedTransactionId) query.andWhere('transaction.id <> :excludedTransactionId', {excludedTransactionId});
+		const rows = await query.getRawMany<{merchantKey: string; category: BankTransactionCategory; count: number}>();
 
 		const history = new Map<string, ManualCategoryCounts>();
 		for (const row of rows) {
@@ -517,14 +535,65 @@ export class BankTransactionCategorizationService {
 	}
 
 	/**
-	 * Saves the owner's manual category on an owned transaction, then applies it to the owner's other rows from the same
-	 * merchant. Returns false when the row no longer exists. The owner's choice is kept even when the follow-up fails;
-	 * the follow-up is then queued and retried with backoff.
+	 * Lists the owner's other rows that a manual correction would change, without writing anything or calling the
+	 * model. The follow-up is planned from the owner's choices as they would be once the correction is saved.
+	 */
+	async previewManualCategory(
+		accountId: string,
+		transaction: BankTransaction,
+		category: BankTransactionCategory,
+	): Promise<ManualCategoryPreview> {
+		const {merchantKey} = transaction;
+		if (!merchantKey) return {followUp: null, transactions: [], total: 0};
+		const otherCounts = (await this.loadAccountManualCategoryCounts(accountId, [merchantKey], transaction.id)).get(
+			merchantKey,
+		);
+		const followUp = planManualCategoryFollowUp(
+			withManualCorrection(otherCounts, category, transaction),
+			this.isEnabled(),
+		);
+		if (!followUp) return {followUp: null, transactions: [], total: 0};
+
+		const query = whereManualCategoryFollowUpCandidates(this.repository.createQueryBuilder('transaction'), {
+			accountId,
+			merchantKey,
+			followUp,
+		})
+			.select([
+				'transaction.id',
+				'transaction.transactionDate',
+				'transaction.bookingDate',
+				'transaction.displayDescription',
+				'transaction.amount',
+				'transaction.currency',
+				'transaction.category',
+				'transaction.categoryStatus',
+				'transaction.categorySource',
+			])
+			.andWhere('transaction.id <> :correctedTransactionId', {correctedTransactionId: transaction.id})
+			// Newest first by the date the preview shows; pending rows without a booking date are the newest.
+			.orderBy(
+				'COALESCE(transaction."transactionDate", transaction."bookingDate", transaction."valueDate")',
+				'DESC',
+				'NULLS FIRST',
+			)
+			.addOrderBy('transaction.id', 'DESC')
+			.take(MAX_MANUAL_CATEGORY_FOLLOW_UP_TRANSACTIONS);
+		const [transactions, total] = await query.getManyAndCount();
+		return {followUp, transactions, total};
+	}
+
+	/**
+	 * Saves the owner's manual category on an owned transaction, then applies the follow-up only to the selected rows
+	 * from the same merchant. Rows that are not selected keep their category and are not remembered, so a later
+	 * correction offers them again. Returns false when the row no longer exists. The owner's choice is kept even when
+	 * the follow-up fails; the follow-up is then queued and retried with backoff.
 	 */
 	async setManualCategory(
 		accountId: string,
 		transaction: BankTransaction,
 		category: BankTransactionCategory,
+		followUpTransactionIds: readonly string[] = [],
 	): Promise<boolean> {
 		const inputHash = createBankTransactionCategorizationInputHash(transaction);
 		const values: CategorizationUpdate & {categoryInputHash: string} = {
@@ -539,18 +608,21 @@ export class BankTransactionCategorizationService {
 		const result = await this.repository.update({id: transaction.id}, values);
 		if (result.affected === 0) return false;
 		Object.assign(transaction, values);
+		const {merchantKey} = transaction;
+		const transactionIds = [...new Set(followUpTransactionIds)].filter((id) => id !== transaction.id);
+		if (!merchantKey || transactionIds.length === 0) return true;
 		try {
-			await this.applyManualCategoryToMerchant(accountId, transaction.merchantKey);
+			await this.applyManualCategoryToMerchant({accountId, merchantKey, transactionIds});
 		} catch (error) {
 			this.logger.warn(`Applying a manual category to the same merchant failed: ${safeErrorName(error)}`);
-			await this.enqueueManualCategoryFollowUp(accountId, transaction.merchantKey);
+			await this.enqueueManualCategoryFollowUp({accountId, merchantKey, transactionIds});
 		}
 		return true;
 	}
 
 	/** Runs a queued follow-up. It reads the owner's current choices, so a late retry applies the latest state. */
-	async processManualCategoryFollowUp({accountId, merchantKey}: ManualCategoryFollowUpJobData): Promise<void> {
-		await this.applyManualCategoryToMerchant(accountId, merchantKey);
+	async processManualCategoryFollowUp(data: ManualCategoryFollowUpJobData): Promise<void> {
+		await this.applyManualCategoryToMerchant(data);
 	}
 
 	/**
@@ -558,13 +630,8 @@ export class BankTransactionCategorizationService {
 	 * is harmless, while sharing a job id could drop a newer correction behind a running or exhausted job. The wait is
 	 * bounded; if Redis is down, the add still completes once the connection returns.
 	 */
-	private async enqueueManualCategoryFollowUp(accountId: string, merchantKey: string | null): Promise<void> {
-		if (!merchantKey) return;
-		const added = this.queue.add(
-			APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB,
-			{accountId, merchantKey},
-			FOLLOW_UP_JOB_OPTIONS,
-		);
+	private async enqueueManualCategoryFollowUp(data: ManualCategoryFollowUpJobData): Promise<void> {
+		const added = this.queue.add(APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB, data, FOLLOW_UP_JOB_OPTIONS);
 		let timer: NodeJS.Timeout | undefined;
 		const timeout = new Promise<never>((_, reject) => {
 			timer = setTimeout(() => reject(new Error('EnqueueTimeout')), FOLLOW_UP_ENQUEUE_TIMEOUT_MS);
@@ -582,57 +649,44 @@ export class BankTransactionCategorizationService {
 	}
 
 	/**
-	 * Called after the owner sets a category manually. When all of the owner's manual choices for this merchant agree,
-	 * the owner's other non-manual rows from the merchant take that category, without a model call. When the choices
-	 * disagree, or no reusable choice is left (for example after a correction to NEEDS_REVIEW), rows that were filled
+	 * Called after the owner sets a category manually, for the rows they selected. When all of the owner's manual
+	 * choices for this merchant agree, those rows take that category, without a model call. When the choices disagree,
+	 * or no reusable choice is left (for example after a correction to NEEDS_REVIEW), selected rows that were filled
 	 * from history go back to the model, which then sees any remaining choices. With AI categorization off they keep
-	 * their current category.
+	 * their current category. Every selected id is checked against the same rules as the preview, so a stale or
+	 * foreign id changes nothing.
 	 */
-	private async applyManualCategoryToMerchant(accountId: string, merchantKey: string | null): Promise<void> {
-		if (!merchantKey) return;
+	private async applyManualCategoryToMerchant({
+		accountId,
+		merchantKey,
+		transactionIds = [],
+	}: ManualCategoryFollowUpJobData): Promise<void> {
+		if (transactionIds.length === 0) return;
 		const counts = (await this.loadAccountManualCategoryCounts(accountId, [merchantKey])).get(merchantKey);
+		const followUp = planManualCategoryFollowUp(counts, this.isEnabled());
+		if (!followUp) return;
 
-		const query = this.repository
-			.createQueryBuilder()
-			.update(BankTransaction)
-			.where('"merchantKey" = :merchantKey', {merchantKey})
-			.andWhere(
-				`"bankAccountId" IN (
-					SELECT bank_account.id FROM bank_accounts bank_account
-					INNER JOIN bank_connections connection ON connection.id = bank_account."bankConnectionId"
-					WHERE connection."accountId" = :accountId
-				)`,
-				{accountId},
-			)
-			.andWhere(notManualCategorySourceSql())
-			.andWhere('"categoryStatus" IN (:...statuses)', {statuses: MERCHANT_REAPPLY_STATUSES})
-			.andWhere('"categoryInputHash" IS NOT NULL')
-			.andWhere('"ownTransferEvidence" IS NULL')
-			.andWhere('"financialEventType" IS NULL');
-
-		const category = getUnanimousCategory(counts);
-		if (category) {
+		const query = whereManualCategoryFollowUpCandidates(
+			this.repository.createQueryBuilder().update(BankTransaction),
+			{accountId, merchantKey, followUp, transactionIds},
+		);
+		if (followUp.action === 'APPLY') {
 			await query
 				.set({
 					...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-					...this.historyCompletionValues(category),
+					...this.historyCompletionValues(followUp.category),
 					categoryStatus: 'COMPLETED',
 					categorySource: 'HISTORY',
 					categoryAppliedInputHash: () => '"categoryInputHash"',
 					categoryUpdatedAt: new Date(),
 				})
-				.andWhere(`("category" IS DISTINCT FROM :category OR "categorySource" IS DISTINCT FROM 'HISTORY')`, {
-					category,
-				})
 				.execute();
 			return;
 		}
 
-		if (!this.isEnabled()) return;
 		const result = await query
 			// The category stays until the model replaces it, so a failed enqueue never leaves a row empty.
 			.set({categoryStatus: 'PENDING', categoryUpdatedAt: new Date()})
-			.andWhere(`"categorySource" = 'HISTORY'`)
 			.returning(['id'])
 			.execute();
 		const ids = ((result.raw ?? []) as {id: string}[]).map(({id}) => id);
@@ -906,10 +960,6 @@ export class BankTransactionCategorizationService {
 		}
 		return 'Transaction categorization failed.';
 	}
-}
-
-function getUnanimousCategory(counts: ManualCategoryCounts | undefined): BankTransactionCategory | null {
-	return counts?.size === 1 ? [...counts.keys()][0] : null;
 }
 
 function toPreviousManualCategories(

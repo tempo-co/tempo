@@ -6,6 +6,7 @@ import {Account} from '@modules/account/account.entity';
 
 import {BANKING_CONNECTION_NOT_FOUND, BANKING_TRANSACTION_NOT_FOUND} from '../api/constants/banking-messages.constants';
 import {BankConnectionTransactionsResponseDto} from '../api/dtos/bank-connection-response.dto';
+import {BankTransactionCategoryImpactResponseDto} from '../api/dtos/bank-transaction-category-impact.dto';
 import {
 	BankTransactionQueryDto,
 	BankTransactionSortField,
@@ -25,6 +26,10 @@ import {getBankTransactionCashFlowTreatment} from '../bank-transaction-financial
 import {BANK_TRANSACTION_TYPES} from '../bank-transaction-type';
 import {BankTransaction} from '../bank-transaction.entity';
 import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
+import type {
+	BankTransactionCategorizationSource,
+	BankTransactionCategorizationStatus,
+} from '../categorization/bank-transaction-categorization.types';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
 import {applyBankTransactionFilters} from './bank-transaction-filters';
@@ -108,13 +113,48 @@ export class BankTransactionService {
 		return this.toResponse(await this.findOwnedTransaction(accountId, id));
 	}
 
+	async getCategoryImpact(
+		accountId: Account['id'],
+		id: BankTransaction['id'],
+		category: BankTransactionCategory,
+	): Promise<BankTransactionCategoryImpactResponseDto> {
+		const transaction = await this.findOwnedTransaction(accountId, id);
+		const {followUp, transactions, total} = await this.categorizationService.previewManualCategory(
+			accountId,
+			transaction,
+			category,
+		);
+		return {
+			action: followUp?.action ?? null,
+			category: followUp?.action === 'APPLY' ? followUp.category : null,
+			transactions: transactions.map((row) => ({
+				id: row.id,
+				transactionDate: row.transactionDate,
+				bookingDate: row.bookingDate,
+				displayDescription: row.displayDescription,
+				amount: row.amount,
+				currency: row.currency,
+				...toCategorizationFields(row),
+			})),
+			total,
+		};
+	}
+
 	async updateCategory(
 		accountId: Account['id'],
 		id: BankTransaction['id'],
 		category: BankTransactionCategory,
+		applyToTransactionIds: readonly string[] = [],
 	): Promise<BankTransactionResponseDto> {
 		const transaction = await this.findOwnedTransaction(accountId, id);
-		if (!(await this.categorizationService.setManualCategory(accountId, transaction, category))) {
+		if (
+			!(await this.categorizationService.setManualCategory(
+				accountId,
+				transaction,
+				category,
+				applyToTransactionIds,
+			))
+		) {
 			throw new NotFoundException(BANKING_TRANSACTION_NOT_FOUND);
 		}
 		return this.toResponse(transaction);
@@ -229,9 +269,7 @@ export class BankTransactionService {
 			description: transaction.description,
 			displayDescription: transaction.displayDescription,
 			counterpartyName: transaction.counterpartyName,
-			category: (transaction.category as BankTransactionResponseDto['category']) ?? null,
-			categoryStatus: (transaction.categoryStatus ?? 'PENDING') as BankTransactionResponseDto['categoryStatus'],
-			categorySource: (transaction.categorySource as BankTransactionResponseDto['categorySource']) ?? null,
+			...toCategorizationFields(transaction),
 			financialEventType: transaction.financialEventType,
 			financialEventSource: transaction.financialEventSource,
 			financialEventRuleVersion: transaction.financialEventRuleVersion,
@@ -245,4 +283,15 @@ export class BankTransactionService {
 			remittanceInformation: transaction.remittanceInformation,
 		};
 	}
+}
+
+/** The stored categorization columns as the API reports them; a row categorization has not reached is PENDING. */
+function toCategorizationFields(
+	transaction: Pick<BankTransaction, 'category' | 'categoryStatus' | 'categorySource'>,
+): Pick<BankTransactionResponseDto, 'category' | 'categoryStatus' | 'categorySource'> {
+	return {
+		category: (transaction.category as BankTransactionCategory | null) ?? null,
+		categoryStatus: (transaction.categoryStatus ?? 'PENDING') as BankTransactionCategorizationStatus,
+		categorySource: (transaction.categorySource as BankTransactionCategorizationSource | null) ?? null,
+	};
 }

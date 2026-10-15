@@ -1004,18 +1004,20 @@ describe('BankTransactionCategorizationService worker', () => {
 describe('BankTransactionCategorizationService manual follow-up', () => {
 	const transaction = () =>
 		createBankTransaction({id: 'corrected', merchantKey: 'EXPENSE:example shop', categorySource: 'AI'});
+	const selected = ['sibling-1', 'sibling-2'];
 
 	it('queues a retry when applying a correction to the same merchant fails', async () => {
 		const queryBuilder = createUpdateQueryBuilder();
 		queryBuilder.getRawMany.mockRejectedValueOnce(new Error('connection lost'));
 		const {service, queue} = createService({queryBuilder});
 
-		await expect(service.setManualCategory('account-1', transaction(), 'SHOPPING')).resolves.toBe(true);
+		await expect(service.setManualCategory('account-1', transaction(), 'SHOPPING', selected)).resolves.toBe(true);
 
 		expect(queue.add).toHaveBeenCalledTimes(1);
 		const [name, data, opts] = queue.add.mock.calls[0];
 		expect(name).toBe(APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB);
-		expect(data).toEqual({accountId: 'account-1', merchantKey: 'EXPENSE:example shop'});
+		// The retry keeps the owner's selection, so it can never widen to rows they left out.
+		expect(data).toEqual({accountId: 'account-1', merchantKey: 'EXPENSE:example shop', transactionIds: selected});
 		expect(opts).toMatchObject({attempts: 8});
 		// No fixed job id: a retained failed or running job with the same id would swallow this one.
 		expect(opts).not.toHaveProperty('jobId');
@@ -1029,7 +1031,7 @@ describe('BankTransactionCategorizationService manual follow-up', () => {
 			const {service, queue} = createService({queryBuilder});
 			queue.add.mockReturnValueOnce(new Promise(() => undefined));
 
-			const saved = service.setManualCategory('account-1', transaction(), 'SHOPPING');
+			const saved = service.setManualCategory('account-1', transaction(), 'SHOPPING', selected);
 			await jest.advanceTimersByTimeAsync(2_000);
 
 			await expect(saved).resolves.toBe(true);
@@ -1041,9 +1043,48 @@ describe('BankTransactionCategorizationService manual follow-up', () => {
 	it('does not queue a retry when the follow-up succeeds', async () => {
 		const {service, queue} = createService();
 
-		await service.setManualCategory('account-1', transaction(), 'SHOPPING');
+		await service.setManualCategory('account-1', transaction(), 'SHOPPING', selected);
 
 		expect(queue.add).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		['nothing is selected', []],
+		['only the corrected row is selected', ['corrected']],
+	])('changes no other row when %s', async (_, ids) => {
+		const queryBuilder = createUpdateQueryBuilder();
+		const {service, queue, repository} = createService({queryBuilder});
+
+		await expect(service.setManualCategory('account-1', transaction(), 'SHOPPING', ids)).resolves.toBe(true);
+
+		expect(repository.update).toHaveBeenCalledTimes(1);
+		expect(repository.createQueryBuilder).not.toHaveBeenCalled();
+		expect(queue.add).not.toHaveBeenCalled();
+	});
+
+	it('changes nothing for a retry queued before rows could be selected', async () => {
+		const {service, repository} = createService();
+
+		await service.processManualCategoryFollowUp({accountId: 'account-1', merchantKey: 'EXPENSE:example shop'});
+
+		expect(repository.createQueryBuilder).not.toHaveBeenCalled();
+	});
+
+	it('limits the follow-up to the selected rows', async () => {
+		const queryBuilder = createUpdateQueryBuilder([{affected: 2}], [{id: 'manual'}]);
+		queryBuilder.getRawMany.mockResolvedValueOnce([
+			{merchantKey: 'EXPENSE:example shop', category: 'SHOPPING', count: 1},
+		]);
+		const {service} = createService({queryBuilder});
+
+		await service.setManualCategory('account-1', transaction(), 'SHOPPING', [...selected, 'sibling-1']);
+
+		expect(queryBuilder.andWhere).toHaveBeenCalledWith('id IN (:...followUpTransactionIds)', {
+			followUpTransactionIds: selected,
+		});
+		expect(queryBuilder.set).toHaveBeenCalledWith(
+			expect.objectContaining({category: 'SHOPPING', categorySource: 'HISTORY', categoryStatus: 'COMPLETED'}),
+		);
 	});
 
 	it('keeps the manual category when the retry cannot be queued either', async () => {
@@ -1052,7 +1093,7 @@ describe('BankTransactionCategorizationService manual follow-up', () => {
 		const {service, queue, repository} = createService({queryBuilder});
 		queue.add.mockRejectedValueOnce(new Error('redis down'));
 
-		await expect(service.setManualCategory('account-1', transaction(), 'SHOPPING')).resolves.toBe(true);
+		await expect(service.setManualCategory('account-1', transaction(), 'SHOPPING', selected)).resolves.toBe(true);
 		expect(repository.update).toHaveBeenCalledWith(
 			{id: 'corrected'},
 			expect.objectContaining({category: 'SHOPPING', categorySource: 'MANUAL'}),
@@ -1065,7 +1106,11 @@ describe('BankTransactionCategorizationService manual follow-up', () => {
 		const {service} = createService({queryBuilder});
 
 		await expect(
-			service.processManualCategoryFollowUp({accountId: 'account-1', merchantKey: 'EXPENSE:example shop'}),
+			service.processManualCategoryFollowUp({
+				accountId: 'account-1',
+				merchantKey: 'EXPENSE:example shop',
+				transactionIds: selected,
+			}),
 		).rejects.toThrow('connection lost');
 	});
 });

@@ -38,6 +38,7 @@ const VERIFIED_ROUTES: GuardedRoute[] = [
 	['get', '/bank-transactions/balance-trend?interval=month&from=2026-01-01&to=2026-10-18&asOf=2026-10-18'],
 	['get', '/bank-transactions/review-counts'],
 	['get', `/bank-transactions/${RESOURCE_ID}`],
+	['get', `/bank-transactions/${RESOURCE_ID}/category-impact?category=TRAVEL`],
 	['patch', `/bank-transactions/${RESOURCE_ID}/category`],
 	['patch', `/bank-transactions/${RESOURCE_ID}/own-transfer`],
 	['post', '/bank-connections/authorize'],
