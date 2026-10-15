@@ -241,7 +241,7 @@ export class BankTransactionSummaryService {
 			return {start, periodEnd, end: periodEnd < to ? periodEnd : to};
 		});
 
-		const rows: Array<{id: string; end: string; since: string; balance: string | null; included: boolean}> =
+		const rows: Array<{id: string; end: string; balance: string | null; included: boolean}> =
 			await this.bankTransactionRepository.manager.query(
 				`
 			WITH accounts AS (
@@ -258,7 +258,7 @@ export class BankTransactionSummaryService {
 				WHERE c."accountId" = $1 AND c."status" = ANY($2::varchar[]) AND a."isActive"
 					AND a."currentBalanceAmount" IS NOT NULL
 			), native AS (
-				SELECT a."id", a."currency", a."first", ends."end", ends."end" >= a."first" AS "included",
+				SELECT a."id", a."currency", ends."end", ends."end" >= a."first" AS "included",
 					a."current" - COALESCE((
 						SELECT SUM(t."amount") FROM "bank_transactions" t
 						WHERE t."bankAccountId" = a."id" AND t."bookingDate" > ends."end"
@@ -266,8 +266,7 @@ export class BankTransactionSummaryService {
 					), 0) AS "amount"
 				FROM accounts a CROSS JOIN unnest($3::date[]) AS ends("end")
 			)
-			SELECT n."id", to_char(n."end", 'YYYY-MM-DD') AS "end", to_char(n."first", 'YYYY-MM-DD') AS "since",
-				n."included",
+			SELECT n."id", to_char(n."end", 'YYYY-MM-DD') AS "end", n."included",
 				CASE
 					WHEN NOT n."included" THEN NULL
 					WHEN n."currency" = $4::varchar THEN ROUND(n."amount", 2)
@@ -304,13 +303,7 @@ export class BankTransactionSummaryService {
 				accounts: accounts.map((row) => ({id: row.id, balance: row.balance})),
 			});
 		}
-		const since = new Map(rows.map((row) => [row.id, row.since]));
-		return {
-			baseCurrency,
-			interval,
-			accounts: [...since].map(([id, date]) => ({id, since: date})),
-			periods,
-		};
+		return {baseCurrency, interval, periods};
 	}
 
 	async getReviewCounts(accountId: Account['id']): Promise<BankTransactionReviewCountsResponseDto> {

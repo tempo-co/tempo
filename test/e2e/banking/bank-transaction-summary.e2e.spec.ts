@@ -564,12 +564,6 @@ describe('BankTransactionSummary', () => {
 
 			expect(body.baseCurrency).toBe('EUR');
 			expect(body.interval).toBe('month');
-			expect(body.accounts).toEqual(
-				expect.arrayContaining([
-					{id: euroAccount.id, since: '2019-01-10'},
-					{id: kronaAccount.id, since: '2019-02-15'},
-				]),
-			);
 			// December comes before any history, so it is left out.
 			expect(
 				body.periods.map((period: {accounts: {id: string}[]}) => ({
@@ -626,7 +620,7 @@ describe('BankTransactionSummary', () => {
 				.get(TREND)
 				.query({interval: 'year', from: '2019-01-01', to: '2019-12-31', asOf: '2026-10-18'})
 				.expect(200);
-			expect(body).toEqual({baseCurrency: null, interval: 'year', accounts: [], periods: []});
+			expect(body).toEqual({baseCurrency: null, interval: 'year', periods: []});
 		});
 
 		it.each([
