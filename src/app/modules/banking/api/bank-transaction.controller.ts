@@ -8,6 +8,7 @@ import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 import {BankTransactionSummaryService} from '../services/bank-transaction-summary.service';
 import {BankTransactionService} from '../services/bank-transaction.service';
 import {BankTransactionCashFlowQueryDto} from './dtos/bank-transaction-cash-flow-query.dto';
+import {BankTransactionCategoryImpactQueryDto} from './dtos/bank-transaction-category-impact.dto';
 import {BankTransactionCategoryUpdateDto} from './dtos/bank-transaction-category-update.dto';
 import {BankTransactionOwnTransferUpdateDto} from './dtos/bank-transaction-own-transfer-update.dto';
 import {BankTransactionQueryDto} from './dtos/bank-transaction-query.dto';
@@ -62,13 +63,23 @@ export class BankTransactionController {
 		return this.bankTransactionService.findById(account.id, id);
 	}
 
+	/** Lists the owner's other rows a category correction would change, without saving anything. */
+	@Get(':id/category-impact')
+	getCategoryImpact(
+		@CurrentAccount() account: Account,
+		@Param('id', new ParseUUIDPipe({version: '4'})) id: string,
+		@Query() query: BankTransactionCategoryImpactQueryDto,
+	) {
+		return this.bankTransactionService.getCategoryImpact(account.id, id, query.category);
+	}
+
 	@Patch(':id/category')
 	updateCategory(
 		@CurrentAccount() account: Account,
 		@Param('id', new ParseUUIDPipe({version: '4'})) id: string,
 		@Body() dto: BankTransactionCategoryUpdateDto,
 	) {
-		return this.bankTransactionService.updateCategory(account.id, id, dto.category);
+		return this.bankTransactionService.updateCategory(account.id, id, dto.category, dto.applyToTransactionIds);
 	}
 
 	@Patch(':id/own-transfer')

@@ -10,6 +10,8 @@ export const BANK_TRANSACTION_CATEGORIZATION_STATUSES = [
 	'NOT_APPLICABLE',
 ] as const;
 export type BankTransactionCategorizationStatus = (typeof BANK_TRANSACTION_CATEGORIZATION_STATUSES)[number];
+/** Statuses a categorization worker may claim a row from. */
+export const CLAIMABLE_CATEGORIZATION_STATUSES = ['PENDING', 'FAILED'] as const;
 
 /** `HISTORY` rows reuse the owner's own manual category for the same merchant instead of asking the model. */
 export const BANK_TRANSACTION_CATEGORIZATION_SOURCES = ['AI', 'HISTORY', 'MANUAL'] as const;

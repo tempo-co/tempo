@@ -196,11 +196,24 @@ describe('Bank transaction categorization integration', () => {
 		});
 	});
 
-	it("applies a manual correction to the owner's history-filled rows from the same merchant", async () => {
+	it("applies a previewed manual correction to the owner's history-filled rows from the same merchant", async () => {
 		// The previous test filled the repeat row from the owner's manual TRANSPORTATION choice.
+		const preview = await verifiedAgent
+			.get(`/bank-transactions/${CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID}/category-impact`)
+			.query({category: 'TRAVEL'})
+			.expect(200);
+		expect(preview.body).toMatchObject({action: 'APPLY', category: 'TRAVEL', total: 1});
+		expect(preview.body.transactions).toEqual([
+			expect.objectContaining({
+				id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
+				category: 'TRANSPORTATION',
+				categorySource: 'HISTORY',
+			}),
+		]);
+
 		await verifiedAgent
 			.patch(`/bank-transactions/${CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID}/category`)
-			.send({category: 'TRAVEL'})
+			.send({category: 'TRAVEL', applyToTransactionIds: [CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID]})
 			.expect(200);
 
 		const sibling = await bankTransactionRepository.findOneByOrFail({
@@ -217,9 +230,22 @@ describe('Bank transaction categorization integration', () => {
 
 	it('sends history-filled rows back to the model when no reusable manual choice is left', async () => {
 		// The previous test left the repeat row filled from the owner's manual TRAVEL choice.
+		const preview = await verifiedAgent
+			.get(`/bank-transactions/${CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID}/category-impact`)
+			.query({category: 'NEEDS_REVIEW'})
+			.expect(200);
+		expect(preview.body).toMatchObject({action: 'RECHECK', category: null, total: 1});
+		expect(preview.body.transactions).toEqual([
+			expect.objectContaining({id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID, category: 'TRAVEL'}),
+		]);
+		expect(categorizeSpy).not.toHaveBeenCalled();
+
 		await verifiedAgent
 			.patch(`/bank-transactions/${CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID}/category`)
-			.send({category: 'NEEDS_REVIEW'})
+			.send({
+				category: 'NEEDS_REVIEW',
+				applyToTransactionIds: [CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID],
+			})
 			.expect(200);
 
 		const sibling = await waitFor(
