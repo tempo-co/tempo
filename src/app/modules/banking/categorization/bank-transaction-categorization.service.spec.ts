@@ -12,7 +12,6 @@ import {createBankTransaction} from '../../../../../test/fixtures/bank-transacti
 import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '../bank-transaction-financial-event';
 import {BankTransaction} from '../bank-transaction.entity';
 import {
-	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
 	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
 	BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION,
 	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION,
@@ -44,6 +43,7 @@ function createUpdateQueryBuilder(
 		where: jest.fn().mockReturnThis(),
 		andWhere: jest.fn().mockReturnThis(),
 		orderBy: jest.fn().mockReturnThis(),
+		addOrderBy: jest.fn().mockReturnThis(),
 		take: jest.fn().mockReturnThis(),
 		returning: jest.fn().mockReturnThis(),
 		execute: jest.fn().mockResolvedValue({affected: 1}),
@@ -132,7 +132,7 @@ function createService({
 
 describe('BankTransactionCategorizationService provider behavior versions', () => {
 	it('versions sanitized transaction text separately from prior provider inputs', () => {
-		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v6');
+		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v7');
 		expect(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION).toBe(
 			'bank-transaction-categorization-web-search-v7',
 		);
@@ -799,28 +799,55 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(queue.addBulk.mock.calls[0][0][0].data).toEqual({transactionIds: [rows[50].id]});
 	});
 
-	it('applies a consistent manual category for the same merchant without calling the provider', async () => {
+	it("never applies the owner's manual category for the same merchant without the model", async () => {
+		// One payee can receive different kinds of payments (rent and small shared costs), so even a consistent
+		// manual choice is only a hint, with the amounts and dates of the choices so the model can tell them apart.
 		const transaction = createBankTransaction({
-			id: 'repeat-merchant',
+			id: 'repeat-payee',
+			amount: '-5.00',
 			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
-			merchantKey: 'EXPENSE:example rail',
+			merchantKey: 'EXPENSE:example landlord',
 		});
 		const queryBuilder = createUpdateQueryBuilder();
-		queryBuilder.getRawMany.mockResolvedValueOnce([
-			{merchantKey: 'EXPENSE:example rail', category: 'TRANSPORTATION', count: 3},
-		] as never);
-		const {service, provider} = createService({rows: [transaction], queryBuilder});
+		queryBuilder.getRawMany
+			.mockResolvedValueOnce([
+				{merchantKey: 'EXPENSE:example landlord', category: 'HOUSING_AND_UTILITIES', count: 8},
+			] as never)
+			.mockResolvedValueOnce([
+				{
+					merchantKey: 'EXPENSE:example landlord',
+					category: 'HOUSING_AND_UTILITIES',
+					amount: '-650.00000000',
+					date: '2026-08-29',
+				},
+				{
+					merchantKey: 'EXPENSE:example landlord',
+					category: 'HOUSING_AND_UTILITIES',
+					amount: '-125.50000000',
+					date: '2026-04-07',
+				},
+			] as never);
+		const {service, provider} = createService({
+			rows: [transaction],
+			queryBuilder,
+			providerResult: [{correlationId: 'repeat-payee', category: 'TRANSFER_OUT', confidence: 0.9}],
+		});
 
 		await service.processTransactionJob([transaction.id]);
 
-		expect(provider.categorize).not.toHaveBeenCalled();
-		expect(transaction).toMatchObject({
-			category: 'TRANSPORTATION',
-			categoryStatus: 'COMPLETED',
-			categorySource: 'HISTORY',
-			categoryProvider: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
-			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
-		});
+		expect(provider.categorize).toHaveBeenCalledTimes(1);
+		expect(provider.categorize.mock.calls[0][0][0].previousManualCategories).toEqual([
+			{
+				category: 'HOUSING_AND_UTILITIES',
+				count: 8,
+				recentExamples: [
+					{amount: '-650.00', date: '2026-08-29'},
+					{amount: '-125.50', date: '2026-04-07'},
+				],
+			},
+		]);
+		expect(transaction).toMatchObject({category: 'TRANSFER_OUT', categorySource: 'AI'});
+		expect(transaction.categoryProvider).not.toBe(BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER);
 	});
 
 	it('passes mixed manual categories for the same merchant to the provider', async () => {
@@ -840,14 +867,17 @@ describe('BankTransactionCategorizationService worker', () => {
 
 		expect(provider.categorize).toHaveBeenCalledTimes(1);
 		expect(provider.categorize.mock.calls[0][0][0].previousManualCategories).toEqual([
-			{category: 'FOOD_AND_DRINK', count: 2},
-			{category: 'TRANSPORTATION', count: 1},
+			{category: 'FOOD_AND_DRINK', count: 2, recentExamples: []},
+			{category: 'TRANSPORTATION', count: 1, recentExamples: []},
 		]);
-		const [, categoryFilter] = queryBuilder.andWhere.mock.calls.find(([clause]) =>
+		const categoryFilters = queryBuilder.andWhere.mock.calls.filter(([clause]) =>
 			String(clause).includes('reusableCategories'),
-		)!;
-		expect(categoryFilter.reusableCategories).not.toContain('NEEDS_REVIEW');
-		expect(categoryFilter.reusableCategories).toContain('TRANSPORTATION');
+		);
+		expect(categoryFilters).toHaveLength(2);
+		for (const [, categoryFilter] of categoryFilters) {
+			expect(categoryFilter.reusableCategories).not.toContain('NEEDS_REVIEW');
+			expect(categoryFilter.reusableCategories).toContain('TRANSPORTATION');
+		}
 		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION);
 	});
 
@@ -870,7 +900,7 @@ describe('BankTransactionCategorizationService worker', () => {
 		});
 	});
 
-	it("prefers the owner's manual history over a rule", async () => {
+	it("sends a rule match to the model with the owner's manual choices instead of applying the rule", async () => {
 		const transaction = createBankTransaction({
 			id: 'ovpay-tap-with-history',
 			description: 'BEA, Betaalpas NLOVEXAMPLE0TAP0002,PAS123 NR:EX0001, 01.01.26/08:00 www.ovpay.nl',
@@ -882,11 +912,16 @@ describe('BankTransactionCategorizationService worker', () => {
 		queryBuilder.getRawMany.mockResolvedValueOnce([
 			{merchantKey: 'EXPENSE:nlovexample0tap0002', category: 'TRAVEL', count: 1},
 		] as never);
-		const {service} = createService({rows: [transaction], queryBuilder});
+		const {service, provider} = createService({
+			rows: [transaction],
+			queryBuilder,
+			providerResult: [{correlationId: 'ovpay-tap-with-history', category: 'TRAVEL', confidence: 0.9}],
+		});
 
 		await service.processTransactionJob([transaction.id]);
 
-		expect(transaction).toMatchObject({category: 'TRAVEL', categorySource: 'HISTORY'});
+		expect(provider.categorize).toHaveBeenCalledTimes(1);
+		expect(transaction).toMatchObject({category: 'TRAVEL', categorySource: 'AI'});
 	});
 
 	it('excludes manual rows from claims and provider calls', async () => {

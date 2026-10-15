@@ -114,7 +114,7 @@ const CATEGORIZATION_INSTRUCTIONS = [
 	'Do not treat missing merchantCategoryCode or counterpartyName as evidence for OTHER or any other category; use clear merchant text as evidence when available.',
 	ONE_CLASSIFICATION_INSTRUCTION,
 	'Use OTHER only when the available evidence supports that the transaction falls outside the other supplied categories.',
-	'previousManualCategories, when present, lists categories the user chose manually for the same merchant before; choose one of them when the transaction fits it, using the amount, date, and description to decide between them.',
+	'previousManualCategories, when present, lists categories the user chose manually for the same merchant or payee before, with how often and recentExamples of the amounts and dates of those choices. Treat it as strong evidence only for transactions that resemble those examples: one payee can receive different kinds of payments, such as rent and small shared costs, so a transaction whose amount or pattern clearly differs from every example is not covered by that choice. Classify it on its own evidence, and choose NEEDS_REVIEW when that evidence is not enough.',
 ].join(' ');
 
 const WEB_SEARCH_CATEGORIZATION_INSTRUCTIONS = [
@@ -447,10 +447,13 @@ export class OpenAiBankTransactionCategorizationProvider implements BankTransact
 			...(merchantLocation ? {merchantLocation} : {}),
 			...(transaction.previousManualCategories?.length
 				? {
-						previousManualCategories: transaction.previousManualCategories.map(({category, count}) => ({
-							category,
-							count,
-						})),
+						previousManualCategories: transaction.previousManualCategories.map(
+							({category, count, recentExamples}) => ({
+								category,
+								count,
+								recentExamples: recentExamples.map(({amount, date}) => ({amount, date})),
+							}),
+						),
 					}
 				: {}),
 		};
