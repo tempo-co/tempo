@@ -7,9 +7,12 @@ import {In, IsNull, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {
+	APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB,
 	BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE,
 	BANK_TRANSACTION_CATEGORIZATION_QUEUE,
+	BANK_TRANSACTION_CATEGORIZATION_RECONCILE_SCHEDULER_ID,
 	CATEGORIZE_BANK_TRANSACTIONS_JOB,
+	RECONCILE_BANK_TRANSACTION_CATEGORIZATION_JOB,
 } from '@core/queue/queue.constants';
 
 import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '../bank-transaction-financial-event';
@@ -54,10 +57,21 @@ import {
 	BankTransactionCategory,
 	isBankTransactionCategory,
 } from './bank-transaction-category';
+import {
+	BANK_TRANSACTION_CATEGORY_RULE_PROVIDER,
+	BANK_TRANSACTION_CATEGORY_RULE_VERSION,
+	getRuleCategory,
+} from './bank-transaction-category-rules';
 
 export type BankTransactionCategorizationJobData = {
 	transactionIds: string[];
 };
+export type ManualCategoryFollowUpJobData = {
+	accountId: string;
+	merchantKey: string;
+};
+export type BankTransactionCategorizationQueueData =
+	BankTransactionCategorizationJobData | ManualCategoryFollowUpJobData | Record<string, never>;
 
 type ClaimedTransaction = {
 	transaction: BankTransaction;
@@ -80,6 +94,16 @@ type CategorizationUpdate = {
 };
 
 const STALE_PROCESSING_AFTER_MS = 15 * 60 * 1000;
+const RECONCILE_INTERVAL_MS = 60 * 60 * 1000;
+// About 21 minutes of exponential backoff in total, enough to ride out a database or Redis restart.
+const FOLLOW_UP_JOB_OPTIONS = {
+	attempts: 8,
+	backoff: {type: 'exponential', delay: 5_000},
+	removeOnComplete: true,
+	removeOnFail: {age: 7 * 86_400, count: 100},
+} as const;
+// The queue connection retries forever while Redis is down, so a follow-up enqueue must not hold the request open.
+const FOLLOW_UP_ENQUEUE_TIMEOUT_MS = 2_000;
 const MAX_ERROR_LENGTH = 500;
 const CLAIMABLE_STATUSES = ['PENDING', 'FAILED'] as const;
 // PROCESSING rows belong to a worker and NOT_APPLICABLE rows are never categorized.
@@ -105,7 +129,7 @@ export class BankTransactionCategorizationService {
 		@InjectRepository(BankTransaction)
 		private readonly repository: Repository<BankTransaction>,
 		@InjectQueue(BANK_TRANSACTION_CATEGORIZATION_QUEUE)
-		private readonly queue: Queue<BankTransactionCategorizationJobData>,
+		private readonly queue: Queue<BankTransactionCategorizationQueueData>,
 		@Inject(BANK_TRANSACTION_CATEGORIZATION_PROVIDER)
 		private readonly provider: BankTransactionCategorizationProvider,
 		private readonly configurationService: ConfigurationService,
@@ -192,7 +216,11 @@ export class BankTransactionCategorizationService {
 		if (claimed.length > 0) await this.categorizeClaimedBatch(claimed);
 	}
 
-	async reconcilePendingTransactions(): Promise<void> {
+	/**
+	 * Re-enqueues rows that are waiting for the model. The hourly run skips FAILED rows so a row that keeps failing is
+	 * not sent to the provider every hour; those are retried on the next start.
+	 */
+	async reconcilePendingTransactions({includeFailed = true}: {includeFailed?: boolean} = {}): Promise<void> {
 		if (!this.isEnabled()) return;
 
 		try {
@@ -215,7 +243,7 @@ export class BankTransactionCategorizationService {
 						)
 					)`,
 					{
-						claimableStatuses: CLAIMABLE_STATUSES,
+						claimableStatuses: includeFailed ? CLAIMABLE_STATUSES : ['PENDING'],
 						processingStatus: 'PROCESSING',
 						staleBefore: new Date(Date.now() - STALE_PROCESSING_AFTER_MS),
 					},
@@ -229,7 +257,30 @@ export class BankTransactionCategorizationService {
 	}
 
 	async onApplicationBootstrap(): Promise<void> {
+		await this.scheduleReconciliation();
 		await this.reconcilePendingTransactions();
+	}
+
+	/** Hourly reconciliation picks up rows left PENDING when an enqueue failed, for example while Redis was down. */
+	private async scheduleReconciliation(): Promise<void> {
+		if (this.configurationService.get('NODE_ENV') === 'test') return;
+		try {
+			if (!this.isEnabled()) {
+				await this.queue.removeJobScheduler(BANK_TRANSACTION_CATEGORIZATION_RECONCILE_SCHEDULER_ID);
+				return;
+			}
+			await this.queue.upsertJobScheduler(
+				BANK_TRANSACTION_CATEGORIZATION_RECONCILE_SCHEDULER_ID,
+				{every: RECONCILE_INTERVAL_MS},
+				{
+					name: RECONCILE_BANK_TRANSACTION_CATEGORIZATION_JOB,
+					data: {},
+					opts: {attempts: 1, removeOnComplete: true, removeOnFail: {age: 86_400, count: 100}},
+				},
+			);
+		} catch (error) {
+			this.logger.warn(`Categorization reconciliation scheduling failed: ${safeErrorName(error)}`);
+		}
 	}
 
 	private async categorizeClaimedBatch(batch: readonly ClaimedTransaction[]): Promise<void> {
@@ -244,8 +295,11 @@ export class BankTransactionCategorizationService {
 		for (const claimed of claimedBatch) {
 			const counts = manualHistory.get(claimed.transaction.id);
 			const category = getUnanimousCategory(counts);
+			const ruleCategory = category ? null : getRuleCategory(claimed.transaction);
 			if (category) {
 				historyMatches.push(this.applyManualHistoryCategory(claimed, category));
+			} else if (ruleCategory) {
+				historyMatches.push(this.applyRuleCategory(claimed, ruleCategory));
 			} else {
 				activeBatch.push(
 					counts
@@ -465,7 +519,7 @@ export class BankTransactionCategorizationService {
 	/**
 	 * Saves the owner's manual category on an owned transaction, then applies it to the owner's other rows from the same
 	 * merchant. Returns false when the row no longer exists. The owner's choice is kept even when the follow-up fails;
-	 * same-merchant rows then catch up on the next correction for that merchant.
+	 * the follow-up is then queued and retried with backoff.
 	 */
 	async setManualCategory(
 		accountId: string,
@@ -489,8 +543,42 @@ export class BankTransactionCategorizationService {
 			await this.applyManualCategoryToMerchant(accountId, transaction.merchantKey);
 		} catch (error) {
 			this.logger.warn(`Applying a manual category to the same merchant failed: ${safeErrorName(error)}`);
+			await this.enqueueManualCategoryFollowUp(accountId, transaction.merchantKey);
 		}
 		return true;
+	}
+
+	/** Runs a queued follow-up. It reads the owner's current choices, so a late retry applies the latest state. */
+	async processManualCategoryFollowUp({accountId, merchantKey}: ManualCategoryFollowUpJobData): Promise<void> {
+		await this.applyManualCategoryToMerchant(accountId, merchantKey);
+	}
+
+	/**
+	 * Every failed correction gets its own job: follow-ups are idempotent and read the current choices, so an extra run
+	 * is harmless, while sharing a job id could drop a newer correction behind a running or exhausted job. The wait is
+	 * bounded; if Redis is down, the add still completes once the connection returns.
+	 */
+	private async enqueueManualCategoryFollowUp(accountId: string, merchantKey: string | null): Promise<void> {
+		if (!merchantKey) return;
+		const added = this.queue.add(
+			APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB,
+			{accountId, merchantKey},
+			FOLLOW_UP_JOB_OPTIONS,
+		);
+		let timer: NodeJS.Timeout | undefined;
+		const timeout = new Promise<never>((_, reject) => {
+			timer = setTimeout(() => reject(new Error('EnqueueTimeout')), FOLLOW_UP_ENQUEUE_TIMEOUT_MS);
+		});
+		try {
+			await Promise.race([added, timeout]);
+		} catch (error) {
+			added.catch(() => undefined);
+			this.logger.warn(
+				`Manual category follow-up enqueue failed: ${error instanceof Error ? error.message : safeErrorName(error)}`,
+			);
+		} finally {
+			clearTimeout(timer);
+		}
 	}
 
 	/**
@@ -555,6 +643,22 @@ export class BankTransactionCategorizationService {
 		return this.completeClaimed(claimed, this.historyCompletionValues(category), 'HISTORY');
 	}
 
+	/** Rule categories have no source, like own transfers: the owner did not choose them and no model guessed. */
+	private applyRuleCategory(claimed: ClaimedTransaction, category: BankTransactionCategory): Promise<void> {
+		return this.completeClaimed(
+			claimed,
+			{
+				category,
+				categoryConfidence: '1',
+				categoryProvider: BANK_TRANSACTION_CATEGORY_RULE_PROVIDER,
+				categoryModel: null,
+				categoryPromptVersion: BANK_TRANSACTION_CATEGORY_RULE_VERSION,
+				categorySearchTrace: null,
+			},
+			null,
+		);
+	}
+
 	private historyCompletionValues(category: BankTransactionCategory): CompletionValues {
 		return {
 			category,
@@ -569,7 +673,7 @@ export class BankTransactionCategorizationService {
 	private async completeClaimed(
 		claimed: ClaimedTransaction,
 		values: CompletionValues,
-		source: BankTransactionCategorizationSource = 'AI',
+		source: BankTransactionCategorizationSource | null = 'AI',
 	): Promise<void> {
 		const completionValues: CategorizationUpdate = {
 			...values,

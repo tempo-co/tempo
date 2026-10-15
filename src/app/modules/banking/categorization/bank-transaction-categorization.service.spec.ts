@@ -1,8 +1,11 @@
 import {ConfigurationService} from '@core/config/config.service';
 import {
+	APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB,
 	BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE,
 	BANK_TRANSACTION_CATEGORIZATION_QUEUE,
+	BANK_TRANSACTION_CATEGORIZATION_RECONCILE_SCHEDULER_ID,
 	CATEGORIZE_BANK_TRANSACTIONS_JOB,
+	RECONCILE_BANK_TRANSACTION_CATEGORIZATION_JOB,
 } from '@core/queue/queue.constants';
 
 import {createBankTransaction} from '../../../../../test/fixtures/bank-transaction.fixture';
@@ -23,6 +26,7 @@ import {
 	BankTransactionCategorizationResult,
 	BankTransactionCategorizationWebSearchInput,
 } from './bank-transaction-categorization.types';
+import {BANK_TRANSACTION_CATEGORY_RULE_PROVIDER} from './bank-transaction-category-rules';
 
 function createUpdateQueryBuilder(
 	results: readonly {affected: number; raw?: readonly {id: string}[]}[] = [{affected: 1}] as const,
@@ -58,7 +62,9 @@ function createService({
 	webSearchResult,
 	webSearchError,
 	queryBuilder,
+	nodeEnv = 'test',
 }: {
+	nodeEnv?: string;
 	enabled?: boolean;
 	webSearchEnabled?: boolean;
 	rows?: BankTransaction[];
@@ -68,7 +74,12 @@ function createService({
 	webSearchError?: BankTransactionCategorizationProviderError;
 	queryBuilder?: ReturnType<typeof createUpdateQueryBuilder>;
 } = {}) {
-	const queue = {addBulk: jest.fn().mockResolvedValue([])};
+	const queue = {
+		addBulk: jest.fn().mockResolvedValue([]),
+		add: jest.fn().mockResolvedValue({}),
+		upsertJobScheduler: jest.fn().mockResolvedValue({}),
+		removeJobScheduler: jest.fn().mockResolvedValue(true),
+	};
 	const provider = {
 		categorize: jest.fn().mockImplementation(async (inputs: readonly BankTransactionCategorizationInput[]) => {
 			if (providerError) throw providerError;
@@ -101,6 +112,7 @@ function createService({
 			if (key === 'AI_CATEGORIZATION_WEB_SEARCH_ENABLED') return webSearchEnabled;
 			if (key === 'AI_CATEGORIZATION_PROVIDER') return 'openai';
 			if (key === 'AI_CATEGORIZATION_MODEL') return 'configured-model';
+			if (key === 'NODE_ENV') return nodeEnv;
 			throw new Error(`Unexpected config key: ${key}`);
 		}),
 	} as unknown as ConfigurationService;
@@ -839,6 +851,44 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION);
 	});
 
+	it('categorizes an OVpay card tap by rule without calling the provider', async () => {
+		const transaction = createBankTransaction({
+			id: 'ovpay-tap',
+			description: 'BEA, Betaalpas NLOVEXAMPLE0TAP0001,PAS123 NR:EX0001, 01.01.26/08:00 www.ovpay.nl',
+			creditDebitIndicator: 'DBIT',
+		});
+		const {service, provider} = createService({rows: [transaction]});
+
+		await service.processTransactionJob([transaction.id]);
+
+		expect(provider.categorize).not.toHaveBeenCalled();
+		expect(transaction).toMatchObject({
+			category: 'TRANSPORTATION',
+			categoryStatus: 'COMPLETED',
+			categorySource: null,
+			categoryProvider: BANK_TRANSACTION_CATEGORY_RULE_PROVIDER,
+		});
+	});
+
+	it("prefers the owner's manual history over a rule", async () => {
+		const transaction = createBankTransaction({
+			id: 'ovpay-tap-with-history',
+			description: 'BEA, Betaalpas NLOVEXAMPLE0TAP0002,PAS123 NR:EX0001, 01.01.26/08:00 www.ovpay.nl',
+			creditDebitIndicator: 'DBIT',
+			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
+			merchantKey: 'EXPENSE:nlovexample0tap0002',
+		});
+		const queryBuilder = createUpdateQueryBuilder();
+		queryBuilder.getRawMany.mockResolvedValueOnce([
+			{merchantKey: 'EXPENSE:nlovexample0tap0002', category: 'TRAVEL', count: 1},
+		] as never);
+		const {service} = createService({rows: [transaction], queryBuilder});
+
+		await service.processTransactionJob([transaction.id]);
+
+		expect(transaction).toMatchObject({category: 'TRAVEL', categorySource: 'HISTORY'});
+	});
+
 	it('excludes manual rows from claims and provider calls', async () => {
 		const transaction = createBankTransaction({
 			category: 'SHOPPING',
@@ -948,5 +998,107 @@ describe('BankTransactionCategorizationService worker', () => {
 				({correlationId}: BankTransactionCategorizationInput) => correlationId,
 			),
 		).toEqual([stale.id]);
+	});
+});
+
+describe('BankTransactionCategorizationService manual follow-up', () => {
+	const transaction = () =>
+		createBankTransaction({id: 'corrected', merchantKey: 'EXPENSE:example shop', categorySource: 'AI'});
+
+	it('queues a retry when applying a correction to the same merchant fails', async () => {
+		const queryBuilder = createUpdateQueryBuilder();
+		queryBuilder.getRawMany.mockRejectedValueOnce(new Error('connection lost'));
+		const {service, queue} = createService({queryBuilder});
+
+		await expect(service.setManualCategory('account-1', transaction(), 'SHOPPING')).resolves.toBe(true);
+
+		expect(queue.add).toHaveBeenCalledTimes(1);
+		const [name, data, opts] = queue.add.mock.calls[0];
+		expect(name).toBe(APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB);
+		expect(data).toEqual({accountId: 'account-1', merchantKey: 'EXPENSE:example shop'});
+		expect(opts).toMatchObject({attempts: 8});
+		// No fixed job id: a retained failed or running job with the same id would swallow this one.
+		expect(opts).not.toHaveProperty('jobId');
+	});
+
+	it('does not hold the request open while Redis is unreachable', async () => {
+		jest.useFakeTimers();
+		try {
+			const queryBuilder = createUpdateQueryBuilder();
+			queryBuilder.getRawMany.mockRejectedValueOnce(new Error('connection lost'));
+			const {service, queue} = createService({queryBuilder});
+			queue.add.mockReturnValueOnce(new Promise(() => undefined));
+
+			const saved = service.setManualCategory('account-1', transaction(), 'SHOPPING');
+			await jest.advanceTimersByTimeAsync(2_000);
+
+			await expect(saved).resolves.toBe(true);
+		} finally {
+			jest.useRealTimers();
+		}
+	});
+
+	it('does not queue a retry when the follow-up succeeds', async () => {
+		const {service, queue} = createService();
+
+		await service.setManualCategory('account-1', transaction(), 'SHOPPING');
+
+		expect(queue.add).not.toHaveBeenCalled();
+	});
+
+	it('keeps the manual category when the retry cannot be queued either', async () => {
+		const queryBuilder = createUpdateQueryBuilder();
+		queryBuilder.getRawMany.mockRejectedValueOnce(new Error('connection lost'));
+		const {service, queue, repository} = createService({queryBuilder});
+		queue.add.mockRejectedValueOnce(new Error('redis down'));
+
+		await expect(service.setManualCategory('account-1', transaction(), 'SHOPPING')).resolves.toBe(true);
+		expect(repository.update).toHaveBeenCalledWith(
+			{id: 'corrected'},
+			expect.objectContaining({category: 'SHOPPING', categorySource: 'MANUAL'}),
+		);
+	});
+
+	it('lets a failing queued follow-up throw so the queue retries it', async () => {
+		const queryBuilder = createUpdateQueryBuilder();
+		queryBuilder.getRawMany.mockRejectedValueOnce(new Error('connection lost'));
+		const {service} = createService({queryBuilder});
+
+		await expect(
+			service.processManualCategoryFollowUp({accountId: 'account-1', merchantKey: 'EXPENSE:example shop'}),
+		).rejects.toThrow('connection lost');
+	});
+});
+
+describe('BankTransactionCategorizationService reconciliation schedule', () => {
+	it('schedules hourly reconciliation outside tests', async () => {
+		const {service, queue} = createService({nodeEnv: 'production'});
+
+		await service.onApplicationBootstrap();
+
+		expect(queue.upsertJobScheduler).toHaveBeenCalledWith(
+			BANK_TRANSACTION_CATEGORIZATION_RECONCILE_SCHEDULER_ID,
+			{every: 60 * 60 * 1000},
+			expect.objectContaining({name: RECONCILE_BANK_TRANSACTION_CATEGORIZATION_JOB}),
+		);
+	});
+
+	it('removes the schedule when AI categorization is off', async () => {
+		const {service, queue} = createService({nodeEnv: 'production', enabled: false});
+
+		await service.onApplicationBootstrap();
+
+		expect(queue.removeJobScheduler).toHaveBeenCalledWith(BANK_TRANSACTION_CATEGORIZATION_RECONCILE_SCHEDULER_ID);
+		expect(queue.upsertJobScheduler).not.toHaveBeenCalled();
+	});
+
+	it('skips FAILED rows in the hourly run', async () => {
+		const queryBuilder = createUpdateQueryBuilder();
+		const {service} = createService({queryBuilder});
+
+		await service.reconcilePendingTransactions({includeFailed: false});
+
+		const statusClause = queryBuilder.andWhere.mock.calls.find(([, params]) => params?.claimableStatuses);
+		expect(statusClause?.[1].claimableStatuses).toEqual(['PENDING']);
 	});
 });
