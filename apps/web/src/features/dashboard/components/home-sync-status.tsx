@@ -10,7 +10,7 @@ import {formatNotSyncedSince, getHomeSyncStatus} from '../utils/sync-status';
 const badgeClassName =
   'inline-flex items-center rounded-full border px-2.5 py-px text-xs font-medium';
 const linkClassName =
-  'text-[0.8125rem] font-medium whitespace-nowrap text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring';
+  'text-sm font-medium whitespace-nowrap text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 function formatSyncedBanks(count: number, syncedAt: string | null) {
   if (!syncedAt) return count === 1 ? 'Your bank is syncing' : 'Your banks are syncing';
@@ -31,7 +31,7 @@ export function HomeSyncStatus({connections}: {connections: BankConnection[]}) {
   return (
     <div
       data-testid='home-sync-status'
-      className='flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.8125rem] text-muted-foreground'
+      className='flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground'
     >
       {problems.length > 0 ? (
         <>
@@ -57,7 +57,7 @@ export function HomeSyncStatus({connections}: {connections: BankConnection[]}) {
           to='/bank-connections'
           className={cn(
             badgeClassName,
-            'border-warning/60 text-foreground hover:bg-warning/10 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring',
+            'border-warning/60 text-foreground hover:bg-warning/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
           )}
         >
           {`${connection.aspspName} consent expires ${formatDaysLeft(daysLeft)}`}

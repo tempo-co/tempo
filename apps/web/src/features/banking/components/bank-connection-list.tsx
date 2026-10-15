@@ -94,7 +94,7 @@ function ConnectionPageFrame({
         className='flex items-end justify-between gap-4 max-md:flex-col max-md:items-stretch max-md:gap-3'
       >
         <div className='min-w-0'>
-          <h1 className='text-2xl font-semibold tracking-tight'>Bank connections</h1>
+          <h1 className='text-page-title'>Bank connections</h1>
           <p className='mt-1 text-sm text-muted-foreground'>
             {formatConnectionCount(connectionCount)}
           </p>
@@ -165,6 +165,7 @@ export function BankConnectionList({
       ) : isError ? (
         <div role='alert'>
           <EmptyState
+            tone='error'
             icon={RefreshCw}
             title='Could not load bank connections'
             description='The connection service did not respond. Try again in a moment.'
@@ -180,16 +181,11 @@ export function BankConnectionList({
           </EmptyState>
         </div>
       ) : bankConnections.length === 0 ? (
-        <Card>
-          <CardContent className='flex flex-col items-center py-16 text-center'>
-            <Building2 className='mb-5 h-12 w-12 text-muted-foreground' />
-            <h2 className='text-xl font-semibold'>No bank connections</h2>
-            <p className='mt-2 max-w-md text-sm text-muted-foreground'>
-              Connect a supported bank to make its available bank accounts part of your financial
-              history.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Building2}
+          title='No bank connections'
+          description='Connect a supported bank to make its available bank accounts part of your financial history.'
+        />
       ) : (
         bankConnections.map((connection) => (
           <BankConnectionCard
@@ -295,7 +291,7 @@ function BankConnectionCard({
             aria-controls={disclosureContentId}
             data-testid={`connection-card-toggle-${connection.id}`}
             className={cn(
-              'flex w-full min-w-0 items-center gap-3 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline-hidden sm:self-auto',
+              'flex w-full min-w-0 items-center gap-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:self-auto',
               needsReauth && 'sm:w-[calc(100%-8.5rem)] sm:shrink',
             )}
           >
@@ -491,10 +487,7 @@ function ConnectionCardHeaderContent({
       />
       <span className='min-w-0 flex-1'>
         <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 max-sm:grid-cols-1 max-sm:gap-y-1'>
-          <h2
-            id={connectionHeadingId}
-            className='min-w-0 text-lg leading-tight font-semibold wrap-break-word'
-          >
+          <h2 id={connectionHeadingId} className='min-w-0 text-section-title wrap-break-word'>
             {connection.aspspName}
           </h2>
           <ConnectionBalanceSummary
@@ -784,7 +777,7 @@ function SectionHeading({
 }) {
   return (
     <div className='mb-3 flex items-baseline justify-between gap-3'>
-      <h3 id={headingId} className='min-w-0 text-base font-semibold'>
+      <h3 id={headingId} className='min-w-0 text-card-title'>
         <span className={compactTitle ? 'max-md:hidden' : undefined}>{title}</span>
         {compactTitle && <span className='hidden max-md:inline'>{compactTitle}</span>}
       </h3>
@@ -854,7 +847,7 @@ function BankTransactionRow({
       aria-label={`View transaction details for ${description}`}
       onClick={(event) => onTransactionSelect(transaction.id, event.currentTarget)}
       data-testid={`bank-transaction-row-${transaction.id}`}
-      className='grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-sm p-3 text-left transition-colors hover:bg-accent/70 focus-visible:relative focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset max-sm:min-h-11 sm:p-4'
+      className='grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-sm p-3 text-left transition-colors hover:bg-accent/70 focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring max-sm:min-h-11 sm:p-4'
     >
       <span className='block min-w-0'>
         <span className='block truncate text-sm font-medium'>{description}</span>

@@ -1299,7 +1299,7 @@ test.describe('bank transactions', () => {
     const readClippedAmounts = () =>
       rows.evaluateAll((elements) =>
         elements.flatMap((row) => {
-          const amount = row.querySelector('.font-mono');
+          const amount = row.querySelector('.numeric');
           const cell = amount?.closest('td');
           if (!amount || !cell) return [];
           const cellBox = cell.getBoundingClientRect();

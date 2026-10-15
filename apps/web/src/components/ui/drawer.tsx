@@ -23,7 +23,7 @@ const DrawerOverlay = React.forwardRef<
 >(({className, ...props}, ref) => (
   <DrawerPrimitive.Overlay
     ref={ref}
-    className={cn('fixed inset-0 z-50 bg-black/80', className)}
+    className={cn('fixed inset-0 z-50 bg-scrim/60 dark:bg-scrim/85', className)}
     {...props}
   />
 ));
@@ -64,11 +64,7 @@ const DrawerTitle = React.forwardRef<
   React.ElementRef<typeof DrawerPrimitive.Title>,
   React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Title>
 >(({className, ...props}, ref) => (
-  <DrawerPrimitive.Title
-    ref={ref}
-    className={cn('text-lg leading-none font-semibold tracking-tight', className)}
-    {...props}
-  />
+  <DrawerPrimitive.Title ref={ref} className={cn('text-section-title', className)} {...props} />
 ));
 DrawerTitle.displayName = DrawerPrimitive.Title.displayName;
 

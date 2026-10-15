@@ -77,7 +77,7 @@ export function BalanceTrendCard({connections}: {connections: BankConnection[]})
     <Card className='@container grid min-w-0 gap-5 p-5 sm:p-6' data-testid='balance-trend'>
       <header className='flex flex-wrap items-start justify-between gap-x-6 gap-y-3'>
         <div className='min-w-0'>
-          <h2 className='text-base font-semibold'>Total balance</h2>
+          <h2 className='text-card-title'>Total balance</h2>
           {loaded && periods.length > 1 && (
             <Change periods={periods} interval={interval} currency={loaded.baseCurrency} />
           )}
@@ -149,15 +149,12 @@ function Change({
     base >= MIN_PERCENT_BASE_CENTS ? Math.round((Math.abs(difference) / base) * 100) : null;
   return (
     <p className='mt-1 text-xs text-muted-foreground'>
-      <span className='font-mono font-medium text-foreground tabular-nums'>
+      <span className='numeric font-medium text-foreground'>
         {formatMoney(last.total, currency)}
       </span>{' '}
       {last.complete ? `on ${pointName(last)}` : 'today'} ·{' '}
       <span
-        className={cn(
-          'font-mono font-medium tabular-nums',
-          difference > 0 ? 'text-success' : 'text-foreground',
-        )}
+        className={cn('numeric font-medium', difference > 0 ? 'text-success' : 'text-foreground')}
       >
         {difference >= 0 ? '+' : '−'}
         {formatMoney(Math.abs(difference) / 100, currency)}
@@ -207,7 +204,7 @@ function BalanceChart({
     <div>
       <ChartContainer
         className='aspect-auto h-56 w-full'
-        config={{total: {color: 'hsl(var(--primary))'}}}
+        config={{total: {color: 'hsl(var(--chart-primary))'}}}
         role='img'
         aria-label={`Total balance at the end of each ${interval}, ${pointName(periods[0])} to ${pointName(last)}. A table with every total follows for screen readers.`}
       >
@@ -235,11 +232,11 @@ function BalanceChart({
                   x={props.x}
                   y={Number(props.y) + 12}
                   textAnchor='middle'
-                  className='fill-muted-foreground text-[11px]'
+                  className='fill-muted-foreground text-caption'
                 >
                   {tickLabel(start)}
                   {interval === 'month' && firstOfYear.has(start) && (
-                    <tspan x={props.x} dy={13} className='text-[10px]'>
+                    <tspan x={props.x} dy={13} className='text-caption'>
                       {start.slice(0, 4)}
                     </tspan>
                   )}
@@ -254,7 +251,7 @@ function BalanceChart({
             domain={[ticks[0], ticks[ticks.length - 1]]}
             ticks={ticks}
             interval={0}
-            tick={{className: 'font-mono'}}
+            tick={{className: 'numeric'}}
             tickFormatter={(value: number) => axis.format(value)}
           />
           <ChartTooltip
@@ -266,14 +263,14 @@ function BalanceChart({
                 <div className='grid min-w-48 gap-1 border bg-card p-2.5 text-xs shadow-sm'>
                   <p className='flex items-baseline justify-between gap-4 font-semibold'>
                     {pointName(period)}
-                    <span className='font-mono tabular-nums'>{money(period.total)}</span>
+                    <span className='numeric'>{money(period.total)}</span>
                   </p>
                   {period.accounts.map((account) => (
                     <p key={account.id} className='flex items-center justify-between gap-4'>
                       <span className='truncate text-muted-foreground'>
                         {labels.get(account.id) ?? 'Bank account'}
                       </span>
-                      <span className='font-mono tabular-nums'>
+                      <span className='numeric'>
                         {account.balance === null ? '–' : money(account.balance)}
                       </span>
                     </p>
@@ -296,7 +293,7 @@ function BalanceChart({
                   cx={props.cx}
                   cy={props.cy}
                   r={4}
-                  className='fill-card stroke-primary'
+                  className='fill-card stroke-chart-primary'
                   strokeWidth={2}
                 />
               ) : (
@@ -311,7 +308,7 @@ function BalanceChart({
         <span>Balance at the end of each {interval}</span>
         {!last.complete && (
           <span className='flex items-center gap-1.5'>
-            <i className='size-2.5 rounded-full border-2 border-primary' />
+            <i className='size-2.5 rounded-full border-2 border-chart-primary' />
             Today
           </span>
         )}
@@ -319,7 +316,7 @@ function BalanceChart({
       <div className='sr-only'>
         <table
           aria-label={`Total balance per ${interval}`}
-          className='w-full text-right text-sm [&_td]:px-2 [&_td]:py-1 [&_td]:font-mono [&_td]:tabular-nums [&_th]:px-2 [&_th]:py-2'
+          className='w-full text-right text-sm [&_td]:px-2 [&_td]:py-1 [&_td]:numeric [&_th]:px-2 [&_th]:py-2'
         >
           <thead>
             <tr>

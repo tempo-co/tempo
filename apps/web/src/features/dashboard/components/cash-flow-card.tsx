@@ -46,7 +46,7 @@ function moneyFor(interval: CashFlowInterval, currency: string | null) {
 }
 
 /** Opaque, so the selected-month band never tints income into a different-looking series. */
-const incomeSwatch = 'bg-[hsl(37_16%_72%)] dark:bg-[hsl(36_6%_40%)]';
+const incomeSwatch = 'bg-chart-secondary ring-1 ring-chart-secondary-edge ring-inset';
 
 /** The dates to load for each zoom level. */
 function requestRange(interval: CashFlowInterval, month: string) {
@@ -85,7 +85,7 @@ export function CashFlowCard({month}: {month: string}) {
     <Card className='@container grid min-w-0 gap-5 p-5 sm:p-6' data-testid='cash-flow'>
       <header className='flex flex-wrap items-start justify-between gap-x-6 gap-y-3'>
         <div className='min-w-0'>
-          <h2 className='text-base font-semibold'>Cash flow</h2>
+          <h2 className='text-card-title'>Cash flow</h2>
           {loaded && <Averages periods={shown} noun={interval} currency={loaded.baseCurrency} />}
         </div>
         <IntervalToggle value={interval} onChange={setGrouping} label='Group cash flow by' />
@@ -148,7 +148,7 @@ function SelectedMonth({
             <Link
               to='/bank-transactions'
               search={flowDrill(flow, period.start, period.end, true)}
-              className='font-mono font-medium tabular-nums underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
+              className='numeric font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
             >
               {formatMoney(amount, currency)}
             </Link>
@@ -157,7 +157,7 @@ function SelectedMonth({
       ))}
       <div className='flex items-baseline gap-1.5'>
         <dt className='text-muted-foreground'>{net < 0 ? 'Overspent' : 'Kept'}</dt>
-        <dd className={cn('font-mono font-medium tabular-nums', net > 0 && 'text-success')}>
+        <dd className={cn('numeric font-medium', net > 0 && 'text-success')}>
           {formatMoney(Math.abs(net) / 100, currency)}
         </dd>
       </div>
@@ -187,7 +187,7 @@ function Averages({
   return (
     <p className='mt-1 text-xs text-muted-foreground'>
       Average {noun} ({complete.length} full {noun}s):{' '}
-      <span className='font-mono font-medium text-foreground tabular-nums'>
+      <span className='numeric font-medium text-foreground'>
         {formatMoney(spent / complete.length / 100, currency)}
       </span>{' '}
       spent
@@ -291,8 +291,8 @@ function CashFlowChart({
       <ChartContainer
         className='aspect-auto h-64 w-full'
         config={{
-          spending: {color: 'hsl(var(--primary))'},
-          income: {theme: {light: 'hsl(37 16% 72%)', dark: 'hsl(36 6% 40%)'}},
+          spending: {color: 'hsl(var(--chart-primary))'},
+          income: {color: 'hsl(var(--chart-secondary))'},
         }}
         role='img'
         aria-label={`Spending and income per ${interval}, ${periodName(periods[0], interval)} to ${periodName(periods[periods.length - 1], interval)}. The table below lists every bar.`}
@@ -345,7 +345,7 @@ function CashFlowChart({
                   y={Number(props.y) + 12}
                   textAnchor='middle'
                   className={cn(
-                    'text-[11px]',
+                    'text-caption',
                     start === selected ? 'fill-primary font-semibold' : 'fill-muted-foreground',
                   )}
                 >
@@ -354,7 +354,7 @@ function CashFlowChart({
                     <tspan
                       x={props.x}
                       dy={13}
-                      className='fill-muted-foreground text-[10px] font-normal'
+                      className='fill-muted-foreground text-caption font-normal'
                     >
                       {start.slice(0, 4)}
                     </tspan>
@@ -370,7 +370,7 @@ function CashFlowChart({
             domain={[0, ticks[ticks.length - 1]]}
             ticks={ticks}
             interval={0}
-            tick={{className: 'font-mono'}}
+            tick={{className: 'numeric'}}
             tickFormatter={(value: number) => axis.format(value)}
           />
           <ChartTooltip
@@ -390,7 +390,11 @@ function CashFlowChart({
                     )}
                   </p>
                   <TooltipRow label='Income' value={money(period.income)} swatch={incomeSwatch} />
-                  <TooltipRow label='Spent' value={money(period.spending)} swatch='bg-primary' />
+                  <TooltipRow
+                    label='Spent'
+                    value={money(period.spending)}
+                    swatch='bg-chart-primary'
+                  />
                   <TooltipRow
                     label={net >= 0 ? 'Kept' : 'Overspent'}
                     value={money(Math.abs(net) / 100)}
@@ -400,7 +404,13 @@ function CashFlowChart({
               );
             }}
           />
-          <Bar dataKey='income' fill='var(--color-income)' isAnimationActive={false}>
+          <Bar
+            dataKey='income'
+            fill='var(--color-income)'
+            stroke='hsl(var(--chart-secondary-edge))'
+            strokeWidth={1}
+            isAnimationActive={false}
+          >
             {periods.map((period) => (
               <Cell key={period.start} fillOpacity={period.complete ? 1 : 0.5} />
             ))}
@@ -421,12 +431,12 @@ function CashFlowChart({
           Income
         </span>
         <span className='flex items-center gap-1.5'>
-          <i className='size-2.5 bg-primary' />
+          <i className='size-2.5 bg-chart-primary' />
           Spent
         </span>
         {runningLabel && (
           <span className='flex items-center gap-1.5'>
-            <i className='size-2.5 bg-[repeating-linear-gradient(135deg,hsl(var(--primary))_0_1.5px,transparent_1.5px_3px)] ring-1 ring-primary/40 ring-inset' />
+            <i className='size-2.5 bg-[repeating-linear-gradient(135deg,hsl(var(--chart-primary))_0_1.5px,transparent_1.5px_3px)] ring-1 ring-chart-primary/40 ring-inset' />
             {runningLabel}
           </span>
         )}
@@ -434,7 +444,7 @@ function CashFlowChart({
       <div className='sr-only focus-within:not-sr-only focus-within:mt-4 focus-within:max-w-full focus-within:overflow-x-auto'>
         <table
           aria-label={`Spending and income per ${interval}`}
-          className='w-full text-right text-sm [&_td]:px-2 [&_td]:py-1 [&_td]:font-mono [&_td]:tabular-nums [&_th]:px-2 [&_th]:py-2'
+          className='w-full text-right text-sm [&_td]:px-2 [&_td]:py-1 [&_td]:numeric [&_th]:px-2 [&_th]:py-2'
         >
           <thead>
             <tr>
@@ -491,7 +501,7 @@ function TooltipRow({
         {swatch && <i className={cn('size-2', swatch)} />}
         {label}
       </span>
-      <span className={cn('font-mono tabular-nums', className)}>{value}</span>
+      <span className={cn('numeric', className)}>{value}</span>
     </p>
   );
 }

@@ -39,7 +39,7 @@ export function BalancesList({
   return (
     <Card role='region' aria-label='Balances' className='grid min-w-0 gap-4 p-5 sm:p-6'>
       <header className='-my-3 flex flex-wrap items-center justify-between gap-x-2'>
-        <h2 className='text-base font-semibold'>
+        <h2 className='text-card-title'>
           Balances{' '}
           {!isCurrentMonth && (
             <span className='text-xs font-normal text-muted-foreground'>· today</span>
@@ -91,7 +91,7 @@ export function BalancesList({
                   )}
                 </div>
                 <div className={cn('text-right text-sm', stale && 'text-muted-foreground')}>
-                  <p className='text-right font-mono tabular-nums'>
+                  <p className='text-right numeric'>
                     {account.currentBalanceAmount == null
                       ? 'No balance yet'
                       : formatMoney(account.currentBalanceAmount, account.currency)}
@@ -103,7 +103,7 @@ export function BalancesList({
                   baseCurrency && (
                     <p className='col-span-2 text-right text-xs text-muted-foreground'>
                       ≈{' '}
-                      <span className='font-mono'>
+                      <span className='numeric'>
                         {formatMoney(account.currentBalanceInBaseCurrency, baseCurrency)}
                       </span>
                       {account.baseCurrencyRateDate &&
@@ -117,7 +117,7 @@ export function BalancesList({
       </ul>
       <div className='grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 border-t pt-4 text-sm'>
         <span className='font-semibold'>Total</span>
-        <p className='text-right font-mono tabular-nums'>
+        <p className='text-right numeric'>
           {baseCurrency
             ? `${formatMoney(totalCents / 100, baseCurrency)}${missing.length ? ` excluding ${missing.map(({account}) => resolveBankAccountLabel(account)).join(', ')}` : ''}`
             : 'Base currency not available yet'}

@@ -36,7 +36,7 @@ export function SessionCard({session}: SessionCardProps) {
         <DialogTrigger asChild>
           <button
             type='button'
-            className='flex min-w-0 flex-1 items-center gap-3 self-stretch py-3 pl-4 text-left transition-colors hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset'
+            className='flex min-w-0 flex-1 items-center gap-3 self-stretch py-3 pl-4 text-left transition-colors hover:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
           >
             {createElement(getSessionIcon(session), {
               className: 'size-5 shrink-0 text-muted-foreground',

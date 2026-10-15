@@ -40,7 +40,7 @@ export function CategoryBreakdown({summary, isCurrentMonth}: CategoryBreakdownPr
   return (
     <Card className='grid min-w-0 gap-6 p-5 sm:p-6' data-testid='category-breakdown'>
       <div>
-        <h2 className='text-base font-semibold'>Where it went</h2>
+        <h2 className='text-card-title'>Where it went</h2>
         {summary.baseline.months.length > 0 && (
           <p className='mt-1 text-xs text-muted-foreground'>
             {isCurrentMonth
@@ -71,9 +71,7 @@ export function CategoryBreakdown({summary, isCurrentMonth}: CategoryBreakdownPr
             >
               <div className='flex items-baseline justify-between gap-3 text-sm'>
                 <span className='min-w-0 group-hover:underline'>{label}</span>
-                <span className='shrink-0 font-mono tabular-nums'>
-                  {formatMoney(row.spending, baseCurrency)}
-                </span>
+                <span className='shrink-0 numeric'>{formatMoney(row.spending, baseCurrency)}</span>
               </div>
               <div
                 className={cn(
@@ -111,7 +109,7 @@ export function CategoryBreakdown({summary, isCurrentMonth}: CategoryBreakdownPr
               through,
               hasMissing,
             )}
-            className='w-fit text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
+            className='w-fit text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
           >
             {remaining.length} more {remaining.length === 1 ? 'category' : 'categories'}{' '}
             <span aria-hidden='true'>→</span>
@@ -121,13 +119,11 @@ export function CategoryBreakdown({summary, isCurrentMonth}: CategoryBreakdownPr
           <Link
             to='/bank-transactions'
             search={categoryDrill('REFUND', from, through, hasMissing)}
-            className='border-t pt-4 text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
+            className='border-t pt-4 text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
           >
             <div className='flex items-baseline justify-between gap-3'>
               <span>Refunds (subtracted)</span>
-              <span className='shrink-0 font-mono tabular-nums'>
-                {formatMoney(refund.spending, baseCurrency)}
-              </span>
+              <span className='shrink-0 numeric'>{formatMoney(refund.spending, baseCurrency)}</span>
             </div>
             <p className='mt-1 text-xs text-muted-foreground'>
               {refund.count} {refund.count === 1 ? 'transaction' : 'transactions'}
@@ -145,7 +141,7 @@ function categoryComparison(row: BankTransactionSummaryCategory, currency: strin
   if (usual < 2000)
     return (
       <>
-        usually <span className='font-mono'>{formatMoney(row.baselineAverage, currency)}</span>
+        usually <span className='numeric'>{formatMoney(row.baselineAverage, currency)}</span>
       </>
     );
   const difference = toCents(row.spending) - usual;

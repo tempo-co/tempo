@@ -55,7 +55,7 @@ export function AttentionList({reviewCounts, baseCurrency}: AttentionListProps) 
             aria-labelledby={headingId}
             className='grid min-w-0 gap-4 p-5 sm:p-6'
           >
-            <h2 id={headingId} className='text-base font-semibold'>
+            <h2 id={headingId} className='text-card-title'>
               {title}
             </h2>
             <ul className='-mx-3 divide-y divide-border/60'>

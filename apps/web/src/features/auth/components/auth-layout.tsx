@@ -29,7 +29,7 @@ export function AuthLayout({title, children, disabledLogoLink = false}: AuthLayo
             animate={{opacity: 1, y: 0}}
             exit={{opacity: 0, y: -5}}
             transition={{duration: 0.3, ease: 'easeOut'}}
-            className='text-xl leading-tight font-semibold tracking-tight'
+            className='text-page-title'
           >
             {title}
           </motion.h1>

@@ -1,5 +1,5 @@
 import {Link} from '@tanstack/react-router';
-import {RefreshCw} from 'lucide-react';
+import {Landmark, RefreshCw} from 'lucide-react';
 
 import {EmptyState} from '@/components/shared/layout/app-empty-state';
 import {Button} from '@/components/ui/button';
@@ -33,6 +33,7 @@ export function HomeDashboard({month, isCurrentMonth}: HomeDashboardProps) {
   if (isError) {
     return (
       <EmptyState
+        tone='error'
         icon={RefreshCw}
         title='Could not load your banks'
         description='The connection service did not respond. Try again in a moment.'
@@ -116,15 +117,14 @@ function HomeDashboardSkeleton() {
 
 function ConnectBankPrompt() {
   return (
-    <Card className='flex flex-col items-center gap-2.5 px-6 py-18 text-center'>
-      <h2 className='text-lg font-semibold'>Connect a bank to see your month</h2>
-      <p className='max-w-md text-sm text-muted-foreground'>
-        Home summarizes spending, balances and anything that needs a look once Tempo has synced at
-        least one account.
-      </p>
-      <Button asChild className='mt-2'>
+    <EmptyState
+      icon={Landmark}
+      title='Connect a bank to see your month'
+      description='Home summarizes spending, balances and anything that needs a look once Tempo has synced at least one account.'
+    >
+      <Button asChild>
         <Link to='/bank-connections'>Connect bank</Link>
       </Button>
-    </Card>
+    </EmptyState>
   );
 }

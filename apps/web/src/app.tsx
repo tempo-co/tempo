@@ -40,7 +40,7 @@ export function App() {
       {isUnavailable || (!isOnline && !isAuthenticated) ? (
         <div className='flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center'>
           <Logo className='h-12 w-12 text-primary' />
-          <h1 className='text-xl font-semibold'>Cannot reach Tempo</h1>
+          <h1 className='text-page-title'>Cannot reach Tempo</h1>
           <p className='max-w-sm text-sm text-muted-foreground'>
             Your session has not been checked yet. Reconnect to continue.
           </p>

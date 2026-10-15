@@ -57,7 +57,7 @@ export function AppTopNav() {
             to={item.to}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'relative flex h-12 items-center gap-2 px-3 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset',
+              'relative flex h-12 items-center gap-2 px-3 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
               active &&
                 'font-medium text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-primary',
             )}
@@ -90,7 +90,7 @@ export function AppTabBar() {
                 to={item.to}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'relative flex h-14 flex-col items-center justify-center gap-1 px-1 text-[0.6875rem] leading-none text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset',
+                  'relative flex h-14 flex-col items-center justify-center gap-1 px-1 text-caption text-muted-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
                   active &&
                     'font-semibold text-primary before:absolute before:inset-x-5 before:top-0 before:h-0.5 before:bg-primary',
                 )}
@@ -125,7 +125,7 @@ export function AccountMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className='flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:ring-2 data-[state=open]:ring-border'
+        className='flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[state=open]:ring-2 data-[state=open]:ring-border'
         aria-label={`Account menu, ${currentAccount.name} (${currentAccount.email})`}
         data-testid='account-menu-trigger'
       >

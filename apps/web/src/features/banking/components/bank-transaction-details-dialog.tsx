@@ -50,7 +50,7 @@ export function BankTransactionDetailsDialog({
       >
         <ResponsiveDialogClose
           aria-label='Close transaction details'
-          className='absolute top-3 right-3 z-20 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden'
+          className='absolute top-3 right-3 z-20 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
         >
           <X className='h-4 w-4' aria-hidden='true' />
           <span className='sr-only'>Close transaction details</span>
@@ -78,6 +78,7 @@ export function BankTransactionDetailsDialog({
             <div role='alert' className='p-5 sm:p-6'>
               {isNotFound ? (
                 <EmptyState
+                  framed={false}
                   icon={FileQuestion}
                   title='Transaction not found'
                   description='This transaction may have been removed or the details may be out of date.'
@@ -90,6 +91,8 @@ export function BankTransactionDetailsDialog({
                 </EmptyState>
               ) : (
                 <EmptyState
+                  tone='error'
+                  framed={false}
                   icon={RefreshCw}
                   title='Could not load bank transaction'
                   description='The transaction service did not respond. Try again in a moment.'

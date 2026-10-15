@@ -21,14 +21,18 @@ colors:
   border: "hsl(270 6.9% 22.7%)"
   secondary: "hsl(265.7 8.2% 16.7%)"
   secondary-foreground: "hsl(17.5 67.1% 69%)"
-  success: "hsl(142 76% 36%)"
-  success-foreground: "hsl(138 76% 13%)"
-  warning: "hsl(32 95% 44%)"
-  warning-foreground: "hsl(48 100% 13%)"
-  info: "hsl(200 98% 39%)"
-  info-foreground: "hsl(204 100% 13%)"
-  destructive: "hsl(2 84% 31%)"
-  destructive-foreground: "hsl(0 70% 13%)"
+  success: "hsl(148 40% 55%)"
+  success-foreground: "hsl(148 30% 12%)"
+  warning: "hsl(36 70% 58%)"
+  warning-foreground: "hsl(36 40% 12%)"
+  info: "hsl(200 55% 62%)"
+  info-foreground: "hsl(200 35% 12%)"
+  destructive: "hsl(4 70% 66%)"
+  destructive-foreground: "hsl(4 40% 12%)"
+  chart-primary: "hsl(38 28% 80%)"
+  chart-secondary: "hsl(36 6% 48%)"
+  scrim: "hsl(252 12% 3%)"
+  light-scrim: "hsl(252 10.2% 9.6%)"
   light-background: "hsl(38.6 43.8% 93.7%)"
   light-surface: "hsl(42 55.6% 96.5%)"
   light-foreground: "hsl(270 7.5% 15.7%)"
@@ -38,17 +42,34 @@ colors:
   light-border: "hsl(39.1 19.7% 77.1%)"
   light-secondary: "hsl(34.3 38.2% 89.2%)"
   light-secondary-foreground: "hsl(9 48.2% 37.8%)"
+  light-success: "hsl(150 50% 27%)"
+  light-success-foreground: "hsl(145 40% 95%)"
+  light-warning: "hsl(34 80% 30%)"
+  light-warning-foreground: "hsl(38 70% 95%)"
+  light-info: "hsl(200 60% 33%)"
+  light-info-foreground: "hsl(200 50% 96%)"
+  light-destructive: "hsl(6 62% 42%)"
+  light-destructive-foreground: "hsl(8 60% 96%)"
+  light-chart-primary: "hsl(270 7% 30%)"
+  light-chart-secondary: "hsl(37 16% 74%)"
+  light-chart-secondary-edge: "hsl(37 12% 48%)"
 typography:
   page-title:
     fontFamily: "Inter Variable, Inter, sans-serif"
     fontSize: "1.5rem"
     fontWeight: 600
-    lineHeight: 1.25
+    lineHeight: "2rem"
+    letterSpacing: "-0.025em"
   section-title:
     fontFamily: "Inter Variable, Inter, sans-serif"
     fontSize: "1.125rem"
     fontWeight: 600
     lineHeight: 1.35
+  card-title:
+    fontFamily: "Inter Variable, Inter, sans-serif"
+    fontSize: "1rem"
+    fontWeight: 600
+    lineHeight: 1.5
   body:
     fontFamily: "Inter Variable, Inter, sans-serif"
     fontSize: "1rem"
@@ -64,8 +85,14 @@ typography:
     fontSize: "0.75rem"
     fontWeight: 500
     lineHeight: 1.333
+  caption:
+    fontFamily: "Inter Variable, Inter, sans-serif"
+    fontSize: "0.6875rem"
+    fontWeight: 400
+    lineHeight: 1
   numeric:
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+    fontFamily: "Inter Variable, Inter, sans-serif"
+    fontFeature: "tabular-nums"
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.5
@@ -107,12 +134,22 @@ components:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.foreground}"
     rounded: "{rounded.surface}"
-    padding: "24px"
+    padding: "20px; 24px from sm"
+  badge:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.primary-foreground}"
+    rounded: "{rounded.pill}"
+    padding: "2px 10px"
   status-badge:
     backgroundColor: "transparent"
     textColor: "{colors.foreground}"
     rounded: "{rounded.pill}"
-    padding: "2px 10px"
+    padding: "1px 10px"
+  empty-state:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.surface}"
+    padding: "64px 24px"
 ---
 
 # Design System: Tempo
@@ -161,8 +198,22 @@ the uses listed above.
 - **Destructive** (`{colors.destructive}`): failed operations and irreversible actions.
 
 Semantic colors are separate from the brand palette and must be paired with text, an icon, or
-another non-color cue. Never communicate transaction direction, synchronization state, or
-error state by hue alone.
+another non-color cue. They are tuned like the category palette, earthy and moderately
+saturated, with separate light and dark values: brick red, ochre, slate blue and forest green.
+The `*-foreground` tokens are the pale (light) or deep (dark) grounds of status toasts, and the
+label on a destructive fill; never put a fixed white on a status fill. Never communicate
+transaction direction, synchronization state, or error state by hue alone.
+
+Every color pair the app renders clears WCAG AA in both themes: 4.5:1 for text, 3:1 for focus
+rings, chart marks and category chip icons.
+
+### Charts
+
+Data series use `chart-primary` (Ink on light, warm Paper on dark) and `chart-secondary` (a
+light warm tint on light, warm grey on dark), never Clay. The light tint stays quiet next to the
+lead series, so its bars carry a 1px `chart-secondary-edge` outline that keeps them at 3:1 on the
+card. Clay marks only the selected period or an action, so it keeps its
+meaning on the dashboard. Chart colors come from tokens, never literals in components.
 
 For transaction categorization, the category label, source (`Suggested by AI` or `Manual`), and
 pending/failed status are secondary text signals. Always render those cues as
@@ -173,16 +224,28 @@ primary action or active state, not a clay wash.
 
 ## Typography
 
-Inter is the product typeface, self-hosted as a variable font at weights 100–900. UI copy and
-headings use Inter; the
-system monospace stack covers identifiers and currency amounts.
+Inter is the product typeface, self-hosted as a variable font at weights 100–900. UI copy,
+headings and money use Inter; the system monospace stack is only for identifiers such as IP
+addresses and error codes.
 
-- **Page title** (`600`, `1.5rem`, ~`1.25`): major authenticated surfaces.
-- **Section title** (`600`, `1.125rem`, ~`1.35`): meaningful subsections.
+The named styles are Tailwind utilities defined in `src/index.css` (`text-page-title`,
+`text-section-title`, `text-card-title`, `text-label`, `text-caption`, `numeric`), so a change
+there reaches every use. Use them instead of rebuilding a style from size and weight classes,
+and don't introduce sizes outside this scale.
+
+- **Page title** (`text-page-title`: `600`, `1.5rem`, `2rem`, `-0.025em`): one per page,
+  including error and auth pages.
+- **Section title** (`text-section-title`: `600`, `1.125rem`, `1.35`): dialog and drawer
+  titles, detail views, empty states.
+- **Card title** (`text-card-title`: `600`, `1rem`, `1.5`): card and settings-group headings.
 - **Body** (`400`, `1rem`, `1.5`): primary copy.
-- **Body small** (`400`, `0.875rem`, `1.5`): supporting descriptions, table content.
-- **Label** (`500`, `0.75rem`, ~`1.333`): metadata, field labels, compact status.
-- **Numeric** (system mono, `1rem`): currency amounts, IDs, rates; tabular figures in columns.
+- **Body small** (`text-sm`: `400`, `0.875rem`, `1.5`): supporting descriptions, table content,
+  status rows.
+- **Label** (`text-label`: `500`, `0.75rem`, `1.333`): metadata, field labels, compact status.
+- **Caption** (`text-caption`: `0.6875rem`, `1`): bottom tab labels and chart axis ticks only,
+  where space is fixed.
+- **Numeric** (`numeric`: Inter with tabular figures): currency amounts and rates, so digits
+  line up in columns and look the same on every device.
 
 **The Plain Number Rule.** Monetary values and dates stay easy to scan, compare, and copy.
 
@@ -204,8 +267,10 @@ decorative headers, metric-tile mosaics, or hero space before the data.
 ## Elevation & Depth
 
 Mostly flat tonal layering: page field, surfaces, accent washes, borders, whitespace. Cards
-keep `shadow-sm`; overlays (dialogs, popovers, drawers) may lift. Focus rings are functional
-emphasis. No glow, glass, backdrop blur, or nested shadows. Resting content stays quiet.
+keep `shadow-xs`; overlays (dialogs, popovers, drawers) may lift. Modal backdrops are the Night
+`scrim` at 60% on light (Night) and 85% on dark (a deeper Night, since the dark page is
+already Night), never pure black. Focus rings are functional emphasis. No glow,
+glass, backdrop blur, or nested shadows. Resting content stays quiet.
 
 ## Shapes
 
@@ -227,33 +292,42 @@ surface, or decorate it. Favicon and installed-app icons live under `public/` wi
 ### Buttons
 
 Compact and action-oriented; default ~40px tall (36 small / 44 large), 16px icons with 8px
-gap, specific labels ("Connect a bank", "Re-authorize"). Primary uses Clay strong on light
-and Clay on dark on dark with Paper foreground. Ghost uses the accent wash only on
-hover/focus/active. Every interactive control has a visible `:focus-visible` ring using the
-ring token. Disabled and pending states preserve the label's meaning and pair motion with
-text ("Connecting...").
+gap, specific labels ("Connect a bank", "Re-authorize"). Primary uses Clay strong with a
+Paper label on light, and Clay on dark with a Night label on dark. Ghost uses the accent wash
+only on hover/focus/active. Destructive buttons carry a `destructive-foreground` label.
+Disabled and pending states preserve the label's meaning and pair motion with text
+("Connecting...").
+
+**Focus.** Every interactive control shows the same focus indicator on `:focus-visible`: a
+solid 2px outline in the ring token, offset 2px (`outline-2 outline-offset-2 outline-ring`).
+Where the control fills its container (nav tabs, rows), the outline sits inside instead
+(`-outline-offset-2`). Use outlines, not box-shadow rings, for focus; they survive forced-colors
+mode. A box-shadow ring marks a selected value (the theme picker's clay ring), never focus.
 
 ### Cards and grouped surfaces
 
 Cards group information that belongs together — a bank connection or a transaction detail
-reads as one record. `rounded-card`, surface color, quiet rule, ~24px padding. Avoid
-statistic-tile collections.
+reads as one record. `rounded-card`, surface color, quiet rule, `shadow-xs`, 20px padding
+(24px from `sm`), with a `text-card-title` heading. Avoid statistic-tile collections.
 
 ### Inputs and fields
 
 ~40px high, page-field background, 1px rule, control radius, `8px 12px` padding. Focus uses
-the clay ring; errors pair the destructive color with a plain-language message on the field.
+the shared outline; errors pair the destructive color with a plain-language message on the
+field.
 
 ### Tables and transaction rows
 
-Quiet headers, dividers only for row scanning, right-aligned monospace/tabular amounts, long
+Quiet headers, dividers only for row scanning, right-aligned `numeric` amounts, long
 descriptions truncated but inspectable. Rows that navigate show a keyboard-visible focus
 state. Status text stays understandable without color.
 
 ### Status, loading, and feedback
 
 Top loading bar for route/data progress, skeletons for known shapes, toasts for background
-outcomes. Distinct states get distinct copy; never imply data changed before the server
+outcomes. Empty and failed loads use the one `EmptyState` component: a framed card with a 48px
+icon, a `text-section-title` heading, a muted description and the next action. `tone='error'`
+marks a failed load with a destructive icon; inside a dialog it drops its frame. Distinct states get distinct copy; never imply data changed before the server
 confirms it. Motion is brief (0.2–0.3s), subtle, reduced-motion aware; never animate
 financial values continuously.
 

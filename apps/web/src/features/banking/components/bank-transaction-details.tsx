@@ -61,7 +61,7 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
 
       <div className='space-y-8 px-5 py-5 sm:px-6 sm:py-6'>
         <section aria-labelledby={detailsHeadingId} data-testid='bank-transaction-details-sections'>
-          <h2 id={detailsHeadingId} className='text-lg font-semibold tracking-tight'>
+          <h2 id={detailsHeadingId} className='text-section-title'>
             Transaction details
           </h2>
           <div className='mt-5 grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-8'>

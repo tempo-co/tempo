@@ -24,7 +24,7 @@ export function BankTransactionCounterpartLink({
         transactionId: counterpart.id,
       })}
       data-testid={testId}
-      className='group mt-2 flex min-h-14 w-full max-w-md items-center gap-3 rounded-md border bg-background px-3 py-2 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset'
+      className='group mt-2 flex min-h-14 w-full max-w-md items-center gap-3 rounded-md border bg-background px-3 py-2 transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
     >
       <span className='min-w-0 flex-1'>
         <span className='block truncate text-sm font-medium'>

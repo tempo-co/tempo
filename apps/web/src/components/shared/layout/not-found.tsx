@@ -8,7 +8,7 @@ export function NotFound() {
       <Badge className='font-mono text-base' variant='secondary'>
         404
       </Badge>
-      <h1 className='text-3xl font-semibold text-foreground'>Page Not Found</h1>
+      <h1 className='text-page-title'>Page Not Found</h1>
       <p className='text-muted-foreground'>
         Sorry, we can&apos;t find the page you&apos;re looking for.
       </p>

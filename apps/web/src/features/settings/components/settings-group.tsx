@@ -13,7 +13,7 @@ export function SettingsGroup({id, title, description, children}: SettingsGroupP
     <section aria-labelledby={id}>
       <div className='mb-3 flex items-end justify-between gap-3'>
         <div className='min-w-0'>
-          <h2 id={id} className='text-base font-semibold'>
+          <h2 id={id} className='text-card-title'>
             {title}
           </h2>
           {description && <p className='mt-1 text-sm text-muted-foreground'>{description}</p>}

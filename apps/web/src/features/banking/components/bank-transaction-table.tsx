@@ -160,6 +160,7 @@ export function BankTransactionTable({
   if (isError) {
     return (
       <EmptyState
+        tone='error'
         icon={RefreshCw}
         title='Could not load bank transactions'
         description='The transaction service did not respond. Try again in a moment.'
@@ -348,7 +349,7 @@ export function BankTransactionTable({
                               type='button'
                               data-bank-transaction-detail-trigger
                               aria-label={`View ${transactionLabel} transaction details`}
-                              className='block w-full truncate rounded-sm text-left focus-visible:relative focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden'
+                              className='block w-full truncate rounded-sm text-left focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
                               title={transactionLabel}
                               onClick={(event) =>
                                 onTransactionSelect(row.original.id, event.currentTarget)

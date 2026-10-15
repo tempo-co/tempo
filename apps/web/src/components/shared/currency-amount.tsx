@@ -15,7 +15,7 @@ export function CurrencyAmount({amount, currency}: CurrencyAmountProps) {
 
   return (
     <span
-      className={cn('font-mono whitespace-nowrap', !roundsToZero && amount > 0 && 'text-success')}
+      className={cn('numeric whitespace-nowrap', !roundsToZero && amount > 0 && 'text-success')}
     >
       {formattedAmount}
     </span>
