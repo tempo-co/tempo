@@ -1,28 +1,26 @@
+import {PickType} from '@nestjs/swagger';
 import {IsEnum} from 'class-validator';
 
-import type {
-	BankTransactionCategorizationSource,
-	BankTransactionCategorizationStatus,
-} from '../../categorization/bank-transaction-categorization.types';
 import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from '../../categorization/bank-transaction-category';
 import type {ManualCategoryFollowUpAction} from '../../categorization/manual-category-follow-up';
+import {BankTransactionResponseDto} from './bank-transaction-response.dto';
 
 export class BankTransactionCategoryImpactQueryDto {
 	@IsEnum(BANK_TRANSACTION_CATEGORIES)
 	category: BankTransactionCategory;
 }
 
-export class BankTransactionCategoryImpactTransactionDto {
-	id: string;
-	transactionDate: string | null;
-	bookingDate: string | null;
-	displayDescription: string;
-	amount: string;
-	currency: string;
-	category: BankTransactionCategory | null;
-	categoryStatus: BankTransactionCategorizationStatus;
-	categorySource: BankTransactionCategorizationSource | null;
-}
+export class BankTransactionCategoryImpactTransactionDto extends PickType(BankTransactionResponseDto, [
+	'id',
+	'transactionDate',
+	'bookingDate',
+	'displayDescription',
+	'amount',
+	'currency',
+	'category',
+	'categoryStatus',
+	'categorySource',
+] as const) {}
 
 export class BankTransactionCategoryImpactResponseDto {
 	/**

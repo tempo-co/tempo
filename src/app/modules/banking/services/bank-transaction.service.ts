@@ -144,19 +144,16 @@ export class BankTransactionService {
 		accountId: Account['id'],
 		id: BankTransaction['id'],
 		category: BankTransactionCategory,
-		applyToTransactionIds: readonly string[] = [],
+		applyToTransactionIds?: readonly string[],
 	): Promise<BankTransactionResponseDto> {
 		const transaction = await this.findOwnedTransaction(accountId, id);
-		if (
-			!(await this.categorizationService.setManualCategory(
-				accountId,
-				transaction,
-				category,
-				applyToTransactionIds,
-			))
-		) {
-			throw new NotFoundException(BANKING_TRANSACTION_NOT_FOUND);
-		}
+		const saved = await this.categorizationService.setManualCategory(
+			accountId,
+			transaction,
+			category,
+			applyToTransactionIds,
+		);
+		if (!saved) throw new NotFoundException(BANKING_TRANSACTION_NOT_FOUND);
 		return this.toResponse(transaction);
 	}
 

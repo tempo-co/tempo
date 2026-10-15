@@ -2,7 +2,6 @@ import {
 	ManualCategoryCounts,
 	planManualCategoryFollowUp,
 	whereManualCategoryFollowUpCandidates,
-	withManualCorrection,
 } from './manual-category-follow-up';
 
 function recordingQuery() {
@@ -23,7 +22,6 @@ function recordingQuery() {
 }
 
 const counts = (entries: [string, number][]) => new Map(entries) as ManualCategoryCounts;
-const ordinaryRow = {ownTransferEvidence: null, financialEventType: null};
 
 describe('planManualCategoryFollowUp', () => {
 	it.each([
@@ -52,33 +50,6 @@ describe('planManualCategoryFollowUp', () => {
 		['no choice left without AI', undefined, false, null],
 	])('plans %s', (_, history, recheckEnabled, expected) => {
 		expect(planManualCategoryFollowUp(history, recheckEnabled)).toEqual(expected);
-	});
-});
-
-describe('withManualCorrection', () => {
-	it("adds a reusable correction to the other rows' choices", () => {
-		expect(withManualCorrection(counts([['SHOPPING', 2]]), 'TRAVEL', ordinaryRow)).toEqual(
-			counts([
-				['SHOPPING', 2],
-				['TRAVEL', 1],
-			]),
-		);
-		expect(withManualCorrection(undefined, 'TRAVEL', ordinaryRow)).toEqual(counts([['TRAVEL', 1]]));
-	});
-
-	it('leaves out NEEDS_REVIEW and corrections on own transfers or exchanges', () => {
-		const history = counts([['SHOPPING', 1]]);
-		expect(withManualCorrection(history, 'NEEDS_REVIEW', ordinaryRow)).toEqual(history);
-		expect(withManualCorrection(history, 'TRAVEL', {...ordinaryRow, ownTransferEvidence: 'IBAN'})).toEqual(history);
-		expect(
-			withManualCorrection(history, 'TRAVEL', {...ordinaryRow, financialEventType: 'CURRENCY_EXCHANGE'}),
-		).toEqual(history);
-	});
-
-	it('does not change the counts it is given', () => {
-		const history = counts([['SHOPPING', 1]]);
-		withManualCorrection(history, 'SHOPPING', ordinaryRow);
-		expect(history).toEqual(counts([['SHOPPING', 1]]));
 	});
 });
 

@@ -1,7 +1,6 @@
 import type {WhereExpressionBuilder} from 'typeorm';
 
-import type {BankTransaction} from '../bank-transaction.entity';
-import {notManualCategorySourceSql} from './bank-transaction-categorization.types';
+import {CLAIMABLE_CATEGORIZATION_STATUSES, notManualCategorySourceSql} from './bank-transaction-categorization.types';
 import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from './bank-transaction-category';
 
 /**
@@ -23,7 +22,7 @@ export const REUSABLE_MANUAL_CATEGORIES: readonly BankTransactionCategory[] = BA
 );
 
 // PROCESSING rows belong to a worker and NOT_APPLICABLE rows are never categorized.
-const FOLLOW_UP_STATUSES = ['PENDING', 'FAILED', 'COMPLETED'] as const;
+const FOLLOW_UP_STATUSES = [...CLAIMABLE_CATEGORIZATION_STATUSES, 'COMPLETED'] as const;
 
 export function getUnanimousCategory(counts: ManualCategoryCounts | undefined): BankTransactionCategory | null {
 	return counts?.size === 1 ? [...counts.keys()][0] : null;
@@ -37,24 +36,6 @@ export function planManualCategoryFollowUp(
 	const category = getUnanimousCategory(counts);
 	if (category) return {action: 'APPLY', category};
 	return recheckEnabled ? {action: 'RECHECK'} : null;
-}
-
-/**
- * The owner's choices once a correction is saved, given the choices of every other row. A correction counts like
- * any other manual row: only reusable categories on rows that are not own transfers or currency exchanges, the same
- * rules the manual-choice count query applies.
- */
-export function withManualCorrection(
-	otherRowCounts: ManualCategoryCounts | undefined,
-	category: BankTransactionCategory,
-	corrected: Pick<BankTransaction, 'ownTransferEvidence' | 'financialEventType'>,
-): ManualCategoryCounts {
-	const counts = new Map(otherRowCounts);
-	const countsAsChoice = !corrected.ownTransferEvidence && !corrected.financialEventType;
-	if (countsAsChoice && REUSABLE_MANUAL_CATEGORIES.includes(category)) {
-		counts.set(category, (counts.get(category) ?? 0) + 1);
-	}
-	return counts;
 }
 
 /**

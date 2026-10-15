@@ -5,7 +5,6 @@ import TestAgent from 'supertest/lib/agent';
 import {DeepPartial} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
-import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 
 import {BankingFixtures, CURRENCY_EXCHANGE_EVENT, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
@@ -46,8 +45,7 @@ describe('Bank transaction category impact', () => {
 		const ownerAccount = await fixtures.createBankAccount(await fixtures.createConnection({id: owner.id}));
 		const otherAccount = await fixtures.createBankAccount(await fixtures.createConnection({id: other.id}));
 
-		const create = async (bankAccount: BankAccount, values: DeepPartial<BankTransaction>) =>
-			fixtures.createTransaction(bankAccount, values);
+		const create = fixtures.createTransaction.bind(fixtures);
 		rows = {
 			corrected: await create(ownerAccount, categorizedRow('2026-09-10', '-10.00')),
 			// Pending: no booking date yet, but the newest by transaction date, so it is listed first.
@@ -127,6 +125,17 @@ describe('Bank transaction category impact', () => {
 		const response = await ownerAgent.get(impactPath('corrected', 'SHOPPING')).expect(200);
 
 		expect(response.body).toEqual({action: null, category: null, total: 0, transactions: []});
+	});
+
+	it.each([
+		['to NEEDS_REVIEW', 'corrected', 'NEEDS_REVIEW'],
+		['on an own transfer', 'ownTransfer', 'SHOPPING'],
+		['on a currency exchange', 'exchange', 'SHOPPING'],
+	])('does not count a correction %s as a choice', async (_, name, category) => {
+		// Only the owner's other choice, TRAVEL, is left, so the follow-up still applies TRAVEL.
+		const response = await ownerAgent.get(impactPath(name, category)).expect(200);
+
+		expect(response.body).toMatchObject({action: 'APPLY', category: 'TRAVEL'});
 	});
 
 	it('rejects other owners and unknown categories', async () => {
