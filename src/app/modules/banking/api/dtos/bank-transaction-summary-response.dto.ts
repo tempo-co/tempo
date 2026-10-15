@@ -65,8 +65,6 @@ export class BankTransactionReviewCountsResponseDto {
 export class BankBalanceTrendResponseDto {
 	baseCurrency: string | null;
 	interval: 'week' | 'month' | 'year';
-	/** Each connected account and the day its history starts; its balance is null before then. */
-	accounts: Array<{id: string; since: string}>;
 	/** Every period from the first one any connected account covers through `to`. */
 	periods: BankBalanceTrendPeriodDto[];
 }
