@@ -32,7 +32,7 @@ export class BankTransactionCategoryImpactResponseDto {
 	action: ManualCategoryFollowUpAction | null;
 	/** The category `APPLY` sets; `null` for `RECHECK`. */
 	category: BankTransactionCategory | null;
-	/** The affected rows, newest booking first, capped at 500. */
+	/** The affected rows, newest first by transaction date (then booking date), capped at 500. */
 	transactions: BankTransactionCategoryImpactTransactionDto[];
 	/** Every affected row, including any past the cap. */
 	total: number;
