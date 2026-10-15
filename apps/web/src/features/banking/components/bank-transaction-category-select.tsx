@@ -1,3 +1,6 @@
+import {useState} from 'react';
+import {toast} from 'sonner';
+
 import {
   Select,
   SelectContent,
@@ -5,12 +8,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {isAuthError} from '@/utils/api';
 
+import {usePreviewBankTransactionCategory} from '../api/use-preview-bank-transaction-category';
 import {useUpdateBankTransactionCategory} from '../api/use-update-bank-transaction-category';
 import {
   BANK_TRANSACTION_CATEGORIES,
   BankTransaction,
   BankTransactionCategory,
+  BankTransactionCategoryImpact,
 } from '../types/bank-transaction';
 import {BANK_TRANSACTION_CATEGORY_META} from '../utils/bank-transaction-category-meta';
 import {
@@ -20,6 +26,7 @@ import {
   isBankTransactionCategory,
 } from '../utils/formatters';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
+import {BankTransactionCategoryImpactDialog} from './bank-transaction-category-impact-dialog';
 
 type BankTransactionCategorySelectProps = {
   transaction: BankTransaction;
@@ -27,18 +34,53 @@ type BankTransactionCategorySelectProps = {
 
 export function BankTransactionCategorySelect({transaction}: BankTransactionCategorySelectProps) {
   const {updateBankTransactionCategory, isPending} = useUpdateBankTransactionCategory();
+  const {previewBankTransactionCategory, isPending: isChecking} =
+    usePreviewBankTransactionCategory();
+  const [draft, setDraft] = useState<{
+    category: BankTransactionCategory;
+    impact: BankTransactionCategoryImpact;
+  } | null>(null);
   const selectId = `transaction-${transaction.id}-category`;
   const statusId = `transaction-${transaction.id}-category-status`;
   const selectedCategory =
     transaction.category && isBankTransactionCategory(transaction.category)
       ? transaction.category
-      : undefined;
+      : '';
   const statusLabel = formatBankTransactionCategoryStatus(transaction.categoryStatus);
   const sourceLabel = formatBankTransactionCategorySource(transaction.categorySource);
 
+  const save = async (category: BankTransactionCategory, applyToTransactionIds: string[]) => {
+    try {
+      await updateBankTransactionCategory({
+        id: transaction.id,
+        category,
+        applyToTransactionIds,
+      }).unwrap();
+      setDraft(null);
+    } catch {
+      // The mutation toast reports the error; keep the preview and selection so the owner can retry.
+    }
+  };
+
   const handleValueChange = (value: string) => {
     if (!isBankTransactionCategory(value)) return;
-    updateBankTransactionCategory({id: transaction.id, category: value});
+    previewBankTransactionCategory(
+      {id: transaction.id, category: value},
+      {
+        onSuccess: (impact) => {
+          if (impact.transactions.length > 0) setDraft({category: value, impact});
+          else void save(value, []);
+        },
+        onError: (error) => {
+          // An expired session or unverified email has its own toast and redirect.
+          if (!isAuthError(error)) {
+            toast.error(
+              'Category changes could not be previewed. Nothing was saved. Please try again.',
+            );
+          }
+        },
+      },
+    );
   };
 
   return (
@@ -47,7 +89,11 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
         <label htmlFor={selectId}>Transaction category</label>
       </dt>
       <dd className='mt-2'>
-        <Select value={selectedCategory} onValueChange={handleValueChange} disabled={isPending}>
+        <Select
+          value={selectedCategory}
+          onValueChange={handleValueChange}
+          disabled={isPending || isChecking || draft !== null}
+        >
           <SelectTrigger
             id={selectId}
             aria-label='Transaction category'
@@ -74,7 +120,7 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
         data-testid='bank-transaction-category-status'
         className='mt-2 text-xs text-muted-foreground'
       >
-        <span>{statusLabel}</span>
+        <span>{isChecking ? 'Checking other transactions…' : statusLabel}</span>
         {sourceLabel && (
           <>
             <span aria-hidden='true'> · </span>
@@ -82,6 +128,15 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
           </>
         )}
       </dd>
+      {draft && (
+        <BankTransactionCategoryImpactDialog
+          category={draft.category}
+          impact={draft.impact}
+          isPending={isPending}
+          onCancel={() => setDraft(null)}
+          onConfirm={(ids) => void save(draft.category, ids)}
+        />
+      )}
     </div>
   );
 }

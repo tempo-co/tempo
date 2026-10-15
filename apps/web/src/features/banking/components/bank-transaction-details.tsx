@@ -97,7 +97,7 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
                 <>
                   <Detail label='Activity' value={financialEvent} />
                   {hasManualCategory ? (
-                    <BankTransactionCategorySelect transaction={transaction} />
+                    <BankTransactionCategorySelect key={transaction.id} transaction={transaction} />
                   ) : (
                     <Detail
                       label='Category'
@@ -106,7 +106,7 @@ export function BankTransactionDetails({transaction}: BankTransactionDetailsProp
                   )}
                 </>
               ) : transaction.ownTransfer ? null : (
-                <BankTransactionCategorySelect transaction={transaction} />
+                <BankTransactionCategorySelect key={transaction.id} transaction={transaction} />
               )}
               {financialEvent || transaction.ownTransfer ? (
                 <Detail

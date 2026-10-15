@@ -18,6 +18,7 @@ import {
   SessionChangedError,
   SessionExpiredError,
   changeSession,
+  isAuthError,
 } from '@/utils/api';
 import {OFFLINE_MAX_AGE, dropSavedData, isAccountQuery} from '@/utils/offline-storage';
 
@@ -69,8 +70,7 @@ const handleAuthError = (error: Error) => {
  * lasts longer than the retry delays, so retrying it only extends the limit.
  */
 const isFinalError = (error: Error) =>
-  error instanceof SessionExpiredError ||
-  error instanceof EmailNotVerifiedError ||
+  isAuthError(error) ||
   error instanceof SessionChangedError ||
   (error instanceof HttpError && error.status === 429);
 

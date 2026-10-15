@@ -312,3 +312,29 @@ export type BankTransactionsResponse = {
   transactions: BankTransaction[];
   total: number;
 };
+
+/** One of the owner's other rows that a category correction would change. */
+export type BankTransactionCategoryImpactTransaction = Pick<
+  BankTransaction,
+  | 'id'
+  | 'transactionDate'
+  | 'bookingDate'
+  | 'amount'
+  | 'currency'
+  | 'category'
+  | 'categoryStatus'
+  | 'categorySource'
+> & {displayDescription: string};
+
+/**
+ * What a category correction would do to the owner's other rows from the same merchant. `APPLY`
+ * sets `category` on them; `RECHECK` sends them back to AI categorization. `null` when no other row
+ * would change.
+ */
+export type BankTransactionCategoryImpact = {
+  action: 'APPLY' | 'RECHECK' | null;
+  category: BankTransactionCategory | null;
+  /** Newest first, capped by the API; `total` counts every affected row. */
+  transactions: BankTransactionCategoryImpactTransaction[];
+  total: number;
+};

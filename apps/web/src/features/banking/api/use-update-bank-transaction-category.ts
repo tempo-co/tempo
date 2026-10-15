@@ -1,7 +1,6 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {toast} from 'sonner';
 
-import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {HttpError, api} from '@/utils/api';
 
 import {
@@ -11,11 +10,14 @@ import {
   BankTransactionFilterParams,
   BankTransactionsResponse,
 } from '../types/bank-transaction';
+import {invalidateBankDerivedData} from './invalidate-bank-derived-data';
 import {bankQueryKeys} from './query-keys';
 
 type UpdateBankTransactionCategoryInput = {
   id: BankTransaction['id'];
   category: BankTransactionCategory;
+  /** The owner's other rows from the preview that change too; omitted changes only this row. */
+  applyToTransactionIds?: BankTransaction['id'][];
 };
 
 export const useUpdateBankTransactionCategory = () => {
@@ -25,10 +27,10 @@ export const useUpdateBankTransactionCategory = () => {
     HttpError,
     UpdateBankTransactionCategoryInput
   >({
-    mutationFn: async ({id, category}) => {
+    mutationFn: async ({id, category, applyToTransactionIds}) => {
       return await api.patch<BankTransaction>(
         `/bank-transactions/${id}/category`,
-        JSON.stringify({category}),
+        JSON.stringify({category, applyToTransactionIds}),
       );
     },
     onSuccess: async (updatedTransaction, {id}) => {
@@ -63,17 +65,9 @@ export const useUpdateBankTransactionCategory = () => {
           });
         }
       }
-      // The API also applies a manual category to the owner's other rows from the same merchant,
-      // so refetch every list and every other cached detail, not just the corrected row.
-      await Promise.all([
-        queryClient.invalidateQueries({queryKey: bankQueryKeys.transactionsRoot}),
-        queryClient.invalidateQueries({queryKey: bankQueryKeys.connectionTransactionsRoot}),
-        queryClient.invalidateQueries({
-          queryKey: bankQueryKeys.transactionRoot,
-          predicate: ({queryKey}) => queryKey[1] !== id,
-        }),
-        queryClient.invalidateQueries({queryKey: dashboardQueryKeys.root}),
-      ]);
+      // The API also changes the rows the owner selected from the same merchant, so refetch every
+      // list and every other cached detail, not just the corrected row.
+      await invalidateBankDerivedData(queryClient, {exceptTransactionId: id});
     },
   });
 

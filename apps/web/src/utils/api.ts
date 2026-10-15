@@ -28,6 +28,10 @@ export class SessionChangedError extends Error {}
 /** The API refused the request until the email is verified; handled app-wide via /verify-email. */
 export class EmailNotVerifiedError extends HttpError {}
 
+/** Errors the query client handles app-wide with its own toast and redirect. */
+export const isAuthError = (error: unknown) =>
+  error instanceof SessionExpiredError || error instanceof EmailNotVerifiedError;
+
 /** Message the API's auth guard sends with a 403 for accounts that have not verified their email. */
 const EMAIL_NOT_VERIFIED_MESSAGE = 'Email not verified.';
 
