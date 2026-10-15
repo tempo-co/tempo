@@ -102,6 +102,8 @@ const FOLLOW_UP_JOB_OPTIONS = {
 	removeOnComplete: true,
 	removeOnFail: {age: 7 * 86_400, count: 100},
 } as const;
+// The queue connection retries forever while Redis is down, so a follow-up enqueue must not hold the request open.
+const FOLLOW_UP_ENQUEUE_TIMEOUT_MS = 2_000;
 const MAX_ERROR_LENGTH = 500;
 const CLAIMABLE_STATUSES = ['PENDING', 'FAILED'] as const;
 // PROCESSING rows belong to a worker and NOT_APPLICABLE rows are never categorized.
@@ -551,18 +553,31 @@ export class BankTransactionCategorizationService {
 		await this.applyManualCategoryToMerchant(accountId, merchantKey);
 	}
 
+	/**
+	 * Every failed correction gets its own job: follow-ups are idempotent and read the current choices, so an extra run
+	 * is harmless, while sharing a job id could drop a newer correction behind a running or exhausted job. The wait is
+	 * bounded; if Redis is down, the add still completes once the connection returns.
+	 */
 	private async enqueueManualCategoryFollowUp(accountId: string, merchantKey: string | null): Promise<void> {
 		if (!merchantKey) return;
-		const key = createHash('sha256').update(`${accountId}\n${merchantKey}`).digest('hex');
+		const added = this.queue.add(
+			APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB,
+			{accountId, merchantKey},
+			FOLLOW_UP_JOB_OPTIONS,
+		);
+		let timer: NodeJS.Timeout | undefined;
+		const timeout = new Promise<never>((_, reject) => {
+			timer = setTimeout(() => reject(new Error('EnqueueTimeout')), FOLLOW_UP_ENQUEUE_TIMEOUT_MS);
+		});
 		try {
-			// One waiting follow-up per owner and merchant is enough; it applies whatever the choices are when it runs.
-			await this.queue.add(
-				APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB,
-				{accountId, merchantKey},
-				{...FOLLOW_UP_JOB_OPTIONS, jobId: `manual-follow-up-${key}`},
-			);
+			await Promise.race([added, timeout]);
 		} catch (error) {
-			this.logger.warn(`Manual category follow-up enqueue failed: ${safeErrorName(error)}`);
+			added.catch(() => undefined);
+			this.logger.warn(
+				`Manual category follow-up enqueue failed: ${error instanceof Error ? error.message : safeErrorName(error)}`,
+			);
+		} finally {
+			clearTimeout(timer);
 		}
 	}
 

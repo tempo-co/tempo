@@ -1016,7 +1016,26 @@ describe('BankTransactionCategorizationService manual follow-up', () => {
 		const [name, data, opts] = queue.add.mock.calls[0];
 		expect(name).toBe(APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB);
 		expect(data).toEqual({accountId: 'account-1', merchantKey: 'EXPENSE:example shop'});
-		expect(opts).toMatchObject({attempts: 8, jobId: expect.stringMatching(/^manual-follow-up-[0-9a-f]{64}$/)});
+		expect(opts).toMatchObject({attempts: 8});
+		// No fixed job id: a retained failed or running job with the same id would swallow this one.
+		expect(opts).not.toHaveProperty('jobId');
+	});
+
+	it('does not hold the request open while Redis is unreachable', async () => {
+		jest.useFakeTimers();
+		try {
+			const queryBuilder = createUpdateQueryBuilder();
+			queryBuilder.getRawMany.mockRejectedValueOnce(new Error('connection lost'));
+			const {service, queue} = createService({queryBuilder});
+			queue.add.mockReturnValueOnce(new Promise(() => undefined));
+
+			const saved = service.setManualCategory('account-1', transaction(), 'SHOPPING');
+			await jest.advanceTimersByTimeAsync(2_000);
+
+			await expect(saved).resolves.toBe(true);
+		} finally {
+			jest.useRealTimers();
+		}
 	});
 
 	it('does not queue a retry when the follow-up succeeds', async () => {
