@@ -17,7 +17,5 @@ export type BalanceTrendPeriod = {
 export type BankBalanceTrend = {
   baseCurrency: string | null;
   interval: CashFlowInterval;
-  /** Each connected account and the day its history in Tempo starts. */
-  accounts: {id: string; since: string}[];
   periods: BalanceTrendPeriod[];
 };

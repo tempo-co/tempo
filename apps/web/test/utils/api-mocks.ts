@@ -32,7 +32,6 @@ export function mockCashFlow(page: Page) {
 const syntheticBalanceTrend = {
   baseCurrency: 'EUR',
   interval: 'month',
-  accounts: [{id: '00000000-0000-4000-8000-000000000001', since: '2026-07-01'}],
   periods: ['2026-07', '2026-08', '2026-09'].map((month, index) => ({
     start: `${month}-01`,
     end: `${month}-${month === '2026-09' ? '30' : '31'}`,

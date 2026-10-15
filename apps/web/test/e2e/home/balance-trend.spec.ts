@@ -67,10 +67,6 @@ async function mockAccounts(page: Page, periods = MONTHS) {
     fulfillJson(route, {
       baseCurrency: 'EUR',
       interval: new URL(route.request().url()).searchParams.get('interval'),
-      accounts: [
-        {id: CURRENT, since: '2026-07-02'},
-        {id: SAVINGS, since: '2026-08-05'},
-      ],
       periods,
     }),
   );
@@ -84,16 +80,11 @@ test('ends today on the live balances from the API', async ({page}) => {
   await expect(rows.last()).toContainText('Today');
 });
 
-test('states today’s total, the change since the first point and when accounts join', async ({
-  page,
-}) => {
+test('states today’s total and the change since the first point', async ({page}) => {
   await mockAccounts(page);
   await page.goto('/');
   await expect(card(page)).toContainText(
     '€3,100.00 today · +€1,400.00 (+140%) since end of July 2026',
-  );
-  await expect(card(page)).toContainText(
-    'Rainy day counts from August 2026, when its history in Tempo starts, and is left out of the change.',
   );
   await expect(card(page)).toContainText('Balance at the end of each month');
   await expect(
@@ -122,7 +113,6 @@ test('switches to weeks and years and fits a phone', async ({page}) => {
   await expect(card(page)).toContainText('Balance at the end of each week');
   await card(page).getByRole('radio', {name: 'Year'}).click();
   await expect(card(page)).toContainText('Balance at the end of each year');
-  await expect(card(page)).not.toContainText('counts from');
   await expectNoHorizontalOverflow(page);
 });
 

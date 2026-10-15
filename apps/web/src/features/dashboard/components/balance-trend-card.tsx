@@ -109,14 +109,6 @@ export function BalanceTrendCard({connections}: {connections: BankConnection[]})
             currency={loaded.baseCurrency}
             labels={labels}
           />
-          {interval !== 'year' && (
-            <LateAccounts
-              accounts={loaded.accounts}
-              periods={periods}
-              interval={interval}
-              labels={labels}
-            />
-          )}
           {withoutRate > 0 && (
             <p className='-mt-2 text-xs text-muted-foreground'>
               {withoutRate === 1 ? 'One point is' : `${withoutRate} points are`} left out until its
@@ -172,35 +164,6 @@ function Change({
         {percent !== null && ` (${difference >= 0 ? '+' : '−'}${percent}%)`}
       </span>{' '}
       <span className='whitespace-nowrap'>since {startName(first, interval)}</span>
-    </p>
-  );
-}
-
-/** Accounts whose history starts inside the window make the line jump; say so. */
-function LateAccounts({
-  accounts,
-  periods,
-  interval,
-  labels,
-}: {
-  accounts: {id: string; since: string}[];
-  periods: TotalPeriod[];
-  interval: CashFlowInterval;
-  labels: Map<string, string>;
-}) {
-  const late = accounts.filter(
-    ({since}) => since > periods[0].end && since <= periods[periods.length - 1].end,
-  );
-  if (late.length === 0) return null;
-  return (
-    <p className='-mt-2 text-xs text-muted-foreground'>
-      {late
-        .map(
-          ({id, since}) =>
-            `${labels.get(id) ?? 'An account'} counts from ${DATE_LABEL[interval](since)}`,
-        )
-        .join(' · ')}
-      , when its history in Tempo starts, and is left out of the change.
     </p>
   );
 }
