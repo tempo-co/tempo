@@ -122,6 +122,7 @@ test('switches to weeks and years and fits a phone', async ({page}) => {
   await expect(card(page)).toContainText('Balance at the end of each week');
   await card(page).getByRole('radio', {name: 'Year'}).click();
   await expect(card(page)).toContainText('Balance at the end of each year');
+  await expect(card(page)).not.toContainText('counts from');
   await expectNoHorizontalOverflow(page);
 });
 

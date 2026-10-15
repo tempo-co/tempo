@@ -109,12 +109,14 @@ export function BalanceTrendCard({connections}: {connections: BankConnection[]})
             currency={loaded.baseCurrency}
             labels={labels}
           />
-          <LateAccounts
-            accounts={loaded.accounts}
-            periods={periods}
-            interval={interval}
-            labels={labels}
-          />
+          {interval !== 'year' && (
+            <LateAccounts
+              accounts={loaded.accounts}
+              periods={periods}
+              interval={interval}
+              labels={labels}
+            />
+          )}
           {withoutRate > 0 && (
             <p className='-mt-2 text-xs text-muted-foreground'>
               {withoutRate === 1 ? 'One point is' : `${withoutRate} points are`} left out until its
