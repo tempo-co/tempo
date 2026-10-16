@@ -135,6 +135,13 @@ describe('OpenAiBankTransactionCategorizationProvider', () => {
 		expect(request.instructions).not.toContain(
 			'For a card payment with no merchantCategoryCode and no counterpartyName, do not guess a specific category',
 		);
+		expect(request.instructions).toContain(
+			"Follow the user's choice when the transaction resembles those examples.",
+		);
+		expect(request.instructions).toContain('also follow it when the amount differs from the examples');
+		expect(request.instructions).toContain(
+			'For a payee that is a person, or a broad business selling many unrelated kinds of products, follow it only when the transaction resembles the examples',
+		);
 		expect(request.input).not.toContain('test-secret-api-key');
 	});
 
