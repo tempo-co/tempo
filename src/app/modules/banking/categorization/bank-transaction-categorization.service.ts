@@ -912,6 +912,10 @@ export class BankTransactionCategorizationService {
 		}
 	}
 
+	/**
+	 * A Transportation guess from a bare card line needs evidence, unless the owner chose Transportation for this
+	 * merchant before; their own choice is that evidence.
+	 */
 	private normalizeStandardResult(
 		input: BankTransactionCategorizationInput | undefined,
 		result: BankTransactionCategorizationResult,
@@ -919,6 +923,7 @@ export class BankTransactionCategorizationService {
 		if (
 			input &&
 			result.category === 'TRANSPORTATION' &&
+			!input.previousManualCategories?.some(({category}) => category === 'TRANSPORTATION') &&
 			input.transactionType === 'CARD_PAYMENT' &&
 			!normalizeMerchantCategoryCode(input.merchantCategoryCode) &&
 			input.counterpartyName === null

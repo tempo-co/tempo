@@ -133,7 +133,7 @@ function createService({
 
 describe('BankTransactionCategorizationService provider behavior versions', () => {
 	it('versions sanitized transaction text separately from prior provider inputs', () => {
-		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v7');
+		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v8');
 		expect(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION).toBe(
 			'bank-transaction-categorization-web-search-v7',
 		);
@@ -465,6 +465,37 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(transaction.categoryStatus).toBe('COMPLETED');
 		expect(transaction.categoryConfidence).toBe('0');
 		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION);
+	});
+
+	it('keeps a Transportation answer from a bare card line when the owner chose Transportation for the merchant', async () => {
+		const transaction = createBankTransaction({
+			id: 'rail-ticket-machine',
+			amount: '-50.00',
+			counterpartyName: null,
+			merchantCategoryCode: null,
+			transactionType: 'CARD_PAYMENT',
+			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
+			merchantKey: 'EXPENSE:example rail',
+		});
+		const queryBuilder = createUpdateQueryBuilder();
+		queryBuilder.getRawMany.mockResolvedValueOnce([
+			{merchantKey: 'EXPENSE:example rail', category: 'TRANSPORTATION', count: 1},
+		] as never);
+		const {service, provider} = createService({
+			rows: [transaction],
+			queryBuilder,
+			webSearchEnabled: true,
+			providerResult: [{correlationId: transaction.id, category: 'TRANSPORTATION', confidence: 0.9}],
+		});
+
+		await service.processTransactionJob([transaction.id]);
+
+		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
+		expect(transaction).toMatchObject({
+			category: 'TRANSPORTATION',
+			categorySource: 'AI',
+			categoryConfidence: '0.9',
+		});
 	});
 
 	it('accepts web Transportation from the identity of a transport merchant', async () => {
