@@ -49,6 +49,7 @@ import {
 	BankTransactionCategorizationSource,
 	BankTransactionCategorizationStatus,
 	CLAIMABLE_CATEGORIZATION_STATUSES,
+	PreviousManualCategory,
 	isManualCategorySource,
 	notManualCategorySourceSql,
 } from './bank-transaction-categorization.types';
@@ -67,7 +68,6 @@ import {
 	ManualCategoryCounts,
 	ManualCategoryFollowUp,
 	REUSABLE_MANUAL_CATEGORIES,
-	getUnanimousCategory,
 	planManualCategoryFollowUp,
 	whereManualCategoryFollowUpCandidates,
 } from './manual-category-follow-up';
@@ -302,31 +302,26 @@ export class BankTransactionCategorizationService {
 		const claimedBatch = await this.getActiveClaimedTransactions(batch);
 		if (claimedBatch.length === 0) return;
 
-		// The user's own manual choices for the same merchant come before the model: a single consistent choice is
-		// applied directly, and mixed choices are passed to the model as context.
+		// The owner's manual choices for the same merchant are only a hint for the model, never applied on their own:
+		// one payee can receive different kinds of payments, such as rent and small shared costs. A rule applies only
+		// when the owner has no choices for the merchant.
 		const manualHistory = await this.loadManualCategoryHistory(claimedBatch);
 		const activeBatch: ClaimedTransaction[] = [];
-		const historyMatches: Promise<void>[] = [];
+		const ruleMatches: Promise<void>[] = [];
 		for (const claimed of claimedBatch) {
-			const counts = manualHistory.get(claimed.transaction.id);
-			const category = getUnanimousCategory(counts);
-			const ruleCategory = category ? null : getRuleCategory(claimed.transaction);
-			if (category) {
-				historyMatches.push(this.applyManualHistoryCategory(claimed, category));
-			} else if (ruleCategory) {
-				historyMatches.push(this.applyRuleCategory(claimed, ruleCategory));
+			const previousManualCategories = manualHistory.get(claimed.transaction.id);
+			const ruleCategory = previousManualCategories ? null : getRuleCategory(claimed.transaction);
+			if (ruleCategory) {
+				ruleMatches.push(this.applyRuleCategory(claimed, ruleCategory));
 			} else {
 				activeBatch.push(
-					counts
-						? {
-								...claimed,
-								input: {...claimed.input, previousManualCategories: toPreviousManualCategories(counts)},
-							}
+					previousManualCategories
+						? {...claimed, input: {...claimed.input, previousManualCategories}}
 						: claimed,
 				);
 			}
 		}
-		await Promise.all(historyMatches);
+		await Promise.all(ruleMatches);
 		if (activeBatch.length === 0) return;
 
 		const inputs = activeBatch.map(({input}) => input);
@@ -358,9 +353,12 @@ export class BankTransactionCategorizationService {
 		const webCandidates = inputs
 			.filter((input) => {
 				const category = standardResultById.get(input.correlationId)?.category;
+				// With the owner's own choices as a hint, a NEEDS_REVIEW or OTHER answer means the row does not resemble
+				// them; a web search on the payee name would only guess, so the row is left for the owner to review.
 				return (
 					activeCorrelationIds.has(input.correlationId) &&
 					webSearchEnabled &&
+					!input.previousManualCategories?.length &&
 					(category === 'OTHER' || category === 'NEEDS_REVIEW')
 				);
 			})
@@ -464,13 +462,13 @@ export class BankTransactionCategorizationService {
 	}
 
 	/**
-	 * Returns, per batch transaction id, the account owner's manual category counts for the same merchant. Batches
-	 * built by reconciliation can contain several accounts, so history is loaded and matched per account. A history
-	 * failure only disables reuse; the batch still goes to the model.
+	 * Returns, per batch transaction id, the account owner's manual choices for the same merchant as a model hint.
+	 * Batches built by reconciliation can contain several accounts, so history is loaded and matched per account. A
+	 * history failure only drops the hint; the batch still goes to the model.
 	 */
 	private async loadManualCategoryHistory(
 		batch: readonly ClaimedTransaction[],
-	): Promise<Map<string, ManualCategoryCounts>> {
+	): Promise<Map<string, readonly PreviousManualCategory[]>> {
 		const batchByAccount = new Map<string, {id: string; merchantKey: string}[]>();
 		for (const {transaction} of batch) {
 			const accountId = transaction.bankAccount?.bankConnection?.accountId;
@@ -479,15 +477,19 @@ export class BankTransactionCategorizationService {
 			batchByAccount.set(accountId, [...(batchByAccount.get(accountId) ?? []), {id, merchantKey}]);
 		}
 
-		const countsByTransaction = new Map<string, ManualCategoryCounts>();
+		const hintsByTransaction = new Map<string, readonly PreviousManualCategory[]>();
 		try {
 			await Promise.all(
 				[...batchByAccount].map(async ([accountId, entries]) => {
 					const merchantKeys = [...new Set(entries.map(({merchantKey}) => merchantKey))];
-					const history = await this.loadAccountManualCategoryCounts(accountId, merchantKeys);
+					const [history, examples] = await Promise.all([
+						this.loadAccountManualCategoryCounts(accountId, merchantKeys),
+						this.loadAccountManualCategoryExamples(accountId, merchantKeys),
+					]);
 					for (const {id, merchantKey} of entries) {
 						const counts = history.get(merchantKey);
-						if (counts) countsByTransaction.set(id, counts);
+						if (counts)
+							hintsByTransaction.set(id, toPreviousManualCategories(counts, examples.get(merchantKey)));
 					}
 				}),
 			);
@@ -495,7 +497,53 @@ export class BankTransactionCategorizationService {
 			this.logger.warn(`Manual category history lookup failed: ${safeErrorName(error)}`);
 			return new Map();
 		}
-		return countsByTransaction;
+		return hintsByTransaction;
+	}
+
+	/**
+	 * The amounts and dates of the owner's most recent manual choices per merchant and category, so the model can tell
+	 * apart different kinds of payments to the same payee. Uses the same eligibility rules as the counts.
+	 */
+	private async loadAccountManualCategoryExamples(
+		accountId: string,
+		merchantKeys: readonly string[],
+	): Promise<Map<string, Map<BankTransactionCategory, ManualCategoryExample[]>>> {
+		const date = 'COALESCE(transaction."transactionDate", transaction."bookingDate", transaction."valueDate")';
+		const rows = await this.repository
+			.createQueryBuilder('transaction')
+			.innerJoin('transaction.bankAccount', 'bankAccount')
+			.innerJoin('bankAccount.bankConnection', 'connection')
+			.select('transaction.merchantKey', 'merchantKey')
+			.addSelect('transaction.category', 'category')
+			.addSelect('transaction.amount', 'amount')
+			.addSelect(`${date}::text`, 'date')
+			.where('transaction."categorySource" = :manualSource', {manualSource: 'MANUAL'})
+			.andWhere('transaction.category IN (:...reusableCategories)', {
+				reusableCategories: REUSABLE_MANUAL_CATEGORIES,
+			})
+			.andWhere('transaction."ownTransferEvidence" IS NULL')
+			.andWhere('transaction."financialEventType" IS NULL')
+			.andWhere('transaction."merchantKey" IN (:...merchantKeys)', {merchantKeys})
+			.andWhere('connection."accountId" = :accountId', {accountId})
+			.orderBy(date, 'DESC', 'NULLS LAST')
+			.addOrderBy('transaction.id', 'DESC')
+			.getRawMany<{
+				merchantKey: string;
+				category: BankTransactionCategory;
+				amount: string;
+				date: string | null;
+			}>();
+
+		const examples = new Map<string, Map<BankTransactionCategory, ManualCategoryExample[]>>();
+		for (const {merchantKey, category, amount, date: exampleDate} of rows) {
+			const byCategory = examples.get(merchantKey) ?? new Map<BankTransactionCategory, ManualCategoryExample[]>();
+			const list = byCategory.get(category) ?? [];
+			if (list.length < MAX_MANUAL_CATEGORY_EXAMPLES)
+				list.push({amount: normalizeAmount(amount), date: exampleDate});
+			byCategory.set(category, list);
+			examples.set(merchantKey, byCategory);
+		}
+		return examples;
 	}
 
 	/**
@@ -697,10 +745,6 @@ export class BankTransactionCategorizationService {
 		if (ids.length > 0) await this.enqueueForTransactions(ids);
 	}
 
-	private applyManualHistoryCategory(claimed: ClaimedTransaction, category: BankTransactionCategory): Promise<void> {
-		return this.completeClaimed(claimed, this.historyCompletionValues(category), 'HISTORY');
-	}
-
 	/** Rule categories have no source, like own transfers: the owner did not choose them and no model guessed. */
 	private applyRuleCategory(claimed: ClaimedTransaction, category: BankTransactionCategory): Promise<void> {
 		return this.completeClaimed(
@@ -819,27 +863,27 @@ export class BankTransactionCategorizationService {
 		return (result.affected ?? 0) > 0;
 	}
 
+	/**
+	 * A row sent back to the model keeps its category when the call fails, as long as that category was given for the
+	 * same input; the row stays FAILED, so the job retry or the next start tries again. Other rows are cleared.
+	 */
 	private async markBatchFailed(batch: readonly ClaimedTransaction[], error: unknown): Promise<void> {
 		const safeMessage = this.safeFailureMessage(error);
 		await Promise.all(
 			batch.map(async ({transaction, inputHash}) => {
+				const keepCategory = transaction.category != null && transaction.categoryAppliedInputHash === inputHash;
+				const values = {
+					...(keepCategory ? {} : BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES),
+					categoryStatus: 'FAILED' as const,
+					categoryLastError: safeMessage,
+				};
 				const failed = await this.updateCategorizationWithGuard(
 					transaction.id,
 					inputHash,
-					{
-						...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-						categoryStatus: 'FAILED',
-						categoryUpdatedAt: new Date(),
-						categoryLastError: safeMessage,
-					},
+					{...values, categoryUpdatedAt: new Date()},
 					'PROCESSING',
 				);
-				if (failed)
-					this.applyLocalUpdate(transaction, {
-						...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-						categoryStatus: 'FAILED',
-						categoryLastError: safeMessage,
-					});
+				if (failed) this.applyLocalUpdate(transaction, values);
 			}),
 		);
 	}
@@ -967,12 +1011,23 @@ export class BankTransactionCategorizationService {
 	}
 }
 
+/** Most recent manual choices per category the model sees as examples. */
+const MAX_MANUAL_CATEGORY_EXAMPLES = 5;
+
+type ManualCategoryExample = PreviousManualCategory['recentExamples'][number];
+
 function toPreviousManualCategories(
 	counts: ManualCategoryCounts,
-): {category: BankTransactionCategory; count: number}[] {
+	examples: Map<BankTransactionCategory, ManualCategoryExample[]> | undefined,
+): PreviousManualCategory[] {
 	return [...counts]
 		.sort(
 			([leftCategory, left], [rightCategory, right]) => right - left || leftCategory.localeCompare(rightCategory),
 		)
-		.map(([category, count]) => ({category, count}));
+		.map(([category, count]) => ({category, count, recentExamples: examples?.get(category) ?? []}));
+}
+
+/** "-12.30000000" -> "-12.30": numeric columns come back with the full scale. */
+function normalizeAmount(amount: string): string {
+	return amount.replace(/(\.\d{2}\d*?)0+$/, '$1');
 }

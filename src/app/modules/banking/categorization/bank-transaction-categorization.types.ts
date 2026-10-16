@@ -13,7 +13,10 @@ export type BankTransactionCategorizationStatus = (typeof BANK_TRANSACTION_CATEG
 /** Statuses a categorization worker may claim a row from. */
 export const CLAIMABLE_CATEGORIZATION_STATUSES = ['PENDING', 'FAILED'] as const;
 
-/** `HISTORY` rows reuse the owner's own manual category for the same merchant instead of asking the model. */
+/**
+ * `HISTORY` rows took the owner's manual category for the same merchant because the owner selected them in a correction
+ * preview. Manual choices are otherwise only a hint for the model and never applied on their own.
+ */
 export const BANK_TRANSACTION_CATEGORIZATION_SOURCES = ['AI', 'HISTORY', 'MANUAL'] as const;
 export type BankTransactionCategorizationSource = (typeof BANK_TRANSACTION_CATEGORIZATION_SOURCES)[number];
 
@@ -45,8 +48,17 @@ export type BankTransactionCategorizationInput = {
 	bankTransactionDescription: string | null;
 	merchantCategoryCode: string | null;
 	remittanceInformation: string | null;
-	/** Categories the user chose manually for the same merchant, most frequent first. Not part of the input hash. */
-	previousManualCategories?: readonly {category: BankTransactionCategory; count: number}[];
+	/**
+	 * Categories the user chose manually for the same merchant, most frequent first, with the amounts and dates of their
+	 * most recent choices. Only a hint for the model; never applied without it. Not part of the input hash.
+	 */
+	previousManualCategories?: readonly PreviousManualCategory[];
+};
+
+export type PreviousManualCategory = {
+	category: BankTransactionCategory;
+	count: number;
+	recentExamples: readonly {amount: string; date: string | null}[];
 };
 
 export type BankTransactionCategorizationWebSearchInput = Pick<

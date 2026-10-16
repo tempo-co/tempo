@@ -4,9 +4,9 @@ import {CLAIMABLE_CATEGORIZATION_STATUSES, notManualCategorySourceSql} from './b
 import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from './bank-transaction-category';
 
 /**
- * What a manual correction does to the owner's other rows from the same merchant: `APPLY` sets the owner's single
- * consistent choice, `RECHECK` sends rows filled from history back to the model because the choices disagree or none
- * is left.
+ * What a manual correction does to the other rows from the same merchant that the owner selected in the preview:
+ * `APPLY` sets the owner's single consistent choice, `RECHECK` sends selected rows filled from history back to the
+ * model because the choices disagree or none is left. Rows the owner did not select never change.
  */
 export type ManualCategoryFollowUp = {action: 'APPLY'; category: BankTransactionCategory} | {action: 'RECHECK'};
 export type ManualCategoryFollowUpAction = ManualCategoryFollowUp['action'];

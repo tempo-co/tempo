@@ -7,7 +7,6 @@ import {Repository} from 'typeorm';
 import {ConfigurationService} from '@core/config/config.service';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {
-	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
 	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
 	BANK_TRANSACTION_CATEGORIZATION_PROVIDER_NAME,
 	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
@@ -161,7 +160,7 @@ describe('Bank transaction categorization integration', () => {
 		});
 	});
 
-	it("reuses the account owner's manual category for the same card merchant without calling the provider", async () => {
+	it("never applies the owner's manual category to another row; it is only a hint for the model", async () => {
 		// Both accounts' rows go through one batch, as reconciliation does across users.
 		const categorizationService = app.get(BankTransactionCategorizationService);
 		await categorizationService.enqueueForTransactions([
@@ -169,35 +168,76 @@ describe('Bank transaction categorization integration', () => {
 			CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID,
 		]);
 
-		const response = await waitFor(
-			() => verifiedAgent.get(`/bank-transactions/${CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID}`),
-			(value) => value.status === 200 && value.body.categoryStatus === 'COMPLETED',
+		const [repeatRow, otherAccountRow] = await Promise.all(
+			[CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID, CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID].map(
+				(id) =>
+					waitFor(
+						() => bankTransactionRepository.findOneByOrFail({id}),
+						(value) => value.categoryStatus === 'COMPLETED',
+					),
+			),
 		);
+		for (const row of [repeatRow, otherAccountRow]) {
+			expect(row).toMatchObject({category: AI_CATEGORY, categorySource: 'AI'});
+			expect(row.categoryProvider).not.toBe(BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER);
+		}
 
-		expect(response.body).toMatchObject({category: 'TRANSPORTATION', categorySource: 'HISTORY'});
-		const otherAccountRow = await waitFor(
-			() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID}),
-			(value) => value.categoryStatus === 'COMPLETED',
+		// Each row's hint carries only its own owner's choices, with the amount and date of each.
+		const inputs = new Map(
+			categorizeSpy.mock.calls.flatMap(([transactions]) =>
+				transactions.map((input) => [input.correlationId, input]),
+			),
 		);
-		expect(otherAccountRow).toMatchObject({
-			category: 'ENTERTAINMENT',
-			categorySource: 'HISTORY',
-			categoryProvider: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
-		});
-		expect(categorizeSpy).not.toHaveBeenCalled();
-		expect(categorizeWithWebSearchSpy).not.toHaveBeenCalled();
-		const persisted = await bankTransactionRepository.findOneByOrFail({
-			id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
-		});
-		expect(persisted).toMatchObject({
-			categoryProvider: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
-			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
-			categoryModel: null,
-		});
+		expect(inputs.get(CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID)?.previousManualCategories).toEqual([
+			{category: 'TRANSPORTATION', count: 1, recentExamples: [{amount: '-20.00', date: '2026-09-04'}]},
+		]);
+		expect(inputs.get(CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID)?.previousManualCategories).toEqual([
+			{category: 'ENTERTAINMENT', count: 1, recentExamples: [{amount: '-20.00', date: '2026-09-04'}]},
+		]);
 	});
 
-	it("applies a previewed manual correction to the owner's history-filled rows from the same merchant", async () => {
-		// The previous test filled the repeat row from the owner's manual TRANSPORTATION choice.
+	it('changes no other row when a correction is saved without selecting it', async () => {
+		// The previous test left the repeat row categorized by the model.
+		await verifiedAgent
+			.patch(`/bank-transactions/${CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID}/category`)
+			.send({category: 'TRAVEL'})
+			.expect(200);
+
+		const sibling = await bankTransactionRepository.findOneByOrFail({
+			id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
+		});
+		expect(sibling).toMatchObject({category: AI_CATEGORY, categorySource: 'AI', categoryStatus: 'COMPLETED'});
+		expect(categorizeSpy).not.toHaveBeenCalled();
+
+		// When the sibling is categorized again, as a newly synced row would be, the model decides; the owner's TRAVEL
+		// choice is only its hint and is not copied.
+		await bankTransactionRepository.update(
+			{id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID},
+			{categoryStatus: 'PENDING'},
+		);
+		await app
+			.get(BankTransactionCategorizationService)
+			.enqueueForTransactions([CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID]);
+		const recategorized = await waitFor(
+			() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID}),
+			(value) => value.categoryStatus === 'COMPLETED',
+		);
+		expect(recategorized).toMatchObject({category: AI_CATEGORY, categorySource: 'AI'});
+		expect(recategorized.categoryProvider).not.toBe(BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER);
+		expect(categorizeSpy).toHaveBeenCalledTimes(1);
+		expect(categorizeSpy.mock.calls[0][0][0].previousManualCategories).toEqual([
+			{category: 'TRAVEL', count: 1, recentExamples: [{amount: '-20.00', date: '2026-09-04'}]},
+		]);
+		categorizeSpy.mockClear();
+
+		// Put the owner's original choice back for the next test.
+		await verifiedAgent
+			.patch(`/bank-transactions/${CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID}/category`)
+			.send({category: 'TRANSPORTATION'})
+			.expect(200);
+	});
+
+	it('applies a previewed manual correction only to the rows the owner selected', async () => {
 		const preview = await verifiedAgent
 			.get(`/bank-transactions/${CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID}/category-impact`)
 			.query({category: 'TRAVEL'})
@@ -206,8 +246,8 @@ describe('Bank transaction categorization integration', () => {
 		expect(preview.body.transactions).toEqual([
 			expect.objectContaining({
 				id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
-				category: 'TRANSPORTATION',
-				categorySource: 'HISTORY',
+				category: AI_CATEGORY,
+				categorySource: 'AI',
 			}),
 		]);
 
@@ -224,7 +264,8 @@ describe('Bank transaction categorization integration', () => {
 		const otherAccountRow = await bankTransactionRepository.findOneByOrFail({
 			id: CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID,
 		});
-		expect(otherAccountRow.category).toBe('ENTERTAINMENT');
+		// The other account's row keeps what the model gave it in the first test.
+		expect(otherAccountRow).toMatchObject({category: AI_CATEGORY, categorySource: 'AI'});
 		expect(categorizeSpy).not.toHaveBeenCalled();
 	});
 

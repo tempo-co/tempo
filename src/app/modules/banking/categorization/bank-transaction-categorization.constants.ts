@@ -1,5 +1,6 @@
-export const BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION = 'bank-transaction-categorization-v6';
-export const BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION = 'bank-transaction-manual-history-v1';
+export const BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION = 'bank-transaction-categorization-v7';
+/** Only rows the owner selected in a correction preview; v1 rows were also filled automatically. */
+export const BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION = 'bank-transaction-manual-follow-up-v2';
 export const BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER = 'manual-history';
 export const BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION =
 	'bank-transaction-categorization-web-search-v7';
