@@ -13,7 +13,7 @@ import {cn} from '@/utils/cn';
 import {useGetBankTransactionCashFlow} from '../api/use-get-bank-transaction-cash-flow';
 import type {CashFlowInterval, CashFlowPeriod} from '../types/bank-transaction-cash-flow';
 import {axisFormatter, axisTicks} from '../utils/chart-axis';
-import {cashFlowDrill, flowDrill, parseCalendarDate} from '../utils/drill-links';
+import {cashFlowDrill, parseCalendarDate} from '../utils/drill-links';
 import {formatMoney, formatWholeMoney, toCents} from '../utils/money';
 import {currentMonth, formatMonth, localDate, monthDates, shiftMonth} from '../utils/month';
 import {MONTHS_SHOWN, latestWindow, shownWeeks} from '../utils/period-window';
@@ -82,13 +82,15 @@ export function CashFlowCard({month}: {month: string}) {
   const shown = interval === 'week' ? shownWeeks(periods, isMobile) : periods;
 
   return (
-    <Card className='@container grid min-w-0 gap-5 p-5 sm:p-6' data-testid='cash-flow'>
-      <header className='flex flex-wrap items-start justify-between gap-x-6 gap-y-3'>
-        <div className='min-w-0'>
-          <h2 className='text-card-title'>Cash flow</h2>
-          {loaded && <Averages periods={shown} noun={interval} currency={loaded.baseCurrency} />}
+    <Card className='@container grid min-w-0 gap-4 p-5 sm:p-6' data-testid='cash-flow'>
+      {/* The title and switch share the first row; the summary spans the card below them. */}
+      <header className='grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2.5'>
+        <h2 className='text-card-title'>Cash flow</h2>
+        {/* Overhangs the title row so the title sits where it does on every other card. */}
+        <div className='-my-1.5'>
+          <IntervalToggle value={interval} onChange={setGrouping} label='Group cash flow by' />
         </div>
-        <IntervalToggle value={interval} onChange={setGrouping} label='Group cash flow by' />
+        {loaded && <Averages periods={shown} interval={interval} currency={loaded.baseCurrency} />}
       </header>
       {isError && !loaded ? (
         <div className='grid justify-items-start gap-3'>
@@ -102,111 +104,69 @@ export function CashFlowCard({month}: {month: string}) {
       ) : shown.length === 0 ? (
         <p className='text-sm text-muted-foreground'>No synced transactions in this period yet.</p>
       ) : (
-        <>
-          <CashFlowChart
-            periods={shown}
-            interval={interval}
-            selectedMonth={month}
-            currency={loaded.baseCurrency}
-          />
-          {interval === 'month' && (
-            <SelectedMonth
-              period={loaded.periods.find((period) => monthOf(period) === month)}
-              currency={loaded.baseCurrency}
-            />
-          )}
-        </>
+        <CashFlowChart
+          periods={shown}
+          interval={interval}
+          selectedMonth={month}
+          currency={loaded.baseCurrency}
+        />
       )}
     </Card>
   );
 }
 
-/** The selected month's totals, each linking to exactly the rows behind it. */
-function SelectedMonth({
-  period,
-  currency,
-}: {
-  period: CashFlowPeriod | undefined;
-  currency: string | null;
-}) {
-  if (!period) return null;
-  const net = toCents(period.net);
-  return (
-    <dl
-      className='-mt-1 flex flex-wrap gap-x-6 gap-y-1 text-sm'
-      data-testid='cash-flow-selected-month'
-    >
-      {(
-        [
-          ['SPENDING', `${formatMonth(monthOf(period))} spent`, period.spending],
-          ['INCOME', 'Income', period.income],
-        ] as const
-      ).map(([flow, label, amount]) => (
-        <div key={flow} className='flex items-baseline gap-1.5'>
-          <dt className='text-muted-foreground'>{label}</dt>
-          <dd>
-            <Link
-              to='/bank-transactions'
-              search={flowDrill(flow, period.start, period.end, true)}
-              className='numeric font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
-            >
-              {formatMoney(amount, currency)}
-            </Link>
-          </dd>
-        </div>
-      ))}
-      <div className='flex items-baseline gap-1.5'>
-        <dt className='text-muted-foreground'>{net < 0 ? 'Overspent' : 'Kept'}</dt>
-        <dd className={cn('numeric font-medium', net > 0 && 'text-success')}>
-          {formatMoney(Math.abs(net) / 100, currency)}
-        </dd>
-      </div>
-    </dl>
-  );
+/** "21 Apr – 12 Oct", "Nov 2025 – Sep 2026" or "2022–2025": the full periods the averages cover. */
+function formatSpan(first: CashFlowPeriod, last: CashFlowPeriod, interval: CashFlowInterval) {
+  if (interval === 'year') return `${first.start.slice(0, 4)}–${last.start.slice(0, 4)}`;
+  const pattern =
+    interval === 'month'
+      ? 'MMM yyyy'
+      : first.start.slice(0, 4) === last.end.slice(0, 4)
+        ? 'd MMM'
+        : 'd MMM yyyy';
+  return `${format(day(first.start), pattern)} – ${format(day(last.end), pattern)}`;
 }
 
 /** Averages over complete periods only; a running period is still filling in. */
 function Averages({
   periods,
-  noun,
+  interval,
   currency,
 }: {
   periods: CashFlowPeriod[];
-  noun: string;
+  interval: CashFlowInterval;
   currency: string | null;
 }) {
   const complete = periods.filter((period) => period.complete);
   // A single full period is not an average.
   if (complete.length < 2) return null;
-  const sum = (key: 'spending' | 'income') =>
-    complete.reduce((total, period) => total + toCents(period[key]), 0);
-  const spent = sum('spending');
-  const earned = sum('income');
-  const saved = earned - spent;
-  const rate = earned > 0 ? Math.round((saved / earned) * 100) : null;
+  const money = moneyFor(interval, currency);
+  // Rounded to what is shown (whole euros for years), so spent and kept add up to earned.
+  const unit = interval === 'year' ? 100 : 1;
+  const average = (key: 'spending' | 'income') =>
+    Math.round(
+      complete.reduce((total, period) => total + toCents(period[key]), 0) / complete.length / unit,
+    ) * unit;
+  const spent = average('spending');
+  const earned = average('income');
+  const kept = earned - spent;
   return (
-    <p className='mt-1 text-xs text-muted-foreground'>
-      Average {noun} ({complete.length} full {noun}s):{' '}
-      <span className='numeric font-medium text-foreground'>
-        {formatMoney(spent / complete.length / 100, currency)}
-      </span>{' '}
-      spent
-      {rate !== null && (
-        <>
-          {' · '}
-          <span className='whitespace-nowrap'>
-            <span
-              className={cn(
-                'font-medium tabular-nums',
-                saved > 0 ? 'text-success' : 'text-foreground',
-              )}
-            >
-              {Math.abs(rate)}%
-            </span>{' '}
-            of income {saved >= 0 ? 'kept' : 'overspent'}
-          </span>
-        </>
-      )}
+    <p className='col-span-2 text-xs text-muted-foreground'>
+      Per {interval}, {formatSpan(complete[0], complete[complete.length - 1], interval)}:{' '}
+      <span className='whitespace-nowrap'>
+        <span className='numeric font-medium text-foreground'>{money(spent / 100)}</span> spent
+      </span>
+      {' · '}
+      <span className='whitespace-nowrap'>
+        <span className='numeric font-medium text-foreground'>{money(earned / 100)}</span> earned
+      </span>
+      {' · '}
+      <span className='whitespace-nowrap'>
+        <span className={cn('numeric font-medium', kept > 0 ? 'text-success' : 'text-foreground')}>
+          {money(Math.abs(kept) / 100)}
+        </span>{' '}
+        {kept >= 0 ? 'kept' : 'overspent'}
+      </span>
     </p>
   );
 }

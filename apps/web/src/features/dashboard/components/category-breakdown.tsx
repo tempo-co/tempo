@@ -38,7 +38,7 @@ export function CategoryBreakdown({summary, isCurrentMonth}: CategoryBreakdownPr
   );
 
   return (
-    <Card className='grid min-w-0 gap-6 p-5 sm:p-6' data-testid='category-breakdown'>
+    <Card className='grid min-w-0 gap-4 p-5 sm:p-6' data-testid='category-breakdown'>
       <div>
         <h2 className='text-card-title'>Where it went</h2>
         {summary.baseline.months.length > 0 && (
@@ -109,7 +109,7 @@ export function CategoryBreakdown({summary, isCurrentMonth}: CategoryBreakdownPr
               through,
               hasMissing,
             )}
-            className='w-fit text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+            className='-my-3 inline-flex min-h-11 w-fit items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
           >
             {remaining.length} more {remaining.length === 1 ? 'category' : 'categories'}{' '}
             <span aria-hidden='true'>→</span>

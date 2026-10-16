@@ -27,11 +27,16 @@ function formatDaysLeft(daysLeft: number) {
 export function HomeSyncStatus({connections}: {connections: BankConnection[]}) {
   const {problems, expiringConsents, oldestSyncedAt} = getHomeSyncStatus(connections);
   const needsReconnect = problems.some(isReauthorizationRequired);
+  // Only problems earn space on a phone; an all-clear line just pushes Home down.
+  const allClear = problems.length === 0 && expiringConsents.length === 0;
 
   return (
     <div
       data-testid='home-sync-status'
-      className='flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground'
+      className={cn(
+        'flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground',
+        allClear && 'max-md:hidden',
+      )}
     >
       {problems.length > 0 ? (
         <>

@@ -203,6 +203,30 @@ for (const width of [1440, 390]) {
   }
 }
 
+for (const width of [1440, 390]) {
+  test(`card titles sit at one offset and balances align with bank names at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({width, height: 1000});
+    await page.goto('/?month=2026-09');
+    await expect(
+      page.getByTestId('cash-flow').locator('.recharts-bar-rectangle').first(),
+    ).toBeVisible();
+    const offsets = await page.locator('main h2').evaluateAll((titles) =>
+      titles.map((title) => {
+        const card = title.closest('.rounded-card')!;
+        return Math.round(title.getBoundingClientRect().top - card.getBoundingClientRect().top);
+      }),
+    );
+    expect(offsets.length).toBeGreaterThan(3);
+    expect(new Set(offsets).size).toBe(1);
+    const row = page.getByRole('region', {name: 'Balances'}).locator('li').first();
+    const bank = await boxOf(row.getByText('Example Bank', {exact: true}));
+    const amount = await boxOf(row.getByText('€100.00'));
+    expect(Math.abs(amount.y - bank.y)).toBeLessThanOrEqual(1);
+  });
+}
+
 test('recent requests and shows only five transactions', async ({page}) => {
   const request = page.waitForRequest((request) => request.url().includes('/bank-transactions?'));
   await page.goto('/?month=2026-09');

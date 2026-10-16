@@ -38,7 +38,8 @@ export function BalancesList({
   );
   return (
     <Card role='region' aria-label='Balances' className='grid min-w-0 gap-4 p-5 sm:p-6'>
-      <header className='-my-3 flex flex-wrap items-center justify-between gap-x-2'>
+      {/* The 44px link overhangs the title row so the title and content line up with other cards. */}
+      <header className='-my-2.5 flex flex-wrap items-center justify-between gap-x-2'>
         <h2 className='text-card-title'>
           Balances{' '}
           {!isCurrentMonth && (
@@ -59,7 +60,7 @@ export function BalancesList({
             <li key={account.id}>
               <Link
                 to='/bank-connections'
-                className='grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-3 py-3 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+                className='grid gap-y-1 px-3 py-3 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
               >
                 <div className='min-w-0'>
                   <div className='flex items-center gap-3'>
@@ -76,8 +77,21 @@ export function BalancesList({
                       imageClassName='p-1.5'
                       testId='bank-balance-logo'
                     />
-                    <div className='min-w-0'>
-                      <p className='text-sm font-medium break-words'>{connection.aspspName}</p>
+                    <div className='min-w-0 flex-1'>
+                      {/* The amount shares the bank name's line, beside the logo's centred text. */}
+                      <div className='flex items-baseline justify-between gap-3 text-sm'>
+                        <p className='min-w-0 font-medium break-words'>{connection.aspspName}</p>
+                        <p
+                          className={cn(
+                            'shrink-0 text-right numeric',
+                            stale && 'text-muted-foreground',
+                          )}
+                        >
+                          {account.currentBalanceAmount == null
+                            ? 'No balance yet'
+                            : formatMoney(account.currentBalanceAmount, account.currency)}
+                        </p>
+                      </div>
                       <p className='mt-0.5 text-xs break-words text-muted-foreground'>
                         {[account.name, account.alias].filter(Boolean).join(' · ') ||
                           'Bank account'}
@@ -90,18 +104,11 @@ export function BalancesList({
                     </p>
                   )}
                 </div>
-                <div className={cn('text-right text-sm', stale && 'text-muted-foreground')}>
-                  <p className='text-right numeric'>
-                    {account.currentBalanceAmount == null
-                      ? 'No balance yet'
-                      : formatMoney(account.currentBalanceAmount, account.currency)}
-                  </p>
-                </div>
                 {account.currency !== baseCurrency &&
                   account.currentBalanceInBaseCurrency != null &&
                   toCents(account.currentBalanceInBaseCurrency) !== 0 &&
                   baseCurrency && (
-                    <p className='col-span-2 text-right text-xs text-muted-foreground'>
+                    <p className='text-right text-xs text-muted-foreground'>
                       ≈{' '}
                       <span className='numeric'>
                         {formatMoney(account.currentBalanceInBaseCurrency, baseCurrency)}

@@ -6,7 +6,7 @@ import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {API_URL, expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
-import {expectNoHorizontalOverflow} from '../../utils/layout';
+import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE});
 test.beforeEach(async ({page}) => {
@@ -50,10 +50,6 @@ test('months match the monthly summary and select the month for the rest of Home
   await page.goto('/?month=2026-08');
   const august = table(page, 'month').getByRole('row', {name: /August 2026/, includeHidden: true});
   await expect(august).toContainText(spent);
-  await expect(page.getByTestId('cash-flow-selected-month')).toContainText(spent);
-
-  // Income and what was left for the selected month sit under the chart.
-  await expect(page.getByTestId('cash-flow-selected-month')).toContainText('August 2026 spent');
 
   await page.goto('/');
   await openRow(page, 'month', 'August 2026');
@@ -108,8 +104,55 @@ test('weeks average full weeks only and mark the running week', async ({page}) =
   );
   await page.goto('/');
   await groupBy(page, 'Week');
-  await expect(card(page)).toContainText('Average week (4 full weeks): €262.50 spent');
+  await expect(card(page)).toContainText(
+    'Per week, 31 Aug – 27 Sep: €262.50 spent · €0.00 earned · €262.50 overspent',
+  );
   await expect(card(page)).toContainText('This week so far');
+});
+
+test('month averages name their span across a year boundary', async ({page}) => {
+  await page.route('**/bank-transactions/cash-flow**', (route) =>
+    fulfillJson(route, {
+      baseCurrency: 'EUR',
+      interval: 'month',
+      periods: [
+        {...week('2025-11-01', '2025-11-30', '1000.00'), income: '1500.00'},
+        {...week('2025-12-01', '2025-12-31', '1400.00'), income: '1500.00'},
+        {...week('2026-01-01', '2026-01-31', '1100.00'), income: '1500.00'},
+        {...week('2026-02-01', '2026-02-10', '300.00', false), income: '1500.00'},
+      ],
+    }),
+  );
+  await page.goto('/');
+  await expect(card(page)).toContainText(
+    'Per month, Nov 2025 – Jan 2026: €1,166.67 spent · €1,500.00 earned · €333.33 kept',
+  );
+});
+
+test('a long summary wraps under the switch instead of pushing it below the title', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 390, height: 844});
+  await page.route('**/bank-transactions/cash-flow**', (route) =>
+    fulfillJson(route, {
+      baseCurrency: 'EUR',
+      interval: 'month',
+      periods: [
+        {...week('2025-11-01', '2025-11-30', '2777.46'), income: '2742.65'},
+        {...week('2025-12-01', '2025-12-31', '2777.46'), income: '2742.65'},
+        {...week('2026-01-01', '2026-01-10', '300.00', false), income: '0.00'},
+      ],
+    }),
+  );
+  await page.goto('/');
+  const summary = card(page).getByText(/^Per month/);
+  await expect(summary).toBeVisible();
+  const title = await boxOf(card(page).getByRole('heading', {name: 'Cash flow'}));
+  const toggle = await boxOf(card(page).getByRole('radiogroup', {name: 'Group cash flow by'}));
+  // The switch shares the title's row, and the summary starts below both.
+  expect(toggle.y).toBeLessThan(title.y + title.height);
+  expect(toggle.y + toggle.height).toBeGreaterThan(title.y);
+  expect((await boxOf(summary)).y).toBeGreaterThanOrEqual(toggle.y + toggle.height);
 });
 
 test('years drop cents and mark partial years', async ({page}) => {
@@ -132,7 +175,7 @@ test('years drop cents and mark partial years', async ({page}) => {
   ).toContainText('€35,400');
   await expect(card(page)).toContainText('Partial period');
   // One full year is not an average.
-  await expect(card(page)).not.toContainText('Average year');
+  await expect(card(page)).not.toContainText('Per year');
   await expect(card(page).locator('.recharts-yAxis-tick-labels')).toContainText('€');
   await expectNoHorizontalOverflow(page);
 });

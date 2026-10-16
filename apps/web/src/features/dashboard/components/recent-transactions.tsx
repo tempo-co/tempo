@@ -30,7 +30,8 @@ export function RecentTransactions({
   const title = isCurrentMonth ? 'Recent' : `Latest in ${formatMonth(month)}`;
   return (
     <Card role='region' aria-label={title} className='grid min-w-0 gap-4 p-5 sm:p-6'>
-      <header className='-my-3 flex flex-wrap items-center justify-between gap-x-2'>
+      {/* The 44px link overhangs the title row so the title and content line up with other cards. */}
+      <header className='-my-2.5 flex flex-wrap items-center justify-between gap-x-2'>
         <h2 className='text-card-title'>{title}</h2>
         <Link
           to='/bank-transactions'

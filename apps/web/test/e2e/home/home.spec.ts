@@ -67,6 +67,13 @@ test.describe('Home', () => {
     await expect(homePage.syncStatus).toHaveText('Your bank synced about 1 month ago');
   });
 
+  test('leaves out the all-synced line on a phone', async ({homePage, page}) => {
+    await page.setViewportSize({width: 390, height: 844});
+    await page.goto('/');
+    await expect(homePage.monthHeading).toBeVisible();
+    await expect(homePage.syncStatus).toBeHidden();
+  });
+
   test('warns about consent that ends within a week', async ({page, homePage}) => {
     await transformBankConnections(page, (connections: BankConnection[]) =>
       connections.map((connection) => ({

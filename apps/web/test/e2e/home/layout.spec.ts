@@ -117,7 +117,8 @@ for (const {width, theme} of layouts) {
     const firstBox = await boxOf(firstCategory);
     const cardBox = await boxOf(categories);
     const lastBox = await boxOf(lastRow);
-    expect(firstBox.y - (headerBox.y + headerBox.height)).toBeGreaterThanOrEqual(20);
+    // Every Home card leaves the same 16px between its header and content.
+    expect(firstBox.y - (headerBox.y + headerBox.height)).toBeGreaterThanOrEqual(16);
     expect(cardBox.y + cardBox.height - (lastBox.y + lastBox.height)).toBeGreaterThanOrEqual(20);
 
     for (const link of [

@@ -173,7 +173,7 @@ for (const mobile of [false, true]) {
   }) => {
     await page.setViewportSize({width: mobile ? 390 : 1440, height: 900});
     await page.goto('/?month=2026-08');
-    await page.getByTestId('cash-flow-selected-month').getByRole('link').first().click();
+    await page.getByTestId('category-breakdown').getByRole('link').first().click();
     await expect(page).toHaveURL(/bank-transactions/);
     const bookingDate = new URL(page.url()).searchParams.get('bookingDate');
     if (mobile) await page.getByTestId('bank-transaction-mobile-filters-trigger').click();

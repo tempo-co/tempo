@@ -34,18 +34,16 @@ const DATE_LABEL: Record<CashFlowInterval, (date: string) => string> = {
   week: (date) => format(day(date), 'd MMM'),
 };
 
-/** Below this, a percentage change says more about the small start than about the money. */
-const MIN_PERCENT_BASE_CENTS = 100_00;
-
 /** "31 Aug 2026" for a past period's end; "today" while it is running. */
 function pointName(period: BalanceTrendPeriod) {
   return period.complete ? format(day(period.end), 'd MMM yyyy') : 'Today';
 }
 
+/** "on 26 Apr", "at the end of November 2025" or "at the end of 2021". */
 function startName(period: BalanceTrendPeriod, interval: CashFlowInterval) {
   return interval === 'week'
-    ? DATE_LABEL.week(period.end)
-    : `end of ${DATE_LABEL[interval](period.start)}`;
+    ? `on ${DATE_LABEL.week(period.end)}`
+    : `at the end of ${DATE_LABEL[interval](period.start)}`;
 }
 
 /**
@@ -74,15 +72,17 @@ export function BalanceTrendCard({connections}: {connections: BankConnection[]})
   );
 
   return (
-    <Card className='@container grid min-w-0 gap-5 p-5 sm:p-6' data-testid='balance-trend'>
-      <header className='flex flex-wrap items-start justify-between gap-x-6 gap-y-3'>
-        <div className='min-w-0'>
-          <h2 className='text-card-title'>Total balance</h2>
-          {loaded && periods.length > 1 && (
-            <Change periods={periods} interval={interval} currency={loaded.baseCurrency} />
-          )}
+    <Card className='@container grid min-w-0 gap-4 p-5 sm:p-6' data-testid='balance-trend'>
+      {/* The title and switch share the first row; the summary spans the card below them. */}
+      <header className='grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2.5'>
+        <h2 className='text-card-title'>Total balance</h2>
+        {/* Overhangs the title row so the title sits where it does on every other card. */}
+        <div className='-my-1.5'>
+          <IntervalToggle value={interval} onChange={setGrouping} label='Show total balance by' />
         </div>
-        <IntervalToggle value={interval} onChange={setGrouping} label='Show total balance by' />
+        {loaded && periods.length > 1 && (
+          <Change periods={periods} interval={interval} currency={loaded.baseCurrency} />
+        )}
       </header>
       {isError && !loaded ? (
         <div className='grid justify-items-start gap-3'>
@@ -121,7 +121,7 @@ export function BalanceTrendCard({connections}: {connections: BankConnection[]})
   );
 }
 
-/** The latest total and how far it moved since the first point shown. */
+/** The latest total and how far the line moved since its first point. */
 function Change({
   periods,
   interval,
@@ -133,34 +133,29 @@ function Change({
 }) {
   const first = periods[0];
   const last = periods[periods.length - 1];
-  // Only accounts already counted at the first point, so an account joining is not growth.
-  const held = new Set(
-    first.accounts.filter((account) => account.balance !== null).map((account) => account.id),
-  );
-  const sumHeld = (period: BalanceTrendPeriod) =>
-    period.accounts.reduce(
-      (sum, account) =>
-        held.has(account.id) && account.balance !== null ? sum + toCents(account.balance) : sum,
-      0,
-    );
-  const difference = sumHeld(last) - sumHeld(first);
-  const base = Math.abs(sumHeld(first));
-  const percent =
-    base >= MIN_PERCENT_BASE_CENTS ? Math.round((Math.abs(difference) / base) * 100) : null;
+  const difference = toCents(last.total) - toCents(first.total);
   return (
-    <p className='mt-1 text-xs text-muted-foreground'>
+    <p className='col-span-2 text-xs text-muted-foreground'>
       <span className='numeric font-medium text-foreground'>
         {formatMoney(last.total, currency)}
       </span>{' '}
-      {last.complete ? `on ${pointName(last)}` : 'today'} ·{' '}
-      <span
-        className={cn('numeric font-medium', difference > 0 ? 'text-success' : 'text-foreground')}
-      >
-        {difference >= 0 ? '+' : '−'}
-        {formatMoney(Math.abs(difference) / 100, currency)}
-        {percent !== null && ` (${difference >= 0 ? '+' : '−'}${percent}%)`}
-      </span>{' '}
-      <span className='whitespace-nowrap'>since {startName(first, interval)}</span>
+      {last.complete ? `on ${pointName(last)}` : 'now'} ·{' '}
+      {difference === 0 ? (
+        'the same as'
+      ) : (
+        <>
+          <span
+            className={cn(
+              'numeric font-medium',
+              difference > 0 ? 'text-success' : 'text-foreground',
+            )}
+          >
+            {formatMoney(Math.abs(difference) / 100, currency)}
+          </span>{' '}
+          {difference > 0 ? 'more than' : 'less than'}
+        </>
+      )}{' '}
+      <span className='whitespace-nowrap'>{startName(first, interval)}</span>
     </p>
   );
 }
