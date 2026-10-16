@@ -923,7 +923,7 @@ export class BankTransactionCategorizationService {
 		if (
 			input &&
 			result.category === 'TRANSPORTATION' &&
-			!input.previousManualCategories?.some(({category}) => category === 'TRANSPORTATION') &&
+			!ownerMostlyChoseTransportation(input) &&
 			input.transactionType === 'CARD_PAYMENT' &&
 			!normalizeMerchantCategoryCode(input.merchantCategoryCode) &&
 			input.counterpartyName === null
@@ -1018,6 +1018,12 @@ export class BankTransactionCategorizationService {
 
 /** Most recent manual choices per category the model sees as examples. */
 const MAX_MANUAL_CATEGORY_EXAMPLES = 5;
+
+/** The owner's history is sorted by count, so Transportation must be first and not tied with another category. */
+function ownerMostlyChoseTransportation(input: BankTransactionCategorizationInput): boolean {
+	const [first, second] = input.previousManualCategories ?? [];
+	return first?.category === 'TRANSPORTATION' && (second === undefined || second.count < first.count);
+}
 
 type ManualCategoryExample = PreviousManualCategory['recentExamples'][number];
 

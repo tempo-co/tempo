@@ -498,6 +498,31 @@ describe('BankTransactionCategorizationService worker', () => {
 		});
 	});
 
+	it('still holds back a bare-card Transportation answer when the owner mostly chose another category', async () => {
+		const transaction = createBankTransaction({
+			id: 'broad-shop-card-line',
+			counterpartyName: null,
+			merchantCategoryCode: null,
+			transactionType: 'CARD_PAYMENT',
+			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
+			merchantKey: 'EXPENSE:example shop',
+		});
+		const queryBuilder = createUpdateQueryBuilder();
+		queryBuilder.getRawMany.mockResolvedValueOnce([
+			{merchantKey: 'EXPENSE:example shop', category: 'SHOPPING', count: 4},
+			{merchantKey: 'EXPENSE:example shop', category: 'TRANSPORTATION', count: 1},
+		] as never);
+		const {service} = createService({
+			rows: [transaction],
+			queryBuilder,
+			providerResult: [{correlationId: transaction.id, category: 'TRANSPORTATION', confidence: 0.9}],
+		});
+
+		await service.processTransactionJob([transaction.id]);
+
+		expect(transaction.category).toBe('NEEDS_REVIEW');
+	});
+
 	it('accepts web Transportation from the identity of a transport merchant', async () => {
 		const transaction = createBankTransaction({id: 'web-transportation-transaction'});
 		const searchTrace = {
