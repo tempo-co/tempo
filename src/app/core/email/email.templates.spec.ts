@@ -22,6 +22,25 @@ const emailTemplates: Array<{name: string; context: Record<string, string>}> = [
 		context: {name: 'Example User'},
 	},
 	{
+		name: 'bank-consent-expiring',
+		context: {
+			subject: 'Your Example Bank connection to Tempo ends soon',
+			bankName: 'Example Bank',
+			consentEndsOn: '1 January 2030 at 00:00 UTC',
+			bankConnectionsUrl: 'https://tempo.example.test/bank-connections',
+		},
+	},
+	{
+		name: 'bank-sync-broken',
+		context: {
+			subject: "Tempo can't sync Example Bank",
+			bankName: 'Example Bank',
+			reason: 'Recent sync attempts did not succeed.',
+			lastSyncDescription: 'The last successful sync was on 1 January 2030 at 00:00 UTC.',
+			bankConnectionsUrl: 'https://tempo.example.test/bank-connections',
+		},
+	},
+	{
 		name: 'email-changed',
 		context: {name: 'Example User', oldEmail: 'old@example.test', newEmail: 'new@example.test'},
 	},

@@ -2,11 +2,18 @@ import {BullModule} from '@nestjs/bullmq';
 import {Module} from '@nestjs/common';
 import {TypeOrmModule} from '@nestjs/typeorm';
 
-import {BANK_CONNECTION_SYNC_QUEUE, BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE} from '@core/queue/queue.constants';
+import {EmailModule} from '@core/email/email.module';
+import {
+	BANK_CONNECTION_ALERT_QUEUE,
+	BANK_CONNECTION_SYNC_QUEUE,
+	BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE,
+} from '@core/queue/queue.constants';
 import {RedisModule} from '@core/redis/redis.module';
 import {Account} from '@modules/account/account.entity';
 import {AccountModule} from '@modules/account/account.module';
 
+import {BankConnectionAlertProcessor} from './alerts/bank-connection-alert.processor';
+import {BankConnectionAlertService} from './alerts/bank-connection-alert.service';
 import {BankConnectionController} from './api/bank-connection.controller';
 import {BankTransactionController} from './api/bank-transaction.controller';
 import {BankAccountBalance} from './bank-account-balance.entity';
@@ -46,6 +53,8 @@ import {OwnTransferService} from './services/own-transfer.service';
 		]),
 		BullModule.registerQueue({name: BANK_CONNECTION_SYNC_QUEUE}),
 		BullModule.registerQueue({name: BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE}),
+		BullModule.registerQueue({name: BANK_CONNECTION_ALERT_QUEUE}),
+		EmailModule,
 		AccountModule,
 		RedisModule,
 		BankingAuthorizationStateModule,
@@ -67,6 +76,8 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankingEncryptionService,
 		OwnTransferService,
 		CurrencyExchangeService,
+		BankConnectionAlertService,
+		BankConnectionAlertProcessor,
 	],
 	controllers: [BankConnectionController, BankTransactionController],
 })
