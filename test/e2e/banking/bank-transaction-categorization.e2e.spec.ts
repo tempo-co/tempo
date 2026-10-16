@@ -209,6 +209,27 @@ describe('Bank transaction categorization integration', () => {
 		expect(sibling).toMatchObject({category: AI_CATEGORY, categorySource: 'AI', categoryStatus: 'COMPLETED'});
 		expect(categorizeSpy).not.toHaveBeenCalled();
 
+		// When the sibling is categorized again, as a newly synced row would be, the model decides; the owner's TRAVEL
+		// choice is only its hint and is not copied.
+		await bankTransactionRepository.update(
+			{id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID},
+			{categoryStatus: 'PENDING'},
+		);
+		await app
+			.get(BankTransactionCategorizationService)
+			.enqueueForTransactions([CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID]);
+		const recategorized = await waitFor(
+			() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID}),
+			(value) => value.categoryStatus === 'COMPLETED',
+		);
+		expect(recategorized).toMatchObject({category: AI_CATEGORY, categorySource: 'AI'});
+		expect(recategorized.categoryProvider).not.toBe(BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER);
+		expect(categorizeSpy).toHaveBeenCalledTimes(1);
+		expect(categorizeSpy.mock.calls[0][0][0].previousManualCategories).toEqual([
+			{category: 'TRAVEL', count: 1, recentExamples: [{amount: '-20.00', date: '2026-09-04'}]},
+		]);
+		categorizeSpy.mockClear();
+
 		// Put the owner's original choice back for the next test.
 		await verifiedAgent
 			.patch(`/bank-transactions/${CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID}/category`)

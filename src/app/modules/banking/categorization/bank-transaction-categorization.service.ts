@@ -353,9 +353,12 @@ export class BankTransactionCategorizationService {
 		const webCandidates = inputs
 			.filter((input) => {
 				const category = standardResultById.get(input.correlationId)?.category;
+				// With the owner's own choices as a hint, a NEEDS_REVIEW or OTHER answer means the row does not resemble
+				// them; a web search on the payee name would only guess, so the row is left for the owner to review.
 				return (
 					activeCorrelationIds.has(input.correlationId) &&
 					webSearchEnabled &&
+					!input.previousManualCategories?.length &&
 					(category === 'OTHER' || category === 'NEEDS_REVIEW')
 				);
 			})
@@ -860,27 +863,27 @@ export class BankTransactionCategorizationService {
 		return (result.affected ?? 0) > 0;
 	}
 
+	/**
+	 * A row sent back to the model keeps its category when the call fails, as long as that category was given for the
+	 * same input; the row stays FAILED, so the job retry or the next start tries again. Other rows are cleared.
+	 */
 	private async markBatchFailed(batch: readonly ClaimedTransaction[], error: unknown): Promise<void> {
 		const safeMessage = this.safeFailureMessage(error);
 		await Promise.all(
 			batch.map(async ({transaction, inputHash}) => {
+				const keepCategory = transaction.category != null && transaction.categoryAppliedInputHash === inputHash;
+				const values = {
+					...(keepCategory ? {} : BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES),
+					categoryStatus: 'FAILED' as const,
+					categoryLastError: safeMessage,
+				};
 				const failed = await this.updateCategorizationWithGuard(
 					transaction.id,
 					inputHash,
-					{
-						...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-						categoryStatus: 'FAILED',
-						categoryUpdatedAt: new Date(),
-						categoryLastError: safeMessage,
-					},
+					{...values, categoryUpdatedAt: new Date()},
 					'PROCESSING',
 				);
-				if (failed)
-					this.applyLocalUpdate(transaction, {
-						...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-						categoryStatus: 'FAILED',
-						categoryLastError: safeMessage,
-					});
+				if (failed) this.applyLocalUpdate(transaction, values);
 			}),
 		);
 	}

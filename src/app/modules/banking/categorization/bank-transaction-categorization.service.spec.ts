@@ -11,6 +11,7 @@ import {
 import {createBankTransaction} from '../../../../../test/fixtures/bank-transaction.fixture';
 import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '../bank-transaction-financial-event';
 import {BankTransaction} from '../bank-transaction.entity';
+import {createBankTransactionCategorizationInputHash} from './bank-transaction-categorization-input';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
 	BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION,
@@ -1010,6 +1011,109 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(failedUpdate.set).toHaveBeenCalledWith(
 			expect.objectContaining({categoryStatus: 'FAILED', categoryLastError: failure.message}),
 		);
+	});
+
+	it('keeps a category given for the same input when the model call fails', async () => {
+		const transaction = createBankTransaction({
+			category: 'SHOPPING',
+			categoryStatus: 'PENDING',
+			categorySource: 'HISTORY',
+		});
+		transaction.categoryInputHash = createBankTransactionCategorizationInputHash(transaction);
+		transaction.categoryAppliedInputHash = transaction.categoryInputHash;
+		const failure = new BankTransactionCategorizationProviderError(
+			'OpenAI categorization request failed (503).',
+			true,
+		);
+		const {service, repository} = createService({rows: [transaction], providerError: failure});
+
+		await expect(service.processTransactionJob([transaction.id])).rejects.toBe(failure);
+
+		const failedUpdate = repository.createQueryBuilder.mock.results.at(-1)?.value;
+		const [values] = failedUpdate.set.mock.calls.at(-1);
+		expect(values).toMatchObject({categoryStatus: 'FAILED', categoryLastError: failure.message});
+		expect(values).not.toHaveProperty('category');
+		expect(transaction).toMatchObject({category: 'SHOPPING', categoryStatus: 'FAILED'});
+	});
+
+	it('clears a category given for an older input when the model call fails', async () => {
+		const transaction = createBankTransaction({
+			category: 'SHOPPING',
+			categoryStatus: 'PENDING',
+			categorySource: 'AI',
+		});
+		transaction.categoryInputHash = createBankTransactionCategorizationInputHash(transaction);
+		transaction.categoryAppliedInputHash = 'older-input';
+		const failure = new BankTransactionCategorizationProviderError(
+			'OpenAI categorization request failed (503).',
+			true,
+		);
+		const {service} = createService({rows: [transaction], providerError: failure});
+
+		await expect(service.processTransactionJob([transaction.id])).rejects.toBe(failure);
+
+		expect(transaction).toMatchObject({category: null, categoryStatus: 'FAILED'});
+	});
+
+	it("skips the web search when the model finds a row unlike the owner's own choices", async () => {
+		const transaction = createBankTransaction({
+			id: 'small-transfer',
+			amount: '-5.00',
+			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
+			merchantKey: 'EXPENSE:example landlord',
+		});
+		const queryBuilder = createUpdateQueryBuilder();
+		queryBuilder.getRawMany.mockResolvedValueOnce([
+			{merchantKey: 'EXPENSE:example landlord', category: 'HOUSING_AND_UTILITIES', count: 3},
+		] as never);
+		const {service, provider} = createService({
+			rows: [transaction],
+			queryBuilder,
+			webSearchEnabled: true,
+			providerResult: [{correlationId: 'small-transfer', category: 'NEEDS_REVIEW', confidence: 0.4}],
+		});
+
+		await service.processTransactionJob([transaction.id]);
+
+		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
+		expect(transaction).toMatchObject({category: 'NEEDS_REVIEW', categorySource: 'AI'});
+	});
+
+	it('sends at most the five newest manual choices per category as examples, with trimmed amounts', async () => {
+		const transaction = createBankTransaction({
+			id: 'many-choices',
+			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
+			merchantKey: 'EXPENSE:example shop',
+		});
+		const amounts = ['-1.00000000', '-12.34500000', '-1.23456789', '0.00000000', '100', '-6.10000000', '-7.00'];
+		const queryBuilder = createUpdateQueryBuilder();
+		queryBuilder.getRawMany
+			.mockResolvedValueOnce([{merchantKey: 'EXPENSE:example shop', category: 'SHOPPING', count: 7}] as never)
+			.mockResolvedValueOnce(
+				amounts.map((amount, index) => ({
+					merchantKey: 'EXPENSE:example shop',
+					category: 'SHOPPING',
+					amount,
+					date: `2026-09-0${7 - index}`,
+				})) as never,
+			);
+		const {service, provider} = createService({rows: [transaction], queryBuilder});
+
+		await service.processTransactionJob([transaction.id]);
+
+		expect(provider.categorize.mock.calls[0][0][0].previousManualCategories).toEqual([
+			{
+				category: 'SHOPPING',
+				count: 7,
+				recentExamples: [
+					{amount: '-1.00', date: '2026-09-07'},
+					{amount: '-12.345', date: '2026-09-06'},
+					{amount: '-1.23456789', date: '2026-09-05'},
+					{amount: '0.00', date: '2026-09-04'},
+					{amount: '100', date: '2026-09-03'},
+				],
+			},
+		]);
 	});
 
 	it('reclaims stale processing rows but leaves fresh claims alone', async () => {

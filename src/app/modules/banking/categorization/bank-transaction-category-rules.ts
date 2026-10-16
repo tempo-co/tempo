@@ -10,7 +10,8 @@ const OVPAY_CARD_TAP_PATTERN = /^\s*(?:bea|gea),.*,\s*\d{2}[./]\d{2}[./]\d{2}\/\
 
 /**
  * Returns the category a fixed rule assigns without a model call, or null. Rules only cover rows whose category is
- * certain from the bank text alone; everything else goes to the owner's history or the model.
+ * certain from the bank text alone; everything else goes to the model. A rule is skipped when the owner has made manual
+ * choices for the merchant, so the model sees those instead.
  */
 export function getRuleCategory(
 	transaction: Pick<BankTransaction, 'description' | 'creditDebitIndicator'>,
