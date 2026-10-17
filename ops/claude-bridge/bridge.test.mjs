@@ -68,10 +68,11 @@ async function setup(t, {mode = 'success', ...options} = {}) {
 	const bridge = await startBridge({
 		socketPath: path.join(root, 'private', 'bridge.sock'),
 		verifyUsage: async () => {},
+		tokenExpiresAt: async () => Date.now() + 60 * 60 * 1000,
 		claudePath: '/synthetic/claude',
 		spawnProcess(command, args, opts) {
 			const child = spawn(process.execPath, [fixture, mode, ...args], opts);
-			const call = {command, args, opts, child, stdin: ''};
+			const call = {command, args, opts, child, stdin: undefined};
 			const end = child.stdin.end.bind(child.stdin);
 			child.stdin.end = (input, ...rest) => {
 				if (typeof input === 'string') call.stdin = input;
@@ -301,6 +302,16 @@ test('times out and reaps the CLI process', async (t) => {
 	assert.equal(calls.length, 2);
 });
 
+test('accepts a near-limit subscription warning while overage stays rejected', async (t) => {
+	const {socketPath} = await setup(t, {mode: 'near-limit'});
+	assert.deepEqual(await request(socketPath), {status: 200, body: expected});
+});
+
+test('still refuses overage under a near-limit warning', async (t) => {
+	const {socketPath} = await setup(t, {mode: 'near-limit-overage'});
+	assert.deepEqual(await request(socketPath), {status: 503, body: {error: 'claude_unavailable'}});
+});
+
 test('rejects concurrent requests without launching another child', async (t) => {
 	const {socketPath, calls} = await setup(t, {mode: 'delay'});
 	const first = request(socketPath);
@@ -308,6 +319,31 @@ test('rejects concurrent requests without launching another child', async (t) =>
 	assert.deepEqual(await request(socketPath), {status: 503, body: {error: 'claude_busy'}});
 	assert.deepEqual(await first, {status: 200, body: expected});
 	assert.equal(calls.length, 2);
+});
+
+test('renews an expired subscription login through the CLI before checking usage', async (t) => {
+	let expiresAt = Date.now() - 1000;
+	const order = [];
+	const {socketPath, calls} = await setup(t, {
+		tokenExpiresAt: async () => expiresAt,
+		verifyUsage: async () => order.push('usage'),
+	});
+	const commands = () => calls.map((call) => call.args[0]);
+	assert.deepEqual(commands(), ['auth', 'doctor']);
+	assert.deepEqual(order, ['usage']);
+	expiresAt = Date.now() + 60 * 60 * 1000;
+	assert.deepEqual(await request(socketPath), {status: 200, body: expected});
+	assert.deepEqual(commands(), ['auth', 'doctor', '-p']);
+	expiresAt = Date.now() + 1000;
+	assert.deepEqual(await request(socketPath), {status: 200, body: expected});
+	assert.deepEqual(commands(), ['auth', 'doctor', '-p', 'doctor', '-p']);
+	assert.equal(calls[1].stdin, '');
+});
+
+test('fails closed when the CLI cannot renew an expired login', async (t) => {
+	await assert.rejects(setup(t, {mode: 'doctor-fail', tokenExpiresAt: async () => 0}), {
+		message: 'Claude unavailable.',
+	});
 });
 
 test('requires first-party Max or Pro subscription authentication at startup', async (t) => {

@@ -55,6 +55,14 @@ test('checks the fixed OAuth usage endpoint without exposing its token', async (
 	]);
 });
 
+test('reads the stored login expiry, treating unreadable credentials as expired', async () => {
+	const {storedTokenExpiresAt} = await import('./subscription.mjs');
+	const read = (text) => ({readCredentials: async () => text});
+	assert.equal(await storedTokenExpiresAt('/synthetic/home', read('{"claudeAiOauth":{"expiresAt":1234}}')), 1234);
+	assert.equal(await storedTokenExpiresAt('/synthetic/home', read('{"claudeAiOauth":{}}')), 0);
+	assert.equal(await storedTokenExpiresAt('/synthetic/home', read('not json')), 0);
+});
+
 test('fails closed on an expired stored token instead of letting inference run unverified', async () => {
 	const {assertExtraUsageDisabled} = await import('./subscription.mjs');
 	const {request} = boundary({status: 401});
