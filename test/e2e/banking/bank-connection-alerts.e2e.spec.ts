@@ -34,6 +34,10 @@ const BANK_NAME = 'Example Bank';
 const SYNTHETIC_IBAN = 'NL91ABNA0417164300';
 
 describe('Bank connection email alerts', () => {
+	// Each scanAndDeliver() waits up to 5 s for the email queue, so the 5 s default would time out a slow run
+	// and let its late email land in the next test's mailbox.
+	jest.setTimeout(30_000);
+
 	let app: INestApplication;
 	let httpServer: Server;
 	let fixtures: BankingFixtures;
