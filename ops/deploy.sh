@@ -7,6 +7,9 @@
 #
 # Tags resolve to immutable digests before rollout. A failed rollout restores the
 # previous images. Database migrations are not rolled back.
+#
+# Services pinned by tag@digest in the installed Compose files (PINNED_SERVICES, Tailscale)
+# are recreated first whenever the pinned image differs from the running one.
 set -Eeuo pipefail
 shopt -s inherit_errexit
 
@@ -115,6 +118,47 @@ rollout() {
     healthy
 }
 
+tailscale_compose() { docker compose -f "$TAILSCALE_COMPOSE_FILE" "$@"; }
+
+# Recreate pinned services (tag@digest in the installed Compose file) whose running image differs.
+# Usage: update_pinned <compose function> <state name> <service>...
+update_pinned() {
+    local run=$1 failed_file=$STATE_DIR/failed-pins-$2 service pinned id pins=''
+    shift 2
+    (($#)) || return 0
+    local -a changed=()
+    for service; do
+        pinned=$("$run" config --images "$service") || die "could not read the $service image from Compose"
+        [[ $pinned == *@sha256:* ]] || die "$service image is not pinned to a digest: $pinned"
+        pins+="$pinned "
+        id=$("$run" ps -a -q "$service") || die "could not list the $service container"
+        [[ -n $id && $(docker inspect --format '{{.Config.Image}}' "$id") == "$pinned" ]] || changed+=("$service")
+    done
+    # Keyed on every pin: until one changes, nothing is retried, backed up or deployed on top of it.
+    if [[ $(cat "$failed_file" 2>/dev/null) == "$pins" ]]; then
+        log "not deploying: these pins already failed to update (delete $failed_file to retry)"
+        ((${#REQUESTED[@]} == 0)) || exit 1
+        exit 0
+    fi
+    rm -f -- "$failed_file"
+    ((${#changed[@]})) || return 0
+    log "updating ${changed[*]} to the pinned images"
+    "$run" pull --quiet "${changed[@]}" || die "could not pull ${changed[*]}"
+    if [[ " ${changed[*]} " == *' postgres '* && -n ${BEFORE_DATA_CHANGE:-} ]]; then
+        log "running pre-deploy step: $BEFORE_DATA_CHANGE"
+        run_hook "$BEFORE_DATA_CHANGE" || die "pre-deploy step failed; ${changed[*]} not updated"
+    fi
+    if ! "$run" up -d --no-deps --wait --wait-timeout "$WAIT_TIMEOUT" "${changed[@]}" || ! healthy; then
+        echo "$pins" >"$failed_file"
+        die "${changed[*]} unhealthy after the update; there is no automatic rollback"
+    fi
+    log "updated ${changed[*]}"
+}
+
+# shellcheck disable=SC2086 # space-separated service list
+update_pinned compose app ${PINNED_SERVICES:-}
+[[ -z ${TAILSCALE_COMPOSE_FILE:-} ]] || update_pinned tailscale_compose tailscale tailscale
+
 current_api=$(running_image api)
 current_web=$(running_image web)
 
@@ -142,9 +186,9 @@ if ((${#REQUESTED[@]} == 0)) && [[ $(cat "$FAILED_FILE" 2>/dev/null) == "${targe
 fi
 
 log "deploying API $(revision "${target[api]}") (${target[api]#*@}), web $(revision "${target[web]}") (${target[web]#*@})"
-if ((api_changed)) && [[ -n ${BEFORE_API_CHANGE:-} ]]; then
-    log "running pre-deploy step: $BEFORE_API_CHANGE"
-    run_hook "$BEFORE_API_CHANGE" || die 'pre-deploy step failed; nothing was deployed'
+if ((api_changed)) && [[ -n ${BEFORE_DATA_CHANGE:-} ]]; then
+    log "running pre-deploy step: $BEFORE_DATA_CHANGE"
+    run_hook "$BEFORE_DATA_CHANGE" || die 'pre-deploy step failed; nothing was deployed'
 fi
 
 if ! rollout "${target[api]}" "${target[web]}" "$api_changed"; then

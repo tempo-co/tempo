@@ -2,7 +2,7 @@ name: tempo-api-development
 
 services:
   mailpit:
-    image: axllent/mailpit
+    image: axllent/mailpit:v1.31.6@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387
     container_name: mailpit
     ports:
       - target: ${EMAIL_PORT}
@@ -23,7 +23,7 @@ services:
         protocol: tcp
 
   redis:
-    image: redis
+    image: redis:7.4.11@sha256:4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85
     container_name: redis
     ports:
       - target: ${REDIS_PORT}
@@ -36,7 +36,7 @@ services:
         protocol: tcp
 
   redisinsight:
-    image: redislabs/redisinsight
+    image: redislabs/redisinsight:3.8.0@sha256:b5e19ee240abef6edb435871b90ff8a210995422e8e018ab61c0339d318a1f84
     container_name: redisinsight
     ports:
       - target: ${REDIS_INSIGHT_PORT}
@@ -56,7 +56,7 @@ services:
       - redis
 
   postgres:
-    image: postgres:17
+    image: postgres:17.11@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
     restart: always
     container_name: postgres
     environment:
@@ -76,7 +76,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   pgadmin:
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:9.18.0@sha256:c332c5f6dfba995d9ebc4af261d93506d6876085d712eaaa3defc8dd1a3f26de
     restart: always
     container_name: pgadmin
     environment:
