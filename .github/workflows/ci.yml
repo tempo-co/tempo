@@ -41,7 +41,7 @@ jobs:
             - name: Check deploy scripts
               run: |
                   shellcheck -x ops/deploy.sh ops/install.sh ops/backup.sh ops/targets/*.env ops/staging/tempo-staging-refresh.sh ops/ghcr-retention.sh
-                  export TEMPO_API_IMAGE=api TEMPO_WEB_IMAGE=web DB_USERNAME=u DB_PASSWORD=p DB_NAME=d TEMPO_PRODUCTION_ENV_FILE=/dev/null ENABLE_BANKING_PRIVATE_KEY_HOST_PATH=/dev/null
+                  export TEMPO_API_IMAGE=api TEMPO_WEB_IMAGE=web DB_USERNAME=u DB_PASSWORD=p DB_NAME=d TEMPO_PRODUCTION_ENV_FILE=/dev/null ENABLE_BANKING_PRIVATE_KEY_HOST_PATH=/dev/null TEMPO_CLAUDE_BRIDGE_DIR=/tmp
                   docker compose -f docker-compose.production.yml config -q
                   docker compose -f ops/staging/docker-compose.yml --env-file ops/staging/staging.env.example config -q
 
@@ -86,6 +86,9 @@ jobs:
 
             - name: Run unit tests
               run: npm run test
+
+            - name: Run Claude bridge tests
+              run: node --test ops/claude-bridge/*.test.mjs
 
     e2e-test:
         name: E2E Tests

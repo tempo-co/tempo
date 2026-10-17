@@ -19,7 +19,10 @@ import {
 	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
 	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_SKIPPED_PROMPT_VERSION,
 } from './bank-transaction-categorization.constants';
-import {BankTransactionCategorizationProviderError} from './bank-transaction-categorization.provider';
+import {
+	BankTransactionCategorizationProviderError,
+	BankTransactionCategorizationUnavailableError,
+} from './bank-transaction-categorization.provider';
 import {BankTransactionCategorizationService} from './bank-transaction-categorization.service';
 import {
 	BankTransactionCategorizationInput,
@@ -111,7 +114,7 @@ function createService({
 		get: jest.fn((key: string) => {
 			if (key === 'AI_CATEGORIZATION_ENABLED') return enabled;
 			if (key === 'AI_CATEGORIZATION_WEB_SEARCH_ENABLED') return webSearchEnabled;
-			if (key === 'AI_CATEGORIZATION_PROVIDER') return 'openai';
+			if (key === 'AI_CATEGORIZATION_PROVIDER') return 'claude';
 			if (key === 'AI_CATEGORIZATION_MODEL') return 'configured-model';
 			if (key === 'NODE_ENV') return nodeEnv;
 			throw new Error(`Unexpected config key: ${key}`);
@@ -372,6 +375,34 @@ describe('BankTransactionCategorizationService worker', () => {
 		]);
 	});
 
+	it.each(['claude-api', 'claude-subscription'])(
+		'persists the actual %s result provider and model instead of configured defaults',
+		async (provider) => {
+			const transaction = createBankTransaction({id: 'routed-transaction'});
+			const result = {
+				correlationId: transaction.id,
+				category: 'FOOD_AND_DRINK' as const,
+				confidence: 0.9,
+				provider,
+				model: 'actual-model',
+			};
+			const {service} = createService({rows: [transaction], providerResult: [result]});
+
+			await service.processTransactionJob([transaction.id]);
+
+			expect(transaction).toMatchObject({categoryProvider: provider, categoryModel: 'actual-model'});
+		},
+	);
+
+	it('uses configured provider and model when a test double omits routing metadata', async () => {
+		const transaction = createBankTransaction();
+		const {service} = createService({rows: [transaction]});
+
+		await service.processTransactionJob([transaction.id]);
+
+		expect(transaction).toMatchObject({categoryProvider: 'claude', categoryModel: 'configured-model'});
+	});
+
 	it('persists NEEDS_REVIEW as a completed category', async () => {
 		const transaction = createBankTransaction({id: 'ambiguous-transaction'});
 		const {service} = createService({
@@ -385,6 +416,90 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(transaction.categoryStatus).toBe('COMPLETED');
 		expect(transaction.categorySource).toBe('AI');
 		expect(transaction.categoryConfidence).toBe('0.1');
+	});
+
+	it.each(['OTHER', 'NEEDS_REVIEW'] as const)(
+		'leaves subscription %s results in review without calling API search',
+		async (category) => {
+			const transaction = createBankTransaction({
+				id: `subscription-${category}`,
+				counterpartyName: 'Example Shop',
+			});
+			const {service, provider} = createService({
+				rows: [transaction],
+				webSearchEnabled: true,
+				providerResult: [
+					{
+						correlationId: transaction.id,
+						category,
+						confidence: 0.3,
+						provider: 'claude-subscription',
+						model: 'subscription-model',
+					},
+				],
+			});
+
+			await service.processTransactionJob([transaction.id]);
+
+			expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
+			expect(transaction).toMatchObject({
+				category: 'NEEDS_REVIEW',
+				categoryStatus: 'COMPLETED',
+				categoryConfidence: '0',
+				categoryProvider: 'claude-subscription',
+				categoryModel: 'subscription-model',
+				categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_SKIPPED_PROMPT_VERSION,
+			});
+		},
+	);
+
+	it('keeps routing metadata and search decisions independent within a mixed-route batch', async () => {
+		const subscription = createBankTransaction({id: 'subscription-row', counterpartyName: 'Example Shop'});
+		const api = createBankTransaction({id: 'api-row', counterpartyName: 'Example Cafe'});
+		const {service, provider} = createService({
+			rows: [subscription, api],
+			webSearchEnabled: true,
+			providerResult: [
+				{
+					correlationId: subscription.id,
+					category: 'OTHER',
+					confidence: 0.3,
+					provider: 'claude-subscription',
+					model: 'subscription-model',
+				},
+				{
+					correlationId: api.id,
+					category: 'OTHER',
+					confidence: 0.3,
+					provider: 'claude-api',
+					model: 'standard-model',
+				},
+			],
+			webSearchResult: [
+				{
+					correlationId: api.id,
+					category: 'SHOPPING',
+					confidence: 0.8,
+					provider: 'claude-api',
+					model: 'search-model',
+				},
+			],
+		});
+
+		await service.processTransactionJob([subscription.id, api.id]);
+
+		expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(1);
+		expect(provider.categorizeWithWebSearch.mock.calls[0][0][0].correlationId).toBe(api.id);
+		expect(subscription).toMatchObject({
+			category: 'NEEDS_REVIEW',
+			categoryProvider: 'claude-subscription',
+			categoryModel: 'subscription-model',
+		});
+		expect(api).toMatchObject({
+			category: 'SHOPPING',
+			categoryProvider: 'claude-api',
+			categoryModel: 'search-model',
+		});
 	});
 
 	it('uses one web-search fallback for OTHER results in ordinary jobs', async () => {
@@ -682,7 +797,7 @@ describe('BankTransactionCategorizationService worker', () => {
 			createBankTransaction({id: `other-transaction-${index}`, counterpartyName: `Merchant ${index}`}),
 		);
 		const failure = new BankTransactionCategorizationProviderError(
-			'OpenAI categorization request failed (503).',
+			'Claude categorization request failed (503).',
 			true,
 		);
 		const {service, provider} = createService({
@@ -756,7 +871,7 @@ describe('BankTransactionCategorizationService worker', () => {
 			merchantCategoryCode: null,
 		});
 		const failure = new BankTransactionCategorizationProviderError(
-			'OpenAI categorization request failed (503).',
+			'Claude categorization request failed (503).',
 			true,
 		);
 		const {service, provider} = createService({
@@ -1054,10 +1169,115 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(repository.update.mock.calls.some(([, values]) => values.categorySource === 'AI')).toBe(false);
 	});
 
+	it('leaves unavailable routes pending so hourly reconciliation can retry', async () => {
+		const transaction = createBankTransaction();
+		const failure = new BankTransactionCategorizationUnavailableError();
+		const {service, repository} = createService({rows: [transaction], providerError: failure});
+
+		await expect(service.processTransactionJob([transaction.id])).rejects.toBe(failure);
+
+		expect(failure).toBeInstanceOf(BankTransactionCategorizationProviderError);
+		expect(failure.retryable).toBe(true);
+		expect(transaction).toMatchObject({
+			category: null,
+			categoryStatus: 'PENDING',
+			categoryLastError: failure.message,
+		});
+		const update = repository.createQueryBuilder.mock.results.at(-1)?.value;
+		expect(update.set).toHaveBeenLastCalledWith(expect.objectContaining({categoryStatus: 'PENDING'}));
+		expect(update.andWhere).toHaveBeenCalledWith('"categoryStatus" = :expectedStatus', {
+			expectedStatus: 'PROCESSING',
+		});
+		expect(update.andWhere).toHaveBeenCalledWith('"categoryInputHash" = :inputHash', {
+			inputHash: transaction.categoryInputHash,
+		});
+		expect(update.andWhere).toHaveBeenCalledWith('"categorySource" IS DISTINCT FROM \'MANUAL\'');
+	});
+
+	it('keeps a same-input category and its metadata pending when routes are unavailable', async () => {
+		const transaction = createBankTransaction({
+			category: 'SHOPPING',
+			categoryStatus: 'PENDING',
+			categorySource: 'AI',
+			categoryConfidence: '0.9',
+			categoryProvider: 'claude-api',
+			categoryModel: 'previous-model',
+		});
+		transaction.categoryInputHash = createBankTransactionCategorizationInputHash(transaction);
+		transaction.categoryAppliedInputHash = transaction.categoryInputHash;
+		const failure = new BankTransactionCategorizationUnavailableError();
+		const {service} = createService({rows: [transaction], providerError: failure});
+
+		await expect(service.processTransactionJob([transaction.id])).rejects.toBe(failure);
+
+		expect(transaction).toMatchObject({
+			category: 'SHOPPING',
+			categoryStatus: 'PENDING',
+			categorySource: 'AI',
+			categoryConfidence: '0.9',
+			categoryProvider: 'claude-api',
+			categoryModel: 'previous-model',
+			categoryAppliedInputHash: transaction.categoryInputHash,
+		});
+	});
+
+	it('clears an older-input category while retaining the pending retry when routes are unavailable', async () => {
+		const transaction = createBankTransaction({
+			category: 'SHOPPING',
+			categoryStatus: 'PENDING',
+			categorySource: 'AI',
+			categoryAppliedInputHash: 'older-input',
+		});
+		const failure = new BankTransactionCategorizationUnavailableError();
+		const {service} = createService({rows: [transaction], providerError: failure});
+
+		await expect(service.processTransactionJob([transaction.id])).rejects.toBe(failure);
+
+		expect(transaction).toMatchObject({
+			category: null,
+			categoryStatus: 'PENDING',
+			categoryAppliedInputHash: null,
+			categoryProvider: null,
+		});
+	});
+
+	it('does not overwrite a concurrent classification when routes become unavailable', async () => {
+		const transaction = createBankTransaction();
+		const queryBuilder = createUpdateQueryBuilder([{affected: 1}, {affected: 0}]);
+		const failure = new BankTransactionCategorizationUnavailableError();
+		const {service, provider} = createService({rows: [transaction], queryBuilder});
+		provider.categorize.mockImplementationOnce(async () => {
+			Object.assign(transaction, {category: 'SHOPPING', categorySource: 'MANUAL', categoryStatus: 'COMPLETED'});
+			throw failure;
+		});
+
+		await expect(service.processTransactionJob([transaction.id])).rejects.toBe(failure);
+
+		expect(transaction).toMatchObject({
+			category: 'SHOPPING',
+			categorySource: 'MANUAL',
+			categoryStatus: 'COMPLETED',
+		});
+	});
+
+	it('keeps nonretryable provider failures failed without throwing', async () => {
+		const transaction = createBankTransaction();
+		const failure = new BankTransactionCategorizationProviderError('synthetic invalid result', false);
+		const {service} = createService({rows: [transaction], providerError: failure});
+
+		await expect(service.processTransactionJob([transaction.id])).resolves.toBeUndefined();
+
+		expect(transaction).toMatchObject({
+			category: null,
+			categoryStatus: 'FAILED',
+			categoryLastError: 'Transaction categorization failed.',
+		});
+	});
+
 	it('marks retryable provider failures as failed and rethrows them', async () => {
 		const transaction = createBankTransaction();
 		const failure = new BankTransactionCategorizationProviderError(
-			'OpenAI categorization request failed (503).',
+			'Claude categorization request failed (503).',
 			true,
 		);
 		const {service, repository} = createService({rows: [transaction], providerError: failure});
@@ -1078,7 +1298,7 @@ describe('BankTransactionCategorizationService worker', () => {
 		transaction.categoryInputHash = createBankTransactionCategorizationInputHash(transaction);
 		transaction.categoryAppliedInputHash = transaction.categoryInputHash;
 		const failure = new BankTransactionCategorizationProviderError(
-			'OpenAI categorization request failed (503).',
+			'Claude categorization request failed (503).',
 			true,
 		);
 		const {service, repository} = createService({rows: [transaction], providerError: failure});
@@ -1101,7 +1321,7 @@ describe('BankTransactionCategorizationService worker', () => {
 		transaction.categoryInputHash = createBankTransactionCategorizationInputHash(transaction);
 		transaction.categoryAppliedInputHash = 'older-input';
 		const failure = new BankTransactionCategorizationProviderError(
-			'OpenAI categorization request failed (503).',
+			'Claude categorization request failed (503).',
 			true,
 		);
 		const {service} = createService({rows: [transaction], providerError: failure});

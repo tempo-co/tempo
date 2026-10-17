@@ -50,13 +50,11 @@ export const configSchema = z
 
 		// --- AI categorization ---
 		AI_CATEGORIZATION_ENABLED: strictBooleanEnvSchema.default(false),
-		AI_CATEGORIZATION_PROVIDER: z
-			.string()
-			.regex(/^[a-z][a-z0-9-]*$/)
-			.default('openai'),
-		AI_CATEGORIZATION_MODEL: z.string().min(1).max(128).default('gpt-6-luna'),
+		AI_CATEGORIZATION_PROVIDER: z.enum(['claude']).default('claude'),
+		AI_CATEGORIZATION_MODEL: z.string().min(1).max(128).default('claude-opus-5-5'),
 		AI_CATEGORIZATION_WEB_SEARCH_ENABLED: strictBooleanEnvSchema.default(false),
-		OPENAI_API_KEY: z.string().min(1).optional(),
+		ANTHROPIC_API_KEY: z.string().min(1).optional(),
+		AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: z.string().min(1).optional(),
 
 		// --- APIs ---
 		BANKING_INTEGRATION_ENABLED: strictBooleanEnvSchema.default(true),
@@ -152,13 +150,14 @@ export const configSchema = z
 
 		if (
 			config.AI_CATEGORIZATION_ENABLED &&
-			config.AI_CATEGORIZATION_PROVIDER === 'openai' &&
-			!config.OPENAI_API_KEY
+			!config.ANTHROPIC_API_KEY &&
+			!config.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET
 		) {
 			context.addIssue({
 				code: 'custom',
-				path: ['OPENAI_API_KEY'],
-				message: 'OPENAI_API_KEY is required when OpenAI categorization is enabled.',
+				path: ['ANTHROPIC_API_KEY'],
+				message:
+					'Configure ANTHROPIC_API_KEY or AI_CATEGORIZATION_SUBSCRIPTION_SOCKET when Claude categorization is enabled.',
 			});
 		}
 	});

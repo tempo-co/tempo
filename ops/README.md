@@ -33,6 +33,17 @@ sudo ops/install.sh production
 
 Production secrets live in `/etc/tempo/production.env` (mode 600), outside the repository. Email goes through authenticated Gmail SMTP (`smtp.gmail.com:587`, STARTTLS required).
 
+### Claude categorization
+
+The API calls the Anthropic API with `ANTHROPIC_API_KEY` and falls back to `tempo-claude-bridge.service`, a user unit that runs `claude -p` under the host user's Claude subscription login and listens on a private Unix socket. Compose mounts the socket directory from `TEMPO_CLAUDE_BRIDGE_DIR` and refuses to start without it. Before deploying a release with this provider, as the subscription user:
+
+```bash
+ops/install.sh claude-bridge
+systemctl --user enable --now tempo-claude-bridge.service
+```
+
+Then set `AI_CATEGORIZATION_PROVIDER=claude`, `AI_CATEGORIZATION_MODEL=claude-opus-5-5`, `ANTHROPIC_API_KEY` and `TEMPO_CLAUDE_BRIDGE_DIR` (the unit's `~/.local/state/tempo-claude`) in `/etc/tempo/production.env`, and remove `OPENAI_API_KEY`. When neither route is available, transactions stay pending and hourly reconciliation retries them.
+
 ### Network boundary
 
 PostgreSQL, Redis and the API share the `default` network. The API also joins the internal `frontend` network; web joins `frontend` and the web-only `ingress` network that publishes its loopback port. Web therefore has no network path to the database or cache. Do not mark `default` internal: the API needs outbound access.

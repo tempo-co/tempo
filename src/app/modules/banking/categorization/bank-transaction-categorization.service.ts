@@ -40,6 +40,7 @@ import {
 	BANK_TRANSACTION_CATEGORIZATION_PROVIDER,
 	BankTransactionCategorizationProvider,
 	BankTransactionCategorizationProviderError,
+	BankTransactionCategorizationUnavailableError,
 } from './bank-transaction-categorization.provider';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES,
@@ -352,7 +353,13 @@ export class BankTransactionCategorizationService {
 		const skippedWebSearchIds = new Set<string>();
 		const webCandidates = inputs
 			.filter((input) => {
-				const category = standardResultById.get(input.correlationId)?.category;
+				const result = standardResultById.get(input.correlationId);
+				const category = result?.category;
+				// Subscription results have no search route; do not send the row back to the API after a fallback.
+				if (result?.provider === 'claude-subscription' && category === 'NEEDS_REVIEW') {
+					skippedWebSearchIds.add(input.correlationId);
+					return false;
+				}
 				// With the owner's own choices as a hint, a NEEDS_REVIEW or OTHER answer means the row does not resemble
 				// them; a web search on the payee name would only guess, so the row is left for the owner to review.
 				return (
@@ -408,8 +415,8 @@ export class BankTransactionCategorizationService {
 				await this.completeClaimed(claimed, {
 					category: result.category,
 					categoryConfidence: String(result.confidence),
-					categoryProvider: this.configurationService.get('AI_CATEGORIZATION_PROVIDER'),
-					categoryModel: this.configurationService.get('AI_CATEGORIZATION_MODEL'),
+					categoryProvider: result.provider ?? this.configurationService.get('AI_CATEGORIZATION_PROVIDER'),
+					categoryModel: result.model ?? this.configurationService.get('AI_CATEGORIZATION_MODEL'),
 					categoryPromptVersion: promptVersion,
 					categorySearchTrace: result.searchTrace ?? null,
 				});
@@ -865,16 +872,18 @@ export class BankTransactionCategorizationService {
 
 	/**
 	 * A row sent back to the model keeps its category when the call fails, as long as that category was given for the
-	 * same input; the row stays FAILED, so the job retry or the next start tries again. Other rows are cleared.
+	 * same input. Unavailable routes stay PENDING for hourly reconciliation; ordinary failures stay FAILED for the
+	 * job retry or next start. Other rows are cleared.
 	 */
 	private async markBatchFailed(batch: readonly ClaimedTransaction[], error: unknown): Promise<void> {
 		const safeMessage = this.safeFailureMessage(error);
+		const categoryStatus = error instanceof BankTransactionCategorizationUnavailableError ? 'PENDING' : 'FAILED';
 		await Promise.all(
 			batch.map(async ({transaction, inputHash}) => {
 				const keepCategory = transaction.category != null && transaction.categoryAppliedInputHash === inputHash;
-				const values = {
+				const values: CategorizationUpdate = {
 					...(keepCategory ? {} : BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES),
-					categoryStatus: 'FAILED' as const,
+					categoryStatus,
 					categoryLastError: safeMessage,
 				};
 				const failed = await this.updateCategorizationWithGuard(
@@ -920,6 +929,12 @@ export class BankTransactionCategorizationService {
 		input: BankTransactionCategorizationInput | undefined,
 		result: BankTransactionCategorizationResult,
 	): BankTransactionCategorizationResult {
+		if (
+			result.provider === 'claude-subscription' &&
+			(result.category === 'OTHER' || result.category === 'NEEDS_REVIEW')
+		) {
+			return {...result, category: 'NEEDS_REVIEW', confidence: 0};
+		}
 		if (
 			input &&
 			result.category === 'TRANSPORTATION' &&
@@ -1006,9 +1021,11 @@ export class BankTransactionCategorizationService {
 	}
 
 	private safeFailureMessage(error: unknown): string {
+		if (error instanceof BankTransactionCategorizationUnavailableError)
+			return 'Claude categorization is temporarily unavailable.';
 		if (
 			error instanceof BankTransactionCategorizationProviderError &&
-			/^OpenAI (?:categorization request failed|returned an invalid)/.test(error.message)
+			/^Claude (?:categorization request failed|returned an invalid)/.test(error.message)
 		) {
 			return error.message.slice(0, MAX_ERROR_LENGTH);
 		}

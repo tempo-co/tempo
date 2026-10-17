@@ -13,7 +13,7 @@ import {
 	BankTransactionCategorizationProvider,
 } from './bank-transaction-categorization.provider';
 import {BankTransactionCategorizationService} from './bank-transaction-categorization.service';
-import {OpenAiBankTransactionCategorizationProvider} from './providers/openai-bank-transaction-categorization.provider';
+import {ClaudeBankTransactionCategorizationProvider} from './providers/claude-bank-transaction-categorization.provider';
 
 @Module({
 	imports: [
@@ -21,16 +21,16 @@ import {OpenAiBankTransactionCategorizationProvider} from './providers/openai-ba
 		TypeOrmModule.forFeature([BankTransaction]),
 	],
 	providers: [
-		OpenAiBankTransactionCategorizationProvider,
+		ClaudeBankTransactionCategorizationProvider,
 		{
 			provide: BANK_TRANSACTION_CATEGORIZATION_PROVIDER,
-			inject: [ConfigurationService, OpenAiBankTransactionCategorizationProvider],
+			inject: [ConfigurationService, ClaudeBankTransactionCategorizationProvider],
 			useFactory: (
 				configurationService: ConfigurationService,
-				openAiProvider: OpenAiBankTransactionCategorizationProvider,
+				claudeProvider: ClaudeBankTransactionCategorizationProvider,
 			): BankTransactionCategorizationProvider => {
 				const provider = configurationService.get('AI_CATEGORIZATION_PROVIDER');
-				if (provider === BANK_TRANSACTION_CATEGORIZATION_PROVIDER_NAME) return openAiProvider;
+				if (provider === BANK_TRANSACTION_CATEGORIZATION_PROVIDER_NAME) return claudeProvider;
 				throw new Error(`Unsupported AI categorization provider: ${provider}`);
 			},
 		},

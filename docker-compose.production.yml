@@ -41,11 +41,18 @@ services:
       EMAIL_SECURE: 'false'
       EMAIL_REQUIRE_TLS: 'true'
       ENABLE_BANKING_PRIVATE_KEY_PATH: /run/secrets/enable-banking-private.key
+      AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: /run/tempo-claude/bridge.sock
     volumes:
       - type: bind
         source: ${ENABLE_BANKING_PRIVATE_KEY_HOST_PATH}
         target: /run/secrets/enable-banking-private.key
         read_only: true
+      - type: bind
+        source: ${TEMPO_CLAUDE_BRIDGE_DIR:?Set TEMPO_CLAUDE_BRIDGE_DIR}
+        target: /run/tempo-claude
+        read_only: true
+        bind:
+          create_host_path: false
     expose:
       - '3000'
     networks:

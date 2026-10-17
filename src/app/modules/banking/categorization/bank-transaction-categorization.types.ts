@@ -91,6 +91,8 @@ export type BankTransactionCategorizationResult = {
 	correlationId: string;
 	category: BankTransactionCategory;
 	confidence: number;
+	provider?: string;
+	model?: string;
 	searchTrace?: BankTransactionCategorizationSearchTrace;
 };
 

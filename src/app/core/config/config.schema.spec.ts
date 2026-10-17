@@ -162,11 +162,36 @@ describe('session cookie configuration', () => {
 	});
 });
 
-describe('AI categorization model configuration', () => {
-	it('defaults to GPT-6 Luna', () => {
+describe('AI categorization configuration', () => {
+	it('defaults to disabled Claude categorization without credentials', () => {
 		const parsed = configSchema.parse(baseConfig);
 
-		expect(parsed.AI_CATEGORIZATION_MODEL).toBe('gpt-6-luna');
+		expect(parsed.AI_CATEGORIZATION_ENABLED).toBe(false);
+		expect(parsed.AI_CATEGORIZATION_PROVIDER).toBe('claude');
+		expect(parsed.AI_CATEGORIZATION_MODEL).toBe('claude-opus-5-5');
+	});
+
+	it.each([
+		['API only', {ANTHROPIC_API_KEY: 'synthetic-api-key'}],
+		['subscription only', {AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/run/claude-bridge.sock'}],
+		[
+			'both routes',
+			{ANTHROPIC_API_KEY: 'synthetic-api-key', AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/run/claude-bridge.sock'},
+		],
+	])('allows enabled categorization with %s', (_description, routeConfig) => {
+		const parsed = configSchema.parse({...baseConfig, AI_CATEGORIZATION_ENABLED: 'true', ...routeConfig});
+
+		expect(parsed).toMatchObject({AI_CATEGORIZATION_ENABLED: true, ...routeConfig});
+	});
+
+	it('rejects enabled categorization without either route', () => {
+		expect(() => configSchema.parse({...baseConfig, AI_CATEGORIZATION_ENABLED: 'true'})).toThrow(
+			'Configure ANTHROPIC_API_KEY or AI_CATEGORIZATION_SUBSCRIPTION_SOCKET',
+		);
+	});
+
+	it.each(['openai', 'unsupported-provider'])('rejects provider %s', (provider) => {
+		expect(configSchema.safeParse({...baseConfig, AI_CATEGORIZATION_PROVIDER: provider}).success).toBe(false);
 	});
 });
 

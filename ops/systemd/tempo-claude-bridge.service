@@ -1,0 +1,17 @@
+[Unit]
+Description=Tempo Claude subscription categorization bridge
+
+[Service]
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TEMPO_CLAUDE_BRIDGE_SOCKET=%h/.local/state/tempo-claude/bridge.sock
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/tempo-claude
+ExecStartPre=/usr/bin/chmod 700 %h/.local/state/tempo-claude
+ExecStartPre=/usr/bin/rm -f %h/.local/state/tempo-claude/bridge.sock
+ExecStart=%h/.local/bin/node %h/.local/lib/tempo-claude-bridge/main.mjs
+Restart=on-failure
+RestartSec=30s
+UMask=0077
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target
