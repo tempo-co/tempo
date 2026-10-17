@@ -9,13 +9,14 @@ After=network-online.target
 Type=oneshot
 ExecStart=/usr/local/lib/tempo-deploy/sync-pins.sh
 StateDirectory=tempo-sync-pins
-TimeoutStartSec=2min
+# Worst case is about 140s (main lookup, two downloads, two Docker Hub requests per changed pin).
+TimeoutStartSec=5min
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-# Root only for file ownership; no capabilities. The rename needs the whole directory writable.
-ReadWritePaths=/etc/tempo
+# Root only for file ownership; no capabilities. Only the Compose directory is writable, not the secrets.
+ReadWritePaths=/etc/tempo/compose
 CapabilityBoundingSet=
 AmbientCapabilities=
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

@@ -1,6 +1,6 @@
 # Gives production Tempo its own tailnet device (https://tempo.<tailnet>.ts.net) so it
 # does not share a browser origin with other apps served from the host's address.
-# Installed to /etc/tempo/tailscale.compose.yml by `ops/install.sh production`; the serve config
+# Installed to /etc/tempo/compose/tailscale.compose.yml by `ops/install.sh production`; the serve config
 # stays on the host. The node is logged in once and keeps its identity in the state volume, so no
 # auth key is passed after that. Separate project, so production deploys never recreate it
 # unless its pinned image changes.
