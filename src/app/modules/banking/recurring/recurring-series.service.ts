@@ -35,7 +35,7 @@ type CandidateRow = {
 	name: string;
 };
 
-/** Detects recurring payments on read from the owner's booked history; only the owner's decisions are stored. */
+/** Detects recurring payments on read from the owner's settled history; only the owner's decisions are stored. */
 @Injectable()
 export class RecurringSeriesService {
 	constructor(
@@ -140,7 +140,7 @@ export class RecurringSeriesService {
 			.where('connection.accountId = :accountId', {accountId})
 			.andWhere('transaction.merchantKey IS NOT NULL')
 			.andWhere('transaction.bookingDate IS NOT NULL')
-			.andWhere("transaction.transactionStatus IS DISTINCT FROM 'PDNG'")
+			.andWhere("UPPER(transaction.transactionStatus) IS DISTINCT FROM 'PDNG'")
 			.andWhere("transaction.creditDebitIndicator IN ('DBIT', 'CRDT')")
 			.andWhere('transaction.category IS DISTINCT FROM :refund', {refund: REFUND})
 			.andWhere(`NOT ${SQL_INTERNAL}`)

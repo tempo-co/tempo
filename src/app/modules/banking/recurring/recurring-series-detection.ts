@@ -29,6 +29,7 @@ export type RecurringCandidate = {
 
 export type DetectedRecurringSeries = {
 	key: string;
+	/** The payee the series is grouped under; may differ from the merchant key stored on its transactions. */
 	merchantKey: string;
 	name: string;
 	direction: BankTransactionDirection;
@@ -162,13 +163,14 @@ function payeeKeys(candidates: readonly RecurringCandidate[]): (merchantKey: str
 	const people = new Set<string>();
 	for (const {merchantKey} of candidates) {
 		const transfer = PERSON_TRANSFER_PATTERN.exec(foldName(merchantKeyName(merchantKey)));
-		if (transfer) people.add(firstAndLastName(transfer[1]));
+		// A single word is too weak to be a person: it would pull in any one-word merchant of that name.
+		if (transfer && transfer[1].includes(' ')) people.add(firstAndLastName(transfer[1]));
 	}
 	return (merchantKey) => {
 		const name = foldName(merchantKeyName(merchantKey));
 		const transfer = PERSON_TRANSFER_PATTERN.exec(name);
 		const person = firstAndLastName(transfer ? transfer[1] : name);
-		if (!transfer && !people.has(person)) return merchantKey;
+		if (!people.has(person)) return merchantKey;
 		return `${merchantKey.slice(0, merchantKey.indexOf(':'))}:${person}`;
 	};
 }

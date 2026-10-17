@@ -106,9 +106,10 @@ describe('RecurringSeries', () => {
 			...monthly('25', '2500.00', 'Example Employer', {category: 'INCOME'}),
 			// A bank that marks settled payments COMPLETED, then switches format: the person's name moves from the
 			// description to the counterparty, with accents and without a middle name.
-			...MONTHS.slice(0, 4).map((month) =>
+			...MONTHS.slice(0, 4).map((month, index) =>
 				bookedRow(`${month}-27`, '-650.00', {
-					transactionStatus: 'COMPLETED',
+					// A row without any status counts as settled too.
+					transactionStatus: index === 0 ? null : 'COMPLETED',
 					counterpartyName: null,
 					description: 'Transfer to ALEX-SAM EXAMPLE',
 					category: 'HOUSING_AND_UTILITIES',

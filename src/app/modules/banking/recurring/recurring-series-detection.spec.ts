@@ -272,6 +272,15 @@ describe('detectRecurringSeries', () => {
 		]);
 	});
 
+	it('does not treat a one-word transfer name as a person', () => {
+		const transfers = monthly(28, MAY_TO_OCT, '50.00', {merchantKey: 'EXPENSE:transfer to example'});
+		const shop = monthly(3, MAY_TO_OCT, '9.99', {merchantKey: 'EXPENSE:example'});
+
+		expect(
+			detectRecurringSeries([...transfers, ...shop], TODAY).map(({transactionIds}) => transactionIds.length),
+		).toEqual([6, 6]);
+	});
+
 	it('keeps each bank account’s payments to one payee apart', () => {
 		const bill = monthly(23, MAY_TO_OCT, '12.00', {merchantKey: 'EXPENSE:example mobile'});
 		// Irregular top-ups to the same payee from another account.
