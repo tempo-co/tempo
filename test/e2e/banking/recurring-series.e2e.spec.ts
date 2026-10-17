@@ -209,7 +209,7 @@ describe('RecurringSeries', () => {
 
 	it('keeps a dismissed series dismissed when new payments arrive, until the owner undoes it', async () => {
 		const streaming = byName((await list(ownerAgent)).series, 'Example Streaming')[0];
-		expect(streaming.decision).toBe('DISMISSED');
+		await ownerAgent.patch(`/recurring-series/${streaming.key}/decision`).send({decision: 'DISMISSED'}).expect(204);
 
 		await fixtures.createTransaction(
 			ownerBankAccount,
@@ -277,6 +277,60 @@ describe('RecurringSeries', () => {
 		const after = byName((await list(ownerAgent)).series, 'Example Water');
 		expect(after.find(({key}) => key === confirmed[0].key)?.decision).toBe('CONFIRMED');
 		expect(after.find(({key}) => key === other.key)?.decision).toBeNull();
+	});
+
+	it('resets a merged series fully, whatever its parts were decided as', async () => {
+		const internet = {counterpartyName: 'Example Internet', description: 'Example Internet'};
+		await fixtures.createTransactions(ownerBankAccount, [
+			...['2026-01-22', '2026-02-22', '2026-03-22'].map((date) => bookedRow(date, '-10.00', internet)),
+			...['2026-04-22', '2026-05-22', '2026-06-22'].map((date) => bookedRow(date, '-20.00', internet)),
+		]);
+		const parts = byName((await list(ownerAgent)).series, 'Example Internet');
+		expect(parts).toHaveLength(2);
+		const [cheap, dear] = [...parts].sort((x, y) => Number(x.typicalAmount) - Number(y.typicalAmount));
+		await ownerAgent.patch(`/recurring-series/${cheap.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
+		await ownerAgent.patch(`/recurring-series/${dear.key}/decision`).send({decision: 'DISMISSED'}).expect(204);
+
+		// Rising amounts merge both into one variable series.
+		await fixtures.createTransactions(ownerBankAccount, [
+			bookedRow('2026-07-22', '-30.00', internet),
+			bookedRow('2026-08-22', '-40.00', internet),
+			bookedRow('2026-09-22', '-50.00', internet),
+		]);
+		const [merged] = byName((await list(ownerAgent)).series, 'Example Internet');
+		expect(merged).toMatchObject({amountKind: 'VARIABLE', transactionCount: 9});
+		expect(merged.decision).not.toBeNull();
+
+		await ownerAgent.patch(`/recurring-series/${merged.key}/decision`).send({decision: null}).expect(204);
+		expect(byName((await list(ownerAgent)).series, 'Example Internet')[0].decision).toBeNull();
+	});
+
+	it('does not move a reset decision to the other part of a split', async () => {
+		const supplier = {counterpartyName: 'Example Supplier', description: 'Example Supplier'};
+		await fixtures.createTransactions(ownerBankAccount, [
+			bookedRow('2026-05-17', '-30.00', supplier),
+			bookedRow('2026-06-17', '-10.00', supplier),
+			bookedRow('2026-07-17', '-20.00', supplier),
+		]);
+		const [variable] = byName((await list(ownerAgent)).series, 'Example Supplier');
+		expect(variable.amountKind).toBe('VARIABLE');
+		await ownerAgent.patch(`/recurring-series/${variable.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
+
+		await fixtures.createTransactions(
+			ownerBankAccount,
+			['2026-08-17', '2026-09-17', '2026-10-17'].flatMap((date) => [
+				bookedRow(date, '-10.00', supplier),
+				bookedRow(date, '-20.00', supplier),
+			]),
+		);
+		const parts = byName((await list(ownerAgent)).series, 'Example Supplier');
+		expect(parts).toHaveLength(2);
+		expect(parts.every(({key}) => key !== variable.key)).toBe(true);
+		const confirmed = parts.filter(({decision}) => decision === 'CONFIRMED');
+		expect(confirmed).toHaveLength(1);
+		await ownerAgent.patch(`/recurring-series/${confirmed[0].key}/decision`).send({decision: null}).expect(204);
+		const reset = byName((await list(ownerAgent)).series, 'Example Supplier');
+		expect(reset.map(({decision}) => decision)).toEqual([null, null]);
 	});
 
 	it('rejects keys that are invalid, unknown or another owner’s', async () => {

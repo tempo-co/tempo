@@ -55,7 +55,7 @@ export class RecurringSeriesService {
 		const decisionBySeries = resolveDecisions(detected, decisions);
 		const series = detected
 			.filter((entry) => entry.direction === direction)
-			.map((entry) => ({entry, decision: decisionBySeries.get(entry.key)?.decision ?? null}))
+			.map((entry) => ({entry, decision: decisionBySeries.get(entry.key)?.[0]?.decision ?? null}))
 			.sort(
 				(a, b) =>
 					DECISION_ORDER[a.decision ?? 'NONE'] - DECISION_ORDER[b.decision ?? 'NONE'] ||
@@ -90,9 +90,8 @@ export class RecurringSeriesService {
 		const series = detected.find((entry) => entry.key === seriesKey);
 		if (!series) throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);
 		const decisions = await this.decisionRepository.find({where: {accountId}});
-		// Replace only the decision this series shows, including one inherited from its earlier key.
-		const shown = resolveDecisions(detected, decisions).get(seriesKey);
-		const superseded = decisions.filter((entry) => entry.seriesKey === seriesKey || entry.id === shown?.id);
+		// Replace every decision owned by this current series, including hidden decisions from merged parts.
+		const superseded = resolveDecisions(detected, decisions).get(seriesKey) ?? [];
 		await this.decisionRepository.manager.transaction(async (manager) => {
 			if (superseded.length > 0) {
 				await manager.delete(
@@ -181,35 +180,45 @@ function toResponse(entry: DetectedRecurringSeries, decision: RecurringSeriesDec
 }
 
 /**
- * Which decision each current series shows. A decision applies to its own key; once that key is gone
- * (the series was reclassified or split), it passes to exactly one series: the one sharing most of its
- * payments. Every decision applies at most once, so changing one series never changes another.
+ * Assigns each matching saved decision to one current series: its own key, otherwise the most shared
+ * payments (ties by series key). Each group is ordered for display: exact key, overlap, then saved key/id.
+ * Updates replace the whole group without changing snapshots or decisions assigned to siblings.
  */
 function resolveDecisions(
 	detected: readonly DetectedRecurringSeries[],
 	decisions: readonly RecurringSeriesDecision[],
-): Map<string, RecurringSeriesDecision> {
-	const result = new Map<string, RecurringSeriesDecision>();
-	const keys = new Set(detected.map(({key}) => key));
+): Map<string, RecurringSeriesDecision[]> {
+	const result = new Map<string, RecurringSeriesDecision[]>();
 	for (const decision of decisions) {
-		if (keys.has(decision.seriesKey)) result.set(decision.seriesKey, decision);
-	}
-	const shares = new Map<string, number>();
-	for (const decision of decisions) {
-		if (keys.has(decision.seriesKey)) continue;
-		const decided = new Set(decision.transactionIds);
-		let best: DetectedRecurringSeries | undefined;
-		let bestShared = 0;
-		for (const series of detected) {
-			const shared = series.transactionIds.filter((id) => decided.has(id)).length;
-			if (shared > bestShared || (shared === bestShared && shared > 0 && best && series.key < best.key)) {
-				best = series;
-				bestShared = shared;
+		let best = detected.find(({key}) => key === decision.seriesKey);
+		if (!best) {
+			const decided = new Set(decision.transactionIds);
+			let bestShared = 0;
+			for (const series of detected) {
+				const shared = series.transactionIds.filter((id) => decided.has(id)).length;
+				if (shared > bestShared || (shared === bestShared && shared > 0 && best && series.key < best.key)) {
+					best = series;
+					bestShared = shared;
+				}
 			}
 		}
-		if (!best || (result.has(best.key) && (shares.get(best.key) ?? Infinity) >= bestShared)) continue;
-		result.set(best.key, decision);
-		shares.set(best.key, bestShared);
+		if (!best) continue;
+		const assigned = result.get(best.key) ?? [];
+		assigned.push(decision);
+		result.set(best.key, assigned);
+	}
+	for (const series of detected) {
+		const payments = new Set(series.transactionIds);
+		result
+			.get(series.key)
+			?.sort(
+				(a, b) =>
+					Number(b.seriesKey === series.key) - Number(a.seriesKey === series.key) ||
+					b.transactionIds.filter((id) => payments.has(id)).length -
+						a.transactionIds.filter((id) => payments.has(id)).length ||
+					a.seriesKey.localeCompare(b.seriesKey) ||
+					a.id.localeCompare(b.id),
+			);
 	}
 	return result;
 }
