@@ -24,6 +24,8 @@ PIN='^( +)image: ([a-z0-9._/-]+):([A-Za-z0-9._-]+)@sha256:[0-9a-f]{64}$'
 
 log() { echo "tempo-sync-pins: $*"; }
 
+suffix() { [[ $1 == *-* ]] && echo "${1#*-}"; }
+
 # Succeeds when the only differences are pins of the same image and major version.
 pin_only_change() {
     local -a old new
@@ -37,7 +39,9 @@ pin_only_change() {
         indent=${BASH_REMATCH[1]} image=${BASH_REMATCH[2]} tag=${BASH_REMATCH[3]}
         [[ ${new[i]} =~ $PIN ]] || return 1
         [[ ${BASH_REMATCH[1]} == "$indent" && ${BASH_REMATCH[2]} == "$image" ]] || return 1
+        # Same major version and same variant suffix (e.g. -trixie never becomes -alpine).
         [[ ${tag%%[.-]*} == "${BASH_REMATCH[3]%%[.-]*}" ]] || return 1
+        [[ $(suffix "$tag") == "$(suffix "${BASH_REMATCH[3]}")" ]] || return 1
     done
 }
 
@@ -55,7 +59,7 @@ fetch() {
     local path
     for path in "${!FILES[@]}"; do
         # Worst case stays far below the unit's TimeoutStartSec, so failures reach the state logic.
-        curl --fail --silent --show-error --max-time 15 --retry 1 --output "$tmp/${path##*/}" "$SOURCE/$path" || return 1
+        curl --fail --silent --show-error --max-time 15 --retry 1 --max-filesize 1M --output "$tmp/${path##*/}" "$SOURCE/$path" || return 1
     done
 }
 
