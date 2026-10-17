@@ -9,6 +9,7 @@ import {
 	SESSION_REVOKE_SUCCESS,
 } from '@core/session/api-messages.constants';
 import {SessionResponseDto} from '@core/session/session-response.dto';
+import {SessionService} from '@core/session/session.service';
 
 import {
 	SESSION_TEST_ACCOUNT_EMAIL,
@@ -195,6 +196,38 @@ describe('AuthController - Sessions', () => {
 			expect(revokedSession).toBeUndefined();
 			// Ensure the current session still exists
 			expect(sessionsAfter.some((s) => s.id === currentSessionId)).toBe(true);
+		});
+
+		it('should keep a session revoked when one of its requests was in flight', async () => {
+			const victim = await loginAgent(httpServer, VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
+			const victimSessions: SessionResponseDto[] = (await victim.get('/auth/sessions').expect(200)).body;
+			const victimId = victimSessions.find((s) => s.isCurrent)!.id;
+
+			// Hold the victim's next request in its handler, after its session has been loaded.
+			const sessionService = getApp().get(SessionService);
+			const getSessions = sessionService.getSessions.bind(sessionService);
+			let release!: () => void;
+			const released = new Promise<void>((resolve) => (release = resolve));
+			let entered!: () => void;
+			const inHandler = new Promise<void>((resolve) => (entered = resolve));
+			const spy = jest.spyOn(sessionService, 'getSessions').mockImplementationOnce(async (...args) => {
+				entered();
+				await released;
+				return getSessions(...args);
+			});
+
+			try {
+				const inFlight = victim.get('/auth/sessions').then((response) => response);
+				await inHandler;
+				await verifiedAgent1.delete(`/auth/sessions/${victimId}`).expect(200);
+				release();
+				await inFlight;
+			} finally {
+				release();
+				spy.mockRestore();
+			}
+
+			await victim.get('/accounts/me').expect(401);
 		});
 
 		it('should fail with 409 Conflict when trying to revoke the current session', async () => {
