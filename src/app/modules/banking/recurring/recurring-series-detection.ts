@@ -382,7 +382,12 @@ function monthlyAnchorDay(days: readonly number[], latestDay: number): number {
 	const unwrapped = sorted.map((day) => (day < sorted[start] ? day + 31 : day)).sort((a, b) => a - b);
 	const middle = Math.floor(unwrapped.length / 2);
 	const wrap = (day: number) => ((day - 1) % 31) + 1;
-	if (unwrapped.length % 2 === 0 && unwrapped[middle] - unwrapped[middle - 1] > MAX_MIDDLE_SPREAD_DAYS) {
+	// Two payments on each side before it counts as a moved day; a single early payment is just early.
+	if (
+		unwrapped.length >= 4 &&
+		unwrapped.length % 2 === 0 &&
+		unwrapped[middle] - unwrapped[middle - 1] > MAX_MIDDLE_SPREAD_DAYS
+	) {
 		const distance = (day: number) =>
 			Math.min(Math.abs(wrap(day) - latestDay), 31 - Math.abs(wrap(day) - latestDay));
 		const [lower, upper] = [unwrapped[middle - 1], unwrapped[middle]];

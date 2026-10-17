@@ -255,6 +255,19 @@ describe('detectRecurringSeries', () => {
 		});
 	});
 
+	it('does not treat one early second payment as a moved billing day', () => {
+		const rows = ['2026-01-10', '2026-02-04', '2026-03-10', '2026-04-10', '2026-05-10', '2026-06-10'].map((date) =>
+			payment(date, '20.00'),
+		);
+
+		expect(detectRecurringSeries(rows, '2026-06-12')[0]).toMatchObject({
+			cadence: 'MONTHLY',
+			status: 'ACTIVE',
+			restartTransactionIds: [],
+			nextExpectedDate: '2026-07-10',
+		});
+	});
+
 	it('marks a payment after the grace period as a restart even when older history is added', () => {
 		const rows = ['2026-05-05', '2026-06-05', '2026-07-11', '2026-08-05', '2026-09-05', '2026-10-05'].map(
 			(date, index) => payment(date, index < 3 ? '10.00' : '20.00'),
