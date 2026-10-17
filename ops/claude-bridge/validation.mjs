@@ -15,6 +15,7 @@ const nullableFields = [
 	'remittanceInformation',
 ];
 const requiredFields = ['correlationId', 'amount', 'currency', 'direction', 'transactionType', ...nullableFields];
+const directions = ['INCOME', 'EXPENSE', 'UNKNOWN'];
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => typeof value === 'string' && value.length <= 8192;
 const nullableText = (value) => value === null || text(value);
@@ -70,11 +71,11 @@ export function validSearchRequest(body) {
 		keys(tx, searchFields) &&
 		tx.correlationId === '0' &&
 		[tx.amount, tx.currency, tx.transactionType, tx.merchantName].every(text) &&
-		['INCOME', 'EXPENSE', 'UNKNOWN'].includes(tx.direction) &&
+		directions.includes(tx.direction) &&
 		tx.merchantName.trim() !== '' &&
-		typeof tx.searchQuery === 'string' &&
+		text(tx.searchQuery) &&
 		tx.searchQuery.trim() !== '' &&
-		tx.searchQuery.length <= 240 &&
+		tx.searchQuery.length <= contract.webSearch.maxSearchQueryLength &&
 		nullableText(tx.merchantLocation) &&
 		nullableText(tx.merchantCategoryCode)
 	);
@@ -109,11 +110,7 @@ export function validRequest(body) {
 		if (!keys(tx, requiredFields, ['merchantLocation', 'previousManualCategories'])) return false;
 		if (tx.correlationId !== String(index) || !text(tx.amount) || !text(tx.currency) || !text(tx.transactionType))
 			return false;
-		if (
-			!['INCOME', 'EXPENSE', 'UNKNOWN'].includes(tx.direction) ||
-			!nullableFields.every((f) => nullableText(tx[f]))
-		)
-			return false;
+		if (!directions.includes(tx.direction) || !nullableFields.every((f) => nullableText(tx[f]))) return false;
 		if (
 			tx.merchantLocation !== undefined &&
 			tx.merchantLocation !== null &&

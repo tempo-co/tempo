@@ -459,7 +459,7 @@ test('searches once with the pinned query hook and returns only source hostnames
 			classifications: [
 				{correlationId: '0', category: 'SHOPPING', confidence: 0.9, evidenceType: 'MERCHANT_IDENTITY_ONLY'},
 			],
-			sourceDomains: ['example.test', 'shop.example.test'],
+			sourceDomains: ['www.example.test', 'shop.example.test'],
 		},
 	});
 	const contract = JSON.parse(await readFile(new URL('./contract.json', import.meta.url), 'utf8'));

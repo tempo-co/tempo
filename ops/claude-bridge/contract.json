@@ -105,6 +105,8 @@
 				}
 			},
 			"required": ["classifications"]
-		}
+		},
+		"maxSearchQueryLength": 240,
+		"maxSourceDomains": 20
 	}
 }

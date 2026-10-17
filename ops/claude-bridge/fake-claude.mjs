@@ -15,6 +15,7 @@ if (args[0] === 'doctor') {
 	let input = '';
 	for await (const chunk of process.stdin) input += chunk;
 	const parsed = JSON.parse(input);
+	const searchRun = args[args.indexOf('--tools') + 1] === 'WebSearch';
 	if (mode !== 'no-init')
 		emit({
 			type: 'system',
@@ -23,9 +24,7 @@ if (args[0] === 'doctor') {
 			tools:
 				mode === 'tools'
 					? ['StructuredOutput', 'Bash']
-					: args[args.indexOf('--tools') + 1] === 'WebSearch'
-						? ['StructuredOutput', 'WebSearch']
-						: ['StructuredOutput'],
+					: ['StructuredOutput', ...(searchRun ? ['WebSearch'] : [])],
 			mcp_servers: mode === 'mcp' ? [{name: 'example', status: 'connected'}] : [],
 		});
 	if (mode === 'overage')
@@ -54,7 +53,6 @@ if (args[0] === 'doctor') {
 		emit({type: 'assistant', message: {content: [{type: 'tool_use', name: 'Bash', input: {command: 'example'}}]}});
 	if (mode === 'standard-search')
 		emit({type: 'assistant', message: {content: [{type: 'tool_use', name: 'WebSearch', input: {query: 'x'}}]}});
-	const searchRun = args[args.indexOf('--tools') + 1] === 'WebSearch';
 	const searches = {'search-none': 0, 'search-twice': 2}[mode] ?? 1;
 	for (let i = 0; searchRun && i < searches; i++) {
 		const query = mode === 'search-other-query' ? 'other query' : parsed.transactions[0].searchQuery;
@@ -102,9 +100,7 @@ if (args[0] === 'doctor') {
 			correlationId,
 			category: mode === 'bad-category' ? 'INVENTED' : 'SHOPPING',
 			confidence: mode === 'bad-confidence' ? 4 : 0.9,
-			...(args[args.indexOf('--tools') + 1] === 'WebSearch' && mode !== 'search-no-evidence'
-				? {evidenceType: 'MERCHANT_IDENTITY_ONLY'}
-				: {}),
+			...(searchRun && mode !== 'search-no-evidence' ? {evidenceType: 'MERCHANT_IDENTITY_ONLY'} : {}),
 		}));
 		if (mode === 'wrong-id') classifications[0].correlationId = 'unknown';
 		if (mode === 'duplicate-id') classifications.push(classifications[0]);

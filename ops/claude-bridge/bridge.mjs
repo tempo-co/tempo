@@ -47,19 +47,27 @@ const SEARCH_CLI_ARGS = cliArgs(contract.webSearch, 'WebSearch', [
 	}),
 ]);
 
+const ROUTES = new Map([
+	['/categorize', {args: CLI_ARGS, tools: ['StructuredOutput'], valid: validRequest, search: false}],
+	[
+		'/categorize-with-search',
+		{args: SEARCH_CLI_ARGS, tools: ['StructuredOutput', 'WebSearch'], valid: validSearchRequest, search: true},
+	],
+]);
+
+/** Hostnames only: result paths and query strings never leave the bridge. The API normalizes the rest. */
 function sourceDomains(results) {
 	const domains = new Set();
 	for (const result of results)
 		for (const item of Array.isArray(result?.content) ? result.content : []) {
 			try {
 				const url = new URL(item.url);
-				if (url.protocol === 'https:' || url.protocol === 'http:')
-					domains.add(url.hostname.toLowerCase().replace(/^www\./, ''));
+				if (url.protocol === 'https:' || url.protocol === 'http:') domains.add(url.hostname);
 			} catch {
 				continue;
 			}
 		}
-	return [...domains].slice(0, 20);
+	return [...domains].slice(0, contract.webSearch.maxSourceDomains);
 }
 
 export async function startBridge({
@@ -204,8 +212,9 @@ export async function startBridge({
 				.writeHead(status, {'content-type': 'application/json', 'cache-control': 'no-store'})
 				.end(JSON.stringify(body));
 		};
-		const search = req.url === '/categorize-with-search';
-		if (req.method !== 'POST' || (req.url !== '/categorize' && !search)) return reply(404, {error: 'not_found'});
+		const route = ROUTES.get(req.url);
+		if (req.method !== 'POST' || !route) return reply(404, {error: 'not_found'});
+		const {search, tools} = route;
 		if (req.headers['content-type']?.split(';')[0].trim() !== 'application/json')
 			return reply(415, {error: 'unsupported_media_type'});
 		if (busy) return reply(503, {error: 'claude_busy'});
@@ -228,11 +237,9 @@ export async function startBridge({
 			} catch {
 				return reply(400, {error: 'invalid_request'});
 			}
-			if (!(search ? validSearchRequest(parsed) : validRequest(parsed)))
-				return reply(400, {error: 'invalid_request'});
+			if (!route.valid(parsed)) return reply(400, {error: 'invalid_request'});
 			const {input} = parsed;
 			const query = search ? input.transactions[0].searchQuery : undefined;
-			const tools = search ? ['StructuredOutput', 'WebSearch'] : ['StructuredOutput'];
 			await verifySubscription();
 			let initialized = false;
 			let overageRejected = false;
@@ -240,7 +247,7 @@ export async function startBridge({
 			let searchId;
 			let domains;
 			await run(
-				search ? SEARCH_CLI_ARGS : CLI_ARGS,
+				route.args,
 				JSON.stringify(input),
 				(event) => {
 					if (event.type === 'system' && event.subtype === 'init') {
