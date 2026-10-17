@@ -215,6 +215,100 @@ describe('detectRecurringSeries', () => {
 		});
 	});
 
+	it.each([
+		[4, '2026-06-25', ['2026-06-30', '2026-07-01']],
+		[5, '2026-07-10', ['2026-08-01']],
+	] as const)(
+		'keeps an even mix of boundary days anchored at month-end with %i payments',
+		(count, today, nextDates) => {
+			const rows = ['2026-03-01', '2026-03-30', '2026-05-01', '2026-05-30', '2026-07-01']
+				.slice(0, count)
+				.map((date) => payment(date, '20.00'));
+
+			const [series] = detectRecurringSeries(rows, today);
+
+			expect(series).toMatchObject({
+				cadence: 'MONTHLY',
+				status: 'ACTIVE',
+				flags: [],
+				transactionIds: rows.map(({id}) => id),
+				restartTransactionIds: [],
+			});
+			// The usual day lies between the 30th and the 1st, never halfway through the month.
+			expect(nextDates).toContain(series.nextExpectedDate);
+		},
+	);
+
+	it.each([
+		[[8, 10, 12, 10, 14, 14], '2026-11-11'],
+		[[13, 14, 15, 16, 18, 18], '2026-11-16'],
+		[[25, 27, 29, 27, 29, 29], '2026-11-28'],
+	] as const)('keeps the historical median for monthly days %j', (days, nextExpectedDate) => {
+		const rows = MAY_TO_OCT.map((month, index) =>
+			payment(`${month}-${String(days[index]).padStart(2, '0')}`, '20.00'),
+		);
+
+		expect(detectRecurringSeries(rows, TODAY)[0]).toMatchObject({nextExpectedDate});
+	});
+
+	it.each([
+		[['2026-11-30', '2027-01-01', '2027-01-31'], '2027-02-28'],
+		[['2027-11-30', '2028-01-01', '2028-01-31'], '2028-02-29'],
+	] as const)('clamps a boundary anchor after year rollover from %j', (dates, nextExpectedDate) => {
+		const rows = dates.map((date) => payment(date, '20.00'));
+
+		expect(detectRecurringSeries(rows, dates[dates.length - 1])[0]).toMatchObject({
+			nextExpectedDate,
+			restartTransactionIds: [],
+		});
+	});
+
+	it.each(
+		[2026, 2027, 2028].flatMap((year) =>
+			[1, 2, 30, 31].flatMap((day) =>
+				[
+					[0, -1],
+					[0, -2],
+					[-1, 0],
+					[1, 0],
+					[0, 1],
+					[-1, 1],
+					[0, -1, 0, 1],
+				].map((drift) => ({
+					year,
+					day,
+					drift,
+				})),
+			),
+		),
+	)('keeps generated boundary histories near day $day from $year with drift $drift', ({year, day, drift}) => {
+		// Starting in October crosses the year boundary and both ordinary and leap Februaries.
+		const due = (month: number) =>
+			Date.UTC(year, month, Math.min(day, new Date(Date.UTC(year, month + 1, 0)).getUTCDate()));
+		const rows = Array.from({length: 8}, (_, index) =>
+			payment(
+				new Date(due(9 + index) + drift[index % drift.length] * 86_400_000).toISOString().slice(0, 10),
+				'20.00',
+			),
+		);
+
+		for (let count = 3; count <= rows.length; count++) {
+			const prefix = rows.slice(0, count);
+			const result = detectRecurringSeries(prefix, prefix[count - 1].date);
+			expect(result).toEqual([
+				expect.objectContaining({
+					cadence: 'MONTHLY',
+					transactionIds: prefix.map(({id}) => id),
+					restartTransactionIds: [],
+					status: 'ACTIVE',
+					flags: [],
+				}),
+			]);
+			const forecastDrift = (Date.parse(result[0].nextExpectedDate) - due(9 + count)) / 86_400_000;
+			expect(Math.abs(forecastDrift)).toBeLessThanOrEqual(2);
+		}
+	});
+
 	it('marks a stopped series ended without flagging its old price', () => {
 		const rows = [...monthly(1, ['2026-03', '2026-04', '2026-05'], '20.00'), payment('2026-06-01', '22.00')];
 

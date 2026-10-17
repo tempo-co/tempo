@@ -389,6 +389,25 @@ describe('RecurringSeries', () => {
 		expect(byName((await list(ownerAgent)).series, 'Example Club Membership')[0].decision).toBe('DISMISSED');
 	});
 
+	it('keeps a dismissal when backfilled history contains an older restart', async () => {
+		const supplier = {counterpartyName: 'Example Historical Supplier', description: 'Example Historical Supplier'};
+		await fixtures.createTransactions(
+			ownerBankAccount,
+			['2026-08-05', '2026-09-05', '2026-10-05'].map((date) => bookedRow(date, '-20.00', supplier)),
+		);
+		const [fixed] = byName((await list(ownerAgent)).series, 'Example Historical Supplier');
+		await ownerAgent.patch(`/recurring-series/${fixed.key}/decision`).send({decision: 'DISMISSED'}).expect(204);
+
+		// Older history changes the amount classification, but its late arrival predates the dismissed payments.
+		await fixtures.createTransactions(
+			ownerBankAccount,
+			['2026-05-05', '2026-06-05', '2026-07-11'].map((date) => bookedRow(date, '-10.00', supplier)),
+		);
+		expect(byName((await list(ownerAgent)).series, 'Example Historical Supplier')).toEqual([
+			expect.objectContaining({amountKind: 'VARIABLE', transactionCount: 6, decision: 'DISMISSED'}),
+		]);
+	});
+
 	it('keeps a confirmed series confirmed when its payments restart after stopping', async () => {
 		const pool = {counterpartyName: 'Example Pool', description: 'Example Pool'};
 		await fixtures.createTransactions(
@@ -397,6 +416,7 @@ describe('RecurringSeries', () => {
 		);
 		const [stopped] = byName((await list(ownerAgent)).series, 'Example Pool');
 		await ownerAgent.patch(`/recurring-series/${stopped.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
+		const totalBeforeRestart = Number((await list(ownerAgent)).confirmedMonthlyTotal);
 		await fixtures.createTransactions(
 			ownerBankAccount,
 			['2026-09-06', '2026-10-06'].map((date) => bookedRow(date, '-21.00', pool)),
@@ -406,7 +426,7 @@ describe('RecurringSeries', () => {
 		expect(byName(series, 'Example Pool')).toEqual([
 			expect.objectContaining({key: stopped.key, status: 'ACTIVE', decision: 'CONFIRMED'}),
 		]);
-		expect(Number(confirmedMonthlyTotal)).toBeGreaterThanOrEqual(21);
+		expect(Number(confirmedMonthlyTotal) - totalBeforeRestart).toBe(21);
 	});
 
 	it('rejects keys that are invalid, unknown or another owner’s', async () => {

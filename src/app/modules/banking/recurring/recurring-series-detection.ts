@@ -346,7 +346,8 @@ function addCycles(rows: readonly RecurringCandidate[], rule: CadenceRule, cycle
 	const lastDate = rows[rows.length - 1].date;
 	if (rule.months === 0) return addDays(lastDate, rule.nominalDays * cycles);
 	// Month-based series keep their usual day of the month, clamped to shorter months.
-	const anchorDay = Math.round(medianNumber(rows.map((row) => Number(row.date.slice(8, 10)))));
+	const days = rows.map((row) => Number(row.date.slice(8, 10)));
+	const anchorDay = rule.cadence === 'MONTHLY' ? monthlyAnchorDay(days) : Math.round(medianNumber(days));
 	const [year, month] = lastDate.split('-').map(Number);
 	// A payment made a few days early, across a month boundary, still pays the month it was due in.
 	const paidMonth = [-1, 0, 1]
@@ -358,6 +359,22 @@ function addCycles(rows: readonly RecurringCandidate[], rule: CadenceRule, cycle
 				: best,
 		);
 	return anchorDate(year, paidMonth + rule.months * cycles, anchorDay);
+}
+
+/** Unwrap the day-of-month circle at its largest gap before taking the usual median. */
+function monthlyAnchorDay(days: readonly number[]): number {
+	const sorted = [...days].sort((a, b) => a - b);
+	let start = 0;
+	let largestGap = sorted[0] + 31 - sorted[sorted.length - 1];
+	for (let index = 1; index < sorted.length; index++) {
+		const gap = sorted[index] - sorted[index - 1];
+		if (gap > largestGap) {
+			largestGap = gap;
+			start = index;
+		}
+	}
+	const unwrapped = sorted.map((day) => (day < sorted[start] ? day + 31 : day));
+	return ((Math.round(medianNumber(unwrapped)) - 1) % 31) + 1;
 }
 
 /** The anchor day in a month counted from January of `year` (0-based, may overflow), clamped to its length. */
