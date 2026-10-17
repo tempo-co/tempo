@@ -1,8 +1,9 @@
 # Installed by `sudo ops/install.sh production`, which fills in @USER@.
 [Unit]
 Description=Deploy the latest tested Tempo images to production
-Wants=network-online.target
-After=docker.service network-online.target
+# Image-pin bumps from main land first; if that step fails, the deploy still runs.
+Wants=network-online.target tempo-sync-pins.service
+After=docker.service network-online.target tempo-sync-pins.service
 Requires=docker.service
 
 [Service]

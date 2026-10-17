@@ -48,9 +48,11 @@ case ${1:-} in
         rendered=$(mktemp)
         trap 'rm -f "$rendered"' EXIT
         install_script /usr/local/lib/tempo-deploy
+        copy 755 "$REPO/ops/sync-pins.sh" /usr/local/lib/tempo-deploy/sync-pins.sh
         copy 644 "$REPO/docker-compose.production.yml" /etc/tempo/production.compose.yml
         copy 644 "$REPO/ops/tailscale.compose.yml" /etc/tempo/tailscale.compose.yml
-        for unit in tempo-deploy-production.service tempo-deploy-production.timer tempo-backup.service tempo-backup.timer; do
+        for unit in tempo-deploy-production.service tempo-deploy-production.timer tempo-sync-pins.service \
+            tempo-backup.service tempo-backup.timer; do
             # Rendered to a temp file: uutils `install` cannot overwrite from /dev/stdin.
             sed -e "s|@USER@|$SUDO_USER|g" -e "s|@HOME@|$home|g" "$REPO/ops/systemd/$unit" >"$rendered"
             copy 644 "$rendered" "/etc/systemd/system/$unit"
