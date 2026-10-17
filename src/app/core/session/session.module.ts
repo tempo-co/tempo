@@ -1,5 +1,4 @@
 import {Inject, MiddlewareConsumer, Module, NestModule} from '@nestjs/common';
-import {RedisStore} from 'connect-redis';
 import session from 'express-session';
 import Redis from 'ioredis';
 import ms from 'ms';
@@ -8,6 +7,7 @@ import passport from 'passport';
 import {ConfigurationService} from '@core/config/config.service';
 import {REDIS} from '@core/redis/redis.constants';
 import {RedisModule} from '@core/redis/redis.module';
+import {RevocationSafeRedisStore} from '@core/session/revocation-safe-redis.store';
 import {SessionMiddleware} from '@core/session/session.middleware';
 import {SessionService} from '@core/session/session.service';
 
@@ -28,10 +28,7 @@ export class SessionModule implements NestModule {
 		consumer
 			.apply(
 				session({
-					store: new RedisStore({
-						client: this.redisClient,
-						prefix: `${this.config.get('SESSION_REDIS_KEY')}:`,
-					}),
+					store: new RevocationSafeRedisStore(this.redisClient, `${this.config.get('SESSION_REDIS_KEY')}:`),
 					name: this.config.get('SESSION_COOKIE_NAME'),
 					secret: this.config.get('SESSION_SECRET'),
 					resave: false,
