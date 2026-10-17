@@ -158,7 +158,7 @@ export class BankTransactionCategorizationService {
 		if (uniqueIds.length === 0) return;
 
 		const transactions = await this.repository.find({
-			select: ['id', 'categoryInputHash', 'financialEventType'],
+			select: {id: true, categoryInputHash: true, financialEventType: true},
 			where: {id: In(uniqueIds)},
 		});
 		const financialEventIds = new Set(
@@ -802,7 +802,7 @@ export class BankTransactionCategorizationService {
 
 	private async getActiveClaimedTransactions(batch: readonly ClaimedTransaction[]): Promise<ClaimedTransaction[]> {
 		const currentTransactions = await this.repository.find({
-			select: ['id', 'financialEventType'],
+			select: {id: true, financialEventType: true},
 			where: {id: In(batch.map(({transaction}) => transaction.id))},
 		});
 		const currentTransactionsById = new Map(

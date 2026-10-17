@@ -640,7 +640,7 @@ describe('BankTransactionController', () => {
 		const categoryOf = async (id: string) =>
 			bankTransactionRepository.findOneOrFail({
 				where: {id},
-				select: ['id', 'category', 'categoryStatus', 'categorySource', 'categoryProvider'],
+				select: {id: true, category: true, categoryStatus: true, categorySource: true, categoryProvider: true},
 			});
 
 		const pairOf = (id: string, counterpartId: string) =>

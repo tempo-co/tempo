@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import {createHash, randomUUID} from 'node:crypto';
-import {DataSource, In, IsNull, Not, Repository} from 'typeorm';
+import {DataSource, FindOptionsSelect, In, IsNull, Not, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
@@ -92,35 +92,35 @@ const PARTIAL = BANK_SYNC_STATUSES.PARTIAL;
 
 const INCREMENTAL_OVERLAP_DAYS = 7;
 const MAX_DATE_TIME_MS = 8_640_000_000_000_000;
-const BANK_TRANSACTION_IDENTITY_SELECT: (keyof BankTransaction)[] = [
-	'id',
-	'bankAccountId',
-	'entryReference',
-	'transactionDate',
-	'bookingDate',
-	'valueDate',
-	'amount',
-	'currency',
-	'creditDebitIndicator',
-	'bankTransactionCode',
-	'bankTransactionSubCode',
-	'bankTransactionDescription',
-	'description',
-	'counterpartyName',
-	'merchantLocation',
-	'merchantCategoryCode',
-	'remittanceInformation',
-	'instructedAmount',
-	'instructedCurrency',
-	'exchangeRate',
-	'exchangeRateUnitCurrency',
-	'exchangeRateType',
-	'referenceNumber',
-	'referenceNumberScheme',
-	'stableIdentityKey',
-	'stableIdentityGroupKey',
-	'transactionStatus',
-];
+const BANK_TRANSACTION_IDENTITY_SELECT = {
+	id: true,
+	bankAccountId: true,
+	entryReference: true,
+	transactionDate: true,
+	bookingDate: true,
+	valueDate: true,
+	amount: true,
+	currency: true,
+	creditDebitIndicator: true,
+	bankTransactionCode: true,
+	bankTransactionSubCode: true,
+	bankTransactionDescription: true,
+	description: true,
+	counterpartyName: true,
+	merchantLocation: true,
+	merchantCategoryCode: true,
+	remittanceInformation: true,
+	instructedAmount: true,
+	instructedCurrency: true,
+	exchangeRate: true,
+	exchangeRateUnitCurrency: true,
+	exchangeRateType: true,
+	referenceNumber: true,
+	referenceNumberScheme: true,
+	stableIdentityKey: true,
+	stableIdentityGroupKey: true,
+	transactionStatus: true,
+} satisfies FindOptionsSelect<BankTransaction>;
 
 type AccountFetchResult = {
 	bankAccount: BankAccount;
@@ -747,7 +747,7 @@ export class BankingSyncService {
 		bankAccountId: string,
 	): Promise<Set<string>> {
 		const occupiedIdentities = await repository.find({
-			select: ['stableIdentityKey'],
+			select: {stableIdentityKey: true},
 			where: {bankAccountId, stableIdentityKey: Not(IsNull())},
 		});
 		return new Set(
@@ -776,13 +776,13 @@ export class BankingSyncService {
 			),
 		];
 		const existingTransactions = await repository.find({
-			select: [
+			select: {
 				...BANK_TRANSACTION_IDENTITY_SELECT,
-				'dedupeKey',
-				'categoryInputHash',
-				'categorySource',
-				'categoryStatus',
-			],
+				dedupeKey: true,
+				categoryInputHash: true,
+				categorySource: true,
+				categoryStatus: true,
+			},
 			// Include every same-reference candidate, not just pending rows: repeated references
 			// and already-booked copies must make a cross-group transition ambiguous.
 			where: entryReferences.length
@@ -921,7 +921,7 @@ export class BankingSyncService {
 		}
 
 		const persistedRows = await repository.find({
-			select: ['id'],
+			select: {id: true},
 			where: {bankAccountId: bankAccount.id, stableIdentityKey: In(stableIdentityKeys)},
 		});
 		const persistedTransactionIds =
