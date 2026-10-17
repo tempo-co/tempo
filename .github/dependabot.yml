@@ -22,3 +22,21 @@ updates:
       # connect-redis 9+ dropped ioredis, which the session store uses.
       - dependency-name: connect-redis
         update-types: ['version-update:semver-major']
+
+  # Compose images are pinned by tag@digest; the production deploy rolls a changed pin out.
+  - package-ecosystem: docker-compose
+    directories: [/, /ops, /ops/staging]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      # One PR per image across dev, test, staging and production.
+      compose-images:
+        group-by: dependency-name
+    ignore:
+      # Major upgrades are planned by hand: PostgreSQL needs a dump and restore.
+      - dependency-name: postgres
+        update-types: ['version-update:semver-major']
+      - dependency-name: redis
+        update-types: ['version-update:semver-major']
