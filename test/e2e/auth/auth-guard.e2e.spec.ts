@@ -13,6 +13,7 @@ type GuardedRoute = [method: Method, path: string];
 
 const SESSION_ID = 'a'.repeat(32);
 const RESOURCE_ID = randomUUID();
+const SERIES_KEY = 'b'.repeat(32);
 
 // Routes that accept unverified accounts (@SkipEmailVerification) only require a session.
 const SESSION_ROUTES: GuardedRoute[] = [
@@ -41,6 +42,8 @@ const VERIFIED_ROUTES: GuardedRoute[] = [
 	['get', `/bank-transactions/${RESOURCE_ID}/category-impact?category=TRAVEL`],
 	['patch', `/bank-transactions/${RESOURCE_ID}/category`],
 	['patch', `/bank-transactions/${RESOURCE_ID}/own-transfer`],
+	['get', '/recurring-series?asOf=2026-10-18'],
+	['patch', `/recurring-series/${SERIES_KEY}/decision`],
 	['post', '/bank-connections/authorize'],
 	['get', '/bank-connections/aspsps'],
 	['get', '/bank-connections'],

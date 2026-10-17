@@ -32,6 +32,7 @@ import type {
 } from '../categorization/bank-transaction-categorization.types';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
+import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {applyBankTransactionFilters} from './bank-transaction-filters';
 import {OwnTransferService} from './own-transfer.service';
 
@@ -44,6 +45,7 @@ export class BankTransactionService {
 		private readonly bankTransactionRepository: Repository<BankTransaction>,
 		private readonly ownTransferService: OwnTransferService,
 		private readonly categorizationService: BankTransactionCategorizationService,
+		private readonly recurringSeriesService: RecurringSeriesService,
 	) {}
 
 	async findAll(
@@ -55,6 +57,11 @@ export class BankTransactionService {
 		const query = this.createOwnerScopedQuery(accountId);
 
 		applyBankTransactionFilters(query, queryParams.filter);
+		const seriesKey = queryParams.filter?.recurringSeriesKey;
+		if (seriesKey) {
+			const ids = await this.recurringSeriesService.findTransactionIds(accountId, seriesKey);
+			query.andWhere('transaction.id IN (:...recurringSeriesIds)', {recurringSeriesIds: ids});
+		}
 
 		const sortField = queryParams.sort?.by ?? BankTransactionSortField.BOOKING_DATE;
 		const sortOrder = queryParams.sort?.order ?? BankTransactionSortOrder.DESC;

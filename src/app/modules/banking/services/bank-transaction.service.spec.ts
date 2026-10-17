@@ -10,6 +10,7 @@ import {
 } from '../bank-transaction-financial-event';
 import {BankTransaction} from '../bank-transaction.entity';
 import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
+import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {BankTransactionService} from './bank-transaction.service';
 import {OwnTransferService} from './own-transfer.service';
 
@@ -65,6 +66,7 @@ function createService(
 		repository as Repository<BankTransaction>,
 		{} as OwnTransferService,
 		{} as BankTransactionCategorizationService,
+		{} as RecurringSeriesService,
 	);
 }
 
