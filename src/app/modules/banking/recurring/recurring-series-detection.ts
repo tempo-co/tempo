@@ -12,7 +12,7 @@ export type RecurringAmountKind = (typeof RECURRING_AMOUNT_KINDS)[number];
 export const RECURRING_SERIES_STATUSES = ['ACTIVE', 'ENDED'] as const;
 export type RecurringSeriesStatus = (typeof RECURRING_SERIES_STATUSES)[number];
 
-export const RECURRING_SERIES_FLAGS = ['PRICE_INCREASED', 'OVERDUE'] as const;
+export const RECURRING_SERIES_FLAGS = ['PRICE_INCREASED', 'LATE'] as const;
 export type RecurringSeriesFlag = (typeof RECURRING_SERIES_FLAGS)[number];
 
 /** One settled, non-internal payment with a merchant identity; amounts are positive magnitudes in cents. */
@@ -25,6 +25,7 @@ export type RecurringCandidate = {
 	amountCents: bigint;
 	baseAmountCents: bigint | null;
 	name: string;
+	category: string | null;
 };
 
 export type DetectedRecurringSeries = {
@@ -41,6 +42,8 @@ export type DetectedRecurringSeries = {
 	/** Base-currency cents per month; null while any row lacks a converted amount. */
 	monthlyEquivalent: bigint | null;
 	transactionIds: string[];
+	/** Payments that arrived after the series had stopped: later than their expected date plus the grace days. */
+	restartTransactionIds: string[];
 	firstDate: string;
 	lastDate: string;
 	nextExpectedDate: string;
@@ -113,6 +116,10 @@ const PRICE_INCREASE_CENTS = 50n;
 /** Other payments to the same payee tolerated inside a yearly series' span. */
 const MAX_OTHER_PAYMENTS_IN_YEARLY_SPAN = 3;
 const DAY_MS = 86_400_000;
+/** A payment may arrive this many days after its expected date; the series shows as late until then, then stops. */
+const GRACE_DAYS = 5;
+/** Categories of money sent to or received from other people. */
+const PERSON_TRANSFER_CATEGORIES: ReadonlySet<string> = new Set(['TRANSFER_OUT', 'TRANSFER_IN']);
 
 /**
  * Finds recurring payments in one owner's history. Deterministic and side-effect free: the same rows and `today`
@@ -122,10 +129,10 @@ export function detectRecurringSeries(
 	candidates: readonly RecurringCandidate[],
 	today: string,
 ): DetectedRecurringSeries[] {
-	const payeeKeyOf = payeeKeys(candidates);
+	const payees = payeeKeys(candidates);
 	const partitions = new Map<string, RecurringCandidate[]>();
 	for (const candidate of candidates) {
-		const payeeKey = payeeKeyOf(candidate.merchantKey);
+		const payeeKey = payees.keyOf(candidate.merchantKey);
 		// Per account: small payments to a payee from one account must not break a bill's rhythm on another.
 		const partitionKey = `${candidate.bankAccountId}\u0000${payeeKey}\u0000${candidate.currency}`;
 		const partition = partitions.get(partitionKey);
@@ -136,14 +143,19 @@ export function detectRecurringSeries(
 	const series: DetectedRecurringSeries[] = [];
 	for (const rows of partitions.values()) {
 		rows.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-		const fixed = chainByAmount(rows).flatMap((chain) => {
+		// Two similar transfers to a friend a year apart are a coincidence, never a yearly bill.
+		const person = payees.isPerson(rows[0].merchantKey) || rows.every(isPersonTransferCategory);
+		const cadenceOf = (chain: readonly RecurringCandidate[]) => {
 			const rule = matchCadence(chain);
-			if (!rule || (rule.cadence === 'YEARLY' && isBusyPayee(rows, chain))) return [];
-			return [buildSeries(chain, rule, 'FIXED', today)];
+			return rule?.cadence === 'YEARLY' && (person || isBusyPayee(rows, chain)) ? null : rule;
+		};
+		const fixed = chainByAmount(rows).flatMap((chain) => {
+			const rule = cadenceOf(chain);
+			return rule ? [buildSeries(chain, rule, 'FIXED', today)] : [];
 		});
 		// A bill whose amount only held still for a while is one variable series, not a short fixed one.
 		const fixedRows = fixed.reduce((count, entry) => count + entry.transactionIds.length, 0);
-		const rule = fixedRows / rows.length < MIN_REGULAR_GAP_SHARE ? matchCadence(rows) : null;
+		const rule = fixedRows / rows.length < MIN_REGULAR_GAP_SHARE ? cadenceOf(rows) : null;
 		if (rule?.allowsVariable) series.push(buildSeries(rows, rule, 'VARIABLE', today));
 		else series.push(...fixed);
 	}
@@ -159,20 +171,33 @@ const PERSON_TRANSFER_PATTERN = /^(?:transfer to|transfer from)\s+(.+)$/;
  * accents, case and middle names are ignored, so it matches that person's counterparty name. Other keys stay as they
  * are unless they name such a person, so two merchants are never merged on a shortened name alone.
  */
-function payeeKeys(candidates: readonly RecurringCandidate[]): (merchantKey: string) => string {
+function payeeKeys(candidates: readonly RecurringCandidate[]): {
+	keyOf: (merchantKey: string) => string;
+	isPerson: (payeeKey: string) => boolean;
+} {
 	const people = new Set<string>();
 	for (const {merchantKey} of candidates) {
 		const transfer = PERSON_TRANSFER_PATTERN.exec(foldName(merchantKeyName(merchantKey)));
 		// A single word is too weak to be a person: it would pull in any one-word merchant of that name.
 		if (transfer && transfer[1].includes(' ')) people.add(firstAndLastName(transfer[1]));
 	}
-	return (merchantKey) => {
-		const name = foldName(merchantKeyName(merchantKey));
-		const transfer = PERSON_TRANSFER_PATTERN.exec(name);
-		const person = firstAndLastName(transfer ? transfer[1] : name);
-		if (!people.has(person)) return merchantKey;
-		return `${merchantKey.slice(0, merchantKey.indexOf(':'))}:${person}`;
+	return {
+		keyOf: (merchantKey) => {
+			const name = foldName(merchantKeyName(merchantKey));
+			const transfer = PERSON_TRANSFER_PATTERN.exec(name);
+			const person = firstAndLastName(transfer ? transfer[1] : name);
+			if (!people.has(person)) return merchantKey;
+			return `${merchantKey.slice(0, merchantKey.indexOf(':'))}:${person}`;
+		},
+		isPerson: (payeeKey) => {
+			const name = foldName(merchantKeyName(payeeKey));
+			return people.has(name) || PERSON_TRANSFER_PATTERN.test(name);
+		},
 	};
+}
+
+function isPersonTransferCategory({category}: RecurringCandidate): boolean {
+	return category !== null && PERSON_TRANSFER_CATEGORIES.has(category);
 }
 
 function merchantKeyName(merchantKey: string): string {
@@ -255,8 +280,7 @@ function buildSeries(
 	const amounts = rows.map((row) => row.amountCents);
 	const typical = medianCents(amounts);
 	const nextExpectedDate = addCycles(rows, rule, 1);
-	const endsAfter = addDays(addCycles(rows, rule, 2), rule.toleranceDays);
-	const status: RecurringSeriesStatus = today > endsAfter ? 'ENDED' : 'ACTIVE';
+	const status: RecurringSeriesStatus = today > addDays(nextExpectedDate, GRACE_DAYS) ? 'ENDED' : 'ACTIVE';
 
 	const direction = first.merchantKey.startsWith(`${BANK_TRANSACTION_DIRECTIONS.INCOME}:`)
 		? BANK_TRANSACTION_DIRECTIONS.INCOME
@@ -271,7 +295,7 @@ function buildSeries(
 			flags.push('PRICE_INCREASED');
 		}
 	}
-	if (status === 'ACTIVE' && today > addDays(nextExpectedDate, rule.toleranceDays)) flags.push('OVERDUE');
+	if (status === 'ACTIVE' && today > nextExpectedDate) flags.push('LATE');
 
 	return {
 		key: seriesKey(first.merchantKey, first.currency, first.id),
@@ -285,6 +309,11 @@ function buildSeries(
 		latestAmount: formatCents(latest.amountCents),
 		monthlyEquivalent: monthlyEquivalent(rows, rule, amountKind),
 		transactionIds: rows.map((row) => row.id),
+		restartTransactionIds: rows
+			.filter(
+				(row, index) => index > 0 && row.date > addDays(addCycles(rows.slice(0, index), rule, 1), GRACE_DAYS),
+			)
+			.map((row) => row.id),
 		firstDate: first.date,
 		lastDate: latest.date,
 		nextExpectedDate,

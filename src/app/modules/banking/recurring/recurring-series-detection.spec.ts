@@ -14,6 +14,7 @@ function payment(date: string, amount: string, overrides: Partial<RecurringCandi
 		amountCents: cents,
 		baseAmountCents: cents,
 		name: 'Example Gym',
+		category: 'SUBSCRIPTIONS',
 		...overrides,
 	};
 }
@@ -179,20 +180,61 @@ describe('detectRecurringSeries', () => {
 		expect(detectRecurringSeries(rows, TODAY)).toEqual([]);
 	});
 
-	it('flags a payment that is overdue', () => {
-		const rows = monthly(1, ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09'], '20.00');
+	it('shows a missed payment as late for five days, then stops the series', () => {
+		const rows = monthly(12, ['2026-06', '2026-07', '2026-08', '2026-09'], '20.00');
+		const on = (today: string) => detectRecurringSeries(rows, today)[0];
 
-		expect(detectRecurringSeries(rows, TODAY)[0]).toMatchObject({
-			nextExpectedDate: '2026-10-01',
+		expect(on('2026-10-12')).toMatchObject({nextExpectedDate: '2026-10-12', status: 'ACTIVE', flags: []});
+		expect(on('2026-10-13')).toMatchObject({status: 'ACTIVE', flags: ['LATE']});
+		expect(on('2026-10-17')).toMatchObject({status: 'ACTIVE', flags: ['LATE']});
+		expect(on('2026-10-18')).toMatchObject({status: 'ENDED', flags: []});
+	});
+
+	it('is active again when a late payment arrives after the series had stopped', () => {
+		const months = ['2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08'];
+		const rows = [...monthly(1, months, '20.00'), payment('2026-09-11', '20.00')];
+
+		expect(detectRecurringSeries(rows, '2026-09-20')[0]).toMatchObject({
 			status: 'ACTIVE',
-			flags: ['OVERDUE'],
+			flags: [],
+			transactionIds: rows.map(({id}) => id),
+			restartTransactionIds: [rows[6].id],
 		});
 	});
 
-	it('marks a series ended after two missed cycles, without flagging its old price', () => {
+	it('marks a stopped series ended without flagging its old price', () => {
 		const rows = [...monthly(1, ['2026-03', '2026-04', '2026-05'], '20.00'), payment('2026-06-01', '22.00')];
 
 		expect(detectRecurringSeries(rows, TODAY)[0]).toMatchObject({status: 'ENDED', flags: []});
+	});
+
+	it('finds a yearly bill from two payments but never a yearly transfer to a person', () => {
+		const insurer = [payment('2025-09-12', '120.00'), payment('2026-09-14', '120.00')].map((row) => ({
+			...row,
+			merchantKey: 'EXPENSE:example insurer',
+		}));
+		const friend = [payment('2025-08-05', '47.00'), payment('2026-08-04', '47.00')].map((row) => ({
+			...row,
+			merchantKey: 'EXPENSE:transfer to alex-sam example',
+		}));
+		const counterpartyFriend = [payment('2025-07-02', '30.00'), payment('2026-07-01', '30.00')].map((row) => ({
+			...row,
+			merchantKey: 'EXPENSE:sam other',
+			category: 'TRANSFER_OUT',
+		}));
+
+		expect(detectRecurringSeries([...insurer, ...friend, ...counterpartyFriend], TODAY)).toEqual([
+			expect.objectContaining({cadence: 'YEARLY', transactionIds: insurer.map(({id}) => id)}),
+		]);
+	});
+
+	it('still finds a monthly transfer to a person', () => {
+		const rows = monthly(28, MAY_TO_OCT.slice(0, 5), '650.00', {
+			merchantKey: 'EXPENSE:transfer to alex-sam example',
+			category: 'TRANSFER_OUT',
+		});
+
+		expect(detectRecurringSeries(rows, TODAY)).toEqual([expect.objectContaining({cadence: 'MONTHLY'})]);
 	});
 
 	it('clamps a month-end payment day to shorter months', () => {

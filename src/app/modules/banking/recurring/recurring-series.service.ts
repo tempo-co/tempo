@@ -33,6 +33,7 @@ type CandidateRow = {
 	amountCents: string;
 	baseAmountCents: string | null;
 	name: string;
+	category: string | null;
 };
 
 /** Detects recurring payments on read from the owner's settled history; only the owner's decisions are stored. */
@@ -56,7 +57,7 @@ export class RecurringSeriesService {
 		const decisionBySeries = resolveDecisions(detected, decisions);
 		const series = detected
 			.filter((entry) => entry.direction === direction)
-			.map((entry) => ({entry, decision: decisionBySeries.get(entry.key)?.[0]?.decision ?? null}))
+			.map((entry) => ({entry, decision: shownDecision(entry, decisionBySeries.get(entry.key)?.[0])}))
 			.sort(
 				(a, b) =>
 					DECISION_ORDER[a.decision ?? 'NONE'] - DECISION_ORDER[b.decision ?? 'NONE'] ||
@@ -137,6 +138,7 @@ export class RecurringSeriesService {
 			.addSelect('ROUND(ABS("transaction"."amount") * 100)::text', 'amountCents')
 			.addSelect('ROUND(ABS("transaction"."amountInBaseCurrency") * 100)::text', 'baseAmountCents')
 			.addSelect('transaction.displayDescription', 'name')
+			.addSelect('transaction.category', 'category')
 			.where('connection.accountId = :accountId', {accountId})
 			.andWhere('transaction.merchantKey IS NOT NULL')
 			.andWhere('transaction.bookingDate IS NOT NULL')
@@ -156,9 +158,24 @@ export class RecurringSeriesService {
 			amountCents: BigInt(row.amountCents),
 			baseAmountCents: row.baseAmountCents === null ? null : BigInt(row.baseAmountCents),
 			name: row.name,
+			category: row.category,
 		}));
 		return detectRecurringSeries(candidates, today);
 	}
+}
+
+/**
+ * A dismissal covers the payments it was made on. When payments restart after the series had stopped, it is suggested
+ * again; a confirmation carries over, because the owner already said the series is real.
+ */
+function shownDecision(
+	entry: DetectedRecurringSeries,
+	decision: RecurringSeriesDecision | undefined,
+): RecurringSeriesDecisionValue | null {
+	if (!decision) return null;
+	if (decision.decision !== 'DISMISSED') return decision.decision;
+	const decided = new Set(decision.transactionIds);
+	return entry.restartTransactionIds.some((id) => !decided.has(id)) ? null : decision.decision;
 }
 
 function toResponse(entry: DetectedRecurringSeries, decision: RecurringSeriesDecisionValue | null): RecurringSeriesDto {

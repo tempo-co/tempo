@@ -21,7 +21,7 @@ export const RECURRING_SERIES_DIRECTIONS = [
 export type RecurringSeriesDirection = (typeof RECURRING_SERIES_DIRECTIONS)[number];
 
 export class RecurringSeriesQueryDto {
-	/** The client's local date; overdue and ended are judged against it. */
+	/** The client's local date; late and ended are judged against it. */
 	@IsCalendarDate()
 	asOf: string;
 

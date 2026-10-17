@@ -83,8 +83,8 @@ describe('RecurringSeries', () => {
 				counterpartyName: 'Example Streaming',
 				description: 'Example Streaming',
 			}),
-			// Overdue: no October payment.
-			...monthly('01', '-45.00', 'Example Phone').slice(0, 5),
+			// Late: the October payment was due on the 14th and has not arrived.
+			...monthly('14', '-45.00', 'Example Phone').slice(0, 5),
 			// Ended in June.
 			...monthly('02', '-15.00', 'Example Magazine').slice(0, 2),
 			bookedRow('2026-04-02', '-15.00', {counterpartyName: 'Example Magazine', description: 'Example Magazine'}),
@@ -153,7 +153,7 @@ describe('RecurringSeries', () => {
 			expect.objectContaining({typicalAmount: '10.00', monthlyEquivalent: '11.50', flags: ['PRICE_INCREASED']}),
 		]);
 		expect(byName(series, 'Example Phone')).toEqual([
-			expect.objectContaining({status: 'ACTIVE', flags: ['OVERDUE']}),
+			expect.objectContaining({status: 'ACTIVE', flags: ['LATE'], nextExpectedDate: '2026-10-14'}),
 		]);
 		expect(byName(series, 'Example Magazine')).toEqual([expect.objectContaining({status: 'ENDED'})]);
 		expect(byName(series, 'Example Insurer')).toEqual([
@@ -360,6 +360,26 @@ describe('RecurringSeries', () => {
 		await ownerAgent.patch(`/recurring-series/${confirmed[0].key}/decision`).send({decision: null}).expect(204);
 		const reset = byName((await list(ownerAgent)).series, 'Example Supplier');
 		expect(reset.map(({decision}) => decision)).toEqual([null, null]);
+	});
+
+	it('suggests a dismissed series again when its payments restart after stopping', async () => {
+		const club = {counterpartyName: 'Example Club Membership', description: 'Example Club Membership'};
+		await fixtures.createTransactions(
+			ownerBankAccount,
+			['2026-04-05', '2026-05-05', '2026-06-05'].map((date) => bookedRow(date, '-19.00', club)),
+		);
+		const [stopped] = byName((await list(ownerAgent)).series, 'Example Club Membership');
+		expect(stopped).toMatchObject({status: 'ENDED'});
+		await ownerAgent.patch(`/recurring-series/${stopped.key}/decision`).send({decision: 'DISMISSED'}).expect(204);
+		expect(byName((await list(ownerAgent)).series, 'Example Club Membership')[0].decision).toBe('DISMISSED');
+
+		await fixtures.createTransactions(
+			ownerBankAccount,
+			['2026-09-05', '2026-10-05'].map((date) => bookedRow(date, '-19.00', club)),
+		);
+		expect(byName((await list(ownerAgent)).series, 'Example Club Membership')).toEqual([
+			expect.objectContaining({key: stopped.key, status: 'ACTIVE', decision: null}),
+		]);
 	});
 
 	it('rejects keys that are invalid, unknown or another owner’s', async () => {
