@@ -4,7 +4,9 @@
 #   sync-pins.sh   # as root, run by tempo-sync-pins.service before every deploy
 #
 # A file is replaced only when every changed line is a tag@digest `image:` line for the same
-# image and major version. Any other change waits for `sudo ops/install.sh production`.
+# image, major version and variant that moves forward (a higher version, or a rebuild of the
+# same tag), where the new digest is the one Docker Hub currently serves for the new tag.
+# Anything else, including a downgrade, waits for `sudo ops/install.sh production`.
 # Exits 1 once per new pending change (and once when main has been unreachable for 6 hours),
 # so the host's failure alert fires once instead of every run.
 set -Eeuo pipefail
@@ -17,31 +19,57 @@ REPO_URL=https://github.com/tempo-co/tempo-api
 SOURCE=${SYNC_PINS_SOURCE:-}
 STATE=${STATE_DIRECTORY:-/var/lib/tempo-sync-pins}
 declare -A FILES=(
-    [docker-compose.production.yml]=${SYNC_PINS_ETC:-/etc/tempo}/production.compose.yml
-    [ops/tailscale.compose.yml]=${SYNC_PINS_ETC:-/etc/tempo}/tailscale.compose.yml
+    [docker-compose.production.yml]=${SYNC_PINS_ETC:-/etc/tempo/compose}/production.compose.yml
+    [ops/tailscale.compose.yml]=${SYNC_PINS_ETC:-/etc/tempo/compose}/tailscale.compose.yml
 )
-PIN='^( +)image: ([a-z0-9._/-]+):([A-Za-z0-9._-]+)@sha256:[0-9a-f]{64}$'
+PIN='^( +)image: ([a-z0-9._/-]+):([A-Za-z0-9._-]+)@(sha256:[0-9a-f]{64})$'
 
 log() { echo "tempo-sync-pins: $*"; }
 
 suffix() { [[ $1 == *-* ]] && echo "${1#*-}"; }
 
-# Succeeds when the only differences are pins of the same image and major version.
+# Version part of a tag: v1.104.1-trixie -> 1.104.1
+version() { local v=${1#v}; echo "${v%%-*}"; }
+
+# Digest Docker Hub serves for image:tag right now. Other registries are not supported.
+current_digest() {
+    local repo=$1 token
+    [[ ${repo%%/*} != *[.:]* || $repo != */* ]] || return 1
+    [[ $repo == */* ]] || repo=library/$repo
+    token=$(curl --fail --silent --max-time 10 --max-filesize 64K \
+        "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$repo:pull" | jq -r .token) || return 1
+    curl --fail --silent --head --max-time 10 -H "Authorization: Bearer $token" \
+        -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+        "https://registry-1.docker.io/v2/$repo/manifests/$2" |
+        tr -d '\r' | awk 'tolower($1) == "docker-content-digest:" { print $2 }'
+}
+
+# Succeeds when the only differences are forward pin moves of the same image, major and variant.
 pin_only_change() {
     local -a old new
-    local i indent image tag
+    local i indent image tag digest new_tag new_digest
     mapfile -t old <"$1"
     mapfile -t new <"$2"
     ((${#old[@]} == ${#new[@]})) || return 1
     for i in "${!old[@]}"; do
         [[ ${old[i]} == "${new[i]}" ]] && continue
         [[ ${old[i]} =~ $PIN ]] || return 1
-        indent=${BASH_REMATCH[1]} image=${BASH_REMATCH[2]} tag=${BASH_REMATCH[3]}
+        indent=${BASH_REMATCH[1]} image=${BASH_REMATCH[2]} tag=${BASH_REMATCH[3]} digest=${BASH_REMATCH[4]}
         [[ ${new[i]} =~ $PIN ]] || return 1
         [[ ${BASH_REMATCH[1]} == "$indent" && ${BASH_REMATCH[2]} == "$image" ]] || return 1
+        new_tag=${BASH_REMATCH[3]} new_digest=${BASH_REMATCH[4]}
         # Same major version and same variant suffix (e.g. -trixie never becomes -alpine).
-        [[ ${tag%%[.-]*} == "${BASH_REMATCH[3]%%[.-]*}" ]] || return 1
-        [[ $(suffix "$tag") == "$(suffix "${BASH_REMATCH[3]}")" ]] || return 1
+        [[ ${tag%%[.-]*} == "${new_tag%%[.-]*}" ]] || return 1
+        [[ $(suffix "$tag") == "$(suffix "$new_tag")" ]] || return 1
+        # Only forward: a higher version, or a rebuild of the same tag.
+        if [[ $new_tag == "$tag" ]]; then
+            [[ $new_digest != "$digest" ]] || return 1
+        else
+            [[ $(version "$tag") != "$(version "$new_tag")" ]] || return 1
+            [[ $(printf '%s\n' "$(version "$tag")" "$(version "$new_tag")" | sort -V | tail -1) == "$(version "$new_tag")" ]] || return 1
+        fi
+        # The tag text alone proves nothing: the digest must be what Docker Hub serves for it now.
+        [[ $(current_digest "$image" "$new_tag") == "$new_digest" ]] || return 1
     done
 }
 

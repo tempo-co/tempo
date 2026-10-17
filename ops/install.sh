@@ -49,8 +49,10 @@ case ${1:-} in
         trap 'rm -f "$rendered"' EXIT
         install_script /usr/local/lib/tempo-deploy
         copy 755 "$REPO/ops/sync-pins.sh" /usr/local/lib/tempo-deploy/sync-pins.sh
-        copy 644 "$REPO/docker-compose.production.yml" /etc/tempo/production.compose.yml
-        copy 644 "$REPO/ops/tailscale.compose.yml" /etc/tempo/tailscale.compose.yml
+        copy 644 "$REPO/docker-compose.production.yml" /etc/tempo/compose/production.compose.yml
+        copy 644 "$REPO/ops/tailscale.compose.yml" /etc/tempo/compose/tailscale.compose.yml
+        # Earlier installs kept these next to the secrets.
+        rm -f /etc/tempo/production.compose.yml /etc/tempo/tailscale.compose.yml
         for unit in tempo-deploy-production.service tempo-deploy-production.timer tempo-sync-pins.service \
             tempo-backup.service tempo-backup.timer; do
             # Rendered to a temp file: uutils `install` cannot overwrite from /dev/stdin.
