@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {mkdtemp, readFile, readdir, rm, stat} from 'node:fs/promises';
 import http from 'node:http';
 import {tmpdir} from 'node:os';
@@ -33,6 +34,10 @@ const payload = {
 		],
 	},
 };
+const contractFile = fileURLToPath(new URL('./contract.json', import.meta.url));
+const contractHash = createHash('sha256')
+	.update(JSON.stringify(JSON.parse(await readFile(contractFile, 'utf8'))))
+	.digest('hex');
 const expected = {classifications: [{correlationId: '0', category: 'SHOPPING', confidence: 0.9}]};
 
 function request(socketPath, body = payload, options = {}) {
@@ -43,7 +48,11 @@ function request(socketPath, body = payload, options = {}) {
 				socketPath,
 				path: '/categorize',
 				method: 'POST',
-				headers: {'content-type': 'application/json', 'content-length': Buffer.byteLength(encoded)},
+				headers: {
+					'content-type': 'application/json',
+					'content-length': Buffer.byteLength(encoded),
+					'x-tempo-contract': contractHash,
+				},
 				...options,
 			},
 			(res) => {
@@ -254,7 +263,14 @@ test('bounds request bodies before JSON parsing for fixed-length and chunked cli
 	const {socketPath, calls} = await setup(t);
 	const large = ' '.repeat(1024 * 1024) + JSON.stringify(payload);
 	assert.equal((await request(socketPath, large)).status, 413);
-	assert.equal((await request(socketPath, large, {headers: {'content-type': 'application/json'}})).status, 413);
+	assert.equal(
+		(
+			await request(socketPath, large, {
+				headers: {'content-type': 'application/json', 'x-tempo-contract': contractHash},
+			})
+		).status,
+		413,
+	);
 	assert.equal(calls.length, 1);
 });
 
@@ -272,7 +288,11 @@ test('decodes a multibyte character split across request chunks', async (t) => {
 				socketPath,
 				path: '/categorize',
 				method: 'POST',
-				headers: {'content-type': 'application/json', 'content-length': body.length},
+				headers: {
+					'content-type': 'application/json',
+					'content-length': body.length,
+					'x-tempo-contract': contractHash,
+				},
 			},
 			(res) => {
 				res.resume();
@@ -398,7 +418,7 @@ test('kills an in-flight CLI when its HTTP caller disconnects', async (t) => {
 		socketPath,
 		method: 'POST',
 		path: '/categorize',
-		headers: {'content-type': 'application/json'},
+		headers: {'content-type': 'application/json', 'x-tempo-contract': contractHash},
 	});
 	req.on('error', () => {});
 	req.end(JSON.stringify(payload));
@@ -519,3 +539,29 @@ test('keeps the standard route tool-free even when the CLI tries a search', asyn
 });
 
 export {payload, expected, request, setup};
+
+test('reports the running contract without starting Claude', async (t) => {
+	const {socketPath, calls} = await setup(t);
+	const before = calls.length;
+	assert.deepEqual(await request(socketPath, '', {method: 'GET', path: '/contract'}), {
+		status: 200,
+		body: {hash: contractHash},
+	});
+	assert.equal(calls.length, before);
+});
+
+for (const route of ['/categorize', '/categorize-with-search'])
+	for (const [name, hash] of [
+		['a different', 'a'.repeat(64)],
+		['no', undefined],
+	])
+		test(`${route} refuses ${name} contract hash before running Claude`, async (t) => {
+			const {socketPath, calls} = await setup(t);
+			const before = calls.length;
+			const headers = {'content-type': 'application/json', ...(hash ? {'x-tempo-contract': hash} : {})};
+			assert.deepEqual(await request(socketPath, payload, {path: route, headers}), {
+				status: 409,
+				body: {error: 'contract_mismatch'},
+			});
+			assert.equal(calls.length, before);
+		});

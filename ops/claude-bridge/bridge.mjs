@@ -1,4 +1,5 @@
 import {spawn} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {chmod, lstat, mkdir, mkdtemp, realpath, rm, unlink, writeFile} from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
@@ -33,6 +34,8 @@ const cliArgs = ({instructions, schema}, tools, extra = []) => [
 	JSON.stringify(schema),
 ];
 const CLI_ARGS = cliArgs(contract, '');
+// The API sends the hash of its own contract; a mismatch means one side was updated without the other.
+const CONTRACT_HASH = createHash('sha256').update(JSON.stringify(contract)).digest('hex');
 const hookPath = fileURLToPath(new URL('./search-hook.mjs', import.meta.url));
 if ([process.execPath, hookPath].some((part) => part.includes("'"))) throw new Error('Unsupported bridge path.');
 // dontAsk denies every tool call that no hook allows; the hook allows only the one pinned search.
@@ -212,11 +215,13 @@ export async function startBridge({
 				.writeHead(status, {'content-type': 'application/json', 'cache-control': 'no-store'})
 				.end(JSON.stringify(body));
 		};
+		if (req.method === 'GET' && req.url === '/contract') return reply(200, {hash: CONTRACT_HASH});
 		const route = ROUTES.get(req.url);
 		if (req.method !== 'POST' || !route) return reply(404, {error: 'not_found'});
 		const {search, tools} = route;
 		if (req.headers['content-type']?.split(';')[0].trim() !== 'application/json')
 			return reply(415, {error: 'unsupported_media_type'});
+		if (req.headers['x-tempo-contract'] !== CONTRACT_HASH) return reply(409, {error: 'contract_mismatch'});
 		if (busy) return reply(503, {error: 'claude_busy'});
 		busy = true;
 		const caller = new AbortController();

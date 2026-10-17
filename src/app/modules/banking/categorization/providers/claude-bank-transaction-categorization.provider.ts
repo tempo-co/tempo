@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type {MessageCreateParamsNonStreaming} from '@anthropic-ai/sdk/resources/messages';
-import {Injectable, Optional} from '@nestjs/common';
+import {Injectable, Logger, Optional} from '@nestjs/common';
+import {createHash} from 'node:crypto';
 import {request as httpRequest} from 'node:http';
 import {z} from 'zod';
 
@@ -57,12 +58,14 @@ type SearchTrace = {queries: string[]; sourceDomains: string[]};
 
 type ClaudeClient = Pick<Anthropic, 'messages'>;
 type RequestInput = {correlationId: string};
+const CONTRACT_HASH = createHash('sha256').update(JSON.stringify(contract)).digest('hex');
 const API_TIMEOUT_MS = 90_000;
 const SUBSCRIPTION_TIMEOUT_MS = 125_000;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 
 @Injectable()
 export class ClaudeBankTransactionCategorizationProvider implements BankTransactionCategorizationProvider {
+	private readonly logger = new Logger(ClaudeBankTransactionCategorizationProvider.name);
 	private client?: ClaudeClient;
 	private readonly model: string;
 	private readonly apiKey?: string;
@@ -319,7 +322,11 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 					socketPath: this.subscriptionSocket,
 					method: 'POST',
 					path,
-					headers: {'content-type': 'application/json', 'content-length': Buffer.byteLength(body)},
+					headers: {
+						'content-type': 'application/json',
+						'content-length': Buffer.byteLength(body),
+						'x-tempo-contract': CONTRACT_HASH,
+					},
 				},
 				(response) => {
 					let size = 0;
@@ -330,11 +337,12 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 						else chunks.push(chunk);
 					});
 					response.on('error', reject);
-					response.on('end', () =>
-						response.statusCode === 200
-							? resolve(Buffer.concat(chunks).toString('utf8'))
-							: reject(new BankTransactionCategorizationUnavailableError()),
-					);
+					response.on('end', () => {
+						if (response.statusCode === 409)
+							this.logger.warn('Claude bridge contract mismatch; reinstall and restart the bridge.');
+						if (response.statusCode === 200) resolve(Buffer.concat(chunks).toString('utf8'));
+						else reject(new BankTransactionCategorizationUnavailableError());
+					});
 				},
 			);
 			const timer = setTimeout(

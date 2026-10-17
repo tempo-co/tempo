@@ -1,3 +1,5 @@
+import {Logger} from '@nestjs/common';
+import {createHash} from 'node:crypto';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
@@ -64,15 +66,15 @@ function response(classifications: unknown[]) {
 	};
 }
 
-type BridgeRequest = {url?: string; body: unknown};
+type BridgeRequest = {url?: string; body: unknown; hash?: string};
 const unavailable = {status: 503, body: {error: 'claude_unavailable'}};
 
 /** A fake subscription bridge on a Unix socket that records requests and returns one fixed reply. */
 async function withBridge(
-	reply: object,
+	reply: {status?: number; body: object},
 	run: (socket: string, requests: BridgeRequest[]) => Promise<void>,
 ): Promise<void> {
-	const {status, body} = reply === unavailable ? unavailable : {status: 200, body: reply};
+	const {status = 200, body} = reply;
 	const directory = await mkdtemp(join(tmpdir(), 'claude-provider-'));
 	const socket = join(directory, 'bridge.sock');
 	const requests: BridgeRequest[] = [];
@@ -80,7 +82,11 @@ async function withBridge(
 		const chunks: Buffer[] = [];
 		req.on('data', (chunk: Buffer) => chunks.push(chunk));
 		req.on('end', () => {
-			requests.push({url: req.url, body: JSON.parse(Buffer.concat(chunks).toString())});
+			requests.push({
+				url: req.url,
+				body: JSON.parse(Buffer.concat(chunks).toString()),
+				hash: req.headers['x-tempo-contract'] as string | undefined,
+			});
 			res.writeHead(status, {'content-type': 'application/json'});
 			res.end(JSON.stringify(body));
 		});
@@ -289,7 +295,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 
 	it('falls back over a local socket, preserves history, and records the actual subscription route', async () => {
 		const reply = {classifications: [{correlationId: '0', category: 'SHOPPING', confidence: 0.9}]};
-		await withBridge(reply, async (socket, requests) => {
+		await withBridge({body: reply}, async (socket, requests) => {
 			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
 			create.mockRejectedValue({status: 400, message: 'API credit balance exhausted, secret'});
 			const transaction = {
@@ -332,7 +338,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			],
 			sourceDomains: ['www.example.test', 'not a domain', 'javascript:alert(1)'],
 		};
-		await withBridge(reply, async (socket, requests) => {
+		await withBridge({body: reply}, async (socket, requests) => {
 			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
 			create.mockRejectedValue({status: 400, message: 'API credit balance exhausted, secret'});
 			const transaction = toBankTransactionCategorizationWebSearchInput(input())!;
@@ -428,6 +434,50 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 				expect(requests).toHaveLength(1);
 			});
 		});
+	});
+
+	it.each(['standard', 'search'])('sends the contract fingerprint on %s fallback requests', async (route) => {
+		await withBridge(unavailable, async (socket, requests) => {
+			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
+			create.mockRejectedValue({status: 400});
+			if (route === 'standard') {
+				await expect(provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).rejects.toThrow(
+					BankTransactionCategorizationUnavailableError,
+				);
+			} else {
+				await provider.categorizeWithWebSearch(
+					[toBankTransactionCategorizationWebSearchInput(input())!],
+					BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+				);
+			}
+			expect(requests).toHaveLength(1);
+			expect(requests[0].hash).toBe(createHash('sha256').update(JSON.stringify(contract)).digest('hex'));
+		});
+	});
+
+	it.each(['standard', 'search'])('logs a safe actionable warning on a %s contract mismatch', async (route) => {
+		const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+		try {
+			await withBridge({status: 409, body: {error: 'synthetic-private-text'}}, async (socket) => {
+				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
+				create.mockRejectedValue({status: 400});
+				if (route === 'standard') {
+					await expect(provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).rejects.toThrow(
+						BankTransactionCategorizationUnavailableError,
+					);
+				} else {
+					const [result] = await provider.categorizeWithWebSearch(
+						[toBankTransactionCategorizationWebSearchInput(input())!],
+						BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+					);
+					expect(result.category).toBe('NEEDS_REVIEW');
+				}
+			});
+			expect(warn).toHaveBeenCalledWith('Claude bridge contract mismatch; reinstall and restart the bridge.');
+			expect(JSON.stringify(warn.mock.calls)).not.toContain('synthetic-private-text');
+		} finally {
+			warn.mockRestore();
+		}
 	});
 
 	it('does not let SDK debug logging print upstream error bodies', async () => {
