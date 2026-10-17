@@ -104,6 +104,21 @@ describe('RecurringSeries', () => {
 			...monthly('12', '5.00', 'Example Refunder', {category: 'REFUND'}),
 			...monthly('13', '-7.00', 'Example Pending', {transactionStatus: 'PDNG'}),
 			...monthly('25', '2500.00', 'Example Employer', {category: 'INCOME'}),
+			// A bank that marks settled payments COMPLETED, then switches format: the person's name moves from the
+			// description to the counterparty, with accents and without a middle name.
+			...MONTHS.slice(0, 4).map((month) =>
+				bookedRow(`${month}-27`, '-650.00', {
+					transactionStatus: 'COMPLETED',
+					counterpartyName: null,
+					description: 'Transfer to ALEX-SAM EXAMPLE',
+					category: 'HOUSING_AND_UTILITIES',
+				}),
+			),
+			bookedRow('2026-09-27', '-650.00', {
+				counterpartyName: 'Alex Exämple',
+				description: 'rent',
+				category: 'HOUSING_AND_UTILITIES',
+			}),
 		]);
 		await fixtures.createTransactions(ownerGbpAccount, [
 			...monthly('03', '-29.99', 'Example Gym', {currency: 'GBP', amountInBaseCurrency: '-34.50'}),
@@ -142,6 +157,19 @@ describe('RecurringSeries', () => {
 		expect(byName(series, 'Example Magazine')).toEqual([expect.objectContaining({status: 'ENDED'})]);
 		expect(byName(series, 'Example Insurer')).toEqual([
 			expect.objectContaining({cadence: 'YEARLY', monthlyEquivalent: '10.00', decision: null}),
+		]);
+	});
+
+	it('finds rent across a settled status and a change in how the bank names the payee', async () => {
+		const rent = (await list(ownerAgent)).series.filter(({typicalAmount}) => typicalAmount === '650.00');
+
+		expect(rent).toEqual([
+			expect.objectContaining({
+				cadence: 'MONTHLY',
+				transactionCount: 5,
+				nextExpectedDate: '2026-10-27',
+				status: 'ACTIVE',
+			}),
 		]);
 	});
 

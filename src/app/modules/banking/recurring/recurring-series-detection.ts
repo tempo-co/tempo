@@ -15,9 +15,10 @@ export type RecurringSeriesStatus = (typeof RECURRING_SERIES_STATUSES)[number];
 export const RECURRING_SERIES_FLAGS = ['PRICE_INCREASED', 'OVERDUE'] as const;
 export type RecurringSeriesFlag = (typeof RECURRING_SERIES_FLAGS)[number];
 
-/** One booked, non-internal payment with a merchant identity; amounts are positive magnitudes in cents. */
+/** One settled, non-internal payment with a merchant identity; amounts are positive magnitudes in cents. */
 export type RecurringCandidate = {
 	id: string;
+	bankAccountId: string;
 	date: string;
 	merchantKey: string;
 	currency: string;
@@ -120,12 +121,15 @@ export function detectRecurringSeries(
 	candidates: readonly RecurringCandidate[],
 	today: string,
 ): DetectedRecurringSeries[] {
+	const payeeKeyOf = payeeKeys(candidates);
 	const partitions = new Map<string, RecurringCandidate[]>();
 	for (const candidate of candidates) {
-		const partitionKey = `${candidate.merchantKey}\u0000${candidate.currency}`;
+		const payeeKey = payeeKeyOf(candidate.merchantKey);
+		// Per account: small payments to a payee from one account must not break a bill's rhythm on another.
+		const partitionKey = `${candidate.bankAccountId}\u0000${payeeKey}\u0000${candidate.currency}`;
 		const partition = partitions.get(partitionKey);
-		if (partition) partition.push(candidate);
-		else partitions.set(partitionKey, [candidate]);
+		if (partition) partition.push({...candidate, merchantKey: payeeKey});
+		else partitions.set(partitionKey, [{...candidate, merchantKey: payeeKey}]);
 	}
 
 	const series: DetectedRecurringSeries[] = [];
@@ -143,6 +147,45 @@ export function detectRecurringSeries(
 		else series.push(...fixed);
 	}
 	return series;
+}
+
+// Older bank exports name a person only in the description ("Transfer to FIRST-MIDDLE LAST"); newer ones send
+// their name as the counterparty ("First Last", with accents), so one person arrives under two merchant keys.
+const PERSON_TRANSFER_PATTERN = /^(?:transfer to|transfer from)\s+(.+)$/;
+
+/**
+ * Maps a merchant key to the payee it is grouped under. A name from a "Transfer to/from" description is a person:
+ * accents, case and middle names are ignored, so it matches that person's counterparty name. Other keys stay as they
+ * are unless they name such a person, so two merchants are never merged on a shortened name alone.
+ */
+function payeeKeys(candidates: readonly RecurringCandidate[]): (merchantKey: string) => string {
+	const people = new Set<string>();
+	for (const {merchantKey} of candidates) {
+		const transfer = PERSON_TRANSFER_PATTERN.exec(foldName(merchantKeyName(merchantKey)));
+		if (transfer) people.add(firstAndLastName(transfer[1]));
+	}
+	return (merchantKey) => {
+		const name = foldName(merchantKeyName(merchantKey));
+		const transfer = PERSON_TRANSFER_PATTERN.exec(name);
+		const person = firstAndLastName(transfer ? transfer[1] : name);
+		if (!transfer && !people.has(person)) return merchantKey;
+		return `${merchantKey.slice(0, merchantKey.indexOf(':'))}:${person}`;
+	};
+}
+
+function merchantKeyName(merchantKey: string): string {
+	return merchantKey.slice(merchantKey.indexOf(':') + 1);
+}
+
+function foldName(name: string): string {
+	return name.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** "alex-sam example" and "alex example" are both "alex example". */
+function firstAndLastName(name: string): string {
+	const words = name.split(' ');
+	if (words.length < 2) return name;
+	return `${words[0].split('-')[0]} ${words[words.length - 1]}`;
 }
 
 /**

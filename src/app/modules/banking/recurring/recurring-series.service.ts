@@ -26,6 +26,7 @@ const DECISION_ORDER: Record<RecurringSeriesDecisionValue | 'NONE', number> = {C
 
 type CandidateRow = {
 	id: string;
+	bankAccountId: string;
 	date: string;
 	merchantKey: string;
 	currency: string;
@@ -129,6 +130,7 @@ export class RecurringSeriesService {
 			.innerJoin('transaction.bankAccount', 'bankAccount')
 			.innerJoin('bankAccount.bankConnection', 'connection')
 			.select('transaction.id', 'id')
+			.addSelect('transaction.bankAccountId', 'bankAccountId')
 			.addSelect('"transaction"."bookingDate"::text', 'date')
 			.addSelect('transaction.merchantKey', 'merchantKey')
 			.addSelect('transaction.currency', 'currency')
@@ -138,7 +140,7 @@ export class RecurringSeriesService {
 			.where('connection.accountId = :accountId', {accountId})
 			.andWhere('transaction.merchantKey IS NOT NULL')
 			.andWhere('transaction.bookingDate IS NOT NULL')
-			.andWhere("transaction.transactionStatus = 'BOOK'")
+			.andWhere("transaction.transactionStatus IS DISTINCT FROM 'PDNG'")
 			.andWhere("transaction.creditDebitIndicator IN ('DBIT', 'CRDT')")
 			.andWhere('transaction.category IS DISTINCT FROM :refund', {refund: REFUND})
 			.andWhere(`NOT ${SQL_INTERNAL}`)
@@ -147,6 +149,7 @@ export class RecurringSeriesService {
 
 		const candidates: RecurringCandidate[] = rows.map((row) => ({
 			id: row.id,
+			bankAccountId: row.bankAccountId,
 			date: row.date,
 			merchantKey: row.merchantKey,
 			currency: row.currency,

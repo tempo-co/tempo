@@ -7,6 +7,7 @@ function payment(date: string, amount: string, overrides: Partial<RecurringCandi
 	const cents = BigInt(Math.round(Number(amount) * 100));
 	return {
 		id: `row-${String(++nextId).padStart(4, '0')}`,
+		bankAccountId: 'account-1',
 		date,
 		merchantKey: 'EXPENSE:example gym',
 		currency: 'EUR',
@@ -238,5 +239,62 @@ describe('detectRecurringSeries', () => {
 
 		expect(after.key).toBe(before.key);
 		expect(after.transactionIds).toHaveLength(6);
+	});
+
+	it('groups a person named in a transfer description with their later counterparty name', () => {
+		const older = monthly(28, ['2026-05', '2026-06', '2026-07', '2026-08'], '650.00', {
+			merchantKey: 'EXPENSE:transfer to alex-sam exämple',
+			name: 'Transfer to ALEX-SAM EXAMPLE',
+		});
+		const newer = monthly(28, ['2026-09'], '650.00', {merchantKey: 'EXPENSE:alex example', name: 'Alex Example'});
+
+		expect(detectRecurringSeries([...older, ...newer], TODAY)).toEqual([
+			expect.objectContaining({
+				name: 'Alex Example',
+				status: 'ACTIVE',
+				transactionIds: [...older, ...newer].map(({id}) => id),
+			}),
+		]);
+	});
+
+	it('groups transfers from a person the same way', () => {
+		const older = monthly(1, ['2026-05', '2026-06', '2026-07'], '40.00', {
+			merchantKey: 'INCOME:transfer from alex-sam example',
+			name: 'Transfer from ALEX-SAM EXAMPLE',
+		});
+		const newer = monthly(1, ['2026-08', '2026-09', '2026-10'], '40.00', {
+			merchantKey: 'INCOME:alex example',
+			name: 'Alex Example',
+		});
+
+		expect(detectRecurringSeries([...older, ...newer], TODAY)).toEqual([
+			expect.objectContaining({direction: 'INCOME', transactionIds: [...older, ...newer].map(({id}) => id)}),
+		]);
+	});
+
+	it('keeps each bank account’s payments to one payee apart', () => {
+		const bill = monthly(23, MAY_TO_OCT, '12.00', {merchantKey: 'EXPENSE:example mobile'});
+		// Irregular top-ups to the same payee from another account.
+		const topUps = ['2026-05-01', '2026-05-09', '2026-06-14', '2026-08-02', '2026-08-05'].map((date) =>
+			payment(date, '2.50', {merchantKey: 'EXPENSE:example mobile', bankAccountId: 'account-2'}),
+		);
+
+		expect(detectRecurringSeries([...bill, ...topUps], TODAY)).toEqual([
+			expect.objectContaining({cadence: 'MONTHLY', transactionIds: bill.map(({id}) => id)}),
+		]);
+	});
+
+	it('keeps a person’s payments and money received apart, and merchants with similar names apart', () => {
+		const rows = [
+			...monthly(28, MAY_TO_OCT, '650.00', {merchantKey: 'EXPENSE:transfer to alex-sam example'}),
+			...monthly(2, MAY_TO_OCT, '20.00', {merchantKey: 'INCOME:alex example'}),
+			// Shares the first and last word of a merchant but names no transferred-to person.
+			...monthly(5, MAY_TO_OCT, '9.99', {merchantKey: 'EXPENSE:example cloud storage'}),
+			...monthly(6, MAY_TO_OCT, '4.99', {merchantKey: 'EXPENSE:example storage'}),
+		];
+
+		expect(detectRecurringSeries(rows, TODAY).map(({transactionIds}) => transactionIds.length)).toEqual([
+			6, 6, 6, 6,
+		]);
 	});
 });
