@@ -52,9 +52,10 @@ export class RecurringSeriesService {
 			this.detect(accountId, asOf),
 			this.decisionRepository.find({where: {accountId}}),
 		]);
+		const decisionBySeries = resolveDecisions(detected, decisions);
 		const series = detected
 			.filter((entry) => entry.direction === direction)
-			.map((entry) => ({entry, decision: findDecision(entry, decisions)?.decision ?? null}))
+			.map((entry) => ({entry, decision: decisionBySeries.get(entry.key)?.decision ?? null}))
 			.sort(
 				(a, b) =>
 					DECISION_ORDER[a.decision ?? 'NONE'] - DECISION_ORDER[b.decision ?? 'NONE'] ||
@@ -85,10 +86,13 @@ export class RecurringSeriesService {
 	 * `null` returns the series to suggested.
 	 */
 	async updateDecision(accountId: Account['id'], seriesKey: string, decision: RecurringSeriesDecisionValue | null) {
-		const series = await this.findDetected(accountId, seriesKey);
+		const detected = await this.detect(accountId, today());
+		const series = detected.find((entry) => entry.key === seriesKey);
+		if (!series) throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);
 		const decisions = await this.decisionRepository.find({where: {accountId}});
-		// Replace whatever decision this series showed, including one inherited from its earlier key.
-		const superseded = decisions.filter((entry) => entry.seriesKey === seriesKey || overlaps(entry, series));
+		// Replace only the decision this series shows, including one inherited from its earlier key.
+		const shown = resolveDecisions(detected, decisions).get(seriesKey);
+		const superseded = decisions.filter((entry) => entry.seriesKey === seriesKey || entry.id === shown?.id);
 		await this.decisionRepository.manager.transaction(async (manager) => {
 			if (superseded.length > 0) {
 				await manager.delete(
@@ -176,29 +180,42 @@ function toResponse(entry: DetectedRecurringSeries, decision: RecurringSeriesDec
 	};
 }
 
-/** The decision made on this series: by its key, else the one sharing the most of its payments. */
-function findDecision(
-	series: DetectedRecurringSeries,
+/**
+ * Which decision each current series shows. A decision applies to its own key; once that key is gone
+ * (the series was reclassified or split), it passes to exactly one series: the one sharing most of its
+ * payments. Every decision applies at most once, so changing one series never changes another.
+ */
+function resolveDecisions(
+	detected: readonly DetectedRecurringSeries[],
 	decisions: readonly RecurringSeriesDecision[],
-): RecurringSeriesDecision | undefined {
-	const exact = decisions.find(({seriesKey}) => seriesKey === series.key);
-	if (exact) return exact;
-	const ids = new Set(series.transactionIds);
-	let best: RecurringSeriesDecision | undefined;
-	let bestShared = 0;
+): Map<string, RecurringSeriesDecision> {
+	const result = new Map<string, RecurringSeriesDecision>();
+	const keys = new Set(detected.map(({key}) => key));
 	for (const decision of decisions) {
-		const shared = decision.transactionIds.filter((id) => ids.has(id)).length;
-		if (shared > bestShared) {
-			best = decision;
-			bestShared = shared;
-		}
+		if (keys.has(decision.seriesKey)) result.set(decision.seriesKey, decision);
 	}
-	return best;
+	const shares = new Map<string, number>();
+	for (const decision of decisions) {
+		if (keys.has(decision.seriesKey)) continue;
+		const decided = new Set(decision.transactionIds);
+		let best: DetectedRecurringSeries | undefined;
+		let bestShared = 0;
+		for (const series of detected) {
+			const shared = series.transactionIds.filter((id) => decided.has(id)).length;
+			if (shared > bestShared || (shared === bestShared && shared > 0 && best && series.key < best.key)) {
+				best = series;
+				bestShared = shared;
+			}
+		}
+		if (!best || (result.has(best.key) && (shares.get(best.key) ?? Infinity) >= bestShared)) continue;
+		result.set(best.key, decision);
+		shares.set(best.key, bestShared);
+	}
+	return result;
 }
 
-function overlaps(decision: RecurringSeriesDecision, series: DetectedRecurringSeries): boolean {
-	const ids = new Set(series.transactionIds);
-	return decision.transactionIds.some((id) => ids.has(id));
+function today(): string {
+	return new Date().toISOString().slice(0, 10);
 }
 
 function compareDescending(a: bigint | null, b: bigint | null): number {

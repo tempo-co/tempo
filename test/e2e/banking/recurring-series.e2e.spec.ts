@@ -247,6 +247,38 @@ describe('RecurringSeries', () => {
 		expect(byName((await list(ownerAgent)).series, 'Example Utility')[0].decision).toBeNull();
 	});
 
+	it('gives a split series’ decision to one part only, so changing one leaves the other alone', async () => {
+		const water = {counterpartyName: 'Example Water', description: 'Example Water'};
+		await fixtures.createTransactions(ownerBankAccount, [
+			bookedRow('2026-05-21', '-10.00', water),
+			bookedRow('2026-06-21', '-20.00', water),
+			bookedRow('2026-07-21', '-20.00', water),
+		]);
+		const [variable] = byName((await list(ownerAgent)).series, 'Example Water');
+		expect(variable).toMatchObject({amountKind: 'VARIABLE'});
+		await ownerAgent.patch(`/recurring-series/${variable.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
+
+		// Two plans billed side by side split it into two fixed series.
+		await fixtures.createTransactions(
+			ownerBankAccount,
+			['2026-08-21', '2026-09-21', '2026-10-16'].flatMap((date) => [
+				bookedRow(date, '-10.00', water),
+				bookedRow(date, '-20.00', water),
+			]),
+		);
+		const parts = byName((await list(ownerAgent)).series, 'Example Water');
+		expect(parts).toHaveLength(2);
+		const confirmed = parts.filter(({decision}) => decision === 'CONFIRMED');
+		expect(confirmed).toHaveLength(1);
+		const other = parts.find(({key}) => key !== confirmed[0].key)!;
+
+		await ownerAgent.patch(`/recurring-series/${other.key}/decision`).send({decision: 'DISMISSED'}).expect(204);
+		await ownerAgent.patch(`/recurring-series/${other.key}/decision`).send({decision: null}).expect(204);
+		const after = byName((await list(ownerAgent)).series, 'Example Water');
+		expect(after.find(({key}) => key === confirmed[0].key)?.decision).toBe('CONFIRMED');
+		expect(after.find(({key}) => key === other.key)?.decision).toBeNull();
+	});
+
 	it('rejects keys that are invalid, unknown or another owner’s', async () => {
 		const [club] = (await list(otherAgent)).series;
 
