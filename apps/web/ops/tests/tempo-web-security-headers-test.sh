@@ -42,8 +42,9 @@ if mode == 'spa':
     for name, value in expected.items():
         assert headers.get(name) == value, f'missing or incorrect {name} in {headers_path}: {headers.get(name)!r}'
     assert 'strict-transport-security' not in headers, 'HSTS belongs at the HTTPS terminator, not the HTTP Nginx listener'
-    csp = headers.get('content-security-policy-report-only')
-    assert csp, 'missing Content-Security-Policy-Report-Only'
+    assert 'content-security-policy-report-only' not in headers, 'CSP must be enforced, not report-only'
+    csp = headers.get('content-security-policy')
+    assert csp, 'missing Content-Security-Policy'
     for directive in (
         "default-src 'self'",
         "base-uri 'self'",
@@ -56,10 +57,11 @@ if mode == 'spa':
         "font-src 'self' data:",
         "connect-src 'self'",
     ):
-        assert directive in csp, f'CSP candidate missing {directive!r}'
+        assert directive in csp, f'CSP missing {directive!r}'
 elif mode == 'proxy':
     assert status == 502, f'expected isolated upstream HTTP 502, got {status}'
     for name in (
+        'content-security-policy',
         'content-security-policy-report-only',
         'x-content-type-options',
         'x-frame-options',
