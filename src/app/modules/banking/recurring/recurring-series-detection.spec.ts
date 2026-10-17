@@ -273,8 +273,9 @@ describe('detectRecurringSeries', () => {
 	});
 
 	it('does not treat a one-word transfer name as a person', () => {
+		// Same amount, so only the payee grouping keeps them apart.
 		const transfers = monthly(28, MAY_TO_OCT, '50.00', {merchantKey: 'EXPENSE:transfer to example'});
-		const shop = monthly(3, MAY_TO_OCT, '9.99', {merchantKey: 'EXPENSE:example'});
+		const shop = monthly(12, MAY_TO_OCT, '50.00', {merchantKey: 'EXPENSE:example'});
 
 		expect(
 			detectRecurringSeries([...transfers, ...shop], TODAY).map(({transactionIds}) => transactionIds.length),
