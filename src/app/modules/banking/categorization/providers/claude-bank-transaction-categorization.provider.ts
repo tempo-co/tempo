@@ -209,27 +209,45 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			);
 			request.tools = [{type: 'web_search_20250305', name: 'web_search', max_uses: 1}];
 			let response;
+			let provider = 'claude-api';
 			try {
 				response = await this.callApi(request);
-			} catch {
-				results.push({
-					correlationId: transaction.correlationId,
-					category: 'NEEDS_REVIEW',
-					confidence: 0,
-					provider: 'claude-api',
-					model: this.model,
-					searchTrace: {queries: [], sourceDomains: [], evidenceType: 'INSUFFICIENT'},
-				});
-				continue;
+			} catch (error) {
+				// Fall back only when the API refused the request outright. After a timeout or an incomplete reply
+				// the search may already have run, and the row gets only one.
+				try {
+					if (!this.subscriptionSocket || !this.refusedBeforeRunning(error)) throw error;
+					provider = 'claude-subscription';
+					const {sourceDomains, ...output} = JSON.parse(
+						await this.callSubscription(input, '/categorize-with-search'),
+					) as {sourceDomains?: unknown};
+					response = {
+						text: JSON.stringify(output),
+						domains: this.toSourceDomains(sourceDomains),
+						queries: [transaction.searchQuery],
+					};
+				} catch {
+					results.push({
+						correlationId: transaction.correlationId,
+						category: 'NEEDS_REVIEW',
+						confidence: 0,
+						provider,
+						model: this.model,
+						searchTrace: {queries: [], sourceDomains: [], evidenceType: 'INSUFFICIENT'},
+					});
+					continue;
+				}
 			}
-			if (response.searches !== 1) throw this.invalidResponseError();
+			if (response.queries.length !== 1 || response.queries[0] !== transaction.searchQuery)
+				throw this.invalidResponseError();
+			const domains = response.domains;
 			results.push(
-				...this.parseResults(response.text, [transaction], true, 'claude-api').map((result) => ({
+				...this.parseResults(response.text, [transaction], true, provider).map((result) => ({
 					...result,
 					searchTrace: {
 						...result.searchTrace!,
 						queries: [transaction.searchQuery],
-						sourceDomains: response.domains,
+						sourceDomains: domains,
 					},
 				})),
 			);
@@ -255,7 +273,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 
 	private async callApi(
 		request: MessageCreateParamsNonStreaming,
-	): Promise<{text: string; domains: string[]; searches: number}> {
+	): Promise<{text: string; domains: string[]; queries: unknown[]}> {
 		if (!this.apiKey && !this.client) throw new BankTransactionCategorizationUnavailableError();
 		const client =
 			this.client ??
@@ -273,26 +291,51 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			.flatMap((block) => (block.type === 'text' ? [block.text] : []))
 			.join('');
 		if (!text.trim()) throw this.invalidResponseError();
-		const domains = new Set<string>();
+		const urls: unknown[] = [];
+		const queries = response.content.flatMap((block) =>
+			block.type === 'server_tool_use' && block.name === 'web_search'
+				? [(block.input as {query?: unknown} | null)?.query]
+				: [],
+		);
+		if (queries.length !== (response.usage.server_tool_use?.web_search_requests ?? 0))
+			throw this.invalidResponseError();
 		for (const block of response.content) {
 			if (block.type !== 'web_search_tool_result') continue;
 			if (!Array.isArray(block.content)) throw this.invalidResponseError();
-			for (const result of block.content) {
-				try {
-					const url = new URL(result.url);
-					const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
-					if (
-						(url.protocol === 'https:' || url.protocol === 'http:') &&
-						/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(hostname) &&
-						domains.size < BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS
-					)
-						domains.add(hostname);
-				} catch {
-					continue;
-				}
-			}
+			urls.push(...block.content.map((result) => result.url));
 		}
-		return {text, domains: [...domains], searches: response.usage.server_tool_use?.web_search_requests ?? 0};
+		return {text, domains: this.toSourceDomains(urls), queries};
+	}
+
+	/** An HTTP refusal (billing, auth, rate limit, overload) means the request, and so its search, never ran. */
+	private refusedBeforeRunning(error: unknown): boolean {
+		if (error instanceof BankTransactionCategorizationUnavailableError) return true;
+		const status = (error as {status?: unknown} | null)?.status;
+		// 408 is a timeout: the request may have run.
+		return typeof status === 'number' && ((status >= 400 && status < 500 && status !== 408) || status === 529);
+	}
+
+	/** Accepts URLs or bare hostnames; keeps only well-formed hostnames, without paths or query strings. */
+	private toSourceDomains(values: unknown): string[] {
+		const domains = new Set<string>();
+		for (const value of Array.isArray(values) ? values : []) {
+			if (typeof value !== 'string') continue;
+			let url: URL;
+			try {
+				// The bridge sends bare hostnames; the API sends result URLs.
+				url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `https://${value}`);
+			} catch {
+				continue;
+			}
+			const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
+			if (
+				(url.protocol === 'https:' || url.protocol === 'http:') &&
+				/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(hostname) &&
+				domains.size < BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS
+			)
+				domains.add(hostname);
+		}
+		return [...domains];
 	}
 
 	private parseResults(
@@ -338,14 +381,14 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		}));
 	}
 
-	private callSubscription(input: object): Promise<string> {
+	private callSubscription(input: object, path = '/categorize'): Promise<string> {
 		return new Promise((resolve, reject) => {
 			const body = JSON.stringify({model: this.model, input});
 			const request = httpRequest(
 				{
 					socketPath: this.subscriptionSocket,
 					method: 'POST',
-					path: '/categorize',
+					path,
 					headers: {'content-type': 'application/json', 'content-length': Buffer.byteLength(body)},
 				},
 				(response) => {

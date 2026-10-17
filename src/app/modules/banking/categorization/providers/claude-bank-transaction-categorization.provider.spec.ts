@@ -100,6 +100,19 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(request.output_config.format.schema).toEqual(contract.schema);
 	});
 
+	it('sends the same search instructions and schema as the subscription bridge contract', async () => {
+		const contract = JSON.parse(readFileSync(join(process.cwd(), 'ops/claude-bridge/contract.json'), 'utf8'));
+		const {provider, create} = setup();
+		create.mockRejectedValue(new Error('synthetic'));
+		await provider.categorizeWithWebSearch(
+			[toBankTransactionCategorizationWebSearchInput(input())!],
+			BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+		);
+		const request = create.mock.calls[0][0];
+		expect(request.system).toBe(contract.webSearch.instructions);
+		expect(request.output_config.format.schema).toEqual(contract.webSearch.schema);
+	});
+
 	describe('structured response validation', () => {
 		it.each([
 			['unknown category', [{correlationId: '0', category: 'UNKNOWN', confidence: 0.5}]],
@@ -206,7 +219,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(create).toHaveBeenCalledTimes(1);
 	});
 
-	it('leaves failed searches for review without spending a subscription request', async () => {
+	it('leaves a search for review when the API and subscription searches both fail', async () => {
 		const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/missing-synthetic.sock'});
 		create.mockRejectedValue({status: 400, message: 'secret raw input'});
 		await expect(
@@ -272,6 +285,152 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 			await rm(directory, {recursive: true, force: true});
 		}
+	});
+
+	it('falls back to a pinned subscription search and keeps only valid source hostnames', async () => {
+		const directory = await mkdtemp(join(tmpdir(), 'claude-provider-'));
+		const socket = join(directory, 'bridge.sock');
+		const requests: {url?: string; body: unknown}[] = [];
+		const server = createServer((req, res) => {
+			const chunks: Buffer[] = [];
+			req.on('data', (chunk: Buffer) => chunks.push(chunk));
+			req.on('end', () => {
+				requests.push({url: req.url, body: JSON.parse(Buffer.concat(chunks).toString())});
+				res.writeHead(200, {'content-type': 'application/json'});
+				res.end(
+					JSON.stringify({
+						classifications: [
+							{
+								correlationId: '0',
+								category: 'FOOD_AND_DRINK',
+								confidence: 0.8,
+								evidenceType: 'MERCHANT_IDENTITY_ONLY',
+							},
+						],
+						sourceDomains: ['example.test', 'not a domain', 'javascript:alert(1)'],
+					}),
+				);
+			});
+		});
+		await new Promise<void>((resolve) => server.listen(socket, resolve));
+		try {
+			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
+			create.mockRejectedValue({status: 400, message: 'API credit balance exhausted, secret'});
+			const transaction = toBankTransactionCategorizationWebSearchInput(input())!;
+			await expect(
+				provider.categorizeWithWebSearch([transaction], BANK_TRANSACTION_CATEGORY_DEFINITIONS),
+			).resolves.toEqual([
+				{
+					correlationId: transaction.correlationId,
+					category: 'FOOD_AND_DRINK',
+					confidence: 0.8,
+					provider: 'claude-subscription',
+					model: 'claude-opus-5-5',
+					searchTrace: {
+						queries: [transaction.searchQuery],
+						sourceDomains: ['example.test'],
+						evidenceType: 'MERCHANT_IDENTITY_ONLY',
+					},
+				},
+			]);
+			expect(requests).toHaveLength(1);
+			expect(requests[0].url).toBe('/categorize-with-search');
+			expect(requests[0].body).toEqual({
+				model: 'claude-opus-5-5',
+				input: JSON.parse(create.mock.calls[0][0].messages[0].content),
+			});
+		} finally {
+			await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+			await rm(directory, {recursive: true, force: true});
+		}
+	});
+
+	describe('search budget across routes', () => {
+		const searched = (query: string, overrides: object = {}) => ({
+			stop_reason: 'end_turn',
+			usage: {server_tool_use: {web_search_requests: 1}},
+			content: [
+				{type: 'server_tool_use', name: 'web_search', input: {query}},
+				{type: 'web_search_tool_result', content: []},
+				{
+					type: 'text',
+					text: '{"classifications":[{"correlationId":"0","category":"SHOPPING","confidence":0.8,"evidenceType":"MERCHANT_IDENTITY_ONLY"}]}',
+				},
+			],
+			...overrides,
+		});
+
+		async function withBridge(run: (socket: string, calls: () => number) => Promise<void>) {
+			const directory = await mkdtemp(join(tmpdir(), 'claude-provider-'));
+			const socket = join(directory, 'bridge.sock');
+			let count = 0;
+			const server = createServer((req, res) => {
+				count += 1;
+				req.resume();
+				res.writeHead(503, {'content-type': 'application/json'});
+				res.end('{"error":"claude_unavailable"}');
+			});
+			await new Promise<void>((resolve) => server.listen(socket, resolve));
+			try {
+				await run(socket, () => count);
+			} finally {
+				await new Promise<void>((resolve) => server.close(() => resolve()));
+				await rm(directory, {recursive: true, force: true});
+			}
+		}
+
+		it.each([
+			['a timeout', () => Promise.reject(new Error('synthetic timeout'))],
+			['an HTTP 408', () => Promise.reject({status: 408})],
+			[
+				'a truncated reply after searching',
+				(query: string) => Promise.resolve(searched(query, {stop_reason: 'max_tokens'})),
+			],
+		])('does not search again on the subscription after %s', async (_name, reply) => {
+			await withBridge(async (socket, calls) => {
+				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
+				const transaction = toBankTransactionCategorizationWebSearchInput(input())!;
+				create.mockImplementation(() => reply(transaction.searchQuery));
+				const [result] = await provider.categorizeWithWebSearch(
+					[transaction],
+					BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+				);
+				expect(result).toMatchObject({category: 'NEEDS_REVIEW', provider: 'claude-api'});
+				expect(calls()).toBe(0);
+			});
+		});
+
+		it('rejects an API result whose search used a different query', async () => {
+			await withBridge(async (socket, calls) => {
+				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
+				create.mockResolvedValue(searched('Example Cafe -10.00 EUR'));
+				await expect(
+					provider.categorizeWithWebSearch(
+						[toBankTransactionCategorizationWebSearchInput(input())!],
+						BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+					),
+				).rejects.toThrow('invalid categorization response');
+				expect(calls()).toBe(0);
+			});
+		});
+
+		it('labels a failed subscription-only search with the subscription route', async () => {
+			await withBridge(async (socket, calls) => {
+				const config = {
+					get: (key: string) =>
+						({AI_CATEGORIZATION_MODEL: 'claude-opus-5-5', AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket})[
+							key
+						],
+				} as unknown as ConfigurationService;
+				const provider = new ClaudeBankTransactionCategorizationProvider(config);
+				const [result] = await provider.categorizeWithWebSearch(
+					[toBankTransactionCategorizationWebSearchInput(input())!],
+					BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+				);
+				expect(result).toMatchObject({category: 'NEEDS_REVIEW', provider: 'claude-subscription'});
+				expect(calls()).toBe(1);
+			});
+		});
 	});
 
 	it('does not let SDK debug logging print upstream error bodies', async () => {
