@@ -4,7 +4,7 @@ import http from 'node:http';
 import path from 'node:path';
 
 import contract from './contract.json' with {type: 'json'};
-import {assertExtraUsageDisabled} from './subscription.mjs';
+import {assertExtraUsageDisabled, storedTokenExpiresAt} from './subscription.mjs';
 import {validRequest, validResponse} from './validation.mjs';
 
 const CLI_ARGS = [
@@ -37,6 +37,7 @@ export async function startBridge({
 	spawnProcess = spawn,
 	env = process.env,
 	verifyUsage = assertExtraUsageDisabled,
+	tokenExpiresAt = storedTokenExpiresAt,
 	timeoutMs = 120_000,
 	maxOutputBytes = 256 * 1024,
 } = {}) {
@@ -147,6 +148,12 @@ export async function startBridge({
 			await rm(cwd, {recursive: true, force: true});
 		}
 	}
+	// Only the CLI renews the subscription login, and `doctor` does so without inference. Renew it before the
+	// usage check, which refuses an expired token.
+	async function verifySubscription() {
+		if ((await tokenExpiresAt(childEnv.HOME)) - Date.now() < 5 * 60 * 1000) await run(['doctor'], '');
+		await verifyUsage(childEnv.HOME);
+	}
 	const auth = JSON.parse(await run(['auth', 'status', '--json']));
 	if (
 		auth.loggedIn !== true ||
@@ -155,7 +162,7 @@ export async function startBridge({
 		!['max', 'pro'].includes(auth.subscriptionType)
 	)
 		throw new Error('Claude subscription authentication required.');
-	await verifyUsage(childEnv.HOME);
+	await verifySubscription();
 	let busy = false;
 	const server = http.createServer(async (req, res) => {
 		const reply = (status, body) => {
@@ -189,7 +196,7 @@ export async function startBridge({
 			}
 			if (!validRequest(parsed)) return reply(400, {error: 'invalid_request'});
 			const {input} = parsed;
-			await verifyUsage(childEnv.HOME);
+			await verifySubscription();
 			let initialized = false;
 			let overageRejected = false;
 			let result;
@@ -213,7 +220,7 @@ export async function startBridge({
 					if (event.type === 'rate_limit_event') {
 						const info = event.rate_limit_info;
 						if (
-							info?.status !== 'allowed' ||
+							!['allowed', 'allowed_warning'].includes(info?.status) ||
 							info.isUsingOverage !== false ||
 							info.overageStatus !== 'rejected'
 						)

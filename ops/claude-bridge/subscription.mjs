@@ -2,6 +2,17 @@ import {readFile} from 'node:fs/promises';
 import {request as httpsRequest} from 'node:https';
 import path from 'node:path';
 
+// Expiry of the stored subscription login, or 0 when unreadable.
+export async function storedTokenExpiresAt(home, {readCredentials = readFile} = {}) {
+	try {
+		const credentials = JSON.parse(await readCredentials(path.join(home, '.claude', '.credentials.json'), 'utf8'));
+		const expiresAt = credentials.claudeAiOauth?.expiresAt;
+		return typeof expiresAt === 'number' ? expiresAt : 0;
+	} catch {
+		return 0;
+	}
+}
+
 // Claude Code's OAuth usage endpoint. Never send this token to the categorizer or caller.
 export async function assertExtraUsageDisabled(
 	home,

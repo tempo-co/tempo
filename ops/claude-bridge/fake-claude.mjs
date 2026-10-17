@@ -2,7 +2,9 @@
 const mode = process.argv[2];
 const args = process.argv.slice(3);
 const emit = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
-if (args[0] === 'auth') {
+if (args[0] === 'doctor') {
+	if (mode === 'doctor-fail') process.exit(1);
+} else if (args[0] === 'auth') {
 	emit({
 		loggedIn: mode !== 'logged-out',
 		authMethod: mode === 'console-auth' ? 'api_key' : 'claude.ai',
@@ -28,7 +30,17 @@ if (args[0] === 'auth') {
 			type: 'rate_limit_event',
 			rate_limit_info: {status: 'allowed', isUsingOverage: false, overageStatus: 'allowed'},
 		});
-	if (!['overage', 'overage-allowed', 'quota', 'no-rate-limit'].includes(mode))
+	if (mode === 'near-limit')
+		emit({
+			type: 'rate_limit_event',
+			rate_limit_info: {status: 'allowed_warning', isUsingOverage: false, overageStatus: 'rejected'},
+		});
+	if (mode === 'near-limit-overage')
+		emit({
+			type: 'rate_limit_event',
+			rate_limit_info: {status: 'allowed_warning', isUsingOverage: true, overageStatus: 'allowed'},
+		});
+	if (!['overage', 'overage-allowed', 'quota', 'no-rate-limit', 'near-limit', 'near-limit-overage'].includes(mode))
 		emit({
 			type: 'rate_limit_event',
 			rate_limit_info: {status: 'allowed', isUsingOverage: false, overageStatus: 'rejected'},
