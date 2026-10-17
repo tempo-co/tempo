@@ -41,7 +41,7 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
 - `npm run format:check` — CI Prettier check for `src/**/*.{js,jsx,ts,tsx}`.
 - `npm run format` — write Prettier formatting for those source files.
 - `npx playwright install chromium --with-deps` — install the CI browser.
-- `npm run test:e2e:local` — reset E2E Docker services, start them, seed the API, and run the full Playwright suite headlessly (always starts from a pristine database). CI runs the same suite via `npx playwright test` against fresh services.
+- `npm run test:e2e:local` — reset E2E Docker services, start them, seed the API, and run the full Playwright suite headlessly (always starts from a pristine database). CI runs the same suite in shards (`npx playwright test --shard=<n>/<total>`), each against its own fresh services.
 - `npm run docker:test:up` / `npm run db:seed:e2e` / `npm run docker:test:down` — start services, seed data, and clean up services respectively.
 
 CI runs these jobs in parallel: lint/format (`npm run generate-routes`, `npm run lint:check`, `npm run format:check`), build (`npm run build`, then `ops/tests/tempo-web-security-headers-test.sh`) and four E2E shards. Each shard starts fresh Docker services, seeds its own API and runs whole Playwright files with one worker. The required `E2E Tests` job merges their reports into the `playwright-report` artifact and fails unless every shard passes. The image build starts after lint/format passes, and the main-image release waits for all of them. There is no unit-test script; Playwright tests are under `test/e2e`.
