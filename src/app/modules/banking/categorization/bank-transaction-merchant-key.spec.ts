@@ -41,7 +41,7 @@ describe('getBankTransactionMerchantKey', () => {
 		['Example Games via Ex', 'EXPENSE:example games'],
 		['Example Games via', 'EXPENSE:example games'],
 		['Example Games, via Example Pay', 'EXPENSE:example games'],
-		['Example Rail B.V. by Example Pay', 'EXPENSE:example rail b.v.'],
+		['Example Rail B.V. by Example Pay', 'EXPENSE:example rail'],
 		['EXAMPLE GAMES VIA EXAMPLE PAY', 'EXPENSE:example games'],
 		['Example Games', 'EXPENSE:example games'],
 		['Example by Night', 'EXPENSE:example by night'],
@@ -70,6 +70,67 @@ describe('getBankTransactionMerchantKey', () => {
 				creditDebitIndicator: 'CRDT',
 			}),
 		).toBe('INCOME:refund by example shop');
+	});
+
+	it.each([
+		['Example Shop EU S.a r.l.', 'EXPENSE:example shop'],
+		['Example Shop Payments Europe S.C.A.', 'EXPENSE:example shop'],
+		['Example Shop Payments Europe S', 'EXPENSE:example shop'],
+		['Example Shop B.V.', 'EXPENSE:example shop'],
+		['Example Shop BV', 'EXPENSE:example shop'],
+		['Example Shop Nederland B. V.', 'EXPENSE:example shop'],
+		['Example Shop GmbH', 'EXPENSE:example shop'],
+		['Example Shop, Ltd.', 'EXPENSE:example shop'],
+		['Example Shop AB', 'EXPENSE:example shop'],
+		['Example Shop S.A.', 'EXPENSE:example shop'],
+		['Example Shop B.V.,', 'EXPENSE:example shop'],
+		['Example Shop,', 'EXPENSE:example shop'],
+		['EXAMPLE SHOP SA', 'EXPENSE:example shop'],
+		['Example Shop (Europe) B.V.', 'EXPENSE:example shop'],
+		['Example Shop Europe B', 'EXPENSE:example shop'],
+		['Example Shop B.V. via Example Pay', 'EXPENSE:example shop'],
+		['Example Shop', 'EXPENSE:example shop'],
+		['Europe B.V.', 'EXPENSE:europe'],
+	])('keys the legal entity %s as its business', (counterpartyName, expected) => {
+		expect(getBankTransactionMerchantKey({description: null, counterpartyName, creditDebitIndicator: 'DBIT'})).toBe(
+			expected,
+		);
+	});
+
+	it.each([
+		['Example Payments', 'EXPENSE:example payments'],
+		['Example Shop Europe', 'EXPENSE:example shop europe'],
+		['Maria Ab', 'EXPENSE:maria ab'],
+		['Joana Sa', 'EXPENSE:joana sa'],
+		['JOANA SA', 'EXPENSE:joana sa'],
+		['Example Shop Europe A', 'EXPENSE:example shop europe a'],
+		['Example Ab Testing', 'EXPENSE:example ab testing'],
+		['Example Bevel', 'EXPENSE:example bevel'],
+	])('keeps every word of %s, which has no legal form', (counterpartyName, expected) => {
+		expect(getBankTransactionMerchantKey({description: null, counterpartyName, creditDebitIndicator: 'DBIT'})).toBe(
+			expected,
+		);
+	});
+
+	it('does not strip legal forms from a plain description', () => {
+		expect(
+			getBankTransactionMerchantKey({
+				description: 'Invoice 2026 AB',
+				counterpartyName: null,
+				creditDebitIndicator: 'DBIT',
+			}),
+		).toBe('EXPENSE:invoice 2026 ab');
+	});
+
+	it('keys a structured SEPA name without its legal form', () => {
+		expect(
+			getBankTransactionMerchantKey({
+				description:
+					'SEPA iDEAL IBAN: NL91ABNA0417164300 BIC: ABNANL2A Naam: Example Shop EU SARL Omschrijving: x',
+				counterpartyName: null,
+				creditDebitIndicator: 'DBIT',
+			}),
+		).toBe('EXPENSE:example shop');
 	});
 
 	it.each([
