@@ -32,7 +32,7 @@ case ${1:-} in
         ;;
     claude-bridge)
         [[ $EUID != 0 ]] || { echo 'run the bridge install as the Claude subscription user, not root' >&2; exit 1; }
-        for file in bridge.mjs contract.json main.mjs search-hook.mjs subscription.mjs validation.mjs; do
+        for file in bridge.mjs check-contract.mjs contract.json main.mjs search-hook.mjs subscription.mjs validation.mjs; do
             copy 600 "$REPO/ops/claude-bridge/$file" "$HOME/.local/lib/tempo-claude-bridge/$file"
         done
         copy 644 "$REPO/ops/systemd/tempo-claude-bridge.service" "$HOME/.config/systemd/user/tempo-claude-bridge.service"

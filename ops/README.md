@@ -48,6 +48,18 @@ systemctl --user enable --now tempo-claude-bridge.service
 
 Then set `AI_CATEGORIZATION_PROVIDER=claude`, `AI_CATEGORIZATION_MODEL=claude-opus-5-5`, `ANTHROPIC_API_KEY` and `TEMPO_CLAUDE_BRIDGE_DIR` (the unit's `~/.local/state/tempo-claude`) in `/etc/tempo/production.env`, and remove `OPENAI_API_KEY`. When neither route is available, transactions stay pending and hourly reconciliation retries them.
 
+### Contract compatibility
+
+The API fingerprints `contract.json` and sends `X-Tempo-Contract` on both subscription routes. The bridge refuses a missing or different fingerprint with `409 contract_mismatch` before starting Claude; the API logs an actionable warning. Reinstall **and restart** the bridge when the contract changes. The initial rollout needs the new API deployed before restarting the stricter bridge, since older APIs do not send the header.
+
+`GET /contract` on the private socket returns the bridge's loaded fingerprint without calling Claude. The host check compares it with the running API container, rather than with an installed file that may not have been reloaded:
+
+```bash
+"$HOME/.local/bin/node" "$HOME/.local/lib/tempo-claude-bridge/check-contract.mjs"
+```
+
+The check is silent on success and prints a safe failure reason with exit status 1 otherwise. It uses `tempo-api-production-api-1` by default (`TEMPO_API_CONTAINER` overrides it), and `TEMPO_CLAUDE_BRIDGE_SOCKET` overrides the socket. Add it as the final check in the host uptime probe's `probe()` function so its existing consecutive-failure threshold, Discord delivery queue and recovery notification also cover contract drift. The host-specific probe and its notification configuration are not managed by this repository.
+
 ### Network boundary
 
 PostgreSQL, Redis and the API share the `default` network. The API also joins the internal `frontend` network; web joins `frontend` and the web-only `ingress` network that publishes its loopback port. Web therefore has no network path to the database or cache. Do not mark `default` internal: the API needs outbound access.
