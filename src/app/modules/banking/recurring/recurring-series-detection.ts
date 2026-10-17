@@ -144,10 +144,11 @@ export function detectRecurringSeries(
 	for (const rows of partitions.values()) {
 		rows.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 		// Two similar transfers to a friend a year apart are a coincidence, never a yearly bill.
-		const person = payees.isPerson(rows[0].merchantKey) || rows.every(isPersonTransferCategory);
+		const person = payees.isPerson(rows[0].merchantKey);
 		const cadenceOf = (chain: readonly RecurringCandidate[]) => {
 			const rule = matchCadence(chain);
-			return rule?.cadence === 'YEARLY' && (person || isBusyPayee(rows, chain)) ? null : rule;
+			const coincidence = person || chain.some(isPersonTransferCategory) || isBusyPayee(rows, chain);
+			return rule?.cadence === 'YEARLY' && coincidence ? null : rule;
 		};
 		const fixed = chainByAmount(rows).flatMap((chain) => {
 			const rule = cadenceOf(chain);
@@ -347,7 +348,21 @@ function addCycles(rows: readonly RecurringCandidate[], rule: CadenceRule, cycle
 	// Month-based series keep their usual day of the month, clamped to shorter months.
 	const anchorDay = Math.round(medianNumber(rows.map((row) => Number(row.date.slice(8, 10)))));
 	const [year, month] = lastDate.split('-').map(Number);
-	const target = new Date(Date.UTC(year, month - 1 + rule.months * cycles, 1));
+	// A payment made a few days early, across a month boundary, still pays the month it was due in.
+	const paidMonth = [-1, 0, 1]
+		.map((offset) => month - 1 + offset)
+		.reduce((best, candidate) =>
+			Math.abs(toDayNumber(anchorDate(year, candidate, anchorDay)) - toDayNumber(lastDate)) <
+			Math.abs(toDayNumber(anchorDate(year, best, anchorDay)) - toDayNumber(lastDate))
+				? candidate
+				: best,
+		);
+	return anchorDate(year, paidMonth + rule.months * cycles, anchorDay);
+}
+
+/** The anchor day in a month counted from January of `year` (0-based, may overflow), clamped to its length. */
+function anchorDate(year: number, monthIndex: number, anchorDay: number): string {
+	const target = new Date(Date.UTC(year, monthIndex, 1));
 	const lastDayOfMonth = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
 	target.setUTCDate(Math.min(anchorDay, lastDayOfMonth));
 	return target.toISOString().slice(0, 10);

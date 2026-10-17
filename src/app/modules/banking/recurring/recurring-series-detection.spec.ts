@@ -202,6 +202,19 @@ describe('detectRecurringSeries', () => {
 		});
 	});
 
+	it('counts a payment made a few days early as the month it was due in', () => {
+		const rows = ['2026-04-01', '2026-05-01', '2026-05-29', '2026-07-01', '2026-08-01', '2026-08-30'].map((date) =>
+			payment(date, '20.00'),
+		);
+
+		expect(detectRecurringSeries(rows, '2026-09-10')[0]).toMatchObject({
+			nextExpectedDate: '2026-10-01',
+			status: 'ACTIVE',
+			flags: [],
+			restartTransactionIds: [],
+		});
+	});
+
 	it('marks a stopped series ended without flagging its old price', () => {
 		const rows = [...monthly(1, ['2026-03', '2026-04', '2026-05'], '20.00'), payment('2026-06-01', '22.00')];
 
@@ -223,7 +236,24 @@ describe('detectRecurringSeries', () => {
 			category: 'TRANSFER_OUT',
 		}));
 
-		expect(detectRecurringSeries([...insurer, ...friend, ...counterpartyFriend], TODAY)).toEqual([
+		// A named person seen elsewhere as a transfer, now under a plain counterparty name.
+		const knownPerson = [payment('2025-06-03', '25.00'), payment('2026-06-02', '25.00')].map((row) => ({
+			...row,
+			merchantKey: 'EXPENSE:jo sample',
+		}));
+		const knownPersonTransfer = {
+			...payment('2026-01-15', '5.00'),
+			merchantKey: 'EXPENSE:transfer to jo sample',
+		};
+		// Two transfers a year apart beside one uncategorised payment to the same payee.
+		const mixed = [
+			{...payment('2025-05-10', '40.00'), category: 'TRANSFER_OUT'},
+			{...payment('2026-01-20', '12.00'), category: null},
+			{...payment('2026-05-09', '40.00'), category: 'TRANSFER_OUT'},
+		].map((row) => ({...row, merchantKey: 'EXPENSE:pat mixed'}));
+
+		const rows = [...insurer, ...friend, ...counterpartyFriend, ...knownPerson, knownPersonTransfer, ...mixed];
+		expect(detectRecurringSeries(rows, TODAY)).toEqual([
 			expect.objectContaining({cadence: 'YEARLY', transactionIds: insurer.map(({id}) => id)}),
 		]);
 	});

@@ -174,8 +174,11 @@ function shownDecision(
 ): RecurringSeriesDecisionValue | null {
 	if (!decision) return null;
 	if (decision.decision !== 'DISMISSED') return decision.decision;
+	// Only a restart after the last payment the owner dismissed brings the series back. Ids are in date order.
 	const decided = new Set(decision.transactionIds);
-	return entry.restartTransactionIds.some((id) => !decided.has(id)) ? null : decision.decision;
+	const lastDecided = entry.transactionIds.findLastIndex((id) => decided.has(id));
+	const later = new Set(entry.transactionIds.slice(lastDecided + 1));
+	return entry.restartTransactionIds.some((id) => later.has(id)) ? null : decision.decision;
 }
 
 function toResponse(entry: DetectedRecurringSeries, decision: RecurringSeriesDecisionValue | null): RecurringSeriesDto {

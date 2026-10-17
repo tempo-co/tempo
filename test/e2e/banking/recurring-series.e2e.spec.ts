@@ -6,6 +6,7 @@ import {In, Repository} from 'typeorm';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
+import {RecurringSeriesDecision} from '@modules/banking/recurring/recurring-series-decision.entity';
 
 import {BankingFixtures, CURRENCY_EXCHANGE_EVENT, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {
@@ -377,9 +378,35 @@ describe('RecurringSeries', () => {
 			ownerBankAccount,
 			['2026-09-05', '2026-10-05'].map((date) => bookedRow(date, '-19.00', club)),
 		);
-		expect(byName((await list(ownerAgent)).series, 'Example Club Membership')).toEqual([
-			expect.objectContaining({key: stopped.key, status: 'ACTIVE', decision: null}),
+		const [restarted] = byName((await list(ownerAgent)).series, 'Example Club Membership');
+		expect(restarted).toMatchObject({key: stopped.key, status: 'ACTIVE', decision: null});
+		// The stored dismissal is untouched; dismissing again covers the restart.
+		const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
+		const stored = await decisions.findBy({accountId: owner.id, seriesKey: stopped.key});
+		expect(stored).toEqual([expect.objectContaining({decision: 'DISMISSED', transactionIds: expect.any(Array)})]);
+		expect(stored[0].transactionIds).toHaveLength(3);
+		await ownerAgent.patch(`/recurring-series/${stopped.key}/decision`).send({decision: 'DISMISSED'}).expect(204);
+		expect(byName((await list(ownerAgent)).series, 'Example Club Membership')[0].decision).toBe('DISMISSED');
+	});
+
+	it('keeps a confirmed series confirmed when its payments restart after stopping', async () => {
+		const pool = {counterpartyName: 'Example Pool', description: 'Example Pool'};
+		await fixtures.createTransactions(
+			ownerBankAccount,
+			['2026-03-06', '2026-04-06', '2026-05-06'].map((date) => bookedRow(date, '-21.00', pool)),
+		);
+		const [stopped] = byName((await list(ownerAgent)).series, 'Example Pool');
+		await ownerAgent.patch(`/recurring-series/${stopped.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
+		await fixtures.createTransactions(
+			ownerBankAccount,
+			['2026-09-06', '2026-10-06'].map((date) => bookedRow(date, '-21.00', pool)),
+		);
+
+		const {series, confirmedMonthlyTotal} = await list(ownerAgent);
+		expect(byName(series, 'Example Pool')).toEqual([
+			expect.objectContaining({key: stopped.key, status: 'ACTIVE', decision: 'CONFIRMED'}),
 		]);
+		expect(Number(confirmedMonthlyTotal)).toBeGreaterThanOrEqual(21);
 	});
 
 	it('rejects keys that are invalid, unknown or another owner’s', async () => {
