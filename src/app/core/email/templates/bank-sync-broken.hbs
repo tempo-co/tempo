@@ -1,0 +1,12 @@
+{{#> layout subject=subject }}
+  <h1>Tempo can't sync {{bankName}}.</h1>
+  <p>{{reason}} {{lastSyncDescription}}</p>
+  <p>Open your bank connections in Tempo to check it, and reconnect the bank if Tempo asks you to.</p>
+  {{> button
+      url=bankConnectionsUrl
+      text="View bank connections"
+      bgColor="#8F4032"
+      textColor="#F6F1E8"
+  }}
+  <p>You won't get this email again for this connection until it has synced successfully.</p>
+{{/layout}}

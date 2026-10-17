@@ -1,0 +1,12 @@
+{{#> layout subject=subject }}
+  <h1>Your {{bankName}} connection needs renewing.</h1>
+  <p>The access you gave Tempo to {{bankName}} ends on {{consentEndsOn}}. After that, Tempo can no longer sync this bank.</p>
+  <p>Reconnect the bank in Tempo before then to keep your data up to date.</p>
+  {{> button
+      url=bankConnectionsUrl
+      text="Reconnect bank"
+      bgColor="#8F4032"
+      textColor="#F6F1E8"
+  }}
+  <p>You get this email at most twice for each consent period: a week before the access ends and on the last day.</p>
+{{/layout}}

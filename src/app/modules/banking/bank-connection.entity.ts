@@ -72,6 +72,21 @@ export class BankConnection {
 	@Column({type: 'integer', default: 0})
 	syncFailureCount: number;
 
+	/** The consent end date the 7-day expiry email warned about. */
+	@Exclude()
+	@Column({type: 'timestamptz', nullable: true})
+	consentExpiringAlertFor: Date | null;
+
+	/** The consent end date the final-day expiry email warned about. */
+	@Exclude()
+	@Column({type: 'timestamptz', nullable: true})
+	consentFinalAlertFor: Date | null;
+
+	/** The last successful sync (or creation) the broken-sync email covered; a later successful sync starts a new episode. */
+	@Exclude()
+	@Column({type: 'timestamptz', nullable: true})
+	syncAlertFor: Date | null;
+
 	@CreateDateColumn({type: 'timestamptz'})
 	createdAt: Date;
 
