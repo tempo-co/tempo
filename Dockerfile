@@ -8,6 +8,7 @@ RUN npm ci
 
 COPY tsconfig*.json ./
 COPY src/ ./src/
+COPY ops/claude-bridge/contract.json ./ops/claude-bridge/
 COPY scripts/ ./scripts/
 COPY nest-cli.json ./
 RUN npm run build

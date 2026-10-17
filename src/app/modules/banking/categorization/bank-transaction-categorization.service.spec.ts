@@ -419,7 +419,7 @@ describe('BankTransactionCategorizationService worker', () => {
 	});
 
 	it.each(['OTHER', 'NEEDS_REVIEW'] as const)(
-		'leaves subscription %s results in review without calling API search',
+		'searches subscription %s results the same way as API results',
 		async (category) => {
 			const transaction = createBankTransaction({
 				id: `subscription-${category}`,
@@ -441,15 +441,8 @@ describe('BankTransactionCategorizationService worker', () => {
 
 			await service.processTransactionJob([transaction.id]);
 
-			expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
-			expect(transaction).toMatchObject({
-				category: 'NEEDS_REVIEW',
-				categoryStatus: 'COMPLETED',
-				categoryConfidence: '0',
-				categoryProvider: 'claude-subscription',
-				categoryModel: 'subscription-model',
-				categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_SKIPPED_PROMPT_VERSION,
-			});
+			expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(1);
+			expect(provider.categorizeWithWebSearch.mock.calls[0][0][0].correlationId).toBe(transaction.id);
 		},
 	);
 
@@ -488,13 +481,11 @@ describe('BankTransactionCategorizationService worker', () => {
 
 		await service.processTransactionJob([subscription.id, api.id]);
 
-		expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(1);
-		expect(provider.categorizeWithWebSearch.mock.calls[0][0][0].correlationId).toBe(api.id);
-		expect(subscription).toMatchObject({
-			category: 'NEEDS_REVIEW',
-			categoryProvider: 'claude-subscription',
-			categoryModel: 'subscription-model',
-		});
+		expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(2);
+		expect(provider.categorizeWithWebSearch.mock.calls.map((call) => call[0][0].correlationId)).toEqual([
+			subscription.id,
+			api.id,
+		]);
 		expect(api).toMatchObject({
 			category: 'SHOPPING',
 			categoryProvider: 'claude-api',

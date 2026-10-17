@@ -1,25 +1,27 @@
 import {spawn} from 'node:child_process';
-import {chmod, lstat, mkdir, mkdtemp, realpath, rm, unlink} from 'node:fs/promises';
+import {chmod, lstat, mkdir, mkdtemp, realpath, rm, unlink, writeFile} from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 
 import contract from './contract.json' with {type: 'json'};
 import {assertExtraUsageDisabled, storedTokenExpiresAt} from './subscription.mjs';
-import {validRequest, validResponse} from './validation.mjs';
+import {validRequest, validResponse, validSearchRequest} from './validation.mjs';
 
-const CLI_ARGS = [
+const cliArgs = ({instructions, schema}, tools, extra = []) => [
 	'-p',
 	'--model',
 	'claude-opus-5-5',
 	'--effort',
 	'medium',
 	'--system-prompt',
-	contract.instructions,
+	instructions,
 	'--tools',
-	'',
+	tools,
 	'--strict-mcp-config',
 	'--setting-sources',
 	'',
+	...extra,
 	'--disable-slash-commands',
 	'--no-session-persistence',
 	'--permission-mode',
@@ -28,8 +30,45 @@ const CLI_ARGS = [
 	'stream-json',
 	'--verbose',
 	'--json-schema',
-	JSON.stringify(contract.schema),
+	JSON.stringify(schema),
 ];
+const CLI_ARGS = cliArgs(contract, '');
+const hookPath = fileURLToPath(new URL('./search-hook.mjs', import.meta.url));
+if ([process.execPath, hookPath].some((part) => part.includes("'"))) throw new Error('Unsupported bridge path.');
+// dontAsk denies every tool call that no hook allows; the hook allows only the one pinned search.
+const SEARCH_CLI_ARGS = cliArgs(contract.webSearch, 'WebSearch', [
+	'--settings',
+	JSON.stringify({
+		hooks: {
+			PreToolUse: [
+				{matcher: 'WebSearch', hooks: [{type: 'command', command: `'${process.execPath}' '${hookPath}'`}]},
+			],
+		},
+	}),
+]);
+
+const ROUTES = new Map([
+	['/categorize', {args: CLI_ARGS, tools: ['StructuredOutput'], valid: validRequest, search: false}],
+	[
+		'/categorize-with-search',
+		{args: SEARCH_CLI_ARGS, tools: ['StructuredOutput', 'WebSearch'], valid: validSearchRequest, search: true},
+	],
+]);
+
+/** Hostnames only: result paths and query strings never leave the bridge. The API normalizes the rest. */
+function sourceDomains(results) {
+	const domains = new Set();
+	for (const result of results)
+		for (const item of Array.isArray(result?.content) ? result.content : []) {
+			try {
+				const url = new URL(item.url);
+				if (url.protocol === 'https:' || url.protocol === 'http:') domains.add(url.hostname);
+			} catch {
+				continue;
+			}
+		}
+	return [...domains].slice(0, contract.webSearch.maxSourceDomains);
+}
 
 export async function startBridge({
 	socketPath,
@@ -74,9 +113,11 @@ export async function startBridge({
 		operation.finally(() => operations.delete(operation)).catch(() => {});
 		return operation;
 	}
-	async function runChild(args, input, onEvent, signal) {
+	async function runChild(args, input, onEvent, signal, files = {}) {
 		const cwd = await mkdtemp(path.join(directory, 'request-'));
 		try {
+			for (const [name, content] of Object.entries(files))
+				await writeFile(path.join(cwd, name), content, {mode: 0o600});
 			if (closing || signal?.aborted) throw new Error('Claude unavailable.');
 			return await new Promise((resolve, reject) => {
 				const child = spawnProcess(claudePath, args, {
@@ -171,7 +212,9 @@ export async function startBridge({
 				.writeHead(status, {'content-type': 'application/json', 'cache-control': 'no-store'})
 				.end(JSON.stringify(body));
 		};
-		if (req.method !== 'POST' || req.url !== '/categorize') return reply(404, {error: 'not_found'});
+		const route = ROUTES.get(req.url);
+		if (req.method !== 'POST' || !route) return reply(404, {error: 'not_found'});
+		const {search, tools} = route;
 		if (req.headers['content-type']?.split(';')[0].trim() !== 'application/json')
 			return reply(415, {error: 'unsupported_media_type'});
 		if (busy) return reply(503, {error: 'claude_busy'});
@@ -194,14 +237,17 @@ export async function startBridge({
 			} catch {
 				return reply(400, {error: 'invalid_request'});
 			}
-			if (!validRequest(parsed)) return reply(400, {error: 'invalid_request'});
+			if (!route.valid(parsed)) return reply(400, {error: 'invalid_request'});
 			const {input} = parsed;
+			const query = search ? input.transactions[0].searchQuery : undefined;
 			await verifySubscription();
 			let initialized = false;
 			let overageRejected = false;
 			let result;
+			let searchId;
+			let domains;
 			await run(
-				CLI_ARGS,
+				route.args,
 				JSON.stringify(input),
 				(event) => {
 					if (event.type === 'system' && event.subtype === 'init') {
@@ -209,8 +255,8 @@ export async function startBridge({
 							initialized ||
 							event.apiKeySource !== 'none' ||
 							!Array.isArray(event.tools) ||
-							event.tools.length !== 1 ||
-							event.tools[0] !== 'StructuredOutput' ||
+							event.tools.length !== tools.length ||
+							!tools.every((tool) => event.tools.includes(tool)) ||
 							!Array.isArray(event.mcp_servers) ||
 							event.mcp_servers.length !== 0
 						)
@@ -227,28 +273,42 @@ export async function startBridge({
 							throw new Error('Usage prohibited.');
 						overageRejected = true;
 					}
-					if (
-						Array.isArray(event.message?.content) &&
-						event.message.content.some(
-							(item) => item.type === 'tool_use' && item.name !== 'StructuredOutput',
-						)
-					)
-						throw new Error('Unexpected tool.');
+					for (const item of Array.isArray(event.message?.content) ? event.message.content : []) {
+						if (item.type === 'tool_use' && item.name !== 'StructuredOutput') {
+							// One search, with exactly the pinned query; the hook enforces the same before it runs.
+							if (
+								!search ||
+								item.name !== 'WebSearch' ||
+								searchId !== undefined ||
+								item.input?.query !== query
+							)
+								throw new Error('Unexpected tool.');
+							searchId = item.id ?? null;
+						}
+						if (item.type === 'tool_result' && searchId !== undefined && item.tool_use_id === searchId) {
+							const output = event.tool_use_result;
+							if (item.is_error || output?.query !== query || !Array.isArray(output.results) || domains)
+								throw new Error('Search failed.');
+							domains = sourceDomains(output.results);
+						}
+					}
 					if (event.type === 'result') {
 						if (!initialized || !overageRejected || result) throw new Error('Invalid result.');
 						result = event;
 					}
 				},
 				caller.signal,
+				search ? {'search.json': JSON.stringify({query})} : {},
 			);
 			if (
 				!result ||
 				result.subtype !== 'success' ||
 				result.is_error !== false ||
-				!validResponse(result.structured_output, input)
+				!validResponse(result.structured_output, input, search) ||
+				(search && !domains)
 			)
 				throw new Error('Invalid result.');
-			reply(200, result.structured_output);
+			reply(200, search ? {...result.structured_output, sourceDomains: domains} : result.structured_output);
 		} catch {
 			reply(503, {error: 'claude_unavailable'});
 		} finally {

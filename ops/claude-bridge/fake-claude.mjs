@@ -15,12 +15,16 @@ if (args[0] === 'doctor') {
 	let input = '';
 	for await (const chunk of process.stdin) input += chunk;
 	const parsed = JSON.parse(input);
+	const searchRun = args[args.indexOf('--tools') + 1] === 'WebSearch';
 	if (mode !== 'no-init')
 		emit({
 			type: 'system',
 			subtype: 'init',
 			apiKeySource: mode === 'api-key' ? 'ANTHROPIC_API_KEY' : 'none',
-			tools: mode === 'tools' ? ['StructuredOutput', 'Bash'] : ['StructuredOutput'],
+			tools:
+				mode === 'tools'
+					? ['StructuredOutput', 'Bash']
+					: ['StructuredOutput', ...(searchRun ? ['WebSearch'] : [])],
 			mcp_servers: mode === 'mcp' ? [{name: 'example', status: 'connected'}] : [],
 		});
 	if (mode === 'overage')
@@ -47,6 +51,37 @@ if (args[0] === 'doctor') {
 		});
 	if (mode === 'tool-call')
 		emit({type: 'assistant', message: {content: [{type: 'tool_use', name: 'Bash', input: {command: 'example'}}]}});
+	if (mode === 'standard-search')
+		emit({type: 'assistant', message: {content: [{type: 'tool_use', name: 'WebSearch', input: {query: 'x'}}]}});
+	const searches = {'search-none': 0, 'search-twice': 2}[mode] ?? 1;
+	for (let i = 0; searchRun && i < searches; i++) {
+		const query = mode === 'search-other-query' ? 'other query' : parsed.transactions[0].searchQuery;
+		emit({
+			type: 'assistant',
+			message: {content: [{type: 'tool_use', id: `t${i}`, name: 'WebSearch', input: {query, mode: 'standard'}}]},
+		});
+		emit({
+			type: 'user',
+			message: {content: [{type: 'tool_result', tool_use_id: `t${i}`, is_error: mode === 'search-denied'}]},
+			tool_use_result:
+				mode === 'search-denied'
+					? 'Error: denied'
+					: {
+							query,
+							searchCount: 1,
+							results: [
+								{
+									content: [
+										{title: 'a', url: 'https://www.example.test/path?token=private'},
+										{title: 'b', url: 'https://shop.example.test/'},
+										{title: 'c', url: 'not a url'},
+									],
+								},
+								'text summary',
+							],
+						},
+		});
+	}
 	if (mode === 'delay') await new Promise((resolve) => setTimeout(resolve, 1200));
 	if (mode === 'large-stdout') emit({type: 'system', subtype: 'status', data: 'x'.repeat(300 * 1024)});
 	if (mode === 'large-stderr') process.stderr.write('x'.repeat(300 * 1024));
@@ -65,6 +100,7 @@ if (args[0] === 'doctor') {
 			correlationId,
 			category: mode === 'bad-category' ? 'INVENTED' : 'SHOPPING',
 			confidence: mode === 'bad-confidence' ? 4 : 0.9,
+			...(searchRun && mode !== 'search-no-evidence' ? {evidenceType: 'MERCHANT_IDENTITY_ONLY'} : {}),
 		}));
 		if (mode === 'wrong-id') classifications[0].correlationId = 'unknown';
 		if (mode === 'duplicate-id') classifications.push(classifications[0]);

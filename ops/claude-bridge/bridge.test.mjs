@@ -429,4 +429,93 @@ test('shutdown kills and reaps its child and removes only its own socket', async
 	assert.deepEqual(await readdir(path.dirname(socketPath)), []);
 });
 
+const searchPayload = {
+	model: 'claude-opus-5-5',
+	input: {
+		categories: payload.input.categories,
+		transactions: [
+			{
+				correlationId: '0',
+				amount: '-12.34',
+				currency: 'EUR',
+				direction: 'EXPENSE',
+				transactionType: 'CARD',
+				merchantName: 'Example Shop',
+				merchantLocation: 'Utrecht',
+				searchQuery: 'Example Shop Utrecht',
+				merchantCategoryCode: null,
+			},
+		],
+	},
+};
+const searchRequest = (socketPath, body = searchPayload) =>
+	request(socketPath, body, {path: '/categorize-with-search'});
+
+test('searches once with the pinned query hook and returns only source hostnames', async (t) => {
+	const {socketPath, calls} = await setup(t);
+	assert.deepEqual(await searchRequest(socketPath), {
+		status: 200,
+		body: {
+			classifications: [
+				{correlationId: '0', category: 'SHOPPING', confidence: 0.9, evidenceType: 'MERCHANT_IDENTITY_ONLY'},
+			],
+			sourceDomains: ['www.example.test', 'shop.example.test'],
+		},
+	});
+	const contract = JSON.parse(await readFile(new URL('./contract.json', import.meta.url), 'utf8'));
+	const {args, stdin} = calls.at(-1);
+	const value = (flag) => args[args.indexOf(flag) + 1];
+	assert.equal(value('--tools'), 'WebSearch');
+	assert.equal(value('--system-prompt'), contract.webSearch.instructions);
+	assert.equal(value('--json-schema'), JSON.stringify(contract.webSearch.schema));
+	assert.equal(value('--setting-sources'), '');
+	assert.equal(value('--permission-mode'), 'dontAsk');
+	assert.ok(!args.some((arg) => /allowed-?tools/i.test(arg)));
+	const hook = JSON.parse(value('--settings')).hooks.PreToolUse;
+	assert.equal(hook.length, 1);
+	assert.equal(hook[0].matcher, 'WebSearch');
+	assert.match(hook[0].hooks[0].command, /search-hook\.mjs'$/);
+	assert.deepEqual(JSON.parse(stdin), searchPayload.input);
+	assert.deepEqual(await readdir(path.dirname(socketPath)), ['bridge.sock']);
+});
+
+test('refuses a search result unless exactly one pinned search succeeded', async (t) => {
+	for (const mode of [
+		'search-none',
+		'search-twice',
+		'search-other-query',
+		'search-denied',
+		'search-no-evidence',
+		'tools',
+		'tool-call',
+		'overage',
+		'near-limit-overage',
+	])
+		await t.test(mode, async (t) => {
+			const {socketPath} = await setup(t, {mode});
+			assert.deepEqual(await searchRequest(socketPath), {status: 503, body: {error: 'claude_unavailable'}});
+		});
+});
+
+test('rejects malformed search requests without spawning a categorizer', async (t) => {
+	const {socketPath, calls} = await setup(t);
+	const tx = searchPayload.input.transactions[0];
+	const withTx = (transactions) => ({...searchPayload, input: {...searchPayload.input, transactions}});
+	for (const body of [
+		withTx([tx, {...tx, correlationId: '1'}]),
+		withTx([{...tx, searchQuery: ''}]),
+		withTx([{...tx, searchQuery: 'x'.repeat(241)}]),
+		withTx([{...tx, description: 'Example Shop'}]),
+		withTx([{...tx, merchantName: undefined}]),
+		payload,
+	])
+		assert.equal((await searchRequest(socketPath, body)).status, 400);
+	assert.equal(calls.length, 1);
+});
+
+test('keeps the standard route tool-free even when the CLI tries a search', async (t) => {
+	const {socketPath} = await setup(t, {mode: 'standard-search'});
+	assert.deepEqual(await request(socketPath), {status: 503, body: {error: 'claude_unavailable'}});
+});
+
 export {payload, expected, request, setup};

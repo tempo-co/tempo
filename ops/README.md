@@ -39,7 +39,7 @@ Production secrets live in `/etc/tempo/production.env` (mode 600), outside the r
 
 ### Claude categorization
 
-The API calls the Anthropic API with `ANTHROPIC_API_KEY` and falls back to `tempo-claude-bridge.service`, a user unit that runs `claude -p` under the host user's Claude subscription login and listens on a private Unix socket. Compose mounts the socket directory from `TEMPO_CLAUDE_BRIDGE_DIR` and refuses to start without it. Before deploying a release with this provider, as the subscription user:
+The API calls the Anthropic API with `ANTHROPIC_API_KEY` and falls back to `tempo-claude-bridge.service`, a user unit that runs `claude -p` under the host user's Claude subscription login and listens on a private Unix socket. Both routes run the same prompts and the same one-search follow-up for unresolved transactions; on the bridge, a hook allows only that one search with the supplied query. Compose mounts the socket directory from `TEMPO_CLAUDE_BRIDGE_DIR` and refuses to start without it. Before deploying a release with this provider, as the subscription user:
 
 ```bash
 ops/install.sh claude-bridge
