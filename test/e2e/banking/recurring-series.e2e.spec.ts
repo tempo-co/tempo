@@ -426,7 +426,8 @@ describe('RecurringSeries', () => {
 		expect(byName(series, 'Example Pool')).toEqual([
 			expect.objectContaining({key: stopped.key, status: 'ACTIVE', decision: 'CONFIRMED'}),
 		]);
-		expect(Number(confirmedMonthlyTotal) - totalBeforeRestart).toBe(21);
+		// The stopped series added nothing before; the restart adds its monthly cost.
+		expect(Number(confirmedMonthlyTotal) - totalBeforeRestart).toBeCloseTo(21, 2);
 	});
 
 	it('rejects keys that are invalid, unknown or another owner’s', async () => {

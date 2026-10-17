@@ -118,6 +118,8 @@ const MAX_OTHER_PAYMENTS_IN_YEARLY_SPAN = 3;
 const DAY_MS = 86_400_000;
 /** A payment may arrive this many days after its expected date; the series shows as late until then, then stops. */
 const GRACE_DAYS = 5;
+/** Middle payment days further apart than this are two billing days, not one; averaging them would fit neither. */
+const MAX_MIDDLE_SPREAD_DAYS = GRACE_DAYS;
 /** Categories of money sent to or received from other people. */
 const PERSON_TRANSFER_CATEGORIES: ReadonlySet<string> = new Set(['TRANSFER_OUT', 'TRANSFER_IN']);
 
@@ -347,7 +349,8 @@ function addCycles(rows: readonly RecurringCandidate[], rule: CadenceRule, cycle
 	if (rule.months === 0) return addDays(lastDate, rule.nominalDays * cycles);
 	// Month-based series keep their usual day of the month, clamped to shorter months.
 	const days = rows.map((row) => Number(row.date.slice(8, 10)));
-	const anchorDay = rule.cadence === 'MONTHLY' ? monthlyAnchorDay(days) : Math.round(medianNumber(days));
+	const anchorDay =
+		rule.cadence === 'MONTHLY' ? monthlyAnchorDay(days, days[days.length - 1]) : Math.round(medianNumber(days));
 	const [year, month] = lastDate.split('-').map(Number);
 	// A payment made a few days early, across a month boundary, still pays the month it was due in.
 	const paidMonth = [-1, 0, 1]
@@ -361,8 +364,11 @@ function addCycles(rows: readonly RecurringCandidate[], rule: CadenceRule, cycle
 	return anchorDate(year, paidMonth + rule.months * cycles, anchorDay);
 }
 
-/** Unwrap the day-of-month circle at its largest gap before taking the usual median. */
-function monthlyAnchorDay(days: readonly number[]): number {
+/**
+ * Unwrap the day-of-month circle at its largest gap before taking the usual median. When the history splits evenly
+ * between two days far apart (a billing day that moved), the median follows the side of the latest payment.
+ */
+function monthlyAnchorDay(days: readonly number[], latestDay: number): number {
 	const sorted = [...days].sort((a, b) => a - b);
 	let start = 0;
 	let largestGap = sorted[0] + 31 - sorted[sorted.length - 1];
@@ -373,8 +379,16 @@ function monthlyAnchorDay(days: readonly number[]): number {
 			start = index;
 		}
 	}
-	const unwrapped = sorted.map((day) => (day < sorted[start] ? day + 31 : day));
-	return ((Math.round(medianNumber(unwrapped)) - 1) % 31) + 1;
+	const unwrapped = sorted.map((day) => (day < sorted[start] ? day + 31 : day)).sort((a, b) => a - b);
+	const middle = Math.floor(unwrapped.length / 2);
+	const wrap = (day: number) => ((day - 1) % 31) + 1;
+	if (unwrapped.length % 2 === 0 && unwrapped[middle] - unwrapped[middle - 1] > MAX_MIDDLE_SPREAD_DAYS) {
+		const distance = (day: number) =>
+			Math.min(Math.abs(wrap(day) - latestDay), 31 - Math.abs(wrap(day) - latestDay));
+		const [lower, upper] = [unwrapped[middle - 1], unwrapped[middle]];
+		return wrap(distance(upper) < distance(lower) ? upper : lower);
+	}
+	return wrap(Math.round(medianNumber(unwrapped)));
 }
 
 /** The anchor day in a month counted from January of `year` (0-based, may overflow), clamped to its length. */

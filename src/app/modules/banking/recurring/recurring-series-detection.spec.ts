@@ -240,6 +240,33 @@ describe('detectRecurringSeries', () => {
 	);
 
 	it.each([
+		[[20, 20, 20, 3, 3, 3], '2026-11-03'],
+		[[3, 3, 3, 20, 20, 20], '2026-11-20'],
+	] as const)('follows a billing day that moved, for monthly days %j', (days, nextExpectedDate) => {
+		const rows = MAY_TO_OCT.map((month, index) =>
+			payment(`${month}-${String(days[index]).padStart(2, '0')}`, '20.00'),
+		);
+
+		expect(detectRecurringSeries(rows, '2026-10-21')[0]).toMatchObject({
+			cadence: 'MONTHLY',
+			status: 'ACTIVE',
+			flags: [],
+			nextExpectedDate,
+		});
+	});
+
+	it('marks a payment after the grace period as a restart even when older history is added', () => {
+		const rows = ['2026-05-05', '2026-06-05', '2026-07-11', '2026-08-05', '2026-09-05', '2026-10-05'].map(
+			(date, index) => payment(date, index < 3 ? '10.00' : '20.00'),
+		);
+
+		expect(detectRecurringSeries(rows, TODAY)[0]).toMatchObject({
+			amountKind: 'VARIABLE',
+			restartTransactionIds: [rows[2].id],
+		});
+	});
+
+	it.each([
 		[[8, 10, 12, 10, 14, 14], '2026-11-11'],
 		[[13, 14, 15, 16, 18, 18], '2026-11-16'],
 		[[25, 27, 29, 27, 29, 29], '2026-11-28'],
