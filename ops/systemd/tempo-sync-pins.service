@@ -1,0 +1,17 @@
+# Installed by `sudo ops/install.sh production`. Runs as root before every production deploy.
+# It fails once per new change that needs a manual install, for the host's failure alert.
+[Unit]
+Description=Copy Tempo image-pin bumps from main into the installed Compose files
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/tempo-deploy/sync-pins.sh
+StateDirectory=tempo-sync-pins
+TimeoutStartSec=2min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/etc/tempo
