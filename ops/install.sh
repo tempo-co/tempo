@@ -30,6 +30,14 @@ case ${1:-} in
         copy 644 "$REPO/ops/staging/docker-compose.yml" "$HOME/.config/tempo-staging/staging.compose.yml"
         copy 700 "$REPO/ops/staging/tempo-staging-refresh.sh" "$HOME/.config/tempo-staging/tempo-staging-refresh.sh"
         ;;
+    claude-bridge)
+        [[ $EUID != 0 ]] || { echo 'run the bridge install as the Claude subscription user, not root' >&2; exit 1; }
+        for file in bridge.mjs contract.json main.mjs subscription.mjs validation.mjs; do
+            copy 600 "$REPO/ops/claude-bridge/$file" "$HOME/.local/lib/tempo-claude-bridge/$file"
+        done
+        copy 644 "$REPO/ops/systemd/tempo-claude-bridge.service" "$HOME/.config/systemd/user/tempo-claude-bridge.service"
+        systemctl --user daemon-reload
+        ;;
     production)
         [[ $EUID == 0 && -n ${SUDO_USER:-} && $SUDO_USER != root ]] || { echo 'run the production install with sudo as the deployment user' >&2; exit 1; }
         home=$(getent passwd "$SUDO_USER" | cut -d: -f6)

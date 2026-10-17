@@ -27,3 +27,11 @@ export class BankTransactionCategorizationProviderError extends Error {
 		this.name = 'BankTransactionCategorizationProviderError';
 	}
 }
+
+/** Both Claude routes are unavailable; leave the transaction pending for reconciliation. */
+export class BankTransactionCategorizationUnavailableError extends BankTransactionCategorizationProviderError {
+	constructor() {
+		super('Claude categorization is temporarily unavailable.', true);
+		this.name = 'BankTransactionCategorizationUnavailableError';
+	}
+}

@@ -1,25 +1,23 @@
+import Anthropic from '@anthropic-ai/sdk';
+import type {MessageCreateParamsNonStreaming} from '@anthropic-ai/sdk/resources/messages';
 import {Injectable, Optional} from '@nestjs/common';
-import OpenAI from 'openai';
+import {request as httpRequest} from 'node:http';
 import {z} from 'zod';
 
 import {ConfigurationService} from '@core/config/config.service';
 
 import {normalizeBankTransactionLocation} from '../../bank-transaction-location';
-import type {BankTransactionLocation} from '../../bank-transaction-location';
 import {normalizeMerchantCategoryCode} from '../bank-transaction-categorization-input';
-import {
-	BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS,
-	BANK_TRANSACTION_CATEGORIZATION_REQUEST_TIMEOUT_MS,
-} from '../bank-transaction-categorization.constants';
+import {BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS} from '../bank-transaction-categorization.constants';
 import {
 	BankTransactionCategorizationProvider,
 	BankTransactionCategorizationProviderError,
+	BankTransactionCategorizationUnavailableError,
 } from '../bank-transaction-categorization.provider';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES,
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
-	BankTransactionCategorizationSearchTrace,
 	BankTransactionCategorizationWebSearchInput,
 	BankTransactionCategoryDefinition,
 } from '../bank-transaction-categorization.types';
@@ -135,37 +133,23 @@ const WEB_SEARCH_CATEGORIZATION_INSTRUCTIONS = [
 	'Use OTHER only when the search evidence supports that the transaction falls outside the other supplied categories.',
 ].join(' ');
 
-type OpenAiResponsesClient = Pick<OpenAI, 'responses'>;
-type OpenAiResponseRequest = Parameters<OpenAiResponsesClient['responses']['create']>[0] & {
-	/** Supported by the Responses API; absent from the pinned SDK request type. */
-	max_tool_calls?: number | null;
-};
-type OpenAiResponseTool = NonNullable<OpenAiResponseRequest['tools']>[number];
-type OpenAiWebSearchRequestTransaction = Omit<BankTransactionCategorizationWebSearchInput, 'approximateLocation'>;
-type CategorizationClassification = z.infer<typeof categorizationClassificationSchema>;
-type WebSearchCategorizationClassification = z.infer<typeof webSearchCategorizationClassificationSchema>;
-type CategorizationResponse<T extends CategorizationClassification> = {classifications: T[]};
-type CorrelatedCategorizationInput = {correlationId: string};
-type OpenAiResponse = {
-	output_text?: unknown;
-	output?: unknown;
-};
-type OpenAiSearchTrace = Pick<BankTransactionCategorizationSearchTrace, 'sourceDomains'>;
-
-type OpenAiProviderError = {
-	status?: unknown;
-	name?: unknown;
-};
+type ClaudeClient = Pick<Anthropic, 'messages'>;
+type RequestInput = {correlationId: string};
+const API_TIMEOUT_MS = 90_000;
+const SUBSCRIPTION_TIMEOUT_MS = 125_000;
+const MAX_RESPONSE_BYTES = 1024 * 1024;
 
 @Injectable()
-export class OpenAiBankTransactionCategorizationProvider implements BankTransactionCategorizationProvider {
-	private client?: OpenAiResponsesClient;
+export class ClaudeBankTransactionCategorizationProvider implements BankTransactionCategorizationProvider {
+	private client?: ClaudeClient;
 	private readonly model: string;
 	private readonly apiKey?: string;
+	private readonly subscriptionSocket?: string;
 
-	constructor(configurationService: ConfigurationService, @Optional() client?: OpenAiResponsesClient) {
+	constructor(configurationService: ConfigurationService, @Optional() client?: ClaudeClient) {
 		this.model = configurationService.get('AI_CATEGORIZATION_MODEL');
-		this.apiKey = configurationService.get('OPENAI_API_KEY');
+		this.apiKey = configurationService.get('ANTHROPIC_API_KEY');
+		this.subscriptionSocket = configurationService.get('AI_CATEGORIZATION_SUBSCRIPTION_SOCKET');
 		this.client = client;
 	}
 
@@ -174,31 +158,27 @@ export class OpenAiBankTransactionCategorizationProvider implements BankTransact
 		categories: readonly BankTransactionCategoryDefinition[],
 	): Promise<readonly BankTransactionCategorizationResult[]> {
 		this.assertUniqueCorrelationIds(transactions);
+		if (!transactions.length) return [];
 		const requestTransactions = transactions.map((transaction, index) => ({
 			...this.toSafeInput(transaction),
 			correlationId: String(index),
 		}));
-
-		return this.requestStructuredCategorization(
-			{
-				model: this.model,
-				instructions: CATEGORIZATION_INSTRUCTIONS,
-				input: this.createInput(categories, requestTransactions),
-				reasoning: {effort: 'low'},
-				store: false,
-				text: {
-					format: {
-						type: 'json_schema',
-						name: 'bank_transaction_categorization',
-						strict: true,
-						schema: categorizationResponseJsonSchema,
-					},
-				},
-			},
-			categorizationResponseSchema,
-			requestTransactions,
-			transactions,
-		);
+		const input = this.createInput(categories, requestTransactions);
+		try {
+			const response = await this.callApi(
+				this.createRequest(CATEGORIZATION_INSTRUCTIONS, input, categorizationResponseJsonSchema, 8192),
+			);
+			return this.parseResults(response.text, transactions, false, 'claude-api');
+		} catch {
+			// A billing/quota/transport failure must never turn into a category or a paid alternative.
+			if (!this.subscriptionSocket) throw new BankTransactionCategorizationUnavailableError();
+			try {
+				const response = await this.callSubscription(input);
+				return this.parseResults(response, transactions, false, 'claude-subscription');
+			} catch {
+				throw new BankTransactionCategorizationUnavailableError();
+			}
+		}
 	}
 
 	async categorizeWithWebSearch(
@@ -207,221 +187,209 @@ export class OpenAiBankTransactionCategorizationProvider implements BankTransact
 	): Promise<readonly BankTransactionCategorizationResult[]> {
 		this.assertUniqueCorrelationIds(transactions);
 		const results: BankTransactionCategorizationResult[] = [];
-
 		for (const transaction of transactions) {
-			const approximateLocation = normalizeBankTransactionLocation(transaction.approximateLocation);
-			const requestTransaction = this.toWebSearchRequestTransaction(transaction, '0');
-			const candidateResults = await this.requestStructuredCategorization(
-				this.createWebSearchRequest(
-					WEB_SEARCH_CATEGORIZATION_INSTRUCTIONS,
-					categories,
-					[requestTransaction],
-					approximateLocation,
-				),
-				webSearchCategorizationResponseSchema,
-				[requestTransaction],
-				[transaction],
-				transaction.searchQuery,
+			const input = this.createInput(categories, [
+				{
+					correlationId: '0',
+					amount: transaction.amount,
+					currency: transaction.currency,
+					direction: transaction.direction,
+					transactionType: transaction.transactionType,
+					merchantName: transaction.merchantName,
+					merchantLocation: transaction.merchantLocation,
+					searchQuery: transaction.searchQuery,
+					merchantCategoryCode: normalizeMerchantCategoryCode(transaction.merchantCategoryCode),
+				},
+			]);
+			const request = this.createRequest(
+				WEB_SEARCH_CATEGORIZATION_INSTRUCTIONS,
+				input,
+				webSearchCategorizationResponseJsonSchema,
+				4096,
 			);
-			results.push(...candidateResults);
+			request.tools = [{type: 'web_search_20250305', name: 'web_search', max_uses: 1}];
+			let response;
+			try {
+				response = await this.callApi(request);
+			} catch {
+				results.push({
+					correlationId: transaction.correlationId,
+					category: 'NEEDS_REVIEW',
+					confidence: 0,
+					provider: 'claude-api',
+					model: this.model,
+					searchTrace: {queries: [], sourceDomains: [], evidenceType: 'INSUFFICIENT'},
+				});
+				continue;
+			}
+			if (response.searches !== 1) throw this.invalidResponseError();
+			results.push(
+				...this.parseResults(response.text, [transaction], true, 'claude-api').map((result) => ({
+					...result,
+					searchTrace: {
+						...result.searchTrace!,
+						queries: [transaction.searchQuery],
+						sourceDomains: response.domains,
+					},
+				})),
+			);
 		}
-
 		return results;
 	}
 
-	private async requestStructuredCategorization<T extends CategorizationClassification>(
-		request: OpenAiResponseRequest,
-		schema: z.ZodType<CategorizationResponse<T>>,
-		requestTransactions: readonly CorrelatedCategorizationInput[],
-		transactions: readonly CorrelatedCategorizationInput[],
-		searchQuery?: string,
-	): Promise<readonly BankTransactionCategorizationResult[]> {
-		const response = await this.createResponse(request);
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(response.outputText);
-		} catch {
-			throw this.invalidResponseError();
-		}
-
-		const validation = schema.safeParse(parsed);
-		if (!validation.success) throw this.invalidResponseError();
-
-		const outputIds = validation.data.classifications.map(({correlationId}) => correlationId);
-		const requestIds = requestTransactions.map(({correlationId}) => correlationId);
-		const outputIdSet = new Set(outputIds);
-		if (
-			outputIdSet.size !== outputIds.length ||
-			outputIdSet.size !== requestIds.length ||
-			requestIds.some((correlationId) => !outputIdSet.has(correlationId))
-		) {
-			throw this.invalidResponseError();
-		}
-
-		return validation.data.classifications.map((result) => {
-			const evidenceType =
-				'evidenceType' in result ? (result as WebSearchCategorizationClassification).evidenceType : undefined;
-			const searchTrace = evidenceType
-				? {
-						queries: searchQuery ? [searchQuery] : [],
-						sourceDomains: response.searchTrace?.sourceDomains ?? [],
-						evidenceType,
-					}
-				: undefined;
-			return {
-				correlationId: transactions[Number(result.correlationId)].correlationId,
-				category: result.category,
-				confidence: result.confidence,
-				...(searchTrace ? {searchTrace} : {}),
-			};
-		});
-	}
-
-	private async createResponse(request: OpenAiResponseRequest): Promise<{
-		outputText: string;
-		searchTrace?: OpenAiSearchTrace;
-	}> {
-		let response: OpenAiResponse;
-		try {
-			const client = this.client ?? (this.client = this.createClient());
-			response = (await client.responses.create(request)) as OpenAiResponse;
-		} catch (error) {
-			if (error instanceof BankTransactionCategorizationProviderError) throw error;
-			throw this.toProviderError(error);
-		}
-
-		if (typeof response.output_text !== 'string' || response.output_text.trim() === '') {
-			throw this.invalidResponseError();
-		}
+	private createRequest(
+		system: string,
+		input: object,
+		schema: object,
+		maxTokens: number,
+	): MessageCreateParamsNonStreaming {
 		return {
-			outputText: response.output_text,
-			searchTrace: this.extractWebSearchTrace(response.output),
+			model: this.model,
+			max_tokens: maxTokens,
+			system,
+			messages: [{role: 'user', content: JSON.stringify(input)}],
+			thinking: {type: 'adaptive'},
+			output_config: {effort: 'medium', format: {type: 'json_schema', schema: schema as Record<string, unknown>}},
 		};
 	}
 
-	private createWebSearchRequest(
-		instructions: string,
-		categories: readonly BankTransactionCategoryDefinition[],
-		transactions: readonly OpenAiWebSearchRequestTransaction[],
-		approximateLocation: BankTransactionLocation | null,
-	): OpenAiResponseRequest {
-		const webSearchTool = {
-			type: 'web_search',
-			external_web_access: true,
-			search_context_size: 'medium',
-			...(approximateLocation
+	private async callApi(
+		request: MessageCreateParamsNonStreaming,
+	): Promise<{text: string; domains: string[]; searches: number}> {
+		if (!this.apiKey && !this.client) throw new BankTransactionCategorizationUnavailableError();
+		const client =
+			this.client ??
+			(this.client = new Anthropic({
+				apiKey: this.apiKey,
+				maxRetries: 0,
+				timeout: API_TIMEOUT_MS,
+				logLevel: 'off',
+			}));
+		const response = await client.messages.create(request);
+		if (response.stop_reason !== 'end_turn') throw this.invalidResponseError();
+		const lastSearch = response.content.findLastIndex((block) => block.type === 'web_search_tool_result');
+		const text = response.content
+			.slice(lastSearch + 1)
+			.flatMap((block) => (block.type === 'text' ? [block.text] : []))
+			.join('');
+		if (!text.trim()) throw this.invalidResponseError();
+		const domains = new Set<string>();
+		for (const block of response.content) {
+			if (block.type !== 'web_search_tool_result') continue;
+			if (!Array.isArray(block.content)) throw this.invalidResponseError();
+			for (const result of block.content) {
+				try {
+					const url = new URL(result.url);
+					const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
+					if (
+						(url.protocol === 'https:' || url.protocol === 'http:') &&
+						/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(hostname) &&
+						domains.size < BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS
+					)
+						domains.add(hostname);
+				} catch {
+					continue;
+				}
+			}
+		}
+		return {text, domains: [...domains], searches: response.usage.server_tool_use?.web_search_requests ?? 0};
+	}
+
+	private parseResults(
+		text: string,
+		transactions: readonly RequestInput[],
+		search: boolean,
+		provider: string,
+	): BankTransactionCategorizationResult[] {
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(text);
+		} catch {
+			throw this.invalidResponseError();
+		}
+		const validation = (search ? webSearchCategorizationResponseSchema : categorizationResponseSchema).safeParse(
+			parsed,
+		);
+		if (!validation.success) throw this.invalidResponseError();
+		const items = validation.data.classifications;
+		const ids = new Set(items.map(({correlationId}) => correlationId));
+		if (
+			items.length !== transactions.length ||
+			ids.size !== items.length ||
+			transactions.some((_, index) => !ids.has(String(index)))
+		)
+			throw this.invalidResponseError();
+		return items.map((item) => ({
+			correlationId: transactions[Number(item.correlationId)].correlationId,
+			category: item.category,
+			confidence: item.confidence,
+			provider,
+			model: this.model,
+			...('evidenceType' in item
 				? {
-						user_location: {
-							type: 'approximate',
-							...(approximateLocation.city ? {city: approximateLocation.city} : {}),
-							...(approximateLocation.region ? {region: approximateLocation.region} : {}),
-							...(approximateLocation.country ? {country: approximateLocation.country} : {}),
+						searchTrace: {
+							queries: [],
+							sourceDomains: [],
+							evidenceType:
+								item.evidenceType as (typeof BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES)[number],
 						},
 					}
 				: {}),
-		} satisfies OpenAiResponseTool;
+		}));
+	}
 
-		return {
-			model: this.model,
-			instructions,
-			input: this.createInput(categories, transactions),
-			reasoning: {effort: 'medium'},
-			include: ['web_search_call.action.sources'],
-			tools: [webSearchTool],
-			tool_choice: 'required',
-			max_tool_calls: 1,
-			parallel_tool_calls: false,
-			store: false,
-			text: {
-				format: {
-					type: 'json_schema',
-					name: 'bank_transaction_categorization_web_search',
-					strict: true,
-					schema: webSearchCategorizationResponseJsonSchema,
+	private callSubscription(input: object): Promise<string> {
+		return new Promise((resolve, reject) => {
+			const body = JSON.stringify({model: this.model, input});
+			const request = httpRequest(
+				{
+					socketPath: this.subscriptionSocket,
+					method: 'POST',
+					path: '/categorize',
+					headers: {'content-type': 'application/json', 'content-length': Buffer.byteLength(body)},
 				},
-			},
-		};
-	}
-
-	private toWebSearchRequestTransaction(
-		transaction: BankTransactionCategorizationWebSearchInput,
-		correlationId: string,
-	): OpenAiWebSearchRequestTransaction {
-		return {
-			correlationId,
-			amount: transaction.amount,
-			currency: transaction.currency,
-			direction: transaction.direction,
-			transactionType: transaction.transactionType,
-			merchantName: transaction.merchantName,
-			merchantLocation: transaction.merchantLocation,
-			searchQuery: transaction.searchQuery,
-			merchantCategoryCode: normalizeMerchantCategoryCode(transaction.merchantCategoryCode),
-		};
-	}
-
-	private extractWebSearchTrace(output: unknown): OpenAiSearchTrace | undefined {
-		if (!Array.isArray(output)) return undefined;
-
-		const sourceDomains = new Set<string>();
-		for (const item of output) {
-			if (!isRecord(item) || item.type !== 'web_search_call' || !isRecord(item.action)) continue;
-			const action = item.action;
-			if (action.type === 'search') {
-				if (Array.isArray(action.sources)) {
-					for (const source of action.sources) {
-						if (isRecord(source)) this.addSearchTraceDomain(sourceDomains, source.url);
-					}
-				}
-			} else {
-				this.addSearchTraceDomain(sourceDomains, action.url);
-			}
-		}
-
-		return {
-			sourceDomains: [...sourceDomains],
-		};
-	}
-
-	private addSearchTraceDomain(sourceDomains: Set<string>, value: unknown): void {
-		if (typeof value !== 'string') return;
-		try {
-			const url = new URL(value);
-			if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
-			const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
-			if (hostname && sourceDomains.size < BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS) {
-				sourceDomains.add(hostname);
-			}
-		} catch {
-			return;
-		}
+				(response) => {
+					let size = 0;
+					const chunks: Buffer[] = [];
+					response.on('data', (chunk: Buffer) => {
+						size += chunk.length;
+						if (size > MAX_RESPONSE_BYTES) request.destroy(new Error('Response limit.'));
+						else chunks.push(chunk);
+					});
+					response.on('error', reject);
+					response.on('end', () =>
+						response.statusCode === 200
+							? resolve(Buffer.concat(chunks).toString('utf8'))
+							: reject(new BankTransactionCategorizationUnavailableError()),
+					);
+				},
+			);
+			const timer = setTimeout(
+				() => request.destroy(new Error('Subscription timeout.')),
+				SUBSCRIPTION_TIMEOUT_MS,
+			);
+			request.on('close', () => clearTimeout(timer));
+			request.on('error', reject);
+			request.end(body);
+		});
 	}
 
 	private createInput(
 		categories: readonly BankTransactionCategoryDefinition[],
 		transactions: readonly object[],
-	): string {
-		return JSON.stringify({
+	): object {
+		return {
 			categories: categories.map(({value, label, description}) => ({value, label, description})),
 			transactions,
-		});
+		};
 	}
 
-	private assertUniqueCorrelationIds(transactions: readonly CorrelatedCategorizationInput[]): void {
-		const inputIds = transactions.map(({correlationId}) => correlationId);
-		if (new Set(inputIds).size !== inputIds.length) throw this.invalidResponseError();
-	}
-
-	private createClient(): OpenAiResponsesClient {
-		if (!this.apiKey) {
-			throw new BankTransactionCategorizationProviderError('OpenAI categorization is not configured.', false);
-		}
-
-		return new OpenAI({
-			apiKey: this.apiKey,
-			maxRetries: 0,
-			timeout: BANK_TRANSACTION_CATEGORIZATION_REQUEST_TIMEOUT_MS,
-		});
+	private assertUniqueCorrelationIds(transactions: readonly RequestInput[]): void {
+		if (
+			transactions.length > 50 ||
+			new Set(transactions.map(({correlationId}) => correlationId)).size !== transactions.length
+		)
+			throw this.invalidResponseError();
 	}
 
 	private toSafeInput(transaction: BankTransactionCategorizationInput): BankTransactionCategorizationInput {
@@ -461,27 +429,8 @@ export class OpenAiBankTransactionCategorizationProvider implements BankTransact
 
 	private invalidResponseError(): BankTransactionCategorizationProviderError {
 		return new BankTransactionCategorizationProviderError(
-			'OpenAI returned an invalid categorization response.',
+			'Claude returned an invalid categorization response.',
 			true,
 		);
 	}
-
-	private toProviderError(error: unknown): BankTransactionCategorizationProviderError {
-		const status = this.getStatus(error);
-		const statusMessage = status === undefined ? '' : ` (${status})`;
-		return new BankTransactionCategorizationProviderError(
-			`OpenAI categorization request failed${statusMessage}.`,
-			status === undefined || status === 408 || status === 429 || status >= 500,
-		);
-	}
-
-	private getStatus(error: unknown): number | undefined {
-		if (!error || typeof error !== 'object') return undefined;
-		const status = (error as OpenAiProviderError).status;
-		return typeof status === 'number' && Number.isInteger(status) ? status : undefined;
-	}
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null;
 }

@@ -1,24 +1,30 @@
+import {getQueueToken} from '@nestjs/bullmq';
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
+import {Queue} from 'bullmq';
 import {Server} from 'node:net';
 import TestAgent from 'supertest/lib/agent';
 import {Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
+import {BANK_TRANSACTION_CATEGORIZATION_QUEUE, CATEGORIZE_BANK_TRANSACTIONS_JOB} from '@core/queue/queue.constants';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
 	BANK_TRANSACTION_CATEGORIZATION_PROVIDER_NAME,
 	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
 } from '@modules/banking/categorization/bank-transaction-categorization.constants';
-import {BankTransactionCategorizationProviderError} from '@modules/banking/categorization/bank-transaction-categorization.provider';
+import {
+	BankTransactionCategorizationProviderError,
+	BankTransactionCategorizationUnavailableError,
+} from '@modules/banking/categorization/bank-transaction-categorization.provider';
 import {BankTransactionCategorizationService} from '@modules/banking/categorization/bank-transaction-categorization.service';
 import type {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
 	BankTransactionCategorizationWebSearchInput,
 } from '@modules/banking/categorization/bank-transaction-categorization.types';
-import {OpenAiBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/openai-bank-transaction-categorization.provider';
+import {ClaudeBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/claude-bank-transaction-categorization.provider';
 
 import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from '../../../scripts/seed-data/seed.constants';
 import {
@@ -40,13 +46,15 @@ const AI_CONFIDENCE = 0.875;
 const WEB_CATEGORY = 'SHOPPING' as const;
 const WEB_CONFIDENCE = 0.812;
 let shouldFail = false;
+let routesUnavailable = false;
 
 const categorizeSpy = jest
-	.spyOn(OpenAiBankTransactionCategorizationProvider.prototype, 'categorize')
+	.spyOn(ClaudeBankTransactionCategorizationProvider.prototype, 'categorize')
 	.mockImplementation(
 		async (
 			transactions: readonly BankTransactionCategorizationInput[],
 		): Promise<readonly BankTransactionCategorizationResult[]> => {
+			if (routesUnavailable) throw new BankTransactionCategorizationUnavailableError();
 			if (shouldFail) {
 				throw new BankTransactionCategorizationProviderError('synthetic provider failure', false);
 			}
@@ -54,12 +62,14 @@ const categorizeSpy = jest
 				correlationId,
 				category: correlationId === CATEGORIZATION_E2E_WEB_TRANSACTION_ID ? 'OTHER' : AI_CATEGORY,
 				confidence: correlationId === CATEGORIZATION_E2E_WEB_TRANSACTION_ID ? 0.25 : AI_CONFIDENCE,
+				provider: 'claude-api',
+				model: 'test-model',
 			}));
 		},
 	);
 
 const categorizeWithWebSearchSpy = jest
-	.spyOn(OpenAiBankTransactionCategorizationProvider.prototype, 'categorizeWithWebSearch')
+	.spyOn(ClaudeBankTransactionCategorizationProvider.prototype, 'categorizeWithWebSearch')
 	.mockImplementation(
 		async (
 			transactions: readonly BankTransactionCategorizationWebSearchInput[],
@@ -68,6 +78,8 @@ const categorizeWithWebSearchSpy = jest
 				correlationId,
 				category: WEB_CATEGORY,
 				confidence: WEB_CONFIDENCE,
+				provider: 'claude-api',
+				model: 'test-model',
 			})),
 	);
 
@@ -102,7 +114,7 @@ describe('Bank transaction categorization integration', () => {
 			BANK_TRANSACTION_CATEGORIZATION_PROVIDER_NAME,
 		);
 		expect(configurationService.get('AI_CATEGORIZATION_WEB_SEARCH_ENABLED')).toBe(true);
-		expect(configurationService.get('OPENAI_API_KEY')).toBeTruthy();
+		expect(configurationService.get('ANTHROPIC_API_KEY')).toBeTruthy();
 
 		bankTransactionRepository = app.get<Repository<BankTransaction>>(getRepositoryToken(BankTransaction));
 		verifiedAgent = await loginAgent(httpServer, VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
@@ -110,6 +122,7 @@ describe('Bank transaction categorization integration', () => {
 
 	beforeEach(() => {
 		shouldFail = false;
+		routesUnavailable = false;
 		categorizeSpy.mockClear();
 		categorizeWithWebSearchSpy.mockClear();
 	});
@@ -156,7 +169,8 @@ describe('Bank transaction categorization integration', () => {
 			categoryStatus: 'COMPLETED',
 			categorySource: 'AI',
 			categoryConfidence: String(AI_CONFIDENCE),
-			categoryProvider: BANK_TRANSACTION_CATEGORIZATION_PROVIDER_NAME,
+			categoryProvider: 'claude-api',
+			categoryModel: 'test-model',
 		});
 	});
 
@@ -341,6 +355,70 @@ describe('Bank transaction categorization integration', () => {
 			categorySource: 'AI',
 			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
 		});
+	});
+
+	it('keeps a real worker outage pending and succeeds after pending reconciliation', async () => {
+		routesUnavailable = true;
+		const categorizationService = app.get(BankTransactionCategorizationService);
+		const queue = app.get<Queue>(getQueueToken(BANK_TRANSACTION_CATEGORIZATION_QUEUE));
+		await bankTransactionRepository.update(CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID, {
+			category: null,
+			categoryStatus: 'PENDING',
+			categorySource: null,
+			categoryConfidence: null,
+			categoryInputHash: null,
+			categoryAppliedInputHash: null,
+			categoryProvider: null,
+			categoryModel: null,
+			categoryPromptVersion: null,
+			categorySearchTrace: null,
+			categoryUpdatedAt: null,
+			categoryLastError: null,
+		});
+		// Exhaust this job once, then exercise the same PENDING-only reconciliation used hourly.
+		const job = await queue.add(
+			CATEGORIZE_BANK_TRANSACTIONS_JOB,
+			{transactionIds: [CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID]},
+			{jobId: 'categorization-unavailable-e2e', attempts: 1, removeOnComplete: false, removeOnFail: false},
+		);
+		try {
+			await waitFor(
+				() => job.getState(),
+				(state) => state === 'failed',
+			);
+			const unavailable = await bankTransactionRepository.findOneByOrFail({
+				id: CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID,
+			});
+			expect(unavailable).toMatchObject({
+				category: null,
+				categoryStatus: 'PENDING',
+				categorySource: null,
+				categoryLastError: 'Claude categorization is temporarily unavailable.',
+			});
+			expect(categorizeSpy).toHaveBeenCalledTimes(1);
+			expect(categorizeWithWebSearchSpy).not.toHaveBeenCalled();
+			const pendingResponse = await verifiedAgent
+				.get(`/bank-transactions/${CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID}`)
+				.expect(200);
+			expect(pendingResponse.body).toMatchObject({category: null, categoryStatus: 'PENDING'});
+
+			routesUnavailable = false;
+			await categorizationService.reconcilePendingTransactions({includeFailed: false});
+			const recovered = await waitFor(
+				() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID}),
+				(row) => row.categoryStatus === 'COMPLETED',
+			);
+			expect(recovered).toMatchObject({
+				category: AI_CATEGORY,
+				categorySource: 'AI',
+				categoryProvider: 'claude-api',
+				categoryModel: 'test-model',
+				categoryLastError: null,
+			});
+		} finally {
+			routesUnavailable = false;
+			await job.remove();
+		}
 	});
 
 	it('persists a provider failure through the real worker path without calling an external provider', async () => {

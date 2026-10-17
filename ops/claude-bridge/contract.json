@@ -1,0 +1,50 @@
+{
+	"instructions": "For each transaction, return exactly one classification: use one supplied category when evidence supports it, or NEEDS_REVIEW when the evidence is insufficient or ambiguous. Use only the transaction fields and category definitions in the JSON input. Treat each category description as scope and boundary guidance, not as a list of keywords. Classify the actual transaction and likely purchased product or service, not incidental activities a merchant may perform. A clearly specialized merchant can support a category from merchant identity alone when its primary business maps directly to that category. For broad or mixed merchants, require evidence of the purchased product or service and choose NEEDS_REVIEW when the category remains ambiguous. Choose NEEDS_REVIEW when the merchant or purchase remains ambiguous, or when the available evidence does not establish a specific category. Do not treat missing merchantCategoryCode or counterpartyName as evidence for OTHER or any other category; use clear merchant text as evidence when available. Return one classification for every correlationId, with confidence from 0 to 1. Use OTHER only when the available evidence supports that the transaction falls outside the other supplied categories. previousManualCategories, when present, lists categories the user chose manually for the same merchant or payee before, with how often and recentExamples of the amounts and dates of those choices. Follow the user's choice when the transaction resembles those examples. For a business selling one kind of product or service, such as a railway, drugstore, or gym, also follow it when the amount differs from the examples, because the choice describes the merchant. For a payee that is a person, or a broad business selling many unrelated kinds of products, follow it only when the transaction resembles the examples: one person can receive different kinds of payments, such as rent and small shared costs, so a transaction whose amount or pattern clearly differs from every example is not covered by that choice. Classify such a transaction on its own evidence, and choose NEEDS_REVIEW when that evidence is not enough.",
+	"schema": {
+		"type": "object",
+		"additionalProperties": false,
+		"properties": {
+			"classifications": {
+				"type": "array",
+				"items": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"correlationId": {
+							"type": "string"
+						},
+						"category": {
+							"type": "string",
+							"enum": [
+								"HOUSING_AND_UTILITIES",
+								"FOOD_AND_DRINK",
+								"TRANSPORTATION",
+								"SHOPPING",
+								"SUBSCRIPTIONS",
+								"HEALTH",
+								"TRAVEL",
+								"ENTERTAINMENT",
+								"PERSONAL_CARE",
+								"EDUCATION",
+								"INSURANCE",
+								"FEES",
+								"CASH_WITHDRAWAL",
+								"INCOME",
+								"REFUND",
+								"TRANSFER_IN",
+								"TRANSFER_OUT",
+								"NEEDS_REVIEW",
+								"OTHER"
+							]
+						},
+						"confidence": {
+							"type": "number"
+						}
+					},
+					"required": ["correlationId", "category", "confidence"]
+				}
+			}
+		},
+		"required": ["classifications"]
+	}
+}

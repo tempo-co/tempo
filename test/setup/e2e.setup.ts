@@ -21,13 +21,14 @@ beforeAll(async () => {
 	process.env.NODE_ENV = 'test';
 	process.env.AI_CATEGORIZATION_ENABLED = String(aiCategorizationEnabled);
 	process.env.AI_CATEGORIZATION_WEB_SEARCH_ENABLED = String(aiCategorizationWebSearchEnabled);
+	delete process.env.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET;
 
 	if (aiCategorizationEnabled) {
-		process.env.AI_CATEGORIZATION_PROVIDER = 'openai';
+		process.env.AI_CATEGORIZATION_PROVIDER = 'claude';
 		process.env.AI_CATEGORIZATION_MODEL = 'test-model';
-		process.env.OPENAI_API_KEY = 'test-only-placeholder';
+		process.env.ANTHROPIC_API_KEY = 'test-only-placeholder';
 	} else {
-		delete process.env.OPENAI_API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
 	}
 
 	const [{seedAccounts}, {AppModule}] = await Promise.all([

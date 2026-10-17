@@ -1,6 +1,6 @@
 # Tempo API Agent Instructions
 
-Tempo API is a NestJS backend for personal-finance accounts, authentication, Enable Banking bank connections, synchronized bank accounts, balances, and transactions, base-currency conversion, and spending categorization. It runs on Node.js 22.x and uses PostgreSQL, Redis/BullMQ, Mailpit, and optional Enable Banking and OpenAI-backed integrations.
+Tempo API is a NestJS backend for personal-finance accounts, authentication, Enable Banking bank connections, synchronized bank accounts, balances, and transactions, base-currency conversion, and spending categorization. It runs on Node.js 22.x and uses PostgreSQL, Redis/BullMQ, Mailpit, and optional Enable Banking and Claude-backed integrations.
 
 ## Product direction and workflow
 
@@ -26,7 +26,8 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
 - Development Swagger is at `http://localhost:3000/docs` when `PORT=3000`.
 - Configuration is validated by `src/app/core/config/config.schema.ts`. `NODE_ENV` selects `.env.development`, `.env.test`, or `.env.production`; the corresponding `.local` file takes precedence for Nest configuration.
 - `src/app/core/config/config.schema.ts` is the source of truth for required and optional environment variables. Use `.env.development` plus `.env.development.local` for local secrets, and keep credentials out of Git.
-- Optional AI categorization configuration is `AI_CATEGORIZATION_ENABLED` (default `false`), `AI_CATEGORIZATION_PROVIDER` (default `openai`), and `AI_CATEGORIZATION_MODEL` (default `gpt-6-luna`). `AI_CATEGORIZATION_WEB_SEARCH_ENABLED` (default `false`) enables the web-search fallback for transactions the standard pass leaves as `OTHER` or `NEEDS_REVIEW`. `OPENAI_API_KEY` is required only when OpenAI categorization is enabled; keep it in the deployment secret/environment path, never in Git.
+- Optional AI categorization configuration is `AI_CATEGORIZATION_ENABLED` (default `false`), `AI_CATEGORIZATION_PROVIDER` (`claude` only), and `AI_CATEGORIZATION_MODEL` (default `claude-opus-5-5`). Enabled categorization requires `ANTHROPIC_API_KEY`, `AI_CATEGORIZATION_SUBSCRIPTION_SOCKET`, or both. The Anthropic API is tried first, then the local subscription bridge. Keep credentials in the deployment secret/environment path, never in Git.
+- `AI_CATEGORIZATION_WEB_SEARCH_ENABLED` (default `false`) enables API-only merchant search for unresolved API results. Subscription `OTHER` or `NEEDS_REVIEW` results stay in review without another API search. Persist actual result provider/model metadata (`claude-api` or `claude-subscription`); when both routes are unavailable, leave rows pending for hourly reconciliation while preserving manual/hash guards and same-input categories.
 - Banking configuration: `BANKING_INTEGRATION_ENABLED` (default `true`) gates the Enable Banking integration. When enabled, configure exactly one of `ENABLE_BANKING_PRIVATE_KEY_B64` or `ENABLE_BANKING_PRIVATE_KEY_PATH` alongside the other `ENABLE_BANKING_*` values and `BANKING_SESSION_ENCRYPTION_KEY_B64`. Background sync timing uses `BANKING_SYNC_INTERVAL`, `BANKING_SYNC_DISPATCH_INTERVAL`, and `BANKING_SYNC_RUNNING_TIMEOUT`.
 
 ## Build, lint, format, and test

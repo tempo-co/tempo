@@ -11,7 +11,7 @@ import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {BANK_TRANSACTION_CASH_FLOW_TREATMENTS} from '@modules/banking/bank-transaction-financial-event';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
-import {OpenAiBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/openai-bank-transaction-categorization.provider';
+import {ClaudeBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/claude-bank-transaction-categorization.provider';
 import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
 
 import {BankingFixtures, CURRENCY_EXCHANGE_EVENT, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
@@ -45,9 +45,9 @@ describe('BankTransactionController', () => {
 		httpServer = app.getHttpServer();
 		expect(app.get(ConfigurationService).get('AI_CATEGORIZATION_ENABLED')).toBe(false);
 		expect(app.get(ConfigurationService).get('AI_CATEGORIZATION_WEB_SEARCH_ENABLED')).toBe(false);
-		categorizeSpy = jest.spyOn(app.get(OpenAiBankTransactionCategorizationProvider), 'categorize');
+		categorizeSpy = jest.spyOn(app.get(ClaudeBankTransactionCategorizationProvider), 'categorize');
 		categorizeWithWebSearchSpy = jest.spyOn(
-			app.get(OpenAiBankTransactionCategorizationProvider),
+			app.get(ClaudeBankTransactionCategorizationProvider),
 			'categorizeWithWebSearch',
 		);
 		const accountService = app.get(AccountService);
