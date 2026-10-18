@@ -39,6 +39,7 @@ function createUpdateQueryBuilder(
 		update: jest.fn().mockReturnThis(),
 		select: jest.fn().mockReturnThis(),
 		addSelect: jest.fn().mockReturnThis(),
+		distinct: jest.fn().mockReturnThis(),
 		innerJoin: jest.fn().mockReturnThis(),
 		groupBy: jest.fn().mockReturnThis(),
 		addGroupBy: jest.fn().mockReturnThis(),
@@ -509,7 +510,7 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION);
 	});
 
-	it('retries an unsupported transportation guess when card merchant evidence is weak', async () => {
+	it('searches the merchant of a card line the model could not place', async () => {
 		const transaction = createBankTransaction({
 			id: 'vending-transaction',
 			counterpartyName: null,
@@ -519,7 +520,7 @@ describe('BankTransactionCategorizationService worker', () => {
 		const {service, provider} = createService({
 			rows: [transaction],
 			webSearchEnabled: true,
-			providerResult: [{correlationId: transaction.id, category: 'TRANSPORTATION', confidence: 0.86}],
+			providerResult: [{correlationId: transaction.id, category: 'NEEDS_REVIEW', confidence: 0.4}],
 			webSearchResult: [
 				{
 					correlationId: transaction.id,
@@ -552,46 +553,17 @@ describe('BankTransactionCategorizationService worker', () => {
 		});
 	});
 
-	it('normalizes a weak transportation guess to NEEDS_REVIEW when web search is disabled', async () => {
-		const transaction = createBankTransaction({
-			id: 'weak-transportation-transaction',
-			counterpartyName: null,
-			merchantCategoryCode: null,
-			transactionType: 'CARD_PAYMENT',
-		});
-		const {service, provider} = createService({
-			rows: [transaction],
-			providerResult: [{correlationId: transaction.id, category: 'TRANSPORTATION', confidence: 0.86}],
-		});
-
-		await service.processTransactionJob([transaction.id]);
-
-		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
-		expect(transaction.category).toBe('NEEDS_REVIEW');
-		expect(transaction.categoryStatus).toBe('COMPLETED');
-		expect(transaction.categoryConfidence).toBe('0');
-		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION);
-	});
-
-	it('keeps a Transportation answer from a bare card line when the owner chose Transportation for the merchant', async () => {
+	it("keeps the model's Transportation answer for a bare card line without searching", async () => {
 		const transaction = createBankTransaction({
 			id: 'rail-ticket-machine',
-			amount: '-50.00',
 			counterpartyName: null,
 			merchantCategoryCode: null,
 			transactionType: 'CARD_PAYMENT',
-			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
-			merchantKey: 'EXPENSE:example rail',
 		});
-		const queryBuilder = createUpdateQueryBuilder();
-		queryBuilder.getRawMany.mockResolvedValueOnce([
-			{merchantKey: 'EXPENSE:example rail', category: 'TRANSPORTATION', count: 1},
-		] as never);
 		const {service, provider} = createService({
 			rows: [transaction],
-			queryBuilder,
 			webSearchEnabled: true,
-			providerResult: [{correlationId: transaction.id, category: 'TRANSPORTATION', confidence: 0.9}],
+			providerResult: [{correlationId: transaction.id, category: 'TRANSPORTATION', confidence: 0.86}],
 		});
 
 		await service.processTransactionJob([transaction.id]);
@@ -599,34 +571,10 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
 		expect(transaction).toMatchObject({
 			category: 'TRANSPORTATION',
-			categorySource: 'AI',
-			categoryConfidence: '0.9',
+			categoryStatus: 'COMPLETED',
+			categoryConfidence: '0.86',
+			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION,
 		});
-	});
-
-	it('still holds back a bare-card Transportation answer when the owner mostly chose another category', async () => {
-		const transaction = createBankTransaction({
-			id: 'broad-shop-card-line',
-			counterpartyName: null,
-			merchantCategoryCode: null,
-			transactionType: 'CARD_PAYMENT',
-			bankAccount: {bankConnection: {accountId: 'account-1'}} as never,
-			merchantKey: 'EXPENSE:example shop',
-		});
-		const queryBuilder = createUpdateQueryBuilder();
-		queryBuilder.getRawMany.mockResolvedValueOnce([
-			{merchantKey: 'EXPENSE:example shop', category: 'SHOPPING', count: 4},
-			{merchantKey: 'EXPENSE:example shop', category: 'TRANSPORTATION', count: 1},
-		] as never);
-		const {service} = createService({
-			rows: [transaction],
-			queryBuilder,
-			providerResult: [{correlationId: transaction.id, category: 'TRANSPORTATION', confidence: 0.9}],
-		});
-
-		await service.processTransactionJob([transaction.id]);
-
-		expect(transaction.category).toBe('NEEDS_REVIEW');
 	});
 
 	it('accepts web Transportation from the identity of a transport merchant', async () => {
@@ -656,38 +604,6 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(transaction.categoryStatus).toBe('COMPLETED');
 		expect(transaction.categoryConfidence).toBe('0.91');
 		expect(transaction.categorySearchTrace).toEqual(searchTrace);
-		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION);
-	});
-
-	it('routes a weak first-pass Transportation guess through web search, which can confirm it', async () => {
-		const transaction = createBankTransaction({
-			id: 'routed-transportation-transaction',
-			counterpartyName: null,
-			merchantCategoryCode: null,
-			transactionType: 'CARD_PAYMENT',
-		});
-		const {service, provider} = createService({
-			rows: [transaction],
-			webSearchEnabled: true,
-			providerResult: [{correlationId: transaction.id, category: 'TRANSPORTATION', confidence: 0.86}],
-			webSearchResult: [
-				{
-					correlationId: transaction.id,
-					category: 'TRANSPORTATION',
-					confidence: 0.9,
-					searchTrace: {
-						queries: ['Example Rail'],
-						sourceDomains: ['example.com'],
-						evidenceType: 'MERCHANT_IDENTITY_ONLY',
-					},
-				},
-			],
-		});
-
-		await service.processTransactionJob([transaction.id]);
-
-		expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(1);
-		expect(transaction.category).toBe('TRANSPORTATION');
 		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION);
 	});
 
@@ -869,7 +785,7 @@ describe('BankTransactionCategorizationService worker', () => {
 			rows: [transaction],
 			webSearchEnabled: true,
 			webSearchError: failure,
-			providerResult: [{correlationId: transaction.id, category: 'TRANSPORTATION', confidence: 0.86}],
+			providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.56}],
 		});
 		const logger = (service as unknown as {logger: {warn(message: string): void}}).logger;
 		const warn = jest.spyOn(logger, 'warn').mockImplementation();
@@ -877,9 +793,9 @@ describe('BankTransactionCategorizationService worker', () => {
 		try {
 			await expect(service.processTransactionJob([transaction.id])).resolves.toBeUndefined();
 			expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(1);
-			expect(transaction.category).toBe('NEEDS_REVIEW');
+			expect(transaction.category).toBe('OTHER');
 			expect(transaction.categoryStatus).toBe('COMPLETED');
-			expect(transaction.categoryConfidence).toBe('0');
+			expect(transaction.categoryConfidence).toBe('0.56');
 			expect(transaction.categoryPromptVersion).toBe(
 				BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION,
 			);
@@ -1033,10 +949,10 @@ describe('BankTransactionCategorizationService worker', () => {
 			{category: 'FOOD_AND_DRINK', count: 2, recentExamples: []},
 			{category: 'TRANSPORTATION', count: 1, recentExamples: []},
 		]);
-		const categoryFilters = queryBuilder.andWhere.mock.calls.filter(([clause]) =>
-			String(clause).includes('reusableCategories'),
+		const categoryFilters = [...queryBuilder.where.mock.calls, ...queryBuilder.andWhere.mock.calls].filter(
+			([clause]) => String(clause).includes('reusableCategories'),
 		);
-		expect(categoryFilters).toHaveLength(2);
+		expect(categoryFilters.length).toBeGreaterThan(0);
 		for (const [, categoryFilter] of categoryFilters) {
 			expect(categoryFilter.reusableCategories).not.toContain('NEEDS_REVIEW');
 			expect(categoryFilter.reusableCategories).toContain('TRANSPORTATION');

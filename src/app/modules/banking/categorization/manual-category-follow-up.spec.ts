@@ -1,7 +1,9 @@
+import type {BankTransactionCategory} from './bank-transaction-category';
 import {
 	ManualCategoryCounts,
 	planManualCategoryFollowUp,
 	whereManualCategoryFollowUpCandidates,
+	withoutOneOffChoices,
 } from './manual-category-follow-up';
 
 function recordingQuery() {
@@ -22,6 +24,49 @@ function recordingQuery() {
 }
 
 const counts = (entries: [string, number][]) => new Map(entries) as ManualCategoryCounts;
+
+describe('withoutOneOffChoices', () => {
+	it.each([
+		[
+			'drops a single choice when the merchant has rows in another category',
+			[['HEALTH', 1]],
+			['FOOD_AND_DRINK', 'HEALTH'],
+			[],
+		],
+		[
+			'keeps a repeated choice and drops the one-off beside it',
+			[
+				['FOOD_AND_DRINK', 2],
+				['HEALTH', 1],
+			],
+			['FOOD_AND_DRINK', 'HEALTH'],
+			[['FOOD_AND_DRINK', 2]],
+		],
+		[
+			'drops both single choices that disagree',
+			[
+				['SHOPPING', 1],
+				['PERSONAL_CARE', 1],
+			],
+			['SHOPPING', 'PERSONAL_CARE'],
+			[],
+		],
+		[
+			'keeps a single choice when it is all that is known',
+			[['ENTERTAINMENT', 1]],
+			['ENTERTAINMENT'],
+			[['ENTERTAINMENT', 1]],
+		],
+		['keeps a single choice when no completed row is known', [['TRAVEL', 1]], [], [['TRAVEL', 1]]],
+	] as const)('%s', (_name, choices, merchantCategories, expected) => {
+		expect([
+			...withoutOneOffChoices(
+				counts(choices.map(([category, count]) => [category, count])),
+				new Set(merchantCategories as readonly BankTransactionCategory[]),
+			),
+		]).toEqual(expected);
+	});
+});
 
 describe('planManualCategoryFollowUp', () => {
 	it.each([

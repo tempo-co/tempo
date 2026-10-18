@@ -31,6 +31,8 @@ import {
 	CATEGORIZATION_E2E_AI_TRANSACTION_ID,
 	CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID,
 	CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID,
+	CATEGORIZATION_E2E_ONE_OFF_CHOICE_TRANSACTION_ID,
+	CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_WEB_TRANSACTION_ID,
@@ -208,6 +210,32 @@ describe('Bank transaction categorization integration', () => {
 		expect(inputs.get(CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID)?.previousManualCategories).toEqual([
 			{category: 'ENTERTAINMENT', count: 1, recentExamples: [{amount: '-20.00', date: '2026-09-04'}]},
 		]);
+	});
+
+	it("leaves the owner's one-off manual choice out of the next row's hint", async () => {
+		await app
+			.get(BankTransactionCategorizationService)
+			.enqueueForTransactions([CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID]);
+
+		const row = await waitFor(
+			() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID}),
+			(value) => value.categoryStatus === 'COMPLETED',
+		);
+		expect(row).toMatchObject({category: AI_CATEGORY, categorySource: 'AI'});
+		// The one-off choice belongs to the same merchant, so without the filter it would have been the hint.
+		const oneOffChoice = await bankTransactionRepository.findOneByOrFail({
+			id: CATEGORIZATION_E2E_ONE_OFF_CHOICE_TRANSACTION_ID,
+		});
+		expect(oneOffChoice).toMatchObject({
+			category: 'HEALTH',
+			categorySource: 'MANUAL',
+			merchantKey: row.merchantKey,
+		});
+		const input = categorizeSpy.mock.calls
+			.flatMap(([transactions]) => transactions)
+			.find(({correlationId}) => correlationId === CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID);
+		expect(input).toMatchObject({correlationId: CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID});
+		expect(input).not.toHaveProperty('previousManualCategories');
 	});
 
 	it('changes no other row when a correction is saved without selecting it', async () => {
