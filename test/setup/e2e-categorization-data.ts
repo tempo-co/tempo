@@ -14,6 +14,8 @@ export const CATEGORIZATION_E2E_WEB_TRANSACTION_ID = '00000000-0000-4000-8000-00
 export const CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID = '00000000-0000-4000-8000-000000000106';
 export const CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000107';
 export const CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000108';
+export const CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000109';
+export const CATEGORIZATION_E2E_ONE_OFF_CHOICE_TRANSACTION_ID = '00000000-0000-4000-8000-000000000110';
 const CATEGORIZATION_E2E_OTHER_ACCOUNT_EMAIL = 'categorization-other@test.com';
 
 export async function seedBankTransactionCategorizationData(app: INestApplicationContext): Promise<void> {
@@ -85,6 +87,42 @@ export async function seedBankTransactionCategorizationData(app: INestApplicatio
 			valueDate: '2026-09-05',
 			amount: '-15.00',
 			description: 'BEA, Google Pay Synthetic Rail 305,PAS001 NR:SY0002, 05.09.26/17:30 SYNTHTOWN',
+			counterpartyName: null,
+		},
+		// A market the owner once filed under Health for one purchase, while its other rows are groceries.
+		{
+			...cardPurchase,
+			id: CATEGORIZATION_E2E_ONE_OFF_CHOICE_TRANSACTION_ID,
+			transactionDate: '2026-09-07',
+			bookingDate: '2026-09-07',
+			valueDate: '2026-09-07',
+			amount: '-16.00',
+			description: 'BEA, Google Pay Synthetic Market,PAS001 NR:SY0005, 07.09.26/09:15 SYNTHTOWN',
+			counterpartyName: null,
+			category: 'HEALTH',
+			categoryStatus: 'COMPLETED',
+			categorySource: 'MANUAL',
+		},
+		{
+			...cardPurchase,
+			transactionDate: '2026-09-08',
+			bookingDate: '2026-09-08',
+			valueDate: '2026-09-08',
+			amount: '-31.00',
+			description: 'BEA, Google Pay Synthetic Market,PAS001 NR:SY0006, 08.09.26/09:15 SYNTHTOWN',
+			counterpartyName: null,
+			category: 'FOOD_AND_DRINK',
+			categoryStatus: 'COMPLETED',
+			categorySource: 'AI',
+		},
+		{
+			...cardPurchase,
+			id: CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID,
+			transactionDate: '2026-09-09',
+			bookingDate: '2026-09-09',
+			valueDate: '2026-09-09',
+			amount: '-17.00',
+			description: 'BEA, Google Pay Synthetic Market,PAS001 NR:SY0007, 09.09.26/09:15 SYNTHTOWN',
 			counterpartyName: null,
 		},
 	]);

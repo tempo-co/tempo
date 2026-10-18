@@ -28,6 +28,25 @@ export function getUnanimousCategory(counts: ManualCategoryCounts | undefined): 
 	return counts?.size === 1 ? [...counts.keys()][0] : null;
 }
 
+/**
+ * The owner's choices without one-offs: a category chosen once is a choice for that transaction, not a habit, when the
+ * merchant's rows also have another category. One Health purchase at a supermarket must not steer its next grocery run.
+ * Rows still in review have no category and do not count.
+ */
+export function withoutOneOffChoices(
+	counts: ManualCategoryCounts,
+	merchantCategories: ReadonlySet<BankTransactionCategory>,
+): ManualCategoryCounts {
+	return new Map(
+		[...counts].filter(
+			([category, count]) =>
+				count > 1 ||
+				merchantCategories.size === 0 ||
+				(merchantCategories.size === 1 && merchantCategories.has(category)),
+		),
+	);
+}
+
 /** With AI categorization off, rows have no model to go back to, so mixed choices change nothing. */
 export function planManualCategoryFollowUp(
 	counts: ManualCategoryCounts | undefined,

@@ -3,7 +3,7 @@ import {Inject, Injectable, Logger} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import {Queue} from 'bullmq';
 import {createHash} from 'node:crypto';
-import {In, IsNull, Repository} from 'typeorm';
+import {In, IsNull, Repository, SelectQueryBuilder} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {
@@ -21,7 +21,6 @@ import {safeErrorName} from '../banking.utils';
 import {isOwnTransferCategorized, notOwnTransferCategorizedSql} from '../own-transfer/own-transfer-category';
 import {
 	createBankTransactionCategorizationInputHash,
-	normalizeMerchantCategoryCode,
 	toBankTransactionCategorizationInput,
 	toBankTransactionCategorizationWebSearchInput,
 } from './bank-transaction-categorization-input';
@@ -71,6 +70,7 @@ import {
 	REUSABLE_MANUAL_CATEGORIES,
 	planManualCategoryFollowUp,
 	whereManualCategoryFollowUpCandidates,
+	withoutOneOffChoices,
 } from './manual-category-follow-up';
 
 export type BankTransactionCategorizationJobData = {
@@ -342,13 +342,7 @@ export class BankTransactionCategorizationService {
 		const activeCorrelationIds = new Set(
 			activeBatchAfterStandardCategorization.map(({input}) => input.correlationId),
 		);
-		const inputById = new Map(inputs.map((input) => [input.correlationId, input]));
-		const standardResultById = new Map(
-			standardResults.map((result) => {
-				const normalized = this.normalizeStandardResult(inputById.get(result.correlationId), result);
-				return [normalized.correlationId, normalized] as const;
-			}),
-		);
+		const standardResultById = new Map(standardResults.map((result) => [result.correlationId, result] as const));
 		const webSearchEnabled = this.isWebSearchEnabled();
 		const skippedWebSearchIds = new Set<string>();
 		const webCandidates = inputs
@@ -483,14 +477,17 @@ export class BankTransactionCategorizationService {
 			await Promise.all(
 				[...batchByAccount].map(async ([accountId, entries]) => {
 					const merchantKeys = [...new Set(entries.map(({merchantKey}) => merchantKey))];
-					const [history, examples] = await Promise.all([
+					const [history, examples, categorized] = await Promise.all([
 						this.loadAccountManualCategoryCounts(accountId, merchantKeys),
 						this.loadAccountManualCategoryExamples(accountId, merchantKeys),
+						this.loadAccountCompletedCategories(accountId, merchantKeys),
 					]);
 					for (const {id, merchantKey} of entries) {
 						const counts = history.get(merchantKey);
-						if (counts)
-							hintsByTransaction.set(id, toPreviousManualCategories(counts, examples.get(merchantKey)));
+						if (!counts) continue;
+						const habits = withoutOneOffChoices(counts, categorized.get(merchantKey) ?? new Set());
+						if (habits.size)
+							hintsByTransaction.set(id, toPreviousManualCategories(habits, examples.get(merchantKey)));
 					}
 				}),
 			);
@@ -502,6 +499,26 @@ export class BankTransactionCategorizationService {
 	}
 
 	/**
+	 * The owner's rows for these merchants that can count as history: a reusable category, and not an own transfer or
+	 * financial event. `category` lets a correction preview count one row under its new category.
+	 */
+	private merchantHistoryQuery(
+		accountId: string,
+		merchantKeys: readonly string[],
+		category = 'transaction.category',
+	): SelectQueryBuilder<BankTransaction> {
+		return this.repository
+			.createQueryBuilder('transaction')
+			.innerJoin('transaction.bankAccount', 'bankAccount')
+			.innerJoin('bankAccount.bankConnection', 'connection')
+			.where(`${category} IN (:...reusableCategories)`, {reusableCategories: REUSABLE_MANUAL_CATEGORIES})
+			.andWhere('transaction."ownTransferEvidence" IS NULL')
+			.andWhere('transaction."financialEventType" IS NULL')
+			.andWhere('transaction."merchantKey" IN (:...merchantKeys)', {merchantKeys})
+			.andWhere('connection."accountId" = :accountId', {accountId});
+	}
+
+	/**
 	 * The amounts and dates of the owner's most recent manual choices per merchant and category, so the model can tell
 	 * apart different kinds of payments to the same payee. Uses the same eligibility rules as the counts.
 	 */
@@ -510,22 +527,12 @@ export class BankTransactionCategorizationService {
 		merchantKeys: readonly string[],
 	): Promise<Map<string, Map<BankTransactionCategory, ManualCategoryExample[]>>> {
 		const date = 'COALESCE(transaction."transactionDate", transaction."bookingDate", transaction."valueDate")';
-		const rows = await this.repository
-			.createQueryBuilder('transaction')
-			.innerJoin('transaction.bankAccount', 'bankAccount')
-			.innerJoin('bankAccount.bankConnection', 'connection')
+		const rows = await this.merchantHistoryQuery(accountId, merchantKeys)
 			.select('transaction.merchantKey', 'merchantKey')
 			.addSelect('transaction.category', 'category')
 			.addSelect('transaction.amount', 'amount')
 			.addSelect(`${date}::text`, 'date')
-			.where('transaction."categorySource" = :manualSource', {manualSource: 'MANUAL'})
-			.andWhere('transaction.category IN (:...reusableCategories)', {
-				reusableCategories: REUSABLE_MANUAL_CATEGORIES,
-			})
-			.andWhere('transaction."ownTransferEvidence" IS NULL')
-			.andWhere('transaction."financialEventType" IS NULL')
-			.andWhere('transaction."merchantKey" IN (:...merchantKeys)', {merchantKeys})
-			.andWhere('connection."accountId" = :accountId', {accountId})
+			.andWhere('transaction."categorySource" = :manualSource', {manualSource: 'MANUAL'})
 			.orderBy(date, 'DESC', 'NULLS LAST')
 			.addOrderBy('transaction.id', 'DESC')
 			.getRawMany<{
@@ -547,6 +554,25 @@ export class BankTransactionCategorizationService {
 		return examples;
 	}
 
+	/** The categories the owner's completed rows per merchant key currently have, from any source. */
+	private async loadAccountCompletedCategories(
+		accountId: string,
+		merchantKeys: readonly string[],
+	): Promise<Map<string, Set<BankTransactionCategory>>> {
+		const rows = await this.merchantHistoryQuery(accountId, merchantKeys)
+			.select('transaction.merchantKey', 'merchantKey')
+			.addSelect('transaction.category', 'category')
+			.distinct(true)
+			.andWhere('transaction."categoryStatus" = :completed', {completed: 'COMPLETED'})
+			.getRawMany<{merchantKey: string; category: BankTransactionCategory}>();
+
+		const categories = new Map<string, Set<BankTransactionCategory>>();
+		for (const {merchantKey, category} of rows) {
+			categories.set(merchantKey, (categories.get(merchantKey) ?? new Set()).add(category));
+		}
+		return categories;
+	}
+
 	/**
 	 * Counts the owner's reusable manual categories per merchant key. With a `correction`, that row counts as if the
 	 * owner had already set it manually to that category, under the same rules as every other manual row.
@@ -562,22 +588,14 @@ export class BankTransactionCategorizationService {
 		const isManual = correction
 			? '(transaction."categorySource" = :manualSource OR transaction.id = :correctedId)'
 			: 'transaction."categorySource" = :manualSource';
-		const rows = await this.repository
-			.createQueryBuilder('transaction')
-			.innerJoin('transaction.bankAccount', 'bankAccount')
-			.innerJoin('bankAccount.bankConnection', 'connection')
+		const rows = await this.merchantHistoryQuery(accountId, merchantKeys, category)
 			.select('transaction.merchantKey', 'merchantKey')
 			.addSelect(category, 'category')
 			.addSelect('COUNT(*)::int', 'count')
-			.where(isManual, {
+			.andWhere(isManual, {
 				manualSource: 'MANUAL',
 				...(correction && {correctedId: correction.transactionId, correctedCategory: correction.category}),
 			})
-			.andWhere(`${category} IN (:...reusableCategories)`, {reusableCategories: REUSABLE_MANUAL_CATEGORIES})
-			.andWhere('transaction."ownTransferEvidence" IS NULL')
-			.andWhere('transaction."financialEventType" IS NULL')
-			.andWhere('transaction."merchantKey" IN (:...merchantKeys)', {merchantKeys})
-			.andWhere('connection."accountId" = :accountId', {accountId})
 			.groupBy('transaction."merchantKey"')
 			.addGroupBy(category)
 			.getRawMany<{merchantKey: string; category: BankTransactionCategory; count: number}>();
@@ -915,27 +933,6 @@ export class BankTransactionCategorizationService {
 		}
 	}
 
-	/**
-	 * A Transportation guess from a bare card line needs evidence, unless the owner chose Transportation for this
-	 * merchant before; their own choice is that evidence.
-	 */
-	private normalizeStandardResult(
-		input: BankTransactionCategorizationInput | undefined,
-		result: BankTransactionCategorizationResult,
-	): BankTransactionCategorizationResult {
-		if (
-			input &&
-			result.category === 'TRANSPORTATION' &&
-			!ownerMostlyChoseTransportation(input) &&
-			input.transactionType === 'CARD_PAYMENT' &&
-			!normalizeMerchantCategoryCode(input.merchantCategoryCode) &&
-			input.counterpartyName === null
-		) {
-			return {...result, category: 'NEEDS_REVIEW', confidence: 0};
-		}
-		return result;
-	}
-
 	private normalizeWebSearchResult(result: BankTransactionCategorizationResult): BankTransactionCategorizationResult {
 		const evidenceType = result.searchTrace?.evidenceType;
 		if (evidenceType === 'INSUFFICIENT' || evidenceType === 'CONFLICTING') {
@@ -1023,12 +1020,6 @@ export class BankTransactionCategorizationService {
 
 /** Most recent manual choices per category the model sees as examples. */
 const MAX_MANUAL_CATEGORY_EXAMPLES = 5;
-
-/** The owner's history is sorted by count, so Transportation must be first and not tied with another category. */
-function ownerMostlyChoseTransportation(input: BankTransactionCategorizationInput): boolean {
-	const [first, second] = input.previousManualCategories ?? [];
-	return first?.category === 'TRANSPORTATION' && (second === undefined || second.count < first.count);
-}
 
 type ManualCategoryExample = PreviousManualCategory['recentExamples'][number];
 
