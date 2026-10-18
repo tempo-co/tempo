@@ -7,6 +7,7 @@ import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {RecurringSeriesDecision} from '@modules/banking/recurring/recurring-series-decision.entity';
+import {seriesKey} from '@modules/banking/recurring/recurring-series-detection';
 
 import {BankingFixtures, CURRENCY_EXCHANGE_EVENT, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {
@@ -89,8 +90,13 @@ describe('RecurringSeries', () => {
 			// Ended in June.
 			...monthly('02', '-15.00', 'Example Magazine').slice(0, 2),
 			bookedRow('2026-04-02', '-15.00', {counterpartyName: 'Example Magazine', description: 'Example Magazine'}),
-			bookedRow('2025-09-12', '-120.00', {counterpartyName: 'Example Insurer', description: 'Example Insurer'}),
-			bookedRow('2026-09-14', '-120.00', {counterpartyName: 'Example Insurer', description: 'Example Insurer'}),
+			...['2024-09-12', '2025-09-12', '2026-09-14'].map((date) =>
+				bookedRow(date, '-120.00', {
+					counterpartyName: 'Example Insurer',
+					description: 'Example Insurer',
+					category: 'INSURANCE',
+				}),
+			),
 			// Irregular purchases at one shop.
 			...['2026-06-02', '2026-06-20', '2026-07-30', '2026-08-04', '2026-09-27', '2026-10-01'].map((date) =>
 				bookedRow(date, '-15.00', {counterpartyName: 'Example Shop', description: 'Example Shop'}),
@@ -311,15 +317,20 @@ describe('RecurringSeries', () => {
 
 	it('resets a merged series fully, whatever its parts were decided as', async () => {
 		const internet = {counterpartyName: 'Example Internet', description: 'Example Internet'};
-		await fixtures.createTransactions(ownerBankAccount, [
+		const initialRows = await fixtures.createTransactions(ownerBankAccount, [
 			...['2026-01-22', '2026-02-22', '2026-03-22'].map((date) => bookedRow(date, '-10.00', internet)),
 			...['2026-04-22', '2026-05-22', '2026-06-22'].map((date) => bookedRow(date, '-20.00', internet)),
 		]);
-		const parts = byName((await list(ownerAgent)).series, 'Example Internet');
-		expect(parts).toHaveLength(2);
-		const [cheap, dear] = [...parts].sort((x, y) => Number(x.typicalAmount) - Number(y.typicalAmount));
-		await ownerAgent.patch(`/recurring-series/${cheap.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
-		await ownerAgent.patch(`/recurring-series/${dear.key}/decision`).send({decision: 'DISMISSED'}).expect(204);
+		const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
+		// Existing decisions from when sequential prices were separate histories.
+		await decisions.insert(
+			[0, 3].map((offset) => ({
+				accountId: owner.id,
+				seriesKey: seriesKey(initialRows[offset].merchantKey!, 'EUR', initialRows[offset].id),
+				decision: offset === 0 ? ('CONFIRMED' as const) : ('DISMISSED' as const),
+				transactionIds: initialRows.slice(offset, offset + 3).map(({id}) => id),
+			})),
+		);
 
 		// Rising amounts merge both into one variable series.
 		await fixtures.createTransactions(ownerBankAccount, [
@@ -329,7 +340,7 @@ describe('RecurringSeries', () => {
 		]);
 		const [merged] = byName((await list(ownerAgent)).series, 'Example Internet');
 		expect(merged).toMatchObject({amountKind: 'VARIABLE', transactionCount: 9});
-		expect(merged.decision).not.toBeNull();
+		expect(merged.decision).toBeNull();
 
 		await ownerAgent.patch(`/recurring-series/${merged.key}/decision`).send({decision: null}).expect(204);
 		expect(byName((await list(ownerAgent)).series, 'Example Internet')[0].decision).toBeNull();
@@ -404,7 +415,7 @@ describe('RecurringSeries', () => {
 			['2026-05-05', '2026-06-05', '2026-07-11'].map((date) => bookedRow(date, '-10.00', supplier)),
 		);
 		expect(byName((await list(ownerAgent)).series, 'Example Historical Supplier')).toEqual([
-			expect.objectContaining({amountKind: 'VARIABLE', transactionCount: 6, decision: 'DISMISSED'}),
+			expect.objectContaining({amountKind: 'FIXED', transactionCount: 6, decision: 'DISMISSED'}),
 		]);
 	});
 
@@ -428,6 +439,120 @@ describe('RecurringSeries', () => {
 		]);
 		// The stopped series added nothing before; the restart adds its monthly cost.
 		expect(Number(confirmedMonthlyTotal) - totalBeforeRestart).toBeCloseTo(21, 2);
+	});
+
+	it.each([
+		['CONFIRMED', 'CONFIRMED', 'CONFIRMED'],
+		['DISMISSED', 'DISMISSED', 'DISMISSED'],
+		['CONFIRMED', 'DISMISSED', null],
+	] as const)(
+		'reconciles saved %s/%s decisions when sequential prices become one history',
+		async (first, second, expected) => {
+			const name = `Example Sequential ${first} ${second}`;
+			const totalBefore = (await list(ownerAgent)).confirmedMonthlyTotal;
+			const rows = await fixtures.createTransactions(
+				ownerBankAccount,
+				MONTHS.map((month, index) =>
+					bookedRow(`${month}-09`, index < 3 ? '-24.00' : '-48.00', {
+						counterpartyName: name,
+						description: name,
+						category: 'SUBSCRIPTIONS',
+					}),
+				),
+			);
+			const snapshot = await fixtures.transactions.find({
+				where: {id: In(rows.map(({id}) => id))},
+				order: {id: 'ASC'},
+			});
+			const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
+			// Snapshots written by the earlier detector when the two prices were separate series.
+			await decisions.insert(
+				[0, 3].map((offset, index) => ({
+					accountId: owner.id,
+					seriesKey: seriesKey(rows[offset].merchantKey!, 'EUR', rows[offset].id),
+					decision: index === 0 ? first : second,
+					transactionIds: rows.slice(offset, offset + 3).map(({id}) => id),
+				})),
+			);
+			const result = await list(ownerAgent);
+			expect(byName(result.series, name)).toEqual([
+				expect.objectContaining({
+					amountKind: 'FIXED',
+					transactionCount: 6,
+					monthlyEquivalent: '48.00',
+					decision: expected,
+				}),
+			]);
+			expect(Number(result.confirmedMonthlyTotal) - Number(totalBefore)).toBeCloseTo(
+				expected === 'CONFIRMED' ? 48 : 0,
+				2,
+			);
+			const [merged] = byName(result.series, name);
+			await ownerAgent.patch(`/recurring-series/${merged.key}/decision`).send({decision: null}).expect(204);
+			expect(byName((await list(ownerAgent)).series, name)[0].decision).toBeNull();
+			expect(
+				await decisions.countBy({
+					accountId: owner.id,
+					seriesKey: In([0, 3].map((offset) => seriesKey(rows[offset].merchantKey!, 'EUR', rows[offset].id))),
+				}),
+			).toBe(0);
+			expect(
+				await fixtures.transactions.find({where: {id: In(rows.map(({id}) => id))}, order: {id: 'ASC'}}),
+			).toEqual(snapshot);
+		},
+	);
+
+	it('keeps confirmation through a price change without absorbing a concurrent plan', async () => {
+		const name = 'Example Parallel Memberships';
+		const samePayee = {counterpartyName: name, description: name, category: 'SUBSCRIPTIONS' as const};
+		await fixtures.createTransactions(ownerBankAccount, [
+			...MONTHS.slice(0, 3).map((month) => bookedRow(`${month}-07`, '-24.00', samePayee)),
+			...MONTHS.map((month) => bookedRow(`${month}-19`, '-96.00', samePayee)),
+		]);
+		const old = byName((await list(ownerAgent)).series, name).find(
+			({monthlyEquivalent}) => monthlyEquivalent === '24.00',
+		)!;
+		await ownerAgent.patch(`/recurring-series/${old.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
+		await fixtures.createTransactions(
+			ownerBankAccount,
+			MONTHS.slice(3).map((month) => bookedRow(`${month}-07`, '-48.00', samePayee)),
+		);
+		expect(byName((await list(ownerAgent)).series, name)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					key: old.key,
+					amountKind: 'FIXED',
+					monthlyEquivalent: '48.00',
+					transactionCount: 6,
+					decision: 'CONFIRMED',
+				}),
+				expect.objectContaining({monthlyEquivalent: '96.00', transactionCount: 6, decision: null}),
+			]),
+		);
+		expect(byName((await list(ownerAgent)).series, name)).toHaveLength(2);
+	});
+
+	it('needs stronger evidence for an annual suggestion than two ordinary purchases', async () => {
+		const variants = [
+			['Example Annual Grocery', 'FOOD_AND_DRINK', 2],
+			['Example Annual Unknown', null, 2],
+			['Example Annual Membership', 'SUBSCRIPTIONS', 2],
+			['Example Annual Cover', 'INSURANCE', 3],
+		] as const;
+		for (const [name, category, count] of variants) {
+			await fixtures.createTransactions(
+				ownerBankAccount,
+				Array.from({length: count}, (_, index) =>
+					bookedRow(`${2024 + index}-02-18`, '-84.00', {counterpartyName: name, description: name, category}),
+				),
+			);
+		}
+		const {series} = await list(ownerAgent);
+		for (const [name, , count] of variants) {
+			const entries = byName(series, name);
+			if (name.endsWith('Grocery') || name.endsWith('Unknown')) expect(entries).toEqual([]);
+			else expect(entries).toEqual([expect.objectContaining({cadence: 'YEARLY', transactionCount: count})]);
+		}
 	});
 
 	it('rejects keys that are invalid, unknown or another owner’s', async () => {

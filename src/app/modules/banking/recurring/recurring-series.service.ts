@@ -57,7 +57,7 @@ export class RecurringSeriesService {
 		const decisionBySeries = resolveDecisions(detected, decisions);
 		const series = detected
 			.filter((entry) => entry.direction === direction)
-			.map((entry) => ({entry, decision: shownDecision(entry, decisionBySeries.get(entry.key)?.[0])}))
+			.map((entry) => ({entry, decision: shownDecision(entry, decisionBySeries.get(entry.key) ?? [])}))
 			.sort(
 				(a, b) =>
 					DECISION_ORDER[a.decision ?? 'NONE'] - DECISION_ORDER[b.decision ?? 'NONE'] ||
@@ -170,15 +170,17 @@ export class RecurringSeriesService {
  */
 function shownDecision(
 	entry: DetectedRecurringSeries,
-	decision: RecurringSeriesDecision | undefined,
+	decisions: readonly RecurringSeriesDecision[],
 ): RecurringSeriesDecisionValue | null {
-	if (!decision) return null;
-	if (decision.decision !== 'DISMISSED') return decision.decision;
+	const decision = decisions[0]?.decision;
+	// Regrouping must not silently choose one side of conflicting owner decisions.
+	if (!decision || decisions.some((saved) => saved.decision !== decision)) return null;
+	if (decision !== 'DISMISSED') return decision;
 	// Only a restart after the last payment the owner dismissed brings the series back. Ids are in date order.
-	const decided = new Set(decision.transactionIds);
+	const decided = new Set(decisions.flatMap(({transactionIds}) => transactionIds));
 	const lastDecided = entry.transactionIds.findLastIndex((id) => decided.has(id));
 	const later = new Set(entry.transactionIds.slice(lastDecided + 1));
-	return entry.restartTransactionIds.some((id) => later.has(id)) ? null : decision.decision;
+	return entry.restartTransactionIds.some((id) => later.has(id)) ? null : decision;
 }
 
 function toResponse(entry: DetectedRecurringSeries, decision: RecurringSeriesDecisionValue | null): RecurringSeriesDto {
@@ -204,8 +206,8 @@ function toResponse(entry: DetectedRecurringSeries, decision: RecurringSeriesDec
 
 /**
  * Assigns each matching saved decision to one current series: its own key, otherwise the most shared
- * payments (ties by series key). Each group is ordered for display: exact key, overlap, then saved key/id.
- * Updates replace the whole group without changing snapshots or decisions assigned to siblings.
+ * payments (ties by series key). Updates replace the whole group without changing snapshots or decisions
+ * assigned to siblings.
  */
 function resolveDecisions(
 	detected: readonly DetectedRecurringSeries[],
@@ -229,19 +231,6 @@ function resolveDecisions(
 		const assigned = result.get(best.key) ?? [];
 		assigned.push(decision);
 		result.set(best.key, assigned);
-	}
-	for (const series of detected) {
-		const payments = new Set(series.transactionIds);
-		result
-			.get(series.key)
-			?.sort(
-				(a, b) =>
-					Number(b.seriesKey === series.key) - Number(a.seriesKey === series.key) ||
-					b.transactionIds.filter((id) => payments.has(id)).length -
-						a.transactionIds.filter((id) => payments.has(id)).length ||
-					a.seriesKey.localeCompare(b.seriesKey) ||
-					a.id.localeCompare(b.id),
-			);
 	}
 	return result;
 }
