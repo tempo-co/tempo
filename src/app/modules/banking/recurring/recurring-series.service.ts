@@ -14,12 +14,15 @@ import {BankTransaction} from '../bank-transaction.entity';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
 import {SQL_INTERNAL} from '../services/bank-transaction-filters';
 import {formatCents} from '../summary/bank-transaction-summary';
+import {RecurringPayeeAlias} from './recurring-payee-alias.entity';
+import {resolveRecurringPayees} from './recurring-payee-identity';
 import {RecurringSeriesDecision, type RecurringSeriesDecisionValue} from './recurring-series-decision.entity';
 import {
 	type DetectedRecurringSeries,
 	type RecurringCandidate,
 	detectRecurringSeries,
 } from './recurring-series-detection';
+import {isOrdinaryRetailExpense} from './recurring-series-eligibility';
 
 const REFUND = 'REFUND' satisfies BankTransactionCategory;
 const DECISION_ORDER: Record<RecurringSeriesDecisionValue | 'NONE', number> = {CONFIRMED: 0, NONE: 1, DISMISSED: 2};
@@ -36,7 +39,7 @@ type CandidateRow = {
 	category: string | null;
 };
 
-/** Detects recurring payments on read from the owner's settled history; only the owner's decisions are stored. */
+/** Detects recurring payments on read; stores only owner decisions and approved identity mappings. */
 @Injectable()
 export class RecurringSeriesService {
 	constructor(
@@ -44,17 +47,15 @@ export class RecurringSeriesService {
 		private readonly bankTransactionRepository: Repository<BankTransaction>,
 		@InjectRepository(RecurringSeriesDecision)
 		private readonly decisionRepository: Repository<RecurringSeriesDecision>,
+		@InjectRepository(RecurringPayeeAlias)
+		private readonly aliasRepository: Repository<RecurringPayeeAlias>,
 	) {}
 
 	async list(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
 		{direction, asOf}: RecurringSeriesQueryDto,
 	): Promise<RecurringSeriesListResponseDto> {
-		const [detected, decisions] = await Promise.all([
-			this.detect(accountId, asOf),
-			this.decisionRepository.find({where: {accountId}}),
-		]);
-		const decisionBySeries = resolveDecisions(detected, decisions);
+		const {detected, decisionBySeries} = await this.readState(accountId, asOf);
 		const series = detected
 			.filter((entry) => entry.direction === direction)
 			.map((entry) => ({entry, decision: shownDecision(entry, decisionBySeries.get(entry.key) ?? [])}))
@@ -88,12 +89,11 @@ export class RecurringSeriesService {
 	 * `null` returns the series to suggested.
 	 */
 	async updateDecision(accountId: Account['id'], seriesKey: string, decision: RecurringSeriesDecisionValue | null) {
-		const detected = await this.detect(accountId, today());
+		const {detected, decisionBySeries} = await this.readState(accountId, today());
 		const series = detected.find((entry) => entry.key === seriesKey);
 		if (!series) throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);
-		const decisions = await this.decisionRepository.find({where: {accountId}});
 		// Replace every decision owned by this current series, including hidden decisions from merged parts.
-		const superseded = resolveDecisions(detected, decisions).get(seriesKey) ?? [];
+		const superseded = decisionBySeries.get(seriesKey) ?? [];
 		await this.decisionRepository.manager.transaction(async (manager) => {
 			if (superseded.length > 0) {
 				await manager.delete(
@@ -120,13 +120,20 @@ export class RecurringSeriesService {
 	private async findDetected(accountId: Account['id'], seriesKey: string): Promise<DetectedRecurringSeries> {
 		// Keys and payments don't depend on the date; only status and flags do.
 		const today = new Date().toISOString().slice(0, 10);
-		const series = (await this.detect(accountId, today)).find((entry) => entry.key === seriesKey);
+		const {detected} = await this.readState(accountId, today);
+		const series = detected.find((entry) => entry.key === seriesKey);
 		if (!series) throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);
 		return series;
 	}
 
-	private async detect(accountId: Account['id'], today: string): Promise<DetectedRecurringSeries[]> {
-		const rows = await this.bankTransactionRepository
+	private async readState(
+		accountId: Account['id'],
+		today: string,
+	): Promise<{
+		detected: DetectedRecurringSeries[];
+		decisionBySeries: Map<string, RecurringSeriesDecision[]>;
+	}> {
+		const rowsQuery = this.bankTransactionRepository
 			.createQueryBuilder('transaction')
 			.innerJoin('transaction.bankAccount', 'bankAccount')
 			.innerJoin('bankAccount.bankConnection', 'connection')
@@ -148,6 +155,11 @@ export class RecurringSeriesService {
 			.andWhere(`NOT ${SQL_INTERNAL}`)
 			.andWhere('transaction.amount <> 0')
 			.getRawMany<CandidateRow>();
+		const [rows, aliases, decisions] = await Promise.all([
+			rowsQuery,
+			this.aliasRepository.find({where: {accountId}}),
+			this.decisionRepository.find({where: {accountId}}),
+		]);
 
 		const candidates: RecurringCandidate[] = rows.map((row) => ({
 			id: row.id,
@@ -160,7 +172,15 @@ export class RecurringSeriesService {
 			name: row.name,
 			category: row.category,
 		}));
-		return detectRecurringSeries(candidates, today);
+		const candidatesById = new Map(candidates.map((row) => [row.id, row]));
+		const detected = detectRecurringSeries(resolveRecurringPayees(candidates, aliases), today);
+		const decisionBySeries = resolveDecisions(detected, decisions);
+		return {
+			detected: detected.filter(
+				(entry) => decisionBySeries.has(entry.key) || !isOrdinaryRetailExpense(entry, candidatesById),
+			),
+			decisionBySeries,
+		};
 	}
 }
 

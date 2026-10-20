@@ -21,6 +21,8 @@ export type RecurringCandidate = {
 	bankAccountId: string;
 	date: string;
 	merchantKey: string;
+	/** Owner-approved recurring identity; the stored transaction merchant key remains unchanged. */
+	recurringPayeeKey?: string;
 	currency: string;
 	amountCents: bigint;
 	baseAmountCents: bigint | null;
@@ -134,9 +136,13 @@ export function detectRecurringSeries(
 	today: string,
 ): DetectedRecurringSeries[] {
 	const payees = payeeKeys(candidates);
+	const byId = new Map(candidates.map((row) => [row.id, row]));
+	const namingPeriod = createNamingPeriodLookup(byId);
+	const personKeys = new Set<string>();
 	const partitions = new Map<string, RecurringCandidate[]>();
 	for (const candidate of candidates) {
-		const payeeKey = payees.keyOf(candidate.merchantKey);
+		const payeeKey = payees.keyOf(candidate.recurringPayeeKey ?? candidate.merchantKey);
+		if (payees.isPerson(payees.keyOf(candidate.merchantKey))) personKeys.add(payeeKey);
 		// Per account: small payments to a payee from one account must not break a bill's rhythm on another.
 		const partitionKey = `${candidate.bankAccountId}\u0000${payeeKey}\u0000${candidate.currency}`;
 		const partition = partitions.get(partitionKey);
@@ -144,39 +150,291 @@ export function detectRecurringSeries(
 		else partitions.set(partitionKey, [{...candidate, merchantKey: payeeKey}]);
 	}
 
-	const series: DetectedRecurringSeries[] = [];
-	for (const rows of partitions.values()) {
-		rows.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-		// Two similar transfers to a friend a year apart are a coincidence, never a yearly bill.
-		const person = payees.isPerson(rows[0].merchantKey);
-		const cadenceOf = (chain: readonly RecurringCandidate[]) => {
-			const rule = matchCadence(chain);
-			if (rule?.cadence !== 'YEARLY') return rule;
-			const coincidence = person || chain.some(isPersonTransferCategory) || isBusyPayee(rows, chain);
-			const enoughHistory = chain.length >= 3 || chain.every(({category}) => category === 'SUBSCRIPTIONS');
-			return coincidence || !enoughHistory ? null : rule;
-		};
-		const chains = chainByAmount(rows);
-		const combinedRule = cadenceOf(rows);
-		const currentPriceRows = combinedRule ? latestPricePeriod(rows, chains, combinedRule) : null;
-		if (combinedRule && currentPriceRows) {
-			series.push(buildSeries(rows, combinedRule, 'FIXED', today, currentPriceRows));
-			continue;
-		}
-		const fixed = successivePriceChains(chains, cadenceOf).flatMap((chain) => {
-			const rule = cadenceOf(chain);
-			const currentPriceRows = rule ? latestPricePeriod(chain, chains, rule) : null;
-			return rule ? [buildSeries(chain, rule, 'FIXED', today, currentPriceRows ?? undefined)] : [];
-		});
-		// A bill whose amount only held still for a while is one variable series, not a short fixed one.
-		// Isolated payments retained in a fixed history do not count as evidence of a stable price.
-		const fixedRows = chains.filter((chain) => cadenceOf(chain)).reduce((count, chain) => count + chain.length, 0);
-		const rule = fixedRows / rows.length < MIN_REGULAR_GAP_SHARE ? combinedRule : null;
-		if (rule?.allowsVariable && !hasRecurringOverlap(rows, rule))
-			series.push(buildSeries(rows, rule, 'VARIABLE', today));
-		else series.push(...fixed);
+	const series = [...partitions.values()].flatMap((rows) =>
+		detectAccountPartition(rows, today, personKeys.has(rows[0].merchantKey), namingPeriod),
+	);
+	return reconcileAccountSeries(series, candidates, today, namingPeriod);
+}
+
+/** Recognize a complete current naming period before older fixed coverage can erase its evidence. */
+function detectAccountPartition(
+	rows: RecurringCandidate[],
+	today: string,
+	person: boolean,
+	namingPeriod: NamingPeriodLookup,
+): DetectedRecurringSeries[] {
+	const whole = detectPartition(rows, today, person);
+	if (
+		!rows[rows.length - 1].recurringPayeeKey ||
+		(whole.length === 1 && whole[0].transactionIds.length === rows.length)
+	)
+		return whole;
+	const currentRows = namingPeriod(rows, person);
+	if (!currentRows || currentRows.length === rows.length) return whole;
+	const currentIds = new Set(currentRows.map(({id}) => id));
+	const previous = rows.filter(({id}) => !currentIds.has(id));
+	return [
+		...detectAccountPartition(previous, today, person, namingPeriod),
+		completePartition(currentRows, today, person)!,
+	];
+}
+
+function completePartition(
+	rows: readonly RecurringCandidate[],
+	today: string,
+	person: boolean,
+): DetectedRecurringSeries | null {
+	const detected = recognizePartition([...rows], person);
+	if (detected.length !== 1 || detected[0].rows.length !== rows.length) return null;
+	const current = detected[0];
+	return buildSeries(current.rows, current.rule, current.amountKind, today, {priceRows: current.priceRows});
+}
+
+/** The same cadence and price rules are used for account-local detection and recognized-history reconciliation. */
+function detectPartition(rows: RecurringCandidate[], today: string, person: boolean): DetectedRecurringSeries[] {
+	return recognizePartition(rows, person).map(({rows, rule, amountKind, priceRows}) =>
+		buildSeries(rows, rule, amountKind, today, {priceRows}),
+	);
+}
+
+type RecognizedPartition = {
+	rows: RecurringCandidate[];
+	rule: CadenceRule;
+	amountKind: RecurringAmountKind;
+	priceRows?: RecurringCandidate[];
+};
+
+/** Qualification does not need to build forecasts/restart calendars for every chronological prefix. */
+function recognizePartition(rows: RecurringCandidate[], person: boolean): RecognizedPartition[] {
+	rows.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+	const cadenceOf = (chain: readonly RecurringCandidate[]) => {
+		const rule = matchCadence(chain);
+		if (rule?.cadence !== 'YEARLY') return rule;
+		const coincidence = person || chain.some(isPersonTransferCategory) || isBusyPayee(rows, chain);
+		const enoughHistory = chain.length >= 3 || chain.every(({category}) => category === 'SUBSCRIPTIONS');
+		return coincidence || !enoughHistory ? null : rule;
+	};
+	const chains = chainByAmount(rows);
+	const combinedRule = cadenceOf(rows);
+	const currentPriceRows = combinedRule ? latestPricePeriod(rows, chains, combinedRule) : null;
+	if (combinedRule && currentPriceRows)
+		return [{rows, rule: combinedRule, amountKind: 'FIXED', priceRows: currentPriceRows}];
+	const fixed = successivePriceChains(chains, cadenceOf).flatMap((chain): RecognizedPartition[] => {
+		const rule = cadenceOf(chain);
+		const currentPriceRows = rule ? latestPricePeriod(chain, chains, rule) : null;
+		return rule ? [{rows: chain, rule, amountKind: 'FIXED', priceRows: currentPriceRows ?? undefined}] : [];
+	});
+	// Isolated payments do not count as sustained price evidence for a genuinely variable bill.
+	const fixedRows = chains.filter((chain) => cadenceOf(chain)).reduce((count, chain) => count + chain.length, 0);
+	const rule = fixedRows / rows.length < MIN_REGULAR_GAP_SHARE ? combinedRule : null;
+	return rule?.allowsVariable && !hasRecurringOverlap(rows, rule) ? [{rows, rule, amountKind: 'VARIABLE'}] : fixed;
+}
+
+function reconcileAccountSeries(
+	series: readonly DetectedRecurringSeries[],
+	candidates: readonly RecurringCandidate[],
+	today: string,
+	namingPeriod: NamingPeriodLookup,
+): DetectedRecurringSeries[] {
+	const byId = new Map(candidates.map((row) => [row.id, row]));
+	// A stream is the account-local recognition, including every approved alias and no unclassified activity.
+	const sourceStreamById = new Map<string, ReadonlySet<string>>();
+	for (const entry of series) {
+		const ids = new Set(entry.transactionIds);
+		for (const id of ids) sourceStreamById.set(id, ids);
 	}
-	return series;
+	const groups = new Map<string, DetectedRecurringSeries[]>();
+	for (const entry of series) {
+		const first = byId.get(entry.transactionIds[0])!;
+		const groupKey = first.recurringPayeeKey
+			? `${entry.merchantKey}\u0000${entry.currency}\u0000${entry.cadence}`
+			: entry.key;
+		const group = groups.get(groupKey) ?? [];
+		group.push(entry);
+		groups.set(groupKey, group);
+	}
+	return [...groups.values()]
+		.flatMap((group) => {
+			if (group.length === 1) return group;
+			const join = (parts: readonly DetectedRecurringSeries[]): DetectedRecurringSeries | null => {
+				const rows = parts.flatMap((entry) =>
+					entry.transactionIds.map((id) => ({...byId.get(id)!, merchantKey: entry.merchantKey})),
+				);
+				rows.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+				const joined = completePartition(rows, today, false);
+				if (joined?.cadence === parts[0].cadence) return joined;
+				// Every member is already independently recognized. Validate continuity, not the share of old prices.
+				const rule = matchCadence(rows);
+				if (!rule || rule.cadence !== parts[0].cadence || hasRecurringOverlap(rows, rule)) return null;
+				const currentRows = namingPeriod(rows, false, rule.cadence);
+				if (!currentRows || currentRows.length === rows.length) return null;
+				// A current period can supersede older evidence, not interleave with another recognized obligation.
+				const currentIds = new Set(currentRows.map(({id}) => id));
+				if (rows.some(({id, date}) => !currentIds.has(id) && date >= currentRows[0].date)) return null;
+				const current = completePartition(currentRows, today, false)!;
+				const priceRows = latestPricePeriod(currentRows, chainByAmount(currentRows), rule) ?? currentRows;
+				return buildSeries(rows, rule, current.amountKind, today, {priceRows});
+			};
+			const whole = join(group);
+			if (whole) return [whole];
+
+			// An independent concurrent plan must not prevent an otherwise unique account continuation.
+			// Consider the complete compatibility component, never greedily choose one ambiguous edge.
+			const neighbours = group.map(() => [] as number[]);
+			for (let left = 0; left < group.length; left++) {
+				for (let right = left + 1; right < group.length; right++) {
+					if (!join([group[left], group[right]])) continue;
+					neighbours[left].push(right);
+					neighbours[right].push(left);
+				}
+			}
+			const seen = new Set<number>();
+			const reconciled: DetectedRecurringSeries[] = [];
+			for (let start = 0; start < group.length; start++) {
+				if (seen.has(start)) continue;
+				const stack = [start];
+				const indices: number[] = [];
+				while (stack.length) {
+					const current = stack.pop()!;
+					if (seen.has(current)) continue;
+					seen.add(current);
+					indices.push(current);
+					stack.push(...neighbours[current]);
+				}
+				const parts = indices.sort((a, b) => a - b).map((index) => group[index]);
+				const joined = parts.length > 1 ? join(parts) : null;
+				reconciled.push(...(joined ? [joined] : parts));
+			}
+			return reconciled;
+		})
+		.map((entry) => withCurrentSourceStream(entry, byId, sourceStreamById, today, namingPeriod));
+}
+
+/** Older linked identities must not move an established current price or billing-day anchor. */
+function withCurrentSourceStream(
+	entry: DetectedRecurringSeries,
+	byId: ReadonlyMap<string, RecurringCandidate>,
+	sourceStreamById: ReadonlyMap<string, ReadonlySet<string>>,
+	today: string,
+	namingPeriod: NamingPeriodLookup,
+): DetectedRecurringSeries {
+	const sources = entry.transactionIds.map((id) => byId.get(id)!);
+	const latest = sources[sources.length - 1];
+	if (!latest.recurringPayeeKey) return entry;
+	const rows = sources.map((row) => ({...row, merchantKey: entry.merchantKey}));
+	const rule = CADENCE_RULES.find(({cadence}) => cadence === entry.cadence)!;
+	const calendarRows = (prefix: readonly RecurringCandidate[]) =>
+		currentSourceRows(prefix, byId, sourceStreamById, rule, today, namingPeriod);
+	const currentRows = calendarRows(rows);
+	if (currentRows === rows) return entry;
+	const [current] = detectPartition([...currentRows], today, false);
+	const priceRows = latestPricePeriod(currentRows, chainByAmount(currentRows), rule) ?? currentRows;
+	return buildSeries(rows, rule, current.amountKind, today, {priceRows, calendarRows});
+}
+
+function currentSourceRows(
+	rows: readonly RecurringCandidate[],
+	byId: ReadonlyMap<string, RecurringCandidate>,
+	sourceStreamById: ReadonlyMap<string, ReadonlySet<string>>,
+	rule: CadenceRule,
+	today: string,
+	namingPeriod: NamingPeriodLookup,
+): readonly RecurringCandidate[] {
+	const latest = byId.get(rows[rows.length - 1].id)!;
+	const recognized = (prefix: RecurringCandidate[]) =>
+		completePartition(prefix, today, false)?.cadence === rule.cadence;
+	const currentRows = namingPeriod(rows, false, rule.cadence);
+	if (currentRows) return currentRows.length === rows.length ? rows : currentRows;
+	// If no alias union qualifies, retain the exact recognized source stream, not other account activity.
+	const sourceIds = sourceStreamById.get(latest.id)!;
+	const sourceRows = rows.filter(({id}) => sourceIds.has(id));
+	return sourceRows.length !== rows.length && recognized(sourceRows) ? sourceRows : rows;
+}
+
+type NamingPeriodCache = Map<string, {start: number | null; children: NamingPeriodCache}>;
+type QualificationCache = {cadence?: RecurringCadence | null; children: Map<string, QualificationCache>};
+type NamingPeriodLookup = (
+	rows: readonly RecurringCandidate[],
+	person: boolean,
+	cadence?: RecurringCadence,
+) => RecurringCandidate[] | null;
+
+/** Cache exact membership qualification and prefix boundaries only for this detector invocation. */
+function createNamingPeriodLookup(byId: ReadonlyMap<string, RecurringCandidate>): NamingPeriodLookup {
+	const periods = new Map<string, NamingPeriodCache>();
+	const qualifications = new Map<boolean, QualificationCache>();
+	return (rows, person, cadence) => {
+		const mode = `${person}:${cadence ?? ''}`;
+		if (!periods.has(mode)) periods.set(mode, new Map());
+		if (!qualifications.has(person)) qualifications.set(person, {children: new Map()});
+		return latestNamingPeriod(
+			rows,
+			byId,
+			(part) => {
+				let qualified = qualifications.get(person)!;
+				for (const {id} of part) {
+					if (!qualified.children.has(id)) qualified.children.set(id, {children: new Map()});
+					qualified = qualified.children.get(id)!;
+				}
+				if (qualified.cadence === undefined) {
+					const detected = recognizePartition([...part], person);
+					qualified.cadence =
+						detected.length === 1 && detected[0].rows.length === part.length
+							? detected[0].rule.cadence
+							: null;
+				}
+				return qualified.cadence !== null && (!cadence || qualified.cadence === cadence);
+			},
+			periods.get(mode)!,
+		);
+	};
+}
+
+/**
+ * Continue an established chronological period before reopening an older alias's whole lifetime. A newer naming
+ * interval may supersede it, but must include every interleaved alias. Both paths use the existing recognition rules.
+ * The prefix trie is local to one recognition predicate/request; calendar and restart checks share its exact evidence.
+ */
+function latestNamingPeriod(
+	rows: readonly RecurringCandidate[],
+	byId: ReadonlyMap<string, RecurringCandidate>,
+	recognized: (part: RecurringCandidate[]) => boolean,
+	cache: NamingPeriodCache = new Map(),
+): RecurringCandidate[] | null {
+	const latest = byId.get(rows[rows.length - 1].id)!;
+	const accountRows = rows.filter(({id}) => byId.get(id)!.bankAccountId === latest.bankAccountId);
+	const firstByKey = new Map<string, number>();
+	let start: number | null = null;
+	for (const [index, {id}] of accountRows.entries()) {
+		const key = byId.get(id)!.merchantKey;
+		if (!firstByKey.has(key)) firstByKey.set(key, index);
+		let node = cache.get(id);
+		if (!node) {
+			// With one raw name, the only naming interval is the whole prefix. It cannot establish a later boundary.
+			let current: number | null = null;
+			if (firstByKey.size > 1) {
+				if (start !== null && start > 0 && recognized(accountRows.slice(start, index + 1))) current = start;
+				let boundary = index + 1;
+				while (boundary > (current ?? -1) && boundary > 0) {
+					boundary--;
+					for (let member = boundary; member >= boundary; member--) {
+						boundary = Math.min(boundary, firstByKey.get(byId.get(accountRows[member].id)!.merchantKey)!);
+					}
+					if (current !== null && boundary <= current) break;
+					if (recognized(accountRows.slice(boundary, index + 1))) {
+						current = boundary;
+						break;
+					}
+				}
+			}
+			node = {start: current, children: new Map()};
+			cache.set(id, node);
+		}
+		start = node.start;
+		cache = node.children;
+	}
+	if (firstByKey.size === 1) return recognized(accountRows) ? accountRows : null;
+	return start === null ? null : accountRows.slice(start);
 }
 
 // Older bank exports name a person only in the description ("Transfer to FIRST-MIDDLE LAST"); newer ones send
@@ -477,14 +735,22 @@ function buildSeries(
 	rule: CadenceRule,
 	amountKind: RecurringAmountKind,
 	today: string,
-	currentPriceRows?: readonly RecurringCandidate[],
+	{
+		priceRows = rows,
+		calendarRows,
+	}: {
+		priceRows?: readonly RecurringCandidate[];
+		calendarRows?: (prefix: readonly RecurringCandidate[]) => readonly RecurringCandidate[];
+	} = {},
 ): DetectedRecurringSeries {
 	const first = rows[0];
 	const latest = rows[rows.length - 1];
-	const currentPrice = currentPriceRows ? currentPriceRows[currentPriceRows.length - 1] : latest;
+	const currentPrice = priceRows[priceRows.length - 1];
 	const amounts = rows.map((row) => row.amountCents);
-	const typical = medianCents(currentPriceRows ? currentPriceRows.map((row) => row.amountCents) : amounts);
-	const nextExpectedDate = addCycles(rows, rule, 1);
+	const typical = medianCents(priceRows.map((row) => row.amountCents));
+	const expectedDate = (prefix: readonly RecurringCandidate[]) =>
+		addCycles(calendarRows?.(prefix) ?? prefix, rule, 1);
+	const nextExpectedDate = expectedDate(rows);
 	const status: RecurringSeriesStatus = today > addDays(nextExpectedDate, GRACE_DAYS) ? 'ENDED' : 'ACTIVE';
 
 	const direction = first.merchantKey.startsWith(`${BANK_TRANSACTION_DIRECTIONS.INCOME}:`)
@@ -518,12 +784,10 @@ function buildSeries(
 		currency: first.currency,
 		typicalAmount: formatCents(typical),
 		latestAmount: formatCents(latest.amountCents),
-		monthlyEquivalent: monthlyEquivalent(rows, rule, amountKind, currentPrice),
+		monthlyEquivalent: monthlyEquivalent(rows, rule, amountKind, currentPrice, priceRows),
 		transactionIds: rows.map((row) => row.id),
 		restartTransactionIds: rows
-			.filter(
-				(row, index) => index > 0 && row.date > addDays(addCycles(rows.slice(0, index), rule, 1), GRACE_DAYS),
-			)
+			.filter((row, index) => index > 0 && row.date > addDays(expectedDate(rows.slice(0, index)), GRACE_DAYS))
 			.map((row) => row.id),
 		firstDate: first.date,
 		lastDate: latest.date,
@@ -539,10 +803,14 @@ function monthlyEquivalent(
 	rule: CadenceRule,
 	amountKind: RecurringAmountKind,
 	currentPrice: RecurringCandidate,
+	priceRows: readonly RecurringCandidate[],
 ): bigint | null {
 	const baseAmounts = rows.map((row) => row.baseAmountCents);
 	if (baseAmounts.some((amount) => amount === null)) return null;
-	const perPayment = amountKind === 'FIXED' ? currentPrice.baseAmountCents! : medianCents(baseAmounts as bigint[]);
+	const perPayment =
+		amountKind === 'FIXED'
+			? currentPrice.baseAmountCents!
+			: medianCents(priceRows.map((row) => row.baseAmountCents!));
 	const [numerator, denominator] = rule.months === 0 ? [52n, 12n] : [1n, BigInt(rule.months)];
 	return divideRounded(perPayment * numerator, denominator);
 }
