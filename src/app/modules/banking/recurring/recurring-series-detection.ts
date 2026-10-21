@@ -474,7 +474,7 @@ function payeeKeys(candidates: readonly RecurringCandidate[]): {
 	};
 }
 
-function isPersonTransferCategory({category}: RecurringCandidate): boolean {
+export function isPersonTransferCategory({category}: Pick<RecurringCandidate, 'category'>): boolean {
 	return category !== null && PERSON_TRANSFER_CATEGORIES.has(category);
 }
 
@@ -709,7 +709,8 @@ function latestPricePeriod(
 		: null;
 }
 
-function withinAmountTolerance(distance: bigint, reference: bigint): boolean {
+/** Whether two amounts are close enough to be one fixed price. */
+export function withinAmountTolerance(distance: bigint, reference: bigint): boolean {
 	const percentTolerance = (reference * AMOUNT_TOLERANCE_PERCENT) / 100n;
 	return distance <= (percentTolerance > AMOUNT_TOLERANCE_CENTS ? percentTolerance : AMOUNT_TOLERANCE_CENTS);
 }

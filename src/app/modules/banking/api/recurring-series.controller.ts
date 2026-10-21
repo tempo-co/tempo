@@ -5,7 +5,11 @@ import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
-import {RecurringSeriesDecisionUpdateDto, RecurringSeriesQueryDto} from './dtos/recurring-series.dto';
+import {
+	RecurringContinuationUpdateDto,
+	RecurringSeriesDecisionUpdateDto,
+	RecurringSeriesQueryDto,
+} from './dtos/recurring-series.dto';
 import {SeriesKeyPipe} from './pipes/series-key.pipe';
 
 @ApiTags('Recurring series')
@@ -26,5 +30,15 @@ export class RecurringSeriesController {
 		@Body() dto: RecurringSeriesDecisionUpdateDto,
 	) {
 		await this.recurringSeriesService.updateDecision(account.id, key, dto.decision);
+	}
+
+	@Patch(':key/continuation')
+	@HttpCode(204)
+	async updateContinuation(
+		@CurrentAccount() account: Account,
+		@Param('key', SeriesKeyPipe) key: string,
+		@Body() dto: RecurringContinuationUpdateDto,
+	) {
+		await this.recurringSeriesService.updateContinuation(account.id, key, dto.choice);
 	}
 }

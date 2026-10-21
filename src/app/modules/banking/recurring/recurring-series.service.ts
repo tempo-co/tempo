@@ -6,6 +6,7 @@ import {Account} from '@modules/account/account.entity';
 
 import {BANKING_RECURRING_SERIES_NOT_FOUND} from '../api/constants/banking-messages.constants';
 import type {
+	RecurringContinuationDto,
 	RecurringSeriesDto,
 	RecurringSeriesListResponseDto,
 	RecurringSeriesQueryDto,
@@ -14,13 +15,31 @@ import {BankTransaction} from '../bank-transaction.entity';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
 import {SQL_INTERNAL} from '../services/bank-transaction-filters';
 import {formatCents} from '../summary/bank-transaction-summary';
+import {continuationKey, findContinuationPairs, joinContinuation} from './recurring-continuation';
+import {
+	RecurringContinuationChoice,
+	type RecurringContinuationChoiceValue,
+} from './recurring-continuation-choice.entity';
 import {type RecurringEvidence, inferRecurringIdentities} from './recurring-payee-identity';
 import {RecurringSeriesDecision, type RecurringSeriesDecisionValue} from './recurring-series-decision.entity';
-import {type DetectedRecurringSeries, detectRecurringSeries} from './recurring-series-detection';
+import {
+	type DetectedRecurringSeries,
+	type RecurringCandidate,
+	detectRecurringSeries,
+} from './recurring-series-detection';
 import {isOrdinaryRetailExpense} from './recurring-series-eligibility';
 
 const REFUND = 'REFUND' satisfies BankTransactionCategory;
 const DECISION_ORDER: Record<RecurringSeriesDecisionValue | 'NONE', number> = {CONFIRMED: 0, NONE: 1, DISMISSED: 2};
+
+/** How a series relates to an earlier history it may continue, and the saved answers behind it. */
+type Continuation = {
+	choice: RecurringContinuationChoiceValue | null;
+	previous: DetectedRecurringSeries;
+	/** The newer history of the pair, when it is shown separately. */
+	newer: DetectedRecurringSeries;
+	saved: RecurringContinuationChoice[];
+};
 
 type CandidateRow = {
 	id: string;
@@ -37,7 +56,7 @@ type CandidateRow = {
 	transactionType: string | null;
 };
 
-/** Detects recurring payments on read; stores only owner decisions. */
+/** Detects recurring payments on read; stores only the owner's decisions and same-payment answers. */
 @Injectable()
 export class RecurringSeriesService {
 	constructor(
@@ -45,13 +64,15 @@ export class RecurringSeriesService {
 		private readonly bankTransactionRepository: Repository<BankTransaction>,
 		@InjectRepository(RecurringSeriesDecision)
 		private readonly decisionRepository: Repository<RecurringSeriesDecision>,
+		@InjectRepository(RecurringContinuationChoice)
+		private readonly continuationRepository: Repository<RecurringContinuationChoice>,
 	) {}
 
 	async list(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
 		{direction, asOf}: RecurringSeriesQueryDto,
 	): Promise<RecurringSeriesListResponseDto> {
-		const {detected, decisionBySeries} = await this.readState(accountId, asOf);
+		const {detected, decisionBySeries, continuationBySeries} = await this.readState(accountId, asOf);
 		const series = detected
 			.filter((entry) => entry.direction === direction)
 			.map((entry) => ({entry, decision: shownDecision(entry, decisionBySeries.get(entry.key) ?? [])}))
@@ -73,7 +94,9 @@ export class RecurringSeriesService {
 		);
 
 		return {
-			series: series.map(({entry, decision}) => toResponse(entry, decision)),
+			series: series.map(({entry, decision}) =>
+				toResponse(entry, decision, continuationBySeries.get(entry.key) ?? null),
+			),
 			confirmedMonthlyTotal: formatCents(confirmedMonthlyTotal),
 			unconvertedConfirmedCount: activeConfirmed.filter(({entry}) => entry.monthlyEquivalent === null).length,
 			baseCurrency,
@@ -108,6 +131,38 @@ export class RecurringSeriesService {
 		});
 	}
 
+	/**
+	 * Answers whether a series continues the earlier history it is shown with. `LINKED` and `SEPARATE` answer an open
+	 * question; `null` removes the answer, splitting a linked history or asking again.
+	 */
+	async updateContinuation(
+		accountId: Account['id'],
+		seriesKey: string,
+		choice: RecurringContinuationChoiceValue | null,
+	) {
+		const {continuationBySeries} = await this.readState(accountId, today());
+		const continuation = continuationBySeries.get(seriesKey);
+		if (!continuation || (choice === null) === (continuation.choice === null)) {
+			throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);
+		}
+		await this.continuationRepository.manager.transaction(async (manager) => {
+			if (continuation.saved.length > 0) {
+				await manager.delete(
+					RecurringContinuationChoice,
+					continuation.saved.map(({id}) => id),
+				);
+			}
+			if (choice !== null) {
+				await manager.insert(RecurringContinuationChoice, {
+					accountId,
+					choice,
+					olderTransactionIds: continuation.previous.transactionIds,
+					newerTransactionIds: continuation.newer.transactionIds,
+				});
+			}
+		});
+	}
+
 	/** The ids of a series' payments, for the transactions list's drill-through filter. */
 	async findTransactionIds(accountId: Account['id'], seriesKey: string): Promise<string[]> {
 		return (await this.findDetected(accountId, seriesKey)).transactionIds;
@@ -128,6 +183,7 @@ export class RecurringSeriesService {
 	): Promise<{
 		detected: DetectedRecurringSeries[];
 		decisionBySeries: Map<string, RecurringSeriesDecision[]>;
+		continuationBySeries: Map<string, Continuation>;
 	}> {
 		const rowsQuery = this.bankTransactionRepository
 			.createQueryBuilder('transaction')
@@ -154,7 +210,11 @@ export class RecurringSeriesService {
 			.andWhere(`NOT ${SQL_INTERNAL}`)
 			.andWhere('transaction.amount <> 0')
 			.getRawMany<CandidateRow>();
-		const [rows, decisions] = await Promise.all([rowsQuery, this.decisionRepository.find({where: {accountId}})]);
+		const [rows, decisions, choices] = await Promise.all([
+			rowsQuery,
+			this.decisionRepository.find({where: {accountId}}),
+			this.continuationRepository.find({where: {accountId}, order: {createdAt: 'ASC', id: 'ASC'}}),
+		]);
 
 		const evidence: RecurringEvidence[] = rows.map((row) => ({
 			id: row.id,
@@ -172,13 +232,38 @@ export class RecurringSeriesService {
 		}));
 		const candidates = inferRecurringIdentities(evidence);
 		const candidatesById = new Map(candidates.map((row) => [row.id, row]));
-		const detected = detectRecurringSeries(candidates, today);
+		const {detected, linked} = applyLinkedChoices(
+			detectRecurringSeries(candidates, today),
+			choices,
+			candidatesById,
+			today,
+		);
 		const decisionBySeries = resolveDecisions(detected, decisions);
+		const continuationBySeries = new Map(linked);
+		for (const {older, newer} of findContinuationPairs(detected, candidatesById, today)) {
+			// A linked history keeps its answer, so it can be undone, until the owner unlinks it.
+			if (continuationBySeries.has(newer.key)) continue;
+			// A dismissed history is not offered again as part of another one.
+			if (
+				[older, newer].some(
+					(entry) => shownDecision(entry, decisionBySeries.get(entry.key) ?? []) === 'DISMISSED',
+				)
+			)
+				continue;
+			const saved = choices.filter((choice) => choice.choice === 'SEPARATE' && answers(choice, older, newer));
+			continuationBySeries.set(newer.key, {
+				choice: saved.length ? 'SEPARATE' : null,
+				previous: older,
+				newer,
+				saved,
+			});
+		}
 		return {
 			detected: detected.filter(
 				(entry) => decisionBySeries.has(entry.key) || !isOrdinaryRetailExpense(entry, candidatesById),
 			),
 			decisionBySeries,
+			continuationBySeries,
 		};
 	}
 }
@@ -202,7 +287,51 @@ function shownDecision(
 	return entry.restartTransactionIds.some((id) => later.has(id)) ? null : decision;
 }
 
-function toResponse(entry: DetectedRecurringSeries, decision: RecurringSeriesDecisionValue | null): RecurringSeriesDto {
+/** Joins the histories the owner linked, oldest answer first, while their union still reads as one history. */
+function applyLinkedChoices(
+	series: DetectedRecurringSeries[],
+	choices: readonly RecurringContinuationChoice[],
+	candidatesById: ReadonlyMap<string, RecurringCandidate>,
+	today: string,
+): {detected: DetectedRecurringSeries[]; linked: Map<string, Continuation>} {
+	let detected = series;
+	const linked = new Map<string, Continuation>();
+	for (const choice of choices) {
+		if (choice.choice !== 'LINKED') continue;
+		const older = detected.find(({transactionIds}) =>
+			transactionIds.some((id) => choice.olderTransactionIds.includes(id)),
+		);
+		const newer = detected.find(({transactionIds}) =>
+			transactionIds.some((id) => choice.newerTransactionIds.includes(id)),
+		);
+		if (!older || !newer || older === newer || older.lastDate >= newer.firstDate) continue;
+		const joined = joinContinuation(older, newer, candidatesById, today, continuationKey(older, newer));
+		if (!joined) continue;
+		detected = [...detected.filter((entry) => entry !== older && entry !== newer), joined];
+		linked.delete(older.key);
+		linked.delete(newer.key);
+		linked.set(joined.key, {choice: 'LINKED', previous: older, newer, saved: [choice]});
+	}
+	return {detected, linked};
+}
+
+/** Whether a saved answer was given for this pair: each side still holds a payment it was answered on. */
+function answers(
+	choice: RecurringContinuationChoice,
+	older: DetectedRecurringSeries,
+	newer: DetectedRecurringSeries,
+): boolean {
+	return (
+		older.transactionIds.some((id) => choice.olderTransactionIds.includes(id)) &&
+		newer.transactionIds.some((id) => choice.newerTransactionIds.includes(id))
+	);
+}
+
+function toResponse(
+	entry: DetectedRecurringSeries,
+	decision: RecurringSeriesDecisionValue | null,
+	continuation: Continuation | null,
+): RecurringSeriesDto {
 	return {
 		key: entry.key,
 		name: entry.name,
@@ -220,6 +349,16 @@ function toResponse(entry: DetectedRecurringSeries, decision: RecurringSeriesDec
 		status: entry.status,
 		flags: entry.flags,
 		decision,
+		continuation: continuation && toContinuationResponse(continuation),
+	};
+}
+
+function toContinuationResponse({choice, previous}: Continuation): RecurringContinuationDto {
+	return {
+		choice,
+		previousName: previous.name,
+		previousFirstDate: previous.firstDate,
+		previousLastDate: previous.lastDate,
 	};
 }
 

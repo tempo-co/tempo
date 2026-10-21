@@ -73,7 +73,7 @@ describe('RecurringSeries', () => {
 			unconvertedConfirmedCount: number;
 			baseCurrency: string | null;
 		};
-	const byName = (series: SeriesBody[], name: string) => series.filter((entry) => entry.name === name);
+	const byName = <T extends SeriesBody>(series: T[], name: string) => series.filter((entry) => entry.name === name);
 
 	beforeAll(async () => {
 		app = getApp();
@@ -1413,6 +1413,236 @@ describe('RecurringSeries', () => {
 			if (name.endsWith('Grocery') || name.endsWith('Unknown')) expect(entries).toEqual([]);
 			else expect(entries).toEqual([expect.objectContaining({cadence: 'YEARLY', transactionCount: count})]);
 		}
+	});
+
+	describe('same-payment prompts', () => {
+		type Continuation = {
+			choice: 'LINKED' | 'SEPARATE' | null;
+			previousName: string;
+			previousFirstDate: string;
+			previousLastDate: string;
+		} | null;
+		type PromptSeries = SeriesBody & {continuation: Continuation; firstDate: string; lastDate: string};
+
+		/** A plan paid under a company name, then from another account under its branch name. */
+		async function renamedPlan(newerAmount = '-25.00') {
+			const fresh = await createVerifiedAccount(
+				app.getHttpServer(),
+				app.get(ConfigurationService).get('EMAIL_UI_URL'),
+			);
+			const freshOwner = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
+			const connection = await fixtures.createConnection(freshOwner);
+			const [first, second] = [
+				await fixtures.createBankAccount(connection),
+				await fixtures.createBankAccount(connection),
+			];
+			const older = await fixtures.createTransactions(
+				first,
+				['2026-01-11', '2026-02-11', '2026-03-11'].map((date) =>
+					bookedRow(date, '-24.00', {counterpartyName: 'Example Motion Ltd', description: null}),
+				),
+			);
+			const newer = await fixtures.createTransactions(
+				second,
+				['2026-07-12', '2026-08-12', '2026-09-12', '2026-10-12'].map((date) =>
+					bookedRow(date, newerAmount, {counterpartyName: 'Example Motion Exampletown', description: null}),
+				),
+			);
+			const read = async () =>
+				(await fresh.agent.get('/recurring-series').query({asOf: AS_OF, direction: 'EXPENSE'}).expect(200))
+					.body as Omit<Awaited<ReturnType<typeof list>>, 'series'> & {series: PromptSeries[]};
+			const drill = async (key: string) =>
+				(
+					await fresh.agent
+						.get('/bank-transactions')
+						.query({filter: {recurringSeriesKey: key}, pagination: {pageIndex: 0, pageSize: 50}})
+						.expect(200)
+				).body.transactions
+					.map(({id}: {id: string}) => id)
+					.sort();
+			const answer = (key: string, choice: 'LINKED' | 'SEPARATE' | null) =>
+				fresh.agent.patch(`/recurring-series/${key}/continuation`).send({choice});
+			const decide = (key: string, decision: 'CONFIRMED' | 'DISMISSED' | null) =>
+				fresh.agent.patch(`/recurring-series/${key}/decision`).send({decision}).expect(204);
+			return {fresh, connection, first, older, newer, read, drill, answer, decide};
+		}
+
+		const sorted = (rows: {id: string}[]) => rows.map(({id}) => id).sort();
+
+		it('asks whether a renamed history continues an earlier one, and links, separates or undoes on the answer', async () => {
+			const {connection, older, newer, read, drill, answer, decide} = await renamedPlan();
+			try {
+				const ids = [...older, ...newer].map(({id}) => id);
+				const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
+				const before = await read();
+				const [previous, current] = [
+					byName(before.series, 'Example Motion Ltd') as PromptSeries[],
+					byName(before.series, 'Example Motion Exampletown') as PromptSeries[],
+				].map(([entry]) => entry);
+				expect(before.series).toHaveLength(2);
+				expect(previous).toMatchObject({status: 'ENDED', transactionCount: 3, continuation: null});
+				expect(current).toMatchObject({
+					status: 'ACTIVE',
+					transactionCount: 4,
+					decision: null,
+					continuation: {
+						choice: null,
+						previousName: 'Example Motion Ltd',
+						previousFirstDate: '2026-01-11',
+						previousLastDate: '2026-03-11',
+					},
+				});
+				expect(await drill(previous.key)).toEqual(sorted(older));
+				expect(await drill(current.key)).toEqual(sorted(newer));
+				await decide(current.key, 'CONFIRMED');
+				expect((await read()).confirmedMonthlyTotal).toBe('25.00');
+
+				// Only the history showing the prompt can answer it, and only while it is open.
+				await answer(previous.key, 'LINKED').expect(404);
+				await answer(current.key, null).expect(404);
+
+				await answer(current.key, 'LINKED').expect(204);
+				const linked = await read();
+				expect(linked.series).toEqual([
+					expect.objectContaining({
+						name: 'Example Motion Exampletown',
+						transactionCount: 7,
+						firstDate: '2026-01-11',
+						lastDate: '2026-10-12',
+						typicalAmount: '25.00',
+						nextExpectedDate: '2026-11-12',
+						status: 'ACTIVE',
+						decision: 'CONFIRMED',
+						continuation: expect.objectContaining({choice: 'LINKED', previousName: 'Example Motion Ltd'}),
+					}),
+				]);
+				expect(linked.confirmedMonthlyTotal).toBe('25.00');
+				const [joined] = linked.series;
+				expect(await drill(joined.key)).toEqual([...ids].sort());
+				await answer(joined.key, 'LINKED').expect(404);
+				await decide(joined.key, 'DISMISSED');
+				expect((await read()).confirmedMonthlyTotal).toBe('0.00');
+				await decide(joined.key, 'CONFIRMED');
+
+				// Unlinking restores both histories and the prompt; the linked decision stays with one of them.
+				await answer(joined.key, null).expect(204);
+				const unlinked = await read();
+				expect(unlinked.series).toHaveLength(2);
+				expect(unlinked.series.filter(({decision}) => decision === 'CONFIRMED')).toHaveLength(1);
+				expect(byName(unlinked.series, 'Example Motion Exampletown')).toEqual([
+					expect.objectContaining({key: current.key, continuation: expect.objectContaining({choice: null})}),
+				]);
+				await decide(previous.key, null);
+				await decide(current.key, 'CONFIRMED');
+
+				await answer(current.key, 'SEPARATE').expect(204);
+				const separate = await read();
+				expect(separate.series.map(({key, continuation}) => [key, continuation?.choice ?? 'none'])).toEqual([
+					[current.key, 'SEPARATE'],
+					[previous.key, 'none'],
+				]);
+				expect(separate.confirmedMonthlyTotal).toBe('25.00');
+				await answer(current.key, 'LINKED').expect(404);
+				await answer(current.key, null).expect(204);
+				expect(byName((await read()).series, 'Example Motion Exampletown')[0]).toMatchObject({
+					continuation: {choice: null},
+				});
+
+				expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
+				await ownerAgent
+					.patch(`/recurring-series/${current.key}/continuation`)
+					.send({choice: 'LINKED'})
+					.expect(404);
+				await answer('not-a-key', 'LINKED').expect(400);
+				await answer(current.key, 'MAYBE' as never).expect(400);
+			} finally {
+				await fixtures.connections.delete(connection.id);
+			}
+		});
+
+		it('asks nothing about a dismissed history, and resetting a linked history leaves other decisions alone', async () => {
+			const {connection, first, read, answer, decide} = await renamedPlan();
+			try {
+				const sibling = await fixtures.createTransactions(
+					first,
+					monthly('20', '-9.00', 'Example Other Club', {description: null}),
+				);
+				const {series} = await read();
+				const [previous] = byName(series, 'Example Motion Ltd');
+				const [current] = byName(series, 'Example Motion Exampletown');
+				const [club] = byName(series, 'Example Other Club');
+				await decide(club.key, 'CONFIRMED');
+
+				await decide(previous.key, 'DISMISSED');
+				expect(byName((await read()).series, 'Example Motion Exampletown')[0].continuation).toBeNull();
+				await answer(current.key, 'LINKED').expect(404);
+				await decide(previous.key, null);
+				expect(byName((await read()).series, 'Example Motion Exampletown')[0].continuation).toMatchObject({
+					choice: null,
+				});
+
+				await decide(previous.key, 'CONFIRMED');
+				await answer(current.key, 'LINKED').expect(204);
+				const linked = await read();
+				const [joined] = byName(linked.series, 'Example Motion Exampletown');
+				expect(joined).toMatchObject({decision: 'CONFIRMED', transactionCount: 7});
+				expect(linked.confirmedMonthlyTotal).toBe('34.00');
+
+				await decide(joined.key, null);
+				const reset = await read();
+				expect(byName(reset.series, 'Example Motion Exampletown')[0].decision).toBeNull();
+				expect(byName(reset.series, 'Example Other Club')[0].decision).toBe('CONFIRMED');
+				expect(reset.confirmedMonthlyTotal).toBe('9.00');
+
+				await answer(joined.key, null).expect(204);
+				const unlinked = await read();
+				expect(unlinked.series.map(({name, decision}) => [name, decision]).sort()).toEqual([
+					['Example Motion Exampletown', null],
+					['Example Motion Ltd', null],
+					['Example Other Club', 'CONFIRMED'],
+				]);
+				expect(sibling).toHaveLength(6);
+			} finally {
+				await fixtures.connections.delete(connection.id);
+			}
+		});
+
+		it('keeps a linked history undoable when an even older history arrives later', async () => {
+			const {connection, first, read, answer} = await renamedPlan();
+			try {
+				const [current] = byName((await read()).series, 'Example Motion Exampletown');
+				await answer(current.key, 'LINKED').expect(204);
+				// Older payments from a reconnected bank appear under the shortest form of the name.
+				await fixtures.createTransactions(
+					first,
+					['2025-08-10', '2025-09-10', '2025-10-10'].map((date) =>
+						bookedRow(date, '-24.00', {counterpartyName: 'Example', description: null}),
+					),
+				);
+				const [joined] = byName((await read()).series, 'Example Motion Exampletown');
+				expect(joined).toMatchObject({
+					transactionCount: 7,
+					continuation: expect.objectContaining({choice: 'LINKED', previousName: 'Example Motion Ltd'}),
+				});
+				await answer(joined.key, null).expect(204);
+				expect((await read()).series.map(({name}) => name).sort()).toEqual([
+					'Example',
+					'Example Motion Exampletown',
+					'Example Motion Ltd',
+				]);
+			} finally {
+				await fixtures.connections.delete(connection.id);
+			}
+		});
+
+		it('offers no prompt when the later history’s price does not continue the earlier one', async () => {
+			const {connection, read} = await renamedPlan('-71.00');
+			try {
+				expect((await read()).series.map(({continuation}) => continuation)).toEqual([null, null]);
+			} finally {
+				await fixtures.connections.delete(connection.id);
+			}
+		});
 	});
 
 	it('rejects keys that are invalid, unknown or another owner’s', async () => {
