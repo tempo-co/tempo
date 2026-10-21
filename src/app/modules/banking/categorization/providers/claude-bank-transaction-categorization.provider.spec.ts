@@ -321,7 +321,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		});
 	});
 
-	it('falls back over a local socket, preserves history, and records the actual subscription route', async () => {
+	it('falls back over a local socket, preserves history hints, and records the actual subscription route', async () => {
 		const reply = {classifications: [{correlationId: '0', category: 'SHOPPING', confidence: 0.9}]};
 		await withBridge({body: reply}, async (socket, requests) => {
 			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
@@ -329,7 +329,15 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			const transaction = {
 				...input(),
 				previousManualCategories: [
-					{category: 'SHOPPING' as const, count: 2, recentExamples: [{amount: '-8.00', date: '2026-08-01'}]},
+					{
+						category: 'SHOPPING' as const,
+						count: 2,
+						recentExamples: [{amount: '-8.00', currency: 'EUR', date: '2026-08-01'}],
+					},
+				],
+				sameAmountPayments: [
+					{date: '2026-07-01', category: 'SHOPPING' as const, source: 'MANUAL' as const, text: null},
+					{date: '2026-06-01', category: 'SHOPPING' as const, source: 'AI' as const, text: 'gift'},
 				],
 			};
 			await expect(provider.categorize([transaction], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).resolves.toEqual([

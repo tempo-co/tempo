@@ -49,16 +49,30 @@ export type BankTransactionCategorizationInput = {
 	merchantCategoryCode: string | null;
 	remittanceInformation: string | null;
 	/**
-	 * Categories the user chose manually for the same merchant, most frequent first, with the amounts and dates of their
-	 * most recent choices. Only a hint for the model; never applied without it. Not part of the input hash.
+	 * Categories the user chose manually for the same merchant, most frequent first, with the amounts, currencies and
+	 * dates of their most recent choices. Only a hint for the model; never applied without it. Not part of the input
+	 * hash.
 	 */
 	previousManualCategories?: readonly PreviousManualCategory[];
+	/**
+	 * Earlier completed payments to the same payee with exactly this amount and currency, sent only when there are at
+	 * least two: the owner's picks newest first, then the two oldest AI rows per category. Lets the model reuse a
+	 * consistent payment's category, such as monthly rent to a person. Only a hint; not part of the input hash.
+	 */
+	sameAmountPayments?: readonly SameAmountPayment[];
+};
+
+export type SameAmountPayment = {
+	date: string | null;
+	category: BankTransactionCategory;
+	source: 'MANUAL' | 'AI';
+	text: string | null;
 };
 
 export type PreviousManualCategory = {
 	category: BankTransactionCategory;
 	count: number;
-	recentExamples: readonly {amount: string; date: string | null}[];
+	recentExamples: readonly {amount: string; currency: string; date: string | null}[];
 };
 
 export type BankTransactionCategorizationWebSearchInput = Pick<

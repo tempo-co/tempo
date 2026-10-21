@@ -34,7 +34,9 @@ import {
 	CATEGORIZATION_E2E_ONE_OFF_CHOICE_TRANSACTION_ID,
 	CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID,
+	CATEGORIZATION_E2E_REPEAT_AMOUNT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
+	CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_WEB_TRANSACTION_ID,
 	seedBankTransactionCategorizationData,
 } from '../../setup/e2e-categorization-data';
@@ -202,18 +204,67 @@ describe('Bank transaction categorization integration', () => {
 			expect(row.categoryProvider).not.toBe(BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER);
 		}
 
-		// Each row's hint carries only its own owner's choices, with the amount and date of each.
+		// Each row's hint carries only its own owner's choices, with the amount, currency and date of each.
 		const inputs = new Map(
 			categorizeSpy.mock.calls.flatMap(([transactions]) =>
 				transactions.map((input) => [input.correlationId, input]),
 			),
 		);
 		expect(inputs.get(CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID)?.previousManualCategories).toEqual([
-			{category: 'TRANSPORTATION', count: 1, recentExamples: [{amount: '-20.00', date: '2026-09-04'}]},
+			{
+				category: 'TRANSPORTATION',
+				count: 1,
+				recentExamples: [{amount: '-20.00', currency: 'EUR', date: '2026-09-04'}],
+			},
 		]);
 		expect(inputs.get(CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID)?.previousManualCategories).toEqual([
-			{category: 'ENTERTAINMENT', count: 1, recentExamples: [{amount: '-20.00', date: '2026-09-04'}]},
+			{
+				category: 'ENTERTAINMENT',
+				count: 1,
+				recentExamples: [{amount: '-20.00', currency: 'EUR', date: '2026-09-04'}],
+			},
 		]);
+	});
+
+	it('sends earlier same-amount payments to the same payee only when there are at least two', async () => {
+		const ids = [CATEGORIZATION_E2E_REPEAT_AMOUNT_TRANSACTION_ID, CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID];
+		await app.get(BankTransactionCategorizationService).enqueueForTransactions(ids);
+		await Promise.all(
+			ids.map((id) =>
+				waitFor(
+					() => bankTransactionRepository.findOneByOrFail({id}),
+					(row) => row.categoryStatus === 'COMPLETED',
+				),
+			),
+		);
+		const inputs = new Map(
+			categorizeSpy.mock.calls.flatMap(([transactions]) =>
+				transactions.map((input) => [input.correlationId, input]),
+			),
+		);
+		// Same payee, amount and currency, earlier than the row: the owner's picks newest first, then the two oldest AI
+		// rows per category, with each payment's sanitized note.
+		const noNote = (date: string, category: string) => ({date, category, source: 'AI', text: 'To Example H'});
+		const picked = (date: string) => ({
+			date,
+			category: 'HOUSING_AND_UTILITIES',
+			source: 'MANUAL',
+			text: 'To Example H',
+		});
+		expect(inputs.get(CATEGORIZATION_E2E_REPEAT_AMOUNT_TRANSACTION_ID)?.sameAmountPayments).toEqual([
+			picked('2026-08-28'),
+			picked('2026-08-10'),
+			noNote('2026-05-01', 'TRANSFER_OUT'),
+			noNote('2026-05-02', 'TRANSFER_OUT'),
+			{
+				date: '2026-06-28',
+				category: 'HOUSING_AND_UTILITIES',
+				source: 'AI',
+				text: 'rent july IBAN [REDACTED] | To Example H',
+			},
+			noNote('2026-07-01', 'HOUSING_AND_UTILITIES'),
+		]);
+		expect(inputs.get(CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID)?.sameAmountPayments).toBeUndefined();
 	});
 
 	it("leaves the owner's one-off manual choice out of the next row's hint", async () => {
@@ -272,7 +323,7 @@ describe('Bank transaction categorization integration', () => {
 		expect(recategorized.categoryProvider).not.toBe(BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER);
 		expect(categorizeSpy).toHaveBeenCalledTimes(1);
 		expect(categorizeSpy.mock.calls[0][0][0].previousManualCategories).toEqual([
-			{category: 'TRAVEL', count: 1, recentExamples: [{amount: '-20.00', date: '2026-09-04'}]},
+			{category: 'TRAVEL', count: 1, recentExamples: [{amount: '-20.00', currency: 'EUR', date: '2026-09-04'}]},
 		]);
 		categorizeSpy.mockClear();
 
