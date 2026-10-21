@@ -236,7 +236,7 @@ describe('AuthController - Change email', () => {
 					requestCompleted = true;
 				});
 
-				// Wait until the request either completes (old code) or waits on the account row lock.
+				// Wait until the request either completes without waiting or waits on the account row lock.
 				let waitingOnLock = false;
 				for (let attempt = 0; attempt < 100 && !requestCompleted && !waitingOnLock; attempt++) {
 					const [result] = await app

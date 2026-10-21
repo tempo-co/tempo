@@ -443,7 +443,7 @@ describe('bank transaction categorization input', () => {
 	});
 
 	it.each(['PLAYSTATION5', 'MEDIAMARKT12'])(
-		'still searches a one-word merchant name with a store number (%s)',
+		'searches a one-word merchant name with a store number (%s)',
 		(counterpartyName) => {
 			const input = toBankTransactionCategorizationInput(
 				createTransaction({counterpartyName, description: null}),

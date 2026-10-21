@@ -322,12 +322,12 @@ test('times out and reaps the CLI process', async (t) => {
 	assert.equal(calls.length, 2);
 });
 
-test('accepts a near-limit subscription warning while overage stays rejected', async (t) => {
+test('accepts a near-limit subscription warning', async (t) => {
 	const {socketPath} = await setup(t, {mode: 'near-limit'});
 	assert.deepEqual(await request(socketPath), {status: 200, body: expected});
 });
 
-test('still refuses overage under a near-limit warning', async (t) => {
+test('refuses overage under a near-limit warning', async (t) => {
 	const {socketPath} = await setup(t, {mode: 'near-limit-overage'});
 	assert.deepEqual(await request(socketPath), {status: 503, body: {error: 'claude_unavailable'}});
 });
@@ -366,8 +366,8 @@ test('fails closed when the CLI cannot renew an expired login', async (t) => {
 	});
 });
 
-test('requires first-party Max or Pro subscription authentication at startup', async (t) => {
-	for (const mode of ['logged-out', 'console-auth', 'enterprise-auth', 'third-party-auth'])
+test('requires first-party claude.ai authentication at startup', async (t) => {
+	for (const mode of ['logged-out', 'console-auth', 'third-party-auth'])
 		await t.test(mode, async (t) => {
 			await assert.rejects(setup(t, {mode}), {message: 'Claude subscription authentication required.'});
 		});

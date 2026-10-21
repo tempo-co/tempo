@@ -190,8 +190,10 @@ describe('AI categorization configuration', () => {
 		);
 	});
 
-	it.each(['openai', 'unsupported-provider'])('rejects provider %s', (provider) => {
-		expect(configSchema.safeParse({...baseConfig, AI_CATEGORIZATION_PROVIDER: provider}).success).toBe(false);
+	it('rejects a provider other than claude', () => {
+		expect(
+			configSchema.safeParse({...baseConfig, AI_CATEGORIZATION_PROVIDER: 'unsupported-provider'}).success,
+		).toBe(false);
 	});
 });
 

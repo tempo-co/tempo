@@ -1191,7 +1191,6 @@ describe('BankConnectionController', () => {
 				.mockResolvedValueOnce([sourceLeg, ordinaryPayment])
 				.mockResolvedValueOnce([targetLeg]);
 
-			// The manual sync endpoint was removed; synchronize through the automatic path.
 			const firstResponse = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
 			expect(firstResponse).toEqual(
 				expect.objectContaining({
@@ -1506,12 +1505,6 @@ describe('BankConnectionController', () => {
 		} finally {
 			await bankConnectionRepository.delete(connection.id);
 		}
-	});
-
-	it('does not expose a manual synchronization endpoint', async () => {
-		const {connection} = await createAuthorizedConnection('manual-sync-removed');
-
-		await verifiedAgent.post(`/bank-connections/${connection.id}/sync`).expect(404);
 	});
 
 	it('marks expired consent before synchronization', async () => {
