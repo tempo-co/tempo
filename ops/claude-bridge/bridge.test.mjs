@@ -172,7 +172,11 @@ test('rejects invalid or nonstandard inputs without spawning a categorizer', asy
 					{
 						...payload.input.transactions[0],
 						previousManualCategories: [
-							{category: 'SHOPPING', count: 1, recentExamples: [{amount: '-1', date: null, secret: 'x'}]},
+							{
+								category: 'SHOPPING',
+								count: 1,
+								recentExamples: [{amount: '-1', currency: 'EUR', date: null, secret: 'x'}],
+							},
 						],
 					},
 				],
@@ -570,3 +574,47 @@ for (const route of ['/categorize', '/categorize-with-search'])
 			});
 			assert.equal(calls.length, before);
 		});
+
+test('accepts history hints with currencies and same-amount payments, and rejects malformed ones', async () => {
+	const {validRequest} = await import('./validation.mjs');
+	const withHints = (hints) => ({
+		...payload,
+		input: {...payload.input, transactions: [{...payload.input.transactions[0], ...hints}]},
+	});
+	const payment = (overrides = {}) => ({
+		date: '2026-08-28',
+		category: 'HOUSING_AND_UTILITIES',
+		source: 'MANUAL',
+		text: 'rent',
+		...overrides,
+	});
+	assert.equal(
+		validRequest(
+			withHints({
+				previousManualCategories: [
+					{
+						category: 'FOOD_AND_DRINK',
+						count: 2,
+						recentExamples: [{amount: '-8', currency: 'EUR', date: null}],
+					},
+				],
+				sameAmountPayments: [payment(), payment({source: 'AI', text: null, date: null})],
+			}),
+		),
+		true,
+	);
+	for (const hints of [
+		{
+			previousManualCategories: [
+				{category: 'FOOD_AND_DRINK', count: 1, recentExamples: [{amount: '-8', date: null}]},
+			],
+		},
+		{sameAmountPayments: [payment()]},
+		{sameAmountPayments: Array.from({length: 16}, () => payment())},
+		{sameAmountPayments: [payment(), payment({source: 'RULE'})]},
+		{sameAmountPayments: [payment(), payment({category: 'NOT_A_CATEGORY'})]},
+		{sameAmountPayments: [payment(), {...payment(), amount: '-640'}]},
+		{sameAmountPayments: 'rent'},
+	])
+		assert.equal(validRequest(withHints(hints)), false, JSON.stringify(hints));
+});

@@ -192,6 +192,23 @@ export function createBankTransactionCategorizationInputHash(
 	return createHash('sha256').update(JSON.stringify(hashInput)).digest('hex');
 }
 
+const MAX_SAME_AMOUNT_PAYMENT_TEXT_LENGTH = 200;
+
+/** The sanitized note of an earlier payment, so the model can see whether it stated its purpose. */
+export function toSameAmountPaymentText(transaction: {
+	remittanceInformation: string | null;
+	description: string | null;
+}): string | null {
+	const remittance = sanitizeCategorizationText(transaction.remittanceInformation);
+	const description = sanitizeCategorizationText(transaction.description);
+	const parts =
+		remittance && description?.length && remittance.includes(description)
+			? [remittance]
+			: [remittance, description];
+	const text = parts.filter(Boolean).join(' | ');
+	return text ? truncate(text, MAX_SAME_AMOUNT_PAYMENT_TEXT_LENGTH) : null;
+}
+
 function isCategorizationInput(
 	value: BankTransaction | BankTransactionCategorizationInput,
 ): value is BankTransactionCategorizationInput {

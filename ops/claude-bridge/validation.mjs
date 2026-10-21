@@ -107,7 +107,8 @@ export function validRequest(body) {
 	if (!Array.isArray(input.transactions) || !input.transactions.length || input.transactions.length > 50)
 		return false;
 	return input.transactions.every((tx, index) => {
-		if (!keys(tx, requiredFields, ['merchantLocation', 'previousManualCategories'])) return false;
+		if (!keys(tx, requiredFields, ['merchantLocation', 'previousManualCategories', 'sameAmountPayments']))
+			return false;
 		if (tx.correlationId !== String(index) || !text(tx.amount) || !text(tx.currency) || !text(tx.transactionType))
 			return false;
 		if (!directions.includes(tx.direction) || !nullableFields.every((f) => nullableText(tx[f]))) return false;
@@ -132,8 +133,26 @@ export function validRequest(body) {
 						previous.recentExamples.length <= 50 &&
 						previous.recentExamples.every(
 							(example) =>
-								keys(example, ['amount', 'date']) && text(example.amount) && nullableText(example.date),
+								keys(example, ['amount', 'currency', 'date']) &&
+								text(example.amount) &&
+								text(example.currency) &&
+								nullableText(example.date),
 						),
+				))
+		)
+			return false;
+		if (
+			tx.sameAmountPayments !== undefined &&
+			(!Array.isArray(tx.sameAmountPayments) ||
+				tx.sameAmountPayments.length < 2 ||
+				tx.sameAmountPayments.length > 15 ||
+				!tx.sameAmountPayments.every(
+					(payment) =>
+						keys(payment, ['date', 'category', 'source', 'text']) &&
+						nullableText(payment.date) &&
+						categories.has(payment.category) &&
+						['MANUAL', 'AI'].includes(payment.source) &&
+						nullableText(payment.text),
 				))
 		)
 			return false;
