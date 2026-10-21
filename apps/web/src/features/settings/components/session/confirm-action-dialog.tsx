@@ -12,7 +12,6 @@ import {
   ResponsiveDialogTitle,
   ResponsiveDialogTrigger,
 } from '@/components/ui/responsive-dialog';
-import {cn} from '@/utils/cn';
 
 type ConfirmActionDialogProps = {
   trigger: ReactNode;
@@ -58,10 +57,7 @@ export function ConfirmActionDialog({
           <Button
             type='submit'
             disabled={isPending}
-            className={cn(
-              'order-1 md:order-2',
-              confirmVariant === 'destructive' && 'text-foreground',
-            )}
+            className='order-1 md:order-2'
             variant={confirmVariant}
             onClick={handleConfirm}
             data-testid={confirmTestId}

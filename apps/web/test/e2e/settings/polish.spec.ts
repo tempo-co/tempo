@@ -91,3 +91,65 @@ test('a successful name save returns keyboard focus to Edit', async ({page}) => 
   await expect(page.getByRole('dialog')).toBeHidden();
   await expect(page.getByTestId('edit-name-button')).toBeFocused();
 });
+
+test('a phone drawer leaves the tab bar and page background in place', async ({page}) => {
+  await page.goto('/settings/account');
+  const tabBar = page.getByTestId('app-tab-bar');
+  const readPlacement = () =>
+    tabBar.evaluate((nav) => ({
+      bottom: Math.round(nav.getBoundingClientRect().bottom),
+      viewport: window.innerHeight,
+      background: getComputedStyle(document.body).backgroundColor,
+    }));
+  const before = await readPlacement();
+  expect(before.bottom).toBe(before.viewport);
+
+  await page.getByTestId('edit-name-button').click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  expect(await readPlacement()).toEqual(before);
+
+  // Read mid-close, while the drawer is still animating out.
+  await page.keyboard.press('Escape');
+  expect(await readPlacement()).toEqual(before);
+  await expect(page.getByRole('dialog')).toBeHidden();
+  expect(await readPlacement()).toEqual(before);
+});
+
+for (const theme of ['light', 'dark']) {
+  test(`destructive confirmations use the destructive label colour (${theme})`, async ({page}) => {
+    await page.addInitScript((value) => localStorage.setItem('vite-ui-theme', value), theme);
+    const session = {
+      name: 'Chrome on a phone',
+      ip: '192.0.2.1',
+      location: 'Example City',
+      deviceType: 'mobile',
+      browserType: 'Chrome',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSeenAt: '2026-01-01T00:00:00.000Z',
+    };
+    await page.route('**/auth/sessions', (route) =>
+      route.fulfill({
+        json: [
+          {...session, id: 'current-session', isCurrent: true},
+          {...session, id: 'other-session', isCurrent: false},
+        ],
+      }),
+    );
+    await page.goto('/settings/security');
+    await page.getByTestId('revoke-all-sessions-button').click();
+    const confirm = page.getByTestId('revoke-all-sessions-button-confirm');
+    await expect(confirm).toBeVisible();
+    const colours = await confirm.evaluate((button) => {
+      const probe = document.createElement('span');
+      probe.className = 'text-destructive-foreground';
+      document.body.append(probe);
+      const expected = getComputedStyle(probe).color;
+      probe.remove();
+      return {actual: getComputedStyle(button).color, expected};
+    });
+    expect(colours.actual).toBe(colours.expected);
+    expect(await page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(
+      theme === 'dark',
+    );
+  });
+}
