@@ -366,8 +366,8 @@ test('fails closed when the CLI cannot renew an expired login', async (t) => {
 	});
 });
 
-test('requires first-party Max or Pro subscription authentication at startup', async (t) => {
-	for (const mode of ['logged-out', 'console-auth', 'enterprise-auth', 'third-party-auth'])
+test('requires first-party claude.ai authentication at startup', async (t) => {
+	for (const mode of ['logged-out', 'console-auth', 'third-party-auth'])
 		await t.test(mode, async (t) => {
 			await assert.rejects(setup(t, {mode}), {message: 'Claude subscription authentication required.'});
 		});

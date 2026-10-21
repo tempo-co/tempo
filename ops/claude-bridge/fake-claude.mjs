@@ -9,7 +9,7 @@ if (args[0] === 'doctor') {
 		loggedIn: mode !== 'logged-out',
 		authMethod: mode === 'console-auth' ? 'api_key' : 'claude.ai',
 		apiProvider: mode === 'third-party-auth' ? 'bedrock' : 'firstParty',
-		subscriptionType: mode === 'enterprise-auth' ? 'enterprise' : 'max',
+		subscriptionType: null,
 	});
 } else {
 	let input = '';

@@ -6,7 +6,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import contract from './contract.json' with {type: 'json'};
-import {assertExtraUsageDisabled, storedTokenExpiresAt} from './subscription.mjs';
+import {assertSubscriptionUsable, storedTokenExpiresAt} from './subscription.mjs';
 import {validRequest, validResponse, validSearchRequest} from './validation.mjs';
 
 const cliArgs = ({instructions, schema}, tools, extra = []) => [
@@ -78,7 +78,7 @@ export async function startBridge({
 	claudePath = 'claude',
 	spawnProcess = spawn,
 	env = process.env,
-	verifyUsage = assertExtraUsageDisabled,
+	verifyUsage = assertSubscriptionUsable,
 	tokenExpiresAt = storedTokenExpiresAt,
 	timeoutMs = 120_000,
 	maxOutputBytes = 256 * 1024,
@@ -193,19 +193,15 @@ export async function startBridge({
 		}
 	}
 	// Only the CLI renews the subscription login, and `doctor` does so without inference. Renew it before the
-	// usage check, which refuses an expired token.
+	// subscription check, which refuses an expired token.
 	async function verifySubscription() {
 		if ((await tokenExpiresAt(childEnv.HOME)) - Date.now() < 5 * 60 * 1000) await run(['doctor'], '');
 		await verifyUsage(childEnv.HOME);
 	}
 	const auth = JSON.parse(await run(['auth', 'status', '--json']));
-	if (
-		auth.loggedIn !== true ||
-		auth.authMethod !== 'claude.ai' ||
-		auth.apiProvider !== 'firstParty' ||
-		!['max', 'pro'].includes(auth.subscriptionType)
-	)
+	if (auth.loggedIn !== true || auth.authMethod !== 'claude.ai' || auth.apiProvider !== 'firstParty')
 		throw new Error('Claude subscription authentication required.');
+	// The CLI no longer reports the plan; verifySubscription checks it against the account profile.
 	await verifySubscription();
 	let busy = false;
 	const server = http.createServer(async (req, res) => {
