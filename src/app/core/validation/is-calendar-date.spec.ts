@@ -50,7 +50,7 @@ describe('calendar-date validation', () => {
 		expect(Object.keys(constraints(date))).not.toHaveLength(0);
 	});
 
-	it('preserves the existing constraint names and messages', () => {
+	it('reports the matches and isDateString constraints with their messages', () => {
 		expect(constraints('2026-02-30')).toEqual({isDateString: 'date must be a valid ISO 8601 date string'});
 		expect(constraints('invalid')).toEqual({
 			matches: 'date must match /^\\d{4}-\\d{2}-\\d{2}$/ regular expression',
@@ -87,7 +87,7 @@ describe('calendar-date validation', () => {
 		},
 	);
 
-	it.each(['0050-04', '2026-1', '2026-13'])('keeps the summary month restriction for %s', (month) => {
+	it.each(['0050-04', '2026-1', '2026-13'])('rejects the summary month %s', (month) => {
 		const errors = validateSync(Object.assign(new BankTransactionSummaryQueryDto(), {month, asOf: '2026-10-18'}));
 		expect(errors.map(({property}) => property)).toEqual(['month']);
 	});
