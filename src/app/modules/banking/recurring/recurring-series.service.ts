@@ -14,14 +14,9 @@ import {BankTransaction} from '../bank-transaction.entity';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
 import {SQL_INTERNAL} from '../services/bank-transaction-filters';
 import {formatCents} from '../summary/bank-transaction-summary';
-import {RecurringPayeeAlias} from './recurring-payee-alias.entity';
-import {resolveRecurringPayees} from './recurring-payee-identity';
+import {type RecurringEvidence, inferRecurringIdentities} from './recurring-payee-identity';
 import {RecurringSeriesDecision, type RecurringSeriesDecisionValue} from './recurring-series-decision.entity';
-import {
-	type DetectedRecurringSeries,
-	type RecurringCandidate,
-	detectRecurringSeries,
-} from './recurring-series-detection';
+import {type DetectedRecurringSeries, detectRecurringSeries} from './recurring-series-detection';
 import {isOrdinaryRetailExpense} from './recurring-series-eligibility';
 
 const REFUND = 'REFUND' satisfies BankTransactionCategory;
@@ -37,9 +32,12 @@ type CandidateRow = {
 	baseAmountCents: string | null;
 	name: string;
 	category: string | null;
+	description: string | null;
+	counterpartyName: string | null;
+	transactionType: string | null;
 };
 
-/** Detects recurring payments on read; stores only owner decisions and approved identity mappings. */
+/** Detects recurring payments on read; stores only owner decisions. */
 @Injectable()
 export class RecurringSeriesService {
 	constructor(
@@ -47,8 +45,6 @@ export class RecurringSeriesService {
 		private readonly bankTransactionRepository: Repository<BankTransaction>,
 		@InjectRepository(RecurringSeriesDecision)
 		private readonly decisionRepository: Repository<RecurringSeriesDecision>,
-		@InjectRepository(RecurringPayeeAlias)
-		private readonly aliasRepository: Repository<RecurringPayeeAlias>,
 	) {}
 
 	async list(
@@ -146,6 +142,9 @@ export class RecurringSeriesService {
 			.addSelect('ROUND(ABS("transaction"."amountInBaseCurrency") * 100)::text', 'baseAmountCents')
 			.addSelect('transaction.displayDescription', 'name')
 			.addSelect('transaction.category', 'category')
+			.addSelect('transaction.description', 'description')
+			.addSelect('transaction.counterpartyName', 'counterpartyName')
+			.addSelect('transaction.transactionType', 'transactionType')
 			.where('connection.accountId = :accountId', {accountId})
 			.andWhere('transaction.merchantKey IS NOT NULL')
 			.andWhere('transaction.bookingDate IS NOT NULL')
@@ -155,13 +154,9 @@ export class RecurringSeriesService {
 			.andWhere(`NOT ${SQL_INTERNAL}`)
 			.andWhere('transaction.amount <> 0')
 			.getRawMany<CandidateRow>();
-		const [rows, aliases, decisions] = await Promise.all([
-			rowsQuery,
-			this.aliasRepository.find({where: {accountId}}),
-			this.decisionRepository.find({where: {accountId}}),
-		]);
+		const [rows, decisions] = await Promise.all([rowsQuery, this.decisionRepository.find({where: {accountId}})]);
 
-		const candidates: RecurringCandidate[] = rows.map((row) => ({
+		const evidence: RecurringEvidence[] = rows.map((row) => ({
 			id: row.id,
 			bankAccountId: row.bankAccountId,
 			date: row.date,
@@ -171,9 +166,13 @@ export class RecurringSeriesService {
 			baseAmountCents: row.baseAmountCents === null ? null : BigInt(row.baseAmountCents),
 			name: row.name,
 			category: row.category,
+			description: row.description,
+			counterpartyName: row.counterpartyName,
+			transactionType: row.transactionType,
 		}));
+		const candidates = inferRecurringIdentities(evidence);
 		const candidatesById = new Map(candidates.map((row) => [row.id, row]));
-		const detected = detectRecurringSeries(resolveRecurringPayees(candidates, aliases), today);
+		const detected = detectRecurringSeries(candidates, today);
 		const decisionBySeries = resolveDecisions(detected, decisions);
 		return {
 			detected: detected.filter(

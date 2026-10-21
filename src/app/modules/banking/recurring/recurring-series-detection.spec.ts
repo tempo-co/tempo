@@ -26,12 +26,12 @@ function monthly(day: number, months: string[], amount: string, overrides: Parti
 const MAY_TO_OCT = ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'];
 
 describe('detectRecurringSeries', () => {
-	it('current naming period: prices every interleaved approved alias', () => {
+	it('current naming period: prices every interleaved linked name', () => {
 		const amounts = ['50.00', '25.00', '100.00', '75.00', '40.00', '60.00'];
 		const rows = amounts.map((amount, index) =>
 			payment(`2026-${String(index + 7).padStart(2, '0')}-10`, amount, {
-				merchantKey: `EXPENSE:example interleaved alias ${index % 3}`,
-				recurringPayeeKey: 'EXPENSE:recurring-payee:example-interleaved',
+				merchantKey: `EXPENSE:example interleaved name ${index % 3}`,
+				recurringPayeeKey: 'EXPENSE:automatic-recurring:example-interleaved',
 			}),
 		);
 
@@ -49,16 +49,16 @@ describe('detectRecurringSeries', () => {
 	});
 
 	it('current naming period: retains an established variable stream after a long fixed history', () => {
-		const recurringPayeeKey = 'EXPENSE:recurring-payee:example-long-history';
+		const recurringPayeeKey = 'EXPENSE:automatic-recurring:example-long-history';
 		const previous = Array.from({length: 24}, (_, index) =>
 			payment(new Date(Date.UTC(2024, index + 6, 3)).toISOString().slice(0, 10), '16.00', {
-				merchantKey: 'EXPENSE:example historical alias',
+				merchantKey: 'EXPENSE:example historical name',
 				recurringPayeeKey,
 			}),
 		);
 		const current = ['50.00', '25.00', '100.00', '75.00'].map((amount, index) =>
 			payment(`2026-${String(index + 7).padStart(2, '0')}-10`, amount, {
-				merchantKey: `EXPENSE:example current alias ${index % 2}`,
+				merchantKey: `EXPENSE:example current name ${index % 2}`,
 				recurringPayeeKey,
 			}),
 		);
@@ -92,8 +92,8 @@ describe('detectRecurringSeries', () => {
 	});
 
 	describe.each([6, 24, 60])('established period after %i historical payments', (oldCount) => {
-		it.each(['VARIABLE', 'FIXED'] as const)('continues %s pricing when an older alias returns', (amountKind) => {
-			const recurringPayeeKey = 'EXPENSE:recurring-payee:example-returning-label';
+		it.each(['VARIABLE', 'FIXED'] as const)('continues %s pricing when an older name returns', (amountKind) => {
+			const recurringPayeeKey = 'EXPENSE:automatic-recurring:example-returning-label';
 			const previous = Array.from({length: oldCount}, (_, index) =>
 				payment(new Date(Date.UTC(2026, 6 - oldCount + index, 3)).toISOString().slice(0, 10), '16.00', {
 					merchantKey: 'EXPENSE:example returning historical label',
@@ -164,7 +164,7 @@ describe('detectRecurringSeries', () => {
 	it.each(['account-1', 'account-2'])(
 		'current naming period: keeps interleaved established obligations separate on %s',
 		(bankAccountId) => {
-			const recurringPayeeKey = 'EXPENSE:recurring-payee:example-interleaved-plans';
+			const recurringPayeeKey = 'EXPENSE:automatic-recurring:example-interleaved-plans';
 			const first = monthly(11, ['2030-04', '2030-05', '2030-06', '2030-08'], '27.00', {
 				merchantKey: 'EXPENSE:example first plan',
 				recurringPayeeKey,
@@ -184,9 +184,9 @@ describe('detectRecurringSeries', () => {
 	);
 
 	describe.each(['account-1', 'account-2'])('complete naming period on %s', (bankAccountId) => {
-		describe.each([2, 3])('with %i interleaved aliases', (aliasCount) => {
+		describe.each([2, 3])('with %i interleaved names', (nameCount) => {
 			it.each([6, 24, 60])('is independent of %i older monthly payments', (oldCount) => {
-				const recurringPayeeKey = 'EXPENSE:recurring-payee:example-complete-cohort';
+				const recurringPayeeKey = 'EXPENSE:automatic-recurring:example-complete-cohort';
 				const previous = Array.from({length: oldCount}, (_, index) =>
 					payment(new Date(Date.UTC(2026, 6 - oldCount + index, 3)).toISOString().slice(0, 10), '16.00', {
 						merchantKey: 'EXPENSE:example former cohort',
@@ -195,21 +195,21 @@ describe('detectRecurringSeries', () => {
 					}),
 				);
 				const amounts =
-					aliasCount === 2
+					nameCount === 2
 						? ['50.00', '25.00', '100.00', '75.00']
 						: ['50.00', '25.00', '100.00', '75.00', '40.00', '60.00'];
 				const current = amounts.map((amount, index) => {
 					const row = payment(`2026-${String(index + 7).padStart(2, '0')}-10`, amount, {
-						merchantKey: `EXPENSE:example complete cohort ${index % aliasCount}`,
+						merchantKey: `EXPENSE:example complete cohort ${index % nameCount}`,
 						recurringPayeeKey,
 						bankAccountId,
 						currency: 'GBP',
 					});
 					return {...row, baseAmountCents: row.amountCents * 2n};
 				});
-				const due = aliasCount === 2 ? '2026-11-10' : '2027-01-10';
-				const expected = aliasCount === 2 ? '62.50' : '55.00';
-				const baseCost = aliasCount === 2 ? 12500n : 11000n;
+				const due = nameCount === 2 ? '2026-11-10' : '2027-01-10';
+				const expected = nameCount === 2 ? '62.50' : '55.00';
+				const baseCost = nameCount === 2 ? 12500n : 11000n;
 				const rows = [...previous, ...current];
 				const snapshot = structuredClone(rows);
 				const baseline = detectRecurringSeries(current, due);
@@ -259,7 +259,7 @@ describe('detectRecurringSeries', () => {
 	});
 
 	it('current naming period: retains a unique continuation alongside an independently recognized plan', () => {
-		const recurringPayeeKey = 'EXPENSE:recurring-payee:example-independent-plan';
+		const recurringPayeeKey = 'EXPENSE:automatic-recurring:example-independent-plan';
 		const months = Array.from({length: 30}, (_, index) =>
 			new Date(Date.UTC(2024, index + 6, 1)).toISOString().slice(0, 7),
 		);
@@ -317,7 +317,7 @@ describe('detectRecurringSeries', () => {
 	])(
 		'current naming period: keeps an established %s to %s price through an isolated outlier',
 		(oldPrice, newPrice) => {
-			const recurringPayeeKey = 'EXPENSE:recurring-payee:example-isolated-cohort';
+			const recurringPayeeKey = 'EXPENSE:automatic-recurring:example-isolated-cohort';
 			const previous = monthly(11, ['2026-01', '2026-02', '2026-03', '2026-04'], oldPrice, {
 				merchantKey: 'EXPENSE:example previous price',
 				recurringPayeeKey,
@@ -344,8 +344,8 @@ describe('detectRecurringSeries', () => {
 		},
 	);
 
-	it('current naming period: never pools unclassified aliases across bank accounts', () => {
-		const recurringPayeeKey = 'EXPENSE:recurring-payee:example-local-evidence';
+	it('current naming period: never pools unrecognized names across bank accounts', () => {
+		const recurringPayeeKey = 'EXPENSE:automatic-recurring:example-local-evidence';
 		const previous = Array.from({length: 24}, (_, index) =>
 			payment(new Date(Date.UTC(2024, index + 6, 3)).toISOString().slice(0, 10), '16.00', {
 				merchantKey: 'EXPENSE:example local previous',
@@ -365,11 +365,11 @@ describe('detectRecurringSeries', () => {
 		}
 	});
 
-	it('recurring aliases: joins approved variants without rewriting candidates', () => {
+	it('linked names: joins name variants without rewriting candidates', () => {
 		const rows = [
 			...monthly(3, MAY_TO_OCT.slice(0, 3), '40.00', {merchantKey: 'EXPENSE:example cover old'}),
 			...monthly(3, MAY_TO_OCT.slice(3), '68.00', {merchantKey: 'EXPENSE:example cover new'}),
-		].map((row) => ({...row, recurringPayeeKey: 'EXPENSE:recurring-payee:example-cover'}));
+		].map((row) => ({...row, recurringPayeeKey: 'EXPENSE:automatic-recurring:example-cover'}));
 		const before = structuredClone(rows);
 
 		expect(detectRecurringSeries(rows, TODAY)).toEqual([
@@ -396,7 +396,7 @@ describe('detectRecurringSeries', () => {
 			);
 			const rows = [...previous, ...current].map((row) => ({
 				...row,
-				recurringPayeeKey: 'EXPENSE:recurring-payee:example-membership',
+				recurringPayeeKey: 'EXPENSE:automatic-recurring:example-membership',
 			}));
 
 			expect(detectRecurringSeries(rows, '2026-11-13')).toEqual([
@@ -425,7 +425,7 @@ describe('detectRecurringSeries', () => {
 				6250n,
 			],
 			[
-				'cross-account alternating aliases',
+				'cross-account alternating names',
 				['17.00', '17.00', '17.00', '17.00'],
 				true,
 				'account-2',
@@ -434,7 +434,7 @@ describe('detectRecurringSeries', () => {
 				1700n,
 			],
 			[
-				'same-account variable alternating aliases',
+				'same-account variable alternating names',
 				['50.00', '25.00', '100.00', '75.00'],
 				true,
 				'account-1',
@@ -443,7 +443,7 @@ describe('detectRecurringSeries', () => {
 				6250n,
 			],
 			[
-				'same-account fixed alternating aliases',
+				'same-account fixed alternating names',
 				['17.00', '17.00', '17.00', '17.00'],
 				true,
 				'account-1',
@@ -453,8 +453,8 @@ describe('detectRecurringSeries', () => {
 			],
 		] as const)(
 			'recurring continuity: preserves the recognized current account stream for %s',
-			(_label, amounts, alternateAliases, bankAccountId, amountKind, typicalAmount, monthlyEquivalent) => {
-				const recurringPayeeKey = 'EXPENSE:recurring-payee:example-current-stream';
+			(_label, amounts, alternateNames, bankAccountId, amountKind, typicalAmount, monthlyEquivalent) => {
+				const recurringPayeeKey = 'EXPENSE:automatic-recurring:example-current-stream';
 				const previous = monthly(
 					3,
 					['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'],
@@ -466,7 +466,7 @@ describe('detectRecurringSeries', () => {
 				const current = ['2026-07', '2026-08', '2026-09', '2026-10'].map((month, index) =>
 					payment(`${month}-10`, amounts[index], {
 						bankAccountId,
-						merchantKey: `EXPENSE:example current bill ${alternateAliases ? index % 2 : 0}`,
+						merchantKey: `EXPENSE:example current bill ${alternateNames ? index % 2 : 0}`,
 						recurringPayeeKey,
 					}),
 				);
@@ -525,7 +525,7 @@ describe('detectRecurringSeries', () => {
 	it.each(['forward', 'reverse'] as const)(
 		'recurring continuity: preserves a qualifying current raw-name history across recognized price parts (%s)',
 		(order) => {
-			const recurringPayeeKey = 'EXPENSE:recurring-payee:example-recognized-prices';
+			const recurringPayeeKey = 'EXPENSE:automatic-recurring:example-recognized-prices';
 			const previous = monthly(3, ['2036-01', '2036-02', '2036-03', '2036-04', '2036-05', '2036-06'], '20.00', {
 				merchantKey: 'EXPENSE:example legacy prices',
 				recurringPayeeKey,
@@ -602,13 +602,13 @@ describe('detectRecurringSeries', () => {
 		);
 		const rows = [...previous, ...current].map((row) => ({
 			...row,
-			recurringPayeeKey: 'EXPENSE:recurring-payee:example-membership',
+			recurringPayeeKey: 'EXPENSE:automatic-recurring:example-membership',
 		}));
 		const [before] = detectRecurringSeries(rows, TODAY);
 		expect(before.nextExpectedDate).toBe('2026-11-10');
 		const next = payment('2026-11-10', '17.00', {
 			bankAccountId: 'account-2',
-			recurringPayeeKey: 'EXPENSE:recurring-payee:example-membership',
+			recurringPayeeKey: 'EXPENSE:automatic-recurring:example-membership',
 		});
 
 		expect(detectRecurringSeries([...rows, next], '2026-11-11')).toEqual([
@@ -627,7 +627,7 @@ describe('detectRecurringSeries', () => {
 		const returned = ['2026-07-15', '2026-08-11', '2026-09-09', '2026-10-07'].map((date) => payment(date, '24.00'));
 		const rows = [...first, ...middle, ...returned].map((row) => ({
 			...row,
-			recurringPayeeKey: 'EXPENSE:recurring-payee:example-membership',
+			recurringPayeeKey: 'EXPENSE:automatic-recurring:example-membership',
 		}));
 
 		expect(detectRecurringSeries([...first, ...returned], '2026-11-10')[0]).toMatchObject({
@@ -649,7 +649,7 @@ describe('detectRecurringSeries', () => {
 		const rows = [
 			...monthly(3, MAY_TO_OCT.slice(0, 3), '24.00', {bankAccountId: 'account-1'}),
 			...monthly(3, MAY_TO_OCT.slice(3), '24.00', {bankAccountId: 'account-2'}),
-		].map((row) => ({...row, recurringPayeeKey: 'EXPENSE:recurring-payee:example-membership'}));
+		].map((row) => ({...row, recurringPayeeKey: 'EXPENSE:automatic-recurring:example-membership'}));
 
 		expect(detectRecurringSeries(rows, TODAY)).toEqual([
 			expect.objectContaining({
@@ -670,7 +670,7 @@ describe('detectRecurringSeries', () => {
 		const parallel = monthly(11, months.slice(-3), '24.00', {bankAccountId: 'account-2'});
 		const rows = [...older, ...parallel].map((row) => ({
 			...row,
-			recurringPayeeKey: 'EXPENSE:recurring-payee:example-membership',
+			recurringPayeeKey: 'EXPENSE:automatic-recurring:example-membership',
 		}));
 
 		const result = detectRecurringSeries(rows, TODAY);
@@ -687,7 +687,7 @@ describe('detectRecurringSeries', () => {
 		const parallel = monthly(15, MAY_TO_OCT, '58.00', {bankAccountId: 'account-3'});
 		const rows = [...first, ...second, ...parallel].map((row) => ({
 			...row,
-			recurringPayeeKey: 'EXPENSE:recurring-payee:example-membership',
+			recurringPayeeKey: 'EXPENSE:automatic-recurring:example-membership',
 		}));
 
 		expect(detectRecurringSeries(rows, TODAY).map(({transactionIds}) => transactionIds)).toEqual([
@@ -696,10 +696,10 @@ describe('detectRecurringSeries', () => {
 		]);
 	});
 
-	it('recurring aliases: preserves the yearly person-transfer exclusion', () => {
+	it('linked names: preserve the yearly person-transfer exclusion', () => {
 		const rows = ['2023-03-10', '2024-03-10', '2025-03-10'].map((date) => ({
 			...payment(date, '120.00', {merchantKey: 'EXPENSE:transfer to alex example'}),
-			recurringPayeeKey: 'EXPENSE:recurring-payee:example-person',
+			recurringPayeeKey: 'EXPENSE:automatic-recurring:example-person',
 		}));
 
 		expect(detectRecurringSeries(rows, TODAY)).toEqual([]);
@@ -710,7 +710,7 @@ describe('detectRecurringSeries', () => {
 		const middle = monthly(3, ['2026-04', '2026-05', '2026-06'], '24.00', {bankAccountId: 'account-2'});
 		const rows = [...firstAccount, ...middle].map((row) => ({
 			...row,
-			recurringPayeeKey: 'EXPENSE:recurring-payee:example-membership',
+			recurringPayeeKey: 'EXPENSE:automatic-recurring:example-membership',
 		}));
 		const expectedIds = [...rows].sort((a, b) => a.date.localeCompare(b.date)).map(({id}) => id);
 		const result = detectRecurringSeries(rows, '2026-09-04');
@@ -726,7 +726,7 @@ describe('detectRecurringSeries', () => {
 		const restarted = monthly(3, ['2026-08', '2026-09', '2026-10'], '24.00', {bankAccountId: 'account-2'});
 		const map = (row: RecurringCandidate) => ({
 			...row,
-			recurringPayeeKey: 'EXPENSE:recurring-payee:example-membership',
+			recurringPayeeKey: 'EXPENSE:automatic-recurring:example-membership',
 		});
 
 		expect(detectRecurringSeries(old.map(map), '2026-04-08')[0]).toMatchObject({status: 'ACTIVE', flags: ['LATE']});
@@ -749,7 +749,7 @@ describe('detectRecurringSeries', () => {
 		);
 		const map = (row: RecurringCandidate) => ({
 			...row,
-			recurringPayeeKey: 'EXPENSE:recurring-payee:example-membership',
+			recurringPayeeKey: 'EXPENSE:automatic-recurring:example-membership',
 		});
 		const baseline = detectRecurringSeries(bill.map(map), TODAY);
 
@@ -764,7 +764,7 @@ describe('detectRecurringSeries', () => {
 		const later = monthly(3, MAY_TO_OCT.slice(3), '90.00', {bankAccountId: 'account-3'});
 		const rows = [...first, ...other, ...later].map((row) => ({
 			...row,
-			recurringPayeeKey: 'EXPENSE:recurring-payee:example-membership',
+			recurringPayeeKey: 'EXPENSE:automatic-recurring:example-membership',
 		}));
 		const memberships = (input: typeof rows) =>
 			detectRecurringSeries(input, TODAY)
@@ -796,7 +796,7 @@ describe('detectRecurringSeries', () => {
 		);
 		const rows = [...first, ...parallel].map((row) => ({
 			...row,
-			recurringPayeeKey: 'EXPENSE:recurring-payee:example-membership',
+			recurringPayeeKey: 'EXPENSE:automatic-recurring:example-membership',
 		}));
 
 		expect(detectRecurringSeries(rows, TODAY).map(({transactionIds}) => transactionIds)).toEqual([

@@ -25,7 +25,6 @@ import {BankTransactionFxRate} from './bank-transaction-fx-rate.entity';
 import {BankTransaction} from './bank-transaction.entity';
 import {BankingService} from './banking.service';
 import {BankTransactionCategorizationModule} from './categorization/bank-transaction-categorization.module';
-import {RecurringPayeeAlias} from './recurring/recurring-payee-alias.entity';
 import {RecurringSeriesDecision} from './recurring/recurring-series-decision.entity';
 import {RecurringSeriesService} from './recurring/recurring-series.service';
 import {BankTransactionAmountConversionProcessor} from './services/bank-transaction-amount-conversion.processor';
@@ -55,7 +54,6 @@ import {OwnTransferService} from './services/own-transfer.service';
 			BankTransaction,
 			BankTransactionFxRate,
 			RecurringSeriesDecision,
-			RecurringPayeeAlias,
 		]),
 		BullModule.registerQueue({name: BANK_CONNECTION_SYNC_QUEUE}),
 		BullModule.registerQueue({name: BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE}),

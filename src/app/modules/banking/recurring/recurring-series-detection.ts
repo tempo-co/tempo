@@ -21,7 +21,10 @@ export type RecurringCandidate = {
 	bankAccountId: string;
 	date: string;
 	merchantKey: string;
-	/** Owner-approved recurring identity; the stored transaction merchant key remains unchanged. */
+	/**
+	 * Payee identity inferred from bank evidence when it spans several merchant keys or bank accounts; the stored
+	 * transaction merchant key remains unchanged.
+	 */
 	recurringPayeeKey?: string;
 	currency: string;
 	amountCents: bigint;
@@ -237,7 +240,7 @@ function reconcileAccountSeries(
 	namingPeriod: NamingPeriodLookup,
 ): DetectedRecurringSeries[] {
 	const byId = new Map(candidates.map((row) => [row.id, row]));
-	// A stream is the account-local recognition, including every approved alias and no unclassified activity.
+	// A stream is the account-local recognition, including every linked name and no unclassified activity.
 	const sourceStreamById = new Map<string, ReadonlySet<string>>();
 	for (const entry of series) {
 		const ids = new Set(entry.transactionIds);
@@ -345,7 +348,7 @@ function currentSourceRows(
 		completePartition(prefix, today, false)?.cadence === rule.cadence;
 	const currentRows = namingPeriod(rows, false, rule.cadence);
 	if (currentRows) return currentRows.length === rows.length ? rows : currentRows;
-	// If no alias union qualifies, retain the exact recognized source stream, not other account activity.
+	// If no linked-name union qualifies, retain the exact recognized source stream, not other account activity.
 	const sourceIds = sourceStreamById.get(latest.id)!;
 	const sourceRows = rows.filter(({id}) => sourceIds.has(id));
 	return sourceRows.length !== rows.length && recognized(sourceRows) ? sourceRows : rows;
@@ -391,8 +394,8 @@ function createNamingPeriodLookup(byId: ReadonlyMap<string, RecurringCandidate>)
 }
 
 /**
- * Continue an established chronological period before reopening an older alias's whole lifetime. A newer naming
- * interval may supersede it, but must include every interleaved alias. Both paths use the existing recognition rules.
+ * Continue an established chronological period before reopening an older name's whole lifetime. A newer naming
+ * interval may supersede it, but must include every interleaved name. Both paths use the existing recognition rules.
  * The prefix trie is local to one recognition predicate/request; calendar and restart checks share its exact evidence.
  */
 function latestNamingPeriod(

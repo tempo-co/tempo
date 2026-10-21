@@ -1,13 +1,12 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import {randomUUID} from 'node:crypto';
 import TestAgent from 'supertest/lib/agent';
 import {In, Repository} from 'typeorm';
 
+import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
-import {RecurringPayeeAlias} from '@modules/banking/recurring/recurring-payee-alias.entity';
 import {RecurringSeriesDecision} from '@modules/banking/recurring/recurring-series-decision.entity';
 import {seriesKey} from '@modules/banking/recurring/recurring-series-detection';
 
@@ -23,6 +22,7 @@ import {
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
+import {createVerifiedAccount} from '../../utils/auth-utils';
 
 const AS_OF = '2026-10-17';
 const MONTHS = ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'];
@@ -45,6 +45,11 @@ type SeriesBody = {
 	flags: string[];
 	decision: string | null;
 };
+
+/** A structured SEPA debit text naming `name` as the payee, the evidence that links a renamed payee. */
+function sepaNaming(name: string) {
+	return `SEPA Incasso Naam: ${name} IBAN: NL91ABNA0417164300`;
+}
 
 function monthly(day: string, amount: string, counterpartyName: string, overrides: Record<string, unknown> = {}) {
 	return MONTHS.map((month) =>
@@ -144,17 +149,110 @@ describe('RecurringSeries', () => {
 		await fixtures.createTransactions(otherBankAccount, monthly('04', '-60.00', 'Example Club'));
 	});
 
-	it('recurring aliases: applies only the owners approved mappings and keeps source rows unchanged', async () => {
-		const aliases: Repository<RecurringPayeeAlias> = app.get(getRepositoryToken(RecurringPayeeAlias));
-		const oldName = 'Example Mapped Legacy';
-		const currentName = 'Example Mapped Current';
+	it('recognizes one payee across the bank’s name formats for a new owner with no setup', async () => {
+		const httpServer = app.getHttpServer();
+		const fresh = await createVerifiedAccount(httpServer, app.get(ConfigurationService).get('EMAIL_UI_URL'));
+		const freshOwner = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
+		const connection = await fixtures.createConnection(freshOwner);
+		const bank = await fixtures.createBankAccount(connection);
+		const newBank = await fixtures.createBankAccount(connection);
+		try {
+			// The bank first names the payee only in a transfer description, later as the counterparty.
+			const rows = await fixtures.createTransactions(
+				bank,
+				MONTHS.map((month, index) =>
+					bookedRow(`${month}-05`, '-80.00', {
+						category: 'EDUCATION',
+						transactionType: 'TRANSFER',
+						...(index < 3
+							? {counterpartyName: null, description: 'To Example Academy'}
+							: {counterpartyName: 'Example Academy', description: null}),
+					}),
+				),
+			);
+			// One plan moves to another bank account under the same name; a second plan stays on the first account.
+			const moved = await Promise.all(
+				MONTHS.map((month, index) =>
+					fixtures.createTransaction(
+						index < 3 ? bank : newBank,
+						bookedRow(`${month}-08`, '-12.00', {counterpartyName: 'Example Stream', description: null}),
+					),
+				),
+			);
+			const parallel = await fixtures.createTransactions(
+				bank,
+				monthly('20', '-30.00', 'Example Stream', {description: null}),
+			);
+			const ids = rows.map(({id}) => id);
+			const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
+			const read = async () =>
+				(await fresh.agent.get('/recurring-series').query({asOf: AS_OF, direction: 'EXPENSE'}).expect(200))
+					.body as Awaited<ReturnType<typeof list>>;
+
+			const {series} = await read();
+			expect(byName(series, 'Example Academy')).toEqual([
+				expect.objectContaining({
+					transactionCount: 6,
+					monthlyEquivalent: '80.00',
+					nextExpectedDate: '2026-11-05',
+					status: 'ACTIVE',
+					decision: null,
+				}),
+			]);
+			expect(byName(series, 'Example Stream')).toEqual([
+				expect.objectContaining({
+					transactionCount: 6,
+					monthlyEquivalent: '30.00',
+					nextExpectedDate: '2026-11-20',
+				}),
+				expect.objectContaining({
+					transactionCount: 6,
+					monthlyEquivalent: '12.00',
+					nextExpectedDate: '2026-11-08',
+				}),
+			]);
+			const streamDrills = await Promise.all(
+				byName(series, 'Example Stream').map(async ({key}) =>
+					(
+						await fresh.agent
+							.get('/bank-transactions')
+							.query({filter: {recurringSeriesKey: key}, pagination: {pageIndex: 0, pageSize: 50}})
+							.expect(200)
+					).body.transactions
+						.map(({id}: {id: string}) => id)
+						.sort(),
+				),
+			);
+			expect(streamDrills).toEqual([parallel, moved].map((part) => part.map(({id}) => id).sort()));
+			series.splice(0, series.length, ...byName(series, 'Example Academy'));
+			const drill = await fresh.agent
+				.get('/bank-transactions')
+				.query({filter: {recurringSeriesKey: series[0].key}, pagination: {pageIndex: 0, pageSize: 50}})
+				.expect(200);
+			expect(drill.body.transactions.map(({id}: {id: string}) => id).sort()).toEqual([...ids].sort());
+			await fresh.agent
+				.patch(`/recurring-series/${series[0].key}/decision`)
+				.send({decision: 'CONFIRMED'})
+				.expect(204);
+			expect((await read()).confirmedMonthlyTotal).toBe('80.00');
+			expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
+			expect(byName((await list(ownerAgent)).series, 'Example Academy')).toEqual([]);
+		} finally {
+			await fixtures.connections.delete(connection.id);
+		}
+	});
+
+	it('links a renamed payee from bank evidence for each owner separately, keeping source rows unchanged', async () => {
+		const oldName = 'Example Renamed Legacy';
+		const currentName = 'Example Renamed Current';
 		const seed = async (bankAccount: BankAccount) =>
 			fixtures.createTransactions(
 				bankAccount,
 				MONTHS.map((month, index) =>
 					bookedRow(`${month}-03`, index < 3 ? '-40.00' : '-68.00', {
 						counterpartyName: index < 3 ? oldName : currentName,
-						description: index < 3 ? oldName : currentName,
+						// The bank's structured record already names the current entity on the older payments.
+						description: sepaNaming(currentName),
 						category: 'INSURANCE',
 					}),
 				),
@@ -163,22 +261,15 @@ describe('RecurringSeries', () => {
 		const otherRows = await seed(await fixtures.createBankAccount(await fixtures.createConnection(otherOwner)));
 		const ids = rows.map(({id}) => id);
 		const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
-		const payeeGroupId = randomUUID();
-		await aliases.insert(
-			[rows[0], rows[3]].map((row) => ({
-				accountId: owner.id,
-				merchantKey: row.merchantKey!,
-				category: 'INSURANCE',
-				payeeGroupId,
-			})),
-		);
 		const selected = (series: SeriesBody[]) => series.filter(({name}) => [oldName, currentName].includes(name));
 		const beforeTotal = (await list(ownerAgent)).confirmedMonthlyTotal;
 		const result = selected((await list(ownerAgent)).series);
 		expect(result).toEqual([
 			expect.objectContaining({name: currentName, transactionCount: 6, monthlyEquivalent: '68.00'}),
 		]);
-		expect(selected((await list(otherAgent)).series)).toHaveLength(2);
+		const otherResult = selected((await list(otherAgent)).series);
+		expect(otherResult).toEqual([expect.objectContaining({name: currentName, transactionCount: 6})]);
+		expect(otherResult[0].key).not.toBe(result[0].key);
 		const drill = await ownerAgent
 			.get('/bank-transactions')
 			.query({filter: {recurringSeriesKey: result[0].key}, pagination: {pageIndex: 0, pageSize: 50}})
@@ -191,12 +282,11 @@ describe('RecurringSeries', () => {
 		expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
 		await ownerAgent.patch(`/recurring-series/${result[0].key}/decision`).send({decision: null}).expect(204);
 		await fixtures.transactions.delete([...ids, ...otherRows.map(({id}) => id)]);
-		await aliases.delete({accountId: owner.id, payeeGroupId});
 	});
 
 	it.each([
 		[
-			'interleaved aliases',
+			'interleaved names',
 			3,
 			0,
 			true,
@@ -208,13 +298,11 @@ describe('RecurringSeries', () => {
 		['long moved-account history', 2, 24, false, ['50.00', '25.00', '100.00', '75.00'], '62.50', '2026-11-10'],
 	] as const)(
 		'current naming period: preserves confirmed cost and exact membership for %s',
-		async (label, aliasCount, oldCount, sameAccount, amounts, cost, due) => {
-			const aliases: Repository<RecurringPayeeAlias> = app.get(getRepositoryToken(RecurringPayeeAlias));
+		async (label, nameCount, oldCount, sameAccount, amounts, cost, due) => {
 			const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
 			const connection = await fixtures.createConnection(owner);
 			const bank = await fixtures.createBankAccount(connection);
 			const oldBank = sameAccount ? bank : await fixtures.createBankAccount(connection);
-			const payeeGroupId = randomUUID();
 			const name = `Example Complete Period ${label}`;
 			let asOf: string = due;
 			const read = async () =>
@@ -226,30 +314,11 @@ describe('RecurringSeries', () => {
 					bank,
 					amounts.map((amount, index) =>
 						bookedRow(`2026-${String(index + 7).padStart(2, '0')}-10`, `-${amount}`, {
-							counterpartyName: `${name} Alias ${index % aliasCount}`,
-							description: name,
+							counterpartyName: `${name} Variant ${index % nameCount}`,
+							description: sepaNaming(name),
 						}),
 					),
 				);
-				await aliases.insert(
-					[...new Set(current.map(({merchantKey}) => merchantKey!))].map((merchantKey) => ({
-						accountId: owner.id,
-						merchantKey,
-						category: 'SUBSCRIPTIONS',
-						payeeGroupId,
-					})),
-				);
-				const previous = await fixtures.createTransactions(
-					oldBank,
-					Array.from({length: oldCount}, (_, index) =>
-						bookedRow(new Date(Date.UTC(2024, index + 6, 3)).toISOString().slice(0, 10), '-16.00', {
-							counterpartyName: `${name} Historical`,
-							description: name,
-						}),
-					),
-				);
-				const ids = [...previous, ...current].map(({id}) => id);
-				const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
 				const before = await read();
 				const baseline = before.series.find(
 					({name: entryName}) => entryName === current.at(-1)!.displayDescription,
@@ -267,14 +336,18 @@ describe('RecurringSeries', () => {
 					.patch(`/recurring-series/${baseline.key}/decision`)
 					.send({decision: 'CONFIRMED'})
 					.expect(204);
-				if (previous.length) {
-					await aliases.insert({
-						accountId: owner.id,
-						merchantKey: previous[0].merchantKey!,
-						category: 'SUBSCRIPTIONS',
-						payeeGroupId,
-					});
-				}
+				// Older payments from the same payee arrive later, under a historical name.
+				const previous = await fixtures.createTransactions(
+					oldBank,
+					Array.from({length: oldCount}, (_, index) =>
+						bookedRow(new Date(Date.UTC(2024, index + 6, 3)).toISOString().slice(0, 10), '-16.00', {
+							counterpartyName: `${name} Historical`,
+							description: sepaNaming(name),
+						}),
+					),
+				);
+				const ids = [...previous, ...current].map(({id}) => id);
+				const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
 				const saved = await decisions.find({
 					where: {accountId: owner.id, seriesKey: In(keys)},
 					order: {id: 'ASC'},
@@ -319,7 +392,7 @@ describe('RecurringSeries', () => {
 					previous.length && sameAccount ? previous[0].counterpartyName : current[0].counterpartyName;
 				const returned = await fixtures.createTransaction(
 					bank,
-					bookedRow(due, '-50.00', {counterpartyName: returnedName, description: name}),
+					bookedRow(due, '-50.00', {counterpartyName: returnedName, description: sepaNaming(name)}),
 				);
 				ids.push(returned.id);
 				const continued = await read();
@@ -374,7 +447,7 @@ describe('RecurringSeries', () => {
 					bank,
 					bookedRow(continuedDue, '-50.00', {
 						counterpartyName: returnedName,
-						description: name,
+						description: sepaNaming(name),
 					}),
 				);
 				const after = await read();
@@ -407,7 +480,7 @@ describe('RecurringSeries', () => {
 					bank,
 					bookedRow(asOf, '-50.00', {
 						counterpartyName: returnedName,
-						description: name,
+						description: sepaNaming(name),
 					}),
 				);
 				expect((await read()).series.filter(({key}) => key === linkedKey)).toEqual([
@@ -430,7 +503,6 @@ describe('RecurringSeries', () => {
 				);
 			} finally {
 				if (keys.length) await decisions.delete({accountId: owner.id, seriesKey: In(keys)});
-				await aliases.delete({accountId: owner.id, payeeGroupId});
 				await fixtures.connections.delete(connection.id);
 			}
 		},
@@ -554,13 +626,15 @@ describe('RecurringSeries', () => {
 	] as const)(
 		'regrouped decisions: reconciles %s/%s across names and bank accounts',
 		async (first, second, expected) => {
-			const aliases: Repository<RecurringPayeeAlias> = app.get(getRepositoryToken(RecurringPayeeAlias));
 			const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
 			const oldName = `Example Linked Old ${first} ${second}`;
 			const newName = `Example Linked New ${first} ${second}`;
 			const otherBank = await fixtures.createBankAccount(await fixtures.createConnection(owner));
 			const rows = [
-				...(await fixtures.createTransactions(ownerBankAccount, monthly('07', '-24.00', oldName).slice(0, 3))),
+				...(await fixtures.createTransactions(
+					ownerBankAccount,
+					monthly('07', '-24.00', oldName, {description: sepaNaming(newName)}).slice(0, 3),
+				)),
 				...(await fixtures.createTransactions(otherBank, monthly('07', '-48.00', newName).slice(3))),
 			];
 			const ids = rows.map(({id}) => id);
@@ -573,15 +647,6 @@ describe('RecurringSeries', () => {
 					seriesKey: legacyKeys[index],
 					decision: index === 0 ? first : second,
 					transactionIds: ids.slice(offset, offset + 3),
-				})),
-			);
-			const payeeGroupId = randomUUID();
-			await aliases.insert(
-				[0, 3].map((offset) => ({
-					accountId: owner.id,
-					merchantKey: rows[offset].merchantKey!,
-					category: 'SUBSCRIPTIONS',
-					payeeGroupId,
 				})),
 			);
 			const result = await list(ownerAgent);
@@ -605,7 +670,6 @@ describe('RecurringSeries', () => {
 			expect(await decisions.countBy({accountId: owner.id, seriesKey: In(legacyKeys)})).toBe(0);
 			expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
 			await fixtures.transactions.delete(ids);
-			await aliases.delete({accountId: owner.id, payeeGroupId});
 		},
 	);
 
@@ -620,7 +684,7 @@ describe('RecurringSeries', () => {
 			6250n,
 		],
 		[
-			'cross-account alternating aliases',
+			'cross-account alternating names',
 			['-17.00', '-17.00', '-17.00', '-17.00'],
 			true,
 			false,
@@ -629,7 +693,7 @@ describe('RecurringSeries', () => {
 			1700n,
 		],
 		[
-			'same-account variable alternating aliases',
+			'same-account variable alternating names',
 			['-50.00', '-25.00', '-100.00', '-75.00'],
 			true,
 			true,
@@ -638,7 +702,7 @@ describe('RecurringSeries', () => {
 			6250n,
 		],
 		[
-			'same-account fixed alternating aliases',
+			'same-account fixed alternating names',
 			['-17.00', '-17.00', '-17.00', '-17.00'],
 			true,
 			true,
@@ -648,14 +712,12 @@ describe('RecurringSeries', () => {
 		],
 	] as const)(
 		'current-stream continuation: retains %s through linking, grace and drill-through',
-		async (label, amounts, alternateAliases, sameAccount, amountKind, typicalAmount, cost) => {
-			const aliases: Repository<RecurringPayeeAlias> = app.get(getRepositoryToken(RecurringPayeeAlias));
+		async (label, amounts, alternateNames, sameAccount, amountKind, typicalAmount, cost) => {
 			const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
 			const name = `Example Current Stream ${label}`;
 			const oldName = `Example Previous Stream ${label}`;
 			const connection = await fixtures.createConnection(owner);
 			const currentBank = await fixtures.createBankAccount(connection);
-			const payeeGroupId = randomUUID();
 			const readAt = async (asOf: string) =>
 				(await ownerAgent.get('/recurring-series').query({asOf, direction: 'EXPENSE'}).expect(200))
 					.body as Awaited<ReturnType<typeof list>>;
@@ -663,22 +725,14 @@ describe('RecurringSeries', () => {
 				currentBank,
 				['2026-07', '2026-08', '2026-09', '2026-10'].map((month, index) =>
 					bookedRow(`${month}-10`, amounts[index], {
-						counterpartyName: alternateAliases && index % 2 === 0 ? `${name} Alternate` : name,
-						description: name,
+						counterpartyName: alternateNames && index % 2 === 0 ? `${name} Alternate` : name,
+						description: sepaNaming(name),
 					}),
 				),
 			);
 			const ids = current.map(({id}) => id);
 			const legacyKeys: string[] = [];
 			try {
-				await aliases.insert(
-					[...new Set(current.map(({merchantKey}) => merchantKey!))].map((merchantKey) => ({
-						accountId: owner.id,
-						merchantKey,
-						category: 'SUBSCRIPTIONS',
-						payeeGroupId,
-					})),
-				);
 				const [baseline] = byName((await readAt('2026-11-10')).series, name);
 				expect(baseline).toMatchObject({
 					amountKind,
@@ -702,7 +756,7 @@ describe('RecurringSeries', () => {
 				const previous = await fixtures.createTransactions(
 					sameAccount ? currentBank : ownerBankAccount,
 					['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'].map((month) =>
-						bookedRow(`${month}-03`, '-16.00', {counterpartyName: oldName, description: oldName}),
+						bookedRow(`${month}-03`, '-16.00', {counterpartyName: oldName, description: sepaNaming(name)}),
 					),
 				);
 				ids.push(...previous.map(({id}) => id));
@@ -723,12 +777,6 @@ describe('RecurringSeries', () => {
 				const savedDecisions = await decisions.find({
 					where: {accountId: owner.id, seriesKey: In(legacyKeys)},
 					order: {id: 'ASC'},
-				});
-				await aliases.insert({
-					accountId: owner.id,
-					merchantKey: previous[0].merchantKey!,
-					category: 'SUBSCRIPTIONS',
-					payeeGroupId,
 				});
 				let linkedKey: string | undefined;
 				for (const [index, date] of dates.entries()) {
@@ -781,7 +829,7 @@ describe('RecurringSeries', () => {
 					currentBank,
 					bookedRow('2026-11-10', amounts[0], {
 						counterpartyName: sameAccount ? previous[0].counterpartyName : current[0].counterpartyName,
-						description: name,
+						description: sepaNaming(name),
 					}),
 				);
 				ids.push(next.id);
@@ -812,7 +860,7 @@ describe('RecurringSeries', () => {
 					currentBank,
 					bookedRow('2026-12-16', amounts[0], {
 						counterpartyName: sameAccount ? previous[0].counterpartyName : current[0].counterpartyName,
-						description: name,
+						description: sepaNaming(name),
 					}),
 				);
 				ids.push(late.id);
@@ -837,7 +885,6 @@ describe('RecurringSeries', () => {
 				).toEqual(beforeRestart);
 			} finally {
 				if (legacyKeys.length) await decisions.delete({accountId: owner.id, seriesKey: In(legacyKeys)});
-				await aliases.delete({accountId: owner.id, payeeGroupId});
 				await fixtures.transactions.delete(ids);
 				await fixtures.connections.delete(connection.id);
 			}
@@ -845,20 +892,18 @@ describe('RecurringSeries', () => {
 	);
 
 	it('current-stream continuation: preserves a qualified raw-name anchor across recognized price parts', async () => {
-		const aliases: Repository<RecurringPayeeAlias> = app.get(getRepositoryToken(RecurringPayeeAlias));
 		const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
 		const name = 'Example Reconciled Current Prices';
 		const oldName = 'Example Reconciled Legacy Prices';
 		const connection = await fixtures.createConnection(owner);
 		const bank = await fixtures.createBankAccount(connection);
-		const payeeGroupId = randomUUID();
 		const keys: string[] = [];
 		const readAt = async (asOf = '2037-04-24') =>
 			(await ownerAgent.get('/recurring-series').query({asOf, direction: 'EXPENSE'}).expect(200)).body as Awaited<
 				ReturnType<typeof list>
 			>;
 		const row = (date: string, amount: string, counterpartyName = name) =>
-			bookedRow(date, amount, {counterpartyName, description: counterpartyName});
+			bookedRow(date, amount, {counterpartyName, description: sepaNaming(name)});
 		try {
 			const current = await fixtures.createTransactions(bank, [
 				...['2036-07', '2036-08', '2036-09', '2036-10', '2036-11'].map((month) => row(`${month}-24`, '-70.00')),
@@ -886,14 +931,6 @@ describe('RecurringSeries', () => {
 			const ids = [...previous, ...current].map(({id}) => id);
 			const allIds = [...ids, ...noise.map(({id}) => id)];
 			const snapshot = await fixtures.transactions.find({where: {id: In(allIds)}, order: {id: 'ASC'}});
-			await aliases.insert(
-				[previous[0], current[0]].map(({merchantKey}) => ({
-					accountId: owner.id,
-					merchantKey: merchantKey!,
-					category: 'SUBSCRIPTIONS',
-					payeeGroupId,
-				})),
-			);
 			const before = await readAt();
 			const [linked] = byName(before.series, name);
 			keys.push(linked.key);
@@ -953,7 +990,6 @@ describe('RecurringSeries', () => {
 			expect(await fixtures.transactions.find({where: {id: In(allIds)}, order: {id: 'ASC'}})).toEqual(snapshot);
 		} finally {
 			if (keys.length) await decisions.delete({accountId: owner.id, seriesKey: In(keys)});
-			await aliases.delete({accountId: owner.id, payeeGroupId});
 			await fixtures.connections.delete(connection.id);
 		}
 	});
