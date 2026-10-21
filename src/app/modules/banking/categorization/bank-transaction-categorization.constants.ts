@@ -1,4 +1,4 @@
-export const BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION = 'bank-transaction-categorization-v8';
+export const BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION = 'bank-transaction-categorization-v9';
 /** Only rows the owner selected in a correction preview; v1 rows were also filled automatically. */
 export const BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION = 'bank-transaction-manual-follow-up-v2';
 export const BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER = 'manual-history';

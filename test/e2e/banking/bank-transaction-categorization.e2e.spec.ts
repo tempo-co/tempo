@@ -34,7 +34,9 @@ import {
 	CATEGORIZATION_E2E_ONE_OFF_CHOICE_TRANSACTION_ID,
 	CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID,
+	CATEGORIZATION_E2E_REPEAT_AMOUNT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
+	CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_WEB_TRANSACTION_ID,
 	seedBankTransactionCategorizationData,
 } from '../../setup/e2e-categorization-data';
@@ -209,11 +211,43 @@ describe('Bank transaction categorization integration', () => {
 			),
 		);
 		expect(inputs.get(CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID)?.previousManualCategories).toEqual([
-			{category: 'TRANSPORTATION', count: 1, recentExamples: [{amount: '-20.00', currency: 'EUR', date: '2026-09-04'}]},
+			{
+				category: 'TRANSPORTATION',
+				count: 1,
+				recentExamples: [{amount: '-20.00', currency: 'EUR', date: '2026-09-04'}],
+			},
 		]);
 		expect(inputs.get(CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID)?.previousManualCategories).toEqual([
-			{category: 'ENTERTAINMENT', count: 1, recentExamples: [{amount: '-20.00', currency: 'EUR', date: '2026-09-04'}]},
+			{
+				category: 'ENTERTAINMENT',
+				count: 1,
+				recentExamples: [{amount: '-20.00', currency: 'EUR', date: '2026-09-04'}],
+			},
 		]);
+	});
+
+	it('sends earlier same-amount payments to the same payee only when there are at least two', async () => {
+		const ids = [CATEGORIZATION_E2E_REPEAT_AMOUNT_TRANSACTION_ID, CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID];
+		await app.get(BankTransactionCategorizationService).enqueueForTransactions(ids);
+		await Promise.all(
+			ids.map((id) =>
+				waitFor(
+					() => bankTransactionRepository.findOneByOrFail({id}),
+					(row) => row.categoryStatus === 'COMPLETED',
+				),
+			),
+		);
+		const inputs = new Map(
+			categorizeSpy.mock.calls.flatMap(([transactions]) =>
+				transactions.map((input) => [input.correlationId, input]),
+			),
+		);
+		// Same payee, amount and currency, earlier than the row, most recent first, with each payment's own note.
+		expect(inputs.get(CATEGORIZATION_E2E_REPEAT_AMOUNT_TRANSACTION_ID)?.sameAmountPayments).toEqual([
+			{date: '2026-08-28', category: 'HOUSING_AND_UTILITIES', source: 'MANUAL', text: 'To Example H'},
+			{date: '2026-07-28', category: 'HOUSING_AND_UTILITIES', source: 'AI', text: 'rent august To Example H'},
+		]);
+		expect(inputs.get(CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID)?.sameAmountPayments).toBeUndefined();
 	});
 
 	it("leaves the owner's one-off manual choice out of the next row's hint", async () => {

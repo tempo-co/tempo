@@ -53,6 +53,19 @@ export type BankTransactionCategorizationInput = {
 	 * most recent choices. Only a hint for the model; never applied without it. Not part of the input hash.
 	 */
 	previousManualCategories?: readonly PreviousManualCategory[];
+	/**
+	 * Earlier completed payments to the same payee with exactly this amount and currency, most recent first, sent only
+	 * when there are at least two. Lets the model reuse a consistent payment's category, such as monthly rent to a
+	 * person. Only a hint; not part of the input hash.
+	 */
+	sameAmountPayments?: readonly SameAmountPayment[];
+};
+
+export type SameAmountPayment = {
+	date: string | null;
+	category: BankTransactionCategory;
+	source: 'MANUAL' | 'AI';
+	text: string | null;
 };
 
 export type PreviousManualCategory = {

@@ -23,6 +23,7 @@ import {
 	createBankTransactionCategorizationInputHash,
 	toBankTransactionCategorizationInput,
 	toBankTransactionCategorizationWebSearchInput,
+	toSameAmountPaymentText,
 } from './bank-transaction-categorization-input';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
@@ -50,6 +51,7 @@ import {
 	BankTransactionCategorizationStatus,
 	CLAIMABLE_CATEGORIZATION_STATUSES,
 	PreviousManualCategory,
+	SameAmountPayment,
 	isManualCategorySource,
 	notManualCategorySourceSql,
 } from './bank-transaction-categorization.types';
@@ -306,20 +308,27 @@ export class BankTransactionCategorizationService {
 		// The owner's manual choices for the same merchant are only a hint for the model, never applied on their own:
 		// one payee can receive different kinds of payments, such as rent and small shared costs. A rule applies only
 		// when the owner has no choices for the merchant.
-		const manualHistory = await this.loadManualCategoryHistory(claimedBatch);
+		const [manualHistory, sameAmounts] = await Promise.all([
+			this.loadManualCategoryHistory(claimedBatch),
+			this.loadSameAmountPayments(claimedBatch),
+		]);
 		const activeBatch: ClaimedTransaction[] = [];
 		const ruleMatches: Promise<void>[] = [];
 		for (const claimed of claimedBatch) {
 			const previousManualCategories = manualHistory.get(claimed.transaction.id);
+			const sameAmountPayments = sameAmounts.get(claimed.transaction.id);
 			const ruleCategory = previousManualCategories ? null : getRuleCategory(claimed.transaction);
 			if (ruleCategory) {
 				ruleMatches.push(this.applyRuleCategory(claimed, ruleCategory));
 			} else {
-				activeBatch.push(
-					previousManualCategories
-						? {...claimed, input: {...claimed.input, previousManualCategories}}
-						: claimed,
-				);
+				activeBatch.push({
+					...claimed,
+					input: {
+						...claimed.input,
+						...(previousManualCategories ? {previousManualCategories} : {}),
+						...(sameAmountPayments ? {sameAmountPayments} : {}),
+					},
+				});
 			}
 		}
 		await Promise.all(ruleMatches);
@@ -510,6 +519,83 @@ export class BankTransactionCategorizationService {
 			return new Map();
 		}
 		return hintsByTransaction;
+	}
+
+	/**
+	 * Returns, per outgoing batch transaction, the owner's earlier completed payments to the same payee with exactly the
+	 * same amount and currency, when there are at least two. Like the manual history, a lookup failure only drops the
+	 * hint.
+	 */
+	private async loadSameAmountPayments(
+		batch: readonly ClaimedTransaction[],
+	): Promise<Map<string, readonly SameAmountPayment[]>> {
+		const batchByAccount = new Map<string, ClaimedTransaction[]>();
+		for (const claimed of batch) {
+			const accountId = claimed.transaction.bankAccount?.bankConnection?.accountId;
+			if (!accountId || !claimed.transaction.merchantKey || claimed.input.direction !== 'EXPENSE') continue;
+			batchByAccount.set(accountId, [...(batchByAccount.get(accountId) ?? []), claimed]);
+		}
+
+		const paymentsByTransaction = new Map<string, readonly SameAmountPayment[]>();
+		const date = 'COALESCE(transaction."transactionDate", transaction."bookingDate", transaction."valueDate")';
+		try {
+			await Promise.all(
+				[...batchByAccount].map(async ([accountId, entries]) => {
+					const merchantKeys = [...new Set(entries.map(({transaction}) => transaction.merchantKey!))];
+					const amounts = [...new Set(entries.map(({transaction}) => transaction.amount))];
+					const rows = await this.merchantHistoryQuery(accountId, merchantKeys)
+						.select('transaction.id', 'id')
+						.addSelect('transaction.merchantKey', 'merchantKey')
+						.addSelect('transaction.amount', 'amount')
+						.addSelect('transaction.currency', 'currency')
+						.addSelect('transaction.category', 'category')
+						.addSelect('transaction.categorySource', 'source')
+						.addSelect('transaction.description', 'description')
+						.addSelect('transaction.remittanceInformation', 'remittanceInformation')
+						.addSelect(`${date}::text`, 'date')
+						.andWhere('transaction."categoryStatus" = :completed', {completed: 'COMPLETED'})
+						.andWhere('transaction."categorySource" IN (:...sources)', {sources: ['MANUAL', 'AI']})
+						.andWhere('transaction.amount IN (:...amounts)', {amounts})
+						.orderBy(date, 'DESC', 'NULLS LAST')
+						.addOrderBy('transaction.id', 'DESC')
+						.getRawMany<{
+							id: string;
+							merchantKey: string;
+							amount: string;
+							currency: string;
+							category: BankTransactionCategory;
+							source: 'MANUAL' | 'AI';
+							description: string | null;
+							remittanceInformation: string | null;
+							date: string | null;
+						}>();
+					for (const {transaction} of entries) {
+						const ownDate = transaction.transactionDate ?? transaction.bookingDate ?? transaction.valueDate;
+						const payments = rows
+							.filter(
+								(row) =>
+									row.id !== transaction.id &&
+									row.merchantKey === transaction.merchantKey &&
+									row.amount === transaction.amount &&
+									row.currency === transaction.currency &&
+									(!ownDate || !row.date || row.date <= ownDate),
+							)
+							.slice(0, MAX_SAME_AMOUNT_PAYMENTS)
+							.map((row) => ({
+								date: row.date,
+								category: row.category,
+								source: row.source,
+								text: toSameAmountPaymentText(row),
+							}));
+						if (payments.length >= 2) paymentsByTransaction.set(transaction.id, payments);
+					}
+				}),
+			);
+		} catch (error) {
+			this.logger.warn(`Same-amount payment lookup failed: ${safeErrorName(error)}`);
+			return new Map();
+		}
+		return paymentsByTransaction;
 	}
 
 	/**
@@ -1036,6 +1122,8 @@ export class BankTransactionCategorizationService {
 
 /** Most recent manual choices per category the model sees as examples. */
 const MAX_MANUAL_CATEGORY_EXAMPLES = 5;
+/** Most recent same-amount payments to one payee the model sees. */
+const MAX_SAME_AMOUNT_PAYMENTS = 5;
 
 type ManualCategoryExample = PreviousManualCategory['recentExamples'][number];
 

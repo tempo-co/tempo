@@ -16,6 +16,8 @@ export const CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID = '00000000-0000-
 export const CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000108';
 export const CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000109';
 export const CATEGORIZATION_E2E_ONE_OFF_CHOICE_TRANSACTION_ID = '00000000-0000-4000-8000-000000000110';
+export const CATEGORIZATION_E2E_REPEAT_AMOUNT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000111';
+export const CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000112';
 const CATEGORIZATION_E2E_OTHER_ACCOUNT_EMAIL = 'categorization-other@test.com';
 
 export async function seedBankTransactionCategorizationData(app: INestApplicationContext): Promise<void> {
@@ -124,6 +126,72 @@ export async function seedBankTransactionCategorizationData(app: INestApplicatio
 			amount: '-17.00',
 			description: 'BEA, Google Pay Synthetic Market,PAS001 NR:SY0007, 09.09.26/09:15 SYNTHTOWN',
 			counterpartyName: null,
+		},
+	]);
+
+	// Transfers to one person: the same amount paid every month, and varying smaller amounts.
+	const personTransfer = {transactionType: BANK_TRANSACTION_TYPES.TRANSFER, counterpartyName: 'Example Housemate'};
+	const completed = (category: string, categorySource: string) => ({
+		category,
+		categoryStatus: 'COMPLETED',
+		categorySource,
+	});
+	await fixtures.createTransactions(bankAccount, [
+		{
+			...personTransfer,
+			...completed('HOUSING_AND_UTILITIES', 'AI'),
+			transactionDate: '2026-07-28',
+			amount: '-640.00',
+			description: 'To Example H',
+			remittanceInformation: 'rent august To Example H',
+		},
+		{
+			...personTransfer,
+			...completed('HOUSING_AND_UTILITIES', 'MANUAL'),
+			transactionDate: '2026-08-28',
+			amount: '-640.00',
+			description: 'To Example H',
+			remittanceInformation: 'To Example H',
+		},
+		// Same number in another currency, and a later payment: neither is earlier evidence for the September row.
+		{
+			...personTransfer,
+			...completed('SHOPPING', 'MANUAL'),
+			transactionDate: '2026-08-15',
+			amount: '-640.00',
+			currency: 'RON',
+			description: 'To Example H',
+		},
+		{
+			...personTransfer,
+			...completed('TRAVEL', 'MANUAL'),
+			transactionDate: '2026-10-28',
+			amount: '-640.00',
+			description: 'To Example H',
+		},
+		{
+			...personTransfer,
+			...completed('FOOD_AND_DRINK', 'MANUAL'),
+			transactionDate: '2026-08-20',
+			amount: '-12.00',
+			description: 'To Example H',
+			remittanceInformation: 'food To Example H',
+		},
+		{
+			...personTransfer,
+			id: CATEGORIZATION_E2E_REPEAT_AMOUNT_TRANSACTION_ID,
+			transactionDate: '2026-09-28',
+			amount: '-640.00',
+			description: 'To Example H',
+			remittanceInformation: 'To Example H',
+		},
+		{
+			...personTransfer,
+			id: CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID,
+			transactionDate: '2026-09-29',
+			amount: '-12.00',
+			description: 'To Example H',
+			remittanceInformation: 'To Example H',
 		},
 	]);
 

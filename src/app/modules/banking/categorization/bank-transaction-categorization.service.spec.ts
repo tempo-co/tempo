@@ -137,7 +137,7 @@ function createService({
 
 describe('BankTransactionCategorizationService provider behavior versions', () => {
 	it('versions sanitized transaction text separately from prior provider inputs', () => {
-		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v8');
+		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v9');
 		expect(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION).toBe(
 			'bank-transaction-categorization-web-search-v7',
 		);

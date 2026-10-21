@@ -192,6 +192,19 @@ export function createBankTransactionCategorizationInputHash(
 	return createHash('sha256').update(JSON.stringify(hashInput)).digest('hex');
 }
 
+const MAX_SAME_AMOUNT_PAYMENT_TEXT_LENGTH = 200;
+
+/** The sanitized note of an earlier payment, so the model can see whether it stated its purpose. */
+export function toSameAmountPaymentText(transaction: {
+	remittanceInformation: string | null;
+	description: string | null;
+}): string | null {
+	return sanitizeCategorizationText(
+		transaction.remittanceInformation ?? transaction.description,
+		MAX_SAME_AMOUNT_PAYMENT_TEXT_LENGTH,
+	);
+}
+
 function isCategorizationInput(
 	value: BankTransaction | BankTransactionCategorizationInput,
 ): value is BankTransactionCategorizationInput {
