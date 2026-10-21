@@ -30,7 +30,7 @@ The development environment uses variables from `.env.development`. To override 
 
 Optional AI categorization uses Claude with model `claude-opus-5-5` by default. `AI_CATEGORIZATION_ENABLED=false` keeps it off in development and tests. When enabled, configure `ANTHROPIC_API_KEY`, `AI_CATEGORIZATION_SUBSCRIPTION_SOCKET`, or both. The API route is tried first; the local subscription bridge is the fallback. No credentials are required while categorization is disabled.
 
-`AI_CATEGORIZATION_WEB_SEARCH_ENABLED=false` keeps merchant search off. Search uses only the Anthropic API; unresolved subscription results remain `NEEDS_REVIEW` without another API attempt. Results retain the actual route (`claude-api` or `claude-subscription`) and configured model. If neither route is available, rows stay pending for queue retries and hourly reconciliation, preserving same-input categories and manual overrides.
+`AI_CATEGORIZATION_WEB_SEARCH_ENABLED=false` keeps merchant search off. When enabled, the one merchant search runs on the Anthropic API, or on the subscription bridge when the API refuses the request. Results retain the actual route (`claude-api` or `claude-subscription`) and configured model. If neither route is available, for the normal pass or the search, rows stay pending for queue retries and hourly reconciliation, preserving same-input categories and manual overrides.
 
 pgAdmin requires a login; its password defaults to `DB_PASSWORD` and can be overridden by setting `PGADMIN_DEFAULT_PASSWORD` in the environment.
 

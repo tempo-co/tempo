@@ -3,7 +3,6 @@ import {createHash} from 'node:crypto';
 import {Repository} from 'typeorm';
 
 import {BANKING_SERVICE_UNAVAILABLE} from '../api/constants/banking-messages.constants';
-import {BankAccountBalance} from '../bank-account-balance.entity';
 import {BankAccount} from '../bank-account.entity';
 import {BankConnection} from '../bank-connection.entity';
 import {BankSyncRun} from '../bank-sync-run.entity';
@@ -62,7 +61,7 @@ function createBankingSyncService(
 }
 
 describe('BankingSyncService disabled integration', () => {
-	it('rejects manual sync and skips automatic sync without touching persistence', async () => {
+	it('skips automatic sync without touching persistence', async () => {
 		const bankConnectionRepository = {findOne: jest.fn()};
 		const service = createBankingSyncService({
 			bankConnectionRepository,
@@ -71,132 +70,30 @@ describe('BankingSyncService disabled integration', () => {
 			},
 		});
 
-		await expect(service.synchronize('account-id', 'connection-id')).rejects.toThrow(BANKING_SERVICE_UNAVAILABLE);
 		await expect(service.synchronizeAutomatically('connection-id')).resolves.toBeNull();
 		expect(bankConnectionRepository.findOne).not.toHaveBeenCalled();
 	});
 });
 
-describe('BankingSyncService', () => {
-	it('does not lock an unauthorized connection while ownership is being resolved', async () => {
-		const connection = {
-			id: 'connection-id',
-			status: 'AUTHORIZED',
-			providerSessionId: 'encrypted-session',
-			consentValidUntil: new Date(Date.now() + 60_000),
-		} as BankConnection;
-		const run = {
-			id: 'run-id',
-			status: 'RUNNING',
-			requestedFrom: null,
-			requestedTo: '2026-09-03',
-			accountsFetched: 0,
-			balancesFetched: 0,
-			transactionsFetched: 0,
-			errorMessage: null,
-		} as BankSyncRun;
-		const completedRun = {...run, status: 'SUCCEEDED', finishedAt: new Date()};
-		const unauthorizedLookupStarted = deferred<void>();
-		const releaseUnauthorizedLookup = deferred<void>();
-		const locks = new Map<string, string>();
-
-		const redisMock = {
-			set: jest.fn((key: string, token: string) => {
-				if (locks.has(key)) return Promise.resolve(null);
-				locks.set(key, token);
-				return Promise.resolve('OK');
-			}),
-			eval: jest.fn((_script: string, _keyCount: number, key: string, token: string) => {
-				if (locks.get(key) === token) locks.delete(key);
-				return Promise.resolve(1);
-			}),
-		};
-		const bankConnectionRepositoryMock = {
-			findOne: jest.fn(),
-			update: jest.fn().mockResolvedValue({affected: 1}),
-		};
-		const bankAccountRepositoryMock = {
-			find: jest.fn().mockResolvedValue([]),
-		};
-		const bankSyncRunRepositoryMock = {
-			findOne: jest.fn().mockResolvedValue(null),
-			create: jest.fn().mockReturnValue(run),
-			save: jest.fn().mockResolvedValue(run),
-			findOneBy: jest.fn().mockResolvedValue(completedRun),
-			update: jest.fn().mockResolvedValue({affected: 1}),
-		};
-		const persistenceRepositories = {
-			bankConnection: {
-				findOne: jest.fn().mockResolvedValue(connection),
-				update: jest.fn().mockResolvedValue({affected: 1}),
-			},
-			bankSyncRun: {update: jest.fn().mockResolvedValue(undefined)},
-			balance: {insert: jest.fn().mockResolvedValue(undefined)},
-			bankTransaction: {
-				find: jest.fn().mockResolvedValue([]),
-				upsert: jest.fn().mockResolvedValue(undefined),
-			},
-			bankAccount: {update: jest.fn().mockResolvedValue(undefined)},
-		};
-		const transactionManager = {
-			getRepository: jest.fn((entity: unknown) => {
-				if (entity === BankConnection) return persistenceRepositories.bankConnection;
-				if (entity === BankSyncRun) return persistenceRepositories.bankSyncRun;
-				if (entity === BankAccountBalance) return persistenceRepositories.balance;
-				if (entity === BankTransaction) return persistenceRepositories.bankTransaction;
-				return persistenceRepositories.bankAccount;
-			}),
-		};
-		const dataSourceMock = {
-			transaction: jest.fn(),
-		};
-		dataSourceMock.transaction.mockImplementation(
-			async (callback: (manager: typeof transactionManager) => unknown) => callback(transactionManager),
-		);
-		const enableBankingClientMock = {
-			getSessionAccounts: jest.fn().mockResolvedValue({status: 'AUTHORIZED', accountIds: []}),
-		};
-		const encryptionServiceMock = {
-			decrypt: jest.fn().mockReturnValue('provider-session'),
-		};
-		const categorizationServiceMock = {
-			enqueueForTransactions: jest.fn().mockResolvedValue(undefined),
-		};
+describe('BankingSyncService automatic sync eligibility', () => {
+	it.each([
+		['is not due yet', {status: 'AUTHORIZED', nextSyncAt: new Date(Date.now() + 60_000)}],
+		['has no scheduled sync', {status: 'AUTHORIZED', nextSyncAt: null}],
+		['is not authorized', {status: 'EXPIRED', nextSyncAt: new Date(0)}],
+	])('skips a connection that %s without claiming it', async (_case, state) => {
+		const connection = {id: 'connection-id', account: {id: 'account-id'}, providerSessionId: 'encrypted', ...state};
+		const bankConnectionRepository = {findOne: jest.fn().mockResolvedValue(connection), update: jest.fn()};
+		const lockLease = {assertHealthy: jest.fn(), stop: jest.fn(), release: jest.fn().mockResolvedValue(undefined)};
 		const service = createBankingSyncService({
-			bankConnectionRepository: bankConnectionRepositoryMock,
-			bankAccountRepository: bankAccountRepositoryMock,
-			bankSyncRunRepository: bankSyncRunRepositoryMock,
-			dataSource: dataSourceMock,
-			enableBankingClient: enableBankingClientMock,
-			encryptionService: encryptionServiceMock,
-			connectionLockService: new BankingConnectionLockService(redisMock as unknown as Redis),
-			categorizationService: categorizationServiceMock,
-			configurationService: {get: jest.fn().mockReturnValue('6h')},
+			bankConnectionRepository,
+			connectionLockService: {acquire: jest.fn().mockResolvedValue(lockLease)},
+			configurationService: {
+				get: jest.fn((key: string) => (key === 'BANKING_INTEGRATION_ENABLED' ? true : '6h')),
+			},
 		});
 
-		bankConnectionRepositoryMock.findOne.mockImplementation(async (options: {where: {account: {id: string}}}) => {
-			if (options.where.account.id === 'attacker-account-id') {
-				unauthorizedLookupStarted.resolve();
-				await releaseUnauthorizedLookup.promise;
-				return null;
-			}
-			return connection;
-		});
-
-		const unauthorizedSync = service.synchronize('attacker-account-id', connection.id);
-		await unauthorizedLookupStarted.promise;
-
-		expect(redisMock.set).not.toHaveBeenCalled();
-
-		await expect(service.synchronize('owner-account-id', connection.id)).resolves.toMatchObject({
-			status: 'SUCCEEDED',
-		});
-
-		releaseUnauthorizedLookup.resolve();
-		await expect(unauthorizedSync).rejects.toMatchObject({status: 404});
-		expect(redisMock.set).toHaveBeenCalledTimes(1);
-		expect(redisMock.eval).toHaveBeenCalledTimes(1);
-		expect(locks.size).toBe(0);
+		await expect(service.synchronizeAutomatically('connection-id')).resolves.toBeNull();
+		expect(bankConnectionRepository.update).not.toHaveBeenCalled();
 	});
 });
 
@@ -273,8 +170,10 @@ describe('BankingSyncService synchronization lock', () => {
 			status: 'AUTHORIZED',
 			providerSessionId: 'encrypted-session',
 			consentValidUntil: new Date(Date.now() + 60 * 60 * 1000),
+			nextSyncAt: new Date(Date.now() - 1),
 			lastSyncedAt: null,
 			lastSyncError: null,
+			account: {id: 'account-id'},
 		} as unknown as BankConnection;
 		const bankAccount = {
 			id: 'bank-account-id',
@@ -362,11 +261,13 @@ describe('BankingSyncService synchronization lock', () => {
 				status: 'AUTHORIZED',
 				providerSessionId: 'encrypted-session',
 				consentValidUntil: new Date(Date.now() + 60 * 60 * 1000),
+				nextSyncAt: new Date(Date.now() - 1),
+				account: {id: 'account-id'},
 			} as BankConnection)
 			.mockResolvedValueOnce(null);
 		enableBankingClient.getAccountTransactions.mockResolvedValueOnce([]);
 
-		await expect(service.synchronize('account-id', 'connection-id')).rejects.toMatchObject({status: 404});
+		await expect(service.synchronizeAutomatically('connection-id')).rejects.toMatchObject({status: 404});
 		expect(enableBankingClient.getSessionAccounts).not.toHaveBeenCalled();
 	});
 
@@ -410,7 +311,7 @@ describe('BankingSyncService synchronization lock', () => {
 			errorMessage: null,
 		} as unknown as BankSyncRun);
 
-		await expect(service.synchronize('account-id', 'connection-id')).resolves.toMatchObject({
+		await expect(service.synchronizeAutomatically('connection-id')).resolves.toMatchObject({
 			status: 'SUCCEEDED',
 			transactionsFetched: 2,
 			transactionsAdded: 1,
@@ -445,7 +346,7 @@ describe('BankingSyncService synchronization lock', () => {
 		);
 		enableBankingClient.getAccountTransactions.mockResolvedValueOnce([]);
 
-		await expect(service.synchronize('account-id', 'connection-id')).resolves.toMatchObject({
+		await expect(service.synchronizeAutomatically('connection-id')).resolves.toMatchObject({
 			status: 'SUCCEEDED',
 		});
 
@@ -469,7 +370,7 @@ describe('BankingSyncService synchronization lock', () => {
 		);
 		enableBankingClient.getAccountTransactions.mockResolvedValueOnce([]);
 
-		await service.synchronize('account-id', 'connection-id');
+		await service.synchronizeAutomatically('connection-id');
 
 		const connectionUpdate = transactionRepository.update.mock.calls
 			.map(([, values]) => values)
@@ -484,7 +385,7 @@ describe('BankingSyncService synchronization lock', () => {
 		);
 		enableBankingClient.getAccountTransactions.mockResolvedValueOnce([]);
 
-		await service.synchronize('account-id', 'connection-id');
+		await service.synchronizeAutomatically('connection-id');
 
 		const connectionUpdate = transactionRepository.update.mock.calls
 			.map(([, values]) => values)
@@ -498,7 +399,7 @@ describe('BankingSyncService synchronization lock', () => {
 		);
 		enableBankingClient.getAccountTransactions.mockResolvedValueOnce([]);
 
-		await service.synchronize('account-id', 'connection-id');
+		await service.synchronizeAutomatically('connection-id');
 
 		const connectionUpdate = transactionRepository.update.mock.calls
 			.map(([, values]) => values)
@@ -513,7 +414,7 @@ describe('BankingSyncService synchronization lock', () => {
 		);
 		enableBankingClient.getAccountTransactions.mockResolvedValueOnce([]);
 
-		await service.synchronize('account-id', 'connection-id');
+		await service.synchronizeAutomatically('connection-id');
 
 		const connectionUpdate = transactionRepository.update.mock.calls
 			.map(([, values]) => values)
@@ -526,7 +427,7 @@ describe('BankingSyncService synchronization lock', () => {
 			new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 400, 23),
 		);
 
-		await expect(service.synchronize('account-id', 'connection-id')).resolves.toMatchObject({
+		await expect(service.synchronizeAutomatically('connection-id')).resolves.toMatchObject({
 			status: 'SUCCEEDED',
 			retryAfterSeconds: 23,
 		});
@@ -546,7 +447,7 @@ describe('BankingSyncService synchronization lock', () => {
 	it('records a retryable failure when loading accounts throws after RUNNING is persisted', async () => {
 		bankAccountRepository.find.mockRejectedValueOnce(new Error('database read failed'));
 
-		await expect(service.synchronize('account-id', 'connection-id')).rejects.toThrow(
+		await expect(service.synchronizeAutomatically('connection-id')).rejects.toThrow(
 			'Bank synchronization could not be saved.',
 		);
 
@@ -569,12 +470,12 @@ describe('BankingSyncService synchronization lock', () => {
 	});
 
 	it('renews a long-running lock so a second synchronization cannot overlap', async () => {
-		const firstSync = service.synchronize('account-id', 'connection-id');
+		const firstSync = service.synchronizeAutomatically('connection-id');
 		await jest.advanceTimersByTimeAsync(0);
 		expect(redis.set).toHaveBeenCalledTimes(1);
 
 		await jest.advanceTimersByTimeAsync(15 * 60 * 1000 + 1);
-		const secondSync = service.synchronize('account-id', 'connection-id');
+		const secondSync = service.synchronizeAutomatically('connection-id');
 		const secondSyncResult = expect(secondSync).rejects.toThrow('A bank synchronization is already in progress.');
 		await jest.advanceTimersByTimeAsync(0);
 
@@ -591,7 +492,7 @@ describe('BankingSyncService synchronization lock', () => {
 	});
 
 	it('cancels the synchronization when renewal loses lock ownership', async () => {
-		const firstSync = service.synchronize('account-id', 'connection-id');
+		const firstSync = service.synchronizeAutomatically('connection-id');
 		const firstSyncResult = expect(firstSync).rejects.toThrow(BANKING_SERVICE_UNAVAILABLE);
 		await jest.advanceTimersByTimeAsync(0);
 

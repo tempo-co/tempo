@@ -221,16 +221,7 @@ test('isolates CLI environment, stdin and empty working directory', async (t) =>
 });
 
 test('rejects unsafe CLI runtime initialization and overage before accepting a result', async (t) => {
-	for (const mode of [
-		'api-key',
-		'tools',
-		'mcp',
-		'overage',
-		'overage-allowed',
-		'no-rate-limit',
-		'no-init',
-		'tool-call',
-	]) {
+	for (const mode of ['api-key', 'tools', 'mcp', 'overage', 'overage-allowed', 'no-rate-limit', 'no-init']) {
 		await t.test(mode, async (t) => {
 			const {socketPath} = await setup(t, {mode});
 			assert.deepEqual(await request(socketPath), {status: 503, body: {error: 'claude_unavailable'}});
@@ -238,12 +229,25 @@ test('rejects unsafe CLI runtime initialization and overage before accepting a r
 	}
 });
 
-test('returns sanitized 503 for quota, CLI errors and invalid classification output', async (t) => {
+test('rejects a run whose model calls a tool, as a failed run rather than a refusal', async (t) => {
+	for (const mode of ['tool-call', 'standard-search'])
+		await t.test(mode, async (t) => {
+			const {socketPath} = await setup(t, {mode});
+			assert.deepEqual(await request(socketPath), {status: 502, body: {error: 'claude_failed'}});
+		});
+});
+
+test('returns a sanitized 503 for quota and CLI errors before any result', async (t) => {
+	for (const mode of ['quota', 'cli-error', 'bad-json', 'missing-result']) {
+		await t.test(mode, async (t) => {
+			const {socketPath} = await setup(t, {mode});
+			assert.deepEqual(await request(socketPath), {status: 503, body: {error: 'claude_unavailable'}});
+		});
+	}
+});
+
+test('returns a sanitized 502 for a run that returned invalid classification output', async (t) => {
 	for (const mode of [
-		'quota',
-		'cli-error',
-		'bad-json',
-		'missing-result',
 		'failure-result',
 		'wrong-id',
 		'duplicate-id',
@@ -254,7 +258,7 @@ test('returns sanitized 503 for quota, CLI errors and invalid classification out
 	]) {
 		await t.test(mode, async (t) => {
 			const {socketPath} = await setup(t, {mode});
-			assert.deepEqual(await request(socketPath), {status: 503, body: {error: 'claude_unavailable'}});
+			assert.deepEqual(await request(socketPath), {status: 502, body: {error: 'claude_failed'}});
 		});
 	}
 });
@@ -311,7 +315,9 @@ test('bounds combined child stdout and stderr', async (t) => {
 	for (const mode of ['large-stdout', 'large-stderr'])
 		await t.test(mode, async (t) => {
 			const {socketPath} = await setup(t, {mode});
-			assert.deepEqual(await request(socketPath), {status: 503, body: {error: 'claude_unavailable'}});
+			// The limit can trip before or after the result arrives; either way the output is refused.
+			const {status} = await request(socketPath);
+			assert.ok([502, 503].includes(status), String(status));
 		});
 });
 
@@ -500,20 +506,24 @@ test('searches once with the pinned query hook and returns only source hostnames
 });
 
 test('refuses a search result unless exactly one pinned search succeeded', async (t) => {
-	for (const mode of [
-		'search-none',
-		'search-twice',
-		'search-other-query',
-		'search-denied',
-		'search-no-evidence',
-		'tools',
-		'tool-call',
-		'overage',
-		'near-limit-overage',
+	// 503 when refused before the model acted, so a retry cannot search twice; 502 once it called a tool or
+	// returned a result.
+	const refused = {status: 503, body: {error: 'claude_unavailable'}};
+	const failed = {status: 502, body: {error: 'claude_failed'}};
+	for (const [mode, expected] of [
+		['search-none', failed],
+		['search-twice', failed],
+		['search-other-query', failed],
+		['search-denied', failed],
+		['search-no-evidence', failed],
+		['tools', refused],
+		['tool-call', failed],
+		['overage', refused],
+		['near-limit-overage', refused],
 	])
 		await t.test(mode, async (t) => {
 			const {socketPath} = await setup(t, {mode});
-			assert.deepEqual(await searchRequest(socketPath), {status: 503, body: {error: 'claude_unavailable'}});
+			assert.deepEqual(await searchRequest(socketPath), expected);
 		});
 });
 
@@ -531,11 +541,6 @@ test('rejects malformed search requests without spawning a categorizer', async (
 	])
 		assert.equal((await searchRequest(socketPath, body)).status, 400);
 	assert.equal(calls.length, 1);
-});
-
-test('keeps the standard route tool-free even when the CLI tries a search', async (t) => {
-	const {socketPath} = await setup(t, {mode: 'standard-search'});
-	assert.deepEqual(await request(socketPath), {status: 503, body: {error: 'claude_unavailable'}});
 });
 
 export {payload, expected, request, setup};
