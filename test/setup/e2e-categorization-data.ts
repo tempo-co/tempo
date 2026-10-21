@@ -137,6 +137,23 @@ export async function seedBankTransactionCategorizationData(app: INestApplicatio
 		categorySource,
 	});
 	await fixtures.createTransactions(bankAccount, [
+		// Older no-note transfers of the same amount must not push the payments that stated rent out of view.
+		...['2026-05-01', '2026-05-02', '2026-05-03', '2026-05-04', '2026-05-05'].map((transactionDate) => ({
+			...personTransfer,
+			...completed('TRANSFER_OUT', 'AI'),
+			transactionDate,
+			amount: '-640.00',
+			description: 'To Example H',
+			remittanceInformation: 'To Example H',
+		})),
+		{
+			...personTransfer,
+			...completed('HOUSING_AND_UTILITIES', 'MANUAL'),
+			transactionDate: '2026-08-10',
+			amount: '-640.00',
+			description: 'To Example H',
+			remittanceInformation: 'To Example H',
+		},
 		{
 			...personTransfer,
 			...completed('HOUSING_AND_UTILITIES', 'AI'),

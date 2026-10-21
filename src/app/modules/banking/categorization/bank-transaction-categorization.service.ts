@@ -579,14 +579,22 @@ export class BankTransactionCategorizationService {
 								row.currency === transaction.currency &&
 								(!ownDate || !row.date || row.date <= ownDate),
 						);
-						// The owner's picks first, newest first. AI rows oldest first: the payments that first stated a
-						// purpose stay in view when later rows carry the category without one.
+						// The owner's picks newest first. From AI rows, the two oldest per category: the payments that
+						// first stated a purpose stay in view when later rows carry the category without one.
+						const aiPerCategory = new Map<BankTransactionCategory, number>();
 						const payments = [
-							...earlier.filter(({source}) => source === 'MANUAL').slice(0, MAX_SAME_AMOUNT_PAYMENTS),
+							...earlier
+								.filter(({source}) => source === 'MANUAL')
+								.slice(0, MAX_SAME_AMOUNT_MANUAL_PAYMENTS),
 							...earlier
 								.filter(({source}) => source === 'AI')
 								.reverse()
-								.slice(0, MAX_SAME_AMOUNT_PAYMENTS),
+								.filter(({category}) => {
+									const count = aiPerCategory.get(category) ?? 0;
+									aiPerCategory.set(category, count + 1);
+									return count < 2;
+								})
+								.slice(0, MAX_SAME_AMOUNT_AI_PAYMENTS),
 						].map((row) => ({
 							date: row.date,
 							category: row.category,
@@ -625,8 +633,8 @@ export class BankTransactionCategorizationService {
 	}
 
 	/**
-	 * The amounts, currencies and dates of the owner's most recent manual choices per merchant and category, so the model can tell
-	 * apart different kinds of payments to the same payee. Uses the same eligibility rules as the counts.
+	 * The amounts, currencies and dates of the owner's most recent manual choices per merchant and category, so the
+	 * model can tell apart different kinds of payments to the same payee. Uses the same eligibility rules as the counts.
 	 */
 	private async loadAccountManualCategoryExamples(
 		accountId: string,
@@ -1128,8 +1136,9 @@ export class BankTransactionCategorizationService {
 
 /** Most recent manual choices per category the model sees as examples. */
 const MAX_MANUAL_CATEGORY_EXAMPLES = 5;
-/** Same-amount payments to one payee the model sees, per source. */
-const MAX_SAME_AMOUNT_PAYMENTS = 5;
+/** Same-amount payments to one payee the model sees, per source; the bridge accepts the sum. */
+const MAX_SAME_AMOUNT_MANUAL_PAYMENTS = 5;
+const MAX_SAME_AMOUNT_AI_PAYMENTS = 10;
 
 type ManualCategoryExample = PreviousManualCategory['recentExamples'][number];
 

@@ -610,7 +610,7 @@ test('accepts history hints with currencies and same-amount payments, and reject
 			],
 		},
 		{sameAmountPayments: [payment()]},
-		{sameAmountPayments: Array.from({length: 11}, () => payment())},
+		{sameAmountPayments: Array.from({length: 16}, () => payment())},
 		{sameAmountPayments: [payment(), payment({source: 'RULE'})]},
 		{sameAmountPayments: [payment(), payment({category: 'NOT_A_CATEGORY'})]},
 		{sameAmountPayments: [payment(), {...payment(), amount: '-640'}]},
