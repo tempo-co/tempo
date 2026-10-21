@@ -224,6 +224,9 @@ export async function startBridge({
 		res.on('close', () => {
 			if (!res.writableFinished) caller.abort();
 		});
+		let result;
+		// Set once the model calls a tool: a failure after that is the run's, not a refusal.
+		let modelActed = false;
 		try {
 			const chunks = [];
 			let bodyBytes = 0;
@@ -244,7 +247,6 @@ export async function startBridge({
 			await verifySubscription();
 			let initialized = false;
 			let overageRejected = false;
-			let result;
 			let searchId;
 			let domains;
 			await run(
@@ -276,6 +278,7 @@ export async function startBridge({
 					}
 					for (const item of Array.isArray(event.message?.content) ? event.message.content : []) {
 						if (item.type === 'tool_use' && item.name !== 'StructuredOutput') {
+							modelActed = true;
 							// One search, with exactly the pinned query; the hook enforces the same before it runs.
 							if (
 								!search ||
@@ -311,7 +314,10 @@ export async function startBridge({
 				throw new Error('Invalid result.');
 			reply(200, search ? {...result.structured_output, sourceDomains: domains} : result.structured_output);
 		} catch {
-			reply(503, {error: 'claude_unavailable'});
+			// 503: refused before the model acted (quota, overage, unsafe runtime), so the caller may retry. 502: the model
+			// called a tool or returned a result, so a retry could search again or fail the same way.
+			if (modelActed || result !== undefined) reply(502, {error: 'claude_failed'});
+			else reply(503, {error: 'claude_unavailable'});
 		} finally {
 			busy = false;
 		}

@@ -366,12 +366,19 @@ export class BankTransactionCategorizationService {
 
 		const webResults: BankTransactionCategorizationResult[] = [];
 		const failedWebSearchIds = new Set<string>();
+		// Rows whose search could run on neither route wait for the hourly retry instead of going to review.
+		const unavailableWebSearch: ClaimedTransaction[] = [];
+		let searchUnavailable: BankTransactionCategorizationUnavailableError | undefined;
 		const claimedByCorrelationId = new Map(
 			activeBatchAfterStandardCategorization.map((claimed) => [claimed.input.correlationId, claimed]),
 		);
 		for (const webSearchInput of webCandidates) {
 			const claimed = claimedByCorrelationId.get(webSearchInput.correlationId);
 			if (!claimed) continue;
+			if (searchUnavailable) {
+				unavailableWebSearch.push(claimed);
+				continue;
+			}
 			const activeBeforeWebSearch = await this.getActiveClaimedTransactions([claimed]);
 			if (activeBeforeWebSearch.length === 0) continue;
 			try {
@@ -383,16 +390,21 @@ export class BankTransactionCategorizationService {
 				webResults.push(...candidateResults.map((result) => this.normalizeWebSearchResult(result)));
 			} catch (error) {
 				this.logger.warn(`Transaction web-search fallback failed: ${safeErrorName(error)}`);
-				failedWebSearchIds.add(webSearchInput.correlationId);
+				if (error instanceof BankTransactionCategorizationUnavailableError) {
+					searchUnavailable = error;
+					unavailableWebSearch.push(claimed);
+				} else failedWebSearchIds.add(webSearchInput.correlationId);
 			}
 		}
+		if (searchUnavailable) await this.markBatchFailed(unavailableWebSearch, searchUnavailable);
+		const unavailableIds = new Set(unavailableWebSearch.map(({input}) => input.correlationId));
 
 		for (const result of webResults) standardResultById.set(result.correlationId, result);
 		const webResultIds = new Set(webResults.map(({correlationId}) => correlationId));
 		await Promise.all(
 			activeBatchAfterStandardCategorization.map(async (claimed) => {
 				const result = standardResultById.get(claimed.input.correlationId);
-				if (!result) return;
+				if (!result || unavailableIds.has(claimed.input.correlationId)) return;
 				const promptVersion = webResultIds.has(claimed.input.correlationId)
 					? BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION
 					: skippedWebSearchIds.has(claimed.input.correlationId)
@@ -410,6 +422,8 @@ export class BankTransactionCategorizationService {
 				});
 			}),
 		);
+		// Completed rows are no longer claimable, so the queue retry only picks up the pending ones.
+		if (searchUnavailable) throw searchUnavailable;
 	}
 
 	private async refreshInputHashAndResetStaleClassification(

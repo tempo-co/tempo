@@ -148,7 +148,8 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 
 	/**
 	 * Runs the row's one search: on the API, or on the subscription bridge when the API refused the request outright.
-	 * After a timeout or an incomplete reply the search may already have run, so there is no second attempt.
+	 * After a timeout or an incomplete reply the search may already have run, so there is no second attempt. When the
+	 * API refused and the subscription refused too, nothing searched, so the row stays pending for a retry.
 	 */
 	private async searchOnce(
 		request: MessageCreateParamsNonStreaming,
@@ -159,18 +160,27 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		try {
 			response = await this.callApi(request);
 		} catch (error) {
-			if (!this.subscriptionSocket || !this.refusedBeforeRunning(error))
+			if (!this.refusedBeforeRunning(error)) return {provider: CLAUDE_API, domains: []};
+			if (!this.subscriptionSocket) {
+				// Without a fallback, wait only for refusals that clear on their own, not a request the API always rejects.
+				if (this.transientRefusal(error)) throw new BankTransactionCategorizationUnavailableError();
 				return {provider: CLAUDE_API, domains: []};
+			}
 		}
 		if (response) {
 			// The bridge's hook enforces the query before searching; on the API it can only be checked afterwards.
 			if (response.queries.length !== 1 || response.queries[0] !== query) throw this.invalidResponseError();
 			return {provider: CLAUDE_API, output: this.parseJson(response.text), domains: response.domains};
 		}
+		let reply: string;
 		try {
-			const {sourceDomains, ...output} = this.parseJson(
-				await this.callSubscription(input, '/categorize-with-search'),
-			) as {sourceDomains?: unknown};
+			reply = await this.callSubscription(input, '/categorize-with-search');
+		} catch (error) {
+			if (error instanceof BankTransactionCategorizationUnavailableError) throw error;
+			return {provider: CLAUDE_SUBSCRIPTION, domains: []};
+		}
+		try {
+			const {sourceDomains, ...output} = this.parseJson(reply) as {sourceDomains?: unknown};
 			return {provider: CLAUDE_SUBSCRIPTION, output, domains: this.toSourceDomains(sourceDomains)};
 		} catch {
 			return {provider: CLAUDE_SUBSCRIPTION, domains: []};
@@ -245,6 +255,13 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			}
 		}
 		return {text, domains: this.toSourceDomains(hostnames), queries};
+	}
+
+	/** Refusals that clear on their own: no key, auth, rate limit, overload. */
+	private transientRefusal(error: unknown): boolean {
+		if (error instanceof BankTransactionCategorizationUnavailableError) return true;
+		const status = (error as {status?: unknown} | null)?.status;
+		return typeof status === 'number' && [401, 403, 429, 529].includes(status);
 	}
 
 	/** An HTTP refusal (billing, auth, rate limit, overload) means the request, and so its search, never ran. */
@@ -341,7 +358,10 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 						if (response.statusCode === 409)
 							this.logger.warn('Claude bridge contract mismatch; reinstall and restart the bridge.');
 						if (response.statusCode === 200) resolve(Buffer.concat(chunks).toString('utf8'));
-						else reject(new BankTransactionCategorizationUnavailableError());
+						// The bridge refused before running (busy, unavailable, outdated contract): safe to retry.
+						else if ([404, 409, 415, 503].includes(response.statusCode ?? 0))
+							reject(new BankTransactionCategorizationUnavailableError());
+						else reject(new Error('Subscription run failed.'));
 					});
 				},
 			);
@@ -350,7 +370,14 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 				SUBSCRIPTION_TIMEOUT_MS,
 			);
 			request.on('close', () => clearTimeout(timer));
-			request.on('error', reject);
+			// No bridge listening: nothing ran. A timeout or a reply over the limit may come after a run.
+			request.on('error', (error: NodeJS.ErrnoException) =>
+				reject(
+					['ENOENT', 'ECONNREFUSED', 'EACCES'].includes(error.code ?? '')
+						? new BankTransactionCategorizationUnavailableError()
+						: error,
+				),
+			);
 			request.end(body);
 		});
 	}

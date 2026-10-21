@@ -49,6 +49,7 @@ const WEB_CATEGORY = 'SHOPPING' as const;
 const WEB_CONFIDENCE = 0.812;
 let shouldFail = false;
 let routesUnavailable = false;
+let searchUnavailable = false;
 
 const categorizeSpy = jest
 	.spyOn(ClaudeBankTransactionCategorizationProvider.prototype, 'categorize')
@@ -75,14 +76,16 @@ const categorizeWithWebSearchSpy = jest
 	.mockImplementation(
 		async (
 			transactions: readonly BankTransactionCategorizationWebSearchInput[],
-		): Promise<readonly BankTransactionCategorizationResult[]> =>
-			transactions.map(({correlationId}) => ({
+		): Promise<readonly BankTransactionCategorizationResult[]> => {
+			if (searchUnavailable) throw new BankTransactionCategorizationUnavailableError();
+			return transactions.map(({correlationId}) => ({
 				correlationId,
 				category: WEB_CATEGORY,
 				confidence: WEB_CONFIDENCE,
 				provider: 'claude-api',
 				model: 'test-model',
-			})),
+			}));
+		},
 	);
 
 async function waitFor<T>(read: () => Promise<T>, predicate: (value: T) => boolean, timeoutMs = 10_000): Promise<T> {
@@ -125,6 +128,7 @@ describe('Bank transaction categorization integration', () => {
 	beforeEach(() => {
 		shouldFail = false;
 		routesUnavailable = false;
+		searchUnavailable = false;
 		categorizeSpy.mockClear();
 		categorizeWithWebSearchSpy.mockClear();
 	});
@@ -382,6 +386,45 @@ describe('Bank transaction categorization integration', () => {
 			category: WEB_CATEGORY,
 			categorySource: 'AI',
 			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
+		});
+	});
+
+	it('keeps a row pending when its web search is unavailable on both routes, then completes it on retry', async () => {
+		searchUnavailable = true;
+		const categorizationService = app.get(BankTransactionCategorizationService);
+		await bankTransactionRepository.update(CATEGORIZATION_E2E_WEB_TRANSACTION_ID, {
+			category: null,
+			categoryStatus: 'PENDING',
+			categorySource: null,
+			categoryConfidence: null,
+			categoryAppliedInputHash: null,
+			categoryProvider: null,
+			categoryModel: null,
+			categoryPromptVersion: null,
+			categorySearchTrace: null,
+			categoryLastError: null,
+		});
+		await expect(
+			categorizationService.processTransactionJob([CATEGORIZATION_E2E_WEB_TRANSACTION_ID]),
+		).rejects.toThrow(BankTransactionCategorizationUnavailableError);
+		const pending = await bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_WEB_TRANSACTION_ID});
+		expect(pending).toMatchObject({
+			category: null,
+			categoryStatus: 'PENDING',
+			categoryLastError: 'Claude categorization is temporarily unavailable.',
+		});
+		expect(categorizeWithWebSearchSpy).toHaveBeenCalledTimes(1);
+
+		searchUnavailable = false;
+		await categorizationService.reconcilePendingTransactions({includeFailed: false});
+		const recovered = await waitFor(
+			() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_WEB_TRANSACTION_ID}),
+			(row) => row.categoryStatus === 'COMPLETED',
+		);
+		expect(recovered).toMatchObject({
+			category: WEB_CATEGORY,
+			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
+			categoryLastError: null,
 		});
 	});
 
