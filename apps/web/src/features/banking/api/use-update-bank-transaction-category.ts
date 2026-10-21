@@ -1,7 +1,7 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {toast} from 'sonner';
 
-import {HttpError, api} from '@/utils/api';
+import {HttpError, api, isAuthError} from '@/utils/api';
 
 import {
   BANK_TRANSACTION_UNCATEGORIZED,
@@ -71,12 +71,18 @@ export const useUpdateBankTransactionCategory = () => {
     },
   });
 
-  const updateBankTransactionCategory = (input: UpdateBankTransactionCategoryInput) =>
-    toast.promise(mutateAsync(input), {
-      loading: 'Saving category...',
-      success: 'Transaction category saved.',
-      error: 'Transaction category could not be saved. Please try again.',
-    });
+  const updateBankTransactionCategory = async (input: UpdateBankTransactionCategoryInput) => {
+    // The select and its status line show progress and the saved category; only failures toast.
+    try {
+      return await mutateAsync(input);
+    } catch (error) {
+      // An expired session or unverified email has its own toast and redirect.
+      if (!isAuthError(error)) {
+        toast.error('Transaction category could not be saved. Please try again.');
+      }
+      throw error;
+    }
+  };
 
   return {updateBankTransactionCategory, isPending};
 };

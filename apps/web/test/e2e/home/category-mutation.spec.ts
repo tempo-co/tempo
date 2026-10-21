@@ -13,8 +13,8 @@ function mutationHarness(response: Record<string, unknown>, reject = false) {
   const request = () =>
     reject ? Promise.reject(new Error('Synthetic mutation failure')) : Promise.resolve(response);
   const {client, renderHook} = createHookHarness({
-    '@/utils/api': {api: {patch: request, delete: request}},
-    sonner: {toast: {promise: (promise: Promise<unknown>) => promise}},
+    '@/utils/api': {api: {patch: request, delete: request}, isAuthError: () => false},
+    sonner: {toast: {promise: (promise: Promise<unknown>) => promise, error: () => undefined}},
   });
   const hook = <T>(filename: string, exportName: string) =>
     renderHook<T>(`src/features/banking/api/${filename}`, exportName);

@@ -54,8 +54,6 @@ export function App() {
         </React.Suspense>
       )}
       <Toaster
-        expand
-        duration={5000}
         offset={hasTabBar ? {bottom: TAB_BAR_TOAST_OFFSET} : undefined}
         mobileOffset={hasTabBar ? {bottom: TAB_BAR_TOAST_OFFSET} : undefined}
       />

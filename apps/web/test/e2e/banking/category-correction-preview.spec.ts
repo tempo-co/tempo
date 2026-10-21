@@ -135,6 +135,19 @@ async function holdPreview(page: Page, body: unknown) {
   return release;
 }
 
+/** Holds the save until the returned function is called, then lets the mocked save answer. */
+async function holdSave(page: Page) {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**/bank-transactions/${ID}/category`, async (route) => {
+    await held;
+    await route.fallback();
+  });
+  return release;
+}
+
 for (const viewport of [
   {width: 1280, height: 800},
   {width: 390, height: 844},
@@ -198,16 +211,27 @@ for (const viewport of [
       expect(state.writes).toEqual([{category: 'TRAVEL', applyToTransactionIds: []}]);
     });
 
-    test('saves without a confirmation when the preview is empty', async ({page}) => {
+    test('an empty preview saves straight away, showing Saving… and then the saved category', async ({
+      page,
+    }) => {
       const state = await mockCorrection(page, {
         action: null,
         category: null,
         transactions: [],
         total: 0,
       });
-      await chooseTravel(page);
+      const releaseSave = await holdSave(page);
+      const status = page.getByTestId('bank-transaction-category-status');
+      try {
+        await chooseTravel(page);
+        await expect(status).toHaveText('Saving…');
+        await expect(categorySelect(page)).toBeDisabled();
+        await expect(page.getByTestId('category-impact-dialog')).toHaveCount(0);
+      } finally {
+        releaseSave();
+      }
       await expect(categorySelect(page)).toHaveText('Travel');
-      await expect(page.getByTestId('category-impact-dialog')).toHaveCount(0);
+      await expect(status).toHaveText('Categorized · Manual');
       expect(state.writes).toEqual([{category: 'TRAVEL', applyToTransactionIds: []}]);
     });
 

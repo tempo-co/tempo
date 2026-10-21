@@ -55,7 +55,7 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
         id: transaction.id,
         category,
         applyToTransactionIds,
-      }).unwrap();
+      });
       setDraft(null);
     } catch {
       // The mutation toast reports the error; keep the preview and selection so the owner can retry.
@@ -120,7 +120,9 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
         data-testid='bank-transaction-category-status'
         className='mt-2 text-xs text-muted-foreground'
       >
-        <span>{isChecking ? 'Checking other transactions…' : statusLabel}</span>
+        <span>
+          {isChecking ? 'Checking other transactions…' : isPending ? 'Saving…' : statusLabel}
+        </span>
         {sourceLabel && (
           <>
             <span aria-hidden='true'> · </span>
