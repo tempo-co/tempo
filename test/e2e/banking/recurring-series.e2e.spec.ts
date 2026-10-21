@@ -225,14 +225,14 @@ describe('RecurringSeries', () => {
 				),
 			);
 			expect(streamDrills).toEqual([parallel, moved].map((part) => part.map(({id}) => id).sort()));
-			series.splice(0, series.length, ...byName(series, 'Example Academy'));
+			const [academy] = byName(series, 'Example Academy');
 			const drill = await fresh.agent
 				.get('/bank-transactions')
-				.query({filter: {recurringSeriesKey: series[0].key}, pagination: {pageIndex: 0, pageSize: 50}})
+				.query({filter: {recurringSeriesKey: academy.key}, pagination: {pageIndex: 0, pageSize: 50}})
 				.expect(200);
 			expect(drill.body.transactions.map(({id}: {id: string}) => id).sort()).toEqual([...ids].sort());
 			await fresh.agent
-				.patch(`/recurring-series/${series[0].key}/decision`)
+				.patch(`/recurring-series/${academy.key}/decision`)
 				.send({decision: 'CONFIRMED'})
 				.expect(204);
 			expect((await read()).confirmedMonthlyTotal).toBe('80.00');
@@ -1477,8 +1477,8 @@ describe('RecurringSeries', () => {
 				const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
 				const before = await read();
 				const [previous, current] = [
-					byName(before.series, 'Example Motion Ltd') as PromptSeries[],
-					byName(before.series, 'Example Motion Exampletown') as PromptSeries[],
+					byName(before.series, 'Example Motion Ltd'),
+					byName(before.series, 'Example Motion Exampletown'),
 				].map(([entry]) => entry);
 				expect(before.series).toHaveLength(2);
 				expect(previous).toMatchObject({status: 'ENDED', transactionCount: 3, continuation: null});
@@ -1564,7 +1564,7 @@ describe('RecurringSeries', () => {
 		it('asks nothing about a dismissed history, and resetting a linked history leaves other decisions alone', async () => {
 			const {connection, first, read, answer, decide} = await renamedPlan();
 			try {
-				const sibling = await fixtures.createTransactions(
+				await fixtures.createTransactions(
 					first,
 					monthly('20', '-9.00', 'Example Other Club', {description: null}),
 				);
@@ -1602,28 +1602,34 @@ describe('RecurringSeries', () => {
 					['Example Motion Ltd', null],
 					['Example Other Club', 'CONFIRMED'],
 				]);
-				expect(sibling).toHaveLength(6);
 			} finally {
 				await fixtures.connections.delete(connection.id);
 			}
 		});
 
-		it('unlinks a history in one step after duplicate answers and an even older history', async () => {
-			const {freshOwner, connection, first, read, answer} = await renamedPlan();
+		it('keeps one answer when two clients answer at the same moment', async () => {
+			const {freshOwner, connection, read, answer} = await renamedPlan();
 			try {
 				const [current] = byName((await read()).series, 'Example Motion Exampletown');
-				await answer(current.key, 'LINKED').expect(204);
-				// A second client answered at the same moment.
+				const statuses = (
+					await Promise.all([answer(current.key, 'LINKED'), answer(current.key, 'SEPARATE')])
+				).map(({status}) => status);
+				// The later request either finds the question already answered or loses the race to it.
+				expect(statuses.sort((a, b) => a - b)).toEqual([204, statuses.includes(409) ? 409 : 404]);
 				const choices: Repository<RecurringContinuationChoice> = app.get(
 					getRepositoryToken(RecurringContinuationChoice),
 				);
-				const [saved] = await choices.findBy({accountId: freshOwner.id});
-				await choices.insert({
-					accountId: saved.accountId,
-					choice: 'LINKED',
-					olderTransactionIds: saved.olderTransactionIds,
-					newerTransactionIds: saved.newerTransactionIds,
-				});
+				expect(await choices.countBy({accountId: freshOwner.id})).toBe(1);
+			} finally {
+				await fixtures.connections.delete(connection.id);
+			}
+		});
+
+		it('unlinks a history in one step after an even older history arrives', async () => {
+			const {connection, first, read, answer} = await renamedPlan();
+			try {
+				const [current] = byName((await read()).series, 'Example Motion Exampletown');
+				await answer(current.key, 'LINKED').expect(204);
 				// Older payments from a reconnected bank appear under the shortest form of the name.
 				await fixtures.createTransactions(
 					first,

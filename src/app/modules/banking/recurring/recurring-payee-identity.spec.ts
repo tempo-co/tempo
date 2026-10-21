@@ -93,14 +93,7 @@ describe('inferRecurringIdentities', () => {
 	});
 
 	it.each<[string, () => RecurringEvidence[]]>([
-		[
-			'a shared collection IBAN',
-			() => [
-				sepaDebit('Example Books', {counterpartyIban: 'NL91ABNA0417164300'} as Partial<RecurringEvidence>),
-				sepaDebit('Example Shoes', {counterpartyIban: 'NL91ABNA0417164300'} as Partial<RecurringEvidence>),
-			],
-		],
-		['a shared creditor and mandate', () => [sepaDebit('Example Cinema'), sepaDebit('Example Pharmacy')]],
+		['a shared creditor, mandate and IBAN', () => [sepaDebit('Example Cinema'), sepaDebit('Example Pharmacy')]],
 		[
 			'a company-name prefix',
 			() => [row({counterpartyName: 'Example Fit'}), row({counterpartyName: 'Example Fitness'})],
@@ -201,8 +194,8 @@ describe('inferRecurringIdentities', () => {
 			],
 		],
 	])('keeps payees apart despite %s', (_label, rows) => {
-		const keys = identity(rows());
-		expect(new Set(keys.slice(-2)).size === 1 && keys.at(-1) !== undefined).toBe(false);
+		const [first, second] = identity(rows()).slice(-2);
+		if (second !== undefined) expect(first).not.toBe(second);
 	});
 
 	it('keeps opposite directions apart', () => {

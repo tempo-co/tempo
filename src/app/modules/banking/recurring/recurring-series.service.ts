@@ -1,10 +1,13 @@
-import {Injectable, NotFoundException} from '@nestjs/common';
+import {ConflictException, Injectable, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 
-import {BANKING_RECURRING_SERIES_NOT_FOUND} from '../api/constants/banking-messages.constants';
+import {
+	BANKING_RECURRING_CONTINUATION_CHANGED,
+	BANKING_RECURRING_SERIES_NOT_FOUND,
+} from '../api/constants/banking-messages.constants';
 import type {
 	RecurringContinuationDto,
 	RecurringSeriesDto,
@@ -15,7 +18,7 @@ import {BankTransaction} from '../bank-transaction.entity';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
 import {SQL_INTERNAL} from '../services/bank-transaction-filters';
 import {formatCents} from '../summary/bank-transaction-summary';
-import {continuationKey, findContinuationPairs, joinContinuation} from './recurring-continuation';
+import {findContinuationPairs, joinContinuation} from './recurring-continuation';
 import {
 	RecurringContinuationChoice,
 	type RecurringContinuationChoiceValue,
@@ -140,12 +143,18 @@ export class RecurringSeriesService {
 		seriesKey: string,
 		choice: RecurringContinuationChoiceValue | null,
 	) {
-		const {continuationBySeries} = await this.readState(accountId, today());
+		const {continuationBySeries, choiceIds} = await this.readState(accountId, today());
 		const continuation = continuationBySeries.get(seriesKey);
 		if (!continuation || (choice === null) === (continuation.choice === null)) {
 			throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);
 		}
 		await this.continuationRepository.manager.transaction(async (manager) => {
+			// One owner's answers change one at a time, and only from the state this answer was given on.
+			await manager.query('SELECT id FROM accounts WHERE id = $1 FOR UPDATE', [accountId]);
+			const current = await manager.find(RecurringContinuationChoice, {select: {id: true}, where: {accountId}});
+			if (current.length !== choiceIds.size || current.some(({id}) => !choiceIds.has(id))) {
+				throw new ConflictException(BANKING_RECURRING_CONTINUATION_CHANGED);
+			}
 			if (continuation.saved.length > 0) {
 				await manager.delete(
 					RecurringContinuationChoice,
@@ -184,6 +193,7 @@ export class RecurringSeriesService {
 		detected: DetectedRecurringSeries[];
 		decisionBySeries: Map<string, RecurringSeriesDecision[]>;
 		continuationBySeries: Map<string, Continuation>;
+		choiceIds: Set<string>;
 	}> {
 		const rowsQuery = this.bankTransactionRepository
 			.createQueryBuilder('transaction')
@@ -264,6 +274,7 @@ export class RecurringSeriesService {
 			),
 			decisionBySeries,
 			continuationBySeries,
+			choiceIds: new Set(choices.map(({id}) => id)),
 		};
 	}
 }
@@ -304,10 +315,8 @@ function applyLinkedChoices(
 		const newer = detected.find(({transactionIds}) =>
 			transactionIds.some((id) => choice.newerTransactionIds.includes(id)),
 		);
-		// A duplicate answer for histories already joined belongs to that link, so one unlink removes both.
-		if (older && older === newer) linked.get(older.key)?.saved.push(choice);
 		if (!older || !newer || older === newer || older.lastDate >= newer.firstDate) continue;
-		const joined = joinContinuation(older, newer, candidatesById, today, continuationKey(older, newer));
+		const joined = joinContinuation(older, newer, candidatesById, today);
 		if (!joined) continue;
 		detected = [...detected.filter((entry) => entry !== older && entry !== newer), joined];
 		linked.delete(older.key);

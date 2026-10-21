@@ -1,9 +1,11 @@
 import {createHash} from 'node:crypto';
 
+import {BANK_TRANSACTION_DIRECTIONS, type BankTransactionDirection} from '../bank-transaction-direction';
 import {extractCardMerchantName, extractStructuredCounterpartyName} from '../bank-transaction-display';
+import {BANK_TRANSACTION_TYPES} from '../bank-transaction-type';
 import {endsWithLegalForm, getBankTransactionMerchantKey} from '../categorization/bank-transaction-merchant-key';
 import {parseSepaDescriptionIban} from '../own-transfer/iban';
-import type {RecurringCandidate} from './recurring-series-detection';
+import {type RecurringCandidate, foldName, isPersonTransferCategory} from './recurring-series-detection';
 
 /** A recurring candidate with the bank's original naming evidence. */
 export type RecurringEvidence = RecurringCandidate & {
@@ -12,12 +14,10 @@ export type RecurringEvidence = RecurringCandidate & {
 	transactionType: string | null;
 };
 
-const PERSON_TRANSFER_CATEGORIES: ReadonlySet<string> = new Set(['TRANSFER_IN', 'TRANSFER_OUT']);
-
 type PayeeNode = {
 	key: string;
 	merchantKey: string;
-	direction: string;
+	direction: BankTransactionDirection;
 	currency: string;
 	categories: Set<string | null>;
 	accounts: Set<string>;
@@ -35,7 +35,7 @@ export function inferRecurringIdentities(rows: readonly RecurringEvidence[]): Re
 	const nodes = new Map<string, PayeeNode>();
 	for (const row of rows) {
 		const key = nodeKey(row);
-		const direction = row.merchantKey.slice(0, row.merchantKey.indexOf(':'));
+		const direction = merchantKeyDirection(row.merchantKey);
 		let node = nodes.get(key);
 		if (!node) {
 			node = {
@@ -53,7 +53,7 @@ export function inferRecurringIdentities(rows: readonly RecurringEvidence[]): Re
 		node.categories.add(row.category);
 		node.accounts.add(row.bankAccountId);
 		for (const name of declaredNames(row)) {
-			const normalized = normalizedName(name, direction);
+			const normalized = normalizedPayeeName(name, direction);
 			if (normalized) node.names.add(normalized);
 		}
 		const company = structuredCompany(row, direction);
@@ -98,24 +98,32 @@ export function inferRecurringIdentities(rows: readonly RecurringEvidence[]): Re
 	const components = new Map<string, PayeeNode[]>();
 	for (const node of nodes.values()) {
 		const root = find(node.key);
-		components.set(root, [...(components.get(root) ?? []), node]);
+		const members = components.get(root) ?? [];
+		members.push(node);
+		components.set(root, members);
 	}
-	const identities = new Map<string, string | undefined>();
+	const identities = new Map<string, string>();
 	for (const members of components.values()) {
-		const memberKeys = members.map(({key}) => key).sort();
-		// Only an identity spanning several names or bank accounts needs history reconciliation.
-		const identity =
-			members.length > 1
-				? `${members[0].direction}:automatic-recurring:${createHash('sha256').update(memberKeys.join('\u0000')).digest('hex')}`
-				: members[0].accounts.size > 1
-					? members[0].merchantKey
-					: undefined;
-		for (const node of members) identities.set(node.key, identity);
+		const identity = componentIdentity(members);
+		if (identity) for (const node of members) identities.set(node.key, identity);
 	}
 	return rows.map(({description: _description, counterpartyName: _counterparty, transactionType: _type, ...row}) => {
 		const recurringPayeeKey = identities.get(nodeKey(row));
 		return recurringPayeeKey ? {...row, recurringPayeeKey} : row;
 	});
+}
+
+/** Only an identity spanning several names or bank accounts needs history reconciliation. */
+function componentIdentity(members: readonly PayeeNode[]): string | undefined {
+	if (members.length > 1) {
+		const memberKeys = members.map(({key}) => key).sort();
+		return `${members[0].direction}:automatic-recurring:${createHash('sha256').update(memberKeys.join('\u0000')).digest('hex')}`;
+	}
+	return members[0].accounts.size > 1 ? members[0].merchantKey : undefined;
+}
+
+function merchantKeyDirection(merchantKey: string): BankTransactionDirection {
+	return merchantKey.slice(0, merchantKey.indexOf(':')) as BankTransactionDirection;
 }
 
 function nodeKey({merchantKey, currency}: Pick<RecurringCandidate, 'merchantKey' | 'currency'>): string {
@@ -128,10 +136,11 @@ function declaredNames({description, counterpartyName, transactionType, merchant
 	const cardName = extractCardMerchantName(text);
 	if (cardName) return [cardName];
 	const names = [counterpartyName, extractStructuredCounterpartyName(text)].filter((name) => name !== null);
-	if (names.length === 0 && transactionType === 'TRANSFER') {
-		const pattern = merchantKey.startsWith('EXPENSE:')
-			? /^(?:transfer to|to)\s+(.+)$/i
-			: /^(?:transfer from|from)\s+(.+)$/i;
+	if (names.length === 0 && transactionType === BANK_TRANSACTION_TYPES.TRANSFER) {
+		const pattern =
+			merchantKeyDirection(merchantKey) === BANK_TRANSACTION_DIRECTIONS.EXPENSE
+				? /^(?:transfer to|to)\s+(.+)$/i
+				: /^(?:transfer from|from)\s+(.+)$/i;
 		const match = pattern.exec(text);
 		if (match) names.push(match[1]);
 	}
@@ -139,28 +148,27 @@ function declaredNames({description, counterpartyName, transactionType, merchant
 }
 
 /** A company named in a structured SEPA record with an IBAN, compacted so spacing differences still match. */
-function structuredCompany(row: RecurringEvidence, direction: string): {token: string; legal: boolean} | null {
-	if (!row.counterpartyName || (row.category !== null && PERSON_TRANSFER_CATEGORIES.has(row.category))) return null;
+function structuredCompany(
+	row: RecurringEvidence,
+	direction: BankTransactionDirection,
+): {token: string; legal: boolean} | null {
+	if (!row.counterpartyName || isPersonTransferCategory(row)) return null;
 	const description = row.description?.trim() ?? '';
 	if (!extractStructuredCounterpartyName(description) || !parseSepaDescriptionIban(description)) return null;
 	// A name the merchant key does not accept (a payment processor) identifies no company.
-	if (!normalizedName(row.counterpartyName, direction)) return null;
+	if (!normalizedPayeeName(row.counterpartyName, direction)) return null;
 	return {token: compact(row.counterpartyName), legal: endsWithLegalForm(row.counterpartyName.trim())};
 }
 
-/** The merchant-key form of a name, so legal forms and processor tails are handled in one place. */
-function normalizedName(name: string, direction: string): string | null {
+/** The merchant-key form of a payee name, so legal forms and processor tails are handled in one place. */
+export function normalizedPayeeName(name: string, direction: BankTransactionDirection): string | null {
 	const key = getBankTransactionMerchantKey({
 		counterpartyName: name,
-		creditDebitIndicator: direction === 'EXPENSE' ? 'DBIT' : 'CRDT',
+		creditDebitIndicator: direction === BANK_TRANSACTION_DIRECTIONS.EXPENSE ? 'DBIT' : 'CRDT',
 	});
-	return key ? fold(key.slice(key.indexOf(':') + 1)) : null;
-}
-
-function fold(value: string): string {
-	return value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
+	return key ? foldName(key.slice(key.indexOf(':') + 1)) : null;
 }
 
 function compact(value: string): string {
-	return fold(value).replace(/[^\p{L}\p{N}]/gu, '');
+	return foldName(value).replace(/[^\p{L}\p{N}]/gu, '');
 }

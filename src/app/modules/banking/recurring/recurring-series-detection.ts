@@ -482,7 +482,7 @@ function merchantKeyName(merchantKey: string): string {
 	return merchantKey.slice(merchantKey.indexOf(':') + 1);
 }
 
-function foldName(name: string): string {
+export function foldName(name: string): string {
 	return name.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
