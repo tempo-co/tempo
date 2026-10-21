@@ -43,7 +43,7 @@ const VERIFIED_ROUTES: GuardedRoute[] = [
 	['patch', `/bank-transactions/${RESOURCE_ID}/category`],
 	['patch', `/bank-transactions/${RESOURCE_ID}/own-transfer`],
 	['get', '/recurring-series?asOf=2026-10-18'],
-	['patch', `/recurring-series/${SERIES_KEY}/decision`],
+	['patch', `/recurring-series/${SERIES_KEY}/hidden`],
 	['patch', `/recurring-series/${SERIES_KEY}/continuation`],
 	['post', '/bank-connections/authorize'],
 	['get', '/bank-connections/aspsps'],

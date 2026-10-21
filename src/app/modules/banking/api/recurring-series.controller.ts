@@ -7,7 +7,7 @@ import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {
 	RecurringContinuationUpdateDto,
-	RecurringSeriesDecisionUpdateDto,
+	RecurringSeriesHiddenUpdateDto,
 	RecurringSeriesQueryDto,
 } from './dtos/recurring-series.dto';
 import {SeriesKeyPipe} from './pipes/series-key.pipe';
@@ -22,14 +22,14 @@ export class RecurringSeriesController {
 		return this.recurringSeriesService.list(account, query);
 	}
 
-	@Patch(':key/decision')
+	@Patch(':key/hidden')
 	@HttpCode(204)
-	async updateDecision(
+	async updateHidden(
 		@CurrentAccount() account: Account,
 		@Param('key', SeriesKeyPipe) key: string,
-		@Body() dto: RecurringSeriesDecisionUpdateDto,
+		@Body() dto: RecurringSeriesHiddenUpdateDto,
 	) {
-		await this.recurringSeriesService.updateDecision(account.id, key, dto.decision);
+		await this.recurringSeriesService.updateHidden(account.id, key, dto.hidden);
 	}
 
 	@Patch(':key/continuation')
@@ -39,6 +39,6 @@ export class RecurringSeriesController {
 		@Param('key', SeriesKeyPipe) key: string,
 		@Body() dto: RecurringContinuationUpdateDto,
 	) {
-		await this.recurringSeriesService.updateContinuation(account.id, key, dto.choice);
+		await this.recurringSeriesService.updateContinuation(account.id, key, dto.linked);
 	}
 }

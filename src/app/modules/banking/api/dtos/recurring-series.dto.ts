@@ -1,16 +1,8 @@
-import {IsIn, IsOptional} from 'class-validator';
+import {IsBoolean, IsIn, IsOptional} from 'class-validator';
 
 import {IsCalendarDate} from '@core/validation/is-calendar-date';
 
 import {BANK_TRANSACTION_DIRECTIONS, type BankTransactionDirection} from '../../bank-transaction-direction';
-import {
-	RECURRING_CONTINUATION_CHOICES,
-	type RecurringContinuationChoiceValue,
-} from '../../recurring/recurring-continuation-choice.entity';
-import {
-	RECURRING_SERIES_DECISIONS,
-	type RecurringSeriesDecisionValue,
-} from '../../recurring/recurring-series-decision.entity';
 import type {
 	RecurringAmountKind,
 	RecurringCadence,
@@ -34,21 +26,20 @@ export class RecurringSeriesQueryDto {
 	direction: RecurringSeriesDirection = BANK_TRANSACTION_DIRECTIONS.EXPENSE;
 }
 
-export class RecurringSeriesDecisionUpdateDto {
-	/** `null` returns the series to suggested. */
-	@IsIn([...RECURRING_SERIES_DECISIONS, null])
-	decision: RecurringSeriesDecisionValue | null;
+export class RecurringSeriesHiddenUpdateDto {
+	/** `true` marks the series as not recurring; `false` shows it again. */
+	@IsBoolean()
+	hidden: boolean;
 }
 
 export class RecurringContinuationUpdateDto {
-	/** `LINKED` joins the series with the earlier history it may continue, `SEPARATE` keeps them apart, `null` asks again. */
-	@IsIn([...RECURRING_CONTINUATION_CHOICES, null])
-	choice: RecurringContinuationChoiceValue | null;
+	/** `false` splits a joined series into its two histories; `true` joins them again. */
+	@IsBoolean()
+	linked: boolean;
 }
 
-/** An earlier history this series may continue. `choice` is null while the owner has not answered. */
+/** The earlier history a series was joined with because it continues it. */
 export class RecurringContinuationDto {
-	choice: RecurringContinuationChoiceValue | null;
 	previousName: string;
 	previousFirstDate: string;
 	previousLastDate: string;
@@ -83,17 +74,18 @@ export class RecurringSeriesDto {
 	flags: RecurringSeriesFlag[];
 	/** Set until the new price has been paid three times. */
 	priceChange: RecurringPriceChangeDto | null;
-	decision: RecurringSeriesDecisionValue | null;
-	/** Set on a history that may continue an earlier one, or that the owner linked to one. */
+	/** The owner marked it as not recurring; it is left out of totals. */
+	hidden: boolean;
+	/** Set while the series includes an earlier history it continues. */
 	continuation: RecurringContinuationDto | null;
 }
 
 export class RecurringSeriesListResponseDto {
-	/** Confirmed first, then suggested, then dismissed; active before ended; larger monthly cost first. */
+	/** Shown before hidden; active before ended; larger monthly cost first. */
 	series: RecurringSeriesDto[];
-	/** Monthly cost of active confirmed series that have a base amount. */
-	confirmedMonthlyTotal: string;
-	/** Active confirmed series left out of the total because a payment is not converted yet. */
-	unconvertedConfirmedCount: number;
+	/** Monthly cost of shown active series that have a base amount. */
+	monthlyTotal: string;
+	/** Shown active series left out of the total because a payment is not converted yet. */
+	unconvertedCount: number;
 	baseCurrency: string | null;
 }

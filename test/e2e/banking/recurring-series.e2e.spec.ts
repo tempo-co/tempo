@@ -1,7 +1,7 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
 import TestAgent from 'supertest/lib/agent';
-import {In, Repository} from 'typeorm';
+import {ArrayContains, In, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
@@ -44,8 +44,11 @@ type SeriesBody = {
 	nextExpectedDate: string;
 	status: string;
 	flags: string[];
-	decision: string | null;
+	priceChange: {amount: string; since: string} | null;
+	hidden: boolean;
 };
+
+const cents = (amount: string) => BigInt(amount.replace('.', ''));
 
 /** A structured SEPA debit text naming `name` as the payee, the evidence that links a renamed payee. */
 function sepaNaming(name: string) {
@@ -70,11 +73,13 @@ describe('RecurringSeries', () => {
 	const list = async (agent: TestAgent, direction = 'EXPENSE') =>
 		(await agent.get('/recurring-series').query({asOf: AS_OF, direction}).expect(200)).body as {
 			series: SeriesBody[];
-			confirmedMonthlyTotal: string;
-			unconvertedConfirmedCount: number;
+			monthlyTotal: string;
+			unconvertedCount: number;
 			baseCurrency: string | null;
 		};
 	const byName = <T extends SeriesBody>(series: T[], name: string) => series.filter((entry) => entry.name === name);
+	const hide = (agent: TestAgent, key: string, hidden = true) =>
+		agent.patch(`/recurring-series/${key}/hidden`).send({hidden});
 
 	beforeAll(async () => {
 		app = getApp();
@@ -197,7 +202,7 @@ describe('RecurringSeries', () => {
 					monthlyEquivalent: '80.00',
 					nextExpectedDate: '2026-11-05',
 					status: 'ACTIVE',
-					decision: null,
+					hidden: false,
 				}),
 			]);
 			expect(byName(series, 'Example Stream')).toEqual([
@@ -231,11 +236,8 @@ describe('RecurringSeries', () => {
 				.query({filter: {recurringSeriesKey: academy.key}, pagination: {pageIndex: 0, pageSize: 50}})
 				.expect(200);
 			expect(drill.body.transactions.map(({id}: {id: string}) => id).sort()).toEqual([...ids].sort());
-			await fresh.agent
-				.patch(`/recurring-series/${academy.key}/decision`)
-				.send({decision: 'CONFIRMED'})
-				.expect(204);
-			expect((await read()).confirmedMonthlyTotal).toBe('80.00');
+			// Every detected series counts without the owner doing anything.
+			expect((await read()).monthlyTotal).toBe('122.00');
 			expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
 			expect(byName((await list(ownerAgent)).series, 'Example Academy')).toEqual([]);
 		} finally {
@@ -263,7 +265,7 @@ describe('RecurringSeries', () => {
 		const ids = rows.map(({id}) => id);
 		const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
 		const selected = (series: SeriesBody[]) => series.filter(({name}) => [oldName, currentName].includes(name));
-		const beforeTotal = (await list(ownerAgent)).confirmedMonthlyTotal;
+		const beforeTotal = (await list(ownerAgent)).monthlyTotal;
 		const result = selected((await list(ownerAgent)).series);
 		expect(result).toEqual([
 			expect.objectContaining({name: currentName, transactionCount: 6, monthlyEquivalent: '68.00'}),
@@ -277,11 +279,12 @@ describe('RecurringSeries', () => {
 			.expect(200);
 		expect(drill.body.total).toBe(ids.length);
 		expect(drill.body.transactions.map((row: {id: string}) => row.id).sort()).toEqual([...ids].sort());
-		await ownerAgent.patch(`/recurring-series/${result[0].key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
-		const afterTotal = (await list(ownerAgent)).confirmedMonthlyTotal;
-		expect(BigInt(afterTotal.replace('.', '')) - BigInt(beforeTotal.replace('.', ''))).toBe(6800n);
+		await hide(ownerAgent, result[0].key).expect(204);
+		const afterTotal = (await list(ownerAgent)).monthlyTotal;
+		expect(cents(afterTotal) - cents(beforeTotal)).toBe(-6800n);
 		expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
-		await ownerAgent.patch(`/recurring-series/${result[0].key}/decision`).send({decision: null}).expect(204);
+		await hide(ownerAgent, result[0].key, false).expect(204);
+		expect((await list(ownerAgent)).monthlyTotal).toBe(beforeTotal);
 		await fixtures.transactions.delete([...ids, ...otherRows.map(({id}) => id)]);
 	});
 
@@ -298,7 +301,7 @@ describe('RecurringSeries', () => {
 		['long same-account history', 2, 24, true, ['50.00', '25.00', '100.00', '75.00'], '75.00', '2026-11-10'],
 		['long moved-account history', 2, 24, false, ['50.00', '25.00', '100.00', '75.00'], '75.00', '2026-11-10'],
 	] as const)(
-		'current naming period: preserves confirmed cost and exact membership for %s',
+		'current naming period: preserves cost, hiding and exact membership for %s',
 		async (label, nameCount, oldCount, sameAccount, amounts, cost, due) => {
 			const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
 			const connection = await fixtures.createConnection(owner);
@@ -333,10 +336,6 @@ describe('RecurringSeries', () => {
 					status: 'ACTIVE',
 				});
 				keys.push(baseline.key);
-				await ownerAgent
-					.patch(`/recurring-series/${baseline.key}/decision`)
-					.send({decision: 'CONFIRMED'})
-					.expect(204);
 				// Older payments from the same payee arrive later, under a historical name.
 				const previous = await fixtures.createTransactions(
 					oldBank,
@@ -364,14 +363,12 @@ describe('RecurringSeries', () => {
 							transactionCount: ids.length,
 							nextExpectedDate: due,
 							status: 'ACTIVE',
-							decision: 'CONFIRMED',
+							hidden: false,
 						}),
 					]);
 					keys.push(linked[0].key);
-					expect(
-						BigInt(result.confirmedMonthlyTotal.replace('.', '')) -
-							BigInt(before.confirmedMonthlyTotal.replace('.', '')),
-					).toBe(BigInt(cost.replace('.', '')));
+					// The older history joins the series without adding to the total.
+					expect(result.monthlyTotal).toBe(before.monthlyTotal);
 					const drill = await ownerAgent
 						.get('/bank-transactions')
 						.query({
@@ -408,13 +405,10 @@ describe('RecurringSeries', () => {
 						transactionCount: ids.length,
 						nextExpectedDate: continuedDue,
 						status: 'ACTIVE',
-						decision: 'CONFIRMED',
+						hidden: false,
 					}),
 				]);
-				expect(
-					BigInt(continued.confirmedMonthlyTotal.replace('.', '')) -
-						BigInt(before.confirmedMonthlyTotal.replace('.', '')),
-				).toBe(5000n);
+				expect(cents(continued.monthlyTotal) - cents(before.monthlyTotal)).toBe(5000n - cents(cost));
 				const continuedDrill = await ownerAgent
 					.get('/bank-transactions')
 					.query({
@@ -436,11 +430,12 @@ describe('RecurringSeries', () => {
 					}),
 				).toEqual(snapshot);
 				const continuedSnapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
-				await ownerAgent
-					.patch(`/recurring-series/${linkedKey}/decision`)
-					.send({decision: 'DISMISSED'})
-					.expect(204);
-				expect((await read()).series.find(({key}) => key === linkedKey)?.decision).toBe('DISMISSED');
+				// Totals are compared on one date: other series may end between dates.
+				asOf = continuedDue;
+				const shownTotal = (await read()).monthlyTotal;
+				asOf = due;
+				await hide(ownerAgent, linkedKey).expect(204);
+				expect((await read()).series.find(({key}) => key === linkedKey)?.hidden).toBe(true);
 				const dismissed = await decisions.findBy({accountId: owner.id, seriesKey: linkedKey});
 				expect(dismissed).toEqual([expect.objectContaining({decision: 'DISMISSED', transactionIds: ids})]);
 				asOf = continuedDue;
@@ -456,10 +451,10 @@ describe('RecurringSeries', () => {
 					expect.objectContaining({
 						transactionCount: ids.length + 1,
 						status: 'ACTIVE',
-						decision: 'DISMISSED',
+						hidden: true,
 					}),
 				]);
-				expect(after.confirmedMonthlyTotal).toBe(before.confirmedMonthlyTotal);
+				expect(cents(after.monthlyTotal) - cents(shownTotal)).toBe(-5000n);
 				const drill = await ownerAgent
 					.get('/bank-transactions')
 					.query({
@@ -485,7 +480,7 @@ describe('RecurringSeries', () => {
 					}),
 				);
 				expect((await read()).series.filter(({key}) => key === linkedKey)).toEqual([
-					expect.objectContaining({decision: null, status: 'ACTIVE', transactionCount: ids.length + 2}),
+					expect.objectContaining({hidden: false, status: 'ACTIVE', transactionCount: ids.length + 2}),
 				]);
 				const restartedDrill = await ownerAgent
 					.get('/bank-transactions')
@@ -561,7 +556,7 @@ describe('RecurringSeries', () => {
 			expect.arrayContaining([expect.objectContaining({name: 'Example Weekly Employer', cadence: 'WEEKLY'})]),
 		);
 		const hiddenKey = seriesKey(retail[0].merchantKey!, 'EUR', retail[0].id);
-		await ownerAgent.patch(`/recurring-series/${hiddenKey}/decision`).send({decision: 'CONFIRMED'}).expect(404);
+		await hide(ownerAgent, hiddenKey).expect(404);
 		await ownerAgent
 			.get('/bank-transactions')
 			.query({filter: {recurringSeriesKey: hiddenKey}})
@@ -570,10 +565,10 @@ describe('RecurringSeries', () => {
 	});
 
 	it.each([
-		['CONFIRMED', 'CONFIRMED'],
-		['DISMISSED', 'DISMISSED'],
-		['CONFLICT', null],
-	] as const)('retail suggestions: respects prior retail %s choices until reset', async (choice, expected) => {
+		['CONFIRMED', false],
+		['DISMISSED', true],
+		['CONFLICT', false],
+	] as const)('retail suggestions: respects prior retail %s choices until reset', async (choice, hidden) => {
 		const name = `Example Chosen Retail ${choice}`;
 		const rows = await fixtures.createTransactions(
 			ownerBankAccount,
@@ -587,7 +582,7 @@ describe('RecurringSeries', () => {
 		);
 		const ids = rows.map(({id}) => id);
 		const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
-		const totalBefore = (await list(ownerAgent)).confirmedMonthlyTotal;
+		const totalBefore = (await list(ownerAgent)).monthlyTotal;
 		const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
 		await decisions.insert(
 			(choice === 'CONFLICT' ? [0, 3] : [0]).map((offset) => ({
@@ -600,15 +595,13 @@ describe('RecurringSeries', () => {
 		);
 		const result = await list(ownerAgent);
 		const chosen = byName(result.series, name);
-		expect(chosen).toEqual([expect.objectContaining({transactionCount: 6, decision: expected})]);
-		expect(BigInt(result.confirmedMonthlyTotal.replace('.', '')) - BigInt(totalBefore.replace('.', ''))).toBe(
-			expected === 'CONFIRMED' ? 2400n : 0n,
-		);
+		expect(chosen).toEqual([expect.objectContaining({transactionCount: 6, hidden})]);
+		expect(cents(result.monthlyTotal) - cents(totalBefore)).toBe(hidden ? 0n : 2400n);
 		await ownerAgent
 			.get('/bank-transactions')
 			.query({filter: {recurringSeriesKey: chosen[0].key}})
 			.expect(200);
-		await ownerAgent.patch(`/recurring-series/${chosen[0].key}/decision`).send({decision: null}).expect(204);
+		await hide(ownerAgent, chosen[0].key, false).expect(204);
 		expect(byName((await list(ownerAgent)).series, name)).toEqual([]);
 		expect(
 			await decisions.countBy({
@@ -621,12 +614,12 @@ describe('RecurringSeries', () => {
 	});
 
 	it.each([
-		['CONFIRMED', 'CONFIRMED', 'CONFIRMED'],
-		['DISMISSED', 'DISMISSED', 'DISMISSED'],
-		['CONFIRMED', 'DISMISSED', null],
+		['CONFIRMED', 'CONFIRMED', false],
+		['DISMISSED', 'DISMISSED', true],
+		['CONFIRMED', 'DISMISSED', false],
 	] as const)(
 		'regrouped decisions: reconciles %s/%s across names and bank accounts',
-		async (first, second, expected) => {
+		async (first, second, hidden) => {
 			const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
 			const oldName = `Example Linked Old ${first} ${second}`;
 			const newName = `Example Linked New ${first} ${second}`;
@@ -641,7 +634,7 @@ describe('RecurringSeries', () => {
 			const ids = rows.map(({id}) => id);
 			const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
 			const legacyKeys = [0, 3].map((offset) => seriesKey(rows[offset].merchantKey!, 'EUR', rows[offset].id));
-			const totalBefore = (await list(ownerAgent)).confirmedMonthlyTotal;
+			const totalBefore = (await list(ownerAgent)).monthlyTotal;
 			await decisions.insert(
 				[0, 3].map((offset, index) => ({
 					accountId: owner.id,
@@ -653,11 +646,10 @@ describe('RecurringSeries', () => {
 			const result = await list(ownerAgent);
 			const merged = byName(result.series, newName);
 			expect(merged).toEqual([
-				expect.objectContaining({transactionCount: 6, monthlyEquivalent: '48.00', decision: expected}),
+				expect.objectContaining({transactionCount: 6, monthlyEquivalent: '48.00', hidden}),
 			]);
-			expect(BigInt(result.confirmedMonthlyTotal.replace('.', '')) - BigInt(totalBefore.replace('.', ''))).toBe(
-				expected === 'CONFIRMED' ? 4800n : 0n,
-			);
+			// The series already counted before; only hiding takes it out.
+			expect(cents(result.monthlyTotal) - cents(totalBefore)).toBe(hidden ? -4800n : 0n);
 			const drill = await ownerAgent
 				.get('/bank-transactions')
 				.query({
@@ -666,8 +658,8 @@ describe('RecurringSeries', () => {
 				})
 				.expect(200);
 			expect(drill.body.transactions.map((row: {id: string}) => row.id).sort()).toEqual([...ids].sort());
-			await ownerAgent.patch(`/recurring-series/${merged[0].key}/decision`).send({decision: null}).expect(204);
-			expect(byName((await list(ownerAgent)).series, newName)[0].decision).toBeNull();
+			await hide(ownerAgent, merged[0].key, false).expect(204);
+			expect(byName((await list(ownerAgent)).series, newName)[0].hidden).toBe(false);
 			expect(await decisions.countBy({accountId: owner.id, seriesKey: In(legacyKeys)})).toBe(0);
 			expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
 			await fixtures.transactions.delete(ids);
@@ -722,6 +714,8 @@ describe('RecurringSeries', () => {
 			const readAt = async (asOf: string) =>
 				(await ownerAgent.get('/recurring-series').query({asOf, direction: 'EXPENSE'}).expect(200))
 					.body as Awaited<ReturnType<typeof list>>;
+			const dates = ['2026-11-10', '2026-11-11', '2026-11-15', '2026-11-16'];
+			const totalsWithout = await Promise.all(dates.map(async (date) => (await readAt(date)).monthlyTotal));
 			const current = await fixtures.createTransactions(
 				currentBank,
 				['2026-07', '2026-08', '2026-09', '2026-10'].map((month, index) =>
@@ -762,10 +756,6 @@ describe('RecurringSeries', () => {
 				);
 				ids.push(...previous.map(({id}) => id));
 				const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
-				const dates = ['2026-11-10', '2026-11-11', '2026-11-15', '2026-11-16'];
-				const totalsBefore = await Promise.all(
-					dates.map(async (date) => (await readAt(date)).confirmedMonthlyTotal),
-				);
 				legacyKeys.push(seriesKey(previous[0].merchantKey!, 'EUR', previous[0].id), baseline.key);
 				await decisions.insert(
 					[previous, current].map((rows, index) => ({
@@ -794,31 +784,25 @@ describe('RecurringSeries', () => {
 							lastDate: '2026-10-10',
 							nextExpectedDate: baseline.nextExpectedDate,
 							status: ended ? 'ENDED' : 'ACTIVE',
-							decision: 'CONFIRMED',
+							hidden: false,
 						}),
 					]);
 					linkedKey ??= linked[0].key;
 					expect(linked[0].key).toBe(linkedKey);
 					expect(linked[0].flags.includes('LATE')).toBe(!ended && date > '2026-11-10');
 					if (ended) expect(linked[0].flags).toEqual([]);
-					expect(
-						BigInt(result.confirmedMonthlyTotal.replace('.', '')) -
-							BigInt(totalsBefore[index].replace('.', '')),
-					).toBe(ended ? 0n : cost);
+					expect(cents(result.monthlyTotal) - cents(totalsWithout[index])).toBe(ended ? 0n : cost);
 					await drill(linked[0].key, ids);
 				}
 				expect(
 					await decisions.find({where: {accountId: owner.id, seriesKey: In(legacyKeys)}, order: {id: 'ASC'}}),
 				).toEqual(savedDecisions);
 				expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
-				await ownerAgent.patch(`/recurring-series/${linkedKey}/decision`).send({decision: null}).expect(204);
-				expect(byName((await readAt('2026-11-10')).series, name)[0].decision).toBeNull();
+				await hide(ownerAgent, linkedKey!, false).expect(204);
+				expect(byName((await readAt('2026-11-10')).series, name)[0].hidden).toBe(false);
 				expect(await decisions.countBy({accountId: owner.id, seriesKey: In(legacyKeys)})).toBe(0);
 				legacyKeys.push(linkedKey!);
-				await ownerAgent
-					.patch(`/recurring-series/${linkedKey}/decision`)
-					.send({decision: 'DISMISSED'})
-					.expect(204);
+				await hide(ownerAgent, linkedKey!).expect(204);
 				const dismissed = await decisions.findBy({accountId: owner.id, seriesKey: linkedKey});
 				expect(dismissed).toEqual([
 					expect.objectContaining({
@@ -838,7 +822,7 @@ describe('RecurringSeries', () => {
 				expect(after.series.filter(({key}) => key === linkedKey)).toEqual([
 					expect.objectContaining({
 						key: linkedKey,
-						decision: 'DISMISSED',
+						hidden: true,
 						amountKind,
 						typicalAmount: amountKind === 'VARIABLE' ? '50.00' : '17.00',
 						monthlyEquivalent: amountKind === 'VARIABLE' ? '50.00' : '17.00',
@@ -847,7 +831,7 @@ describe('RecurringSeries', () => {
 						status: 'ACTIVE',
 					}),
 				]);
-				expect(after.confirmedMonthlyTotal).toBe(totalsBefore[1]);
+				expect(after.monthlyTotal).toBe(totalsWithout[1]);
 				await drill(linkedKey!, ids);
 				expect(await decisions.findBy({accountId: owner.id, seriesKey: linkedKey})).toEqual(dismissed);
 				expect(
@@ -867,7 +851,7 @@ describe('RecurringSeries', () => {
 				ids.push(late.id);
 				expect((await readAt('2026-12-16')).series.filter(({key}) => key === linkedKey)).toEqual([
 					expect.objectContaining({
-						decision: null,
+						hidden: false,
 						amountKind,
 						typicalAmount: amountKind === 'VARIABLE' ? '50.00' : '17.00',
 						monthlyEquivalent: amountKind === 'VARIABLE' ? '50.00' : '17.00',
@@ -956,21 +940,10 @@ describe('RecurringSeries', () => {
 				);
 			};
 			await drill(ids);
-			await ownerAgent
-				.patch(`/recurring-series/${linked.key}/decision`)
-				.send({decision: 'CONFIRMED'})
-				.expect(204);
-			const confirmed = await readAt();
-			expect(byName(confirmed.series, name)[0].decision).toBe('CONFIRMED');
-			expect(
-				BigInt(confirmed.confirmedMonthlyTotal.replace('.', '')) -
-					BigInt(before.confirmedMonthlyTotal.replace('.', '')),
-			).toBe(2100n);
-			await ownerAgent
-				.patch(`/recurring-series/${linked.key}/decision`)
-				.send({decision: 'DISMISSED'})
-				.expect(204);
-			expect(byName((await readAt()).series, name)[0].decision).toBe('DISMISSED');
+			await hide(ownerAgent, linked.key).expect(204);
+			const hidden = await readAt();
+			expect(byName(hidden.series, name)[0].hidden).toBe(true);
+			expect(cents(hidden.monthlyTotal) - cents(before.monthlyTotal)).toBe(-2100n);
 			const saved = await decisions.findBy({accountId: owner.id, seriesKey: linked.key});
 			expect(saved).toEqual([expect.objectContaining({decision: 'DISMISSED', transactionIds: ids})]);
 			const next = await fixtures.createTransaction(bank, row(baseline.nextExpectedDate, '-21.00'));
@@ -978,14 +951,14 @@ describe('RecurringSeries', () => {
 			expect(byName(after.series, name)).toEqual([
 				expect.objectContaining({
 					key: linked.key,
-					decision: 'DISMISSED',
+					hidden: true,
 					monthlyEquivalent: '21.00',
 					nextExpectedDate: '2037-05-24',
 					status: 'ACTIVE',
 					transactionCount: ids.length + 1,
 				}),
 			]);
-			expect(after.confirmedMonthlyTotal).toBe(before.confirmedMonthlyTotal);
+			expect(after.monthlyTotal).toBe(hidden.monthlyTotal);
 			await drill([...ids, next.id]);
 			expect(await decisions.findBy({accountId: owner.id, seriesKey: linked.key})).toEqual(saved);
 			expect(await fixtures.transactions.find({where: {id: In(allIds)}, order: {id: 'ASC'}})).toEqual(snapshot);
@@ -1012,7 +985,7 @@ describe('RecurringSeries', () => {
 					status: 'ACTIVE',
 					flags: [],
 					priceChange: null,
-					decision: null,
+					hidden: false,
 				}),
 				// The same shop in another currency is its own series, costed in the base currency.
 				expect.objectContaining({currency: 'GBP', typicalAmount: '29.99', monthlyEquivalent: '34.50'}),
@@ -1031,7 +1004,7 @@ describe('RecurringSeries', () => {
 		]);
 		expect(byName(series, 'Example Magazine')).toEqual([expect.objectContaining({status: 'ENDED'})]);
 		expect(byName(series, 'Example Insurer')).toEqual([
-			expect.objectContaining({cadence: 'YEARLY', monthlyEquivalent: '10.00', decision: null}),
+			expect.objectContaining({cadence: 'YEARLY', monthlyEquivalent: '10.00', hidden: false}),
 		]);
 	});
 
@@ -1071,10 +1044,11 @@ describe('RecurringSeries', () => {
 		]);
 	});
 
-	it('confirms and dismisses series without touching their transactions', async () => {
+	it('counts every series by default and hides one without touching its transactions', async () => {
 		const before = await list(ownerAgent);
-		const gym = before.series.find((entry) => entry.name === 'Example Gym' && entry.currency === 'EUR')!;
 		const streaming = byName(before.series, 'Example Streaming')[0];
+		expect(before.series.every(({hidden}) => !hidden)).toBe(true);
+		expect(before.unconvertedCount).toBe(0);
 		const gymRows = await fixtures.transactions.find({
 			where: {bankAccountId: ownerBankAccount.id, counterpartyName: In(['Example Gym', 'Example Streaming'])},
 			order: {id: 'ASC'},
@@ -1087,13 +1061,11 @@ describe('RecurringSeries', () => {
 			updatedAt,
 		}));
 
-		await ownerAgent.patch(`/recurring-series/${gym.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
-		await ownerAgent.patch(`/recurring-series/${streaming.key}/decision`).send({decision: 'DISMISSED'}).expect(204);
+		await hide(ownerAgent, streaming.key).expect(204);
 
 		const after = await list(ownerAgent);
-		expect(after.series[0]).toMatchObject({key: gym.key, decision: 'CONFIRMED'});
-		expect(after.series.at(-1)).toMatchObject({key: streaming.key, decision: 'DISMISSED'});
-		expect(after).toMatchObject({confirmedMonthlyTotal: '29.99', unconvertedConfirmedCount: 0});
+		expect(after.series.at(-1)).toMatchObject({key: streaming.key, hidden: true});
+		expect(cents(after.monthlyTotal) - cents(before.monthlyTotal)).toBe(-1150n);
 
 		const rowsAfter = await fixtures.transactions.find({
 			where: {id: In(snapshot.map(({id}) => id))},
@@ -1108,11 +1080,13 @@ describe('RecurringSeries', () => {
 				updatedAt,
 			})),
 		).toEqual(snapshot);
+		await hide(ownerAgent, streaming.key, false).expect(204);
+		expect((await list(ownerAgent)).monthlyTotal).toBe(before.monthlyTotal);
 	});
 
-	it('keeps a dismissed series dismissed when new payments arrive, until the owner undoes it', async () => {
+	it('keeps a hidden series hidden when new payments arrive, until the owner shows it again', async () => {
 		const streaming = byName((await list(ownerAgent)).series, 'Example Streaming')[0];
-		await ownerAgent.patch(`/recurring-series/${streaming.key}/decision`).send({decision: 'DISMISSED'}).expect(204);
+		await hide(ownerAgent, streaming.key).expect(204);
 
 		await fixtures.createTransaction(
 			ownerBankAccount,
@@ -1122,13 +1096,13 @@ describe('RecurringSeries', () => {
 			}),
 		);
 		const [stillDismissed] = byName((await list(ownerAgent)).series, 'Example Streaming');
-		expect(stillDismissed).toMatchObject({key: streaming.key, decision: 'DISMISSED', transactionCount: 7});
+		expect(stillDismissed).toMatchObject({key: streaming.key, hidden: true, transactionCount: 7});
 
-		await ownerAgent.patch(`/recurring-series/${streaming.key}/decision`).send({decision: null}).expect(204);
-		expect(byName((await list(ownerAgent)).series, 'Example Streaming')[0].decision).toBeNull();
+		await hide(ownerAgent, streaming.key, false).expect(204);
+		expect(byName((await list(ownerAgent)).series, 'Example Streaming')[0].hidden).toBe(false);
 	});
 
-	it('keeps a decision when a series is reclassified', async () => {
+	it('keeps a series hidden when it is reclassified', async () => {
 		const utility = {counterpartyName: 'Example Utility', description: 'Example Utility'};
 		await fixtures.createTransactions(ownerBankAccount, [
 			bookedRow('2026-06-20', '-10.00', utility),
@@ -1137,33 +1111,33 @@ describe('RecurringSeries', () => {
 		]);
 		const [variable] = byName((await list(ownerAgent)).series, 'Example Utility');
 		expect(variable).toMatchObject({amountKind: 'VARIABLE', transactionCount: 3});
-		await ownerAgent.patch(`/recurring-series/${variable.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
+		await hide(ownerAgent, variable.key).expect(204);
 
-		// The amount settles; the payments stay one stream on one rhythm, so the series and its decision stay.
+		// The amount settles; the payments stay one stream on one rhythm, so the series stays hidden.
 		await fixtures.createTransaction(ownerBankAccount, bookedRow('2026-09-20', '-20.00', utility));
 		const [fixed] = byName((await list(ownerAgent)).series, 'Example Utility');
 		expect(fixed).toMatchObject({
 			key: variable.key,
 			amountKind: 'FIXED',
-			decision: 'CONFIRMED',
+			hidden: true,
 			transactionCount: 4,
 			priceChange: {amount: '10.00', since: '2026-07-20'},
 		});
 
-		await ownerAgent.patch(`/recurring-series/${fixed.key}/decision`).send({decision: null}).expect(204);
-		expect(byName((await list(ownerAgent)).series, 'Example Utility')[0].decision).toBeNull();
+		await hide(ownerAgent, fixed.key, false).expect(204);
+		expect(byName((await list(ownerAgent)).series, 'Example Utility')[0].hidden).toBe(false);
 	});
 
-	it('gives a split series’ decision to one part only, so changing one leaves the other alone', async () => {
+	it('keeps a split series hidden on one part only, so changing one leaves the other alone', async () => {
 		const water = {counterpartyName: 'Example Water', description: 'Example Water'};
 		await fixtures.createTransactions(ownerBankAccount, [
-			bookedRow('2026-05-21', '-10.00', water),
-			bookedRow('2026-06-21', '-20.00', water),
+			bookedRow('2026-05-21', '-20.00', water),
+			bookedRow('2026-06-21', '-10.00', water),
 			bookedRow('2026-07-21', '-20.00', water),
 		]);
 		const [variable] = byName((await list(ownerAgent)).series, 'Example Water');
 		expect(variable).toMatchObject({amountKind: 'VARIABLE'});
-		await ownerAgent.patch(`/recurring-series/${variable.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
+		await hide(ownerAgent, variable.key).expect(204);
 
 		// Two plans billed side by side split it into two fixed series.
 		await fixtures.createTransactions(
@@ -1175,15 +1149,15 @@ describe('RecurringSeries', () => {
 		);
 		const parts = byName((await list(ownerAgent)).series, 'Example Water');
 		expect(parts).toHaveLength(2);
-		const confirmed = parts.filter(({decision}) => decision === 'CONFIRMED');
-		expect(confirmed).toHaveLength(1);
-		const other = parts.find(({key}) => key !== confirmed[0].key)!;
+		const hidden = parts.filter((part) => part.hidden);
+		expect(hidden).toHaveLength(1);
+		const other = parts.find(({key}) => key !== hidden[0].key)!;
 
-		await ownerAgent.patch(`/recurring-series/${other.key}/decision`).send({decision: 'DISMISSED'}).expect(204);
-		await ownerAgent.patch(`/recurring-series/${other.key}/decision`).send({decision: null}).expect(204);
+		await hide(ownerAgent, other.key).expect(204);
+		await hide(ownerAgent, other.key, false).expect(204);
 		const after = byName((await list(ownerAgent)).series, 'Example Water');
-		expect(after.find(({key}) => key === confirmed[0].key)?.decision).toBe('CONFIRMED');
-		expect(after.find(({key}) => key === other.key)?.decision).toBeNull();
+		expect(after.find(({key}) => key === hidden[0].key)?.hidden).toBe(true);
+		expect(after.find(({key}) => key === other.key)?.hidden).toBe(false);
 	});
 
 	it('resets a merged series fully, whatever its parts were decided as', async () => {
@@ -1210,23 +1184,26 @@ describe('RecurringSeries', () => {
 			bookedRow('2026-09-22', '-50.00', internet),
 		]);
 		const [merged] = byName((await list(ownerAgent)).series, 'Example Internet');
-		expect(merged).toMatchObject({amountKind: 'VARIABLE', transactionCount: 9});
-		expect(merged.decision).toBeNull();
+		// One part was hidden and one confirmed; conflicting saved decisions leave the merged series shown.
+		expect(merged).toMatchObject({amountKind: 'VARIABLE', transactionCount: 9, hidden: false});
 
-		await ownerAgent.patch(`/recurring-series/${merged.key}/decision`).send({decision: null}).expect(204);
-		expect(byName((await list(ownerAgent)).series, 'Example Internet')[0].decision).toBeNull();
+		await hide(ownerAgent, merged.key, false).expect(204);
+		expect(byName((await list(ownerAgent)).series, 'Example Internet')[0].hidden).toBe(false);
+		expect(await decisions.countBy({accountId: owner.id, transactionIds: ArrayContains([initialRows[0].id])})).toBe(
+			0,
+		);
 	});
 
-	it('does not move a reset decision to the other part of a split', async () => {
+	it('does not move a hide that was undone to the other part of a split', async () => {
 		const supplier = {counterpartyName: 'Example Supplier', description: 'Example Supplier'};
 		await fixtures.createTransactions(ownerBankAccount, [
 			bookedRow('2026-05-17', '-30.00', supplier),
-			bookedRow('2026-06-17', '-10.00', supplier),
+			bookedRow('2026-06-17', '-20.00', supplier),
 			bookedRow('2026-07-17', '-20.00', supplier),
 		]);
 		const [variable] = byName((await list(ownerAgent)).series, 'Example Supplier');
 		expect(variable.amountKind).toBe('VARIABLE');
-		await ownerAgent.patch(`/recurring-series/${variable.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
+		await hide(ownerAgent, variable.key).expect(204);
 
 		await fixtures.createTransactions(
 			ownerBankAccount,
@@ -1238,14 +1215,14 @@ describe('RecurringSeries', () => {
 		const parts = byName((await list(ownerAgent)).series, 'Example Supplier');
 		expect(parts).toHaveLength(2);
 		expect(parts.every(({key}) => key !== variable.key)).toBe(true);
-		const confirmed = parts.filter(({decision}) => decision === 'CONFIRMED');
-		expect(confirmed).toHaveLength(1);
-		await ownerAgent.patch(`/recurring-series/${confirmed[0].key}/decision`).send({decision: null}).expect(204);
+		const hidden = parts.filter((part) => part.hidden);
+		expect(hidden).toHaveLength(1);
+		await hide(ownerAgent, hidden[0].key, false).expect(204);
 		const reset = byName((await list(ownerAgent)).series, 'Example Supplier');
-		expect(reset.map(({decision}) => decision)).toEqual([null, null]);
+		expect(reset.map((part) => part.hidden)).toEqual([false, false]);
 	});
 
-	it('suggests a dismissed series again when its payments restart after stopping', async () => {
+	it('counts a hidden series again when its payments restart after stopping', async () => {
 		const club = {counterpartyName: 'Example Club Membership', description: 'Example Club Membership'};
 		await fixtures.createTransactions(
 			ownerBankAccount,
@@ -1253,32 +1230,32 @@ describe('RecurringSeries', () => {
 		);
 		const [stopped] = byName((await list(ownerAgent)).series, 'Example Club Membership');
 		expect(stopped).toMatchObject({status: 'ENDED'});
-		await ownerAgent.patch(`/recurring-series/${stopped.key}/decision`).send({decision: 'DISMISSED'}).expect(204);
-		expect(byName((await list(ownerAgent)).series, 'Example Club Membership')[0].decision).toBe('DISMISSED');
+		await hide(ownerAgent, stopped.key).expect(204);
+		expect(byName((await list(ownerAgent)).series, 'Example Club Membership')[0].hidden).toBe(true);
 
 		await fixtures.createTransactions(
 			ownerBankAccount,
 			['2026-09-05', '2026-10-05'].map((date) => bookedRow(date, '-19.00', club)),
 		);
 		const [restarted] = byName((await list(ownerAgent)).series, 'Example Club Membership');
-		expect(restarted).toMatchObject({key: stopped.key, status: 'ACTIVE', decision: null});
-		// The stored dismissal is untouched; dismissing again covers the restart.
+		expect(restarted).toMatchObject({key: stopped.key, status: 'ACTIVE', hidden: false});
+		// The stored hide is untouched; hiding again covers the restart.
 		const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
 		const stored = await decisions.findBy({accountId: owner.id, seriesKey: stopped.key});
 		expect(stored).toEqual([expect.objectContaining({decision: 'DISMISSED', transactionIds: expect.any(Array)})]);
 		expect(stored[0].transactionIds).toHaveLength(3);
-		await ownerAgent.patch(`/recurring-series/${stopped.key}/decision`).send({decision: 'DISMISSED'}).expect(204);
-		expect(byName((await list(ownerAgent)).series, 'Example Club Membership')[0].decision).toBe('DISMISSED');
+		await hide(ownerAgent, stopped.key).expect(204);
+		expect(byName((await list(ownerAgent)).series, 'Example Club Membership')[0].hidden).toBe(true);
 	});
 
-	it('keeps a dismissal when backfilled history contains an older restart', async () => {
+	it('keeps a series hidden when backfilled history contains an older restart', async () => {
 		const supplier = {counterpartyName: 'Example Historical Supplier', description: 'Example Historical Supplier'};
 		await fixtures.createTransactions(
 			ownerBankAccount,
 			['2026-08-05', '2026-09-05', '2026-10-05'].map((date) => bookedRow(date, '-20.00', supplier)),
 		);
 		const [fixed] = byName((await list(ownerAgent)).series, 'Example Historical Supplier');
-		await ownerAgent.patch(`/recurring-series/${fixed.key}/decision`).send({decision: 'DISMISSED'}).expect(204);
+		await hide(ownerAgent, fixed.key).expect(204);
 
 		// Older history changes the amount classification, but its late arrival predates the dismissed payments.
 		await fixtures.createTransactions(
@@ -1286,41 +1263,40 @@ describe('RecurringSeries', () => {
 			['2026-05-05', '2026-06-05', '2026-07-11'].map((date) => bookedRow(date, '-10.00', supplier)),
 		);
 		expect(byName((await list(ownerAgent)).series, 'Example Historical Supplier')).toEqual([
-			expect.objectContaining({amountKind: 'FIXED', transactionCount: 6, decision: 'DISMISSED'}),
+			expect.objectContaining({amountKind: 'FIXED', transactionCount: 6, hidden: true}),
 		]);
 	});
 
-	it('keeps a confirmed series confirmed when its payments restart after stopping', async () => {
+	it('adds a stopped series back to the total when its payments restart', async () => {
 		const pool = {counterpartyName: 'Example Pool', description: 'Example Pool'};
 		await fixtures.createTransactions(
 			ownerBankAccount,
 			['2026-03-06', '2026-04-06', '2026-05-06'].map((date) => bookedRow(date, '-21.00', pool)),
 		);
 		const [stopped] = byName((await list(ownerAgent)).series, 'Example Pool');
-		await ownerAgent.patch(`/recurring-series/${stopped.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
-		const totalBeforeRestart = Number((await list(ownerAgent)).confirmedMonthlyTotal);
+		const totalBeforeRestart = Number((await list(ownerAgent)).monthlyTotal);
 		await fixtures.createTransactions(
 			ownerBankAccount,
 			['2026-09-06', '2026-10-06'].map((date) => bookedRow(date, '-21.00', pool)),
 		);
 
-		const {series, confirmedMonthlyTotal} = await list(ownerAgent);
+		const {series, monthlyTotal} = await list(ownerAgent);
 		expect(byName(series, 'Example Pool')).toEqual([
-			expect.objectContaining({key: stopped.key, status: 'ACTIVE', decision: 'CONFIRMED'}),
+			expect.objectContaining({key: stopped.key, status: 'ACTIVE', hidden: false}),
 		]);
 		// The stopped series added nothing before; the restart adds its monthly cost.
-		expect(Number(confirmedMonthlyTotal) - totalBeforeRestart).toBeCloseTo(21, 2);
+		expect(Number(monthlyTotal) - totalBeforeRestart).toBeCloseTo(21, 2);
 	});
 
 	it.each([
-		['CONFIRMED', 'CONFIRMED', 'CONFIRMED'],
-		['DISMISSED', 'DISMISSED', 'DISMISSED'],
-		['CONFIRMED', 'DISMISSED', null],
+		['CONFIRMED', 'CONFIRMED', false],
+		['DISMISSED', 'DISMISSED', true],
+		['CONFIRMED', 'DISMISSED', false],
 	] as const)(
 		'reconciles saved %s/%s decisions when sequential prices become one history',
-		async (first, second, expected) => {
+		async (first, second, hidden) => {
 			const name = `Example Sequential ${first} ${second}`;
-			const totalBefore = (await list(ownerAgent)).confirmedMonthlyTotal;
+			const totalBefore = (await list(ownerAgent)).monthlyTotal;
 			const rows = await fixtures.createTransactions(
 				ownerBankAccount,
 				MONTHS.map((month, index) =>
@@ -1351,16 +1327,13 @@ describe('RecurringSeries', () => {
 					amountKind: 'FIXED',
 					transactionCount: 6,
 					monthlyEquivalent: '48.00',
-					decision: expected,
+					hidden,
 				}),
 			]);
-			expect(Number(result.confirmedMonthlyTotal) - Number(totalBefore)).toBeCloseTo(
-				expected === 'CONFIRMED' ? 48 : 0,
-				2,
-			);
+			expect(cents(result.monthlyTotal) - cents(totalBefore)).toBe(hidden ? 0n : 4800n);
 			const [merged] = byName(result.series, name);
-			await ownerAgent.patch(`/recurring-series/${merged.key}/decision`).send({decision: null}).expect(204);
-			expect(byName((await list(ownerAgent)).series, name)[0].decision).toBeNull();
+			await hide(ownerAgent, merged.key, false).expect(204);
+			expect(byName((await list(ownerAgent)).series, name)[0].hidden).toBe(false);
 			expect(
 				await decisions.countBy({
 					accountId: owner.id,
@@ -1373,7 +1346,7 @@ describe('RecurringSeries', () => {
 		},
 	);
 
-	it('keeps confirmation through a price change without absorbing a concurrent plan', async () => {
+	it('keeps a series hidden through a price change without hiding a concurrent plan', async () => {
 		const name = 'Example Parallel Memberships';
 		const samePayee = {counterpartyName: name, description: name, category: 'SUBSCRIPTIONS' as const};
 		await fixtures.createTransactions(ownerBankAccount, [
@@ -1383,7 +1356,7 @@ describe('RecurringSeries', () => {
 		const old = byName((await list(ownerAgent)).series, name).find(
 			({monthlyEquivalent}) => monthlyEquivalent === '24.00',
 		)!;
-		await ownerAgent.patch(`/recurring-series/${old.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
+		await hide(ownerAgent, old.key).expect(204);
 		await fixtures.createTransactions(
 			ownerBankAccount,
 			MONTHS.slice(3).map((month) => bookedRow(`${month}-07`, '-48.00', samePayee)),
@@ -1395,9 +1368,9 @@ describe('RecurringSeries', () => {
 					amountKind: 'FIXED',
 					monthlyEquivalent: '48.00',
 					transactionCount: 6,
-					decision: 'CONFIRMED',
+					hidden: true,
 				}),
-				expect.objectContaining({monthlyEquivalent: '96.00', transactionCount: 6, decision: null}),
+				expect.objectContaining({monthlyEquivalent: '96.00', transactionCount: 6, hidden: false}),
 			]),
 		);
 		expect(byName((await list(ownerAgent)).series, name)).toHaveLength(2);
@@ -1426,14 +1399,9 @@ describe('RecurringSeries', () => {
 		}
 	});
 
-	describe('same-payment prompts', () => {
-		type Continuation = {
-			choice: 'LINKED' | 'SEPARATE' | null;
-			previousName: string;
-			previousFirstDate: string;
-			previousLastDate: string;
-		} | null;
-		type PromptSeries = SeriesBody & {continuation: Continuation; firstDate: string; lastDate: string};
+	describe('automatic continuations', () => {
+		type Continuation = {previousName: string; previousFirstDate: string; previousLastDate: string} | null;
+		type LinkSeries = SeriesBody & {continuation: Continuation; firstDate: string; lastDate: string};
 
 		/** A plan paid under a company name, then from another account under its branch name. */
 		async function renamedPlan(newerAmount = '-25.00') {
@@ -1461,7 +1429,7 @@ describe('RecurringSeries', () => {
 			);
 			const read = async () =>
 				(await fresh.agent.get('/recurring-series').query({asOf: AS_OF, direction: 'EXPENSE'}).expect(200))
-					.body as Omit<Awaited<ReturnType<typeof list>>, 'series'> & {series: PromptSeries[]};
+					.body as Omit<Awaited<ReturnType<typeof list>>, 'series'> & {series: LinkSeries[]};
 			const drill = async (key: string) =>
 				(
 					await fresh.agent
@@ -1471,48 +1439,18 @@ describe('RecurringSeries', () => {
 				).body.transactions
 					.map(({id}: {id: string}) => id)
 					.sort();
-			const answer = (key: string, choice: 'LINKED' | 'SEPARATE' | null) =>
-				fresh.agent.patch(`/recurring-series/${key}/continuation`).send({choice});
-			const decide = (key: string, decision: 'CONFIRMED' | 'DISMISSED' | null) =>
-				fresh.agent.patch(`/recurring-series/${key}/decision`).send({decision}).expect(204);
-			return {fresh, freshOwner, connection, first, older, newer, read, drill, answer, decide};
+			const link = (key: string, linked: boolean) =>
+				fresh.agent.patch(`/recurring-series/${key}/continuation`).send({linked});
+			return {fresh, freshOwner, connection, first, older, newer, read, drill, link};
 		}
 
 		const sorted = (rows: {id: string}[]) => rows.map(({id}) => id).sort();
 
-		it('asks whether a renamed history continues an earlier one, and links, separates or undoes on the answer', async () => {
-			const {connection, older, newer, read, drill, answer, decide} = await renamedPlan();
+		it('links a renamed history automatically, and unlinks or links it again on request', async () => {
+			const {fresh, freshOwner, connection, older, newer, read, drill, link} = await renamedPlan();
 			try {
 				const ids = [...older, ...newer].map(({id}) => id);
 				const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
-				const before = await read();
-				const [previous, current] = [
-					byName(before.series, 'Example Motion Ltd'),
-					byName(before.series, 'Example Motion Exampletown'),
-				].map(([entry]) => entry);
-				expect(before.series).toHaveLength(2);
-				expect(previous).toMatchObject({status: 'ENDED', transactionCount: 3, continuation: null});
-				expect(current).toMatchObject({
-					status: 'ACTIVE',
-					transactionCount: 4,
-					decision: null,
-					continuation: {
-						choice: null,
-						previousName: 'Example Motion Ltd',
-						previousFirstDate: '2026-01-11',
-						previousLastDate: '2026-03-11',
-					},
-				});
-				expect(await drill(previous.key)).toEqual(sorted(older));
-				expect(await drill(current.key)).toEqual(sorted(newer));
-				await decide(current.key, 'CONFIRMED');
-				expect((await read()).confirmedMonthlyTotal).toBe('25.00');
-
-				// Only the history showing the prompt can answer it, and only while it is open.
-				await answer(previous.key, 'LINKED').expect(404);
-				await answer(current.key, null).expect(404);
-
-				await answer(current.key, 'LINKED').expect(204);
 				const linked = await read();
 				expect(linked.series).toEqual([
 					expect.objectContaining({
@@ -1523,108 +1461,103 @@ describe('RecurringSeries', () => {
 						typicalAmount: '25.00',
 						nextExpectedDate: '2026-11-12',
 						status: 'ACTIVE',
-						decision: 'CONFIRMED',
-						continuation: expect.objectContaining({choice: 'LINKED', previousName: 'Example Motion Ltd'}),
+						hidden: false,
+						continuation: {
+							previousName: 'Example Motion Ltd',
+							previousFirstDate: '2026-01-11',
+							previousLastDate: '2026-03-11',
+						},
 					}),
 				]);
-				expect(linked.confirmedMonthlyTotal).toBe('25.00');
+				expect(linked.monthlyTotal).toBe('25.00');
 				const [joined] = linked.series;
 				expect(await drill(joined.key)).toEqual([...ids].sort());
-				await answer(joined.key, 'LINKED').expect(404);
-				await decide(joined.key, 'DISMISSED');
-				expect((await read()).confirmedMonthlyTotal).toBe('0.00');
-				await decide(joined.key, 'CONFIRMED');
+				await link(joined.key, true).expect(404);
 
-				// Unlinking restores both histories and the prompt; the linked decision stays with one of them.
-				await answer(joined.key, null).expect(204);
+				// Unlinking shows both histories apart; only the newer one still counts.
+				await link(joined.key, false).expect(204);
 				const unlinked = await read();
+				const [previous] = byName(unlinked.series, 'Example Motion Ltd');
+				const [current] = byName(unlinked.series, 'Example Motion Exampletown');
 				expect(unlinked.series).toHaveLength(2);
-				expect(unlinked.series.filter(({decision}) => decision === 'CONFIRMED')).toHaveLength(1);
-				expect(byName(unlinked.series, 'Example Motion Exampletown')).toEqual([
-					expect.objectContaining({key: current.key, continuation: expect.objectContaining({choice: null})}),
+				expect(previous).toMatchObject({status: 'ENDED', transactionCount: 3, continuation: null});
+				expect(current).toMatchObject({status: 'ACTIVE', transactionCount: 4, continuation: null});
+				expect(unlinked.monthlyTotal).toBe('25.00');
+				expect(await drill(previous.key)).toEqual(sorted(older));
+				expect(await drill(current.key)).toEqual(sorted(newer));
+				const choices: Repository<RecurringContinuationChoice> = app.get(
+					getRepositoryToken(RecurringContinuationChoice),
+				);
+				expect(await choices.findBy({accountId: freshOwner.id})).toEqual([
+					expect.objectContaining({
+						choice: 'SEPARATE',
+						olderTransactionIds: older.map(({id}) => id),
+						newerTransactionIds: newer.map(({id}) => id),
+					}),
 				]);
-				await decide(previous.key, null);
-				await decide(current.key, 'CONFIRMED');
+				await link(current.key, false).expect(404);
 
-				await answer(current.key, 'SEPARATE').expect(204);
-				const separate = await read();
-				expect(separate.series.map(({key, continuation}) => [key, continuation?.choice ?? 'none'])).toEqual([
-					[current.key, 'SEPARATE'],
-					[previous.key, 'none'],
+				// Either history links them again.
+				await link(previous.key, true).expect(204);
+				expect((await read()).series).toEqual([
+					expect.objectContaining({key: joined.key, transactionCount: 7, continuation: expect.anything()}),
 				]);
-				expect(separate.confirmedMonthlyTotal).toBe('25.00');
-				await answer(current.key, 'LINKED').expect(404);
-				await answer(current.key, null).expect(204);
-				expect(byName((await read()).series, 'Example Motion Exampletown')[0]).toMatchObject({
-					continuation: {choice: null},
-				});
+				expect(await choices.countBy({accountId: freshOwner.id})).toBe(0);
 
 				expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
 				await ownerAgent
-					.patch(`/recurring-series/${current.key}/continuation`)
-					.send({choice: 'LINKED'})
+					.patch(`/recurring-series/${joined.key}/continuation`)
+					.send({linked: false})
 					.expect(404);
-				await answer('not-a-key', 'LINKED').expect(400);
-				await answer(current.key, 'MAYBE' as never).expect(400);
+				await link('not-a-key', false).expect(400);
+				await link(joined.key, 'MAYBE' as never).expect(400);
+				await fresh.agent.patch(`/recurring-series/${joined.key}/continuation`).send({}).expect(400);
 			} finally {
 				await fixtures.connections.delete(connection.id);
 			}
 		});
 
-		it('asks nothing about a dismissed history, and resetting a linked history leaves other decisions alone', async () => {
-			const {connection, first, read, answer, decide} = await renamedPlan();
+		it('hides a linked history as a whole, and unlinking keeps other series alone', async () => {
+			const {connection, first, read, link, fresh} = await renamedPlan();
 			try {
 				await fixtures.createTransactions(
 					first,
 					monthly('20', '-9.00', 'Example Other Club', {description: null}),
 				);
-				const {series} = await read();
-				const [previous] = byName(series, 'Example Motion Ltd');
-				const [current] = byName(series, 'Example Motion Exampletown');
-				const [club] = byName(series, 'Example Other Club');
-				await decide(club.key, 'CONFIRMED');
+				const [joined] = byName((await read()).series, 'Example Motion Exampletown');
+				expect(joined).toMatchObject({transactionCount: 7});
+				expect((await read()).monthlyTotal).toBe('34.00');
 
-				await decide(previous.key, 'DISMISSED');
-				expect(byName((await read()).series, 'Example Motion Exampletown')[0].continuation).toBeNull();
-				await answer(current.key, 'LINKED').expect(404);
-				await decide(previous.key, null);
-				expect(byName((await read()).series, 'Example Motion Exampletown')[0].continuation).toMatchObject({
-					choice: null,
-				});
-
-				await decide(previous.key, 'CONFIRMED');
-				await answer(current.key, 'LINKED').expect(204);
-				const linked = await read();
-				const [joined] = byName(linked.series, 'Example Motion Exampletown');
-				expect(joined).toMatchObject({decision: 'CONFIRMED', transactionCount: 7});
-				expect(linked.confirmedMonthlyTotal).toBe('34.00');
-
-				await decide(joined.key, null);
-				const reset = await read();
-				expect(byName(reset.series, 'Example Motion Exampletown')[0].decision).toBeNull();
-				expect(byName(reset.series, 'Example Other Club')[0].decision).toBe('CONFIRMED');
-				expect(reset.confirmedMonthlyTotal).toBe('9.00');
-
-				await answer(joined.key, null).expect(204);
-				const unlinked = await read();
-				expect(unlinked.series.map(({name, decision}) => [name, decision]).sort()).toEqual([
-					['Example Motion Exampletown', null],
-					['Example Motion Ltd', null],
-					['Example Other Club', 'CONFIRMED'],
+				await hide(fresh.agent, joined.key).expect(204);
+				const hidden = await read();
+				expect(hidden.series.map(({name, hidden}) => [name, hidden])).toEqual([
+					['Example Other Club', false],
+					['Example Motion Exampletown', true],
 				]);
+				expect(hidden.monthlyTotal).toBe('9.00');
+
+				await hide(fresh.agent, joined.key, false).expect(204);
+				await link(joined.key, false).expect(204);
+				const unlinked = await read();
+				expect(unlinked.series.map(({name, hidden}) => [name, hidden]).sort()).toEqual([
+					['Example Motion Exampletown', false],
+					['Example Motion Ltd', false],
+					['Example Other Club', false],
+				]);
+				expect(unlinked.monthlyTotal).toBe('34.00');
 			} finally {
 				await fixtures.connections.delete(connection.id);
 			}
 		});
 
-		it('keeps one answer when two clients answer at the same moment', async () => {
-			const {freshOwner, connection, read, answer} = await renamedPlan();
+		it('keeps one answer when two clients unlink at the same moment', async () => {
+			const {freshOwner, connection, read, link} = await renamedPlan();
 			try {
-				const [current] = byName((await read()).series, 'Example Motion Exampletown');
-				const statuses = (
-					await Promise.all([answer(current.key, 'LINKED'), answer(current.key, 'SEPARATE')])
-				).map(({status}) => status);
-				// The later request either finds the question already answered or loses the race to it.
+				const [joined] = byName((await read()).series, 'Example Motion Exampletown');
+				const statuses = (await Promise.all([link(joined.key, false), link(joined.key, false)])).map(
+					({status}) => status,
+				);
+				// The later request either finds the pair already unlinked or loses the race to it.
 				expect(statuses.sort((a, b) => a - b)).toEqual([204, statuses.includes(409) ? 409 : 404]);
 				const choices: Repository<RecurringContinuationChoice> = app.get(
 					getRepositoryToken(RecurringContinuationChoice),
@@ -1635,38 +1568,40 @@ describe('RecurringSeries', () => {
 			}
 		});
 
-		it('unlinks a history in one step after an even older history arrives', async () => {
-			const {connection, first, read, answer} = await renamedPlan();
+		it('stops linking when an even older history makes the continuation ambiguous', async () => {
+			const {connection, first, read, link} = await renamedPlan();
 			try {
-				const [current] = byName((await read()).series, 'Example Motion Exampletown');
-				await answer(current.key, 'LINKED').expect(204);
-				// Older payments from a reconnected bank appear under the shortest form of the name.
+				const [joined] = byName((await read()).series, 'Example Motion Exampletown');
+				// Older payments from a reconnected bank appear under the shortest form of the name, which either later
+				// name could continue.
 				await fixtures.createTransactions(
 					first,
 					['2025-08-10', '2025-09-10', '2025-10-10'].map((date) =>
 						bookedRow(date, '-24.00', {counterpartyName: 'Example', description: null}),
 					),
 				);
-				const [joined] = byName((await read()).series, 'Example Motion Exampletown');
-				expect(joined).toMatchObject({
-					transactionCount: 7,
-					continuation: expect.objectContaining({choice: 'LINKED', previousName: 'Example Motion Ltd'}),
-				});
-				await answer(joined.key, null).expect(204);
-				expect((await read()).series.map(({name}) => name).sort()).toEqual([
-					'Example',
-					'Example Motion Exampletown',
-					'Example Motion Ltd',
+				const {series} = await read();
+				expect(
+					[...series]
+						.sort((a, b) => a.name.localeCompare(b.name))
+						.map(({name, continuation}) => [name, continuation]),
+				).toEqual([
+					['Example', null],
+					['Example Motion Exampletown', null],
+					['Example Motion Ltd', null],
 				]);
+				await link(joined.key, false).expect(404);
 			} finally {
 				await fixtures.connections.delete(connection.id);
 			}
 		});
 
-		it('offers no prompt when the later history’s price does not continue the earlier one', async () => {
+		it('links nothing when the later history’s price does not continue the earlier one', async () => {
 			const {connection, read} = await renamedPlan('-71.00');
 			try {
-				expect((await read()).series.map(({continuation}) => continuation)).toEqual([null, null]);
+				const {series} = await read();
+				expect(series.map(({continuation}) => continuation)).toEqual([null, null]);
+				expect(series).toHaveLength(2);
 			} finally {
 				await fixtures.connections.delete(connection.id);
 			}
@@ -1676,14 +1611,12 @@ describe('RecurringSeries', () => {
 	it('rejects keys that are invalid, unknown or another owner’s', async () => {
 		const [club] = (await list(otherAgent)).series;
 
-		await ownerAgent.patch(`/recurring-series/${club.key}/decision`).send({decision: 'CONFIRMED'}).expect(404);
-		await ownerAgent.patch(`/recurring-series/${club.key}/decision`).send({decision: null}).expect(404);
-		await ownerAgent
-			.patch(`/recurring-series/${'0'.repeat(32)}/decision`)
-			.send({decision: 'CONFIRMED'})
-			.expect(404);
-		await ownerAgent.patch('/recurring-series/not-a-key/decision').send({decision: 'CONFIRMED'}).expect(400);
-		await otherAgent.patch(`/recurring-series/${club.key}/decision`).send({decision: 'MAYBE'}).expect(400);
+		await hide(ownerAgent, club.key).expect(404);
+		await hide(ownerAgent, club.key, false).expect(404);
+		await hide(ownerAgent, '0'.repeat(32)).expect(404);
+		await hide(ownerAgent, 'not-a-key').expect(400);
+		await otherAgent.patch(`/recurring-series/${club.key}/hidden`).send({hidden: 'MAYBE'}).expect(400);
+		await otherAgent.patch(`/recurring-series/${club.key}/hidden`).send({}).expect(400);
 		await ownerAgent.get('/recurring-series').query({asOf: AS_OF, direction: 'UNKNOWN'}).expect(400);
 		await ownerAgent.get('/recurring-series').expect(400);
 		await ownerAgent
