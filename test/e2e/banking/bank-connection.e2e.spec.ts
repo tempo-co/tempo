@@ -878,11 +878,7 @@ describe('BankConnectionController', () => {
 		const stored = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
 		getAccountBalances.mockResolvedValueOnce(makeBalances());
 		getAccountTransactions.mockResolvedValueOnce([{...pending, status: 'BOOK', valueDate: '2026-08-27'}]);
-		await bankConnectionRepository.update(connection.id, {
-			nextSyncAt: new Date(Date.now() - 1),
-			syncStatus: 'QUEUED',
-		});
-		expect(await app.get(BankingSyncService).synchronizeAutomatically(connection.id)).toMatchObject({
+		expect(await synchronizeDue(connection.id)).toMatchObject({
 			status: 'SUCCEEDED',
 			transactionsAdded: 1,
 		});
