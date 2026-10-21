@@ -322,12 +322,12 @@ test('times out and reaps the CLI process', async (t) => {
 	assert.equal(calls.length, 2);
 });
 
-test('accepts a near-limit subscription warning while overage stays rejected', async (t) => {
+test('accepts a near-limit subscription warning', async (t) => {
 	const {socketPath} = await setup(t, {mode: 'near-limit'});
 	assert.deepEqual(await request(socketPath), {status: 200, body: expected});
 });
 
-test('still refuses overage under a near-limit warning', async (t) => {
+test('refuses overage under a near-limit warning', async (t) => {
 	const {socketPath} = await setup(t, {mode: 'near-limit-overage'});
 	assert.deepEqual(await request(socketPath), {status: 503, body: {error: 'claude_unavailable'}});
 });

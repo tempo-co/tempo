@@ -89,7 +89,7 @@ describe('Email templates', () => {
 		});
 	}
 
-	it('keeps the reset subject, copy, and supplied action URL', () => {
+	it('renders the reset subject, copy, and supplied action URL', () => {
 		const html = renderEmailTemplate('reset-password', resetPasswordContext);
 
 		expect(html).toContain('<title>Reset your Tempo password</title>');
@@ -100,7 +100,7 @@ describe('Email templates', () => {
 		expect(html).toContain('This link will expire in 1 hour.');
 	});
 
-	it('retains the configured button colors and verification-code styling', () => {
+	it('renders the brand button colors and verification-code styling', () => {
 		const html = renderEmailTemplate('welcome', welcomeContext);
 
 		expect(html).toContain('background-color: #8F4032');
