@@ -132,7 +132,10 @@ export function validRequest(body) {
 						previous.recentExamples.length <= 50 &&
 						previous.recentExamples.every(
 							(example) =>
-								keys(example, ['amount', 'date']) && text(example.amount) && nullableText(example.date),
+								keys(example, ['amount', 'currency', 'date']) &&
+								text(example.amount) &&
+								text(example.currency) &&
+								nullableText(example.date),
 						),
 				))
 		)

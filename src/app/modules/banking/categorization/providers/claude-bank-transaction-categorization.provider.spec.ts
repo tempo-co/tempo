@@ -329,7 +329,11 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			const transaction = {
 				...input(),
 				previousManualCategories: [
-					{category: 'SHOPPING' as const, count: 2, recentExamples: [{amount: '-8.00', date: '2026-08-01'}]},
+					{
+						category: 'SHOPPING' as const,
+						count: 2,
+						recentExamples: [{amount: '-8.00', currency: 'EUR', date: '2026-08-01'}],
+					},
 				],
 			};
 			await expect(provider.categorize([transaction], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).resolves.toEqual([

@@ -427,7 +427,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 							({category, count, recentExamples}) => ({
 								category,
 								count,
-								recentExamples: recentExamples.map(({amount, date}) => ({amount, date})),
+								recentExamples: recentExamples.map(({amount, currency, date}) => ({amount, currency, date})),
 							}),
 						),
 					}

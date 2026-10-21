@@ -533,7 +533,7 @@ export class BankTransactionCategorizationService {
 	}
 
 	/**
-	 * The amounts and dates of the owner's most recent manual choices per merchant and category, so the model can tell
+	 * The amounts, currencies and dates of the owner's most recent manual choices per merchant and category, so the model can tell
 	 * apart different kinds of payments to the same payee. Uses the same eligibility rules as the counts.
 	 */
 	private async loadAccountManualCategoryExamples(
@@ -545,6 +545,7 @@ export class BankTransactionCategorizationService {
 			.select('transaction.merchantKey', 'merchantKey')
 			.addSelect('transaction.category', 'category')
 			.addSelect('transaction.amount', 'amount')
+			.addSelect('transaction.currency', 'currency')
 			.addSelect(`${date}::text`, 'date')
 			.andWhere('transaction."categorySource" = :manualSource', {manualSource: 'MANUAL'})
 			.orderBy(date, 'DESC', 'NULLS LAST')
@@ -553,15 +554,16 @@ export class BankTransactionCategorizationService {
 				merchantKey: string;
 				category: BankTransactionCategory;
 				amount: string;
+				currency: string;
 				date: string | null;
 			}>();
 
 		const examples = new Map<string, Map<BankTransactionCategory, ManualCategoryExample[]>>();
-		for (const {merchantKey, category, amount, date: exampleDate} of rows) {
+		for (const {merchantKey, category, amount, currency, date: exampleDate} of rows) {
 			const byCategory = examples.get(merchantKey) ?? new Map<BankTransactionCategory, ManualCategoryExample[]>();
 			const list = byCategory.get(category) ?? [];
 			if (list.length < MAX_MANUAL_CATEGORY_EXAMPLES)
-				list.push({amount: normalizeAmount(amount), date: exampleDate});
+				list.push({amount: normalizeAmount(amount), currency, date: exampleDate});
 			byCategory.set(category, list);
 			examples.set(merchantKey, byCategory);
 		}

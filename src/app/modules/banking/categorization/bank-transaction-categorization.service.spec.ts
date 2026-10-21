@@ -855,12 +855,14 @@ describe('BankTransactionCategorizationService worker', () => {
 					merchantKey: 'EXPENSE:example landlord',
 					category: 'HOUSING_AND_UTILITIES',
 					amount: '-650.00000000',
+					currency: 'EUR',
 					date: '2026-08-29',
 				},
 				{
 					merchantKey: 'EXPENSE:example landlord',
 					category: 'HOUSING_AND_UTILITIES',
 					amount: '-125.50000000',
+					currency: 'RON',
 					date: '2026-04-07',
 				},
 			] as never);
@@ -878,8 +880,8 @@ describe('BankTransactionCategorizationService worker', () => {
 				category: 'HOUSING_AND_UTILITIES',
 				count: 8,
 				recentExamples: [
-					{amount: '-650.00', date: '2026-08-29'},
-					{amount: '-125.50', date: '2026-04-07'},
+					{amount: '-650.00', currency: 'EUR', date: '2026-08-29'},
+					{amount: '-125.50', currency: 'RON', date: '2026-04-07'},
 				],
 			},
 		]);
@@ -1235,6 +1237,7 @@ describe('BankTransactionCategorizationService worker', () => {
 					merchantKey: 'EXPENSE:example shop',
 					category: 'SHOPPING',
 					amount,
+					currency: 'EUR',
 					date: `2026-09-0${7 - index}`,
 				})) as never,
 			);
@@ -1247,11 +1250,11 @@ describe('BankTransactionCategorizationService worker', () => {
 				category: 'SHOPPING',
 				count: 7,
 				recentExamples: [
-					{amount: '-1.00', date: '2026-09-07'},
-					{amount: '-12.345', date: '2026-09-06'},
-					{amount: '-1.23456789', date: '2026-09-05'},
-					{amount: '0.00', date: '2026-09-04'},
-					{amount: '100', date: '2026-09-03'},
+					{amount: '-1.00', currency: 'EUR', date: '2026-09-07'},
+					{amount: '-12.345', currency: 'EUR', date: '2026-09-06'},
+					{amount: '-1.23456789', currency: 'EUR', date: '2026-09-05'},
+					{amount: '0.00', currency: 'EUR', date: '2026-09-04'},
+					{amount: '100', currency: 'EUR', date: '2026-09-03'},
 				],
 			},
 		]);

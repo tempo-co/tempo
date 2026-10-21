@@ -172,7 +172,7 @@ test('rejects invalid or nonstandard inputs without spawning a categorizer', asy
 					{
 						...payload.input.transactions[0],
 						previousManualCategories: [
-							{category: 'SHOPPING', count: 1, recentExamples: [{amount: '-1', date: null, secret: 'x'}]},
+							{category: 'SHOPPING', count: 1, recentExamples: [{amount: '-1', currency: 'EUR', date: null, secret: 'x'}]},
 						],
 					},
 				],

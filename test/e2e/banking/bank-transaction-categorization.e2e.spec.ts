@@ -202,17 +202,17 @@ describe('Bank transaction categorization integration', () => {
 			expect(row.categoryProvider).not.toBe(BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER);
 		}
 
-		// Each row's hint carries only its own owner's choices, with the amount and date of each.
+		// Each row's hint carries only its own owner's choices, with the amount, currency and date of each.
 		const inputs = new Map(
 			categorizeSpy.mock.calls.flatMap(([transactions]) =>
 				transactions.map((input) => [input.correlationId, input]),
 			),
 		);
 		expect(inputs.get(CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID)?.previousManualCategories).toEqual([
-			{category: 'TRANSPORTATION', count: 1, recentExamples: [{amount: '-20.00', date: '2026-09-04'}]},
+			{category: 'TRANSPORTATION', count: 1, recentExamples: [{amount: '-20.00', currency: 'EUR', date: '2026-09-04'}]},
 		]);
 		expect(inputs.get(CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID)?.previousManualCategories).toEqual([
-			{category: 'ENTERTAINMENT', count: 1, recentExamples: [{amount: '-20.00', date: '2026-09-04'}]},
+			{category: 'ENTERTAINMENT', count: 1, recentExamples: [{amount: '-20.00', currency: 'EUR', date: '2026-09-04'}]},
 		]);
 	});
 
@@ -272,7 +272,7 @@ describe('Bank transaction categorization integration', () => {
 		expect(recategorized.categoryProvider).not.toBe(BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER);
 		expect(categorizeSpy).toHaveBeenCalledTimes(1);
 		expect(categorizeSpy.mock.calls[0][0][0].previousManualCategories).toEqual([
-			{category: 'TRAVEL', count: 1, recentExamples: [{amount: '-20.00', date: '2026-09-04'}]},
+			{category: 'TRAVEL', count: 1, recentExamples: [{amount: '-20.00', currency: 'EUR', date: '2026-09-04'}]},
 		]);
 		categorizeSpy.mockClear();
 
