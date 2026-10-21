@@ -45,6 +45,19 @@ function input(correlationId = 'transaction-1'): BankTransactionCategorizationIn
 	};
 }
 
+function searchOn(provider: ClaudeBankTransactionCategorizationProvider) {
+	return provider.categorizeWithWebSearch(
+		[toBankTransactionCategorizationWebSearchInput(input())!],
+		BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+	);
+}
+
+function categorizeOn(provider: ClaudeBankTransactionCategorizationProvider, route: 'standard' | 'search') {
+	return route === 'standard'
+		? provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS)
+		: searchOn(provider);
+}
+
 function setup(overrides: Record<string, unknown> = {}) {
 	const create = jest.fn();
 	const config = {
@@ -275,22 +288,37 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(create).toHaveBeenCalledTimes(1);
 	});
 
-	it('leaves a search for review when the API and subscription searches both fail', async () => {
-		const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/missing-synthetic.sock'});
-		create.mockRejectedValue({status: 400, message: 'secret raw input'});
-		await expect(
-			provider.categorizeWithWebSearch(
-				[toBankTransactionCategorizationWebSearchInput(input())!],
-				BANK_TRANSACTION_CATEGORY_DEFINITIONS,
-			),
-		).resolves.toEqual([
-			expect.objectContaining({
-				category: 'NEEDS_REVIEW',
-				confidence: 0,
-				searchTrace: {queries: [], sourceDomains: [], evidenceType: 'INSUFFICIENT'},
-			}),
-		]);
+	it.each([
+		['the subscription socket is missing', 400, {AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/missing-synthetic.sock'}],
+		['no subscription is configured and the API is rate limited', 429, {}],
+		['no subscription is configured and the API is overloaded', 529, {}],
+	])('leaves a search pending for retry when %s', async (_case, status, config) => {
+		const {provider, create} = setup(config);
+		create.mockRejectedValue({status, message: 'secret raw input'});
+		await expect(searchOn(provider)).rejects.toThrow(BankTransactionCategorizationUnavailableError);
 		expect(create).toHaveBeenCalledTimes(1);
+	});
+
+	it('sends a search the API always rejects to review when no subscription is configured', async () => {
+		const {provider, create} = setup();
+		create.mockRejectedValue({status: 400, message: 'secret raw input'});
+		await expect(searchOn(provider)).resolves.toEqual([
+			expect.objectContaining({category: 'NEEDS_REVIEW', confidence: 0, provider: 'claude-api'}),
+		]);
+	});
+
+	it.each([
+		[502, {error: 'claude_failed'}],
+		[400, {error: 'invalid_request'}],
+	])('sends a search to review when the bridge ran or rejected it (%s)', async (status, body) => {
+		await withBridge({status, body}, async (socket, requests) => {
+			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
+			create.mockRejectedValue({status: 400});
+			await expect(searchOn(provider)).resolves.toEqual([
+				expect.objectContaining({category: 'NEEDS_REVIEW', confidence: 0, provider: 'claude-subscription'}),
+			]);
+			expect(requests).toHaveLength(1);
+		});
 	});
 
 	it('falls back over a local socket, preserves history, and records the actual subscription route', async () => {
@@ -417,7 +445,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			});
 		});
 
-		it('labels a failed subscription-only search with the subscription route', async () => {
+		it('leaves a subscription-only search pending for retry when the bridge is unavailable', async () => {
 			await withBridge(unavailable, async (socket, requests) => {
 				const config = {
 					get: (key: string) =>
@@ -426,59 +454,51 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 						],
 				} as unknown as ConfigurationService;
 				const provider = new ClaudeBankTransactionCategorizationProvider(config);
-				const [result] = await provider.categorizeWithWebSearch(
-					[toBankTransactionCategorizationWebSearchInput(input())!],
-					BANK_TRANSACTION_CATEGORY_DEFINITIONS,
-				);
-				expect(result).toMatchObject({category: 'NEEDS_REVIEW', provider: 'claude-subscription'});
+				await expect(
+					provider.categorizeWithWebSearch(
+						[toBankTransactionCategorizationWebSearchInput(input())!],
+						BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+					),
+				).rejects.toThrow(BankTransactionCategorizationUnavailableError);
 				expect(requests).toHaveLength(1);
 			});
 		});
 	});
 
-	it.each(['standard', 'search'])('sends the contract fingerprint on %s fallback requests', async (route) => {
-		await withBridge(unavailable, async (socket, requests) => {
-			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-			create.mockRejectedValue({status: 400});
-			if (route === 'standard') {
-				await expect(provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).rejects.toThrow(
-					BankTransactionCategorizationUnavailableError,
-				);
-			} else {
-				await provider.categorizeWithWebSearch(
-					[toBankTransactionCategorizationWebSearchInput(input())!],
-					BANK_TRANSACTION_CATEGORY_DEFINITIONS,
-				);
-			}
-			expect(requests).toHaveLength(1);
-			expect(requests[0].hash).toBe(createHash('sha256').update(JSON.stringify(contract)).digest('hex'));
-		});
-	});
-
-	it.each(['standard', 'search'])('logs a safe actionable warning on a %s contract mismatch', async (route) => {
-		const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-		try {
-			await withBridge({status: 409, body: {error: 'synthetic-private-text'}}, async (socket) => {
+	it.each(['standard', 'search'] as const)(
+		'sends the contract fingerprint on %s fallback requests',
+		async (route) => {
+			await withBridge(unavailable, async (socket, requests) => {
 				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
 				create.mockRejectedValue({status: 400});
-				if (route === 'standard') {
-					await expect(provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).rejects.toThrow(
+				await expect(categorizeOn(provider, route)).rejects.toThrow(
+					BankTransactionCategorizationUnavailableError,
+				);
+				expect(requests).toHaveLength(1);
+				expect(requests[0].hash).toBe(createHash('sha256').update(JSON.stringify(contract)).digest('hex'));
+			});
+		},
+	);
+
+	it.each(['standard', 'search'] as const)(
+		'logs a safe actionable warning on a %s contract mismatch',
+		async (route) => {
+			const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+			try {
+				await withBridge({status: 409, body: {error: 'synthetic-private-text'}}, async (socket) => {
+					const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
+					create.mockRejectedValue({status: 400});
+					await expect(categorizeOn(provider, route)).rejects.toThrow(
 						BankTransactionCategorizationUnavailableError,
 					);
-				} else {
-					const [result] = await provider.categorizeWithWebSearch(
-						[toBankTransactionCategorizationWebSearchInput(input())!],
-						BANK_TRANSACTION_CATEGORY_DEFINITIONS,
-					);
-					expect(result.category).toBe('NEEDS_REVIEW');
-				}
-			});
-			expect(warn).toHaveBeenCalledWith('Claude bridge contract mismatch; reinstall and restart the bridge.');
-			expect(JSON.stringify(warn.mock.calls)).not.toContain('synthetic-private-text');
-		} finally {
-			warn.mockRestore();
-		}
-	});
+				});
+				expect(warn).toHaveBeenCalledWith('Claude bridge contract mismatch; reinstall and restart the bridge.');
+				expect(JSON.stringify(warn.mock.calls)).not.toContain('synthetic-private-text');
+			} finally {
+				warn.mockRestore();
+			}
+		},
+	);
 
 	it('does not let SDK debug logging print upstream error bodies', async () => {
 		const server = createServer((_req, res) => {

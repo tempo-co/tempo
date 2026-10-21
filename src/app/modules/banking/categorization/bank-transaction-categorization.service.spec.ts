@@ -702,6 +702,48 @@ describe('BankTransactionCategorizationService worker', () => {
 		}
 	});
 
+	it('leaves rows pending, without searching further, once the search is unavailable on both routes', async () => {
+		const rows = Array.from({length: 5}, (_, index) =>
+			createBankTransaction({id: `pending-search-${index}`, counterpartyName: `Merchant ${index}`}),
+		);
+		const resolved = createBankTransaction({id: 'resolved-row', counterpartyName: 'Known Merchant'});
+		const {service, provider} = createService({
+			rows: [...rows, resolved],
+			webSearchEnabled: true,
+			providerResult: [
+				...rows.map(({id}) => ({correlationId: id, category: 'OTHER' as const, confidence: 0.5})),
+				{correlationId: resolved.id, category: 'FOOD_AND_DRINK' as const, confidence: 0.9},
+			],
+		});
+		const shopping = async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) =>
+			inputs.map(({correlationId}) => ({correlationId, category: 'SHOPPING' as const, confidence: 0.75}));
+		provider.categorizeWithWebSearch
+			.mockImplementationOnce(shopping)
+			.mockImplementationOnce(shopping)
+			.mockRejectedValueOnce(new BankTransactionCategorizationUnavailableError());
+		const logger = (service as unknown as {logger: {warn(message: string): void}}).logger;
+		const warn = jest.spyOn(logger, 'warn').mockImplementation();
+
+		try {
+			// Thrown so the queue retries soon; the hourly reconciliation is the backstop.
+			await expect(service.processTransactionJob([...rows, resolved].map(({id}) => id))).rejects.toThrow(
+				BankTransactionCategorizationUnavailableError,
+			);
+
+			expect(provider.categorizeWithWebSearch.mock.calls.map(([inputs]) => inputs.length)).toEqual([1, 1, 1]);
+			expect(rows.slice(0, 2).map(({category}) => category)).toEqual(['SHOPPING', 'SHOPPING']);
+			for (const row of rows.slice(2))
+				expect(row).toMatchObject({
+					category: null,
+					categoryStatus: 'PENDING',
+					categoryLastError: 'Claude categorization is temporarily unavailable.',
+				});
+			expect(resolved).toMatchObject({category: 'FOOD_AND_DRINK', categoryStatus: 'COMPLETED'});
+		} finally {
+			warn.mockRestore();
+		}
+	});
+
 	it('skips OTHER rows without a usable merchant name', async () => {
 		const transaction = createBankTransaction({
 			id: 'merchantless-transaction',
