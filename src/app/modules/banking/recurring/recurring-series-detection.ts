@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 
 import {BANK_TRANSACTION_DIRECTIONS, type BankTransactionDirection} from '../bank-transaction-direction';
-import {averageCents, formatCents} from '../summary/bank-transaction-summary';
+import {formatCents} from '../summary/bank-transaction-summary';
 
 export const RECURRING_CADENCES = ['WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY'] as const;
 export type RecurringCadence = (typeof RECURRING_CADENCES)[number];
@@ -12,7 +12,7 @@ export type RecurringAmountKind = (typeof RECURRING_AMOUNT_KINDS)[number];
 export const RECURRING_SERIES_STATUSES = ['ACTIVE', 'ENDED'] as const;
 export type RecurringSeriesStatus = (typeof RECURRING_SERIES_STATUSES)[number];
 
-export const RECURRING_SERIES_FLAGS = ['PRICE_INCREASED', 'LATE'] as const;
+export const RECURRING_SERIES_FLAGS = ['LATE'] as const;
 export type RecurringSeriesFlag = (typeof RECURRING_SERIES_FLAGS)[number];
 
 /** One settled, non-internal payment with a merchant identity; amounts are positive magnitudes in cents. */
@@ -42,7 +42,7 @@ export type DetectedRecurringSeries = {
 	cadence: RecurringCadence;
 	amountKind: RecurringAmountKind;
 	currency: string;
-	/** The latest sustained price period's median after reconciliation; otherwise the history median. */
+	/** The latest payment, or the price before it while the latest payment is a one-off spike. */
 	typicalAmount: string;
 	/** The most recent actual payment, including an isolated amount outside the established price. */
 	latestAmount: string;
@@ -56,6 +56,15 @@ export type DetectedRecurringSeries = {
 	nextExpectedDate: string;
 	status: RecurringSeriesStatus;
 	flags: RecurringSeriesFlag[];
+	/** A fixed price's recent change against the price before it, until the new price has been paid three times. */
+	priceChange: RecurringPriceChange | null;
+};
+
+export type RecurringPriceChange = {
+	/** Signed difference, e.g. "1.50" or "-3.50". */
+	amount: string;
+	/** Date of the first payment at the new price. */
+	since: string;
 };
 
 type CadenceRule = {
@@ -117,9 +126,14 @@ const MIN_REGULAR_GAP_SHARE = 0.75;
 /** Amounts chain into one fixed series within 15% or 2.00 of the series' latest amount. */
 const AMOUNT_TOLERANCE_PERCENT = 15n;
 const AMOUNT_TOLERANCE_CENTS = 200n;
-/** The latest payment counts as a price increase above 5% and 0.50 over the earlier typical amount. */
-const PRICE_INCREASE_PERCENT = 5n;
-const PRICE_INCREASE_CENTS = 50n;
+/** Two amounts are different prices above 5% and 0.50 apart. */
+const PRICE_CHANGE_PERCENT = 5n;
+const PRICE_CHANGE_CENTS = 50n;
+/** A price change is shown until the new price has been paid this many times. */
+const PRICE_CHANGE_SHOWN_PAYMENTS = 3;
+/** A payment over 50% and 5.00 away from the shown price is a one-off until a similar amount follows it. */
+const SPIKE_PERCENT = 50n;
+const SPIKE_CENTS = 500n;
 /** Other payments to the same payee tolerated inside a yearly series' span. */
 const MAX_OTHER_PAYMENTS_IN_YEARLY_SPAN = 3;
 const DAY_MS = 86_400_000;
@@ -190,13 +204,13 @@ function completePartition(
 	const detected = recognizePartition([...rows], person);
 	if (detected.length !== 1 || detected[0].rows.length !== rows.length) return null;
 	const current = detected[0];
-	return buildSeries(current.rows, current.rule, current.amountKind, today, {priceRows: current.priceRows});
+	return buildSeries(current.rows, current.rule, current.amountKind, today);
 }
 
 /** The same cadence and price rules are used for account-local detection and recognized-history reconciliation. */
 function detectPartition(rows: RecurringCandidate[], today: string, person: boolean): DetectedRecurringSeries[] {
-	return recognizePartition(rows, person).map(({rows, rule, amountKind, priceRows}) =>
-		buildSeries(rows, rule, amountKind, today, {priceRows}),
+	return recognizePartition(rows, person).map(({rows, rule, amountKind}) =>
+		buildSeries(rows, rule, amountKind, today),
 	);
 }
 
@@ -204,7 +218,6 @@ type RecognizedPartition = {
 	rows: RecurringCandidate[];
 	rule: CadenceRule;
 	amountKind: RecurringAmountKind;
-	priceRows?: RecurringCandidate[];
 };
 
 /** Qualification does not need to build forecasts/restart calendars for every chronological prefix. */
@@ -219,18 +232,30 @@ function recognizePartition(rows: RecurringCandidate[], person: boolean): Recogn
 	};
 	const chains = chainByAmount(rows);
 	const combinedRule = cadenceOf(rows);
-	const currentPriceRows = combinedRule ? latestPricePeriod(rows, chains, combinedRule) : null;
-	if (combinedRule && currentPriceRows)
-		return [{rows, rule: combinedRule, amountKind: 'FIXED', priceRows: currentPriceRows}];
+	if (combinedRule && latestPricePeriod(rows, chains, combinedRule))
+		return [{rows, rule: combinedRule, amountKind: 'FIXED'}];
 	const fixed = successivePriceChains(chains, cadenceOf).flatMap((chain): RecognizedPartition[] => {
 		const rule = cadenceOf(chain);
-		const currentPriceRows = rule ? latestPricePeriod(chain, chains, rule) : null;
-		return rule ? [{rows: chain, rule, amountKind: 'FIXED', priceRows: currentPriceRows ?? undefined}] : [];
+		return rule ? [{rows: chain, rule, amountKind: 'FIXED'}] : [];
 	});
 	// Isolated payments do not count as sustained price evidence for a genuinely variable bill.
 	const fixedRows = chains.filter((chain) => cadenceOf(chain)).reduce((count, chain) => count + chain.length, 0);
 	const rule = fixedRows / rows.length < MIN_REGULAR_GAP_SHARE ? combinedRule : null;
-	return rule?.allowsVariable && !hasRecurringOverlap(rows, rule) ? [{rows, rule, amountKind: 'VARIABLE'}] : fixed;
+	const recognized =
+		rule?.allowsVariable && !hasRecurringOverlap(rows, rule)
+			? [{rows, rule, amountKind: 'VARIABLE' as const}]
+			: fixed;
+	// One payer on one rhythm is one stream whatever its amounts; payments outside that rhythm stay out of it.
+	// Histories linked across names or accounts are reconciled by their naming periods instead.
+	if (rows.some(({recurringPayeeKey}) => recurringPayeeKey)) return recognized;
+	const stream = rhythmStream(rows, cadenceOf);
+	if (!stream) return recognized;
+	const same = recognized.length === 1 && recognized[0].rows.length === stream.rows.length;
+	// A fixed price that already spans more than the stream is the better reading of this history.
+	const longerFixed = recognized.some(
+		({rows, amountKind}) => amountKind === 'FIXED' && rows.length > stream.rows.length,
+	);
+	return same || longerFixed ? recognized : [stream];
 }
 
 function reconcileAccountSeries(
@@ -275,8 +300,7 @@ function reconcileAccountSeries(
 				const currentIds = new Set(currentRows.map(({id}) => id));
 				if (rows.some(({id, date}) => !currentIds.has(id) && date >= currentRows[0].date)) return null;
 				const current = completePartition(currentRows, today, false)!;
-				const priceRows = latestPricePeriod(currentRows, chainByAmount(currentRows), rule) ?? currentRows;
-				return buildSeries(rows, rule, current.amountKind, today, {priceRows});
+				return buildSeries(rows, rule, current.amountKind, today);
 			};
 			const whole = join(group);
 			if (whole) return [whole];
@@ -331,8 +355,7 @@ function withCurrentSourceStream(
 	const currentRows = calendarRows(rows);
 	if (currentRows === rows) return entry;
 	const [current] = detectPartition([...currentRows], today, false);
-	const priceRows = latestPricePeriod(currentRows, chainByAmount(currentRows), rule) ?? currentRows;
-	return buildSeries(rows, rule, current.amountKind, today, {priceRows, calendarRows});
+	return buildSeries(rows, rule, current.amountKind, today, calendarRows);
 }
 
 function currentSourceRows(
@@ -637,6 +660,116 @@ function retainIsolatedPayments(
 	});
 }
 
+/**
+ * The longest run of payments, one per cycle, that follows a cadence. It is a stream only when the payments left
+ * outside it do not follow the same cadence themselves: that would be a second obligation from the same payer.
+ */
+function rhythmStream(
+	rows: readonly RecurringCandidate[],
+	cadenceOf: (rows: readonly RecurringCandidate[]) => CadenceRule | null,
+): RecognizedPartition | null {
+	let best: RecognizedPartition | null = null;
+	for (const rule of CADENCE_RULES) {
+		const path = rhythmPath(rows, rule);
+		if (!path || cadenceOf(path)?.cadence !== rule.cadence) continue;
+		const inPath = new Set(path);
+		const outside = rows.filter((row) => !inPath.has(row));
+		// Payments outside the stream with a rhythm of their own are another obligation.
+		if (CADENCE_RULES.some((other) => cadenceOf(rhythmPath(outside, other) ?? []))) continue;
+		// A second charge on a stream payment's own day is billed alongside it, not a one-off.
+		const days = new Set(path.map(({date}) => date));
+		if (outside.some(({date}) => days.has(date))) continue;
+		if (alternatesPrices(path) || hasOtherCadencePrice(path, rule)) continue;
+		const amountKind = streamAmountKind(path, rule);
+		if (amountKind === 'VARIABLE' && !rule.allowsVariable) continue;
+		if (!best || path.length > best.rows.length) best = {rows: [...path], rule, amountKind};
+	}
+	return best;
+}
+
+/**
+ * Two plans paid in turn: a price seen once between two payments of another price, then again within a few cycles.
+ * A one-off between them does not come back that soon.
+ */
+function alternatesPrices(rows: readonly RecurringCandidate[]): boolean {
+	const near = (a: RecurringCandidate, b: RecurringCandidate) =>
+		withinAmountTolerance(abs(a.amountCents - b.amountCents), b.amountCents);
+	return rows.some(
+		(row, index) =>
+			index > 0 &&
+			index < rows.length - 1 &&
+			!near(row, rows[index - 1]) &&
+			!near(row, rows[index + 1]) &&
+			near(rows[index - 1], rows[index + 1]) &&
+			rows.slice(index + 2, index + 2 + MAX_CYCLES_PER_GAP).some((later) => near(later, row)),
+	);
+}
+
+/** A sustained price inside the stream that keeps its own different cadence is a different obligation. */
+function hasOtherCadencePrice(rows: readonly RecurringCandidate[], rule: CadenceRule): boolean {
+	return chainByAmount(rows).some((chain) => {
+		if (chain.length < rule.minCount) return false;
+		const own = matchCadence(chain);
+		return own !== null && own.cadence !== rule.cadence;
+	});
+}
+
+/** The most payments that follow each other at a regular gap of the rule; ties go to the most even gaps. */
+function rhythmPath(rows: readonly RecurringCandidate[], rule: CadenceRule): RecurringCandidate[] | null {
+	const days = rows.map((row) => toDayNumber(row.date));
+	const maxGap = rule.nominalDays * MAX_CYCLES_PER_GAP + rule.toleranceDays;
+	const count: number[] = [];
+	const drift: number[] = [];
+	const previous: number[] = [];
+	let end = -1;
+	for (let index = 0; index < rows.length; index++) {
+		count[index] = 1;
+		drift[index] = 0;
+		previous[index] = -1;
+		for (let before = index - 1; before >= 0 && days[index] - days[before] <= maxGap; before--) {
+			const gap = days[index] - days[before];
+			if (!isRegularGap(gap, rule)) continue;
+			const cycles = Math.max(1, Math.round(gap / rule.nominalDays));
+			const candidateDrift = drift[before] + Math.abs(gap - cycles * rule.nominalDays);
+			if (
+				count[before] + 1 > count[index] ||
+				(count[before] + 1 === count[index] && candidateDrift < drift[index])
+			) {
+				count[index] = count[before] + 1;
+				drift[index] = candidateDrift;
+				previous[index] = before;
+			}
+		}
+		if (end < 0 || count[index] > count[end] || (count[index] === count[end] && drift[index] < drift[end])) {
+			end = index;
+		}
+	}
+	if (end < 0 || count[end] < rule.minCount) return null;
+	const path: RecurringCandidate[] = [];
+	for (let index = end; index >= 0; index = previous[index]) path.unshift(rows[index]);
+	return path;
+}
+
+/**
+ * Fixed when most payments sit in sustained prices and the current price is sustained or a fresh change after one;
+ * otherwise the amount varies.
+ */
+function streamAmountKind(rows: readonly RecurringCandidate[], rule: CadenceRule): RecurringAmountKind {
+	const runs: RecurringCandidate[][] = [];
+	for (const row of rows) {
+		const run = runs[runs.length - 1];
+		const price = run?.[run.length - 1].amountCents;
+		if (run && withinAmountTolerance(abs(row.amountCents - price!), price!)) run.push(row);
+		else runs.push([row]);
+	}
+	const sustained = (run: readonly RecurringCandidate[]) => run.length >= rule.minCount;
+	const current = runs[runs.length - 1];
+	const changing = !sustained(current) && runs.length > 1 && sustained(runs[runs.length - 2]);
+	if (!sustained(current) && !changing) return 'VARIABLE';
+	const settled = runs.filter(sustained).reduce((total, run) => total + run.length, 0);
+	return settled + (changing ? current.length : 0) >= rows.length * MIN_REGULAR_GAP_SHARE ? 'FIXED' : 'VARIABLE';
+}
+
 /** Occasional extra charges can belong to one variable bill; a repeated overlapping rhythm is another obligation. */
 function hasRecurringOverlap(rows: readonly RecurringCandidate[], rule: CadenceRule): boolean {
 	const overlapping = rows.filter(
@@ -739,19 +872,11 @@ function buildSeries(
 	rule: CadenceRule,
 	amountKind: RecurringAmountKind,
 	today: string,
-	{
-		priceRows = rows,
-		calendarRows,
-	}: {
-		priceRows?: readonly RecurringCandidate[];
-		calendarRows?: (prefix: readonly RecurringCandidate[]) => readonly RecurringCandidate[];
-	} = {},
+	calendarRows?: (prefix: readonly RecurringCandidate[]) => readonly RecurringCandidate[],
 ): DetectedRecurringSeries {
 	const first = rows[0];
 	const latest = rows[rows.length - 1];
-	const currentPrice = priceRows[priceRows.length - 1];
-	const amounts = rows.map((row) => row.amountCents);
-	const typical = medianCents(priceRows.map((row) => row.amountCents));
+	const shown = shownPayment(rows);
 	const expectedDate = (prefix: readonly RecurringCandidate[]) =>
 		addCycles(calendarRows?.(prefix) ?? prefix, rule, 1);
 	const nextExpectedDate = expectedDate(rows);
@@ -762,20 +887,6 @@ function buildSeries(
 		: BANK_TRANSACTION_DIRECTIONS.EXPENSE;
 
 	const flags: RecurringSeriesFlag[] = [];
-	// A price only rises on something still being paid.
-	if (
-		amountKind === 'FIXED' &&
-		direction === 'EXPENSE' &&
-		status === 'ACTIVE' &&
-		rows.length > 1 &&
-		currentPrice === latest
-	) {
-		const earlier = medianCents(amounts.slice(0, rows.indexOf(currentPrice)));
-		const increase = currentPrice.amountCents - earlier;
-		if (increase > PRICE_INCREASE_CENTS && increase * 100n > earlier * PRICE_INCREASE_PERCENT) {
-			flags.push('PRICE_INCREASED');
-		}
-	}
 	if (status === 'ACTIVE' && today > nextExpectedDate) flags.push('LATE');
 
 	return {
@@ -786,9 +897,9 @@ function buildSeries(
 		cadence: rule.cadence,
 		amountKind,
 		currency: first.currency,
-		typicalAmount: formatCents(typical),
+		typicalAmount: formatCents(shown.amountCents),
 		latestAmount: formatCents(latest.amountCents),
-		monthlyEquivalent: monthlyEquivalent(rows, rule, amountKind, currentPrice, priceRows),
+		monthlyEquivalent: monthlyEquivalent(rows, rule, shown),
 		transactionIds: rows.map((row) => row.id),
 		restartTransactionIds: rows
 			.filter((row, index) => index > 0 && row.date > addDays(expectedDate(rows.slice(0, index)), GRACE_DAYS))
@@ -798,23 +909,54 @@ function buildSeries(
 		nextExpectedDate,
 		status,
 		flags,
+		priceChange: amountKind === 'FIXED' && status === 'ACTIVE' ? priceChange(rows, shown) : null,
 	};
 }
 
-/** A fixed series costs its current price; a variable one its median. Weekly uses 52 weeks over 12 months. */
+/**
+ * The payment whose amount the series shows: the latest one, unless it jumped away from a normal payment before it.
+ * A one-off keeps the previous price until the next payment shows whether it was a new price.
+ */
+function shownPayment(rows: readonly RecurringCandidate[]): RecurringCandidate {
+	const latest = rows[rows.length - 1];
+	const previous = rows[rows.length - 2];
+	if (!previous || !isSpike(latest.amountCents, previous.amountCents)) return latest;
+	const beforePrevious = rows[rows.length - 3];
+	const previousWasOneOff = beforePrevious && isSpike(previous.amountCents, beforePrevious.amountCents);
+	return previousWasOneOff ? latest : previous;
+}
+
+function isSpike(amount: bigint, price: bigint): boolean {
+	const distance = abs(amount - price);
+	return distance > SPIKE_CENTS && distance * 100n > price * SPIKE_PERCENT;
+}
+
+function isPriceChange(amount: bigint, price: bigint): boolean {
+	const distance = abs(amount - price);
+	return distance > PRICE_CHANGE_CENTS && distance * 100n > price * PRICE_CHANGE_PERCENT;
+}
+
+/** The shown price against the price before its current run, while that run is short. */
+function priceChange(rows: readonly RecurringCandidate[], shown: RecurringCandidate): RecurringPriceChange | null {
+	const latest = rows[rows.length - 1];
+	// A one-off payment is not a new price.
+	if (shown !== latest) return null;
+	let start = rows.length - 1;
+	while (start > 0 && !isPriceChange(rows[start - 1].amountCents, shown.amountCents)) start--;
+	if (start === 0 || rows.length - start > PRICE_CHANGE_SHOWN_PAYMENTS) return null;
+	const before = shownPayment(rows.slice(0, start)).amountCents;
+	if (!isPriceChange(shown.amountCents, before)) return null;
+	return {amount: formatCents(shown.amountCents - before), since: rows[start].date};
+}
+
+/** A series costs its shown payment per cycle. Weekly uses 52 weeks over 12 months. */
 function monthlyEquivalent(
 	rows: readonly RecurringCandidate[],
 	rule: CadenceRule,
-	amountKind: RecurringAmountKind,
-	currentPrice: RecurringCandidate,
-	priceRows: readonly RecurringCandidate[],
+	shown: RecurringCandidate,
 ): bigint | null {
-	const baseAmounts = rows.map((row) => row.baseAmountCents);
-	if (baseAmounts.some((amount) => amount === null)) return null;
-	const perPayment =
-		amountKind === 'FIXED'
-			? currentPrice.baseAmountCents!
-			: medianCents(priceRows.map((row) => row.baseAmountCents!));
+	if (rows.some((row) => row.baseAmountCents === null)) return null;
+	const perPayment = shown.baseAmountCents!;
 	const [numerator, denominator] = rule.months === 0 ? [52n, 12n] : [1n, BigInt(rule.months)];
 	return divideRounded(perPayment * numerator, denominator);
 }
@@ -895,12 +1037,6 @@ function medianNumber(values: readonly number[]): number {
 	const sorted = [...values].sort((a, b) => a - b);
 	const middle = Math.floor(sorted.length / 2);
 	return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
-function medianCents(values: readonly bigint[]): bigint {
-	const sorted = [...values].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-	const middle = Math.floor(sorted.length / 2);
-	return sorted.length % 2 ? sorted[middle] : averageCents([sorted[middle - 1], sorted[middle]]);
 }
 
 /** Rounds half away from zero, like Postgres `ROUND`. */

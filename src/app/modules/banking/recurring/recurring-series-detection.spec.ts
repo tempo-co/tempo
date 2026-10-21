@@ -25,6 +25,16 @@ function monthly(day: number, months: string[], amount: string, overrides: Parti
 
 const MAY_TO_OCT = ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'];
 
+/** The given day in a month counted from January of `year` (1-based, may overflow into later years). */
+function isoMonth(year: number, month: number, day: number): string {
+	return new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10);
+}
+
+/** A day shortly after a payment, before the next one is due. */
+function addMonthDays(date: string): string {
+	return new Date(Date.parse(date) + 3 * 86_400_000).toISOString().slice(0, 10);
+}
+
 describe('detectRecurringSeries', () => {
 	it('current naming period: prices every interleaved linked name', () => {
 		const amounts = ['50.00', '25.00', '100.00', '75.00', '40.00', '60.00'];
@@ -38,8 +48,8 @@ describe('detectRecurringSeries', () => {
 		expect(detectRecurringSeries(rows, '2027-01-10')).toEqual([
 			expect.objectContaining({
 				amountKind: 'VARIABLE',
-				typicalAmount: '55.00',
-				monthlyEquivalent: 5500n,
+				typicalAmount: '60.00',
+				monthlyEquivalent: 6000n,
 				nextExpectedDate: '2027-01-10',
 				status: 'ACTIVE',
 				transactionIds: rows.map(({id}) => id),
@@ -63,13 +73,13 @@ describe('detectRecurringSeries', () => {
 			}),
 		);
 		expect(detectRecurringSeries(current, '2026-11-10')).toEqual([
-			expect.objectContaining({amountKind: 'VARIABLE', typicalAmount: '62.50', monthlyEquivalent: 6250n}),
+			expect.objectContaining({amountKind: 'VARIABLE', typicalAmount: '75.00', monthlyEquivalent: 7500n}),
 		]);
 		expect(detectRecurringSeries([...previous, ...current], '2026-11-10')).toEqual([
 			expect.objectContaining({
 				amountKind: 'VARIABLE',
-				typicalAmount: '62.50',
-				monthlyEquivalent: 6250n,
+				typicalAmount: '75.00',
+				monthlyEquivalent: 7500n,
 				nextExpectedDate: '2026-11-10',
 				status: 'ACTIVE',
 				transactionIds: [...previous, ...current].map(({id}) => id),
@@ -130,8 +140,8 @@ describe('detectRecurringSeries', () => {
 								key: original.key,
 								firstDate: previous[0].date,
 								amountKind,
-								typicalAmount: amountKind === 'VARIABLE' ? '50.00' : '17.00',
-								monthlyEquivalent: amountKind === 'VARIABLE' ? 5000n : 1700n,
+								typicalAmount: amountKind === 'VARIABLE' ? ['50.00', '25.00', '25.00'][count] : '17.00',
+								monthlyEquivalent: amountKind === 'VARIABLE' ? [5000n, 2500n, 2500n][count] : 1700n,
 								nextExpectedDate: ['2026-12-10', '2027-01-10', '2027-02-10'][count],
 								transactionIds: recognized.map(({id}) => id),
 								restartTransactionIds: [
@@ -151,8 +161,8 @@ describe('detectRecurringSeries', () => {
 					expect(after).toMatchObject({
 						key: original.key,
 						amountKind,
-						typicalAmount: amountKind === 'VARIABLE' ? '62.50' : '17.00',
-						monthlyEquivalent: amountKind === 'VARIABLE' ? 6250n : 1700n,
+						typicalAmount: amountKind === 'VARIABLE' ? '175.00' : '17.00',
+						monthlyEquivalent: amountKind === 'VARIABLE' ? 17500n : 1700n,
 					});
 					expect(after.transactionIds).toEqual(expect.arrayContaining(rows.map(({id}) => id)));
 				}
@@ -208,8 +218,8 @@ describe('detectRecurringSeries', () => {
 					return {...row, baseAmountCents: row.amountCents * 2n};
 				});
 				const due = nameCount === 2 ? '2026-11-10' : '2027-01-10';
-				const expected = nameCount === 2 ? '62.50' : '55.00';
-				const baseCost = nameCount === 2 ? 12500n : 11000n;
+				const expected = nameCount === 2 ? '75.00' : '60.00';
+				const baseCost = nameCount === 2 ? 15000n : 12000n;
 				const rows = [...previous, ...current];
 				const snapshot = structuredClone(rows);
 				const baseline = detectRecurringSeries(current, due);
@@ -296,8 +306,8 @@ describe('detectRecurringSeries', () => {
 				expect.arrayContaining([
 					expect.objectContaining({
 						amountKind: 'VARIABLE',
-						typicalAmount: '55.00',
-						monthlyEquivalent: 5500n,
+						typicalAmount: '60.00',
+						monthlyEquivalent: 6000n,
 						transactionIds: [...previous, ...current].map(({id}) => id),
 					}),
 					expect.objectContaining({
@@ -407,7 +417,8 @@ describe('detectRecurringSeries', () => {
 					monthlyEquivalent: 1700n,
 					nextExpectedDate: '2026-11-10',
 					status: 'ACTIVE',
-					flags: ['PRICE_INCREASED', 'LATE'],
+					flags: ['LATE'],
+					priceChange: null,
 				}),
 			]);
 		},
@@ -421,8 +432,8 @@ describe('detectRecurringSeries', () => {
 				false,
 				'account-2',
 				'VARIABLE',
-				'62.50',
-				6250n,
+				'75.00',
+				7500n,
 			],
 			[
 				'cross-account alternating names',
@@ -439,8 +450,8 @@ describe('detectRecurringSeries', () => {
 				true,
 				'account-1',
 				'VARIABLE',
-				'62.50',
-				6250n,
+				'75.00',
+				7500n,
 			],
 			[
 				'same-account fixed alternating names',
@@ -896,7 +907,7 @@ describe('detectRecurringSeries', () => {
 	it.each([
 		[['120.00', '120.00', '120.00'], 'INSURANCE', 'FIXED', '120.00', 1000n],
 		[['120.00', '240.00', '180.00'], 'INSURANCE', 'VARIABLE', '180.00', 1500n],
-		[['120.00', '240.00'], 'SUBSCRIPTIONS', 'VARIABLE', '180.00', 1500n],
+		[['120.00', '240.00'], 'SUBSCRIPTIONS', 'VARIABLE', '120.00', 1000n],
 	] as const)('accepts eligible annual amounts %j in %s', (amounts, category, amountKind, typicalAmount, cost) => {
 		const dates = amounts.length === 2 ? ['2025-03-10', '2026-03-12'] : ['2024-03-10', '2025-03-11', '2026-03-12'];
 		const rows = dates.map((date, index) => payment(date, amounts[index], {category}));
@@ -1082,18 +1093,143 @@ describe('detectRecurringSeries', () => {
 		expect(new Set(series.map((entry) => entry.key)).size).toBe(2);
 	});
 
-	it('keeps a price step in one series and flags it', () => {
+	it('keeps one payer’s monthly payments as one stream through amount changes and one-off extras', () => {
+		const income = {merchantKey: 'INCOME:example grants office', category: 'INCOME'};
+		const levels = ['300.00', '300.00', '300.00', '640.00', '640.00', '640.00', '640.00', '500.00', '500.00'];
+		const levels2 = ['500.00', '220.00', '220.00', '320.00', '320.00', '320.00', '230.00', '230.00', '230.00'];
+		const monthlyRows = [...levels, ...levels2].map((amount, index) =>
+			payment(isoMonth(2024, 10 + index, 24), amount, income),
+		);
+		const extras = [
+			payment('2024-12-29', '950.00', income),
+			payment('2024-12-29', '310.00', income),
+			payment('2025-03-22', '180.00', income),
+			payment('2025-10-17', '1200.00', income),
+		];
+		const [series, ...rest] = detectRecurringSeries([...monthlyRows, ...extras], '2026-03-27');
+
+		expect(rest).toEqual([]);
+		expect(series).toMatchObject({
+			cadence: 'MONTHLY',
+			status: 'ACTIVE',
+			typicalAmount: '230.00',
+			transactionIds: monthlyRows.map(({id}) => id),
+		});
+	});
+
+	it('keeps a salary one stream from a small start through months that vary', () => {
+		const income = {merchantKey: 'INCOME:example employer', category: 'INCOME'};
+		const amounts = ['250.00', '250.00', '250.00', '250.00', '250.00', null, '1150.00', '1170.00', '1260.00'];
+		const later = ['1330.00', '1240.00', '1500.00', '1120.00', '1220.00', '1160.00', '1210.00', '940.00', '215.00'];
+		const rows = [...amounts, ...later].flatMap((amount, index) =>
+			amount ? [payment(isoMonth(2024, 9 + index, 27), amount, income)] : [],
+		);
+		const [series, ...rest] = detectRecurringSeries(rows, '2026-03-01');
+
+		expect(rest).toEqual([]);
+		expect(series).toMatchObject({status: 'ACTIVE', transactionIds: rows.map(({id}) => id)});
+	});
+
+	it('keeps a second plan from one payer apart once it has its own monthly rhythm', () => {
+		const first = monthly(
+			3,
+			['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'],
+			'20.00',
+		);
+		const second = monthly(18, ['2026-08', '2026-09', '2026-10'], '9.00');
+
+		expect(detectRecurringSeries([...first, ...second], '2026-10-19')).toEqual([
+			expect.objectContaining({transactionIds: first.map(({id}) => id)}),
+			expect.objectContaining({transactionIds: second.map(({id}) => id)}),
+		]);
+	});
+
+	it('keeps a price step in one series and shows the new price with its change', () => {
 		const rows = [...monthly(8, MAY_TO_OCT.slice(0, 5), '10.00'), payment('2026-10-08', '11.50')];
 
 		const [series, ...rest] = detectRecurringSeries(rows, TODAY);
 
 		expect(rest).toHaveLength(0);
 		expect(series).toMatchObject({
-			typicalAmount: '10.00',
+			typicalAmount: '11.50',
 			latestAmount: '11.50',
 			monthlyEquivalent: 1150n,
-			flags: ['PRICE_INCREASED'],
+			priceChange: {amount: '1.50', since: '2026-10-08'},
+			flags: [],
 		});
+	});
+
+	it('shows a price drop until the new price has been paid three times', () => {
+		const older = monthly(23, ['2026-01', '2026-02', '2026-03', '2026-04'], '12.00', {
+			merchantKey: 'EXPENSE:example mobile',
+		});
+		const newer = monthly(23, ['2026-05', '2026-06', '2026-07', '2026-08'], '8.50', {
+			merchantKey: 'EXPENSE:example mobile',
+		});
+		const change = (count: number) =>
+			detectRecurringSeries([...older, ...newer.slice(0, count)], addMonthDays(newer[count - 1].date))[0]
+				.priceChange;
+
+		expect(change(1)).toEqual({amount: '-3.50', since: '2026-05-23'});
+		expect(change(3)).toEqual({amount: '-3.50', since: '2026-05-23'});
+		expect(change(4)).toBeNull();
+		// A series no longer paid has no current price to compare.
+		expect(detectRecurringSeries([...older, newer[0]], '2026-08-01')[0]).toMatchObject({
+			status: 'ENDED',
+			priceChange: null,
+		});
+	});
+
+	it('shows no price change for small differences or a variable bill', () => {
+		const jitter = ['9.00', '9.30', '9.00', '9.00', '9.20', '9.00'].map((amount, index) =>
+			payment(`2026-0${index + 3}-05`, amount, {merchantKey: 'EXPENSE:example jitter'}),
+		);
+		const variable = ['40.00', '25.00', '100.00', '75.00', '60.00', '50.00'].map((amount, index) =>
+			payment(`2026-0${index + 3}-12`, amount, {merchantKey: 'EXPENSE:example energy'}),
+		);
+
+		expect(detectRecurringSeries(jitter, '2026-08-06')).toEqual([
+			expect.objectContaining({amountKind: 'FIXED', typicalAmount: '9.00', priceChange: null}),
+		]);
+		expect(detectRecurringSeries(variable, '2026-08-13')).toEqual([
+			expect.objectContaining({amountKind: 'VARIABLE', typicalAmount: '50.00', priceChange: null}),
+		]);
+	});
+
+	it('shows the latest payment of a variable bill and keeps the price before a one-off spike', () => {
+		const amounts = ['8.00', '11.00', '8.00', '25.00', '11.00', '4.75', '4.75', '5.25', '4.75', '36.00'];
+		const rows = amounts.map((amount, index) =>
+			payment(isoMonth(2025, 12 + index, 23), amount, {merchantKey: 'EXPENSE:example phone'}),
+		);
+		const shown = (count: number, next: string[] = []) => {
+			const extra = next.map((amount, index) =>
+				payment(isoMonth(2025, 12 + count + index, 23), amount, {merchantKey: 'EXPENSE:example phone'}),
+			);
+			const history = [...rows.slice(0, count), ...extra];
+			return detectRecurringSeries(history, addMonthDays(history[history.length - 1].date));
+		};
+
+		// 4.75 to 36.00 is more than 50% and more than 5.00 away: a one-off until it repeats.
+		expect(shown(10)).toEqual([
+			expect.objectContaining({
+				amountKind: 'VARIABLE',
+				typicalAmount: '4.75',
+				latestAmount: '36.00',
+				monthlyEquivalent: 475n,
+			}),
+		]);
+		expect(shown(10, ['35.80'])).toEqual([
+			expect.objectContaining({typicalAmount: '35.80', monthlyEquivalent: 3580n}),
+		]);
+		// A small bill doubling is under 5.00 away, so it is a price change, not a one-off.
+		const small = ['2.00', '2.40', '2.00', '2.20', '4.50'].map((amount, index) =>
+			payment(isoMonth(2026, 3 + index, 9), amount, {merchantKey: 'EXPENSE:example small bill'}),
+		);
+		expect(detectRecurringSeries(small, '2026-07-12')).toEqual([expect.objectContaining({typicalAmount: '4.50'})]);
+		// A normal change shows at once.
+		expect(shown(10, ['6.50'])).toEqual([
+			expect.objectContaining({typicalAmount: '6.50', monthlyEquivalent: 650n}),
+		]);
 	});
 
 	it.each([
@@ -1489,8 +1625,9 @@ describe('detectRecurringSeries', () => {
 		expect(detectRecurringSeries(rows, TODAY)).toEqual([
 			expect.objectContaining({
 				amountKind: 'VARIABLE',
-				typicalAmount: '30.00',
-				monthlyEquivalent: 3000n,
+				// Alternating amounts are no one-off: the latest one shows.
+				typicalAmount: '42.00',
+				monthlyEquivalent: 4200n,
 				flags: [],
 				transactionIds: rows.map(({id}) => id),
 			}),
@@ -1557,8 +1694,8 @@ describe('detectRecurringSeries', () => {
 			expect.objectContaining({
 				cadence: 'MONTHLY',
 				amountKind: 'VARIABLE',
-				typicalAmount: '83.00',
-				monthlyEquivalent: 8300n,
+				typicalAmount: '88.30',
+				monthlyEquivalent: 8830n,
 				flags: [],
 			}),
 		]);

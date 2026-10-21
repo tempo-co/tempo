@@ -54,7 +54,16 @@ export class RecurringContinuationDto {
 	previousLastDate: string;
 }
 
-/** Amounts are positive decimal strings with two places; `monthlyEquivalent` is in the owner's base currency. */
+/** A fixed price's recent change; `amount` is signed, `since` is the first payment at the new price. */
+export class RecurringPriceChangeDto {
+	amount: string;
+	since: string;
+}
+
+/**
+ * Amounts are positive decimal strings with two places; `monthlyEquivalent` is in the owner's base currency.
+ * `typicalAmount` is the latest payment, or the one before it while the latest is a one-off.
+ */
 export class RecurringSeriesDto {
 	key: string;
 	name: string;
@@ -72,6 +81,8 @@ export class RecurringSeriesDto {
 	nextExpectedDate: string;
 	status: RecurringSeriesStatus;
 	flags: RecurringSeriesFlag[];
+	/** Set until the new price has been paid three times. */
+	priceChange: RecurringPriceChangeDto | null;
 	decision: RecurringSeriesDecisionValue | null;
 	/** Set on a history that may continue an earlier one, or that the owner linked to one. */
 	continuation: RecurringContinuationDto | null;

@@ -292,11 +292,11 @@ describe('RecurringSeries', () => {
 			0,
 			true,
 			['50.00', '25.00', '100.00', '75.00', '40.00', '60.00'],
-			'55.00',
+			'60.00',
 			'2027-01-10',
 		],
-		['long same-account history', 2, 24, true, ['50.00', '25.00', '100.00', '75.00'], '62.50', '2026-11-10'],
-		['long moved-account history', 2, 24, false, ['50.00', '25.00', '100.00', '75.00'], '62.50', '2026-11-10'],
+		['long same-account history', 2, 24, true, ['50.00', '25.00', '100.00', '75.00'], '75.00', '2026-11-10'],
+		['long moved-account history', 2, 24, false, ['50.00', '25.00', '100.00', '75.00'], '75.00', '2026-11-10'],
 	] as const)(
 		'current naming period: preserves confirmed cost and exact membership for %s',
 		async (label, nameCount, oldCount, sameAccount, amounts, cost, due) => {
@@ -681,8 +681,8 @@ describe('RecurringSeries', () => {
 			false,
 			false,
 			'VARIABLE',
-			'62.50',
-			6250n,
+			'75.00',
+			7500n,
 		],
 		[
 			'cross-account alternating names',
@@ -699,8 +699,8 @@ describe('RecurringSeries', () => {
 			true,
 			true,
 			'VARIABLE',
-			'62.50',
-			6250n,
+			'75.00',
+			7500n,
 		],
 		[
 			'same-account fixed alternating names',
@@ -1011,6 +1011,7 @@ describe('RecurringSeries', () => {
 					nextExpectedDate: '2026-11-03',
 					status: 'ACTIVE',
 					flags: [],
+					priceChange: null,
 					decision: null,
 				}),
 				// The same shop in another currency is its own series, costed in the base currency.
@@ -1018,7 +1019,12 @@ describe('RecurringSeries', () => {
 			]),
 		);
 		expect(byName(series, 'Example Streaming')).toEqual([
-			expect.objectContaining({typicalAmount: '10.00', monthlyEquivalent: '11.50', flags: ['PRICE_INCREASED']}),
+			expect.objectContaining({
+				typicalAmount: '11.50',
+				monthlyEquivalent: '11.50',
+				flags: [],
+				priceChange: {amount: '1.50', since: '2026-10-08'},
+			}),
 		]);
 		expect(byName(series, 'Example Phone')).toEqual([
 			expect.objectContaining({status: 'ACTIVE', flags: ['LATE'], nextExpectedDate: '2026-10-14'}),
@@ -1133,13 +1139,17 @@ describe('RecurringSeries', () => {
 		expect(variable).toMatchObject({amountKind: 'VARIABLE', transactionCount: 3});
 		await ownerAgent.patch(`/recurring-series/${variable.key}/decision`).send({decision: 'CONFIRMED'}).expect(204);
 
-		// The amount settles, so the series becomes a fixed one starting at another payment.
+		// The amount settles; the payments stay one stream on one rhythm, so the series and its decision stay.
 		await fixtures.createTransaction(ownerBankAccount, bookedRow('2026-09-20', '-20.00', utility));
 		const [fixed] = byName((await list(ownerAgent)).series, 'Example Utility');
-		expect(fixed).toMatchObject({amountKind: 'FIXED', decision: 'CONFIRMED'});
-		expect(fixed.key).not.toBe(variable.key);
+		expect(fixed).toMatchObject({
+			key: variable.key,
+			amountKind: 'FIXED',
+			decision: 'CONFIRMED',
+			transactionCount: 4,
+			priceChange: {amount: '10.00', since: '2026-07-20'},
+		});
 
-		// Undoing under the new key clears the inherited decision too.
 		await ownerAgent.patch(`/recurring-series/${fixed.key}/decision`).send({decision: null}).expect(204);
 		expect(byName((await list(ownerAgent)).series, 'Example Utility')[0].decision).toBeNull();
 	});

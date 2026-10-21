@@ -359,6 +359,7 @@ function toResponse(
 		nextExpectedDate: entry.nextExpectedDate,
 		status: entry.status,
 		flags: entry.flags,
+		priceChange: entry.priceChange,
 		decision,
 		continuation: continuation && toContinuationResponse(continuation),
 	};
