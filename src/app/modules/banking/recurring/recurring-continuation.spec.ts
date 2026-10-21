@@ -77,6 +77,19 @@ describe('findContinuationPairs', () => {
 		expect(rows).toEqual(before);
 	});
 
+	it('pairs histories when the earlier name is the longer one', () => {
+		const rows = history({merchantKey: 'EXPENSE:example motion', name: 'Example Motion Ltd'}).map((row, index) =>
+			index < 3
+				? {...row, merchantKey: 'EXPENSE:example motion exampletown', name: 'Example Motion Exampletown'}
+				: row,
+		);
+		expect(pairs(rows).pairs).toEqual([
+			expect.objectContaining({
+				joined: expect.objectContaining({transactionIds: ids(rows), name: 'Example Motion Ltd'}),
+			}),
+		]);
+	});
+
 	it('pairs histories within one bank account', () => {
 		const rows = history({bankAccountId: 'account-1'});
 		expect(pairs(rows).pairs).toEqual([
@@ -84,7 +97,7 @@ describe('findContinuationPairs', () => {
 		]);
 	});
 
-	it('keeps a late manual payment late instead of moving the billing day', () => {
+	it('keeps a late manual payment late and the billing day where it was', () => {
 		const rows = history({}, ['2036-05-11', '2036-06-05', '2036-07-05', '2036-08-05']).map((row, index) =>
 			index < 3 ? {...row, date: ['2036-01-05', '2036-02-05', '2036-03-05'][index]} : row,
 		);

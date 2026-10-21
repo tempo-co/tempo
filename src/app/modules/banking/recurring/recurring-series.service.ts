@@ -304,6 +304,8 @@ function applyLinkedChoices(
 		const newer = detected.find(({transactionIds}) =>
 			transactionIds.some((id) => choice.newerTransactionIds.includes(id)),
 		);
+		// A duplicate answer for histories already joined belongs to that link, so one unlink removes both.
+		if (older && older === newer) linked.get(older.key)?.saved.push(choice);
 		if (!older || !newer || older === newer || older.lastDate >= newer.firstDate) continue;
 		const joined = joinContinuation(older, newer, candidatesById, today, continuationKey(older, newer));
 		if (!joined) continue;

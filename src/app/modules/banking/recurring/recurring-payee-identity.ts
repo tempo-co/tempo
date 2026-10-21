@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 
 import {extractCardMerchantName, extractStructuredCounterpartyName} from '../bank-transaction-display';
-import {getBankTransactionMerchantKey} from '../categorization/bank-transaction-merchant-key';
+import {endsWithLegalForm, getBankTransactionMerchantKey} from '../categorization/bank-transaction-merchant-key';
 import {parseSepaDescriptionIban} from '../own-transfer/iban';
 import type {RecurringCandidate} from './recurring-series-detection';
 
@@ -143,10 +143,9 @@ function structuredCompany(row: RecurringEvidence, direction: string): {token: s
 	if (!row.counterpartyName || (row.category !== null && PERSON_TRANSFER_CATEGORIES.has(row.category))) return null;
 	const description = row.description?.trim() ?? '';
 	if (!extractStructuredCounterpartyName(description) || !parseSepaDescriptionIban(description)) return null;
-	const normalized = normalizedName(row.counterpartyName, direction);
-	if (!normalized) return null;
-	// The merchant-key normalizer already knows legal forms; a name it shortened carried one.
-	return {token: compact(row.counterpartyName), legal: normalized !== fold(row.counterpartyName)};
+	// A name the merchant key does not accept (a payment processor) identifies no company.
+	if (!normalizedName(row.counterpartyName, direction)) return null;
+	return {token: compact(row.counterpartyName), legal: endsWithLegalForm(row.counterpartyName.trim())};
 }
 
 /** The merchant-key form of a name, so legal forms and processor tails are handled in one place. */

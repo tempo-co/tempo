@@ -17,11 +17,12 @@ export type ContinuationPair = {
 };
 
 /**
- * Finds histories that look like one fixed-price obligation renamed: the newer starts after the older ends, one name
+ * Finds histories that look like one fixed-price obligation renamed: the newer starts after the older ends, either name
  * extends the other by whole words, and direction, currency, cadence, price and a single payment purpose agree. The
  * detector must keep their union whole. Retail and person transfers are left out, and a history with more than one
  * possible counterpart is never paired. The same evidence also fits a new plan from the same provider, so a pair is
  * only ever a question for the owner.
+ * A middle history of three successive renames has two counterparts, so it is asked about only once one link exists.
  */
 export function joinContinuation(
 	older: DetectedRecurringSeries,

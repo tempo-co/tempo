@@ -154,6 +154,14 @@ describe('inferRecurringIdentities', () => {
 			() => [sepaDebit('Example Bar Stool'), sepaDebit('Example Barstool')],
 		],
 		[
+			'structured names with different spacing and a trailing comma',
+			() => [sepaDebit('Example Bar Stool,'), sepaDebit('Example Barstool')],
+		],
+		[
+			'structured names with different spacing and the same processor tail',
+			() => [sepaDebit('Example Bar Stool via Example Pay'), sepaDebit('Example Barstool via Example Pay')],
+		],
+		[
 			'company-like free text without a structured record',
 			() => [row({counterpartyName: 'Example Music AB'}), row({counterpartyName: 'EXAMPLEMUSICAB'})],
 		],

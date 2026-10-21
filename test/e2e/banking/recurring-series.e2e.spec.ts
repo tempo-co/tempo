@@ -7,6 +7,7 @@ import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
+import {RecurringContinuationChoice} from '@modules/banking/recurring/recurring-continuation-choice.entity';
 import {RecurringSeriesDecision} from '@modules/banking/recurring/recurring-series-decision.entity';
 import {seriesKey} from '@modules/banking/recurring/recurring-series-detection';
 
@@ -1464,7 +1465,7 @@ describe('RecurringSeries', () => {
 				fresh.agent.patch(`/recurring-series/${key}/continuation`).send({choice});
 			const decide = (key: string, decision: 'CONFIRMED' | 'DISMISSED' | null) =>
 				fresh.agent.patch(`/recurring-series/${key}/decision`).send({decision}).expect(204);
-			return {fresh, connection, first, older, newer, read, drill, answer, decide};
+			return {fresh, freshOwner, connection, first, older, newer, read, drill, answer, decide};
 		}
 
 		const sorted = (rows: {id: string}[]) => rows.map(({id}) => id).sort();
@@ -1607,11 +1608,22 @@ describe('RecurringSeries', () => {
 			}
 		});
 
-		it('keeps a linked history undoable when an even older history arrives later', async () => {
-			const {connection, first, read, answer} = await renamedPlan();
+		it('unlinks a history in one step after duplicate answers and an even older history', async () => {
+			const {freshOwner, connection, first, read, answer} = await renamedPlan();
 			try {
 				const [current] = byName((await read()).series, 'Example Motion Exampletown');
 				await answer(current.key, 'LINKED').expect(204);
+				// A second client answered at the same moment.
+				const choices: Repository<RecurringContinuationChoice> = app.get(
+					getRepositoryToken(RecurringContinuationChoice),
+				);
+				const [saved] = await choices.findBy({accountId: freshOwner.id});
+				await choices.insert({
+					accountId: saved.accountId,
+					choice: 'LINKED',
+					olderTransactionIds: saved.olderTransactionIds,
+					newerTransactionIds: saved.newerTransactionIds,
+				});
 				// Older payments from a reconnected bank appear under the shortest form of the name.
 				await fixtures.createTransactions(
 					first,
