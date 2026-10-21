@@ -50,8 +50,6 @@ test.describe('bank transactions', () => {
       .getByText('Description', {exact: true})
       .locator('..');
     await expect(descriptionDetail).toContainText('Coffee shop');
-    await expect(inspector.getByRole('heading', {level: 2, name: 'Notes'})).toHaveCount(0);
-    await expect(inspector.getByText('Remittance information', {exact: true})).toHaveCount(0);
     await expect(inspector.getByText('Merchant category code')).toBeVisible();
     await expect(inspector.getByText('Bank account', {exact: true})).toBeVisible();
     await expect(inspector.getByText('Daily spending')).toBeVisible();
@@ -65,7 +63,6 @@ test.describe('bank transactions', () => {
       inspector.getByText('0.923400000000000000 USD (SPOT)', {exact: true}),
     ).not.toBeVisible();
     await expect(inspector.getByText('reference-coffee (RF)')).toBeVisible();
-    await expect(inspector.getByTestId('bank-transaction-id-row')).toHaveCount(0);
     await expect(inspector.getByTestId('bank-transaction-category-control')).toBeVisible();
     await expect(inspector.getByTestId('bank-transaction-category-status')).toHaveText(
       'Categorizing…',
@@ -182,7 +179,7 @@ test.describe('bank transactions', () => {
     ).toHaveCount(1);
     expect(new URL(page.url()).searchParams.get('pageIndex')).toBe('0');
 
-    // Links from before Activity merged into Cash flow keep filtering the same rows.
+    // Shared links that use the financialEventTypes parameter filter the same rows.
     await page.goto(
       '/bank-transactions?pageIndex=1&pageSize=10&financialEventTypes=%5B%22CURRENCY_EXCHANGE%22%5D',
     );
@@ -219,7 +216,6 @@ test.describe('bank transactions', () => {
     await page.keyboard.press('Escape');
     await page.goBack();
     await expect(page.getByRole('button', {name: 'Cash flow', exact: true})).toBeVisible();
-    await expect(page.getByRole('button', {name: 'Activity'})).toHaveCount(0);
     await expect(
       page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Coffee shop'}),
     ).toBeVisible();
@@ -900,7 +896,6 @@ test.describe('bank transactions', () => {
     await expect(mobileFilters.getByRole('heading', {name: 'Categories'})).toBeVisible();
     await expect(mobileFilters.getByRole('heading', {name: 'Category source'})).toBeVisible();
     await expect(mobileFilters.getByRole('heading', {name: 'Cash flow'})).toBeVisible();
-    await expect(mobileFilters.getByRole('heading', {name: 'Activity'})).toHaveCount(0);
     const mobileFiltersBody = page.getByTestId('bank-transaction-mobile-filters-body');
     await expect.poll(() => mobileFiltersBody.evaluate((element) => element.scrollTop)).toBe(0);
     await expect(mobileFiltersBody).toHaveCSS('padding-top', '16px');

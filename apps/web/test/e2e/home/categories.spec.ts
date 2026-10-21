@@ -31,7 +31,6 @@ test('shows six positive categories, remaining count and refunds last', async ({
     await expect(links.nth(index)).toContainText(label);
   }
   await expect(links.last()).toContainText('-€40.00');
-  await expect(card).not.toContainText('Payments to people');
 });
 
 test('drills to the exact category and booking range', async ({page}) => {

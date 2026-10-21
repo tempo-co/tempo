@@ -62,6 +62,13 @@ CI runs these jobs in parallel: lint/format (`npm run generate-routes`, `npm run
 - Use Tailwind classes for styling and `cn` from `src/utils/cn.ts` when class merging is needed. Formatting is single-quoted, JSX uses single quotes, trailing commas are enabled, bracket spacing is disabled, and the print width is 100.
 - TypeScript is strict with unused locals/parameters and fallthrough cases disabled in `tsconfig.app.json`.
 
+## Writing tests
+
+- Test current behavior. Name and assert what the software does now ("saving shows a pending state, then the saved value"), never the change that led to it ("…instead of X", "no longer…", "still…"). Change history belongs in commits and PRs.
+- Don't assert that removed behavior stays removed. Assert that something doesn't happen only when that is a requirement in its own right: a cancelled action writes nothing, a failed check leaves data unchanged, an unauthorized request is refused.
+- One test per flow. A flow is a user journey in the UI, a request through an API endpoint, or a module's public contract. When a change adds or alters a step in an existing flow, extend that flow's test (action → pending state → result) instead of adding a test for the step. Add a separate test only for a distinct flow or outcome: a failure, a cancellation, another entry point, a different kind of input.
+- Regression tests follow the same rules. Strengthen the test for the flow where the bug happened so it fails on the old code, and name it for the behavior, not the bug.
+
 ## E2E test helpers
 
 Reuse these instead of re-creating setup inline:

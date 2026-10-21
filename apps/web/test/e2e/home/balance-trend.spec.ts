@@ -86,7 +86,6 @@ test('states the total now and how far the line moved since its first point', as
   await expect(card(page)).toContainText(
     '€3,100.00 now · €2,100.00 more than at the end of July 2026',
   );
-  await expect(card(page)).not.toContainText('added since');
   await expect(card(page)).toContainText('Balance at the end of each month');
   await expect(
     table(page, 'month').getByRole('row', {name: /31 Aug 2026/, includeHidden: true}),

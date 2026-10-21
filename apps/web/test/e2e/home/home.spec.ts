@@ -60,6 +60,9 @@ test.describe('Home', () => {
 
     await page.goto('/?month=2026-13');
     await expect(homePage.monthHeading).toHaveText('October 2026');
+
+    await page.goto('/?month=0000-01');
+    await expect(homePage.monthHeading).toHaveText('October 2026');
   });
 
   test('says when the seeded bank last synced', async ({homePage, page}) => {

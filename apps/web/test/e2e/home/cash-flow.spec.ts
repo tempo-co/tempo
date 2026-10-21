@@ -129,9 +129,7 @@ test('month averages name their span across a year boundary', async ({page}) => 
   );
 });
 
-test('a long summary wraps under the switch instead of pushing it below the title', async ({
-  page,
-}) => {
+test('a long summary wraps below the switch, which stays on the title row', async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
   await page.route('**/bank-transactions/cash-flow**', (route) =>
     fulfillJson(route, {

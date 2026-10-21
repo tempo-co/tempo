@@ -164,7 +164,6 @@ test.describe('Account Settings: Email change', () => {
               : done.y < different.y && Math.abs(done.width - input.width) < 1;
           })
           .toBe(true);
-        await expect(page.getByRole('dialog')).not.toContainText('Until then, keep signing in');
       });
     });
   }

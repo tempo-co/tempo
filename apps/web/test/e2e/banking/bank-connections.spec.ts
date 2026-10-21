@@ -201,7 +201,6 @@ test.describe('bank connections', () => {
     await expect(status).toBeVisible();
     await expect(freshness).toBeVisible();
     await expect(connectionCard.getByTestId('bank-connection-sync-status')).toHaveCount(0);
-    await expect(connectionCard.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
     await expect(connectionCard.getByText('Daily spending', {exact: true})).toBeVisible();
     await expect(connectionCard.getByText('Provider purchase')).toBeVisible();
     await expect(connectionCard).toContainText('Currency exchange');
@@ -223,24 +222,6 @@ test.describe('bank connections', () => {
     expect(new URL(page.url()).searchParams.has('transactionId')).toBe(false);
     await expect(page.getByText('Bank connection added')).toBeVisible();
     await expect(page).toHaveURL(new RegExp('/bank-connections$'));
-  });
-
-  test('shows throttled automatic sync state without a manual endpoint', async ({page}) => {
-    await transformBankConnections(page, (connections) =>
-      connections.map((connection) => ({
-        ...connection,
-        syncStatus: 'RATE_LIMITED',
-        lastSyncError: 'Bank data access is temporarily rate-limited.',
-        nextSyncAt: '2030-01-01T01:00:00.000Z',
-      })),
-    );
-
-    await page.goto('/bank-connections');
-
-    const syncStatus = page.getByTestId('bank-connection-sync-status').first();
-    await expect(syncStatus).toContainText('Automatic sync is rate-limited');
-    await expect(syncStatus).toContainText('temporarily');
-    await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
   });
 
   for (const {syncStatus, title, description} of [
@@ -265,7 +246,7 @@ test.describe('bank connections', () => {
       description: 'Consent expired.',
     },
   ] as const) {
-    test(`retains the ${syncStatus} automatic sync warning`, async ({page}) => {
+    test(`shows the ${syncStatus} sync warning when the next sync is overdue`, async ({page}) => {
       await mockBankConnections(page, [
         {
           ...MOCK_CONNECTION,
@@ -497,7 +478,6 @@ test.describe('bank connections', () => {
     const countrySelector = picker.getByTestId('bank-connection-country-selector');
     const bankSelector = picker.getByTestId('bank-connection-bank-selector');
     await expect(picker).toBeVisible();
-    await expect(picker.getByText(/personal account-information access/)).toHaveCount(0);
     await expect(countrySelector).toBeVisible();
     await expect(countrySelector).toBeDisabled();
     await expect(bankSelector).toBeVisible();
@@ -660,7 +640,6 @@ test.describe('bank connections', () => {
     expect(totalBox.x).toBeCloseTo(titleBox.x, 0);
     await connectionCard.getByTestId(/^connection-card-toggle-/).click();
     await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
-    await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
     await expect(page.getByText('Daily spending', {exact: true})).toBeVisible();
     await expect(freshness).toBeVisible();
     await expect(connectionCard.locator('footer')).not.toContainText('·', {useInnerText: true});
@@ -759,7 +738,6 @@ test.describe('bank connections', () => {
     await expect(page.getByRole('heading', {name: 'Accounts'})).toBeVisible();
     await expect(page.getByRole('heading', {name: 'Transactions'})).toBeVisible();
     await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
-    await expect(page.getByRole('button', {name: 'Sync now'})).toHaveCount(0);
     await expect(activeTab).toHaveAttribute('aria-current', 'page');
 
     const [connectionCardBox, activeTabBox] = await Promise.all([

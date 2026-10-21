@@ -145,7 +145,7 @@ test.describe('saved Home', () => {
     await page.getByRole('link', {name: 'Connections', exact: true}).click();
     await expect(page.locator('[data-testid^="connection-card-toggle-"]').first()).toBeVisible();
     await page.clock.runFor(1100);
-    // The inactive transactions now compete with summaries, rather than getting another budget.
+    // Inactive transactions share the summaries' budget rather than getting their own.
     await expect.poll(savedMonths).toEqual(['2026-09']);
     const queries = (await readCache(page))!.clientState.queries;
     expect(queries.some((query) => query.queryKey[0] === 'currentAccount')).toBe(true);

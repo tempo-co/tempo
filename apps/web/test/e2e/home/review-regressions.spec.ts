@@ -9,22 +9,7 @@ test.beforeEach(async ({page}) => {
   await page.clock.setFixedTime(SEEDED_TRANSACTION_YEAR_NOW);
 });
 
-test('rejects year zero instead of crashing', async ({page}) => {
-  await page.goto('/?month=0000-01');
-  await expect(page.getByRole('heading', {level: 1})).toHaveText('October 2026');
-});
-
-test('retains a positive refund bucket in spending', async ({page}) => {
-  await mockJson(page, '**/bank-transactions/summary**', {
-    ...septemberSummary,
-    categories: [{category: 'REFUND', spending: '50.00', count: 1, baselineAverage: null}],
-  });
-  await page.goto('/?month=2026-09');
-  const breakdown = page.getByTestId('category-breakdown');
-  await expect(breakdown.getByRole('link', {name: /Refund/})).toContainText('€50.00');
-});
-
-test('ranks a positive refund bucket by its amount', async ({page}) => {
+test('counts a positive refund bucket as spending, ranked by its amount', async ({page}) => {
   // The API lists REFUND last; Home ranks positive refunds with the other spending.
   const categories = [
     'HOUSING_AND_UTILITIES',

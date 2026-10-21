@@ -19,7 +19,7 @@ const session = (id: string, isCurrent: boolean) => ({
   isCurrent,
 });
 
-// Phone width, so every settings dialog renders as a drawer.
+// Phone width, so every settings dialog renders as a drawer above the tab bar.
 test.use({viewport: {width: 390, height: 850}, storageState: {cookies: [], origins: []}});
 
 test.beforeEach(async ({page}) => {
@@ -41,17 +41,33 @@ const drawers = [
 
 for (const {path, trigger: testId} of drawers) {
   for (const dismissal of ['Escape', 'Cancel'] as const) {
-    test(`${testId} drawer returns focus to its trigger after ${dismissal}`, async ({page}) => {
+    test(`${testId} drawer closes on ${dismissal}, keeping the tab bar and page in place, and refocuses its trigger`, async ({
+      page,
+    }) => {
       await page.goto(path);
+      const tabBar = page.getByTestId('app-tab-bar');
+      const readPlacement = () =>
+        tabBar.evaluate((nav) => ({
+          bottom: Math.round(nav.getBoundingClientRect().bottom),
+          viewport: window.innerHeight,
+          background: getComputedStyle(document.body).backgroundColor,
+        }));
+      const before = await readPlacement();
+      expect(before.bottom).toBe(before.viewport);
+
       const trigger = page.getByTestId(testId);
       await trigger.click();
       const dialog = page.getByRole('dialog');
       await expect(dialog).toBeVisible();
+      expect(await readPlacement()).toEqual(before);
 
       if (dismissal === 'Escape') await page.keyboard.press('Escape');
       else await dialog.getByRole('button', {name: 'Cancel', exact: true}).click();
+      // Read mid-close, while the drawer is still animating out.
+      expect(await readPlacement()).toEqual(before);
 
       await expect(dialog).toBeHidden();
+      expect(await readPlacement()).toEqual(before);
       await expect(trigger).toBeFocused();
     });
   }

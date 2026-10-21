@@ -12,7 +12,7 @@ const verifyEmailUrl = (params: object) => withSearchParams('/verify-email', par
 
 test.describe('Email Verification', () => {
   test.describe('Verification request errors', () => {
-    test('should show a retry state instead of an indefinite spinner', async ({page}) => {
+    test('should show a retry state when the verification request fails', async ({page}) => {
       let attempts = 0;
       await page.route('**/auth/signup/verify', async (route) => {
         attempts++;

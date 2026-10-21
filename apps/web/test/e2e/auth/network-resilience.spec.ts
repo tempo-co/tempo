@@ -150,7 +150,7 @@ test.describe('saved app', () => {
     await expect(page.getByText('Could not load bank connections')).not.toBeVisible();
   });
 
-  test('still reports a failed refresh when Tempo answers with an error', async ({page}) => {
+  test('reports a failed refresh when Tempo answers with an error', async ({page}) => {
     let requests = 0;
     await routeBankConnectionsApi(page, async (route) => {
       if (requests++ > 0) return fulfillJson(route, {message: 'Unavailable'}, 503);
@@ -238,7 +238,7 @@ test.describe('saved app', () => {
       await expect(unavailableTransactions(page)).not.toBeVisible();
     });
 
-    test('still reports a failed transaction refresh when Tempo answers with an error', async ({
+    test('reports a failed transaction refresh when Tempo answers with an error', async ({
       page,
     }) => {
       await page.goto('/bank-connections');
@@ -406,7 +406,7 @@ test.describe('saved app', () => {
   });
 });
 
-test('logging out while Tempo is unreachable still clears saved data', async ({
+test('logging out while Tempo is unreachable clears saved data', async ({
   page,
   context,
   freshAccount,
@@ -900,7 +900,7 @@ for (const outage of ['browser offline', 'Tempo unreachable'] as const) {
   });
 }
 
-test('an actual revoked session clears saved data instead of granting offline access', async ({
+test('a session revoked on the server clears saved data and is not reopened offline', async ({
   page,
   context,
   freshAccount,
