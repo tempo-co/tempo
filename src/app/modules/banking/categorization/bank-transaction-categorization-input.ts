@@ -199,10 +199,14 @@ export function toSameAmountPaymentText(transaction: {
 	remittanceInformation: string | null;
 	description: string | null;
 }): string | null {
-	return sanitizeCategorizationText(
-		transaction.remittanceInformation ?? transaction.description,
-		MAX_SAME_AMOUNT_PAYMENT_TEXT_LENGTH,
-	);
+	const remittance = sanitizeCategorizationText(transaction.remittanceInformation);
+	const description = sanitizeCategorizationText(transaction.description);
+	const parts =
+		remittance && description?.length && remittance.includes(description)
+			? [remittance]
+			: [remittance, description];
+	const text = parts.filter(Boolean).join(' | ');
+	return text ? truncate(text, MAX_SAME_AMOUNT_PAYMENT_TEXT_LENGTH) : null;
 }
 
 function isCategorizationInput(

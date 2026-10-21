@@ -571,22 +571,28 @@ export class BankTransactionCategorizationService {
 						}>();
 					for (const {transaction} of entries) {
 						const ownDate = transaction.transactionDate ?? transaction.bookingDate ?? transaction.valueDate;
-						const payments = rows
-							.filter(
-								(row) =>
-									row.id !== transaction.id &&
-									row.merchantKey === transaction.merchantKey &&
-									row.amount === transaction.amount &&
-									row.currency === transaction.currency &&
-									(!ownDate || !row.date || row.date <= ownDate),
-							)
-							.slice(0, MAX_SAME_AMOUNT_PAYMENTS)
-							.map((row) => ({
-								date: row.date,
-								category: row.category,
-								source: row.source,
-								text: toSameAmountPaymentText(row),
-							}));
+						const earlier = rows.filter(
+							(row) =>
+								row.id !== transaction.id &&
+								row.merchantKey === transaction.merchantKey &&
+								row.amount === transaction.amount &&
+								row.currency === transaction.currency &&
+								(!ownDate || !row.date || row.date <= ownDate),
+						);
+						// The owner's picks first, newest first. AI rows oldest first: the payments that first stated a
+						// purpose stay in view when later rows carry the category without one.
+						const payments = [
+							...earlier.filter(({source}) => source === 'MANUAL').slice(0, MAX_SAME_AMOUNT_PAYMENTS),
+							...earlier
+								.filter(({source}) => source === 'AI')
+								.reverse()
+								.slice(0, MAX_SAME_AMOUNT_PAYMENTS),
+						].map((row) => ({
+							date: row.date,
+							category: row.category,
+							source: row.source,
+							text: toSameAmountPaymentText(row),
+						}));
 						if (payments.length >= 2) paymentsByTransaction.set(transaction.id, payments);
 					}
 				}),
@@ -1122,7 +1128,7 @@ export class BankTransactionCategorizationService {
 
 /** Most recent manual choices per category the model sees as examples. */
 const MAX_MANUAL_CATEGORY_EXAMPLES = 5;
-/** Most recent same-amount payments to one payee the model sees. */
+/** Same-amount payments to one payee the model sees, per source. */
 const MAX_SAME_AMOUNT_PAYMENTS = 5;
 
 type ManualCategoryExample = PreviousManualCategory['recentExamples'][number];

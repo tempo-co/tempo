@@ -242,10 +242,26 @@ describe('Bank transaction categorization integration', () => {
 				transactions.map((input) => [input.correlationId, input]),
 			),
 		);
-		// Same payee, amount and currency, earlier than the row, most recent first, with each payment's own note.
+		// Same payee, amount and currency, earlier than the row: the owner's picks newest first, then AI rows oldest
+		// first, at most five of each, with each payment's sanitized note.
+		const carried = (date: string) => ({
+			date,
+			category: 'HOUSING_AND_UTILITIES',
+			source: 'AI',
+			text: 'To Example H',
+		});
 		expect(inputs.get(CATEGORIZATION_E2E_REPEAT_AMOUNT_TRANSACTION_ID)?.sameAmountPayments).toEqual([
 			{date: '2026-08-28', category: 'HOUSING_AND_UTILITIES', source: 'MANUAL', text: 'To Example H'},
-			{date: '2026-07-28', category: 'HOUSING_AND_UTILITIES', source: 'AI', text: 'rent august To Example H'},
+			{
+				date: '2026-06-28',
+				category: 'HOUSING_AND_UTILITIES',
+				source: 'AI',
+				text: 'rent july IBAN [REDACTED] | To Example H',
+			},
+			carried('2026-07-01'),
+			carried('2026-07-02'),
+			carried('2026-07-03'),
+			carried('2026-07-04'),
 		]);
 		expect(inputs.get(CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID)?.sameAmountPayments).toBeUndefined();
 	});

@@ -145,7 +145,7 @@ export function validRequest(body) {
 			tx.sameAmountPayments !== undefined &&
 			(!Array.isArray(tx.sameAmountPayments) ||
 				tx.sameAmountPayments.length < 2 ||
-				tx.sameAmountPayments.length > 5 ||
+				tx.sameAmountPayments.length > 10 ||
 				!tx.sameAmountPayments.every(
 					(payment) =>
 						keys(payment, ['date', 'category', 'source', 'text']) &&

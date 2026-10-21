@@ -140,11 +140,20 @@ export async function seedBankTransactionCategorizationData(app: INestApplicatio
 		{
 			...personTransfer,
 			...completed('HOUSING_AND_UTILITIES', 'AI'),
-			transactionDate: '2026-07-28',
+			transactionDate: '2026-06-28',
 			amount: '-640.00',
 			description: 'To Example H',
-			remittanceInformation: 'rent august To Example H',
+			remittanceInformation: 'rent july IBAN NL91ABNA0417164300',
 		},
+		// Later months carried the category without a note; the first month that stated rent must stay in view.
+		...['2026-07-01', '2026-07-02', '2026-07-03', '2026-07-04', '2026-07-05'].map((transactionDate) => ({
+			...personTransfer,
+			...completed('HOUSING_AND_UTILITIES', 'AI'),
+			transactionDate,
+			amount: '-640.00',
+			description: 'To Example H',
+			remittanceInformation: 'To Example H',
+		})),
 		{
 			...personTransfer,
 			...completed('HOUSING_AND_UTILITIES', 'MANUAL'),
