@@ -912,7 +912,7 @@ describe('BankConnectionController', () => {
 		]);
 
 		try {
-			expect(await app.get(BankingSyncService).synchronize(account.id, connection.id)).toMatchObject({
+			expect(await app.get(BankingSyncService).synchronizeAutomatically(connection.id)).toMatchObject({
 				status: 'SUCCEEDED',
 				transactionsAdded: 1,
 			});
@@ -1281,7 +1281,7 @@ describe('BankConnectionController', () => {
 			getAccountTransactions
 				.mockResolvedValueOnce([sourceLeg, ordinaryPayment])
 				.mockResolvedValueOnce([targetLeg]);
-			const secondResponse = await app.get(BankingSyncService).synchronize(account.id, connection.id);
+			const secondResponse = await synchronizeDue(connection.id);
 			expect(secondResponse).toEqual(
 				expect.objectContaining({
 					status: 'SUCCEEDED',
@@ -1340,7 +1340,7 @@ describe('BankConnectionController', () => {
 
 			// Providers list the newest booking first, so the new row precedes the stored one.
 			getAccountTransactions.mockResolvedValueOnce([newPayment, storedPayment]);
-			await expect(app.get(BankingSyncService).synchronize(account.id, connection.id)).resolves.toMatchObject({
+			await expect(synchronizeDue(connection.id)).resolves.toMatchObject({
 				status: 'SUCCEEDED',
 				transactionsAdded: 1,
 			});
@@ -1436,7 +1436,7 @@ describe('BankConnectionController', () => {
 				.send({override: 'UNMARKED'})
 				.expect(200);
 			getAccountTransactions.mockResolvedValueOnce([abnLeg, unrelatedPayment]);
-			await expect(app.get(BankingSyncService).synchronize(account.id, abnConnection.id)).resolves.toMatchObject({
+			await expect(synchronizeDue(abnConnection.id)).resolves.toMatchObject({
 				status: 'SUCCEEDED',
 				transactionsAdded: 0,
 			});
@@ -1517,7 +1517,7 @@ describe('BankConnectionController', () => {
 			getSessionAccounts.mockClear();
 			getAccountBalances.mockClear();
 			getAccountTransactions.mockClear();
-			await expect(app.get(BankingSyncService).synchronize(account.id, connection.id)).rejects.toMatchObject({
+			await expect(synchronizeDue(connection.id)).rejects.toMatchObject({
 				status: 409,
 			});
 
@@ -1549,9 +1549,9 @@ describe('BankConnectionController', () => {
 		getAccountTransactions.mockResolvedValue([]);
 
 		try {
-			const response = await app.get(BankingSyncService).synchronize(account.id, connection.id);
+			const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
 
-			expect(response.status).toBe('SUCCEEDED');
+			expect(response).toMatchObject({status: 'SUCCEEDED'});
 			expect(await bankAccountRepository.findOneBy({id: bankAccounts[0].id})).toMatchObject({
 				isActive: true,
 			});
@@ -1580,7 +1580,7 @@ describe('BankConnectionController', () => {
 		getAccountTransactions.mockResolvedValue([]);
 
 		try {
-			const response = await app.get(BankingSyncService).synchronize(account.id, connection.id);
+			const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
 
 			expect(response).toMatchObject({
 				status: 'PARTIAL',
@@ -1603,7 +1603,7 @@ describe('BankConnectionController', () => {
 		getAccountTransactions.mockResolvedValue([]);
 
 		try {
-			const response = await app.get(BankingSyncService).synchronize(account.id, connection.id);
+			const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
 
 			expect(response).toMatchObject({
 				status: 'PARTIAL',
@@ -1633,9 +1633,11 @@ describe('BankConnectionController', () => {
 			return makeTransactions('partial');
 		});
 
-		const response = await app.get(BankingSyncService).synchronize(account.id, connection.id);
-		expect(response.status).toBe('PARTIAL');
-		expect(response.errorMessage).toBe('Some bank data could not be synchronized.');
+		const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
+		expect(response).toMatchObject({
+			status: 'PARTIAL',
+			errorMessage: 'Some bank data could not be synchronized.',
+		});
 		const successfulBankAccount = await bankAccountRepository.findOne({
 			where: {bankConnection: {id: connection.id}, providerAccountId: 'partial-success-account'},
 		});
@@ -1654,7 +1656,7 @@ describe('BankConnectionController', () => {
 			},
 		]);
 
-		await expect(app.get(BankingSyncService).synchronize(account.id, connection.id)).rejects.toMatchObject({
+		await expect(app.get(BankingSyncService).synchronizeAutomatically(connection.id)).rejects.toMatchObject({
 			status: 500,
 			message: 'Bank synchronization could not be saved.',
 		});
@@ -1703,6 +1705,11 @@ describe('BankConnectionController', () => {
 	async function synchronizeQueued(connectionId: string, transactions: EnableBankingTransaction[]) {
 		getAccountBalances.mockResolvedValueOnce(makeBalances());
 		getAccountTransactions.mockResolvedValueOnce(transactions);
+		return synchronizeDue(connectionId);
+	}
+
+	/** Makes the connection due and runs its automatic sync with the provider mocks already in place. */
+	async function synchronizeDue(connectionId: string) {
 		await bankConnectionRepository.update(connectionId, {
 			nextSyncAt: new Date(Date.now() - 1),
 			syncStatus: 'QUEUED',

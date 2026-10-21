@@ -5,7 +5,6 @@ import {
 	InternalServerErrorException,
 	Logger,
 	NotFoundException,
-	ServiceUnavailableException,
 } from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import {createHash, randomUUID} from 'node:crypto';
@@ -24,7 +23,6 @@ import {
 	BANKING_PARTIAL_SYNC_ERROR,
 	BANKING_PERSISTENCE_SYNC_ERROR,
 	BANKING_RATE_LIMITED_SYNC_ERROR,
-	BANKING_SERVICE_UNAVAILABLE,
 } from '../api/constants/banking-messages.constants';
 import {BankSyncRunResponseDto} from '../api/dtos/bank-connection-response.dto';
 import {BankAccountBalance} from '../bank-account-balance.entity';
@@ -187,14 +185,6 @@ export class BankingSyncService {
 		this.bankingIntegrationEnabled = configurationService.get('BANKING_INTEGRATION_ENABLED') !== false;
 	}
 
-	async synchronize(accountId: Account['id'], connectionId: BankConnection['id']): Promise<BankSyncRunResponseDto> {
-		this.ensureEnabled();
-		await this.findOwnedConnection(accountId, connectionId);
-		const synchronizedRun = await this.runSynchronization(accountId, connectionId, {requireDue: false});
-		if (!synchronizedRun) throw new InternalServerErrorException(BANKING_PERSISTENCE_SYNC_ERROR);
-		return synchronizedRun;
-	}
-
 	async synchronizeAutomatically(connectionId: BankConnection['id']): Promise<BankSyncRunResponseDto | null> {
 		if (!this.bankingIntegrationEnabled) return null;
 
@@ -204,19 +194,18 @@ export class BankingSyncService {
 		});
 		if (!connection || connection.status !== BANK_CONNECTION_STATUSES.AUTHORIZED) return null;
 
-		return this.runSynchronization(connection.account.id, connectionId, {requireDue: true});
+		return this.runSynchronization(connection.account.id, connectionId);
 	}
 
 	private async runSynchronization(
 		accountId: Account['id'],
 		connectionId: BankConnection['id'],
-		options: {requireDue: boolean},
 	): Promise<BankSyncRunResponseDto | null> {
 		const lockLease = await this.connectionLockService.acquire(connectionId);
 
 		try {
 			const connection = await this.findOwnedConnection(accountId, connectionId);
-			if (options.requireDue && !this.isAutomaticSyncEligible(connection)) return null;
+			if (!this.isAutomaticSyncEligible(connection)) return null;
 			const providerSessionId = await this.validateConnection(connection, lockLease);
 			let run: BankSyncRun | undefined;
 			let syncStartedAt: Date | undefined;
@@ -321,10 +310,6 @@ export class BankingSyncService {
 				this.logger.warn('Bank synchronization lock release failed.');
 			}
 		}
-	}
-
-	private ensureEnabled(): void {
-		if (!this.bankingIntegrationEnabled) throw new ServiceUnavailableException(BANKING_SERVICE_UNAVAILABLE);
 	}
 
 	private isAutomaticSyncEligible(
