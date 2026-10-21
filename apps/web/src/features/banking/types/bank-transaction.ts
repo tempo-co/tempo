@@ -218,8 +218,8 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
 export type BankTransactionSearchParams = z.infer<typeof bankTransactionSearchParamsSchema>;
 
 /**
- * The route schema. Links from before the Activity filter merged into Cash flow carry `financialEventTypes`;
- * their values are cash flows now, so they keep filtering the same rows.
+ * The route schema. It also accepts `financialEventTypes`, which older shared links use for the cash-flow filter,
+ * and merges its values into `cashFlows` so those links filter the same rows.
  */
 export const bankTransactionRouteSearchSchema = z.preprocess((search) => {
   if (!search || typeof search !== 'object' || !('financialEventTypes' in search)) return search;

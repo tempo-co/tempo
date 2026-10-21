@@ -53,6 +53,47 @@ test.describe('Home', () => {
     await expect(homePage.monthHeading).toHaveText('October 2026');
   });
 
+  test("does not show the old month's rows under the month being loaded", async ({page}) => {
+    await page.goto('/?month=2026-08');
+    await expect(
+      page
+        .getByRole('region', {name: 'Latest in August 2026'})
+        .getByRole('link', {name: /Coffee shop/}),
+    ).toBeVisible();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route('**/bank-transactions?**', async (route) => {
+      if (
+        new URL(route.request().url()).searchParams.get('filter[bookingDate][from]') ===
+        '2026-07-01'
+      ) {
+        await gate;
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({transactions: [], total: 0}),
+        });
+      } else await route.continue();
+    });
+    try {
+      const request = page.waitForRequest(
+        (request) =>
+          new URL(request.url()).searchParams.get('filter[bookingDate][from]') === '2026-07-01',
+      );
+      await page.getByRole('link', {name: 'Previous month'}).click();
+      await request;
+      await expect(
+        page
+          .getByRole('region', {name: 'Latest in July 2026'})
+          .getByRole('link', {name: /Coffee shop/}),
+      ).toHaveCount(0);
+    } finally {
+      release();
+      await page.unrouteAll({behavior: 'wait'});
+    }
+  });
+
   test('shows the current month for a future or invalid month', async ({page, homePage}) => {
     await page.goto('/?month=2027-01');
     await expect(homePage.monthHeading).toHaveText('October 2026');

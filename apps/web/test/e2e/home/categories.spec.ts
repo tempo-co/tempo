@@ -1,6 +1,7 @@
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {categorySummary} from '../../data/home-categories.data';
+import {septemberSummary} from '../../data/home-summary.data';
 import {expect, test} from '../../fixtures';
 import {mockJson} from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
@@ -31,6 +32,32 @@ test('shows six positive categories, remaining count and refunds last', async ({
     await expect(links.nth(index)).toContainText(label);
   }
   await expect(links.last()).toContainText('-€40.00');
+});
+
+test('counts a positive refund bucket as spending, ranked by its amount', async ({page}) => {
+  // The API lists REFUND last; Home ranks positive refunds with the other spending.
+  const categories = [
+    'HOUSING_AND_UTILITIES',
+    'FOOD_AND_DRINK',
+    'TRANSPORTATION',
+    'SHOPPING',
+    'INSURANCE',
+    'HEALTH',
+    'REFUND',
+  ];
+  await mockJson(page, '**/bank-transactions/summary**', {
+    ...septemberSummary,
+    categories: categories.map((category, index) => ({
+      category,
+      spending: category === 'REFUND' ? '500.00' : `${60 - index}.00`,
+      count: 1,
+      baselineAverage: null,
+    })),
+  });
+  await page.goto('/?month=2026-09');
+  const rows = page.getByTestId('category-breakdown').getByRole('link');
+  await expect(rows.first()).toContainText('Refund');
+  await expect(rows.first()).toContainText('€500.00');
 });
 
 test('drills to the exact category and booking range', async ({page}) => {
