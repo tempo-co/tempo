@@ -180,7 +180,7 @@ export function detectRecurringSeries(
 		// Per account: small payments to a payee from one account must not break a bill's rhythm on another.
 		const partitionKey = `${candidate.bankAccountId}\u0000${payeeKey}\u0000${candidate.currency}`;
 		const partition = partitions.get(partitionKey);
-		const row = {...candidate, merchantKey: payeeKey, sourceMerchantKey: candidate.merchantKey};
+		const row = grouped(candidate, payeeKey);
 		if (partition) partition.push(row);
 		else partitions.set(partitionKey, [row]);
 	}
@@ -189,6 +189,11 @@ export function detectRecurringSeries(
 		detectAccountPartition(rows, today, personKeys.has(rows[0].merchantKey), namingPeriod),
 	);
 	return reconcileAccountSeries(series, candidates, today, namingPeriod);
+}
+
+/** A candidate grouped under a payee key, keeping its own merchant key for the rename check. */
+function grouped(candidate: RecurringCandidate, payeeKey: string): RecurringCandidate {
+	return {...candidate, merchantKey: payeeKey, sourceMerchantKey: candidate.merchantKey};
 }
 
 /** Recognize a complete current naming period before older fixed coverage can erase its evidence. */
@@ -313,7 +318,7 @@ function reconcileAccountSeries(
 			if (group.length === 1) return group;
 			const join = (parts: readonly DetectedRecurringSeries[]): DetectedRecurringSeries | null => {
 				const rows = parts.flatMap((entry) =>
-					entry.transactionIds.map((id) => ({...byId.get(id)!, merchantKey: entry.merchantKey})),
+					entry.transactionIds.map((id) => grouped(byId.get(id)!, entry.merchantKey)),
 				);
 				rows.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 				const joined = completePartition(rows, today, false);
@@ -375,7 +380,7 @@ function withCurrentSourceStream(
 	const sources = entry.transactionIds.map((id) => byId.get(id)!);
 	const latest = sources[sources.length - 1];
 	if (!latest.recurringPayeeKey) return entry;
-	const rows = sources.map((row) => ({...row, merchantKey: entry.merchantKey}));
+	const rows = sources.map((row) => grouped(row, entry.merchantKey));
 	const rule = CADENCE_RULES.find(({cadence}) => cadence === entry.cadence)!;
 	const calendarRows = (prefix: readonly RecurringCandidate[]) =>
 		currentSourceRows(prefix, byId, sourceStreamById, rule, today, namingPeriod);
@@ -688,10 +693,6 @@ function retainIsolatedPayments(
 }
 
 /**
- * The longest run of payments, one per cycle, that follows a cadence. It is a stream only when the payments left
- * outside it do not follow the same cadence themselves: that would be a second obligation from the same payer.
- */
-/**
  * One payer's streams. Usually one: the longest rhythm, with leftovers that have no rhythm of their own. When every
  * leftover payment is a second plan at a fixed price on its own rhythm, both are streams. Any other rhythmic leftover,
  * as at a busy shop, means the payer has no single stream.
@@ -710,6 +711,10 @@ function rhythmStreams(
 	return second?.amountKind === 'FIXED' && second.rows.length === outside.length ? [main, second] : [];
 }
 
+/**
+ * The longest run of payments, one per cycle, that follows a cadence. With `rhythmicLeftovers` false, payments left
+ * outside it must not follow a cadence of their own.
+ */
 function rhythmStream(
 	rows: readonly RecurringCandidate[],
 	cadenceOf: (rows: readonly RecurringCandidate[]) => CadenceRule | null,

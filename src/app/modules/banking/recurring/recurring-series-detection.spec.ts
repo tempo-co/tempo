@@ -1197,6 +1197,26 @@ describe('detectRecurringSeries', () => {
 		expect(detectRecurringSeries(rows, '2026-10-18')).toEqual([]);
 	});
 
+	it('keeps a varying bill whose category changes partway', () => {
+		const energy = {merchantKey: 'EXPENSE:example energy'};
+		const rows = ['61.20', '95.40', '48.10', '120.00', '77.70', '88.30'].map((amount, index) =>
+			payment(isoMonth(2026, 3 + index, 20), amount, {
+				...energy,
+				category: index < 3 ? 'HOUSING_AND_UTILITIES' : 'SUBSCRIPTIONS',
+			}),
+		);
+		expect(detectRecurringSeries(rows, '2026-08-22')).toEqual([
+			expect.objectContaining({amountKind: 'VARIABLE', transactionIds: rows.map(({id}) => id)}),
+		]);
+	});
+
+	it('shows an amount paid shortly before again at once, without waiting for it to repeat', () => {
+		const rows = ['10.00', '10.00', '100.00', '100.00', '10.00'].map((amount, index) =>
+			payment(isoMonth(2026, 1 + index, 9), amount),
+		);
+		expect(detectRecurringSeries(rows, '2026-05-12')).toEqual([expect.objectContaining({typicalAmount: '10.00'})]);
+	});
+
 	it('does not promote two different spikes in a row', () => {
 		const rows = ['10.00', '10.00', '10.00', '100.00', '300.00'].map((amount, index) =>
 			payment(isoMonth(2026, 1 + index, 9), amount),
