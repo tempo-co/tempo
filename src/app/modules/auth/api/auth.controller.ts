@@ -247,7 +247,7 @@ export class AuthController {
 	@ApiResponse({status: 200, description: `${ALL_OTHER_SESSIONS_REVOKED} or ${NO_OTHER_SESSIONS_TO_REVOKE}`})
 	@ApiResponse({status: 401, description: UNAUTHORIZED})
 	@ApiResponse({status: 429, description: TOO_MANY_REQUESTS})
-	@ApiOperation({summary: 'Revokes all sessions except the current one.'})
+	@ApiOperation({summary: 'Revokes all personal access tokens and all sessions except the current one.'})
 	async revokeAllOtherSessions(@CurrentAccount() account: Account, @Req() request: Request) {
 		return await this.sessionService.revokeAllOtherSessions(account.id, request.session.id);
 	}

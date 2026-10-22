@@ -2,17 +2,36 @@ import {CanActivate, ExecutionContext, ForbiddenException, Injectable, Unauthori
 import {Reflector} from '@nestjs/core';
 import {Request} from 'express';
 
+import {isBearerRequest} from '@core/personal-access-token/bearer-request';
+import {PersonalAccessTokenService} from '@core/personal-access-token/personal-access-token.service';
 import {Account} from '@modules/account/account.entity';
 
 import {EMAIL_NOT_VERIFIED} from '../api/constants/api-messages.constants';
 import {IS_PUBLIC_KEY} from '../decorators/public.decorator';
 import {SKIP_EMAIL_VERIFICATION_KEY} from '../decorators/skip-email-verification.decorator';
+import {TOKEN_READABLE_KEY} from '../decorators/token-readable.decorator';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-	constructor(private readonly reflector: Reflector) {}
+	constructor(
+		private readonly reflector: Reflector,
+		private readonly tokens: PersonalAccessTokenService,
+	) {}
 
-	canActivate(context: ExecutionContext): boolean {
+	async canActivate(context: ExecutionContext): Promise<boolean> {
+		const request = context.switchToHttp().getRequest<Request>();
+		if (isBearerRequest(request)) {
+			const token = await this.tokens.authenticate(request.headers.authorization!);
+			const readable = this.reflector.getAllAndOverride<boolean>(TOKEN_READABLE_KEY, [
+				context.getHandler(),
+				context.getClass(),
+			]);
+			if (request.method !== 'GET' || !readable) throw new ForbiddenException();
+			if (!token.account.isEmailVerified) throw new ForbiddenException(EMAIL_NOT_VERIFIED);
+			request.user = token.account;
+			await this.tokens.recordUse(token.id);
+			return true;
+		}
 		const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
 			context.getHandler(),
 			context.getClass(),
@@ -21,7 +40,6 @@ export class AuthGuard implements CanActivate {
 			return true;
 		}
 
-		const request = context.switchToHttp().getRequest() as Request;
 		const user = request.user as Account;
 
 		if (!request.isAuthenticated()) {

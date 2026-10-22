@@ -8,6 +8,7 @@ import {createWebUrl} from '@core/config/web-url';
 import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 import {Public} from '@modules/auth/decorators/public.decorator';
+import {TokenReadable} from '@modules/auth/decorators/token-readable.decorator';
 
 import {BankingService} from '../banking.service';
 import {BankTransactionService} from '../services/bank-transaction.service';
@@ -38,6 +39,7 @@ export class BankConnectionController {
 	}
 
 	@Get()
+	@TokenReadable()
 	async getConnections(@CurrentAccount() account: Account) {
 		return this.bankingService.findAll(account);
 	}

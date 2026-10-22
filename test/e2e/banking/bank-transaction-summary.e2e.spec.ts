@@ -79,7 +79,7 @@ describe('BankTransactionSummary', () => {
 			bookedRow('2026-09-01', '-60.00', {category: 'TRANSFER_OUT'}),
 			bookedRow('2026-09-30', '-15.00', {category: 'FOOD_AND_DRINK'}),
 			// Viewed month.
-			bookedRow('2026-10-01', '-12.30', {category: 'FOOD_AND_DRINK'}),
+			bookedRow('2026-10-01', '-12.30', {category: 'FOOD_AND_DRINK', description: 'Example filter match'}),
 			bookedRow('2026-10-03', '-7.70', {category: 'FOOD_AND_DRINK'}),
 			bookedRow('2026-10-05', '-50.00', {category: 'TRANSFER_OUT'}),
 			bookedRow('2026-10-06', '5.00', {category: 'REFUND'}),
@@ -197,6 +197,92 @@ describe('BankTransactionSummary', () => {
 	}
 
 	it('reconciles totals and categories with the filtered transaction list', async () => {
+		for (const filter of [
+			{},
+			{'filter[bookingDate][from]': '2026-10-01', 'filter[bookingDate][to]': '2026-10-18'},
+			{'filter[search]': 'eXample filter'},
+			{
+				'filter[search]': 'Example filter',
+				'filter[bookingDate][from]': '2026-10-01',
+				'filter[categories][]': 'FOOD_AND_DRINK',
+			},
+			{'filter[categorySources][]': 'AI'},
+			{'filter[financialEventTypes][]': 'CURRENCY_EXCHANGE'},
+			{'filter[categoryStatuses][]': 'FAILED'},
+			{'filter[categories][]': 'FOOD_AND_DRINK'},
+			{'filter[bankAccountIds][]': otherBankAccount.id},
+			{'filter[cashFlows][]': 'INTERNAL'},
+			{'filter[baseAmount]': 'MISSING'},
+		]) {
+			const {body: totals} = await ownerAgent.get('/bank-transactions/totals').query(filter).expect(200);
+			const rows: Array<{
+				amountInBaseCurrency: string | null;
+				cashFlowTreatment: string;
+				creditDebitIndicator: string | null;
+				category: string | null;
+			}> = [];
+			let total = 0;
+			for (let pageIndex = 0; ; pageIndex++) {
+				const {body: page} = await ownerAgent
+					.get('/bank-transactions')
+					.query({...filter, 'pagination[pageSize]': 5, 'pagination[pageIndex]': pageIndex})
+					.expect(200);
+				rows.push(...page.transactions);
+				total = page.total;
+				if (rows.length >= total) break;
+			}
+			const sum = (flow: string) =>
+				rows
+					.filter(
+						(row) =>
+							row.cashFlowTreatment !== 'INTERNAL' &&
+							(flow === 'SPENDING'
+								? row.creditDebitIndicator === 'DBIT' ||
+									(row.creditDebitIndicator === 'CRDT' && row.category === 'REFUND')
+								: row.creditDebitIndicator === 'CRDT' && row.category !== 'REFUND'),
+					)
+					.reduce(
+						(sum, row) =>
+							sum + (row.amountInBaseCurrency === null ? 0n : parseCents(row.amountInBaseCurrency)),
+						0n,
+					);
+			const nonInternal = rows.filter((row) => row.cashFlowTreatment !== 'INTERNAL');
+			expect(totals.excluded).toEqual({
+				unknownDirection: nonInternal.filter(
+					(row) => !['DBIT', 'CRDT'].includes(row.creditDebitIndicator ?? ''),
+				).length,
+				missingBaseAmount: nonInternal.filter((row) => row.amountInBaseCurrency === null).length,
+			});
+			const spending = -sum('SPENDING');
+			const income = sum('INCOME');
+			expect(totals).toMatchObject({
+				baseCurrency: 'EUR',
+				count: total,
+				spending: formatCents(spending),
+				income: formatCents(income),
+				net: formatCents(income - spending),
+			});
+		}
+		const ignoredPage = await ownerAgent
+			.get('/bank-transactions/totals')
+			.query({'pagination[pageSize]': 5, 'sort[by]': 'amount'})
+			.expect(200);
+		const all = await ownerAgent.get('/bank-transactions/totals').expect(200);
+		expect(ignoredPage.body).toEqual(all.body);
+		await ownerAgent
+			.get('/bank-transactions/totals')
+			.query({'filter[bookingDate][from]': '2026-02-30'})
+			.expect(400);
+		const {body: totals} = await ownerAgent
+			.get('/bank-transactions/totals')
+			.query({'filter[bookingDate][from]': '2026-10-01', 'filter[bookingDate][to]': '2026-10-18'})
+			.expect(200);
+		expect(totals).toMatchObject({
+			spending: '79.60',
+			income: '2000.00',
+			net: '1920.40',
+			excluded: {unknownDirection: 1, missingBaseAmount: 1},
+		});
 		const {body: summary} = await ownerAgent.get(SUMMARY).query(OCTOBER).expect(200);
 		const from = '2026-10-01';
 

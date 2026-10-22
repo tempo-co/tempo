@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import {IResult, UAParser} from 'ua-parser-js';
 
 import {ConfigurationService} from '@core/config/config.service';
+import {PersonalAccessTokenService} from '@core/personal-access-token/personal-access-token.service';
 import {REDIS} from '@core/redis/redis.constants';
 import {Account} from '@modules/account/account.entity';
 
@@ -26,6 +27,7 @@ export class SessionService {
 	constructor(
 		@Inject(REDIS) private readonly redisClient: Redis,
 		private readonly configService: ConfigurationService,
+		private readonly tokens: PersonalAccessTokenService,
 	) {
 		this.REDIS_KEY = this.configService.get('SESSION_REDIS_KEY');
 	}
@@ -99,8 +101,10 @@ export class SessionService {
 		return {message: SESSION_REVOKE_SUCCESS};
 	}
 
-	/** Revokes all sessions of an account except the current one. */
+	/** Revokes all personal access tokens and all sessions of an account except the current session. */
 	async revokeAllOtherSessions(accountId: Account['id'], currentSessionId: string | null) {
+		// Every account-wide security revocation uses this path, including password changes and resets.
+		await this.tokens.revokeAll(accountId);
 		const allSessions = await this.getSessions(accountId, currentSessionId);
 
 		const sessionsToRevoke = allSessions.filter((session) => !session.isCurrent);
