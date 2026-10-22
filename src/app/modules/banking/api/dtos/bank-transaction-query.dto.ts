@@ -98,7 +98,7 @@ export class BankTransactionFilterQueryDto {
 
 	@IsOptional()
 	@IsString()
-	@MaxLength(100)
+	@MaxLength(1000)
 	search?: string;
 
 	@IsOptional()
