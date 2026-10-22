@@ -22,6 +22,7 @@ import {PaginationParams} from '@/types/pagination';
 import {cn} from '@/utils/cn';
 
 import {
+  BANK_TRANSACTION_SEARCH_MAX_LENGTH,
   BankTransaction,
   BankTransactionFilterParams,
   BankTransactionSortField,
@@ -190,6 +191,7 @@ export function BankTransactionTable({
           <Search className='absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
           <Input
             value={searchInput}
+            maxLength={BANK_TRANSACTION_SEARCH_MAX_LENGTH}
             onChange={(event) => setSearchInput(event.target.value)}
             placeholder='Search...'
             aria-label='Search transactions'

@@ -176,6 +176,8 @@ export const BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES = ['FAILED', 'CATEGO
 export type BankTransactionCategoryStatusFilterValue =
   (typeof BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES)[number];
 
+export const BANK_TRANSACTION_SEARCH_MAX_LENGTH = 1000;
+
 const toDate = (value: unknown) => (typeof value === 'string' ? new Date(value) : value);
 
 export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.extend({
@@ -205,7 +207,7 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
     .optional(),
   baseAmount: z.enum(BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES).optional(),
   categoryStatuses: z.array(z.enum(BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES)).optional(),
-  search: z.string().max(100).optional(),
+  search: z.string().max(BANK_TRANSACTION_SEARCH_MAX_LENGTH).optional(),
   transactionId: z.string().optional(),
   sort: z
     .object({

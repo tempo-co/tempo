@@ -108,6 +108,9 @@ check() {
 check spa / spa
 check asset /favicon.svg spa
 check deep-link /bank-transactions spa
+encoded_search=$(python3 -c 'from urllib.parse import quote; print(quote("€" * 1000))')
+check unicode-api-search "/api/bank-transactions?filter%5Bsearch%5D=$encoded_search" proxy
+check unicode-search "/bank-transactions?search=$encoded_search" spa
 check api /api/health proxy
 check callback /bank-connections/callback proxy
 
