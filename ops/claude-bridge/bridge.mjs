@@ -9,12 +9,8 @@ import contract from './contract.json' with {type: 'json'};
 import {createSubscriptionCheck, storedTokenExpiresAt} from './subscription.mjs';
 import {validRequest, validResponse, validSearchRequest} from './validation.mjs';
 
+// Model and effort come from the validated request, so the CLI arguments start with them per call.
 const cliArgs = ({instructions, schema}, tools, extra = []) => [
-	'-p',
-	'--model',
-	'claude-opus-5-5',
-	'--effort',
-	'medium',
 	'--system-prompt',
 	instructions,
 	'--tools',
@@ -250,7 +246,7 @@ export async function startBridge({
 			let searchId;
 			let domains;
 			await run(
-				route.args,
+				['-p', '--model', parsed.model, '--effort', parsed.effort, ...route.args],
 				JSON.stringify(input),
 				(event) => {
 					if (event.type === 'system' && event.subtype === 'init') {
