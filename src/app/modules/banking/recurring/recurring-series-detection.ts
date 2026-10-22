@@ -122,6 +122,19 @@ const CADENCE_RULES: readonly CadenceRule[] = [
 	},
 ];
 
+/**
+ * Whether a varying amount can still be one recurring series. Transfers between people vary because they settle shared
+ * costs, so only a fixed amount (rent, an allowance) recurs. Weekly pay varies with hours worked, so weekly income may
+ * vary where weekly bills may not.
+ */
+function variableAllowed(rule: CadenceRule, rows: readonly RecurringCandidate[], person: boolean): boolean {
+	if (person || rows.some(isPersonTransferCategory)) return false;
+	return (
+		rule.allowsVariable ||
+		rows.every(({merchantKey}) => merchantKey.startsWith(`${BANK_TRANSACTION_DIRECTIONS.INCOME}:`))
+	);
+}
+
 /** A missed payment or two (gaps of two or three cycles) is a skipped period, not irregularity. */
 const MAX_CYCLES_PER_GAP = 3;
 const MIN_REGULAR_GAP_SHARE = 0.75;
@@ -264,7 +277,7 @@ function recognizePartition(rows: RecurringCandidate[], person: boolean): Recogn
 	const fixedRows = chains.filter((chain) => cadenceOf(chain)).reduce((count, chain) => count + chain.length, 0);
 	const rule = fixedRows / rows.length < MIN_REGULAR_GAP_SHARE ? combinedRule : null;
 	const recognized =
-		rule?.allowsVariable && !hasRecurringOverlap(rows, rule)
+		rule && variableAllowed(rule, rows, person) && !hasRecurringOverlap(rows, rule)
 			? [{rows, rule, amountKind: 'VARIABLE' as const}]
 			: fixed;
 	// One payer on one rhythm is one stream whatever its amounts; payments outside that rhythm stay out of it.
@@ -272,7 +285,7 @@ function recognizePartition(rows: RecurringCandidate[], person: boolean): Recogn
 	const sources = new Set(rows.map(({sourceMerchantKey}) => sourceMerchantKey));
 	const renamed = sources.size > 1 || sources.has(undefined);
 	if (renamed && rows.some(({recurringPayeeKey}) => recurringPayeeKey)) return recognized;
-	const streams = rhythmStreams(rows, cadenceOf);
+	const streams = rhythmStreams(rows, cadenceOf, person);
 	if (streams.length === 0) return recognized;
 	const covered = (parts: readonly RecognizedPartition[]) =>
 		parts.reduce((count, part) => count + part.rows.length, 0);
@@ -699,14 +712,15 @@ function retainIsolatedPayments(
 function rhythmStreams(
 	rows: readonly RecurringCandidate[],
 	cadenceOf: (rows: readonly RecurringCandidate[]) => CadenceRule | null,
+	person: boolean,
 ): RecognizedPartition[] {
-	const single = rhythmStream(rows, cadenceOf, false);
+	const single = rhythmStream(rows, cadenceOf, false, person);
 	if (single) return [single];
-	const main = rhythmStream(rows, cadenceOf, true);
+	const main = rhythmStream(rows, cadenceOf, true, person);
 	if (!main) return [];
 	const inMain = new Set(main.rows);
 	const outside = rows.filter((row) => !inMain.has(row));
-	const second = rhythmStream(outside, cadenceOf, false);
+	const second = rhythmStream(outside, cadenceOf, false, person);
 	return second?.amountKind === 'FIXED' && second.rows.length === outside.length ? [main, second] : [];
 }
 
@@ -718,6 +732,7 @@ function rhythmStream(
 	rows: readonly RecurringCandidate[],
 	cadenceOf: (rows: readonly RecurringCandidate[]) => CadenceRule | null,
 	rhythmicLeftovers: boolean,
+	person: boolean,
 ): RecognizedPartition | null {
 	let best: RecognizedPartition | null = null;
 	for (const rule of CADENCE_RULES) {
@@ -730,7 +745,7 @@ function rhythmStream(
 		if (outside.some(({date}) => days.has(date))) continue;
 		if (alternatesPrices(path) || hasOtherCadencePrice(path, rule)) continue;
 		const amountKind = streamAmountKind(path, rule);
-		if (amountKind === 'VARIABLE' && !rule.allowsVariable) continue;
+		if (amountKind === 'VARIABLE' && !variableAllowed(rule, path, person)) continue;
 		// Varying amounts with mixed payment purposes are separate purchases, not one bill.
 		const purposes = new Set(path.flatMap(({category}) => (category ? [category] : [])));
 		if (amountKind === 'VARIABLE' && purposes.size > 1) continue;

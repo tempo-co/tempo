@@ -1218,6 +1218,71 @@ describe('detectRecurringSeries', () => {
 		expect(detectRecurringSeries(rows, '2026-05-12')).toEqual([expect.objectContaining({typicalAmount: '10.00'})]);
 	});
 
+	it('finds no recurring income in varying transfers from a person that happen to fall a month apart', () => {
+		const friend = {
+			merchantKey: 'INCOME:transfer from example friend',
+			name: 'Transfer from EXAMPLE FRIEND',
+			category: 'TRANSFER_IN',
+		};
+		const rows = [
+			payment('2024-01-26', '55.00', friend),
+			payment('2024-02-25', '22.66', friend),
+			payment('2024-03-31', '3.00', friend),
+			payment('2024-05-03', '10.00', friend),
+			payment('2024-05-31', '5.00', friend),
+		];
+		expect(detectRecurringSeries(rows, '2024-06-02')).toEqual([]);
+	});
+
+	it('keeps a fixed monthly transfer to a person, such as rent', () => {
+		const landlord = {
+			merchantKey: 'EXPENSE:transfer to example landlord',
+			name: 'Transfer to EXAMPLE LANDLORD',
+			category: 'TRANSFER_OUT',
+		};
+		const rows = monthly(1, MAY_TO_OCT, '650.00', landlord);
+		expect(detectRecurringSeries(rows, '2026-10-03')).toEqual([
+			expect.objectContaining({amountKind: 'FIXED', transactionIds: rows.map(({id}) => id)}),
+		]);
+	});
+
+	it('keeps weekly pay that varies with hours worked as one income stream', () => {
+		const employer = {merchantKey: 'INCOME:example staffing payroll', name: 'EXAMPLE STAFFING', category: 'INCOME'};
+		const amounts = [
+			'140.10',
+			'151.80',
+			'96.40',
+			'182.25',
+			'120.00',
+			'77.80',
+			'84.15',
+			'133.90',
+			'160.20',
+			'88.60',
+		];
+		const rows = amounts.map((amount, index) => payment(isoMonth(2024, 1, 3 + 7 * index), amount, employer));
+		const series = detectRecurringSeries(rows, '2024-03-10');
+		expect(series).toEqual([
+			expect.objectContaining({
+				cadence: 'WEEKLY',
+				amountKind: 'VARIABLE',
+				direction: 'INCOME',
+				transactionIds: rows.map(({id}) => id),
+			}),
+		]);
+	});
+
+	it('still finds no weekly bill in varying weekly shopping', () => {
+		const shop = {
+			merchantKey: 'EXPENSE:example corner shop',
+			name: 'Example Corner Shop',
+			category: 'SUBSCRIPTIONS',
+		};
+		const amounts = ['14.10', '31.80', '9.40', '22.25', '18.00', '27.80', '8.15', '33.90'];
+		const rows = amounts.map((amount, index) => payment(isoMonth(2024, 1, 3 + 7 * index), amount, shop));
+		expect(detectRecurringSeries(rows, '2024-03-01')).toEqual([]);
+	});
+
 	it('does not promote two different spikes in a row', () => {
 		const rows = ['10.00', '10.00', '10.00', '100.00', '300.00'].map((amount, index) =>
 			payment(isoMonth(2026, 1 + index, 9), amount),
