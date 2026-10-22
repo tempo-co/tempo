@@ -78,7 +78,7 @@ type CadenceRule = {
 	toleranceDays: number;
 	months: number;
 	minCount: number;
-	/** Variable amounts at a weekly rhythm are mostly groceries, not bills. */
+	/** Variable amounts at a weekly rhythm are mostly groceries, not bills; `variableAllowed` lets weekly pay vary. */
 	allowsVariable: boolean;
 };
 
