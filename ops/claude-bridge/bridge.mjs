@@ -6,7 +6,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import contract from './contract.json' with {type: 'json'};
-import {assertSubscriptionUsable, storedTokenExpiresAt} from './subscription.mjs';
+import {createSubscriptionCheck, storedTokenExpiresAt} from './subscription.mjs';
 import {validRequest, validResponse, validSearchRequest} from './validation.mjs';
 
 const cliArgs = ({instructions, schema}, tools, extra = []) => [
@@ -78,7 +78,7 @@ export async function startBridge({
 	claudePath = 'claude',
 	spawnProcess = spawn,
 	env = process.env,
-	verifyUsage = assertSubscriptionUsable,
+	verifyUsage = createSubscriptionCheck(),
 	tokenExpiresAt = storedTokenExpiresAt,
 	timeoutMs = 120_000,
 	maxOutputBytes = 256 * 1024,

@@ -33,7 +33,7 @@ function boundary({profile = {}, usage = {}} = {}) {
 		});
 		return req;
 	};
-	return {request, calls};
+	return {request, calls, endpoints};
 }
 
 test('checks the plan and extra usage on the fixed OAuth endpoints without exposing the token', async () => {
@@ -136,4 +136,65 @@ test('fails closed unless the account profile shows a Max or Pro plan', async (t
 	const {assertSubscriptionUsable} = await import('./subscription.mjs');
 	const {request} = boundary({profile: {body: {organization: {organization_type: 'claude_pro'}}}});
 	await assertSubscriptionUsable('/synthetic/home', {request, readCredentials: async () => credentials});
+});
+
+const minute = 60 * 1000;
+
+test('reuses a pass for five minutes per unexpired login; a new login, expiry or failure checks again', async () => {
+	const {createSubscriptionCheck} = await import('./subscription.mjs');
+	let now = 1_000_000;
+	let stored = {claudeAiOauth: {accessToken: 'synthetic-token', expiresAt: now + 60 * minute}};
+	const {request, calls, endpoints} = boundary();
+	const check = createSubscriptionCheck({
+		request,
+		now: () => now,
+		readCredentials: async () => JSON.stringify(stored),
+	});
+	await check('/synthetic/home');
+	assert.equal(calls.length, 2);
+	now += 5 * minute - 1;
+	await check('/synthetic/home');
+	assert.equal(calls.length, 2);
+	now += 1;
+	await check('/synthetic/home');
+	assert.equal(calls.length, 4);
+	stored = {claudeAiOauth: {accessToken: 'synthetic-other-token', expiresAt: now + 60 * minute}};
+	await check('/synthetic/home');
+	assert.equal(calls.length, 6);
+	stored = {claudeAiOauth: {accessToken: 'synthetic-other-token'}};
+	await check('/synthetic/home');
+	assert.equal(calls.length, 8);
+	stored = {claudeAiOauth: {accessToken: 'synthetic-other-token', expiresAt: now - 1}};
+	endpoints.profile.status = 401;
+	await assert.rejects(check('/synthetic/home'), failure);
+	assert.equal(calls.length, 9);
+	stored = {claudeAiOauth: {accessToken: 'synthetic-other-token', expiresAt: now + 60 * minute}};
+	endpoints.profile.status = 200;
+	endpoints.usage.body = {extra_usage: {is_enabled: true}};
+	await assert.rejects(check('/synthetic/home'), failure);
+	await assert.rejects(check('/synthetic/home'), failure);
+	assert.equal(calls.length, 13);
+});
+
+test('rides out a rate-limited check for fifteen minutes after the last pass; other failures fail closed', async () => {
+	const {createSubscriptionCheck} = await import('./subscription.mjs');
+	let now = 1_000_000;
+	const stored = JSON.stringify({claudeAiOauth: {accessToken: 'synthetic-token', expiresAt: now + 120 * minute}});
+	const {request, calls, endpoints} = boundary();
+	const check = createSubscriptionCheck({request, now: () => now, readCredentials: async () => stored});
+	await check('/synthetic/home');
+	now += 15 * minute - 1;
+	endpoints.profile.status = 429;
+	await check('/synthetic/home');
+	assert.equal(calls.length, 3);
+	now += 1;
+	await assert.rejects(check('/synthetic/home'), failure);
+	endpoints.profile.status = 200;
+	await check('/synthetic/home');
+	now += 6 * minute;
+	endpoints.profile.status = 401;
+	await assert.rejects(check('/synthetic/home'), failure);
+	endpoints.profile.status = 429;
+	await assert.rejects(check('/synthetic/home'), failure);
+	assert.equal(calls.length, 8);
 });
