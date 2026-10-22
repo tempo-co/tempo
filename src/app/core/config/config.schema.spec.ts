@@ -168,7 +168,15 @@ describe('AI categorization configuration', () => {
 
 		expect(parsed.AI_CATEGORIZATION_ENABLED).toBe(false);
 		expect(parsed.AI_CATEGORIZATION_PROVIDER).toBe('claude');
-		expect(parsed.AI_CATEGORIZATION_MODEL).toBe('claude-opus-5-5');
+		expect(parsed.AI_CATEGORIZATION_MODEL).toBe('claude-sonnet-5-5');
+		expect(parsed.AI_CATEGORIZATION_EFFORT).toBe('high');
+	});
+
+	it('accepts only the effort levels Claude supports', () => {
+		expect(configSchema.parse({...baseConfig, AI_CATEGORIZATION_EFFORT: 'xhigh'}).AI_CATEGORIZATION_EFFORT).toBe(
+			'xhigh',
+		);
+		expect(() => configSchema.parse({...baseConfig, AI_CATEGORIZATION_EFFORT: 'extreme'})).toThrow();
 	});
 
 	it.each([

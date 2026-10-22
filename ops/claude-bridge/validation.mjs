@@ -82,7 +82,11 @@ export function validSearchRequest(body) {
 }
 
 function validEnvelope(body) {
-	if (!keys(body, ['input'], ['model']) || (Object.hasOwn(body, 'model') && body.model !== 'claude-opus-5-5'))
+	if (
+		!keys(body, ['model', 'effort', 'input']) ||
+		!contract.models.includes(body.model) ||
+		!contract.efforts.includes(body.effort)
+	)
 		return false;
 	const input = body.input;
 	if (!keys(input, ['categories', 'transactions'])) return false;
