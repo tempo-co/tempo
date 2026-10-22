@@ -1498,6 +1498,13 @@ describe('RecurringSeries', () => {
 				]);
 				await link(current.key, false).expect(404);
 
+				// Undo from the joined key the web still holds links them again.
+				await link(joined.key, true).expect(204);
+				expect((await read()).series).toEqual([
+					expect.objectContaining({key: joined.key, transactionCount: 7}),
+				]);
+				await link(joined.key, false).expect(204);
+
 				// Either history links them again.
 				await link(previous.key, true).expect(204);
 				expect((await read()).series).toEqual([
@@ -1661,6 +1668,31 @@ describe('RecurringSeries', () => {
 			expect(byName((await list(ownerAgent)).series, 'Example Cache Bill')).toEqual([]);
 			expect(detect).toHaveBeenCalled();
 			await fixtures.transactions.delete(extra.map(({id}) => id));
+
+			// Moving text between fields is a change too: a yearly plan of two payments counts only as a subscription.
+			const annual = await fixtures.createTransactions(
+				ownerBankAccount,
+				['2025-09-21', '2026-09-21'].map((date) =>
+					bookedRow(date, '-60.00', {
+						counterpartyName: 'Example Cache Annual',
+						description: 'Example Cache Annual',
+						category: 'SUBSCRIPTIONS',
+					}),
+				),
+			);
+			expect(byName((await list(ownerAgent)).series, 'Example Cache Annual')).toHaveLength(1);
+			await fixtures.transactions
+				.createQueryBuilder()
+				.update()
+				.set({
+					category: null,
+					description: 'SUBSCRIPTIONS|Example Cache Annual',
+					updatedAt: () => '"updatedAt"',
+				})
+				.whereInIds(annual.map(({id}) => id))
+				.execute();
+			expect(byName((await list(ownerAgent)).series, 'Example Cache Annual')).toEqual([]);
+			await fixtures.transactions.delete(annual.map(({id}) => id));
 		} finally {
 			detect.mockRestore();
 		}

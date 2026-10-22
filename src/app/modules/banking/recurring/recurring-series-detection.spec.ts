@@ -178,8 +178,9 @@ describe('detectRecurringSeries', () => {
 					expect(after).toMatchObject({
 						key: original.key,
 						amountKind,
-						typicalAmount: amountKind === 'VARIABLE' ? '175.00' : '17.00',
-						monthlyEquivalent: amountKind === 'VARIABLE' ? 17500n : 1700n,
+						// 25.00 to 175.00 with nothing like it before or after is a one-off.
+						typicalAmount: amountKind === 'VARIABLE' ? '25.00' : '17.00',
+						monthlyEquivalent: amountKind === 'VARIABLE' ? 2500n : 1700n,
 					});
 					expect(after.transactionIds).toEqual(expect.arrayContaining(rows.map(({id}) => id)));
 				}
@@ -1147,6 +1148,62 @@ describe('detectRecurringSeries', () => {
 		expect(series).toMatchObject({status: 'ACTIVE', transactionIds: rows.map(({id}) => id)});
 	});
 
+	it('keeps a rising variable bill when a second plan from the payer starts', () => {
+		const bill = ['100.00', '140.00', '180.00', '220.00', '260.00', '300.00'].map((amount, index) =>
+			payment(isoMonth(2026, 1 + index, 3), amount),
+		);
+		const plan = monthly(18, ['2026-04', '2026-05', '2026-06'], '20.00');
+
+		expect(detectRecurringSeries([...bill, ...plan], '2026-06-20')).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({transactionIds: bill.map(({id}) => id), typicalAmount: '300.00'}),
+				expect.objectContaining({transactionIds: plan.map(({id}) => id)}),
+			]),
+		);
+	});
+
+	it('keeps one stream when the payer also pays once from another account', () => {
+		const income = {merchantKey: 'INCOME:example grants office', category: 'INCOME', name: 'Example Grants Office'};
+		const stream = ['100.00', '140.00', '180.00', '220.00', '260.00', '300.00'].map((amount, index) =>
+			payment(isoMonth(2026, 1 + index, 24), amount, income),
+		);
+		const offRhythm = payment('2026-03-10', '180.00', income);
+		const other = payment('2026-02-16', '15.00', {
+			...income,
+			bankAccountId: 'account-2',
+			recurringPayeeKey: 'INCOME:example grants office',
+		});
+		const linked = [...stream, offRhythm].map((row) => ({
+			...row,
+			recurringPayeeKey: 'INCOME:example grants office',
+		}));
+
+		expect(detectRecurringSeries([...linked, other], '2026-06-26')).toEqual([
+			expect.objectContaining({transactionIds: stream.map(({id}) => id), status: 'ACTIVE'}),
+		]);
+	});
+
+	it('finds no bill in varying purchases with different purposes at one shop', () => {
+		const shop = {merchantKey: 'EXPENSE:example marketplace'};
+		// Two purchases a day apart rule out one bill; the monthly-looking rest must not become one either.
+		const rows = [
+			payment('2026-04-29', '86.52', {...shop, category: 'SHOPPING'}),
+			payment('2026-06-01', '4.99', {...shop, category: 'SUBSCRIPTIONS'}),
+			payment('2026-09-01', '86.52', {...shop, category: 'SHOPPING'}),
+			payment('2026-09-28', '121.12', {...shop, category: 'SHOPPING'}),
+			payment('2026-09-29', '0.49', {...shop, category: 'SHOPPING'}),
+			payment('2026-10-16', '79.99', {...shop, category: 'SHOPPING'}),
+		];
+		expect(detectRecurringSeries(rows, '2026-10-18')).toEqual([]);
+	});
+
+	it('does not promote two different spikes in a row', () => {
+		const rows = ['10.00', '10.00', '10.00', '100.00', '300.00'].map((amount, index) =>
+			payment(isoMonth(2026, 1 + index, 9), amount),
+		);
+		expect(detectRecurringSeries(rows, '2026-05-12')).toEqual([expect.objectContaining({typicalAmount: '10.00'})]);
+	});
+
 	it('keeps a second plan from one payer apart once it has its own monthly rhythm', () => {
 		const first = monthly(
 			3,
@@ -1188,6 +1245,7 @@ describe('detectRecurringSeries', () => {
 				.priceChange;
 
 		expect(change(1)).toEqual({amount: '-3.50', since: '2026-05-23'});
+		expect(change(2)).toEqual({amount: '-3.50', since: '2026-05-23'});
 		expect(change(3)).toEqual({amount: '-3.50', since: '2026-05-23'});
 		expect(change(4)).toBeNull();
 		// A series no longer paid has no current price to compare.

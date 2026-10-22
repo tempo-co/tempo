@@ -251,7 +251,7 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 	private async detect(accountId: Account['id']): Promise<Detection> {
 		const [{version}] = await this.candidateRows(accountId)
 			.select(
-				`md5(string_agg(concat_ws('|', ${CANDIDATE_COLUMNS.map(([sql]) => sql).join(', ')}), ',' ORDER BY "transaction"."id"))`,
+				`md5(string_agg(json_build_array(${CANDIDATE_COLUMNS.map(([sql]) => sql).join(', ')})::text, ',' ORDER BY "transaction"."id"))`,
 				'version',
 			)
 			.getRawMany<{version: string | null}>();
@@ -375,9 +375,8 @@ function linkContinuations(
 		const saved = separate.filter((choice) => answers(choice, older, newer));
 		const linked = saved.length === 0;
 		if (linked) detected = [...detected.filter((entry) => entry !== older && entry !== newer), joined];
-		for (const {key} of linked ? [older, newer, joined] : [older, newer]) {
-			continuations.set(key, {linked, older, newer, saved});
-		}
+		// The joined key stays reachable after an unlink, so an undo can use the key the owner acted on.
+		for (const {key} of [older, newer, joined]) continuations.set(key, {linked, older, newer, saved});
 	}
 	return {detected, continuations};
 }

@@ -26,6 +26,8 @@ export type RecurringCandidate = {
 	 * transaction merchant key remains unchanged.
 	 */
 	recurringPayeeKey?: string;
+	/** Set by detection on rows it groups under a payee key: the row's own merchant key. */
+	sourceMerchantKey?: string;
 	currency: string;
 	amountCents: bigint;
 	baseAmountCents: bigint | null;
@@ -133,6 +135,8 @@ const PRICE_CHANGE_CENTS = 50n;
 const PRICE_CHANGE_SHOWN_PAYMENTS = 3;
 /** A payment over 50% and 5.00 away from the shown price is a one-off until a similar amount follows it. */
 const SPIKE_PERCENT = 50n;
+/** A jump that matches one of this many payments before it is an amount already paid, not a one-off. */
+const REPEAT_LOOKBACK_PAYMENTS = 3;
 const SPIKE_CENTS = 500n;
 /** Other payments to the same payee tolerated inside a yearly series' span. */
 const MAX_OTHER_PAYMENTS_IN_YEARLY_SPAN = 3;
@@ -176,8 +180,9 @@ export function detectRecurringSeries(
 		// Per account: small payments to a payee from one account must not break a bill's rhythm on another.
 		const partitionKey = `${candidate.bankAccountId}\u0000${payeeKey}\u0000${candidate.currency}`;
 		const partition = partitions.get(partitionKey);
-		if (partition) partition.push({...candidate, merchantKey: payeeKey});
-		else partitions.set(partitionKey, [{...candidate, merchantKey: payeeKey}]);
+		const row = {...candidate, merchantKey: payeeKey, sourceMerchantKey: candidate.merchantKey};
+		if (partition) partition.push(row);
+		else partitions.set(partitionKey, [row]);
 	}
 
 	const series = [...partitions.values()].flatMap((rows) =>
@@ -259,16 +264,25 @@ function recognizePartition(rows: RecurringCandidate[], person: boolean): Recogn
 			? [{rows, rule, amountKind: 'VARIABLE' as const}]
 			: fixed;
 	// One payer on one rhythm is one stream whatever its amounts; payments outside that rhythm stay out of it.
-	// Histories linked across names or accounts are reconciled by their naming periods instead.
-	if (rows.some(({recurringPayeeKey}) => recurringPayeeKey)) return recognized;
-	const stream = rhythmStream(rows, cadenceOf);
-	if (!stream) return recognized;
-	const same = recognized.length === 1 && recognized[0].rows.length === stream.rows.length;
+	// Renamed histories linked by bank evidence are reconciled by their naming periods instead.
+	const sources = new Set(rows.map(({sourceMerchantKey}) => sourceMerchantKey));
+	const renamed = sources.size > 1 || sources.has(undefined);
+	if (renamed && rows.some(({recurringPayeeKey}) => recurringPayeeKey)) return recognized;
+	const streams = rhythmStreams(rows, cadenceOf);
+	if (streams.length === 0) return recognized;
+	const covered = (parts: readonly RecognizedPartition[]) =>
+		parts.reduce((count, part) => count + part.rows.length, 0);
+	if (streams.length > 1) return covered(streams) > covered(recognized) ? streams : recognized;
+	const [stream] = streams;
+	if (recognized.length === 1 && recognized[0].rows.length === stream.rows.length) {
+		// The same payments: either reading of a settled price makes the series fixed, so its price label holds.
+		return [{...recognized[0], amountKind: stream.amountKind === 'FIXED' ? 'FIXED' : recognized[0].amountKind}];
+	}
 	// A fixed price that already spans more than the stream is the better reading of this history.
 	const longerFixed = recognized.some(
 		({rows, amountKind}) => amountKind === 'FIXED' && rows.length > stream.rows.length,
 	);
-	return same || longerFixed ? recognized : [stream];
+	return longerFixed ? recognized : [stream];
 }
 
 function reconcileAccountSeries(
@@ -677,9 +691,29 @@ function retainIsolatedPayments(
  * The longest run of payments, one per cycle, that follows a cadence. It is a stream only when the payments left
  * outside it do not follow the same cadence themselves: that would be a second obligation from the same payer.
  */
+/**
+ * One payer's streams. Usually one: the longest rhythm, with leftovers that have no rhythm of their own. When every
+ * leftover payment is a second plan at a fixed price on its own rhythm, both are streams. Any other rhythmic leftover,
+ * as at a busy shop, means the payer has no single stream.
+ */
+function rhythmStreams(
+	rows: readonly RecurringCandidate[],
+	cadenceOf: (rows: readonly RecurringCandidate[]) => CadenceRule | null,
+): RecognizedPartition[] {
+	const single = rhythmStream(rows, cadenceOf, false);
+	if (single) return [single];
+	const main = rhythmStream(rows, cadenceOf, true);
+	if (!main) return [];
+	const inMain = new Set(main.rows);
+	const outside = rows.filter((row) => !inMain.has(row));
+	const second = rhythmStream(outside, cadenceOf, false);
+	return second?.amountKind === 'FIXED' && second.rows.length === outside.length ? [main, second] : [];
+}
+
 function rhythmStream(
 	rows: readonly RecurringCandidate[],
 	cadenceOf: (rows: readonly RecurringCandidate[]) => CadenceRule | null,
+	rhythmicLeftovers: boolean,
 ): RecognizedPartition | null {
 	let best: RecognizedPartition | null = null;
 	for (const rule of CADENCE_RULES) {
@@ -688,13 +722,17 @@ function rhythmStream(
 		const inPath = new Set(path);
 		const outside = rows.filter((row) => !inPath.has(row));
 		// Payments outside the stream with a rhythm of their own are another obligation.
-		if (CADENCE_RULES.some((other) => cadenceOf(rhythmPath(outside, other) ?? []))) continue;
+		const rhythmic = CADENCE_RULES.some((other) => cadenceOf(rhythmPath(outside, other) ?? []));
+		if (rhythmic && !rhythmicLeftovers) continue;
 		// A second charge on a stream payment's own day is billed alongside it, not a one-off.
 		const days = new Set(path.map(({date}) => date));
 		if (outside.some(({date}) => days.has(date))) continue;
 		if (alternatesPrices(path) || hasOtherCadencePrice(path, rule)) continue;
 		const amountKind = streamAmountKind(path, rule);
 		if (amountKind === 'VARIABLE' && !rule.allowsVariable) continue;
+		// Varying amounts with mixed payment purposes are separate purchases, not one bill.
+		const purposes = new Set(path.flatMap(({category}) => (category ? [category] : [])));
+		if (amountKind === 'VARIABLE' && purposes.size > 1) continue;
 		if (!best || path.length > best.rows.length) best = {rows: [...path], rule, amountKind};
 	}
 	return best;
@@ -927,16 +965,22 @@ function buildSeries(
 }
 
 /**
- * The payment whose amount the series shows: the latest one, unless it jumped away from a normal payment before it.
- * A one-off keeps the previous price until the next payment shows whether it was a new price.
+ * The payment whose amount the series shows: the latest one, unless it jumped away from the amount shown before it.
+ * A jump becomes the shown amount once it repeats: the payment after it stays near it, or one of the few payments
+ * before it was the same amount. Until then it is a one-off.
  */
 function shownPayment(rows: readonly RecurringCandidate[]): RecurringCandidate {
-	const latest = rows[rows.length - 1];
-	const previous = rows[rows.length - 2];
-	if (!previous || !isSpike(latest.amountCents, previous.amountCents)) return latest;
-	const beforePrevious = rows[rows.length - 3];
-	const previousWasOneOff = beforePrevious && isSpike(previous.amountCents, beforePrevious.amountCents);
-	return previousWasOneOff ? latest : previous;
+	let shown = rows[0];
+	for (let index = 1; index < rows.length; index++) {
+		const row = rows[index];
+		const next = rows[index + 1];
+		const followed = next !== undefined && !isSpike(next.amountCents, row.amountCents);
+		const seen = rows
+			.slice(Math.max(0, index - REPEAT_LOOKBACK_PAYMENTS), index)
+			.some(({amountCents}) => withinAmountTolerance(abs(amountCents - row.amountCents), row.amountCents));
+		if (followed || seen || !isSpike(row.amountCents, shown.amountCents)) shown = row;
+	}
+	return shown;
 }
 
 function isSpike(amount: bigint, price: bigint): boolean {
