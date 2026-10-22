@@ -23,7 +23,11 @@ import {
 	BankTransactionCategorizationProviderError,
 	BankTransactionCategorizationUnavailableError,
 } from './bank-transaction-categorization.provider';
-import {BankTransactionCategorizationService} from './bank-transaction-categorization.service';
+import {
+	BankTransactionCategorizationService,
+	CATEGORIZATION_RETRY_BACKOFF_TYPE,
+	categorizationRetryDelay,
+} from './bank-transaction-categorization.service';
 import {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
@@ -166,17 +170,45 @@ describe('BankTransactionCategorizationService queue scheduling', () => {
 		expect(jobs[0]).toEqual({
 			name: CATEGORIZE_BANK_TRANSACTIONS_JOB,
 			data: {transactionIds: expect.any(Array)},
-			opts: {jobId: expect.any(String), removeOnFail: true},
+			opts: {
+				jobId: expect.any(String),
+				attempts: 6,
+				backoff: {type: CATEGORIZATION_RETRY_BACKOFF_TYPE},
+				removeOnFail: true,
+			},
 		});
 		expect(jobs[1]).toEqual({
 			name: CATEGORIZE_BANK_TRANSACTIONS_JOB,
 			data: {transactionIds: expect.any(Array)},
-			opts: {jobId: expect.any(String), removeOnFail: true},
+			opts: {
+				jobId: expect.any(String),
+				attempts: 6,
+				backoff: {type: CATEGORIZATION_RETRY_BACKOFF_TYPE},
+				removeOnFail: true,
+			},
 		});
 		expect(jobs[0].data.transactionIds).toHaveLength(50);
 		expect(jobs[1].data.transactionIds).toHaveLength(1);
 		expect([...jobs[0].data.transactionIds, ...jobs[1].data.transactionIds].sort()).toEqual(ids.sort());
 	});
+
+	it.each([
+		{attempt: 1, error: new BankTransactionCategorizationUnavailableError(), delay: 60_000},
+		{attempt: 2, error: new BankTransactionCategorizationUnavailableError(), delay: 120_000},
+		{attempt: 3, error: new BankTransactionCategorizationUnavailableError(), delay: 300_000},
+		{attempt: 4, error: new BankTransactionCategorizationUnavailableError(), delay: 600_000},
+		{attempt: 5, error: new BankTransactionCategorizationUnavailableError(), delay: 1_200_000},
+		{attempt: 1, error: new BankTransactionCategorizationProviderError('synthetic 503', true), delay: 1_000},
+		{attempt: 2, error: new BankTransactionCategorizationProviderError('synthetic 503', true), delay: 2_000},
+		{attempt: 3, error: new BankTransactionCategorizationProviderError('synthetic 503', true), delay: -1},
+		{attempt: 1, error: new Error('synthetic database error'), delay: 1_000},
+		{attempt: 3, error: new Error('synthetic database error'), delay: -1},
+	])(
+		'retries failed attempt $attempt of a categorize job ($error.name) after $delay ms',
+		({attempt, error, delay}) => {
+			expect(categorizationRetryDelay(attempt, error)).toBe(delay);
+		},
+	);
 
 	it('changes the job ID when the categorization input hash changes', async () => {
 		const transaction = createBankTransaction({categoryInputHash: 'hash-a'});
@@ -1036,7 +1068,7 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(repository.update.mock.calls.some(([, values]) => values.categorySource === 'AI')).toBe(false);
 	});
 
-	it('leaves unavailable routes pending so hourly reconciliation can retry', async () => {
+	it('leaves unavailable routes pending and rethrows so the job is retried', async () => {
 		const transaction = createBankTransaction();
 		const failure = new BankTransactionCategorizationUnavailableError();
 		const {service, repository} = createService({rows: [transaction], providerError: failure});

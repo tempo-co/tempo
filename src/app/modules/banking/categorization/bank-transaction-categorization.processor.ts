@@ -13,9 +13,13 @@ import {
 	BankTransactionCategorizationQueueData,
 	BankTransactionCategorizationService,
 	ManualCategoryFollowUpJobData,
+	categorizationRetryDelay,
 } from './bank-transaction-categorization.service';
 
-@Processor(BANK_TRANSACTION_CATEGORIZATION_QUEUE, {concurrency: 1})
+@Processor(BANK_TRANSACTION_CATEGORIZATION_QUEUE, {
+	concurrency: 1,
+	settings: {backoffStrategy: (attemptsMade, _type, error) => categorizationRetryDelay(attemptsMade, error)},
+})
 export class BankTransactionCategorizationProcessor extends WorkerHost {
 	constructor(private readonly categorizationService: BankTransactionCategorizationService) {
 		super();
