@@ -7,7 +7,7 @@ import test from 'node:test';
 
 import {checkContract} from './check-contract.mjs';
 
-const hash = 'a'.repeat(64);
+const hashes = {hash: 'a'.repeat(64), merchantHash: 'c'.repeat(64)};
 const unavailable = 'Claude fallback contract check failed; bridge or API unavailable.';
 
 async function withBridge(t, body, run, status = 200) {
@@ -23,28 +23,30 @@ async function withBridge(t, body, run, status = 200) {
 		await new Promise((resolve) => server.close(resolve));
 		await rm(root, {recursive: true, force: true});
 	});
-	return run({socketPath, readApiHash: async () => hash});
+	return run({socketPath, readApiHashes: async () => hashes});
 }
 
 test('stays silent when the running bridge and API contracts agree', async (t) => {
-	await withBridge(t, JSON.stringify({hash}), async (options) => {
+	await withBridge(t, JSON.stringify(hashes), async (options) => {
 		assert.equal(await checkContract(options), '');
 	});
 });
 
-test('reports a mismatch before any categorization request is needed', async (t) => {
-	await withBridge(t, JSON.stringify({hash: 'b'.repeat(64)}), async (options) => {
-		assert.equal(
-			await checkContract(options),
-			'Claude fallback contract differs from the running API; reinstall and restart the bridge.',
-		);
+for (const field of ['hash', 'merchantHash'])
+	test(`reports a ${field} mismatch before any request is needed`, async (t) => {
+		await withBridge(t, JSON.stringify({...hashes, [field]: 'b'.repeat(64)}), async (options) => {
+			assert.equal(
+				await checkContract(options),
+				'Claude fallback contract differs from the running API; reinstall and restart the bridge.',
+			);
+		});
 	});
-});
 
 for (const [label, body, status] of [
 	['an old bridge', '{"error":"not_found"}', 404],
 	['a malformed reply', 'not json', 200],
 	['a missing hash', '{}', 200],
+	['a bridge without the merchant contract', JSON.stringify({hash: hashes.hash}), 200],
 	['an invalid hash', '{"hash":"synthetic-private-value"}', 200],
 	['an oversized reply', 'x'.repeat(8192), 200],
 ])
@@ -60,11 +62,11 @@ for (const [label, body, status] of [
 	});
 
 test('reports an unavailable API without leaking command errors', async (t) => {
-	await withBridge(t, JSON.stringify({hash}), async (options) => {
+	await withBridge(t, JSON.stringify(hashes), async (options) => {
 		assert.equal(
 			await checkContract({
 				...options,
-				readApiHash: async () => {
+				readApiHashes: async () => {
 					throw new Error('synthetic-private-value');
 				},
 			}),
@@ -75,7 +77,7 @@ test('reports an unavailable API without leaking command errors', async (t) => {
 
 test('reports a missing bridge socket', async () => {
 	assert.equal(
-		await checkContract({socketPath: '/nonexistent/bridge.sock', readApiHash: async () => hash}),
+		await checkContract({socketPath: '/nonexistent/bridge.sock', readApiHashes: async () => hashes}),
 		unavailable,
 	);
 });
@@ -90,11 +92,14 @@ test('bounds a stalled bridge response with the safe failure reason', {timeout: 
 		await new Promise((resolve) => server.close(resolve));
 		await rm(root, {recursive: true, force: true});
 	});
-	assert.equal(await checkContract({socketPath, readApiHash: async () => hash}), unavailable);
+	assert.equal(await checkContract({socketPath, readApiHashes: async () => hashes}), unavailable);
 });
 
 test('rejects an invalid API hash rather than treating it as a mismatch', async (t) => {
-	await withBridge(t, JSON.stringify({hash}), async (options) => {
-		assert.equal(await checkContract({...options, readApiHash: async () => 'not-a-hash'}), unavailable);
+	await withBridge(t, JSON.stringify(hashes), async (options) => {
+		assert.equal(
+			await checkContract({...options, readApiHashes: async () => ({...hashes, hash: 'not-a-hash'})}),
+			unavailable,
+		);
 	});
 });

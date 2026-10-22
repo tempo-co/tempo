@@ -10,7 +10,7 @@ COPY tsconfig*.json ./
 COPY src/ ./src/
 COPY mcp/src/ ./mcp/src/
 COPY mcp/scripts/generate-categories.mjs ./mcp/scripts/
-COPY ops/claude-bridge/contract.json ./ops/claude-bridge/
+COPY ops/claude-bridge/contract.json ops/claude-bridge/merchant-contract.json ./ops/claude-bridge/
 COPY scripts/ ./scripts/
 COPY nest-cli.json ./
 RUN npm run build

@@ -37,6 +37,6 @@ import {ClaudeBankTransactionCategorizationProvider} from './providers/claude-ba
 		BankTransactionCategorizationService,
 		BankTransactionCategorizationProcessor,
 	],
-	exports: [BankTransactionCategorizationService],
+	exports: [BankTransactionCategorizationService, ClaudeBankTransactionCategorizationProvider],
 })
 export class BankTransactionCategorizationModule {}

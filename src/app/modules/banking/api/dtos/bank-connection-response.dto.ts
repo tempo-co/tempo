@@ -72,6 +72,8 @@ export class BankConnectionTransactionResponseDto {
 	transactionStatus: string | null;
 	description: string | null;
 	displayDescription: string;
+	/** Path of the merchant's logo image, null when no confirmed logo exists. */
+	merchantLogoUrl: string | null;
 	counterpartyName: string | null;
 	category: BankTransactionCategory | null;
 	categoryStatus: BankTransactionCategorizationStatus;

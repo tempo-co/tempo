@@ -59,6 +59,9 @@ export const configSchema = z
 		ANTHROPIC_API_KEY: z.string().min(1).optional(),
 		AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: z.string().min(1).optional(),
 
+		// --- Merchant logos ---
+		MERCHANT_LOGOS_ENABLED: strictBooleanEnvSchema.default(false),
+
 		// --- APIs ---
 		BANKING_INTEGRATION_ENABLED: strictBooleanEnvSchema.default(true),
 		ENABLE_BANKING_API_URL: z.string().url(),
@@ -175,6 +178,19 @@ export const configSchema = z
 				code: 'custom',
 				path: ['AI_CATEGORIZATION_MODEL'],
 				message: `AI_CATEGORIZATION_MODEL must be one of the subscription bridge models: ${categorizationContract.models.join(', ')}.`,
+			});
+		}
+
+		if (
+			config.MERCHANT_LOGOS_ENABLED &&
+			!config.ANTHROPIC_API_KEY &&
+			!config.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET
+		) {
+			context.addIssue({
+				code: 'custom',
+				path: ['ANTHROPIC_API_KEY'],
+				message:
+					'Configure ANTHROPIC_API_KEY or AI_CATEGORIZATION_SUBSCRIPTION_SOCKET when merchant logos are enabled.',
 			});
 		}
 	});

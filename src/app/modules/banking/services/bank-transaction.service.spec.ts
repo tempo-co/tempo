@@ -11,6 +11,7 @@ import {
 import {BankTransaction} from '../bank-transaction.entity';
 import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
+import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {BankTransactionService} from './bank-transaction.service';
 import {OwnTransferService} from './own-transfer.service';
 
@@ -67,6 +68,7 @@ function createService(
 		{} as OwnTransferService,
 		{} as BankTransactionCategorizationService,
 		{} as RecurringSeriesService,
+		{getLogoUrls: async () => new Map()} as unknown as MerchantLogoService,
 	);
 }
 

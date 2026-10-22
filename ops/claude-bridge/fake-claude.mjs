@@ -95,7 +95,19 @@ if (args[0] === 'doctor') {
 		process.exit(1);
 	}
 	if (mode === 'bad-json') process.stdout.write('synthetic-sensitive-malformed-output\n');
-	if (mode !== 'missing-result') {
+	if (mode === 'output-then-exit') {
+		emit({type: 'assistant', message: {content: [{type: 'tool_use', name: 'StructuredOutput', input: {}}]}});
+		process.exit(1);
+	}
+	if (mode !== 'missing-result' && parsed.merchants) {
+		const merchants = parsed.merchants.map(({correlationId}) => ({
+			correlationId,
+			kind: mode === 'bad-kind' ? 'INVENTED' : 'BUSINESS',
+			brand: 'Example Shop',
+			domain: 'shop.example.test',
+		}));
+		emit({type: 'result', subtype: 'success', is_error: false, structured_output: {merchants}});
+	} else if (mode !== 'missing-result') {
 		const classifications = parsed.transactions.map(({correlationId}) => ({
 			correlationId,
 			category: mode === 'bad-category' ? 'INVENTED' : 'SHOPPING',

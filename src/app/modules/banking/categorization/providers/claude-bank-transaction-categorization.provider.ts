@@ -8,7 +8,10 @@ import {z} from 'zod';
 import {ConfigurationService} from '@core/config/config.service';
 
 import contract from '../../../../../../ops/claude-bridge/contract.json';
+import merchantContract from '../../../../../../ops/claude-bridge/merchant-contract.json';
+import {normalizeBankTransactionText} from '../../bank-transaction-display';
 import {normalizeBankTransactionLocation} from '../../bank-transaction-location';
+import {isHostname} from '../../banking.utils';
 import {normalizeMerchantCategoryCode} from '../bank-transaction-categorization-input';
 import {BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS} from '../bank-transaction-categorization.constants';
 import {
@@ -22,6 +25,9 @@ import {
 	BankTransactionCategorizationResult,
 	BankTransactionCategorizationWebSearchInput,
 	BankTransactionCategoryDefinition,
+	MERCHANT_KINDS,
+	MerchantIdentification,
+	MerchantIdentificationInput,
 } from '../bank-transaction-categorization.types';
 import {BANK_TRANSACTION_CATEGORIES} from '../bank-transaction-category';
 
@@ -47,6 +53,21 @@ const webSearchCategorizationResponseSchema = z
 	})
 	.strict();
 
+const merchantIdentificationResponseSchema = z
+	.object({
+		merchants: z.array(
+			z
+				.object({
+					correlationId: z.string().min(1),
+					kind: z.enum(MERCHANT_KINDS),
+					brand: z.string().nullable(),
+					domain: z.string().nullable(),
+				})
+				.strict(),
+		),
+	})
+	.strict();
+
 // One source for the prompts and schemas, shared with the host-installed subscription bridge.
 const {instructions: CATEGORIZATION_INSTRUCTIONS, schema: categorizationResponseJsonSchema} = contract;
 const {instructions: WEB_SEARCH_CATEGORIZATION_INSTRUCTIONS, schema: webSearchCategorizationResponseJsonSchema} =
@@ -60,6 +81,8 @@ type ClaudeClient = Pick<Anthropic, 'messages'>;
 type RequestInput = {correlationId: string};
 type ClaudeEffort = NonNullable<NonNullable<MessageCreateParamsNonStreaming['output_config']>['effort']>;
 const CONTRACT_HASH = createHash('sha256').update(JSON.stringify(contract)).digest('hex');
+// Merchant identification has its own contract file, so changing it never affects the categorization routes.
+const MERCHANT_CONTRACT_HASH = createHash('sha256').update(JSON.stringify(merchantContract)).digest('hex');
 const API_TIMEOUT_MS = 90_000;
 const SUBSCRIPTION_TIMEOUT_MS = 125_000;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -108,6 +131,48 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 				throw new BankTransactionCategorizationUnavailableError();
 			}
 		}
+	}
+
+	/**
+	 * Names the business behind each merchant, with its official website when the model is confident of it, on the
+	 * same routes as categorization: the API first, then the subscription bridge. When both routes refused before the
+	 * model ran, throws the unavailable error so the merchants stay pending without counting an attempt; when a model
+	 * ran and its answer was unusable, throws a provider error so the attempt counts.
+	 */
+	async identifyMerchants(
+		merchants: readonly MerchantIdentificationInput[],
+	): Promise<readonly MerchantIdentification[]> {
+		if (merchants.length > merchantContract.maxMerchants) throw this.invalidResponseError();
+		this.assertUniqueCorrelationIds(merchants);
+		if (!merchants.length) return [];
+		const input = {
+			merchants: merchants.map((merchant, index) => ({
+				correlationId: String(index),
+				name: merchant.name,
+				location: merchant.location,
+				transactionType: merchant.transactionType,
+				direction: merchant.direction,
+				searchSourceDomains: merchant.searchSourceDomains.slice(0, merchantContract.maxSourceDomains),
+			})),
+		};
+		let ran = false;
+		try {
+			const response = await this.callApi(
+				this.createRequest(merchantContract.instructions, input, merchantContract.schema, 16384),
+			);
+			return this.parseMerchants(this.parseJson(response.text), merchants);
+		} catch (error) {
+			ran = this.mayHaveRun(error);
+		}
+		if (this.subscriptionSocket) {
+			try {
+				const response = await this.callSubscription(input, '/identify-merchants', MERCHANT_CONTRACT_HASH);
+				return this.parseMerchants(this.parseJson(response), merchants);
+			} catch (error) {
+				if (!(error instanceof BankTransactionCategorizationUnavailableError)) ran = true;
+			}
+		}
+		throw ran ? this.invalidResponseError() : new BankTransactionCategorizationUnavailableError();
 	}
 
 	async categorizeWithWebSearch(
@@ -279,6 +344,12 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		return typeof status === 'number' && ((status >= 400 && status < 500 && status !== 408) || status === 529);
 	}
 
+	/** Whether an API call may have reached the model: anything but a refusal or a connection that never opened. */
+	private mayHaveRun(error: unknown): boolean {
+		if (this.refusedBeforeRunning(error)) return false;
+		return !(error instanceof Anthropic.APIConnectionError) || error instanceof Anthropic.APIConnectionTimeoutError;
+	}
+
 	/** Keeps well-formed hostnames only, up to the trace limit. */
 	private toSourceDomains(values: unknown): string[] {
 		const domains = new Set<string>();
@@ -338,7 +409,39 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		}));
 	}
 
-	private callSubscription(input: object, path = '/categorize'): Promise<string> {
+	private parseMerchants(
+		parsed: unknown,
+		merchants: readonly MerchantIdentificationInput[],
+	): MerchantIdentification[] {
+		const validation = merchantIdentificationResponseSchema.safeParse(parsed);
+		if (!validation.success) throw this.invalidResponseError();
+		const items = validation.data.merchants;
+		const ids = new Set(items.map(({correlationId}) => correlationId));
+		if (
+			items.length !== merchants.length ||
+			ids.size !== items.length ||
+			merchants.some((_, index) => !ids.has(String(index)))
+		)
+			throw this.invalidResponseError();
+		return items.map((item) => {
+			const brand = item.kind === 'BUSINESS' ? normalizeBankTransactionText(item.brand) : null;
+			const domain =
+				item.kind === 'BUSINESS'
+					? item.domain
+							?.trim()
+							.toLowerCase()
+							.replace(/^www\./, '')
+					: null;
+			return {
+				correlationId: merchants[Number(item.correlationId)].correlationId,
+				kind: item.kind,
+				brand: brand && brand.length <= merchantContract.maxBrandLength ? brand : null,
+				domain: brand && domain && isHostname(domain) ? domain : null,
+			};
+		});
+	}
+
+	private callSubscription(input: object, path = '/categorize', contractHash = CONTRACT_HASH): Promise<string> {
 		return new Promise((resolve, reject) => {
 			const body = JSON.stringify({model: this.model, effort: this.effort, input});
 			const request = httpRequest(
@@ -349,7 +452,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 					headers: {
 						'content-type': 'application/json',
 						'content-length': Buffer.byteLength(body),
-						'x-tempo-contract': CONTRACT_HASH,
+						'x-tempo-contract': contractHash,
 					},
 				},
 				(response) => {

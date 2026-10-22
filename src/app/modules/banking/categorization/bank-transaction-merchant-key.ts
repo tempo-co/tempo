@@ -1,4 +1,8 @@
-import {type BankTransactionDirection, toBankTransactionDirection} from '../bank-transaction-direction';
+import {
+	BANK_TRANSACTION_DIRECTIONS,
+	type BankTransactionDirection,
+	toBankTransactionDirection,
+} from '../bank-transaction-direction';
 import {
 	extractCardMerchantName,
 	extractProcessorCollectedBusinessName,
@@ -84,6 +88,16 @@ function getEntityName(transaction: MerchantKeyTransaction, description: string 
 		extractProcessorCollectedBusinessName(transaction) ??
 		(counterpartyName ? stripProcessorTail(counterpartyName) : null)
 	);
+}
+
+/** The merchant part of a stored key, without its direction, so a purchase and its refund share it. */
+export function getMerchantKeyName(merchantKey: string | null | undefined): string | null {
+	return merchantKey?.slice(merchantKey.indexOf(':') + 1) || null;
+}
+
+/** Every stored key for a merchant name, one per direction. */
+export function getMerchantKeysForName(name: string): string[] {
+	return Object.values(BANK_TRANSACTION_DIRECTIONS).map((direction) => `${direction}:${name}`);
 }
 
 // Keeps the full name when the strip would leave fewer than two words, because "via" or "by" can then be part of the

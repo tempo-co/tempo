@@ -90,6 +90,13 @@ export function addDays(date: string, days: number): string {
 	return value.toISOString().slice(0, 10);
 }
 
+const HOSTNAME_PATTERN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+
+/** A lowercase DNS hostname ending in a letters-only label: no IP literal, port or trailing dot. */
+export function isHostname(value: string): boolean {
+	return HOSTNAME_PATTERN.test(value);
+}
+
 export const BATCH_WRITE_CHUNK_SIZE = 1000;
 
 export function chunkArray<T>(items: readonly T[], size: number): T[][] {

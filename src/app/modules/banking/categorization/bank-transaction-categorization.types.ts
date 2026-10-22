@@ -119,3 +119,26 @@ export type BankTransactionCategoryDefinition = {
 /** Categorization states a list can be filtered by: failed, or still waiting to be categorized. */
 export const BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES = ['FAILED', 'CATEGORIZING'] as const;
 export type BankTransactionCategoryStatusFilterValue = (typeof BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES)[number];
+
+export const MERCHANT_KINDS = ['BUSINESS', 'PERSON', 'PAYMENT_SERVICE', 'UNCLEAR'] as const;
+export type MerchantKind = (typeof MERCHANT_KINDS)[number];
+
+/** One merchant to identify: the statement name without card or reference details, never amounts or dates. */
+export type MerchantIdentificationInput = {
+	correlationId: string;
+	name: string;
+	location: string | null;
+	transactionType: string;
+	direction: BankTransactionDirection;
+	/** Hostnames an earlier categorization web search returned for this merchant. */
+	searchSourceDomains: readonly string[];
+};
+
+export type MerchantIdentification = {
+	correlationId: string;
+	kind: MerchantKind;
+	/** Set only for a business. */
+	brand: string | null;
+	/** A well-formed lowercase hostname without `www.`, set only for a business; not yet confirmed by its site. */
+	domain: string | null;
+};
