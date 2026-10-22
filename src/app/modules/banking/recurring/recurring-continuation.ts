@@ -5,11 +5,11 @@ import {
 	type RecurringCandidate,
 	detectRecurringSeries,
 	isPersonTransferCategory,
-	withinAmountTolerance,
+	nearAmount,
 } from './recurring-series-detection';
 import {isOrdinaryRetailExpense} from './recurring-series-eligibility';
 
-/** Two successive histories that may be one obligation; only the owner can say whether they are. */
+/** Two successive histories of one obligation; they are joined unless the owner unlinks them. */
 export type ContinuationPair = {
 	older: DetectedRecurringSeries;
 	newer: DetectedRecurringSeries;
@@ -24,7 +24,7 @@ export function joinContinuation(
 	candidatesById: ReadonlyMap<string, RecurringCandidate>,
 	today: string,
 ): DetectedRecurringSeries | null {
-	// The pair is replayed under its own identity, which never reaches stored data.
+	// The pair is replayed under its own identity, so its rows group together whatever their own payee keys.
 	const recurringPayeeKey = `${older.direction}:continuation:${older.key}:${newer.key}`;
 	const ids = new Set([...older.transactionIds, ...newer.transactionIds]);
 	const rows = [...ids].map((id) => ({...candidatesById.get(id)!, recurringPayeeKey}));
@@ -37,8 +37,8 @@ export function joinContinuation(
  * Finds histories that look like one fixed-price obligation renamed: the newer starts after the older ends, either name
  * extends the other by whole words, and direction, currency, cadence, price and a single payment purpose agree. The
  * detector must keep their union whole. Retail and person transfers are left out, and a history with more than one
- * possible counterpart is never paired. The same evidence also fits a new plan from the same provider, so a pair is
- * only ever a question for the owner.
+ * possible counterpart is never paired. The same evidence also fits a new plan from the same provider, so the owner
+ * can unlink a pair.
  * A middle history of three successive renames has two counterparts, so it is asked about only once one link exists.
  */
 export function findContinuationPairs(
@@ -83,7 +83,7 @@ function compatible(
 	if (purposes.size !== 1 || purposes.has(null)) return false;
 	const oldPrice = parseCents(older.typicalAmount);
 	const newPrice = parseCents(newer.typicalAmount);
-	return withinAmountTolerance(oldPrice > newPrice ? oldPrice - newPrice : newPrice - oldPrice, oldPrice);
+	return nearAmount(newPrice, oldPrice);
 }
 
 /** One name is the other followed by more whole words, after the merchant-key normalization of legal forms. */

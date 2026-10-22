@@ -129,15 +129,13 @@ const MIN_REGULAR_GAP_SHARE = 0.75;
 const AMOUNT_TOLERANCE_PERCENT = 15n;
 const AMOUNT_TOLERANCE_CENTS = 200n;
 /** Two amounts are different prices above 5% and 0.50 apart. */
-const PRICE_CHANGE_PERCENT = 5n;
-const PRICE_CHANGE_CENTS = 50n;
+const PRICE_CHANGE: Threshold = {percent: 5n, cents: 50n};
 /** A price change is shown until the new price has been paid this many times. */
 const PRICE_CHANGE_SHOWN_PAYMENTS = 3;
 /** A payment over 50% and 5.00 away from the shown price is a one-off until a similar amount follows it. */
-const SPIKE_PERCENT = 50n;
+const SPIKE: Threshold = {percent: 50n, cents: 500n};
 /** A jump that matches one of this many payments before it is an amount already paid, not a one-off. */
 const REPEAT_LOOKBACK_PAYMENTS = 3;
-const SPIKE_CENTS = 500n;
 /** Other payments to the same payee tolerated inside a yearly series' span. */
 const MAX_OTHER_PAYMENTS_IN_YEARLY_SPAN = 3;
 const DAY_MS = 86_400_000;
@@ -726,9 +724,6 @@ function rhythmStream(
 		if (!path || cadenceOf(path)?.cadence !== rule.cadence) continue;
 		const inPath = new Set(path);
 		const outside = rows.filter((row) => !inPath.has(row));
-		// Payments outside the stream with a rhythm of their own are another obligation.
-		const rhythmic = CADENCE_RULES.some((other) => cadenceOf(rhythmPath(outside, other) ?? []));
-		if (rhythmic && !rhythmicLeftovers) continue;
 		// A second charge on a stream payment's own day is billed alongside it, not a one-off.
 		const days = new Set(path.map(({date}) => date));
 		if (outside.some(({date}) => days.has(date))) continue;
@@ -738,7 +733,10 @@ function rhythmStream(
 		// Varying amounts with mixed payment purposes are separate purchases, not one bill.
 		const purposes = new Set(path.flatMap(({category}) => (category ? [category] : [])));
 		if (amountKind === 'VARIABLE' && purposes.size > 1) continue;
-		if (!best || path.length > best.rows.length) best = {rows: [...path], rule, amountKind};
+		if (best && path.length <= best.rows.length) continue;
+		// Payments outside the stream with a rhythm of their own are another obligation.
+		if (!rhythmicLeftovers && CADENCE_RULES.some((other) => cadenceOf(rhythmPath(outside, other) ?? []))) continue;
+		best = {rows: [...path], rule, amountKind};
 	}
 	return best;
 }
@@ -748,8 +746,7 @@ function rhythmStream(
  * A one-off between them does not come back that soon.
  */
 function alternatesPrices(rows: readonly RecurringCandidate[]): boolean {
-	const near = (a: RecurringCandidate, b: RecurringCandidate) =>
-		withinAmountTolerance(abs(a.amountCents - b.amountCents), b.amountCents);
+	const near = (a: RecurringCandidate, b: RecurringCandidate) => nearAmount(a.amountCents, b.amountCents);
 	return rows.some(
 		(row, index) =>
 			index > 0 &&
@@ -814,8 +811,7 @@ function streamAmountKind(rows: readonly RecurringCandidate[], rule: CadenceRule
 	const runs: RecurringCandidate[][] = [];
 	for (const row of rows) {
 		const run = runs[runs.length - 1];
-		const price = run?.[run.length - 1].amountCents;
-		if (run && withinAmountTolerance(abs(row.amountCents - price!), price!)) run.push(row);
+		if (run && nearAmount(row.amountCents, run[run.length - 1].amountCents)) run.push(row);
 		else runs.push([row]);
 	}
 	const sustained = (run: readonly RecurringCandidate[]) => run.length >= rule.minCount;
@@ -899,6 +895,11 @@ function latestPricePeriod(
 }
 
 /** Whether two amounts are close enough to be one fixed price. */
+/** Whether `amount` is close enough to `reference` to be the same price. */
+export function nearAmount(amount: bigint, reference: bigint): boolean {
+	return withinAmountTolerance(abs(amount - reference), reference);
+}
+
 export function withinAmountTolerance(distance: bigint, reference: bigint): boolean {
 	const percentTolerance = (reference * AMOUNT_TOLERANCE_PERCENT) / 100n;
 	return distance <= (percentTolerance > AMOUNT_TOLERANCE_CENTS ? percentTolerance : AMOUNT_TOLERANCE_CENTS);
@@ -979,23 +980,21 @@ function shownPayment(rows: readonly RecurringCandidate[]): RecurringCandidate {
 	for (let index = 1; index < rows.length; index++) {
 		const row = rows[index];
 		const next = rows[index + 1];
-		const followed = next !== undefined && !isSpike(next.amountCents, row.amountCents);
+		const followed = next !== undefined && !exceeds(next.amountCents, row.amountCents, SPIKE);
 		const seen = rows
 			.slice(Math.max(0, index - REPEAT_LOOKBACK_PAYMENTS), index)
-			.some(({amountCents}) => withinAmountTolerance(abs(amountCents - row.amountCents), row.amountCents));
-		if (followed || seen || !isSpike(row.amountCents, shown.amountCents)) shown = row;
+			.some(({amountCents}) => nearAmount(amountCents, row.amountCents));
+		if (followed || seen || !exceeds(row.amountCents, shown.amountCents, SPIKE)) shown = row;
 	}
 	return shown;
 }
 
-function isSpike(amount: bigint, price: bigint): boolean {
-	const distance = abs(amount - price);
-	return distance > SPIKE_CENTS && distance * 100n > price * SPIKE_PERCENT;
-}
+type Threshold = {percent: bigint; cents: bigint};
 
-function isPriceChange(amount: bigint, price: bigint): boolean {
+/** Whether `amount` is further from `price` than both parts of the threshold. */
+function exceeds(amount: bigint, price: bigint, {percent, cents}: Threshold): boolean {
 	const distance = abs(amount - price);
-	return distance > PRICE_CHANGE_CENTS && distance * 100n > price * PRICE_CHANGE_PERCENT;
+	return distance > cents && distance * 100n > price * percent;
 }
 
 /** The shown price against the price before its current run, while that run is short. */
@@ -1004,10 +1003,10 @@ function priceChange(rows: readonly RecurringCandidate[], shown: RecurringCandid
 	// A one-off payment is not a new price.
 	if (shown !== latest) return null;
 	let start = rows.length - 1;
-	while (start > 0 && !isPriceChange(rows[start - 1].amountCents, shown.amountCents)) start--;
+	while (start > 0 && !exceeds(rows[start - 1].amountCents, shown.amountCents, PRICE_CHANGE)) start--;
 	if (start === 0 || rows.length - start > PRICE_CHANGE_SHOWN_PAYMENTS) return null;
 	const before = shownPayment(rows.slice(0, start)).amountCents;
-	if (!isPriceChange(shown.amountCents, before)) return null;
+	if (!exceeds(shown.amountCents, before, PRICE_CHANGE)) return null;
 	return {amount: formatCents(shown.amountCents - before), since: rows[start].date};
 }
 

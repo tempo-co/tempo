@@ -69,7 +69,16 @@ type SnapshotPayload = {
 type Detection = {
 	series: DetectedRecurringSeries[];
 	pairs: ContinuationPair[];
-	retail: Set<DetectedRecurringSeries>;
+	/** Keys of series that are ordinary retail, shown only once the owner decided on them. */
+	retail: Set<string>;
+};
+
+/** What a read needs: the dated series after linking, and the owner's answers resolved onto them. */
+type ReadState = {
+	detected: DetectedRecurringSeries[];
+	decisionBySeries: Map<string, RecurringSeriesDecision[]>;
+	continuationBySeries: Map<string, Continuation>;
+	choiceIds: Set<string>;
 };
 
 type CandidateRow = {
@@ -103,6 +112,9 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 		@InjectRepository(RecurringSnapshot)
 		private readonly snapshotRepository: Repository<RecurringSnapshot>,
 	) {}
+
+	/** Detections under way, by owner and input version, so reads that overlap share one. */
+	private readonly detecting = new Map<string, Promise<Detection>>();
 
 	/** Stored results come from the detection rules of the running version only. */
 	async onApplicationBootstrap() {
@@ -209,38 +221,28 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 
 	private async findDetected(accountId: Account['id'], seriesKey: string): Promise<DetectedRecurringSeries> {
 		// Keys and payments don't depend on the date; only status and flags do.
-		const today = new Date().toISOString().slice(0, 10);
-		const {detected} = await this.readState(accountId, today);
+		const {detected} = await this.readState(accountId, today());
 		const series = detected.find((entry) => entry.key === seriesKey);
 		if (!series) throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);
 		return series;
 	}
 
-	private async readState(
-		accountId: Account['id'],
-		today: string,
-	): Promise<{
-		detected: DetectedRecurringSeries[];
-		decisionBySeries: Map<string, RecurringSeriesDecision[]>;
-		continuationBySeries: Map<string, Continuation>;
-		choiceIds: Set<string>;
-	}> {
+	private async readState(accountId: Account['id'], today: string): Promise<ReadState> {
 		const [{series, pairs, retail}, decisions, choices] = await Promise.all([
 			this.detect(accountId),
 			this.decisionRepository.find({where: {accountId}}),
 			this.continuationRepository.find({where: {accountId}, order: {createdAt: 'ASC', id: 'ASC'}}),
 		]);
 		const dated = new Map(series.map((entry) => [entry, atDate(entry, today)]));
-		const isRetail = new Set([...retail].map((entry) => dated.get(entry) ?? entry));
-		const datedPairs = pairs.map(({older, newer, joined}) => {
-			const datedJoined = atDate(joined, today);
-			if (retail.has(joined)) isRetail.add(datedJoined);
-			return {older: dated.get(older)!, newer: dated.get(newer)!, joined: datedJoined};
-		});
+		const datedPairs = pairs.map(({older, newer, joined}) => ({
+			older: dated.get(older)!,
+			newer: dated.get(newer)!,
+			joined: atDate(joined, today),
+		}));
 		const {detected, continuations} = linkContinuations([...dated.values()], datedPairs, choices);
 		const decisionBySeries = resolveDecisions(detected, decisions);
 		return {
-			detected: detected.filter((entry) => decisionBySeries.has(entry.key) || !isRetail.has(entry)),
+			detected: detected.filter((entry) => decisionBySeries.has(entry.key) || !retail.has(entry.key)),
 			decisionBySeries,
 			continuationBySeries: continuations,
 			choiceIds: new Set(choices.map(({id}) => id)),
@@ -249,16 +251,27 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 
 	/** The stored detection while the owner's payments are unchanged; otherwise detects again and stores it. */
 	private async detect(accountId: Account['id']): Promise<Detection> {
-		const [{version}] = await this.candidateRows(accountId)
-			.select(
-				`md5(string_agg(json_build_array(${CANDIDATE_COLUMNS.map(([sql]) => sql).join(', ')})::text, ',' ORDER BY "transaction"."id"))`,
-				'version',
-			)
-			.getRawMany<{version: string | null}>();
+		const [[{version}], stored] = await Promise.all([
+			this.candidateRows(accountId)
+				.select(
+					`md5(string_agg(json_build_array(${CANDIDATE_COLUMNS.map(([sql]) => sql).join(', ')})::text, ',' ORDER BY "transaction"."id"))`,
+					'version',
+				)
+				.getRawMany<{version: string | null}>(),
+			this.snapshotRepository.findOneBy({accountId}),
+		]);
 		const inputVersion = version ?? 'none';
-		const stored = await this.snapshotRepository.findOneBy({accountId});
 		if (stored?.inputVersion === inputVersion) return fromPayload(stored.payload as SnapshotPayload);
 
+		const running = `${accountId}\u0000${inputVersion}`;
+		const shared = this.detecting.get(running);
+		if (shared) return shared;
+		const detection = this.detectAndStore(accountId, inputVersion).finally(() => this.detecting.delete(running));
+		this.detecting.set(running, detection);
+		return detection;
+	}
+
+	private async detectAndStore(accountId: Account['id'], inputVersion: string): Promise<Detection> {
 		const query = this.candidateRows(accountId).select(CANDIDATE_COLUMNS[0][0], CANDIDATE_COLUMNS[0][1]);
 		for (const [sql, alias] of CANDIDATE_COLUMNS.slice(1)) query.addSelect(sql, alias);
 		const rows = await query.getRawMany<CandidateRow>();
@@ -281,9 +294,9 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 		const series = detectRecurringSeries(candidates, UNDATED);
 		const pairs = findContinuationPairs(series, candidatesById, UNDATED);
 		const retail = new Set(
-			[...series, ...pairs.map(({joined}) => joined)].filter((entry) =>
-				isOrdinaryRetailExpense(entry, candidatesById),
-			),
+			[...series, ...pairs.map(({joined}) => joined)]
+				.filter((entry) => isOrdinaryRetailExpense(entry, candidatesById))
+				.map(({key}) => key),
 		);
 		const detection = {series, pairs, retail};
 		await this.snapshotRepository.upsert({accountId, inputVersion, payload: toPayload(detection)}, ['accountId']);
@@ -306,8 +319,6 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 			.andWhere('transaction.amount <> 0');
 	}
 }
-
-type ReadState = Awaited<ReturnType<RecurringSeriesService['readState']>>;
 
 /** One direction's series, shown before hidden, with the monthly total of shown active series. */
 function listFor(
@@ -476,7 +487,7 @@ function toPayload({series, pairs, retail}: Detection): SnapshotPayload {
 	const stored = (entry: DetectedRecurringSeries): StoredSeries => ({
 		...entry,
 		monthlyEquivalent: entry.monthlyEquivalent === null ? null : String(entry.monthlyEquivalent),
-		retail: retail.has(entry),
+		retail: retail.has(entry.key),
 	});
 	const index = new Map(series.map((entry, position) => [entry, position]));
 	return {
@@ -490,11 +501,10 @@ function toPayload({series, pairs, retail}: Detection): SnapshotPayload {
 }
 
 function fromPayload(payload: SnapshotPayload): Detection {
-	const retail = new Set<DetectedRecurringSeries>();
+	const retail = new Set<string>();
 	const restored = ({retail: isRetail, monthlyEquivalent, ...entry}: StoredSeries): DetectedRecurringSeries => {
-		const series = {...entry, monthlyEquivalent: monthlyEquivalent === null ? null : BigInt(monthlyEquivalent)};
-		if (isRetail) retail.add(series);
-		return series;
+		if (isRetail) retail.add(entry.key);
+		return {...entry, monthlyEquivalent: monthlyEquivalent === null ? null : BigInt(monthlyEquivalent)};
 	};
 	const series = payload.series.map(restored);
 	const pairs = payload.pairs.map(({older, newer, joined}) => ({

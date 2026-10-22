@@ -11,6 +11,7 @@ import {RecurringContinuationChoice} from '@modules/banking/recurring/recurring-
 import {RecurringSeriesDecision} from '@modules/banking/recurring/recurring-series-decision.entity';
 import * as detection from '@modules/banking/recurring/recurring-series-detection';
 import {seriesKey} from '@modules/banking/recurring/recurring-series-detection';
+import {parseCents} from '@modules/banking/summary/bank-transaction-summary';
 
 import {
 	BankingFixtures,
@@ -48,8 +49,6 @@ type SeriesBody = {
 	priceChange: {amount: string; since: string} | null;
 	hidden: boolean;
 };
-
-const cents = (amount: string) => BigInt(amount.replace('.', ''));
 
 /** A structured SEPA debit text naming `name` as the payee, the evidence that links a renamed payee. */
 function sepaNaming(name: string) {
@@ -282,7 +281,7 @@ describe('RecurringSeries', () => {
 		expect(drill.body.transactions.map((row: {id: string}) => row.id).sort()).toEqual([...ids].sort());
 		await hide(ownerAgent, result[0].key).expect(204);
 		const afterTotal = (await list(ownerAgent)).monthlyTotal;
-		expect(cents(afterTotal) - cents(beforeTotal)).toBe(-6800n);
+		expect(parseCents(afterTotal) - parseCents(beforeTotal)).toBe(-6800n);
 		expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
 		await hide(ownerAgent, result[0].key, false).expect(204);
 		expect((await list(ownerAgent)).monthlyTotal).toBe(beforeTotal);
@@ -409,7 +408,9 @@ describe('RecurringSeries', () => {
 						hidden: false,
 					}),
 				]);
-				expect(cents(continued.monthlyTotal) - cents(before.monthlyTotal)).toBe(5000n - cents(cost));
+				expect(parseCents(continued.monthlyTotal) - parseCents(before.monthlyTotal)).toBe(
+					5000n - parseCents(cost),
+				);
 				const continuedDrill = await ownerAgent
 					.get('/bank-transactions')
 					.query({
@@ -455,7 +456,7 @@ describe('RecurringSeries', () => {
 						hidden: true,
 					}),
 				]);
-				expect(cents(after.monthlyTotal) - cents(shownTotal)).toBe(-5000n);
+				expect(parseCents(after.monthlyTotal) - parseCents(shownTotal)).toBe(-5000n);
 				const drill = await ownerAgent
 					.get('/bank-transactions')
 					.query({
@@ -597,7 +598,7 @@ describe('RecurringSeries', () => {
 		const result = await list(ownerAgent);
 		const chosen = byName(result.series, name);
 		expect(chosen).toEqual([expect.objectContaining({transactionCount: 6, hidden})]);
-		expect(cents(result.monthlyTotal) - cents(totalBefore)).toBe(hidden ? 0n : 2400n);
+		expect(parseCents(result.monthlyTotal) - parseCents(totalBefore)).toBe(hidden ? 0n : 2400n);
 		await ownerAgent
 			.get('/bank-transactions')
 			.query({filter: {recurringSeriesKey: chosen[0].key}})
@@ -650,7 +651,7 @@ describe('RecurringSeries', () => {
 				expect.objectContaining({transactionCount: 6, monthlyEquivalent: '48.00', hidden}),
 			]);
 			// The series already counted before; only hiding takes it out.
-			expect(cents(result.monthlyTotal) - cents(totalBefore)).toBe(hidden ? -4800n : 0n);
+			expect(parseCents(result.monthlyTotal) - parseCents(totalBefore)).toBe(hidden ? -4800n : 0n);
 			const drill = await ownerAgent
 				.get('/bank-transactions')
 				.query({
@@ -792,7 +793,7 @@ describe('RecurringSeries', () => {
 					expect(linked[0].key).toBe(linkedKey);
 					expect(linked[0].flags.includes('LATE')).toBe(!ended && date > '2026-11-10');
 					if (ended) expect(linked[0].flags).toEqual([]);
-					expect(cents(result.monthlyTotal) - cents(totalsWithout[index])).toBe(ended ? 0n : cost);
+					expect(parseCents(result.monthlyTotal) - parseCents(totalsWithout[index])).toBe(ended ? 0n : cost);
 					await drill(linked[0].key, ids);
 				}
 				expect(
@@ -944,7 +945,7 @@ describe('RecurringSeries', () => {
 			await hide(ownerAgent, linked.key).expect(204);
 			const hidden = await readAt();
 			expect(byName(hidden.series, name)[0].hidden).toBe(true);
-			expect(cents(hidden.monthlyTotal) - cents(before.monthlyTotal)).toBe(-2100n);
+			expect(parseCents(hidden.monthlyTotal) - parseCents(before.monthlyTotal)).toBe(-2100n);
 			const saved = await decisions.findBy({accountId: owner.id, seriesKey: linked.key});
 			expect(saved).toEqual([expect.objectContaining({decision: 'DISMISSED', transactionIds: ids})]);
 			const next = await fixtures.createTransaction(bank, row(baseline.nextExpectedDate, '-21.00'));
@@ -1066,7 +1067,7 @@ describe('RecurringSeries', () => {
 
 		const after = await list(ownerAgent);
 		expect(after.series.at(-1)).toMatchObject({key: streaming.key, hidden: true});
-		expect(cents(after.monthlyTotal) - cents(before.monthlyTotal)).toBe(-1150n);
+		expect(parseCents(after.monthlyTotal) - parseCents(before.monthlyTotal)).toBe(-1150n);
 
 		const rowsAfter = await fixtures.transactions.find({
 			where: {id: In(snapshot.map(({id}) => id))},
@@ -1331,7 +1332,7 @@ describe('RecurringSeries', () => {
 					hidden,
 				}),
 			]);
-			expect(cents(result.monthlyTotal) - cents(totalBefore)).toBe(hidden ? 0n : 4800n);
+			expect(parseCents(result.monthlyTotal) - parseCents(totalBefore)).toBe(hidden ? 0n : 4800n);
 			const [merged] = byName(result.series, name);
 			await hide(ownerAgent, merged.key, false).expect(204);
 			expect(byName((await list(ownerAgent)).series, name)[0].hidden).toBe(false);
@@ -1633,6 +1634,23 @@ describe('RecurringSeries', () => {
 			.expect(404);
 	});
 
+	it('detects once when reads after a change overlap', async () => {
+		const extra = await fixtures.createTransactions(
+			ownerBankAccount,
+			monthly('17', '-9.00', 'Example Shared Bill', {category: 'SUBSCRIPTIONS'}),
+		);
+		const detect = jest.spyOn(detection, 'detectRecurringSeries');
+		try {
+			const reads = await Promise.all([list(ownerAgent), list(ownerAgent, 'INCOME'), list(ownerAgent)]);
+			expect(byName(reads[0].series, 'Example Shared Bill')).toHaveLength(1);
+			expect(reads[2]).toEqual(reads[0]);
+			expect(detect).toHaveBeenCalledTimes(1);
+		} finally {
+			detect.mockRestore();
+			await fixtures.transactions.delete(extra.map(({id}) => id));
+		}
+	});
+
 	it('detects once per change in the payments it reads, not on every read', async () => {
 		const detect = jest.spyOn(detection, 'detectRecurringSeries');
 		try {
@@ -1740,7 +1758,7 @@ describe('RecurringSeries', () => {
 		await hide(ownerAgent, due[0].key).expect(204);
 		const hidden = await summary();
 		expect(hidden.upcoming.map(({key}) => key)).not.toContain(due[0].key);
-		expect(cents(hidden.expenseMonthlyTotal)).toBeLessThan(cents(result.expenseMonthlyTotal));
+		expect(parseCents(hidden.expenseMonthlyTotal)).toBeLessThan(parseCents(result.expenseMonthlyTotal));
 		await hide(ownerAgent, due[0].key, false).expect(204);
 
 		expect((await otherAgent.get('/recurring-series/summary').query({asOf: AS_OF}).expect(200)).body).toMatchObject(

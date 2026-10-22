@@ -1,3 +1,4 @@
+import {PickType} from '@nestjs/swagger';
 import {IsBoolean, IsIn, IsOptional} from 'class-validator';
 
 import {IsCalendarDate} from '@core/validation/is-calendar-date';
@@ -26,11 +27,7 @@ export class RecurringSeriesQueryDto {
 	direction: RecurringSeriesDirection = BANK_TRANSACTION_DIRECTIONS.EXPENSE;
 }
 
-export class RecurringSeriesSummaryQueryDto {
-	/** The client's local date; late and ended are judged against it. */
-	@IsCalendarDate()
-	asOf: string;
-}
+export class RecurringSeriesSummaryQueryDto extends PickType(RecurringSeriesQueryDto, ['asOf'] as const) {}
 
 export class RecurringSeriesHiddenUpdateDto {
 	/** `true` marks the series as not recurring; `false` shows it again. */
@@ -97,14 +94,14 @@ export class RecurringSeriesListResponseDto {
 }
 
 /** A counted series' next payment. */
-export class RecurringUpcomingPaymentDto {
-	key: string;
-	name: string;
-	direction: BankTransactionDirection;
-	nextExpectedDate: string;
-	typicalAmount: string;
-	currency: string;
-}
+export class RecurringUpcomingPaymentDto extends PickType(RecurringSeriesDto, [
+	'key',
+	'name',
+	'direction',
+	'nextExpectedDate',
+	'typicalAmount',
+	'currency',
+] as const) {}
 
 export class RecurringSeriesSummaryResponseDto {
 	/** The bills and income lists' monthly totals. */

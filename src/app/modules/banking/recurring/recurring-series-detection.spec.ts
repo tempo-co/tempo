@@ -1,3 +1,4 @@
+import {addDays} from '../banking.utils';
 import {type RecurringCandidate, UNDATED, atDate, detectRecurringSeries} from './recurring-series-detection';
 
 const TODAY = '2026-10-17';
@@ -31,8 +32,8 @@ function isoMonth(year: number, month: number, day: number): string {
 }
 
 /** A day shortly after a payment, before the next one is due. */
-function addMonthDays(date: string): string {
-	return new Date(Date.parse(date) + 3 * 86_400_000).toISOString().slice(0, 10);
+function soonAfter(date: string): string {
+	return addDays(date, 3);
 }
 
 describe('atDate', () => {
@@ -1261,7 +1262,7 @@ describe('detectRecurringSeries', () => {
 			merchantKey: 'EXPENSE:example mobile',
 		});
 		const change = (count: number) =>
-			detectRecurringSeries([...older, ...newer.slice(0, count)], addMonthDays(newer[count - 1].date))[0]
+			detectRecurringSeries([...older, ...newer.slice(0, count)], soonAfter(newer[count - 1].date))[0]
 				.priceChange;
 
 		expect(change(1)).toEqual({amount: '-3.50', since: '2026-05-23'});
@@ -1301,7 +1302,7 @@ describe('detectRecurringSeries', () => {
 				payment(isoMonth(2025, 12 + count + index, 23), amount, {merchantKey: 'EXPENSE:example phone'}),
 			);
 			const history = [...rows.slice(0, count), ...extra];
-			return detectRecurringSeries(history, addMonthDays(history[history.length - 1].date));
+			return detectRecurringSeries(history, soonAfter(history[history.length - 1].date));
 		};
 
 		// 4.75 to 36.00 is more than 50% and more than 5.00 away: a one-off until it repeats.
