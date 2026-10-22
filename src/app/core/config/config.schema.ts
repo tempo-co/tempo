@@ -164,6 +164,19 @@ export const configSchema = z
 					'Configure ANTHROPIC_API_KEY or AI_CATEGORIZATION_SUBSCRIPTION_SOCKET when Claude categorization is enabled.',
 			});
 		}
+
+		// The bridge refuses other models outright, which would fail rows instead of leaving them pending.
+		if (
+			config.AI_CATEGORIZATION_ENABLED &&
+			config.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET &&
+			!categorizationContract.models.includes(config.AI_CATEGORIZATION_MODEL)
+		) {
+			context.addIssue({
+				code: 'custom',
+				path: ['AI_CATEGORIZATION_MODEL'],
+				message: `AI_CATEGORIZATION_MODEL must be one of the subscription bridge models: ${categorizationContract.models.join(', ')}.`,
+			});
+		}
 	});
 
 export type Config = z.infer<typeof configSchema>;
