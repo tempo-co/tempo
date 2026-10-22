@@ -137,8 +137,10 @@ export type MerchantIdentificationInput = {
 export type MerchantIdentification = {
 	correlationId: string;
 	kind: MerchantKind;
-	/** Set only for a business. */
+	/** Set for a business or a payment service. */
 	brand: string | null;
-	/** A well-formed lowercase hostname without `www.`, set only for a business; not yet confirmed by its site. */
+	/** A well-formed lowercase hostname without `www.`, set with a brand; not yet confirmed by its site. */
 	domain: string | null;
+	/** Whether the model was sure the domain is the brand's own site rather than its best guess. */
+	domainConfident: boolean;
 };

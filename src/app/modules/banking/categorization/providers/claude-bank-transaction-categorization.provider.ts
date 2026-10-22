@@ -62,6 +62,7 @@ const merchantIdentificationResponseSchema = z
 					kind: z.enum(MERCHANT_KINDS),
 					brand: z.string().nullable(),
 					domain: z.string().nullable(),
+					domainConfident: z.boolean(),
 				})
 				.strict(),
 		),
@@ -134,7 +135,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	}
 
 	/**
-	 * Names the business behind each merchant, with its official website when the model is confident of it, on the
+	 * Names the business or payment service behind each merchant and its most likely official website, on the
 	 * same routes as categorization: the API first, then the subscription bridge. When both routes refused before the
 	 * model ran, throws the unavailable error so the merchants stay pending without counting an attempt; when a model
 	 * ran and its answer was unusable, throws a provider error so the attempt counts.
@@ -424,19 +425,22 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		)
 			throw this.invalidResponseError();
 		return items.map((item) => {
-			const brand = item.kind === 'BUSINESS' ? normalizeBankTransactionText(item.brand) : null;
-			const domain =
-				item.kind === 'BUSINESS'
-					? item.domain
-							?.trim()
-							.toLowerCase()
-							.replace(/^www\./, '')
-					: null;
+			const named = item.kind === 'BUSINESS' || item.kind === 'PAYMENT_SERVICE';
+			const normalized = named ? normalizeBankTransactionText(item.brand) : null;
+			const brand = normalized && normalized.length <= merchantContract.maxBrandLength ? normalized : null;
+			const domain = named
+				? item.domain
+						?.trim()
+						.toLowerCase()
+						.replace(/^www\./, '')
+				: null;
+			const validDomain = brand && domain && isHostname(domain) ? domain : null;
 			return {
 				correlationId: merchants[Number(item.correlationId)].correlationId,
 				kind: item.kind,
-				brand: brand && brand.length <= merchantContract.maxBrandLength ? brand : null,
-				domain: brand && domain && isHostname(domain) ? domain : null,
+				brand,
+				domain: validDomain,
+				domainConfident: !!validDomain && item.domainConfident,
 			};
 		});
 	}

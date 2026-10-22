@@ -140,6 +140,15 @@ export function toBankTransactionCategorizationWebSearchInput(
 	};
 }
 
+/**
+ * The merchant name for identifying a merchant's brand: the web-search name, but keeping hostnames, since a
+ * statement's "example.com" or "pay.example.com via Processor" names the business by its site. Identifiers stay
+ * removed.
+ */
+export function toMerchantIdentificationName(input: BankTransactionCategorizationInput): string | null {
+	return sanitizeWebSearchMerchantName(getWebSearchMerchantDetails(input).merchantName, {keepHostnames: true});
+}
+
 function getWebSearchMerchantDetails(input: BankTransactionCategorizationInput): {
 	merchantName: string | null;
 	merchantLocation: string | null;
@@ -257,7 +266,10 @@ function sanitizeUrlToHostname(value: string): string {
 	}
 }
 
-function sanitizeWebSearchMerchantName(value: string | null | undefined): string | null {
+function sanitizeWebSearchMerchantName(
+	value: string | null | undefined,
+	{keepHostnames = false}: {keepHostnames?: boolean} = {},
+): string | null {
 	const normalized = normalizeNullableText(value);
 	if (!normalized || BARE_IDENTIFIER_PATTERN.test(normalized)) return null;
 
@@ -266,10 +278,13 @@ function sanitizeWebSearchMerchantName(value: string | null | undefined): string
 	)?.[1];
 	if (paymentDomainMerchantName) return truncate(paymentDomainMerchantName, MAX_WEB_SEARCH_MERCHANT_NAME_LENGTH);
 
-	const sanitized = normalized
-		.replace(URL_PATTERN, ' ')
-		.replace(EMAIL_PATTERN, ' ')
-		.replace(DOMAIN_PATTERN, ' ')
+	const withoutAddresses = keepHostnames
+		? normalized
+				.replace(URL_PATTERN, sanitizeUrlToHostname)
+				.replace(EMAIL_PATTERN, ' ')
+				.replace(DOMAIN_PATTERN, (domain) => domain.replace(/\/.*$/, ''))
+		: normalized.replace(URL_PATTERN, ' ').replace(EMAIL_PATTERN, ' ').replace(DOMAIN_PATTERN, ' ');
+	const sanitized = withoutAddresses
 		.replace(IBAN_PATTERN, ' ')
 		.replace(LABELED_MIXED_ALPHANUMERIC_IDENTIFIER_PATTERN, ' ')
 		.replace(LABELED_NUMERIC_MIXED_IDENTIFIER_PATTERN, ' ')

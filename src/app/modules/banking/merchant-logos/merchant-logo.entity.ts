@@ -31,6 +31,14 @@ export class MerchantLogo {
 	@Column({type: 'text', nullable: true})
 	sourceUrl: string | null;
 
+	/** The shorter side of the source image in pixels; a vector icon counts as its render size. */
+	@Column({type: 'int', nullable: true})
+	sourceSize: number | null;
+
+	/** Whether the homepage loaded for the stored image; when it did not, the image came from a favicon service. */
+	@Column({type: 'boolean', default: false})
+	homepageLoaded: boolean;
+
 	@Column({type: 'int', default: 0})
 	attempts: number;
 

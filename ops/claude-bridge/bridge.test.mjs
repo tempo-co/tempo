@@ -609,7 +609,17 @@ test('identifies merchants with the merchant prompt and no tools, and validates 
 	const {socketPath, calls} = await setup(t);
 	assert.deepEqual(await merchantRequest(socketPath), {
 		status: 200,
-		body: {merchants: [{correlationId: '0', kind: 'BUSINESS', brand: 'Example Shop', domain: 'shop.example.test'}]},
+		body: {
+			merchants: [
+				{
+					correlationId: '0',
+					kind: 'BUSINESS',
+					brand: 'Example Shop',
+					domain: 'shop.example.test',
+					domainConfident: true,
+				},
+			],
+		},
 	});
 	const contract = JSON.parse(await readFile(new URL('./merchant-contract.json', import.meta.url), 'utf8'));
 	const {args, stdin} = calls.at(-1);

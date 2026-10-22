@@ -31,11 +31,22 @@ enableMerchantLogosE2e();
 
 /** What the fake model answers per sanitized merchant name, ignoring a card terminal number. */
 const IDENTITIES: Record<string, Omit<MerchantIdentification, 'correlationId'>> = {
-	'Example Shop': {kind: 'BUSINESS', brand: 'Example Shop', domain: 'shop.example.test'},
-	'Other Example Shop': {kind: 'BUSINESS', brand: 'Other Example Shop', domain: 'other-shop.example.test'},
-	'Jane Example': {kind: 'PERSON', brand: null, domain: null},
-	Exampleshop: {kind: 'BUSINESS', brand: 'Exampleshop', domain: 'exampleshop.test'},
+	'Example Shop': {kind: 'BUSINESS', brand: 'Example Shop', domain: 'shop.example.test', domainConfident: true},
+	// A branch of the same brand whose own site the model could not name.
+	'Example Shop Station': {kind: 'BUSINESS', brand: 'Example Shop', domain: null, domainConfident: false},
+	'Example Pay': {kind: 'PAYMENT_SERVICE', brand: 'Example Pay', domain: 'pay.example.test', domainConfident: true},
+	'Other Example Shop': {
+		kind: 'BUSINESS',
+		brand: 'Other Example Shop',
+		domain: 'other-shop.example.test',
+		domainConfident: true,
+	},
+	'Jane Example': {kind: 'PERSON', brand: null, domain: null, domainConfident: false},
+	Exampleshop: {kind: 'BUSINESS', brand: 'Exampleshop', domain: 'exampleshop.test', domainConfident: false},
+	'Walled Example': {kind: 'BUSINESS', brand: 'Walled Example', domain: 'walled.example.test', domainConfident: true},
 };
+
+const FAVICON_SERVICE = 'https://icons.duckduckgo.com/ip3/';
 
 describe('Merchant logos', () => {
 	jest.setTimeout(30_000);
@@ -74,7 +85,12 @@ describe('Merchant logos', () => {
 				if (routesUnavailable) throw new BankTransactionCategorizationUnavailableError();
 				return inputs.map(({correlationId, name}) => ({
 					correlationId,
-					...(IDENTITIES[name.replace(/\s+\d+$/, '')] ?? {kind: 'UNCLEAR', brand: null, domain: null}),
+					...(IDENTITIES[name.replace(/\s+\d+$/, '')] ?? {
+						kind: 'UNCLEAR',
+						brand: null,
+						domain: null,
+						domainConfident: false,
+					}),
 				}));
 			});
 		const sites: Record<string, MerchantSiteResponse> = {
@@ -88,14 +104,16 @@ describe('Merchant logos', () => {
 				url: 'https://www.shop.example.test/touch.png',
 				bytes: icon,
 			},
-			// Its icon loads, but its homepage is unreachable during the test that uses it.
-			'https://exampleshop.test/favicon.ico': {
-				url: 'https://exampleshop.test/favicon.ico',
-				bytes: icon,
+			'https://pay.example.test/': {
+				url: 'https://pay.example.test/',
+				bytes: Buffer.from('<title>Example Pay</title>'),
 			},
-			'https://exampleshop.test/': {
-				url: 'https://exampleshop.test/',
-				bytes: Buffer.from('<p>Welcome</p>'),
+			'https://pay.example.test/favicon.ico': {url: 'https://pay.example.test/favicon.ico', bytes: icon},
+			// Homepages that refuse the server; the favicon service has their icons.
+			[`${FAVICON_SERVICE}exampleshop.test.ico`]: {url: `${FAVICON_SERVICE}exampleshop.test.ico`, bytes: icon},
+			[`${FAVICON_SERVICE}walled.example.test.ico`]: {
+				url: `${FAVICON_SERVICE}walled.example.test.ico`,
+				bytes: icon,
 			},
 			// The model named a site that calls itself something else.
 			'https://other-shop.example.test/': {
@@ -122,23 +140,35 @@ describe('Merchant logos', () => {
 	it('shows a synced merchant’s official logo on its purchases and refunds, to its owner only', async () => {
 		const connection = await fixtures.createConnection({id: owner.id});
 		const bankAccount = await fixtures.createBankAccount(connection);
-		const [purchase, refund, person, ownTransfer] = await fixtures.createTransactions(bankAccount, [
-			bookedRow('2026-10-01', '-12.40', {
-				description: 'BEA, Betaalpas Example Shop 01,PAS123 NR:XX000, 01.10.26/12:00 Example City',
-				transactionType: 'CARD_PAYMENT',
-			}),
-			bookedRow('2026-10-03', '12.40', {
-				description: 'BEA, Betaalpas Example Shop 02,PAS123 NR:XX001, 03.10.26/12:00 Example City',
-				transactionType: 'REFUND',
-			}),
-			bookedRow('2026-10-04', '-20.00', {counterpartyName: 'Jane Example', transactionType: 'TRANSFER'}),
-			// Money moved to the owner's own account held with the same business shares its merchant key.
-			bookedRow('2026-10-05', '-50.00', {
-				counterpartyName: 'Example Shop',
-				transactionType: 'TRANSFER',
-				ownTransferEvidence: 'IBAN',
-			}),
-		]);
+		const [purchase, refund, person, ownTransfer, branch, payment] = await fixtures.createTransactions(
+			bankAccount,
+			[
+				bookedRow('2026-10-01', '-12.40', {
+					description: 'BEA, Betaalpas Example Shop 01,PAS123 NR:XX000, 01.10.26/12:00 Example City',
+					transactionType: 'CARD_PAYMENT',
+				}),
+				bookedRow('2026-10-03', '12.40', {
+					description: 'BEA, Betaalpas Example Shop 02,PAS123 NR:XX001, 03.10.26/12:00 Example City',
+					transactionType: 'REFUND',
+				}),
+				bookedRow('2026-10-04', '-20.00', {counterpartyName: 'Jane Example', transactionType: 'TRANSFER'}),
+				// Money moved to the owner's own account held with the same business shares its merchant key.
+				bookedRow('2026-10-05', '-50.00', {
+					counterpartyName: 'Example Shop',
+					transactionType: 'TRANSFER',
+					ownTransferEvidence: 'IBAN',
+				}),
+				bookedRow('2026-10-06', '-4.10', {
+					description: 'BEA, Betaalpas Example Shop Station,PAS123 NR:XX005, 06.10.26/07:00 Example City',
+					transactionType: 'CARD_PAYMENT',
+				}),
+				// A payment service named on its own shows its own logo.
+				bookedRow('2026-10-07', '-15.00', {
+					description: 'BEA, Betaalpas Example Pay,PAS123 NR:XX006, 07.10.26/10:00 Example City',
+					transactionType: 'CARD_PAYMENT',
+				}),
+			],
+		);
 		expect(purchase.merchantKey).toBe('EXPENSE:example shop');
 		expect(refund.merchantKey).toBe('INCOME:example shop');
 		expect(ownTransfer.merchantKey).toBe('EXPENSE:example shop');
@@ -159,8 +189,18 @@ describe('Merchant logos', () => {
 		expect(logoOf(refund.id)).toBe(logoUrl);
 		expect(logoOf(person.id)).toBeNull();
 		expect(logoOf(ownTransfer.id)).toBeNull();
+		// A branch without a site of its own shows its brand's logo.
+		expect(logoOf(branch.id)).toBe(logoUrl);
+		await waitFor(
+			() => owner.agent.get(`/bank-transactions/${payment.id}`).expect(200),
+			(response) => response.body.merchantLogoUrl !== null,
+		);
+		const paymentLogo = (await owner.agent.get(`/bank-transactions/${payment.id}`).expect(200)).body
+			.merchantLogoUrl;
+		expect(paymentLogo).toMatch(/^\/merchant-logos\//);
+		expect(paymentLogo).not.toBe(logoUrl);
 
-		// One model call for both merchants of the owner, with sanitized names and no amounts or references.
+		// One model call for every merchant of the owner, with sanitized names and no amounts or references.
 		expect(identifySpy).toHaveBeenCalledTimes(1);
 		expect(identifySpy.mock.calls[0][0]).toEqual(
 			expect.arrayContaining([
@@ -173,9 +213,11 @@ describe('Merchant logos', () => {
 			expect.arrayContaining([
 				expect.objectContaining({key: 'example shop', status: 'IDENTIFIED', brand: 'Example Shop'}),
 				expect.objectContaining({key: 'jane example', status: 'NONE', logoId: null}),
+				expect.objectContaining({key: 'example shop station', status: 'IDENTIFIED', logoId: null}),
+				expect.objectContaining({key: 'example pay', status: 'IDENTIFIED', brand: 'Example Pay'}),
 			]),
 		);
-		expect(await merchants.countBy({accountId: owner.id})).toBe(2);
+		expect(await merchants.countBy({accountId: owner.id})).toBe(4);
 
 		const detail = await owner.agent.get(`/bank-transactions/${purchase.id}`).expect(200);
 		expect(detail.body.merchantLogoUrl).toBe(logoUrl);
@@ -218,7 +260,7 @@ describe('Merchant logos', () => {
 		expect(refreshed.body.merchantLogoUrl).toBe(logoUrl);
 	});
 
-	it('shows no logo when the named website does not call itself the brand or its homepage does not load', async () => {
+	it('shows a logo only when the named website calls itself the brand, or the model was sure of a site that would not load', async () => {
 		const connection = await fixtures.createConnection({id: other.id});
 		const bankAccount = await fixtures.createBankAccount(connection);
 		const transaction = await fixtures.createTransaction(
@@ -239,23 +281,33 @@ describe('Merchant logos', () => {
 		expect(response.body.merchantLogoUrl).toBeNull();
 		expect(fetchSpy).toHaveBeenCalledWith('https://other-shop.example.test/', expect.anything());
 
-		// A site whose hostname spells the brand still needs a homepage that loads, even when its icon does.
-		const unconfirmed = await fixtures.createTransaction(
-			bankAccount,
+		// Homepages that refuse the server: the favicon service's icon shows only for a site the model was sure of,
+		// since nothing on the site confirmed the brand. A guess whose hostname spells the brand is not enough.
+		const [guessed, walled] = await fixtures.createTransactions(bankAccount, [
 			bookedRow('2026-10-03', '-9.00', {
 				description: 'BEA, Betaalpas Exampleshop,PAS123 NR:XX004, 03.10.26/09:00 Example City',
 				transactionType: 'CARD_PAYMENT',
 			}),
-		);
+			bookedRow('2026-10-04', '-6.00', {
+				description: 'BEA, Betaalpas Walled Example,PAS123 NR:XX007, 04.10.26/09:00 Example City',
+				transactionType: 'CARD_PAYMENT',
+			}),
+		]);
 		unreachable.add('exampleshop.test');
+		unreachable.add('walled.example.test');
 		await app.get(MerchantLogoService).enqueueForOwnerSafely(other.id);
-		const logo = await waitFor(
-			() => logos.findOneBy({domain: 'exampleshop.test'}),
-			(row) => row?.attempts === 1,
+		const walledResponse = await waitFor(
+			() => other.agent.get(`/bank-transactions/${walled.id}`).expect(200),
+			(result) => result.body.merchantLogoUrl !== null,
 		);
-		expect(logo).toMatchObject({status: 'PENDING', version: null});
-		const unconfirmedResponse = await other.agent.get(`/bank-transactions/${unconfirmed.id}`).expect(200);
-		expect(unconfirmedResponse.body.merchantLogoUrl).toBeNull();
+		expect(walledResponse.body.merchantLogoUrl).toMatch(/^\/merchant-logos\//);
+		const guessedLogo = await waitFor(
+			() => logos.findOneBy({domain: 'exampleshop.test'}),
+			(row) => row?.status === 'READY',
+		);
+		expect(guessedLogo).toMatchObject({homepageLoaded: false, siteNames: []});
+		const guessedResponse = await other.agent.get(`/bank-transactions/${guessed.id}`).expect(200);
+		expect(guessedResponse.body.merchantLogoUrl).toBeNull();
 	});
 
 	it('keeps merchants pending while both model routes are unavailable and identifies them once one recovers', async () => {

@@ -105,6 +105,7 @@ if (args[0] === 'doctor') {
 			kind: mode === 'bad-kind' ? 'INVENTED' : 'BUSINESS',
 			brand: 'Example Shop',
 			domain: 'shop.example.test',
+			domainConfident: true,
 		}));
 		emit({type: 'result', subtype: 'success', is_error: false, structured_output: {merchants}});
 	} else if (mode !== 'missing-result') {

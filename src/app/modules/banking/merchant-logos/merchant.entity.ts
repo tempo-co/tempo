@@ -36,16 +36,20 @@ export class Merchant {
 	@Column({type: 'text'})
 	key: string;
 
-	/** PENDING until identified; NONE for people, payment processors and merchants the model could not name. */
+	/** PENDING until identified; NONE for people and merchants the model could not name. */
 	@Column({type: 'varchar', length: 16, default: 'PENDING'})
 	status: MerchantStatus;
 
 	@Column({type: 'varchar', length: 120, nullable: true})
 	brand: string | null;
 
-	/** The official website hostname the model named; a logo is shown only after the site confirms the brand. */
+	/** The official website hostname the model named; its logo shows once the site confirms the brand. */
 	@Column({type: 'varchar', length: 253, nullable: true})
 	domain: string | null;
+
+	/** Whether the model was sure of the domain; only then may a site whose homepage does not load show a logo. */
+	@Column({type: 'boolean', default: false})
+	domainConfident: boolean;
 
 	@Column({type: 'uuid', nullable: true})
 	logoId: string | null;

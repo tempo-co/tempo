@@ -212,11 +212,12 @@ export function validMerchantResponse(output, input) {
 	return (
 		output.merchants.every(
 			(item) =>
-				keys(item, ['correlationId', 'kind', 'brand', 'domain']) &&
+				keys(item, ['correlationId', 'kind', 'brand', 'domain', 'domainConfident']) &&
 				ids.delete(item.correlationId) &&
 				merchantKinds.has(item.kind) &&
 				nullableText(item.brand) &&
-				nullableText(item.domain),
+				nullableText(item.domain) &&
+				typeof item.domainConfident === 'boolean',
 		) && ids.size === 0
 	);
 }

@@ -102,12 +102,17 @@ describe('MerchantSiteFetcher', () => {
 		expect(fake.send).not.toHaveBeenCalled();
 	});
 
-	it('refuses a redirect to plain HTTP', async () => {
-		const fake = network([{status: 302, headers: {location: 'http://shop.example.test/'}}]);
+	it('follows a redirect to plain HTTP over HTTPS, and refuses one to another port', async () => {
+		const fake = network([{status: 302, headers: {location: 'http://shop.example.test:80/home'}}, {}]);
+		const result = await new MerchantSiteFetcher(fake).fetch('https://shop.example.test/', fetchOptions);
+		expect(result.url).toBe('https://shop.example.test/home');
+		expect(fake.requests[1]).toMatchObject({port: 443, path: '/home'});
+
+		const other = network([{status: 302, headers: {location: 'http://shop.example.test:8080/'}}]);
 		await expect(
-			new MerchantSiteFetcher(fake).fetch('https://shop.example.test/', fetchOptions),
+			new MerchantSiteFetcher(other).fetch('https://shop.example.test/', fetchOptions),
 		).rejects.toMatchObject({code: 'unsafe_url'});
-		expect(fake.send).toHaveBeenCalledTimes(1);
+		expect(other.send).toHaveBeenCalledTimes(1);
 	});
 
 	it('bounds redirect chains', async () => {

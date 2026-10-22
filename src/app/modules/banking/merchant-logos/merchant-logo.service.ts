@@ -3,7 +3,7 @@ import {Injectable, Logger, NotFoundException, OnApplicationBootstrap} from '@ne
 import {InjectRepository} from '@nestjs/typeorm';
 import {Queue} from 'bullmq';
 import {createHash} from 'node:crypto';
-import {DataSource, In, IsNull, LessThanOrEqual, Not, Or, Repository} from 'typeorm';
+import {Brackets, DataSource, In, IsNull, LessThanOrEqual, Or, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {
@@ -21,13 +21,23 @@ import {chunkArray, safeErrorName} from '../banking.utils';
 import {
 	toBankTransactionCategorizationInput,
 	toBankTransactionCategorizationWebSearchInput,
+	toMerchantIdentificationName,
 } from '../categorization/bank-transaction-categorization-input';
 import {BankTransactionCategorizationUnavailableError} from '../categorization/bank-transaction-categorization.provider';
 import {MerchantIdentificationInput} from '../categorization/bank-transaction-categorization.types';
 import {getMerchantKeyName, getMerchantKeysForName} from '../categorization/bank-transaction-merchant-key';
 import {ClaudeBankTransactionCategorizationProvider} from '../categorization/providers/claude-bank-transaction-categorization.provider';
 import {MERCHANT_LOGO_STATUSES, MerchantLogo} from './merchant-logo.entity';
-import {Homepage, encodeMerchantLogo, iconCandidates, parseHomepage, siteMatchesBrand} from './merchant-site';
+import {
+	Homepage,
+	MERCHANT_LOGO_SIZE,
+	MerchantLogoImage,
+	chooseMerchantLogos,
+	encodeMerchantLogo,
+	iconCandidates,
+	parseHomepage,
+	parseManifestIcons,
+} from './merchant-site';
 import {MerchantSiteFetcher, toPublicHttpsUrl} from './merchant-site-fetcher';
 import {MERCHANT_STATUSES, Merchant} from './merchant.entity';
 
@@ -43,7 +53,10 @@ const RETRY_DELAYS_MS = [DAY_MS, 3 * DAY_MS];
 const MISSING_RECHECK_MS = 30 * DAY_MS;
 const READY_REFRESH_MS = 180 * DAY_MS;
 const HOMEPAGE_BYTES = 512 * 1024;
+const MANIFEST_BYTES = 64 * 1024;
 const ICON_BYTES = 1024 * 1024;
+/** A public favicon service, asked for a site's icon with only its hostname when the site serves none we can use. */
+const FAVICON_SERVICE_URL = 'https://icons.duckduckgo.com/ip3/';
 
 const {PENDING, IDENTIFIED, NONE} = MERCHANT_STATUSES;
 const {READY, MISSING} = MERCHANT_LOGO_STATUSES;
@@ -55,8 +68,9 @@ function logoPath(id: string, version: string): string {
 
 /**
  * Shows a logo for the merchant of a transaction. A merchant is identified once per owner and merchant key by the
- * categorization model (brand and official website), the website must call itself that brand, and the logo comes
- * from the site's own icons. Display only: categories, merchant keys and recurring payments never read it.
+ * categorization model (brand and most likely official website), the website must call itself that brand, and the
+ * logo comes from the site's own icons, or from a favicon service when the site has none we can use. Display only:
+ * categories, merchant keys and recurring payments never read it.
  */
 @Injectable()
 export class MerchantLogoService implements OnApplicationBootstrap {
@@ -151,19 +165,30 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 			return;
 		}
 		for (const result of results) {
-			const status = result.kind === 'BUSINESS' && result.brand ? IDENTIFIED : NONE;
+			// A payment service the statement names on its own shows its own logo.
+			const named = result.kind === 'BUSINESS' || result.kind === 'PAYMENT_SERVICE';
+			const status = named && result.brand ? IDENTIFIED : NONE;
 			const logo = status === IDENTIFIED && result.domain ? await this.findOrCreateLogo(result.domain) : null;
 			await this.merchants.update(
 				{id: result.correlationId, status: PENDING},
-				{status, brand: result.brand, domain: result.domain, logoId: logo?.id ?? null, retryAfter: null},
+				{
+					status,
+					brand: result.brand,
+					domain: result.domain,
+					domainConfident: result.domainConfident,
+					logoId: logo?.id ?? null,
+					retryAfter: null,
+				},
 			);
 			if (logo?.status === PENDING) await this.enqueueLogo(logo.id);
 		}
 	}
 
 	/**
-	 * Reads a site's names and icon. The homepage must load, since its names are the evidence that the domain belongs
-	 * to the brand; names and image are stored together. Failures back off and are retried a few times, then rechecked
+	 * Reads a site's names and its sharpest icon. The homepage's names are the evidence that the domain belongs to the
+	 * brand, so names and image are stored together. When the site serves no icon of at least the logo's size, or its
+	 * homepage does not load, the favicon service's icon is used if it is larger; a logo without a loaded homepage
+	 * shows only for a domain the model was sure of. Failures back off and are retried a few times, then rechecked
 	 * monthly.
 	 */
 	async fetchLogo(logoId: string): Promise<void> {
@@ -177,18 +202,30 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 				(page) => parseHomepage(page.bytes.toString('utf8'), page.url),
 				() => null,
 			);
-		const icon = homepage && !homepage.parked ? await this.fetchIcon(homepage, origin) : null;
+		// A refresh that cannot read the homepage keeps a logo its homepage confirmed.
+		const keepConfirmed = !homepage && logo.status === READY && logo.homepageLoaded;
+		let icon: (MerchantLogoImage & {source: string}) | null = null;
+		if (!homepage?.parked && !keepConfirmed) {
+			if (homepage) icon = await this.fetchSiteIcon(homepage, origin);
+			if ((icon?.size ?? 0) < MERCHANT_LOGO_SIZE) {
+				const service = await this.fetchIconFrom(`${FAVICON_SERVICE_URL}${logo.domain}.ico`);
+				if (service && service.size > (icon?.size ?? 0)) icon = service;
+			}
+		}
 		const now = new Date();
-		if (homepage && icon) {
+		if (icon) {
 			await this.logos.update(logo.id, {
 				status: READY,
 				image: icon.png,
 				version: createHash('sha256').update(icon.png).digest('hex'),
 				sourceUrl: icon.source,
-				siteNames: homepage.names,
+				sourceSize: icon.size,
+				homepageLoaded: !!homepage,
+				siteNames: homepage?.names ?? [],
 				attempts: 0,
 				fetchedAt: now,
-				retryAfter: new Date(now.getTime() + READY_REFRESH_MS),
+				// Without its homepage the site is read again sooner, so its own names can confirm it.
+				retryAfter: new Date(now.getTime() + (homepage ? READY_REFRESH_MS : MISSING_RECHECK_MS)),
 			});
 			return;
 		}
@@ -223,24 +260,25 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 			(key): key is string => key !== null,
 		);
 		if (!keys.length) return urls;
-		const merchants = await this.merchants.find({
-			where: {accountId, key: In(keys), status: IDENTIFIED, logoId: Not(IsNull())},
-			relations: {logo: true},
-		});
-		const byKey = new Map<string, string>();
-		for (const {key, brand, domain, logo} of merchants)
-			if (
-				brand &&
-				domain &&
-				logo?.status === READY &&
-				logo.version &&
-				siteMatchesBrand(brand, domain, logo.siteNames)
+		// The listed merchants, plus the owner's other merchants with a logo, which may share a brand with them.
+		const merchants = await this.merchants
+			.createQueryBuilder('merchant')
+			.leftJoinAndSelect('merchant.logo', 'logo')
+			.where('merchant.accountId = :accountId AND merchant.status = :identified', {
+				accountId,
+				identified: IDENTIFIED,
+			})
+			.andWhere(
+				new Brackets((query) =>
+					query.where('merchant.key IN (:...keys)', {keys}).orWhere('logo.status = :ready', {ready: READY}),
+				),
 			)
-				byKey.set(key, logoPath(logo.id, logo.version));
+			.getMany();
+		const chosen = chooseMerchantLogos(merchants);
 		for (const transaction of merchantRows) {
 			const key = getMerchantKeyName(transaction.merchantKey);
-			const url = key && byKey.get(key);
-			if (url) urls.set(transaction.id, url);
+			const logo = key ? chosen.get(key) : undefined;
+			if (logo) urls.set(transaction.id, logoPath(logo.id, logo.version));
 		}
 		return urls;
 	}
@@ -303,20 +341,45 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		}
 	}
 
-	/** The first icon the site serves that decodes to a usable logo. */
-	private async fetchIcon(homepage: Homepage, origin: string): Promise<{png: Buffer; source: string} | null> {
-		for (const url of iconCandidates(homepage, origin)) {
-			try {
-				const response = await this.fetcher.fetch(toPublicHttpsUrl(url).href, {
-					accept: 'image/*',
-					maxBytes: ICON_BYTES,
-				});
-				return {png: await encodeMerchantLogo(response.bytes), source: response.url};
-			} catch {
-				// Try the next candidate: sites often declare icons they no longer serve.
-			}
+	/**
+	 * The largest usable icon the site serves, from its page, its web app manifest and the conventional paths. Stops
+	 * at the first one of at least the logo's size; declared sizes are often wrong, so smaller ones are all tried.
+	 */
+	private async fetchSiteIcon(
+		homepage: Homepage,
+		origin: string,
+	): Promise<(MerchantLogoImage & {source: string}) | null> {
+		const manifest = homepage.manifest
+			? await this.fetcher
+					.fetch(toPublicHttpsUrl(homepage.manifest.replace(/^http:/i, 'https:')).href, {
+						accept: 'application/manifest+json,application/json',
+						maxBytes: MANIFEST_BYTES,
+					})
+					.then(
+						(response) => parseManifestIcons(response.bytes.toString('utf8'), response.url),
+						() => [],
+					)
+			: [];
+		let best: (MerchantLogoImage & {source: string}) | null = null;
+		for (const url of iconCandidates(homepage, origin, manifest)) {
+			const icon = await this.fetchIconFrom(url);
+			if (icon && icon.size > (best?.size ?? 0)) best = icon;
+			if ((best?.size ?? 0) >= MERCHANT_LOGO_SIZE) break;
 		}
-		return null;
+		return best;
+	}
+
+	/** One icon decoded to a logo, or null when it does not load or decode: sites often declare icons they no longer serve. */
+	private async fetchIconFrom(url: string): Promise<(MerchantLogoImage & {source: string}) | null> {
+		try {
+			const response = await this.fetcher.fetch(toPublicHttpsUrl(url).href, {
+				accept: 'image/*',
+				maxBytes: ICON_BYTES,
+			});
+			return {...(await encodeMerchantLogo(response.bytes)), source: response.url};
+		} catch {
+			return null;
+		}
 	}
 
 	private async enqueueLogo(logoId: string): Promise<void> {
@@ -362,15 +425,17 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 			.getMany();
 		const [newest] = rows;
 		if (!newest) return null;
-		const input = toBankTransactionCategorizationWebSearchInput(
-			toBankTransactionCategorizationInput({...newest, aspspName: newest.bankAccount.bankConnection.aspspName}),
-		);
-		if (!input) return null;
+		const input = toBankTransactionCategorizationInput({
+			...newest,
+			aspspName: newest.bankAccount.bankConnection.aspspName,
+		});
+		const name = toMerchantIdentificationName(input);
+		if (!name) return null;
 		const searchSourceDomains = [...new Set(rows.flatMap((row) => row.categorySearchTrace?.sourceDomains ?? []))];
 		return {
 			correlationId: merchant.id,
-			name: input.merchantName,
-			location: input.merchantLocation,
+			name,
+			location: toBankTransactionCategorizationWebSearchInput(input)?.merchantLocation ?? null,
 			transactionType: input.transactionType,
 			direction: input.direction,
 			searchSourceDomains,

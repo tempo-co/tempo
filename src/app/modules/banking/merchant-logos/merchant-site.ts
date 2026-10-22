@@ -1,7 +1,10 @@
 import {DefaultTreeAdapterMap, parse} from 'parse5';
 import sharp from 'sharp';
 
-// Only raster buffers are decoded: no SVG or other vector, file or URL loaders.
+import {SVG_RENDER_SIZE, isSvg, rasterizeSvg} from './merchant-svg';
+
+// Only raster buffers are decoded in this process: SVG is rendered in a separate one (merchant-svg.ts), and no file
+// or URL loaders are available.
 sharp.block({operation: ['VipsForeignLoad']});
 sharp.unblock({
 	operation: [
@@ -12,20 +15,29 @@ sharp.unblock({
 	],
 });
 
-const MERCHANT_LOGO_SIZE = 128;
+/** The stored logo's side in pixels; a source at least this large looks sharp in every tile. */
+export const MERCHANT_LOGO_SIZE = 128;
 const MIN_ICON_SIZE = 32;
 const MAX_INPUT_PIXELS = 4096 * 4096;
 const MAX_SITE_NAME_LENGTH = 200;
+const MAX_ICON_CANDIDATES = 8;
+/** Assumed sizes for icons that declare none: an apple-touch-icon is made for home screens, a favicon for tabs. */
+const APPLE_TOUCH_ICON_SIZE = 180;
+const FAVICON_SIZE = 32;
 
+/** A declared icon and its size in pixels; a vector icon counts as SVG_RENDER_SIZE. */
 export type SiteIcon = {url: string; size: number};
-export type Homepage = {names: string[]; icons: SiteIcon[]; parked: boolean};
+export type Homepage = {names: string[]; icons: SiteIcon[]; manifest: string | null; parked: boolean};
+/** A logo ready to store, with the size of the image it came from. */
+export type MerchantLogoImage = {png: Buffer; size: number};
 
 type Element = DefaultTreeAdapterMap['element'];
 
-/** Reads the names a homepage gives itself and the raster icons it declares. */
+/** Reads the names a homepage gives itself, the icons it declares and its web app manifest. */
 export function parseHomepage(html: string, pageUrl: string): Homepage {
 	const names: string[] = [];
 	const icons: SiteIcon[] = [];
+	let manifest: string | null = null;
 	let base = pageUrl;
 	const elements: Element[] = [];
 	const nodes: DefaultTreeAdapterMap['node'][] = [parse(html)];
@@ -50,19 +62,21 @@ export function parseHomepage(html: string, pageUrl: string): Homepage {
 		const attributes = new Map(element.attrs.map(({name, value}) => [name.toLowerCase(), value.trim()]));
 		const rel = (attributes.get('rel') ?? '').toLowerCase().split(/\s+/);
 		const href = attributes.get('href');
-		const type = (attributes.get('type') ?? '').toLowerCase();
-		if (!href || type.includes('svg') || /\.svgz?(?:$|[?#])/i.test(href)) continue;
+		const url = href ? resolveUrl(href, base) : null;
+		if (!url) continue;
+		if (rel.includes('manifest')) {
+			manifest ??= url;
+			continue;
+		}
 		const apple = rel.some((token) => token.startsWith('apple-touch-icon'));
 		if (!apple && !rel.includes('icon')) continue;
-		const url = resolveUrl(href, base);
-		if (!url) continue;
-		const declared = Math.max(
-			0,
-			...(attributes.get('sizes') ?? '')
-				.split(/\s+/)
-				.map((size) => Number(size.toLowerCase().split('x')[0]) || 0),
-		);
-		icons.push({url, size: declared || (apple ? 180 : 32)});
+		const declared = largestDeclaredSize(attributes.get('sizes'));
+		icons.push({
+			url,
+			size: isVectorIcon(attributes.get('type'), url)
+				? SVG_RENDER_SIZE
+				: declared || (apple ? APPLE_TOUCH_ICON_SIZE : FAVICON_SIZE),
+		});
 	}
 	const cleanNames = [...new Set(names.map((name) => name.replace(/\s+/g, ' ').trim()).filter(Boolean))].map((name) =>
 		name.slice(0, MAX_SITE_NAME_LENGTH),
@@ -70,32 +84,78 @@ export function parseHomepage(html: string, pageUrl: string): Homepage {
 	const text = cleanNames.join(' ') + ' ' + html.slice(0, 64 * 1024).replace(/<[^>]*>/g, ' ');
 	return {
 		names: cleanNames.slice(0, 5),
-		icons: [...new Map(icons.map((icon) => [icon.url, icon])).values()].sort((a, b) => b.size - a.size),
+		icons: [...new Map(icons.map((icon) => [icon.url, icon])).values()],
+		manifest,
 		parked: /\b(?:this domain (?:name )?(?:is|may be) for sale|buy this domain|domain (?:is )?parked|parked (?:free|domain))\b/i.test(
 			text,
 		),
 	};
 }
 
-/** Icons to try, best first: declared icons by size, then the conventional paths most sites serve. */
-export function iconCandidates(homepage: Homepage | null, origin: string): string[] {
+/** The icons a web app manifest lists, except monochrome ones, which are meant to be tinted. */
+export function parseManifestIcons(json: string, manifestUrl: string): SiteIcon[] {
+	let manifest: unknown;
+	try {
+		manifest = JSON.parse(json);
+	} catch {
+		return [];
+	}
+	const icons = (manifest as {icons?: unknown} | null)?.icons;
+	if (!Array.isArray(icons)) return [];
+	return icons.flatMap((icon: unknown) => {
+		if (!icon || typeof icon !== 'object') return [];
+		const {src, sizes, type, purpose} = icon as Record<string, unknown>;
+		if (typeof src !== 'string') return [];
+		if (typeof purpose === 'string' && purpose.split(/\s+/).every((value) => value === 'monochrome')) return [];
+		const url = resolveUrl(src, manifestUrl);
+		if (!url) return [];
+		const declared = largestDeclaredSize(typeof sizes === 'string' ? sizes : undefined);
+		return [
+			{
+				url,
+				size: isVectorIcon(typeof type === 'string' ? type : undefined, url)
+					? SVG_RENDER_SIZE
+					: declared || FAVICON_SIZE,
+			},
+		];
+	});
+}
+
+/**
+ * Icons to try: declared and manifest icons, largest first (vector first, equal sizes in page order), then the
+ * conventional paths most sites serve. Plain-http icon links are tried over HTTPS.
+ */
+export function iconCandidates(
+	homepage: Homepage | null,
+	origin: string,
+	manifestIcons: readonly SiteIcon[] = [],
+): string[] {
+	const declared = [...(homepage?.icons ?? []), ...manifestIcons].sort((a, b) => b.size - a.size);
 	return [
-		...new Set([
-			...(homepage?.icons ?? []).map(({url}) => url),
-			new URL('/apple-touch-icon.png', origin).href,
-			new URL('/favicon.ico', origin).href,
-		]),
-	].slice(0, 6);
+		...new Set(
+			[
+				...declared.map(({url}) => url),
+				new URL('/apple-touch-icon.png', origin).href,
+				new URL('/favicon.ico', origin).href,
+			].map((url) => url.replace(/^http:\/\//i, 'https://')),
+		),
+	].slice(0, MAX_ICON_CANDIDATES);
 }
 
 /**
  * Whether a site belongs to the brand the model named. When the site states its own names (title, og:site_name,
- * app name), one must spell the brand in whole words, spaces and punctuation aside: a model can name a plausible
- * domain that belongs to someone else. Only a site that states no name falls back to its hostname spelling the brand.
+ * app name), one must spell the brand in whole words, spaces and punctuation aside, allowing a plural or possessive
+ * "s": a model can name a plausible domain that belongs to someone else. Only a site that states no name falls back
+ * to its hostname: one label spells the brand, or every word of the brand is a label (`play.example.com` for
+ * "Example Play").
  */
 export function siteMatchesBrand(brand: string, domain: string, siteNames: readonly string[]): boolean {
-	const compact = tokens(brand).join('');
+	const brandTokens = tokens(brand);
+	const compact = brandTokens.join('');
 	if (!compact) return false;
+	// The plural or possessive variant only for longer brands: "Bar" and "Bars" may well be different businesses.
+	const spellings =
+		compact.length >= 6 ? [compact, compact.endsWith('s') ? compact.slice(0, -1) : `${compact}s`] : [compact];
 	if (siteNames.length)
 		return siteNames.some((name) => {
 			const nameTokens = tokens(name);
@@ -103,35 +163,98 @@ export function siteMatchesBrand(brand: string, domain: string, siteNames: reado
 				let joined = '';
 				for (const token of nameTokens.slice(start)) {
 					joined += token;
-					if (joined === compact) return true;
-					if (!compact.startsWith(joined)) return false;
+					if (spellings.includes(joined)) return true;
+					if (!spellings.some((spelling) => spelling.startsWith(joined))) return false;
 				}
 				return false;
 			});
 		});
-	return domain
-		.split('.')
-		.slice(0, -1)
-		.some((label) => label.replace(/-/g, '') === compact);
+	const labels = domain.split('.').slice(0, -1);
+	return (
+		labels.some((label) => label.replace(/-/g, '') === compact) ||
+		(brandTokens.length > 1 && brandTokens.every((token) => labels.includes(token)))
+	);
 }
 
-/** Decodes one raster icon (PNG, JPEG, WebP, GIF, or a PNG or bitmap inside an ICO) to a square PNG on white. */
-export async function encodeMerchantLogo(bytes: Buffer): Promise<Buffer> {
-	const ico = largestIcoImage(bytes);
+/**
+ * Decodes one icon to a square PNG on white, with the source's size in pixels: SVG (rendered), PNG, JPEG, WebP, GIF,
+ * or a PNG or bitmap inside an ICO. Rejects icons too small to show, animations and icons that come out blank.
+ */
+export async function encodeMerchantLogo(bytes: Buffer): Promise<MerchantLogoImage> {
+	const svg = isSvg(bytes);
+	const ico = svg ? null : largestIcoImage(bytes);
 	const image =
 		ico && 'rgba' in ico
 			? sharp(ico.rgba, {raw: {width: ico.width, height: ico.height, channels: 4}})
-			: sharp(ico?.encoded ?? bytes, {limitInputPixels: MAX_INPUT_PIXELS, pages: 1, failOn: 'error'});
+			: sharp(svg ? await rasterizeSvg(bytes) : (ico?.encoded ?? bytes), {
+					limitInputPixels: MAX_INPUT_PIXELS,
+					pages: 1,
+					failOn: 'error',
+				});
 	const {width = 0, height = 0, pages = 1} = await image.metadata();
-	const size = Math.min(width, height);
+	const size = svg ? SVG_RENDER_SIZE : Math.min(width, height);
 	// Animated icons are skipped rather than reduced to a first frame that may not show the brand.
-	if (pages > 1 || size < MIN_ICON_SIZE) throw new Error('Unusable icon.');
+	if (pages > 1 || Math.min(width, height) < MIN_ICON_SIZE) throw new Error('Unusable icon.');
 	const side = Math.min(MERCHANT_LOGO_SIZE, Math.max(width, height));
-	return image
+	const png = await image
 		.flatten({background: '#ffffff'})
 		.resize(side, side, {fit: 'contain', background: '#ffffff'})
 		.png({compressionLevel: 9})
 		.toBuffer();
+	// A white mark on a transparent background, drawn for dark browser tabs, comes out as an empty white square.
+	const {channels} = await sharp(png).stats();
+	if (channels.every(({mean, stdev}) => mean > 250 && stdev < 1)) throw new Error('Blank icon.');
+	return {png, size};
+}
+
+/** A merchant as the read path sees it, for choosing the logo it shows. */
+export type MerchantLogoCandidate = {
+	key: string;
+	brand: string | null;
+	domain: string | null;
+	domainConfident: boolean;
+	logo: {
+		id: string;
+		status: string;
+		version: string | null;
+		siteNames: string[];
+		homepageLoaded: boolean;
+		sourceSize: number | null;
+	} | null;
+};
+
+/**
+ * The logo each merchant key shows. A merchant's own logo counts when its site's homepage confirmed the brand, or,
+ * for a site whose homepage would not load, when the model was sure of the domain. Merchants of one brand show the
+ * same logo, the largest any of them has, so a chain's country sites look alike and a branch without a site of its
+ * own still shows its brand.
+ */
+export function chooseMerchantLogos(
+	merchants: readonly MerchantLogoCandidate[],
+): Map<string, {id: string; version: string}> {
+	const trusted = ({brand, domain, domainConfident, logo}: MerchantLogoCandidate) =>
+		!!brand &&
+		!!domain &&
+		logo?.status === 'READY' &&
+		!!logo.version &&
+		(logo.homepageLoaded ? siteMatchesBrand(brand, domain, logo.siteNames) : domainConfident);
+	const sizeOf = (merchant: MerchantLogoCandidate | undefined) => merchant?.logo?.sourceSize ?? 0;
+	const best = new Map<string, MerchantLogoCandidate>();
+	for (const merchant of merchants) {
+		if (!trusted(merchant)) continue;
+		const brand = tokens(merchant.brand!).join('');
+		if (sizeOf(merchant) > sizeOf(best.get(brand)) || !best.has(brand)) best.set(brand, merchant);
+	}
+	const chosen = new Map<string, {id: string; version: string}>();
+	for (const merchant of merchants) {
+		if (!merchant.brand) continue;
+		const brandBest = best.get(tokens(merchant.brand).join(''));
+		if (!brandBest) continue;
+		// On a tie the merchant keeps its own site's logo.
+		const {logo} = trusted(merchant) && sizeOf(merchant) >= sizeOf(brandBest) ? merchant : brandBest;
+		chosen.set(merchant.key, {id: logo!.id, version: logo!.version!});
+	}
+	return chosen;
 }
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -159,8 +282,9 @@ function largestIcoImage(bytes: Buffer): IcoImage | null {
 }
 
 /**
- * An uncompressed 24- or 32-bit ICO bitmap: a 40-byte header, bottom-up BGR(A) rows, then a 1-bit mask that marks
- * transparent pixels. The mask applies to 24-bit images and to 32-bit images whose alpha channel is empty.
+ * An uncompressed ICO bitmap: a 40-byte header, a colour table for 1-, 4- and 8-bit images, bottom-up rows of
+ * palette indexes or BGR(A) pixels, then a 1-bit mask that marks transparent pixels. The mask applies unless a
+ * 32-bit image carries its own alpha.
  */
 function decodeIcoBitmap(data: Buffer): {rgba: Buffer; width: number; height: number} | null {
 	if (data.length < 40 || data.readUInt32LE(0) !== 40) return null;
@@ -168,19 +292,28 @@ function decodeIcoBitmap(data: Buffer): {rgba: Buffer; width: number; height: nu
 	const height = data.readInt32LE(8) / 2;
 	const bits = data.readUInt16LE(14);
 	if (!Number.isInteger(height) || width < 1 || width > 256 || height < 1 || height > 256) return null;
-	if ((bits !== 24 && bits !== 32) || data.readUInt32LE(16) !== 0) return null;
+	if (![1, 4, 8, 24, 32].includes(bits) || data.readUInt32LE(16) !== 0) return null;
+	const colours = bits <= 8 ? data.readUInt32LE(32) || 2 ** bits : 0;
+	if (colours > 2 ** bits) return null;
+	const pixelStart = 40 + colours * 4;
 	const stride = Math.ceil((width * bits) / 32) * 4;
 	const maskStride = Math.ceil(width / 32) * 4;
-	const maskStart = 40 + stride * height;
+	const maskStart = pixelStart + stride * height;
 	if (data.length < maskStart) return null;
 	const hasMask = data.length >= maskStart + maskStride * height;
 	const rgba = Buffer.alloc(width * height * 4);
 	let hasAlpha = false;
 	for (let y = 0; y < height; y++) {
-		const row = 40 + (height - 1 - y) * stride;
+		const row = pixelStart + (height - 1 - y) * stride;
 		for (let x = 0; x < width; x++) {
-			const source = row + x * (bits / 8);
 			const target = (y * width + x) * 4;
+			let source = row + x * (bits / 8);
+			if (bits <= 8) {
+				const bit = x * bits;
+				const index = (data[row + (bit >> 3)] >> (8 - bits - (bit & 7))) & (2 ** bits - 1);
+				if (index >= colours) return null;
+				source = 40 + index * 4;
+			}
 			rgba[target] = data[source + 2];
 			rgba[target + 1] = data[source + 1];
 			rgba[target + 2] = data[source];
@@ -195,6 +328,14 @@ function decodeIcoBitmap(data: Buffer): {rgba: Buffer; width: number; height: nu
 				rgba[(y * width + x) * 4 + 3] = (data[row + (x >> 3)] >> (7 - (x & 7))) & 1 ? 0 : 255;
 		}
 	return {rgba, width, height};
+}
+
+function isVectorIcon(type: string | undefined, url: string): boolean {
+	return (type ?? '').toLowerCase().includes('svg') || /\.svgz?(?:$|[?#])/i.test(url);
+}
+
+function largestDeclaredSize(sizes: string | undefined): number {
+	return Math.max(0, ...(sizes ?? '').split(/\s+/).map((size) => Number(size.toLowerCase().split('x')[0]) || 0));
 }
 
 function tokens(value: string): string[] {

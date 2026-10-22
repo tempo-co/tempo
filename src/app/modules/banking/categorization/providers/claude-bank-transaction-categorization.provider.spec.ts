@@ -588,32 +588,74 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			const {provider, create} = setup();
 			create.mockResolvedValue(
 				merchantResponse([
-					{correlationId: '0', kind: 'BUSINESS', brand: ' Example  Shop ', domain: 'WWW.Shop.Example.test'},
-					{correlationId: '1', kind: 'BUSINESS', brand: 'Example Cafe', domain: 'https://cafe.example.test/'},
-					{correlationId: '2', kind: 'PERSON', brand: 'Example Person', domain: 'person.example.test'},
+					{
+						correlationId: '0',
+						kind: 'BUSINESS',
+						brand: ' Example  Shop ',
+						domain: 'WWW.Shop.Example.test',
+						domainConfident: true,
+					},
+					{
+						correlationId: '1',
+						kind: 'BUSINESS',
+						brand: 'Example Cafe',
+						domain: 'https://cafe.example.test/',
+						domainConfident: true,
+					},
+					{
+						correlationId: '2',
+						kind: 'PERSON',
+						brand: 'Example Person',
+						domain: 'person.example.test',
+						domainConfident: true,
+					},
+					{
+						correlationId: '3',
+						kind: 'PAYMENT_SERVICE',
+						brand: 'Example Pay',
+						domain: 'pay.example.test',
+						domainConfident: false,
+					},
 				]),
 			);
-			await expect(provider.identifyMerchants([merchant('a'), merchant('b'), merchant('c')])).resolves.toEqual([
-				{correlationId: 'a', kind: 'BUSINESS', brand: 'Example Shop', domain: 'shop.example.test'},
-				{correlationId: 'b', kind: 'BUSINESS', brand: 'Example Cafe', domain: null},
-				{correlationId: 'c', kind: 'PERSON', brand: null, domain: null},
+			await expect(
+				provider.identifyMerchants([merchant('a'), merchant('b'), merchant('c'), merchant('d')]),
+			).resolves.toEqual([
+				{
+					correlationId: 'a',
+					kind: 'BUSINESS',
+					brand: 'Example Shop',
+					domain: 'shop.example.test',
+					domainConfident: true,
+				},
+				{correlationId: 'b', kind: 'BUSINESS', brand: 'Example Cafe', domain: null, domainConfident: false},
+				{correlationId: 'c', kind: 'PERSON', brand: null, domain: null, domainConfident: false},
+				{
+					correlationId: 'd',
+					kind: 'PAYMENT_SERVICE',
+					brand: 'Example Pay',
+					domain: 'pay.example.test',
+					domainConfident: false,
+				},
 			]);
 			const request = create.mock.calls[0][0];
 			expect(request.system).toBe(merchantContract.instructions);
 			expect(request.output_config.format.schema).toEqual(merchantContract.schema);
 			expect(request).not.toHaveProperty('tools');
 			expect(JSON.parse(request.messages[0].content)).toEqual({
-				merchants: ['0', '1', '2'].map((correlationId) => ({...merchant(), correlationId})),
+				merchants: ['0', '1', '2', '3'].map((correlationId) => ({...merchant(), correlationId})),
 			});
 		});
 
 		it('falls back to the subscription bridge, and stays pending only when both routes refused', async () => {
-			const reply = {merchants: [{correlationId: '0', kind: 'UNCLEAR', brand: null, domain: null}]};
+			const reply = {
+				merchants: [{correlationId: '0', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false}],
+			};
 			await withBridge({body: reply}, async (socket, requests) => {
 				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
 				create.mockRejectedValue({status: 400});
 				await expect(provider.identifyMerchants([merchant()])).resolves.toEqual([
-					{correlationId: 'merchant-1', kind: 'UNCLEAR', brand: null, domain: null},
+					{correlationId: 'merchant-1', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false},
 				]);
 				expect(requests).toEqual([
 					{
@@ -635,7 +677,9 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 				);
 				// The API model ran but answered for an unknown merchant: an attempt that counts, not an outage.
 				create.mockResolvedValue(
-					merchantResponse([{correlationId: '9', kind: 'UNCLEAR', brand: null, domain: null}]),
+					merchantResponse([
+						{correlationId: '9', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false},
+					]),
 				);
 				await expect(provider.identifyMerchants([merchant()])).rejects.toMatchObject({
 					name: 'BankTransactionCategorizationProviderError',

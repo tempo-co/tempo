@@ -4,6 +4,7 @@ import {
 	createBankTransactionCategorizationInputHash,
 	toBankTransactionCategorizationInput,
 	toBankTransactionCategorizationWebSearchInput,
+	toMerchantIdentificationName,
 } from './bank-transaction-categorization-input';
 
 // Raw provider-style values (padding, lowercase codes) so normalization is observable.
@@ -515,5 +516,17 @@ describe('bank transaction categorization input', () => {
 		);
 
 		expect(toBankTransactionCategorizationWebSearchInput(input)).toBeNull();
+	});
+
+	it.each([
+		['Example-shop.com', 'Example-shop.com'],
+		['www.example-shop.com/orders/ABC123456 via Example Pay', 'example-shop.com via Example Pay'],
+		['pay.example-gym.test via Example Pay', 'pay.example-gym.test via Example Pay'],
+		['Example Shop, mail info@example-shop.test ref 12345678', 'Example Shop mail'],
+	])('names a merchant %j for identification as %j, keeping its hostname', (description, name) => {
+		const input = toBankTransactionCategorizationInput(
+			createTransaction({counterpartyName: null, description, bankTransactionDescription: null}),
+		);
+		expect(toMerchantIdentificationName(input)).toBe(name);
 	});
 });

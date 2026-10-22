@@ -1,6 +1,14 @@
 import sharp from 'sharp';
 
-import {encodeMerchantLogo, iconCandidates, parseHomepage, siteMatchesBrand} from './merchant-site';
+import {
+	MerchantLogoCandidate,
+	chooseMerchantLogos,
+	encodeMerchantLogo,
+	iconCandidates,
+	parseHomepage,
+	parseManifestIcons,
+	siteMatchesBrand,
+} from './merchant-site';
 
 function png(width: number, height = width): Promise<Buffer> {
 	return sharp({create: {width, height, channels: 4, background: {r: 200, g: 40, b: 40, alpha: 0.5}}})
@@ -26,6 +34,23 @@ function ico(images: {size: number; bytes: Buffer}[]): Buffer {
 	return Buffer.concat([header, ...images.map(({bytes}) => bytes)]);
 }
 
+/** An 8-bit paletted ICO bitmap: the left half palette colour 1, the right half colour 2, no transparent pixels. */
+function palettedBitmap(size: number, colours: [number, number, number][]): Buffer {
+	const stride = Math.ceil((size * 8) / 32) * 4;
+	const maskStride = Math.ceil(size / 32) * 4;
+	const table = 40 + 256 * 4;
+	const data = Buffer.alloc(table + stride * size + maskStride * size);
+	data.writeUInt32LE(40, 0);
+	data.writeInt32LE(size, 4);
+	data.writeInt32LE(size * 2, 8);
+	data.writeUInt16LE(1, 12);
+	data.writeUInt16LE(8, 14);
+	colours.forEach(([red, green, blue], index) => data.set([blue, green, red, 0], 40 + index * 4));
+	for (let row = 0; row < size; row++)
+		for (let x = 0; x < size; x++) data[table + row * stride + x] = x < size / 2 ? 1 : 2;
+	return data;
+}
+
 /** A 24-bit ICO bitmap filled with one colour, its top-left pixel marked transparent by the mask. */
 function bitmap(size: number, [red, green, blue]: [number, number, number]): Buffer {
 	const stride = Math.ceil((size * 24) / 32) * 4;
@@ -44,7 +69,7 @@ function bitmap(size: number, [red, green, blue]: [number, number, number]): Buf
 }
 
 describe('parseHomepage', () => {
-	it('reads the site names and raster icons, largest first, resolved against the page and its base', () => {
+	it('reads the site names, icons and manifest; icons are tried largest first, vector first', () => {
 		const homepage = parseHomepage(
 			`<!doctype html><html><head>
 				<title>  Example Shop |  Groceries online </title>
@@ -56,25 +81,46 @@ describe('parseHomepage', () => {
 				<link rel="icon" type="image/svg+xml" href="/icon.svg">
 				<link rel="mask-icon" href="/mask.png">
 				<link rel="shortcut icon" href="icon-192.png" sizes="192x192 16x16">
+				<link rel="icon" href="http://shop.example.test/legacy.ico">
+				<link rel="manifest" href="/site.webmanifest">
 			</head><body>Welcome</body></html>`,
 			'https://shop.example.test/',
 		);
 		expect(homepage).toEqual({
 			names: ['Example Shop | Groceries online', 'Example Shop', 'Example'],
 			icons: [
-				{url: 'https://cdn.example.test/assets/icon-192.png', size: 192},
-				{url: 'https://cdn.example.test/assets/touch.png', size: 180},
 				{url: 'https://cdn.example.test/favicon-32.png', size: 32},
+				{url: 'https://cdn.example.test/assets/touch.png', size: 180},
+				{url: 'https://cdn.example.test/icon.svg', size: 512},
+				{url: 'https://cdn.example.test/assets/icon-192.png', size: 192},
+				{url: 'http://shop.example.test/legacy.ico', size: 32},
 			],
+			manifest: 'https://cdn.example.test/site.webmanifest',
 			parked: false,
 		});
-		expect(iconCandidates(homepage, 'https://shop.example.test/')).toEqual([
+		const manifestIcons = parseManifestIcons(
+			JSON.stringify({
+				icons: [
+					{src: 'android-512.png', sizes: '512x512', type: 'image/png'},
+					{src: 'mono.png', sizes: '1024x1024', purpose: 'monochrome'},
+					{src: 'javascript:alert(1)', sizes: '2048x2048'},
+					{sizes: '256x256'},
+				],
+			}),
+			'https://cdn.example.test/site.webmanifest',
+		);
+		expect(manifestIcons).toEqual([{url: 'https://cdn.example.test/android-512.png', size: 512}]);
+		expect(iconCandidates(homepage, 'https://shop.example.test/', manifestIcons)).toEqual([
+			'https://cdn.example.test/icon.svg',
+			'https://cdn.example.test/android-512.png',
 			'https://cdn.example.test/assets/icon-192.png',
 			'https://cdn.example.test/assets/touch.png',
 			'https://cdn.example.test/favicon-32.png',
+			'https://shop.example.test/legacy.ico',
 			'https://shop.example.test/apple-touch-icon.png',
 			'https://shop.example.test/favicon.ico',
 		]);
+		expect(parseManifestIcons('not json', 'https://cdn.example.test/m.json')).toEqual([]);
 	});
 
 	it('recognizes a parked domain page', () => {
@@ -99,6 +145,12 @@ describe('siteMatchesBrand', () => {
 		['Ex', 'brand.test', ['Expert Cleaning'], false],
 		['Example Shop', 'example-shop.test', [], true],
 		['Example Shop', 'examples.test', [], false],
+		['Examplers', 'brand.test', ['Welcome to J D Exampler'], true],
+		['Exampler', 'brand.test', ["Examplers' Pubs"], true],
+		['Bar', 'brand.test', ['Bars of the World'], false],
+		['Example Play', 'play.example.test', [], true],
+		['Example Play', 'example.test', [], false],
+		['Example', 'play.example.test', [], true],
 	])('%s at %s named %j matches: %s', (brand, domain, names, expected) => {
 		expect(siteMatchesBrand(brand, domain, names)).toBe(expected);
 	});
@@ -106,25 +158,48 @@ describe('siteMatchesBrand', () => {
 
 describe('encodeMerchantLogo (real sharp)', () => {
 	it('turns a non-square transparent icon into a square PNG on white, at most 128px', async () => {
-		const output = await encodeMerchantLogo(await png(300, 150));
+		const {png: output, size} = await encodeMerchantLogo(await png(300, 150));
 		const metadata = await sharp(output).metadata();
 		expect(metadata).toMatchObject({format: 'png', width: 128, height: 128, hasAlpha: false});
+		expect(size).toBe(150);
 		const [corner] = await sharp(output).raw().toBuffer();
 		expect(corner).toBe(255);
 	});
 
+	it('renders an SVG sharply at 128px, without loading anything it references', async () => {
+		const svg = Buffer.from(
+			`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+				viewBox="0 0 16 16"><rect width="8" height="16" fill="#c82828"/>
+				<image x="8" width="8" height="16" xlink:href="file:///etc/hostname"/>
+				<image x="8" width="8" height="16" xlink:href="https://shop.example.test/x.png"/></svg>`,
+		);
+		const {png: output, size} = await encodeMerchantLogo(svg);
+		expect(size).toBe(512);
+		const {data, info} = await sharp(output).raw().toBuffer({resolveWithObject: true});
+		expect(info).toMatchObject({width: 128, height: 128});
+		// Resampling may shift a colour by a few levels.
+		const near = (x: number, colour: number[]) =>
+			data
+				.subarray((64 * 128 + x) * 3, (64 * 128 + x) * 3 + 3)
+				.every((value, i) => Math.abs(value - colour[i]) <= 4);
+		// Crisp at the edge of the red half, and nothing drawn where the references point.
+		expect(near(62, [200, 40, 40])).toBe(true);
+		expect(near(66, [255, 255, 255])).toBe(true);
+	});
+
 	it('uses the largest PNG inside an ICO and keeps small icons at their own size', async () => {
-		const output = await encodeMerchantLogo(
+		const {png: output, size} = await encodeMerchantLogo(
 			ico([
 				{size: 16, bytes: await png(16)},
 				{size: 48, bytes: await png(48)},
 			]),
 		);
 		expect(await sharp(output).metadata()).toMatchObject({width: 48, height: 48});
+		expect(size).toBe(48);
 	});
 
 	it('decodes a bitmap inside an ICO, with its transparency mask', async () => {
-		const output = await encodeMerchantLogo(
+		const {png: output} = await encodeMerchantLogo(
 			ico([
 				{size: 16, bytes: await png(16)},
 				{size: 32, bytes: bitmap(32, [200, 40, 40])},
@@ -135,8 +210,32 @@ describe('encodeMerchantLogo (real sharp)', () => {
 		expect([...data.subarray(0, 6)]).toEqual([255, 255, 255, 200, 40, 40]);
 	});
 
+	it('decodes a paletted bitmap inside an ICO', async () => {
+		const {png: output} = await encodeMerchantLogo(
+			ico([
+				{
+					size: 32,
+					bytes: palettedBitmap(32, [
+						[0, 0, 0],
+						[200, 40, 40],
+						[40, 40, 200],
+					]),
+				},
+			]),
+		);
+		const {data} = await sharp(output).raw().toBuffer({resolveWithObject: true});
+		expect([...data.subarray(0, 3)]).toEqual([200, 40, 40]);
+		expect([...data.subarray(31 * 3, 32 * 3)]).toEqual([40, 40, 200]);
+	});
+
 	it.each([
-		['an SVG', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"/>')],
+		[
+			'an SVG that comes out blank: a white mark for dark tabs',
+			Buffer.from(
+				'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="#fff"/></svg>',
+			),
+		],
+		['an SVG that is not well formed', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect></svg>')],
 		['HTML', Buffer.from('<html><body>Not found</body></html>')],
 		['an ICO without a readable image', ico([{size: 32, bytes: Buffer.alloc(64, 1)}])],
 		['an ICO bitmap cut short', ico([{size: 32, bytes: bitmap(32, [200, 40, 40]).subarray(0, 200)}])],
@@ -144,7 +243,69 @@ describe('encodeMerchantLogo (real sharp)', () => {
 		await expect(encodeMerchantLogo(bytes)).rejects.toThrow();
 	});
 
+	it('rejects an SVG that takes too long to render', async () => {
+		const strokes =
+			'<path d="M0 0C9999 -9999 -9999 9999 1024 1024" fill="none" stroke="red" stroke-width="5000" stroke-dasharray="0.01"/>';
+		const slow = Buffer.from(
+			`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">${strokes.repeat(500)}</svg>`,
+		);
+		const started = Date.now();
+		await expect(encodeMerchantLogo(slow)).rejects.toThrow('SVG render failed.');
+		expect(Date.now() - started).toBeLessThan(8000);
+	}, 15_000);
+
 	it('rejects an icon too small to show', async () => {
 		await expect(encodeMerchantLogo(await png(8))).rejects.toThrow('Unusable icon.');
+	});
+});
+
+describe('chooseMerchantLogos', () => {
+	const merchant = (
+		key: string,
+		brand: string | null,
+		logo: Partial<NonNullable<MerchantLogoCandidate['logo']>> | null,
+		domainConfident = false,
+	): MerchantLogoCandidate => ({
+		key,
+		brand,
+		domain: logo ? `${key.replace(/\W/g, '')}.test` : null,
+		domainConfident,
+		logo: logo && {
+			id: `logo-${key}`,
+			status: 'READY',
+			version: `v-${key}`,
+			siteNames: [brand ?? ''],
+			homepageLoaded: true,
+			sourceSize: 32,
+			...logo,
+		},
+	});
+
+	it('shows each brand its largest confirmed logo, on every merchant of that brand', () => {
+		const chosen = chooseMerchantLogos([
+			merchant('example nl', 'Example Burger', {sourceSize: 32}),
+			merchant('example uk', 'EXAMPLE burger', {sourceSize: 48}),
+			merchant('example station', 'Example Burger', null),
+			merchant('example be', 'Example Burger', {sourceSize: 48}),
+			merchant('other', 'Other Shop', {sourceSize: 180}),
+		]);
+		expect(Object.fromEntries(chosen)).toEqual({
+			'example nl': {id: 'logo-example uk', version: 'v-example uk'},
+			'example uk': {id: 'logo-example uk', version: 'v-example uk'},
+			'example station': {id: 'logo-example uk', version: 'v-example uk'},
+			'example be': {id: 'logo-example be', version: 'v-example be'},
+			other: {id: 'logo-other', version: 'v-other'},
+		});
+	});
+
+	it('shows a logo only when the homepage named the brand, or the model was sure of a site that would not load', () => {
+		const chosen = chooseMerchantLogos([
+			merchant('mismatch', 'Example Shop', {siteNames: ['Unrelated Business']}),
+			merchant('blocked sure', 'Blocked Shop', {homepageLoaded: false, siteNames: []}, true),
+			merchant('blocked guess', 'Guessed Shop', {homepageLoaded: false, siteNames: []}, false),
+			merchant('pending', 'Pending Shop', {status: 'PENDING', version: null}),
+			merchant('person', null, null),
+		]);
+		expect([...chosen.keys()]).toEqual(['blocked sure']);
 	});
 });

@@ -58,8 +58,9 @@ export function toPublicHttpsUrl(input: string, base?: string): URL {
 }
 
 /**
- * Fetches a public website resource for a merchant logo: https only, every hop resolved to public unicast addresses
- * and connected to the checked address, bounded in redirects, size and time. Sends no cookies or bank data.
+ * Fetches a public website resource for a merchant logo: https only (a redirect to http is followed over https), every
+ * hop resolved to public unicast addresses and connected to the checked address, bounded in redirects, size and time.
+ * Sends no cookies or bank data.
  */
 export class MerchantSiteFetcher {
 	private readonly network: MerchantSiteNetwork;
@@ -84,7 +85,7 @@ export class MerchantSiteFetcher {
 				const result = await Promise.race([this.hop(url, options, controller.signal), deadline]);
 				if (!('redirect' in result)) return result;
 				if (redirects >= MAX_REDIRECTS) throw new MerchantSiteError('limit');
-				url = toPublicHttpsUrl(result.redirect, url.href);
+				url = toPublicHttpsUrl(upgradeToHttps(result.redirect, url.href), url.href);
 			}
 		} catch (error) {
 			if (controller.signal.aborted) throw new MerchantSiteError('limit');
@@ -139,6 +140,20 @@ export class MerchantSiteFetcher {
 		const bytes = await readBody(response, options);
 		return {bytes, url: url.href};
 	}
+}
+
+/** A redirect to plain HTTP is followed over HTTPS on the default port; nothing is ever fetched without TLS. */
+function upgradeToHttps(location: string, base: string): string {
+	let url: URL;
+	try {
+		url = new URL(location, base);
+	} catch {
+		return location;
+	}
+	if (url.protocol !== 'http:') return location;
+	url.protocol = 'https:';
+	if (url.port === '80') url.port = '';
+	return url.href;
 }
 
 function isPublicAddress({address, family}: LookupAddress): boolean {
