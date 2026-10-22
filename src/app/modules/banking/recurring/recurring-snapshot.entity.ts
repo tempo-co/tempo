@@ -4,7 +4,7 @@ import {Account} from '@modules/account/account.entity';
 
 /**
  * The owner's detected recurring series, before any date or answer is applied. It is derived data: it is rebuilt when
- * the payments it was detected from change, and dropped when the app starts so new detection rules apply at once.
+ * the payments it was detected from or the detection rules change.
  */
 @Entity('recurring_snapshots')
 export class RecurringSnapshot {
@@ -18,6 +18,10 @@ export class RecurringSnapshot {
 	/** Hash of every payment field detection reads. */
 	@Column({type: 'varchar', length: 32})
 	inputVersion: string;
+
+	/** The detection rules the payload was computed with; a stored payload from other rules is not reused. */
+	@Column({type: 'varchar', length: 32})
+	rulesVersion: string;
 
 	@Column({type: 'jsonb'})
 	payload: unknown;

@@ -1,16 +1,16 @@
 import {MigrationInterface, QueryRunner, Table} from 'typeorm';
 
-const CHOICES_TABLE = 'recurring_continuation_choices';
+const UNLINKS_TABLE = 'recurring_continuation_unlinks';
 
-export class AddRecurringContinuationChoices20261021120000 implements MigrationInterface {
-	name = 'AddRecurringContinuationChoices20261021120000';
+export class AddRecurringContinuationUnlinks20261021120000 implements MigrationInterface {
+	name = 'AddRecurringContinuationUnlinks20261021120000';
 
 	public async up(queryRunner: QueryRunner): Promise<void> {
-		if (await queryRunner.hasTable(CHOICES_TABLE)) return;
+		if (await queryRunner.hasTable(UNLINKS_TABLE)) return;
 
 		await queryRunner.createTable(
 			new Table({
-				name: CHOICES_TABLE,
+				name: UNLINKS_TABLE,
 				columns: [
 					{
 						name: 'id',
@@ -21,7 +21,6 @@ export class AddRecurringContinuationChoices20261021120000 implements MigrationI
 						default: 'gen_random_uuid()',
 					},
 					{name: 'accountId', type: 'uuid'},
-					{name: 'choice', type: 'varchar', length: '16'},
 					{name: 'olderTransactionIds', type: 'uuid', isArray: true},
 					{name: 'newerTransactionIds', type: 'uuid', isArray: true},
 					{name: 'createdAt', type: 'timestamptz', default: 'now()'},
@@ -40,6 +39,6 @@ export class AddRecurringContinuationChoices20261021120000 implements MigrationI
 	}
 
 	public async down(queryRunner: QueryRunner): Promise<void> {
-		if (await queryRunner.hasTable(CHOICES_TABLE)) await queryRunner.dropTable(CHOICES_TABLE);
+		if (await queryRunner.hasTable(UNLINKS_TABLE)) await queryRunner.dropTable(UNLINKS_TABLE);
 	}
 }

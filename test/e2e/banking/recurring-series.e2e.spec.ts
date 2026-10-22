@@ -1,4 +1,4 @@
-import {INestApplication} from '@nestjs/common';
+import {INestApplication, OnApplicationBootstrap} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
 import TestAgent from 'supertest/lib/agent';
 import {ArrayContains, In, Repository} from 'typeorm';
@@ -7,10 +7,15 @@ import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
-import {RecurringContinuationChoice} from '@modules/banking/recurring/recurring-continuation-choice.entity';
-import {RecurringSeriesDecision} from '@modules/banking/recurring/recurring-series-decision.entity';
+import {RecurringContinuationUnlink} from '@modules/banking/recurring/recurring-continuation-unlink.entity';
 import * as detection from '@modules/banking/recurring/recurring-series-detection';
 import {seriesKey} from '@modules/banking/recurring/recurring-series-detection';
+import {RecurringSeriesHide} from '@modules/banking/recurring/recurring-series-hide.entity';
+import {
+	RECURRING_DETECTION_RULES_VERSION,
+	RecurringSeriesService,
+} from '@modules/banking/recurring/recurring-series.service';
+import {RecurringSnapshot} from '@modules/banking/recurring/recurring-snapshot.entity';
 import {parseCents} from '@modules/banking/summary/bank-transaction-summary';
 
 import {
@@ -70,13 +75,19 @@ describe('RecurringSeries', () => {
 	let otherAgent: TestAgent;
 	let ownerBankAccount: BankAccount;
 
-	const list = async (agent: TestAgent, direction = 'EXPENSE') =>
-		(await agent.get('/recurring-series').query({asOf: AS_OF, direction}).expect(200)).body as {
-			series: SeriesBody[];
-			monthlyTotal: string;
-			unconvertedCount: number;
-			baseCurrency: string | null;
-		};
+	type ListBody = {
+		series: SeriesBody[];
+		monthlyTotal: string;
+		unconvertedCount: number;
+		baseCurrency: string | null;
+	};
+	/** Bills and income come from one read. */
+	const lists = async (agent: TestAgent, asOf: string = AS_OF) =>
+		(await agent.get('/recurring-series').query({asOf}).expect(200)).body as {expenses: ListBody; income: ListBody};
+	const list = async (agent: TestAgent, direction: 'EXPENSE' | 'INCOME' = 'EXPENSE') => {
+		const {expenses, income} = await lists(agent);
+		return direction === 'EXPENSE' ? expenses : income;
+	};
 	const byName = <T extends SeriesBody>(series: T[], name: string) => series.filter((entry) => entry.name === name);
 	const hide = (agent: TestAgent, key: string, hidden = true) =>
 		agent.patch(`/recurring-series/${key}/hidden`).send({hidden});
@@ -192,8 +203,9 @@ describe('RecurringSeries', () => {
 			const ids = rows.map(({id}) => id);
 			const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
 			const read = async () =>
-				(await fresh.agent.get('/recurring-series').query({asOf: AS_OF, direction: 'EXPENSE'}).expect(200))
-					.body as Awaited<ReturnType<typeof list>>;
+				(await fresh.agent.get('/recurring-series').query({asOf: AS_OF}).expect(200)).body.expenses as Awaited<
+					ReturnType<typeof list>
+				>;
 
 			const {series} = await read();
 			expect(byName(series, 'Example Academy')).toEqual([
@@ -303,15 +315,16 @@ describe('RecurringSeries', () => {
 	] as const)(
 		'current naming period: preserves cost, hiding and exact membership for %s',
 		async (label, nameCount, oldCount, sameAccount, amounts, cost, due) => {
-			const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
+			const hides: Repository<RecurringSeriesHide> = app.get(getRepositoryToken(RecurringSeriesHide));
 			const connection = await fixtures.createConnection(owner);
 			const bank = await fixtures.createBankAccount(connection);
 			const oldBank = sameAccount ? bank : await fixtures.createBankAccount(connection);
 			const name = `Example Complete Period ${label}`;
 			let asOf: string = due;
 			const read = async () =>
-				(await ownerAgent.get('/recurring-series').query({asOf, direction: 'EXPENSE'}).expect(200))
-					.body as Awaited<ReturnType<typeof list>>;
+				(await ownerAgent.get('/recurring-series').query({asOf}).expect(200)).body.expenses as Awaited<
+					ReturnType<typeof list>
+				>;
 			const keys: string[] = [];
 			try {
 				const current = await fixtures.createTransactions(
@@ -348,7 +361,7 @@ describe('RecurringSeries', () => {
 				);
 				const ids = [...previous, ...current].map(({id}) => id);
 				const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
-				const saved = await decisions.find({
+				const saved = await hides.find({
 					where: {accountId: owner.id, seriesKey: In(keys)},
 					order: {id: 'ASC'},
 				});
@@ -382,7 +395,7 @@ describe('RecurringSeries', () => {
 						snapshot,
 					);
 					expect(
-						await decisions.find({where: {accountId: owner.id, seriesKey: In(keys)}, order: {id: 'ASC'}}),
+						await hides.find({where: {accountId: owner.id, seriesKey: In(keys)}, order: {id: 'ASC'}}),
 					).toEqual(saved);
 				}
 				const linkedKey = keys.at(-1)!;
@@ -423,7 +436,7 @@ describe('RecurringSeries', () => {
 					[...ids].sort(),
 				);
 				expect(
-					await decisions.find({where: {accountId: owner.id, seriesKey: In(keys)}, order: {id: 'ASC'}}),
+					await hides.find({where: {accountId: owner.id, seriesKey: In(keys)}, order: {id: 'ASC'}}),
 				).toEqual(saved);
 				expect(
 					await fixtures.transactions.find({
@@ -438,8 +451,8 @@ describe('RecurringSeries', () => {
 				asOf = due;
 				await hide(ownerAgent, linkedKey).expect(204);
 				expect((await read()).series.find(({key}) => key === linkedKey)?.hidden).toBe(true);
-				const dismissed = await decisions.findBy({accountId: owner.id, seriesKey: linkedKey});
-				expect(dismissed).toEqual([expect.objectContaining({decision: 'DISMISSED', transactionIds: ids})]);
+				const dismissed = await hides.findBy({accountId: owner.id, seriesKey: linkedKey});
+				expect(dismissed).toEqual([expect.objectContaining({transactionIds: ids})]);
 				asOf = continuedDue;
 				const next = await fixtures.createTransaction(
 					bank,
@@ -468,7 +481,7 @@ describe('RecurringSeries', () => {
 				expect(drill.body.transactions.map(({id}: {id: string}) => id).sort()).toEqual(
 					[...ids, next.id].sort(),
 				);
-				expect(await decisions.findBy({accountId: owner.id, seriesKey: linkedKey})).toEqual(dismissed);
+				expect(await hides.findBy({accountId: owner.id, seriesKey: linkedKey})).toEqual(dismissed);
 				expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(
 					continuedSnapshot,
 				);
@@ -495,12 +508,12 @@ describe('RecurringSeries', () => {
 				expect(restartedDrill.body.transactions.map(({id}: {id: string}) => id).sort()).toEqual(
 					[...ids, next.id, late.id].sort(),
 				);
-				expect(await decisions.findBy({accountId: owner.id, seriesKey: linkedKey})).toEqual(dismissed);
+				expect(await hides.findBy({accountId: owner.id, seriesKey: linkedKey})).toEqual(dismissed);
 				expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(
 					continuedSnapshot,
 				);
 			} finally {
-				if (keys.length) await decisions.delete({accountId: owner.id, seriesKey: In(keys)});
+				if (keys.length) await hides.delete({accountId: owner.id, seriesKey: In(keys)});
 				await fixtures.connections.delete(connection.id);
 			}
 		},
@@ -566,12 +579,8 @@ describe('RecurringSeries', () => {
 		await fixtures.transactions.delete([...retail, ...bills].map(({id}) => id));
 	});
 
-	it.each([
-		['CONFIRMED', false],
-		['DISMISSED', true],
-		['CONFLICT', false],
-	] as const)('retail suggestions: respects prior retail %s choices until reset', async (choice, hidden) => {
-		const name = `Example Chosen Retail ${choice}`;
+	it('retail suggestions: keeps a retail series hidden earlier listed as hidden until shown again', async () => {
+		const name = 'Example Hidden Retail';
 		const rows = await fixtures.createTransactions(
 			ownerBankAccount,
 			MONTHS.map((month, index) =>
@@ -585,20 +594,16 @@ describe('RecurringSeries', () => {
 		const ids = rows.map(({id}) => id);
 		const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
 		const totalBefore = (await list(ownerAgent)).monthlyTotal;
-		const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
-		await decisions.insert(
-			(choice === 'CONFLICT' ? [0, 3] : [0]).map((offset) => ({
-				accountId: owner.id,
-				seriesKey: seriesKey(rows[offset].merchantKey!, 'EUR', rows[offset].id),
-				decision:
-					choice === 'CONFLICT' ? (offset === 0 ? ('CONFIRMED' as const) : ('DISMISSED' as const)) : choice,
-				transactionIds: choice === 'CONFLICT' ? ids.slice(offset, offset + 3) : ids,
-			})),
-		);
+		const hides: Repository<RecurringSeriesHide> = app.get(getRepositoryToken(RecurringSeriesHide));
+		await hides.insert({
+			accountId: owner.id,
+			seriesKey: seriesKey(rows[0].merchantKey!, 'EUR', rows[0].id),
+			transactionIds: ids,
+		});
 		const result = await list(ownerAgent);
 		const chosen = byName(result.series, name);
-		expect(chosen).toEqual([expect.objectContaining({transactionCount: 6, hidden})]);
-		expect(parseCents(result.monthlyTotal) - parseCents(totalBefore)).toBe(hidden ? 0n : 2400n);
+		expect(chosen).toEqual([expect.objectContaining({transactionCount: 6, hidden: true})]);
+		expect(parseCents(result.monthlyTotal) - parseCents(totalBefore)).toBe(0n);
 		await ownerAgent
 			.get('/bank-transactions')
 			.query({filter: {recurringSeriesKey: chosen[0].key}})
@@ -606,7 +611,7 @@ describe('RecurringSeries', () => {
 		await hide(ownerAgent, chosen[0].key, false).expect(204);
 		expect(byName((await list(ownerAgent)).series, name)).toEqual([]);
 		expect(
-			await decisions.countBy({
+			await hides.countBy({
 				accountId: owner.id,
 				seriesKey: In([0, 3].map((offset) => seriesKey(rows[offset].merchantKey!, 'EUR', rows[offset].id))),
 			}),
@@ -615,16 +620,14 @@ describe('RecurringSeries', () => {
 		await fixtures.transactions.delete(ids);
 	});
 
-	it.each([
-		['CONFIRMED', 'CONFIRMED', false],
-		['DISMISSED', 'DISMISSED', true],
-		['CONFIRMED', 'DISMISSED', false],
-	] as const)(
-		'regrouped decisions: reconciles %s/%s across names and bank accounts',
-		async (first, second, hidden) => {
-			const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
-			const oldName = `Example Linked Old ${first} ${second}`;
-			const newName = `Example Linked New ${first} ${second}`;
+	it.each([[true], [false]] as const)(
+		'regrouped hides: hides parts hidden %s as one series across names and bank accounts',
+		async (bothHidden) => {
+			const hidden = true;
+			const label = bothHidden ? 'Both' : 'First';
+			const hides: Repository<RecurringSeriesHide> = app.get(getRepositoryToken(RecurringSeriesHide));
+			const oldName = `Example Linked Old ${label}`;
+			const newName = `Example Linked New ${label}`;
 			const otherBank = await fixtures.createBankAccount(await fixtures.createConnection(owner));
 			const rows = [
 				...(await fixtures.createTransactions(
@@ -637,11 +640,10 @@ describe('RecurringSeries', () => {
 			const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
 			const legacyKeys = [0, 3].map((offset) => seriesKey(rows[offset].merchantKey!, 'EUR', rows[offset].id));
 			const totalBefore = (await list(ownerAgent)).monthlyTotal;
-			await decisions.insert(
-				[0, 3].map((offset, index) => ({
+			await hides.insert(
+				(bothHidden ? [0, 3] : [0]).map((offset, index) => ({
 					accountId: owner.id,
 					seriesKey: legacyKeys[index],
-					decision: index === 0 ? first : second,
 					transactionIds: ids.slice(offset, offset + 3),
 				})),
 			);
@@ -662,7 +664,7 @@ describe('RecurringSeries', () => {
 			expect(drill.body.transactions.map((row: {id: string}) => row.id).sort()).toEqual([...ids].sort());
 			await hide(ownerAgent, merged[0].key, false).expect(204);
 			expect(byName((await list(ownerAgent)).series, newName)[0].hidden).toBe(false);
-			expect(await decisions.countBy({accountId: owner.id, seriesKey: In(legacyKeys)})).toBe(0);
+			expect(await hides.countBy({accountId: owner.id, seriesKey: In(legacyKeys)})).toBe(0);
 			expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
 			await fixtures.transactions.delete(ids);
 		},
@@ -708,14 +710,15 @@ describe('RecurringSeries', () => {
 	] as const)(
 		'current-stream continuation: retains %s through linking, grace and drill-through',
 		async (label, amounts, alternateNames, sameAccount, amountKind, typicalAmount, cost) => {
-			const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
+			const hides: Repository<RecurringSeriesHide> = app.get(getRepositoryToken(RecurringSeriesHide));
 			const name = `Example Current Stream ${label}`;
 			const oldName = `Example Previous Stream ${label}`;
 			const connection = await fixtures.createConnection(owner);
 			const currentBank = await fixtures.createBankAccount(connection);
 			const readAt = async (asOf: string) =>
-				(await ownerAgent.get('/recurring-series').query({asOf, direction: 'EXPENSE'}).expect(200))
-					.body as Awaited<ReturnType<typeof list>>;
+				(await ownerAgent.get('/recurring-series').query({asOf}).expect(200)).body.expenses as Awaited<
+					ReturnType<typeof list>
+				>;
 			const dates = ['2026-11-10', '2026-11-11', '2026-11-15', '2026-11-16'];
 			const totalsWithout = await Promise.all(dates.map(async (date) => (await readAt(date)).monthlyTotal));
 			const current = await fixtures.createTransactions(
@@ -758,19 +761,6 @@ describe('RecurringSeries', () => {
 				);
 				ids.push(...previous.map(({id}) => id));
 				const snapshot = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
-				legacyKeys.push(seriesKey(previous[0].merchantKey!, 'EUR', previous[0].id), baseline.key);
-				await decisions.insert(
-					[previous, current].map((rows, index) => ({
-						accountId: owner.id,
-						seriesKey: legacyKeys[index],
-						decision: 'CONFIRMED' as const,
-						transactionIds: rows.map(({id}) => id),
-					})),
-				);
-				const savedDecisions = await decisions.find({
-					where: {accountId: owner.id, seriesKey: In(legacyKeys)},
-					order: {id: 'ASC'},
-				});
 				let linkedKey: string | undefined;
 				for (const [index, date] of dates.entries()) {
 					const result = await readAt(date);
@@ -796,19 +786,12 @@ describe('RecurringSeries', () => {
 					expect(parseCents(result.monthlyTotal) - parseCents(totalsWithout[index])).toBe(ended ? 0n : cost);
 					await drill(linked[0].key, ids);
 				}
-				expect(
-					await decisions.find({where: {accountId: owner.id, seriesKey: In(legacyKeys)}, order: {id: 'ASC'}}),
-				).toEqual(savedDecisions);
 				expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
-				await hide(ownerAgent, linkedKey!, false).expect(204);
-				expect(byName((await readAt('2026-11-10')).series, name)[0].hidden).toBe(false);
-				expect(await decisions.countBy({accountId: owner.id, seriesKey: In(legacyKeys)})).toBe(0);
 				legacyKeys.push(linkedKey!);
 				await hide(ownerAgent, linkedKey!).expect(204);
-				const dismissed = await decisions.findBy({accountId: owner.id, seriesKey: linkedKey});
+				const dismissed = await hides.findBy({accountId: owner.id, seriesKey: linkedKey});
 				expect(dismissed).toEqual([
 					expect.objectContaining({
-						decision: 'DISMISSED',
 						transactionIds: [...previous, ...current].map(({id}) => id),
 					}),
 				]);
@@ -835,7 +818,7 @@ describe('RecurringSeries', () => {
 				]);
 				expect(after.monthlyTotal).toBe(totalsWithout[1]);
 				await drill(linkedKey!, ids);
-				expect(await decisions.findBy({accountId: owner.id, seriesKey: linkedKey})).toEqual(dismissed);
+				expect(await hides.findBy({accountId: owner.id, seriesKey: linkedKey})).toEqual(dismissed);
 				expect(
 					await fixtures.transactions.find({
 						where: {id: In(ids.filter((id) => id !== next.id))},
@@ -863,7 +846,7 @@ describe('RecurringSeries', () => {
 					}),
 				]);
 				await drill(linkedKey!, ids);
-				expect(await decisions.findBy({accountId: owner.id, seriesKey: linkedKey})).toEqual(dismissed);
+				expect(await hides.findBy({accountId: owner.id, seriesKey: linkedKey})).toEqual(dismissed);
 				expect(
 					await fixtures.transactions.find({
 						where: {id: In(ids.filter((id) => id !== late.id))},
@@ -871,7 +854,7 @@ describe('RecurringSeries', () => {
 					}),
 				).toEqual(beforeRestart);
 			} finally {
-				if (legacyKeys.length) await decisions.delete({accountId: owner.id, seriesKey: In(legacyKeys)});
+				if (legacyKeys.length) await hides.delete({accountId: owner.id, seriesKey: In(legacyKeys)});
 				await fixtures.transactions.delete(ids);
 				await fixtures.connections.delete(connection.id);
 			}
@@ -879,14 +862,14 @@ describe('RecurringSeries', () => {
 	);
 
 	it('current-stream continuation: preserves a qualified raw-name anchor across recognized price parts', async () => {
-		const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
+		const hides: Repository<RecurringSeriesHide> = app.get(getRepositoryToken(RecurringSeriesHide));
 		const name = 'Example Reconciled Current Prices';
 		const oldName = 'Example Reconciled Legacy Prices';
 		const connection = await fixtures.createConnection(owner);
 		const bank = await fixtures.createBankAccount(connection);
 		const keys: string[] = [];
 		const readAt = async (asOf = '2037-04-24') =>
-			(await ownerAgent.get('/recurring-series').query({asOf, direction: 'EXPENSE'}).expect(200)).body as Awaited<
+			(await ownerAgent.get('/recurring-series').query({asOf}).expect(200)).body.expenses as Awaited<
 				ReturnType<typeof list>
 			>;
 		const row = (date: string, amount: string, counterpartyName = name) =>
@@ -946,8 +929,8 @@ describe('RecurringSeries', () => {
 			const hidden = await readAt();
 			expect(byName(hidden.series, name)[0].hidden).toBe(true);
 			expect(parseCents(hidden.monthlyTotal) - parseCents(before.monthlyTotal)).toBe(-2100n);
-			const saved = await decisions.findBy({accountId: owner.id, seriesKey: linked.key});
-			expect(saved).toEqual([expect.objectContaining({decision: 'DISMISSED', transactionIds: ids})]);
+			const saved = await hides.findBy({accountId: owner.id, seriesKey: linked.key});
+			expect(saved).toEqual([expect.objectContaining({transactionIds: ids})]);
 			const next = await fixtures.createTransaction(bank, row(baseline.nextExpectedDate, '-21.00'));
 			const after = await readAt('2037-04-25');
 			expect(byName(after.series, name)).toEqual([
@@ -962,10 +945,10 @@ describe('RecurringSeries', () => {
 			]);
 			expect(after.monthlyTotal).toBe(hidden.monthlyTotal);
 			await drill([...ids, next.id]);
-			expect(await decisions.findBy({accountId: owner.id, seriesKey: linked.key})).toEqual(saved);
+			expect(await hides.findBy({accountId: owner.id, seriesKey: linked.key})).toEqual(saved);
 			expect(await fixtures.transactions.find({where: {id: In(allIds)}, order: {id: 'ASC'}})).toEqual(snapshot);
 		} finally {
-			if (keys.length) await decisions.delete({accountId: owner.id, seriesKey: In(keys)});
+			if (keys.length) await hides.delete({accountId: owner.id, seriesKey: In(keys)});
 			await fixtures.connections.delete(connection.id);
 		}
 	});
@@ -1040,10 +1023,12 @@ describe('RecurringSeries', () => {
 		expect((await list(otherAgent)).series.map(({name}) => name)).toEqual(['Example Club']);
 	});
 
-	it('lists recurring income separately', async () => {
-		expect((await list(ownerAgent, 'INCOME')).series).toEqual([
+	it('lists recurring income apart from bills in the same read', async () => {
+		const {expenses, income} = await lists(ownerAgent);
+		expect(income.series).toEqual([
 			expect.objectContaining({name: 'Example Employer', cadence: 'MONTHLY', typicalAmount: '2500.00'}),
 		]);
+		expect(expenses.series.every(({name}) => name !== 'Example Employer')).toBe(true);
 	});
 
 	it('counts every series by default and hides one without touching its transactions', async () => {
@@ -1162,19 +1147,18 @@ describe('RecurringSeries', () => {
 		expect(after.find(({key}) => key === other.key)?.hidden).toBe(false);
 	});
 
-	it('resets a merged series fully, whatever its parts were decided as', async () => {
+	it('shows a merged series again in full when it is shown again', async () => {
 		const internet = {counterpartyName: 'Example Internet', description: 'Example Internet'};
 		const initialRows = await fixtures.createTransactions(ownerBankAccount, [
 			...['2026-01-22', '2026-02-22', '2026-03-22'].map((date) => bookedRow(date, '-10.00', internet)),
 			...['2026-04-22', '2026-05-22', '2026-06-22'].map((date) => bookedRow(date, '-20.00', internet)),
 		]);
-		const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
-		// Existing decisions from when sequential prices were separate histories.
-		await decisions.insert(
+		const hides: Repository<RecurringSeriesHide> = app.get(getRepositoryToken(RecurringSeriesHide));
+		// Hides from when sequential prices were separate histories.
+		await hides.insert(
 			[0, 3].map((offset) => ({
 				accountId: owner.id,
 				seriesKey: seriesKey(initialRows[offset].merchantKey!, 'EUR', initialRows[offset].id),
-				decision: offset === 0 ? ('CONFIRMED' as const) : ('DISMISSED' as const),
 				transactionIds: initialRows.slice(offset, offset + 3).map(({id}) => id),
 			})),
 		);
@@ -1186,14 +1170,11 @@ describe('RecurringSeries', () => {
 			bookedRow('2026-09-22', '-50.00', internet),
 		]);
 		const [merged] = byName((await list(ownerAgent)).series, 'Example Internet');
-		// One part was hidden and one confirmed; conflicting saved decisions leave the merged series shown.
-		expect(merged).toMatchObject({amountKind: 'VARIABLE', transactionCount: 9, hidden: false});
+		expect(merged).toMatchObject({amountKind: 'VARIABLE', transactionCount: 9, hidden: true});
 
 		await hide(ownerAgent, merged.key, false).expect(204);
 		expect(byName((await list(ownerAgent)).series, 'Example Internet')[0].hidden).toBe(false);
-		expect(await decisions.countBy({accountId: owner.id, transactionIds: ArrayContains([initialRows[0].id])})).toBe(
-			0,
-		);
+		expect(await hides.countBy({accountId: owner.id, transactionIds: ArrayContains([initialRows[0].id])})).toBe(0);
 	});
 
 	it('does not move a hide that was undone to the other part of a split', async () => {
@@ -1242,9 +1223,9 @@ describe('RecurringSeries', () => {
 		const [restarted] = byName((await list(ownerAgent)).series, 'Example Club Membership');
 		expect(restarted).toMatchObject({key: stopped.key, status: 'ACTIVE', hidden: false});
 		// The stored hide is untouched; hiding again covers the restart.
-		const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
-		const stored = await decisions.findBy({accountId: owner.id, seriesKey: stopped.key});
-		expect(stored).toEqual([expect.objectContaining({decision: 'DISMISSED', transactionIds: expect.any(Array)})]);
+		const hides: Repository<RecurringSeriesHide> = app.get(getRepositoryToken(RecurringSeriesHide));
+		const stored = await hides.findBy({accountId: owner.id, seriesKey: stopped.key});
+		expect(stored).toEqual([expect.objectContaining({transactionIds: expect.any(Array)})]);
 		expect(stored[0].transactionIds).toHaveLength(3);
 		await hide(ownerAgent, stopped.key).expect(204);
 		expect(byName((await list(ownerAgent)).series, 'Example Club Membership')[0].hidden).toBe(true);
@@ -1290,14 +1271,11 @@ describe('RecurringSeries', () => {
 		expect(Number(monthlyTotal) - totalBeforeRestart).toBeCloseTo(21, 2);
 	});
 
-	it.each([
-		['CONFIRMED', 'CONFIRMED', false],
-		['DISMISSED', 'DISMISSED', true],
-		['CONFIRMED', 'DISMISSED', false],
-	] as const)(
-		'reconciles saved %s/%s decisions when sequential prices become one history',
-		async (first, second, hidden) => {
-			const name = `Example Sequential ${first} ${second}`;
+	it.each([[true], [false]] as const)(
+		'keeps hiding when sequential prices become one history, both parts hidden %s',
+		async (bothHidden) => {
+			const hidden = true;
+			const name = `Example Sequential ${bothHidden ? 'Both' : 'First'}`;
 			const totalBefore = (await list(ownerAgent)).monthlyTotal;
 			const rows = await fixtures.createTransactions(
 				ownerBankAccount,
@@ -1313,13 +1291,12 @@ describe('RecurringSeries', () => {
 				where: {id: In(rows.map(({id}) => id))},
 				order: {id: 'ASC'},
 			});
-			const decisions: Repository<RecurringSeriesDecision> = app.get(getRepositoryToken(RecurringSeriesDecision));
-			// Snapshots written by the earlier detector when the two prices were separate series.
-			await decisions.insert(
-				[0, 3].map((offset, index) => ({
+			const hides: Repository<RecurringSeriesHide> = app.get(getRepositoryToken(RecurringSeriesHide));
+			// Hides saved when the two prices were separate series.
+			await hides.insert(
+				(bothHidden ? [0, 3] : [0]).map((offset) => ({
 					accountId: owner.id,
 					seriesKey: seriesKey(rows[offset].merchantKey!, 'EUR', rows[offset].id),
-					decision: index === 0 ? first : second,
 					transactionIds: rows.slice(offset, offset + 3).map(({id}) => id),
 				})),
 			);
@@ -1337,7 +1314,7 @@ describe('RecurringSeries', () => {
 			await hide(ownerAgent, merged.key, false).expect(204);
 			expect(byName((await list(ownerAgent)).series, name)[0].hidden).toBe(false);
 			expect(
-				await decisions.countBy({
+				await hides.countBy({
 					accountId: owner.id,
 					seriesKey: In([0, 3].map((offset) => seriesKey(rows[offset].merchantKey!, 'EUR', rows[offset].id))),
 				}),
@@ -1430,8 +1407,10 @@ describe('RecurringSeries', () => {
 				),
 			);
 			const read = async () =>
-				(await fresh.agent.get('/recurring-series').query({asOf: AS_OF, direction: 'EXPENSE'}).expect(200))
-					.body as Omit<Awaited<ReturnType<typeof list>>, 'series'> & {series: LinkSeries[]};
+				(await fresh.agent.get('/recurring-series').query({asOf: AS_OF}).expect(200)).body.expenses as Omit<
+					Awaited<ReturnType<typeof list>>,
+					'series'
+				> & {series: LinkSeries[]};
 			const drill = async (key: string) =>
 				(
 					await fresh.agent
@@ -1487,12 +1466,11 @@ describe('RecurringSeries', () => {
 				expect(unlinked.monthlyTotal).toBe('25.00');
 				expect(await drill(previous.key)).toEqual(sorted(older));
 				expect(await drill(current.key)).toEqual(sorted(newer));
-				const choices: Repository<RecurringContinuationChoice> = app.get(
-					getRepositoryToken(RecurringContinuationChoice),
+				const unlinks: Repository<RecurringContinuationUnlink> = app.get(
+					getRepositoryToken(RecurringContinuationUnlink),
 				);
-				expect(await choices.findBy({accountId: freshOwner.id})).toEqual([
+				expect(await unlinks.findBy({accountId: freshOwner.id})).toEqual([
 					expect.objectContaining({
-						choice: 'SEPARATE',
 						olderTransactionIds: older.map(({id}) => id),
 						newerTransactionIds: newer.map(({id}) => id),
 					}),
@@ -1511,7 +1489,7 @@ describe('RecurringSeries', () => {
 				expect((await read()).series).toEqual([
 					expect.objectContaining({key: joined.key, transactionCount: 7, continuation: expect.anything()}),
 				]);
-				expect(await choices.countBy({accountId: freshOwner.id})).toBe(0);
+				expect(await unlinks.countBy({accountId: freshOwner.id})).toBe(0);
 
 				expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
 				await ownerAgent
@@ -1568,10 +1546,10 @@ describe('RecurringSeries', () => {
 				);
 				// The later request either finds the pair already unlinked or loses the race to it.
 				expect(statuses.sort((a, b) => a - b)).toEqual([204, statuses.includes(409) ? 409 : 404]);
-				const choices: Repository<RecurringContinuationChoice> = app.get(
-					getRepositoryToken(RecurringContinuationChoice),
+				const unlinks: Repository<RecurringContinuationUnlink> = app.get(
+					getRepositoryToken(RecurringContinuationUnlink),
 				);
-				expect(await choices.countBy({accountId: freshOwner.id})).toBe(1);
+				expect(await unlinks.countBy({accountId: freshOwner.id})).toBe(1);
 			} finally {
 				await fixtures.connections.delete(connection.id);
 			}
@@ -1626,12 +1604,35 @@ describe('RecurringSeries', () => {
 		await hide(ownerAgent, 'not-a-key').expect(400);
 		await otherAgent.patch(`/recurring-series/${club.key}/hidden`).send({hidden: 'MAYBE'}).expect(400);
 		await otherAgent.patch(`/recurring-series/${club.key}/hidden`).send({}).expect(400);
-		await ownerAgent.get('/recurring-series').query({asOf: AS_OF, direction: 'UNKNOWN'}).expect(400);
 		await ownerAgent.get('/recurring-series').expect(400);
 		await ownerAgent
 			.get('/bank-transactions')
 			.query({filter: {recurringSeriesKey: club.key}})
 			.expect(404);
+	});
+
+	it('keeps stored detections across restarts and detects again when the detection rules change', async () => {
+		const service: Partial<OnApplicationBootstrap> = app.get(RecurringSeriesService);
+		const snapshots: Repository<RecurringSnapshot> = app.get(getRepositoryToken(RecurringSnapshot));
+		const detect = jest.spyOn(detection, 'detectRecurringSeries');
+		try {
+			const before = await list(ownerAgent);
+			detect.mockClear();
+			// Starting the app again keeps what was stored.
+			await service.onApplicationBootstrap?.();
+			expect(await list(ownerAgent)).toEqual(before);
+			expect(detect).not.toHaveBeenCalled();
+
+			// A detection stored under other rules is not reused.
+			await snapshots.update({accountId: owner.id}, {rulesVersion: 'older-rules'});
+			expect(await list(ownerAgent)).toEqual(before);
+			expect(detect).toHaveBeenCalledTimes(1);
+			expect(await snapshots.findOneByOrFail({accountId: owner.id})).toMatchObject({
+				rulesVersion: RECURRING_DETECTION_RULES_VERSION,
+			});
+		} finally {
+			detect.mockRestore();
+		}
 	});
 
 	it('detects once when reads after a change overlap', async () => {
@@ -1641,7 +1642,7 @@ describe('RecurringSeries', () => {
 		);
 		const detect = jest.spyOn(detection, 'detectRecurringSeries');
 		try {
-			const reads = await Promise.all([list(ownerAgent), list(ownerAgent, 'INCOME'), list(ownerAgent)]);
+			const reads = await Promise.all([list(ownerAgent), lists(ownerAgent), list(ownerAgent)]);
 			expect(byName(reads[0].series, 'Example Shared Bill')).toHaveLength(1);
 			expect(reads[2]).toEqual(reads[0]);
 			expect(detect).toHaveBeenCalledTimes(1);
@@ -1732,7 +1733,7 @@ describe('RecurringSeries', () => {
 				incomeUnconvertedCount: number;
 				baseCurrency: string | null;
 			};
-		const [expenses, income, result] = [await list(ownerAgent), await list(ownerAgent, 'INCOME'), await summary()];
+		const [{expenses, income}, result] = [await lists(ownerAgent), await summary()];
 		expect(result).toMatchObject({
 			expenseMonthlyTotal: expenses.monthlyTotal,
 			incomeMonthlyTotal: income.monthlyTotal,

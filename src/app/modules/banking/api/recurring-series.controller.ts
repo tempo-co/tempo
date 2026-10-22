@@ -9,7 +9,6 @@ import {
 	RecurringContinuationUpdateDto,
 	RecurringSeriesHiddenUpdateDto,
 	RecurringSeriesQueryDto,
-	RecurringSeriesSummaryQueryDto,
 } from './dtos/recurring-series.dto';
 import {SeriesKeyPipe} from './pipes/series-key.pipe';
 
@@ -20,11 +19,11 @@ export class RecurringSeriesController {
 
 	@Get()
 	findAll(@CurrentAccount() account: Account, @Query() query: RecurringSeriesQueryDto) {
-		return this.recurringSeriesService.list(account, query);
+		return this.recurringSeriesService.list(account, query.asOf);
 	}
 
 	@Get('summary')
-	summary(@CurrentAccount() account: Account, @Query() query: RecurringSeriesSummaryQueryDto) {
+	summary(@CurrentAccount() account: Account, @Query() query: RecurringSeriesQueryDto) {
 		return this.recurringSeriesService.summary(account, query.asOf);
 	}
 

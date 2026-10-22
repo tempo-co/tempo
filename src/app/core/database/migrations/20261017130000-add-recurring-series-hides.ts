@@ -1,16 +1,16 @@
 import {MigrationInterface, QueryRunner, Table} from 'typeorm';
 
-const DECISIONS_TABLE = 'recurring_series_decisions';
+const HIDES_TABLE = 'recurring_series_hides';
 
-export class AddRecurringSeriesDecisions20261017130000 implements MigrationInterface {
-	name = 'AddRecurringSeriesDecisions20261017130000';
+export class AddRecurringSeriesHides20261017130000 implements MigrationInterface {
+	name = 'AddRecurringSeriesHides20261017130000';
 
 	public async up(queryRunner: QueryRunner): Promise<void> {
-		if (await queryRunner.hasTable(DECISIONS_TABLE)) return;
+		if (await queryRunner.hasTable(HIDES_TABLE)) return;
 
 		await queryRunner.createTable(
 			new Table({
-				name: DECISIONS_TABLE,
+				name: HIDES_TABLE,
 				columns: [
 					{
 						name: 'id',
@@ -22,14 +22,11 @@ export class AddRecurringSeriesDecisions20261017130000 implements MigrationInter
 					},
 					{name: 'accountId', type: 'uuid'},
 					{name: 'seriesKey', type: 'varchar', length: '32'},
-					{name: 'decision', type: 'varchar', length: '16'},
 					{name: 'transactionIds', type: 'uuid', isArray: true, default: "'{}'"},
 					{name: 'createdAt', type: 'timestamptz', default: 'now()'},
 					{name: 'updatedAt', type: 'timestamptz', default: 'now()'},
 				],
-				uniques: [
-					{name: 'uq_recurring_series_decisions_account_series', columnNames: ['accountId', 'seriesKey']},
-				],
+				uniques: [{name: 'uq_recurring_series_hides_account_series', columnNames: ['accountId', 'seriesKey']}],
 				foreignKeys: [
 					{
 						columnNames: ['accountId'],
@@ -43,6 +40,6 @@ export class AddRecurringSeriesDecisions20261017130000 implements MigrationInter
 	}
 
 	public async down(queryRunner: QueryRunner): Promise<void> {
-		if (await queryRunner.hasTable(DECISIONS_TABLE)) await queryRunner.dropTable(DECISIONS_TABLE);
+		if (await queryRunner.hasTable(HIDES_TABLE)) await queryRunner.dropTable(HIDES_TABLE);
 	}
 }

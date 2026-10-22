@@ -1,5 +1,5 @@
 import {PickType} from '@nestjs/swagger';
-import {IsBoolean, IsIn, IsOptional} from 'class-validator';
+import {IsBoolean} from 'class-validator';
 
 import {IsCalendarDate} from '@core/validation/is-calendar-date';
 
@@ -21,13 +21,7 @@ export class RecurringSeriesQueryDto {
 	/** The client's local date; late and ended are judged against it. */
 	@IsCalendarDate()
 	asOf: string;
-
-	@IsOptional()
-	@IsIn(RECURRING_SERIES_DIRECTIONS)
-	direction: RecurringSeriesDirection = BANK_TRANSACTION_DIRECTIONS.EXPENSE;
 }
-
-export class RecurringSeriesSummaryQueryDto extends PickType(RecurringSeriesQueryDto, ['asOf'] as const) {}
 
 export class RecurringSeriesHiddenUpdateDto {
 	/** `true` marks the series as not recurring; `false` shows it again. */
@@ -83,7 +77,8 @@ export class RecurringSeriesDto {
 	continuation: RecurringContinuationDto | null;
 }
 
-export class RecurringSeriesListResponseDto {
+/** One direction's series and total. */
+export class RecurringSeriesListDto {
 	/** Shown before hidden; active before ended; larger monthly cost first. */
 	series: RecurringSeriesDto[];
 	/** Monthly cost of shown active series that have a base amount. */
@@ -102,6 +97,12 @@ export class RecurringUpcomingPaymentDto extends PickType(RecurringSeriesDto, [
 	'typicalAmount',
 	'currency',
 ] as const) {}
+
+/** Bills and income, from one read. */
+export class RecurringSeriesListsResponseDto {
+	expenses: RecurringSeriesListDto;
+	income: RecurringSeriesListDto;
+}
 
 export class RecurringSeriesSummaryResponseDto {
 	/** The bills and income lists' monthly totals. */

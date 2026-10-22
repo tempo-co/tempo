@@ -25,8 +25,8 @@ import {BankTransactionFxRate} from './bank-transaction-fx-rate.entity';
 import {BankTransaction} from './bank-transaction.entity';
 import {BankingService} from './banking.service';
 import {BankTransactionCategorizationModule} from './categorization/bank-transaction-categorization.module';
-import {RecurringContinuationChoice} from './recurring/recurring-continuation-choice.entity';
-import {RecurringSeriesDecision} from './recurring/recurring-series-decision.entity';
+import {RecurringContinuationUnlink} from './recurring/recurring-continuation-unlink.entity';
+import {RecurringSeriesHide} from './recurring/recurring-series-hide.entity';
 import {RecurringSeriesService} from './recurring/recurring-series.service';
 import {RecurringSnapshot} from './recurring/recurring-snapshot.entity';
 import {BankTransactionAmountConversionProcessor} from './services/bank-transaction-amount-conversion.processor';
@@ -55,8 +55,8 @@ import {OwnTransferService} from './services/own-transfer.service';
 			BankAccountBalance,
 			BankTransaction,
 			BankTransactionFxRate,
-			RecurringSeriesDecision,
-			RecurringContinuationChoice,
+			RecurringSeriesHide,
+			RecurringContinuationUnlink,
 			RecurringSnapshot,
 		]),
 		BullModule.registerQueue({name: BANK_CONNECTION_SYNC_QUEUE}),

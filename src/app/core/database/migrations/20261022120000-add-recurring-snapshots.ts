@@ -14,6 +14,7 @@ export class AddRecurringSnapshots20261022120000 implements MigrationInterface {
 				columns: [
 					{name: 'accountId', type: 'uuid', isPrimary: true},
 					{name: 'inputVersion', type: 'varchar', length: '32'},
+					{name: 'rulesVersion', type: 'varchar', length: '32'},
 					{name: 'payload', type: 'jsonb'},
 					{name: 'computedAt', type: 'timestamptz', default: 'now()'},
 				],

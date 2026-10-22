@@ -1,4 +1,4 @@
-import {ConflictException, Injectable, NotFoundException, OnApplicationBootstrap} from '@nestjs/common';
+import {ConflictException, Injectable, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import {Repository} from 'typeorm';
 
@@ -10,9 +10,10 @@ import {
 } from '../api/constants/banking-messages.constants';
 import type {
 	RecurringContinuationDto,
+	RecurringSeriesDirection,
 	RecurringSeriesDto,
-	RecurringSeriesListResponseDto,
-	RecurringSeriesQueryDto,
+	RecurringSeriesListDto,
+	RecurringSeriesListsResponseDto,
 	RecurringSeriesSummaryResponseDto,
 } from '../api/dtos/recurring-series.dto';
 import {BankTransaction} from '../bank-transaction.entity';
@@ -20,14 +21,16 @@ import type {BankTransactionCategory} from '../categorization/bank-transaction-c
 import {SQL_INTERNAL} from '../services/bank-transaction-filters';
 import {formatCents} from '../summary/bank-transaction-summary';
 import {type ContinuationPair, findContinuationPairs} from './recurring-continuation';
-import {RecurringContinuationChoice} from './recurring-continuation-choice.entity';
+import {RecurringContinuationUnlink} from './recurring-continuation-unlink.entity';
 import {type RecurringEvidence, inferRecurringIdentities} from './recurring-payee-identity';
-import {RecurringSeriesDecision} from './recurring-series-decision.entity';
 import {type DetectedRecurringSeries, UNDATED, atDate, detectRecurringSeries} from './recurring-series-detection';
 import {isOrdinaryRetailExpense} from './recurring-series-eligibility';
+import {RecurringSeriesHide} from './recurring-series-hide.entity';
 import {RecurringSnapshot} from './recurring-snapshot.entity';
 
 const REFUND = 'REFUND' satisfies BankTransactionCategory;
+/** Bump whenever a change makes detection or its stored payload differ for the same payments. */
+export const RECURRING_DETECTION_RULES_VERSION = '1';
 const UPCOMING_COUNT = 3;
 /** Every payment field detection reads; the stored detection's version is a hash over all of them. */
 const CANDIDATE_COLUMNS: readonly [sql: string, alias: keyof CandidateRow][] = [
@@ -51,7 +54,7 @@ type Continuation = {
 	older: DetectedRecurringSeries;
 	newer: DetectedRecurringSeries;
 	/** The owner's unlink answers for this pair. */
-	saved: RecurringContinuationChoice[];
+	saved: RecurringContinuationUnlink[];
 };
 
 /** A detected series as stored: amounts as strings, plus whether it is ordinary retail. */
@@ -76,9 +79,9 @@ type Detection = {
 /** What a read needs: the dated series after linking, and the owner's answers resolved onto them. */
 type ReadState = {
 	detected: DetectedRecurringSeries[];
-	decisionBySeries: Map<string, RecurringSeriesDecision[]>;
+	hidesBySeries: Map<string, RecurringSeriesHide[]>;
 	continuationBySeries: Map<string, Continuation>;
-	choiceIds: Set<string>;
+	unlinkIds: Set<string>;
 };
 
 type CandidateRow = {
@@ -101,14 +104,14 @@ type CandidateRow = {
  * applies the owner's hidden series and unlinked histories.
  */
 @Injectable()
-export class RecurringSeriesService implements OnApplicationBootstrap {
+export class RecurringSeriesService {
 	constructor(
 		@InjectRepository(BankTransaction)
 		private readonly bankTransactionRepository: Repository<BankTransaction>,
-		@InjectRepository(RecurringSeriesDecision)
-		private readonly decisionRepository: Repository<RecurringSeriesDecision>,
-		@InjectRepository(RecurringContinuationChoice)
-		private readonly continuationRepository: Repository<RecurringContinuationChoice>,
+		@InjectRepository(RecurringSeriesHide)
+		private readonly hideRepository: Repository<RecurringSeriesHide>,
+		@InjectRepository(RecurringContinuationUnlink)
+		private readonly unlinkRepository: Repository<RecurringContinuationUnlink>,
 		@InjectRepository(RecurringSnapshot)
 		private readonly snapshotRepository: Repository<RecurringSnapshot>,
 	) {}
@@ -116,13 +119,13 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 	/** Detections under way, by owner and input version, so reads that overlap share one. */
 	private readonly detecting = new Map<string, Promise<Detection>>();
 
-	/** Stored results come from the detection rules of the running version only. */
-	async onApplicationBootstrap() {
-		await this.snapshotRepository.clear();
-	}
-
-	async list(account: Pick<Account, 'id' | 'baseCurrency'>, {direction, asOf}: RecurringSeriesQueryDto) {
-		return listFor(await this.readState(account.id, asOf), direction, account.baseCurrency);
+	/** Bills and income from one read. */
+	async list(
+		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
+		asOf: string,
+	): Promise<RecurringSeriesListsResponseDto> {
+		const state = await this.readState(accountId, asOf);
+		return {expenses: listFor(state, 'EXPENSE', baseCurrency), income: listFor(state, 'INCOME', baseCurrency)};
 	}
 
 	/** Both lists' totals and the next payments due, from one read. */
@@ -130,10 +133,7 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
 		asOf: string,
 	): Promise<RecurringSeriesSummaryResponseDto> {
-		const state = await this.readState(accountId, asOf);
-		const [expenses, income] = (['EXPENSE', 'INCOME'] as const).map((direction) =>
-			listFor(state, direction, baseCurrency),
-		);
+		const {expenses, income} = await this.list({id: accountId, baseCurrency}, asOf);
 		const upcoming = [...expenses.series, ...income.series]
 			.filter(({hidden, status}) => !hidden && status === 'ACTIVE')
 			.sort((a, b) => a.nextExpectedDate.localeCompare(b.nextExpectedDate) || a.key.localeCompare(b.key))
@@ -158,23 +158,22 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 
 	/** Hides a series detected right now, or shows it again; an unknown or another owner's key is not found. */
 	async updateHidden(accountId: Account['id'], seriesKey: string, hidden: boolean) {
-		const {detected, decisionBySeries} = await this.readState(accountId, today());
+		const {detected, hidesBySeries} = await this.readState(accountId, today());
 		const series = detected.find((entry) => entry.key === seriesKey);
 		if (!series) throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);
-		// Replace every decision owned by this current series, including older ones from merged parts.
-		const superseded = decisionBySeries.get(seriesKey) ?? [];
-		await this.decisionRepository.manager.transaction(async (manager) => {
+		// Replace every hide owned by this current series, including older ones from merged parts.
+		const superseded = hidesBySeries.get(seriesKey) ?? [];
+		await this.hideRepository.manager.transaction(async (manager) => {
 			if (superseded.length > 0) {
 				await manager.delete(
-					RecurringSeriesDecision,
+					RecurringSeriesHide,
 					superseded.map(({id}) => id),
 				);
 			}
 			if (hidden) {
-				await manager.insert(RecurringSeriesDecision, {
+				await manager.insert(RecurringSeriesHide, {
 					accountId,
 					seriesKey,
-					decision: 'DISMISSED',
 					transactionIds: series.transactionIds,
 				});
 			}
@@ -186,28 +185,27 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 	 * joined series or either history of the pair; the request must change the pair's state.
 	 */
 	async updateContinuation(accountId: Account['id'], seriesKey: string, linked: boolean) {
-		const {continuationBySeries, choiceIds} = await this.readState(accountId, today());
+		const {continuationBySeries, unlinkIds} = await this.readState(accountId, today());
 		const continuation = continuationBySeries.get(seriesKey);
 		if (!continuation || continuation.linked === linked) {
 			throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);
 		}
-		await this.continuationRepository.manager.transaction(async (manager) => {
+		await this.unlinkRepository.manager.transaction(async (manager) => {
 			// One owner's answers change one at a time, and only from the state this answer was given on.
 			await manager.query('SELECT id FROM accounts WHERE id = $1 FOR UPDATE', [accountId]);
-			const current = await manager.find(RecurringContinuationChoice, {select: {id: true}, where: {accountId}});
-			if (current.length !== choiceIds.size || current.some(({id}) => !choiceIds.has(id))) {
+			const current = await manager.find(RecurringContinuationUnlink, {select: {id: true}, where: {accountId}});
+			if (current.length !== unlinkIds.size || current.some(({id}) => !unlinkIds.has(id))) {
 				throw new ConflictException(BANKING_RECURRING_CONTINUATION_CHANGED);
 			}
 			if (continuation.saved.length > 0) {
 				await manager.delete(
-					RecurringContinuationChoice,
+					RecurringContinuationUnlink,
 					continuation.saved.map(({id}) => id),
 				);
 			}
 			if (!linked) {
-				await manager.insert(RecurringContinuationChoice, {
+				await manager.insert(RecurringContinuationUnlink, {
 					accountId,
-					choice: 'SEPARATE',
 					olderTransactionIds: continuation.older.transactionIds,
 					newerTransactionIds: continuation.newer.transactionIds,
 				});
@@ -229,10 +227,10 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 	}
 
 	private async readState(accountId: Account['id'], today: string): Promise<ReadState> {
-		const [{series, pairs, retail}, decisions, choices] = await Promise.all([
+		const [{series, pairs, retail}, hides, unlinks] = await Promise.all([
 			this.detect(accountId),
-			this.decisionRepository.find({where: {accountId}}),
-			this.continuationRepository.find({where: {accountId}, order: {createdAt: 'ASC', id: 'ASC'}}),
+			this.hideRepository.find({where: {accountId}}),
+			this.unlinkRepository.find({where: {accountId}, order: {createdAt: 'ASC', id: 'ASC'}}),
 		]);
 		const dated = new Map(series.map((entry) => [entry, atDate(entry, today)]));
 		const datedPairs = pairs.map(({older, newer, joined}) => ({
@@ -240,13 +238,13 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 			newer: dated.get(newer)!,
 			joined: atDate(joined, today),
 		}));
-		const {detected, continuations} = linkContinuations([...dated.values()], datedPairs, choices);
-		const decisionBySeries = resolveDecisions(detected, decisions);
+		const {detected, continuations} = linkContinuations([...dated.values()], datedPairs, unlinks);
+		const hidesBySeries = assignHides(detected, hides);
 		return {
-			detected: detected.filter((entry) => decisionBySeries.has(entry.key) || !retail.has(entry.key)),
-			decisionBySeries,
+			detected: detected.filter((entry) => hidesBySeries.has(entry.key) || !retail.has(entry.key)),
+			hidesBySeries,
 			continuationBySeries: continuations,
-			choiceIds: new Set(choices.map(({id}) => id)),
+			unlinkIds: new Set(unlinks.map(({id}) => id)),
 		};
 	}
 
@@ -262,7 +260,8 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 			this.snapshotRepository.findOneBy({accountId}),
 		]);
 		const inputVersion = version ?? 'none';
-		if (stored?.inputVersion === inputVersion) return fromPayload(stored.payload as SnapshotPayload);
+		if (stored?.inputVersion === inputVersion && stored.rulesVersion === RECURRING_DETECTION_RULES_VERSION)
+			return fromPayload(stored.payload as SnapshotPayload);
 
 		const running = `${accountId}\u0000${inputVersion}`;
 		const shared = this.detecting.get(running);
@@ -300,7 +299,10 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 				.map(({key}) => key),
 		);
 		const detection = {series, pairs, retail};
-		await this.snapshotRepository.upsert({accountId, inputVersion, payload: toPayload(detection)}, ['accountId']);
+		await this.snapshotRepository.upsert(
+			{accountId, inputVersion, rulesVersion: RECURRING_DETECTION_RULES_VERSION, payload: toPayload(detection)},
+			['accountId'],
+		);
 		return detection;
 	}
 
@@ -325,15 +327,15 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 function listFor(
 	{
 		detected,
-		decisionBySeries,
+		hidesBySeries,
 		continuationBySeries,
-	}: Pick<ReadState, 'detected' | 'decisionBySeries' | 'continuationBySeries'>,
-	direction: RecurringSeriesQueryDto['direction'],
+	}: Pick<ReadState, 'detected' | 'hidesBySeries' | 'continuationBySeries'>,
+	direction: RecurringSeriesDirection,
 	baseCurrency: string | null,
-): RecurringSeriesListResponseDto {
+): RecurringSeriesListDto {
 	const series = detected
 		.filter((entry) => entry.direction === direction)
-		.map((entry) => ({entry, hidden: isHidden(entry, decisionBySeries.get(entry.key) ?? [])}))
+		.map((entry) => ({entry, hidden: isHidden(entry, hidesBySeries.get(entry.key) ?? [])}))
 		.sort(
 			(a, b) =>
 				Number(a.hidden) - Number(b.hidden) ||
@@ -359,13 +361,13 @@ function listFor(
 
 /**
  * A hidden series stays hidden for the payments it was hidden on. When payments restart after the series had stopped,
- * it counts again. Older confirmations no longer matter; conflicting saved decisions leave the series shown.
+ * it counts again.
  */
-function isHidden(entry: DetectedRecurringSeries, decisions: readonly RecurringSeriesDecision[]): boolean {
-	if (decisions.length === 0 || decisions.some(({decision}) => decision !== 'DISMISSED')) return false;
+function isHidden(entry: DetectedRecurringSeries, hides: readonly RecurringSeriesHide[]): boolean {
+	if (hides.length === 0) return false;
 	// Only a restart after the last payment the owner hid brings the series back. Ids are in date order.
-	const decided = new Set(decisions.flatMap(({transactionIds}) => transactionIds));
-	const lastDecided = entry.transactionIds.findLastIndex((id) => decided.has(id));
+	const hiddenIds = new Set(hides.flatMap(({transactionIds}) => transactionIds));
+	const lastDecided = entry.transactionIds.findLastIndex((id) => hiddenIds.has(id));
 	const later = new Set(entry.transactionIds.slice(lastDecided + 1));
 	return !entry.restartTransactionIds.some((id) => later.has(id));
 }
@@ -378,13 +380,12 @@ function isHidden(entry: DetectedRecurringSeries, decisions: readonly RecurringS
 function linkContinuations(
 	series: DetectedRecurringSeries[],
 	pairs: readonly ContinuationPair[],
-	choices: readonly RecurringContinuationChoice[],
+	unlinks: readonly RecurringContinuationUnlink[],
 ): {detected: DetectedRecurringSeries[]; continuations: Map<string, Continuation>} {
 	let detected = series;
 	const continuations = new Map<string, Continuation>();
-	const separate = choices.filter(({choice}) => choice === 'SEPARATE');
 	for (const {older, newer, joined} of pairs) {
-		const saved = separate.filter((choice) => answers(choice, older, newer));
+		const saved = unlinks.filter((unlink) => answers(unlink, older, newer));
 		const linked = saved.length === 0;
 		if (linked) detected = [...detected.filter((entry) => entry !== older && entry !== newer), joined];
 		// The joined key stays reachable after an unlink, so an undo can use the key the owner acted on.
@@ -393,15 +394,15 @@ function linkContinuations(
 	return {detected, continuations};
 }
 
-/** Whether a saved answer was given for this pair: each side still holds a payment it was answered on. */
+/** Whether a saved unlink was given for this pair: each side still holds a payment it was unlinked on. */
 function answers(
-	choice: RecurringContinuationChoice,
+	unlink: RecurringContinuationUnlink,
 	older: DetectedRecurringSeries,
 	newer: DetectedRecurringSeries,
 ): boolean {
 	return (
-		older.transactionIds.some((id) => choice.olderTransactionIds.includes(id)) &&
-		newer.transactionIds.some((id) => choice.newerTransactionIds.includes(id))
+		older.transactionIds.some((id) => unlink.olderTransactionIds.includes(id)) &&
+		newer.transactionIds.some((id) => unlink.newerTransactionIds.includes(id))
 	);
 }
 
@@ -443,19 +444,18 @@ function shownContinuation(
 }
 
 /**
- * Assigns each matching saved decision to one current series: its own key, otherwise the most shared
- * payments (ties by series key). Updates replace the whole group without changing snapshots or decisions
- * assigned to siblings.
+ * Assigns each saved hide to one current series: its own key, otherwise the most shared payments (ties by series key).
+ * Updates replace the whole group without changing hides assigned to siblings.
  */
-function resolveDecisions(
+function assignHides(
 	detected: readonly DetectedRecurringSeries[],
-	decisions: readonly RecurringSeriesDecision[],
-): Map<string, RecurringSeriesDecision[]> {
-	const result = new Map<string, RecurringSeriesDecision[]>();
-	for (const decision of decisions) {
-		let best = detected.find(({key}) => key === decision.seriesKey);
+	hides: readonly RecurringSeriesHide[],
+): Map<string, RecurringSeriesHide[]> {
+	const result = new Map<string, RecurringSeriesHide[]>();
+	for (const hide of hides) {
+		let best = detected.find(({key}) => key === hide.seriesKey);
 		if (!best) {
-			const decided = new Set(decision.transactionIds);
+			const decided = new Set(hide.transactionIds);
 			let bestShared = 0;
 			for (const series of detected) {
 				const shared = series.transactionIds.filter((id) => decided.has(id)).length;
@@ -467,7 +467,7 @@ function resolveDecisions(
 		}
 		if (!best) continue;
 		const assigned = result.get(best.key) ?? [];
-		assigned.push(decision);
+		assigned.push(hide);
 		result.set(best.key, assigned);
 	}
 	return result;
