@@ -13,6 +13,7 @@ import type {
 	RecurringSeriesDto,
 	RecurringSeriesListResponseDto,
 	RecurringSeriesQueryDto,
+	RecurringSeriesSummaryResponseDto,
 } from '../api/dtos/recurring-series.dto';
 import {BankTransaction} from '../bank-transaction.entity';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
@@ -27,6 +28,7 @@ import {isOrdinaryRetailExpense} from './recurring-series-eligibility';
 import {RecurringSnapshot} from './recurring-snapshot.entity';
 
 const REFUND = 'REFUND' satisfies BankTransactionCategory;
+const UPCOMING_COUNT = 3;
 /** Every payment field detection reads; the stored detection's version is a hash over all of them. */
 const CANDIDATE_COLUMNS: readonly [sql: string, alias: keyof CandidateRow][] = [
 	['"transaction"."id"', 'id'],
@@ -107,33 +109,36 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 		await this.snapshotRepository.clear();
 	}
 
-	async list(
+	async list(account: Pick<Account, 'id' | 'baseCurrency'>, {direction, asOf}: RecurringSeriesQueryDto) {
+		return listFor(await this.readState(account.id, asOf), direction, account.baseCurrency);
+	}
+
+	/** Both lists' totals and the next payments due, from one read. */
+	async summary(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
-		{direction, asOf}: RecurringSeriesQueryDto,
-	): Promise<RecurringSeriesListResponseDto> {
-		const {detected, decisionBySeries, continuationBySeries} = await this.readState(accountId, asOf);
-		const series = detected
-			.filter((entry) => entry.direction === direction)
-			.map((entry) => ({entry, hidden: isHidden(entry, decisionBySeries.get(entry.key) ?? [])}))
-			.sort(
-				(a, b) =>
-					Number(a.hidden) - Number(b.hidden) ||
-					Number(a.entry.status === 'ENDED') - Number(b.entry.status === 'ENDED') ||
-					compareDescending(a.entry.monthlyEquivalent, b.entry.monthlyEquivalent) ||
-					a.entry.name.localeCompare(b.entry.name) ||
-					a.entry.key.localeCompare(b.entry.key),
-			);
-
-		// Every detected series counts until the owner hides it.
-		const counted = series.filter(({entry, hidden}) => !hidden && entry.status === 'ACTIVE');
-		const monthlyTotal = counted.reduce((sum, {entry}) => sum + (entry.monthlyEquivalent ?? 0n), 0n);
-
+		asOf: string,
+	): Promise<RecurringSeriesSummaryResponseDto> {
+		const state = await this.readState(accountId, asOf);
+		const [expenses, income] = (['EXPENSE', 'INCOME'] as const).map((direction) =>
+			listFor(state, direction, baseCurrency),
+		);
+		const upcoming = [...expenses.series, ...income.series]
+			.filter(({hidden, status}) => !hidden && status === 'ACTIVE')
+			.sort((a, b) => a.nextExpectedDate.localeCompare(b.nextExpectedDate) || a.key.localeCompare(b.key))
+			.slice(0, UPCOMING_COUNT)
+			.map(({key, name, direction, nextExpectedDate, typicalAmount, currency}) => ({
+				key,
+				name,
+				direction,
+				nextExpectedDate,
+				typicalAmount,
+				currency,
+			}));
 		return {
-			series: series.map(({entry, hidden}) =>
-				toResponse(entry, hidden, shownContinuation(entry, continuationBySeries.get(entry.key))),
-			),
-			monthlyTotal: formatCents(monthlyTotal),
-			unconvertedCount: counted.filter(({entry}) => entry.monthlyEquivalent === null).length,
+			expenseMonthlyTotal: expenses.monthlyTotal,
+			incomeMonthlyTotal: income.monthlyTotal,
+			upcoming,
+			unconvertedCount: expenses.unconvertedCount + income.unconvertedCount,
 			baseCurrency,
 		};
 	}
@@ -300,6 +305,44 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 			.andWhere(`NOT ${SQL_INTERNAL}`)
 			.andWhere('transaction.amount <> 0');
 	}
+}
+
+type ReadState = Awaited<ReturnType<RecurringSeriesService['readState']>>;
+
+/** One direction's series, shown before hidden, with the monthly total of shown active series. */
+function listFor(
+	{
+		detected,
+		decisionBySeries,
+		continuationBySeries,
+	}: Pick<ReadState, 'detected' | 'decisionBySeries' | 'continuationBySeries'>,
+	direction: RecurringSeriesQueryDto['direction'],
+	baseCurrency: string | null,
+): RecurringSeriesListResponseDto {
+	const series = detected
+		.filter((entry) => entry.direction === direction)
+		.map((entry) => ({entry, hidden: isHidden(entry, decisionBySeries.get(entry.key) ?? [])}))
+		.sort(
+			(a, b) =>
+				Number(a.hidden) - Number(b.hidden) ||
+				Number(a.entry.status === 'ENDED') - Number(b.entry.status === 'ENDED') ||
+				compareDescending(a.entry.monthlyEquivalent, b.entry.monthlyEquivalent) ||
+				a.entry.name.localeCompare(b.entry.name) ||
+				a.entry.key.localeCompare(b.entry.key),
+		);
+
+	// Every detected series counts until the owner hides it.
+	const counted = series.filter(({entry, hidden}) => !hidden && entry.status === 'ACTIVE');
+	const monthlyTotal = counted.reduce((sum, {entry}) => sum + (entry.monthlyEquivalent ?? 0n), 0n);
+
+	return {
+		series: series.map(({entry, hidden}) =>
+			toResponse(entry, hidden, shownContinuation(entry, continuationBySeries.get(entry.key))),
+		),
+		monthlyTotal: formatCents(monthlyTotal),
+		unconvertedCount: counted.filter(({entry}) => entry.monthlyEquivalent === null).length,
+		baseCurrency,
+	};
 }
 
 /**

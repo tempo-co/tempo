@@ -26,6 +26,12 @@ export class RecurringSeriesQueryDto {
 	direction: RecurringSeriesDirection = BANK_TRANSACTION_DIRECTIONS.EXPENSE;
 }
 
+export class RecurringSeriesSummaryQueryDto {
+	/** The client's local date; late and ended are judged against it. */
+	@IsCalendarDate()
+	asOf: string;
+}
+
 export class RecurringSeriesHiddenUpdateDto {
 	/** `true` marks the series as not recurring; `false` shows it again. */
 	@IsBoolean()
@@ -86,6 +92,26 @@ export class RecurringSeriesListResponseDto {
 	/** Monthly cost of shown active series that have a base amount. */
 	monthlyTotal: string;
 	/** Shown active series left out of the total because a payment is not converted yet. */
+	unconvertedCount: number;
+	baseCurrency: string | null;
+}
+
+/** A counted series' next payment. */
+export class RecurringUpcomingPaymentDto {
+	key: string;
+	name: string;
+	direction: BankTransactionDirection;
+	nextExpectedDate: string;
+	typicalAmount: string;
+	currency: string;
+}
+
+export class RecurringSeriesSummaryResponseDto {
+	/** The bills and income lists' monthly totals. */
+	expenseMonthlyTotal: string;
+	incomeMonthlyTotal: string;
+	/** The three soonest next payments of shown active series, bills and income together. */
+	upcoming: RecurringUpcomingPaymentDto[];
 	unconvertedCount: number;
 	baseCurrency: string | null;
 }

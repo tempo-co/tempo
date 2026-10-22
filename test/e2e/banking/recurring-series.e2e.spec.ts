@@ -1666,6 +1666,59 @@ describe('RecurringSeries', () => {
 		}
 	});
 
+	it('summarizes counted bills and income with the next payments due', async () => {
+		const summary = async (asOf = AS_OF) =>
+			(await ownerAgent.get('/recurring-series/summary').query({asOf}).expect(200)).body as {
+				expenseMonthlyTotal: string;
+				incomeMonthlyTotal: string;
+				upcoming: {
+					key: string;
+					name: string;
+					direction: string;
+					nextExpectedDate: string;
+					typicalAmount: string;
+				}[];
+				unconvertedCount: number;
+				baseCurrency: string | null;
+			};
+		const [expenses, income, result] = [await list(ownerAgent), await list(ownerAgent, 'INCOME'), await summary()];
+		expect(result).toMatchObject({
+			expenseMonthlyTotal: expenses.monthlyTotal,
+			incomeMonthlyTotal: income.monthlyTotal,
+			unconvertedCount: expenses.unconvertedCount + income.unconvertedCount,
+			baseCurrency: 'EUR',
+		});
+		// The three soonest of the counted bills and income; late ones are still due.
+		const due = [...expenses.series, ...income.series]
+			.filter(({hidden, status}) => !hidden && status === 'ACTIVE')
+			.sort((a, b) => a.nextExpectedDate.localeCompare(b.nextExpectedDate) || a.key.localeCompare(b.key))
+			.slice(0, 3);
+		expect(due).toHaveLength(3);
+		expect(result.upcoming.map(({key}) => key)).toEqual(due.map(({key}) => key));
+		expect(result.upcoming[0]).toEqual({
+			key: due[0].key,
+			name: due[0].name,
+			direction: 'EXPENSE',
+			nextExpectedDate: due[0].nextExpectedDate,
+			typicalAmount: due[0].typicalAmount,
+			currency: due[0].currency,
+		});
+
+		// A hidden series leaves both the total and the upcoming payments.
+		await hide(ownerAgent, due[0].key).expect(204);
+		const hidden = await summary();
+		expect(hidden.upcoming.map(({key}) => key)).not.toContain(due[0].key);
+		expect(cents(hidden.expenseMonthlyTotal)).toBeLessThan(cents(result.expenseMonthlyTotal));
+		await hide(ownerAgent, due[0].key, false).expect(204);
+
+		expect((await otherAgent.get('/recurring-series/summary').query({asOf: AS_OF}).expect(200)).body).toMatchObject(
+			{
+				upcoming: [expect.objectContaining({name: 'Example Club'})],
+			},
+		);
+		await ownerAgent.get('/recurring-series/summary').expect(400);
+	});
+
 	it('drills through to exactly the series payments', async () => {
 		const gym = (await list(ownerAgent)).series.find(
 			(entry) => entry.name === 'Example Gym' && entry.currency === 'EUR',
