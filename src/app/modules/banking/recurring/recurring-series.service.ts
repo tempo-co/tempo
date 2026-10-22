@@ -1,4 +1,4 @@
-import {ConflictException, Injectable, NotFoundException} from '@nestjs/common';
+import {ConflictException, Injectable, NotFoundException, OnApplicationBootstrap} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import {Repository} from 'typeorm';
 
@@ -18,18 +18,30 @@ import {BankTransaction} from '../bank-transaction.entity';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
 import {SQL_INTERNAL} from '../services/bank-transaction-filters';
 import {formatCents} from '../summary/bank-transaction-summary';
-import {findContinuationPairs} from './recurring-continuation';
+import {type ContinuationPair, findContinuationPairs} from './recurring-continuation';
 import {RecurringContinuationChoice} from './recurring-continuation-choice.entity';
 import {type RecurringEvidence, inferRecurringIdentities} from './recurring-payee-identity';
 import {RecurringSeriesDecision} from './recurring-series-decision.entity';
-import {
-	type DetectedRecurringSeries,
-	type RecurringCandidate,
-	detectRecurringSeries,
-} from './recurring-series-detection';
+import {type DetectedRecurringSeries, UNDATED, atDate, detectRecurringSeries} from './recurring-series-detection';
 import {isOrdinaryRetailExpense} from './recurring-series-eligibility';
+import {RecurringSnapshot} from './recurring-snapshot.entity';
 
 const REFUND = 'REFUND' satisfies BankTransactionCategory;
+/** Every payment field detection reads; the stored detection's version is a hash over all of them. */
+const CANDIDATE_COLUMNS: readonly [sql: string, alias: keyof CandidateRow][] = [
+	['"transaction"."id"', 'id'],
+	['"transaction"."bankAccountId"', 'bankAccountId'],
+	['"transaction"."bookingDate"::text', 'date'],
+	['"transaction"."merchantKey"', 'merchantKey'],
+	['"transaction"."currency"', 'currency'],
+	['ROUND(ABS("transaction"."amount") * 100)::text', 'amountCents'],
+	['ROUND(ABS("transaction"."amountInBaseCurrency") * 100)::text', 'baseAmountCents'],
+	['"transaction"."displayDescription"', 'name'],
+	['"transaction"."category"', 'category'],
+	['"transaction"."description"', 'description'],
+	['"transaction"."counterpartyName"', 'counterpartyName'],
+	['"transaction"."transactionType"', 'transactionType'],
+];
 
 /** Two successive histories of one obligation: joined automatically, or kept apart because the owner unlinked them. */
 type Continuation = {
@@ -38,6 +50,24 @@ type Continuation = {
 	newer: DetectedRecurringSeries;
 	/** The owner's unlink answers for this pair. */
 	saved: RecurringContinuationChoice[];
+};
+
+/** A detected series as stored: amounts as strings, plus whether it is ordinary retail. */
+type StoredSeries = Omit<DetectedRecurringSeries, 'monthlyEquivalent'> & {
+	monthlyEquivalent: string | null;
+	retail: boolean;
+};
+type SnapshotPayload = {
+	series: StoredSeries[];
+	/** Pairs refer to `series` by index. */
+	pairs: {older: number; newer: number; joined: StoredSeries}[];
+};
+
+/** The series and pairs of one owner, detected without a date. */
+type Detection = {
+	series: DetectedRecurringSeries[];
+	pairs: ContinuationPair[];
+	retail: Set<DetectedRecurringSeries>;
 };
 
 type CandidateRow = {
@@ -55,9 +85,12 @@ type CandidateRow = {
 	transactionType: string | null;
 };
 
-/** Detects recurring payments on read; stores only the owner's hidden series and unlinked histories. */
+/**
+ * Detects recurring payments once per change in an owner's payments and stores the result; each read dates it and
+ * applies the owner's hidden series and unlinked histories.
+ */
 @Injectable()
-export class RecurringSeriesService {
+export class RecurringSeriesService implements OnApplicationBootstrap {
 	constructor(
 		@InjectRepository(BankTransaction)
 		private readonly bankTransactionRepository: Repository<BankTransaction>,
@@ -65,7 +98,14 @@ export class RecurringSeriesService {
 		private readonly decisionRepository: Repository<RecurringSeriesDecision>,
 		@InjectRepository(RecurringContinuationChoice)
 		private readonly continuationRepository: Repository<RecurringContinuationChoice>,
+		@InjectRepository(RecurringSnapshot)
+		private readonly snapshotRepository: Repository<RecurringSnapshot>,
 	) {}
+
+	/** Stored results come from the detection rules of the running version only. */
+	async onApplicationBootstrap() {
+		await this.snapshotRepository.clear();
+	}
 
 	async list(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
@@ -180,37 +220,43 @@ export class RecurringSeriesService {
 		continuationBySeries: Map<string, Continuation>;
 		choiceIds: Set<string>;
 	}> {
-		const rowsQuery = this.bankTransactionRepository
-			.createQueryBuilder('transaction')
-			.innerJoin('transaction.bankAccount', 'bankAccount')
-			.innerJoin('bankAccount.bankConnection', 'connection')
-			.select('transaction.id', 'id')
-			.addSelect('transaction.bankAccountId', 'bankAccountId')
-			.addSelect('"transaction"."bookingDate"::text', 'date')
-			.addSelect('transaction.merchantKey', 'merchantKey')
-			.addSelect('transaction.currency', 'currency')
-			.addSelect('ROUND(ABS("transaction"."amount") * 100)::text', 'amountCents')
-			.addSelect('ROUND(ABS("transaction"."amountInBaseCurrency") * 100)::text', 'baseAmountCents')
-			.addSelect('transaction.displayDescription', 'name')
-			.addSelect('transaction.category', 'category')
-			.addSelect('transaction.description', 'description')
-			.addSelect('transaction.counterpartyName', 'counterpartyName')
-			.addSelect('transaction.transactionType', 'transactionType')
-			.where('connection.accountId = :accountId', {accountId})
-			.andWhere('transaction.merchantKey IS NOT NULL')
-			.andWhere('transaction.bookingDate IS NOT NULL')
-			.andWhere("UPPER(transaction.transactionStatus) IS DISTINCT FROM 'PDNG'")
-			.andWhere("transaction.creditDebitIndicator IN ('DBIT', 'CRDT')")
-			.andWhere('transaction.category IS DISTINCT FROM :refund', {refund: REFUND})
-			.andWhere(`NOT ${SQL_INTERNAL}`)
-			.andWhere('transaction.amount <> 0')
-			.getRawMany<CandidateRow>();
-		const [rows, decisions, choices] = await Promise.all([
-			rowsQuery,
+		const [{series, pairs, retail}, decisions, choices] = await Promise.all([
+			this.detect(accountId),
 			this.decisionRepository.find({where: {accountId}}),
 			this.continuationRepository.find({where: {accountId}, order: {createdAt: 'ASC', id: 'ASC'}}),
 		]);
+		const dated = new Map(series.map((entry) => [entry, atDate(entry, today)]));
+		const isRetail = new Set([...retail].map((entry) => dated.get(entry) ?? entry));
+		const datedPairs = pairs.map(({older, newer, joined}) => {
+			const datedJoined = atDate(joined, today);
+			if (retail.has(joined)) isRetail.add(datedJoined);
+			return {older: dated.get(older)!, newer: dated.get(newer)!, joined: datedJoined};
+		});
+		const {detected, continuations} = linkContinuations([...dated.values()], datedPairs, choices);
+		const decisionBySeries = resolveDecisions(detected, decisions);
+		return {
+			detected: detected.filter((entry) => decisionBySeries.has(entry.key) || !isRetail.has(entry)),
+			decisionBySeries,
+			continuationBySeries: continuations,
+			choiceIds: new Set(choices.map(({id}) => id)),
+		};
+	}
 
+	/** The stored detection while the owner's payments are unchanged; otherwise detects again and stores it. */
+	private async detect(accountId: Account['id']): Promise<Detection> {
+		const [{version}] = await this.candidateRows(accountId)
+			.select(
+				`md5(string_agg(concat_ws('|', ${CANDIDATE_COLUMNS.map(([sql]) => sql).join(', ')}), ',' ORDER BY "transaction"."id"))`,
+				'version',
+			)
+			.getRawMany<{version: string | null}>();
+		const inputVersion = version ?? 'none';
+		const stored = await this.snapshotRepository.findOneBy({accountId});
+		if (stored?.inputVersion === inputVersion) return fromPayload(stored.payload as SnapshotPayload);
+
+		const query = this.candidateRows(accountId).select(CANDIDATE_COLUMNS[0][0], CANDIDATE_COLUMNS[0][1]);
+		for (const [sql, alias] of CANDIDATE_COLUMNS.slice(1)) query.addSelect(sql, alias);
+		const rows = await query.getRawMany<CandidateRow>();
 		const evidence: RecurringEvidence[] = rows.map((row) => ({
 			id: row.id,
 			bankAccountId: row.bankAccountId,
@@ -227,21 +273,32 @@ export class RecurringSeriesService {
 		}));
 		const candidates = inferRecurringIdentities(evidence);
 		const candidatesById = new Map(candidates.map((row) => [row.id, row]));
-		const {detected, continuations} = linkContinuations(
-			detectRecurringSeries(candidates, today),
-			choices,
-			candidatesById,
-			today,
-		);
-		const decisionBySeries = resolveDecisions(detected, decisions);
-		return {
-			detected: detected.filter(
-				(entry) => decisionBySeries.has(entry.key) || !isOrdinaryRetailExpense(entry, candidatesById),
+		const series = detectRecurringSeries(candidates, UNDATED);
+		const pairs = findContinuationPairs(series, candidatesById, UNDATED);
+		const retail = new Set(
+			[...series, ...pairs.map(({joined}) => joined)].filter((entry) =>
+				isOrdinaryRetailExpense(entry, candidatesById),
 			),
-			decisionBySeries,
-			continuationBySeries: continuations,
-			choiceIds: new Set(choices.map(({id}) => id)),
-		};
+		);
+		const detection = {series, pairs, retail};
+		await this.snapshotRepository.upsert({accountId, inputVersion, payload: toPayload(detection)}, ['accountId']);
+		return detection;
+	}
+
+	/** The owner's payments that can be recurring: settled, booked, not internal, refunded or zero. */
+	private candidateRows(accountId: Account['id']) {
+		return this.bankTransactionRepository
+			.createQueryBuilder('transaction')
+			.innerJoin('transaction.bankAccount', 'bankAccount')
+			.innerJoin('bankAccount.bankConnection', 'connection')
+			.where('connection.accountId = :accountId', {accountId})
+			.andWhere('transaction.merchantKey IS NOT NULL')
+			.andWhere('transaction.bookingDate IS NOT NULL')
+			.andWhere("UPPER(transaction.transactionStatus) IS DISTINCT FROM 'PDNG'")
+			.andWhere("transaction.creditDebitIndicator IN ('DBIT', 'CRDT')")
+			.andWhere('transaction.category IS DISTINCT FROM :refund', {refund: REFUND})
+			.andWhere(`NOT ${SQL_INTERNAL}`)
+			.andWhere('transaction.amount <> 0');
 	}
 }
 
@@ -265,14 +322,13 @@ function isHidden(entry: DetectedRecurringSeries, decisions: readonly RecurringS
  */
 function linkContinuations(
 	series: DetectedRecurringSeries[],
+	pairs: readonly ContinuationPair[],
 	choices: readonly RecurringContinuationChoice[],
-	candidatesById: ReadonlyMap<string, RecurringCandidate>,
-	today: string,
 ): {detected: DetectedRecurringSeries[]; continuations: Map<string, Continuation>} {
 	let detected = series;
 	const continuations = new Map<string, Continuation>();
 	const separate = choices.filter(({choice}) => choice === 'SEPARATE');
-	for (const {older, newer, joined} of findContinuationPairs(series, candidatesById, today)) {
+	for (const {older, newer, joined} of pairs) {
 		const saved = separate.filter((choice) => answers(choice, older, newer));
 		const linked = saved.length === 0;
 		if (linked) detected = [...detected.filter((entry) => entry !== older && entry !== newer), joined];
@@ -372,4 +428,37 @@ function compareDescending(a: bigint | null, b: bigint | null): number {
 	if (a === null) return 1;
 	if (b === null) return -1;
 	return a > b ? -1 : 1;
+}
+
+function toPayload({series, pairs, retail}: Detection): SnapshotPayload {
+	const stored = (entry: DetectedRecurringSeries): StoredSeries => ({
+		...entry,
+		monthlyEquivalent: entry.monthlyEquivalent === null ? null : String(entry.monthlyEquivalent),
+		retail: retail.has(entry),
+	});
+	const index = new Map(series.map((entry, position) => [entry, position]));
+	return {
+		series: series.map(stored),
+		pairs: pairs.map(({older, newer, joined}) => ({
+			older: index.get(older)!,
+			newer: index.get(newer)!,
+			joined: stored(joined),
+		})),
+	};
+}
+
+function fromPayload(payload: SnapshotPayload): Detection {
+	const retail = new Set<DetectedRecurringSeries>();
+	const restored = ({retail: isRetail, monthlyEquivalent, ...entry}: StoredSeries): DetectedRecurringSeries => {
+		const series = {...entry, monthlyEquivalent: monthlyEquivalent === null ? null : BigInt(monthlyEquivalent)};
+		if (isRetail) retail.add(series);
+		return series;
+	};
+	const series = payload.series.map(restored);
+	const pairs = payload.pairs.map(({older, newer, joined}) => ({
+		older: series[older],
+		newer: series[newer],
+		joined: restored(joined),
+	}));
+	return {series, pairs, retail};
 }

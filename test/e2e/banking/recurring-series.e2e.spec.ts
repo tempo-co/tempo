@@ -9,6 +9,7 @@ import {AccountService} from '@modules/account/account.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {RecurringContinuationChoice} from '@modules/banking/recurring/recurring-continuation-choice.entity';
 import {RecurringSeriesDecision} from '@modules/banking/recurring/recurring-series-decision.entity';
+import * as detection from '@modules/banking/recurring/recurring-series-detection';
 import {seriesKey} from '@modules/banking/recurring/recurring-series-detection';
 
 import {
@@ -1623,6 +1624,46 @@ describe('RecurringSeries', () => {
 			.get('/bank-transactions')
 			.query({filter: {recurringSeriesKey: club.key}})
 			.expect(404);
+	});
+
+	it('detects once per change in the payments it reads, not on every read', async () => {
+		const detect = jest.spyOn(detection, 'detectRecurringSeries');
+		try {
+			const before = await list(ownerAgent);
+			detect.mockClear();
+			expect(await list(ownerAgent)).toEqual(before);
+			expect(await list(ownerAgent, 'INCOME')).toEqual(expect.objectContaining({series: expect.any(Array)}));
+			expect(detect).not.toHaveBeenCalled();
+
+			// Hiding is the owner's answer, not a change in payments: no new detection.
+			const [gym] = byName(before.series, 'Example Gym');
+			await hide(ownerAgent, gym.key).expect(204);
+			expect((await list(ownerAgent)).series.find(({key}) => key === gym.key)?.hidden).toBe(true);
+			await hide(ownerAgent, gym.key, false).expect(204);
+			expect(detect).not.toHaveBeenCalled();
+
+			// A new payment is detected on the next read.
+			const extra = await fixtures.createTransactions(
+				ownerBankAccount,
+				monthly('16', '-7.00', 'Example Cache Bill', {category: 'SUBSCRIPTIONS'}),
+			);
+			expect(byName((await list(ownerAgent)).series, 'Example Cache Bill')).toHaveLength(1);
+			expect(detect).toHaveBeenCalled();
+
+			// So is a category change that skips the row's update timestamp.
+			detect.mockClear();
+			await fixtures.transactions
+				.createQueryBuilder()
+				.update()
+				.set({category: 'FOOD_AND_DRINK', updatedAt: () => '"updatedAt"'})
+				.whereInIds(extra.map(({id}) => id))
+				.execute();
+			expect(byName((await list(ownerAgent)).series, 'Example Cache Bill')).toEqual([]);
+			expect(detect).toHaveBeenCalled();
+			await fixtures.transactions.delete(extra.map(({id}) => id));
+		} finally {
+			detect.mockRestore();
+		}
 	});
 
 	it('drills through to exactly the series payments', async () => {

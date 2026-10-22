@@ -1,4 +1,4 @@
-import {type RecurringCandidate, detectRecurringSeries} from './recurring-series-detection';
+import {type RecurringCandidate, UNDATED, atDate, detectRecurringSeries} from './recurring-series-detection';
 
 const TODAY = '2026-10-17';
 let nextId = 0;
@@ -34,6 +34,23 @@ function isoMonth(year: number, month: number, day: number): string {
 function addMonthDays(date: string): string {
 	return new Date(Date.parse(date) + 3 * 86_400_000).toISOString().slice(0, 10);
 }
+
+describe('atDate', () => {
+	it('dates series detected without a date exactly as detecting on that date would', () => {
+		const rows = [
+			...monthly(8, MAY_TO_OCT.slice(0, 5), '10.00'),
+			payment('2026-10-08', '11.50'),
+			...monthly(14, MAY_TO_OCT.slice(0, 5), '45.00', {merchantKey: 'EXPENSE:example phone'}),
+			...['2024-09-12', '2025-09-12', '2026-09-14'].map((date) =>
+				payment(date, '120.00', {merchantKey: 'EXPENSE:example insurer', category: 'INSURANCE'}),
+			),
+		];
+		const undated = detectRecurringSeries(rows, UNDATED);
+		for (const date of ['2026-10-01', '2026-10-15', '2026-10-20', '2026-11-12', '2026-11-20', '2027-12-01']) {
+			expect(undated.map((entry) => atDate(entry, date))).toEqual(detectRecurringSeries(rows, date));
+		}
+	});
+});
 
 describe('detectRecurringSeries', () => {
 	it('current naming period: prices every interleaved linked name', () => {

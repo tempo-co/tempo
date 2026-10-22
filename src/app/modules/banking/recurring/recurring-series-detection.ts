@@ -145,6 +145,19 @@ const MAX_MIDDLE_SPREAD_DAYS = GRACE_DAYS;
 const PERSON_TRANSFER_CATEGORIES: ReadonlySet<string> = new Set(['TRANSFER_OUT', 'TRANSFER_IN']);
 
 /**
+ * A date before any payment. Detecting on it gives every series as if still active; `atDate` then dates them, so the
+ * grouping can be stored and dated on each read.
+ */
+export const UNDATED = '0000-01-01';
+
+/** Status, lateness and the price label of a series detected on `UNDATED`, as on `today`. */
+export function atDate(entry: DetectedRecurringSeries, today: string): DetectedRecurringSeries {
+	const status: RecurringSeriesStatus = today > addDays(entry.nextExpectedDate, GRACE_DAYS) ? 'ENDED' : 'ACTIVE';
+	const flags: RecurringSeriesFlag[] = status === 'ACTIVE' && today > entry.nextExpectedDate ? ['LATE'] : [];
+	return {...entry, status, flags, priceChange: status === 'ACTIVE' ? entry.priceChange : null};
+}
+
+/**
  * Finds recurring payments in one owner's history. Deterministic and side-effect free: the same rows and `today`
  * always give the same series, so the result can be computed on every read.
  */

@@ -28,6 +28,7 @@ import {BankTransactionCategorizationModule} from './categorization/bank-transac
 import {RecurringContinuationChoice} from './recurring/recurring-continuation-choice.entity';
 import {RecurringSeriesDecision} from './recurring/recurring-series-decision.entity';
 import {RecurringSeriesService} from './recurring/recurring-series.service';
+import {RecurringSnapshot} from './recurring/recurring-snapshot.entity';
 import {BankTransactionAmountConversionProcessor} from './services/bank-transaction-amount-conversion.processor';
 import {BankTransactionAmountConversionQueueService} from './services/bank-transaction-amount-conversion.queue.service';
 import {BankTransactionAmountConversionService} from './services/bank-transaction-amount-conversion.service';
@@ -56,6 +57,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 			BankTransactionFxRate,
 			RecurringSeriesDecision,
 			RecurringContinuationChoice,
+			RecurringSnapshot,
 		]),
 		BullModule.registerQueue({name: BANK_CONNECTION_SYNC_QUEUE}),
 		BullModule.registerQueue({name: BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE}),
