@@ -894,12 +894,12 @@ function latestPricePeriod(
 		: null;
 }
 
-/** Whether two amounts are close enough to be one fixed price. */
 /** Whether `amount` is close enough to `reference` to be the same price. */
 export function nearAmount(amount: bigint, reference: bigint): boolean {
 	return withinAmountTolerance(abs(amount - reference), reference);
 }
 
+/** Whether two amounts this far apart are close enough to be one fixed price. */
 export function withinAmountTolerance(distance: bigint, reference: bigint): boolean {
 	const percentTolerance = (reference * AMOUNT_TOLERANCE_PERCENT) / 100n;
 	return distance <= (percentTolerance > AMOUNT_TOLERANCE_CENTS ? percentTolerance : AMOUNT_TOLERANCE_CENTS);

@@ -1728,14 +1728,16 @@ describe('RecurringSeries', () => {
 					nextExpectedDate: string;
 					typicalAmount: string;
 				}[];
-				unconvertedCount: number;
+				expenseUnconvertedCount: number;
+				incomeUnconvertedCount: number;
 				baseCurrency: string | null;
 			};
 		const [expenses, income, result] = [await list(ownerAgent), await list(ownerAgent, 'INCOME'), await summary()];
 		expect(result).toMatchObject({
 			expenseMonthlyTotal: expenses.monthlyTotal,
 			incomeMonthlyTotal: income.monthlyTotal,
-			unconvertedCount: expenses.unconvertedCount + income.unconvertedCount,
+			expenseUnconvertedCount: expenses.unconvertedCount,
+			incomeUnconvertedCount: income.unconvertedCount,
 			baseCurrency: 'EUR',
 		});
 		// The three soonest of the counted bills and income; late ones are still due.
@@ -1760,6 +1762,17 @@ describe('RecurringSeries', () => {
 		expect(hidden.upcoming.map(({key}) => key)).not.toContain(due[0].key);
 		expect(parseCents(hidden.expenseMonthlyTotal)).toBeLessThan(parseCents(result.expenseMonthlyTotal));
 		await hide(ownerAgent, due[0].key, false).expect(204);
+
+		// Income not converted yet is left out of the income total only, never counted against the bills.
+		const unconverted = await fixtures.createTransactions(
+			ownerBankAccount,
+			monthly('19', '900.00', 'Example Foreign Payroll', {currency: 'USD', amountInBaseCurrency: null}),
+		);
+		expect(await summary()).toMatchObject({
+			expenseUnconvertedCount: result.expenseUnconvertedCount,
+			incomeUnconvertedCount: result.incomeUnconvertedCount + 1,
+		});
+		await fixtures.transactions.delete(unconverted.map(({id}) => id));
 
 		expect((await otherAgent.get('/recurring-series/summary').query({asOf: AS_OF}).expect(200)).body).toMatchObject(
 			{

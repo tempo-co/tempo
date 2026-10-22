@@ -150,7 +150,8 @@ export class RecurringSeriesService implements OnApplicationBootstrap {
 			expenseMonthlyTotal: expenses.monthlyTotal,
 			incomeMonthlyTotal: income.monthlyTotal,
 			upcoming,
-			unconvertedCount: expenses.unconvertedCount + income.unconvertedCount,
+			expenseUnconvertedCount: expenses.unconvertedCount,
+			incomeUnconvertedCount: income.unconvertedCount,
 			baseCurrency,
 		};
 	}

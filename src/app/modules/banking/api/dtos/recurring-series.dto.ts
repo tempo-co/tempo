@@ -109,6 +109,8 @@ export class RecurringSeriesSummaryResponseDto {
 	incomeMonthlyTotal: string;
 	/** The three soonest next payments of shown active series, bills and income together. */
 	upcoming: RecurringUpcomingPaymentDto[];
-	unconvertedCount: number;
+	/** Each list's shown active series left out of its total because a payment is not converted yet. */
+	expenseUnconvertedCount: number;
+	incomeUnconvertedCount: number;
 	baseCurrency: string | null;
 }
