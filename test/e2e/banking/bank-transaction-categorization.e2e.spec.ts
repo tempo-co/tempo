@@ -1,7 +1,7 @@
 import {getQueueToken} from '@nestjs/bullmq';
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import {Queue} from 'bullmq';
+import {JobType, Queue} from 'bullmq';
 import {Server} from 'node:net';
 import TestAgent from 'supertest/lib/agent';
 import {Repository} from 'typeorm';
@@ -52,6 +52,7 @@ const WEB_CONFIDENCE = 0.812;
 let shouldFail = false;
 let routesUnavailable = false;
 let searchUnavailable = false;
+let retryableFailure = false;
 
 const categorizeSpy = jest
 	.spyOn(ClaudeBankTransactionCategorizationProvider.prototype, 'categorize')
@@ -62,6 +63,12 @@ const categorizeSpy = jest
 			if (routesUnavailable) throw new BankTransactionCategorizationUnavailableError();
 			if (shouldFail) {
 				throw new BankTransactionCategorizationProviderError('synthetic provider failure', false);
+			}
+			if (retryableFailure) {
+				throw new BankTransactionCategorizationProviderError(
+					'Claude categorization request failed (503).',
+					true,
+				);
 			}
 			return transactions.map(({correlationId}) => ({
 				correlationId,
@@ -131,6 +138,7 @@ describe('Bank transaction categorization integration', () => {
 		shouldFail = false;
 		routesUnavailable = false;
 		searchUnavailable = false;
+		retryableFailure = false;
 		categorizeSpy.mockClear();
 		categorizeWithWebSearchSpy.mockClear();
 	});
@@ -479,7 +487,7 @@ describe('Bank transaction categorization integration', () => {
 		});
 	});
 
-	it('keeps a real worker outage pending and succeeds after pending reconciliation', async () => {
+	it('keeps a real worker outage pending and retries the job a minute later', async () => {
 		routesUnavailable = true;
 		const categorizationService = app.get(BankTransactionCategorizationService);
 		const queue = app.get<Queue>(getQueueToken(BANK_TRANSACTION_CATEGORIZATION_QUEUE));
@@ -497,17 +505,26 @@ describe('Bank transaction categorization integration', () => {
 			categoryUpdatedAt: null,
 			categoryLastError: null,
 		});
-		// Exhaust this job once, then exercise the same PENDING-only reconciliation used hourly.
-		const job = await queue.add(
-			CATEGORIZE_BANK_TRANSACTIONS_JOB,
-			{transactionIds: [CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID]},
-			{jobId: 'categorization-unavailable-e2e', attempts: 1, removeOnComplete: false, removeOnFail: false},
-		);
-		try {
-			await waitFor(
-				() => job.getState(),
-				(state) => state === 'failed',
+		const rowJobs = async (states: JobType[]) =>
+			(await queue.getJobs(states)).filter(
+				(job) =>
+					job.name === CATEGORIZE_BANK_TRANSACTIONS_JOB &&
+					(job.data as {transactionIds: string[]}).transactionIds.includes(
+						CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID,
+					),
 			);
+		const modelCallsForRow = () =>
+			categorizeSpy.mock.calls.filter(([inputs]) =>
+				inputs.some(({correlationId}) => correlationId === CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID),
+			).length;
+		try {
+			await categorizationService.enqueueForTransactions([CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID]);
+			const [retry] = await waitFor(
+				() => rowJobs(['delayed']),
+				(jobs) => jobs.length === 1,
+			);
+			expect(retry.delay).toBe(60_000);
+			expect(retry.attemptsMade).toBe(1);
 			const unavailable = await bankTransactionRepository.findOneByOrFail({
 				id: CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID,
 			});
@@ -517,15 +534,24 @@ describe('Bank transaction categorization integration', () => {
 				categorySource: null,
 				categoryLastError: 'Claude categorization is temporarily unavailable.',
 			});
-			expect(categorizeSpy).toHaveBeenCalledTimes(1);
+			expect(modelCallsForRow()).toBe(1);
 			expect(categorizeWithWebSearchSpy).not.toHaveBeenCalled();
 			const pendingResponse = await verifiedAgent
 				.get(`/bank-transactions/${CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID}`)
 				.expect(200);
 			expect(pendingResponse.body).toMatchObject({category: null, categoryStatus: 'PENDING'});
 
-			routesUnavailable = false;
+			// The hourly sweep can run while the job waits; it may queue its own batch, which waits too.
 			await categorizationService.reconcilePendingTransactions({includeFailed: false});
+			await waitFor(
+				() => rowJobs(['waiting', 'active', 'prioritized']),
+				(jobs) => jobs.length === 0,
+			);
+
+			routesUnavailable = false;
+			categorizeSpy.mockClear();
+			// Stands in for the minute passing.
+			await Promise.all((await rowJobs(['delayed'])).map((job) => job.promote()));
 			const recovered = await waitFor(
 				() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID}),
 				(row) => row.categoryStatus === 'COMPLETED',
@@ -537,9 +563,61 @@ describe('Bank transaction categorization integration', () => {
 				categoryModel: 'test-model',
 				categoryLastError: null,
 			});
+			await waitFor(
+				() => rowJobs(['delayed', 'waiting', 'active', 'prioritized']),
+				(jobs) => jobs.length === 0,
+			);
+			expect(modelCallsForRow()).toBe(1);
 		} finally {
 			routesUnavailable = false;
-			await job.remove();
+			// The sweep's own batches for other pending rows would otherwise run during later tests.
+			const leftover = await queue.getJobs(['delayed']);
+			await Promise.all(
+				leftover.filter((job) => job.name === CATEGORIZE_BANK_TRANSACTIONS_JOB).map((job) => job.remove()),
+			);
+		}
+	});
+
+	it('retries an ordinary model failure within seconds, then leaves the row failed', async () => {
+		retryableFailure = true;
+		const queue = app.get<Queue>(getQueueToken(BANK_TRANSACTION_CATEGORIZATION_QUEUE));
+		try {
+			await bankTransactionRepository.update(CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID, {
+				category: null,
+				categoryStatus: 'PENDING',
+				categorySource: null,
+				categoryConfidence: null,
+				categoryInputHash: null,
+				categoryAppliedInputHash: null,
+				categoryProvider: null,
+				categoryModel: null,
+				categoryPromptVersion: null,
+				categoryUpdatedAt: null,
+				categoryLastError: null,
+			});
+			await app
+				.get(BankTransactionCategorizationService)
+				.enqueueForTransactions([CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID]);
+
+			await waitFor(
+				async () => categorizeSpy.mock.calls.length,
+				(calls) => calls === 3,
+			);
+			await waitFor(
+				async () => (await queue.getJobs(['delayed', 'waiting', 'active'])).length,
+				(count) => count === 0,
+			);
+			expect(categorizeSpy).toHaveBeenCalledTimes(3);
+			const persisted = await bankTransactionRepository.findOneByOrFail({
+				id: CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID,
+			});
+			expect(persisted).toMatchObject({
+				category: null,
+				categoryStatus: 'FAILED',
+				categoryLastError: 'Claude categorization request failed (503).',
+			});
+		} finally {
+			retryableFailure = false;
 		}
 	});
 
