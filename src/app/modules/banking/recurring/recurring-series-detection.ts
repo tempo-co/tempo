@@ -161,7 +161,8 @@ export function atDate(entry: DetectedRecurringSeries, today: string): DetectedR
 
 /**
  * Finds recurring payments in one owner's history. Deterministic and side-effect free: the same rows and `today`
- * always give the same series, so the result can be computed on every read.
+ * always give the same series. Results are stored per owner, so a change to these rules must bump
+ * `RECURRING_DETECTION_RULES_VERSION` in the recurring series service.
  */
 export function detectRecurringSeries(
 	candidates: readonly RecurringCandidate[],

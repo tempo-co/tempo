@@ -1,4 +1,4 @@
-import {INestApplication, OnApplicationBootstrap} from '@nestjs/common';
+import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
 import TestAgent from 'supertest/lib/agent';
 import {ArrayContains, In, Repository} from 'typeorm';
@@ -7,6 +7,7 @@ import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
+import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {RecurringContinuationUnlink} from '@modules/banking/recurring/recurring-continuation-unlink.entity';
 import * as detection from '@modules/banking/recurring/recurring-series-detection';
 import {seriesKey} from '@modules/banking/recurring/recurring-series-detection';
@@ -1612,15 +1613,22 @@ describe('RecurringSeries', () => {
 	});
 
 	it('keeps stored detections across restarts and detects again when the detection rules change', async () => {
-		const service: Partial<OnApplicationBootstrap> = app.get(RecurringSeriesService);
 		const snapshots: Repository<RecurringSnapshot> = app.get(getRepositoryToken(RecurringSnapshot));
+		// A restarted app is a new service on the same database, with nothing kept in memory.
+		const restarted = new RecurringSeriesService(
+			app.get(getRepositoryToken(BankTransaction)),
+			app.get(getRepositoryToken(RecurringSeriesHide)),
+			app.get(getRepositoryToken(RecurringContinuationUnlink)),
+			snapshots,
+		);
+		const readRestarted = async () =>
+			JSON.parse(JSON.stringify(await restarted.list({id: owner.id, baseCurrency: 'EUR'}, AS_OF))) as unknown;
 		const detect = jest.spyOn(detection, 'detectRecurringSeries');
 		try {
 			const before = await list(ownerAgent);
 			detect.mockClear();
 			// Starting the app again keeps what was stored.
-			await service.onApplicationBootstrap?.();
-			expect(await list(ownerAgent)).toEqual(before);
+			expect(await readRestarted()).toEqual(await lists(ownerAgent));
 			expect(detect).not.toHaveBeenCalled();
 
 			// A detection stored under other rules is not reused.

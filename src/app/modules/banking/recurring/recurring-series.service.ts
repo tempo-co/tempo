@@ -29,7 +29,11 @@ import {RecurringSeriesHide} from './recurring-series-hide.entity';
 import {RecurringSnapshot} from './recurring-snapshot.entity';
 
 const REFUND = 'REFUND' satisfies BankTransactionCategory;
-/** Bump whenever a change makes detection or its stored payload differ for the same payments. */
+/**
+ * Bump whenever a change makes detection or its stored payload differ for the same payments: detection rules in
+ * `recurring-series-detection`, `recurring-payee-identity`, `recurring-continuation` or `recurring-series-eligibility`,
+ * or the payload shape in `toPayload`. Stored detections from other rules are not reused.
+ */
 export const RECURRING_DETECTION_RULES_VERSION = '1';
 const UPCOMING_COUNT = 3;
 /** Every payment field detection reads; the stored detection's version is a hash over all of them. */
