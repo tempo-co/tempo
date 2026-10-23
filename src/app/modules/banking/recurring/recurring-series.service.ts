@@ -437,14 +437,18 @@ function toResponse(
 	};
 }
 
-/** A joined series shows the earlier history it includes. */
+/**
+ * A joined series shows the earlier history it includes. After an unlink the newer history shows it too, so the owner
+ * can link them again; the older one shows nothing.
+ */
 function shownContinuation(
 	entry: DetectedRecurringSeries,
 	continuation: Continuation | undefined,
 ): RecurringContinuationDto | null {
-	if (!continuation?.linked || entry === continuation.older || entry === continuation.newer) return null;
-	const {older} = continuation;
-	return {previousName: older.name, previousFirstDate: older.firstDate, previousLastDate: older.lastDate};
+	if (!continuation) return null;
+	const {linked, older, newer} = continuation;
+	if (linked ? entry === older || entry === newer : entry !== newer) return null;
+	return {previousName: older.name, previousFirstDate: older.firstDate, previousLastDate: older.lastDate, linked};
 }
 
 /**

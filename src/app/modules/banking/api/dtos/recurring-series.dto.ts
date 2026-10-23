@@ -35,11 +35,13 @@ export class RecurringContinuationUpdateDto {
 	linked: boolean;
 }
 
-/** The earlier history a series was joined with because it continues it. */
+/** The earlier history a series continues: joined with it, or kept apart because the owner unlinked them. */
 export class RecurringContinuationDto {
 	previousName: string;
 	previousFirstDate: string;
 	previousLastDate: string;
+	/** `false` once unlinked; linking again joins them. */
+	linked: boolean;
 }
 
 /** A fixed price's recent change; `amount` is signed, `since` is the first payment at the new price. */
@@ -73,7 +75,7 @@ export class RecurringSeriesDto {
 	priceChange: RecurringPriceChangeDto | null;
 	/** The owner marked it as not recurring; it is left out of totals. */
 	hidden: boolean;
-	/** Set while the series includes an earlier history it continues. */
+	/** Set while the series continues an earlier history, linked or unlinked. */
 	continuation: RecurringContinuationDto | null;
 }
 

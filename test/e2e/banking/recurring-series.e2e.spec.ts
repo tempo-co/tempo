@@ -1380,7 +1380,12 @@ describe('RecurringSeries', () => {
 	});
 
 	describe('automatic continuations', () => {
-		type Continuation = {previousName: string; previousFirstDate: string; previousLastDate: string} | null;
+		type Continuation = {
+			previousName: string;
+			previousFirstDate: string;
+			previousLastDate: string;
+			linked: boolean;
+		} | null;
 		type LinkSeries = SeriesBody & {continuation: Continuation; firstDate: string; lastDate: string};
 
 		/** A plan paid under a company name, then from another account under its branch name. */
@@ -1448,6 +1453,7 @@ describe('RecurringSeries', () => {
 							previousName: 'Example Motion Ltd',
 							previousFirstDate: '2026-01-11',
 							previousLastDate: '2026-03-11',
+							linked: true,
 						},
 					}),
 				]);
@@ -1463,7 +1469,17 @@ describe('RecurringSeries', () => {
 				const [current] = byName(unlinked.series, 'Example Motion Exampletown');
 				expect(unlinked.series).toHaveLength(2);
 				expect(previous).toMatchObject({status: 'ENDED', transactionCount: 3, continuation: null});
-				expect(current).toMatchObject({status: 'ACTIVE', transactionCount: 4, continuation: null});
+				// The newer history keeps the pair, so it can be linked again after the undo toast is gone.
+				expect(current).toMatchObject({
+					status: 'ACTIVE',
+					transactionCount: 4,
+					continuation: {
+						previousName: 'Example Motion Ltd',
+						previousFirstDate: '2026-01-11',
+						previousLastDate: '2026-03-11',
+						linked: false,
+					},
+				});
 				expect(unlinked.monthlyTotal).toBe('25.00');
 				expect(await drill(previous.key)).toEqual(sorted(older));
 				expect(await drill(current.key)).toEqual(sorted(newer));
