@@ -21,11 +21,11 @@ The build generates category values and descriptions from `src/app/modules/banki
 
 Use a verified Tempo browser session to manage tokens:
 
-- `POST /api/personal-access-tokens` with `{"name":"Local MCP"}` creates a read-scoped token and returns metadata plus the token once.
+- `POST /api/personal-access-tokens` with `{"name":"Local MCP","expiresInDays":90}` creates a read-scoped token and returns metadata plus the token once. `expiresInDays` is 30, 90 or 365, or `null` for a token that never expires; it defaults to 90.
 - `GET /api/personal-access-tokens` returns metadata without secrets.
 - `DELETE /api/personal-access-tokens/:id` revokes a token and returns 204.
 
-Token management requires a session, not a bearer token. Creation and revocation also require the configured web Origin. Tokens have no expiry. Revoking all other sessions also revokes every personal token, even when there are no other sessions. Password changes and resets use that same revocation path; deleting an account deletes its tokens. Ordinary logout and individual-session revocation leave tokens unchanged. Keep the returned token in the client's secret store or protected process environment, never in Git, a prompt, a command argument or a shared client configuration. Revoke unused tokens and restart clients after replacing a token.
+Token management requires a session, not a bearer token. Creation and revocation also require the configured web Origin. Expired tokens are refused with 401 and stay listed until revoked. Revoking all other sessions also revokes every personal token, even when there are no other sessions. Password changes and resets use that same revocation path; deleting an account deletes its tokens. Ordinary logout and individual-session revocation leave tokens unchanged. Keep the returned token in the client's secret store or protected process environment, never in Git, a prompt, a command argument or a shared client configuration. Revoke unused tokens and restart clients after replacing a token.
 
 | Environment | Contract |
 | --- | --- |
