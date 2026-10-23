@@ -234,6 +234,8 @@
   }
 
   .dark {
+    /* Native controls and scrollbars follow the theme instead of staying light. */
+    color-scheme: dark;
     /* dark: Night canvas, warm paper text, Clay-on-dark accents */
     --background: 252 10.2% 9.6%;   /* Night #17161B */
     --foreground: 38.6 31.8% 91.4%;

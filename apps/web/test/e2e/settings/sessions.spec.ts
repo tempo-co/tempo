@@ -64,6 +64,9 @@ test.describe.serial('Account Settings: Sessions', () => {
     await expect(otherSessionsSection.locator('[data-current-session="true"]')).toHaveCount(0);
 
     await securitySettingsPage.revokeAllButton.click();
+    await expect(
+      page1.getByRole('dialog').getByText('This also revokes all access tokens.'),
+    ).toBeVisible();
     await securitySettingsPage.revokeAllButtonConfirm.click();
 
     await expect(securitySettingsPage.currentSessionCard).toBeVisible();

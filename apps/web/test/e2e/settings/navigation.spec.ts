@@ -1,8 +1,23 @@
-import {expect, test} from '@playwright/test';
-import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
 import {boxOf, expectNoHorizontalOverflow} from 'test/utils/layout';
 
-test.use({storageState: VERIFIED_USER_AUTH_FILE});
+import {expect, test} from '../../fixtures';
+
+test.use({storageState: {cookies: [], origins: []}});
+
+test.beforeEach(async ({page}) => {
+  await page.route('**/accounts/me', (route) =>
+    route.fulfill({
+      json: {
+        id: '00000000-0000-4000-8000-000000000001',
+        name: 'Alex Example',
+        email: 'alex@example.com',
+        isEmailVerified: true,
+      },
+    }),
+  );
+  await page.route('**/auth/sessions', (route) => route.fulfill({json: []}));
+  await page.route('**/personal-access-tokens', (route) => route.fulfill({json: []}));
+});
 
 test.describe('Settings navigation', () => {
   test('keeps the section navigation aligned with the active page', async ({page}) => {
@@ -10,6 +25,7 @@ test.describe('Settings navigation', () => {
       {path: 'account', label: 'Account'},
       {path: 'security', label: 'Security'},
       {path: 'appearance', label: 'Appearance'},
+      {path: 'integrations', label: 'Integrations'},
     ];
 
     for (const route of routes) {
@@ -38,14 +54,14 @@ test.describe('Settings navigation', () => {
         range.selectNodeContents(link);
         return range.getBoundingClientRect().x;
       }),
-      boxOf(sections.getByRole('link', {name: 'Appearance'})),
+      boxOf(sections.getByRole('link', {name: 'Integrations'})),
     ]);
     expect(lastTab.x + lastTab.width).toBeLessThanOrEqual(nav.x + nav.width);
     expect(Math.abs(firstLabel - title.x)).toBeLessThan(1);
     await expectNoHorizontalOverflow(page);
 
-    await sections.getByRole('link', {name: 'Appearance'}).click();
-    await expect(page).toHaveURL(/\/settings\/appearance$/);
-    await expect(sections.locator('a[aria-current="page"]')).toHaveText('Appearance');
+    await sections.getByRole('link', {name: 'Integrations'}).click();
+    await expect(page).toHaveURL(/\/settings\/integrations$/);
+    await expect(sections.locator('a[aria-current="page"]')).toHaveText('Integrations');
   });
 });

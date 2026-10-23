@@ -344,7 +344,8 @@ Transactions, Settings) keeps every destination one tap away: icon over label, a
 clay with a top rule and heavier label, padded for the safe area. Toasts sit above it.
 
 Settings is one page titled "Settings" with a row of text section tabs (Account, Security,
-Appearance) on a bottom rule inside the `40rem` column, at every width. The active section
+Appearance, Integrations) on a bottom rule inside the `40rem` column, at every width. Compact
+spacing and labels keep all four tabs visible on narrow phones. The active section
 gets the same clay underline as the header; no icons, no side column, no segmented control.
 Under the tabs, settings are grouped rows: a small group heading, then one bordered list of
 `divide-y` rows (label, muted value, small outline action of a shared minimum width), the

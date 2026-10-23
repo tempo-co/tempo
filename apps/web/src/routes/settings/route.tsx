@@ -15,6 +15,7 @@ const sections = [
   {label: 'Account', route: '/settings/account'},
   {label: 'Security', route: '/settings/security'},
   {label: 'Appearance', route: '/settings/appearance'},
+  {label: 'Integrations', route: '/settings/integrations'},
 ] as const;
 
 function SettingsIndex() {
@@ -26,8 +27,8 @@ function SettingsIndex() {
         <h1 className='text-page-title'>Settings</h1>
         {/* Same underline language as the header nav, one level down. */}
         <nav aria-label='Settings sections' className='mt-4 border-b'>
-          {/* -ml-3 lines the first label up with the page title. */}
-          <ul className='-mb-px -ml-3 flex'>
+          {/* Match the link inset so the first label aligns with the page title. */}
+          <ul className='-mb-px -ml-1.5 flex sm:-ml-3'>
             {sections.map((section) => {
               const isActive = matchRoute({to: section.route, fuzzy: true}) !== false;
               return (
@@ -36,9 +37,9 @@ function SettingsIndex() {
                     to={section.route}
                     aria-current={isActive ? 'page' : undefined}
                     className={cn(
-                      'relative flex h-11 items-center px-3 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+                      'relative flex h-11 items-center px-1.5 text-xs whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:px-3 sm:text-sm',
                       isActive &&
-                        'font-medium text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-primary',
+                        'font-medium text-foreground after:absolute after:inset-x-1.5 after:bottom-0 after:h-0.5 after:bg-primary sm:after:inset-x-3',
                     )}
                   >
                     {section.label}

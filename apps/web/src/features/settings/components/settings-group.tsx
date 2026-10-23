@@ -4,20 +4,23 @@ type SettingsGroupProps = {
   id: string;
   title: string;
   description?: ReactNode;
+  /** A group-level action, such as creating an item, beside the heading. */
+  action?: ReactNode;
   children: ReactNode;
 };
 
 /** A titled settings group: a small heading, and optional one-line context. */
-export function SettingsGroup({id, title, description, children}: SettingsGroupProps) {
+export function SettingsGroup({id, title, description, action, children}: SettingsGroupProps) {
   return (
     <section aria-labelledby={id}>
-      <div className='mb-3 flex items-end justify-between gap-3'>
-        <div className='min-w-0'>
-          <h2 id={id} className='text-card-title'>
+      <div className='mb-3'>
+        <div className='flex min-h-9 items-center justify-between gap-3'>
+          <h2 id={id} className='min-w-0 text-card-title'>
             {title}
           </h2>
-          {description && <p className='mt-1 text-sm text-muted-foreground'>{description}</p>}
+          {action && <div className='shrink-0'>{action}</div>}
         </div>
+        {description && <p className='mt-1 text-sm text-muted-foreground'>{description}</p>}
       </div>
       {children}
     </section>

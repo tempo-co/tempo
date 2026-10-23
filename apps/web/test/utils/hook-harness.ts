@@ -47,11 +47,11 @@ export function createHookHarness(stubs: Record<string, unknown>) {
   }
 
   /** Renders the hook once inside the client's provider and returns its result. */
-  function renderHook<T>(path: string, exportName: string): T {
+  function renderHook<T>(path: string, exportName: string, ...args: unknown[]): T {
     let result: T;
-    const useHook = load(path)[exportName] as () => T;
+    const useHook = load(path)[exportName] as (...args: unknown[]) => T;
     function Harness() {
-      result = useHook();
+      result = useHook(...args);
       return null;
     }
     renderToString(createElement(QueryClientProvider, {client}, createElement(Harness)));
