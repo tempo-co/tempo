@@ -5,6 +5,7 @@ import {
 	chooseMerchantLogos,
 	encodeMerchantLogo,
 	iconCandidates,
+	isPlatformDefaultIcon,
 	parseHomepage,
 	parseManifestIcons,
 	siteMatchesBrand,
@@ -110,17 +111,34 @@ describe('parseHomepage', () => {
 			'https://cdn.example.test/site.webmanifest',
 		);
 		expect(manifestIcons).toEqual([{url: 'https://cdn.example.test/android-512.png', size: 512}]);
+		// The page's own icons first, then the manifest's, then the conventional paths.
 		expect(iconCandidates(homepage, 'https://shop.example.test/', manifestIcons)).toEqual([
 			'https://cdn.example.test/icon.svg',
-			'https://cdn.example.test/android-512.png',
 			'https://cdn.example.test/assets/icon-192.png',
 			'https://cdn.example.test/assets/touch.png',
 			'https://cdn.example.test/favicon-32.png',
 			'https://shop.example.test/legacy.ico',
+			'https://cdn.example.test/android-512.png',
+			'https://shop.example.test/favicon.svg',
 			'https://shop.example.test/apple-touch-icon.png',
+			'https://shop.example.test/apple-touch-icon-precomposed.png',
+			'https://shop.example.test/favicon.ico',
+		]);
+		// A homepage that refused us still leaves the conventional paths to try.
+		expect(iconCandidates(null, 'https://shop.example.test/')).toEqual([
+			'https://shop.example.test/favicon.svg',
+			'https://shop.example.test/apple-touch-icon.png',
+			'https://shop.example.test/apple-touch-icon-precomposed.png',
 			'https://shop.example.test/favicon.ico',
 		]);
 		expect(parseManifestIcons('not json', 'https://cdn.example.test/m.json')).toEqual([]);
+	});
+
+	it.each([
+		['https://shop.example.test/wp-includes/images/w-logo-blue.png', true],
+		['https://shop.example.test/wp-content/uploads/logo.png', false],
+	])('treats %s as a platform default icon: %s', (url, expected) => {
+		expect(isPlatformDefaultIcon(url)).toBe(expected);
 	});
 
 	it('recognizes a parked domain page', () => {

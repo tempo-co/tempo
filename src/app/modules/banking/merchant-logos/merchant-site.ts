@@ -20,7 +20,7 @@ export const MERCHANT_LOGO_SIZE = 128;
 const MIN_ICON_SIZE = 32;
 const MAX_INPUT_PIXELS = 4096 * 4096;
 const MAX_SITE_NAME_LENGTH = 200;
-const MAX_ICON_CANDIDATES = 8;
+const MAX_ICON_CANDIDATES = 10;
 /** Assumed sizes for icons that declare none: an apple-touch-icon is made for home screens, a favicon for tabs. */
 const APPLE_TOUCH_ICON_SIZE = 180;
 const FAVICON_SIZE = 32;
@@ -122,24 +122,33 @@ export function parseManifestIcons(json: string, manifestUrl: string): SiteIcon[
 }
 
 /**
- * Icons to try: declared and manifest icons, largest first (vector first, equal sizes in page order), then the
- * conventional paths most sites serve. Plain-http icon links are tried over HTTPS.
+ * Icons to try: the page's own icons, then its web app manifest's, each largest first (vector first, equal sizes in
+ * page order), then the conventional paths most sites serve, which also work when the homepage refuses us. Manifest
+ * icons come after the page's because an app's install icon is more often a framework placeholder than the brand
+ * mark. Plain-http icon links are tried over HTTPS.
  */
 export function iconCandidates(
 	homepage: Homepage | null,
 	origin: string,
 	manifestIcons: readonly SiteIcon[] = [],
 ): string[] {
-	const declared = [...(homepage?.icons ?? []), ...manifestIcons].sort((a, b) => b.size - a.size);
+	const bySize = (icons: readonly SiteIcon[]) => [...icons].sort((a, b) => b.size - a.size).map(({url}) => url);
 	return [
 		...new Set(
 			[
-				...declared.map(({url}) => url),
-				new URL('/apple-touch-icon.png', origin).href,
-				new URL('/favicon.ico', origin).href,
+				...bySize(homepage?.icons ?? []),
+				...bySize(manifestIcons),
+				...['/favicon.svg', '/apple-touch-icon.png', '/apple-touch-icon-precomposed.png', '/favicon.ico'].map(
+					(path) => new URL(path, origin).href,
+				),
 			].map((url) => url.replace(/^http:\/\//i, 'https://')),
 		),
 	].slice(0, MAX_ICON_CANDIDATES);
+}
+
+/** A content system's stand-in icon, served when a site has none of its own, such as WordPress's "W". */
+export function isPlatformDefaultIcon(url: string): boolean {
+	return /\/wp-includes\/images\//i.test(new URL(url).pathname);
 }
 
 /**

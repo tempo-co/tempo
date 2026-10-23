@@ -58,12 +58,15 @@ describe('Merchant logos', () => {
 	let owner: {id: string; agent: TestAgent};
 	let other: {id: string; agent: TestAgent};
 	let icon: Buffer;
+	let smallIcon: Buffer;
 	let identifySpy: jest.SpyInstance;
 	let fetchSpy: jest.SpyInstance;
 	let queue: Queue;
 	let routesUnavailable = false;
 	/** Hostnames whose pages and icons currently fail to load. */
 	const unreachable = new Set<string>();
+	/** Hostnames whose homepage refuses the server while their other files still load, like a bot wall. */
+	const walledHomepages = new Set<string>();
 
 	beforeAll(async () => {
 		app = getApp();
@@ -76,6 +79,9 @@ describe('Merchant logos', () => {
 		owner = await createVerifiedAccount(app.getHttpServer(), config.get('EMAIL_UI_URL'));
 		other = await createVerifiedAccount(app.getHttpServer(), config.get('EMAIL_UI_URL'));
 		icon = await sharp({create: {width: 180, height: 180, channels: 4, background: '#cc3322'}})
+			.png()
+			.toBuffer();
+		smallIcon = await sharp({create: {width: 32, height: 32, channels: 4, background: '#2233cc'}})
 			.png()
 			.toBuffer();
 
@@ -113,6 +119,11 @@ describe('Merchant logos', () => {
 			[`${FAVICON_SERVICE}exampleshop.test.ico`]: {url: `${FAVICON_SERVICE}exampleshop.test.ico`, bytes: icon},
 			[`${FAVICON_SERVICE}walled.example.test.ico`]: {
 				url: `${FAVICON_SERVICE}walled.example.test.ico`,
+				bytes: smallIcon,
+			},
+			// Behind its homepage's wall, the site still serves its own large icon at the conventional path.
+			'https://walled.example.test/apple-touch-icon.png': {
+				url: 'https://walled.example.test/apple-touch-icon.png',
 				bytes: icon,
 			},
 			// The model named a site that calls itself something else.
@@ -127,7 +138,9 @@ describe('Merchant logos', () => {
 		};
 		fetchSpy = jest.spyOn(app.get(MerchantSiteFetcher), 'fetch').mockImplementation(async (url: string) => {
 			const site = sites[url];
-			if (!site || unreachable.has(new URL(url).hostname)) throw new Error('not found');
+			const {hostname, pathname} = new URL(url);
+			if (!site || unreachable.has(hostname) || (pathname === '/' && walledHomepages.has(hostname)))
+				throw new Error('not found');
 			return site;
 		});
 	});
@@ -135,6 +148,7 @@ describe('Merchant logos', () => {
 	afterEach(() => {
 		routesUnavailable = false;
 		unreachable.clear();
+		walledHomepages.clear();
 	});
 
 	it('shows a synced merchant’s official logo on its purchases and refunds, to its owner only', async () => {
@@ -281,8 +295,9 @@ describe('Merchant logos', () => {
 		expect(response.body.merchantLogoUrl).toBeNull();
 		expect(fetchSpy).toHaveBeenCalledWith('https://other-shop.example.test/', expect.anything());
 
-		// Homepages that refuse the server: the favicon service's icon shows only for a site the model was sure of,
-		// since nothing on the site confirmed the brand. A guess whose hostname spells the brand is not enough.
+		// Homepages that refuse the server: a logo shows only for a site the model was sure of, since nothing on the
+		// site confirmed the brand, and it is the site's own large icon rather than the favicon service's small one.
+		// A guess whose hostname spells the brand is not enough.
 		const [guessed, walled] = await fixtures.createTransactions(bankAccount, [
 			bookedRow('2026-10-03', '-9.00', {
 				description: 'BEA, Betaalpas Exampleshop,PAS123 NR:XX004, 03.10.26/09:00 Example City',
@@ -294,13 +309,18 @@ describe('Merchant logos', () => {
 			}),
 		]);
 		unreachable.add('exampleshop.test');
-		unreachable.add('walled.example.test');
+		walledHomepages.add('walled.example.test');
 		await app.get(MerchantLogoService).enqueueForOwnerSafely(other.id);
 		const walledResponse = await waitFor(
 			() => other.agent.get(`/bank-transactions/${walled.id}`).expect(200),
 			(result) => result.body.merchantLogoUrl !== null,
 		);
 		expect(walledResponse.body.merchantLogoUrl).toMatch(/^\/merchant-logos\//);
+		expect(await logos.findOneByOrFail({domain: 'walled.example.test'})).toMatchObject({
+			homepageLoaded: false,
+			sourceUrl: 'https://walled.example.test/apple-touch-icon.png',
+			sourceSize: 180,
+		});
 		const guessedLogo = await waitFor(
 			() => logos.findOneBy({domain: 'exampleshop.test'}),
 			(row) => row?.status === 'READY',

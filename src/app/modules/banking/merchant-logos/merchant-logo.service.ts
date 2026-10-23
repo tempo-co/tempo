@@ -35,6 +35,7 @@ import {
 	chooseMerchantLogos,
 	encodeMerchantLogo,
 	iconCandidates,
+	isPlatformDefaultIcon,
 	parseHomepage,
 	parseManifestIcons,
 } from './merchant-site';
@@ -206,7 +207,8 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		const keepConfirmed = !homepage && logo.status === READY && logo.homepageLoaded;
 		let icon: (MerchantLogoImage & {source: string}) | null = null;
 		if (!homepage?.parked && !keepConfirmed) {
-			if (homepage) icon = await this.fetchSiteIcon(homepage, origin);
+			// A site that refuses its homepage often still serves its icons at the conventional paths.
+			icon = await this.fetchSiteIcon(homepage, origin);
 			if ((icon?.size ?? 0) < MERCHANT_LOGO_SIZE) {
 				const service = await this.fetchIconFrom(`${FAVICON_SERVICE_URL}${logo.domain}.ico`);
 				if (service && service.size > (icon?.size ?? 0)) icon = service;
@@ -346,10 +348,10 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 	 * at the first one of at least the logo's size; declared sizes are often wrong, so smaller ones are all tried.
 	 */
 	private async fetchSiteIcon(
-		homepage: Homepage,
+		homepage: Homepage | null,
 		origin: string,
 	): Promise<(MerchantLogoImage & {source: string}) | null> {
-		const manifest = homepage.manifest
+		const manifest = homepage?.manifest
 			? await this.fetcher
 					.fetch(toPublicHttpsUrl(homepage.manifest.replace(/^http:/i, 'https:')).href, {
 						accept: 'application/manifest+json,application/json',
@@ -376,6 +378,7 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 				accept: 'image/*',
 				maxBytes: ICON_BYTES,
 			});
+			if (isPlatformDefaultIcon(response.url)) return null;
 			return {...(await encodeMerchantLogo(response.bytes)), source: response.url};
 		} catch {
 			return null;
