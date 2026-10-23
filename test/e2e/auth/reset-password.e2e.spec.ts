@@ -12,7 +12,7 @@ import {
 import {PasswordResetVerifyDto} from '@modules/auth/api/dtos/password-reset-verify.dto';
 
 import {PW_RESET_ACCOUNT_EMAIL, PW_RESET_ACCOUNT_PASSWORD} from '../../../scripts/seed-data/seed.constants';
-import {getApp} from '../../setup/e2e.setup';
+import {getApp, loginAgent} from '../../setup/e2e.setup';
 import {UUID_VALIDATION_REGEX} from '../../types/regex.constants';
 import {expectValidationMessage} from '../../utils/auth-utils';
 import {EmailUtils} from '../../utils/email-utils';
@@ -100,11 +100,18 @@ describe('AuthController - Reset Password', () => {
 			await login(currentPassword).expect(200);
 		});
 
-		it('should reset the password with a valid token and new password', async () => {
+		it('resets the password and revokes personal access tokens with a valid reset token', async () => {
+			const agent = await loginAgent(httpServer, PW_RESET_ACCOUNT_EMAIL, currentPassword);
+			const {body: pat} = await agent
+				.post('/personal-access-tokens')
+				.set('Origin', 'http://localhost:5173')
+				.send({name: 'Example reset client'})
+				.expect(201);
 			const newPassword = faker.internet.password({length: 12});
 
 			const response = await verifyReset({token: resetToken, newPassword}).expect(200);
 			expect(response.body.message).toBe(PASSWORD_RESET_SUCCESS);
+			await request(httpServer).get('/bank-transactions').auth(pat.token, {type: 'bearer'}).expect(401);
 
 			await login(currentPassword).expect(401);
 			await login(newPassword).expect(200);

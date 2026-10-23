@@ -46,6 +46,10 @@ This script starts the necessary Docker services, cleans any previous build outp
 
 For development, Swagger UI documentation is enabled. Navigate to http://localhost:3000/docs to interact with the API endpoints.
 
+## Local MCP client
+
+The optional [read-only stdio MCP package](mcp/README.md) exposes nine banking tools to a local MCP client. It uses a Tempo personal access token, not a browser session, and runs separately from the API. Build and configure it only for an explicitly selected client session or project; do not enable it globally until interactive/background isolation is proven.
+
 ## Test
 
 ### Unit tests
