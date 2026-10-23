@@ -1501,11 +1501,18 @@ describe('RecurringSeries', () => {
 				]);
 				await link(joined.key, false).expect(204);
 
-				// Either history links them again.
-				await link(previous.key, true).expect(204);
-				expect((await read()).series).toEqual([
-					expect.objectContaining({key: joined.key, transactionCount: 7, continuation: expect.anything()}),
-				]);
+				// Either history links them again; the web sends the newer one's key.
+				for (const key of [current.key, previous.key]) {
+					await link(key, true).expect(204);
+					expect((await read()).series).toEqual([
+						expect.objectContaining({
+							key: joined.key,
+							transactionCount: 7,
+							continuation: expect.objectContaining({linked: true}),
+						}),
+					]);
+					if (key === current.key) await link(joined.key, false).expect(204);
+				}
 				expect(await unlinks.countBy({accountId: freshOwner.id})).toBe(0);
 
 				expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
