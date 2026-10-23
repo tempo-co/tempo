@@ -50,7 +50,7 @@ Then set `AI_CATEGORIZATION_PROVIDER=claude`, `ANTHROPIC_API_KEY` and `TEMPO_CLA
 
 ### Merchant logos
 
-`MERCHANT_LOGOS_ENABLED=true` in `/etc/tempo/production.env` turns merchant logos on. The first start identifies every existing merchant key in batches of 50 and then fetches each confirmed site's icon, so expect a few minutes of model calls and outbound HTTPS requests to merchant sites and `icons.duckduckgo.com`. Identification uses the subscription bridge's `/identify-merchants` route as its fallback, which needs the bridge reinstalled and restarted after the API release that adds it (see below).
+`MERCHANT_LOGOS_ENABLED=true` in `/etc/tempo/production.env` turns merchant logos on. The first start identifies every existing merchant key in batches of 50 and then fetches each confirmed site's icon, so expect a few minutes of model calls and outbound HTTPS requests to merchant sites, `icons.duckduckgo.com` and, with `LOGO_DEV_SECRET_KEY` set, `api.logo.dev`. logo.dev's free plan has a monthly credit allowance; when it runs out, logos come from the merchants' sites and logo.dev is asked again the next day. Identification uses the subscription bridge's `/identify-merchants` route as its fallback, which needs the bridge reinstalled and restarted after the API release that adds it (see below).
 
 ### Contract compatibility
 

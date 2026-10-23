@@ -27,10 +27,12 @@ import {BankTransactionCategorizationUnavailableError} from '../categorization/b
 import {MerchantIdentificationInput} from '../categorization/bank-transaction-categorization.types';
 import {getMerchantKeyName, getMerchantKeysForName} from '../categorization/bank-transaction-merchant-key';
 import {ClaudeBankTransactionCategorizationProvider} from '../categorization/providers/claude-bank-transaction-categorization.provider';
+import {LogoDevClient} from './logo-dev.client';
 import {MERCHANT_LOGO_STATUSES, MerchantLogo} from './merchant-logo.entity';
 import {
 	Homepage,
 	MERCHANT_LOGO_SIZE,
+	MIN_ICON_SIZE,
 	MerchantLogoImage,
 	chooseMerchantLogos,
 	encodeMerchantLogo,
@@ -70,7 +72,7 @@ function logoPath(id: string, version: string): string {
 /**
  * Shows a logo for the merchant of a transaction. A merchant is identified once per owner and merchant key by the
  * categorization model (brand and most likely official website), the website must call itself that brand, and the
- * logo comes from the site's own icons, or from a favicon service when the site has none we can use. Display only:
+ * logo comes from logo.dev, or from the site's own icons or a favicon service when those are larger. Display only:
  * categories, merchant keys and recurring payments never read it.
  */
 @Injectable()
@@ -86,6 +88,7 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		private readonly configurationService: ConfigurationService,
 		private readonly provider: ClaudeBankTransactionCategorizationProvider,
 		private readonly fetcher: MerchantSiteFetcher,
+		private readonly logoDev: LogoDevClient,
 	) {}
 
 	private isEnabled(): boolean {
@@ -186,9 +189,10 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 	}
 
 	/**
-	 * Reads a site's names and its sharpest icon. The homepage's names are the evidence that the domain belongs to the
-	 * brand, so names and image are stored together. When the site serves no icon of at least the logo's size, or its
-	 * homepage does not load, the favicon service's icon is used if it is larger; a logo without a loaded homepage
+	 * Reads a site's names and its sharpest logo. The homepage's names are the evidence that the domain belongs to the
+	 * brand, so names and image are stored together. logo.dev's logo comes first; when it has none of at least the
+	 * logo's size, the site's own icons are tried, and when those are small too or the homepage does not load, the
+	 * favicon service's icon. The largest wins. A logo without a loaded homepage
 	 * shows only for a domain the model was sure of. Failures back off and are retried a few times, then rechecked
 	 * monthly.
 	 */
@@ -206,28 +210,44 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		// A refresh that cannot read the homepage keeps a logo its homepage confirmed.
 		const keepConfirmed = !homepage && logo.status === READY && logo.homepageLoaded;
 		let icon: (MerchantLogoImage & {source: string}) | null = null;
-		if (!homepage?.parked && !keepConfirmed) {
-			// A site that refuses its homepage often still serves its icons at the conventional paths.
-			icon = await this.fetchSiteIcon(homepage, origin);
-			if ((icon?.size ?? 0) < MERCHANT_LOGO_SIZE) {
-				const service = await this.fetchIconFrom(`${FAVICON_SERVICE_URL}${logo.domain}.ico`);
-				if (service && service.size > (icon?.size ?? 0)) icon = service;
+		let askLogoDevAgain = false;
+		const larger = (candidate: (MerchantLogoImage & {source: string}) | null) => {
+			if (candidate && candidate.size > (icon?.size ?? 0)) icon = candidate;
+		};
+		if (!homepage?.parked) {
+			// logo.dev does not need the homepage, so a confirmed logo is still renewed from it.
+			const logoDev = await this.logoDev.findLogo(logo.domain);
+			askLogoDevAgain = logoDev.status === 'later';
+			if (logoDev.status === 'found' && logoDev.size >= MIN_ICON_SIZE) {
+				const image = await this.fetchIconFrom(logoDev.url);
+				// The download is enlarged to a fixed size, so the original's size is the one that counts.
+				if (image) icon = {...image, size: logoDev.size, source: logoDev.url.split('?')[0]};
 			}
+			// A refresh without the homepage only takes a logo at least as sharp as the confirmed one it has.
+			if (keepConfirmed && (icon?.size ?? 0) < (logo.sourceSize ?? 0)) icon = null;
+			// The site's own icons, then the favicon service's, when logo.dev has no large logo: the largest wins.
+			// A site that refuses its homepage often still serves its icons at the conventional paths.
+			if (!keepConfirmed && (icon?.size ?? 0) < MERCHANT_LOGO_SIZE)
+				larger(await this.fetchSiteIcon(homepage, origin));
+			if (!keepConfirmed && (icon?.size ?? 0) < MERCHANT_LOGO_SIZE)
+				larger(await this.fetchIconFrom(`${FAVICON_SERVICE_URL}${logo.domain}.ico`));
 		}
 		const now = new Date();
 		if (icon) {
+			// Without its homepage the site is read again sooner, so its own names can confirm it; when logo.dev was
+			// still indexing the domain or out of credits, it is asked again the next day.
+			const refreshMs = askLogoDevAgain ? DAY_MS : homepage ? READY_REFRESH_MS : MISSING_RECHECK_MS;
 			await this.logos.update(logo.id, {
 				status: READY,
 				image: icon.png,
 				version: createHash('sha256').update(icon.png).digest('hex'),
 				sourceUrl: icon.source,
 				sourceSize: icon.size,
-				homepageLoaded: !!homepage,
-				siteNames: homepage?.names ?? [],
+				homepageLoaded: !!homepage || keepConfirmed,
+				siteNames: homepage?.names ?? (keepConfirmed ? logo.siteNames : []),
 				attempts: 0,
 				fetchedAt: now,
-				// Without its homepage the site is read again sooner, so its own names can confirm it.
-				retryAfter: new Date(now.getTime() + (homepage ? READY_REFRESH_MS : MISSING_RECHECK_MS)),
+				retryAfter: new Date(now.getTime() + refreshMs),
 			});
 			return;
 		}
@@ -238,7 +258,11 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 			status: logo.status === READY && !homepage?.parked ? READY : exhausted ? MISSING : PENDING,
 			attempts: exhausted ? 0 : attempts,
 			fetchedAt: now,
-			retryAfter: new Date(now.getTime() + (exhausted ? MISSING_RECHECK_MS : RETRY_DELAYS_MS[attempts - 1])),
+			// When logo.dev was still indexing the domain or out of credits, it is asked again the next day.
+			retryAfter: new Date(
+				now.getTime() +
+					(askLogoDevAgain ? DAY_MS : exhausted ? MISSING_RECHECK_MS : RETRY_DELAYS_MS[attempts - 1]),
+			),
 		});
 	}
 

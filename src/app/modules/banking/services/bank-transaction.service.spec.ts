@@ -10,8 +10,8 @@ import {
 } from '../bank-transaction-financial-event';
 import {BankTransaction} from '../bank-transaction.entity';
 import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
-import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
+import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {BankTransactionService} from './bank-transaction.service';
 import {OwnTransferService} from './own-transfer.service';
 

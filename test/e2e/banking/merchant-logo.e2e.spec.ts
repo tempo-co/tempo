@@ -17,6 +17,7 @@ import {
 	MerchantIdentificationInput,
 } from '@modules/banking/categorization/bank-transaction-categorization.types';
 import {ClaudeBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/claude-bank-transaction-categorization.provider';
+import {LogoDevClient, LogoDevResult} from '@modules/banking/merchant-logos/logo-dev.client';
 import {MerchantLogo} from '@modules/banking/merchant-logos/merchant-logo.entity';
 import {MerchantLogoService} from '@modules/banking/merchant-logos/merchant-logo.service';
 import {MerchantSiteFetcher, MerchantSiteResponse} from '@modules/banking/merchant-logos/merchant-site-fetcher';
@@ -47,6 +48,14 @@ const IDENTITIES: Record<string, Omit<MerchantIdentification, 'correlationId'>> 
 };
 
 const FAVICON_SERVICE = 'https://icons.duckduckgo.com/ip3/';
+const LOGO_DEV_ASSET = 'https://img.logo.dev/assets/';
+
+/** What logo.dev knows per domain: a vector logo, only a small original, still indexing, or nothing. */
+const LOGO_DEV: Record<string, LogoDevResult> = {
+	'shop.example.test': {status: 'found', url: `${LOGO_DEV_ASSET}shop?format=png&size=256`, size: 512},
+	'walled.example.test': {status: 'found', url: `${LOGO_DEV_ASSET}walled?format=png&size=256`, size: 48},
+	'exampleshop.test': {status: 'later'},
+};
 
 describe('Merchant logos', () => {
 	jest.setTimeout(30_000);
@@ -59,6 +68,7 @@ describe('Merchant logos', () => {
 	let other: {id: string; agent: TestAgent};
 	let icon: Buffer;
 	let smallIcon: Buffer;
+	let largeIcon: Buffer;
 	let identifySpy: jest.SpyInstance;
 	let fetchSpy: jest.SpyInstance;
 	let queue: Queue;
@@ -67,6 +77,8 @@ describe('Merchant logos', () => {
 	const unreachable = new Set<string>();
 	/** Hostnames whose homepage refuses the server while their other files still load, like a bot wall. */
 	const walledHomepages = new Set<string>();
+	/** logo.dev answers that replace the usual ones for a domain. */
+	const logoDevNow = new Map<string, LogoDevResult>();
 
 	beforeAll(async () => {
 		app = getApp();
@@ -79,6 +91,9 @@ describe('Merchant logos', () => {
 		owner = await createVerifiedAccount(app.getHttpServer(), config.get('EMAIL_UI_URL'));
 		other = await createVerifiedAccount(app.getHttpServer(), config.get('EMAIL_UI_URL'));
 		icon = await sharp({create: {width: 180, height: 180, channels: 4, background: '#cc3322'}})
+			.png()
+			.toBuffer();
+		largeIcon = await sharp({create: {width: 256, height: 256, channels: 4, background: '#22aa33'}})
 			.png()
 			.toBuffer();
 		smallIcon = await sharp({create: {width: 32, height: 32, channels: 4, background: '#2233cc'}})
@@ -99,7 +114,14 @@ describe('Merchant logos', () => {
 					}),
 				}));
 			});
+		jest.spyOn(app.get(LogoDevClient), 'findLogo').mockImplementation(
+			async (domain: string) => logoDevNow.get(domain) ?? LOGO_DEV[domain] ?? {status: 'none'},
+		);
 		const sites: Record<string, MerchantSiteResponse> = {
+			// logo.dev's downloads, enlarged to the requested size whatever the original's.
+			[`${LOGO_DEV_ASSET}shop?format=png&size=256`]: {url: `${LOGO_DEV_ASSET}shop`, bytes: largeIcon},
+			[`${LOGO_DEV_ASSET}walled?format=png&size=256`]: {url: `${LOGO_DEV_ASSET}walled`, bytes: largeIcon},
+			[`${LOGO_DEV_ASSET}shop-new?format=png&size=256`]: {url: `${LOGO_DEV_ASSET}shop-new`, bytes: icon},
 			'https://shop.example.test/': {
 				url: 'https://www.shop.example.test/',
 				bytes: Buffer.from(
@@ -149,6 +171,7 @@ describe('Merchant logos', () => {
 		routesUnavailable = false;
 		unreachable.clear();
 		walledHomepages.clear();
+		logoDevNow.clear();
 	});
 
 	it('shows a synced merchant’s official logo on its purchases and refunds, to its owner only', async () => {
@@ -232,6 +255,16 @@ describe('Merchant logos', () => {
 			]),
 		);
 		expect(await merchants.countBy({accountId: owner.id})).toBe(4);
+		// logo.dev's logo, rated by its vector original; a site logo.dev doesn't know shows its own icon.
+		expect(await logos.findOneByOrFail({domain: 'shop.example.test'})).toMatchObject({
+			sourceUrl: `${LOGO_DEV_ASSET}shop`,
+			sourceSize: 512,
+			homepageLoaded: true,
+		});
+		expect(await logos.findOneByOrFail({domain: 'pay.example.test'})).toMatchObject({
+			sourceUrl: 'https://pay.example.test/favicon.ico',
+			sourceSize: 180,
+		});
 
 		const detail = await owner.agent.get(`/bank-transactions/${purchase.id}`).expect(200);
 		expect(detail.body.merchantLogoUrl).toBe(logoUrl);
@@ -258,20 +291,42 @@ describe('Merchant logos', () => {
 		await owner.agent.get(logoUrl.replace(/[0-9a-f]{64}$/, 'b'.repeat(64))).expect(404);
 		await request(app.getHttpServer()).get(logoUrl).expect(401);
 
-		// A refresh while the site is down keeps the logo and the names that confirmed it.
+		// A refresh while the site is down and logo.dev can't answer yet keeps the logo and the names that confirmed
+		// it, and asks logo.dev again the next day.
 		const logo = await logos.findOneByOrFail({domain: 'shop.example.test'});
-		await logos.update(logo.id, {retryAfter: new Date()});
+		const due = () => logos.update(logo.id, {retryAfter: new Date()});
+		await due();
 		unreachable.add('www.shop.example.test');
 		unreachable.add('shop.example.test');
+		logoDevNow.set('shop.example.test', {status: 'later'});
 		await app.get(MerchantLogoService).fetchLogo(logo.id);
-		expect(await logos.findOneByOrFail({id: logo.id})).toMatchObject({
+		const kept = await logos.findOneByOrFail({id: logo.id});
+		expect(kept).toMatchObject({
 			status: 'READY',
 			version: logo.version,
 			siteNames: ['Example Shop | Groceries'],
 			attempts: 1,
 		});
+		expect(kept.retryAfter!.getTime() - kept.fetchedAt!.getTime()).toBe(24 * 60 * 60 * 1000);
+		// The next day logo.dev has a new logo: it replaces the old one while the site is still down.
+		await due();
+		logoDevNow.set('shop.example.test', {
+			status: 'found',
+			url: `${LOGO_DEV_ASSET}shop-new?format=png&size=256`,
+			size: 512,
+		});
+		await app.get(MerchantLogoService).fetchLogo(logo.id);
+		const renewed = await logos.findOneByOrFail({id: logo.id});
+		expect(renewed).toMatchObject({
+			status: 'READY',
+			sourceUrl: `${LOGO_DEV_ASSET}shop-new`,
+			homepageLoaded: true,
+			siteNames: ['Example Shop | Groceries'],
+			attempts: 0,
+		});
+		expect(renewed.version).not.toBe(logo.version);
 		const refreshed = await owner.agent.get(`/bank-transactions/${purchase.id}`).expect(200);
-		expect(refreshed.body.merchantLogoUrl).toBe(logoUrl);
+		expect(refreshed.body.merchantLogoUrl).toBe(`/merchant-logos/${logo.id}/${renewed.version}`);
 	});
 
 	it('shows a logo only when the named website calls itself the brand, or the model was sure of a site that would not load', async () => {
@@ -296,8 +351,8 @@ describe('Merchant logos', () => {
 		expect(fetchSpy).toHaveBeenCalledWith('https://other-shop.example.test/', expect.anything());
 
 		// Homepages that refuse the server: a logo shows only for a site the model was sure of, since nothing on the
-		// site confirmed the brand, and it is the site's own large icon rather than the favicon service's small one.
-		// A guess whose hostname spells the brand is not enough.
+		// site confirmed the brand, and it is the site's own large icon rather than logo.dev's or the favicon service's
+		// small one. A guess whose hostname spells the brand is not enough.
 		const [guessed, walled] = await fixtures.createTransactions(bankAccount, [
 			bookedRow('2026-10-03', '-9.00', {
 				description: 'BEA, Betaalpas Exampleshop,PAS123 NR:XX004, 03.10.26/09:00 Example City',
@@ -325,7 +380,13 @@ describe('Merchant logos', () => {
 			() => logos.findOneBy({domain: 'exampleshop.test'}),
 			(row) => row?.status === 'READY',
 		);
-		expect(guessedLogo).toMatchObject({homepageLoaded: false, siteNames: []});
+		expect(guessedLogo).toMatchObject({
+			homepageLoaded: false,
+			siteNames: [],
+			sourceUrl: `${FAVICON_SERVICE}exampleshop.test.ico`,
+		});
+		// logo.dev was still indexing the site, so it is asked again the next day.
+		expect(guessedLogo!.retryAfter!.getTime() - guessedLogo!.fetchedAt!.getTime()).toBe(24 * 60 * 60 * 1000);
 		const guessedResponse = await other.agent.get(`/bank-transactions/${guessed.id}`).expect(200);
 		expect(guessedResponse.body.merchantLogoUrl).toBeNull();
 	});

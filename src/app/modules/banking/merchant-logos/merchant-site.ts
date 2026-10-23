@@ -17,7 +17,7 @@ sharp.unblock({
 
 /** The stored logo's side in pixels; a source at least this large looks sharp in every tile. */
 export const MERCHANT_LOGO_SIZE = 128;
-const MIN_ICON_SIZE = 32;
+export const MIN_ICON_SIZE = 32;
 const MAX_INPUT_PIXELS = 4096 * 4096;
 const MAX_SITE_NAME_LENGTH = 200;
 const MAX_ICON_CANDIDATES = 10;

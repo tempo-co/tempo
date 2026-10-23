@@ -61,6 +61,8 @@ export const configSchema = z
 
 		// --- Merchant logos ---
 		MERCHANT_LOGOS_ENABLED: strictBooleanEnvSchema.default(false),
+		/** logo.dev's secret key; without it logos come from the merchants' own sites only. */
+		LOGO_DEV_SECRET_KEY: z.string().min(1).optional(),
 
 		// --- APIs ---
 		BANKING_INTEGRATION_ENABLED: strictBooleanEnvSchema.default(true),
