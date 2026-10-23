@@ -2,6 +2,7 @@ import type {QueryClient} from '@tanstack/react-query';
 
 import {dashboardQueryKeys} from './aggregate-query-keys';
 import {bankQueryKeys} from './query-keys';
+import {recurringQueryKeys} from './recurring-query-keys';
 
 /**
  * Marks every cache derived from bank transactions stale, including inactive months and filtered
@@ -19,5 +20,7 @@ export function invalidateBankDerivedData(
       predicate: ({queryKey}) => queryKey[1] !== exceptTransactionId,
     }),
     queryClient.invalidateQueries({queryKey: bankQueryKeys.connectionTransactionsRoot}),
+    // Own-transfer and category changes move payments in or out of recurring series.
+    queryClient.invalidateQueries({queryKey: recurringQueryKeys.root}),
   ]);
 }

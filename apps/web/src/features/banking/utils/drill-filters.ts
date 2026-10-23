@@ -24,6 +24,7 @@ export function hasDrillFilters(filters: BankTransactionFilterParams) {
   return (
     (filters.cashFlows?.length ?? 0) > 0 ||
     Boolean(filters.baseAmount) ||
-    (filters.categoryStatuses?.length ?? 0) > 0
+    (filters.categoryStatuses?.length ?? 0) > 0 ||
+    Boolean(filters.recurringSeriesKey)
   );
 }

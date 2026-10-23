@@ -19,6 +19,7 @@ import {CategoryBreakdown} from './category-breakdown';
 import {HomeSyncStatus} from './home-sync-status';
 import {MonthNavigation} from './month-navigation';
 import {RecentTransactions} from './recent-transactions';
+import {RecurringCard} from './recurring-card';
 
 type HomeDashboardProps = {
   month: string;
@@ -62,6 +63,7 @@ export function HomeDashboard({month, isCurrentMonth}: HomeDashboardProps) {
         </div>
         <div className='grid min-w-0 content-start gap-6'>
           <HomeAttention baseCurrency={connections[0]?.baseCurrency ?? null} />
+          <RecurringCard />
           <BalancesList connections={connections} isCurrentMonth={isCurrentMonth} />
           <RecentTransactions month={month} isCurrentMonth={isCurrentMonth} />
         </div>

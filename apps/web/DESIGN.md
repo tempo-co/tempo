@@ -337,10 +337,10 @@ financial values continuously.
 ### Navigation
 
 Navigation is a quiet index with no breadcrumbs; the page title and the active item say
-where you are. From `md` up the header carries the logo, Home, Connections and Transactions
-with a clay underline on the active item, and an initials account menu (name, email,
-Settings, Log out) on the right. Below `md` a four-tab bottom bar (Home, Connections,
-Transactions, Settings) keeps every destination one tap away: icon over label, active tab in
+where you are. From `md` up the header carries the logo, Home, Connections, Transactions and
+Recurring with a clay underline on the active item, and an initials account menu (name, email,
+Settings, Log out) on the right. Below `md` a five-tab bottom bar (Home, Connections,
+Transactions, Recurring, Settings) keeps every destination one tap away: icon over label, active tab in
 clay with a top rule and heavier label, padded for the safe area. Toasts sit above it.
 
 Settings is one page titled "Settings" with a row of text section tabs (Account, Security,

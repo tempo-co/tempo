@@ -148,6 +148,7 @@ export function BankTransactionTable({
         cashFlows: undefined,
         baseAmount: undefined,
         categoryStatuses: undefined,
+        recurringSeriesKey: undefined,
         search: undefined,
         pageIndex: 0,
       }),
@@ -169,6 +170,12 @@ export function BankTransactionTable({
         <Button variant='outline' onClick={onRetry}>
           Try again
         </Button>
+        {/* A recurring payment stops being found when its payments change, and then fails to load. */}
+        {isFilteringApplied && (
+          <Button variant='secondary' onClick={clearFilters}>
+            Clear filters
+          </Button>
+        )}
       </EmptyState>
     );
   }

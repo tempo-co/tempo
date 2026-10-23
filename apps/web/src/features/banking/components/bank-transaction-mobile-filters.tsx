@@ -46,6 +46,7 @@ export function BankTransactionMobileFilters({
     (filters.cashFlows?.length ?? 0) > 0,
     Boolean(filters.baseAmount),
     (filters.categoryStatuses?.length ?? 0) > 0,
+    Boolean(filters.recurringSeriesKey),
   ].filter(Boolean).length;
 
   React.useEffect(() => {

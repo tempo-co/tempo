@@ -81,7 +81,7 @@ export function AppTabBar() {
       data-testid='app-tab-bar'
       className='fixed inset-x-0 bottom-0 z-20 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden'
     >
-      <ul className='grid grid-cols-4'>
+      <ul className='grid auto-cols-fr grid-flow-col'>
         {tabItems.map((item) => {
           const active = isActive(item);
           return (

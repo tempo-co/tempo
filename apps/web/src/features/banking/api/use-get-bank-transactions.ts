@@ -40,6 +40,7 @@ export const useGetBankTransactions = (
       cashFlows: searchParams.cashFlows,
       baseAmount: searchParams.baseAmount,
       categoryStatuses: searchParams.categoryStatuses,
+      recurringSeriesKey: searchParams.recurringSeriesKey,
       search: searchParams.search,
     }),
     [
@@ -50,6 +51,7 @@ export const useGetBankTransactions = (
       searchParams.cashFlows,
       searchParams.baseAmount,
       searchParams.categoryStatuses,
+      searchParams.recurringSeriesKey,
       searchParams.search,
     ],
   );
@@ -81,6 +83,9 @@ export const useGetBankTransactions = (
           params.append('filter[baseAmount]', filters.baseAmount);
         }
         appendArrayFilter(params, 'filter[categoryStatuses][]', filters.categoryStatuses);
+        if (filters.recurringSeriesKey) {
+          params.append('filter[recurringSeriesKey]', filters.recurringSeriesKey);
+        }
         if (filters.search?.trim()) {
           params.append('filter[search]', filters.search.trim());
         }

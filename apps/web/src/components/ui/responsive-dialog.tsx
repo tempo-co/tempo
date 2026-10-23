@@ -1,3 +1,4 @@
+import {X} from 'lucide-react';
 import * as React from 'react';
 
 import {
@@ -88,12 +89,29 @@ const ResponsiveDialogClose = ({className, children, ...props}: ResponsiveDialog
   );
 };
 
+/** A 44px close button in the top corner of a full-height sheet whose own close button is hidden. */
+const ResponsiveDialogCornerClose = ({label}: {label: string}) => (
+  <ResponsiveDialogClose
+    aria-label={label}
+    className='absolute top-3 right-3 z-20 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+  >
+    <X className='h-4 w-4' aria-hidden='true' />
+    <span className='sr-only'>{label}</span>
+  </ResponsiveDialogClose>
+);
+
+/** A toast's action (such as Undo) answers what happened in the dialog; it is not a click outside it. */
+const keepOpenForToasts = (event: {target: EventTarget | null; preventDefault: () => void}) => {
+  if (event.target instanceof Element && event.target.closest('[data-sonner-toaster]'))
+    event.preventDefault();
+};
+
 const ResponsiveDialogContent = ({className, children, ...props}: ResponsiveDialogProps) => {
   const {isDesktop} = useResponsiveDialogContext();
   const ResponsiveDialogContent = isDesktop ? DialogContent : DrawerContent;
 
   return (
-    <ResponsiveDialogContent className={className} {...props}>
+    <ResponsiveDialogContent className={className} onInteractOutside={keepOpenForToasts} {...props}>
       {children}
     </ResponsiveDialogContent>
   );
@@ -156,6 +174,7 @@ export {
   ResponsiveDialogTrigger,
   ResponsiveDialogClose,
   ResponsiveDialogContent,
+  ResponsiveDialogCornerClose,
   ResponsiveDialogDescription,
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
