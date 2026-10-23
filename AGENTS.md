@@ -78,7 +78,7 @@ Reuse these instead of re-creating setup inline:
 
 ## Pitfalls
 
-- Test mode configures TypeORM with `dropSchema: true`; E2E setup seeds accounts before tests. `.env.test` must satisfy the full config schema and its host ports must be free. The runtime image ships `.env.test` (synthetic values) because tempo-web E2E runs it with `NODE_ENV=test`; `.env.development` is not in the image.
+- Test mode configures TypeORM with `dropSchema: true`; E2E setup seeds accounts before tests. `.env.test` must satisfy the full config schema and its host ports must be free. The runtime image ships no env files (the image smoke check fails the build if one appears); tempo-web E2E passes its own synthetic config when it runs the image with `NODE_ENV=test`.
 - `npm run test:e2e*` deliberately removes test containers/volumes via `docker compose ... down -v --remove-orphans`. Do not point `.env.test` at a development database.
 - `npm run db:seed` truncates and recreates the PostgreSQL `public` schema before seeding; run it only against the intended database.
 - Compose uses fixed container names and environment-interpolated host ports, so stale containers or overlapping ports can block startup.
