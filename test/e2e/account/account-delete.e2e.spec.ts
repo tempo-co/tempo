@@ -57,6 +57,11 @@ describe('AccountController - DELETE /accounts/me', () => {
 			agent,
 		} = await createVerifiedAccount(httpServer, mailpitApiUrl);
 
+		const {body: pat} = await agent
+			.post('/personal-access-tokens')
+			.set('Origin', 'http://localhost:5173')
+			.send({name: 'Example deletion client'})
+			.expect(201);
 		await seedBankingData(app, {accountEmail: email});
 		expect(await countOwnedAccounts(connectionRepository, accountId)).toBe(1);
 
@@ -108,6 +113,10 @@ describe('AccountController - DELETE /accounts/me', () => {
 
 		const deleteResponse = await agent.delete('/accounts/me').send({password}).expect(200);
 		expect(deleteResponse.body.message).toEqual(ACCOUNT_DELETED_MESSAGE);
+		expect(
+			await dataSource.query('SELECT id FROM personal_access_tokens WHERE "accountId" = $1', [accountId]),
+		).toEqual([]);
+		await request(httpServer).get('/bank-transactions').auth(pat.token, {type: 'bearer'}).expect(401);
 
 		// FK cascades must have removed every bank-owned row.
 		expect(await countOwnedAccounts(connectionRepository, accountId)).toBe(0);

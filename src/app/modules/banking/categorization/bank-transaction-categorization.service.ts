@@ -121,6 +121,29 @@ const FOLLOW_UP_JOB_OPTIONS = {
 } as const;
 // The queue connection retries forever while Redis is down, so a follow-up enqueue must not hold the request open.
 const FOLLOW_UP_ENQUEUE_TIMEOUT_MS = 2_000;
+/** Backoff type of categorize jobs, resolved by {@link categorizationRetryDelay} in the worker. */
+export const CATEGORIZATION_RETRY_BACKOFF_TYPE = 'categorization-retry';
+// A refusal from both Claude routes (busy bridge, rate limit, login renewal) usually clears within minutes.
+const UNAVAILABLE_RETRY_DELAYS_MS = [60_000, 120_000, 300_000, 600_000, 1_200_000] as const;
+const ORDINARY_RETRY_ATTEMPTS = 3;
+const ORDINARY_RETRY_BASE_DELAY_MS = 1_000;
+const CATEGORIZE_JOB_OPTIONS = {
+	attempts: UNAVAILABLE_RETRY_DELAYS_MS.length + 1,
+	backoff: {type: CATEGORIZATION_RETRY_BACKOFF_TYPE},
+	removeOnFail: true,
+} as const;
+
+/**
+ * Delay before retrying a categorize job after its attempt number `attemptsMade` failed, or -1 to stop. Unavailable
+ * routes are retried over about 38 minutes, leaving the rows PENDING in between and for the hourly sweep afterwards;
+ * other failures get two quick retries.
+ */
+export function categorizationRetryDelay(attemptsMade: number, error: unknown): number {
+	if (error instanceof BankTransactionCategorizationUnavailableError)
+		return UNAVAILABLE_RETRY_DELAYS_MS[attemptsMade - 1] ?? -1;
+	if (attemptsMade >= ORDINARY_RETRY_ATTEMPTS) return -1;
+	return ORDINARY_RETRY_BASE_DELAY_MS * 2 ** (attemptsMade - 1);
+}
 const MAX_ERROR_LENGTH = 500;
 
 /** The rows a correction would change on the owner's other transactions from the same merchant. */
@@ -182,10 +205,8 @@ export class BankTransactionCategorizationService {
 				data: {
 					transactionIds: batch,
 				},
-				opts: {
-					jobId: this.createJobId(batch, inputHashes),
-					removeOnFail: true,
-				},
+				// An identical batch keeps its job ID, so a sweep while the job waits for a retry adds nothing.
+				opts: {jobId: this.createJobId(batch, inputHashes), ...CATEGORIZE_JOB_OPTIONS},
 			});
 		}
 		await this.queue.addBulk(jobs);
@@ -375,7 +396,7 @@ export class BankTransactionCategorizationService {
 
 		const webResults: BankTransactionCategorizationResult[] = [];
 		const failedWebSearchIds = new Set<string>();
-		// Rows whose search could run on neither route wait for the hourly retry instead of going to review.
+		// Rows whose search could run on neither route wait for the job retry instead of going to review.
 		const unavailableWebSearch: ClaimedTransaction[] = [];
 		let searchUnavailable: BankTransactionCategorizationUnavailableError | undefined;
 		const claimedByCorrelationId = new Map(
@@ -1000,8 +1021,8 @@ export class BankTransactionCategorizationService {
 
 	/**
 	 * A row sent back to the model keeps its category when the call fails, as long as that category was given for the
-	 * same input. Unavailable routes stay PENDING for hourly reconciliation; ordinary failures stay FAILED for the
-	 * job retry or next start. Other rows are cleared.
+	 * same input. Unavailable routes stay PENDING for the job retry and hourly reconciliation; ordinary failures stay
+	 * FAILED for the job retry or next start. Other rows are cleared.
 	 */
 	private async markBatchFailed(batch: readonly ClaimedTransaction[], error: unknown): Promise<void> {
 		const safeMessage = this.safeFailureMessage(error);

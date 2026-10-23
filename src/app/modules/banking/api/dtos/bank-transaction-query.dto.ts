@@ -100,7 +100,7 @@ export class BankTransactionFilterQueryDto {
 
 	@IsOptional()
 	@IsString()
-	@MaxLength(100)
+	@MaxLength(1000)
 	search?: string;
 
 	@IsOptional()
@@ -138,7 +138,15 @@ export class BankTransactionFilterQueryDto {
 	recurringSeriesKey?: string;
 }
 
-export class BankTransactionQueryDto {
+/** Totals use the list's filter contract, without sort or pagination inputs. */
+export class BankTransactionTotalsQueryDto {
+	@IsOptional()
+	@ValidateNested()
+	@Type(() => BankTransactionFilterQueryDto)
+	filter?: BankTransactionFilterQueryDto;
+}
+
+export class BankTransactionQueryDto extends BankTransactionTotalsQueryDto {
 	@IsOptional()
 	@ValidateNested()
 	@Type(() => BankTransactionPaginationQueryDto)
@@ -148,9 +156,4 @@ export class BankTransactionQueryDto {
 	@ValidateNested()
 	@Type(() => BankTransactionSortQueryDto)
 	sort?: BankTransactionSortQueryDto;
-
-	@IsOptional()
-	@ValidateNested()
-	@Type(() => BankTransactionFilterQueryDto)
-	filter?: BankTransactionFilterQueryDto;
 }

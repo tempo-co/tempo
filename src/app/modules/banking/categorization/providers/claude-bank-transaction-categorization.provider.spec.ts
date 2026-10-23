@@ -64,7 +64,8 @@ function setup(overrides: Record<string, unknown> = {}) {
 		get: (key: string) =>
 			({
 				ANTHROPIC_API_KEY: 'synthetic-api-key',
-				AI_CATEGORIZATION_MODEL: 'claude-opus-5-5',
+				AI_CATEGORIZATION_MODEL: 'claude-sonnet-5-5',
+				AI_CATEGORIZATION_EFFORT: 'high',
 				...overrides,
 			})[key],
 	} as unknown as ConfigurationService;
@@ -114,8 +115,11 @@ async function withBridge(
 }
 
 describe('ClaudeBankTransactionCategorizationProvider', () => {
-	it('uses the evaluated structured API request and maps compact IDs back to the caller', async () => {
-		const {provider, create} = setup();
+	it.each([
+		['claude-sonnet-5-5', 'high'],
+		['claude-opus-5-5', 'medium'],
+	])('uses the configured %s model at %s effort and maps compact IDs back to the caller', async (model, effort) => {
+		const {provider, create} = setup({AI_CATEGORIZATION_MODEL: model, AI_CATEGORIZATION_EFFORT: effort});
 		create.mockResolvedValue(response([{correlationId: '0', category: 'FOOD_AND_DRINK', confidence: 0.9}]));
 		await expect(provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).resolves.toEqual([
 			{
@@ -123,16 +127,16 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 				category: 'FOOD_AND_DRINK',
 				confidence: 0.9,
 				provider: 'claude-api',
-				model: 'claude-opus-5-5',
+				model,
 			},
 		]);
 		expect(create).toHaveBeenCalledTimes(1);
 		const request = create.mock.calls[0][0];
 		expect(request).toMatchObject({
-			model: 'claude-opus-5-5',
+			model,
 			max_tokens: 8192,
 			thinking: {type: 'adaptive'},
-			output_config: {effort: 'medium', format: {type: 'json_schema'}},
+			output_config: {effort, format: {type: 'json_schema'}},
 		});
 		expect(request.output_config.format.schema.properties.classifications.items.properties.category.enum).toEqual(
 			BANK_TRANSACTION_CATEGORIES,
@@ -272,7 +276,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 				category: 'FOOD_AND_DRINK',
 				confidence: 0.8,
 				provider: 'claude-api',
-				model: 'claude-opus-5-5',
+				model: 'claude-sonnet-5-5',
 				searchTrace: {
 					queries: [transaction.searchQuery],
 					sourceDomains: ['example.test'],
@@ -281,6 +285,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			},
 		]);
 		const request = create.mock.calls[0][0];
+		expect(request).toMatchObject({model: 'claude-sonnet-5-5', output_config: {effort: 'high'}});
 		expect(request.tools).toEqual([{type: 'web_search_20250305', name: 'web_search', max_uses: 1}]);
 		expect(request.max_tokens).toBe(4096);
 		expect(request.system).toContain('Do not perform a follow-up lookup.');
@@ -346,12 +351,13 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 					category: 'SHOPPING',
 					confidence: 0.9,
 					provider: 'claude-subscription',
-					model: 'claude-opus-5-5',
+					model: 'claude-sonnet-5-5',
 				},
 			]);
 			expect(requests.map(({body}) => body)).toEqual([
 				{
-					model: 'claude-opus-5-5',
+					model: 'claude-sonnet-5-5',
+					effort: 'high',
 					input: {
 						categories: BANK_TRANSACTION_CATEGORY_DEFINITIONS,
 						transactions: [{...transaction, correlationId: '0'}],
@@ -386,7 +392,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 					category: 'FOOD_AND_DRINK',
 					confidence: 0.8,
 					provider: 'claude-subscription',
-					model: 'claude-opus-5-5',
+					model: 'claude-sonnet-5-5',
 					searchTrace: {
 						queries: [transaction.searchQuery],
 						sourceDomains: ['example.test'],
@@ -397,7 +403,8 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			expect(requests).toHaveLength(1);
 			expect(requests[0].url).toBe('/categorize-with-search');
 			expect(requests[0].body).toEqual({
-				model: 'claude-opus-5-5',
+				model: 'claude-sonnet-5-5',
+				effort: 'high',
 				input: JSON.parse(create.mock.calls[0][0].messages[0].content),
 			});
 		});
@@ -457,9 +464,11 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			await withBridge(unavailable, async (socket, requests) => {
 				const config = {
 					get: (key: string) =>
-						({AI_CATEGORIZATION_MODEL: 'claude-opus-5-5', AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket})[
-							key
-						],
+						({
+							AI_CATEGORIZATION_MODEL: 'claude-sonnet-5-5',
+							AI_CATEGORIZATION_EFFORT: 'high',
+							AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket,
+						})[key],
 				} as unknown as ConfigurationService;
 				const provider = new ClaudeBankTransactionCategorizationProvider(config);
 				await expect(
@@ -524,7 +533,11 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		try {
 			const config = {
 				get: (key: string) =>
-					({ANTHROPIC_API_KEY: 'synthetic-api-key', AI_CATEGORIZATION_MODEL: 'claude-opus-5-5'})[key],
+					({
+						ANTHROPIC_API_KEY: 'synthetic-api-key',
+						AI_CATEGORIZATION_MODEL: 'claude-sonnet-5-5',
+						AI_CATEGORIZATION_EFFORT: 'high',
+					})[key],
 			} as unknown as ConfigurationService;
 			const provider = new ClaudeBankTransactionCategorizationProvider(config);
 			await expect(provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).rejects.toBeInstanceOf(

@@ -10,6 +10,7 @@ import {
 	BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH,
 } from '../api/constants/banking-messages.constants';
 import type {BankTransactionCashFlowQueryDto, CashFlowInterval} from '../api/dtos/bank-transaction-cash-flow-query.dto';
+import type {BankTransactionTotalsQueryDto} from '../api/dtos/bank-transaction-query.dto';
 import type {BankTransactionSummaryQueryDto} from '../api/dtos/bank-transaction-summary-query.dto';
 import type {
 	BankBalanceTrendPeriodDto,
@@ -20,6 +21,7 @@ import type {
 	BankTransactionSummaryCategoryDto,
 	BankTransactionSummaryResponseDto,
 } from '../api/dtos/bank-transaction-summary-response.dto';
+import type {BankTransactionTotalsResponseDto} from '../api/dtos/bank-transaction-totals-response.dto';
 import {BankTransaction} from '../bank-transaction.entity';
 import {
 	BANK_TRANSACTION_UNCATEGORIZED,
@@ -304,6 +306,39 @@ export class BankTransactionSummaryService {
 			});
 		}
 		return {baseCurrency, interval, periods};
+	}
+
+	async getTotals(
+		{id, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
+		{filter}: BankTransactionTotalsQueryDto,
+	): Promise<BankTransactionTotalsResponseDto> {
+		const query = this.createOwnerScopedQuery(id);
+		applyBankTransactionFilters(query, filter);
+		// Round each amount to minor units before summing; never convert monetary SQL results to Number.
+		const cents = `ROUND(${BASE_AMOUNT} * 100)`;
+		const row = await query
+			.select('COUNT(*)::int', 'count')
+			.addSelect(`COALESCE(SUM(${cents}) FILTER (WHERE ${SQL_SPENDING}), 0)::text`, 'spending')
+			.addSelect(`COALESCE(SUM(${cents}) FILTER (WHERE ${SQL_INCOME}), 0)::text`, 'income')
+			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_UNKNOWN_DIRECTION})::int`, 'unknownDirection')
+			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_MISSING_BASE_AMOUNT})::int`, 'missingBaseAmount')
+			.getRawOne<{
+				count: number;
+				spending: string;
+				income: string;
+				unknownDirection: number;
+				missingBaseAmount: number;
+			}>();
+		const spending = -BigInt(row!.spending);
+		const income = BigInt(row!.income);
+		return {
+			baseCurrency,
+			spending: formatCents(spending),
+			income: formatCents(income),
+			net: formatCents(income - spending),
+			count: row!.count,
+			excluded: {unknownDirection: row!.unknownDirection, missingBaseAmount: row!.missingBaseAmount},
+		};
 	}
 
 	async getReviewCounts(accountId: Account['id']): Promise<BankTransactionReviewCountsResponseDto> {

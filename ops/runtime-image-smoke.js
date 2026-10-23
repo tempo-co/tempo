@@ -14,6 +14,10 @@ assert.deepEqual(remainingDevDependencies, [], `Development dependencies remain 
 const manifest = require('/usr/src/app/package.json');
 assert.deepEqual(Object.keys(manifest.devDependencies ?? {}), [], 'Runtime package.json still declares devDependencies');
 
+// Env files are host configuration; test values in the image would be loaded whenever NODE_ENV=test.
+const envFiles = fs.readdirSync('/usr/src/app').filter((name) => name === '.env' || name.startsWith('.env.'));
+assert.deepEqual(envFiles, [], `Env files present in runtime image: ${envFiles.join(', ')}`);
+
 const emailTemplatesDirectory = '/usr/src/app/dist/src/app/core/email/templates';
 for (const template of [
 	'account-deleted.hbs',

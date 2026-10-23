@@ -58,6 +58,7 @@ type SearchTrace = {queries: string[]; sourceDomains: string[]};
 
 type ClaudeClient = Pick<Anthropic, 'messages'>;
 type RequestInput = {correlationId: string};
+type ClaudeEffort = NonNullable<NonNullable<MessageCreateParamsNonStreaming['output_config']>['effort']>;
 const CONTRACT_HASH = createHash('sha256').update(JSON.stringify(contract)).digest('hex');
 const API_TIMEOUT_MS = 90_000;
 const SUBSCRIPTION_TIMEOUT_MS = 125_000;
@@ -68,11 +69,14 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	private readonly logger = new Logger(ClaudeBankTransactionCategorizationProvider.name);
 	private client?: ClaudeClient;
 	private readonly model: string;
+	private readonly effort: ClaudeEffort;
 	private readonly apiKey?: string;
 	private readonly subscriptionSocket?: string;
 
 	constructor(configurationService: ConfigurationService, @Optional() client?: ClaudeClient) {
 		this.model = configurationService.get('AI_CATEGORIZATION_MODEL');
+		// The config schema checks the value against the bridge contract's effort list.
+		this.effort = configurationService.get('AI_CATEGORIZATION_EFFORT') as ClaudeEffort;
 		this.apiKey = configurationService.get('ANTHROPIC_API_KEY');
 		this.subscriptionSocket = configurationService.get('AI_CATEGORIZATION_SUBSCRIPTION_SOCKET');
 		this.client = client;
@@ -210,7 +214,10 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			system,
 			messages: [{role: 'user', content: JSON.stringify(input)}],
 			thinking: {type: 'adaptive'},
-			output_config: {effort: 'medium', format: {type: 'json_schema', schema: schema as Record<string, unknown>}},
+			output_config: {
+				effort: this.effort,
+				format: {type: 'json_schema', schema: schema as Record<string, unknown>},
+			},
 		};
 	}
 
@@ -333,7 +340,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 
 	private callSubscription(input: object, path = '/categorize'): Promise<string> {
 		return new Promise((resolve, reject) => {
-			const body = JSON.stringify({model: this.model, input});
+			const body = JSON.stringify({model: this.model, effort: this.effort, input});
 			const request = httpRequest(
 				{
 					socketPath: this.subscriptionSocket,

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Tempo production DB backup: validated custom-format pg_dump, keep the newest $KEEP.
 #
-#   BACKUP_DIR=~/backups/tempo backup.sh                          # scheduled backup
-#   BACKUP_DIR=/var/lib/tempo-deploy/pre-deploy-backups KEEP=5 backup.sh  # before a deploy
+#   BACKUP_DIR=<dir> [KEEP=<n>] backup.sh
+#
+# The backup timer and the pre-deploy hook set their own directories (see install.sh).
 set -Eeuo pipefail
 umask 077
 

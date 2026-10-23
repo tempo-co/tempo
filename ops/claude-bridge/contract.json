@@ -108,5 +108,7 @@
 		},
 		"maxSearchQueryLength": 240,
 		"maxSourceDomains": 20
-	}
+	},
+	"models": ["claude-sonnet-5-5", "claude-opus-5-5"],
+	"efforts": ["low", "medium", "high", "xhigh", "max"]
 }

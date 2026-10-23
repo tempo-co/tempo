@@ -6,15 +6,11 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import contract from './contract.json' with {type: 'json'};
-import {assertSubscriptionUsable, storedTokenExpiresAt} from './subscription.mjs';
+import {createSubscriptionCheck, storedTokenExpiresAt} from './subscription.mjs';
 import {validRequest, validResponse, validSearchRequest} from './validation.mjs';
 
+// Model and effort come from the validated request, so the CLI arguments start with them per call.
 const cliArgs = ({instructions, schema}, tools, extra = []) => [
-	'-p',
-	'--model',
-	'claude-opus-5-5',
-	'--effort',
-	'medium',
 	'--system-prompt',
 	instructions,
 	'--tools',
@@ -78,7 +74,7 @@ export async function startBridge({
 	claudePath = 'claude',
 	spawnProcess = spawn,
 	env = process.env,
-	verifyUsage = assertSubscriptionUsable,
+	verifyUsage = createSubscriptionCheck(),
 	tokenExpiresAt = storedTokenExpiresAt,
 	timeoutMs = 120_000,
 	maxOutputBytes = 256 * 1024,
@@ -250,7 +246,7 @@ export async function startBridge({
 			let searchId;
 			let domains;
 			await run(
-				route.args,
+				['-p', '--model', parsed.model, '--effort', parsed.effort, ...route.args],
 				JSON.stringify(input),
 				(event) => {
 					if (event.type === 'system' && event.subtype === 'init') {

@@ -394,6 +394,27 @@ describe('BankTransactionController', () => {
 
 		expect(filteredResponse.body.total).toBe(1);
 		expect(filteredResponse.body.transactions[0].description).toBe('Coffee shop');
+
+		const longSearchText = 'Example long transaction remittance '.padEnd(1000, 'x');
+		const longSearchTransaction = await fixtures.createTransaction(fixtureBankAccount, {
+			bookingDate: '2026-08-25',
+			description: 'Example long-search transaction',
+			remittanceInformation: longSearchText,
+		});
+
+		try {
+			const longSearchResponse = await verifiedAgent
+				.get('/bank-transactions')
+				.query({'filter[search]': longSearchText})
+				.expect(200);
+
+			expect(longSearchResponse.body.total).toBe(1);
+			expect(longSearchResponse.body.transactions).toEqual([
+				expect.objectContaining({id: longSearchTransaction.id, remittanceInformation: longSearchText}),
+			]);
+		} finally {
+			await bankTransactionRepository.remove(longSearchTransaction);
+		}
 	});
 
 	it('applies one or multiple category filters', async () => {
@@ -855,6 +876,7 @@ describe('BankTransactionController', () => {
 	it.each([
 		['an unsupported sort field', {'sort[by]': 'postedDate'}],
 		['an unsupported sort order', {'sort[order]': 'DOWN'}],
+		['a search longer than 1000 characters', {'filter[search]': 'x'.repeat(1001)}],
 		['an invalid booking date', {'filter[bookingDate][from]': '2026-99-99'}],
 		['a malformed bank account ID', {'filter[bankAccountIds][]': 'not-a-uuid'}],
 		['an unsupported category', {'filter[categories][]': 'NOT_A_CATEGORY'}],

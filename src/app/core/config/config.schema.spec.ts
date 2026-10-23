@@ -168,7 +168,15 @@ describe('AI categorization configuration', () => {
 
 		expect(parsed.AI_CATEGORIZATION_ENABLED).toBe(false);
 		expect(parsed.AI_CATEGORIZATION_PROVIDER).toBe('claude');
-		expect(parsed.AI_CATEGORIZATION_MODEL).toBe('claude-opus-5-5');
+		expect(parsed.AI_CATEGORIZATION_MODEL).toBe('claude-sonnet-5-5');
+		expect(parsed.AI_CATEGORIZATION_EFFORT).toBe('high');
+	});
+
+	it('accepts only the effort levels Claude supports', () => {
+		expect(configSchema.parse({...baseConfig, AI_CATEGORIZATION_EFFORT: 'xhigh'}).AI_CATEGORIZATION_EFFORT).toBe(
+			'xhigh',
+		);
+		expect(() => configSchema.parse({...baseConfig, AI_CATEGORIZATION_EFFORT: 'extreme'})).toThrow();
 	});
 
 	it.each([
@@ -188,6 +196,29 @@ describe('AI categorization configuration', () => {
 		expect(() => configSchema.parse({...baseConfig, AI_CATEGORIZATION_ENABLED: 'true'})).toThrow(
 			'Configure ANTHROPIC_API_KEY or AI_CATEGORIZATION_SUBSCRIPTION_SOCKET',
 		);
+	});
+
+	it('rejects a model the subscription bridge does not accept when the bridge is configured', () => {
+		const bridgeConfig = {
+			...baseConfig,
+			AI_CATEGORIZATION_ENABLED: 'true',
+			AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/run/claude-bridge.sock',
+		};
+
+		expect(() => configSchema.parse({...bridgeConfig, AI_CATEGORIZATION_MODEL: 'synthetic-model'})).toThrow(
+			'AI_CATEGORIZATION_MODEL must be one of the subscription bridge models',
+		);
+		expect(configSchema.parse({...bridgeConfig, AI_CATEGORIZATION_MODEL: 'claude-opus-5-5'})).toMatchObject({
+			AI_CATEGORIZATION_MODEL: 'claude-opus-5-5',
+		});
+		expect(
+			configSchema.parse({
+				...baseConfig,
+				AI_CATEGORIZATION_ENABLED: 'true',
+				ANTHROPIC_API_KEY: 'synthetic-api-key',
+				AI_CATEGORIZATION_MODEL: 'synthetic-model',
+			}),
+		).toMatchObject({AI_CATEGORIZATION_MODEL: 'synthetic-model'});
 	});
 
 	it('rejects a provider other than claude', () => {

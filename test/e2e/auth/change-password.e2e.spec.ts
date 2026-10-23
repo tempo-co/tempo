@@ -25,6 +25,11 @@ describe('AuthController - Change password', () => {
 		it('should change password, revoke other sessions, and allow login with new password', async () => {
 			const agent = await loginAgent(httpServer, PW_CHANGE_ACCOUNT_EMAIL, PW_CHANGE_ACCOUNT_PASSWORD);
 			const otherAgent = await loginAgent(httpServer, PW_CHANGE_ACCOUNT_EMAIL, PW_CHANGE_ACCOUNT_PASSWORD);
+			const {body: pat} = await agent
+				.post('/personal-access-tokens')
+				.set('Origin', 'http://localhost:5173')
+				.send({name: 'Example password client'})
+				.expect(201);
 
 			const newPassword = faker.internet.password({length: 12});
 			const changePasswordDto: PasswordChangeDto = {
@@ -40,6 +45,7 @@ describe('AuthController - Change password', () => {
 					expect(res.body.message).toEqual(PASSWORD_CHANGE_SUCCESS);
 				});
 
+			await request(httpServer).get('/bank-transactions').auth(pat.token, {type: 'bearer'}).expect(401);
 			await agent.get('/accounts/me').expect(200);
 			await otherAgent.get('/accounts/me').expect(401);
 			await agent.post('/auth/logout').expect(200);

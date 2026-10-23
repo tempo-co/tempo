@@ -38,11 +38,18 @@ jobs:
             - name: Run format check
               run: npm run format:check
 
+            - name: Install MCP dependencies
+              run: NODE_ENV=development npm --prefix mcp ci --include=dev
+
+            - name: Check MCP lint and format
+              run: npm --prefix mcp run lint:check && npm --prefix mcp run format:check
+
             - name: Check deploy scripts
               run: |
                   shellcheck -x ops/deploy.sh ops/install.sh ops/backup.sh ops/targets/*.env ops/staging/tempo-staging-refresh.sh ops/ghcr-retention.sh ops/sync-pins.sh
                   export TEMPO_API_IMAGE=api TEMPO_WEB_IMAGE=web DB_USERNAME=u DB_PASSWORD=p DB_NAME=d TEMPO_PRODUCTION_ENV_FILE=/dev/null ENABLE_BANKING_PRIVATE_KEY_HOST_PATH=/dev/null TEMPO_CLAUDE_BRIDGE_DIR=/tmp
                   docker compose -f docker-compose.production.yml config -q
+                  docker compose -f ops/tailscale.compose.yml config -q
                   docker compose -f ops/staging/docker-compose.yml --env-file ops/staging/staging.env.example config -q
 
     build:
@@ -65,6 +72,9 @@ jobs:
 
             - name: Build application
               run: npm run build
+
+            - name: Build local MCP package
+              run: NODE_ENV=development npm --prefix mcp ci --include=dev && npm --prefix mcp run build
 
     unit-test:
         name: Unit Tests
@@ -89,6 +99,9 @@ jobs:
 
             - name: Run Claude bridge tests
               run: node --test ops/claude-bridge/*.test.mjs
+
+            - name: Test local MCP package and stdio transport
+              run: NODE_ENV=development npm --prefix mcp ci --include=dev && npm --prefix mcp test
 
     e2e-test:
         name: E2E Tests

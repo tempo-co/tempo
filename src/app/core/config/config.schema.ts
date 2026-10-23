@@ -1,5 +1,7 @@
 import {z} from 'zod';
 
+import categorizationContract from '../../../../ops/claude-bridge/contract.json';
+
 const portSchema = z.coerce.number().int().min(0).max(65535);
 
 const durationPattern = /^[0-9]+(s|m|h|d|w)$/;
@@ -51,7 +53,8 @@ export const configSchema = z
 		// --- AI categorization ---
 		AI_CATEGORIZATION_ENABLED: strictBooleanEnvSchema.default(false),
 		AI_CATEGORIZATION_PROVIDER: z.enum(['claude']).default('claude'),
-		AI_CATEGORIZATION_MODEL: z.string().min(1).max(128).default('claude-opus-5-5'),
+		AI_CATEGORIZATION_MODEL: z.string().min(1).max(128).default('claude-sonnet-5-5'),
+		AI_CATEGORIZATION_EFFORT: z.enum(categorizationContract.efforts).default('high'),
 		AI_CATEGORIZATION_WEB_SEARCH_ENABLED: strictBooleanEnvSchema.default(false),
 		ANTHROPIC_API_KEY: z.string().min(1).optional(),
 		AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: z.string().min(1).optional(),
@@ -159,6 +162,19 @@ export const configSchema = z
 				path: ['ANTHROPIC_API_KEY'],
 				message:
 					'Configure ANTHROPIC_API_KEY or AI_CATEGORIZATION_SUBSCRIPTION_SOCKET when Claude categorization is enabled.',
+			});
+		}
+
+		// The bridge refuses other models outright, which would fail rows instead of leaving them pending.
+		if (
+			config.AI_CATEGORIZATION_ENABLED &&
+			config.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET &&
+			!categorizationContract.models.includes(config.AI_CATEGORIZATION_MODEL)
+		) {
+			context.addIssue({
+				code: 'custom',
+				path: ['AI_CATEGORIZATION_MODEL'],
+				message: `AI_CATEGORIZATION_MODEL must be one of the subscription bridge models: ${categorizationContract.models.join(', ')}.`,
 			});
 		}
 	});

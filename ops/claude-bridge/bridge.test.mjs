@@ -10,6 +10,8 @@ import {fileURLToPath} from 'node:url';
 
 const fixture = fileURLToPath(new URL('./fake-claude.mjs', import.meta.url));
 const payload = {
+	model: 'claude-sonnet-5-5',
+	effort: 'high',
 	input: {
 		categories: [{value: 'SHOPPING', label: 'Shopping', description: 'General retail goods.'}],
 		transactions: [
@@ -96,7 +98,7 @@ async function setup(t, {mode = 'success', ...options} = {}) {
 	return {bridge, calls, root, socketPath: bridge.socketPath};
 }
 
-test('categorizes through a real private Unix HTTP socket with the canonical contract', async (t) => {
+test('categorizes through a real private Unix HTTP socket with the canonical contract and requested model', async (t) => {
 	const {socketPath, calls} = await setup(t);
 	assert.deepEqual(await request(socketPath), {status: 200, body: expected});
 	assert.equal((await stat(path.dirname(socketPath))).mode & 0o777, 0o700);
@@ -104,12 +106,13 @@ test('categorizes through a real private Unix HTTP socket with the canonical con
 	assert.equal(calls[0].args.join(' '), 'auth status --json');
 	const call = calls.at(-1);
 	const contract = JSON.parse(await readFile(new URL('./contract.json', import.meta.url), 'utf8'));
+	assert.deepEqual(JSON.parse(call.stdin), payload.input);
 	assert.deepEqual(call.args, [
 		'-p',
 		'--model',
-		'claude-opus-5-5',
+		'claude-sonnet-5-5',
 		'--effort',
-		'medium',
+		'high',
 		'--system-prompt',
 		contract.instructions,
 		'--tools',
@@ -127,16 +130,26 @@ test('categorizes through a real private Unix HTTP socket with the canonical con
 		'--json-schema',
 		JSON.stringify(contract.schema),
 	]);
+	assert.deepEqual(await request(socketPath, {...payload, model: 'claude-opus-5-5', effort: 'medium'}), {
+		status: 200,
+		body: expected,
+	});
+	assert.deepEqual(calls.at(-1).args.slice(0, 5), ['-p', '--model', 'claude-opus-5-5', '--effort', 'medium']);
 });
 
 test('rejects invalid or nonstandard inputs without spawning a categorizer', async (t) => {
 	const {socketPath, calls} = await setup(t);
 	const invalid = [
 		{...payload, model: 'caller-model'},
+		{...payload, effort: 'extreme'},
+		{...payload, effort: ['high']},
+		{model: payload.model, input: payload.input},
+		{effort: payload.effort, input: payload.input},
 		{...payload, system: 'caller-system'},
-		{input: {...payload.input, schema: {}}},
-		{input: {...payload.input, transactions: []}},
+		{...payload, input: {...payload.input, schema: {}}},
+		{...payload, input: {...payload.input, transactions: []}},
 		{
+			...payload,
 			input: {
 				...payload.input,
 				transactions: Array.from({length: 51}, (_, i) => ({
@@ -145,16 +158,18 @@ test('rejects invalid or nonstandard inputs without spawning a categorizer', asy
 				})),
 			},
 		},
-		{input: {...payload.input, transactions: [payload.input.transactions[0], payload.input.transactions[0]]}},
+		{...payload, input: {...payload.input, transactions: [payload.input.transactions[0], payload.input.transactions[0]]}},
 		{
+			...payload,
 			input: {
 				...payload.input,
 				transactions: [{...payload.input.transactions[0], correlationId: 'private-row-identifier'}],
 			},
 		},
-		{input: {...payload.input, transactions: [{...payload.input.transactions[0], accountNumber: 'secret'}]}},
-		{input: {...payload.input, transactions: [{...payload.input.transactions[0], amount: {command: 'run'}}]}},
+		{...payload, input: {...payload.input, transactions: [{...payload.input.transactions[0], accountNumber: 'secret'}]}},
+		{...payload, input: {...payload.input, transactions: [{...payload.input.transactions[0], amount: {command: 'run'}}]}},
 		{
+			...payload,
 			input: {
 				...payload.input,
 				transactions: [
@@ -166,6 +181,7 @@ test('rejects invalid or nonstandard inputs without spawning a categorizer', asy
 			},
 		},
 		{
+			...payload,
 			input: {
 				...payload.input,
 				transactions: [
@@ -182,7 +198,7 @@ test('rejects invalid or nonstandard inputs without spawning a categorizer', asy
 				],
 			},
 		},
-		{input: {...payload.input, categories: [{value: 'NOT_A_CATEGORY', label: 'Fake', description: 'Fake'}]}},
+		{...payload, input: {...payload.input, categories: [{value: 'NOT_A_CATEGORY', label: 'Fake', description: 'Fake'}]}},
 		'not json',
 	];
 	for (const body of invalid) assert.equal((await request(socketPath, body)).status, 400);
@@ -207,7 +223,7 @@ test('isolates CLI environment, stdin and empty working directory', async (t) =>
 		GOOGLE_APPLICATION_CREDENTIALS: '/synthetic/key',
 	};
 	const {socketPath, calls} = await setup(t, {env: poisoned});
-	assert.deepEqual(await request(socketPath, {...payload, model: 'claude-opus-5-5'}), {status: 200, body: expected});
+	assert.deepEqual(await request(socketPath), {status: 200, body: expected});
 	for (const {opts} of calls) {
 		assert.equal(opts.shell, false);
 		assert.equal(opts.detached, true);
@@ -286,6 +302,7 @@ test('decodes a multibyte character split across request chunks', async (t) => {
 	const {socketPath, calls} = await setup(t);
 	const body = Buffer.from(
 		JSON.stringify({
+			...payload,
 			input: {...payload.input, transactions: [{...payload.input.transactions[0], description: 'Example Café'}]},
 		}),
 	);
@@ -460,7 +477,8 @@ test('shutdown kills and reaps its child and removes only its own socket', async
 });
 
 const searchPayload = {
-	model: 'claude-opus-5-5',
+	model: 'claude-sonnet-5-5',
+	effort: 'high',
 	input: {
 		categories: payload.input.categories,
 		transactions: [
@@ -495,6 +513,8 @@ test('searches once with the pinned query hook and returns only source hostnames
 	const contract = JSON.parse(await readFile(new URL('./contract.json', import.meta.url), 'utf8'));
 	const {args, stdin} = calls.at(-1);
 	const value = (flag) => args[args.indexOf(flag) + 1];
+	assert.equal(value('--model'), 'claude-sonnet-5-5');
+	assert.equal(value('--effort'), 'high');
 	assert.equal(value('--tools'), 'WebSearch');
 	assert.equal(value('--system-prompt'), contract.webSearch.instructions);
 	assert.equal(value('--json-schema'), JSON.stringify(contract.webSearch.schema));
@@ -541,6 +561,7 @@ test('rejects malformed search requests without spawning a categorizer', async (
 		withTx([{...tx, searchQuery: 'x'.repeat(241)}]),
 		withTx([{...tx, description: 'Example Shop'}]),
 		withTx([{...tx, merchantName: undefined}]),
+		{...searchPayload, effort: 'extreme'},
 		payload,
 	])
 		assert.equal((await searchRequest(socketPath, body)).status, 400);
