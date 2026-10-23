@@ -17,16 +17,16 @@ CI builds one image per commit, publishes `ghcr.io/tempo-co/tempo-{api,web}:pr-<
 
 ## Production
 
-`tempo-deploy-production.timer` runs `deploy.sh production` every 5 minutes and deploys `:main`. Before any API image change it takes a validated backup into `/var/lib/tempo-deploy/pre-deploy-backups` (newest 5 kept); a failed backup cancels the deploy. Images that fail to deploy are skipped until `:main` moves.
+`tempo-deploy-production.timer` runs `deploy.sh production` every 5 minutes and deploys `:main`. Before any API image change it takes a validated database backup; a failed backup cancels the deploy. Images that fail to deploy are skipped until `:main` moves.
 
-PostgreSQL, Redis, Mailpit and Tailscale are pinned by `tag@digest` in the Compose files, and Dependabot proposes weekly bumps (no PostgreSQL or Redis majors). Before every deploy run, `tempo-sync-pins.service` (root, `sync-pins.sh`) copies a merged bump from `main` into the installed Compose files in `/etc/tempo/compose/` when the only change is a tag@digest `image:` line for the same image, major version and variant that moves forward (a higher version, or the same tag at the digest Docker Hub currently serves); downgrades and anything else still need `sudo ops/install.sh production`. The deploy run then recreates the services whose pin changed, taking the same backup first when PostgreSQL changes, and waits for health. There is no automatic rollback for these. After a failed pin update, deploys stop until a pin changes or the `failed-pins-*` file in the state directory is removed.
+PostgreSQL, Redis, Mailpit and Tailscale are pinned by `tag@digest` in the Compose files, and Dependabot proposes weekly bumps (no PostgreSQL or Redis majors). Before every deploy run, `tempo-sync-pins.service` (root, `sync-pins.sh`) copies a merged bump from `main` into the installed Compose files when the only change is a tag@digest `image:` line for the same image, major version and variant that moves forward (a higher version, or the same tag at the digest Docker Hub currently serves); downgrades and anything else still need `sudo ops/install.sh production`. The deploy run then recreates the services whose pin changed, taking the same backup first when PostgreSQL changes, and waits for health. There is no automatic rollback for these. After a failed pin update, deploys stop until a pin changes or the `failed-pins-*` file in the state directory is removed.
 
 ```bash
 journalctl -u tempo-deploy-production.service -n 50   # what happened
 cat /var/lib/tempo-deploy/deployed.env                # what is deployed
 ```
 
-`tempo-backup.timer` runs `backup.sh` nightly at 03:30 into `~/backups/tempo` (newest 14 timestamped archives kept; manual `tempo-pre-*.dump` files are never pruned). Staging refreshes from these archives.
+`tempo-backup.timer` runs `backup.sh` on a schedule and keeps a fixed number of timestamped archives; manual `tempo-pre-*.dump` files are never pruned. Schedule, directory and retention are set by the units `install.sh` installs. Staging refreshes from these archives.
 
 After changing anything else in `ops/` or `docker-compose.production.yml`, install from a clean `main` checkout:
 
@@ -35,7 +35,7 @@ git fetch && git checkout --detach origin/main
 sudo ops/install.sh production
 ```
 
-Production secrets live in `/etc/tempo/production.env` (mode 600), outside the repository. Email goes through authenticated Gmail SMTP (`smtp.gmail.com:587`, STARTTLS required).
+Production secrets live in the production env file (path set by `install.sh`, mode 600), outside the repository. Email goes through authenticated SMTP with STARTTLS required.
 
 ### Claude categorization
 
@@ -46,7 +46,7 @@ ops/install.sh claude-bridge
 systemctl --user enable --now tempo-claude-bridge.service
 ```
 
-Then set `AI_CATEGORIZATION_PROVIDER=claude`, `ANTHROPIC_API_KEY` and `TEMPO_CLAUDE_BRIDGE_DIR` (the unit's `~/.local/state/tempo-claude`) in `/etc/tempo/production.env`, and remove `OPENAI_API_KEY`. When neither route is available, transactions stay pending and hourly reconciliation retries them.
+Then set `AI_CATEGORIZATION_PROVIDER=claude`, `ANTHROPIC_API_KEY` and `TEMPO_CLAUDE_BRIDGE_DIR` (the bridge unit's socket directory) in the production env file, and remove `OPENAI_API_KEY`. When neither route is available, transactions stay pending and hourly reconciliation retries them.
 
 ### Contract compatibility
 
@@ -73,4 +73,4 @@ ops/install.sh staging                         # after changing ops/
 tempo-deploy staging --api pr-115 --web main
 ```
 
-A successful deploy refreshes the staging database from the newest production backup, so staging holds production data: keep it on loopback. See [`staging/README.md`](staging/README.md).
+A successful deploy refreshes the staging database from the newest production backup, so keep staging on loopback. See [`staging/README.md`](staging/README.md).
