@@ -16,6 +16,7 @@ import {BankConnectionAlertProcessor} from './alerts/bank-connection-alert.proce
 import {BankConnectionAlertService} from './alerts/bank-connection-alert.service';
 import {BankConnectionController} from './api/bank-connection.controller';
 import {BankTransactionController} from './api/bank-transaction.controller';
+import {RecurringSeriesController} from './api/recurring-series.controller';
 import {BankAccountBalance} from './bank-account-balance.entity';
 import {BankAccount} from './bank-account.entity';
 import {BankConnection} from './bank-connection.entity';
@@ -24,6 +25,10 @@ import {BankTransactionFxRate} from './bank-transaction-fx-rate.entity';
 import {BankTransaction} from './bank-transaction.entity';
 import {BankingService} from './banking.service';
 import {BankTransactionCategorizationModule} from './categorization/bank-transaction-categorization.module';
+import {RecurringContinuationUnlink} from './recurring/recurring-continuation-unlink.entity';
+import {RecurringSeriesHide} from './recurring/recurring-series-hide.entity';
+import {RecurringSeriesService} from './recurring/recurring-series.service';
+import {RecurringSnapshot} from './recurring/recurring-snapshot.entity';
 import {BankTransactionAmountConversionProcessor} from './services/bank-transaction-amount-conversion.processor';
 import {BankTransactionAmountConversionQueueService} from './services/bank-transaction-amount-conversion.queue.service';
 import {BankTransactionAmountConversionService} from './services/bank-transaction-amount-conversion.service';
@@ -50,6 +55,9 @@ import {OwnTransferService} from './services/own-transfer.service';
 			BankAccountBalance,
 			BankTransaction,
 			BankTransactionFxRate,
+			RecurringSeriesHide,
+			RecurringContinuationUnlink,
+			RecurringSnapshot,
 		]),
 		BullModule.registerQueue({name: BANK_CONNECTION_SYNC_QUEUE}),
 		BullModule.registerQueue({name: BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE}),
@@ -78,7 +86,8 @@ import {OwnTransferService} from './services/own-transfer.service';
 		CurrencyExchangeService,
 		BankConnectionAlertService,
 		BankConnectionAlertProcessor,
+		RecurringSeriesService,
 	],
-	controllers: [BankConnectionController, BankTransactionController],
+	controllers: [BankConnectionController, BankTransactionController, RecurringSeriesController],
 })
 export class BankingModule {}

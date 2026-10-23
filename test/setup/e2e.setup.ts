@@ -42,7 +42,8 @@ beforeAll(async () => {
 	await app.init();
 
 	await seedAccounts(app);
-});
+	// Starting the app and syncing the schema on a cold CI runner can take longer than Jest's 5 s default.
+}, 60_000);
 
 afterAll(async () => {
 	if (app) await app.close();

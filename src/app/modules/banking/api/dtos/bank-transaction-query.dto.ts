@@ -7,6 +7,7 @@ import {
 	IsOptional,
 	IsString,
 	IsUUID,
+	Matches,
 	MaxLength,
 	Min,
 	ValidateNested,
@@ -34,6 +35,7 @@ import {
 	BANK_TRANSACTION_CATEGORY_FILTER_VALUES,
 	type BankTransactionCategoryFilterValue,
 } from '../../categorization/bank-transaction-category';
+import {SERIES_KEY_PATTERN} from '../pipes/series-key.pipe';
 
 export const DEFAULT_BANK_TRANSACTION_PAGE_INDEX = DEFAULT_PAGE_INDEX;
 export const DEFAULT_BANK_TRANSACTION_PAGE_SIZE = DEFAULT_PAGE_SIZE;
@@ -129,6 +131,11 @@ export class BankTransactionFilterQueryDto {
 	@IsArray()
 	@IsIn(BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES, {each: true})
 	categoryStatuses?: BankTransactionCategoryStatusFilterValue[];
+
+	/** Only the payments of one detected recurring series. */
+	@IsOptional()
+	@Matches(SERIES_KEY_PATTERN)
+	recurringSeriesKey?: string;
 }
 
 /** Totals use the list's filter contract, without sort or pagination inputs. */

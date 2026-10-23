@@ -65,6 +65,11 @@ function stripProcessorTail(name: string): string {
 	return MULTI_WORD_PATTERN.test(stripped) ? stripped : name;
 }
 
+/** Whether a name ends in a legal form ("Example Music AB"), as the merchant key would strip it. */
+export function endsWithLegalForm(name: string): boolean {
+	return stripLegalEntity(name) !== name.replace(TRAILING_SEPARATOR_PATTERN, '');
+}
+
 // Drops a trailing legal form and then the entity words before it; a name without a legal form is kept whole.
 function stripLegalEntity(name: string): string {
 	const trimmed = name.replace(TRAILING_SEPARATOR_PATTERN, '');
