@@ -38,24 +38,44 @@ const TRAILING_SEPARATOR_PATTERN = /[\s,;]+$/;
  * manually can be reused. Card lines drop wallet prefixes, card details, payment-processor prefixes and terminal
  * numbers; other rows use the counterparty name without its payment-processor tail, then the plain description.
  * Card and counterparty names also drop a trailing legal form, so one business's legal entities share a key.
+ * Explicit transfer descriptions drop their direction prefix; names ignore accents but retain every name part.
  *
  * The key is stored on each transaction. Changing its output needs a migration that backfills existing rows, or old
  * and new rows from the same merchant stop matching.
  */
 export function getBankTransactionMerchantKey(transaction: MerchantKeyTransaction): string | null {
 	const description = normalizeBankTransactionText(transaction.description);
+	const entityName = getEntityName(transaction, description);
+	const direction = toBankTransactionDirection(transaction.creditDebitIndicator?.trim() ?? null);
+	const name = entityName ?? extractTransferPayeeName(description, direction) ?? description;
+	const normalizedName = name?.toLowerCase();
+	if (!normalizedName || PAYMENT_PROCESSOR_NAME_PATTERN.test(normalizedName)) return null;
+	const key = (entityName ? stripLegalEntity(entityName).toLowerCase() : normalizedName)
+		.normalize('NFKD')
+		.replace(/\p{M}/gu, '');
+
+	return `${direction}:${key}`;
+}
+
+/** The full name explicitly named by a transfer description, without discarding middle names or surname words. */
+function extractTransferPayeeName(description: string | null, direction: string): string | null {
+	if (direction !== 'EXPENSE' && direction !== 'INCOME') return null;
+	const pattern = direction === 'EXPENSE' ? /^transfer to\s+(.+\s+.+)$/i : /^transfer from\s+(.+\s+.+)$/i;
+	return description ? (pattern.exec(description)?.[1] ?? null) : null;
+}
+
+/** Whether the merchant key comes from a "Transfer to/from" description, which names a person, not a merchant. */
+export function isTransferDescriptionMerchantKey(transaction: MerchantKeyTransaction): boolean {
+	const description = normalizeBankTransactionText(transaction.description);
+	return !getEntityName(transaction, description) && /^transfer (?:to|from)\s+\S/i.test(description ?? '');
+}
+
+// A card merchant comes first, then the counterparty name without its processor tail; the description is the fallback.
+function getEntityName(transaction: MerchantKeyTransaction, description: string | null): string | null {
 	const counterpartyName =
 		normalizeBankTransactionText(transaction.counterpartyName) ??
 		(description ? extractStructuredCounterpartyName(description) : null);
-	const entityName =
-		getCardMerchantName(description) ?? (counterpartyName ? stripProcessorTail(counterpartyName) : null);
-	const name = entityName ?? description;
-	const normalizedName = name?.toLowerCase();
-	if (!normalizedName || PAYMENT_PROCESSOR_NAME_PATTERN.test(normalizedName)) return null;
-	const key = entityName ? stripLegalEntity(entityName).toLowerCase() : normalizedName;
-
-	const direction = toBankTransactionDirection(transaction.creditDebitIndicator?.trim() ?? null);
-	return `${direction}:${key}`;
+	return getCardMerchantName(description) ?? (counterpartyName ? stripProcessorTail(counterpartyName) : null);
 }
 
 // Keeps the full name when the strip would leave fewer than two words, because "via" or "by" can then be part of the

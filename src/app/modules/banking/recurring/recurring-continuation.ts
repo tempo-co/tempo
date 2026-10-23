@@ -77,7 +77,7 @@ function compatible(
 	)
 		return false;
 	const rows = [...older.transactionIds, ...newer.transactionIds].map((id) => candidatesById.get(id)!);
-	if (rows.some(isPersonTransferCategory)) return false;
+	if (rows.some((row) => row.personTransfer || isPersonTransferCategory(row))) return false;
 	if (isOrdinaryRetailExpense(older, candidatesById) || isOrdinaryRetailExpense(newer, candidatesById)) return false;
 	const purposes = new Set(rows.map(({category}) => category));
 	if (purposes.size !== 1 || purposes.has(null)) return false;

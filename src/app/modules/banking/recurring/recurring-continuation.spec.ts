@@ -127,6 +127,10 @@ describe('findContinuationPairs', () => {
 		],
 		['ordinary retail', () => history().map((row) => ({...row, category: 'SHOPPING'}))],
 		['person transfers', () => history().map((row) => ({...row, category: 'TRANSFER_OUT'}))],
+		[
+			'bank-described person transfers',
+			() => history().map((row) => ({...row, personTransfer: true, category: 'HOUSING_AND_UTILITIES'})),
+		],
 		['overlapping plans', () => history({}, ['2036-02-11', '2036-03-11', '2036-04-11'])],
 		['staggered simultaneous billing', () => history({}, ['2036-01-25', '2036-02-25', '2036-03-25'])],
 		['different cadences', () => history({}, ['2036-07-08', '2036-07-15', '2036-07-22'])],

@@ -1,7 +1,7 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
 import TestAgent from 'supertest/lib/agent';
-import {ArrayContains, In, Repository} from 'typeorm';
+import {ArrayContains, DataSource, In, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
@@ -145,7 +145,7 @@ describe('RecurringSeries', () => {
 			...monthly('13', '-7.00', 'Example Pending', {transactionStatus: 'PDNG'}),
 			...monthly('25', '2500.00', 'Example Employer', {category: 'INCOME'}),
 			// A bank that marks settled payments COMPLETED, then switches format: the person's name moves from the
-			// description to the counterparty, with accents and without a middle name.
+			// description to the counterparty, with accents but the full name retained.
 			...MONTHS.slice(0, 4).map((month, index) =>
 				bookedRow(`${month}-27`, '-650.00', {
 					// A row without any status counts as settled too.
@@ -156,7 +156,7 @@ describe('RecurringSeries', () => {
 				}),
 			),
 			bookedRow('2026-09-27', '-650.00', {
-				counterpartyName: 'Alex Exämple',
+				counterpartyName: 'Alex-Sam Exämple',
 				description: 'rent',
 				category: 'HOUSING_AND_UTILITIES',
 			}),
@@ -1052,16 +1052,61 @@ describe('RecurringSeries', () => {
 	});
 
 	it('finds rent across a settled status and a change in how the bank names the payee', async () => {
-		const rent = (await list(ownerAgent)).series.filter(({typicalAmount}) => typicalAmount === '650.00');
+		const ds = app.get(DataSource);
+		const runner = ds.createQueryRunner();
+		const hides: Repository<RecurringSeriesHide> = app.get(getRepositoryToken(RecurringSeriesHide));
+		const rentRows = await fixtures.transactions.findBy({bankAccountId: ownerBankAccount.id, amount: '-650.00'});
+		const ids = rentRows.map(({id}) => id);
+		try {
+			for (const row of rentRows) {
+				await runner.query('UPDATE bank_transactions SET "merchantKey" = $1 WHERE id = $2', [
+					row.counterpartyName ? 'EXPENSE:alex-sam exämple' : 'EXPENSE:transfer to alex-sam example',
+					row.id,
+				]);
+			}
+			const before = await list(ownerAgent);
+			const legacy = before.series.find(({typicalAmount}) => typicalAmount === '650.00')!;
+			await hide(ownerAgent, legacy.key).expect(204);
+			const saved = await hides.findBy({accountId: owner.id, seriesKey: legacy.key});
+			const source = await runner.query(
+				"SELECT to_jsonb(t) - 'merchantKey' AS state FROM bank_transactions t WHERE id = ANY($1::uuid[]) ORDER BY id",
+				[ids],
+			);
+			const migration = ds.migrations.find(
+				(entry) => entry.name === 'RefreshBankTransactionMerchantKeysForTransferPayees20261023230000',
+			)!;
+			await migration.up(runner);
+			const result = await list(ownerAgent);
+			const rent = result.series.filter(({typicalAmount}) => typicalAmount === '650.00');
 
-		expect(rent).toEqual([
-			expect.objectContaining({
-				cadence: 'MONTHLY',
-				transactionCount: 5,
-				nextExpectedDate: '2026-10-27',
-				status: 'ACTIVE',
-			}),
-		]);
+			expect(rent).toEqual([
+				expect.objectContaining({
+					cadence: 'MONTHLY',
+					transactionCount: 5,
+					nextExpectedDate: '2026-10-27',
+					status: 'ACTIVE',
+					hidden: true,
+				}),
+			]);
+			expect(rent[0].key).not.toBe(legacy.key);
+			expect(result.monthlyTotal).toBe(before.monthlyTotal);
+			expect(await hides.findBy({accountId: owner.id, seriesKey: legacy.key})).toEqual(saved);
+			expect(
+				await runner.query(
+					"SELECT to_jsonb(t) - 'merchantKey' AS state FROM bank_transactions t WHERE id = ANY($1::uuid[]) ORDER BY id",
+					[ids],
+				),
+			).toEqual(source);
+			const drill = await ownerAgent
+				.get('/bank-transactions')
+				.query({filter: {recurringSeriesKey: rent[0].key}})
+				.expect(200);
+			expect(drill.body.transactions.map(({id}: {id: string}) => id).sort()).toEqual([...ids].sort());
+			await hide(ownerAgent, rent[0].key, false).expect(204);
+			expect(parseCents((await list(ownerAgent)).monthlyTotal) - parseCents(before.monthlyTotal)).toBe(65000n);
+		} finally {
+			await runner.release();
+		}
 	});
 
 	it('leaves out irregular, internal, refunded and pending payments, income and other owners', async () => {
