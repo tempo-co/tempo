@@ -78,6 +78,7 @@ services:
     networks:
       - frontend
       - ingress
+      - tailscale
     depends_on:
       api:
         condition: service_healthy
@@ -93,6 +94,14 @@ networks:
   frontend:
     internal: true
   ingress: {}
+  # Joins web and the Tailscale sidecar (ops/tailscale.compose.yml). The fixed subnet gives the sidecar a
+  # static address outside the dynamic range, the only address web's Nginx trusts for X-Forwarded-For.
+  tailscale:
+    ipam:
+      config:
+        - subnet: 10.213.47.0/28
+          gateway: 10.213.47.1
+          ip_range: 10.213.47.8/29
 
 volumes:
   tempo_production_postgres_data:
