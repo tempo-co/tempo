@@ -1129,6 +1129,21 @@ describe('RecurringSeries', () => {
 		expect((await list(ownerAgent)).monthlyTotal).toBe(before.monthlyTotal);
 	});
 
+	it('keeps one hide when two hides of the same series arrive at once', async () => {
+		const hides: Repository<RecurringSeriesHide> = app.get(getRepositoryToken(RecurringSeriesHide));
+		const streaming = byName((await list(ownerAgent)).series, 'Example Streaming')[0];
+		try {
+			for (let attempt = 0; attempt < 3; attempt++) {
+				const responses = await Promise.all([hide(ownerAgent, streaming.key), hide(ownerAgent, streaming.key)]);
+				expect(responses.map(({status}) => status)).toEqual([204, 204]);
+				expect(await hides.countBy({accountId: owner.id, seriesKey: streaming.key})).toBe(1);
+				await hide(ownerAgent, streaming.key, false).expect(204);
+			}
+		} finally {
+			await hides.delete({accountId: owner.id, seriesKey: streaming.key});
+		}
+	});
+
 	it('keeps a hidden series hidden when new payments arrive, until the owner shows it again', async () => {
 		const streaming = byName((await list(ownerAgent)).series, 'Example Streaming')[0];
 		await hide(ownerAgent, streaming.key).expect(204);

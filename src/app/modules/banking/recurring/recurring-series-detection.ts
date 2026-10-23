@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 
 import {BANK_TRANSACTION_DIRECTIONS, type BankTransactionDirection} from '../bank-transaction-direction';
+import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
 import {formatCents} from '../summary/bank-transaction-summary';
 
 export const RECURRING_CADENCES = ['WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY'] as const;
@@ -178,12 +179,16 @@ const MIN_USUAL_PAYMENTS = 3;
 /** Other payments to the same payee tolerated inside a yearly series' span. */
 const MAX_OTHER_PAYMENTS_IN_YEARLY_SPAN = 3;
 const DAY_MS = 86_400_000;
+const SUBSCRIPTIONS = 'SUBSCRIPTIONS' satisfies BankTransactionCategory;
 /** A payment may arrive this many days after its expected date; the series shows as late until then, then stops. */
 const GRACE_DAYS = 5;
 /** Middle payment days further apart than this are two billing days, not one; averaging them would fit neither. */
 const MAX_MIDDLE_SPREAD_DAYS = GRACE_DAYS;
 /** Categories of money sent to or received from other people. */
-const PERSON_TRANSFER_CATEGORIES: ReadonlySet<string> = new Set(['TRANSFER_OUT', 'TRANSFER_IN']);
+const PERSON_TRANSFER_CATEGORIES: ReadonlySet<string> = new Set<BankTransactionCategory>([
+	'TRANSFER_OUT',
+	'TRANSFER_IN',
+]);
 
 /**
  * A date before any payment. Detecting on it gives every series as if still active; `atDate` then dates them, so the
@@ -295,12 +300,12 @@ type RecognizedPartition = {
 
 /** Qualification does not need to build forecasts/restart calendars for every chronological prefix. */
 function recognizePartition(rows: RecurringCandidate[], person: boolean): RecognizedPartition[] {
-	rows.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+	rows.sort(byDateThenId);
 	const cadenceOf = (chain: readonly RecurringCandidate[]) => {
 		const rule = matchCadence(chain);
 		if (rule?.cadence !== 'YEARLY') return rule;
 		const coincidence = person || chain.some(isPersonTransferCategory) || isBusyPayee(rows, chain);
-		const enoughHistory = chain.length >= 3 || chain.every(({category}) => category === 'SUBSCRIPTIONS');
+		const enoughHistory = chain.length >= 3 || chain.every(({category}) => category === SUBSCRIPTIONS);
 		return coincidence || !enoughHistory ? null : rule;
 	};
 	const chains = chainByAmount(rows);
@@ -370,7 +375,7 @@ function reconcileAccountSeries(
 				const rows = parts.flatMap((entry) =>
 					entry.transactionIds.map((id) => grouped(byId.get(id)!, entry.merchantKey)),
 				);
-				rows.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+				rows.sort(byDateThenId);
 				const joined = completePartition(rows, today, false);
 				if (joined?.cadence === parts[0].cadence) return joined;
 				// Every member is already independently recognized. Validate continuity, not the share of old prices.
@@ -507,7 +512,7 @@ function latestNamingPeriod(
 	rows: readonly RecurringCandidate[],
 	byId: ReadonlyMap<string, RecurringCandidate>,
 	recognized: (part: RecurringCandidate[]) => boolean,
-	cache: NamingPeriodCache = new Map(),
+	cache: NamingPeriodCache,
 ): RecurringCandidate[] | null {
 	const latest = byId.get(rows[rows.length - 1].id)!;
 	const accountRows = rows.filter(({id}) => byId.get(id)!.bankAccountId === latest.bankAccountId);
@@ -733,9 +738,7 @@ function retainIsolatedPayments(
 						owner.rule.nominalDays - owner.rule.toleranceDays,
 			),
 		);
-		const extended = [...rows, ...additions].sort(
-			(a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id),
-		);
+		const extended = [...rows, ...additions].sort(byDateThenId);
 		return cadenceOf(extended)?.cadence === owner.rule.cadence && latestPricePeriod(extended, chains, owner.rule)
 			? extended
 			: rows;
@@ -878,11 +881,7 @@ function streamAmountKind(rows: readonly RecurringCandidate[], rule: CadenceRule
 
 /** Occasional extra charges can belong to one variable bill; a repeated overlapping rhythm is another obligation. */
 function hasRecurringOverlap(rows: readonly RecurringCandidate[], rule: CadenceRule): boolean {
-	const overlapping = rows.filter(
-		(row, index) =>
-			index > 0 &&
-			toDayNumber(row.date) - toDayNumber(rows[index - 1].date) < rule.nominalDays - rule.toleranceDays,
-	);
+	const overlapping = shortGapRows(rows, rule);
 	// Use the detector's actual cadence rule on short witnesses, including a skipped cycle.
 	const followsCadence = (path: readonly RecurringCandidate[], lastIndex: number): boolean => {
 		if (matchCadence(path)?.cadence === rule.cadence) return true;
@@ -898,7 +897,12 @@ function hasRecurringOverlap(rows: readonly RecurringCandidate[], rule: CadenceR
 }
 
 function hasOverlappingCycles(rows: readonly RecurringCandidate[], rule: CadenceRule): boolean {
-	return rows.some(
+	return shortGapRows(rows, rule).length > 0;
+}
+
+/** Payments that came sooner after the one before than the cadence allows: a second obligation in the same cycle. */
+function shortGapRows(rows: readonly RecurringCandidate[], rule: CadenceRule): RecurringCandidate[] {
+	return rows.filter(
 		(row, index) =>
 			index > 0 &&
 			toDayNumber(row.date) - toDayNumber(rows[index - 1].date) < rule.nominalDays - rule.toleranceDays,
@@ -954,7 +958,7 @@ export function nearAmount(amount: bigint, reference: bigint): boolean {
 }
 
 /** Whether two amounts this far apart are close enough to be one fixed price. */
-export function withinAmountTolerance(distance: bigint, reference: bigint): boolean {
+function withinAmountTolerance(distance: bigint, reference: bigint): boolean {
 	const percentTolerance = (reference * AMOUNT_TOLERANCE_PERCENT) / 100n;
 	return distance <= (percentTolerance > AMOUNT_TOLERANCE_CENTS ? percentTolerance : AMOUNT_TOLERANCE_CENTS);
 }
@@ -1209,6 +1213,10 @@ function anchorDate(year: number, monthIndex: number, anchorDay: number): string
 	const lastDayOfMonth = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
 	target.setUTCDate(Math.min(anchorDay, lastDayOfMonth));
 	return target.toISOString().slice(0, 10);
+}
+
+function byDateThenId(a: RecurringCandidate, b: RecurringCandidate): number {
+	return a.date.localeCompare(b.date) || a.id.localeCompare(b.id);
 }
 
 function addDays(date: string, days: number): string {

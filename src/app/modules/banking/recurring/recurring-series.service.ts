@@ -61,10 +61,10 @@ type Continuation = {
 	saved: RecurringContinuationUnlink[];
 };
 
-/** A detected series as stored: amounts as strings, plus whether it is ordinary retail. */
 /** Cents stored as strings, since JSON has no bigint. */
 const CENTS_FIELDS = ['monthlyEquivalent', 'usualMonthlyEquivalent', 'paidMonthlyEquivalent'] as const;
 type CentsField = (typeof CENTS_FIELDS)[number];
+/** A detected series as stored: amounts as strings, plus whether it is ordinary retail. */
 type StoredSeries = Omit<DetectedRecurringSeries, CentsField> & {[field in CentsField]: string | null} & {
 	retail: boolean;
 };
@@ -165,12 +165,15 @@ export class RecurringSeriesService {
 
 	/** Hides a series detected right now, or shows it again; an unknown or another owner's key is not found. */
 	async updateHidden(accountId: Account['id'], seriesKey: string, hidden: boolean) {
-		const {detected, hidesBySeries} = await this.readState(accountId, today());
+		const {detected} = await this.readState(accountId, today());
 		const series = detected.find((entry) => entry.key === seriesKey);
 		if (!series) throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);
-		// Replace every hide owned by this current series, including older ones from merged parts.
-		const superseded = hidesBySeries.get(seriesKey) ?? [];
 		await this.hideRepository.manager.transaction(async (manager) => {
+			// One owner's answers change one at a time, so two taps cannot both add a hide.
+			await manager.query('SELECT id FROM accounts WHERE id = $1 FOR UPDATE', [accountId]);
+			// Replace every hide owned by this current series, including older ones from merged parts.
+			const hides = await manager.find(RecurringSeriesHide, {where: {accountId}});
+			const superseded = assignHides(detected, hides).get(seriesKey) ?? [];
 			if (superseded.length > 0) {
 				await manager.delete(
 					RecurringSeriesHide,
