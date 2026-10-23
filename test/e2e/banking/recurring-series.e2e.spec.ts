@@ -308,11 +308,11 @@ describe('RecurringSeries', () => {
 			0,
 			true,
 			['50.00', '25.00', '100.00', '75.00', '40.00', '60.00'],
-			'60.00',
+			'55.00',
 			'2027-01-10',
 		],
-		['long same-account history', 2, 24, true, ['50.00', '25.00', '100.00', '75.00'], '75.00', '2026-11-10'],
-		['long moved-account history', 2, 24, false, ['50.00', '25.00', '100.00', '75.00'], '75.00', '2026-11-10'],
+		['long same-account history', 2, 24, true, ['50.00', '25.00', '100.00', '75.00'], '62.50', '2026-11-10'],
+		['long moved-account history', 2, 24, false, ['50.00', '25.00', '100.00', '75.00'], '62.50', '2026-11-10'],
 	] as const)(
 		'current naming period: preserves cost, hiding and exact membership for %s',
 		async (label, nameCount, oldCount, sameAccount, amounts, cost, due) => {
@@ -407,6 +407,7 @@ describe('RecurringSeries', () => {
 					bookedRow(due, '-50.00', {counterpartyName: returnedName, description: sepaNaming(name)}),
 				);
 				ids.push(returned.id);
+				const usual = nameCount === 3 ? '55.00' : '50.00';
 				const continued = await read();
 				const continuedDue = new Date(Date.UTC(Number(due.slice(0, 4)), Number(due.slice(5, 7)), 10))
 					.toISOString()
@@ -414,7 +415,8 @@ describe('RecurringSeries', () => {
 				expect(continued.series.filter(({key}) => key === linkedKey)).toEqual([
 					expect.objectContaining({
 						amountKind: 'VARIABLE',
-						typicalAmount: '50.00',
+						// The median of the latest six payments; the month the 50.00 was paid in costs 50.00.
+						typicalAmount: usual,
 						monthlyEquivalent: '50.00',
 						transactionCount: ids.length,
 						nextExpectedDate: continuedDue,
@@ -470,7 +472,8 @@ describe('RecurringSeries', () => {
 						hidden: true,
 					}),
 				]);
-				expect(parseCents(after.monthlyTotal) - parseCents(shownTotal)).toBe(-5000n);
+				// Next month it would have cost its usual amount.
+				expect(parseCents(after.monthlyTotal) - parseCents(shownTotal)).toBe(-parseCents(usual));
 				const drill = await ownerAgent
 					.get('/bank-transactions')
 					.query({
@@ -678,8 +681,8 @@ describe('RecurringSeries', () => {
 			false,
 			false,
 			'VARIABLE',
-			'75.00',
-			7500n,
+			'62.50',
+			6250n,
 		],
 		[
 			'cross-account alternating names',
@@ -696,8 +699,8 @@ describe('RecurringSeries', () => {
 			true,
 			true,
 			'VARIABLE',
-			'75.00',
-			7500n,
+			'62.50',
+			6250n,
 		],
 		[
 			'same-account fixed alternating names',
@@ -992,6 +995,60 @@ describe('RecurringSeries', () => {
 		expect(byName(series, 'Example Insurer')).toEqual([
 			expect.objectContaining({cadence: 'YEARLY', monthlyEquivalent: '10.00', hidden: false}),
 		]);
+	});
+
+	it('shows a varying bill at its usual amount with its range and recent payments, flagging a high latest one', async () => {
+		const fresh = await createVerifiedAccount(
+			app.getHttpServer(),
+			app.get(ConfigurationService).get('EMAIL_UI_URL'),
+		);
+		const freshOwner = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
+		await app.get(getRepositoryToken(Account)).update({id: freshOwner.id}, {baseCurrency: 'EUR'});
+		const connection = await fixtures.createConnection(freshOwner);
+		try {
+			const bank = await fixtures.createBankAccount(connection);
+			const amounts = ['61.00', '95.00', '48.00', '80.00', '77.00', '160.00'];
+			const rows = await fixtures.createTransactions(
+				bank,
+				MONTHS.map((month, index) =>
+					bookedRow(`${month}-05`, `-${amounts[index]}`, {
+						counterpartyName: 'Example Energy',
+						description: 'Example Energy',
+						category: 'UTILITIES',
+					}),
+				),
+			);
+			const read = async (asOf: string) =>
+				(await fresh.agent.get('/recurring-series').query({asOf}).expect(200)).body.expenses;
+
+			const paid = await read(AS_OF);
+			expect(paid.series).toEqual([
+				expect.objectContaining({
+					name: 'Example Energy',
+					amountKind: 'VARIABLE',
+					typicalAmount: '78.50',
+					latestAmount: '160.00',
+					amountRange: {low: '48.00', high: '160.00'},
+					recentPayments: rows.map(({bookingDate}, index) => ({date: bookingDate, amount: amounts[index]})),
+					// This month's bill is in, so the month costs what was paid.
+					monthlyEquivalent: '160.00',
+					flags: ['HIGHER_THAN_USUAL'],
+				}),
+			]);
+			expect(paid.monthlyTotal).toBe('160.00');
+			// Next month the usual amount is expected again.
+			const next = await read('2026-11-02');
+			expect(next.series).toEqual([expect.objectContaining({monthlyEquivalent: '78.50'})]);
+			expect(next.monthlyTotal).toBe('78.50');
+			expect(
+				(await fresh.agent.get('/recurring-series/summary').query({asOf: AS_OF}).expect(200)).body,
+			).toMatchObject({
+				expenseMonthlyTotal: '160.00',
+				upcoming: [expect.objectContaining({typicalAmount: '78.50', amountKind: 'VARIABLE'})],
+			});
+		} finally {
+			await fixtures.connections.delete(connection.id);
+		}
 	});
 
 	it('finds rent across a settled status and a change in how the bank names the payee', async () => {
@@ -1785,6 +1842,7 @@ describe('RecurringSeries', () => {
 			direction: 'EXPENSE',
 			nextExpectedDate: due[0].nextExpectedDate,
 			typicalAmount: due[0].typicalAmount,
+			amountKind: due[0].amountKind,
 			currency: due[0].currency,
 		});
 

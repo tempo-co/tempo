@@ -12,7 +12,7 @@ export type RecurringAmountKind = (typeof RECURRING_AMOUNT_KINDS)[number];
 export const RECURRING_SERIES_STATUSES = ['ACTIVE', 'ENDED'] as const;
 export type RecurringSeriesStatus = (typeof RECURRING_SERIES_STATUSES)[number];
 
-export const RECURRING_SERIES_FLAGS = ['LATE'] as const;
+export const RECURRING_SERIES_FLAGS = ['LATE', 'HIGHER_THAN_USUAL'] as const;
 export type RecurringSeriesFlag = (typeof RECURRING_SERIES_FLAGS)[number];
 
 /** One settled, non-internal payment with a merchant identity; amounts are positive magnitudes in cents. */
@@ -44,12 +44,28 @@ export type DetectedRecurringSeries = {
 	cadence: RecurringCadence;
 	amountKind: RecurringAmountKind;
 	currency: string;
-	/** The latest payment, or the price before it while the latest payment is a one-off spike. */
+	/**
+	 * Fixed: the latest payment, or the price before it while the latest payment is a one-off spike. Variable: the
+	 * median of the recent payments.
+	 */
 	typicalAmount: string;
 	/** The most recent actual payment, including an isolated amount outside the established price. */
 	latestAmount: string;
-	/** Base-currency cents per month; null while any row lacks a converted amount. */
+	/**
+	 * Base-currency cents per month on the date the series is dated: `paidMonthlyEquivalent` in the month of the latest
+	 * payment, otherwise `usualMonthlyEquivalent`. Null while any row lacks a converted amount.
+	 */
 	monthlyEquivalent: bigint | null;
+	/** The shown amount per month: the fixed price, or a variable amount's median. */
+	usualMonthlyEquivalent: bigint | null;
+	/** A variable monthly bill's cost in the month its latest payment was made: that payment. Null otherwise. */
+	paidMonthlyEquivalent: bigint | null;
+	/** A variable series' lowest and highest recent payment; null for a fixed price. */
+	amountRange: RecurringAmountRange | null;
+	/** A variable series' recent payments, oldest first; empty for a fixed price. */
+	recentPayments: RecurringPayment[];
+	/** A variable bill's latest payment is clearly above every recent one before it. */
+	higherThanUsual: boolean;
 	transactionIds: string[];
 	/** Payments that arrived after the series had stopped: later than their expected date plus the grace days. */
 	restartTransactionIds: string[];
@@ -61,6 +77,10 @@ export type DetectedRecurringSeries = {
 	/** A fixed price's recent change against the price before it, until the new price has been paid three times. */
 	priceChange: RecurringPriceChange | null;
 };
+
+export type RecurringAmountRange = {low: string; high: string};
+
+export type RecurringPayment = {date: string; amount: string};
 
 export type RecurringPriceChange = {
 	/** Signed difference, e.g. "1.50" or "-3.50". */
@@ -149,6 +169,12 @@ const PRICE_CHANGE_SHOWN_PAYMENTS = 3;
 const SPIKE: Threshold = {percent: 50n, cents: 500n};
 /** A jump that matches one of this many payments before it is an amount already paid, not a one-off. */
 const REPEAT_LOOKBACK_PAYMENTS = 3;
+/** A variable amount is summarized by this many latest payments: their median, range and history. */
+const RECENT_PAYMENTS = 6;
+/** A variable bill's latest payment is higher than usual over 10% and 5.00 above every recent payment before it. */
+const HIGHER_THAN_USUAL: Threshold = {percent: 10n, cents: 500n};
+/** Fewest earlier payments that make a usual range to compare the latest one with. */
+const MIN_USUAL_PAYMENTS = 3;
 /** Other payments to the same payee tolerated inside a yearly series' span. */
 const MAX_OTHER_PAYMENTS_IN_YEARLY_SPAN = 3;
 const DAY_MS = 86_400_000;
@@ -165,11 +191,23 @@ const PERSON_TRANSFER_CATEGORIES: ReadonlySet<string> = new Set(['TRANSFER_OUT',
  */
 export const UNDATED = '0000-01-01';
 
-/** Status, lateness and the price label of a series detected on `UNDATED`, as on `today`. */
+/**
+ * Status, flags, the price label and this month's cost of a series detected on `UNDATED`, as on `today`. Only the
+ * fields derived here change; the rest are the same on any date.
+ */
 export function atDate(entry: DetectedRecurringSeries, today: string): DetectedRecurringSeries {
 	const status: RecurringSeriesStatus = today > addDays(entry.nextExpectedDate, GRACE_DAYS) ? 'ENDED' : 'ACTIVE';
-	const flags: RecurringSeriesFlag[] = status === 'ACTIVE' && today > entry.nextExpectedDate ? ['LATE'] : [];
-	return {...entry, status, flags, priceChange: status === 'ACTIVE' ? entry.priceChange : null};
+	const flags: RecurringSeriesFlag[] = [];
+	if (status === 'ACTIVE' && today > entry.nextExpectedDate) flags.push('LATE');
+	if (status === 'ACTIVE' && entry.higherThanUsual) flags.push('HIGHER_THAN_USUAL');
+	const paidThisMonth = entry.paidMonthlyEquivalent !== null && entry.lastDate.slice(0, 7) === today.slice(0, 7);
+	return {
+		...entry,
+		status,
+		flags,
+		priceChange: status === 'ACTIVE' ? entry.priceChange : null,
+		monthlyEquivalent: paidThisMonth ? entry.paidMonthlyEquivalent : entry.usualMonthlyEquivalent,
+	};
 }
 
 /**
@@ -344,7 +382,7 @@ function reconcileAccountSeries(
 				const currentIds = new Set(currentRows.map(({id}) => id));
 				if (rows.some(({id, date}) => !currentIds.has(id) && date >= currentRows[0].date)) return null;
 				const current = completePartition(currentRows, today, false)!;
-				return buildSeries(rows, rule, current.amountKind, today);
+				return buildSeries(rows, rule, current.amountKind, today, undefined, currentRows);
 			};
 			const whole = join(group);
 			if (whole) return [whole];
@@ -399,7 +437,7 @@ function withCurrentSourceStream(
 	const currentRows = calendarRows(rows);
 	if (currentRows === rows) return entry;
 	const [current] = detectPartition([...currentRows], today, false);
-	return buildSeries(rows, rule, current.amountKind, today, calendarRows);
+	return buildSeries(rows, rule, current.amountKind, today, calendarRows, currentRows);
 }
 
 function currentSourceRows(
@@ -946,44 +984,123 @@ function buildSeries(
 	amountKind: RecurringAmountKind,
 	today: string,
 	calendarRows?: (prefix: readonly RecurringCandidate[]) => readonly RecurringCandidate[],
+	/** The current naming period's payments, which a varying amount is summarized from; all payments by default. */
+	priceRows: readonly RecurringCandidate[] = rows,
 ): DetectedRecurringSeries {
 	const first = rows[0];
 	const latest = rows[rows.length - 1];
-	const shown = shownPayment(rows);
 	const expectedDate = (prefix: readonly RecurringCandidate[]) =>
 		addCycles(calendarRows?.(prefix) ?? prefix, rule, 1);
-	const nextExpectedDate = expectedDate(rows);
-	const status: RecurringSeriesStatus = today > addDays(nextExpectedDate, GRACE_DAYS) ? 'ENDED' : 'ACTIVE';
-
 	const direction = first.merchantKey.startsWith(`${BANK_TRANSACTION_DIRECTIONS.INCOME}:`)
 		? BANK_TRANSACTION_DIRECTIONS.INCOME
 		: BANK_TRANSACTION_DIRECTIONS.EXPENSE;
-
-	const flags: RecurringSeriesFlag[] = [];
-	if (status === 'ACTIVE' && today > nextExpectedDate) flags.push('LATE');
-
-	return {
-		key: seriesKey(first.merchantKey, first.currency, first.id),
-		merchantKey: first.merchantKey,
-		name: latest.name,
-		direction,
-		cadence: rule.cadence,
-		amountKind,
-		currency: first.currency,
-		typicalAmount: formatCents(shown.amountCents),
-		latestAmount: formatCents(latest.amountCents),
-		monthlyEquivalent: monthlyEquivalent(rows, rule, shown),
-		transactionIds: rows.map((row) => row.id),
-		restartTransactionIds: rows
-			.filter((row, index) => index > 0 && row.date > addDays(expectedDate(rows.slice(0, index)), GRACE_DAYS))
-			.map((row) => row.id),
-		firstDate: first.date,
-		lastDate: latest.date,
-		nextExpectedDate,
-		status,
-		flags,
-		priceChange: amountKind === 'FIXED' && status === 'ACTIVE' ? priceChange(rows, shown) : null,
+	const converted = rows.every((row) => row.baseAmountCents !== null);
+	// Weekly uses 52 weeks over 12 months.
+	const perMonth = (perPayment: bigint) => {
+		const [numerator, denominator] = rule.months === 0 ? [52n, 12n] : [1n, BigInt(rule.months)];
+		return divideRounded(perPayment * numerator, denominator);
 	};
+	const amounts =
+		amountKind === 'FIXED'
+			? fixedAmounts(rows, converted, perMonth)
+			: variableAmounts(priceRows, rule, direction, converted, perMonth);
+
+	return atDate(
+		{
+			key: seriesKey(first.merchantKey, first.currency, first.id),
+			merchantKey: first.merchantKey,
+			name: latest.name,
+			direction,
+			cadence: rule.cadence,
+			amountKind,
+			currency: first.currency,
+			latestAmount: formatCents(latest.amountCents),
+			...amounts,
+			monthlyEquivalent: amounts.usualMonthlyEquivalent,
+			transactionIds: rows.map((row) => row.id),
+			restartTransactionIds: rows
+				.filter((row, index) => index > 0 && row.date > addDays(expectedDate(rows.slice(0, index)), GRACE_DAYS))
+				.map((row) => row.id),
+			firstDate: first.date,
+			lastDate: latest.date,
+			nextExpectedDate: expectedDate(rows),
+			status: 'ACTIVE',
+			flags: [],
+		},
+		today,
+	);
+}
+
+type SeriesAmounts = Pick<
+	DetectedRecurringSeries,
+	| 'typicalAmount'
+	| 'usualMonthlyEquivalent'
+	| 'paidMonthlyEquivalent'
+	| 'amountRange'
+	| 'recentPayments'
+	| 'higherThanUsual'
+	| 'priceChange'
+>;
+
+/** A fixed price shows and costs its shown payment. */
+function fixedAmounts(
+	rows: readonly RecurringCandidate[],
+	converted: boolean,
+	perMonth: (perPayment: bigint) => bigint,
+): SeriesAmounts {
+	const shown = shownPayment(rows);
+	return {
+		typicalAmount: formatCents(shown.amountCents),
+		usualMonthlyEquivalent: converted ? perMonth(shown.baseAmountCents!) : null,
+		paidMonthlyEquivalent: null,
+		amountRange: null,
+		recentPayments: [],
+		higherThanUsual: false,
+		priceChange: priceChange(rows, shown),
+	};
+}
+
+/**
+ * A varying amount shows the median of its recent payments, which one unusual payment does not move, and their range.
+ * A monthly bill costs what was paid in the month its latest payment was made.
+ */
+function variableAmounts(
+	rows: readonly RecurringCandidate[],
+	rule: CadenceRule,
+	direction: BankTransactionDirection,
+	converted: boolean,
+	perMonth: (perPayment: bigint) => bigint,
+): SeriesAmounts {
+	const recent = rows.slice(-RECENT_PAYMENTS);
+	const amounts = recent.map(({amountCents}) => amountCents);
+	const latest = recent[recent.length - 1];
+	const before = amounts.slice(0, -1);
+	const highestBefore = before.reduce((high, amount) => (amount > high ? amount : high), 0n);
+	return {
+		typicalAmount: formatCents(medianCents(amounts)),
+		usualMonthlyEquivalent: converted
+			? perMonth(medianCents(recent.map(({baseAmountCents}) => baseAmountCents!)))
+			: null,
+		paidMonthlyEquivalent: converted && rule.cadence === 'MONTHLY' ? latest.baseAmountCents : null,
+		amountRange: {
+			low: formatCents(amounts.reduce((low, amount) => (amount < low ? amount : low))),
+			high: formatCents(amounts.reduce((high, amount) => (amount > high ? amount : high))),
+		},
+		recentPayments: recent.map(({date, amountCents}) => ({date, amount: formatCents(amountCents)})),
+		higherThanUsual:
+			direction === BANK_TRANSACTION_DIRECTIONS.EXPENSE &&
+			before.length >= MIN_USUAL_PAYMENTS &&
+			latest.amountCents > highestBefore &&
+			exceeds(latest.amountCents, highestBefore, HIGHER_THAN_USUAL),
+		priceChange: null,
+	};
+}
+
+/** The middle amount, or the mean of the two middle ones rounded half away from zero. */
+function medianCents(values: readonly bigint[]): bigint {
+	const sorted = [...values].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+	const middle = Math.floor(sorted.length / 2);
+	return sorted.length % 2 ? sorted[middle] : divideRounded(sorted[middle - 1] + sorted[middle], 2n);
 }
 
 /**
@@ -1024,18 +1141,6 @@ function priceChange(rows: readonly RecurringCandidate[], shown: RecurringCandid
 	const before = shownPayment(rows.slice(0, start)).amountCents;
 	if (!exceeds(shown.amountCents, before, PRICE_CHANGE)) return null;
 	return {amount: formatCents(shown.amountCents - before), since: rows[start].date};
-}
-
-/** A series costs its shown payment per cycle. Weekly uses 52 weeks over 12 months. */
-function monthlyEquivalent(
-	rows: readonly RecurringCandidate[],
-	rule: CadenceRule,
-	shown: RecurringCandidate,
-): bigint | null {
-	if (rows.some((row) => row.baseAmountCents === null)) return null;
-	const perPayment = shown.baseAmountCents!;
-	const [numerator, denominator] = rule.months === 0 ? [52n, 12n] : [1n, BigInt(rule.months)];
-	return divideRounded(perPayment * numerator, denominator);
 }
 
 /** Stays the same as new payments arrive; decisions follow other changes through their payments. */

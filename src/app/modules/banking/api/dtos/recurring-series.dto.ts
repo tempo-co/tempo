@@ -50,9 +50,20 @@ export class RecurringPriceChangeDto {
 	since: string;
 }
 
+/** A variable amount's lowest and highest recent payment. */
+export class RecurringAmountRangeDto {
+	low: string;
+	high: string;
+}
+
+export class RecurringPaymentDto {
+	date: string;
+	amount: string;
+}
+
 /**
  * Amounts are positive decimal strings with two places; `monthlyEquivalent` is in the owner's base currency.
- * `typicalAmount` is the latest payment, or the one before it while the latest is a one-off.
+ * `typicalAmount` is a fixed price, or the median of a variable amount's recent payments.
  */
 export class RecurringSeriesDto {
 	key: string;
@@ -63,8 +74,15 @@ export class RecurringSeriesDto {
 	currency: string;
 	typicalAmount: string;
 	latestAmount: string;
-	/** Null until every payment in the series has a base-currency amount. */
+	/**
+	 * This month's cost: the usual amount per month, or what a variable monthly bill was paid in the month of its latest
+	 * payment. Null until every payment in the series has a base-currency amount.
+	 */
 	monthlyEquivalent: string | null;
+	/** Set for a variable amount. */
+	amountRange: RecurringAmountRangeDto | null;
+	/** A variable amount's recent payments, oldest first; empty for a fixed price. */
+	recentPayments: RecurringPaymentDto[];
 	transactionCount: number;
 	firstDate: string;
 	lastDate: string;
@@ -97,6 +115,7 @@ export class RecurringUpcomingPaymentDto extends PickType(RecurringSeriesDto, [
 	'direction',
 	'nextExpectedDate',
 	'typicalAmount',
+	'amountKind',
 	'currency',
 ] as const) {}
 

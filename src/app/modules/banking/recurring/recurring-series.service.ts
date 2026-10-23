@@ -34,7 +34,7 @@ const REFUND = 'REFUND' satisfies BankTransactionCategory;
  * `recurring-series-detection`, `recurring-payee-identity`, `recurring-continuation` or `recurring-series-eligibility`,
  * or the payload shape in `toPayload`. Stored detections from other rules are not reused.
  */
-export const RECURRING_DETECTION_RULES_VERSION = '2';
+export const RECURRING_DETECTION_RULES_VERSION = '3';
 const UPCOMING_COUNT = 3;
 /** Every payment field detection reads; the stored detection's version is a hash over all of them. */
 const CANDIDATE_COLUMNS: readonly [sql: string, alias: keyof CandidateRow][] = [
@@ -62,8 +62,10 @@ type Continuation = {
 };
 
 /** A detected series as stored: amounts as strings, plus whether it is ordinary retail. */
-type StoredSeries = Omit<DetectedRecurringSeries, 'monthlyEquivalent'> & {
-	monthlyEquivalent: string | null;
+/** Cents stored as strings, since JSON has no bigint. */
+const CENTS_FIELDS = ['monthlyEquivalent', 'usualMonthlyEquivalent', 'paidMonthlyEquivalent'] as const;
+type CentsField = (typeof CENTS_FIELDS)[number];
+type StoredSeries = Omit<DetectedRecurringSeries, CentsField> & {[field in CentsField]: string | null} & {
 	retail: boolean;
 };
 type SnapshotPayload = {
@@ -142,12 +144,13 @@ export class RecurringSeriesService {
 			.filter(({hidden, status}) => !hidden && status === 'ACTIVE')
 			.sort((a, b) => a.nextExpectedDate.localeCompare(b.nextExpectedDate) || a.key.localeCompare(b.key))
 			.slice(0, UPCOMING_COUNT)
-			.map(({key, name, direction, nextExpectedDate, typicalAmount, currency}) => ({
+			.map(({key, name, direction, nextExpectedDate, typicalAmount, amountKind, currency}) => ({
 				key,
 				name,
 				direction,
 				nextExpectedDate,
 				typicalAmount,
+				amountKind,
 				currency,
 			}));
 		return {
@@ -425,6 +428,8 @@ function toResponse(
 		typicalAmount: entry.typicalAmount,
 		latestAmount: entry.latestAmount,
 		monthlyEquivalent: entry.monthlyEquivalent === null ? null : formatCents(entry.monthlyEquivalent),
+		amountRange: entry.amountRange,
+		recentPayments: entry.recentPayments,
 		transactionCount: entry.transactionIds.length,
 		firstDate: entry.firstDate,
 		lastDate: entry.lastDate,
@@ -495,7 +500,7 @@ function compareDescending(a: bigint | null, b: bigint | null): number {
 function toPayload({series, pairs, retail}: Detection): SnapshotPayload {
 	const stored = (entry: DetectedRecurringSeries): StoredSeries => ({
 		...entry,
-		monthlyEquivalent: entry.monthlyEquivalent === null ? null : String(entry.monthlyEquivalent),
+		...mapCents(entry, (cents) => (cents === null ? null : String(cents))),
 		retail: retail.has(entry.key),
 	});
 	const index = new Map(series.map((entry, position) => [entry, position]));
@@ -511,9 +516,9 @@ function toPayload({series, pairs, retail}: Detection): SnapshotPayload {
 
 function fromPayload(payload: SnapshotPayload): Detection {
 	const retail = new Set<string>();
-	const restored = ({retail: isRetail, monthlyEquivalent, ...entry}: StoredSeries): DetectedRecurringSeries => {
+	const restored = ({retail: isRetail, ...entry}: StoredSeries): DetectedRecurringSeries => {
 		if (isRetail) retail.add(entry.key);
-		return {...entry, monthlyEquivalent: monthlyEquivalent === null ? null : BigInt(monthlyEquivalent)};
+		return {...entry, ...mapCents(entry, (cents) => (cents === null ? null : BigInt(cents)))};
 	};
 	const series = payload.series.map(restored);
 	const pairs = payload.pairs.map(({older, newer, joined}) => ({
@@ -522,4 +527,8 @@ function fromPayload(payload: SnapshotPayload): Detection {
 		joined: restored(joined),
 	}));
 	return {series, pairs, retail};
+}
+
+function mapCents<From, To>(entry: {[field in CentsField]: From}, map: (cents: From) => To) {
+	return Object.fromEntries(CENTS_FIELDS.map((field) => [field, map(entry[field])])) as {[field in CentsField]: To};
 }
