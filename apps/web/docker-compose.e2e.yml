@@ -47,11 +47,43 @@ services:
     container_name: api
     ports:
       - '3000:3000'
+    # Synthetic test configuration; the API image ships no env file.
     environment:
       NODE_ENV: test
+      PORT: 3000
+      API_URL: http://localhost:3000
+      WEB_BASE_URL: http://localhost:5173
       DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: tempo_test
+      DB_SYNCHRONIZE: 'true'
+      DB_PGADMIN_PORT: 5050
+      SESSION_SECRET: tempo-web-e2e-synthetic-session-secret
+      SESSION_EXPIRATION: 7d
+      SESSION_REDIS_KEY: sess
       REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_INSIGHT_PORT: 5540
+      BANKING_INTEGRATION_ENABLED: 'true'
+      ENABLE_BANKING_API_URL: https://api.example.invalid
+      ENABLE_BANKING_APPLICATION_ID: tempo-web-e2e-application
+      ENABLE_BANKING_PRIVATE_KEY_B64: dGVzdA==
+      ENABLE_BANKING_REDIRECT_URL: http://localhost:5173/banking/callback
+      BANKING_SESSION_ENCRYPTION_KEY_B64: dGVtcG8td2ViLWUyZS1zeW50aGV0aWMta2V5LTAwMzI=
       EMAIL_HOST: mailpit
+      EMAIL_PORT: 1025
+      EMAIL_UI_PORT: 8025
+      EMAIL_UI_URL: http://localhost:8025
+      EMAIL_VERIFICATION_EXPIRATION: 15m
+      EMAIL_VERIFICATION_REDIS_KEY: email_ver
+      PASSWORD_RESET_EXPIRATION: 15m
+      PASSWORD_RESET_REDIS_KEY: pwd_reset
+      THROTTLE_TTL: 1m
+      THROTTLE_LIMIT: 400
+      AI_CATEGORIZATION_ENABLED: 'false'
     depends_on:
       postgres:
         condition: service_healthy
