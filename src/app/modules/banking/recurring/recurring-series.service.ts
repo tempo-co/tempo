@@ -226,7 +226,7 @@ export class RecurringSeriesService {
 	}
 
 	private async findDetected(accountId: Account['id'], seriesKey: string): Promise<DetectedRecurringSeries> {
-		// Keys and payments don't depend on the date; only status and flags do.
+		// Keys and payments don't depend on the date; only status, flags, price label and this month's cost do.
 		const {detected} = await this.readState(accountId, today());
 		const series = detected.find((entry) => entry.key === seriesKey);
 		if (!series) throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);

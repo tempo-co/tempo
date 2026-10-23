@@ -1075,7 +1075,7 @@ function variableAmounts(
 	const amounts = recent.map(({amountCents}) => amountCents);
 	const latest = recent[recent.length - 1];
 	const before = amounts.slice(0, -1);
-	const highestBefore = before.reduce((high, amount) => (amount > high ? amount : high), 0n);
+	const highestBefore = before.length ? maxCents(before) : 0n;
 	return {
 		typicalAmount: formatCents(medianCents(amounts)),
 		usualMonthlyEquivalent: converted
@@ -1084,7 +1084,7 @@ function variableAmounts(
 		paidMonthlyEquivalent: converted && rule.cadence === 'MONTHLY' ? latest.baseAmountCents : null,
 		amountRange: {
 			low: formatCents(amounts.reduce((low, amount) => (amount < low ? amount : low))),
-			high: formatCents(amounts.reduce((high, amount) => (amount > high ? amount : high))),
+			high: formatCents(maxCents(amounts)),
 		},
 		recentPayments: recent.map(({date, amountCents}) => ({date, amount: formatCents(amountCents)})),
 		higherThanUsual:
@@ -1094,6 +1094,10 @@ function variableAmounts(
 			exceeds(latest.amountCents, highestBefore, HIGHER_THAN_USUAL),
 		priceChange: null,
 	};
+}
+
+function maxCents(values: readonly bigint[]): bigint {
+	return values.reduce((high, amount) => (amount > high ? amount : high));
 }
 
 /** The middle amount, or the mean of the two middle ones rounded half away from zero. */
