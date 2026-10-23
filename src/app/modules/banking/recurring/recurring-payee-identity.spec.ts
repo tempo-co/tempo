@@ -48,6 +48,30 @@ function identity(rows: RecurringEvidence[]): (string | undefined)[] {
 }
 
 describe('inferRecurringIdentities', () => {
+	it('carries the original person-transfer evidence on a full-name key', () => {
+		const source = row({
+			counterpartyName: null,
+			description: 'Transfer to ALEX-SAM EXAMPLE',
+			transactionType: 'TRANSFER',
+			category: 'HOUSING_AND_UTILITIES',
+		});
+		const counterpartyOnly = row({counterpartyName: 'Alex-Sam Exämple', category: 'HOUSING_AND_UTILITIES'});
+		expect(inferRecurringIdentities([source, counterpartyOnly])).toEqual([
+			expect.objectContaining({merchantKey: 'EXPENSE:alex-sam example', personTransfer: true}),
+			expect.objectContaining({merchantKey: 'EXPENSE:alex-sam example', personTransfer: true}),
+		]);
+	});
+	it.each<[string, Partial<RecurringEvidence>, boolean]>([
+		['a single-word transfer payee', {counterpartyName: null, description: 'Transfer to Example'}, true],
+		[
+			'a transfer description beside the counterparty name the key comes from',
+			{counterpartyName: 'Example Energy B.V.', description: 'Transfer to Example Energy BV'},
+			false,
+		],
+	])('marks a person transfer only when the key comes from the transfer text: %s', (_case, overrides, expected) => {
+		const [result] = inferRecurringIdentities([row({transactionType: 'TRANSFER', category: null, ...overrides})]);
+		expect(result.personTransfer ?? false).toBe(expected);
+	});
 	it.each<[string, () => RecurringEvidence[]]>([
 		[
 			'a transfer description and the later counterparty name',

@@ -12,6 +12,49 @@ describe('getBankTransactionMerchantKey', () => {
 		);
 	});
 
+	it.each([
+		['DBIT', 'Transfer to ALEX-SAM EXAMPLE', 'Alex-Sam Exämple', 'EXPENSE:alex-sam example'],
+		['CRDT', 'Transfer from ALEX SAM EXAMPLE', 'Alex Sam Exämple', 'INCOME:alex sam example'],
+	])(
+		'keys %s transfers by their full payee name',
+		(creditDebitIndicator, description, counterpartyName, expected) => {
+			expect(getBankTransactionMerchantKey({description, counterpartyName: null, creditDebitIndicator})).toBe(
+				expected,
+			);
+			expect(getBankTransactionMerchantKey({description: null, counterpartyName, creditDebitIndicator})).toBe(
+				expected,
+			);
+			expect(
+				getBankTransactionMerchantKey({
+					description: null,
+					counterpartyName: 'Alex Example',
+					creditDebitIndicator,
+				}),
+			).not.toBe(expected);
+			expect(
+				getBankTransactionMerchantKey({
+					description: null,
+					counterpartyName: 'Alex-Jo Example',
+					creditDebitIndicator,
+				}),
+			).not.toBe(expected);
+		},
+	);
+
+	it.each([
+		['Transfer to Example', 'DBIT', 'EXPENSE:transfer to example'],
+		['Transfer from Alex Example', 'DBIT', 'EXPENSE:transfer from alex example'],
+		['Transfer to Alex Example', 'CRDT', 'INCOME:transfer to alex example'],
+	])('keeps the ambiguous transfer text %s in direction %s', (description, creditDebitIndicator, expected) => {
+		expect(getBankTransactionMerchantKey({description, creditDebitIndicator})).toBe(expected);
+	});
+
+	it('gives no key to a transfer that names only a payment processor', () => {
+		expect(
+			getBankTransactionMerchantKey({description: 'Transfer to PayPal Europe', creditDebitIndicator: 'DBIT'}),
+		).toBeNull();
+	});
+
 	it('uses the structured SEPA name, then the counterparty name, then the description', () => {
 		expect(
 			getBankTransactionMerchantKey({

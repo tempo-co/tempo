@@ -2,27 +2,29 @@ import {INestApplication} from '@nestjs/common';
 import {randomUUID} from 'node:crypto';
 import {Server} from 'node:net';
 import TestAgent from 'supertest/lib/agent';
-import {DeepPartial} from 'typeorm';
+import {DataSource, DeepPartial} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {BankTransactionCategorizationService} from '@modules/banking/categorization/bank-transaction-categorization.service';
 
 import {BankingFixtures, CURRENCY_EXCHANGE_EVENT, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {getApp} from '../../setup/e2e.setup';
 import {createVerifiedAccount, expectValidationMessage} from '../../utils/auth-utils';
 
-const EXAMPLE_SHOP = {description: 'Example Shop', counterpartyName: 'Example Shop'};
+const EXAMPLE_PAYEE = {description: 'Transfer to ALEX-SAM EXAMPLE', counterpartyName: null};
 const EXAMPLE_CAFE = {description: 'Example Cafe', counterpartyName: 'Example Cafe'};
 
 /** A row automation has categorized, as sync leaves it: with an input hash. */
 function categorizedRow(bookingDate: string | null, amount: string, overrides: DeepPartial<BankTransaction> = {}) {
-	return bookedRow(bookingDate, amount, {...EXAMPLE_SHOP, categoryInputHash: `hash-${randomUUID()}`, ...overrides});
+	return bookedRow(bookingDate, amount, {...EXAMPLE_PAYEE, categoryInputHash: `hash-${randomUUID()}`, ...overrides});
 }
 
 describe('Bank transaction category impact', () => {
 	let app: INestApplication<Server>;
 	let fixtures: BankingFixtures;
 	let ownerAgent: TestAgent;
+	let ownerId: string;
 	let otherAgent: TestAgent;
 	let rows: Record<string, BankTransaction>;
 
@@ -40,6 +42,7 @@ describe('Bank transaction category impact', () => {
 		const owner = await createVerifiedAccount(httpServer, config.get('EMAIL_UI_URL'));
 		const other = await createVerifiedAccount(httpServer, config.get('EMAIL_UI_URL'));
 		ownerAgent = owner.agent;
+		ownerId = owner.id;
 		otherAgent = other.agent;
 
 		const ownerAccount = await fixtures.createBankAccount(await fixtures.createConnection({id: owner.id}));
@@ -53,7 +56,26 @@ describe('Bank transaction category impact', () => {
 				ownerAccount,
 				categorizedRow(null, '-9.00', {transactionDate: '2026-09-11', transactionStatus: 'PDNG'}),
 			),
-			aiSibling: await create(ownerAccount, categorizedRow('2026-09-08', '-11.00')),
+			aiSibling: await create(
+				ownerAccount,
+				categorizedRow('2026-09-08', '-11.00', {
+					description: 'Example payment',
+					counterpartyName: 'Alex-Sam Exämple',
+				}),
+			),
+			differentPerson: await create(
+				ownerAccount,
+				categorizedRow('2026-09-08', '-21.00', {
+					description: 'Transfer to ALEX-JO EXAMPLE',
+				}),
+			),
+			shortenedName: await create(
+				ownerAccount,
+				categorizedRow('2026-09-08', '-22.00', {
+					description: null,
+					counterpartyName: 'Alex Example',
+				}),
+			),
 			historySibling: await create(
 				ownerAccount,
 				categorizedRow('2026-09-09', '-12.00', {category: 'FOOD_AND_DRINK', categorySource: 'HISTORY'}),
@@ -93,6 +115,43 @@ describe('Bank transaction category impact', () => {
 		expect(rows.otherOwner.merchantKey).toBe(rows.corrected.merchantKey);
 	});
 
+	it('stores canonical full-name merchant keys without changing other transaction fields', async () => {
+		const ds = app.get(DataSource);
+		const runner = ds.createQueryRunner();
+		await runner.startTransaction();
+		try {
+			await runner.query('UPDATE bank_transactions SET "merchantKey" = $1 WHERE id = $2', [
+				'EXPENSE:transfer to alex-sam example',
+				rows.corrected.id,
+			]);
+			await runner.query('UPDATE bank_transactions SET "merchantKey" = $1 WHERE id = $2', [
+				'EXPENSE:alex-sam exämple',
+				rows.aiSibling.id,
+			]);
+			const snapshot = async (omitKey = false) =>
+				runner.query(
+					`SELECT to_jsonb(t) ${omitKey ? "- 'merchantKey'" : ''} AS state FROM bank_transactions t ORDER BY id`,
+				);
+			const before = await snapshot(true);
+			const migration = ds.migrations.find(
+				(entry) => entry.name === 'RefreshBankTransactionMerchantKeysForTransferPayees20261023230000',
+			);
+			await migration!.up(runner);
+			expect(
+				await runner.query('SELECT DISTINCT "merchantKey" FROM bank_transactions WHERE id = ANY($1::uuid[])', [
+					[rows.corrected.id, rows.aiSibling.id],
+				]),
+			).toEqual([{merchantKey: 'EXPENSE:alex-sam example'}]);
+			expect(await snapshot(true)).toEqual(before);
+			const once = await snapshot();
+			await migration!.up(runner);
+			expect(await snapshot()).toEqual(once);
+		} finally {
+			await runner.rollbackTransaction();
+			await runner.release();
+		}
+	});
+
 	it('lists exactly the rows the correction would change, without saving anything', async () => {
 		const response = await ownerAgent.get(impactPath('corrected', 'TRAVEL')).expect(200);
 
@@ -106,7 +165,7 @@ describe('Bank transaction category impact', () => {
 					id: rows.historySibling.id,
 					transactionDate: null,
 					bookingDate: '2026-09-09',
-					displayDescription: 'Example Shop',
+					displayDescription: 'Transfer to ALEX-SAM EXAMPLE',
 					amount: '-12.00000000',
 					currency: 'EUR',
 					category: 'FOOD_AND_DRINK',
@@ -118,6 +177,16 @@ describe('Bank transaction category impact', () => {
 			],
 		});
 		expect(await reload('corrected')).toMatchObject({category: 'SHOPPING', categorySource: 'AI'});
+	});
+
+	it('leaves selected rows unchanged when a queued retry names an obsolete merchant key', async () => {
+		const before = await reload('aiSibling');
+		await app.get(BankTransactionCategorizationService).processManualCategoryFollowUp({
+			accountId: ownerId,
+			merchantKey: 'EXPENSE:transfer to alex-sam example',
+			transactionIds: [before.id],
+		});
+		expect(await reload('aiSibling')).toEqual(before);
 	});
 
 	it('lists nothing when the correction would leave the owner without one consistent choice', async () => {
@@ -168,6 +237,8 @@ describe('Bank transaction category impact', () => {
 
 	it('applies the correction only to selected rows the preview would list', async () => {
 		const ineligible = [
+			'differentPerson',
+			'shortenedName',
 			'manual',
 			'alreadyApplied',
 			'processing',

@@ -730,7 +730,7 @@ describe('detectRecurringSeries', () => {
 
 	it('linked names: preserve the yearly person-transfer exclusion', () => {
 		const rows = ['2023-03-10', '2024-03-10', '2025-03-10'].map((date) => ({
-			...payment(date, '120.00', {merchantKey: 'EXPENSE:transfer to alex example'}),
+			...payment(date, '120.00', {merchantKey: 'EXPENSE:alex example', personTransfer: true}),
 			recurringPayeeKey: 'EXPENSE:automatic-recurring:example-person',
 		}));
 
@@ -946,7 +946,9 @@ describe('detectRecurringSeries', () => {
 
 	it.each([2, 3])('excludes people and busy payees from annual detection with %i occurrences', (count) => {
 		const dates = ['2024-03-10', '2025-03-11', '2026-03-12'].slice(-count);
-		const people = dates.map((date) => payment(date, '120.00', {merchantKey: 'EXPENSE:transfer to alex example'}));
+		const people = dates.map((date) =>
+			payment(date, '120.00', {merchantKey: 'EXPENSE:alex example', personTransfer: true}),
+		);
 		const categorized = dates.map((date) => payment(date, '120.00', {category: 'TRANSFER_OUT'}));
 		const busy = [
 			...dates.map((date) => payment(date, '120.00')),
@@ -1238,7 +1240,8 @@ describe('detectRecurringSeries', () => {
 
 	it('keeps a fixed monthly transfer to a person, such as rent', () => {
 		const landlord = {
-			merchantKey: 'EXPENSE:transfer to example landlord',
+			merchantKey: 'EXPENSE:example landlord',
+			personTransfer: true,
 			name: 'Transfer to EXAMPLE LANDLORD',
 			category: 'TRANSFER_OUT',
 		};
@@ -2059,7 +2062,8 @@ describe('detectRecurringSeries', () => {
 		}));
 		const friend = [payment('2025-08-05', '47.00'), payment('2026-08-04', '47.00')].map((row) => ({
 			...row,
-			merchantKey: 'EXPENSE:transfer to alex-sam example',
+			merchantKey: 'EXPENSE:alex-sam example',
+			personTransfer: true,
 		}));
 		const counterpartyFriend = [payment('2025-07-02', '30.00'), payment('2026-07-01', '30.00')].map((row) => ({
 			...row,
@@ -2074,7 +2078,8 @@ describe('detectRecurringSeries', () => {
 		}));
 		const knownPersonTransfer = {
 			...payment('2026-01-15', '5.00'),
-			merchantKey: 'EXPENSE:transfer to jo sample',
+			merchantKey: 'EXPENSE:jo sample',
+			personTransfer: true,
 		};
 		// Two transfers a year apart beside one uncategorised payment to the same payee.
 		const mixed = [
@@ -2091,7 +2096,8 @@ describe('detectRecurringSeries', () => {
 
 	it('still finds a monthly transfer to a person', () => {
 		const rows = monthly(28, MAY_TO_OCT.slice(0, 5), '650.00', {
-			merchantKey: 'EXPENSE:transfer to alex-sam example',
+			merchantKey: 'EXPENSE:alex-sam example',
+			personTransfer: true,
 			category: 'TRANSFER_OUT',
 		});
 
@@ -2144,30 +2150,32 @@ describe('detectRecurringSeries', () => {
 		expect(after.transactionIds).toHaveLength(6);
 	});
 
-	it('groups a person named in a transfer description with their later counterparty name', () => {
-		const older = monthly(28, ['2026-05', '2026-06', '2026-07', '2026-08'], '650.00', {
-			merchantKey: 'EXPENSE:transfer to alex-sam exämple',
+	it.each(['alex-sam example', 'alex example', 'alex-jo example'])('keeps the full payee identity %s', (laterKey) => {
+		const older = monthly(28, ['2026-05', '2026-06', '2026-07'], '650.00', {
+			merchantKey: 'EXPENSE:alex-sam example',
+			personTransfer: true,
 			name: 'Transfer to ALEX-SAM EXAMPLE',
 		});
-		const newer = monthly(28, ['2026-09'], '650.00', {merchantKey: 'EXPENSE:alex example', name: 'Alex Example'});
+		const newer = monthly(28, ['2026-08', '2026-09', '2026-10'], '650.00', {
+			merchantKey: `EXPENSE:${laterKey}`,
+			name: laterKey,
+		});
 
-		expect(detectRecurringSeries([...older, ...newer], TODAY)).toEqual([
-			expect.objectContaining({
-				name: 'Alex Example',
-				status: 'ACTIVE',
-				transactionIds: [...older, ...newer].map(({id}) => id),
-			}),
-		]);
+		const expected = laterKey === 'alex-sam example' ? [[...older, ...newer]] : [older, newer];
+		expect(detectRecurringSeries([...older, ...newer], TODAY).map(({transactionIds}) => transactionIds)).toEqual(
+			expected.map((rows) => rows.map(({id}) => id)),
+		);
 	});
 
 	it('groups transfers from a person the same way', () => {
 		const older = monthly(1, ['2026-05', '2026-06', '2026-07'], '40.00', {
-			merchantKey: 'INCOME:transfer from alex-sam example',
+			merchantKey: 'INCOME:alex-sam example',
+			personTransfer: true,
 			name: 'Transfer from ALEX-SAM EXAMPLE',
 		});
 		const newer = monthly(1, ['2026-08', '2026-09', '2026-10'], '40.00', {
-			merchantKey: 'INCOME:alex example',
-			name: 'Alex Example',
+			merchantKey: 'INCOME:alex-sam example',
+			name: 'Alex-Sam Example',
 		});
 
 		expect(detectRecurringSeries([...older, ...newer], TODAY)).toEqual([
@@ -2199,7 +2207,7 @@ describe('detectRecurringSeries', () => {
 
 	it('keeps a person’s payments and money received apart, and merchants with similar names apart', () => {
 		const rows = [
-			...monthly(28, MAY_TO_OCT, '650.00', {merchantKey: 'EXPENSE:transfer to alex-sam example'}),
+			...monthly(28, MAY_TO_OCT, '650.00', {merchantKey: 'EXPENSE:alex-sam example', personTransfer: true}),
 			...monthly(2, MAY_TO_OCT, '20.00', {merchantKey: 'INCOME:alex example'}),
 			// Shares the first and last word of a merchant but names no transferred-to person.
 			...monthly(5, MAY_TO_OCT, '9.99', {merchantKey: 'EXPENSE:example cloud storage'}),

@@ -27,6 +27,8 @@ export type RecurringCandidate = {
 	 * transaction merchant key remains unchanged.
 	 */
 	recurringPayeeKey?: string;
+	/** True when the original bank text explicitly names a transfer to or from a person. */
+	personTransfer?: boolean;
 	/** Set by detection on rows it groups under a payee key: the row's own merchant key. */
 	sourceMerchantKey?: string;
 	currency: string;
@@ -224,14 +226,13 @@ export function detectRecurringSeries(
 	candidates: readonly RecurringCandidate[],
 	today: string,
 ): DetectedRecurringSeries[] {
-	const payees = payeeKeys(candidates);
 	const byId = new Map(candidates.map((row) => [row.id, row]));
 	const namingPeriod = createNamingPeriodLookup(byId);
 	const personKeys = new Set<string>();
 	const partitions = new Map<string, RecurringCandidate[]>();
 	for (const candidate of candidates) {
-		const payeeKey = payees.keyOf(candidate.recurringPayeeKey ?? candidate.merchantKey);
-		if (payees.isPerson(payees.keyOf(candidate.merchantKey))) personKeys.add(payeeKey);
+		const payeeKey = candidate.recurringPayeeKey ?? candidate.merchantKey;
+		if (candidate.personTransfer) personKeys.add(payeeKey);
 		// Per account: small payments to a payee from one account must not break a bill's rhythm on another.
 		const partitionKey = `${candidate.bankAccountId}\u0000${payeeKey}\u0000${candidate.currency}`;
 		const partition = partitions.get(partitionKey);
@@ -550,57 +551,12 @@ function latestNamingPeriod(
 	return start === null ? null : accountRows.slice(start);
 }
 
-// Older bank exports name a person only in the description ("Transfer to FIRST-MIDDLE LAST"); newer ones send
-// their name as the counterparty ("First Last", with accents), so one person arrives under two merchant keys.
-const PERSON_TRANSFER_PATTERN = /^(?:transfer to|transfer from)\s+(.+)$/;
-
-/**
- * Maps a merchant key to the payee it is grouped under. A name from a "Transfer to/from" description is a person:
- * accents, case and middle names are ignored, so it matches that person's counterparty name. Other keys stay as they
- * are unless they name such a person, so two merchants are never merged on a shortened name alone.
- */
-function payeeKeys(candidates: readonly RecurringCandidate[]): {
-	keyOf: (merchantKey: string) => string;
-	isPerson: (payeeKey: string) => boolean;
-} {
-	const people = new Set<string>();
-	for (const {merchantKey} of candidates) {
-		const transfer = PERSON_TRANSFER_PATTERN.exec(foldName(merchantKeyName(merchantKey)));
-		// A single word is too weak to be a person: it would pull in any one-word merchant of that name.
-		if (transfer && transfer[1].includes(' ')) people.add(firstAndLastName(transfer[1]));
-	}
-	return {
-		keyOf: (merchantKey) => {
-			const name = foldName(merchantKeyName(merchantKey));
-			const transfer = PERSON_TRANSFER_PATTERN.exec(name);
-			const person = firstAndLastName(transfer ? transfer[1] : name);
-			if (!people.has(person)) return merchantKey;
-			return `${merchantKey.slice(0, merchantKey.indexOf(':'))}:${person}`;
-		},
-		isPerson: (payeeKey) => {
-			const name = foldName(merchantKeyName(payeeKey));
-			return people.has(name) || PERSON_TRANSFER_PATTERN.test(name);
-		},
-	};
-}
-
 export function isPersonTransferCategory({category}: Pick<RecurringCandidate, 'category'>): boolean {
 	return category !== null && PERSON_TRANSFER_CATEGORIES.has(category);
 }
 
-function merchantKeyName(merchantKey: string): string {
-	return merchantKey.slice(merchantKey.indexOf(':') + 1);
-}
-
 export function foldName(name: string): string {
 	return name.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
-}
-
-/** "alex-sam example" and "alex example" are both "alex example". */
-function firstAndLastName(name: string): string {
-	const words = name.split(' ');
-	if (words.length < 2) return name;
-	return `${words[0].split('-')[0]} ${words[words.length - 1]}`;
 }
 
 /**

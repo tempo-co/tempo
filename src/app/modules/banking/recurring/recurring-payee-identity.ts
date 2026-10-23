@@ -3,7 +3,11 @@ import {createHash} from 'node:crypto';
 import {BANK_TRANSACTION_DIRECTIONS, type BankTransactionDirection} from '../bank-transaction-direction';
 import {extractCardMerchantName, extractStructuredCounterpartyName} from '../bank-transaction-display';
 import {BANK_TRANSACTION_TYPES} from '../bank-transaction-type';
-import {endsWithLegalForm, getBankTransactionMerchantKey} from '../categorization/bank-transaction-merchant-key';
+import {
+	endsWithLegalForm,
+	getBankTransactionMerchantKey,
+	isTransferDescriptionMerchantKey,
+} from '../categorization/bank-transaction-merchant-key';
 import {parseSepaDescriptionIban} from '../own-transfer/iban';
 import {type RecurringCandidate, foldName, isPersonTransferCategory} from './recurring-series-detection';
 
@@ -33,9 +37,11 @@ type PayeeNode = {
  */
 export function inferRecurringIdentities(rows: readonly RecurringEvidence[]): RecurringCandidate[] {
 	const nodes = new Map<string, PayeeNode>();
+	const people = new Set<string>();
 	for (const row of rows) {
 		const key = nodeKey(row);
 		const direction = merchantKeyDirection(row.merchantKey);
+		if (isTransferDescriptionMerchantKey(row)) people.add(key);
 		let node = nodes.get(key);
 		if (!node) {
 			node = {
@@ -106,10 +112,15 @@ export function inferRecurringIdentities(rows: readonly RecurringEvidence[]): Re
 	for (const members of components.values()) {
 		const identity = componentIdentity(members);
 		if (identity) for (const node of members) identities.set(node.key, identity);
+		if (members.some(({key}) => people.has(key))) for (const {key} of members) people.add(key);
 	}
 	return rows.map(({description: _description, counterpartyName: _counterparty, transactionType: _type, ...row}) => {
 		const recurringPayeeKey = identities.get(nodeKey(row));
-		return recurringPayeeKey ? {...row, recurringPayeeKey} : row;
+		return {
+			...row,
+			...(recurringPayeeKey ? {recurringPayeeKey} : {}),
+			...(people.has(nodeKey(row)) ? {personTransfer: true} : {}),
+		};
 	});
 }
 
