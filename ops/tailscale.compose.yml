@@ -21,7 +21,9 @@ services:
       - tempo_tailscale_state:/var/lib/tailscale
       - /etc/tempo/tailscale-serve.json:/config/serve.json:ro
     networks:
-      - ingress
+      tailscale:
+        # Web's Nginx trusts X-Forwarded-For only from this address.
+        ipv4_address: 10.213.47.2
     # Fails until the node is logged in and running.
     healthcheck:
       test: ['CMD', 'tailscale', 'status', '--peers=false']
@@ -32,8 +34,8 @@ services:
       start_interval: 2s
 
 networks:
-  ingress:
-    name: tempo-api-production_ingress
+  tailscale:
+    name: tempo-api-production_tailscale
     external: true
 
 volumes:

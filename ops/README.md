@@ -62,7 +62,9 @@ The check is silent on success and prints a safe failure reason with exit status
 
 ### Network boundary
 
-PostgreSQL, Redis and the API share the `default` network. The API also joins the internal `frontend` network; web joins `frontend` and the web-only `ingress` network that publishes its loopback port. Web therefore has no network path to the database or cache. Do not mark `default` internal: the API needs outbound access.
+PostgreSQL, Redis and the API share the `default` network. The API also joins the internal `frontend` network; web joins `frontend`, the web-only `ingress` network that publishes its loopback port, and the `tailscale` network it shares with the Tailscale sidecar. Web therefore has no network path to the database or cache. Do not mark `default` internal: the API needs outbound access.
+
+The `tailscale` network has a fixed subnet so the sidecar gets the static address `10.213.47.2`, outside the range Docker assigns to web. Web's Nginx takes the client address from `X-Forwarded-For` only on requests from that address, so the API sees tailnet clients' `100.x` addresses while local processes and other containers cannot set their own. Changing the address needs the matching change in tempo-web's `nginx/tempo.conf`. Compose changes to either network reach running containers only when they are recreated: after `sudo ops/install.sh production`, recreate web (`deploy.sh` only does that when an image changes) and then the sidecar.
 
 ## Staging
 
