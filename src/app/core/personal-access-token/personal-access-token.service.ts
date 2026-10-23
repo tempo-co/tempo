@@ -9,7 +9,8 @@ import {PersonalAccessToken} from './personal-access-token.entity';
 export class PersonalAccessTokenService {
 	constructor(@InjectRepository(PersonalAccessToken) private readonly tokens: Repository<PersonalAccessToken>) {}
 
-	async create(accountId: string, name: string) {
+	/** `expiresInDays` null keeps the token until it is revoked. */
+	async create(accountId: string, name: string, expiresInDays: number | null) {
 		const token = `tempo_pat_${randomBytes(32).toString('base64url')}`;
 		const saved = await this.tokens.save(
 			this.tokens.create({
@@ -19,6 +20,7 @@ export class PersonalAccessTokenService {
 				prefix: token.slice(0, 20),
 				scopes: ['read'],
 				lastUsedAt: null,
+				expiresAt: expiresInDays === null ? null : new Date(Date.now() + expiresInDays * 86_400_000),
 				revokedAt: null,
 			}),
 		);
@@ -48,6 +50,7 @@ export class PersonalAccessTokenService {
 			.innerJoinAndSelect('token.account', 'account')
 			.where('token.tokenHash = :tokenHash', {tokenHash: createHash('sha256').update(token).digest('hex')})
 			.andWhere('token.revokedAt IS NULL')
+			.andWhere('(token.expiresAt IS NULL OR token.expiresAt > CURRENT_TIMESTAMP)')
 			.getOne();
 		if (!saved || !saved.scopes.includes('read')) throw new UnauthorizedException();
 		return saved;
@@ -64,7 +67,7 @@ export class PersonalAccessTokenService {
 			.execute();
 	}
 
-	private metadata({id, name, prefix, scopes, createdAt, lastUsedAt}: PersonalAccessToken) {
-		return {id, name, prefix, scopes, createdAt, lastUsedAt};
+	private metadata({id, name, prefix, scopes, createdAt, lastUsedAt, expiresAt}: PersonalAccessToken) {
+		return {id, name, prefix, scopes, createdAt, lastUsedAt, expiresAt};
 	}
 }

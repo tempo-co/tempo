@@ -15,6 +15,7 @@ export class AddPersonalAccessTokens20261022120000 implements MigrationInterface
 			"scopes" text[] NOT NULL DEFAULT ARRAY['read']::text[],
 			"createdAt" timestamptz NOT NULL DEFAULT now(),
 			"lastUsedAt" timestamptz,
+			"expiresAt" timestamptz,
 			"revokedAt" timestamptz,
 			CONSTRAINT "pk_personal_access_tokens" PRIMARY KEY ("id"),
 			CONSTRAINT "fk_personal_access_tokens_account" FOREIGN KEY ("accountId") REFERENCES "accounts"("id") ON DELETE CASCADE

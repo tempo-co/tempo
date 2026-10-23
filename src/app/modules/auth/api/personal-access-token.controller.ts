@@ -19,7 +19,7 @@ export class PersonalAccessTokenController {
 	@Post()
 	@UseGuards(CsrfOriginGuard)
 	create(@CurrentAccount() account: Account, @Body() dto: PersonalAccessTokenCreateDto) {
-		return this.tokens.create(account.id, dto.name);
+		return this.tokens.create(account.id, dto.name, dto.expiresInDays);
 	}
 
 	@Delete(':id')

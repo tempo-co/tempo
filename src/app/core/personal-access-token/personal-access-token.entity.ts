@@ -38,6 +38,10 @@ export class PersonalAccessToken {
 	@Column({type: 'timestamptz', nullable: true})
 	lastUsedAt: Date | null;
 
+	/** Null means the token never expires. */
+	@Column({type: 'timestamptz', nullable: true})
+	expiresAt: Date | null;
+
 	@Column({type: 'timestamptz', nullable: true})
 	@Exclude()
 	revokedAt: Date | null;

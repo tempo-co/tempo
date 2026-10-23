@@ -175,13 +175,19 @@ describe('Personal access tokens', () => {
 		expect(await redis.mget(sessionKeys)).toEqual(revokedSnapshot);
 		await fixtures.connections.delete([connection.id, otherConnection.id]);
 	});
-	it.each([{}, {name: ''}, {name: '   '}, {name: 'x'.repeat(101)}, {name: 42}])(
-		'rejects an invalid token name %j',
-		async (body) => {
-			const agent = await loginAgent(getApp().getHttpServer(), VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
-			await agent.post(PATH).set('Origin', ORIGIN).send(body).expect(400);
-		},
-	);
+	it.each([
+		{},
+		{name: ''},
+		{name: '   '},
+		{name: 'x'.repeat(101)},
+		{name: 42},
+		{name: 'Example client', expiresInDays: 7},
+		{name: 'Example client', expiresInDays: '90'},
+		{name: 'Example client', expiresInDays: 0},
+	])('rejects an invalid token name or lifetime %j', async (body) => {
+		const agent = await loginAgent(getApp().getHttpServer(), VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
+		await agent.post(PATH).set('Origin', ORIGIN).send(body).expect(400);
+	});
 
 	it('requires the configured web origin for token creation and revocation', async () => {
 		const agent = await loginAgent(getApp().getHttpServer(), VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
@@ -214,8 +220,11 @@ describe('Personal access tokens', () => {
 			.expect(201);
 		expect(created).toMatchObject({name: 'Example client', scopes: ['read'], lastUsedAt: null});
 		expect(Object.keys(created).sort()).toEqual(
-			['id', 'name', 'prefix', 'scopes', 'createdAt', 'lastUsedAt', 'token'].sort(),
+			['id', 'name', 'prefix', 'scopes', 'createdAt', 'lastUsedAt', 'expiresAt', 'token'].sort(),
 		);
+		// Without an explicit lifetime a token lasts 90 days.
+		const lifetime = new Date(created.expiresAt).getTime() - new Date(created.createdAt).getTime();
+		expect(Math.abs(lifetime - 90 * 86_400_000)).toBeLessThan(60_000);
 		const otherAgent = await loginAgent(
 			app.getHttpServer(),
 			SESSION_TEST_ACCOUNT_EMAIL,
@@ -236,5 +245,40 @@ describe('Personal access tokens', () => {
 		expect(JSON.stringify(listed)).not.toContain(stored.tokenHash);
 		await agent.delete(`${PATH}/${created.id}`).set('Origin', ORIGIN).expect(204);
 		expect((await agent.get(PATH).expect(200)).body).toEqual([]);
+	});
+	it('expires a token after its chosen lifetime, keeping it listed until revoked', async () => {
+		const app = getApp();
+		const server = app.getHttpServer();
+		const agent = await loginAgent(server, VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
+		const create = async (expiresInDays: number | null) =>
+			(
+				await agent
+					.post(PATH)
+					.set('Origin', ORIGIN)
+					.send({name: `Example ${expiresInDays ?? 'lasting'} client`, expiresInDays})
+					.expect(201)
+			).body;
+		const days = (token: {createdAt: string; expiresAt: string}) =>
+			Math.round((new Date(token.expiresAt).getTime() - new Date(token.createdAt).getTime()) / 86_400_000);
+		const month = await create(30);
+		const year = await create(365);
+		const lasting = await create(null);
+		expect(days(month)).toBe(30);
+		expect(days(year)).toBe(365);
+		expect(lasting.expiresAt).toBeNull();
+		await request(server).get('/bank-connections').auth(month.token, {type: 'bearer'}).expect(200);
+		await app
+			.get(DataSource)
+			.query(
+				`UPDATE personal_access_tokens SET "expiresAt" = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE id = $1`,
+				[month.id],
+			);
+		const expired = await request(server).get('/bank-connections').auth(month.token, {type: 'bearer'}).expect(401);
+		expect(expired.headers['set-cookie']).toBeUndefined();
+		await request(server).get('/bank-connections').auth(lasting.token, {type: 'bearer'}).expect(200);
+		const listed: Array<{id: string; expiresAt: string | null}> = (await agent.get(PATH).expect(200)).body;
+		expect(listed.find(({id}) => id === month.id)?.expiresAt).toEqual(expect.any(String));
+		for (const {id} of [month, year, lasting])
+			await agent.delete(`${PATH}/${id}`).set('Origin', ORIGIN).expect(204);
 	});
 });
