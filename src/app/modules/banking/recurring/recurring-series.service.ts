@@ -23,7 +23,12 @@ import {formatCents} from '../summary/bank-transaction-summary';
 import {type ContinuationPair, findContinuationPairs} from './recurring-continuation';
 import {RecurringContinuationUnlink} from './recurring-continuation-unlink.entity';
 import {type RecurringEvidence, inferRecurringIdentities} from './recurring-payee-identity';
-import {type DetectedRecurringSeries, UNDATED, atDate, detectRecurringSeries} from './recurring-series-detection';
+import {
+	type DetectedRecurringSeries,
+	type UndatedRecurringSeries,
+	atDate,
+	detectUndatedRecurringSeries,
+} from './recurring-series-detection';
 import {isOrdinaryRetailExpense} from './recurring-series-eligibility';
 import {RecurringSeriesHide} from './recurring-series-hide.entity';
 import {RecurringSnapshot} from './recurring-snapshot.entity';
@@ -34,7 +39,7 @@ const REFUND = 'REFUND' satisfies BankTransactionCategory;
  * `recurring-series-detection`, `recurring-payee-identity`, `recurring-continuation` or `recurring-series-eligibility`,
  * or the payload shape in `toPayload`. Stored detections from other rules are not reused.
  */
-export const RECURRING_DETECTION_RULES_VERSION = '4';
+export const RECURRING_DETECTION_RULES_VERSION = '5';
 const UPCOMING_COUNT = 3;
 /** Every payment field detection reads; the stored detection's version is a hash over all of them. */
 const CANDIDATE_COLUMNS: readonly [sql: string, alias: keyof CandidateRow][] = [
@@ -55,17 +60,17 @@ const CANDIDATE_COLUMNS: readonly [sql: string, alias: keyof CandidateRow][] = [
 /** Two successive histories of one obligation: joined automatically, or kept apart because the owner unlinked them. */
 type Continuation = {
 	linked: boolean;
-	older: DetectedRecurringSeries;
-	newer: DetectedRecurringSeries;
+	older: UndatedRecurringSeries;
+	newer: UndatedRecurringSeries;
 	/** The owner's unlink answers for this pair. */
 	saved: RecurringContinuationUnlink[];
 };
 
 /** Cents stored as strings, since JSON has no bigint. */
-const CENTS_FIELDS = ['monthlyEquivalent', 'usualMonthlyEquivalent', 'paidMonthlyEquivalent'] as const;
+const CENTS_FIELDS = ['usualMonthlyEquivalent', 'paidMonthlyEquivalent'] as const;
 type CentsField = (typeof CENTS_FIELDS)[number];
 /** A detected series as stored: amounts as strings, plus whether it is ordinary retail. */
-type StoredSeries = Omit<DetectedRecurringSeries, CentsField> & {[field in CentsField]: string | null} & {
+type StoredSeries = Omit<UndatedRecurringSeries, CentsField> & {[field in CentsField]: string | null} & {
 	retail: boolean;
 };
 type SnapshotPayload = {
@@ -76,7 +81,7 @@ type SnapshotPayload = {
 
 /** The series and pairs of one owner, detected without a date. */
 type Detection = {
-	series: DetectedRecurringSeries[];
+	series: UndatedRecurringSeries[];
 	pairs: ContinuationPair[];
 	/** Keys of series that are ordinary retail, shown only once the owner decided on them. */
 	retail: Set<string>;
@@ -84,7 +89,7 @@ type Detection = {
 
 /** What a read needs: the dated series after linking, and the owner's answers resolved onto them. */
 type ReadState = {
-	detected: DetectedRecurringSeries[];
+	detected: UndatedRecurringSeries[];
 	hidesBySeries: Map<string, RecurringSeriesHide[]>;
 	continuationBySeries: Map<string, Continuation>;
 	unlinkIds: Set<string>;
@@ -130,8 +135,11 @@ export class RecurringSeriesService {
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
 		asOf: string,
 	): Promise<RecurringSeriesListsResponseDto> {
-		const state = await this.readState(accountId, asOf);
-		return {expenses: listFor(state, 'EXPENSE', baseCurrency), income: listFor(state, 'INCOME', baseCurrency)};
+		const state = await this.readState(accountId);
+		return {
+			expenses: listFor(state, 'EXPENSE', baseCurrency, asOf),
+			income: listFor(state, 'INCOME', baseCurrency, asOf),
+		};
 	}
 
 	/** Both lists' totals and the next payments due, from one read. */
@@ -165,7 +173,7 @@ export class RecurringSeriesService {
 
 	/** Hides a series detected right now, or shows it again; an unknown or another owner's key is not found. */
 	async updateHidden(accountId: Account['id'], seriesKey: string, hidden: boolean) {
-		const {detected} = await this.readState(accountId, today());
+		const {detected} = await this.readState(accountId);
 		const series = detected.find((entry) => entry.key === seriesKey);
 		if (!series) throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);
 		await this.hideRepository.manager.transaction(async (manager) => {
@@ -195,7 +203,7 @@ export class RecurringSeriesService {
 	 * joined series or either history of the pair; the request must change the pair's state.
 	 */
 	async updateContinuation(accountId: Account['id'], seriesKey: string, linked: boolean) {
-		const {continuationBySeries, unlinkIds} = await this.readState(accountId, today());
+		const {continuationBySeries, unlinkIds} = await this.readState(accountId);
 		const continuation = continuationBySeries.get(seriesKey);
 		if (!continuation || continuation.linked === linked) {
 			throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);
@@ -228,27 +236,21 @@ export class RecurringSeriesService {
 		return (await this.findDetected(accountId, seriesKey)).transactionIds;
 	}
 
-	private async findDetected(accountId: Account['id'], seriesKey: string): Promise<DetectedRecurringSeries> {
+	private async findDetected(accountId: Account['id'], seriesKey: string): Promise<UndatedRecurringSeries> {
 		// Keys and payments don't depend on the date; only status, flags, price label and this month's cost do.
-		const {detected} = await this.readState(accountId, today());
+		const {detected} = await this.readState(accountId);
 		const series = detected.find((entry) => entry.key === seriesKey);
 		if (!series) throw new NotFoundException(BANKING_RECURRING_SERIES_NOT_FOUND);
 		return series;
 	}
 
-	private async readState(accountId: Account['id'], today: string): Promise<ReadState> {
+	private async readState(accountId: Account['id']): Promise<ReadState> {
 		const [{series, pairs, retail}, hides, unlinks] = await Promise.all([
 			this.detect(accountId),
 			this.hideRepository.find({where: {accountId}}),
 			this.unlinkRepository.find({where: {accountId}, order: {createdAt: 'ASC', id: 'ASC'}}),
 		]);
-		const dated = new Map(series.map((entry) => [entry, atDate(entry, today)]));
-		const datedPairs = pairs.map(({older, newer, joined}) => ({
-			older: dated.get(older)!,
-			newer: dated.get(newer)!,
-			joined: atDate(joined, today),
-		}));
-		const {detected, continuations} = linkContinuations([...dated.values()], datedPairs, unlinks);
+		const {detected, continuations} = linkContinuations(series, pairs, unlinks);
 		const hidesBySeries = assignHides(detected, hides);
 		return {
 			detected: detected.filter((entry) => hidesBySeries.has(entry.key) || !retail.has(entry.key)),
@@ -301,8 +303,8 @@ export class RecurringSeriesService {
 		}));
 		const candidates = inferRecurringIdentities(evidence);
 		const candidatesById = new Map(candidates.map((row) => [row.id, row]));
-		const series = detectRecurringSeries(candidates, UNDATED);
-		const pairs = findContinuationPairs(series, candidatesById, UNDATED);
+		const series = detectUndatedRecurringSeries(candidates);
+		const pairs = findContinuationPairs(series, candidatesById);
 		const retail = new Set(
 			[...series, ...pairs.map(({joined}) => joined)]
 				.filter((entry) => isOrdinaryRetailExpense(entry, candidatesById))
@@ -342,10 +344,15 @@ function listFor(
 	}: Pick<ReadState, 'detected' | 'hidesBySeries' | 'continuationBySeries'>,
 	direction: RecurringSeriesDirection,
 	baseCurrency: string | null,
+	asOf: string,
 ): RecurringSeriesListDto {
 	const series = detected
 		.filter((entry) => entry.direction === direction)
-		.map((entry) => ({entry, hidden: isHidden(entry, hidesBySeries.get(entry.key) ?? [])}))
+		.map((entry) => ({
+			entry: atDate(entry, asOf),
+			hidden: isHidden(entry, hidesBySeries.get(entry.key) ?? []),
+			continuation: shownContinuation(entry, continuationBySeries.get(entry.key)),
+		}))
 		.sort(
 			(a, b) =>
 				Number(a.hidden) - Number(b.hidden) ||
@@ -360,9 +367,7 @@ function listFor(
 	const monthlyTotal = counted.reduce((sum, {entry}) => sum + (entry.monthlyEquivalent ?? 0n), 0n);
 
 	return {
-		series: series.map(({entry, hidden}) =>
-			toResponse(entry, hidden, shownContinuation(entry, continuationBySeries.get(entry.key))),
-		),
+		series: series.map(({entry, hidden, continuation}) => toResponse(entry, hidden, continuation)),
 		monthlyTotal: formatCents(monthlyTotal),
 		unconvertedCount: counted.filter(({entry}) => entry.monthlyEquivalent === null).length,
 		baseCurrency,
@@ -373,7 +378,7 @@ function listFor(
  * A hidden series stays hidden for the payments it was hidden on. When payments restart after the series had stopped,
  * it counts again.
  */
-function isHidden(entry: DetectedRecurringSeries, hides: readonly RecurringSeriesHide[]): boolean {
+function isHidden(entry: UndatedRecurringSeries, hides: readonly RecurringSeriesHide[]): boolean {
 	if (hides.length === 0) return false;
 	// Only a restart after the last payment the owner hid brings the series back. Ids are in date order.
 	const hiddenIds = new Set(hides.flatMap(({transactionIds}) => transactionIds));
@@ -388,10 +393,10 @@ function isHidden(entry: DetectedRecurringSeries, hides: readonly RecurringSerie
  * resolved on the joined result, so hiding a joined series hides all of it.
  */
 function linkContinuations(
-	series: DetectedRecurringSeries[],
+	series: UndatedRecurringSeries[],
 	pairs: readonly ContinuationPair[],
 	unlinks: readonly RecurringContinuationUnlink[],
-): {detected: DetectedRecurringSeries[]; continuations: Map<string, Continuation>} {
+): {detected: UndatedRecurringSeries[]; continuations: Map<string, Continuation>} {
 	let detected = series;
 	const continuations = new Map<string, Continuation>();
 	for (const {older, newer, joined} of pairs) {
@@ -407,8 +412,8 @@ function linkContinuations(
 /** Whether a saved unlink was given for this pair: each side still holds a payment it was unlinked on. */
 function answers(
 	unlink: RecurringContinuationUnlink,
-	older: DetectedRecurringSeries,
-	newer: DetectedRecurringSeries,
+	older: UndatedRecurringSeries,
+	newer: UndatedRecurringSeries,
 ): boolean {
 	return (
 		older.transactionIds.some((id) => unlink.olderTransactionIds.includes(id)) &&
@@ -450,7 +455,7 @@ function toResponse(
  * can link them again; the older one shows nothing.
  */
 function shownContinuation(
-	entry: DetectedRecurringSeries,
+	entry: UndatedRecurringSeries,
 	continuation: Continuation | undefined,
 ): RecurringContinuationDto | null {
 	if (!continuation) return null;
@@ -464,7 +469,7 @@ function shownContinuation(
  * Updates replace the whole group without changing hides assigned to siblings.
  */
 function assignHides(
-	detected: readonly DetectedRecurringSeries[],
+	detected: readonly UndatedRecurringSeries[],
 	hides: readonly RecurringSeriesHide[],
 ): Map<string, RecurringSeriesHide[]> {
 	const result = new Map<string, RecurringSeriesHide[]>();
@@ -489,10 +494,6 @@ function assignHides(
 	return result;
 }
 
-function today(): string {
-	return new Date().toISOString().slice(0, 10);
-}
-
 function compareDescending(a: bigint | null, b: bigint | null): number {
 	if (a === b) return 0;
 	if (a === null) return 1;
@@ -501,7 +502,7 @@ function compareDescending(a: bigint | null, b: bigint | null): number {
 }
 
 function toPayload({series, pairs, retail}: Detection): SnapshotPayload {
-	const stored = (entry: DetectedRecurringSeries): StoredSeries => ({
+	const stored = (entry: UndatedRecurringSeries): StoredSeries => ({
 		...entry,
 		...mapCents(entry, (cents) => (cents === null ? null : String(cents))),
 		retail: retail.has(entry.key),
@@ -519,7 +520,7 @@ function toPayload({series, pairs, retail}: Detection): SnapshotPayload {
 
 function fromPayload(payload: SnapshotPayload): Detection {
 	const retail = new Set<string>();
-	const restored = ({retail: isRetail, ...entry}: StoredSeries): DetectedRecurringSeries => {
+	const restored = ({retail: isRetail, ...entry}: StoredSeries): UndatedRecurringSeries => {
 		if (isRetail) retail.add(entry.key);
 		return {...entry, ...mapCents(entry, (cents) => (cents === null ? null : BigInt(cents)))};
 	};

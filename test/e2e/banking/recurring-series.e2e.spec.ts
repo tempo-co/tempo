@@ -1763,9 +1763,19 @@ describe('RecurringSeries', () => {
 		);
 		const readRestarted = async () =>
 			JSON.parse(JSON.stringify(await restarted.list({id: owner.id, baseCurrency: 'EUR'}, AS_OF))) as unknown;
-		const detect = jest.spyOn(detection, 'detectRecurringSeries');
+		const detect = jest.spyOn(detection, 'detectUndatedRecurringSeries');
 		try {
 			const before = await list(ownerAgent);
+			const payload = (await snapshots.findOneByOrFail({accountId: owner.id})).payload as {
+				series: Record<string, unknown>[];
+				pairs: {joined: Record<string, unknown>}[];
+			};
+			expect(payload.series.length).toBeGreaterThan(0);
+			for (const entry of [...payload.series, ...payload.pairs.map(({joined}) => joined)]) {
+				expect(entry).not.toHaveProperty('monthlyEquivalent');
+				expect(entry).not.toHaveProperty('status');
+				expect(entry).not.toHaveProperty('flags');
+			}
 			detect.mockClear();
 			// Starting the app again keeps what was stored.
 			expect(await readRestarted()).toEqual(await lists(ownerAgent));
@@ -1788,7 +1798,7 @@ describe('RecurringSeries', () => {
 			ownerBankAccount,
 			monthly('17', '-9.00', 'Example Shared Bill', {category: 'SUBSCRIPTIONS'}),
 		);
-		const detect = jest.spyOn(detection, 'detectRecurringSeries');
+		const detect = jest.spyOn(detection, 'detectUndatedRecurringSeries');
 		try {
 			const reads = await Promise.all([list(ownerAgent), lists(ownerAgent), list(ownerAgent)]);
 			expect(byName(reads[0].series, 'Example Shared Bill')).toHaveLength(1);
@@ -1801,7 +1811,8 @@ describe('RecurringSeries', () => {
 	});
 
 	it('detects once per change in the payments it reads, not on every read', async () => {
-		const detect = jest.spyOn(detection, 'detectRecurringSeries');
+		const detect = jest.spyOn(detection, 'detectUndatedRecurringSeries');
+		const dating = jest.spyOn(detection, 'atDate');
 		try {
 			const before = await list(ownerAgent);
 			detect.mockClear();
@@ -1811,9 +1822,16 @@ describe('RecurringSeries', () => {
 
 			// Hiding is the owner's answer, not a change in payments: no new detection.
 			const [gym] = byName(before.series, 'Example Gym');
+			dating.mockClear();
 			await hide(ownerAgent, gym.key).expect(204);
+			expect(await app.get(RecurringSeriesService).findTransactionIds(owner.id, gym.key)).toHaveLength(
+				gym.transactionCount,
+			);
+			expect(dating).not.toHaveBeenCalled();
 			expect((await list(ownerAgent)).series.find(({key}) => key === gym.key)?.hidden).toBe(true);
+			dating.mockClear();
 			await hide(ownerAgent, gym.key, false).expect(204);
+			expect(dating).not.toHaveBeenCalled();
 			expect(detect).not.toHaveBeenCalled();
 
 			// A new payment is detected on the next read.
@@ -1861,6 +1879,7 @@ describe('RecurringSeries', () => {
 			expect(byName((await list(ownerAgent)).series, 'Example Cache Annual')).toEqual([]);
 			await fixtures.transactions.delete(annual.map(({id}) => id));
 		} finally {
+			dating.mockRestore();
 			detect.mockRestore();
 		}
 	});

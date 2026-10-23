@@ -1,9 +1,9 @@
 import {parseCents} from '../summary/bank-transaction-summary';
 import {normalizedPayeeName} from './recurring-payee-identity';
 import {
-	type DetectedRecurringSeries,
 	type RecurringCandidate,
-	detectRecurringSeries,
+	type UndatedRecurringSeries,
+	detectUndatedRecurringSeries,
 	isPersonTransferCategory,
 	nearAmount,
 } from './recurring-series-detection';
@@ -11,24 +11,23 @@ import {isOrdinaryRetailExpense} from './recurring-series-eligibility';
 
 /** Two successive histories of one obligation; they are joined unless the owner unlinks them. */
 export type ContinuationPair = {
-	older: DetectedRecurringSeries;
-	newer: DetectedRecurringSeries;
+	older: UndatedRecurringSeries;
+	newer: UndatedRecurringSeries;
 	/** The detector's history for both together, as it would read once linked. */
-	joined: DetectedRecurringSeries;
+	joined: UndatedRecurringSeries;
 };
 
 /** The detector's single history for both together, or null when it would not keep their union whole. */
 export function joinContinuation(
-	older: DetectedRecurringSeries,
-	newer: DetectedRecurringSeries,
+	older: UndatedRecurringSeries,
+	newer: UndatedRecurringSeries,
 	candidatesById: ReadonlyMap<string, RecurringCandidate>,
-	today: string,
-): DetectedRecurringSeries | null {
+): UndatedRecurringSeries | null {
 	// The pair is replayed under its own identity, so its rows group together whatever their own payee keys.
 	const recurringPayeeKey = `${older.direction}:continuation:${older.key}:${newer.key}`;
 	const ids = new Set([...older.transactionIds, ...newer.transactionIds]);
 	const rows = [...ids].map((id) => ({...candidatesById.get(id)!, recurringPayeeKey}));
-	const joined = detectRecurringSeries(rows, today);
+	const joined = detectUndatedRecurringSeries(rows);
 	if (joined.length !== 1 || joined[0].transactionIds.length !== ids.size) return null;
 	return joined[0];
 }
@@ -42,16 +41,15 @@ export function joinContinuation(
  * A middle history of three successive renames has two counterparts, so it is asked about only once one link exists.
  */
 export function findContinuationPairs(
-	series: readonly DetectedRecurringSeries[],
+	series: readonly UndatedRecurringSeries[],
 	candidatesById: ReadonlyMap<string, RecurringCandidate>,
-	today: string,
 ): ContinuationPair[] {
 	const pairs: ContinuationPair[] = [];
 	for (const older of series) {
 		for (const newer of series) {
 			if (older === newer || older.lastDate >= newer.firstDate) continue;
 			if (!compatible(older, newer, candidatesById) || !continuesName(older, newer)) continue;
-			const joined = joinContinuation(older, newer, candidatesById, today);
+			const joined = joinContinuation(older, newer, candidatesById);
 			if (joined) pairs.push({older, newer, joined});
 		}
 	}
@@ -64,8 +62,8 @@ export function findContinuationPairs(
 }
 
 function compatible(
-	older: DetectedRecurringSeries,
-	newer: DetectedRecurringSeries,
+	older: UndatedRecurringSeries,
+	newer: UndatedRecurringSeries,
 	candidatesById: ReadonlyMap<string, RecurringCandidate>,
 ): boolean {
 	if (
@@ -87,7 +85,7 @@ function compatible(
 }
 
 /** One name is the other followed by more whole words, after the merchant-key normalization of legal forms. */
-function continuesName(olderSeries: DetectedRecurringSeries, newerSeries: DetectedRecurringSeries): boolean {
+function continuesName(olderSeries: UndatedRecurringSeries, newerSeries: UndatedRecurringSeries): boolean {
 	const older = normalizedPayeeName(olderSeries.name, olderSeries.direction);
 	const newer = normalizedPayeeName(newerSeries.name, olderSeries.direction);
 	if (!older || !newer || older === newer) return false;
