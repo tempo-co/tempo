@@ -80,9 +80,11 @@ docker build \
     --tag "$image" \
     "$repo_root" >/dev/null
 
+# NET_ADMIN lets the test add the trusted proxy address inside the container and send requests from it.
 docker run --detach --name "$container" \
     --publish 127.0.0.1::8080 \
     --add-host api:127.0.0.1 \
+    --cap-add NET_ADMIN \
     "$image" >/dev/null
 port=$(docker port "$container" 8080/tcp | python3 -c 'import sys; print(sys.stdin.read().strip().rsplit(":", 1)[1])')
 
@@ -114,20 +116,31 @@ check unicode-search "/bank-transactions?search=$encoded_search" spa
 check api /api/health proxy
 check callback /bank-connections/callback proxy
 
-# Requests arrive through the container network gateway; the forwarded client address must replace it.
-curl -sS --max-time 5 -o /dev/null -H 'X-Forwarded-For: 203.0.113.10' "http://127.0.0.1:$port/?real-ip-check"
-real_ip_logged=0
-for _ in $(seq 1 10); do
-    if [[ "$(docker logs "$container" 2>/dev/null)" =~ (^|$'\n')203\.0\.113\.10\ [^$'\n']*real-ip-check ]]; then
-        real_ip_logged=1
-        break
+# Waits for Nginx to log the request whose query is $1 and checks the client address it logged.
+expect_client() {
+    local marker=$1 expected=$2 line
+    for _ in $(seq 1 10); do
+        line=$(docker logs "$container" 2>/dev/null | grep -F "GET /?$marker " || true)
+        [[ -n "$line" ]] && break
+        sleep 0.5
+    done
+    if [[ "${line%% *}" != "$expected" ]]; then
+        docker logs "$container" >&2
+        echo "$marker: expected client address $expected, got '${line%% *}'" >&2
+        exit 1
     fi
-    sleep 0.5
-done
-if [[ "$real_ip_logged" != 1 ]]; then
-    docker logs "$container" >&2
-    echo 'Nginx did not use the forwarded client address' >&2
-    exit 1
-fi
+}
+
+# A request from the Tailscale proxy address uses the last X-Forwarded-For entry, which the proxy appends.
+trusted_proxy=10.213.47.2
+docker exec "$container" ip addr add "$trusted_proxy/32" dev lo
+docker exec "$container" curl -sS --max-time 5 -o /dev/null --interface "$trusted_proxy" \
+    -H 'X-Forwarded-For: 198.51.100.7, 203.0.113.10' "http://$trusted_proxy:8080/?trusted-proxy"
+expect_client trusted-proxy 203.0.113.10
+
+# Any other sender, here the container network gateway, keeps its own address whatever it forwards.
+gateway=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}' "$container")
+curl -sS --max-time 5 -o /dev/null -H 'X-Forwarded-For: 203.0.113.10' "http://127.0.0.1:$port/?untrusted-sender"
+expect_client untrusted-sender "$gateway"
 
 echo 'tempo web security headers: PASS'
