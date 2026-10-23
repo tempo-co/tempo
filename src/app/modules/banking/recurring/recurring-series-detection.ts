@@ -38,7 +38,7 @@ export type RecurringCandidate = {
 	category: string | null;
 };
 
-export type DetectedRecurringSeries = {
+export type UndatedRecurringSeries = {
 	key: string;
 	/** The payee the series is grouped under; may differ from the merchant key stored on its transactions. */
 	merchantKey: string;
@@ -54,11 +54,6 @@ export type DetectedRecurringSeries = {
 	typicalAmount: string;
 	/** The most recent actual payment, including an isolated amount outside the established price. */
 	latestAmount: string;
-	/**
-	 * Base-currency cents per month on the date the series is dated: `paidMonthlyEquivalent` in the month of the latest
-	 * payment, otherwise `usualMonthlyEquivalent`. Null while any row lacks a converted amount.
-	 */
-	monthlyEquivalent: bigint | null;
 	/** The shown amount per month: the fixed price, or a variable amount's median. */
 	usualMonthlyEquivalent: bigint | null;
 	/** A variable monthly bill's cost in the month its latest payment was made: that payment. Null otherwise. */
@@ -75,10 +70,16 @@ export type DetectedRecurringSeries = {
 	firstDate: string;
 	lastDate: string;
 	nextExpectedDate: string;
-	status: RecurringSeriesStatus;
-	flags: RecurringSeriesFlag[];
 	/** A fixed price's recent change against the price before it, until the new price has been paid three times. */
 	priceChange: RecurringPriceChange | null;
+};
+
+/** A detected history rendered on one date; never stored as the recognition result. */
+export type DetectedRecurringSeries = UndatedRecurringSeries & {
+	status: RecurringSeriesStatus;
+	flags: RecurringSeriesFlag[];
+	/** This month's actual cost for a varying monthly bill, otherwise its usual monthly cost. */
+	monthlyEquivalent: bigint | null;
 };
 
 export type RecurringAmountRange = {low: string; high: string};
@@ -192,17 +193,8 @@ const PERSON_TRANSFER_CATEGORIES: ReadonlySet<string> = new Set<BankTransactionC
 	'TRANSFER_IN',
 ]);
 
-/**
- * A date before any payment. Detecting on it gives every series as if still active; `atDate` then dates them, so the
- * grouping can be stored and dated on each read.
- */
-export const UNDATED = '0000-01-01';
-
-/**
- * Status, flags, the price label and this month's cost of a series detected on `UNDATED`, as on `today`. Only the
- * fields derived here change; the rest are the same on any date.
- */
-export function atDate(entry: DetectedRecurringSeries, today: string): DetectedRecurringSeries {
+/** Status, flags, the price label and monthly cost for an undated detection, as on `today`. */
+export function atDate(entry: UndatedRecurringSeries, today: string): DetectedRecurringSeries {
 	const status: RecurringSeriesStatus = today > addDays(entry.nextExpectedDate, GRACE_DAYS) ? 'ENDED' : 'ACTIVE';
 	const flags: RecurringSeriesFlag[] = [];
 	if (status === 'ACTIVE' && today > entry.nextExpectedDate) flags.push('LATE');
@@ -226,6 +218,11 @@ export function detectRecurringSeries(
 	candidates: readonly RecurringCandidate[],
 	today: string,
 ): DetectedRecurringSeries[] {
+	return detectUndatedRecurringSeries(candidates).map((entry) => atDate(entry, today));
+}
+
+/** Recognizes payment histories without applying any read date. */
+export function detectUndatedRecurringSeries(candidates: readonly RecurringCandidate[]): UndatedRecurringSeries[] {
 	const byId = new Map(candidates.map((row) => [row.id, row]));
 	const namingPeriod = createNamingPeriodLookup(byId);
 	const personKeys = new Set<string>();
@@ -242,9 +239,9 @@ export function detectRecurringSeries(
 	}
 
 	const series = [...partitions.values()].flatMap((rows) =>
-		detectAccountPartition(rows, today, personKeys.has(rows[0].merchantKey), namingPeriod),
+		detectAccountPartition(rows, personKeys.has(rows[0].merchantKey), namingPeriod),
 	);
-	return reconcileAccountSeries(series, candidates, today, namingPeriod);
+	return reconcileAccountSeries(series, candidates, namingPeriod);
 }
 
 /** A candidate grouped under a payee key, keeping its own merchant key for the rename check. */
@@ -255,11 +252,10 @@ function grouped(candidate: RecurringCandidate, payeeKey: string): RecurringCand
 /** Recognize a complete current naming period before older fixed coverage can erase its evidence. */
 function detectAccountPartition(
 	rows: RecurringCandidate[],
-	today: string,
 	person: boolean,
 	namingPeriod: NamingPeriodLookup,
-): DetectedRecurringSeries[] {
-	const whole = detectPartition(rows, today, person);
+): UndatedRecurringSeries[] {
+	const whole = detectPartition(rows, person);
 	if (
 		!rows[rows.length - 1].recurringPayeeKey ||
 		(whole.length === 1 && whole[0].transactionIds.length === rows.length)
@@ -269,28 +265,19 @@ function detectAccountPartition(
 	if (!currentRows || currentRows.length === rows.length) return whole;
 	const currentIds = new Set(currentRows.map(({id}) => id));
 	const previous = rows.filter(({id}) => !currentIds.has(id));
-	return [
-		...detectAccountPartition(previous, today, person, namingPeriod),
-		completePartition(currentRows, today, person)!,
-	];
+	return [...detectAccountPartition(previous, person, namingPeriod), completePartition(currentRows, person)!];
 }
 
-function completePartition(
-	rows: readonly RecurringCandidate[],
-	today: string,
-	person: boolean,
-): DetectedRecurringSeries | null {
+function completePartition(rows: readonly RecurringCandidate[], person: boolean): UndatedRecurringSeries | null {
 	const detected = recognizePartition([...rows], person);
 	if (detected.length !== 1 || detected[0].rows.length !== rows.length) return null;
 	const current = detected[0];
-	return buildSeries(current.rows, current.rule, current.amountKind, today);
+	return buildSeries(current.rows, current.rule, current.amountKind);
 }
 
 /** The same cadence and price rules are used for account-local detection and recognized-history reconciliation. */
-function detectPartition(rows: RecurringCandidate[], today: string, person: boolean): DetectedRecurringSeries[] {
-	return recognizePartition(rows, person).map(({rows, rule, amountKind}) =>
-		buildSeries(rows, rule, amountKind, today),
-	);
+function detectPartition(rows: RecurringCandidate[], person: boolean): UndatedRecurringSeries[] {
+	return recognizePartition(rows, person).map(({rows, rule, amountKind}) => buildSeries(rows, rule, amountKind));
 }
 
 type RecognizedPartition = {
@@ -347,11 +334,10 @@ function recognizePartition(rows: RecurringCandidate[], person: boolean): Recogn
 }
 
 function reconcileAccountSeries(
-	series: readonly DetectedRecurringSeries[],
+	series: readonly UndatedRecurringSeries[],
 	candidates: readonly RecurringCandidate[],
-	today: string,
 	namingPeriod: NamingPeriodLookup,
-): DetectedRecurringSeries[] {
+): UndatedRecurringSeries[] {
 	const byId = new Map(candidates.map((row) => [row.id, row]));
 	// A stream is the account-local recognition, including every linked name and no unclassified activity.
 	const sourceStreamById = new Map<string, ReadonlySet<string>>();
@@ -359,7 +345,7 @@ function reconcileAccountSeries(
 		const ids = new Set(entry.transactionIds);
 		for (const id of ids) sourceStreamById.set(id, ids);
 	}
-	const groups = new Map<string, DetectedRecurringSeries[]>();
+	const groups = new Map<string, UndatedRecurringSeries[]>();
 	for (const entry of series) {
 		const first = byId.get(entry.transactionIds[0])!;
 		const groupKey = first.recurringPayeeKey
@@ -372,12 +358,12 @@ function reconcileAccountSeries(
 	return [...groups.values()]
 		.flatMap((group) => {
 			if (group.length === 1) return group;
-			const join = (parts: readonly DetectedRecurringSeries[]): DetectedRecurringSeries | null => {
+			const join = (parts: readonly UndatedRecurringSeries[]): UndatedRecurringSeries | null => {
 				const rows = parts.flatMap((entry) =>
 					entry.transactionIds.map((id) => grouped(byId.get(id)!, entry.merchantKey)),
 				);
 				rows.sort(byDateThenId);
-				const joined = completePartition(rows, today, false);
+				const joined = completePartition(rows, false);
 				if (joined?.cadence === parts[0].cadence) return joined;
 				// Every member is already independently recognized. Validate continuity, not the share of old prices.
 				const rule = matchCadence(rows);
@@ -387,8 +373,8 @@ function reconcileAccountSeries(
 				// A current period can supersede older evidence, not interleave with another recognized obligation.
 				const currentIds = new Set(currentRows.map(({id}) => id));
 				if (rows.some(({id, date}) => !currentIds.has(id) && date >= currentRows[0].date)) return null;
-				const current = completePartition(currentRows, today, false)!;
-				return buildSeries(rows, rule, current.amountKind, today, undefined, currentRows);
+				const current = completePartition(currentRows, false)!;
+				return buildSeries(rows, rule, current.amountKind, undefined, currentRows);
 			};
 			const whole = join(group);
 			if (whole) return [whole];
@@ -404,7 +390,7 @@ function reconcileAccountSeries(
 				}
 			}
 			const seen = new Set<number>();
-			const reconciled: DetectedRecurringSeries[] = [];
+			const reconciled: UndatedRecurringSeries[] = [];
 			for (let start = 0; start < group.length; start++) {
 				if (seen.has(start)) continue;
 				const stack = [start];
@@ -422,28 +408,27 @@ function reconcileAccountSeries(
 			}
 			return reconciled;
 		})
-		.map((entry) => withCurrentSourceStream(entry, byId, sourceStreamById, today, namingPeriod));
+		.map((entry) => withCurrentSourceStream(entry, byId, sourceStreamById, namingPeriod));
 }
 
 /** Older linked identities must not move an established current price or billing-day anchor. */
 function withCurrentSourceStream(
-	entry: DetectedRecurringSeries,
+	entry: UndatedRecurringSeries,
 	byId: ReadonlyMap<string, RecurringCandidate>,
 	sourceStreamById: ReadonlyMap<string, ReadonlySet<string>>,
-	today: string,
 	namingPeriod: NamingPeriodLookup,
-): DetectedRecurringSeries {
+): UndatedRecurringSeries {
 	const sources = entry.transactionIds.map((id) => byId.get(id)!);
 	const latest = sources[sources.length - 1];
 	if (!latest.recurringPayeeKey) return entry;
 	const rows = sources.map((row) => grouped(row, entry.merchantKey));
 	const rule = CADENCE_RULES.find(({cadence}) => cadence === entry.cadence)!;
 	const calendarRows = (prefix: readonly RecurringCandidate[]) =>
-		currentSourceRows(prefix, byId, sourceStreamById, rule, today, namingPeriod);
+		currentSourceRows(prefix, byId, sourceStreamById, rule, namingPeriod);
 	const currentRows = calendarRows(rows);
 	if (currentRows === rows) return entry;
-	const [current] = detectPartition([...currentRows], today, false);
-	return buildSeries(rows, rule, current.amountKind, today, calendarRows, currentRows);
+	const [current] = detectPartition([...currentRows], false);
+	return buildSeries(rows, rule, current.amountKind, calendarRows, currentRows);
 }
 
 function currentSourceRows(
@@ -451,12 +436,10 @@ function currentSourceRows(
 	byId: ReadonlyMap<string, RecurringCandidate>,
 	sourceStreamById: ReadonlyMap<string, ReadonlySet<string>>,
 	rule: CadenceRule,
-	today: string,
 	namingPeriod: NamingPeriodLookup,
 ): readonly RecurringCandidate[] {
 	const latest = byId.get(rows[rows.length - 1].id)!;
-	const recognized = (prefix: RecurringCandidate[]) =>
-		completePartition(prefix, today, false)?.cadence === rule.cadence;
+	const recognized = (prefix: RecurringCandidate[]) => completePartition(prefix, false)?.cadence === rule.cadence;
 	const currentRows = namingPeriod(rows, false, rule.cadence);
 	if (currentRows) return currentRows.length === rows.length ? rows : currentRows;
 	// If no linked-name union qualifies, retain the exact recognized source stream, not other account activity.
@@ -942,11 +925,10 @@ function buildSeries(
 	rows: readonly RecurringCandidate[],
 	rule: CadenceRule,
 	amountKind: RecurringAmountKind,
-	today: string,
 	calendarRows?: (prefix: readonly RecurringCandidate[]) => readonly RecurringCandidate[],
 	/** The current naming period's payments, which a varying amount is summarized from; all payments by default. */
 	priceRows: readonly RecurringCandidate[] = rows,
-): DetectedRecurringSeries {
+): UndatedRecurringSeries {
 	const first = rows[0];
 	const latest = rows[rows.length - 1];
 	const expectedDate = (prefix: readonly RecurringCandidate[]) =>
@@ -965,34 +947,28 @@ function buildSeries(
 			? fixedAmounts(rows, converted, perMonth)
 			: variableAmounts(priceRows, rule, direction, converted, perMonth);
 
-	return atDate(
-		{
-			key: seriesKey(first.merchantKey, first.currency, first.id),
-			merchantKey: first.merchantKey,
-			name: latest.name,
-			direction,
-			cadence: rule.cadence,
-			amountKind,
-			currency: first.currency,
-			latestAmount: formatCents(latest.amountCents),
-			...amounts,
-			monthlyEquivalent: amounts.usualMonthlyEquivalent,
-			transactionIds: rows.map((row) => row.id),
-			restartTransactionIds: rows
-				.filter((row, index) => index > 0 && row.date > addDays(expectedDate(rows.slice(0, index)), GRACE_DAYS))
-				.map((row) => row.id),
-			firstDate: first.date,
-			lastDate: latest.date,
-			nextExpectedDate: expectedDate(rows),
-			status: 'ACTIVE',
-			flags: [],
-		},
-		today,
-	);
+	return {
+		key: seriesKey(first.merchantKey, first.currency, first.id),
+		merchantKey: first.merchantKey,
+		name: latest.name,
+		direction,
+		cadence: rule.cadence,
+		amountKind,
+		currency: first.currency,
+		latestAmount: formatCents(latest.amountCents),
+		...amounts,
+		transactionIds: rows.map((row) => row.id),
+		restartTransactionIds: rows
+			.filter((row, index) => index > 0 && row.date > addDays(expectedDate(rows.slice(0, index)), GRACE_DAYS))
+			.map((row) => row.id),
+		firstDate: first.date,
+		lastDate: latest.date,
+		nextExpectedDate: expectedDate(rows),
+	};
 }
 
 type SeriesAmounts = Pick<
-	DetectedRecurringSeries,
+	UndatedRecurringSeries,
 	| 'typicalAmount'
 	| 'usualMonthlyEquivalent'
 	| 'paidMonthlyEquivalent'

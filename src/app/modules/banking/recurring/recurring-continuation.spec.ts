@@ -1,7 +1,6 @@
 import {findContinuationPairs} from './recurring-continuation';
-import {type RecurringCandidate, detectRecurringSeries} from './recurring-series-detection';
+import {type RecurringCandidate, atDate, detectUndatedRecurringSeries} from './recurring-series-detection';
 
-const AS_OF = '2036-11-20';
 let nextId = 0;
 
 function payment(date: string, overrides: Partial<RecurringCandidate> = {}): RecurringCandidate {
@@ -39,9 +38,9 @@ function history(newer: Partial<RecurringCandidate> = {}, newerDates = NEWER_DAT
 	];
 }
 
-function pairs(rows: RecurringCandidate[], asOf = AS_OF) {
-	const series = detectRecurringSeries(rows, asOf);
-	return {series, pairs: findContinuationPairs(series, new Map(rows.map((row) => [row.id, row])), asOf)};
+function pairs(rows: RecurringCandidate[]) {
+	const series = detectUndatedRecurringSeries(rows);
+	return {series, pairs: findContinuationPairs(series, new Map(rows.map((row) => [row.id, row])))};
 }
 
 const ids = (rows: readonly RecurringCandidate[]) => rows.map(({id}) => id);
@@ -63,11 +62,10 @@ describe('findContinuationPairs', () => {
 						cadence: newer.cadence,
 						amountKind: 'FIXED',
 						typicalAmount: newer.typicalAmount,
-						monthlyEquivalent: newer.monthlyEquivalent,
+						usualMonthlyEquivalent: newer.usualMonthlyEquivalent,
 						firstDate: older.firstDate,
 						lastDate: newer.lastDate,
 						nextExpectedDate: newer.nextExpectedDate,
-						status: 'ENDED',
 						transactionIds: ids(rows),
 						restartTransactionIds: [rows[3].id],
 					}),
@@ -101,8 +99,8 @@ describe('findContinuationPairs', () => {
 		const rows = history({}, ['2036-05-11', '2036-06-05', '2036-07-05', '2036-08-05']).map((row, index) =>
 			index < 3 ? {...row, date: ['2036-01-05', '2036-02-05', '2036-03-05'][index]} : row,
 		);
-		const [pair] = pairs(rows, '2036-09-07').pairs;
-		expect(pair.joined).toMatchObject({
+		const [pair] = pairs(rows).pairs;
+		expect(atDate(pair.joined, '2036-09-07')).toMatchObject({
 			nextExpectedDate: '2036-09-05',
 			status: 'ACTIVE',
 			flags: ['LATE'],
@@ -181,7 +179,7 @@ describe('findContinuationPairs', () => {
 		const rows = history({}, ['2042-07-08', '2043-07-09'])
 			.slice(1)
 			.map((row, index) => (index < 2 ? {...row, date: ['2032-01-11', '2033-01-11'][index]} : row));
-		expect(pairs(rows, '2043-08-01').series.map(({cadence}) => cadence)).toEqual(['YEARLY', 'YEARLY']);
-		expect(pairs(rows, '2043-08-01').pairs).toEqual([]);
+		expect(pairs(rows).series.map(({cadence}) => cadence)).toEqual(['YEARLY', 'YEARLY']);
+		expect(pairs(rows).pairs).toEqual([]);
 	});
 });

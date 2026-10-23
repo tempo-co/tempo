@@ -1,5 +1,10 @@
 import {addDays} from '../banking.utils';
-import {type RecurringCandidate, UNDATED, atDate, detectRecurringSeries} from './recurring-series-detection';
+import {
+	type RecurringCandidate,
+	atDate,
+	detectRecurringSeries,
+	detectUndatedRecurringSeries,
+} from './recurring-series-detection';
 
 const TODAY = '2026-10-17';
 let nextId = 0;
@@ -37,19 +42,17 @@ function soonAfter(date: string): string {
 }
 
 describe('atDate', () => {
-	it('dates series detected without a date exactly as detecting on that date would', () => {
-		const rows = [
-			...monthly(8, MAY_TO_OCT.slice(0, 5), '10.00'),
-			payment('2026-10-08', '11.50'),
-			...monthly(14, MAY_TO_OCT.slice(0, 5), '45.00', {merchantKey: 'EXPENSE:example phone'}),
-			...['2024-09-12', '2025-09-12', '2026-09-14'].map((date) =>
-				payment(date, '120.00', {merchantKey: 'EXPENSE:example insurer', category: 'INSURANCE'}),
-			),
-		];
-		const undated = detectRecurringSeries(rows, UNDATED);
-		for (const date of ['2026-10-01', '2026-10-15', '2026-10-20', '2026-11-12', '2026-11-20', '2027-12-01']) {
-			expect(undated.map((entry) => atDate(entry, date))).toEqual(detectRecurringSeries(rows, date));
-		}
+	it('renders status and a recent price label from the same stored history on each read date', () => {
+		const rows = [...monthly(8, MAY_TO_OCT.slice(0, 5), '10.00'), payment('2026-10-08', '11.50')];
+		const [undated] = detectUndatedRecurringSeries(rows);
+		expect(atDate(undated, '2026-11-16')).toMatchObject({status: 'ENDED', flags: [], priceChange: null});
+		expect(atDate(undated, '2026-10-20')).toMatchObject({
+			status: 'ACTIVE',
+			flags: [],
+			monthlyEquivalent: 1150n,
+			priceChange: {amount: '1.50', since: '2026-10-08'},
+		});
+		expect(undated.priceChange).toEqual({amount: '1.50', since: '2026-10-08'});
 	});
 });
 
