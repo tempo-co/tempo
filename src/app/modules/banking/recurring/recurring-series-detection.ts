@@ -2,7 +2,8 @@ import {createHash} from 'node:crypto';
 
 import {BANK_TRANSACTION_DIRECTIONS, type BankTransactionDirection} from '../bank-transaction-direction';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
-import {formatCents} from '../summary/bank-transaction-summary';
+import {parseMerchantKey} from '../categorization/bank-transaction-merchant-key';
+import {divideRounded, formatCents, medianCents} from '../summary/bank-transaction-summary';
 
 export const RECURRING_CADENCES = ['WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY'] as const;
 export type RecurringCadence = (typeof RECURRING_CADENCES)[number];
@@ -155,7 +156,7 @@ function variableAllowed(rule: CadenceRule, rows: readonly RecurringCandidate[],
 	if (person || rows.some(isPersonTransferCategory)) return false;
 	return (
 		rule.allowsVariable ||
-		rows.every(({merchantKey}) => merchantKey.startsWith(`${BANK_TRANSACTION_DIRECTIONS.INCOME}:`))
+		rows.every(({merchantKey}) => parseMerchantKey(merchantKey).direction === BANK_TRANSACTION_DIRECTIONS.INCOME)
 	);
 }
 
@@ -358,25 +359,7 @@ function reconcileAccountSeries(
 	return [...groups.values()]
 		.flatMap((group) => {
 			if (group.length === 1) return group;
-			const join = (parts: readonly UndatedRecurringSeries[]): UndatedRecurringSeries | null => {
-				const rows = parts.flatMap((entry) =>
-					entry.transactionIds.map((id) => grouped(byId.get(id)!, entry.merchantKey)),
-				);
-				rows.sort(byDateThenId);
-				const joined = completePartition(rows, false);
-				if (joined?.cadence === parts[0].cadence) return joined;
-				// Every member is already independently recognized. Validate continuity, not the share of old prices.
-				const rule = matchCadence(rows);
-				if (!rule || rule.cadence !== parts[0].cadence || hasRecurringOverlap(rows, rule)) return null;
-				const currentRows = namingPeriod(rows, false, rule.cadence);
-				if (!currentRows || currentRows.length === rows.length) return null;
-				// A current period can supersede older evidence, not interleave with another recognized obligation.
-				const currentIds = new Set(currentRows.map(({id}) => id));
-				if (rows.some(({id, date}) => !currentIds.has(id) && date >= currentRows[0].date)) return null;
-				const current = completePartition(currentRows, false)!;
-				return buildSeries(rows, rule, current.amountKind, undefined, currentRows);
-			};
-			const whole = join(group);
+			const whole = joinSeries(group, byId, namingPeriod);
 			if (whole) return [whole];
 
 			// An independent concurrent plan must not prevent an otherwise unique account continuation.
@@ -384,31 +367,59 @@ function reconcileAccountSeries(
 			const neighbours = group.map(() => [] as number[]);
 			for (let left = 0; left < group.length; left++) {
 				for (let right = left + 1; right < group.length; right++) {
-					if (!join([group[left], group[right]])) continue;
+					if (!joinSeries([group[left], group[right]], byId, namingPeriod)) continue;
 					neighbours[left].push(right);
 					neighbours[right].push(left);
 				}
 			}
-			const seen = new Set<number>();
-			const reconciled: UndatedRecurringSeries[] = [];
-			for (let start = 0; start < group.length; start++) {
-				if (seen.has(start)) continue;
-				const stack = [start];
-				const indices: number[] = [];
-				while (stack.length) {
-					const current = stack.pop()!;
-					if (seen.has(current)) continue;
-					seen.add(current);
-					indices.push(current);
-					stack.push(...neighbours[current]);
-				}
+			return connectedComponents(neighbours).flatMap((indices) => {
 				const parts = indices.sort((a, b) => a - b).map((index) => group[index]);
-				const joined = parts.length > 1 ? join(parts) : null;
-				reconciled.push(...(joined ? [joined] : parts));
-			}
-			return reconciled;
+				const joined = parts.length > 1 ? joinSeries(parts, byId, namingPeriod) : null;
+				return joined ? [joined] : parts;
+			});
 		})
 		.map((entry) => withCurrentSourceStream(entry, byId, sourceStreamById, namingPeriod));
+}
+
+function joinSeries(
+	parts: readonly UndatedRecurringSeries[],
+	byId: ReadonlyMap<string, RecurringCandidate>,
+	namingPeriod: NamingPeriodLookup,
+): UndatedRecurringSeries | null {
+	const rows = parts.flatMap((entry) => entry.transactionIds.map((id) => grouped(byId.get(id)!, entry.merchantKey)));
+	rows.sort(byDateThenId);
+	const joined = completePartition(rows, false);
+	if (joined?.cadence === parts[0].cadence) return joined;
+	// Every member is already independently recognized. Validate continuity, not the share of old prices.
+	const rule = matchCadence(rows);
+	if (!rule || rule.cadence !== parts[0].cadence || hasRecurringOverlap(rows, rule)) return null;
+	const currentRows = namingPeriod(rows, false, rule.cadence);
+	if (!currentRows || currentRows.length === rows.length) return null;
+	// A current period can supersede older evidence, not interleave with another recognized obligation.
+	const currentIds = new Set(currentRows.map(({id}) => id));
+	if (rows.some(({id, date}) => !currentIds.has(id) && date >= currentRows[0].date)) return null;
+	const current = completePartition(currentRows, false)!;
+	return buildSeries(rows, rule, current.amountKind, {priceRows: currentRows});
+}
+
+/** Every complete compatibility component, in the original traversal order. */
+function connectedComponents(neighbours: readonly (readonly number[])[]): number[][] {
+	const seen = new Set<number>();
+	const components: number[][] = [];
+	for (let start = 0; start < neighbours.length; start++) {
+		if (seen.has(start)) continue;
+		const stack = [start];
+		const indices: number[] = [];
+		while (stack.length) {
+			const current = stack.pop()!;
+			if (seen.has(current)) continue;
+			seen.add(current);
+			indices.push(current);
+			stack.push(...neighbours[current]);
+		}
+		components.push(indices);
+	}
+	return components;
 }
 
 /** Older linked identities must not move an established current price or billing-day anchor. */
@@ -428,7 +439,7 @@ function withCurrentSourceStream(
 	const currentRows = calendarRows(rows);
 	if (currentRows === rows) return entry;
 	const [current] = detectPartition([...currentRows], false);
-	return buildSeries(rows, rule, current.amountKind, calendarRows, currentRows);
+	return buildSeries(rows, rule, current.amountKind, {calendarRows, priceRows: currentRows});
 }
 
 function currentSourceRows(
@@ -925,17 +936,23 @@ function buildSeries(
 	rows: readonly RecurringCandidate[],
 	rule: CadenceRule,
 	amountKind: RecurringAmountKind,
-	calendarRows?: (prefix: readonly RecurringCandidate[]) => readonly RecurringCandidate[],
-	/** The current naming period's payments, which a varying amount is summarized from; all payments by default. */
-	priceRows: readonly RecurringCandidate[] = rows,
+	{
+		calendarRows,
+		priceRows = rows,
+	}: {
+		calendarRows?: (prefix: readonly RecurringCandidate[]) => readonly RecurringCandidate[];
+		/** The current naming period's payments for a varying amount; all payments by default. */
+		priceRows?: readonly RecurringCandidate[];
+	} = {},
 ): UndatedRecurringSeries {
 	const first = rows[0];
 	const latest = rows[rows.length - 1];
 	const expectedDate = (prefix: readonly RecurringCandidate[]) =>
 		addCycles(calendarRows?.(prefix) ?? prefix, rule, 1);
-	const direction = first.merchantKey.startsWith(`${BANK_TRANSACTION_DIRECTIONS.INCOME}:`)
-		? BANK_TRANSACTION_DIRECTIONS.INCOME
-		: BANK_TRANSACTION_DIRECTIONS.EXPENSE;
+	const direction =
+		parseMerchantKey(first.merchantKey).direction === BANK_TRANSACTION_DIRECTIONS.INCOME
+			? BANK_TRANSACTION_DIRECTIONS.INCOME
+			: BANK_TRANSACTION_DIRECTIONS.EXPENSE;
 	const converted = rows.every((row) => row.baseAmountCents !== null);
 	// Weekly uses 52 weeks over 12 months.
 	const perMonth = (perPayment: bigint) => {
@@ -1034,13 +1051,6 @@ function variableAmounts(
 
 function maxCents(values: readonly bigint[]): bigint {
 	return values.reduce((high, amount) => (amount > high ? amount : high));
-}
-
-/** The middle amount, or the mean of the two middle ones rounded half away from zero. */
-function medianCents(values: readonly bigint[]): bigint {
-	const sorted = [...values].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-	const middle = Math.floor(sorted.length / 2);
-	return sorted.length % 2 ? sorted[middle] : divideRounded(sorted[middle - 1] + sorted[middle], 2n);
 }
 
 /**
@@ -1163,12 +1173,6 @@ function medianNumber(values: readonly number[]): number {
 	const sorted = [...values].sort((a, b) => a - b);
 	const middle = Math.floor(sorted.length / 2);
 	return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
-/** Rounds half away from zero, like Postgres `ROUND`. */
-function divideRounded(value: bigint, divisor: bigint): bigint {
-	const rounded = (abs(value) * 2n + divisor) / (divisor * 2n);
-	return value < 0n ? -rounded : rounded;
 }
 
 function abs(value: bigint): bigint {

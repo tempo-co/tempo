@@ -56,12 +56,11 @@ export class BankTransactionService {
 		const pageSize = queryParams.pagination?.pageSize ?? DEFAULT_BANK_TRANSACTION_PAGE_SIZE;
 		const query = this.createOwnerScopedQuery(accountId);
 
-		applyBankTransactionFilters(query, queryParams.filter);
 		const seriesKey = queryParams.filter?.recurringSeriesKey;
-		if (seriesKey) {
-			const ids = await this.recurringSeriesService.findTransactionIds(accountId, seriesKey);
-			query.andWhere('transaction.id IN (:...recurringSeriesIds)', {recurringSeriesIds: ids});
-		}
+		const recurringIds = seriesKey
+			? await this.recurringSeriesService.findTransactionIds(accountId, seriesKey)
+			: undefined;
+		applyBankTransactionFilters(query, queryParams.filter, recurringIds);
 
 		const sortField = queryParams.sort?.by ?? BankTransactionSortField.BOOKING_DATE;
 		const sortOrder = queryParams.sort?.order ?? BankTransactionSortOrder.DESC;

@@ -18,7 +18,7 @@ import type {
 } from '../api/dtos/recurring-series.dto';
 import {BankTransaction} from '../bank-transaction.entity';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
-import {SQL_INTERNAL} from '../services/bank-transaction-filters';
+import {SQL_INTERNAL, createOwnerScopedQuery} from '../services/bank-transaction-filters';
 import {formatCents} from '../summary/bank-transaction-summary';
 import {type ContinuationPair, findContinuationPairs} from './recurring-continuation';
 import {RecurringContinuationUnlink} from './recurring-continuation-unlink.entity';
@@ -39,7 +39,7 @@ const REFUND = 'REFUND' satisfies BankTransactionCategory;
  * `recurring-series-detection`, `recurring-payee-identity`, `recurring-continuation` or `recurring-series-eligibility`,
  * or the payload shape in `toPayload`. Stored detections from other rules are not reused.
  */
-export const RECURRING_DETECTION_RULES_VERSION = '5';
+export const RECURRING_DETECTION_RULES_VERSION = '6';
 const UPCOMING_COUNT = 3;
 /** Every payment field detection reads; the stored detection's version is a hash over all of them. */
 const CANDIDATE_COLUMNS: readonly [sql: string, alias: keyof CandidateRow][] = [
@@ -87,7 +87,7 @@ type Detection = {
 	retail: Set<string>;
 };
 
-/** What a read needs: the dated series after linking, and the owner's answers resolved onto them. */
+/** Undated histories after linking, and the owner's answers resolved onto them. */
 type ReadState = {
 	detected: UndatedRecurringSeries[];
 	hidesBySeries: Map<string, RecurringSeriesHide[]>;
@@ -260,33 +260,57 @@ export class RecurringSeriesService {
 		};
 	}
 
-	/** The stored detection while the owner's payments are unchanged; otherwise detects again and stores it. */
+	/** Hash and candidates share a short read snapshot; computation and writes hold no read connection. */
 	private async detect(accountId: Account['id']): Promise<Detection> {
-		const [[{version}], stored] = await Promise.all([
-			this.candidateRows(accountId)
-				.select(
-					`md5(string_agg(json_build_array(${CANDIDATE_COLUMNS.map(([sql]) => sql).join(', ')})::text, ',' ORDER BY "transaction"."id"))`,
-					'version',
-				)
-				.getRawMany<{version: string | null}>(),
-			this.snapshotRepository.findOneBy({accountId}),
-		]);
-		const inputVersion = version ?? 'none';
-		if (stored?.inputVersion === inputVersion && stored.rulesVersion === RECURRING_DETECTION_RULES_VERSION)
-			return fromPayload(stored.payload as SnapshotPayload);
+		let leader: Promise<Detection> | undefined;
+		// The callback awaits its hash query before it can chain leader work from this read promise.
+		const read: Promise<{cached: SnapshotPayload} | {pending: Promise<Detection>}> =
+			this.bankTransactionRepository.manager.transaction('REPEATABLE READ', async (manager) => {
+				const repository = manager.getRepository(BankTransaction);
+				const [{version}] = await this.candidateRows(accountId, repository)
+					.select(
+						`md5(string_agg(json_build_array(${CANDIDATE_COLUMNS.map(([sql]) => sql).join(', ')})::text, ',' ORDER BY "transaction"."id"))`,
+						'version',
+					)
+					.getRawMany<{version: string | null}>();
+				const inputVersion = version ?? 'none';
+				const stored = await manager.getRepository(RecurringSnapshot).findOneBy({accountId});
+				if (stored?.inputVersion === inputVersion && stored.rulesVersion === RECURRING_DETECTION_RULES_VERSION)
+					return {cached: stored.payload as SnapshotPayload};
 
-		const running = `${accountId}\u0000${inputVersion}`;
-		const shared = this.detecting.get(running);
-		if (shared) return shared;
-		const detection = this.detectAndStore(accountId, inputVersion).finally(() => this.detecting.delete(running));
-		this.detecting.set(running, detection);
-		return detection;
+				const running = `${accountId}\u0000${inputVersion}`;
+				const shared = this.detecting.get(running);
+				if (shared) return {pending: shared};
+				const query = this.candidateRows(accountId, repository).select(
+					CANDIDATE_COLUMNS[0][0],
+					CANDIDATE_COLUMNS[0][1],
+				);
+				for (const [sql, alias] of CANDIDATE_COLUMNS.slice(1)) query.addSelect(sql, alias);
+				const rows = query.getRawMany<CandidateRow>();
+				// Reserve before loading finishes, but do not compute or upsert until this transaction has released.
+				leader = read
+					.then(() => rows)
+					.then((rows) => this.detectAndStore(accountId, inputVersion, rows))
+					.finally(() => this.detecting.delete(running));
+				this.detecting.set(running, leader);
+				await rows;
+				return {pending: leader};
+			});
+		try {
+			const result = await read;
+			return 'cached' in result ? fromPayload(result.cached) : result.pending;
+		} catch (error) {
+			// The leader includes read/commit failures, so consume that same rejection and clear its map entry.
+			if (leader) return leader;
+			throw error;
+		}
 	}
 
-	private async detectAndStore(accountId: Account['id'], inputVersion: string): Promise<Detection> {
-		const query = this.candidateRows(accountId).select(CANDIDATE_COLUMNS[0][0], CANDIDATE_COLUMNS[0][1]);
-		for (const [sql, alias] of CANDIDATE_COLUMNS.slice(1)) query.addSelect(sql, alias);
-		const rows = await query.getRawMany<CandidateRow>();
+	private async detectAndStore(
+		accountId: Account['id'],
+		inputVersion: string,
+		rows: CandidateRow[],
+	): Promise<Detection> {
 		const evidence: RecurringEvidence[] = rows.map((row) => ({
 			id: row.id,
 			bankAccountId: row.bankAccountId,
@@ -319,12 +343,8 @@ export class RecurringSeriesService {
 	}
 
 	/** The owner's payments that can be recurring: settled, booked, not internal, refunded or zero. */
-	private candidateRows(accountId: Account['id']) {
-		return this.bankTransactionRepository
-			.createQueryBuilder('transaction')
-			.innerJoin('transaction.bankAccount', 'bankAccount')
-			.innerJoin('bankAccount.bankConnection', 'connection')
-			.where('connection.accountId = :accountId', {accountId})
+	private candidateRows(accountId: Account['id'], repository = this.bankTransactionRepository) {
+		return createOwnerScopedQuery(repository, accountId)
 			.andWhere('transaction.merchantKey IS NOT NULL')
 			.andWhere('transaction.bookingDate IS NOT NULL')
 			.andWhere("UPPER(transaction.transactionStatus) IS DISTINCT FROM 'PDNG'")

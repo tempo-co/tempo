@@ -1,4 +1,4 @@
-import {toBankTransactionDirection} from '../bank-transaction-direction';
+import {type BankTransactionDirection, toBankTransactionDirection} from '../bank-transaction-direction';
 import {
 	extractCardMerchantName,
 	extractStructuredCounterpartyName,
@@ -55,6 +55,12 @@ export function getBankTransactionMerchantKey(transaction: MerchantKeyTransactio
 		.replace(/\p{M}/gu, '');
 
 	return `${direction}:${key}`;
+}
+
+/** Splits a generated merchant key at its direction separator; colons in the name stay intact. */
+export function parseMerchantKey(key: string): {direction: BankTransactionDirection; name: string} {
+	const separator = key.indexOf(':');
+	return {direction: key.slice(0, separator) as BankTransactionDirection, name: key.slice(separator + 1)};
 }
 
 /** The full name explicitly named by a transfer description, without discarding middle names or surname words. */

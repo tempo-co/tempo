@@ -1,7 +1,7 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
 import TestAgent from 'supertest/lib/agent';
-import {ArrayContains, DataSource, In, Repository} from 'typeorm';
+import {ArrayContains, DataSource, In, Repository, SelectQueryBuilder} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
@@ -249,6 +249,20 @@ describe('RecurringSeries', () => {
 				.query({filter: {recurringSeriesKey: academy.key}, pagination: {pageIndex: 0, pageSize: 50}})
 				.expect(200);
 			expect(drill.body.transactions.map(({id}: {id: string}) => id).sort()).toEqual([...ids].sort());
+			const totals = await fresh.agent
+				.get('/bank-transactions/totals')
+				.query({filter: {recurringSeriesKey: academy.key}})
+				.expect(200);
+			expect(totals.body).toMatchObject({count: rows.length, spending: '480.00', income: '0.00', net: '-480.00'});
+			const laterTotals = await fresh.agent
+				.get('/bank-transactions/totals')
+				.query({filter: {recurringSeriesKey: academy.key, bookingDate: {from: '2026-08-01'}}})
+				.expect(200);
+			expect(laterTotals.body).toMatchObject({count: 3, spending: '240.00', income: '0.00', net: '-240.00'});
+			await ownerAgent
+				.get('/bank-transactions/totals')
+				.query({filter: {recurringSeriesKey: academy.key}})
+				.expect(404);
 			// Every detected series counts without the owner doing anything.
 			expect((await read()).monthlyTotal).toBe('122.00');
 			expect(await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}})).toEqual(snapshot);
@@ -1750,6 +1764,113 @@ describe('RecurringSeries', () => {
 			.get('/bank-transactions')
 			.query({filter: {recurringSeriesKey: club.key}})
 			.expect(404);
+	});
+
+	it('reads and stores one coherent payment version while the ledger changes', async () => {
+		const fresh = await createVerifiedAccount(
+			app.getHttpServer(),
+			app.get(ConfigurationService).get('EMAIL_UI_URL'),
+		);
+		const account = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
+		const connection = await fixtures.createConnection(account);
+		const bank = await fixtures.createBankAccount(connection);
+		const rows = await fixtures.createTransactions(
+			bank,
+			monthly('12', '-40.00', 'Example Snapshot Race').slice(0, 3),
+		);
+		const read = SelectQueryBuilder.prototype.getRawMany;
+		let concurrentPayment: BankTransaction | undefined;
+		let armed = true;
+		const query = jest.spyOn(SelectQueryBuilder.prototype, 'getRawMany').mockImplementation(async function (
+			this: SelectQueryBuilder<BankTransaction>,
+		) {
+			const result = await read.call(this);
+			if (armed && this.getParameters().accountId === account.id && this.getQuery().includes('md5(string_agg')) {
+				armed = false;
+				// A separate connection commits a payment after the hash's database read.
+				concurrentPayment = await fixtures.createTransaction(
+					bank,
+					bookedRow('2026-08-12', '-40.00', {
+						counterpartyName: 'Example Snapshot Race',
+					}),
+				);
+			}
+			return result;
+		});
+		try {
+			await fresh.agent.get('/recurring-series').query({asOf: AS_OF}).expect(200);
+			expect(concurrentPayment).toBeDefined();
+			query.mockRestore();
+			await fixtures.transactions.delete(concurrentPayment!.id);
+			const response = await fresh.agent.get('/recurring-series').query({asOf: AS_OF}).expect(200);
+			const [series] = byName(response.body.expenses.series, 'Example Snapshot Race');
+			expect(series.transactionCount).toBe(rows.length);
+			const drill = await fresh.agent
+				.get('/bank-transactions')
+				.query({filter: {recurringSeriesKey: series.key}})
+				.expect(200);
+			expect(drill.body.total).toBe(series.transactionCount);
+			expect(drill.body.transactions.map(({id}: {id: string}) => id).sort()).toEqual(
+				rows.map(({id}) => id).sort(),
+			);
+		} finally {
+			query.mockRestore();
+			await fixtures.connections.delete(connection.id);
+		}
+	});
+
+	it.each(['hash', 'rows', 'commit', 'upsert'] as const)('retries after a failed snapshot %s', async (phase) => {
+		const fresh = await createVerifiedAccount(
+			app.getHttpServer(),
+			app.get(ConfigurationService).get('EMAIL_UI_URL'),
+		);
+		const account = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
+		const connection = await fixtures.createConnection(account);
+		const bank = await fixtures.createBankAccount(connection);
+		const rows = await fixtures.createTransactions(
+			bank,
+			monthly('12', '-40.00', 'Example Snapshot Retry').slice(0, 3),
+		);
+		const snapshots: Repository<RecurringSnapshot> = app.get(getRepositoryToken(RecurringSnapshot));
+		const upsert = jest.spyOn(snapshots, 'upsert');
+		if (phase === 'upsert') upsert.mockRejectedValueOnce(new Error('Synthetic snapshot write failure'));
+		const read = SelectQueryBuilder.prototype.getRawMany;
+		let armed = true;
+		let restoreCommit: (() => void) | undefined;
+		const query = jest.spyOn(SelectQueryBuilder.prototype, 'getRawMany').mockImplementation(async function (
+			this: SelectQueryBuilder<BankTransaction>,
+		) {
+			const owner = this.getParameters().accountId === account.id;
+			const hash = this.getQuery().includes('md5(string_agg');
+			if (armed && owner && ((phase === 'hash' && hash) || (phase === 'rows' && !hash))) {
+				armed = false;
+				throw new Error('Synthetic snapshot read failure');
+			}
+			const result = await read.call(this);
+			if (armed && owner && hash && phase === 'commit') {
+				armed = false;
+				const commit = jest
+					.spyOn(this.queryRunner!, 'commitTransaction')
+					.mockRejectedValueOnce(new Error('Synthetic snapshot commit failure'));
+				restoreCommit = () => commit.mockRestore();
+			}
+			return result;
+		});
+		try {
+			await fresh.agent.get('/recurring-series').query({asOf: AS_OF}).expect(500);
+			query.mockRestore();
+			restoreCommit?.();
+			upsert.mockRestore();
+			const response = await fresh.agent.get('/recurring-series').query({asOf: AS_OF}).expect(200);
+			expect(byName(response.body.expenses.series, 'Example Snapshot Retry')).toEqual([
+				expect.objectContaining({transactionCount: rows.length, typicalAmount: '40.00'}),
+			]);
+		} finally {
+			query.mockRestore();
+			restoreCommit?.();
+			upsert.mockRestore();
+			await fixtures.connections.delete(connection.id);
+		}
 	});
 
 	it('keeps stored detections across restarts and detects again when the detection rules change', async () => {

@@ -1,4 +1,4 @@
-import {Brackets, SelectQueryBuilder} from 'typeorm';
+import {Brackets, type Repository, SelectQueryBuilder} from 'typeorm';
 
 import type {BankTransactionFilterQueryDto} from '../api/dtos/bank-transaction-query.dto';
 import {
@@ -52,6 +52,15 @@ const CATEGORY_STATUS_SQL: Record<BankTransactionCategoryStatusFilterValue, stri
 
 const anyOf = (conditions: string[]) => `(${conditions.join(' OR ')})`;
 
+/** Owner-scoped ledger query; transaction and bankAccount aliases are shared with the filters below. */
+export function createOwnerScopedQuery(repository: Repository<BankTransaction>, accountId: string) {
+	return repository
+		.createQueryBuilder('transaction')
+		.innerJoin('transaction.bankAccount', 'bankAccount')
+		.innerJoin('bankAccount.bankConnection', 'connection')
+		.where('connection.accountId = :accountId', {accountId});
+}
+
 /**
  * Applies the Transactions list filters to an owner-scoped query whose transaction alias is `transaction` and whose
  * bank account alias is `bankAccount`. Shared so every summary number reconciles with a filtered list.
@@ -59,7 +68,9 @@ const anyOf = (conditions: string[]) => `(${conditions.join(' OR ')})`;
 export function applyBankTransactionFilters(
 	query: SelectQueryBuilder<BankTransaction>,
 	filter: BankTransactionFilterQueryDto | undefined,
+	recurringTransactionIds?: readonly string[],
 ): void {
+	if (recurringTransactionIds) query.andWhereInIds(recurringTransactionIds);
 	const bookingDate = filter?.bookingDate;
 	if (bookingDate?.from) {
 		query.andWhere('transaction.bookingDate >= :bookingDateFrom', {bookingDateFrom: bookingDate.from});

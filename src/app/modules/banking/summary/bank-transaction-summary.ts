@@ -78,11 +78,24 @@ export function formatCents(value: bigint): string {
 
 /** Mean in whole cents, rounded half away from zero like Postgres `ROUND`. */
 export function averageCents(values: readonly bigint[]): bigint {
-	const count = BigInt(values.length);
-	const total = values.reduce((sum, value) => sum + value, 0n);
-	const absolute = total < 0n ? -total : total;
-	const rounded = (absolute * 2n + count) / (count * 2n);
-	return total < 0n ? -rounded : rounded;
+	return divideRounded(
+		values.reduce((sum, value) => sum + value, 0n),
+		BigInt(values.length),
+	);
+}
+
+/** Rounds integer division half away from zero, like Postgres ROUND. */
+export function divideRounded(value: bigint, divisor: bigint): bigint {
+	const absolute = value < 0n ? -value : value;
+	const rounded = (absolute * 2n + divisor) / (divisor * 2n);
+	return value < 0n ? -rounded : rounded;
+}
+
+/** Median in whole cents, with an even-sized middle rounded half away from zero. */
+export function medianCents(values: readonly bigint[]): bigint {
+	const sorted = [...values].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+	const middle = Math.floor(sorted.length / 2);
+	return sorted.length % 2 ? sorted[middle] : divideRounded(sorted[middle - 1] + sorted[middle], 2n);
 }
 
 function cumulativeSeries(daily: DailyCents, monthDays: number): bigint[] {

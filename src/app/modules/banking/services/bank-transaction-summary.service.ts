@@ -27,6 +27,7 @@ import {
 	BANK_TRANSACTION_UNCATEGORIZED,
 	type BankTransactionCategoryFilterValue,
 } from '../categorization/bank-transaction-category';
+import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {
 	averageCents,
 	buildSpendingPace,
@@ -46,6 +47,7 @@ import {
 	SQL_SPENDING,
 	SQL_UNKNOWN_DIRECTION,
 	applyBankTransactionFilters,
+	createOwnerScopedQuery,
 } from './bank-transaction-filters';
 import {BANK_CONNECTION_STATUSES} from './banking-sync.constants';
 
@@ -74,6 +76,7 @@ export class BankTransactionSummaryService {
 	constructor(
 		@InjectRepository(BankTransaction)
 		private readonly bankTransactionRepository: Repository<BankTransaction>,
+		private readonly recurringSeriesService: RecurringSeriesService,
 	) {}
 
 	async getSummary(
@@ -312,8 +315,11 @@ export class BankTransactionSummaryService {
 		{id, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
 		{filter}: BankTransactionTotalsQueryDto,
 	): Promise<BankTransactionTotalsResponseDto> {
-		const query = this.createOwnerScopedQuery(id);
-		applyBankTransactionFilters(query, filter);
+		const query = createOwnerScopedQuery(this.bankTransactionRepository, id);
+		const recurringIds = filter?.recurringSeriesKey
+			? await this.recurringSeriesService.findTransactionIds(id, filter.recurringSeriesKey)
+			: undefined;
+		applyBankTransactionFilters(query, filter, recurringIds);
 		// Round each amount to minor units before summing; never convert monetary SQL results to Number.
 		const cents = `ROUND(${BASE_AMOUNT} * 100)`;
 		const row = await query
@@ -342,7 +348,7 @@ export class BankTransactionSummaryService {
 	}
 
 	async getReviewCounts(accountId: Account['id']): Promise<BankTransactionReviewCountsResponseDto> {
-		const counts = await this.createOwnerScopedQuery(accountId)
+		const counts = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
 			.select(`COUNT(*) FILTER (WHERE "transaction"."category" = 'NEEDS_REVIEW')::int`, 'needsReview')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_CATEGORIZATION_FAILED})::int`, 'categorizationFailed')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_CATEGORIZING})::int`, 'categorizing')
@@ -355,7 +361,7 @@ export class BankTransactionSummaryService {
 	/** Spending and income per month, day and category key; amounts are raw base-currency sums. */
 	private findFlows(accountId: string, from: string, to: string): Promise<FlowRow[]> {
 		// The same filters a drill link sends, so every number reconciles with the list.
-		const query = this.createOwnerScopedQuery(accountId);
+		const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
 		applyBankTransactionFilters(query, {
 			bookingDate: {from, to},
 			baseAmount: 'PRESENT',
@@ -377,7 +383,7 @@ export class BankTransactionSummaryService {
 
 	/** Raw signed spending and income sums per period, on the same filters as {@link findFlows}. */
 	private findPeriodFlows(accountId: string, interval: CashFlowInterval, from: string, to: string) {
-		const query = this.createOwnerScopedQuery(accountId);
+		const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
 		applyBankTransactionFilters(query, {
 			bookingDate: {from, to},
 			baseAmount: 'PRESENT',
@@ -393,7 +399,7 @@ export class BankTransactionSummaryService {
 	}
 
 	private async findPeriodCounts(accountId: string, from: string, to: string) {
-		const query = this.createOwnerScopedQuery(accountId);
+		const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
 		applyBankTransactionFilters(query, {bookingDate: {from, to}});
 		const counts = await query
 			.select(
@@ -407,18 +413,10 @@ export class BankTransactionSummaryService {
 	}
 
 	private async findFirstBookingDate(accountId: string): Promise<string | null> {
-		const row = await this.createOwnerScopedQuery(accountId)
+		const row = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
 			.select(`to_char(MIN("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'first')
 			.getRawOne<{first: string | null}>();
 		return row?.first ?? null;
-	}
-
-	private createOwnerScopedQuery(accountId: string) {
-		return this.bankTransactionRepository
-			.createQueryBuilder('transaction')
-			.innerJoin('transaction.bankAccount', 'bankAccount')
-			.innerJoin('bankAccount.bankConnection', 'connection')
-			.where('connection.accountId = :accountId', {accountId});
 	}
 }
 
