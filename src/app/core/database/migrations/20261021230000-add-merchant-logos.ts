@@ -30,6 +30,7 @@ export class AddMerchantLogos20261021230000 implements MigrationInterface {
 						{name: 'sourceUrl', type: 'text', isNullable: true},
 						{name: 'sourceSize', type: 'int', isNullable: true},
 						{name: 'homepageLoaded', type: 'boolean', default: false},
+						{name: 'monochrome', type: 'boolean', default: false},
 						{name: 'attempts', type: 'int', default: 0},
 						{name: 'retryAfter', type: 'timestamptz', isNullable: true},
 						{name: 'fetchedAt', type: 'timestamptz', isNullable: true},

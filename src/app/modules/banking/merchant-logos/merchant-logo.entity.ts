@@ -39,6 +39,10 @@ export class MerchantLogo {
 	@Column({type: 'boolean', default: false})
 	homepageLoaded: boolean;
 
+	/** Whether the logo has no colour, like a brand's one-colour version; a brand's colour logo is shown first. */
+	@Column({type: 'boolean', default: false})
+	monochrome: boolean;
+
 	@Column({type: 'int', default: 0})
 	attempts: number;
 

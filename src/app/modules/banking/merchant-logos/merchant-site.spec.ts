@@ -101,6 +101,7 @@ describe('parseHomepage', () => {
 		});
 		const manifestIcons = parseManifestIcons(
 			JSON.stringify({
+				name: 'Example Shop',
 				icons: [
 					{src: 'android-512.png', sizes: '512x512', type: 'image/png'},
 					{src: 'mono.png', sizes: '1024x1024', purpose: 'monochrome'},
@@ -109,8 +110,19 @@ describe('parseHomepage', () => {
 				],
 			}),
 			'https://cdn.example.test/site.webmanifest',
+			'shop.example.test',
 		);
 		expect(manifestIcons).toEqual([{url: 'https://cdn.example.test/android-512.png', size: 512}]);
+		// A manifest named after the software the site runs on, or not named at all, isn't the brand's app.
+		const generic = (manifest: object) =>
+			parseManifestIcons(JSON.stringify(manifest), 'https://shop.example.test/m.json', 'shop.example.test');
+		expect(generic({name: 'Webshop', icons: [{src: 'icon.png', sizes: '512x512'}]})).toEqual([]);
+		expect(generic({icons: [{src: 'icon.png', sizes: '512x512'}]})).toEqual([]);
+		expect(generic({short_name: 'Shop', icons: [{src: 'icon.png', sizes: '512x512'}]})).toHaveLength(1);
+		// A very long name is read in time proportional to its length.
+		const started = Date.now();
+		expect(generic({name: 'x '.repeat(32_000), icons: [{src: 'icon.png', sizes: '512x512'}]})).toEqual([]);
+		expect(Date.now() - started).toBeLessThan(500);
 		// The page's own icons first, then the manifest's, then the conventional paths.
 		expect(iconCandidates(homepage, 'https://shop.example.test/', manifestIcons)).toEqual([
 			'https://cdn.example.test/icon.svg',
@@ -131,7 +143,7 @@ describe('parseHomepage', () => {
 			'https://shop.example.test/apple-touch-icon-precomposed.png',
 			'https://shop.example.test/favicon.ico',
 		]);
-		expect(parseManifestIcons('not json', 'https://cdn.example.test/m.json')).toEqual([]);
+		expect(parseManifestIcons('not json', 'https://cdn.example.test/m.json', 'shop.example.test')).toEqual([]);
 	});
 
 	it.each([
@@ -176,12 +188,36 @@ describe('siteMatchesBrand', () => {
 
 describe('encodeMerchantLogo (real sharp)', () => {
 	it('turns a non-square transparent icon into a square PNG on white, at most 128px', async () => {
-		const {png: output, size} = await encodeMerchantLogo(await png(300, 150));
+		const {png: output, size, monochrome} = await encodeMerchantLogo(await png(300, 150));
 		const metadata = await sharp(output).metadata();
 		expect(metadata).toMatchObject({format: 'png', width: 128, height: 128, hasAlpha: false});
 		expect(size).toBe(150);
+		expect(monochrome).toBe(false);
 		const [corner] = await sharp(output).raw().toBuffer();
 		expect(corner).toBe(255);
+	});
+
+	it('marks a logo as monochrome when under 1% of its pixels have colour', async () => {
+		const dotted = (dots: number) =>
+			sharp({create: {width: 100, height: 100, channels: 3, background: '#1b1f3a'}})
+				.composite(
+					Array.from({length: dots}, (_, index) => ({
+						input: {create: {width: 1, height: 1, channels: 3, background: '#e30613'}},
+						left: index % 100,
+						top: Math.floor(index / 100),
+					})),
+				)
+				.png()
+				.toBuffer();
+		expect((await encodeMerchantLogo(await dotted(80))).monochrome).toBe(true);
+		expect((await encodeMerchantLogo(await dotted(300))).monochrome).toBe(false);
+	});
+
+	it('marks a logo with no colour as monochrome', async () => {
+		const grey = await sharp({create: {width: 64, height: 64, channels: 3, background: '#1b1f3a'}})
+			.png()
+			.toBuffer();
+		expect((await encodeMerchantLogo(grey)).monochrome).toBe(true);
 	});
 
 	it('renders an SVG sharply at 128px, without loading anything it references', async () => {
@@ -295,17 +331,20 @@ describe('chooseMerchantLogos', () => {
 			siteNames: [brand ?? ''],
 			homepageLoaded: true,
 			sourceSize: 32,
+			monochrome: false,
 			...logo,
 		},
 	});
 
-	it('shows each brand its largest confirmed logo, on every merchant of that brand', () => {
+	it('shows each brand its best confirmed logo, colour before size, on every merchant of that brand', () => {
 		const chosen = chooseMerchantLogos([
 			merchant('example nl', 'Example Burger', {sourceSize: 32}),
 			merchant('example uk', 'EXAMPLE burger', {sourceSize: 48}),
 			merchant('example station', 'Example Burger', null),
 			merchant('example be', 'Example Burger', {sourceSize: 48}),
 			merchant('other', 'Other Shop', {sourceSize: 180}),
+			merchant('chain ro', 'Example Chain', {sourceSize: 512, monochrome: true}),
+			merchant('chain com', 'Example Chain', {sourceSize: 400}),
 		]);
 		expect(Object.fromEntries(chosen)).toEqual({
 			'example nl': {id: 'logo-example uk', version: 'v-example uk'},
@@ -313,17 +352,23 @@ describe('chooseMerchantLogos', () => {
 			'example station': {id: 'logo-example uk', version: 'v-example uk'},
 			'example be': {id: 'logo-example be', version: 'v-example be'},
 			other: {id: 'logo-other', version: 'v-other'},
+			'chain ro': {id: 'logo-chain com', version: 'v-chain com'},
+			'chain com': {id: 'logo-chain com', version: 'v-chain com'},
 		});
 	});
 
-	it('shows a logo only when the homepage named the brand, or the model was sure of a site that would not load', () => {
+	it('shows a logo only when the homepage named the brand, or named nothing against it', () => {
 		const chosen = chooseMerchantLogos([
+			merchant('unnamed sure', 'Unnamed Shop Plus', {siteNames: []}, true),
+			merchant('unnamed guess', 'Guessed Plus', {siteNames: []}, false),
+			merchant('unnamedhost', 'Unnamedhost', {siteNames: []}, false),
+			merchant('sure but other', 'Sure Shop', {siteNames: ['Unrelated Business']}, true),
 			merchant('mismatch', 'Example Shop', {siteNames: ['Unrelated Business']}),
 			merchant('blocked sure', 'Blocked Shop', {homepageLoaded: false, siteNames: []}, true),
 			merchant('blocked guess', 'Guessed Shop', {homepageLoaded: false, siteNames: []}, false),
 			merchant('pending', 'Pending Shop', {status: 'PENDING', version: null}),
 			merchant('person', null, null),
 		]);
-		expect([...chosen.keys()]).toEqual(['blocked sure']);
+		expect([...chosen.keys()]).toEqual(['unnamed sure', 'unnamedhost', 'blocked sure']);
 	});
 });

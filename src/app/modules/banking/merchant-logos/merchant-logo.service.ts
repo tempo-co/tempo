@@ -210,14 +210,15 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		// A refresh that cannot read the homepage keeps a logo its homepage confirmed.
 		const keepConfirmed = !homepage && logo.status === READY && logo.homepageLoaded;
 		let icon: (MerchantLogoImage & {source: string}) | null = null;
-		let askLogoDevAgain = false;
+		/** When logo.dev could not answer yet, how soon to ask it again. */
+		let askLogoDevAfterMs: number | null = null;
 		const larger = (candidate: (MerchantLogoImage & {source: string}) | null) => {
 			if (candidate && candidate.size > (icon?.size ?? 0)) icon = candidate;
 		};
 		if (!homepage?.parked) {
 			// logo.dev does not need the homepage, so a confirmed logo is still renewed from it.
 			const logoDev = await this.logoDev.findLogo(logo.domain);
-			askLogoDevAgain = logoDev.status === 'later';
+			if (logoDev.status === 'later') askLogoDevAfterMs = logoDev.retryAfterMs;
 			if (logoDev.status === 'found' && logoDev.size >= MIN_ICON_SIZE) {
 				const image = await this.fetchIconFrom(logoDev.url);
 				// The download is enlarged to a fixed size, so the original's size is the one that counts.
@@ -234,15 +235,16 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		}
 		const now = new Date();
 		if (icon) {
-			// Without its homepage the site is read again sooner, so its own names can confirm it; when logo.dev was
-			// still indexing the domain or out of credits, it is asked again the next day.
-			const refreshMs = askLogoDevAgain ? DAY_MS : homepage ? READY_REFRESH_MS : MISSING_RECHECK_MS;
+			// Without its homepage the site is read again sooner, so its own names can confirm it; when logo.dev could
+			// not answer yet, it is asked again when it said.
+			const refreshMs = askLogoDevAfterMs ?? (homepage ? READY_REFRESH_MS : MISSING_RECHECK_MS);
 			await this.logos.update(logo.id, {
 				status: READY,
 				image: icon.png,
 				version: createHash('sha256').update(icon.png).digest('hex'),
 				sourceUrl: icon.source,
 				sourceSize: icon.size,
+				monochrome: icon.monochrome,
 				homepageLoaded: !!homepage || keepConfirmed,
 				siteNames: homepage?.names ?? (keepConfirmed ? logo.siteNames : []),
 				attempts: 0,
@@ -258,10 +260,9 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 			status: logo.status === READY && !homepage?.parked ? READY : exhausted ? MISSING : PENDING,
 			attempts: exhausted ? 0 : attempts,
 			fetchedAt: now,
-			// When logo.dev was still indexing the domain or out of credits, it is asked again the next day.
+			// When logo.dev could not answer yet, it is asked again when it said.
 			retryAfter: new Date(
-				now.getTime() +
-					(askLogoDevAgain ? DAY_MS : exhausted ? MISSING_RECHECK_MS : RETRY_DELAYS_MS[attempts - 1]),
+				now.getTime() + (askLogoDevAfterMs ?? (exhausted ? MISSING_RECHECK_MS : RETRY_DELAYS_MS[attempts - 1])),
 			),
 		});
 	}
@@ -382,7 +383,8 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 						maxBytes: MANIFEST_BYTES,
 					})
 					.then(
-						(response) => parseManifestIcons(response.bytes.toString('utf8'), response.url),
+						(response) =>
+							parseManifestIcons(response.bytes.toString('utf8'), response.url, new URL(origin).hostname),
 						() => [],
 					)
 			: [];

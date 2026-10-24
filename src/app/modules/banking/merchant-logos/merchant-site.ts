@@ -28,8 +28,8 @@ const FAVICON_SIZE = 32;
 /** A declared icon and its size in pixels; a vector icon counts as SVG_RENDER_SIZE. */
 export type SiteIcon = {url: string; size: number};
 export type Homepage = {names: string[]; icons: SiteIcon[]; manifest: string | null; parked: boolean};
-/** A logo ready to store, with the size of the image it came from. */
-export type MerchantLogoImage = {png: Buffer; size: number};
+/** A logo ready to store, with the size of the image it came from and whether it has no colour at all. */
+export type MerchantLogoImage = {png: Buffer; size: number; monochrome: boolean};
 
 type Element = DefaultTreeAdapterMap['element'];
 
@@ -92,16 +92,24 @@ export function parseHomepage(html: string, pageUrl: string): Homepage {
 	};
 }
 
-/** The icons a web app manifest lists, except monochrome ones, which are meant to be tinted. */
-export function parseManifestIcons(json: string, manifestUrl: string): SiteIcon[] {
+/**
+ * The icons a web app manifest lists, except monochrome ones, which are meant to be tinted. Only a manifest whose
+ * name spells the site's domain counts: one named "Webshop" or "App", or with no name, belongs to the software
+ * the site runs on, and its install icon is that software's rather than the brand's.
+ */
+export function parseManifestIcons(json: string, manifestUrl: string, domain: string): SiteIcon[] {
 	let manifest: unknown;
 	try {
 		manifest = JSON.parse(json);
 	} catch {
 		return [];
 	}
-	const icons = (manifest as {icons?: unknown} | null)?.icons;
-	if (!Array.isArray(icons)) return [];
+	const {icons, name, short_name: shortName} = (manifest ?? {}) as Record<string, unknown>;
+	if (
+		!Array.isArray(icons) ||
+		![name, shortName].some((value) => typeof value === 'string' && namesDomain(value, domain))
+	)
+		return [];
 	return icons.flatMap((icon: unknown) => {
 		if (!icon || typeof icon !== 'object') return [];
 		const {src, sizes, type, purpose} = icon as Record<string, unknown>;
@@ -146,6 +154,31 @@ export function iconCandidates(
 	].slice(0, MAX_ICON_CANDIDATES);
 }
 
+/** Whether some run of a name's words, joined, spells a label of the domain ("A'DAM Toren" for adamtoren.example). */
+function namesDomain(name: string, domain: string): boolean {
+	const labels = domain
+		.split('.')
+		.slice(0, -1)
+		.map((label) => label.replace(/-/g, ''));
+	return spellsAny(tokens(name), labels);
+}
+
+/**
+ * Whether some run of consecutive words, joined, equals one of the spellings. A run stops as soon as no spelling
+ * starts with it, so a long name costs time in proportion to its length.
+ */
+function spellsAny(words: readonly string[], spellings: readonly string[]): boolean {
+	for (let start = 0; start < words.length; start++) {
+		let joined = '';
+		for (let index = start; index < words.length; index++) {
+			joined += words[index];
+			if (spellings.includes(joined)) return true;
+			if (!spellings.some((spelling) => spelling.startsWith(joined))) break;
+		}
+	}
+	return false;
+}
+
 /** A content system's stand-in icon, served when a site has none of its own, such as WordPress's "W". */
 export function isPlatformDefaultIcon(url: string): boolean {
 	return /\/wp-includes\/images\//i.test(new URL(url).pathname);
@@ -165,19 +198,7 @@ export function siteMatchesBrand(brand: string, domain: string, siteNames: reado
 	// The plural or possessive variant only for longer brands: "Bar" and "Bars" may well be different businesses.
 	const spellings =
 		compact.length >= 6 ? [compact, compact.endsWith('s') ? compact.slice(0, -1) : `${compact}s`] : [compact];
-	if (siteNames.length)
-		return siteNames.some((name) => {
-			const nameTokens = tokens(name);
-			return nameTokens.some((_, start) => {
-				let joined = '';
-				for (const token of nameTokens.slice(start)) {
-					joined += token;
-					if (spellings.includes(joined)) return true;
-					if (!spellings.some((spelling) => spelling.startsWith(joined))) return false;
-				}
-				return false;
-			});
-		});
+	if (siteNames.length) return siteNames.some((name) => spellsAny(tokens(name), spellings));
 	const labels = domain.split('.').slice(0, -1);
 	return (
 		labels.some((label) => label.replace(/-/g, '') === compact) ||
@@ -213,7 +234,37 @@ export async function encodeMerchantLogo(bytes: Buffer): Promise<MerchantLogoIma
 	// A white mark on a transparent background, drawn for dark browser tabs, comes out as an empty white square.
 	const {channels} = await sharp(png).stats();
 	if (channels.every(({mean, stdev}) => mean > 250 && stdev < 1)) throw new Error('Blank icon.');
-	return {png, size};
+	return {png, size, monochrome: await isMonochrome(png)};
+}
+
+/**
+ * Whether a logo has (almost) no colour: black, grey and white only, like the one-colour versions of logos made for
+ * print or dark mode. Pixels count as coloured when their channels differ clearly and they are not near black.
+ */
+async function isMonochrome(png: Buffer): Promise<boolean> {
+	const {data} = await sharp(png).removeAlpha().raw().toBuffer({resolveWithObject: true});
+	let coloured = 0;
+	for (let index = 0; index < data.length; index += 3) {
+		const max = Math.max(data[index], data[index + 1], data[index + 2]);
+		const min = Math.min(data[index], data[index + 1], data[index + 2]);
+		if (max - min >= 51) coloured++;
+	}
+	return coloured / (data.length / 3) < 0.01;
+}
+
+/**
+ * Whether the site confirms the brand. A homepage that names itself must name the brand. One that loaded but names
+ * nothing confirms it by its hostname, or, like a homepage that would not load, by the model being sure of the site:
+ * neither says anything against it.
+ */
+function isConfirmed(
+	brand: string,
+	domain: string,
+	domainConfident: boolean,
+	{homepageLoaded, siteNames}: {homepageLoaded: boolean; siteNames: string[]},
+): boolean {
+	if (homepageLoaded && siteNames.length) return siteMatchesBrand(brand, domain, siteNames);
+	return domainConfident || (homepageLoaded && siteMatchesBrand(brand, domain, []));
 }
 
 /** A merchant as the read path sees it, for choosing the logo it shows. */
@@ -229,14 +280,15 @@ export type MerchantLogoCandidate = {
 		siteNames: string[];
 		homepageLoaded: boolean;
 		sourceSize: number | null;
+		monochrome: boolean;
 	} | null;
 };
 
 /**
  * The logo each merchant key shows. A merchant's own logo counts when its site's homepage confirmed the brand, or,
- * for a site whose homepage would not load, when the model was sure of the domain. Merchants of one brand show the
- * same logo, the largest any of them has, so a chain's country sites look alike and a branch without a site of its
- * own still shows its brand.
+ * for a site whose homepage would not load or named nothing, when the model was sure of the domain. Merchants of one
+ * brand show the same logo, the best any of them has (a colour one before a one-colour version, then the largest),
+ * so a chain's country sites look alike and a branch without a site of its own still shows its brand.
  */
 export function chooseMerchantLogos(
 	merchants: readonly MerchantLogoCandidate[],
@@ -246,13 +298,15 @@ export function chooseMerchantLogos(
 		!!domain &&
 		logo?.status === 'READY' &&
 		!!logo.version &&
-		(logo.homepageLoaded ? siteMatchesBrand(brand, domain, logo.siteNames) : domainConfident);
-	const sizeOf = (merchant: MerchantLogoCandidate | undefined) => merchant?.logo?.sourceSize ?? 0;
+		isConfirmed(brand, domain, domainConfident, logo);
+	// Colour counts before size: a brand's one-colour logo is a variant, not the logo people know.
+	const rankOf = (merchant: MerchantLogoCandidate | undefined) =>
+		merchant?.logo ? (merchant.logo.monochrome ? 0 : 1_000_000) + (merchant.logo.sourceSize ?? 0) : -1;
 	const best = new Map<string, MerchantLogoCandidate>();
 	for (const merchant of merchants) {
 		if (!trusted(merchant)) continue;
 		const brand = tokens(merchant.brand!).join('');
-		if (sizeOf(merchant) > sizeOf(best.get(brand)) || !best.has(brand)) best.set(brand, merchant);
+		if (rankOf(merchant) > rankOf(best.get(brand))) best.set(brand, merchant);
 	}
 	const chosen = new Map<string, {id: string; version: string}>();
 	for (const merchant of merchants) {
@@ -260,7 +314,7 @@ export function chooseMerchantLogos(
 		const brandBest = best.get(tokens(merchant.brand).join(''));
 		if (!brandBest) continue;
 		// On a tie the merchant keeps its own site's logo.
-		const {logo} = trusted(merchant) && sizeOf(merchant) >= sizeOf(brandBest) ? merchant : brandBest;
+		const {logo} = trusted(merchant) && rankOf(merchant) >= rankOf(brandBest) ? merchant : brandBest;
 		chosen.set(merchant.key, {id: logo!.id, version: logo!.version!});
 	}
 	return chosen;

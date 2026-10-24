@@ -49,12 +49,13 @@ const IDENTITIES: Record<string, Omit<MerchantIdentification, 'correlationId'>> 
 
 const FAVICON_SERVICE = 'https://icons.duckduckgo.com/ip3/';
 const LOGO_DEV_ASSET = 'https://img.logo.dev/assets/';
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** What logo.dev knows per domain: a vector logo, only a small original, still indexing, or nothing. */
 const LOGO_DEV: Record<string, LogoDevResult> = {
 	'shop.example.test': {status: 'found', url: `${LOGO_DEV_ASSET}shop?format=png&size=256`, size: 512},
 	'walled.example.test': {status: 'found', url: `${LOGO_DEV_ASSET}walled?format=png&size=256`, size: 48},
-	'exampleshop.test': {status: 'later'},
+	'exampleshop.test': {status: 'later', retryAfterMs: DAY_MS},
 };
 
 describe('Merchant logos', () => {
@@ -292,13 +293,14 @@ describe('Merchant logos', () => {
 		await request(app.getHttpServer()).get(logoUrl).expect(401);
 
 		// A refresh while the site is down and logo.dev can't answer yet keeps the logo and the names that confirmed
-		// it, and asks logo.dev again the next day.
+		// it, and asks logo.dev again when it can answer.
 		const logo = await logos.findOneByOrFail({domain: 'shop.example.test'});
 		const due = () => logos.update(logo.id, {retryAfter: new Date()});
 		await due();
 		unreachable.add('www.shop.example.test');
 		unreachable.add('shop.example.test');
-		logoDevNow.set('shop.example.test', {status: 'later'});
+		// Out of the month's free credits: asked again a week later.
+		logoDevNow.set('shop.example.test', {status: 'later', retryAfterMs: 7 * DAY_MS});
 		await app.get(MerchantLogoService).fetchLogo(logo.id);
 		const kept = await logos.findOneByOrFail({id: logo.id});
 		expect(kept).toMatchObject({
@@ -307,8 +309,8 @@ describe('Merchant logos', () => {
 			siteNames: ['Example Shop | Groceries'],
 			attempts: 1,
 		});
-		expect(kept.retryAfter!.getTime() - kept.fetchedAt!.getTime()).toBe(24 * 60 * 60 * 1000);
-		// The next day logo.dev has a new logo: it replaces the old one while the site is still down.
+		expect(kept.retryAfter!.getTime() - kept.fetchedAt!.getTime()).toBe(7 * DAY_MS);
+		// A week later logo.dev has a new logo: it replaces the old one while the site is still down.
 		await due();
 		logoDevNow.set('shop.example.test', {
 			status: 'found',
@@ -386,7 +388,7 @@ describe('Merchant logos', () => {
 			sourceUrl: `${FAVICON_SERVICE}exampleshop.test.ico`,
 		});
 		// logo.dev was still indexing the site, so it is asked again the next day.
-		expect(guessedLogo!.retryAfter!.getTime() - guessedLogo!.fetchedAt!.getTime()).toBe(24 * 60 * 60 * 1000);
+		expect(guessedLogo!.retryAfter!.getTime() - guessedLogo!.fetchedAt!.getTime()).toBe(DAY_MS);
 		const guessedResponse = await other.agent.get(`/bank-transactions/${guessed.id}`).expect(200);
 		expect(guessedResponse.body.merchantLogoUrl).toBeNull();
 	});

@@ -28,7 +28,10 @@ describe('toLogoDevResult', () => {
 		expect(toLogoDevResult(200, {data: {url: 'not a url', source: {width: 64, height: 64}}})).toEqual({
 			status: 'none',
 		});
-		// Still indexing, out of credits, rate limited or failing.
-		for (const status of [202, 402, 429, 500]) expect(toLogoDevResult(status, null)).toEqual({status: 'later'});
+		// Still indexing, rate limited or failing: the next day. Out of the month's credits: a week later.
+		const day = 24 * 60 * 60 * 1000;
+		for (const status of [202, 429, 500])
+			expect(toLogoDevResult(status, null)).toEqual({status: 'later', retryAfterMs: day});
+		expect(toLogoDevResult(402, null)).toEqual({status: 'later', retryAfterMs: 7 * day});
 	});
 });
