@@ -24,3 +24,9 @@ updates:
       # date-fns 4 needs react-day-picker 9, which changes the calendar component's API.
       - dependency-name: date-fns
         update-types: ['version-update:semver-major']
+      # Remove when eslint-plugin-react supports ESLint 10 and the lint stack is upgraded together.
+      - dependency-name: eslint
+        versions: ['10.x.x']
+      # Remove when route validators are migrated from the Zod 3-only TanStack adapter.
+      - dependency-name: zod
+        versions: ['4.x.x']
