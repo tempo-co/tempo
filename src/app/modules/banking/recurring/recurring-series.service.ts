@@ -127,8 +127,8 @@ export class RecurringSeriesService {
 		private readonly snapshotRepository: Repository<RecurringSnapshot>,
 	) {}
 
-	/** Detections under way, by owner and input version, so reads that overlap share one. */
-	private readonly detecting = new Map<string, Promise<Detection>>();
+	/** Keep each version available until overlapping reads have left their older database snapshots. */
+	private readonly detecting = new Map<string, {readers: number; versions: Map<string, Promise<Detection>>}>();
 
 	/** Bills and income from one read. */
 	async list(
@@ -262,6 +262,9 @@ export class RecurringSeriesService {
 
 	/** Hash and candidates share a short read snapshot; computation and writes hold no read connection. */
 	private async detect(accountId: Account['id']): Promise<Detection> {
+		const reads = this.detecting.get(accountId) ?? {readers: 0, versions: new Map<string, Promise<Detection>>()};
+		this.detecting.set(accountId, reads);
+		reads.readers++;
 		let leader: Promise<Detection> | undefined;
 		// The callback awaits its hash query before it can chain leader work from this read promise.
 		const read: Promise<{cached: SnapshotPayload} | {pending: Promise<Detection>}> =
@@ -278,8 +281,7 @@ export class RecurringSeriesService {
 				if (stored?.inputVersion === inputVersion && stored.rulesVersion === RECURRING_DETECTION_RULES_VERSION)
 					return {cached: stored.payload as SnapshotPayload};
 
-				const running = `${accountId}\u0000${inputVersion}`;
-				const shared = this.detecting.get(running);
+				const shared = reads.versions.get(inputVersion);
 				if (shared) return {pending: shared};
 				const query = this.candidateRows(accountId, repository).select(
 					CANDIDATE_COLUMNS[0][0],
@@ -291,18 +293,23 @@ export class RecurringSeriesService {
 				leader = read
 					.then(() => rows)
 					.then((rows) => this.detectAndStore(accountId, inputVersion, rows))
-					.finally(() => this.detecting.delete(running));
-				this.detecting.set(running, leader);
+					.catch((error: unknown) => {
+						reads.versions.delete(inputVersion);
+						throw error;
+					});
+				reads.versions.set(inputVersion, leader);
 				await rows;
 				return {pending: leader};
 			});
 		try {
 			const result = await read;
-			return 'cached' in result ? fromPayload(result.cached) : result.pending;
+			return 'cached' in result ? fromPayload(result.cached) : await result.pending;
 		} catch (error) {
-			// The leader includes read/commit failures, so consume that same rejection and clear its map entry.
-			if (leader) return leader;
+			// The leader includes read/commit failures, so consume that same rejection and clear its version.
+			if (leader) return await leader;
 			throw error;
+		} finally {
+			if (--reads.readers === 0) this.detecting.delete(accountId);
 		}
 	}
 

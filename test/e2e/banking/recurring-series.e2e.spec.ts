@@ -1914,22 +1914,75 @@ describe('RecurringSeries', () => {
 		}
 	});
 
-	it('detects once when reads after a change overlap', async () => {
-		const extra = await fixtures.createTransactions(
-			ownerBankAccount,
-			monthly('17', '-9.00', 'Example Shared Bill', {category: 'SUBSCRIPTIONS'}),
-		);
-		const detect = jest.spyOn(detection, 'detectUndatedRecurringSeries');
-		try {
-			const reads = await Promise.all([list(ownerAgent), lists(ownerAgent), list(ownerAgent)]);
-			expect(byName(reads[0].series, 'Example Shared Bill')).toHaveLength(1);
-			expect(reads[2]).toEqual(reads[0]);
-			expect(detect).toHaveBeenCalledTimes(1);
-		} finally {
-			detect.mockRestore();
-			await fixtures.transactions.delete(extra.map(({id}) => id));
-		}
-	});
+	it.each(['unchanged', 'changed'] as const)(
+		'detects once when reads after a change overlap (%s inputs)',
+		async (inputs) => {
+			const extra = await fixtures.createTransactions(
+				ownerBankAccount,
+				monthly('17', '-9.00', 'Example Shared Bill', {category: 'SUBSCRIPTIONS'}),
+			);
+			const server = app.getHttpServer();
+			await app.listen(0, '127.0.0.1');
+			let hashes = 0;
+			let allHashed!: () => void;
+			const snapshotsStarted = new Promise<void>((resolve) => (allHashed = resolve));
+			let releaseFollowers!: () => void;
+			const leaderFinished = new Promise<void>((resolve) => (releaseFollowers = resolve));
+			const read = SelectQueryBuilder.prototype.getRawMany;
+			const query = jest.spyOn(SelectQueryBuilder.prototype, 'getRawMany').mockImplementation(async function (
+				this: SelectQueryBuilder<BankTransaction>,
+			) {
+				const result = await read.call(this);
+				if (this.getParameters().accountId === owner.id && this.getQuery().includes('md5(string_agg')) {
+					const position = ++hashes;
+					if (position === 3) allHashed();
+					if (position <= 3) {
+						// All three database snapshots precede the write; followers resume after the leader responds.
+						await snapshotsStarted;
+						if (position > 1) await leaderFinished;
+					}
+				}
+				return result;
+			});
+			const detect = jest.spyOn(detection, 'detectUndatedRecurringSeries');
+			const pending = [list(ownerAgent), lists(ownerAgent), list(ownerAgent)] as const;
+			try {
+				await Promise.race(pending);
+				expect(detect).toHaveBeenCalledTimes(1);
+				if (inputs === 'changed') {
+					// A newer input version can finish while readers of the previous version are paused.
+					await fixtures.transactions.update(
+						{id: In(extra.map(({id}) => id))},
+						{displayDescription: 'Example Updated Bill'},
+					);
+				}
+				const current = await list(ownerAgent);
+				expect(
+					byName(current.series, inputs === 'changed' ? 'Example Updated Bill' : 'Example Shared Bill'),
+				).toHaveLength(1);
+				const detections = inputs === 'changed' ? 2 : 1;
+				expect(detect).toHaveBeenCalledTimes(detections);
+				releaseFollowers();
+				const reads = await Promise.all(pending);
+				expect(byName(reads[0].series, 'Example Shared Bill')).toHaveLength(1);
+				expect(reads[1].expenses).toEqual(reads[0]);
+				expect(reads[2]).toEqual(reads[0]);
+				expect(detect).toHaveBeenCalledTimes(detections);
+				expect(await list(ownerAgent)).toEqual(current);
+				expect(detect).toHaveBeenCalledTimes(detections);
+			} finally {
+				allHashed();
+				releaseFollowers();
+				await Promise.allSettled(pending);
+				query.mockRestore();
+				detect.mockRestore();
+				await new Promise<void>((resolve, reject) =>
+					server.close((error?: Error) => (error ? reject(error) : resolve())),
+				);
+				await fixtures.transactions.delete(extra.map(({id}) => id));
+			}
+		},
+	);
 
 	it('detects once per change in the payments it reads, not on every read', async () => {
 		const detect = jest.spyOn(detection, 'detectUndatedRecurringSeries');
