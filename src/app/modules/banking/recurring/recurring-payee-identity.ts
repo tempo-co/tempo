@@ -9,13 +9,14 @@ import {
 	isTransferDescriptionMerchantKey,
 	parseMerchantKey,
 } from '../categorization/bank-transaction-merchant-key';
-import {parseSepaDescriptionIban} from '../own-transfer/iban';
+import {normalizeIban, parseSepaDescriptionIban} from '../own-transfer/iban';
 import {type RecurringCandidate, foldName, isPersonTransferCategory} from './recurring-series-detection';
 
 /** A recurring candidate with the bank's original naming evidence. */
 export type RecurringEvidence = RecurringCandidate & {
 	description: string | null;
 	counterpartyName: string | null;
+	counterpartyIban?: string | null;
 	transactionType: string | null;
 };
 
@@ -115,14 +116,24 @@ export function inferRecurringIdentities(rows: readonly RecurringEvidence[]): Re
 		if (identity) for (const node of members) identities.set(node.key, identity);
 		if (members.some(({key}) => people.has(key))) for (const {key} of members) people.add(key);
 	}
-	return rows.map(({description: _description, counterpartyName: _counterparty, transactionType: _type, ...row}) => {
-		const recurringPayeeKey = identities.get(nodeKey(row));
-		return {
-			...row,
-			...(recurringPayeeKey ? {recurringPayeeKey} : {}),
-			...(people.has(nodeKey(row)) ? {personTransfer: true} : {}),
-		};
-	});
+	return rows.map(
+		({description, counterpartyName: _counterparty, counterpartyIban, transactionType: _type, ...row}) => {
+			const recurringPayeeKey = identities.get(nodeKey(row));
+			const recipientIbans = [
+				...new Set(
+					[normalizeIban(counterpartyIban), parseSepaDescriptionIban(description)].filter(
+						(iban): iban is string => iban !== null,
+					),
+				),
+			];
+			return {
+				...row,
+				...(recipientIbans.length > 0 ? {recipientIbans} : {}),
+				...(recurringPayeeKey ? {recurringPayeeKey} : {}),
+				...(people.has(nodeKey(row)) ? {personTransfer: true} : {}),
+			};
+		},
+	);
 }
 
 /** Only an identity spanning several names or bank accounts needs history reconciliation. */

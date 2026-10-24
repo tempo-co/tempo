@@ -1659,6 +1659,231 @@ describe('RecurringSeries', () => {
 			}
 		});
 
+		it.each([1, 2])('continues established rent with %i new-name payments and a durable unlink', async (count) => {
+			const fresh = await createVerifiedAccount(
+				app.getHttpServer(),
+				app.get(ConfigurationService).get('EMAIL_UI_URL'),
+			);
+			const freshOwner = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
+			const connection = await fixtures.createConnection(freshOwner);
+			const bank = await fixtures.createBankAccount(connection);
+			const oldName = 'Transfer to ALEX-JO EXAMPLE';
+			const newName = 'Alex Example';
+			const older = await fixtures.createTransactions(
+				bank,
+				['2035-12-11', '2036-01-11', '2036-02-11', '2036-03-11'].map((date, index) =>
+					bookedRow(date, index === 0 ? '-420.00' : '-480.00', {
+						counterpartyName: null,
+						description: oldName,
+						transactionType: 'TRANSFER',
+						category: 'HOUSING_AND_UTILITIES',
+					}),
+				),
+			);
+			const newer = await fixtures.createTransactions(
+				bank,
+				['2036-04-11', '2036-05-11'].slice(0, count).map((date) =>
+					bookedRow(date, '-480.00', {
+						counterpartyName: newName,
+						displayDescription: newName,
+						description: 'Example rent',
+						transactionType: 'TRANSFER',
+						category: 'HOUSING_AND_UTILITIES',
+					}),
+				),
+			);
+			const asOf = count === 1 ? '2036-04-17' : '2036-05-12';
+			const due = count === 1 ? '2036-05-11' : '2036-06-11';
+			const read = async (date = asOf) =>
+				(await fresh.agent.get('/recurring-series').query({asOf: date}).expect(200)).body.expenses as Omit<
+					ListBody,
+					'series'
+				> & {series: LinkSeries[]};
+			const link = (key: string, linked: boolean) =>
+				fresh.agent.patch(`/recurring-series/${key}/continuation`).send({linked});
+			const drill = async (key: string) => {
+				const result = await fresh.agent
+					.get('/bank-transactions')
+					.query({filter: {recurringSeriesKey: key}, pagination: {pageIndex: 0, pageSize: 50}})
+					.expect(200);
+				expect(result.body.total).toBe(result.body.transactions.length);
+				return result.body.transactions.map(({id}: {id: string}) => id).sort();
+			};
+			const unlinks: Repository<RecurringContinuationUnlink> = app.get(
+				getRepositoryToken(RecurringContinuationUnlink),
+			);
+			const snapshots: Repository<RecurringSnapshot> = app.get(getRepositoryToken(RecurringSnapshot));
+			const billIds = [...older, ...newer].map(({id}) => id);
+			const extras = await fixtures.createTransactions(
+				bank,
+				['2036-01-18', '2036-02-24', '2036-03-19', '2036-04-02'].map((date, index) =>
+					bookedRow(date, `-${13 + index * 7}.00`, {
+						counterpartyName: index % 2 ? newName : null,
+						description: index % 2 ? 'Example shared purchase' : oldName,
+						transactionType: 'TRANSFER',
+						category: index % 2 ? 'SHOPPING' : 'TRANSFER_OUT',
+					}),
+				),
+			);
+			const sourceIds = [...billIds, ...extras.map(({id}) => id)];
+			const source = await fixtures.transactions.find({where: {id: In(sourceIds)}, order: {id: 'ASC'}});
+			try {
+				const linked = await read();
+				expect(linked.series).toEqual([
+					expect.objectContaining({
+						name: newName,
+						cadence: 'MONTHLY',
+						amountKind: 'FIXED',
+						typicalAmount: '480.00',
+						latestAmount: '480.00',
+						monthlyEquivalent: '480.00',
+						transactionCount: older.length + count,
+						firstDate: '2035-12-11',
+						lastDate: newer.at(-1)!.bookingDate,
+						nextExpectedDate: due,
+						status: 'ACTIVE',
+						flags: [],
+						hidden: false,
+						continuation: {
+							previousName: oldName,
+							previousFirstDate: '2035-12-11',
+							previousLastDate: '2036-03-11',
+							linked: true,
+						},
+					}),
+				]);
+				const joined = linked.series[0];
+				expect(linked.monthlyTotal).toBe('480.00');
+				expect(await drill(joined.key)).toEqual([...billIds].sort());
+				// Changing only retained recipient evidence invalidates the stored result and blocks the join.
+				const inputVersion = (await snapshots.findOneByOrFail({accountId: freshOwner.id})).inputVersion;
+				await fixtures.transactions.update(
+					{id: In(older.map(({id}) => id))},
+					{counterpartyIban: 'NL91ABNA0417164300'},
+				);
+				await fixtures.transactions.update(
+					{id: In(newer.map(({id}) => id))},
+					{counterpartyIban: 'DE89370400440532013000'},
+				);
+				expect((await read()).series.every(({continuation}) => continuation === null)).toBe(true);
+				expect((await snapshots.findOneByOrFail({accountId: freshOwner.id})).inputVersion).not.toBe(
+					inputVersion,
+				);
+				await fixtures.transactions.update({id: In(sourceIds)}, {counterpartyIban: null});
+				for (const {id, updatedAt} of source) await fixtures.transactions.update({id}, {updatedAt});
+				expect(await read()).toEqual(linked);
+				const summary = (await fresh.agent.get('/recurring-series/summary').query({asOf}).expect(200)).body;
+				expect(summary).toMatchObject({
+					expenseMonthlyTotal: '480.00',
+					upcoming: [
+						expect.objectContaining({key: joined.key, typicalAmount: '480.00', nextExpectedDate: due}),
+					],
+				});
+				expect((await read(due.replace('-11', '-16'))).series[0]).toMatchObject({
+					status: 'ACTIVE',
+					flags: ['LATE'],
+				});
+				expect(await read(due.replace('-11', '-17'))).toMatchObject({
+					monthlyTotal: '0.00',
+					series: [expect.objectContaining({status: 'ENDED', flags: []})],
+				});
+				await ownerAgent
+					.patch(`/recurring-series/${joined.key}/continuation`)
+					.send({linked: false})
+					.expect(404);
+				await ownerAgent
+					.get('/bank-transactions')
+					.query({filter: {recurringSeriesKey: joined.key}})
+					.expect(404);
+				await link(joined.key, false).expect(204);
+				const split = await read();
+				expect(split.series).toHaveLength(2);
+				const current = byName(split.series, newName)[0];
+				expect(current).toMatchObject({
+					transactionCount: count,
+					status: 'ACTIVE',
+					continuation: expect.objectContaining({linked: false}),
+				});
+				expect(await drill(current.key)).toEqual(sorted(newer));
+				expect(await drill(byName(split.series, oldName)[0].key)).toEqual(sorted(older));
+				expect(split.monthlyTotal).toBe('480.00');
+				const saved = await unlinks.findBy({accountId: freshOwner.id});
+				expect(saved).toEqual([
+					expect.objectContaining({
+						olderTransactionIds: older.map(({id}) => id),
+						newerTransactionIds: newer.map(({id}) => id),
+					}),
+				]);
+				// An answer is retained but cannot force a union after conflicting slot evidence arrives.
+				const conflict = await fixtures.createTransaction(
+					bank,
+					bookedRow(newer[0].bookingDate!, '-480.00', {
+						counterpartyName: newName,
+						displayDescription: newName,
+						description: 'Example rent',
+						transactionType: 'TRANSFER',
+						category: 'HOUSING_AND_UTILITIES',
+					}),
+				);
+				const conflicted = await read();
+				expect(byName(conflicted.series, oldName)).toEqual([
+					expect.objectContaining({transactionCount: older.length}),
+				]);
+				expect(conflicted.series.every(({continuation}) => continuation === null)).toBe(true);
+				expect(await unlinks.findBy({accountId: freshOwner.id})).toEqual(saved);
+				await link(current.key, true).expect(404);
+				await fixtures.transactions.delete(conflict.id);
+				expect(await read()).toEqual(split);
+				await snapshots.update({accountId: freshOwner.id}, {rulesVersion: 'previous-rules'});
+				expect(await read()).toEqual(split);
+				expect((await snapshots.findOneByOrFail({accountId: freshOwner.id})).rulesVersion).toBe(
+					RECURRING_DETECTION_RULES_VERSION,
+				);
+				const restarted = new RecurringSeriesService(
+					fixtures.transactions,
+					app.get(getRepositoryToken(RecurringSeriesHide)),
+					unlinks,
+					snapshots,
+				);
+				expect((await restarted.list(freshOwner, asOf)).expenses).toEqual(split);
+				const next = await fixtures.createTransaction(
+					bank,
+					bookedRow(due, '-480.00', {
+						counterpartyName: newName,
+						displayDescription: newName,
+						description: 'Example rent',
+						transactionType: 'TRANSFER',
+						category: 'HOUSING_AND_UTILITIES',
+					}),
+				);
+				const nextSource = await fixtures.transactions.findOneByOrFail({id: next.id});
+				const extended = await read(due);
+				expect(byName(extended.series, newName)).toEqual([
+					expect.objectContaining({
+						key: current.key,
+						transactionCount: count + 1,
+						continuation: expect.objectContaining({linked: false}),
+					}),
+				]);
+				expect(await unlinks.findBy({accountId: freshOwner.id})).toEqual(saved);
+				expect(await drill(current.key)).toEqual([...sorted(newer), next.id].sort());
+				await link(current.key, true).expect(204);
+				expect((await read(due)).series).toEqual([
+					expect.objectContaining({
+						transactionCount: older.length + count + 1,
+						continuation: expect.objectContaining({linked: true}),
+					}),
+				]);
+				expect(await unlinks.countBy({accountId: freshOwner.id})).toBe(0);
+				expect(await fixtures.transactions.findOneByOrFail({id: next.id})).toEqual(nextSource);
+				expect(await fixtures.transactions.find({where: {id: In(sourceIds)}, order: {id: 'ASC'}})).toEqual(
+					source,
+				);
+			} finally {
+				await fixtures.connections.delete(connection.id);
+			}
+		});
+
 		it('hides a linked history as a whole, and unlinking keeps other series alone', async () => {
 			const {connection, first, read, link, fresh} = await renamedPlan();
 			try {

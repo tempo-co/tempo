@@ -30,6 +30,8 @@ export type RecurringCandidate = {
 	recurringPayeeKey?: string;
 	/** True when the original bank text explicitly names a transfer to or from a person. */
 	personTransfer?: boolean;
+	/** Valid recipient identifiers retained from bank fields and structured text; never used as a name alias. */
+	recipientIbans?: readonly string[];
 	/** Set by detection on rows it groups under a payee key: the row's own merchant key. */
 	sourceMerchantKey?: string;
 	currency: string;
@@ -930,6 +932,45 @@ function isRegularGap(gap: number, rule: CadenceRule): boolean {
 		if (Math.abs(gap - cycles * rule.nominalDays) <= rule.toleranceDays) return true;
 	}
 	return false;
+}
+
+/**
+ * Renders the newer part of an established monthly stream with the existing price/calendar contract. This does not
+ * qualify a new series: callers must validate its complete union with the established history before exposing it.
+ */
+export function monthlyContinuationPart(rows: readonly RecurringCandidate[]): UndatedRecurringSeries {
+	return buildSeries(
+		[...rows].sort(byDateThenId),
+		CADENCE_RULES.find(({cadence}) => cadence === 'MONTHLY')!,
+		'FIXED',
+	);
+}
+
+/** The chronological history ends in an established run at exactly this monthly price. */
+export function hasSettledMonthlyPrice(rows: readonly RecurringCandidate[], amountCents: bigint): boolean {
+	const {minCount} = CADENCE_RULES.find(({cadence}) => cadence === 'MONTHLY')!;
+	return rows.length >= minCount && rows.slice(-minCount).every((row) => row.amountCents === amountCents);
+}
+
+/** Whether every appended payment occupies a monthly slot under the detector's calendar, drift and skipped cycles. */
+export function occupiesMonthlySlots(
+	older: readonly RecurringCandidate[],
+	newer: readonly RecurringCandidate[],
+): boolean {
+	const rule = CADENCE_RULES.find(({cadence}) => cadence === 'MONTHLY')!;
+	const prefix = [...older].sort(byDateThenId);
+	for (const row of [...newer].sort(byDateThenId)) {
+		let matches = false;
+		for (let cycles = 1; cycles <= MAX_CYCLES_PER_GAP; cycles++) {
+			if (Math.abs(toDayNumber(row.date) - toDayNumber(addCycles(prefix, rule, cycles))) <= rule.toleranceDays) {
+				matches = true;
+				break;
+			}
+		}
+		if (!matches) return false;
+		prefix.push(row);
+	}
+	return true;
 }
 
 function buildSeries(
