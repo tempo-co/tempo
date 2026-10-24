@@ -180,12 +180,12 @@ function BalanceChart({
   const last = periods[periods.length - 1];
   // Labelled like the cash flow chart above: counted back from the latest, years under months.
   const labelEvery = interval === 'year' ? 1 : interval === 'week' ? 4 : isMobile ? 2 : 1;
-  const labelled = new Set(
+  const labelled = new Map(
     periods
       .filter((_, index) => (periods.length - 1 - index) % labelEvery === 0)
-      .map((period) => period.start),
+      .map((period) => [period.start, interval === 'week' ? period.end : period.start]),
   );
-  const labelledStarts = [...labelled];
+  const labelledStarts = [...labelled.keys()];
   const firstOfYear = new Set(
     labelledStarts.filter(
       (start, index) => index === 0 || labelledStarts[index - 1].slice(0, 4) !== start.slice(0, 4),
@@ -221,7 +221,8 @@ function BalanceChart({
             scale='band'
             tick={(props) => {
               const start = String(props.payload.value);
-              if (!labelled.has(start)) return <g />;
+              const date = labelled.get(start);
+              if (!date) return <g />;
               return (
                 <text
                   x={props.x}
@@ -229,7 +230,7 @@ function BalanceChart({
                   textAnchor='middle'
                   className='fill-muted-foreground text-caption'
                 >
-                  {tickLabel(start)}
+                  {tickLabel(date)}
                   {interval === 'month' && firstOfYear.has(start) && (
                     <tspan x={props.x} dy={13} className='text-caption'>
                       {start.slice(0, 4)}

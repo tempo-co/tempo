@@ -30,6 +30,19 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 - Touch targets inside composite controls still need 44px on phones (`max-sm:h-12` on the token field).
 - Phones cannot hover: no information only in a `title` tooltip.
 
+## Charts
+
+Use `ChartContainer` and `ChartTooltip` for the shared pointer behavior. Mouse hover follows
+Recharts; touch inspection begins with a brief hold or a horizontal drag and ends on release
+or cancellation. Vertical gestures scroll the page and pinch zoom remains available. A short
+tap keeps the chart's click action; releasing an inspection must not navigate.
+
+Touch readouts sit at the top of the plot without movement animation. Supported browsers can
+request a brief vibration when the inspected period changes; Safari has no Vibration API.
+Keep exact values and actions available through the chart's accessible table as well.
+Pointer focus outlines on SVG marks are suppressed centrally, including Recharts z-index layers;
+ordinary controls and table links retain their keyboard focus indicators.
+
 ## Settings lists
 
 Pattern in `src/features/settings/components/settings-group.tsx` and the access-token settings:

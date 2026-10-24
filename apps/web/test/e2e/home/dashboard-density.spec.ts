@@ -235,6 +235,205 @@ for (const width of [1440, 390]) {
   });
 }
 
+for (const width of [1440, 390]) {
+  test(`weekly balance labels identify the snapshot directly above them at ${width}px`, async ({page}) => {
+    await page.setViewportSize({width, height: 1000});
+    await mockJson(page, '**/bank-transactions/balance-trend**', {
+      baseCurrency: 'EUR',
+      interval: 'week',
+      periods: Array.from({length: 5}, (_, index) => ({
+        start: index === 0 ? '2026-08-31' : `2026-09-${String(index * 7).padStart(2, '0')}`,
+        end: index === 4 ? '2026-10-01' : `2026-09-${String(6 + index * 7).padStart(2, '0')}`,
+        complete: index < 4,
+        total: `${1000 + index * 250}.00`,
+        accounts: [],
+      })),
+    });
+    await page.goto('/');
+    const card = page.getByTestId('balance-trend');
+    await card.getByRole('radio', {name: 'Week'}).click();
+    const labels = card.locator('.recharts-xAxis-tick-labels text');
+    await expect(labels).toHaveText(['6 Sep', '1 Oct']);
+    const chart = await boxOf(card.locator('.recharts-surface'));
+    for (const [index, title] of ['6 Sep 2026', 'Today'].entries()) {
+      const label = await boxOf(labels.nth(index));
+      await page.mouse.move(label.x + label.width / 2, chart.y + chart.height / 2);
+      await expect(card.locator('.recharts-tooltip-wrapper')).toBeVisible();
+      await expect(card.locator('.recharts-tooltip-wrapper')).toContainText(title);
+    }
+  });
+}
+
+test('pointer clicks leave chart surfaces and marks without focus outlines', async ({page}) => {
+  await page.goto('/');
+  for (const name of ['balance-trend', 'cash-flow']) {
+    const chart = page.getByTestId(name).locator('[data-slot="chart"]');
+    await chart.scrollIntoViewIfNeeded();
+    await chart.click({position: {x: 5, y: 5}});
+
+    const mark = chart.locator('.recharts-bar-rectangle path, .recharts-area-curve').last();
+    await mark.click({force: true});
+    const outlines = await chart.evaluate((el) => Array.from(el.querySelectorAll('*')).filter((item) => {
+      const style = getComputedStyle(item);
+      return item.matches(':focus') && style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0;
+    }).map((item) => item.getAttribute('class')));
+    expect(outlines).toEqual([]);
+  }
+});
+
+test.describe('touch chart inspection', () => {
+  test.use({hasTouch: true, isMobile: true, viewport: {width: 390, height: 844}});
+
+  test('holding and scrubbing shows each period until release', async ({page, context}) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'vibrate', {value: () => {
+        const root = document.documentElement;
+        root.dataset.chartPulses = String(Number(root.dataset.chartPulses ?? 0) + 1);
+        return true;
+      }});
+    });
+    await page.goto('/?month=2026-09');
+    const touch = await context.newCDPSession(page);
+    for (const [name, first, last] of [
+      ['balance-trend', '31 Jul 2026', '30 Sep 2026'],
+      ['cash-flow', 'July 2026', 'September 2026'],
+    ]) {
+      const card = page.getByTestId(name);
+      const plot = card.locator('[data-slot="chart"]');
+      await plot.scrollIntoViewIfNeeded();
+      const labels = card.locator('.recharts-xAxis-tick-labels text');
+      const start = await boxOf(labels.first());
+      const end = await boxOf(labels.last());
+      const box = await boxOf(plot);
+      const y = Math.round(box.y + box.height / 2);
+      const x = Math.round(start.x + start.width / 2);
+      const tooltip = card.locator('.recharts-tooltip-wrapper');
+      const url = page.url();
+      await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y}]});
+      await expect(tooltip).not.toBeVisible();
+      await expect(tooltip).toBeVisible();
+      await expect(tooltip).toContainText(first);
+      const pulses = Number(await page.locator('html').getAttribute('data-chart-pulses'));
+      expect(pulses).toBeGreaterThan(0);
+      await touch.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: x + 1, y}]});
+      await expect(page.locator('html')).toHaveAttribute('data-chart-pulses', String(pulses));
+      await touch.send('Input.dispatchTouchEvent', {
+        type: 'touchMove', touchPoints: [{x: Math.round(end.x + end.width / 2), y}],
+      });
+      await expect(tooltip).toContainText(last);
+      await expect(page.locator('html')).toHaveAttribute('data-chart-pulses', String(pulses + 1));
+      const readout = await boxOf(tooltip);
+      expect(readout.y + readout.height).toBeLessThan(y);
+      expect(readout.x).toBeGreaterThanOrEqual(0);
+      expect(readout.x + readout.width).toBeLessThanOrEqual(390);
+      if (process.env.HOME_DENSITY_CAPTURE_DIR) {
+        await page.screenshot({path: join(process.env.HOME_DENSITY_CAPTURE_DIR, `${name}-touch.png`)});
+      }
+      await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+      await expect(tooltip).not.toBeVisible();
+      await expect(card.locator('.recharts-tooltip-cursor')).toHaveCount(0);
+      await expect(page).toHaveURL(url);
+    }
+  });
+
+  test('horizontal scrubbing inspects while a short tap selects a month', async ({page, context}) => {
+    // Safari has no Vibration API; inspection is complete without it.
+    await page.addInitScript(() => Object.defineProperty(navigator, 'vibrate', {value: undefined}));
+    await page.goto('/?month=2026-09');
+    const card = page.getByTestId('cash-flow');
+    const plot = card.locator('[data-slot="chart"]');
+    await plot.scrollIntoViewIfNeeded();
+    const start = await boxOf(card.locator('.recharts-xAxis-tick-labels text').first());
+    const box = await boxOf(plot);
+    const x = Math.round(start.x + start.width / 2);
+    const y = Math.round(box.y + box.height / 2);
+    const touch = await context.newCDPSession(page);
+    const url = page.url();
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y}]});
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: x + 1, y}]});
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: x + 15, y}]});
+    await expect(card.locator('.recharts-tooltip-wrapper')).toContainText('July 2026');
+    await expect(card.locator('.recharts-tooltip-wrapper')).toBeVisible();
+    const end = await boxOf(card.locator('.recharts-xAxis-tick-labels text').last());
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchMove', touchPoints: [{x: Math.round(end.x + end.width / 2), y}],
+    });
+    await expect(card.locator('.recharts-tooltip-wrapper')).toBeVisible();
+    await expect(card.locator('.recharts-tooltip-wrapper')).toContainText('September 2026');
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x, y}]});
+    await expect(card.locator('.recharts-tooltip-wrapper')).toContainText('July 2026');
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+    await expect(card.locator('.recharts-tooltip-wrapper')).not.toBeVisible();
+    // A browser compatibility click after a scrub must not activate its bar.
+    await card.locator('.recharts-wrapper').dispatchEvent('click', {clientX: x, clientY: y, detail: 1});
+    await expect(page).toHaveURL(url);
+    await page.touchscreen.tap(x, y);
+    await expect(page).toHaveURL(/month=2026-07/);
+    await expect(card.locator('.recharts-tooltip-wrapper')).not.toBeVisible();
+    const august = card.getByRole('link', {name: 'August 2026', includeHidden: true});
+    await august.focus();
+    await expect(august).toBeInViewport();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/month=2026-08/);
+  });
+
+  for (const interval of ['Week', 'Year']) {
+    test(`a short ${interval.toLowerCase()} tap opens its transactions`, async ({page}) => {
+      const start = interval === 'Week' ? '2026-09-07' : '2025-01-01';
+      const end = interval === 'Week' ? '2026-09-13' : '2025-12-31';
+      await mockJson(page, '**/bank-transactions/cash-flow**', {
+        baseCurrency: 'EUR', interval: interval.toLowerCase(),
+        periods: [{start, end, complete: true, spending: '100.00', income: '200.00', net: '100.00'}],
+      });
+      await page.goto('/?month=2026-09');
+      const card = page.getByTestId('cash-flow');
+      await card.getByRole('radio', {name: interval}).click();
+      const chart = card.locator('[data-slot="chart"]');
+      await chart.scrollIntoViewIfNeeded();
+      const label = await boxOf(card.locator('.recharts-xAxis-tick-labels text').first());
+      const box = await boxOf(chart);
+      await page.touchscreen.tap(label.x + label.width / 2, box.y + box.height / 2);
+      await expect(page).toHaveURL(/\/bank-transactions/);
+      const range = JSON.parse(new URL(page.url()).searchParams.get('bookingDate')!) as {from: string; to: string};
+      const dates = await page.evaluate(({from, to}) => [from, to].map((value) => {
+        const date = new Date(value);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      }), range);
+      expect(dates).toEqual([start, end]);
+    });
+  }
+
+  test('vertical gestures scroll the page and cancellation ends inspection', async ({page, context}) => {
+    await page.goto('/?month=2026-09');
+    const card = page.getByTestId('balance-trend');
+    const plot = card.locator('[data-slot="chart"]');
+    await plot.scrollIntoViewIfNeeded();
+    const box = await boxOf(plot);
+    const x = Math.round(box.x + box.width / 2);
+    const y = Math.round(box.y + box.height / 2);
+    const before = await page.evaluate(() => window.scrollY);
+    const touch = await context.newCDPSession(page);
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y}]});
+    for (const distance of [20, 50, 90]) {
+      await touch.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x, y: y - distance}]});
+    }
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before);
+    await expect(card.locator('.recharts-tooltip-wrapper')).not.toBeVisible();
+    await plot.scrollIntoViewIfNeeded();
+    const next = await boxOf(plot);
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchStart', touchPoints: [{x, y: Math.round(next.y + next.height / 2)}],
+    });
+    await expect(card.locator('.recharts-tooltip-wrapper')).toBeVisible();
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchCancel', touchPoints: []});
+    await expect(card.locator('.recharts-tooltip-wrapper')).not.toBeVisible();
+    // Headless Chromium does not zoom even on an unhandled plain page. Check the
+    // browser gesture policy here; real-device pinch remains part of the phone trial.
+    await expect(plot).toHaveCSS('touch-action', 'pan-y pinch-zoom');
+  });
+});
+
 test('recent requests and shows only five transactions', async ({page}) => {
   const request = page.waitForRequest((request) => request.url().includes('/bank-transactions?'));
   await page.goto('/?month=2026-09');
