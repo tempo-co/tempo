@@ -24,6 +24,7 @@ import {useUpdateRecurringSeries} from '../api/use-update-recurring-series';
 import {
   RECURRING_CADENCE_LABELS,
   type RecurringSeries,
+  type RecurringSeriesDirection,
   type RecurringSeriesList,
 } from '../types/recurring-series';
 import {formatBankTransactionCompactDate} from '../utils/formatters';
@@ -67,17 +68,56 @@ export function RecurringSeriesOverview({asOf}: {asOf: string}) {
     );
   }
 
-  const {expenses: data, income} = query.data;
-  const groups = groupSeries(data.series);
-
   return (
     <div className='grid gap-6'>
-      {data.series.length === 0 ? (
-        <EmptyState
-          icon={Repeat}
-          title='No recurring payments found yet'
-          description='Tempo looks for payments to the same place on a regular rhythm, leaving out ordinary grocery and shopping patterns. Annual subscriptions count after two payments; other patterns need at least three.'
-        />
+      <DirectionSection direction='EXPENSE' data={query.data.expenses} />
+      <DirectionSection direction='INCOME' data={query.data.income} />
+    </div>
+  );
+}
+
+/** Bills and income share grouping and folds, but keep their own headings and empty states. */
+function DirectionSection({
+  direction,
+  data,
+}: {
+  direction: RecurringSeriesDirection;
+  data: RecurringSeriesList;
+}) {
+  const isIncome = direction === 'INCOME';
+  if (data.series.length === 0) {
+    return isIncome ? null : (
+      <EmptyState
+        icon={Repeat}
+        title='No recurring payments found yet'
+        description='Tempo looks for payments to the same place on a regular rhythm, leaving out ordinary grocery and shopping patterns. Annual subscriptions count after two payments; other patterns need at least three.'
+      />
+    );
+  }
+
+  const groups = groupSeries(data.series);
+  const content = (
+    <>
+      {isIncome ? (
+        <>
+          <header>
+            <h2 className='text-section-title'>
+              Income{' '}
+              <span className='text-sm font-normal text-muted-foreground'>
+                {groups.active.length}
+              </span>
+            </h2>
+            <p className='mt-1 text-sm text-muted-foreground'>
+              <span className='numeric font-semibold text-foreground'>
+                {formatMoney(data.monthlyTotal, data.baseCurrency)}
+              </span>{' '}
+              a month
+            </p>
+          </header>
+          {groups.active.length > 0 && (
+            <SeriesList series={groups.active} baseCurrency={data.baseCurrency} />
+          )}
+        </>
       ) : (
         <>
           <p className='text-sm text-muted-foreground' data-testid='recurring-summary'>
@@ -89,12 +129,27 @@ export function RecurringSeriesOverview({asOf}: {asOf: string}) {
             {data.unconvertedCount > 0 && `, excluding ${data.unconvertedCount} not converted yet`}.
           </p>
           <SeriesSection title='Bills' series={groups.active} baseCurrency={data.baseCurrency} />
-          <FoldedSection title='Ended' series={groups.ended} baseCurrency={data.baseCurrency} />
-          <FoldedSection title='Hidden' series={groups.hidden} baseCurrency={data.baseCurrency} />
         </>
       )}
-      <IncomeSection data={income} />
-    </div>
+      <FoldedSection
+        title={isIncome ? 'Ended income' : 'Ended'}
+        series={groups.ended}
+        baseCurrency={data.baseCurrency}
+      />
+      <FoldedSection
+        title={isIncome ? 'Hidden income' : 'Hidden'}
+        series={groups.hidden}
+        baseCurrency={data.baseCurrency}
+      />
+    </>
+  );
+
+  return isIncome ? (
+    <section aria-label='Income' className='grid gap-3 border-t pt-6'>
+      {content}
+    </section>
+  ) : (
+    content
   );
 }
 
@@ -137,37 +192,6 @@ function FoldedSection({
         <SeriesList series={series} baseCurrency={baseCurrency} />
       </div>
     </details>
-  );
-}
-
-/** Recurring income, with the same rows and folds as bills. */
-function IncomeSection({data}: {data: RecurringSeriesList}) {
-  if (data.series.length === 0) return null;
-  const groups = groupSeries(data.series);
-  return (
-    <section aria-label='Income' className='grid gap-3 border-t pt-6'>
-      <header>
-        <h2 className='text-section-title'>
-          Income{' '}
-          <span className='text-sm font-normal text-muted-foreground'>{groups.active.length}</span>
-        </h2>
-        <p className='mt-1 text-sm text-muted-foreground'>
-          <span className='numeric font-semibold text-foreground'>
-            {formatMoney(data.monthlyTotal, data.baseCurrency)}
-          </span>{' '}
-          a month
-        </p>
-      </header>
-      {groups.active.length > 0 && (
-        <SeriesList series={groups.active} baseCurrency={data.baseCurrency} />
-      )}
-      <FoldedSection title='Ended income' series={groups.ended} baseCurrency={data.baseCurrency} />
-      <FoldedSection
-        title='Hidden income'
-        series={groups.hidden}
-        baseCurrency={data.baseCurrency}
-      />
-    </section>
   );
 }
 
