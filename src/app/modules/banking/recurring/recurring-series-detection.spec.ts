@@ -1160,7 +1160,7 @@ describe('detectRecurringSeries', () => {
 		const bill = ['100.00', '140.00', '180.00', '220.00', '260.00', '300.00'].map((amount, index) =>
 			payment(isoMonth(2026, 1 + index, 3), amount),
 		);
-		const plan = monthly(18, ['2026-04', '2026-05', '2026-06'], '20.00');
+		const plan = monthly(18, ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'], '20.00');
 
 		expect(detectRecurringSeries([...bill, ...plan], '2026-06-20')).toEqual(
 			expect.arrayContaining([
@@ -1203,6 +1203,49 @@ describe('detectRecurringSeries', () => {
 			payment('2026-10-16', '79.99', {...shop, category: 'SHOPPING'}),
 		];
 		expect(detectRecurringSeries(rows, '2026-10-18')).toEqual([]);
+	});
+
+	it.each(['EXPENSE', 'INCOME'] as const)(
+		'classifies a small quarterly subset of irregular %s payments',
+		(direction) => {
+			const venue = {merchantKey: `${direction}:example venue`, name: 'Example Venue', category: 'ENTERTAINMENT'};
+			const quarterly = ['2034-01-12', '2034-04-12', '2034-07-12', '2034-10-12'].map((date, index) =>
+				payment(date, ['17.00', '41.00', '23.00', '59.00'][index], venue),
+			);
+			const purchases = [
+				payment('2034-02-03', '11.00', venue),
+				payment('2034-02-05', '79.00', venue),
+				payment('2034-05-20', '37.00', venue),
+				payment('2034-08-25', '97.00', venue),
+				payment('2034-09-02', '53.00', venue),
+				payment('2034-10-28', '101.00', venue),
+			];
+			const expected = expect.objectContaining({
+				direction,
+				cadence: 'QUARTERLY',
+				amountKind: 'VARIABLE',
+				transactionIds: quarterly.map(({id}) => id),
+			});
+			expect(detectRecurringSeries(quarterly, '2034-10-29')).toEqual([expected]);
+			expect(detectRecurringSeries([...quarterly, purchases[0]], '2034-10-29')).toEqual([expected]);
+			expect(
+				detectRecurringSeries(
+					[...quarterly, ...purchases.map((row) => ({...row, date: '2030-01-01'}))],
+					'2034-10-29',
+				),
+			).toEqual([expected]);
+			for (const rows of [[...quarterly, ...purchases], [...quarterly, ...purchases].reverse()]) {
+				expect(detectRecurringSeries(rows, '2034-10-29')).toEqual(direction === 'EXPENSE' ? [] : [expected]);
+			}
+		},
+	);
+
+	it('finds no varying monthly bill among frequent one-off payments', () => {
+		const monthlyRows = ['2034-01', '2034-02', '2034-03', '2034-04'].map((month, index) =>
+			payment(`${month}-12`, ['17.00', '41.00', '23.00', '59.00'][index]),
+		);
+		const extras = ['11.00', '79.00', '37.00', '97.00', '53.00'].map((amount) => payment('2034-02-01', amount));
+		expect(detectRecurringSeries([...monthlyRows, ...extras], '2034-04-18')).toEqual([]);
 	});
 
 	it('keeps a varying bill whose category changes partway', () => {

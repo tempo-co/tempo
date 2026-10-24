@@ -549,6 +549,35 @@ describe('RecurringSeries', () => {
 			),
 			...monthly('09', '-16.00', 'Example Ordinary Shop', {category: 'SHOPPING'}),
 		]);
+		const before = await list(ownerAgent);
+		// A dense purchase history can contain an accidental quarterly subset even with one category throughout.
+		const venue = await fixtures.createTransactions(
+			ownerBankAccount,
+			[
+				['2034-01-12', '-17.00'],
+				['2034-04-12', '-41.00'],
+				['2034-07-12', '-23.00'],
+				['2034-10-12', '-59.00'],
+				['2034-02-03', '-11.00'],
+				['2034-02-05', '-79.00'],
+				['2034-05-20', '-37.00'],
+				['2034-08-25', '-97.00'],
+				['2034-09-02', '-53.00'],
+				['2034-10-28', '-101.00'],
+			].map(([date, amount]) =>
+				bookedRow(date, amount, {
+					counterpartyName: 'Example Leisure Venue',
+					description: 'Example Leisure Venue',
+					category: 'ENTERTAINMENT',
+					transactionType: 'CARD_PAYMENT',
+				}),
+			),
+		);
+		const snapshot = await fixtures.transactions.find({
+			where: {id: In(venue.map(({id}) => id))},
+			order: {id: 'ASC'},
+		});
+		expect((await list(ownerAgent)).monthlyTotal).toBe(before.monthlyTotal);
 		const bills = await fixtures.createTransactions(ownerBankAccount, [
 			...weeklyDates.map((date) =>
 				bookedRow(date, '-8.00', {
@@ -564,8 +593,8 @@ describe('RecurringSeries', () => {
 					category: 'INCOME',
 				}),
 			),
-			...['2026-04-05', '2026-07-05', '2026-10-05'].map((date) =>
-				bookedRow(date, '-90.00', {
+			...['2026-04-05', '2026-07-05', '2026-10-05'].map((date, index) =>
+				bookedRow(date, ['-90.00', '-150.00', '-120.00'][index], {
 					counterpartyName: 'Example Quarterly Bill',
 					description: 'Example Quarterly Bill',
 					category: 'SUBSCRIPTIONS',
@@ -579,7 +608,12 @@ describe('RecurringSeries', () => {
 				}),
 			),
 		]);
-		const names = (await list(ownerAgent)).series.map(({name}) => name);
+		const result = await list(ownerAgent);
+		const names = result.series.map(({name}) => name);
+		expect(names).not.toContain('Example Leisure Venue');
+		expect(byName(result.series, 'Example Quarterly Bill')).toEqual([
+			expect.objectContaining({cadence: 'QUARTERLY', amountKind: 'VARIABLE', monthlyEquivalent: '40.00'}),
+		]);
 		expect(names).not.toContain('Example Ordinary Grocery');
 		expect(names).not.toContain('Example Ordinary Shop');
 		expect(names).toEqual(
@@ -594,7 +628,16 @@ describe('RecurringSeries', () => {
 			.get('/bank-transactions')
 			.query({filter: {recurringSeriesKey: hiddenKey}})
 			.expect(404);
-		await fixtures.transactions.delete([...retail, ...bills].map(({id}) => id));
+		const venueKey = seriesKey(venue[0].merchantKey!, 'EUR', venue[0].id);
+		await hide(ownerAgent, venueKey).expect(404);
+		await ownerAgent
+			.get('/bank-transactions')
+			.query({filter: {recurringSeriesKey: venueKey}})
+			.expect(404);
+		expect(
+			await fixtures.transactions.find({where: {id: In(venue.map(({id}) => id))}, order: {id: 'ASC'}}),
+		).toEqual(snapshot);
+		await fixtures.transactions.delete([...retail, ...bills, ...venue].map(({id}) => id));
 	});
 
 	it('retail suggestions: keeps a retail series hidden earlier listed as hidden until shown again', async () => {

@@ -739,6 +739,16 @@ function rhythmStream(
 		if (alternatesPrices(path) || hasOtherCadencePrice(path, rule)) continue;
 		const amountKind = streamAmountKind(path, rule);
 		if (amountKind === 'VARIABLE' && !variableAllowed(rule, path, person)) continue;
+		// A varying bill must explain most activity during its own span, not cherry-pick a minority of purchases.
+		// With rhythmic leftovers, the caller requires every other payment to belong to a second fixed plan.
+		if (
+			amountKind === 'VARIABLE' &&
+			!rhythmicLeftovers &&
+			parseMerchantKey(path[0].merchantKey).direction === 'EXPENSE'
+		) {
+			const inSpan = rows.filter(({date}) => date >= path[0].date && date <= path[path.length - 1].date);
+			if (path.length * 2 <= inSpan.length) continue;
+		}
 		// Varying amounts with mixed payment purposes are separate purchases, not one bill.
 		const purposes = new Set(path.flatMap(({category}) => (category ? [category] : [])));
 		if (amountKind === 'VARIABLE' && purposes.size > 1) continue;

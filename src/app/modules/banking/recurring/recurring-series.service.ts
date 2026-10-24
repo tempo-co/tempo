@@ -39,7 +39,7 @@ const REFUND = 'REFUND' satisfies BankTransactionCategory;
  * `recurring-series-detection`, `recurring-payee-identity`, `recurring-continuation` or `recurring-series-eligibility`,
  * or the payload shape in `toPayload`. Stored detections from other rules are not reused.
  */
-export const RECURRING_DETECTION_RULES_VERSION = '7';
+export const RECURRING_DETECTION_RULES_VERSION = '8';
 const UPCOMING_COUNT = 3;
 /** Every payment field detection reads; the stored detection's version is a hash over all of them. */
 const CANDIDATE_COLUMNS: readonly [sql: string, alias: keyof CandidateRow][] = [
