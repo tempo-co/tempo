@@ -185,6 +185,24 @@ export function isPlatformDefaultIcon(url: string): boolean {
 }
 
 /**
+ * Whether a site name names the domain's first label, as joined words or as the initials of words in a row ("Albert
+ * Heijn" for ah.example, "Transport for London" for tfl.gov.example). Only the first label: later ones can be parts
+ * of a public suffix such as co.uk, which any name could spell.
+ */
+function namesFirstLabel(name: string, domain: string): boolean {
+	const label = domain.split('.')[0].replace(/-/g, '');
+	if (label.length < 2) return false;
+	const words = tokens(name);
+	return (
+		spellsAny(words, [label]) ||
+		spellsAny(
+			words.map((word) => word[0]),
+			[label],
+		)
+	);
+}
+
+/**
  * Whether a site belongs to the brand the model named. When the site states its own names (title, og:site_name,
  * app name), one must spell the brand in whole words, spaces and punctuation aside, allowing a plural or possessive
  * "s": a model can name a plausible domain that belongs to someone else. Only a site that states no name falls back
@@ -253,7 +271,8 @@ async function isMonochrome(png: Buffer): Promise<boolean> {
 }
 
 /**
- * Whether the site confirms the brand. A homepage that names itself must name the brand. One that loaded but names
+ * Whether the site confirms the brand. A homepage that names itself must name the brand, or, for a domain the model
+ * was sure of, the domain's first label (a sub-brand on its parent's site). One that loaded but names
  * nothing confirms it by its hostname, or, like a homepage that would not load, by the model being sure of the site:
  * neither says anything against it.
  */
@@ -263,7 +282,11 @@ function isConfirmed(
 	domainConfident: boolean,
 	{homepageLoaded, siteNames}: {homepageLoaded: boolean; siteNames: string[]},
 ): boolean {
-	if (homepageLoaded && siteNames.length) return siteMatchesBrand(brand, domain, siteNames);
+	if (homepageLoaded && siteNames.length)
+		return (
+			siteMatchesBrand(brand, domain, siteNames) ||
+			(domainConfident && siteNames.some((name) => namesFirstLabel(name, domain)))
+		);
 	return domainConfident || (homepageLoaded && siteMatchesBrand(brand, domain, []));
 }
 
@@ -286,7 +309,9 @@ export type MerchantLogoCandidate = {
 
 /**
  * The logo each merchant key shows. A merchant's own logo counts when its site's homepage confirmed the brand, or,
- * for a site whose homepage would not load or named nothing, when the model was sure of the domain. Merchants of one
+ * for a site whose homepage would not load or named nothing, when the model was sure of the domain. A domain the model
+ * was sure of also counts when its homepage names the domain itself rather than the brand, as a sub-brand on its
+ * parent's site does ("Example to go" on a site named after the parent). Merchants of one
  * brand show the same logo, the best any of them has (a colour one before a one-colour version, then the largest),
  * so a chain's country sites look alike and a branch without a site of its own still shows its brand.
  */

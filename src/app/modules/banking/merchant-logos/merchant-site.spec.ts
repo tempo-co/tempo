@@ -357,7 +357,7 @@ describe('chooseMerchantLogos', () => {
 		});
 	});
 
-	it('shows a logo only when the homepage named the brand, or named nothing against it', () => {
+	it('shows a logo only when the homepage named the brand, named nothing against it, or named a sure domain', () => {
 		const chosen = chooseMerchantLogos([
 			merchant('unnamed sure', 'Unnamed Shop Plus', {siteNames: []}, true),
 			merchant('unnamed guess', 'Guessed Plus', {siteNames: []}, false),
@@ -368,7 +368,13 @@ describe('chooseMerchantLogos', () => {
 			merchant('blocked guess', 'Guessed Shop', {homepageLoaded: false, siteNames: []}, false),
 			merchant('pending', 'Pending Shop', {status: 'PENDING', version: null}),
 			merchant('person', null, null),
+			// A sub-brand on its parent's site: the site names the domain's first label, spelled out or by initials.
+			merchant('egroup', 'EG to go', {siteNames: ['Egroup: groceries']}, true),
+			{...merchant('eg', 'EG Express', {siteNames: ['Example Group: groceries']}, true), domain: 'eg.test'},
+			{...merchant('xyz', 'Xyz Bikes', {siteNames: ['Xavier Yellow Zebra']}, true), domain: 'xyz.gov.test'},
+			{...merchant('eg guess', 'EG Market', {siteNames: ['Example Group']}, false), domain: 'eg.test'},
+			{...merchant('suffix', 'Sure Shop', {siteNames: ['Casino Online']}, true), domain: 'unrelated.co.test'},
 		]);
-		expect([...chosen.keys()]).toEqual(['unnamed sure', 'unnamedhost', 'blocked sure']);
+		expect([...chosen.keys()]).toEqual(['unnamed sure', 'unnamedhost', 'blocked sure', 'egroup', 'eg', 'xyz']);
 	});
 });
