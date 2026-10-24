@@ -48,6 +48,20 @@ function identity(rows: RecurringEvidence[]): (string | undefined)[] {
 }
 
 describe('inferRecurringIdentities', () => {
+	it('carries available recipient identifiers separately from payee identity', () => {
+		const source = {
+			...row({counterpartyName: 'Alex Example', category: 'HOUSING_AND_UTILITIES'}),
+			counterpartyIban: 'nl91 abna 0417 1643 00',
+		};
+		const structured = sepaDebit('Alex Example', {category: 'HOUSING_AND_UTILITIES'});
+		const conflicting = {...structured, counterpartyIban: 'DE89370400440532013000'};
+		expect(inferRecurringIdentities([source, structured, conflicting])).toEqual([
+			expect.objectContaining({recipientIbans: ['NL91ABNA0417164300']}),
+			expect.objectContaining({recipientIbans: ['NL91ABNA0417164300']}),
+			expect.objectContaining({recipientIbans: ['DE89370400440532013000', 'NL91ABNA0417164300']}),
+		]);
+	});
+
 	it('carries the original person-transfer evidence on a full-name key', () => {
 		const source = row({
 			counterpartyName: null,

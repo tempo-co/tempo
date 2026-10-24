@@ -39,7 +39,7 @@ const REFUND = 'REFUND' satisfies BankTransactionCategory;
  * `recurring-series-detection`, `recurring-payee-identity`, `recurring-continuation` or `recurring-series-eligibility`,
  * or the payload shape in `toPayload`. Stored detections from other rules are not reused.
  */
-export const RECURRING_DETECTION_RULES_VERSION = '6';
+export const RECURRING_DETECTION_RULES_VERSION = '7';
 const UPCOMING_COUNT = 3;
 /** Every payment field detection reads; the stored detection's version is a hash over all of them. */
 const CANDIDATE_COLUMNS: readonly [sql: string, alias: keyof CandidateRow][] = [
@@ -54,6 +54,7 @@ const CANDIDATE_COLUMNS: readonly [sql: string, alias: keyof CandidateRow][] = [
 	['"transaction"."category"', 'category'],
 	['"transaction"."description"', 'description'],
 	['"transaction"."counterpartyName"', 'counterpartyName'],
+	['"transaction"."counterpartyIban"', 'counterpartyIban'],
 	['"transaction"."transactionType"', 'transactionType'],
 ];
 
@@ -107,6 +108,7 @@ type CandidateRow = {
 	category: string | null;
 	description: string | null;
 	counterpartyName: string | null;
+	counterpartyIban: string | null;
 	transactionType: string | null;
 };
 
@@ -330,12 +332,16 @@ export class RecurringSeriesService {
 			category: row.category,
 			description: row.description,
 			counterpartyName: row.counterpartyName,
+			counterpartyIban: row.counterpartyIban,
 			transactionType: row.transactionType,
 		}));
 		const candidates = inferRecurringIdentities(evidence);
 		const candidatesById = new Map(candidates.map((row) => [row.id, row]));
 		const series = detectUndatedRecurringSeries(candidates);
 		const pairs = findContinuationPairs(series, candidatesById);
+		// A newer history may have only one or two payments, qualified by its established predecessor. Keep the part
+		// in the existing snapshot/list representation so an unlink has a durable newer entry from which to relink.
+		for (const {newer} of pairs) if (!series.includes(newer)) series.push(newer);
 		const retail = new Set(
 			[...series, ...pairs.map(({joined}) => joined)]
 				.filter((entry) => isOrdinaryRetailExpense(entry, candidatesById))
