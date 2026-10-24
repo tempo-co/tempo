@@ -1,4 +1,13 @@
-import {getBankTransactionMerchantKey} from './bank-transaction-merchant-key';
+import {getBankTransactionMerchantKey, parseMerchantKey} from './bank-transaction-merchant-key';
+
+it.each<[string, {direction: string; name: string}]>([
+	['EXPENSE:example shop', {direction: 'EXPENSE', name: 'example shop'}],
+	['INCOME:example payer', {direction: 'INCOME', name: 'example payer'}],
+	['UNKNOWN:example name', {direction: 'UNKNOWN', name: 'example name'}],
+	['EXPENSE:automatic-recurring:example', {direction: 'EXPENSE', name: 'automatic-recurring:example'}],
+])('parses the direction and full name of %s', (key, expected) => {
+	expect(parseMerchantKey(key)).toEqual(expected);
+});
 
 describe('getBankTransactionMerchantKey', () => {
 	it.each([

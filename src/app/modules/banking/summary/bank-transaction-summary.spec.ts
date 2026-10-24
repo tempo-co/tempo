@@ -2,7 +2,9 @@ import {
 	averageCents,
 	buildSpendingPace,
 	daysInMonth,
+	divideRounded,
 	formatCents,
+	medianCents,
 	parseCents,
 	previousMonths,
 } from './bank-transaction-summary';
@@ -60,6 +62,24 @@ describe('bank transaction summary', () => {
 		[[10n], 10n],
 	])('averages %s to %s cents, rounding half away from zero', (values, expected) => {
 		expect(averageCents(values)).toBe(expected);
+	});
+
+	it.each([
+		[1n, 2n, 1n],
+		[-1n, 2n, -1n],
+		[4n, 3n, 1n],
+		[-4n, 3n, -1n],
+	])('divides %s by %s in whole cents, rounding half away from zero', (value, divisor, expected) => {
+		expect(divideRounded(value, divisor)).toBe(expected);
+	});
+
+	it.each([
+		[[4n, 1n, 2n], 2n],
+		[[2n, 1n], 2n],
+		[[-2n, -1n], -2n],
+		[[9007199254740993n, 9007199254740994n], 9007199254740994n],
+	])('takes the median of %s in whole cents', (values, expected) => {
+		expect(medianCents(values)).toBe(expected);
 	});
 
 	it('builds a zero-filled cumulative pace through the cut-off day', () => {

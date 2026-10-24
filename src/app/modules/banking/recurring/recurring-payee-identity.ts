@@ -7,6 +7,7 @@ import {
 	endsWithLegalForm,
 	getBankTransactionMerchantKey,
 	isTransferDescriptionMerchantKey,
+	parseMerchantKey,
 } from '../categorization/bank-transaction-merchant-key';
 import {parseSepaDescriptionIban} from '../own-transfer/iban';
 import {type RecurringCandidate, foldName, isPersonTransferCategory} from './recurring-series-detection';
@@ -40,7 +41,7 @@ export function inferRecurringIdentities(rows: readonly RecurringEvidence[]): Re
 	const people = new Set<string>();
 	for (const row of rows) {
 		const key = nodeKey(row);
-		const direction = merchantKeyDirection(row.merchantKey);
+		const direction = parseMerchantKey(row.merchantKey).direction;
 		if (isTransferDescriptionMerchantKey(row)) people.add(key);
 		let node = nodes.get(key);
 		if (!node) {
@@ -133,10 +134,6 @@ function componentIdentity(members: readonly PayeeNode[]): string | undefined {
 	return members[0].accounts.size > 1 ? members[0].merchantKey : undefined;
 }
 
-function merchantKeyDirection(merchantKey: string): BankTransactionDirection {
-	return merchantKey.slice(0, merchantKey.indexOf(':')) as BankTransactionDirection;
-}
-
 function nodeKey({merchantKey, currency}: Pick<RecurringCandidate, 'merchantKey' | 'currency'>): string {
 	return `${merchantKey}\u0000${currency}`;
 }
@@ -149,7 +146,7 @@ function declaredNames({description, counterpartyName, transactionType, merchant
 	const names = [counterpartyName, extractStructuredCounterpartyName(text)].filter((name) => name !== null);
 	if (names.length === 0 && transactionType === BANK_TRANSACTION_TYPES.TRANSFER) {
 		const pattern =
-			merchantKeyDirection(merchantKey) === BANK_TRANSACTION_DIRECTIONS.EXPENSE
+			parseMerchantKey(merchantKey).direction === BANK_TRANSACTION_DIRECTIONS.EXPENSE
 				? /^(?:transfer to|to)\s+(.+)$/i
 				: /^(?:transfer from|from)\s+(.+)$/i;
 		const match = pattern.exec(text);
@@ -177,7 +174,7 @@ export function normalizedPayeeName(name: string, direction: BankTransactionDire
 		counterpartyName: name,
 		creditDebitIndicator: direction === BANK_TRANSACTION_DIRECTIONS.EXPENSE ? 'DBIT' : 'CRDT',
 	});
-	return key ? foldName(key.slice(key.indexOf(':') + 1)) : null;
+	return key ? foldName(parseMerchantKey(key).name) : null;
 }
 
 function compact(value: string): string {
