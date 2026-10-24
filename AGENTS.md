@@ -24,7 +24,7 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
 
 - `src/app/modules/banking/` (authorization, sync, deletion, identity, own transfers, exchanges, totals): `docs/banking-invariants.md`.
 - `src/app/modules/banking/categorization/` or `ops/claude-bridge/`: `docs/categorization.md`.
-- `src/app/modules/banking/merchant-logos/`: display only. Categories, merchant keys and recurring payments never read it; setup is in `README.md` and `ops/README.md`.
+- `src/app/modules/banking/merchant-logos/` (identification, icon choice, brand trust rules, site fetcher, image route): `docs/merchant-logos.md`. Display only: categories, merchant keys and recurring payments never read it.
 - Anything calling Enable Banking or Claude, or tests that mock them: `docs/provider-testing.md`.
 - E2E setup, seeds, Compose stacks, `NODE_ENV`, image consumers: `docs/e2e-and-seeding.md`.
 - `.github/workflows/`, `Dockerfile`, migrations, release tags: `docs/ci-and-images.md`.
