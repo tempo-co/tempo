@@ -178,9 +178,8 @@ describe('Merchant logos', () => {
 	it('shows a synced merchant’s official logo on its purchases and refunds, to its owner only', async () => {
 		const connection = await fixtures.createConnection({id: owner.id});
 		const bankAccount = await fixtures.createBankAccount(connection);
-		const [purchase, refund, person, ownTransfer, branch, payment] = await fixtures.createTransactions(
-			bankAccount,
-			[
+		const [purchase, refund, person, ownTransfer, branch, payment, personOut, personIn, businessTransfer] =
+			await fixtures.createTransactions(bankAccount, [
 				bookedRow('2026-10-01', '-12.40', {
 					description: 'BEA, Betaalpas Example Shop 01,PAS123 NR:XX000, 01.10.26/12:00 Example City',
 					transactionType: 'CARD_PAYMENT',
@@ -205,19 +204,54 @@ describe('Merchant logos', () => {
 					description: 'BEA, Betaalpas Example Pay,PAS123 NR:XX006, 07.10.26/10:00 Example City',
 					transactionType: 'CARD_PAYMENT',
 				}),
-			],
+				bookedRow('2026-10-08', '-30.00', {
+					description: 'Transfer to Alex Example',
+					transactionType: 'TRANSFER',
+					category: 'HOUSING_AND_UTILITIES',
+				}),
+				bookedRow('2026-10-09', '30.00', {
+					description: 'Transfer from Alex Example',
+					transactionType: 'TRANSFER',
+				}),
+				bookedRow('2026-10-10', '-10.00', {
+					description: 'Transfer to Example Pay',
+					counterpartyName: 'Example Pay',
+					transactionType: 'TRANSFER',
+				}),
+			]);
+		// An older purchase is business evidence even behind a full page of transfer descriptions for the same key.
+		await fixtures.createTransactions(
+			bankAccount,
+			Array.from({length: 21}, () =>
+				bookedRow('2026-10-11', '-2.00', {
+					description: 'Transfer to Example Shop',
+					transactionType: 'TRANSFER',
+				}),
+			),
 		);
 		expect(purchase.merchantKey).toBe('EXPENSE:example shop');
 		expect(refund.merchantKey).toBe('INCOME:example shop');
 		expect(ownTransfer.merchantKey).toBe('EXPENSE:example shop');
 
 		await app.get(MerchantLogoService).enqueueForOwnerSafely(owner.id);
+		await waitFor(
+			() => merchants.findBy({accountId: owner.id}),
+			(rows) => rows.length === 5 && rows.every(({status}) => status !== 'PENDING'),
+		);
+		expect(JSON.stringify(identifySpy.mock.calls)).not.toContain('Alex Example');
 
 		const listed = await waitFor(
-			() => owner.agent.get('/bank-transactions').expect(200),
+			() =>
+				owner.agent
+					.get('/bank-transactions')
+					.query({pagination: {pageSize: 50}})
+					.expect(200),
 			(response) =>
-				response.body.transactions.find(({id}: BankTransaction) => id === purchase.id)?.merchantLogoUrl !==
-				null,
+				[purchase.id, businessTransfer.id].every(
+					(id) =>
+						typeof response.body.transactions.find((row: BankTransaction) => row.id === id)
+							?.merchantLogoUrl === 'string',
+				),
 		);
 		const logoOf = (id: string) =>
 			listed.body.transactions.find((row: BankTransaction & {merchantLogoUrl: string | null}) => row.id === id)
@@ -226,7 +260,13 @@ describe('Merchant logos', () => {
 		expect(logoUrl).toMatch(/^\/merchant-logos\/[0-9a-f-]{36}\/[0-9a-f]{64}$/);
 		expect(logoOf(refund.id)).toBe(logoUrl);
 		expect(logoOf(person.id)).toBeNull();
+		expect(logoOf(personOut.id)).toBeNull();
+		expect(logoOf(personIn.id)).toBeNull();
 		expect(logoOf(ownTransfer.id)).toBeNull();
+		expect(await fixtures.transactions.findOneByOrFail({id: personOut.id})).toMatchObject({
+			category: 'HOUSING_AND_UTILITIES',
+			categorySource: 'AI',
+		});
 		// A branch without a site of its own shows its brand's logo.
 		expect(logoOf(branch.id)).toBe(logoUrl);
 		await waitFor(
@@ -237,25 +277,28 @@ describe('Merchant logos', () => {
 			.merchantLogoUrl;
 		expect(paymentLogo).toMatch(/^\/merchant-logos\//);
 		expect(paymentLogo).not.toBe(logoUrl);
+		expect(logoOf(businessTransfer.id)).toBe(paymentLogo);
 
-		// One model call for every merchant of the owner, with sanitized names and no amounts or references.
+		// Known people need no identification; ambiguous names and businesses share one sanitized model call.
 		expect(identifySpy).toHaveBeenCalledTimes(1);
+		expect(JSON.stringify(identifySpy.mock.calls)).not.toMatch(/12\.40|PAS123|XX000/);
 		expect(identifySpy.mock.calls[0][0]).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({name: 'Example Shop 02', location: 'Example City', direction: 'INCOME'}),
 				expect.objectContaining({name: 'Jane Example', location: null}),
+				expect.objectContaining({name: 'Example Pay', direction: 'EXPENSE'}),
 			]),
 		);
-		expect(JSON.stringify(identifySpy.mock.calls)).not.toMatch(/12\.40|PAS123|XX000/);
 		expect(await merchants.findBy({accountId: owner.id})).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({key: 'example shop', status: 'IDENTIFIED', brand: 'Example Shop'}),
 				expect.objectContaining({key: 'jane example', status: 'NONE', logoId: null}),
+				expect.objectContaining({key: 'alex example', status: 'NONE', logoId: null, attempts: 0}),
 				expect.objectContaining({key: 'example shop station', status: 'IDENTIFIED', logoId: null}),
 				expect.objectContaining({key: 'example pay', status: 'IDENTIFIED', brand: 'Example Pay'}),
 			]),
 		);
-		expect(await merchants.countBy({accountId: owner.id})).toBe(4);
+		expect(await merchants.countBy({accountId: owner.id})).toBe(5);
 		// logo.dev's logo, rated by its vector original; a site logo.dev doesn't know shows its own icon.
 		expect(await logos.findOneByOrFail({domain: 'shop.example.test'})).toMatchObject({
 			sourceUrl: `${LOGO_DEV_ASSET}shop`,
@@ -269,7 +312,10 @@ describe('Merchant logos', () => {
 
 		const detail = await owner.agent.get(`/bank-transactions/${purchase.id}`).expect(200);
 		expect(detail.body.merchantLogoUrl).toBe(logoUrl);
-		const connectionRows = await owner.agent.get(`/bank-connections/${connection.id}/transactions`).expect(200);
+		const connectionRows = await owner.agent
+			.get(`/bank-connections/${connection.id}/transactions`)
+			.query({limit: 50})
+			.expect(200);
 		expect(connectionRows.body.transactions).toEqual(
 			expect.arrayContaining([expect.objectContaining({id: purchase.id, merchantLogoUrl: logoUrl})]),
 		);

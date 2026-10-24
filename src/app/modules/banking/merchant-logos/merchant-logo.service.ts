@@ -25,7 +25,11 @@ import {
 } from '../categorization/bank-transaction-categorization-input';
 import {BankTransactionCategorizationUnavailableError} from '../categorization/bank-transaction-categorization.provider';
 import {MerchantIdentificationInput} from '../categorization/bank-transaction-categorization.types';
-import {getMerchantKeyName, getMerchantKeysForName} from '../categorization/bank-transaction-merchant-key';
+import {
+	getMerchantKeyName,
+	getMerchantKeysForName,
+	isTransferDescriptionMerchantKey,
+} from '../categorization/bank-transaction-merchant-key';
 import {ClaudeBankTransactionCategorizationProvider} from '../categorization/providers/claude-bank-transaction-categorization.provider';
 import {LogoDevClient} from './logo-dev.client';
 import {MERCHANT_LOGO_STATUSES, MerchantLogo} from './merchant-logo.entity';
@@ -438,7 +442,8 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 
 	/**
 	 * The merchant as the categorization web search would see it: the sanitized name and location of the newest
-	 * transaction, plus the website hostnames earlier searches returned for it. No amounts, dates or references.
+	 * non-person transaction, plus the website hostnames earlier searches returned for it.
+	 * No amounts, dates or references.
 	 */
 	private async toIdentificationInput(merchant: Merchant): Promise<MerchantIdentificationInput | null> {
 		const rows = await this.transactions
@@ -450,9 +455,10 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 			.andWhere('transaction."ownTransferEvidence" IS NULL AND transaction."financialEventType" IS NULL')
 			.orderBy('transaction.bookingDate', 'DESC', 'NULLS LAST')
 			.addOrderBy('transaction.createdAt', 'DESC')
-			.take(20)
 			.getMany();
-		const [newest] = rows;
+		// Filter before taking the recent sample so older business evidence on the same key remains eligible.
+		const candidates = rows.filter((row) => !isTransferDescriptionMerchantKey(row)).slice(0, 20);
+		const [newest] = candidates;
 		if (!newest) return null;
 		const input = toBankTransactionCategorizationInput({
 			...newest,
@@ -460,7 +466,9 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		});
 		const name = toMerchantIdentificationName(input);
 		if (!name) return null;
-		const searchSourceDomains = [...new Set(rows.flatMap((row) => row.categorySearchTrace?.sourceDomains ?? []))];
+		const searchSourceDomains = [
+			...new Set(candidates.flatMap((row) => row.categorySearchTrace?.sourceDomains ?? [])),
+		];
 		return {
 			correlationId: merchant.id,
 			name,
