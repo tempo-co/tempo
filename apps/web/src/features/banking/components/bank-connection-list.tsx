@@ -37,9 +37,7 @@ import {
   isReauthorizationRequired,
 } from '../utils/bank-sync-status';
 import {
-  formatBankTransactionCashFlowTreatment,
   formatBankTransactionCompactDate,
-  formatBankTransactionFinancialEvent,
   formatBankingWords,
   resolveBankAccountLabel,
   resolveBankTransactionDisplayTitle,
@@ -839,7 +837,6 @@ function BankTransactionRow({
   const metadata = formatBankTransactionCompactDate(
     transaction.bookingDate || transaction.valueDate,
   );
-  const financialEvent = formatBankTransactionFinancialEvent(transaction.financialEventType);
 
   return (
     <button
@@ -852,13 +849,6 @@ function BankTransactionRow({
       <span className='block min-w-0'>
         <span className='block truncate text-sm font-medium'>{description}</span>
         <span className='block truncate text-xs text-muted-foreground'>{metadata}</span>
-        {financialEvent && (
-          <span className='block truncate text-xs text-foreground'>
-            {financialEvent}
-            <span aria-hidden='true'> · </span>
-            {formatBankTransactionCashFlowTreatment(transaction.cashFlowTreatment)}
-          </span>
-        )}
       </span>
       <span className='text-right'>
         <CurrencyAmount amount={Number(transaction.amount)} currency={transaction.currency} />

@@ -149,8 +149,10 @@ test.describe('bank connections', () => {
         transactions: Array<Record<string, unknown>>;
         total: number;
       };
-      const [recentTransaction, ...remainingTransactions] = payload.transactions;
-      if (!recentTransaction) throw new Error('Expected a seeded recent bank transaction');
+      const recentTransaction = payload.transactions.find(
+        (transaction) => transaction.id === DETAIL_TRANSACTION_ID,
+      );
+      if (!recentTransaction) throw new Error('Expected the seeded detail bank transaction');
 
       await route.fulfill({
         response,
@@ -167,7 +169,7 @@ test.describe('bank connections', () => {
               financialEventRuleVersion: 'provider-currency-exchange-v1',
               cashFlowTreatment: 'INTERNAL',
             },
-            ...remainingTransactions,
+            ...payload.transactions.filter((transaction) => transaction.id !== DETAIL_TRANSACTION_ID),
           ],
         },
       });
@@ -203,13 +205,16 @@ test.describe('bank connections', () => {
     await expect(connectionCard.getByTestId('bank-connection-sync-status')).toHaveCount(0);
     await expect(connectionCard.getByText('Daily spending', {exact: true})).toBeVisible();
     await expect(connectionCard.getByText('Provider purchase')).toBeVisible();
-    await expect(connectionCard).toContainText('Currency exchange');
-    await expect(connectionCard).toContainText('Internal movement');
     const transactionTrigger = connectionCard.getByRole('button', {
       name: 'View transaction details for Provider purchase',
     });
     await expect(transactionTrigger).toBeVisible();
-    await expect(transactionTrigger.getByText('18 Aug', {exact: true})).toHaveText('18 Aug');
+    await expect(transactionTrigger).toHaveText('Provider purchase18 Aug-€12.50');
+    const descriptionBox = await boxOf(transactionTrigger.getByText('Provider purchase', {exact: true}));
+    const dateBox = await boxOf(transactionTrigger.getByText('18 Aug', {exact: true}));
+    const amountBox = await boxOf(transactionTrigger.getByText('-€12.50', {exact: true}));
+    expect(dateBox.y).toBeGreaterThanOrEqual(descriptionBox.y + descriptionBox.height);
+    expect(amountBox.x).toBeGreaterThan(descriptionBox.x + descriptionBox.width);
     await transactionTrigger.click();
     const inspector = page.getByTestId('bank-transaction-inspector');
     await expect(inspector).toBeVisible();
