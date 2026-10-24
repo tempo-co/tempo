@@ -1,6 +1,14 @@
 # Tempo Web Agent Instructions
 
-Tempo Web is a React 19 + TypeScript single-page frontend built with Vite. It uses TanStack Router for file-based routing, TanStack Query for API state, Tailwind CSS/shadcn-style Radix components, and Playwright E2E tests. Main feature areas (`src/features/{auth,banking,settings}`) are authentication, Enable Banking bank connections, bank transactions, and account settings.
+React 19 + TypeScript SPA (Vite, TanStack Router/Query, Tailwind with shadcn-style Radix wrappers, Playwright E2E). `package.json`, `vite.config.ts`, `playwright.config.ts` and `.github/workflows/ci.yml` are authoritative; when `README.md` differs, trust them.
+
+## Read before touching
+
+- `docs/browser-and-e2e-testing.md`: before writing or running Playwright specs, mocking routes, testing dialogs, drawers, dates or search limits.
+- `docs/env-boundaries.md`: before changing `VITE_*` values, `NODE_ENV`, `docker-compose.e2e.yml`, the API image, Nginx or `Dockerfile.production`, or when local E2E setup fails.
+- `docs/frontend-conventions.md`: before changing feedback/toasts, destructive styles, phone layouts, settings lists, copy or `src/components/ui`.
+- `docs/pwa.md`: before changing the manifest, icons, base path or offline shell.
+- `DESIGN.md`: palette, typography and component tokens. `PRODUCT.md`: product scope.
 
 ## Product direction and cross-repo workflow
 
@@ -20,47 +28,26 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
 - Build fixtures from scratch; never copy a real payload. Refer to production rows by UUID only.
 - If you find real personal data, stop and tell the owner instead of fixing it in a PR: the diff would publish it again.
 
-## Dev environment
-
-- CI uses Node.js 22.x and the committed npm lockfile. Install with `npm ci`.
-- Vite environment values are declared in `vite-env.d.ts`:
-  - `VITE_API_URL`: API base URL used by `src/utils/api.ts`.
-  - `VITE_APP_URL`: app URL used by Playwright's web server and `baseURL`.
-  - `VITE_EMAIL_UI_URL`: Mailpit URL used by `test/utils/email-utils.ts`.
-  - `VITE_BASE_PATH` (optional, default `/`): the base path `vite.config.ts` serves the app and PWA manifest under. `Dockerfile.production` builds with `/`.
-- `npm run dev` generates the TanStack route tree and starts Vite.
-
-## Build, lint, format, and test
+## Verification
 
 - Size local verification to the change: run relevant static checks and focused tests, including regression proof where appropriate. Let PR CI run the full suite on fresh services. Run the full suite locally for cross-cutting changes, gaps in CI, or failures requiring reproduction. A complete passing CI run on the current head is the delivery gate.
+- Fresh worktree: `npm ci`, then `npx playwright install chromium --with-deps` (as CI does) before any spec runs. Production and staging serve the app at `/`.
+- Static checks: `npm run lint:check`, `npm run format:check`, `npm run build`. `npm run lint` and `npm run format` modify files.
+- There is no unit-test runner; all tests are Playwright specs under `test/`. Find the specs for a change by grepping `test/e2e` for the route, component or label; `--only-changed` finds nothing because specs do not import `src`.
+- `npm run test:e2e:local` resets the Docker services (`down -v`), starts them, seeds, and runs the whole suite. Fully mocked specs run without Docker; see `docs/browser-and-e2e-testing.md`.
+- CI runs lint/format, build (plus `ops/tests/tempo-web-security-headers-test.sh`) and four E2E shards; the required `E2E Tests` job fails unless every shard passes.
 
-- `npm run generate-routes` — regenerate the route tree.
-- `npm run build` — generate routes, run `tsc -b`, then run `vite build`.
-- `npm run lint:check` — CI lint check; does not modify files.
-- `npm run lint` — lint with ESLint `--fix`; it modifies files.
-- `npm run format:check` — CI Prettier check for `src/**/*.{js,jsx,ts,tsx}`.
-- `npm run format` — write Prettier formatting for those source files.
-- `npx playwright install chromium --with-deps` — install the CI browser.
-- `npm run test:e2e:local` — reset E2E Docker services, start them, seed the API, and run the full Playwright suite headlessly (always starts from a pristine database). CI runs the same suite in shards (`npx playwright test --shard=<n>/<total>`), each against its own fresh services.
-- `npm run docker:test:up` / `npm run db:seed:e2e` / `npm run docker:test:down` — start services, seed data, and clean up services respectively.
+## Traps
 
-CI runs these jobs in parallel: lint/format (`npm run generate-routes`, `npm run lint:check`, `npm run format:check`), build (`npm run build`, then `ops/tests/tempo-web-security-headers-test.sh`) and four E2E shards. Each shard starts fresh Docker services, seeds its own API and runs whole Playwright files with one worker. The required `E2E Tests` job merges their reports into the `playwright-report` artifact and fails unless every shard passes. The image build starts after lint/format passes, and the main-image release waits for all of them. There is no unit-test script; Playwright tests are under `test/e2e`.
-
-## Deployment and ops checks
-
-- `ops/tests/tempo-web-security-headers-test.sh` builds the production image and probes the security headers Nginx serves (needs Docker). Update it when you change `nginx/tempo.conf`.
-- CI publishes `ghcr.io/tempo-co/tempo-web:pr-<n>` for every same-repo PR and tags `:main` after tests pass on `main`. Production deploys `:main` automatically; staging deploys any pair with `tempo-deploy staging --api <tag> --web <tag>` (see `tempo-api/ops/README.md`). Production and staging serve the app at the root.
-
-## Repository layout and conventions
-
-- `src/routes/**` contains TanStack Router route files. Each route exports `Route = createFileRoute(...)`; nested/index routes follow the filesystem path.
-- `src/features/<feature>/{api,components,types,utils}` holds feature code. Cross-feature code belongs in `src/components/shared`, `src/hooks`, `src/providers`, `src/types`, or `src/utils`; Radix/shadcn primitives are in `src/components/ui`.
-- `src/routeTree.gen.ts` is generated by TanStack Router, ignored by Git, and must not be hand-edited. Run `npm run generate-routes` after adding, renaming, or deleting a route.
-- Use the configured `@/*` alias for `src` imports. Prettier sorts imports as third-party, `@/` imports, then relative imports, with blank-line separation and sorted specifiers.
-- Existing filenames use kebab-case; React components use PascalCase; hooks use `useX` exports from `use-x.ts`. DTO files live in feature `types` directories, define a Zod schema, and infer the exported TypeScript type from it.
-- JSON API feature hooks use the `api` wrapper in `src/utils/api.ts` and TanStack Query. That wrapper sends cookie credentials, maps failures to `HttpError`, and handles shared auth/network toasts and redirects.
-- Use Tailwind classes for styling and `cn` from `src/utils/cn.ts` when class merging is needed. Formatting is single-quoted, JSX uses single quotes, trailing commas are enabled, bracket spacing is disabled, and the print width is 100.
-- TypeScript is strict with unused locals/parameters and fallthrough cases disabled in `tsconfig.app.json`.
+- `src/routeTree.gen.ts` is generated and ignored by Git. Run `npm run generate-routes` (or any `dev`/`build`) in a fresh clone or worktree before `lint:check`, and after adding, renaming or deleting a route. A missing or stale tree shows up as dozens of `no-unsafe-*` or implicit-`any` errors in untouched files, not a regression.
+- `.env.*` is ignored, so a fresh worktree has no `VITE_*` values. Pass CI's values inline for the process (`VITE_API_URL=http://localhost:3000 VITE_APP_URL=http://localhost:5173 VITE_EMAIL_UI_URL=http://localhost:8025`); do not create or edit env files for a run.
+- Leave `NODE_ENV` unset for builds and Playwright. `NODE_ENV=test` during `vite build` turns off the service worker and turns on dev-only code in the preview build. Gate dev-only code on `import.meta.env.MODE === 'development'` or an explicit `VITE_*` flag, never on `import.meta.env.DEV`.
+- Playwright reuses any server already on `VITE_APP_URL` locally (`reuseExistingServer`). Another worktree's preview on port 5173 means you are testing the wrong build; check the listener first.
+- `docker-compose.e2e.yml` has fixed container names and host ports (1025, 8025, 6379, 5432, 3000). Check for other stacks before `docker:test:up`; `docker:test:down` deletes volumes.
+- The E2E API drops its schema on boot (`NODE_ENV=test`). Seed only after it is healthy; a full local run changes seeded accounts, so reset the stack before rerunning.
+- A web change that needs an unmerged API change is only tested when `TEMPO_API_E2E_IMAGE` (locally) or `Depends-on:` (CI) selects an image containing it. A missing image is version skew: wait for it; never weaken assertions.
+- `ops/tests/tempo-web-security-headers-test.sh` builds the production image and probes the SPA and the API proxy (needs Docker). Update it with any change to `nginx/`.
+- CI publishes `ghcr.io/tempo-co/tempo-web:pr-<n>` for same-repo PRs and retags the tested image as `:main` after `main` passes. `:main` is what production deploys, so a merge to `main` ships.
 
 ## Writing tests
 
@@ -81,11 +68,15 @@ Reuse these instead of re-creating setup inline:
 - `test/utils/layout.ts`: `boxOf(locator)` returns a rendered element's bounding box, and `expectNoHorizontalOverflow(page)` checks for horizontal scrolling.
 - `test/utils/url.ts`: `withSearchParams(path, params)` builds URLs for the invalid-search-param cases in `test/data`.
 - `test/utils/email-utils.ts`: `EmailUtils.getVerificationCode(email)` reads a verification code from Mailpit; `ResetPasswordPage.openResetLink(email)` requests a reset and opens the emailed link.
+- `test/utils/hook-harness.ts`: `createHookHarness(stubs)` runs a real hook against a real `QueryClient` with whole modules stubbed. Add every new named import a hook uses from a stubbed module to the stubs.
+- Fully mocked specs declare `test.use({storageState: {cookies: [], origins: []}})`.
 - Write repeated validation cases as a `for` loop over a table of cases.
 
-## E2E environment and pitfalls
+## Code conventions not enforced by tooling
 
-- `docker-compose.e2e.yml` requires Docker and reserves host ports 1025/8025 (Mailpit), 6379 (Redis), 5432 (Postgres), and 3000 (API). The Vite preview uses port 5173.
-- E2E setup authenticates seeded users in `test/auth.setup.ts` and writes ignored storage state under `playwright/.auth/`; settings tests change seeded account data, so use the disposable E2E services.
-- `npm run docker:test:down` uses `docker compose ... down -v --remove-orphans`; the local E2E reset removes Docker volumes.
-- `README.md` documents the current Tempo setup and commands. When it differs from the implementation, use `package.json`, the Vite/Playwright configs, and `.github/workflows/ci.yml` as the authoritative references.
+- Feature code lives in `src/features/<feature>/{api,components,types,utils}`; shared code in `src/components/shared`, `src/hooks`, `src/providers`, `src/types`, `src/utils`; primitives in `src/components/ui`. Import `src` through the `@/` alias.
+- Filenames are kebab-case; hooks export `useX` from `use-x.ts`. DTO files in feature `types` directories define a Zod schema and infer the exported type from it.
+- JSON API hooks use the `api` wrapper in `src/utils/api.ts` with TanStack Query; it sends cookies, maps failures to `HttpError` and owns the shared auth/network toasts and redirects. Mutations never retry or queue for replay (`src/query-client.ts`).
+- Use `cn` from `src/utils/cn.ts` to merge Tailwind classes.
+- Prettier covers `src/**/*.{js,jsx,ts,tsx}` only; edit `src/index.css` and Markdown by hand.
+- Living docs (`DESIGN.md`, `PRODUCT.md`, `README.md`, `docs/`) state current durable facts: no dates, decision history or rename narration. No em dashes in the README.
