@@ -35,10 +35,6 @@
 		"prestart:debug": "npm run generate:mcp",
 		"predb:seed": "npm run generate:mcp",
 		"predb:schema": "npm run generate:mcp",
-		"pretest": "npm run generate:mcp",
-		"pretest:watch": "npm run generate:mcp",
-		"pretest:cov": "npm run generate:mcp",
-		"pretest:debug": "npm run generate:mcp",
 		"pretest:e2e": "npm run generate:mcp",
 		"pretest:e2e:cov": "npm run generate:mcp"
 	},
