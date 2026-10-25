@@ -7,6 +7,7 @@ import passport from 'passport';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {isBearerRequest} from '@core/personal-access-token/bearer-request';
+import {isMcpRequest} from '@core/personal-access-token/mcp-request';
 import {PersonalAccessTokenModule} from '@core/personal-access-token/personal-access-token.module';
 import {REDIS} from '@core/redis/redis.constants';
 import {RedisModule} from '@core/redis/redis.module';
@@ -16,13 +17,14 @@ import {SessionService} from '@core/session/session.service';
 
 @Module({
 	imports: [RedisModule, PersonalAccessTokenModule],
-	providers: [SessionService],
+	providers: [SessionService, SessionMiddleware],
 	exports: [SessionService],
 })
 export class SessionModule implements NestModule {
 	constructor(
 		@Inject(REDIS) private readonly redisClient: Redis,
 		private readonly config: ConfigurationService,
+		private readonly sessionMiddleware: SessionMiddleware,
 	) {}
 
 	async configure(consumer: MiddlewareConsumer) {
@@ -31,7 +33,7 @@ export class SessionModule implements NestModule {
 		const sessionOnly =
 			(middleware: (req: Request, res: Response, next: NextFunction) => unknown) =>
 			(req: Request, res: Response, next: NextFunction) =>
-				isBearerRequest(req) ? next() : middleware(req, res, next);
+				isMcpRequest(req) || isBearerRequest(req) ? next() : middleware(req, res, next);
 
 		consumer
 			.apply(
@@ -56,7 +58,7 @@ export class SessionModule implements NestModule {
 				),
 				sessionOnly(passport.initialize()),
 				sessionOnly(passport.session()),
-				SessionMiddleware,
+				sessionOnly(this.sessionMiddleware.use.bind(this.sessionMiddleware)),
 			)
 			.forRoutes('*');
 	}

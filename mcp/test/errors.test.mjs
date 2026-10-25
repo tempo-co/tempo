@@ -1,6 +1,30 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {Client} from '@modelcontextprotocol/sdk/client/index.js';
+import {InMemoryTransport} from '@modelcontextprotocol/sdk/inMemory.js';
+import {createToolServer} from '../dist/tools.js';
 import {fixture, TOKEN} from './helpers.mjs';
+
+test('reader failures return a safe tool error', async (t) => {
+	const server = createToolServer({
+		listAccounts: async () => {
+			throw new Error(`example-private-failure ${TOKEN}`);
+		},
+	});
+	const client = new Client({name: 'example-reader-client', version: '1'});
+	const [a, b] = InMemoryTransport.createLinkedPair();
+	t.after(async () => {
+		await client.close();
+		await server.close();
+	});
+	await server.connect(a);
+	await client.connect(b);
+	const result = await client.callTool({name: 'list_accounts', arguments: {}});
+	assert.deepEqual(result, {
+		isError: true,
+		content: [{type: 'text', text: 'Tempo API HTTP 500: Tempo API unavailable. Retry later.'}],
+	});
+});
 
 for (const status of [301, 302, 307, 308]) {
 	test(`HTTP ${status} redirects are refused before another request`, async (t) => {

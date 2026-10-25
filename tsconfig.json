@@ -28,5 +28,10 @@
 		"noFallthroughCasesInSwitch": true,
 		"noUnusedLocals": true,
 		"noUnusedParameters": true
+	},
+	"exclude": ["node_modules", "dist", "mcp"],
+	"ts-node": {
+		"moduleTypes": {"mcp/src/**/*.ts": "cjs"},
+		"experimentalResolver": true
 	}
 }

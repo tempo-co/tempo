@@ -16,6 +16,7 @@ import {BankConnectionAlertProcessor} from './alerts/bank-connection-alert.proce
 import {BankConnectionAlertService} from './alerts/bank-connection-alert.service';
 import {BankConnectionController} from './api/bank-connection.controller';
 import {BankTransactionController} from './api/bank-transaction.controller';
+import {McpController} from './api/mcp.controller';
 import {RecurringSeriesController} from './api/recurring-series.controller';
 import {BankAccountBalance} from './bank-account-balance.entity';
 import {BankAccount} from './bank-account.entity';
@@ -43,6 +44,7 @@ import {BankingSyncService} from './services/banking-sync.service';
 import {CurrencyExchangeService} from './services/currency-exchange.service';
 import {EnableBankingClient} from './services/enable-banking.client';
 import {FxRateService} from './services/fx-rate.service';
+import {McpReaderService} from './services/mcp-reader.service';
 import {OwnTransferService} from './services/own-transfer.service';
 
 @Module({
@@ -70,6 +72,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 	],
 	providers: [
 		BankingService,
+		McpReaderService,
 		BankingConnectionLockService,
 		BankingSyncService,
 		BankingSyncQueueService,
@@ -88,6 +91,6 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankConnectionAlertProcessor,
 		RecurringSeriesService,
 	],
-	controllers: [BankConnectionController, BankTransactionController, RecurringSeriesController],
+	controllers: [BankConnectionController, BankTransactionController, RecurringSeriesController, McpController],
 })
 export class BankingModule {}

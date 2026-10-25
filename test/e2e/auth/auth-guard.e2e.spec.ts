@@ -2,7 +2,10 @@ import {randomUUID} from 'node:crypto';
 import {Server} from 'node:net';
 import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
+import {DataSource} from 'typeorm';
 
+import {PersonalAccessTokenService} from '@core/personal-access-token/personal-access-token.service';
+import {Account} from '@modules/account/account.entity';
 import {EMAIL_NOT_VERIFIED} from '@modules/auth/api/constants/api-messages.constants';
 
 import {
@@ -19,6 +22,12 @@ type GuardedRoute = [method: Method, path: string];
 const SESSION_ID = 'a'.repeat(32);
 const RESOURCE_ID = randomUUID();
 const SERIES_KEY = 'b'.repeat(32);
+const MCP_TOKEN_ROUTES: GuardedRoute[] = [
+	['post', '/mcp'],
+	['get', '/mcp'],
+	['delete', '/mcp'],
+	['head', '/mcp'],
+];
 
 // Routes that accept unverified accounts (@SkipEmailVerification) only require a session.
 const SESSION_ROUTES: GuardedRoute[] = [
@@ -92,6 +101,7 @@ describe('AuthGuard - protected routes', () => {
 	let httpServer: Server;
 	let unverifiedAgent: TestAgent;
 	let token: string;
+	let unverifiedToken: string;
 
 	beforeAll(async () => {
 		httpServer = getApp().getHttpServer();
@@ -104,6 +114,32 @@ describe('AuthGuard - protected routes', () => {
 				.send({name: 'Example route guard client'})
 				.expect(201)
 		).body.token;
+		const unverified = await getApp()
+			.get(DataSource)
+			.getRepository(Account)
+			.findOneByOrFail({email: UNVERIFIED_ACCOUNT_EMAIL});
+		unverifiedToken = (
+			await getApp().get(PersonalAccessTokenService).create(unverified.id, 'Example unverified client', 30)
+		).token;
+	});
+
+	it.each(MCP_TOKEN_ROUTES)('%s %s permits a verified personal token', async (method, path) => {
+		await send(
+			request(httpServer)
+				[method](path)
+				.auth(token, {type: 'bearer'})
+				.set('Accept', 'application/json, text/event-stream'),
+			method,
+		).expect(method === 'post' ? 400 : 405);
+	});
+
+	it.each(MCP_TOKEN_ROUTES)('%s %s requires a verified token owner', async (method, path) => {
+		const response = await send(
+			request(httpServer)[method](path).auth(unverifiedToken, {type: 'bearer'}),
+			method,
+		).expect(403);
+		if (method !== 'head') expect(response.body.message).toBe(EMAIL_NOT_VERIFIED);
+		expect(response.headers['set-cookie']).toBeUndefined();
 	});
 
 	it.each(TOKEN_READABLE_PATHS)('%s accepts a read-only personal token', async (path) => {
@@ -124,11 +160,12 @@ describe('AuthGuard - protected routes', () => {
 		await send(request(httpServer)[method](path).auth('tempo_pat_invalid', {type: 'bearer'}), method).expect(401);
 	});
 
-	it.each([...SESSION_ROUTES, ...VERIFIED_ROUTES])(
+	it.each([...SESSION_ROUTES, ...VERIFIED_ROUTES, ...MCP_TOKEN_ROUTES])(
 		'%s %s rejects an unauthenticated request with 401',
 		async (method, path) => {
 			const response = await send(request(httpServer)[method](path), method).expect(401);
 			if (method !== 'head') expect(response.body.message).toBe('Unauthorized');
+			if (path === '/mcp') expect(response.headers['www-authenticate']).toBe('Bearer');
 		},
 	);
 
