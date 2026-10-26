@@ -3,6 +3,7 @@ import {ApiTags} from '@nestjs/swagger';
 
 import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
+import {TokenReadable} from '@modules/auth/decorators/token-readable.decorator';
 
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {
@@ -18,11 +19,13 @@ export class RecurringSeriesController {
 	constructor(private readonly recurringSeriesService: RecurringSeriesService) {}
 
 	@Get()
+	@TokenReadable()
 	findAll(@CurrentAccount() account: Account, @Query() query: RecurringSeriesQueryDto) {
 		return this.recurringSeriesService.list(account, query.asOf);
 	}
 
 	@Get('summary')
+	@TokenReadable()
 	summary(@CurrentAccount() account: Account, @Query() query: RecurringSeriesQueryDto) {
 		return this.recurringSeriesService.summary(account, query.asOf);
 	}

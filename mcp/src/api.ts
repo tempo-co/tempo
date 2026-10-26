@@ -29,14 +29,20 @@ export function createApiReader({apiUrl, apiToken}: {apiUrl: string; apiToken: s
 	};
 	return {
 		listAccounts: () => get('/bank-connections'),
+		listRecurring: (input) => get('/recurring-series', input),
+		recurringSummary: (input) => get('/recurring-series/summary', input),
 		monthSummary: (input) => get('/bank-transactions/summary', input),
 		cashFlow: (input) => get('/bank-transactions/cash-flow', {...input}),
 		balanceTrend: (input) => get('/bank-transactions/balance-trend', {...input}),
-		searchTransactions: ({filters, page, pageSize}) => {
+		searchTransactions: ({filters, sort, page, pageSize}) => {
 			const query = new URLSearchParams({
 				'pagination[pageIndex]': String(page),
 				'pagination[pageSize]': String(pageSize),
 			});
+			if (sort) {
+				query.set('sort[by]', sort.by);
+				query.set('sort[order]', sort.order);
+			}
 			for (const [key, value] of filterQuery(filters)) query.append(key, value);
 			return get('/bank-transactions', query);
 		},

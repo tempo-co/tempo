@@ -45,6 +45,8 @@ const TOKEN_READABLE_PATHS = [
 	'/bank-transactions/cash-flow?interval=month&from=2026-01-01&to=2026-10-18&asOf=2026-10-18',
 	'/bank-transactions/balance-trend?interval=month&from=2026-01-01&to=2026-10-18&asOf=2026-10-18',
 	'/bank-transactions/review-counts',
+	'/recurring-series?asOf=2026-10-18',
+	'/recurring-series/summary?asOf=2026-10-18',
 	`/bank-transactions/${RESOURCE_ID}`,
 ];
 
@@ -65,8 +67,6 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['get', `/bank-transactions/${RESOURCE_ID}/category-impact?category=TRAVEL`],
 	['patch', `/bank-transactions/${RESOURCE_ID}/category`],
 	['patch', `/bank-transactions/${RESOURCE_ID}/own-transfer`],
-	['get', '/recurring-series?asOf=2026-10-18'],
-	['get', '/recurring-series/summary?asOf=2026-10-18'],
 	['patch', `/recurring-series/${SERIES_KEY}/hidden`],
 	['patch', `/recurring-series/${SERIES_KEY}/continuation`],
 	['post', '/bank-connections/authorize'],

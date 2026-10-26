@@ -36,8 +36,10 @@ test('the disposable API smoke command exercises every tool through SDK stdio wi
 		},
 	);
 	assert.equal(stderr, '');
-	assert.match(stdout, /PASS 9 tools/);
+	assert.match(stdout, /PASS 11 tools/);
+	assert.match(stdout, /PASS list_recurring/);
+	assert.match(stdout, /PASS recurring_summary/);
 	assert.doesNotMatch(stdout, /synthetic-test-token|1\.00|baseCurrency/);
-	assert.equal(f.requests.length, 8);
+	assert.equal(f.requests.length, 10);
 	for (const req of f.requests) assert.equal(req.method, 'GET');
 });

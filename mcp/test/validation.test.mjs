@@ -4,6 +4,37 @@ import {fixture, ID, json} from './helpers.mjs';
 import {filtersSchema} from '../dist/inputs.js';
 
 const cases = [
+	...[
+		{},
+		{by: 'amount'},
+		{order: 'ASC'},
+		{by: 'id', order: 'ASC'},
+		{by: 'amount', order: 'asc'},
+		{by: 'bookingDate', order: 'DESC', accountId: ID},
+		'amount',
+		null,
+	].map((sort) => ['search_transactions', {sort}, 'complete strict API sort']),
+	['transaction_totals', {sort: {by: 'amount', order: 'ASC'}}, 'totals only accepts filters'],
+	...['search_transactions', 'transaction_totals'].flatMap((name) =>
+		[
+			'',
+			'a'.repeat(31),
+			'a'.repeat(33),
+			'A'.repeat(32),
+			'g'.repeat(32),
+			` ${'a'.repeat(32)}`,
+			`${'a'.repeat(32)}\n`,
+			ID,
+			7,
+			null,
+		].map((recurringSeriesKey) => [name, {filters: {recurringSeriesKey}}, '32 lowercase hex series key']),
+	),
+	['recurring_summary', {asOf: '2041-02-29'}, 'recurring summary calendar date'],
+	['recurring_summary', {asOf: '2040-02-03T00:00:00Z'}, 'recurring summary date without time'],
+	['recurring_summary', {asOf: null}, 'recurring summary date is not null'],
+	['list_recurring', {asOf: '2041-02-29'}, 'recurring calendar date'],
+	['list_recurring', {asOf: '2040-02-03T00:00:00Z'}, 'recurring date without time'],
+	['list_recurring', {asOf: null}, 'recurring date is not null'],
 	['month_summary', {}, 'missing month'],
 	['month_summary', {month: '2100-01'}, 'month year bound'],
 	['month_summary', {month: '2040-13'}, 'month calendar bound'],
@@ -51,7 +82,7 @@ test('invalid DTO-shaped tool inputs are refused before HTTP', async (t) => {
 	assert.deepEqual(f.requests, []);
 });
 
-test('all nine tools reject caller-supplied owner, token and origin overrides', async (t) => {
+test('all tools reject caller-supplied owner, token and origin overrides', async (t) => {
 	const f = await fixture(t);
 	const valid = {
 		month_summary: {month: '2040-01'},

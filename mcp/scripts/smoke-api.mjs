@@ -23,6 +23,8 @@ try {
 	const tools = (await client.listTools()).tools;
 	const calls = [
 		['list_accounts', {}],
+		['list_recurring', {asOf: '2000-02-01'}],
+		['recurring_summary', {asOf: '2000-02-01'}],
 		['month_summary', {month: '2000-01', asOf: '2000-02-01'}],
 		['cash_flow', {interval: 'month', from: '2000-01-01', to: '2000-01-31', asOf: '2000-02-01'}],
 		['balance_trend', {interval: 'month', from: '2000-01-01', to: '2000-01-31', asOf: '2000-02-01'}],
@@ -52,7 +54,7 @@ try {
 		if (name === 'get_transaction' && value.id !== id) throw new Error();
 		console.log(`PASS ${name}`);
 	}
-	console.log('PASS 9 tools through SDK stdio and the disposable API');
+	console.log(`PASS ${calls.length} tools through SDK stdio and the disposable API`);
 } catch {
 	console.error(
 		`Tempo MCP API smoke failed at ${currentTool}. Check the disposable loopback API, token and synthetic transaction fixture.`,
