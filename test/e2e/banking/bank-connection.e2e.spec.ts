@@ -2,6 +2,7 @@ import {faker} from '@faker-js/faker';
 import {jest} from '@jest/globals';
 import {INestApplication} from '@nestjs/common';
 import Redis from 'ioredis';
+import {generateKeyPairSync} from 'node:crypto';
 import {Server} from 'node:net';
 import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
@@ -34,6 +35,13 @@ import {
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
+
+// The concrete adapter is exercised below against a mocked transport, never a live provider.
+process.env.ENABLE_BANKING_API_URL = 'https://provider.example.test';
+process.env.ENABLE_BANKING_APPLICATION_ID = 'test-only-placeholder';
+process.env.ENABLE_BANKING_PRIVATE_KEY_B64 = Buffer.from(
+	generateKeyPairSync('rsa', {modulusLength: 2048}).privateKey.export({type: 'pkcs8', format: 'pem'}),
+).toString('base64');
 
 describe('BankConnectionController', () => {
 	let app: INestApplication;
@@ -113,6 +121,453 @@ describe('BankConnectionController', () => {
 			.execute();
 		jest.restoreAllMocks();
 	});
+
+	it('refreshes an owned connection before its automatic due time and returns the persisted finished run', async () => {
+		const {connection, bankAccount} = await createAuthorizedConnection('manual-refresh-session');
+		await bankConnectionRepository.update(connection.id, {
+			nextSyncAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+			syncStatus: 'SUCCEEDED',
+		});
+		getAccountBalances.mockResolvedValue(makeBalances());
+		const transactions = makeTransactions('manual-refresh').map((transaction) => ({
+			transaction_id: transaction.providerTransactionId,
+			transaction_amount: {amount: transaction.amount, currency: transaction.currency},
+			credit_debit_indicator: transaction.creditDebitIndicator,
+			booking_date: transaction.bookingDate,
+			remittance_information: [transaction.description],
+		}));
+		const transport = jest.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+			const parsed = new URL(String(url));
+			if (parsed.origin !== 'https://provider.example.test' || !parsed.pathname.endsWith('/transactions'))
+				throw new Error('Unexpected provider request');
+			const key = parsed.searchParams.get('continuation_key');
+			return new Response(
+				JSON.stringify(
+					key === 'last-page'
+						? {transactions: transactions.slice(2)}
+						: key === 'empty-page'
+							? {transactions: [], continuation_key: 'last-page'}
+							: {transactions: transactions.slice(0, 2), continuation_key: 'empty-page'},
+				),
+				{status: 200},
+			);
+		});
+		getAccountTransactions.mockImplementation((...args) =>
+			EnableBankingClient.prototype.getAccountTransactions.call(enableBankingClient, ...args),
+		);
+
+		try {
+			const response = await verifiedAgent
+				.post(`/bank-connections/${connection.id}/refresh`)
+				.set('Origin', 'http://localhost:5173')
+				.set('User-Agent', 'ExampleBrowser/1.0')
+				.set('X-Forwarded-For', '192.0.2.77')
+				.set('Psu-Ip-Address', '192.0.2.88')
+				.send({psuIpAddress: '192.0.2.99', psuUserAgent: 'ForgedBrowser/1.0'})
+				.expect(200);
+			const expectedPresence = {
+				ipAddress: expect.stringMatching(/^(::ffff:)?127\.0\.0\.1$|^::1$/),
+				userAgent: 'ExampleBrowser/1.0',
+			};
+			expect(getSessionAccounts).toHaveBeenLastCalledWith(
+				'manual-refresh-session',
+				expect.any(AbortSignal),
+				expectedPresence,
+			);
+			expect(getAccountBalances).toHaveBeenLastCalledWith(
+				bankAccount.providerAccountId,
+				expect.any(AbortSignal),
+				expectedPresence,
+			);
+			expect(getAccountTransactions).toHaveBeenLastCalledWith(
+				bankAccount.providerAccountId,
+				{strategy: 'longest'},
+				expect.any(AbortSignal),
+				expectedPresence,
+			);
+			expect(transport).toHaveBeenCalledTimes(3);
+			for (const [, init] of transport.mock.calls) {
+				const headers = new Headers(init?.headers);
+				expect(headers.get('Psu-Ip-Address')).toEqual(expectedPresence.ipAddress);
+				expect(headers.get('Psu-User-Agent')).toBe('ExampleBrowser/1.0');
+			}
+			expect(response.body).toMatchObject({
+				status: 'SUCCEEDED',
+				startedAt: expect.any(String),
+				finishedAt: expect.any(String),
+				requestedFrom: null,
+				requestedTo: expect.any(String),
+				accountsFetched: 1,
+				balancesFetched: 2,
+				transactionsFetched: 5,
+				transactionsAdded: 5,
+				errorMessage: null,
+				rateLimitSource: null,
+				retryAfterSeconds: null,
+			});
+			expect(Object.keys(response.body).sort()).toEqual(
+				[
+					'id',
+					'status',
+					'startedAt',
+					'finishedAt',
+					'requestedFrom',
+					'requestedTo',
+					'accountsFetched',
+					'balancesFetched',
+					'transactionsFetched',
+					'transactionsAdded',
+					'errorMessage',
+					'rateLimitSource',
+					'retryAfterSeconds',
+				].sort(),
+			);
+			expect(await bankSyncRunRepository.findOneByOrFail({id: response.body.id})).toMatchObject({
+				status: 'SUCCEEDED',
+				finishedAt: expect.any(Date),
+				transactionsFetched: 5,
+			});
+			expect(await bankTransactionRepository.countBy({bankAccountId: bankAccount.id})).toBe(5);
+			const savedConnection = await bankConnectionRepository.findOneByOrFail({id: connection.id});
+			expect(savedConnection).toMatchObject({syncStatus: 'SUCCEEDED', lastSyncError: null});
+			expect(savedConnection.nextSyncAt!.getTime() - savedConnection.lastSyncedAt!.getTime()).toBe(
+				6 * 60 * 60 * 1000,
+			);
+			const readback = await verifiedAgent.get(`/bank-connections/${connection.id}/transactions`).expect(200);
+			expect(readback.body.transactions).toHaveLength(5);
+			transport.mockClear();
+			const second = await verifiedAgent
+				.post(`/bank-connections/${connection.id}/refresh`)
+				.set('Origin', 'http://localhost:5173')
+				.set('User-Agent', 'ExampleBrowser/1.0')
+				.expect(200);
+			expect(second.body).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 0, transactionsFetched: 5});
+			expect(getAccountTransactions).toHaveBeenLastCalledWith(
+				bankAccount.providerAccountId,
+				{strategy: 'default', dateFrom: expect.any(String), dateTo: response.body.requestedTo},
+				expect.any(AbortSignal),
+				expectedPresence,
+			);
+			expect(await bankTransactionRepository.countBy({bankAccountId: bankAccount.id})).toBe(5);
+		} finally {
+			transport.mockRestore();
+			getAccountTransactions.mockReset();
+			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
+	it.each([undefined, 'null', 'https://other.example.test'])(
+		'rejects manual refresh with Origin %s',
+		async (origin) => {
+			const {connection} = await createAuthorizedConnection('manual-refresh-csrf');
+			getSessionAccounts.mockClear();
+			try {
+				const refresh = verifiedAgent.post(`/bank-connections/${connection.id}/refresh`);
+				if (origin !== undefined) refresh.set('Origin', origin);
+				await refresh.expect(403);
+				expect(getSessionAccounts).not.toHaveBeenCalled();
+				expect(await bankSyncRunRepository.countBy({bankConnection: {id: connection.id}})).toBe(0);
+			} finally {
+				await bankConnectionRepository.delete(connection.id);
+			}
+		},
+	);
+
+	it('hides manual refresh lease state from another owner', async () => {
+		const {connection} = await createAuthorizedConnection('manual-refresh-ownership');
+		const lockKey = `banking:sync:${connection.id}`;
+		getSessionAccounts.mockClear();
+		try {
+			await redis.set(lockKey, 'active-sync', 'EX', 60);
+			const response = await otherVerifiedAgent
+				.post(`/bank-connections/${connection.id}/refresh`)
+				.set('Origin', 'http://localhost:5173')
+				.expect(404);
+			expect(response.body.message).toBe('Bank connection not found.');
+			expect(getSessionAccounts).not.toHaveBeenCalled();
+			expect(await bankSyncRunRepository.countBy({bankConnection: {id: connection.id}})).toBe(0);
+			await verifiedAgent
+				.post('/bank-connections/not-a-uuid/refresh')
+				.set('Origin', 'http://localhost:5173')
+				.expect(400);
+			await verifiedAgent
+				.post(`/bank-connections/${faker.string.uuid()}/refresh`)
+				.set('Origin', 'http://localhost:5173')
+				.expect(404);
+		} finally {
+			await redis.del(lockKey);
+			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
+	it.each([
+		{requiredPsuHeaders: ['Psu-Ip-Address', 'Psu-User-Agent'], userAgent: ''},
+		{requiredPsuHeaders: ['Psu-Ip-Address', 'Psu-User-Agent'], userAgent: '   '},
+		{requiredPsuHeaders: ['Psu-Ip-Address', 'Psu-Accept'], userAgent: 'ExampleBrowser/1.0'},
+		{requiredPsuHeaders: ['constructor'], userAgent: 'ExampleBrowser/1.0'},
+	])('rejects manual refresh without genuine required context %j', async ({requiredPsuHeaders, userAgent}) => {
+		const {connection} = await createAuthorizedConnection('manual-refresh-context');
+		getAspsps.mockResolvedValueOnce([
+			{name: 'ABN AMRO', country: 'NL', maximumConsentValiditySeconds: 86_400, requiredPsuHeaders},
+		]);
+		getSessionAccounts.mockClear();
+		try {
+			const response = await verifiedAgent
+				.post(`/bank-connections/${connection.id}/refresh`)
+				.set('Origin', 'http://localhost:5173')
+				.set('User-Agent', userAgent)
+				.set('Psu-User-Agent', 'ForgedBrowser/1.0')
+				.set('Psu-Accept', 'application/json')
+				.send({userAgent: 'ForgedBrowser/1.0'})
+				.expect(400);
+			expect(response.body.message).toBe(
+				'Browser context required by this bank is unavailable. Please try again from your browser.',
+			);
+			expect(getSessionAccounts).not.toHaveBeenCalled();
+			expect(await bankSyncRunRepository.countBy({bankConnection: {id: connection.id}})).toBe(0);
+		} finally {
+			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
+	it('cancels a disconnected manual refresh without importing data or replaying presence', async () => {
+		if (!httpServer.listening) await app.listen(0, '127.0.0.1');
+		const {connection, bankAccount} = await createAuthorizedConnection('manual-refresh-disconnect');
+		const nextSyncAt = new Date(Date.now() + 6 * 60 * 60 * 1000);
+		await bankConnectionRepository.update(connection.id, {nextSyncAt, syncStatus: 'SUCCEEDED'});
+		getAccountBalances.mockResolvedValue(makeBalances());
+		let providerSignal: AbortSignal | undefined;
+		let releaseProvider!: () => void;
+		let enterProvider!: () => void;
+		const entered = new Promise<void>((resolve) => {
+			enterProvider = resolve;
+		});
+		getAccountTransactions.mockImplementationOnce(
+			(_accountId, _options, signal) =>
+				new Promise((resolve, reject) => {
+					providerSignal = signal;
+					releaseProvider = () => resolve(makeTransactions('cancelled-refresh'));
+					signal?.addEventListener(
+						'abort',
+						() => reject(new EnableBankingClientError('provider_unreachable')),
+						{once: true},
+					);
+					enterProvider();
+				}),
+		);
+		const pending = verifiedAgent
+			.post(`/bank-connections/${connection.id}/refresh`)
+			.set('Origin', 'http://localhost:5173')
+			.set('User-Agent', 'ExampleBrowser/1.0');
+		const completed = pending.then(
+			() => undefined,
+			() => undefined,
+		);
+		try {
+			await entered;
+			pending.abort();
+			for (let attempt = 0; attempt < 100 && !providerSignal?.aborted; attempt += 1)
+				await new Promise((resolve) => setTimeout(resolve, 10));
+			expect(providerSignal?.aborted).toBe(true);
+			for (let attempt = 0; attempt < 100 && (await redis.exists(`banking:sync:${connection.id}`)); attempt += 1)
+				await new Promise((resolve) => setTimeout(resolve, 10));
+			expect(await redis.exists(`banking:sync:${connection.id}`)).toBe(0);
+			expect(await bankTransactionRepository.countBy({bankAccountId: bankAccount.id})).toBe(0);
+			expect(await bankAccountBalanceRepository.countBy({bankAccountId: bankAccount.id})).toBe(0);
+			expect(await bankConnectionRepository.findOneByOrFail({id: connection.id})).toMatchObject({
+				nextSyncAt,
+				syncStatus: 'SUCCEEDED',
+				syncStartedAt: null,
+			});
+			expect(await bankSyncRunRepository.findOneByOrFail({bankConnection: {id: connection.id}})).toMatchObject({
+				status: 'FAILED',
+				finishedAt: expect.any(Date),
+			});
+		} finally {
+			releaseProvider?.();
+			await completed;
+			for (let attempt = 0; attempt < 100 && (await redis.exists(`banking:sync:${connection.id}`)); attempt += 1)
+				await new Promise((resolve) => setTimeout(resolve, 10));
+			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
+	it('returns provider cooldown metadata and refuses manual refresh during Retry-After', async () => {
+		const {connection} = await createAuthorizedConnection('manual-refresh-rate-limit');
+		getAccountBalances.mockResolvedValue(makeBalances());
+		getAccountBalances.mockRejectedValueOnce(new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 429, 17));
+		getAccountTransactions.mockClear();
+		try {
+			const response = await verifiedAgent
+				.post(`/bank-connections/${connection.id}/refresh`)
+				.set('Origin', 'http://localhost:5173')
+				.set('User-Agent', 'ExampleBrowser/1.0')
+				.expect(200);
+			expect(response.body).toMatchObject({
+				status: 'PARTIAL',
+				finishedAt: expect.any(String),
+				errorMessage:
+					'Bank access is temporarily rate-limited. The next automatic attempt will wait for the provider cooldown.',
+				rateLimitSource: 'enable-banking',
+				retryAfterSeconds: 17,
+			});
+			expect(getAccountTransactions).not.toHaveBeenCalled();
+			const saved = await bankConnectionRepository.findOneByOrFail({id: connection.id});
+			expect(saved.syncStatus).toBe('RATE_LIMITED');
+			expect(saved.nextSyncAt!.getTime() - new Date(response.body.finishedAt).getTime()).toBe(17_000);
+			getAspsps.mockClear();
+			getSessionAccounts.mockClear();
+			const cooldown = await verifiedAgent
+				.post(`/bank-connections/${connection.id}/refresh`)
+				.set('Origin', 'http://localhost:5173')
+				.set('User-Agent', 'ExampleBrowser/1.0')
+				.expect(429);
+			expect(Number(cooldown.headers['retry-after'])).toBeGreaterThan(0);
+			expect(Number(cooldown.headers['retry-after'])).toBeLessThanOrEqual(17);
+			expect(cooldown.body).toMatchObject({
+				rateLimitSource: 'enable-banking',
+				retryAfterSeconds: Number(cooldown.headers['retry-after']),
+			});
+			expect(getAspsps).not.toHaveBeenCalled();
+			expect(getSessionAccounts).not.toHaveBeenCalled();
+			expect(await bankSyncRunRepository.countBy({bankConnection: {id: connection.id}})).toBe(1);
+			await bankConnectionRepository.update(connection.id, {nextSyncAt: new Date(Date.now() - 1)});
+			getAccountTransactions.mockResolvedValue([]);
+			const retry = await verifiedAgent
+				.post(`/bank-connections/${connection.id}/refresh`)
+				.set('Origin', 'http://localhost:5173')
+				.set('User-Agent', 'ExampleBrowser/1.0')
+				.expect(200);
+			expect(retry.body.status).toBe('SUCCEEDED');
+		} finally {
+			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
+	it.each(['manual', 'automatic'] as const)(
+		'serializes an active %s sync with manual refresh, automatic sync and deletion',
+		async (entry) => {
+			if (!httpServer.listening) await app.listen(0, '127.0.0.1');
+			const {connection} = await createAuthorizedConnection(`manual-refresh-lock-${entry}`);
+			getAccountBalances.mockResolvedValue(makeBalances());
+			getAccountTransactions.mockClear();
+			let enterProvider!: () => void;
+			let releaseProvider!: () => void;
+			const entered = new Promise<void>((resolve) => {
+				enterProvider = resolve;
+			});
+			getAccountTransactions.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						releaseProvider = () => resolve([]);
+						enterProvider();
+					}),
+			);
+			const active =
+				entry === 'manual'
+					? verifiedAgent
+							.post(`/bank-connections/${connection.id}/refresh`)
+							.set('Origin', 'http://localhost:5173')
+							.set('User-Agent', 'ExampleBrowser/1.0')
+							.expect(200)
+							.then(({body}) => body)
+					: app.get(BankingSyncService).synchronizeAutomatically(connection.id);
+			try {
+				await entered;
+				const conflict = await verifiedAgent
+					.post(`/bank-connections/${connection.id}/refresh`)
+					.set('Origin', 'http://localhost:5173')
+					.expect(409);
+				expect(conflict.body.message).toBe('A bank synchronization is already in progress.');
+				await expect(app.get(BankingSyncService).synchronizeAutomatically(connection.id)).rejects.toMatchObject(
+					{status: 409, message: 'A bank synchronization is already in progress.'},
+				);
+				await verifiedAgent
+					.delete(`/bank-connections/${connection.id}`)
+					.send({confirmation: 'DELETE'})
+					.expect(409);
+				expect(getAccountTransactions).toHaveBeenCalledTimes(1);
+				if (entry === 'automatic') expect(getAccountTransactions.mock.calls[0]).toHaveLength(3);
+				releaseProvider();
+				expect(await active).toMatchObject({status: 'SUCCEEDED', finishedAt: expect.anything()});
+				expect(await bankSyncRunRepository.countBy({bankConnection: {id: connection.id}})).toBe(1);
+			} finally {
+				releaseProvider?.();
+				await active;
+				await bankConnectionRepository.delete(connection.id);
+			}
+		},
+	);
+
+	it('refuses manual refresh when consent has expired', async () => {
+		const {connection} = await createAuthorizedConnection('manual-refresh-expired');
+		await bankConnectionRepository.update(connection.id, {
+			consentValidUntil: new Date(Date.now() - 1000),
+			nextSyncAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+		});
+		getAspsps.mockClear();
+		getSessionAccounts.mockClear();
+		try {
+			const response = await verifiedAgent
+				.post(`/bank-connections/${connection.id}/refresh`)
+				.set('Origin', 'http://localhost:5173')
+				.expect(409);
+			expect(response.body.message).toBe('Bank consent has expired. Please reconnect.');
+			expect(await bankConnectionRepository.findOneByOrFail({id: connection.id})).toMatchObject({
+				status: 'EXPIRED',
+				syncStatus: 'EXPIRED',
+				nextSyncAt: null,
+			});
+			expect(await bankSyncRunRepository.countBy({bankConnection: {id: connection.id}})).toBe(0);
+			expect(getAspsps).not.toHaveBeenCalled();
+			expect(getSessionAccounts).not.toHaveBeenCalled();
+		} finally {
+			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
+	it.each(['PARTIAL', 'FAILED'] as const)(
+		'returns a finished %s manual refresh with stored successful endpoint data',
+		async (status) => {
+			const {connection, bankAccount} = await createAuthorizedConnection(`manual-refresh-${status}`);
+			if (status === 'FAILED')
+				getSessionAccounts.mockRejectedValueOnce(new EnableBankingClientError('provider_unreachable', 502));
+			getAccountBalances.mockRejectedValueOnce(new EnableBankingClientError('provider_unreachable', 502));
+			if (status === 'PARTIAL') getAccountTransactions.mockResolvedValueOnce(makeTransactions('manual-partial'));
+			else
+				getAccountTransactions.mockRejectedValueOnce(new EnableBankingClientError('provider_unreachable', 502));
+			try {
+				const response = await verifiedAgent
+					.post(`/bank-connections/${connection.id}/refresh`)
+					.set('Origin', 'http://localhost:5173')
+					.set('User-Agent', 'ExampleBrowser/1.0')
+					.expect(200);
+				expect(response.body).toMatchObject({
+					status,
+					finishedAt: expect.any(String),
+					transactionsAdded: status === 'PARTIAL' ? 5 : 0,
+					rateLimitSource: null,
+					retryAfterSeconds: null,
+					errorMessage:
+						status === 'PARTIAL'
+							? 'Some bank data could not be synchronized.'
+							: 'Bank synchronization failed.',
+				});
+				expect(await bankSyncRunRepository.findOneByOrFail({id: response.body.id})).toMatchObject({
+					status,
+					finishedAt: expect.any(Date),
+				});
+				expect(await bankTransactionRepository.countBy({bankAccountId: bankAccount.id})).toBe(
+					status === 'PARTIAL' ? 5 : 0,
+				);
+				const saved = await bankConnectionRepository.findOneByOrFail({id: connection.id});
+				expect(saved.syncStatus).toBe(status);
+				expect(JSON.stringify(saved)).not.toContain('ExampleBrowser/1.0');
+			} finally {
+				await bankConnectionRepository.delete(connection.id);
+			}
+		},
+	);
 
 	it('rejects destructive removal while synchronization owns the connection lock', async () => {
 		const {connection} = await createAuthorizedConnection('delete-while-sync-locked');

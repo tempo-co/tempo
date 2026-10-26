@@ -1,13 +1,18 @@
 import {
+	BadGatewayException,
+	BadRequestException,
 	ConflictException,
 	HttpException,
 	Injectable,
 	InternalServerErrorException,
 	Logger,
 	NotFoundException,
+	RequestTimeoutException,
+	ServiceUnavailableException,
 } from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import {createHash, randomUUID} from 'node:crypto';
+import {isIP} from 'node:net';
 import {DataSource, FindOptionsSelect, In, IsNull, Not, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
@@ -23,6 +28,10 @@ import {
 	BANKING_PARTIAL_SYNC_ERROR,
 	BANKING_PERSISTENCE_SYNC_ERROR,
 	BANKING_RATE_LIMITED_SYNC_ERROR,
+	BANKING_REFRESH_CONTEXT_UNAVAILABLE,
+	BANKING_SELECTED_BANK_UNAVAILABLE,
+	BANKING_SERVICE_UNAVAILABLE,
+	BANKING_SUPPORTED_BANKS_UNAVAILABLE,
 } from '../api/constants/banking-messages.constants';
 import {BankSyncRunResponseDto} from '../api/dtos/bank-connection-response.dto';
 import {BankAccountBalance} from '../bank-account-balance.entity';
@@ -66,10 +75,12 @@ import {
 } from '../categorization/bank-transaction-categorization.types';
 import {
 	EnableBankingBalance,
+	EnableBankingPsuContext,
 	EnableBankingTransaction,
 	EnableBankingTransactionFetchOptions,
 } from '../enable-banking.types';
 import {BankingEncryptionError} from '../errors/banking-encryption.error';
+import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {BASE_AMOUNT_INPUT_COLUMNS, baseAmountInputsSql} from './bank-transaction-amount-conversion.utils';
 import {BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';
 import {BankingEncryptionService} from './banking-encryption.service';
@@ -197,16 +208,61 @@ export class BankingSyncService {
 		return this.runSynchronization(connection.account.id, connectionId);
 	}
 
+	async synchronizeManually(
+		accountId: Account['id'],
+		connectionId: BankConnection['id'],
+		psu: EnableBankingPsuContext,
+		signal: AbortSignal,
+	): Promise<BankSyncRunResponseDto> {
+		if (!this.bankingIntegrationEnabled) throw new ServiceUnavailableException(BANKING_SERVICE_UNAVAILABLE);
+		await this.findOwnedConnection(accountId, connectionId);
+		return this.runSynchronization(accountId, connectionId, psu, signal);
+	}
+
+	private runSynchronization(
+		accountId: Account['id'],
+		connectionId: BankConnection['id'],
+		psu: EnableBankingPsuContext,
+		requestSignal: AbortSignal,
+	): Promise<BankSyncRunResponseDto>;
+	private runSynchronization(
+		accountId: Account['id'],
+		connectionId: BankConnection['id'],
+	): Promise<BankSyncRunResponseDto | null>;
 	private async runSynchronization(
 		accountId: Account['id'],
 		connectionId: BankConnection['id'],
+		psu?: EnableBankingPsuContext,
+		requestSignal?: AbortSignal,
 	): Promise<BankSyncRunResponseDto | null> {
-		const lockLease = await this.connectionLockService.acquire(connectionId);
+		const lease = await this.connectionLockService.acquire(connectionId);
+		const stopRenewal = () => lease.stop();
+		requestSignal?.addEventListener('abort', stopRenewal, {once: true});
+		const lockLease: BankingConnectionLock = {
+			...lease,
+			signal: requestSignal ? AbortSignal.any([lease.signal, requestSignal]) : lease.signal,
+			assertHealthy: () => {
+				lease.assertHealthy();
+				if (requestSignal?.aborted) throw new RequestTimeoutException(BANKING_FAILED_SYNC_ERROR);
+			},
+		};
 
 		try {
+			lockLease.assertHealthy();
 			const connection = await this.findOwnedConnection(accountId, connectionId);
-			if (!this.isAutomaticSyncEligible(connection)) return null;
+			if (!psu && !this.isAutomaticSyncEligible(connection)) return null;
 			const providerSessionId = await this.validateConnection(connection, lockLease);
+			if (psu) {
+				const now = Date.now();
+				if (
+					connection.syncStatus === BANK_SYNC_STATUSES.RATE_LIMITED &&
+					connection.nextSyncAt &&
+					connection.nextSyncAt.getTime() > now
+				) {
+					throw new BankingSyncCooldownError(Math.ceil((connection.nextSyncAt.getTime() - now) / 1000));
+				}
+				psu = await this.resolveManualPsuContext(connection, psu, lockLease.signal);
+			}
 			let run: BankSyncRun | undefined;
 			let syncStartedAt: Date | undefined;
 
@@ -255,6 +311,7 @@ export class BankingSyncService {
 						providerSessionId,
 						transactionOptions,
 						lockLease,
+						psu,
 					);
 				} catch {
 					lockLease.assertHealthy();
@@ -292,10 +349,14 @@ export class BankingSyncService {
 				return this.toSyncRunResponse(completedRun, persistenceResult.transactionsAdded, fetchResult.rateLimit);
 			} catch (error) {
 				try {
-					await this.markPersistenceFailure(connection.id, run?.id, syncStartedAt);
+					if (requestSignal?.aborted) {
+						await this.markCancelledRefresh(connection, run?.id, syncStartedAt);
+					} else {
+						await this.markPersistenceFailure(connection.id, run?.id, syncStartedAt);
+					}
 				} catch (failureError) {
 					this.logger.warn(
-						`Automatic bank synchronization failure could not be recorded: ${safeErrorName(failureError)}`,
+						`Bank synchronization failure could not be recorded: ${safeErrorName(failureError)}`,
 					);
 				}
 
@@ -303,6 +364,7 @@ export class BankingSyncService {
 				throw new InternalServerErrorException(BANKING_PERSISTENCE_SYNC_ERROR);
 			}
 		} finally {
+			requestSignal?.removeEventListener('abort', stopRenewal);
 			lockLease.stop();
 			try {
 				await lockLease.release();
@@ -310,6 +372,35 @@ export class BankingSyncService {
 				this.logger.warn('Bank synchronization lock release failed.');
 			}
 		}
+	}
+
+	private async resolveManualPsuContext(
+		connection: BankConnection,
+		psu: EnableBankingPsuContext,
+		signal: AbortSignal,
+	): Promise<EnableBankingPsuContext> {
+		let aspsps;
+		try {
+			aspsps = await this.enableBankingClient.getAspsps(connection.aspspCountry, signal);
+		} catch {
+			throw new BadGatewayException(BANKING_SUPPORTED_BANKS_UNAVAILABLE);
+		}
+		const aspsp = aspsps.find(
+			({name, country}) => name === connection.aspspName && country === connection.aspspCountry,
+		);
+		if (!aspsp) throw new BadRequestException(BANKING_SELECTED_BANK_UNAVAILABLE);
+		const userAgent = psu.userAgent?.trim() || undefined;
+		const supportedHeaders = new Map<string, string | undefined>([
+			['psu-ip-address', isIP(psu.ipAddress) ? psu.ipAddress : undefined],
+			['psu-user-agent', userAgent],
+		]);
+		if (
+			!supportedHeaders.get('psu-ip-address') ||
+			(aspsp.requiredPsuHeaders ?? []).some((header) => !supportedHeaders.get(header.toLowerCase()))
+		) {
+			throw new BadRequestException(BANKING_REFRESH_CONTEXT_UNAVAILABLE);
+		}
+		return {ipAddress: psu.ipAddress, userAgent};
 	}
 
 	private isAutomaticSyncEligible(
@@ -384,6 +475,7 @@ export class BankingSyncService {
 		providerSessionId: string,
 		transactionOptions: EnableBankingTransactionFetchOptions,
 		lockLease: BankingConnectionLock,
+		psu?: EnableBankingPsuContext,
 	): Promise<SyncFetchResult> {
 		const accounts: AccountFetchResult[] = [];
 		let authoritativeAccountIds: Set<string> | null = null;
@@ -402,6 +494,7 @@ export class BankingSyncService {
 			const sessionAccounts = await this.enableBankingClient.getSessionAccounts(
 				providerSessionId,
 				lockLease.signal,
+				...(psu ? [psu] : []),
 			);
 			lockLease.assertHealthy();
 
@@ -441,6 +534,7 @@ export class BankingSyncService {
 				balances = await this.enableBankingClient.getAccountBalances(
 					bankAccount.providerAccountId,
 					lockLease.signal,
+					...(psu ? [psu] : []),
 				);
 				lockLease.assertHealthy();
 				balancesSucceeded = true;
@@ -456,6 +550,7 @@ export class BankingSyncService {
 					bankAccount.providerAccountId,
 					transactionOptions,
 					lockLease.signal,
+					...(psu ? [psu] : []),
 				);
 				lockLease.assertHealthy();
 				transactionsSucceeded = true;
@@ -976,6 +1071,32 @@ export class BankingSyncService {
 		} catch (error) {
 			this.logger.warn(`Transaction categorization enqueue failed: ${safeErrorName(error)}`);
 		}
+	}
+
+	private async markCancelledRefresh(
+		connection: BankConnection,
+		runId?: string,
+		syncStartedAt?: Date,
+	): Promise<void> {
+		if (runId) {
+			await this.bankSyncRunRepository.update(
+				{id: runId, status: BANK_SYNC_STATUSES.RUNNING},
+				{
+					status: FAILED,
+					finishedAt: new Date(),
+					errorMessage: BANKING_FAILED_SYNC_ERROR,
+				},
+			);
+		}
+		if (!syncStartedAt) return;
+		await this.bankConnectionRepository.update(
+			{id: connection.id, syncStatus: BANK_SYNC_STATUSES.RUNNING, syncStartedAt},
+			{
+				syncStatus: connection.syncStatus,
+				syncStartedAt: null,
+				nextSyncAt: connection.nextSyncAt,
+			},
+		);
 	}
 
 	private async markPersistenceFailure(connectionId: string, runId?: string, syncStartedAt?: Date): Promise<void> {

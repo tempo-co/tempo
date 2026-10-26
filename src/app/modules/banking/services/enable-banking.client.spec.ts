@@ -243,6 +243,7 @@ describe('EnableBankingClient', () => {
 							country: 'FI',
 							logo: 'https://enablebanking.com/brands/FI/Nordea/',
 							maximum_consent_validity: 86_400,
+							required_psu_headers: ['Psu-Ip-Address', 'Psu-User-Agent'],
 						},
 					],
 				}),
@@ -256,6 +257,7 @@ describe('EnableBankingClient', () => {
 				country: 'FI',
 				logoUrl: 'https://enablebanking.com/brands/FI/Nordea/',
 				maximumConsentValiditySeconds: 86_400,
+				requiredPsuHeaders: ['Psu-Ip-Address', 'Psu-User-Agent'],
 			},
 		]);
 
@@ -266,6 +268,28 @@ describe('EnableBankingClient', () => {
 		expect(requestUrl.searchParams.get('psu_type')).toBe('personal');
 		expect(requestUrl.searchParams.get('service')).toBe('AIS');
 	});
+
+	it.each(['Psu-Ip-Address', [null], [''], ['   ']])(
+		'rejects malformed required PSU header metadata %j',
+		async (requiredPsuHeaders) => {
+			fetchMock.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						aspsps: [
+							{
+								name: 'Example Bank',
+								country: 'FI',
+								maximum_consent_validity: 86_400,
+								required_psu_headers: requiredPsuHeaders,
+							},
+						],
+					}),
+					{status: 200},
+				),
+			);
+			await expect(client.getAspsps('FI')).rejects.toMatchObject({code: 'invalid_provider_response'});
+		},
+	);
 
 	it('requests the full supported ASPSP catalog without a country filter', async () => {
 		fetchMock.mockResolvedValueOnce(
@@ -564,6 +588,36 @@ describe('EnableBankingClient', () => {
 		]);
 	});
 
+	it('serializes request-scoped PSU headers on session, balances and every transaction page without leaking to unattended calls', async () => {
+		const psu = {ipAddress: '192.0.2.42', userAgent: 'ExampleBrowser/1.0'};
+		const json = (body: unknown) => new Response(JSON.stringify(body), {status: 200});
+		fetchMock
+			.mockResolvedValueOnce(json({status: 'AUTHORIZED', accounts: ['account-id']}))
+			.mockResolvedValueOnce(json({balances: []}))
+			.mockResolvedValueOnce(json({transactions: [], continuation_key: 'empty-page'}))
+			.mockResolvedValueOnce(json({transactions: [], continuation_key: 'last-page'}))
+			.mockResolvedValueOnce(json({transactions: []}))
+			.mockResolvedValueOnce(json({status: 'AUTHORIZED', accounts: ['account-id']}))
+			.mockResolvedValueOnce(json({balances: []}))
+			.mockResolvedValueOnce(json({transactions: []}));
+		await client.getSessionAccounts('session-id', undefined, psu);
+		await client.getAccountBalances('account-id', undefined, psu);
+		await client.getAccountTransactions('account-id', {strategy: 'longest'}, undefined, psu);
+		await client.getSessionAccounts('session-id');
+		await client.getAccountBalances('account-id');
+		await client.getAccountTransactions('account-id', {strategy: 'longest'});
+		expect(fetchMock).toHaveBeenCalledTimes(8);
+		for (const [, init] of fetchMock.mock.calls.slice(0, 5) as [string, RequestInit][]) {
+			const headers = new Headers(init.headers);
+			expect(headers.get('Psu-Ip-Address')).toBe('192.0.2.42');
+			expect(headers.get('Psu-User-Agent')).toBe('ExampleBrowser/1.0');
+		}
+		for (const [, init] of fetchMock.mock.calls.slice(5) as [string, RequestInit][]) {
+			const headers = new Headers(init.headers);
+			expect([...headers.keys()].filter((key) => key.startsWith('psu-'))).toEqual([]);
+		}
+	});
+
 	it('follows continuation keys while mapping transaction pages', async () => {
 		fetchMock
 			.mockResolvedValueOnce(
@@ -817,6 +871,22 @@ describe('EnableBankingClient', () => {
 
 		expect(transactions).toHaveLength(3);
 		for (const transaction of transactions) expect(transaction).not.toHaveProperty('counterpartyLocation');
+	});
+
+	it('cancels pagination before dispatching another PSU request', async () => {
+		const controller = new AbortController();
+		fetchMock.mockResolvedValue(new Response(JSON.stringify({transactions: []}), {status: 200}));
+		fetchMock.mockImplementationOnce(async () => {
+			controller.abort();
+			return new Response(JSON.stringify({transactions: [], continuation_key: 'next-page'}), {status: 200});
+		});
+		await expect(
+			client.getAccountTransactions('account-id', {strategy: 'longest'}, controller.signal, {
+				ipAddress: '192.0.2.42',
+				userAgent: 'ExampleBrowser/1.0',
+			}),
+		).rejects.toMatchObject({code: 'provider_unreachable'});
+		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
 	it('propagates a supplied cancellation signal to transaction requests', async () => {
