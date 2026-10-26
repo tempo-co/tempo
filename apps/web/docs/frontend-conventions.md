@@ -47,8 +47,8 @@ ordinary controls and table links retain their keyboard focus indicators.
 
 Pattern in `src/features/settings/components/settings-group.tsx` and the access-token settings:
 
-- A group's create action sits on the heading row (`SettingsGroup action`), never as a trailing row. When the list is empty, the empty state carries the only create button; the header button appears once items exist. Keep one dialog instance outside the empty state so it survives the list refetch, and return focus to whichever create button exists after close.
-- Row metadata is a timeline in time order, joined by `·` on wider screens: `Created <date> · Last used today · Expires <date>` (variants `Never used`, `No expiration`, `Expired <date>` in destructive colour). On phones each part stacks on its own line (`max-sm:block`, separators hidden). Assert the layout per width in the spec.
+- A group's create action sits on the heading row (`SettingsGroup action`), never as a trailing row. When the list is empty, the empty state carries the only create button; the header button appears once items exist. Keep one dialog instance outside the empty state so it survives the list refetch, and return focus to whichever create button exists after close. Access-token creation uses the primary button in either state.
+- Access-token rows mirror session rows: an icon, a truncated name, last-used text on the second line, and an always-visible Revoke action with 16px of space on either side. Clicking the row opens a details dialog with the token prefix, permissions, creation timestamp, last-used timestamp and expiration. Created/prefix/expiration metadata belongs in that dialog, not the row; expired values use destructive colour. The full secret is only shown during creation. Revocation from either entry point uses the same confirmation flow.
 - Last-used reads `today`, `yesterday` or a date, never relative "N hours ago".
 - Repeated row buttons get an accessible name that includes the item (`Revoke <name>`).
 

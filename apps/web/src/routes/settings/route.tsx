@@ -14,8 +14,8 @@ export const Route = createFileRoute('/settings')({
 const sections = [
   {label: 'Account', route: '/settings/account'},
   {label: 'Security', route: '/settings/security'},
-  {label: 'Appearance', route: '/settings/appearance'},
   {label: 'Integrations', route: '/settings/integrations'},
+  {label: 'Appearance', route: '/settings/appearance'},
 ] as const;
 
 function SettingsIndex() {

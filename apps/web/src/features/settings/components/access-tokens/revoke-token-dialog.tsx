@@ -1,6 +1,6 @@
 import {useState} from 'react';
 
-import {Button} from '@/components/ui/button';
+import {Button, ButtonProps} from '@/components/ui/button';
 import {
   ResponsiveDialog,
   ResponsiveDialogBody,
@@ -16,7 +16,12 @@ import {
 import {useRevokePersonalAccessToken} from '../../api/use-personal-access-tokens';
 import {PersonalAccessToken} from '../../types/personal-access-token';
 
-export function RevokeTokenDialog({token}: {token: PersonalAccessToken}) {
+type RevokeTokenDialogProps = {
+  token: PersonalAccessToken;
+  triggerVariant?: ButtonProps['variant'];
+};
+
+export function RevokeTokenDialog({token, triggerVariant = 'outline'}: RevokeTokenDialogProps) {
   const [open, setOpen] = useState(false);
   const revoke = useRevokePersonalAccessToken();
   const confirm = async () => {
@@ -38,7 +43,7 @@ export function RevokeTokenDialog({token}: {token: PersonalAccessToken}) {
     >
       <ResponsiveDialogTrigger asChild>
         <Button
-          variant='outline'
+          variant={triggerVariant}
           size='sm'
           aria-label={`Revoke ${token.name}`}
           className='min-w-20 max-sm:h-11'

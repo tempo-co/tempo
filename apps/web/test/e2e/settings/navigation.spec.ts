@@ -24,8 +24,8 @@ test.describe('Settings navigation', () => {
     const routes = [
       {path: 'account', label: 'Account'},
       {path: 'security', label: 'Security'},
-      {path: 'appearance', label: 'Appearance'},
       {path: 'integrations', label: 'Integrations'},
+      {path: 'appearance', label: 'Appearance'},
     ];
 
     for (const route of routes) {
@@ -34,6 +34,7 @@ test.describe('Settings navigation', () => {
 
       const sections = page.getByRole('navigation', {name: 'Settings sections'});
       await expect(sections).toHaveCount(1);
+      await expect(sections.getByRole('link')).toHaveText(routes.map((route) => route.label));
       const active = sections.locator('a[aria-current="page"]');
       await expect(active).toHaveCount(1);
       await expect(active).toHaveText(route.label);
@@ -54,7 +55,7 @@ test.describe('Settings navigation', () => {
         range.selectNodeContents(link);
         return range.getBoundingClientRect().x;
       }),
-      boxOf(sections.getByRole('link', {name: 'Integrations'})),
+      boxOf(sections.getByRole('link', {name: 'Appearance'})),
     ]);
     expect(lastTab.x + lastTab.width).toBeLessThanOrEqual(nav.x + nav.width);
     expect(Math.abs(firstLabel - title.x)).toBeLessThan(1);

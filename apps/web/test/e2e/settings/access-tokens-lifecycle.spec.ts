@@ -38,7 +38,12 @@ test('a signed-in account creates a one-time token and revokes its read-only acc
   await expect(dialog).toBeHidden();
   const row = page.getByTestId('access-token-row');
   await expect(row).toContainText('Example API integration');
-  await expect(row).toContainText(metadata.prefix);
+  await row.getByRole('button', {name: 'View Example API integration', exact: true}).click();
+  const details = page.getByRole('dialog', {name: 'Example API integration', exact: true});
+  await expect(details).toContainText(metadata.prefix);
+  await expect(details).not.toContainText(secret);
+  await page.keyboard.press('Escape');
+  await expect(details).toBeHidden();
   await expect(page.locator('body')).not.toContainText(secret);
   await page.reload();
   await expect(row).toContainText('Example API integration');

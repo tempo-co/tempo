@@ -29,7 +29,7 @@ export function SessionCard({session}: SessionCardProps) {
   return (
     <Dialog>
       <div
-        className='flex min-h-16 items-center gap-2 pr-4'
+        className='flex min-h-16 items-center gap-4 pr-4'
         data-testid='session-card'
         data-current-session={session.isCurrent}
       >

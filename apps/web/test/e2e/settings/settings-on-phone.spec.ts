@@ -1,5 +1,7 @@
 import {expect, test} from '@playwright/test';
 
+import {expectEvenRowActionSpacing} from '../../utils/layout';
+
 const account = {
   id: '00000000-0000-4000-8000-000000000001',
   name: 'Alex Example',
@@ -44,7 +46,9 @@ test('session details wrap long IPv6 and location values on a phone', async ({pa
     }),
   );
   await page.goto('/settings/security');
-  await page.getByTestId('session-card').locator('button').first().click();
+  const row = page.getByTestId('session-card');
+  await expectEvenRowActionSpacing(row);
+  await row.getByRole('button').first().click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('2001:db8:1234:5678:1234:5678:1234:5678');

@@ -1,6 +1,6 @@
-import {expect, test} from '../../fixtures';
+import {API_URL, expect, test} from '../../fixtures';
 import {createHookHarness} from '../../utils/hook-harness';
-import {expectNoHorizontalOverflow} from '../../utils/layout';
+import {expectEvenRowActionSpacing, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const account = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -65,11 +65,11 @@ test.beforeEach(async ({page}) => {
 });
 
 for (const width of [1440, 320]) {
-  test(`creates, copies and dismisses a one-time token, then revokes its access (${width}px)`, async ({
+  test(`creates, copies and inspects a one-time token, then revokes its access (${width}px)`, async ({
     page,
   }) => {
     // The whole create, copy, revoke journey, including the 2 s copy confirmation.
-    test.setTimeout(20_000);
+    test.setTimeout(30_000);
     await page.setViewportSize({width, height: 900});
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     let tokens: (typeof tokenMetadata)[] = [];
@@ -96,9 +96,47 @@ for (const width of [1440, 320]) {
       await route.fulfill({status: 204});
     });
     await page.goto('/settings/integrations');
+    const connect = page.getByRole('region', {name: 'Connect an MCP client', exact: true});
+    const serverUrl = new URL(`${API_URL.replace(/\/+$/, '')}/mcp`, page.url()).href;
+    const urlField = connect.getByRole('textbox', {name: 'Server URL', exact: true});
+    await expect(urlField).toHaveValue(serverUrl);
+    const steps = connect.getByRole('list', {name: 'Connection steps'}).getByRole('listitem');
+    await expect(steps).toHaveText([
+      /Create an access token below.*store it securely in your MCP client/,
+      /Add an MCP server.*Streamable HTTP/,
+      /Select Bearer token and enter your access token\. For headers, use Authorization: Bearer <access-token>/,
+    ]);
+    await expect(connect.locator('strong')).toHaveText([
+      'access token',
+      'Streamable HTTP',
+      'Bearer token',
+    ]);
+    await urlField.focus();
+    expect(
+      await urlField.evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd]),
+    ).toEqual([0, serverUrl.length]);
+    const copyUrl = connect.getByRole('button', {name: 'Copy URL', exact: true});
+    if (width < 768) expect((await copyUrl.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await copyUrl.click();
+    await expect(connect.getByRole('button', {name: 'Copied', exact: true})).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(serverUrl);
+    await expect(copyUrl).toBeVisible({timeout: 4000});
+    await expectNoHorizontalOverflow(page);
     await expect(page.getByText('No access tokens yet.', {exact: true})).toBeVisible();
     // Empty: the empty state owns the only create action.
     await expect(page.getByRole('button', {name: 'Create token', exact: true})).toHaveCount(1);
+    const primaryBackground = await page.evaluate(() => {
+      const probe = document.createElement('span');
+      probe.className = 'bg-primary';
+      document.body.append(probe);
+      const background = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return background;
+    });
+    await expect(page.getByRole('button', {name: 'Create token', exact: true})).toHaveCSS(
+      'background-color',
+      primaryBackground,
+    );
     await page.getByRole('button', {name: 'Create token', exact: true}).click();
     const dialog = page.getByRole('dialog');
     const expectPhoneActions = async () => {
@@ -164,36 +202,61 @@ for (const width of [1440, 320]) {
     await dialog.getByRole('button', {name: 'Done', exact: true}).click();
     await expect(dialog).toBeHidden();
     const row = page.getByTestId('access-token-row');
-    await expect(row).toContainText(tokenMetadata.name);
-    await expect(row).toContainText(tokenMetadata.prefix);
-    await expect(row.getByTestId('access-token-usage')).toHaveText(
-      /^Created 2 Jan 2026·?Never used$/,
-    );
-    await expect(row.getByTestId('access-token-expiry')).toHaveText('Expires 2 Jan 2027');
-    // Wide screens keep the timeline on one line; phones stack each part.
-    const [usageBox, expiryBox] = await Promise.all([
-      row.getByTestId('access-token-usage').boundingBox(),
-      row.getByTestId('access-token-expiry').boundingBox(),
-    ]);
-    if (width >= 768) expect(Math.abs(expiryBox!.y - usageBox!.y)).toBeLessThan(2);
-    else expect(expiryBox!.y).toBeGreaterThan(usageBox!.y + usageBox!.height - 1);
+    const viewToken = row.getByRole('button', {name: `View ${tokenMetadata.name}`, exact: true});
+    await expect(viewToken).toHaveText(/^Example integration\s*Never used$/);
+    await expect(row.getByTestId('access-token-icon')).toBeVisible();
+    await expectEvenRowActionSpacing(row);
+    await expect(row.getByTestId('access-token-usage')).toHaveText('Never used');
+    const nameBox = await viewToken.getByText(tokenMetadata.name, {exact: true}).boundingBox();
+    const usageBox = await row.getByTestId('access-token-usage').boundingBox();
+    expect(usageBox!.y).toBeGreaterThanOrEqual(nameBox!.y + nameBox!.height);
     // With tokens listed, creation moves to the section header, above the list.
     const headerCreate = page.getByRole('button', {name: 'Create token', exact: true});
     await expect(headerCreate).toHaveCount(1);
+    await expect(headerCreate).toHaveCSS('background-color', primaryBackground);
     expect((await headerCreate.boundingBox())!.y).toBeLessThan((await row.boundingBox())!.y);
     await expect(headerCreate).toBeFocused();
     await expect(page.locator('body')).not.toContainText(secret);
+    await viewToken.focus();
+    await page.keyboard.press('Enter');
+    const details = page.getByRole('dialog', {name: tokenMetadata.name, exact: true});
+    await expect(details).toBeVisible();
+    await expect(details.locator('dt')).toHaveText([
+      'Token prefix',
+      'Permissions',
+      'Created',
+      'Last used',
+      'Expiration',
+    ]);
+    await expect(details.locator('dd')).toHaveText([
+      `${tokenMetadata.prefix}…`,
+      'Read-only',
+      /2 Jan 2026, \d{2}:\d{2}/,
+      'Never used',
+      /2 Jan 2027, \d{2}:\d{2}/,
+    ]);
+    await expect(details).not.toContainText(secret);
+    await expectPhoneActions();
+    await expectNoHorizontalOverflow(page);
+    await page.keyboard.press('Escape');
+    await expect(details).toBeHidden();
+    await expect(viewToken).toBeFocused();
     await page.reload();
     await expect(row).toContainText(tokenMetadata.name);
     await expect(page.locator('body')).not.toContainText(secret);
     await expect(page.getByLabel('Access token', {exact: true})).toHaveCount(0);
-    await row.getByRole('button', {name: /^Revoke /}).click();
-    await expect(dialog).toContainText(tokenMetadata.name);
+    await viewToken.click();
+    await details.getByRole('button', {name: /^Revoke /}).click();
+    const confirmation = page.getByRole('dialog', {name: 'Revoke access token', exact: true});
+    await expect(confirmation).toContainText(tokenMetadata.name);
     await expectPhoneActions();
-    await dialog.getByRole('button', {name: 'Cancel', exact: true}).click();
+    await confirmation.getByRole('button', {name: 'Cancel', exact: true}).click();
+    await expect(confirmation).toBeHidden();
+    await expect(details).toBeVisible();
     expect(revokes).toBe(0);
-    await row.getByRole('button', {name: /^Revoke /}).click();
-    await dialog.getByRole('button', {name: 'Revoke token', exact: true}).click();
+    await details.getByRole('button', {name: /^Revoke /}).click();
+    await confirmation.getByRole('button', {name: 'Revoke token', exact: true}).click();
+    await expect(details).toBeHidden();
     await expect(row).toHaveCount(0);
     await expect(page.getByText('No access tokens yet.', {exact: true})).toBeVisible();
     await page.reload();
@@ -229,6 +292,12 @@ test('validates names, keeps creation open while pending, and offers manual copy
     });
   });
   await page.goto('/settings/integrations');
+  const connect = page.getByRole('region', {name: 'Connect an MCP client', exact: true});
+  await connect.getByRole('button', {name: 'Copy URL', exact: true}).click();
+  await expect(connect.getByRole('alert')).toContainText('Select it and copy it manually.');
+  await expect(connect.getByRole('textbox', {name: 'Server URL', exact: true})).toHaveValue(
+    new URL(`${API_URL.replace(/\/+$/, '')}/mcp`, page.url()).href,
+  );
   const trigger = page.getByRole('button', {name: 'Create token', exact: true});
   await trigger.click();
   const dialog = page.getByRole('dialog');
@@ -281,6 +350,7 @@ test('a failed creation preserves the name for retry and clears the error when d
   await expect(dialog.getByRole('alert')).toContainText('could not be created');
   await expect(dialog.getByLabel('Name', {exact: true})).toHaveValue(tokenMetadata.name);
   await dialog.getByRole('button', {name: 'Cancel', exact: true}).click();
+  await expect(dialog).toBeHidden();
   await trigger.click();
   await expect(dialog.getByRole('alert')).toHaveCount(0);
   await expect(dialog.getByLabel('Name', {exact: true})).toHaveValue('');
@@ -291,14 +361,14 @@ test('a failed creation preserves the name for retry and clears the error when d
 });
 
 test('retries a failed list load and retains a token until revocation succeeds', async ({page}) => {
+  test.setTimeout(20_000);
   let loadFails = true;
   let revokeFails = true;
+  const longName = 'W'.repeat(100);
   let tokens = [
     {
       ...tokenMetadata,
-      name: 'An example integration with a deliberately long synthetic name '
-        .repeat(2)
-        .slice(0, 100),
+      name: longName,
       lastUsedAt: '2026-01-03T12:30:00.000Z',
       expiresAt: '2026-02-01T12:00:00.000Z',
     },
@@ -326,13 +396,47 @@ test('retries a failed list load and retains a token until revocation succeeds',
   loadFails = false;
   await page.getByRole('button', {name: 'Try again', exact: true}).click();
   const rows = page.getByTestId('access-token-row');
-  await expect(rows.nth(0).getByTestId('access-token-usage')).toHaveText(
-    /^Created 2 Jan 2026·?Last used 3 Jan 2026$/,
+  await expect(rows.nth(0).getByTestId('access-token-usage')).toHaveText('Last used 3 Jan 2026');
+  await expect(rows.nth(1).getByTestId('access-token-usage')).toHaveText('Last used today');
+  await rows
+    .nth(1)
+    .getByRole('button', {name: /^View /})
+    .focus();
+  await page.keyboard.press('Enter');
+  const activeDetails = page.getByRole('dialog', {name: 'Example used today', exact: true});
+  await expect(activeDetails.getByTestId('access-token-expiry')).toHaveText('No expiration');
+  await page.keyboard.press('Escape');
+  await expect(activeDetails).toBeHidden();
+  await rows
+    .nth(0)
+    .getByRole('button', {name: /^View /})
+    .focus();
+  await page.keyboard.press('Enter');
+  const expiredDetails = page.getByRole('dialog', {name: tokens[0].name, exact: true});
+  await expect(expiredDetails.getByTestId('access-token-expiry')).toHaveText(
+    /Expired 1 Feb 2026, \d{2}:\d{2}/,
   );
-  await expect(rows.nth(0).getByTestId('access-token-expiry')).toHaveText('Expired 1 Feb 2026');
-  await expect(rows.nth(1).getByTestId('access-token-usage')).toContainText('Last used today');
-  await expect(rows.nth(1).getByTestId('access-token-expiry')).toHaveText('No expiration');
-  const row = rows.filter({hasText: 'deliberately long synthetic name'});
+  await expectNoHorizontalOverflow(page);
+  await page.setViewportSize({width: 568, height: 320});
+  await expect
+    .poll(async () => {
+      const box = await expiredDetails.boundingBox();
+      return box !== null && box.y >= 0 && box.y + box.height <= 320;
+    })
+    .toBe(true);
+  await expect(expiredDetails.getByRole('button', {name: 'Close', exact: true})).toBeInViewport({
+    ratio: 1,
+  });
+  await expiredDetails.hover();
+  await page.mouse.wheel(0, 600);
+  await expect
+    .poll(() => expiredDetails.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  await expect(expiredDetails.getByRole('button', {name: /^Revoke /})).toBeInViewport({ratio: 1});
+  await page.keyboard.press('Escape');
+  await expect(expiredDetails).toBeHidden();
+  await page.setViewportSize({width: 320, height: 900});
+  const row = rows.filter({hasText: longName});
   await expectNoHorizontalOverflow(page);
   await row.getByRole('button', {name: /^Revoke /}).focus();
   await page.keyboard.press('Enter');
@@ -341,7 +445,8 @@ test('retries a failed list load and retains a token until revocation succeeds',
   await expect(dialog.getByRole('alert')).toContainText('could not be revoked');
   await expect(row).toHaveCount(1);
   revokeFails = false;
-  await dialog.getByRole('button', {name: 'Revoke token', exact: true}).click();
+  await dialog.getByRole('button', {name: 'Revoke token', exact: true}).focus();
+  await page.keyboard.press('Enter');
   await expect(row).toHaveCount(0);
 });
 

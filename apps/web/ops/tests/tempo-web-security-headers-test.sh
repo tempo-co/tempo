@@ -6,8 +6,10 @@ tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/tempo-web-security-headers.XXXXXX")
 suffix=${tmp_dir##*/}
 image="tempo-web-security-headers:${suffix}"
 container="tempo-web-security-headers-${suffix}"
+mcp_upstream="${container}-mcp"
 
 cleanup() {
+    docker rm -f "$mcp_upstream" >/dev/null 2>&1 || true
     docker rm -f "$container" >/dev/null 2>&1 || true
     docker image rm "$image" >/dev/null 2>&1 || true
     python3 -c 'import shutil,sys; shutil.rmtree(sys.argv[1], ignore_errors=True)' "$tmp_dir"
@@ -114,7 +116,56 @@ encoded_search=$(python3 -c 'from urllib.parse import quote; print(quote("€" *
 check unicode-api-search "/api/bank-transactions?filter%5Bsearch%5D=$encoded_search" proxy
 check unicode-search "/bank-transactions?search=$encoded_search" spa
 check api /api/health proxy
+check mcp /api/mcp proxy
 check callback /bank-connections/callback proxy
+
+# The first streamed event must arrive before a second request releases the final event.
+# Sharing only the network namespace keeps the synthetic API isolated from host services.
+docker run --detach --name "$mcp_upstream" \
+    --network "container:$container" \
+    --volume "$repo_root/ops/tests/mcp-proxy-server.mjs:/server.mjs:ro" \
+    node:22-alpine node /server.mjs >/dev/null
+python3 - "$port" <<'PY'
+import time
+import urllib.error
+import urllib.request
+import sys
+
+url = f'http://127.0.0.1:{sys.argv[1]}/api/mcp'
+for attempt in range(30):
+    try:
+        with urllib.request.urlopen(url + '?release=1', timeout=2) as response:
+            assert response.status == 204
+        break
+    except urllib.error.HTTPError as error:
+        if error.code != 502 or attempt == 29:
+            raise
+        time.sleep(0.2)
+
+request = urllib.request.Request(url, method='POST',
+    data=b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}', headers={
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+        'Authorization': 'Bearer synthetic-proxy-token',
+        'Origin': 'https://example.test',
+        'MCP-Protocol-Version': '2025-11-25',
+    })
+with urllib.request.urlopen(request, timeout=5) as response:
+    assert response.headers['Content-Type'] == 'text/event-stream'
+    assert response.readline() == b'data: first\n', 'MCP events must reach the client before completion'
+    assert response.readline() == b'\n'
+    with urllib.request.urlopen(url + '?release=1', timeout=2) as released:
+        assert released.status == 204
+    assert response.read() == b'data: second\n\n'
+
+try:
+    urllib.request.urlopen(urllib.request.Request(url, data=b'x' * (100 * 1024 + 1)), timeout=5)
+except urllib.error.HTTPError as error:
+    assert error.code == 413, f'expected request size cap HTTP 413, got {error.code}'
+else:
+    raise AssertionError('MCP requests larger than 100 KiB must be refused')
+print('tempo MCP proxy streaming and request limit: PASS')
+PY
 
 # Waits for Nginx to log the request whose query is $1 and checks the client address it logged.
 expect_client() {
