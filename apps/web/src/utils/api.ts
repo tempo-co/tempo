@@ -167,7 +167,22 @@ async function request<T = unknown>(
       throw new SessionExpiredError(response.status, response.statusText);
     }
     if (response.status === 429) {
-      const retryAfterSeconds = parseRetryAfter(response);
+      let retryAfterSeconds = parseRetryAfter(response);
+      if (retryAfterSeconds === undefined) {
+        const body: unknown = await response.json().catch(() => null);
+        assertSameSession(epoch);
+        if (body !== null && typeof body === 'object' && 'retryAfterSeconds' in body) {
+          const seconds = body.retryAfterSeconds;
+          if (
+            typeof seconds === 'number' &&
+            Number.isFinite(seconds) &&
+            seconds >= 0 &&
+            seconds <= Number.MAX_SAFE_INTEGER
+          ) {
+            retryAfterSeconds = seconds;
+          }
+        }
+      }
       toast.error('Rate limit exceeded', {
         description: formatRetryAfter(retryAfterSeconds),
         id: 'rate-limit-exceeded',

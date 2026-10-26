@@ -196,7 +196,7 @@ test.describe('saved app', () => {
       test.setTimeout(25000);
       await page.goto('/bank-connections');
       const card = abnAmroCard(page);
-      await card.getByRole('button', {name: /ABN AMRO/}).click();
+      await card.getByTestId(/^connection-card-toggle-/).click();
       await expect(card.getByText('Provider purchase')).toBeVisible();
       let refreshed = false;
       await page.route('**/bank-connections/*/transactions**', async (route) => {
@@ -227,7 +227,7 @@ test.describe('saved app', () => {
 
       await loseConnection(page);
       await expect(savedStatus(page)).toBeVisible();
-      await card.getByRole('button', {name: /ABN AMRO/}).click();
+      await card.getByTestId(/^connection-card-toggle-/).click();
       await expect(unavailableTransactions(page)).toBeVisible();
       await expect(card.getByRole('status', {name: 'Loading recent transactions'})).toHaveCount(0);
       await expect(card.getByText('Provider purchase')).not.toBeVisible();
@@ -243,7 +243,7 @@ test.describe('saved app', () => {
     }) => {
       await page.goto('/bank-connections');
       const card = abnAmroCard(page);
-      await card.getByRole('button', {name: /ABN AMRO/}).click();
+      await card.getByTestId(/^connection-card-toggle-/).click();
       await expect(card.getByText('Provider purchase')).toBeVisible();
       await mockJson(page, '**/bank-connections/*/transactions**', {message: 'Unavailable'}, 503);
 

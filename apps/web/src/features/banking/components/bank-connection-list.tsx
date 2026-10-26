@@ -19,22 +19,26 @@ import {
   ResponsiveDialogTrigger,
 } from '@/components/ui/responsive-dialog';
 import {Skeleton} from '@/components/ui/skeleton';
+import {useIsOnline} from '@/hooks/use-connection';
 import {HttpError} from '@/utils/api';
 import {cn} from '@/utils/cn';
 
 import {useDeleteBankConnection} from '../api/use-delete-bank-connection';
 import {useGetBankConnectionTransactions} from '../api/use-get-bank-connection-transactions';
 import {useGetSupportedBanks} from '../api/use-get-supported-banks';
+import {useRefreshBankConnection} from '../api/use-refresh-bank-connection';
 import {useStartBankConnection} from '../api/use-start-bank-connection';
 import {
   BankConnection,
   BankConnectionAspsp,
   BankConnectionTransaction,
 } from '../types/bank-connection';
+import {getBankRefreshErrorFeedback, getBankRefreshFeedback} from '../utils/bank-refresh-feedback';
 import {
   type AutomaticSyncDetails,
   getAutomaticSyncDetailsForConnection,
   isReauthorizationRequired,
+  isSyncInProgress,
 } from '../utils/bank-sync-status';
 import {
   formatBankTransactionCompactDate,
@@ -214,6 +218,7 @@ function BankConnectionCard({
   onTransactionSelect: BankConnectionListProps['onTransactionSelect'];
 }) {
   const isAuthorized = connection.status === 'AUTHORIZED';
+  const isOnline = useIsOnline();
   const isRemovable = isRemovableConnection(connection.status);
   const isDestructive = isDestructiveConnection(connection.status);
   // Collapsed by default: the header already carries state, so the body is opt-in.
@@ -228,8 +233,34 @@ function BankConnectionCard({
   const disclosureContentId = `bank-connection-${connection.id}-content`;
   const metadataHeadingId = `bank-connection-${connection.id}-meta`;
   const {deleteBankConnection, isPending: isRemoving} = useDeleteBankConnection();
+  const {
+    refreshBankConnection,
+    isPending: isRefreshing,
+    data: refreshResult,
+    error: refreshError,
+  } = useRefreshBankConnection();
   const hasSynced = isAuthorized && !!connection.lastSyncedAt;
   const needsReauth = isReauthorizationRequired(connection);
+  const isBankSyncInProgress = isSyncInProgress(connection);
+  const refreshFeedback = refreshError
+    ? getBankRefreshErrorFeedback(refreshError)
+    : refreshResult
+      ? getBankRefreshFeedback(refreshResult)
+      : null;
+  const refreshStatus = isRefreshing
+    ? {message: 'Refreshing bank data...', tone: 'info'}
+    : isRemoving
+      ? {message: 'Removing bank connection...', tone: 'info'}
+      : isAuthorized && !needsReauth && !isOnline
+        ? refreshError
+          ? refreshFeedback
+          : {message: 'Connect to refresh bank data.', tone: 'info'}
+        : isBankSyncInProgress
+          ? {
+              message: 'Bank sync is in progress. Refresh is available when it finishes.',
+              tone: 'info',
+            }
+          : refreshFeedback;
   const {
     transactions,
     total,
@@ -277,7 +308,12 @@ function BankConnectionCard({
       data-testid={`bank-connection-${connection.id}`}
       aria-labelledby={connectionHeadingId}
     >
-      <CardHeader className='relative flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-0'>
+      <CardHeader
+        className={cn(
+          'relative flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-0',
+          isAuthorized && !needsReauth && 'max-sm:flex-row max-sm:items-center max-sm:gap-0',
+        )}
+      >
         {hasBodyContent ? (
           <button
             type='button'
@@ -289,7 +325,7 @@ function BankConnectionCard({
             aria-controls={disclosureContentId}
             data-testid={`connection-card-toggle-${connection.id}`}
             className={cn(
-              'flex w-full min-w-0 items-center gap-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:self-auto',
+              'flex w-full min-w-0 items-center gap-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:flex-1 sm:self-auto',
               needsReauth && 'sm:w-[calc(100%-8.5rem)] sm:shrink',
             )}
           >
@@ -318,6 +354,22 @@ function BankConnectionCard({
             />
           </div>
         )}
+        {isAuthorized && !needsReauth && (
+          <Button
+            variant='outline'
+            size='sm'
+            aria-label={`${isRefreshing ? 'Refreshing' : 'Refresh'} ${connection.aspspName}`}
+            disabled={!isOnline || isRefreshing || isRemoving || isBankSyncInProgress}
+            onClick={() => void refreshBankConnection(connection.id).catch(() => undefined)}
+            className='shrink-0 max-sm:size-11 max-sm:px-0'
+          >
+            <RefreshCw
+              aria-hidden='true'
+              className={cn(isRefreshing && 'animate-spin motion-reduce:animate-none')}
+            />
+            <span className='max-sm:sr-only'>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+          </Button>
+        )}
         {needsReauth && (
           <Button
             variant='outline'
@@ -330,6 +382,19 @@ function BankConnectionCard({
           </Button>
         )}
       </CardHeader>
+      {refreshStatus && (
+        <p
+          role='status'
+          data-testid='bank-refresh-status'
+          className={cn(
+            'px-4 pb-4 text-sm',
+            refreshStatus.tone === 'warning' && 'text-warning',
+            refreshStatus.tone === 'error' && 'text-destructive',
+          )}
+        >
+          {refreshStatus.message}
+        </p>
+      )}
       {!isExpanded && <AutomaticSyncStatus details={syncDetails} />}
       {isExpanded && (
         <CardContent
@@ -449,6 +514,7 @@ function BankConnectionCard({
                 <DestructiveBankConnectionFooterButton
                   connection={connection}
                   isPending={isRemoving}
+                  disabled={isRefreshing || isBankSyncInProgress}
                   onConfirm={removeBank}
                 />
               ) : (
@@ -531,10 +597,12 @@ function ConsentBadge({value}: {value: string}) {
 function RemoveConnectionButton({
   connectionId,
   isPending,
+  disabled = false,
   onClick,
 }: {
   connectionId: string;
   isPending: boolean;
+  disabled?: boolean;
   onClick?: () => void;
 }) {
   return (
@@ -542,7 +610,7 @@ function RemoveConnectionButton({
       variant='ghost'
       size='icon'
       onClick={onClick}
-      disabled={isPending}
+      disabled={isPending || disabled}
       aria-label='Remove connection'
       data-testid={`remove-bank-${connectionId}`}
       className='h-11 w-11 text-muted-foreground'
@@ -556,15 +624,17 @@ function RemoveConnectionButton({
 function DestructiveBankConnectionFooterButton({
   connection,
   isPending,
+  disabled,
   onConfirm,
 }: {
   connection: BankConnection;
   isPending: boolean;
+  disabled: boolean;
   onConfirm: () => Promise<boolean>;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [confirmation, setConfirmation] = useState('');
-  const canConfirm = confirmation === 'DELETE' && !isPending;
+  const canConfirm = confirmation === 'DELETE' && !isPending && !disabled;
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
@@ -579,7 +649,11 @@ function DestructiveBankConnectionFooterButton({
   return (
     <ResponsiveDialog open={isOpen} onOpenChange={handleOpenChange}>
       <ResponsiveDialogTrigger asChild>
-        <RemoveConnectionButton connectionId={connection.id} isPending={isPending} />
+        <RemoveConnectionButton
+          connectionId={connection.id}
+          isPending={isPending}
+          disabled={disabled}
+        />
       </ResponsiveDialogTrigger>
       <ResponsiveDialogContent className='md:w-120'>
         <ResponsiveDialogHeader className='text-start'>
@@ -613,6 +687,11 @@ function DestructiveBankConnectionFooterButton({
                 data-testid={`remove-bank-confirmation-${connection.id}`}
               />
             </div>
+            {disabled && !isPending && (
+              <p role='status' className='text-sm text-muted-foreground'>
+                Bank sync is in progress. Wait for it to finish before removing this connection.
+              </p>
+            )}
             <div className='mt-2 flex flex-col justify-end gap-4 pb-4 md:flex-row md:pb-0'>
               <Button
                 type='submit'
