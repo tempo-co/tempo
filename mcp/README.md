@@ -1,6 +1,16 @@
-# Tempo local MCP
+# Tempo MCP
 
-A standalone TypeScript stdio server using the official `@modelcontextprotocol/sdk`. It calls Tempo over authenticated GET requests. It does not import or start the Nest app, expose an HTTP transport, sync bank accounts, or provide write or recurring-payment tools.
+Connect an MCP client to Tempo's hosted **Streamable HTTP** endpoint using the server URL shown in Settings → Integrations, normally `https://example.ts.net/api/mcp`. Configure an account-owned personal access token as a Bearer credential through the client's secret store. The client can run on another device; it does not need a local checkout or Node.js.
+
+The endpoint serves nine read-only tools through the official `@modelcontextprotocol/sdk`. It reads stored data directly through the same owner-scoped services, validation and public response boundaries as REST. It does not sync banks or provide write or recurring-payment tools. The standalone stdio entrypoint remains available for clients that launch a local process; both transports share one tool registration.
+
+## Hosted endpoint
+
+The API route is `/mcp`; the web proxy exposes it at `/api/mcp`. Each POST uses a fresh stateless server and transport. There is no MCP session ID or session registry. Authenticated GET and DELETE return 405 with `Allow: POST`.
+
+Every routed request requires a valid personal token for a verified account. Missing, malformed, revoked and expired credentials return 401 with `WWW-Authenticate: Bearer`; an unverified token owner returns 403. Browser cookies do not authorize requests and do not cause session reads, last-seen updates, TTL refreshes or `Set-Cookie` responses, including on refused requests. Token usage updates `lastUsedAt` with the same one-minute write allowance as REST.
+
+Non-browser requests may omit Origin. A present Origin must exactly equal the origin of `WEB_BASE_URL`; null, malformed and other origins return 403, including preflight and unsupported methods. These boundaries match Express's pathname for both ordinary and absolute-form HTTP targets. Requests use the existing Nest throttler (300 requests per minute for browsing in production) and a 100 KiB body cap in both the JSON parser and SDK fallback reader. Parser and service errors use static safe text; raw exception messages, request bodies and credentials are not copied to MCP errors or logs.
 
 ## Build and verify
 
@@ -13,11 +23,13 @@ npm --prefix mcp run format:check
 npm --prefix mcp test
 ```
 
-`test` builds the package and runs synthetic integration tests against disposable loopback HTTP servers, plus real SDK stdio process tests. No database, Docker or live credentials are used. Existing CI checks `Lint & Format`, `Build` and `Unit Tests` include this package without changing their names.
+`test` builds the standalone package and runs synthetic integration tests against disposable loopback HTTP servers, plus real SDK stdio process tests. These package tests need no database, Docker or live credentials. Existing CI checks `Lint & Format`, `Build` and `Unit Tests` include this package without changing their names.
 
-The build generates category values and descriptions from `src/app/modules/banking/categorization/bank-transaction-category.ts`. Generated TypeScript and `dist/` are ignored. Only build-time code reads that leaf module; the built server needs only `mcp/dist/` and its production dependencies.
+Both builds generate category values and descriptions from `src/app/modules/banking/categorization/bank-transaction-category.ts`. Generated TypeScript and `dist/` are ignored. The API's CommonJS build compiles only the imported Nest-free registration and its dependencies; the standalone package builds as ESM and preserves `mcp/dist/stdio.js`. The Docker builder copies the shared source and generator, and runtime smoke loads the compiled API with production dependencies.
 
-## Token and environment
+Hosted E2E coverage lives in `test/e2e/mcp/mcp.e2e.spec.ts`. It binds a disposable API on loopback and uses the real `StreamableHTTPClientTransport` to initialize, list and call all nine tools against synthetic PostgreSQL fixtures. It verifies ownership, REST output parity, decimal strings, safe errors, auth, Origin, body cap, throttling and Redis session isolation, including observed Redis commands. Use the normal disposable E2E stack or an isolated override as described in `docs/e2e-and-seeding.md`; generate categories with `npm run generate:mcp` before invoking Jest directly. The auth-guard and personal-token E2E suites cover the related REST contracts.
+
+## Tokens
 
 Use a verified Tempo browser session to manage tokens:
 
@@ -27,6 +39,8 @@ Use a verified Tempo browser session to manage tokens:
 
 Token management requires a session, not a bearer token. Creation and revocation also require the configured web Origin. Expired tokens are refused with 401 and stay listed until revoked. Revoking all other sessions also revokes every personal token, even when there are no other sessions. Password changes and resets use that same revocation path; deleting an account deletes its tokens. Ordinary logout and individual-session revocation leave tokens unchanged. Keep the returned token in the client's secret store or protected process environment, never in Git, a prompt, a command argument or a shared client configuration. Revoke unused tokens and restart clients after replacing a token.
 
+The following environment variables apply to the optional stdio server and disposable smoke script:
+
 | Environment | Contract |
 | --- | --- |
 | `TEMPO_API_TOKEN` | Required bearer token. No whitespace or control characters. |
@@ -34,11 +48,11 @@ Token management requires a session, not a bearer token. Creation and revocation
 
 Choose the final API base URL: redirects, including same-origin redirects, are refused. Requests time out after 15 seconds. HTTP 401, 403, 404, 429 and 5xx errors become actionable MCP errors without copying response bodies or bearer credentials. Valid numeric or HTTP-date `Retry-After` headers are included for 429 responses. There are no automatic retries.
 
-## Client setup and isolation
+## Client isolation and optional stdio setup
 
 **Do not enable this server globally until client isolation is proven.** Enable it only for the intended interactive session or project. Confirm that background, cron and delegated-agent sessions cannot discover or call it before using real financial data. This package does not configure or guarantee that isolation, and read-only access is still sensitive access.
 
-A generic client entry looks like this. Replace the path and inject the token through that client's secret mechanism; the placeholder is not a usable token:
+For a client that requires a local process, build the package and use an entry like this. Replace the path and inject the token through that client's secret mechanism; the placeholder is not a usable token:
 
 ```json
 {
@@ -55,11 +69,11 @@ A generic client entry looks like this. Replace the path and inject the token th
 }
 ```
 
-Run `node .../mcp/dist/stdio.js` directly, not an npm command that prints a banner to stdout. The server uses stdout only for MCP protocol messages; startup diagnostics use stderr. The client must explicitly forward both environment variables to the child process if it does not inherit them. Do not configure remote MCP hosting or an HTTP transport.
+Run `node .../mcp/dist/stdio.js` directly, not an npm command that prints a banner to stdout. The server uses stdout only for MCP protocol messages; startup diagnostics use stderr. The client must explicitly forward both environment variables to the child process if it does not inherit them.
 
 ## Tools
 
-All inputs are strict: unknown fields are rejected, including caller-supplied owner/account IDs, bearer tokens and origins. `bankAccountIds` is an owner-scoped bank-account filter, not an owner selector. All HTTP-backed tools use only the token's account. Successful results are one compact JSON text block. API money strings, precision, nulls and metadata are preserved rather than converted to floating-point values.
+All inputs are strict: unknown fields are rejected, including caller-supplied owner/account IDs, bearer tokens and origins. `bankAccountIds` is an owner-scoped bank-account filter, not an owner selector. Every data tool uses only the token's account. Successful results are one compact JSON text block. API money strings, precision, nulls and metadata are preserved rather than converted to floating-point values. The table shows the equivalent REST reads; hosted calls use the owning services directly.
 
 | Tool | Input | API mapping |
 | --- | --- | --- |

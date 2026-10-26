@@ -23,7 +23,9 @@ Workflow: `.github/workflows/ci.yml` (`CI/CD`). Jobs: `Lint & Format`, `Build`, 
 
 - The runtime stage sets `NODE_ENV=production` and ships only `dist/` and production dependencies. `ops/claude-bridge/contract.json` is copied into the build because the config schema imports it; a new contract file must be added to the `Dockerfile` too.
 - Email `.hbs` templates are copied to `dist/` by `nest-cli.json` assets and checked by the smoke script; keep templates under `src/app/core/email/templates`.
-- The `mcp/` package is excluded from the API build (`tsconfig.build.json`). New side packages under the repo root need the same exclusion, or the parent build compiles them.
+- The `mcp/` package is excluded from the API build's file discovery (`tsconfig.build.json`). The hosted controller explicitly imports the Nest-free tool registration, so that shared dependency closure is compiled into `dist/mcp/src/` as CommonJS. The stdio runtime remains excluded; its own build emits ESM to `mcp/dist/stdio.js`. Do not copy `mcp/package.json` into `dist/mcp/`, where its `type: module` would change how the API's CommonJS output loads.
+- Root build, start, seed/schema and test npm hooks generate the shared category catalog before compilation. Direct Jest or TypeScript invocations need `npm run generate:mcp` first. The Docker builder copies `mcp/src/` and `mcp/scripts/generate-categories.mjs`; it needs no separate MCP install. The root SDK version matches the standalone lockfile. The runtime image smoke loads the API module and its compiled shared registration with production dependencies.
+- Root `ts-node` commands treat `mcp/src/` as CommonJS and resolve its `.js` source specifiers to TypeScript through the root `tsconfig.json` overrides. Keep those overrides scoped to root commands; the standalone package remains ESM.
 - Image cleanup must filter on `org.opencontainers.image.source` and pass `--all`; tagged leftovers are never dangling.
 
 ## Migrations

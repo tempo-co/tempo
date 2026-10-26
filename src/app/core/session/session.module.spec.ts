@@ -4,7 +4,9 @@ import Redis from 'ioredis';
 
 import {ConfigurationService} from '@core/config/config.service';
 
+import {SessionMiddleware} from './session.middleware';
 import {SessionModule} from './session.module';
+import {SessionService} from './session.service';
 
 jest.mock('connect-redis', () => ({
 	RedisStore: jest.fn().mockImplementation((options: {client: Redis; prefix?: string}) => ({
@@ -34,7 +36,8 @@ describe('SessionModule', () => {
 			apply: jest.fn().mockReturnValue({forRoutes}),
 		} as unknown as MiddlewareConsumer;
 
-		await new SessionModule(redisClient, config).configure(consumer);
+		const sessionMiddleware = new SessionMiddleware({} as SessionService);
+		await new SessionModule(redisClient, config, sessionMiddleware).configure(consumer);
 
 		expect(RedisStore).toHaveBeenCalledWith({client: redisClient, prefix: 'tempo:session:'});
 		expect(forRoutes).toHaveBeenCalledWith('*');

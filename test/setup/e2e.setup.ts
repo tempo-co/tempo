@@ -5,6 +5,9 @@ import {Server} from 'node:net';
 import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
 
+import {ConfigurationService} from '@core/config/config.service';
+import {mcpOriginMiddleware} from '@core/personal-access-token/mcp-origin.middleware';
+
 let app: INestApplication<Server>;
 let aiCategorizationEnabled = false;
 let aiCategorizationWebSearchEnabled = false;
@@ -38,6 +41,9 @@ beforeAll(async () => {
 	const moduleFixture = await Test.createTestingModule({imports: [AppModule]}).compile();
 	app = moduleFixture.createNestApplication({forceCloseConnections: true});
 	(app as NestExpressApplication).set('query parser', 'extended');
+	const webOrigin = new URL(app.get(ConfigurationService).get('WEB_BASE_URL')).origin;
+	app.use(mcpOriginMiddleware(webOrigin));
+	app.enableCors({origin: webOrigin, credentials: true});
 	app.useGlobalPipes(new ValidationPipe({whitelist: true, transform: true}));
 	await app.init();
 

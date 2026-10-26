@@ -1,5 +1,5 @@
 import {ClassSerializerInterceptor, Module} from '@nestjs/common';
-import {APP_GUARD, APP_INTERCEPTOR} from '@nestjs/core';
+import {APP_FILTER, APP_GUARD, APP_INTERCEPTOR} from '@nestjs/core';
 import {ThrottlerGuard} from '@nestjs/throttler';
 
 import {ConfigurationModule} from '@core/config/config.module';
@@ -12,6 +12,7 @@ import {RedisModule} from '@core/redis/redis.module';
 import {SessionModule} from '@core/session/session.module';
 import {AccountModule} from '@modules/account/account.module';
 import {AuthModule} from '@modules/auth/auth.module';
+import {McpExceptionFilter} from '@modules/banking/api/mcp-exception.filter';
 import {BankingModule} from '@modules/banking/banking.module';
 
 @Module({
@@ -29,6 +30,7 @@ import {BankingModule} from '@modules/banking/banking.module';
 		BankingModule,
 	],
 	providers: [
+		{provide: APP_FILTER, useClass: McpExceptionFilter},
 		{provide: APP_GUARD, useClass: ThrottlerGuard},
 		{provide: APP_INTERCEPTOR, useClass: ClassSerializerInterceptor},
 	],

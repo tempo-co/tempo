@@ -27,10 +27,20 @@
 		"test:e2e": "npm run docker:test:down && npm run docker:test:up && rimraf dist && jest --config ./test/jest-e2e.json --verbose --runInBand",
 		"test:e2e:cov": "npm run docker:test:down && npm run docker:test:up && rimraf dist && jest --config ./test/jest-e2e.json --verbose --coverage --runInBand",
 		"db:seed": "ts-node -r tsconfig-paths/register ./scripts/seed.ts",
-		"db:schema": "ts-node -r tsconfig-paths/register ./scripts/schema.ts"
+		"db:schema": "ts-node -r tsconfig-paths/register ./scripts/schema.ts",
+		"generate:mcp": "node mcp/scripts/generate-categories.mjs",
+		"prebuild": "npm run generate:mcp",
+		"prestart": "npm run generate:mcp",
+		"prestart:dev": "npm run generate:mcp",
+		"prestart:debug": "npm run generate:mcp",
+		"predb:seed": "npm run generate:mcp",
+		"predb:schema": "npm run generate:mcp",
+		"pretest:e2e": "npm run generate:mcp",
+		"pretest:e2e:cov": "npm run generate:mcp"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "0.135.0",
+		"@modelcontextprotocol/sdk": "1.32.1",
 		"@nest-lab/throttler-storage-redis": "^1.2.0",
 		"@nestjs-modules/mailer": "^3.0.2",
 		"@nestjs/bullmq": "^11.0.5",
@@ -64,6 +74,7 @@
 		"rxjs": "^7.8.1",
 		"typeorm": "^1.1.2",
 		"ua-parser-js": "^2.0.10",
+		"validator": "13.15.35",
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {
@@ -99,7 +110,8 @@
 	"jest": {
 		"moduleNameMapper": {
 			"^@core/(.*)$": "<rootDir>/src/app/core/$1",
-			"^@modules/(.*)$": "<rootDir>/src/app/modules/$1"
+			"^@modules/(.*)$": "<rootDir>/src/app/modules/$1",
+			"^(\\.{1,2}/.*)\\.js$": "$1"
 		},
 		"moduleFileExtensions": [
 			"js",
