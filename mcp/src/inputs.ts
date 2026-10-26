@@ -20,6 +20,15 @@ export const filtersSchema = z.strictObject({
 		.optional(),
 	baseAmount: z.enum(['PRESENT', 'MISSING']).optional(),
 	categoryStatuses: z.array(z.enum(['FAILED', 'CATEGORIZING'])).optional(),
+	recurringSeriesKey: z
+		.string()
+		.regex(/^[0-9a-f]{32}$/)
+		.optional(),
+});
+
+export const sortSchema = z.strictObject({
+	by: z.enum(['bookingDate', 'amount', 'category', 'source']),
+	order: z.enum(['ASC', 'DESC']),
 });
 
 export function filterQuery(filters: z.infer<typeof filtersSchema> = {}): URLSearchParams {

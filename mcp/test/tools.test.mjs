@@ -4,12 +4,61 @@ import {readFile} from 'node:fs/promises';
 import ts from 'typescript';
 import {fixture, json, TOKEN, ID} from './helpers.mjs';
 
+test('list_recurring reads both recurring directions at the Amsterdam call date or explicit asOf', async (t) => {
+	let now = new Date('2040-02-02T23:30:00Z');
+	const f = await fixture(t, {now: () => now});
+	const body = {
+		expenses: {
+			series: [
+				{key: 'a'.repeat(32), typicalAmount: '9007199254740993.01', monthlyEquivalent: null, hidden: false},
+			],
+			monthlyTotal: '0.00',
+			unconvertedCount: 1,
+			baseCurrency: 'EUR',
+		},
+		income: {series: [], monthlyTotal: '0.00', unconvertedCount: 0, baseCurrency: 'EUR'},
+	};
+	f.respond(body);
+	assert.deepEqual(json(await f.client.callTool({name: 'list_recurring', arguments: {}})), body);
+	assert.equal(f.requests[0].url, '/api/recurring-series?asOf=2040-02-03');
+	now = new Date('2040-07-02T22:30:00Z');
+	await f.client.callTool({name: 'list_recurring', arguments: {}});
+	assert.equal(f.requests[1].url, '/api/recurring-series?asOf=2040-07-03');
+	await f.client.callTool({name: 'list_recurring', arguments: {asOf: '2040-02-29'}});
+	assert.equal(f.requests[2].url, '/api/recurring-series?asOf=2040-02-29');
+});
+
 test('review_counts reads owner-scoped review counts', async (t) => {
 	const f = await fixture(t);
 	const body = {needsReview: 3, uncategorized: 7};
 	f.respond(body);
 	assert.deepEqual(json(await f.client.callTool({name: 'review_counts', arguments: {}})), body);
 	assert.equal(f.requests[0].url, '/api/bank-transactions/review-counts');
+});
+
+test('recurring_summary preserves totals, exclusions and the API upcoming payments at each asOf', async (t) => {
+	let now = new Date('2040-02-02T23:30:00Z');
+	const f = await fixture(t, {now: () => now});
+	const body = {
+		expenseMonthlyTotal: '9007199254740993.01',
+		incomeMonthlyTotal: '0.00',
+		expenseUnconvertedCount: 1,
+		incomeUnconvertedCount: 0,
+		baseCurrency: null,
+		upcoming: [
+			{key: 'a'.repeat(32), typicalAmount: '9.99', amountKind: 'FIXED', nextExpectedDate: '2040-02-04'},
+			{key: 'b'.repeat(32), typicalAmount: '12.50', amountKind: 'VARIABLE', nextExpectedDate: '2040-02-05'},
+			{key: 'c'.repeat(32), typicalAmount: '25.01', amountKind: 'FIXED', nextExpectedDate: '2040-02-06'},
+		],
+	};
+	f.respond(body);
+	assert.deepEqual(json(await f.client.callTool({name: 'recurring_summary', arguments: {}})), body);
+	assert.equal(f.requests[0].url, '/api/recurring-series/summary?asOf=2040-02-03');
+	now = new Date('2040-07-02T22:30:00Z');
+	await f.client.callTool({name: 'recurring_summary', arguments: {}});
+	assert.equal(f.requests[1].url, '/api/recurring-series/summary?asOf=2040-07-03');
+	await f.client.callTool({name: 'recurring_summary', arguments: {asOf: '2040-02-29'}});
+	assert.equal(f.requests[2].url, '/api/recurring-series/summary?asOf=2040-02-29');
 });
 
 test('get_transaction reads one UUIDv4 transaction unchanged', async (t) => {
@@ -35,7 +84,13 @@ test('transaction_totals reads all filtered matches as exact decimal strings', a
 		json(
 			await f.client.callTool({
 				name: 'transaction_totals',
-				arguments: {filters: {categories: ['SHOPPING'], cashFlows: ['SPENDING']}},
+				arguments: {
+					filters: {
+						categories: ['SHOPPING'],
+						cashFlows: ['SPENDING'],
+						recurringSeriesKey: '0123456789abcdef'.repeat(2),
+					},
+				},
 			}),
 		),
 		body,
@@ -47,6 +102,7 @@ test('transaction_totals reads all filtered matches as exact decimal strings', a
 		[
 			['filter[categories][]', 'SHOPPING'],
 			['filter[cashFlows][]', 'SPENDING'],
+			['filter[recurringSeriesKey]', '0123456789abcdef'.repeat(2)],
 		],
 	);
 });
@@ -63,11 +119,15 @@ test('search_transactions maps bounded paging and all DTO filters to nested API 
 		cashFlows: ['SPENDING'],
 		baseAmount: 'PRESENT',
 		categoryStatuses: ['CATEGORIZING'],
+		recurringSeriesKey: '0123456789abcdef'.repeat(2),
 	};
 	const body = {transactions: [{id: ID, amount: '12.3400'}], total: 233};
+	const sort = {by: 'amount', order: 'DESC'};
 	f.respond(body);
 	assert.deepEqual(
-		json(await f.client.callTool({name: 'search_transactions', arguments: {filters, page: 2, pageSize: 100}})),
+		json(
+			await f.client.callTool({name: 'search_transactions', arguments: {filters, sort, page: 2, pageSize: 100}}),
+		),
 		body,
 	);
 	const url = new URL(f.requests[0].url, 'http://example.test');
@@ -75,6 +135,8 @@ test('search_transactions maps bounded paging and all DTO filters to nested API 
 	assert.deepEqual(Object.fromEntries(url.searchParams), {
 		'pagination[pageIndex]': '2',
 		'pagination[pageSize]': '100',
+		'sort[by]': 'amount',
+		'sort[order]': 'DESC',
 		'filter[bookingDate][from]': '2040-01-01',
 		'filter[bookingDate][to]': '2040-02-01',
 		'filter[bankAccountIds][]': ID,
@@ -85,12 +147,24 @@ test('search_transactions maps bounded paging and all DTO filters to nested API 
 		'filter[cashFlows][]': 'SPENDING',
 		'filter[baseAmount]': 'PRESENT',
 		'filter[categoryStatuses][]': 'CATEGORIZING',
+		'filter[recurringSeriesKey]': '0123456789abcdef'.repeat(2),
 	});
 	assert.deepEqual(url.searchParams.getAll('filter[categories][]'), ['FOOD_AND_DRINK', 'UNCATEGORIZED']);
 	await f.client.callTool({name: 'search_transactions', arguments: {}});
 	const defaults = new URL(f.requests[1].url, 'http://example.test');
 	assert.equal(defaults.searchParams.get('pagination[pageIndex]'), '0');
 	assert.equal(defaults.searchParams.get('pagination[pageSize]'), '10');
+	for (const by of ['bookingDate', 'amount', 'category', 'source']) {
+		for (const order of ['ASC', 'DESC']) {
+			assert.deepEqual(
+				json(await f.client.callTool({name: 'search_transactions', arguments: {sort: {by, order}}})),
+				body,
+			);
+			const sorted = new URL(f.requests.at(-1).url, 'http://example.test');
+			assert.equal(sorted.searchParams.get('sort[by]'), by);
+			assert.equal(sorted.searchParams.get('sort[order]'), order);
+		}
+	}
 	const tool = (await f.client.listTools()).tools.find((tool) => tool.name === 'search_transactions');
 	assert.match(tool.description, /transaction_totals/);
 });

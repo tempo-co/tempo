@@ -1,7 +1,7 @@
 import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
 import {z} from 'zod';
 import {CATEGORY_DEFINITIONS} from './categories.generated.js';
-import {filtersSchema} from './inputs.js';
+import {filtersSchema, sortSchema} from './inputs.js';
 import {ToolReadError} from './errors.js';
 import type {CallToolResult} from '@modelcontextprotocol/sdk/types.js';
 
@@ -13,14 +13,22 @@ export interface PeriodInput {
 }
 
 export type TransactionFilters = z.infer<typeof filtersSchema>;
+export type TransactionSort = z.infer<typeof sortSchema>;
 
 /** Operations return the public REST response shape, never persistence entities. */
 export interface ToolReader {
 	listAccounts(): Promise<unknown>;
+	listRecurring(input: {asOf: string}): Promise<unknown>;
+	recurringSummary(input: {asOf: string}): Promise<unknown>;
 	monthSummary(input: {month: string; asOf: string}): Promise<unknown>;
 	cashFlow(input: PeriodInput): Promise<unknown>;
 	balanceTrend(input: PeriodInput): Promise<unknown>;
-	searchTransactions(input: {filters?: TransactionFilters; page: number; pageSize: number}): Promise<unknown>;
+	searchTransactions(input: {
+		filters?: TransactionFilters;
+		sort?: TransactionSort;
+		page: number;
+		pageSize: number;
+	}): Promise<unknown>;
 	transactionTotals(input: {filters?: TransactionFilters}): Promise<unknown>;
 	getTransaction(id: string): Promise<unknown>;
 	reviewCounts(): Promise<unknown>;
@@ -51,6 +59,26 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 			month: '2-digit',
 			day: '2-digit',
 		}).format(now());
+	server.registerTool(
+		'list_recurring',
+		{
+			description:
+				'Read recurring bills and income, monthly totals and unconverted counts. asOf defaults to today in Europe/Amsterdam.',
+			inputSchema: z.strictObject({asOf: z.iso.date().optional()}),
+			annotations,
+		},
+		async ({asOf}) => read(() => reader.listRecurring({asOf: asOf ?? today()})),
+	);
+	server.registerTool(
+		'recurring_summary',
+		{
+			description:
+				'Read recurring monthly totals, unconverted counts and the next three upcoming payments. asOf defaults to today in Europe/Amsterdam.',
+			inputSchema: z.strictObject({asOf: z.iso.date().optional()}),
+			annotations,
+		},
+		async ({asOf}) => read(() => reader.recurringSummary({asOf: asOf ?? today()})),
+	);
 	server.registerTool(
 		'month_summary',
 		{
@@ -115,6 +143,7 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 				'Search one page of transactions. page is zero-based. Use transaction_totals with the same filters for sums across all matches; never sum a page as a full total.',
 			inputSchema: z.strictObject({
 				filters: filtersSchema.optional(),
+				sort: sortSchema.optional(),
 				page: z.int().min(0).default(0),
 				pageSize: z
 					.union([
@@ -130,7 +159,8 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 			}),
 			annotations,
 		},
-		async ({filters, page, pageSize}) => read(() => reader.searchTransactions({filters, page, pageSize})),
+		async ({filters, sort, page, pageSize}) =>
+			read(() => reader.searchTransactions({filters, sort, page, pageSize})),
 	);
 	server.registerTool(
 		'transaction_totals',

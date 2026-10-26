@@ -39,7 +39,9 @@ const TOOL_NAMES = [
 	'get_transaction',
 	'list_accounts',
 	'list_categories',
+	'list_recurring',
 	'month_summary',
+	'recurring_summary',
 	'review_counts',
 	'search_transactions',
 	'transaction_totals',
@@ -172,7 +174,7 @@ describe('Hosted MCP', () => {
 		expect(await snapshot()).toEqual(before);
 	}
 
-	it('initializes a stateless SDK client and reads all nine tools from only its token owner', async () => {
+	it('initializes a stateless SDK client and reads every tool from only its token owner', async () => {
 		const connection = await fixtures.createConnection(owner, {
 			aspspName: 'Example Bank',
 			providerSessionId: 'example-private-session',
@@ -210,10 +212,42 @@ describe('Hosted MCP', () => {
 			otherBankAccount,
 			bookedRow('2026-01-04', '-9999.00', {category: 'NEEDS_REVIEW'}),
 		);
+		const recurringFixtures = [
+			{name: 'Example Subscription Alpha', day: '03', amount: '-9.99', category: 'SUBSCRIPTIONS'},
+			{name: 'Example Subscription Beta', day: '08', amount: '-12.50', category: 'SUBSCRIPTIONS'},
+			{name: 'Example Subscription Gamma', day: '12', amount: '-25.01', category: 'SUBSCRIPTIONS'},
+			{name: 'Example Payroll', day: '20', amount: '1200.00', category: 'SALARY'},
+		] as const;
+		for (const {name, day, amount, category} of recurringFixtures)
+			await fixtures.createTransactions(
+				bankAccount,
+				['07', '08', '09', '10', '11', '12'].map((month) =>
+					bookedRow(`2025-${month}-${day}`, amount, {description: name, counterpartyName: name, category}),
+				),
+			);
+		await fixtures.createTransactions(
+			otherBankAccount,
+			['07', '08', '09', '10', '11', '12'].map((month) =>
+				bookedRow(`2025-${month}-05`, '-777.00', {
+					description: 'Example Other Subscription',
+					counterpartyName: 'Example Other Subscription',
+					category: 'SUBSCRIPTIONS',
+				}),
+			),
+		);
 		const savedRows = await fixtures.transactions.find({
 			where: {bankAccountId: bankAccount.id},
 			order: {id: 'ASC'},
 		});
+		const otherRecurring = (
+			await request(getApp().getHttpServer())
+				.get('/recurring-series?asOf=2025-12-31')
+				.set('Cookie', cookie)
+				.expect(200)
+		).body;
+		const foreignKey = otherRecurring.expenses.series.find(
+			({name}: {name: string}) => name === 'Example Other Subscription',
+		).key;
 		const statuses: number[] = [];
 		const client = new Client({name: 'example-hosted-client', version: '1'});
 		const call = async (name: string, args: Record<string, unknown> = {}) => {
@@ -315,7 +349,155 @@ describe('Hosted MCP', () => {
 						expect.objectContaining({value: 'UNCATEGORIZED'}),
 					]),
 				);
-				const publicOutput = JSON.stringify({accounts, search, detail, summary, flow, trend});
+				const recurring = await call('list_recurring', {asOf: '2025-12-31'});
+				expect(recurring).toEqual(await rest('/recurring-series?asOf=2025-12-31'));
+				expect(recurring.expenses.series.map(({name}: {name: string}) => name).sort()).toEqual([
+					'Example Subscription Alpha',
+					'Example Subscription Beta',
+					'Example Subscription Gamma',
+				]);
+				expect(recurring.expenses).toMatchObject({
+					monthlyTotal: '47.50',
+					unconvertedCount: 0,
+					baseCurrency: 'EUR',
+				});
+				expect(recurring.income).toMatchObject({
+					series: [expect.objectContaining({name: 'Example Payroll', typicalAmount: '1200.00'})],
+					monthlyTotal: '1200.00',
+					unconvertedCount: 0,
+					baseCurrency: 'EUR',
+				});
+				const recurringSummary = await call('recurring_summary', {asOf: '2025-12-31'});
+				expect(recurringSummary).toEqual(await rest('/recurring-series/summary?asOf=2025-12-31'));
+				expect(recurringSummary).toEqual({
+					expenseMonthlyTotal: '47.50',
+					incomeMonthlyTotal: '1200.00',
+					expenseUnconvertedCount: 0,
+					incomeUnconvertedCount: 0,
+					baseCurrency: 'EUR',
+					upcoming: recurring.expenses.series
+						.toSorted((a: {nextExpectedDate: string}, b: {nextExpectedDate: string}) =>
+							a.nextExpectedDate.localeCompare(b.nextExpectedDate),
+						)
+						.map(
+							({
+								key,
+								name,
+								direction,
+								nextExpectedDate,
+								typicalAmount,
+								amountKind,
+								currency,
+							}: Record<string, string>) => ({
+								key,
+								name,
+								direction,
+								nextExpectedDate,
+								typicalAmount,
+								amountKind,
+								currency,
+							}),
+						),
+				});
+				expect([...recurring.expenses.series, ...recurring.income.series]).toHaveLength(4);
+				expect(recurringSummary.upcoming).toHaveLength(3);
+				const recurringSeriesKey = recurring.expenses.series.find(
+					({name}: {name: string}) => name === 'Example Subscription Alpha',
+				).key;
+				const seriesFilters = {recurringSeriesKey, bankAccountIds: [bankAccount.id, otherBankAccount.id]};
+				const seriesSearch = await call('search_transactions', {filters: seriesFilters, pageSize: 5});
+				const seriesQuery = new URLSearchParams({
+					'filter[recurringSeriesKey]': recurringSeriesKey,
+					'filter[bankAccountIds][]': bankAccount.id,
+					'pagination[pageSize]': '5',
+				});
+				seriesQuery.append('filter[bankAccountIds][]', otherBankAccount.id);
+				expect(seriesSearch).toEqual(await rest(`/bank-transactions?${seriesQuery}`));
+				expect(seriesSearch.total).toBe(6);
+				expect(seriesSearch.transactions).toHaveLength(5);
+				expect(
+					seriesSearch.transactions.every(
+						({description}: {description: string}) => description === 'Example Subscription Alpha',
+					),
+				).toBe(true);
+				const seriesTotals = await call('transaction_totals', {filters: seriesFilters});
+				seriesQuery.delete('pagination[pageSize]');
+				expect(seriesTotals).toEqual(await rest(`/bank-transactions/totals?${seriesQuery}`));
+				expect(seriesTotals).toEqual({
+					baseCurrency: 'EUR',
+					spending: '59.94',
+					income: '0.00',
+					net: '-59.94',
+					count: 6,
+					excluded: {unknownDirection: 0, missingBaseAmount: 0},
+				});
+				const narrowed = {...seriesFilters, bookingDate: {from: '2025-10-01'}};
+				expect(await call('search_transactions', {filters: narrowed})).toMatchObject({total: 3});
+				expect(await call('transaction_totals', {filters: narrowed})).toMatchObject({
+					count: 3,
+					spending: '29.97',
+					net: '-29.97',
+				});
+
+				for (const name of ['search_transactions', 'transaction_totals']) {
+					const foreign = await client.callTool({
+						name,
+						arguments: {filters: {recurringSeriesKey: foreignKey}},
+					});
+					const missing = await client.callTool({
+						name,
+						arguments: {filters: {recurringSeriesKey: 'f'.repeat(32)}},
+					});
+					expect(foreign).toEqual(missing);
+					expect(foreign).toMatchObject({
+						isError: true,
+						content: [
+							{
+								type: 'text',
+								text: 'Tempo API HTTP 404: Resource not found or not accessible to this token.',
+							},
+						],
+					});
+				}
+				const alternateBank = await fixtures.createBankAccount(
+					await fixtures.createConnection(owner, {aspspName: 'Example Alternate Bank'}),
+				);
+				const alternateRow = await fixtures.createTransaction(
+					alternateBank,
+					bookedRow('2026-01-09', '-3.33', {category: 'FOOD_AND_DRINK'}),
+				);
+				const ownedRowIds = new Set([...savedRows.map(({id}) => id), alternateRow.id]);
+				for (const by of ['bookingDate', 'amount', 'category', 'source']) {
+					for (const order of ['ASC', 'DESC']) {
+						const sortFilters = {bankAccountIds: [bankAccount.id, alternateBank.id, otherBankAccount.id]};
+						const sortQuery = new URLSearchParams({
+							'sort[by]': by,
+							'sort[order]': order,
+							'pagination[pageIndex]': '1',
+							'pagination[pageSize]': '5',
+						});
+						for (const id of sortFilters.bankAccountIds) sortQuery.append('filter[bankAccountIds][]', id);
+						const sorted = await call('search_transactions', {
+							filters: sortFilters,
+							sort: {by, order},
+							page: 1,
+							pageSize: 5,
+						});
+						expect(sorted).toEqual(await rest(`/bank-transactions?${sortQuery}`));
+						expect(sorted.transactions).toHaveLength(5);
+						expect(sorted.transactions.every(({id}: {id: string}) => ownedRowIds.has(id))).toBe(true);
+					}
+				}
+				const publicOutput = JSON.stringify({
+					accounts,
+					search,
+					detail,
+					summary,
+					flow,
+					trend,
+					recurring,
+					recurringSummary,
+				});
 				for (const privateValue of [
 					'providerSessionId',
 					'authorizationStateHash',
@@ -329,6 +511,7 @@ describe('Hosted MCP', () => {
 					otherOwner.id,
 					otherRow.id,
 					otherBankAccount.id,
+					'Example Other Subscription',
 				])
 					expect(publicOutput).not.toContain(privateValue);
 				const forbidden = await client.callTool({name: 'get_transaction', arguments: {id: otherRow.id}});

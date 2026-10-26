@@ -8,7 +8,9 @@ import type {ToolReader} from '../../../../../mcp/src/tools';
 import {BankTransactionCashFlowQueryDto} from '../api/dtos/bank-transaction-cash-flow-query.dto';
 import {BankTransactionQueryDto, BankTransactionTotalsQueryDto} from '../api/dtos/bank-transaction-query.dto';
 import {BankTransactionSummaryQueryDto} from '../api/dtos/bank-transaction-summary-query.dto';
+import {RecurringSeriesQueryDto} from '../api/dtos/recurring-series.dto';
 import {BankingService} from '../banking.service';
+import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {BankTransactionSummaryService} from './bank-transaction-summary.service';
 import {BankTransactionService} from './bank-transaction.service';
 
@@ -20,6 +22,7 @@ export class McpReaderService {
 		private readonly banking: BankingService,
 		private readonly transactions: BankTransactionService,
 		private readonly summaries: BankTransactionSummaryService,
+		private readonly recurring: RecurringSeriesService,
 	) {}
 
 	/** Capture the authenticated owner once; caller input can only filter that owner's data. */
@@ -37,6 +40,10 @@ export class McpReaderService {
 		};
 		return {
 			listAccounts: () => read(() => this.banking.findAll(account)),
+			listRecurring: (input) =>
+				read(async () => this.recurring.list(account, (await query(input, RecurringSeriesQueryDto)).asOf)),
+			recurringSummary: (input) =>
+				read(async () => this.recurring.summary(account, (await query(input, RecurringSeriesQueryDto)).asOf)),
 			monthSummary: (input) =>
 				read(async () =>
 					this.summaries.getSummary(account, await query(input, BankTransactionSummaryQueryDto)),
@@ -49,12 +56,12 @@ export class McpReaderService {
 				read(async () =>
 					this.summaries.getBalanceTrend(account, await query(input, BankTransactionCashFlowQueryDto)),
 				),
-			searchTransactions: ({filters, page, pageSize}) =>
+			searchTransactions: ({filters, sort, page, pageSize}) =>
 				read(async () =>
 					this.transactions.findAll(
 						account.id,
 						await query(
-							{filter: filters, pagination: {pageIndex: page, pageSize}},
+							{filter: filters, sort, pagination: {pageIndex: page, pageSize}},
 							BankTransactionQueryDto,
 						),
 					),

@@ -12,14 +12,16 @@ export const TOOL_NAMES = [
 	'get_transaction',
 	'list_accounts',
 	'list_categories',
+	'list_recurring',
 	'month_summary',
+	'recurring_summary',
 	'review_counts',
 	'search_transactions',
 	'transaction_totals',
 ];
 const entry = fileURLToPath(new URL('../dist/stdio.js', import.meta.url));
 
-test('SDK stdio initializes, advertises exactly nine read-only tools and calls HTTP with the configured token', async (t) => {
+test('SDK stdio initializes, advertises exactly eleven read-only tools and calls HTTP with the configured token', async (t) => {
 	const f = await fixture(t);
 	const transport = new StdioClientTransport({
 		command: process.execPath,
@@ -50,6 +52,18 @@ test('SDK stdio initializes, advertises exactly nine read-only tools and calls H
 		{baseCurrency: 'EUR', bankAccounts: [], syncStatus: 'IDLE'},
 	]);
 	assert.deepEqual(f.requests, [{method: 'GET', url: '/api/bank-connections', authorization: `Bearer ${TOKEN}`}]);
+	for (const [name, path] of [
+		['list_recurring', '/api/recurring-series'],
+		['recurring_summary', '/api/recurring-series/summary'],
+	]) {
+		f.respond({synthetic: name});
+		assert.deepEqual(json(await client.callTool({name, arguments: {asOf: '2040-02-29'}})), {synthetic: name});
+		assert.deepEqual(f.requests.at(-1), {
+			method: 'GET',
+			url: `${path}?asOf=2040-02-29`,
+			authorization: `Bearer ${TOKEN}`,
+		});
+	}
 	await client.close();
 	assert.deepEqual(errors, [], 'all stdout must parse as MCP protocol');
 	assert.equal(stderr, '');

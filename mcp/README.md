@@ -2,7 +2,7 @@
 
 Connect an MCP client to Tempo's hosted **Streamable HTTP** endpoint using the server URL shown in Settings → Integrations, normally `https://example.ts.net/api/mcp`. Configure an account-owned personal access token as a Bearer credential through the client's secret store. The client can run on another device; it does not need a local checkout or Node.js.
 
-The endpoint serves nine read-only tools through the official `@modelcontextprotocol/sdk`. It reads stored data directly through the same owner-scoped services, validation and public response boundaries as REST. It does not sync banks or provide write or recurring-payment tools. The standalone stdio entrypoint remains available for clients that launch a local process; both transports share one tool registration.
+The endpoint serves eleven read-only tools through the official `@modelcontextprotocol/sdk`. It reads stored data directly through the same owner-scoped services, validation and public response boundaries as REST. It does not sync banks or provide write tools. The standalone stdio entrypoint remains available for clients that launch a local process; both transports share one tool registration.
 
 ## Hosted endpoint
 
@@ -27,7 +27,7 @@ npm --prefix mcp test
 
 Both builds generate category values and descriptions from `src/app/modules/banking/categorization/bank-transaction-category.ts`. Generated TypeScript and `dist/` are ignored. The API's CommonJS build compiles only the imported Nest-free registration and its dependencies; the standalone package builds as ESM and preserves `mcp/dist/stdio.js`. The Docker builder copies the shared source and generator, and runtime smoke loads the compiled API with production dependencies.
 
-Hosted E2E coverage lives in `test/e2e/mcp/mcp.e2e.spec.ts`. It binds a disposable API on loopback and uses the real `StreamableHTTPClientTransport` to initialize, list and call all nine tools against synthetic PostgreSQL fixtures. It verifies ownership, REST output parity, decimal strings, safe errors, auth, Origin, body cap, throttling and Redis session isolation, including observed Redis commands. Use the normal disposable E2E stack or an isolated override as described in `docs/e2e-and-seeding.md`; generate categories with `npm run generate:mcp` before invoking Jest directly. The auth-guard and personal-token E2E suites cover the related REST contracts.
+Hosted E2E coverage lives in `test/e2e/mcp/mcp.e2e.spec.ts`. It binds a disposable API on loopback and uses the real `StreamableHTTPClientTransport` to initialize, list and call all eleven tools against synthetic PostgreSQL fixtures. It verifies ownership, REST output parity, decimal strings, safe errors, auth, Origin, body cap, throttling and Redis session isolation, including observed Redis commands. Use the normal disposable E2E stack or an isolated override as described in `docs/e2e-and-seeding.md`; generate categories with `npm run generate:mcp` before invoking Jest directly. The auth-guard and personal-token E2E suites cover the related REST contracts.
 
 ## Tokens
 
@@ -78,10 +78,12 @@ All inputs are strict: unknown fields are rejected, including caller-supplied ow
 | Tool | Input | API mapping |
 | --- | --- | --- |
 | `list_accounts` | `{}` | `GET /bank-connections`; connection array with bank accounts, current/latest balances, base-currency balance values and sync freshness. |
+| `list_recurring` | `{asOf?}` | `GET /recurring-series`; expense and income lists with per-series details, monthly totals and unconverted counts. |
+| `recurring_summary` | `{asOf?}` | `GET /recurring-series/summary`; monthly totals and the next three payments across shown active bills and income. |
 | `month_summary` | `{month, asOf?}` | `GET /bank-transactions/summary?month=...&asOf=...`. |
 | `cash_flow` | `{interval, from, to, asOf?}` | `GET /bank-transactions/cash-flow`. |
 | `balance_trend` | `{interval, from, to, asOf?}` | `GET /bank-transactions/balance-trend`. |
-| `search_transactions` | `{filters?, page?, pageSize?}` | `GET /bank-transactions` with `pagination[pageIndex]`, `pagination[pageSize]` and nested `filter[...]` query parameters. |
+| `search_transactions` | `{filters?, sort?, page?, pageSize?}` | `GET /bank-transactions` with `pagination[pageIndex]`, `pagination[pageSize]` nested `filter[...]` and optional `sort[by]` / `sort[order]` query parameters. |
 | `transaction_totals` | `{filters?}` | `GET /bank-transactions/totals`, no paging. |
 | `get_transaction` | `{id}` | `GET /bank-transactions/:id`, UUIDv4 only. |
 | `review_counts` | `{}` | `GET /bank-transactions/review-counts`. |
@@ -89,9 +91,11 @@ All inputs are strict: unknown fields are rejected, including caller-supplied ow
 
 Routes above are relative to `TEMPO_API_URL`, including its `/api` prefix. Every tool declares `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true` and `openWorldHint: true`; server and API authorization, not annotations, enforce read-only access.
 
-`month` is `YYYY-MM` in 1900–2099. Dates are real `YYYY-MM-DD` calendar dates, not timestamps. `asOf` defaults to the date in **Europe/Amsterdam at each call**, including for cash flow and balance trend, whose API DTO requires it. `interval` is `week`, `month` or `year`. The API enforces `from <= to <= asOf`, maximum ranges of 104 weeks, 60 months or 10 years, and summary months on or before `asOf`. API range errors are returned as safe HTTP 400 tool errors.
+`month` is `YYYY-MM` in 1900–2099. Dates are real `YYYY-MM-DD` calendar dates, not timestamps. `asOf` defaults to the date in **Europe/Amsterdam at each call**, including recurring lists/summary, cash flow and balance trend, whose API DTOs require it. `interval` is `week`, `month` or `year`. The API enforces `from <= to <= asOf`, maximum ranges of 104 weeks, 60 months or 10 years, and summary months on or before `asOf`. API range errors are returned as safe HTTP 400 tool errors.
 
 Search `page` is a zero-based nonnegative integer, default 0. `pageSize` defaults to 10 and must be one of the actual API DTO options: **5, 10, 20, 30, 40, 50, 100**. No unbounded fetch-all loop is provided. Use `transaction_totals` with the same filters for sums across all matches; summing a search page does not produce a full total.
+
+Search accepts optional `sort: {by, order}`, where `by` is `bookingDate`, `amount`, `category` or `source`, and `order` is `ASC` or `DESC`. Amount sorting uses signed base-currency amounts; source sorts by bank name. Omitting sort preserves the API default of newest booking date first. Totals do not accept sorting.
 
 Both search and totals accept these optional `filters`, matching the banking DTO:
 
@@ -104,6 +108,7 @@ Both search and totals accept these optional `filters`, matching the banking DTO
 - `cashFlows: (SPENDING | INCOME | INTERNAL | CURRENCY_EXCHANGE | OWN_TRANSFER | UNKNOWN)[]`.
 - `baseAmount: PRESENT | MISSING`.
 - `categoryStatuses: (FAILED | CATEGORIZING)[]`.
+- `recurringSeriesKey: string`, the 32-character lowercase hexadecimal `key` from `list_recurring`. It narrows results to that series and combines with the other filters. Unknown or another owner's keys return the same safe 404 error.
 
 `transaction_totals` returns `{baseCurrency, spending, income, net, count, excluded: {unknownDirection, missingBaseAmount}}`. Monetary totals are decimal strings using Tempo's spending/income semantics. Counts and exclusions describe the whole filtered set, not one search page. `list_accounts` preserves the API connection array and does not invent a grand balance total across currencies or missing conversions.
 
@@ -115,4 +120,4 @@ After starting an isolated API with synthetic banking fixtures, create a test to
 npm --prefix mcp run smoke:api
 ```
 
-The command uses the SDK's actual stdio client to list and call all nine tools, including the new totals route and a real fixture detail. It prints only tool pass/fail labels, not financial payloads or credentials. It refuses non-loopback hosts and requires an explicit URL and fixture ID. It neither creates nor revokes tokens; the fixture owner must revoke the disposable token and stop the isolated API afterwards. This smoke is a separate gate from the HTTP-stub suite.
+The command uses the SDK's actual stdio client to list and call all eleven tools, including recurring reads, totals and a real transaction detail. It prints only tool pass/fail labels, not financial payloads or credentials. It refuses non-loopback hosts and requires an explicit URL and fixture ID. It neither creates nor revokes tokens; the fixture owner must revoke the disposable token and stop the isolated API afterwards. This smoke is a separate gate from the HTTP-stub suite.
