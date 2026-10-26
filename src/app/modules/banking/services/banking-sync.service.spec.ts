@@ -71,8 +71,65 @@ describe('BankingSyncService disabled integration', () => {
 		});
 
 		await expect(service.synchronizeAutomatically('connection-id')).resolves.toBeNull();
+		await expect(
+			service.synchronizeManually(
+				'account-id',
+				'connection-id',
+				{ipAddress: '192.0.2.42'},
+				new AbortController().signal,
+			),
+		).rejects.toMatchObject({status: 503, message: BANKING_SERVICE_UNAVAILABLE});
 		expect(bankConnectionRepository.findOne).not.toHaveBeenCalled();
 	});
+});
+
+describe('BankingSyncService manual refresh context', () => {
+	it.each(['', 'not-an-ip', '192.0.2.42, 192.0.2.43'])(
+		'refuses missing or invalid derived IP %j before claiming a run',
+		async (ipAddress) => {
+			const connection = {
+				id: 'connection-id',
+				status: 'AUTHORIZED',
+				providerSessionId: 'encrypted',
+				consentValidUntil: new Date(Date.now() + 60_000),
+				aspspName: 'Example Bank',
+				aspspCountry: 'FI',
+			};
+			const bankConnectionRepository = {findOne: jest.fn().mockResolvedValue(connection), update: jest.fn()};
+			const service = createBankingSyncService({
+				bankConnectionRepository,
+				configurationService: {get: jest.fn(() => true)},
+				encryptionService: {decrypt: jest.fn(() => 'session-id')},
+				connectionLockService: {
+					acquire: jest.fn().mockResolvedValue({
+						signal: new AbortController().signal,
+						assertHealthy: jest.fn(),
+						stop: jest.fn(),
+						release: jest.fn().mockResolvedValue(undefined),
+					}),
+				},
+				enableBankingClient: {
+					getAspsps: jest
+						.fn()
+						.mockResolvedValue([
+							{name: 'Example Bank', country: 'FI', maximumConsentValiditySeconds: 86_400},
+						]),
+				},
+			});
+			await expect(
+				service.synchronizeManually(
+					'account-id',
+					connection.id,
+					{ipAddress, userAgent: 'ExampleBrowser/1.0'},
+					new AbortController().signal,
+				),
+			).rejects.toMatchObject({
+				status: 400,
+				message: 'Browser context required by this bank is unavailable. Please try again from your browser.',
+			});
+			expect(bankConnectionRepository.update).not.toHaveBeenCalled();
+		},
+	);
 });
 
 describe('BankingSyncService automatic sync eligibility', () => {

@@ -9,6 +9,7 @@ import {
 	EnableBankingAccount,
 	EnableBankingAspsp,
 	EnableBankingBalance,
+	EnableBankingPsuContext,
 	EnableBankingSession,
 	EnableBankingSessionAccounts,
 	EnableBankingTransaction,
@@ -61,12 +62,12 @@ export class EnableBankingClient {
 			: Buffer.from(privateKeyB64 as string, 'base64').toString('utf8');
 	}
 
-	async getAspsps(country?: string): Promise<EnableBankingAspsp[]> {
+	async getAspsps(country?: string, signal?: AbortSignal): Promise<EnableBankingAspsp[]> {
 		const filteredParams = new URLSearchParams({psu_type: 'personal', service: 'AIS'});
 		if (country) filteredParams.set('country', country);
 
 		try {
-			const response = await this.request(`/aspsps?${filteredParams.toString()}`);
+			const response = await this.request(`/aspsps?${filteredParams.toString()}`, undefined, signal);
 			return this.parseAspsps(response);
 		} catch (error) {
 			if (!this.isUnsupportedAspspFilterError(error)) throw error;
@@ -74,7 +75,7 @@ export class EnableBankingClient {
 			const fallbackParams = new URLSearchParams();
 			if (country) fallbackParams.set('country', country);
 			const query = fallbackParams.toString();
-			const response = await this.request(`/aspsps${query ? `?${query}` : ''}`);
+			const response = await this.request(`/aspsps${query ? `?${query}` : ''}`, undefined, signal);
 			return this.parseAspsps(response);
 		}
 	}
@@ -130,8 +131,12 @@ export class EnableBankingClient {
 		};
 	}
 
-	async getSessionAccounts(sessionId: string, signal?: AbortSignal): Promise<EnableBankingSessionAccounts> {
-		const response = await this.request(`/sessions/${encodeURIComponent(sessionId)}`, undefined, signal);
+	async getSessionAccounts(
+		sessionId: string,
+		signal?: AbortSignal,
+		psu?: EnableBankingPsuContext,
+	): Promise<EnableBankingSessionAccounts> {
+		const response = await this.request(`/sessions/${encodeURIComponent(sessionId)}`, undefined, signal, psu);
 		const record = this.asRecord(response);
 		const status = this.asString(record?.status);
 		const rawAccounts = record?.accounts;
@@ -147,8 +152,17 @@ export class EnableBankingClient {
 		return {status, accountIds: rawAccounts as string[]};
 	}
 
-	async getAccountBalances(accountId: string, signal?: AbortSignal): Promise<EnableBankingBalance[]> {
-		const response = await this.request(`/accounts/${encodeURIComponent(accountId)}/balances`, undefined, signal);
+	async getAccountBalances(
+		accountId: string,
+		signal?: AbortSignal,
+		psu?: EnableBankingPsuContext,
+	): Promise<EnableBankingBalance[]> {
+		const response = await this.request(
+			`/accounts/${encodeURIComponent(accountId)}/balances`,
+			undefined,
+			signal,
+			psu,
+		);
 		return this.parseBalances(response);
 	}
 
@@ -156,6 +170,7 @@ export class EnableBankingClient {
 		accountId: string,
 		options: EnableBankingTransactionFetchOptions,
 		signal?: AbortSignal,
+		psu?: EnableBankingPsuContext,
 	): Promise<EnableBankingTransaction[]> {
 		const transactions: EnableBankingTransaction[] = [];
 		let continuationKey: string | undefined;
@@ -170,6 +185,7 @@ export class EnableBankingClient {
 				`/accounts/${encodeURIComponent(accountId)}/transactions?${params.toString()}`,
 				undefined,
 				signal,
+				psu,
 			);
 			const parsed = this.parseTransactionsPage(response);
 			transactions.push(...parsed.transactions);
@@ -181,7 +197,12 @@ export class EnableBankingClient {
 		throw new EnableBankingClientError('provider_pagination_limit_exceeded');
 	}
 
-	private async request(path: string, body?: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
+	private async request(
+		path: string,
+		body?: Record<string, unknown>,
+		signal?: AbortSignal,
+		psu?: EnableBankingPsuContext,
+	): Promise<unknown> {
 		if (!this.enabled) throw new EnableBankingClientError('banking_integration_disabled');
 
 		let response: Response;
@@ -189,10 +210,13 @@ export class EnableBankingClient {
 		const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 
 		try {
+			requestSignal.throwIfAborted();
 			response = await fetch(`${this.apiUrl}${path}`, {
 				method: body ? 'POST' : 'GET',
 				headers: {
 					Accept: 'application/json',
+					...(psu ? {'Psu-Ip-Address': psu.ipAddress} : {}),
+					...(psu?.userAgent ? {'Psu-User-Agent': psu.userAgent} : {}),
 					...(body ? {'Content-Type': 'application/json'} : {}),
 					Authorization: `Bearer ${this.createJwt()}`,
 				},
@@ -280,7 +304,23 @@ export class EnableBankingClient {
 				return [];
 			}
 
-			return [{name, country, ...(logoUrl ? {logoUrl} : {}), maximumConsentValiditySeconds}];
+			const requiredPsuHeaders = record?.required_psu_headers;
+			if (
+				requiredPsuHeaders !== undefined &&
+				(!Array.isArray(requiredPsuHeaders) ||
+					requiredPsuHeaders.some((header) => typeof header !== 'string' || !header.trim()))
+			) {
+				throw new EnableBankingClientError('invalid_provider_response');
+			}
+			return [
+				{
+					name,
+					country,
+					...(logoUrl ? {logoUrl} : {}),
+					maximumConsentValiditySeconds,
+					...(requiredPsuHeaders !== undefined ? {requiredPsuHeaders: requiredPsuHeaders as string[]} : {}),
+				},
+			];
 		});
 
 		if (rawAspsps.length > 0 && aspsps.length === 0) {

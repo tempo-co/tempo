@@ -1,7 +1,20 @@
-import {Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Res} from '@nestjs/common';
+import {
+	Body,
+	Controller,
+	Delete,
+	Get,
+	HttpCode,
+	Param,
+	ParseUUIDPipe,
+	Post,
+	Query,
+	Req,
+	Res,
+	UseGuards,
+} from '@nestjs/common';
 import {ApiTags} from '@nestjs/swagger';
 import {Throttle, minutes} from '@nestjs/throttler';
-import {Response} from 'express';
+import {Request, Response} from 'express';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {createWebUrl} from '@core/config/web-url';
@@ -9,9 +22,12 @@ import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 import {Public} from '@modules/auth/decorators/public.decorator';
 import {TokenReadable} from '@modules/auth/decorators/token-readable.decorator';
+import {CsrfOriginGuard} from '@modules/auth/guards/csrf-origin.guard';
 
 import {BankingService} from '../banking.service';
+import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {BankTransactionService} from '../services/bank-transaction.service';
+import {BankingSyncService} from '../services/banking-sync.service';
 import {BankConnectionAuthorizeDto} from './dtos/bank-connection-authorize.dto';
 import {BankConnectionCallbackDto} from './dtos/bank-connection-callback.dto';
 import {BankConnectionRemoveDto} from './dtos/bank-connection-remove.dto';
@@ -23,6 +39,7 @@ export class BankConnectionController {
 	constructor(
 		private readonly bankingService: BankingService,
 		private readonly bankTransactionService: BankTransactionService,
+		private readonly bankingSyncService: BankingSyncService,
 		private readonly configurationService: ConfigurationService,
 	) {}
 
@@ -42,6 +59,42 @@ export class BankConnectionController {
 	@TokenReadable()
 	async getConnections(@CurrentAccount() account: Account) {
 		return this.bankingService.findAll(account);
+	}
+
+	@Post(':connectionId/refresh')
+	@HttpCode(200)
+	@UseGuards(CsrfOriginGuard)
+	async refreshConnection(
+		@Param('connectionId', new ParseUUIDPipe({version: '4'})) connectionId: string,
+		@CurrentAccount() account: Account,
+		@Req() request: Request,
+		@Res({passthrough: true}) response: Response,
+	) {
+		const abortController = new AbortController();
+		const abort = () => abortController.abort();
+		const close = () => {
+			if (!response.writableFinished) abort();
+		};
+		request.once('aborted', abort);
+		response.once('close', close);
+		if (request.aborted || response.destroyed) abort();
+		try {
+			return await this.bankingSyncService.synchronizeManually(
+				account.id,
+				connectionId,
+				{
+					ipAddress: request.ip ?? '',
+					userAgent: request.get('User-Agent'),
+				},
+				abortController.signal,
+			);
+		} catch (error) {
+			if (error instanceof BankingSyncCooldownError) response.setHeader('Retry-After', error.retryAfterSeconds);
+			throw error;
+		} finally {
+			request.off('aborted', abort);
+			response.off('close', close);
+		}
 	}
 
 	@Delete(':connectionId')

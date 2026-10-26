@@ -70,6 +70,7 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['patch', `/recurring-series/${SERIES_KEY}/hidden`],
 	['patch', `/recurring-series/${SERIES_KEY}/continuation`],
 	['post', '/bank-connections/authorize'],
+	['post', `/bank-connections/${RESOURCE_ID}/refresh`],
 	['get', '/bank-connections/aspsps'],
 	['delete', `/bank-connections/${RESOURCE_ID}`],
 	['get', `/bank-connections/${RESOURCE_ID}/transactions`],

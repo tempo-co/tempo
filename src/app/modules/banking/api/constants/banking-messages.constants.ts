@@ -18,6 +18,8 @@ export const BANKING_RATE_LIMITED_SYNC_ERROR =
 	'Bank access is temporarily rate-limited. The next automatic attempt will wait for the provider cooldown.';
 export const BANKING_PERSISTENCE_SYNC_ERROR = 'Bank synchronization could not be saved.';
 export const BANKING_SYNC_ALREADY_IN_PROGRESS = 'A bank synchronization is already in progress.';
+export const BANKING_REFRESH_CONTEXT_UNAVAILABLE =
+	'Browser context required by this bank is unavailable. Please try again from your browser.';
 
 export const BANKING_TRANSACTION_NOT_FOUND = 'Bank transaction not found.';
 export const BANKING_RECURRING_SERIES_NOT_FOUND = 'Recurring payment not found.';
