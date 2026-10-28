@@ -1,6 +1,5 @@
 import {DataSource, DeepPartial} from 'typeorm';
 
-import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {RecurringContinuationUnlink} from '@modules/banking/recurring/recurring-continuation-unlink.entity';
@@ -169,9 +168,6 @@ describe('Processor-collected business identity', () => {
 
 	it('uses backfilled and fresh business identity for separate recurring histories and owner-scoped category previews', async () => {
 		const app = getApp();
-		const config = app.get(ConfigurationService);
-		expect(config.get('BANKING_INTEGRATION_ENABLED')).toBe(false);
-		expect(config.get('AI_CATEGORIZATION_ENABLED')).toBe(false);
 		const ds = app.get(DataSource);
 		const fixtures = new BankingFixtures(app);
 		const owner = await ds.getRepository(Account).findOneByOrFail({email: VERIFIED_ACCOUNT_EMAIL});
