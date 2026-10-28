@@ -1158,9 +1158,15 @@ test.describe('mocked Enable Banking bank connection', () => {
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
       await card.getByTestId(/^connection-card-toggle-/).tap();
       await card.getByRole('button', {name: 'Remove connection'}).tap({force: true});
-      await expect(page.getByRole('tooltip')).toHaveText(
+      const tooltip = page.getByRole('tooltip');
+      await expect(tooltip).toHaveText(
         'Bank sync is in progress. Wait for it to finish before removing this connection.',
       );
+      // Radix renders a visually hidden copy with role=tooltip; measure the visible bubble.
+      const box = await page.locator('[data-radix-popper-content-wrapper]').boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(390);
       await expect(page.getByRole('dialog')).toHaveCount(0);
     });
   });

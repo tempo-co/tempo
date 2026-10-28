@@ -625,7 +625,10 @@ function DestructiveBankConnectionFooterButton({
               </Button>
             </TooltipTrigger>
           </ResponsiveDialogTrigger>
-          <TooltipContent>{SYNC_IN_PROGRESS_REMOVAL}</TooltipContent>
+          {/* Wraps instead of overflowing a phone screen; the content is wider than it is tall. */}
+          <TooltipContent collisionPadding={16} className='max-w-[min(20rem,calc(100vw-2rem))]'>
+            {SYNC_IN_PROGRESS_REMOVAL}
+          </TooltipContent>
         </Tooltip>
       </TooltipProvider>
       {isBlocked && (
