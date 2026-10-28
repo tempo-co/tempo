@@ -7,10 +7,15 @@ import type {BankConnection} from '../../../src/features/banking/types/bank-conn
 import type {BankSyncRun} from '../../../src/features/banking/types/bank-sync-run';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
+import {successfulBankRefresh} from '../../data/bank-sync-run.data';
+import {septemberSpending} from '../../data/home-summary.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
   fulfillJson,
+  mockBalanceTrend,
+  mockCashFlow,
   mockBankConnections,
+  mockBankRefresh,
   mockJson,
   routeBankConnectionsApi,
   transformBankConnections,
@@ -78,21 +83,7 @@ const MOCK_CONNECTION: BankConnection = {
   ],
 };
 
-const REFRESH_RESULT = {
-  id: '00000000-0000-4000-8000-000000000099',
-  status: 'SUCCEEDED',
-  startedAt: '2026-10-01T12:00:00.000Z',
-  finishedAt: '2026-10-01T12:00:01.000Z',
-  requestedFrom: '2026-09-01',
-  requestedTo: '2026-10-01',
-  accountsFetched: 2,
-  balancesFetched: 2,
-  transactionsFetched: 5,
-  transactionsAdded: 3,
-  errorMessage: null,
-  rateLimitSource: null,
-  retryAfterSeconds: null,
-} satisfies BankSyncRun;
+const REFRESH_RESULT = {...successfulBankRefresh, transactionsAdded: 3} satisfies BankSyncRun;
 
 test.describe('bank connections', () => {
   test.use({storageState: VERIFIED_USER_AUTH_FILE});
@@ -642,8 +633,12 @@ test.describe('bank connections', () => {
   });
 
   test('keeps the connection overview usable at phone widths', async ({page}) => {
+    await mockBankRefresh(page);
     await page.setViewportSize({width: 393, height: 852});
     await page.goto('/bank-connections');
+    await expect(page.getByTestId('bank-refresh-status')).toHaveText(
+      'Refresh complete. 0 new transactions.',
+    );
 
     const heading = page.getByRole('heading', {name: 'Bank connections'});
     const headingGroup = page.getByTestId('bank-connections-heading');
@@ -815,6 +810,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       if (url.origin === API_URL && url.pathname === '/bank-connections/aspsps')
         return fulfillJson(route, []);
       if (url.origin === API_URL && url.pathname === '/health') return fulfillJson(route, {});
+      if (url.origin === API_URL && url.pathname.endsWith('/refresh')) return fulfillJson(route, REFRESH_RESULT);
       await route.abort('blockedbyclient');
       throw new Error(`Unmocked request: ${route.request().method()} ${url}`);
     });
@@ -877,7 +873,6 @@ test.describe('mocked Enable Banking bank connection', () => {
       });
       await page.goto('/bank-connections');
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true}).click();
       await expect(card.getByTestId('bank-refresh-status')).toHaveText(
         `Refresh failed. ${message}`,
       );
@@ -906,34 +901,62 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    const refresh = card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true});
-    await refresh.click();
     await expect(card.getByTestId('bank-refresh-status')).toHaveText(
       'Refresh not confirmed. Cannot reach Tempo. Check bank data before trying again.',
     );
-    await expect(refresh).toBeDisabled();
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
     unreachable = false;
     await page.evaluate(() => window.dispatchEvent(new Event('online')));
-    await expect(refresh).toBeEnabled();
     await page.clock.runFor(60_000);
     expect(requests).toBe(1);
     await page.reload();
-    await expect(refresh).toBeEnabled();
-    expect(requests).toBe(1);
+    await expect(card.getByTestId('bank-refresh-status')).toHaveText(
+      'Refresh not confirmed. Cannot reach Tempo. Check bank data before trying again.',
+    );
+    expect(requests).toBe(2);
   });
 
-  test('blocks refresh while removing a bank connection', async ({page}) => {
+  test('handles pending and completed connection removal during foreground refresh', async ({page}) => {
+    const first = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000091'};
+    const requests: string[] = [];
+    let reads = 0;
+    let includeFirst = false;
+    let removed = false;
+    let removalAttempts = 0;
     let releaseRemoval!: () => void;
     const held = new Promise<void>((resolve) => (releaseRemoval = resolve));
-    await mockBankConnections(page, [MOCK_CONNECTION]);
+    let releaseRefresh!: () => void;
+    const refreshHeld = new Promise<void>((resolve) => (releaseRefresh = resolve));
+    await mockBankConnections(page, () => {
+      reads++;
+      return [...(includeFirst ? [first] : []), ...(removed ? [] : [MOCK_CONNECTION])];
+    });
+    await page.route('**/bank-connections/*/refresh', async (route) => {
+      const id = new URL(route.request().url()).pathname.split('/')[2];
+      requests.push(id);
+      if (id === first.id) await refreshHeld;
+      await fulfillJson(route, removed && id === MOCK_CONNECTION.id ? {message: 'Not found'} : REFRESH_RESULT, removed && id === MOCK_CONNECTION.id ? 404 : 200);
+    });
+    await page.route(`**/bank-connections/${first.id}/transactions*`, (route) =>
+      fulfillJson(route, {transactions: [], total: 0}),
+    );
+    await page.route(`**/bank-connections/${MOCK_CONNECTION.id}/transactions*`, (route) =>
+      fulfillJson(route, {transactions: [], total: 0}),
+    );
     await page.route(`**/bank-connections/${MOCK_CONNECTION.id}`, async (route) => {
       expect(route.request().method()).toBe('DELETE');
-      await held;
-      await fulfillJson(route, {message: 'Unavailable'}, 503);
+      removalAttempts++;
+      if (removalAttempts === 1) {
+        await held;
+        await fulfillJson(route, {message: 'Unavailable'}, 503);
+      } else {
+        removed = true;
+        await route.fulfill({status: 204, body: ''});
+      }
     });
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
+    await expect(card.getByTestId('bank-refresh-status')).toHaveText('Refresh complete. 3 new transactions.');
     await card.getByTestId(/^connection-card-toggle-/).click();
     await card.getByRole('button', {name: 'Remove connection'}).click();
     await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
@@ -941,16 +964,42 @@ test.describe('mocked Enable Banking bank connection', () => {
     try {
       await expect(page.getByRole('button', {name: 'Removing...'})).toBeDisabled();
       await page.getByRole('button', {name: 'Cancel', exact: true}).click();
-      await expect(
-        card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true}),
-      ).toBeDisabled();
-      await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-        'Removing bank connection...',
-      );
+      const before = reads;
+      await page.evaluate(() => {
+        for (const value of ['hidden', 'visible']) {
+          Object.defineProperty(document, 'visibilityState', {value, configurable: true});
+          window.dispatchEvent(new Event('visibilitychange'));
+        }
+      });
+      await expect.poll(() => reads).toBeGreaterThan(before);
+      await expect(card.getByTestId('bank-refresh-status')).toHaveText('Removing bank connection...');
+      expect(requests).toEqual([MOCK_CONNECTION.id]);
     } finally {
       releaseRemoval();
     }
-    await expect(card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true})).toBeEnabled();
+    await expect(card.getByRole('button', {name: 'Remove connection'})).toBeEnabled();
+
+    includeFirst = true;
+    await page.evaluate(() => {
+      for (const value of ['hidden', 'visible']) {
+        Object.defineProperty(document, 'visibilityState', {value, configurable: true});
+        window.dispatchEvent(new Event('visibilitychange'));
+      }
+    });
+    const firstCard = page.getByTestId(`bank-connection-${first.id}`);
+    try {
+      await expect(firstCard.getByTestId('bank-refresh-status')).toHaveText('Refreshing bank data...');
+      await card.getByRole('button', {name: 'Remove connection'}).click();
+      await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
+      await page.getByRole('button', {name: 'Remove permanently', exact: true}).click();
+      await expect(page.getByText('Bank connection removed', {exact: true})).toBeVisible();
+      await expect(card).toHaveCount(0);
+    } finally {
+      releaseRefresh();
+    }
+    await expect(firstCard.getByTestId('bank-refresh-status')).toHaveText('Refresh complete. 3 new transactions.');
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    expect(requests).toEqual([MOCK_CONNECTION.id, first.id]);
   });
 
   test('shows an API request limit inline with its retry guidance and one shared error toast', async ({
@@ -974,7 +1023,6 @@ test.describe('mocked Enable Banking bank connection', () => {
     );
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    await card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true}).click();
     await expect(card.getByTestId('bank-refresh-status')).toHaveText(
       'Refresh rate-limited. Please try again in about 2 minutes.',
     );
@@ -983,6 +1031,11 @@ test.describe('mocked Enable Banking bank connection', () => {
     await expect(page.locator('[data-sonner-toast]')).toContainText(
       'Please try again in about 2 minutes.',
     );
+    const guidance = 'Refresh rate-limited. Please try again in about 2 minutes.';
+    await page.context().setOffline(true);
+    await expect(card.getByTestId('bank-refresh-status')).toHaveText(guidance);
+    await page.context().setOffline(false);
+    await expect(card.getByTestId('bank-refresh-status')).toHaveText(guidance);
   });
 
   for (const {name, body, headers, guidance} of [
@@ -1023,7 +1076,6 @@ test.describe('mocked Enable Banking bank connection', () => {
       );
       await page.goto('/bank-connections');
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true}).click();
       await expect(card.getByTestId('bank-refresh-status')).toHaveText(
         `Refresh rate-limited. ${guidance}`,
       );
@@ -1032,13 +1084,17 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
   }
 
-  test('discards rate-limit feedback when logout completes during the response body read', async ({
+  test('cancels foreground refresh at logout intent and discards its late response body', async ({
     page,
     homePage,
   }) => {
     await page.addInitScript(() => {
       const fetch = window.fetch.bind(window);
       window.fetch = async (...args) => {
+        const url = typeof args[0] === 'string' ? args[0] : args[0] instanceof URL ? args[0].href : args[0].url;
+        if (url.endsWith('/refresh')) args[1]?.signal?.addEventListener('abort', () => {
+          document.documentElement.dataset.refreshAborted = 'true';
+        }, {once: true});
         const response = await fetch(...args);
         if (response.url.endsWith('/refresh') && response.status === 429) {
           const readJson = response.json.bind(response);
@@ -1062,16 +1118,22 @@ test.describe('mocked Enable Banking bank connection', () => {
     await page.route(`**/bank-connections/${MOCK_CONNECTION.id}/refresh`, (route) =>
       fulfillJson(route, {retryAfterSeconds: 90}, 429),
     );
-    await page.route(`${API_URL}/auth/logout`, (route) => fulfillJson(route, {}));
+    let releaseLogout!: () => void;
+    const logoutHeld = new Promise<void>((resolve) => (releaseLogout = resolve));
+    await page.route(`${API_URL}/auth/logout`, async (route) => {
+      await logoutHeld;
+      await fulfillJson(route, {});
+    });
     await page.goto('/bank-connections');
-    await page.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true}).click();
     try {
       await expect(page.locator('html')).toHaveAttribute('data-refresh-body', 'pending');
       await homePage.logOut();
-      await expect(page).toHaveURL(/\/login$/);
+      await expect(page.locator('html')).toHaveAttribute('data-refresh-aborted', 'true');
     } finally {
+      releaseLogout();
       await page.evaluate(() => window.dispatchEvent(new Event('release-refresh-body')));
     }
+    await expect(page).toHaveURL(/\/login$/);
     await expect(page.locator('html')).toHaveAttribute('data-refresh-body', 'read');
     await page.evaluate(
       () =>
@@ -1083,25 +1145,19 @@ test.describe('mocked Enable Banking bank connection', () => {
   });
 
   for (const syncStatus of ['QUEUED', 'RUNNING'] as const) {
-    test(`blocks manual refresh and removal while bank sync is ${syncStatus}`, async ({page}) => {
+    test(`shows in-progress synchronization and blocks removal while bank sync is ${syncStatus}`, async ({page}) => {
       await mockBankConnections(page, [{...MOCK_CONNECTION, syncStatus}]);
       await page.goto('/bank-connections');
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await expect(
-        card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true}),
-      ).toBeDisabled();
       await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-        'Bank sync is in progress. Refresh is available when it finishes.',
+        'Bank sync is in progress.',
       );
       await card.getByTestId(/^connection-card-toggle-/).click();
       await expect(card.getByRole('button', {name: 'Remove connection'})).toBeDisabled();
     });
   }
 
-  test('disables refresh offline and only sends a request after an explicit online click', async ({
-    page,
-    context,
-  }) => {
+  test('opens saved bank data offline without replaying refresh work on reconnect', async ({page}) => {
     let requests = 0;
     await page.clock.install();
     await mockBankConnections(page, [MOCK_CONNECTION]);
@@ -1111,30 +1167,47 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    const refresh = card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true});
-    await expect(refresh).toBeEnabled();
-    await context.setOffline(true);
-    await expect(refresh).toBeDisabled();
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-      'Connect to refresh bank data.',
-    );
-    await context.setOffline(false);
-    await expect(refresh).toBeEnabled();
-    await page.evaluate(() => {
-      window.dispatchEvent(new Event('focus'));
-      document.dispatchEvent(new Event('visibilitychange'));
+    await expect(card.getByTestId('bank-refresh-status')).toHaveText('Refresh complete. 3 new transactions.');
+    await page.clock.runFor(1100);
+    await expect.poll(() => page.evaluate(() => !!localStorage.getItem('tempo-offline-cache'))).toBe(true);
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'onLine', {value: false, configurable: true});
     });
-    await page.clock.runFor(60_000);
-    expect(requests).toBe(0);
-    await refresh.click();
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-      'Refresh complete. 3 new transactions.',
-    );
-    expect(requests).toBe(1);
+    let checkHeld = false;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(`${API_URL}/accounts/me`, async (route) => {
+      checkHeld = true;
+      await held;
+      await route.fallback();
+    });
     await page.reload();
-    await expect(refresh).toBeEnabled();
+    await expect(card).toBeVisible();
+    await expect(page.getByRole('status').filter({hasText: /^Offline/})).toBeVisible();
+    expect(requests).toBe(1);
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'onLine', {value: true, configurable: true});
+      window.dispatchEvent(new Event('online'));
+    });
+    try {
+      await expect.poll(() => checkHeld).toBe(true);
+      expect(requests).toBe(1);
+      await expect(card).toBeVisible();
+    } finally {
+      release();
+    }
+    await page.clock.resume();
+    await expect(page.getByRole('status').filter({hasText: /^Offline/})).toHaveCount(0);
     await page.clock.runFor(60_000);
     expect(requests).toBe(1);
+    await page.evaluate(() => {
+      for (const value of ['hidden', 'visible']) {
+        Object.defineProperty(document, 'visibilityState', {value, configurable: true});
+        window.dispatchEvent(new Event('visibilitychange'));
+      }
+    });
+    await expect(card.getByTestId('bank-refresh-status')).toHaveText('Refresh complete. 3 new transactions.');
+    expect(requests).toBe(2);
   });
 
   for (const outcome of ['conflict', 'FAILED', 'PARTIAL'] as const) {
@@ -1163,15 +1236,11 @@ test.describe('mocked Enable Banking bank connection', () => {
       });
       await page.goto('/bank-connections');
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true}).click();
       await expect(card.getByTestId('bank-refresh-status')).toHaveText(
         `${outcome === 'PARTIAL' ? 'Refresh incomplete. 1 new transaction.' : 'Refresh failed.'} Bank consent has expired. Please reconnect.`,
       );
       await expect(card.getByRole('button', {name: 'Re-authorize', exact: true})).toBeVisible();
       await expect(card.getByTestId('bank-connection-status')).toContainText('Expired');
-      await expect(card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true})).toHaveCount(
-        0,
-      );
     });
   }
 
@@ -1195,7 +1264,6 @@ test.describe('mocked Enable Banking bank connection', () => {
       });
       await page.goto('/bank-connections');
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true}).click();
       await expect(card.getByTestId('bank-refresh-status')).toHaveText(
         `${status === 'PARTIAL' ? 'Refresh incomplete: bank rate limit. 1 new transaction.' : 'Refresh rate-limited.'} Example bank request limit reached. Please try again in about 2 minutes.`,
       );
@@ -1205,7 +1273,112 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
   }
 
-  test('shows a failed refresh and lets the user explicitly try again', async ({page}) => {
+  test('refreshes the next signed-in account without dispatching the previous account tail', async ({page, homePage, loginPage}) => {
+    const next = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000093'};
+    const tail = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000092'};
+    let nextSession = false;
+    const requests: string[] = [];
+    await mockBankConnections(page, () => nextSession ? [next] : [MOCK_CONNECTION, tail]);
+    await mockBalanceTrend(page);
+    await mockCashFlow(page);
+    await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
+    await mockJson(page, '**/recurring-series/summary?**', {expenseMonthlyTotal: '0.00', incomeMonthlyTotal: '0.00', upcoming: []});
+    await mockJson(page, '**/bank-transactions/review-counts', {needsReview: 0, categorizationFailed: 0, categorizing: 0, unknownDirection: 0, missingBaseAmount: 0});
+    await mockJson(page, '**/bank-transactions?**', {transactions: [], total: 0});
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route('**/bank-connections/*/refresh', async (route) => {
+      const id = new URL(route.request().url()).pathname.split('/')[2];
+      requests.push(id);
+      if (id === MOCK_CONNECTION.id) await held;
+      await fulfillJson(route, REFRESH_RESULT);
+    });
+    await mockJson(page, `${API_URL}/auth/logout`, {});
+    await page.route(`${API_URL}/auth/login`, (route) => {
+      nextSession = true;
+      return fulfillJson(route, {id: '00000000-0000-4000-8000-000000000002', name: 'Next Example', email: 'next@example.test', isEmailVerified: true, createdAt: '2026-01-01T00:00:00Z'});
+    });
+    await page.goto('/bank-connections');
+    await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id]);
+    try {
+      await homePage.logOut();
+      await expect(page).toHaveURL(/\/login$/);
+      await loginPage.emailInput.fill('next@example.test');
+      await loginPage.passwordInput.fill('synthetic-test-password');
+      await loginPage.submitButton.click();
+      await expect(page.getByTestId('account-menu-trigger')).toContainText('NE');
+      await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id, next.id]);
+      await page.getByRole('navigation', {name: 'Primary'}).getByRole('link', {name: 'Connections', exact: true}).click();
+      await expect(page.getByTestId(`bank-connection-${next.id}`).getByTestId('bank-refresh-status')).toHaveText('Refresh complete. 3 new transactions.');
+    } finally {
+      release();
+    }
+    expect(requests).toEqual([MOCK_CONNECTION.id, next.id]);
+  });
+
+  test('cancels hidden foreground work and reads current connection state on reopening', async ({page}) => {
+    await page.addInitScript(() => {
+      const fetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.endsWith('/refresh')) {
+          init?.signal?.addEventListener('abort', () => {
+            document.documentElement.dataset.refreshAborted = 'true';
+          }, {once: true});
+        }
+        return fetch(input, init);
+      };
+    });
+    const second = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000095'};
+    const third = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000094'};
+    let reopened = false;
+    let listReads = 0;
+    const requests: string[] = [];
+    await mockBankConnections(page, () => {
+      listReads++;
+      return reopened ? [
+        {...MOCK_CONNECTION, syncStatus: 'RUNNING'},
+        {...second, status: 'EXPIRED'},
+        third,
+      ] : [MOCK_CONNECTION, second];
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route('**/bank-connections/*/refresh', async (route) => {
+      const id = new URL(route.request().url()).pathname.split('/')[2];
+      requests.push(id);
+      if (id === MOCK_CONNECTION.id) await held;
+      await fulfillJson(route, REFRESH_RESULT);
+    });
+    await page.goto('/bank-connections');
+    const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
+    await expect(card.getByTestId('bank-refresh-status')).toHaveText('Refreshing bank data...');
+    try {
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', {value: 'hidden', configurable: true});
+        window.dispatchEvent(new Event('visibilitychange'));
+      });
+      await expect(page.locator('html')).toHaveAttribute('data-refresh-aborted', 'true');
+      await expect(card.getByTestId('bank-refresh-status')).toHaveCount(0);
+      expect(requests).toEqual([MOCK_CONNECTION.id]);
+      expect(await page.locator('[data-sonner-toast]').count()).toBe(0);
+      expect(await page.getByRole('status').filter({hasText: /^Offline/}).count()).toBe(0);
+      reopened = true;
+      const readsBefore = listReads;
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', {value: 'visible', configurable: true});
+        window.dispatchEvent(new Event('visibilitychange'));
+        window.dispatchEvent(new Event('visibilitychange'));
+      });
+      await expect(page.getByTestId(`bank-connection-${third.id}`).getByTestId('bank-refresh-status')).toHaveText('Refresh complete. 3 new transactions.');
+      expect(listReads).toBeGreaterThan(readsBefore);
+      expect(requests).toEqual([MOCK_CONNECTION.id, third.id]);
+    } finally {
+      release();
+    }
+  });
+
+  test('refreshes once per visible opening and retries a failed bank on reopening', async ({page}) => {
     let requests = 0;
     await mockBankConnections(page, [MOCK_CONNECTION]);
     await page.route(`**/bank-connections/${MOCK_CONNECTION.id}/refresh`, (route) => {
@@ -1224,14 +1397,27 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    const refresh = card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true});
-    await refresh.click();
     await expect(card.getByTestId('bank-refresh-status')).toHaveText(
       'Refresh failed. Example bank is unavailable.',
     );
     await expect(page.getByText('Bank refresh failed', {exact: true})).toBeVisible();
     expect(requests).toBe(1);
-    await refresh.click();
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('focus'));
+      window.dispatchEvent(new Event('online'));
+      window.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.getByTestId('account-menu-trigger').click();
+    await page.getByRole('menuitem', {name: 'Settings'}).click();
+    await page.getByRole('link', {name: 'Connections', exact: true}).click();
+    await expect(card).toBeVisible();
+    expect(requests).toBe(1);
+    await page.evaluate(() => {
+      for (const value of ['hidden', 'visible']) {
+        Object.defineProperty(document, 'visibilityState', {value, configurable: true});
+        window.dispatchEvent(new Event('visibilitychange'));
+      }
+    });
     await expect(card.getByTestId('bank-refresh-status')).toHaveText(
       'Refresh complete. 3 new transactions.',
     );
@@ -1260,13 +1446,11 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    await card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true}).click();
     await expect(card.getByTestId('bank-refresh-status')).toHaveText(
       'Refresh incomplete. 1 new transaction. Example account is unavailable.',
     );
     await expect(card.getByTestId('bank-connection-total')).toContainText('2,000.00');
     await expect(page.getByText('Bank refresh incomplete', {exact: true})).toBeVisible();
-    await expect(card.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true})).toBeEnabled();
   });
 
   for (const {width, theme} of [
@@ -1274,7 +1458,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     {width: 390, theme: 'dark'},
     {width: 320, theme: 'light'},
   ]) {
-    test(`connects, explicitly refreshes, and removes a mock bank account at ${width}px in ${theme}`, async ({
+    test(`connects, refreshes on opening, and removes a mock bank account at ${width}px in ${theme}`, async ({
       page,
     }, testInfo) => {
       test.setTimeout(20_000);
@@ -1452,40 +1636,12 @@ test.describe('mocked Enable Banking bank connection', () => {
       await expect(connectionCard.getByRole('heading', {name: TARGET_ASPSP.name})).toBeVisible();
       await expect(connectionCard.getByText('Connected', {exact: true})).toBeVisible();
       await expect(connectionCard.getByText('Consent valid until', {exact: false})).toBeHidden();
-      const refresh = connectionCard.getByRole('button', {name: 'Refresh Mock ASPSP', exact: true});
-      await expect(refresh).toBeVisible();
-      const toggle = connectionCard.getByTestId(/^connection-card-toggle-/);
-      const [cardBox, toggleBox, refreshBox] = await Promise.all([
-        boxOf(connectionCard),
-        boxOf(toggle),
-        boxOf(refresh),
-      ]);
-      expect(refreshBox.x).toBeGreaterThanOrEqual(cardBox.x);
-      expect(refreshBox.x + refreshBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
-      expect(refreshBox.x).toBeGreaterThanOrEqual(toggleBox.x + toggleBox.width);
-      if (width < 640) {
-        expect(refreshBox.height).toBeGreaterThanOrEqual(44);
-        expect(refreshBox.width).toBeGreaterThanOrEqual(44);
-      }
       await expectNoHorizontalOverflow(page);
-      await testInfo.attach('refresh-geometry', {
-        body: JSON.stringify({width, theme, cardBox, toggleBox, refreshBox}),
-        contentType: 'application/json',
-      });
-      expect(refreshRequests).toBe(0);
-      await toggle.focus();
-      await page.keyboard.press('Tab');
-      await expect(refresh).toBeFocused();
-      await expect(refresh).toHaveCSS('outline-style', 'solid');
-      await expect(refresh).toHaveCSS('outline-width', '2px');
-      await page.keyboard.press('Enter');
       try {
-        await expect(
-          connectionCard.getByRole('button', {name: 'Refreshing Mock ASPSP'}),
-        ).toBeDisabled();
         await expect(connectionCard.getByTestId('bank-refresh-status')).toHaveText(
           'Refreshing bank data...',
         );
+        await expect(connectionCard.getByRole('button', {name: /^Refresh/})).toHaveCount(0);
         await page.screenshot({
           path: testInfo.outputPath(`refresh-pending-${width}-${theme}.png`),
           fullPage: true,
@@ -1502,7 +1658,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         'Refresh complete. 3 new transactions.',
       );
       await expect(connectionCard.getByTestId('bank-connection-total')).toContainText('2,000.00');
-      await expect(refresh).toBeEnabled();
+      await expect(connectionCard.getByRole('button', {name: 'Remove connection'})).toBeEnabled();
       await page.screenshot({
         path: testInfo.outputPath(`refresh-complete-${width}-${theme}.png`),
         fullPage: true,
@@ -1572,9 +1728,9 @@ test.describe('manual bank refresh caches', () => {
       const unsubscribe = observer.subscribe(() => {});
       try {
         const {refreshBankConnection} = renderHook<{
-          refreshBankConnection: (connectionId: string) => Promise<unknown>;
+          refreshBankConnection: (request: {connectionId: string}) => Promise<unknown>;
         }>('src/features/banking/api/use-refresh-bank-connection.ts', 'useRefreshBankConnection');
-        await refreshBankConnection(MOCK_CONNECTION.id);
+        await refreshBankConnection({connectionId: MOCK_CONNECTION.id});
         expect(catalogReads).toBe(0);
         expect(client.getQueryState(bankQueryKeys.supportedBanks)?.isInvalidated).toBe(false);
         expect(client.getQueryData(dashboardQueryKeys.reviewCounts)).toEqual({revision: 1});

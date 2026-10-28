@@ -11,6 +11,7 @@ import {SecuritySettingsPage} from './pages/security-settings.page';
 import {SignupPage} from './pages/signup.page';
 import {VerifyEmailChangePage} from './pages/verify-email-change.page';
 import {VerifyEmailPage} from './pages/verify-email.page';
+import {mockBankConnections} from './utils/api-mocks';
 import {EmailUtils} from './utils/email-utils';
 
 export const API_URL = loadEnv('development', process.cwd(), '').VITE_API_URL;
@@ -41,6 +42,11 @@ export async function createVerifiedAccount(request: APIRequestContext): Promise
 }
 
 type Fixtures = {
+  /**
+   * Fully mocked specs (empty `storageState`) start with no bank connections, so opening the app
+   * never reaches the real API for them. A spec's own bank-connection mock takes precedence.
+   */
+  defaultBankConnections: void;
   /** A new verified account without bank data; the test's browser context is logged in as it. */
   freshAccount: TestAccount;
   accountSettingsPage: AccountSettingsPage;
@@ -55,6 +61,15 @@ type Fixtures = {
 };
 
 export const test = base.extend<Fixtures>({
+  defaultBankConnections: [
+    async ({page, storageState}, provide) => {
+      // Registered before the test body, so any later route for the same request wins.
+      if (typeof storageState === 'object' && storageState.cookies.length === 0)
+        await mockBankConnections(page, []);
+      await provide();
+    },
+    {auto: true},
+  ],
   accountSettingsPage: async ({page}, provide) => provide(new AccountSettingsPage(page)),
   appearanceSettingsPage: async ({page}, provide) => provide(new AppearanceSettingsPage(page)),
   homePage: async ({page}, provide) => provide(new HomePage(page)),

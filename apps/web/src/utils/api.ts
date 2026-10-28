@@ -38,6 +38,10 @@ const EMAIL_NOT_VERIFIED_MESSAGE = 'Email not verified.';
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 let sessionEpoch = 0;
+let sessionController = new AbortController();
+
+/** Cancels foreground work at logout intent and whenever this tab changes sessions. */
+export const getSessionSignal = () => sessionController.signal;
 const PENDING_LOGOUT_KEY = 'tempo-pending-logout';
 let logoutRequest: Promise<void> | undefined;
 let unpersistedLogout = false;
@@ -86,6 +90,9 @@ export async function completePendingLogout() {
 }
 
 export function beginLogout() {
+  changeSession();
+  // Keep this signal cancelled until signOut/signIn establishes the next session.
+  sessionController.abort();
   try {
     localStorage.setItem(PENDING_LOGOUT_KEY, 'true');
   } catch {
@@ -102,6 +109,8 @@ export function beginLogout() {
  */
 export function changeSession() {
   sessionEpoch++;
+  sessionController.abort();
+  sessionController = new AbortController();
 }
 
 function assertSameSession(epoch: number) {
@@ -130,7 +139,9 @@ async function request<T = unknown>(
   resource: string,
   init?: RequestOptions,
 ): Promise<T | Response> {
+  init?.signal?.throwIfAborted();
   await completePendingLogout();
+  init?.signal?.throwIfAborted();
   const url = API_BASE_URL + resource;
   const headers = {'Content-Type': 'application/json', ...init?.headers};
 
@@ -145,7 +156,10 @@ async function request<T = unknown>(
     credentials: 'include',
     ...init,
     signal: init?.signal ?? (!isWrite ? AbortSignal.timeout(15000) : undefined),
-  }).catch(() => {
+  }).catch((error: unknown) => {
+    // A foreground lifecycle cancellation is not a lost connection or an unconfirmed write.
+    if (init?.signal?.aborted && error instanceof DOMException && error.name === 'AbortError')
+      throw error;
     onlineManager.setOnline(false);
     if (isWrite)
       toast.error(
@@ -155,6 +169,7 @@ async function request<T = unknown>(
   });
   // Any reply, including an error status, proves Tempo is reachable. The API itself answers 502/503
   // when the bank provider fails, so only a failed request means the connection is down.
+  init?.signal?.throwIfAborted();
   onlineManager.setOnline(true);
   assertSameSession(epoch);
 
@@ -171,6 +186,7 @@ async function request<T = unknown>(
       if (retryAfterSeconds === undefined) {
         const body: unknown = await response.json().catch(() => null);
         assertSameSession(epoch);
+        init?.signal?.throwIfAborted();
         if (body !== null && typeof body === 'object' && 'retryAfterSeconds' in body) {
           const seconds = body.retryAfterSeconds;
           if (
@@ -217,6 +233,7 @@ async function request<T = unknown>(
 
   const body = (await response.json()) as T;
   assertSameSession(epoch);
+  init?.signal?.throwIfAborted();
   return body;
 }
 

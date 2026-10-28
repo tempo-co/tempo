@@ -1,16 +1,21 @@
+import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, expect, test} from '../../fixtures';
-import {fulfillJson} from '../../utils/api-mocks';
+import {fulfillJson, mockBankConnections} from '../../utils/api-mocks';
 
 test.describe('auth errors during a session', () => {
   test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
   test.beforeEach(async ({page}) => {
+    // Load the fixture before navigation so late banking responses cannot restore cleared cookies.
+    const response = await page.request.get(`${API_URL}/bank-connections`);
+    expect(response.status()).toBe(200);
+    const connections = (await response.json()) as BankConnection[];
+    await mockBankConnections(page, connections.map((connection) => ({...connection, status: 'EXPIRED'})));
     const connectionsResponse = page.waitForResponse(`${API_URL}/bank-connections`);
     await page.goto('/bank-transactions');
     await expect(page.getByText('Coffee shop')).toBeVisible();
-    // Connections load independently of the table and refresh the session cookie. Let that
-    // response finish before clearing cookies so it cannot restore the session afterwards.
+    // Finish the initial connection load before expiring the Tempo session.
     await (await connectionsResponse).finished();
   });
 

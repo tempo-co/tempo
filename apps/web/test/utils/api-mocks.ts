@@ -1,6 +1,7 @@
 import {Page, Route} from '@playwright/test';
 
 import type {BankConnection} from '../../src/features/banking/types/bank-connection';
+import {successfulBankRefresh} from '../data/bank-sync-run.data';
 
 export function fulfillJson(route: Route, body: unknown, status = 200) {
   return route.fulfill({status, contentType: 'application/json', body: JSON.stringify(body)});
@@ -52,6 +53,11 @@ export function mockBalanceTrend(page: Page) {
 /** Answers every request to `url` with the same JSON response. */
 export function mockJson(page: Page, url: string, body: unknown, status = 200) {
   return page.route(url, (route) => fulfillJson(route, body, status));
+}
+
+/** Completes a foreground refresh without changing the synthetic saved data. */
+export function mockBankRefresh(page: Page) {
+  return mockJson(page, '**/bank-connections/*/refresh', successfulBankRefresh);
 }
 
 /**

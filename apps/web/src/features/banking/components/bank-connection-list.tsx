@@ -26,7 +26,7 @@ import {cn} from '@/utils/cn';
 import {useDeleteBankConnection} from '../api/use-delete-bank-connection';
 import {useGetBankConnectionTransactions} from '../api/use-get-bank-connection-transactions';
 import {useGetSupportedBanks} from '../api/use-get-supported-banks';
-import {useRefreshBankConnection} from '../api/use-refresh-bank-connection';
+import {useBankConnectionRefreshState} from '../api/use-refresh-bank-connection';
 import {useStartBankConnection} from '../api/use-start-bank-connection';
 import {
   BankConnection,
@@ -234,11 +234,10 @@ function BankConnectionCard({
   const metadataHeadingId = `bank-connection-${connection.id}-meta`;
   const {deleteBankConnection, isPending: isRemoving} = useDeleteBankConnection();
   const {
-    refreshBankConnection,
     isPending: isRefreshing,
     data: refreshResult,
     error: refreshError,
-  } = useRefreshBankConnection();
+  } = useBankConnectionRefreshState(connection.id);
   const hasSynced = isAuthorized && !!connection.lastSyncedAt;
   const needsReauth = isReauthorizationRequired(connection);
   const isBankSyncInProgress = isSyncInProgress(connection);
@@ -257,7 +256,7 @@ function BankConnectionCard({
           : {message: 'Connect to refresh bank data.', tone: 'info'}
         : isBankSyncInProgress
           ? {
-              message: 'Bank sync is in progress. Refresh is available when it finishes.',
+              message: 'Bank sync is in progress.',
               tone: 'info',
             }
           : refreshFeedback;
@@ -312,6 +311,7 @@ function BankConnectionCard({
         className={cn(
           'relative flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-0',
           isAuthorized && !needsReauth && 'max-sm:flex-row max-sm:items-center max-sm:gap-0',
+          refreshStatus && 'pb-2',
         )}
       >
         {hasBodyContent ? (
@@ -354,22 +354,6 @@ function BankConnectionCard({
             />
           </div>
         )}
-        {isAuthorized && !needsReauth && (
-          <Button
-            variant='outline'
-            size='sm'
-            aria-label={`${isRefreshing ? 'Refreshing' : 'Refresh'} ${connection.aspspName}`}
-            disabled={!isOnline || isRefreshing || isRemoving || isBankSyncInProgress}
-            onClick={() => void refreshBankConnection(connection.id).catch(() => undefined)}
-            className='shrink-0 max-sm:size-11 max-sm:px-0'
-          >
-            <RefreshCw
-              aria-hidden='true'
-              className={cn(isRefreshing && 'animate-spin motion-reduce:animate-none')}
-            />
-            <span className='max-sm:sr-only'>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
-          </Button>
-        )}
         {needsReauth && (
           <Button
             variant='outline'
@@ -387,7 +371,7 @@ function BankConnectionCard({
           role='status'
           data-testid='bank-refresh-status'
           className={cn(
-            'px-4 pb-4 text-sm',
+            'px-4 pb-2 text-sm',
             refreshStatus.tone === 'warning' && 'text-warning',
             refreshStatus.tone === 'error' && 'text-destructive',
           )}

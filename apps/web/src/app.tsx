@@ -4,6 +4,7 @@ import React, {useEffect} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {Toaster} from '@/components/ui/sonner';
+import {useAppOpenBankRefresh} from '@/features/banking/api/use-app-open-bank-refresh';
 import {useConnection} from '@/hooks/use-connection';
 import {
   markSavedSessionShown,
@@ -28,6 +29,7 @@ export function App() {
     isSavedSessionUnconfirmed,
     refetch,
   } = useCurrentAccount();
+  useAppOpenBankRefresh();
   const isShowingSavedSession = isSavedSessionUnconfirmed && !isOnline;
   useEffect(() => {
     if (isShowingSavedSession) markSavedSessionShown();

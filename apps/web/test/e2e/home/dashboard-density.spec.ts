@@ -7,6 +7,7 @@ import {
   fulfillJson,
   mockBalanceTrend,
   mockBankConnections,
+  mockBankRefresh,
   mockCashFlow,
   mockJson,
 } from '../../utils/api-mocks';
@@ -22,6 +23,7 @@ test.beforeEach(async ({page}) => {
     email: 'dashboard@example.com',
     isEmailVerified: true,
   });
+  await mockBankRefresh(page);
   await mockBankConnections(page, [
     {
       id: '00000000-0000-4000-8000-000000000002',
