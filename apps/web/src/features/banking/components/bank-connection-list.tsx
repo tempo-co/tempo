@@ -19,6 +19,7 @@ import {
   ResponsiveDialogTrigger,
 } from '@/components/ui/responsive-dialog';
 import {Skeleton} from '@/components/ui/skeleton';
+import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
 import {HttpError} from '@/utils/api';
 import {cn} from '@/utils/cn';
 
@@ -539,6 +540,9 @@ function ConsentBadge({value}: {value: string}) {
   );
 }
 
+const SYNC_IN_PROGRESS_REMOVAL =
+  'Bank sync is in progress. Wait for it to finish before removing this connection.';
+
 function RemoveConnectionButton({
   connectionId,
   isPending,
@@ -579,6 +583,9 @@ function DestructiveBankConnectionFooterButton({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [confirmation, setConfirmation] = useState('');
+  const [isReasonOpen, setIsReasonOpen] = useState(false);
+  const isBlocked = disabled && !isPending;
+  const blockedReasonId = `remove-bank-blocked-${connection.id}`;
   const canConfirm = confirmation === 'DELETE' && !isPending && !disabled;
 
   const handleOpenChange = (open: boolean) => {
@@ -593,13 +600,39 @@ function DestructiveBankConnectionFooterButton({
 
   return (
     <ResponsiveDialog open={isOpen} onOpenChange={handleOpenChange}>
-      <ResponsiveDialogTrigger asChild>
-        <RemoveConnectionButton
-          connectionId={connection.id}
-          isPending={isPending}
-          disabled={disabled}
-        />
-      </ResponsiveDialogTrigger>
+      <TooltipProvider delayDuration={300}>
+        {/* One trigger element in every state, so focus survives a sync starting or ending. */}
+        <Tooltip open={isBlocked && isReasonOpen} onOpenChange={setIsReasonOpen}>
+          <ResponsiveDialogTrigger asChild>
+            <TooltipTrigger asChild>
+              <Button
+                variant='ghost'
+                size='icon'
+                disabled={isPending}
+                aria-disabled={isBlocked || undefined}
+                aria-label='Remove connection'
+                aria-describedby={isBlocked ? blockedReasonId : undefined}
+                data-testid={`remove-bank-${connection.id}`}
+                className='h-11 w-11 text-muted-foreground aria-disabled:opacity-50'
+                onClick={(event) => {
+                  if (!isBlocked) return;
+                  // Stops the dialog opening and Radix closing the tooltip; phones open it by tap.
+                  event.preventDefault();
+                  setIsReasonOpen(true);
+                }}
+              >
+                <Trash2 />
+              </Button>
+            </TooltipTrigger>
+          </ResponsiveDialogTrigger>
+          <TooltipContent>{SYNC_IN_PROGRESS_REMOVAL}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      {isBlocked && (
+        <span id={blockedReasonId} className='sr-only'>
+          {SYNC_IN_PROGRESS_REMOVAL}
+        </span>
+      )}
       <ResponsiveDialogContent className='md:w-120'>
         <ResponsiveDialogHeader className='text-start'>
           <ResponsiveDialogTitle>Remove connected bank?</ResponsiveDialogTitle>
@@ -634,7 +667,7 @@ function DestructiveBankConnectionFooterButton({
             </div>
             {disabled && !isPending && (
               <p role='status' className='text-sm text-muted-foreground'>
-                Bank sync is in progress. Wait for it to finish before removing this connection.
+                {SYNC_IN_PROGRESS_REMOVAL}
               </p>
             )}
             <div className='mt-2 flex flex-col justify-end gap-4 pb-4 md:flex-row md:pb-0'>

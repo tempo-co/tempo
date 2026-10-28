@@ -836,7 +836,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     await expect(confirm).toBeDisabled();
     await expect(
-      page.getByText(
+      page.getByRole('dialog').getByText(
         'Bank sync is in progress. Wait for it to finish before removing this connection.',
         {exact: true},
       ),
@@ -1127,14 +1127,43 @@ test.describe('mocked Enable Banking bank connection', () => {
   });
 
   for (const syncStatus of ['QUEUED', 'RUNNING'] as const) {
-    test(`blocks removal while bank sync is ${syncStatus}`, async ({page}) => {
+    test(`blocks removal and explains why while bank sync is ${syncStatus}`, async ({page}) => {
       await mockBankConnections(page, [{...MOCK_CONNECTION, syncStatus}]);
       await page.goto('/bank-connections');
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
       await card.getByTestId(/^connection-card-toggle-/).click();
-      await expect(card.getByRole('button', {name: 'Remove connection'})).toBeDisabled();
+      const remove = card.getByRole('button', {name: 'Remove connection'});
+      const reason = 'Bank sync is in progress. Wait for it to finish before removing this connection.';
+      await expect(remove).toHaveAttribute('aria-disabled', 'true');
+      await expect(remove).toHaveAccessibleDescription(reason);
+      await remove.hover();
+      await expect(page.getByRole('tooltip')).toHaveText(reason);
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('tooltip')).toHaveCount(0);
+      await remove.focus();
+      await expect(page.getByRole('tooltip')).toHaveText(reason);
+      // Playwright skips aria-disabled targets unless forced; browsers still deliver the click.
+      await remove.click({force: true});
+      await expect(page.getByRole('tooltip')).toHaveText(reason);
+      await expect(page.getByRole('dialog')).toHaveCount(0);
     });
   }
+
+  test.describe('on a touch phone', () => {
+    test.use({hasTouch: true, isMobile: true, viewport: {width: 390, height: 844}});
+
+    test('explains blocked removal on tap', async ({page}) => {
+      await mockBankConnections(page, [{...MOCK_CONNECTION, syncStatus: 'RUNNING'}]);
+      await page.goto('/bank-connections');
+      const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
+      await card.getByTestId(/^connection-card-toggle-/).tap();
+      await card.getByRole('button', {name: 'Remove connection'}).tap({force: true});
+      await expect(page.getByRole('tooltip')).toHaveText(
+        'Bank sync is in progress. Wait for it to finish before removing this connection.',
+      );
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+    });
+  });
 
   test('opens saved bank data offline without replaying refresh work on reconnect', async ({page}) => {
     let requests = 0;
