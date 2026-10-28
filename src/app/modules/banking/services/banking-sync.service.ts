@@ -86,6 +86,7 @@ import {BASE_AMOUNT_INPUT_COLUMNS, baseAmountInputsSql} from './bank-transaction
 import {BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';
 import {BankingEncryptionService} from './banking-encryption.service';
 import {
+	BANKING_FOREGROUND_REFRESH_MIN_INTERVAL_MS,
 	BANKING_TRANSIENT_RETRY_BASE_MS,
 	BANK_CONNECTION_STATUSES,
 	BANK_SYNC_STATUSES,
@@ -210,27 +211,18 @@ export class BankingSyncService {
 		return this.runSynchronization(connection.account.id, connectionId);
 	}
 
+	/** Resolves null when the connection synchronized too recently to contact the bank again. */
 	async synchronizeManually(
 		accountId: Account['id'],
 		connectionId: BankConnection['id'],
 		psu: EnableBankingPsuContext,
 		signal: AbortSignal,
-	): Promise<BankSyncRunResponseDto> {
+	): Promise<BankSyncRunResponseDto | null> {
 		if (!this.bankingIntegrationEnabled) throw new ServiceUnavailableException(BANKING_SERVICE_UNAVAILABLE);
 		await this.findOwnedConnection(accountId, connectionId);
 		return this.runSynchronization(accountId, connectionId, psu, signal);
 	}
 
-	private runSynchronization(
-		accountId: Account['id'],
-		connectionId: BankConnection['id'],
-		psu: EnableBankingPsuContext,
-		requestSignal: AbortSignal,
-	): Promise<BankSyncRunResponseDto>;
-	private runSynchronization(
-		accountId: Account['id'],
-		connectionId: BankConnection['id'],
-	): Promise<BankSyncRunResponseDto | null>;
 	private async runSynchronization(
 		accountId: Account['id'],
 		connectionId: BankConnection['id'],
@@ -262,6 +254,12 @@ export class BankingSyncService {
 					connection.nextSyncAt.getTime() > now
 				) {
 					throw new BankingSyncCooldownError(Math.ceil((connection.nextSyncAt.getTime() - now) / 1000));
+				}
+				if (
+					connection.lastSyncedAt &&
+					now - connection.lastSyncedAt.getTime() < BANKING_FOREGROUND_REFRESH_MIN_INTERVAL_MS
+				) {
+					return null;
 				}
 				psu = await this.resolveManualPsuContext(connection, psu, lockLease.signal);
 			}

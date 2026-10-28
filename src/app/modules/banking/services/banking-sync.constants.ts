@@ -23,6 +23,8 @@ export const BANK_SYNC_STATUSES = {
 export const BANKING_DEFAULT_RETRY_AFTER_SECONDS = 6 * 60 * 60;
 export const BANKING_MAX_RETRY_AFTER_SECONDS = 8_000_000_000_000;
 export const BANKING_TRANSIENT_RETRY_BASE_MS = 15 * 60 * 1000;
+/** A foreground refresh is skipped when the connection synchronized more recently than this. */
+export const BANKING_FOREGROUND_REFRESH_MIN_INTERVAL_MS = 5 * 60 * 1000;
 
 export function resolveDurationMs(value: string, key: string): number {
 	const parsed = ms(value as ms.StringValue);
