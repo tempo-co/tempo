@@ -1427,6 +1427,30 @@ test.describe('mocked Enable Banking bank connection', () => {
     await expect.poll(() => requests).toBe(2);
   });
 
+  test('stays silent when the API skips a bank that synchronized moments ago', async ({page}) => {
+    let requests = 0;
+    let reads = 0;
+    let readsAtSkip = Number.POSITIVE_INFINITY;
+    await mockBankConnections(page, () => {
+      reads++;
+      return [MOCK_CONNECTION];
+    });
+    await page.route(`**/bank-connections/${MOCK_CONNECTION.id}/refresh`, (route) => {
+      requests++;
+      readsAtSkip = reads;
+      return route.fulfill({status: 204, body: ''});
+    });
+    await page.goto('/bank-connections');
+    const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
+    await expect.poll(() => requests).toBe(1);
+    // The settled refresh re-reads the saved connections; by then any toast would have shown.
+    await expect.poll(() => reads).toBeGreaterThan(readsAtSkip);
+    await expect(card.getByTestId('bank-connection-total')).toBeVisible();
+    await card.getByTestId(/^connection-card-toggle-/).click();
+    await expect(card.getByRole('button', {name: 'Remove connection'})).toBeEnabled();
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
+  });
+
   test('shows a partial refresh with saved balances and the bank error', async ({page}) => {
     let completed = false;
     await mockBankConnections(page, () => [

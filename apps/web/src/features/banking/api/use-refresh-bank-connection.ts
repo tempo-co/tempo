@@ -32,9 +32,12 @@ export function useRefreshBankConnection() {
   const {mutateAsync, ...state} = useMutation({
     mutationKey: BANK_REFRESH_KEY,
     mutationFn: ({connectionId, signal}: RefreshRequest) =>
-      api.post<BankSyncRun>(`/bank-connections/${connectionId}/refresh`, undefined, {signal}),
+      // 204 (null): the bank synchronized moments ago, so the API skipped it and nothing changed.
+      api.post<BankSyncRun | null>(`/bank-connections/${connectionId}/refresh`, undefined, {
+        signal,
+      }),
     onSuccess: async (result, {signal}) => {
-      if (signal?.aborted) return;
+      if (signal?.aborted || !result) return;
       const feedback = getBankRefreshToast(result);
       if (feedback) toast.error(feedback.title, {description: feedback.description});
       await invalidateBankDerivedData(queryClient);
