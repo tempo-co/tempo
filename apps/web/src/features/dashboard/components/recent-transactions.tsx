@@ -5,6 +5,7 @@ import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {Skeleton} from '@/components/ui/skeleton';
 import {useGetBankTransactions} from '@/features/banking/api/use-get-bank-transactions';
+import {MerchantLogoTile} from '@/features/banking/components/merchant-logo-tile';
 import {
   formatBankTransactionCompactDate,
   resolveBankTransactionDisplayTitle,
@@ -59,8 +60,9 @@ export function RecentTransactions({
               <Link
                 to='/bank-transactions'
                 search={{bookingDate, transactionId: transaction.id}}
-                className='grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-3 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+                className='grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
               >
+                <MerchantLogoTile transaction={transaction} />
                 <div className='min-w-0'>
                   <p className='truncate text-sm'>
                     {resolveBankTransactionDisplayTitle(transaction)}

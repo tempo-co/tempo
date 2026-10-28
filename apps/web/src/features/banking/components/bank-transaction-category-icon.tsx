@@ -11,12 +11,16 @@ type BankTransactionCategoryIconProps = {
   /** Own transfers and currency exchanges show a neutral activity icon instead of the category. */
   activity?: boolean;
   className?: string;
+  iconClassName?: string;
+  'data-testid'?: string;
 };
 
 export function BankTransactionCategoryIcon({
   category,
   activity = false,
   className,
+  iconClassName,
+  'data-testid': testId,
 }: BankTransactionCategoryIconProps) {
   const {icon: Icon, colorClassName} =
     !activity && category
@@ -26,13 +30,14 @@ export function BankTransactionCategoryIcon({
   return (
     <span
       aria-hidden='true'
+      data-testid={testId}
       className={cn(
         'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border',
         colorClassName,
         className,
       )}
     >
-      <Icon className='h-3.5 w-3.5' strokeWidth={1.8} />
+      <Icon className={cn('h-3.5 w-3.5', iconClassName)} strokeWidth={1.8} />
     </span>
   );
 }

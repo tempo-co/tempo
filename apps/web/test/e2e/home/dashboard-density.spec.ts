@@ -116,10 +116,13 @@ for (const width of [1440, 390]) {
     await expect(recent.locator('li')).toHaveCount(5);
     const card = await boxOf(recent);
     const lastRow = recent.locator('li').last();
+    // The row starts with the transaction's tile, then its title.
+    const tile = await boxOf(lastRow.getByTestId('merchant-logo-tile'));
     const title = await boxOf(lastRow.getByText('Example transaction 5'));
     const amount = await boxOf(lastRow.getByText('€10.00'));
     const meta = await boxOf(lastRow.getByText(/30 Sep/));
-    const side = title.x - card.x;
+    const side = tile.x - card.x;
+    expect(title.x).toBeGreaterThan(tile.x + tile.width);
     expect(card.x + card.width - amount.x - amount.width).toBeCloseTo(side, 0);
     expect(card.y + card.height - meta.y - meta.height).toBeCloseTo(side, 0);
   });

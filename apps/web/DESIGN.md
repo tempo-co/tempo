@@ -322,6 +322,11 @@ Quiet headers, dividers only for row scanning, right-aligned `numeric` amounts, 
 descriptions truncated but inspectable. Rows that navigate show a keyboard-visible focus
 state. Status text stays understandable without color.
 
+Every transaction row starts with a round tile: the merchant's logo when the API has one,
+otherwise the category icon in its category colors (the neutral activity icon for own
+transfers and currency exchanges). A logo that fails to load falls back to the icon. Logos are
+display only; the title stays the bank's description.
+
 ### Status, loading, and feedback
 
 Top loading bar for route/data progress, skeletons for known shapes, toasts for background

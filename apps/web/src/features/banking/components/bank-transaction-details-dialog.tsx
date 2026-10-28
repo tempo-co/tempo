@@ -20,6 +20,7 @@ import {useGetBankTransaction} from '../api/use-get-bank-transaction';
 import {BankTransaction} from '../types/bank-transaction';
 import {resolveBankTransactionDisplayTitle} from '../utils/formatters';
 import {BankTransactionDetails} from './bank-transaction-details';
+import {MerchantLogoTile} from './merchant-logo-tile';
 
 type BankTransactionDetailsDialogProps = {
   transactionId: BankTransaction['id'];
@@ -51,9 +52,12 @@ export function BankTransactionDetailsDialog({
       >
         <ResponsiveDialogCornerClose label='Close transaction details' />
         <ResponsiveDialogHeader className='shrink-0 border-b px-5 pt-5 pr-16 pb-4 text-left sm:px-6'>
-          <ResponsiveDialogTitle className='text-xl leading-tight wrap-anywhere sm:text-2xl sm:leading-8'>
-            {transactionTitle}
-          </ResponsiveDialogTitle>
+          <div className='flex min-w-0 items-center gap-3'>
+            {transaction && <MerchantLogoTile transaction={transaction} className='h-10 w-10' />}
+            <ResponsiveDialogTitle className='min-w-0 text-xl leading-tight wrap-anywhere sm:text-2xl sm:leading-8'>
+              {transactionTitle}
+            </ResponsiveDialogTitle>
+          </div>
           <ResponsiveDialogDescription className='mt-1 md:mt-0'>
             {transaction ? 'Bank transaction' : 'Transaction details'}
           </ResponsiveDialogDescription>

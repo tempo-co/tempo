@@ -14,6 +14,7 @@ import {
 } from '../utils/formatters';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 import {BankTransactionSourceCell} from './bank-transaction-source-cell';
+import {MerchantLogoTile} from './merchant-logo-tile';
 
 export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
   {
@@ -29,15 +30,19 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
       const counterpartyName = row.original.counterpartyName?.trim();
 
       return (
-        <div className='w-full min-w-0'>
-          <p className='overflow-hidden text-ellipsis whitespace-nowrap'>{displayDescription}</p>
-          {counterpartyName &&
-            row.original.description &&
-            displayDescription !== counterpartyName.replace(/\s+/g, ' ').trim() && (
-              <p className='overflow-hidden text-xs text-ellipsis whitespace-nowrap text-muted-foreground max-lg:hidden'>
-                {counterpartyName}
-              </p>
-            )}
+        <div className='flex w-full min-w-0 items-center gap-3'>
+          {/* Phones show the tile in its own cell beside the title and meta lines. */}
+          <MerchantLogoTile transaction={row.original} className='max-lg:hidden' />
+          <div className='min-w-0 flex-1'>
+            <p className='overflow-hidden text-ellipsis whitespace-nowrap'>{displayDescription}</p>
+            {counterpartyName &&
+              row.original.description &&
+              displayDescription !== counterpartyName.replace(/\s+/g, ' ').trim() && (
+                <p className='overflow-hidden text-xs text-ellipsis whitespace-nowrap text-muted-foreground max-lg:hidden'>
+                  {counterpartyName}
+                </p>
+              )}
+          </div>
         </div>
       );
     },

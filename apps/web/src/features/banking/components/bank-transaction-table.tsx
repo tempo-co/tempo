@@ -48,6 +48,7 @@ import {BankTransactionDateFilter} from './bank-transaction-date-filter';
 import {BankTransactionDrillFilters} from './bank-transaction-drill-filters';
 import {BankTransactionMobileFilters} from './bank-transaction-mobile-filters';
 import {bankTransactionTableColumns} from './bank-transaction-table-columns';
+import {MerchantLogoTile} from './merchant-logo-tile';
 
 type BankTransactionTableProps = {
   transactions: BankTransaction[];
@@ -322,7 +323,7 @@ export function BankTransactionTable({
                 return (
                   <TableRow
                     key={row.id}
-                    className='cursor-pointer focus-within:bg-accent hover:bg-card max-lg:mb-1.5 max-lg:grid max-lg:grid-cols-[minmax(0,1fr)_auto] max-lg:gap-x-3 max-lg:gap-y-0.5 max-lg:rounded-md max-lg:border! max-lg:bg-card max-lg:p-2'
+                    className='cursor-pointer focus-within:bg-accent hover:bg-card max-lg:mb-1.5 max-lg:grid max-lg:grid-cols-[auto_minmax(0,1fr)_auto] max-lg:gap-x-3 max-lg:gap-y-0.5 max-lg:rounded-md max-lg:border! max-lg:bg-card max-lg:p-2'
                     data-testid={`bank-transaction-row-${row.original.id}`}
                     onClick={(event) => {
                       if (event.target instanceof Element && event.target.closest('a,button')) {
@@ -372,7 +373,7 @@ export function BankTransactionTable({
                         </TableCell>
                       );
                     })}
-                    <TableCell className='hidden max-lg:order-3 max-lg:col-span-2 max-lg:block max-lg:border-0 max-lg:p-0'>
+                    <TableCell className='hidden max-lg:order-3 max-lg:col-span-2 max-lg:col-start-2 max-lg:block max-lg:border-0 max-lg:p-0'>
                       <div
                         data-testid='bank-transaction-mobile-meta'
                         className='flex min-w-0 items-center justify-between gap-3 text-xs text-muted-foreground'
@@ -403,6 +404,9 @@ export function BankTransactionTable({
                           <span className='truncate'>{row.original.bankName}</span>
                         </span>
                       </div>
+                    </TableCell>
+                    <TableCell className='hidden max-lg:row-span-2 max-lg:block max-lg:self-center max-lg:border-0 max-lg:p-0'>
+                      <MerchantLogoTile transaction={row.original} />
                     </TableCell>
                   </TableRow>
                 );

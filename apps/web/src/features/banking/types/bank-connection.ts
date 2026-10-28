@@ -78,6 +78,7 @@ export type BankConnectionTransaction = Pick<
   | 'transactionStatus'
   | 'description'
   | 'displayDescription'
+  | 'merchantLogoUrl'
   | 'counterpartyName'
   | 'merchantCategoryCode'
   | 'remittanceInformation'

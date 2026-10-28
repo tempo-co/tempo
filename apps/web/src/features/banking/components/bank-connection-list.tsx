@@ -48,6 +48,7 @@ import {
 } from '../utils/formatters';
 import {BankConnectionPicker} from './bank-connection-picker';
 import {BankLogo} from './bank-logo';
+import {MerchantLogoTile} from './merchant-logo-tile';
 
 type BankConnectionListProps = {
   bankConnections: BankConnection[];
@@ -907,8 +908,9 @@ function BankTransactionRow({
       aria-label={`View transaction details for ${description}`}
       onClick={(event) => onTransactionSelect(transaction.id, event.currentTarget)}
       data-testid={`bank-transaction-row-${transaction.id}`}
-      className='grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-sm p-3 text-left transition-colors hover:bg-accent/70 focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring max-sm:min-h-11 sm:p-4'
+      className='grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 rounded-sm p-3 text-left transition-colors hover:bg-accent/70 focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring max-sm:min-h-11 sm:p-4'
     >
+      <MerchantLogoTile transaction={transaction} />
       <span className='block min-w-0'>
         <span className='block truncate text-sm font-medium'>{description}</span>
         <span className='block truncate text-xs text-muted-foreground'>{metadata}</span>

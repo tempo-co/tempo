@@ -291,6 +291,8 @@ export type BankTransaction = BankTransactionCategorizationFields &
     valueDate: string | null;
     description: string | null;
     displayDescription?: string | null;
+    /** Path of the merchant's logo on the API; null or absent when no confirmed logo exists. */
+    merchantLogoUrl?: string | null;
     counterpartyName: string | null;
     amount: string;
     currency: string;
