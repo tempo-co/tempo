@@ -519,13 +519,19 @@ describe('bank transaction categorization input', () => {
 	});
 
 	it.each([
-		['Example-shop.com', 'Example-shop.com'],
-		['www.example-shop.com/orders/ABC123456 via Example Pay', 'example-shop.com via Example Pay'],
-		['pay.example-gym.test via Example Pay', 'pay.example-gym.test via Example Pay'],
-		['Example Shop, mail info@example-shop.test ref 12345678', 'Example Shop mail'],
-	])('names a merchant %j for identification as %j, keeping its hostname', (description, name) => {
+		['Example-shop.com', null, 'Example-shop.com'],
+		['www.example-shop.com/orders/ABC123456 via Example Pay', null, 'example-shop.com via Example Pay'],
+		['pay.example-gym.test via Example Pay', null, 'pay.example-gym.test via Example Pay'],
+		['Example Shop, mail info@example-shop.test ref 12345678', null, 'Example Shop mail'],
+		// A processor's direct debit names the business it collects for, as the merchant key and display name do.
+		[
+			'SEPA Incasso algemeen doorlopend Incassant: NL00ZZZ000000000000 Naam: Buckaroo Stichting Derdengelden Machtiging: example-ref Omschrijving: Example Fitness B.V. Example City: 2026-12345',
+			'Buckaroo Stichting Derde',
+			'Example Fitness B.V.',
+		],
+	])('names a merchant %j (counterparty %j) for identification as %j', (description, counterpartyName, name) => {
 		const input = toBankTransactionCategorizationInput(
-			createTransaction({counterpartyName: null, description, bankTransactionDescription: null}),
+			createTransaction({counterpartyName, description, bankTransactionDescription: null}),
 		);
 		expect(toMerchantIdentificationName(input)).toBe(name);
 	});
