@@ -122,7 +122,7 @@ describe('BankConnectionController', () => {
 		jest.restoreAllMocks();
 	});
 
-	it('refreshes an owned connection before its automatic due time and returns the persisted finished run', async () => {
+	it('refreshes an owned connection before its automatic due time, skips a repeat within five minutes and returns the persisted finished run', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('manual-refresh-session');
 		await bankConnectionRepository.update(connection.id, {
 			nextSyncAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
@@ -236,6 +236,22 @@ describe('BankConnectionController', () => {
 			const readback = await verifiedAgent.get(`/bank-connections/${connection.id}/transactions`).expect(200);
 			expect(readback.body.transactions).toHaveLength(5);
 			transport.mockClear();
+			getAspsps.mockClear();
+			getAccountBalances.mockClear();
+			const runsBefore = await bankSyncRunRepository.countBy({bankConnection: {id: connection.id}});
+			const skipped = await verifiedAgent
+				.post(`/bank-connections/${connection.id}/refresh`)
+				.set('Origin', 'http://localhost:5173')
+				.set('User-Agent', 'ExampleBrowser/1.0')
+				.expect(204);
+			expect(skipped.text).toBe('');
+			expect(getAspsps).not.toHaveBeenCalled();
+			expect(getAccountBalances).not.toHaveBeenCalled();
+			expect(transport).not.toHaveBeenCalled();
+			expect(await bankSyncRunRepository.countBy({bankConnection: {id: connection.id}})).toBe(runsBefore);
+			await bankConnectionRepository.update(connection.id, {
+				lastSyncedAt: new Date(Date.now() - 5 * 60 * 1000 - 1000),
+			});
 			const second = await verifiedAgent
 				.post(`/bank-connections/${connection.id}/refresh`)
 				.set('Origin', 'http://localhost:5173')
@@ -431,7 +447,11 @@ describe('BankConnectionController', () => {
 			expect(getAspsps).not.toHaveBeenCalled();
 			expect(getSessionAccounts).not.toHaveBeenCalled();
 			expect(await bankSyncRunRepository.countBy({bankConnection: {id: connection.id}})).toBe(1);
-			await bankConnectionRepository.update(connection.id, {nextSyncAt: new Date(Date.now() - 1)});
+			// Past both the provider cooldown and the five-minute foreground minimum.
+			await bankConnectionRepository.update(connection.id, {
+				nextSyncAt: new Date(Date.now() - 1),
+				lastSyncedAt: new Date(Date.now() - 5 * 60 * 1000 - 1000),
+			});
 			getAccountTransactions.mockResolvedValue([]);
 			const retry = await verifiedAgent
 				.post(`/bank-connections/${connection.id}/refresh`)

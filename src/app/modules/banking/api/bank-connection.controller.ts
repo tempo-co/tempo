@@ -79,7 +79,7 @@ export class BankConnectionController {
 		response.once('close', close);
 		if (request.aborted || response.destroyed) abort();
 		try {
-			return await this.bankingSyncService.synchronizeManually(
+			const run = await this.bankingSyncService.synchronizeManually(
 				account.id,
 				connectionId,
 				{
@@ -88,6 +88,9 @@ export class BankConnectionController {
 				},
 				abortController.signal,
 			);
+			// Synchronized moments ago: nothing was fetched, so there is no run to return.
+			if (!run) response.status(204);
+			return run;
 		} catch (error) {
 			if (error instanceof BankingSyncCooldownError) response.setHeader('Retry-After', error.retryAfterSeconds);
 			throw error;
