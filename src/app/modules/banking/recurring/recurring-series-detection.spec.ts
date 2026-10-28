@@ -875,11 +875,199 @@ describe('detectRecurringSeries', () => {
 		]);
 	});
 
+	it.each([
+		['three-payment ambiguous', ['2033-01-19', '2033-02-16', '2033-03-16'], 'MONTHLY'],
+		['short four-weekly', ['2033-01-19', '2033-02-16', '2033-03-16', '2033-04-13'], 'FOUR_WEEKLY'],
+		[
+			'four-weekly with bank-date drift',
+			Array.from({length: 8}, (_, index) => addDays('2033-01-03', 28 * index + (index % 2))),
+			'FOUR_WEEKLY',
+		],
+		[
+			'four-weekly with three-day bank-date drift',
+			Array.from({length: 12}, (_, index) => addDays('2033-01-03', 28 * index + 3 * (index % 2))),
+			'FOUR_WEEKLY',
+		],
+		[
+			'four-weekly with skipped cycles',
+			[0, 1, 3, 4, 5, 7].map((cycle) => addDays('2033-01-03', 28 * cycle)),
+			'FOUR_WEEKLY',
+		],
+		[
+			'calendar-month with an occasional late cycle',
+			['2033-01-04', '2033-02-01', '2033-03-01', '2033-03-29', '2033-05-05'],
+			'MONTHLY',
+		],
+		[
+			'calendar-month with overlapping gap tolerances',
+			['2033-01-18', '2033-02-15', '2033-03-15', '2033-04-15', '2033-05-13', '2033-06-13'],
+			'MONTHLY',
+		],
+		[
+			'calendar-month with bank-date drift',
+			[
+				'2033-01-19',
+				'2033-02-16',
+				'2033-03-16',
+				'2033-04-19',
+				'2033-05-17',
+				'2033-06-14',
+				'2033-07-19',
+				'2033-08-16',
+				'2033-09-13',
+				'2033-10-18',
+				'2033-11-15',
+				'2033-12-13',
+			],
+			'MONTHLY',
+		],
+	] as const)('recognizes the complete %s rhythm', (_label, dates, cadence) => {
+		const rows = dates.map((date) => payment(date, '24.00'));
+		expect(detectRecurringSeries(rows, dates.at(-1)!)).toEqual([
+			expect.objectContaining({
+				cadence,
+				transactionIds: rows.map(({id}) => id),
+				monthlyEquivalent: cadence === 'FOUR_WEEKLY' ? 2600n : 2400n,
+				...(cadence === 'FOUR_WEEKLY' ? {nextExpectedDate: addDays(dates.at(-1)!, 28)} : {}),
+			}),
+		]);
+	});
+
+	it('recognizes a variable monthly stream with a short fixed-price period and extra purchases', () => {
+		const dates = ['2033-01-18', '2033-02-15', '2033-03-15', '2033-04-12', '2033-05-17', '2033-06-14'];
+		const recurring = dates.map((date, index) =>
+			payment(date, index < 4 ? '12.00' : index === 4 ? '24.00' : '5.00'),
+		);
+		const extras = ['2033-01-21', '2033-03-18', '2033-05-20'].map((date) => payment(date, '39.00'));
+		expect(detectRecurringSeries([...recurring, ...extras], dates.at(-1)!)).toEqual([
+			expect.objectContaining({cadence: 'MONTHLY', transactionIds: recurring.map(({id}) => id)}),
+		]);
+	});
+
+	it.each([-56, -58, -86])('recognizes a four-weekly price after an earlier one-off charge at day %i', (offset) => {
+		const recurring = Array.from({length: 4}, (_, index) => payment(addDays('2033-01-03', 28 * index), '24.00'));
+		const oneOff = payment(addDays(recurring[0].date, offset), '4.50');
+		const newPrice = Array.from({length: 4}, (_, index) =>
+			payment(addDays(recurring.at(-1)!.date, 28 * (index + 1)), '30.00'),
+		);
+		const extra = payment(addDays(recurring[0].date, 7), '39.00');
+		const histories = Array.from({length: 5}, (_, count) => [...recurring, ...newPrice.slice(0, count)]);
+		const snapshots = (extras: RecurringCandidate[]) =>
+			histories.map((history) => detectRecurringSeries([oneOff, ...history, ...extras], history.at(-1)!.date));
+		const expected = histories.map((history, count) => [
+			expect.objectContaining({
+				cadence: 'FOUR_WEEKLY',
+				amountKind: 'FIXED',
+				typicalAmount: count ? '30.00' : '24.00',
+				monthlyEquivalent: count ? 3250n : 2600n,
+				firstDate: recurring[0].date,
+				lastDate: history.at(-1)!.date,
+				nextExpectedDate: addDays(history.at(-1)!.date, 28),
+				latestAmount: count ? '30.00' : '24.00',
+				status: 'ACTIVE',
+				flags: [],
+				restartTransactionIds: [],
+				transactionIds: history.map(({id}) => id),
+			}),
+		]);
+		expect({alone: snapshots([]), interleaved: snapshots([extra])}).toEqual({
+			alone: expected,
+			interleaved: expected,
+		});
+	});
+
+	it.each([
+		{
+			label: 'four-weekly variable',
+			dates: Array.from({length: 10}, (_, index) => addDays('2033-01-03', 28 * index)),
+			amounts: ['24.00', '49.00', '18.00', '65.00', '31.00', '77.00', ...Array<string>(4).fill('30.00')],
+			cadence: 'FOUR_WEEKLY',
+			amountKind: 'VARIABLE',
+			typicalAmount: '30.00',
+			monthlyEquivalent: 3250n,
+			restartIndices: [],
+		},
+		...[0, 1].flatMap((joiningOffset) =>
+			[false, true].map((variable) => ({
+				label: `monthly ${variable ? 'variable' : 'fixed'} joining at offset ${joiningOffset}`,
+				dates: [
+					'2033-01-03',
+					'2033-02-03',
+					'2033-03-03',
+					...Array.from({length: 4}, (_, index) => addDays('2033-04-03', joiningOffset + 28 * index)),
+				],
+				amounts: [
+					...(variable ? ['24.00', '4.50', '30.00'] : Array<string>(3).fill('4.50')),
+					...Array<string>(4).fill('24.00'),
+				],
+				cadence: 'MONTHLY',
+				amountKind: variable ? 'VARIABLE' : 'FIXED',
+				typicalAmount: '24.00',
+				monthlyEquivalent: 2400n,
+				restartIndices: [],
+			})),
+		),
+		{
+			label: 'monthly variable completed before the joining payment',
+			dates: ['2033-01-03', '2033-02-03', '2033-03-03', '2033-04-09', '2033-05-07', '2033-06-04', '2033-07-02'],
+			amounts: ['24.00', '4.50', '30.00', ...Array<string>(4).fill('24.00')],
+			cadence: 'MONTHLY',
+			amountKind: 'VARIABLE',
+			typicalAmount: '24.00',
+			monthlyEquivalent: 2400n,
+			nextExpectedDate: '2033-08-03',
+			restartIndices: [3],
+		},
+		...[-1, 0].flatMap((joiningOffset) =>
+			[false, true].map((samePrice) => ({
+				label: `monthly ${samePrice ? 'fixed' : 'variable'} with a shared joining payment at offset ${joiningOffset}`,
+				dates: [
+					'2033-01-03',
+					'2033-02-03',
+					...Array.from({length: 5}, (_, index) => addDays('2033-03-03', joiningOffset + 28 * index)),
+				],
+				amounts: ['24.00', samePrice ? '24.00' : '4.50', ...Array<string>(5).fill('24.00')],
+				cadence: 'FOUR_WEEKLY',
+				amountKind: samePrice ? 'FIXED' : 'VARIABLE',
+				latestAmount: '24.00',
+				typicalAmount: '24.00',
+				monthlyEquivalent: 2600n,
+				nextExpectedDate: addDays('2033-07-21', joiningOffset),
+				restartIndices: [],
+			})),
+		),
+	])(
+		'recognizes a supported $label history before a settled price',
+		({label: _label, dates, amounts, restartIndices, ...expected}) => {
+			const rows = dates.map((date, index) => payment(date, amounts[index]));
+			const supported = rows.slice(0, 3);
+			expect(detectRecurringSeries(supported, supported.at(-1)!.date)).toEqual([
+				expect.objectContaining({
+					cadence: 'MONTHLY',
+					amountKind: expected.amountKind,
+					transactionIds: supported.map(({id}) => id),
+				}),
+			]);
+			expect(detectRecurringSeries(rows, rows.at(-1)!.date)).toEqual([
+				expect.objectContaining({
+					...expected,
+					latestAmount: amounts.at(-1),
+					status: 'ACTIVE',
+					flags: [],
+					restartTransactionIds: restartIndices.map((index) => rows[index].id),
+					firstDate: rows[0].date,
+					lastDate: rows.at(-1)!.date,
+					transactionIds: rows.map(({id}) => id),
+				}),
+			]);
+		},
+	);
+
 	it('needs three monthly payments', () => {
 		expect(detectRecurringSeries(monthly(3, ['2026-08', '2026-09'], '9.99'), TODAY)).toEqual([]);
 	});
 
-	it('detects weekly and quarterly payments with their monthly equivalents', () => {
+	it('detects weekly, four-weekly and quarterly payments with their monthly equivalents', () => {
 		const weekly = ['2026-09-19', '2026-09-26', '2026-10-03', '2026-10-10', '2026-10-17'].map((date) =>
 			payment(date, '6.00', {merchantKey: 'EXPENSE:example lessons'}),
 		);
@@ -887,10 +1075,37 @@ describe('detectRecurringSeries', () => {
 			payment(date, '90.00', {merchantKey: 'EXPENSE:example water'}),
 		);
 
-		const series = detectRecurringSeries([...weekly, ...quarterly], TODAY);
+		const fourWeekly = Array.from({length: 6}, (_, index) =>
+			payment(addDays('2026-05-03', 28 * index), '12.00', {merchantKey: 'EXPENSE:example four-weekly lessons'}),
+		);
+		const series = detectRecurringSeries([...weekly, ...fourWeekly, ...quarterly], TODAY);
 
+		expect(series).toHaveLength(3);
+		const fourWeeklySeries = series.find(({cadence}) => cadence === 'FOUR_WEEKLY')!;
+		const due = fourWeeklySeries.nextExpectedDate;
+		expect(atDate(fourWeeklySeries, due)).toMatchObject({status: 'ACTIVE', flags: [], monthlyEquivalent: 1300n});
+		expect(atDate(fourWeeklySeries, addDays(due, 5))).toMatchObject({status: 'ACTIVE', flags: ['LATE']});
+		expect(atDate(fourWeeklySeries, addDays(due, 6))).toMatchObject({status: 'ENDED', flags: []});
+		const onTime = payment(due, '12.00', {merchantKey: fourWeekly[0].merchantKey});
+		expect(detectRecurringSeries([...fourWeekly, onTime], due)).toEqual([
+			expect.objectContaining({
+				cadence: 'FOUR_WEEKLY',
+				nextExpectedDate: addDays(due, 28),
+				restartTransactionIds: [],
+				monthlyEquivalent: 1300n,
+				status: 'ACTIVE',
+			}),
+		]);
 		expect(series).toEqual(
 			expect.arrayContaining([
+				expect.objectContaining({
+					cadence: 'FOUR_WEEKLY',
+					amountKind: 'FIXED',
+					typicalAmount: '12.00',
+					monthlyEquivalent: 1300n,
+					nextExpectedDate: addDays(fourWeekly.at(-1)!.date, 28),
+					transactionIds: fourWeekly.map(({id}) => id),
+				}),
 				expect.objectContaining({cadence: 'WEEKLY', monthlyEquivalent: 2600n, nextExpectedDate: '2026-10-24'}),
 				expect.objectContaining({
 					cadence: 'QUARTERLY',

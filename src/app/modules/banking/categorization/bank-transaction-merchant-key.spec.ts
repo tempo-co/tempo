@@ -204,6 +204,23 @@ describe('getBankTransactionMerchantKey', () => {
 		).toBeNull();
 	});
 
+	it('keys processor-collected direct debits by the explicitly named legal business', () => {
+		const transactions = ['Example Fitness', 'Example Music'].map((business) => ({
+			description: `SEPA Incasso algemeen doorlopend Naam: Adyen N.V. Machtiging: example-mandate Omschrijving: ${business} B.V. Example City: example-invoice 03/05/26 - 31/05/26 Example plan`,
+			counterpartyName: 'Adyen N.V.',
+			creditDebitIndicator: 'DBIT',
+		}));
+		expect(transactions.map(getBankTransactionMerchantKey)).toEqual([
+			'EXPENSE:example fitness',
+			'EXPENSE:example music',
+		]);
+		for (const transaction of transactions) {
+			expect(getBankTransactionMerchantKey({...transaction, counterpartyName: null})).toBe(
+				getBankTransactionMerchantKey(transaction),
+			);
+		}
+	});
+
 	it('separates directions and rejects empty merchants', () => {
 		const base = {description: null, counterpartyName: 'Example Shop'};
 		expect(getBankTransactionMerchantKey({...base, creditDebitIndicator: 'DBIT'})).not.toBe(

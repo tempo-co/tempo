@@ -23,6 +23,12 @@ PostgreSQL is the record; BullMQ only schedules work.
 - `NEEDS_REVIEW` is an ordinary category value meaning "purpose unknown or evidence conflicts". `OTHER` means a known kind of transaction outside the taxonomy. A provider or queue failure is neither: rows stay `PENDING`/`FAILED`.
 - Never erase a completed category (including historical `OTHER`) in a response shim, sync reset or worker path; guard resets with the row's current status and hash.
 
+## Merchant identity
+
+`merchantKey` and `displayDescription` are derived from retained bank text at sync. A bare payment processor does not identify the business it collects for. A structured SEPA direct debit can supply that identity when its remittance begins with one explicitly named legal entity, bounded before the locality/reference tail, and its declared counterparty is absent or a processor. Display and key derivation share this evidence extractor; arbitrary notes, narrative remittances, multiple entities and a declared nonprocessor counterparty do not qualify.
+
+The processor-collected-business refresh migration updates only these two derived columns for qualifying rows whose values differ. It leaves source text, categorization metadata and manual choices, owner decisions and unrelated rows unchanged, and neither enqueues categorization nor calls a provider. Repeating it writes nothing once the derived values match.
+
 ## Pipeline order
 
 Read `categorizeClaimedBatch` before explaining a result.
