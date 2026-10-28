@@ -519,11 +519,12 @@ describe('BankConnectionController', () => {
 		},
 	);
 
-	it('refuses manual refresh when consent has expired', async () => {
+	it('refuses manual refresh when consent has expired, even right after a sync', async () => {
 		const {connection} = await createAuthorizedConnection('manual-refresh-expired');
 		await bankConnectionRepository.update(connection.id, {
 			consentValidUntil: new Date(Date.now() - 1000),
 			nextSyncAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+			lastSyncedAt: new Date(),
 		});
 		getAspsps.mockClear();
 		getSessionAccounts.mockClear();
