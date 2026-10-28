@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 
 import {toBankTransactionDirection} from '../bank-transaction-direction';
-import {getBankTransactionDisplayDescription} from '../bank-transaction-display';
+import {extractProcessorCollectedBusinessName, getBankTransactionDisplayDescription} from '../bank-transaction-display';
 import {formatBankTransactionLocation, normalizeBankTransactionLocation} from '../bank-transaction-location';
 import {normalizeBankTransactionType} from '../bank-transaction-type';
 import {BankTransaction} from '../bank-transaction.entity';
@@ -141,12 +141,15 @@ export function toBankTransactionCategorizationWebSearchInput(
 }
 
 /**
- * The merchant name for identifying a merchant's brand: the web-search name, but keeping hostnames, since a
- * statement's "example.com" or "pay.example.com via Processor" names the business by its site. Identifiers stay
- * removed.
+ * The merchant name for identifying a merchant's brand: the business a payment processor collects for when its direct
+ * debit names one, as the merchant key does, else the web-search name. Hostnames are kept, since a statement's
+ * "example.com" or "pay.example.com via Processor" names the business by its site. Identifiers stay removed.
  */
 export function toMerchantIdentificationName(input: BankTransactionCategorizationInput): string | null {
-	return sanitizeWebSearchMerchantName(getWebSearchMerchantDetails(input).merchantName, {keepHostnames: true});
+	return sanitizeWebSearchMerchantName(
+		extractProcessorCollectedBusinessName(input) ?? getWebSearchMerchantDetails(input).merchantName,
+		{keepHostnames: true},
+	);
 }
 
 function getWebSearchMerchantDetails(input: BankTransactionCategorizationInput): {
