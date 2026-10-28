@@ -593,6 +593,13 @@ describe('RecurringSeries', () => {
 					category: 'INCOME',
 				}),
 			),
+			...['2026-07-19', '2026-08-16', '2026-09-13', '2026-10-11'].map((date) =>
+				bookedRow(date, '-24.00', {
+					counterpartyName: 'Example Four-Week Membership',
+					description: 'Example Four-Week Membership',
+					category: 'SUBSCRIPTIONS',
+				}),
+			),
 			...['2026-04-05', '2026-07-05', '2026-10-05'].map((date, index) =>
 				bookedRow(date, ['-90.00', '-150.00', '-120.00'][index], {
 					counterpartyName: 'Example Quarterly Bill',
@@ -611,6 +618,17 @@ describe('RecurringSeries', () => {
 		const result = await list(ownerAgent);
 		const names = result.series.map(({name}) => name);
 		expect(names).not.toContain('Example Leisure Venue');
+		expect(byName(result.series, 'Example Four-Week Membership')).toEqual([
+			expect.objectContaining({
+				cadence: 'FOUR_WEEKLY',
+				amountKind: 'FIXED',
+				typicalAmount: '24.00',
+				monthlyEquivalent: '26.00',
+				transactionCount: 4,
+				nextExpectedDate: '2026-11-08',
+				status: 'ACTIVE',
+			}),
+		]);
 		expect(byName(result.series, 'Example Quarterly Bill')).toEqual([
 			expect.objectContaining({cadence: 'QUARTERLY', amountKind: 'VARIABLE', monthlyEquivalent: '40.00'}),
 		]);

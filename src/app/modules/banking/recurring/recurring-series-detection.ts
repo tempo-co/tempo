@@ -5,7 +5,7 @@ import type {BankTransactionCategory} from '../categorization/bank-transaction-c
 import {parseMerchantKey} from '../categorization/bank-transaction-merchant-key';
 import {divideRounded, formatCents, medianCents} from '../summary/bank-transaction-summary';
 
-export const RECURRING_CADENCES = ['WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY'] as const;
+export const RECURRING_CADENCES = ['WEEKLY', 'FOUR_WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY'] as const;
 export type RecurringCadence = (typeof RECURRING_CADENCES)[number];
 
 export const RECURRING_AMOUNT_KINDS = ['FIXED', 'VARIABLE'] as const;
@@ -104,6 +104,8 @@ type CadenceRule = {
 	/** Days a single payment may drift from its expected date. */
 	toleranceDays: number;
 	months: number;
+	/** Payments per calendar month, expressed as an exact ratio. */
+	monthlyRatio: readonly [bigint, bigint];
 	minCount: number;
 	/** Variable amounts at a weekly rhythm are mostly groceries, not bills; `variableAllowed` lets weekly pay vary. */
 	allowsVariable: boolean;
@@ -116,8 +118,19 @@ const CADENCE_RULES: readonly CadenceRule[] = [
 		nominalDays: 7,
 		toleranceDays: 2,
 		months: 0,
+		monthlyRatio: [52n, 12n],
 		minCount: 3,
 		allowsVariable: false,
+	},
+	{
+		cadence: 'FOUR_WEEKLY',
+		medianGap: [25, 31],
+		nominalDays: 28,
+		toleranceDays: 3,
+		months: 0,
+		monthlyRatio: [13n, 12n],
+		minCount: 4,
+		allowsVariable: true,
 	},
 	{
 		cadence: 'MONTHLY',
@@ -125,6 +138,7 @@ const CADENCE_RULES: readonly CadenceRule[] = [
 		nominalDays: 30.44,
 		toleranceDays: 6,
 		months: 1,
+		monthlyRatio: [1n, 1n],
 		minCount: 3,
 		allowsVariable: true,
 	},
@@ -134,6 +148,7 @@ const CADENCE_RULES: readonly CadenceRule[] = [
 		nominalDays: 91.31,
 		toleranceDays: 12,
 		months: 3,
+		monthlyRatio: [1n, 3n],
 		minCount: 3,
 		allowsVariable: true,
 	},
@@ -144,6 +159,7 @@ const CADENCE_RULES: readonly CadenceRule[] = [
 		nominalDays: 365.25,
 		toleranceDays: 20,
 		months: 12,
+		monthlyRatio: [1n, 12n],
 		minCount: 2,
 		allowsVariable: true,
 	},
@@ -289,6 +305,23 @@ type RecognizedPartition = {
 	amountKind: RecurringAmountKind;
 };
 
+/** Qualify billing history before unsupported introductory prices can affect cadence or coverage selection. */
+function qualifiedBillingHistory(rows: RecurringCandidate[], person: boolean): RecurringCandidate[] {
+	const firstPrice = priceRuns(rows).find((period) => matchCadence(period)?.cadence === 'FOUR_WEEKLY');
+	if (!firstPrice) return rows;
+	const priceStart = rows.indexOf(firstPrice[0]);
+	// Earlier billing can qualify before or at the joining payment without moving the trim boundary.
+	const earlierSupported = [priceStart, priceStart + 1].some((end) => {
+		const earlier = rows.slice(0, end);
+		const earlierRule = matchCadence(earlier);
+		return (
+			earlierRule &&
+			(streamAmountKind(earlier, earlierRule) === 'FIXED' || variableAllowed(earlierRule, earlier, person))
+		);
+	});
+	return earlierSupported ? rows : rows.slice(priceStart);
+}
+
 /** Qualification does not need to build forecasts/restart calendars for every chronological prefix. */
 function recognizePartition(rows: RecurringCandidate[], person: boolean): RecognizedPartition[] {
 	rows.sort(byDateThenId);
@@ -300,20 +333,22 @@ function recognizePartition(rows: RecurringCandidate[], person: boolean): Recogn
 		return coincidence || !enoughHistory ? null : rule;
 	};
 	const chains = chainByAmount(rows);
-	const combinedRule = cadenceOf(rows);
-	if (combinedRule && latestPricePeriod(rows, chains, combinedRule))
-		return [{rows, rule: combinedRule, amountKind: 'FIXED'}];
+	const combined = qualifiedBillingHistory(rows, person);
+	const combinedRule = cadenceOf(combined);
 	const fixed = successivePriceChains(chains, cadenceOf).flatMap((chain): RecognizedPartition[] => {
+		chain = qualifiedBillingHistory(chain, person);
 		const rule = cadenceOf(chain);
 		return rule ? [{rows: chain, rule, amountKind: 'FIXED'}] : [];
 	});
 	// Isolated payments do not count as sustained price evidence for a genuinely variable bill.
 	const fixedRows = chains.filter((chain) => cadenceOf(chain)).reduce((count, chain) => count + chain.length, 0);
 	const rule = fixedRows / rows.length < MIN_REGULAR_GAP_SHARE ? combinedRule : null;
-	const recognized =
-		rule && variableAllowed(rule, rows, person) && !hasRecurringOverlap(rows, rule)
-			? [{rows, rule, amountKind: 'VARIABLE' as const}]
-			: fixed;
+	const recognized: RecognizedPartition[] =
+		combinedRule && latestPricePeriod(combined, chains, combinedRule)
+			? [{rows: combined, rule: combinedRule, amountKind: 'FIXED'}]
+			: rule && variableAllowed(rule, combined, person) && !hasRecurringOverlap(combined, rule)
+				? [{rows: combined, rule, amountKind: 'VARIABLE'}]
+				: fixed;
 	// One payer on one rhythm is one stream whatever its amounts; payments outside that rhythm stay out of it.
 	// Renamed histories linked by bank evidence are reconciled by their naming periods instead.
 	const sources = new Set(rows.map(({sourceMerchantKey}) => sourceMerchantKey));
@@ -729,8 +764,10 @@ function rhythmStream(
 ): RecognizedPartition | null {
 	let best: RecognizedPartition | null = null;
 	for (const rule of CADENCE_RULES) {
-		const path = rhythmPath(rows, rule);
-		if (!path || cadenceOf(path)?.cadence !== rule.cadence) continue;
+		const candidate = rhythmPath(rows, rule);
+		if (!candidate) continue;
+		const path = qualifiedBillingHistory(candidate, person);
+		if (cadenceOf(path)?.cadence !== rule.cadence) continue;
 		const inPath = new Set(path);
 		const outside = rows.filter((row) => !inPath.has(row));
 		// A second charge on a stream payment's own day is billed alongside it, not a one-off.
@@ -781,8 +818,8 @@ function alternatesPrices(rows: readonly RecurringCandidate[]): boolean {
 function hasOtherCadencePrice(rows: readonly RecurringCandidate[], rule: CadenceRule): boolean {
 	return chainByAmount(rows).some((chain) => {
 		if (chain.length < rule.minCount) return false;
-		const own = matchCadence(chain);
-		return own !== null && own.cadence !== rule.cadence;
+		const matches = matchingCadences(chain);
+		return matches.length > 0 && !matches.includes(rule);
 	});
 }
 
@@ -822,17 +859,23 @@ function rhythmPath(rows: readonly RecurringCandidate[], rule: CadenceRule): Rec
 	return path;
 }
 
-/**
- * Fixed when most payments sit in sustained prices and the current price is sustained or a fresh change after one;
- * otherwise the amount varies.
- */
-function streamAmountKind(rows: readonly RecurringCandidate[], rule: CadenceRule): RecurringAmountKind {
+/** Chronological periods at one billing price, shared by qualification and history selection. */
+function priceRuns(rows: readonly RecurringCandidate[]): RecurringCandidate[][] {
 	const runs: RecurringCandidate[][] = [];
 	for (const row of rows) {
 		const run = runs[runs.length - 1];
 		if (run && nearAmount(row.amountCents, run[run.length - 1].amountCents)) run.push(row);
 		else runs.push([row]);
 	}
+	return runs;
+}
+
+/**
+ * Fixed when most payments sit in sustained prices and the current price is sustained or a fresh change after one;
+ * otherwise the amount varies.
+ */
+function streamAmountKind(rows: readonly RecurringCandidate[], rule: CadenceRule): RecurringAmountKind {
+	const runs = priceRuns(rows);
 	const sustained = (run: readonly RecurringCandidate[]) => run.length >= rule.minCount;
 	const current = runs[runs.length - 1];
 	const changing = !sustained(current) && runs.length > 1 && sustained(runs[runs.length - 2]);
@@ -925,16 +968,59 @@ function withinAmountTolerance(distance: bigint, reference: bigint): boolean {
 	return distance <= (percentTolerance > AMOUNT_TOLERANCE_CENTS ? percentTolerance : AMOUNT_TOLERANCE_CENTS);
 }
 
-function matchCadence(rows: readonly RecurringCandidate[]): CadenceRule | null {
-	if (rows.length < 2) return null;
+function matchingCadences(rows: readonly RecurringCandidate[]): CadenceRule[] {
+	if (rows.length < 2) return [];
 	const days = rows.map((row) => toDayNumber(row.date));
 	const gaps = days.slice(1).map((day, index) => day - days[index]);
 	const medianGap = medianNumber(gaps);
-	const rule = CADENCE_RULES.find(({medianGap: [min, max]}) => medianGap >= min && medianGap <= max);
-	if (!rule || rows.length < rule.minCount) return null;
+	return CADENCE_RULES.filter((rule) => {
+		const [min, max] = rule.medianGap;
+		if (medianGap < min || medianGap > max || rows.length < rule.minCount) return false;
+		if (
+			rule.cadence === 'FOUR_WEEKLY' &&
+			!cadenceDistances(rows, days, rule).every((distance) => distance <= rule.toleranceDays)
+		)
+			return false;
+		const regular = gaps.filter((gap) => isRegularGap(gap, rule)).length;
+		return regular / gaps.length >= MIN_REGULAR_GAP_SHARE;
+	});
+}
 
-	const regular = gaps.filter((gap) => isRegularGap(gap, rule)).length;
-	return regular / gaps.length >= MIN_REGULAR_GAP_SHARE ? rule : null;
+function matchCadence(rows: readonly RecurringCandidate[]): CadenceRule | null {
+	const matches = matchingCadences(rows);
+	if (matches.length < 2) return matches[0] ?? null;
+	const days = rows.map((row) => toDayNumber(row.date));
+	// Keep a calendar-compatible history monthly unless the bank dates prove an exact fixed-day phase.
+	const scored = matches.map((rule) => ({rule, distances: cadenceDistances(rows, days, rule)}));
+	const monthly = scored.find(({rule}) => rule.cadence === 'MONTHLY');
+	const fourWeekly = scored.find(({rule}) => rule.cadence === 'FOUR_WEEKLY');
+	if (
+		monthly &&
+		fourWeekly &&
+		monthly.distances.every((distance) => distance <= monthly.rule.toleranceDays) &&
+		!days.every((day) => (day - days[0]) % fourWeekly.rule.nominalDays === 0)
+	)
+		return monthly.rule;
+	return scored
+		.map(({rule, distances}) => ({rule, drift: distances.reduce((total, distance) => total + distance, 0)}))
+		.sort((a, b) => a.drift - b.drift || Number(b.rule.months > 0) - Number(a.rule.months > 0))[0].rule;
+}
+
+/** Distances from one stable billing phase, using the same calendar anchors as forecasting. */
+function cadenceDistances(rows: readonly RecurringCandidate[], days: readonly number[], rule: CadenceRule): number[] {
+	if (rule.months === 0) {
+		const offsets = days.map((day) => {
+			const elapsed = day - days[0];
+			return elapsed - Math.round(elapsed / rule.nominalDays) * rule.nominalDays;
+		});
+		const phase = medianNumber(offsets);
+		return offsets.map((offset) => Math.abs(offset - phase));
+	}
+	const anchorDay = calendarAnchorDay(
+		rows.map(({date}) => Number(date.slice(8, 10))),
+		Number(rows.at(-1)!.date.slice(8, 10)),
+	);
+	return rows.map((row, index) => Math.abs(days[index] - toDayNumber(calendarPaymentDate(row.date, anchorDay))));
 }
 
 function isRegularGap(gap: number, rule: CadenceRule): boolean {
@@ -1005,9 +1091,8 @@ function buildSeries(
 			? BANK_TRANSACTION_DIRECTIONS.INCOME
 			: BANK_TRANSACTION_DIRECTIONS.EXPENSE;
 	const converted = rows.every((row) => row.baseAmountCents !== null);
-	// Weekly uses 52 weeks over 12 months.
 	const perMonth = (perPayment: bigint) => {
-		const [numerator, denominator] = rule.months === 0 ? [52n, 12n] : [1n, BigInt(rule.months)];
+		const [numerator, denominator] = rule.monthlyRatio;
 		return divideRounded(perPayment * numerator, denominator);
 	};
 	const amounts =
@@ -1155,17 +1240,21 @@ function addCycles(rows: readonly RecurringCandidate[], rule: CadenceRule, cycle
 	// Month-based series keep their usual day of the month, clamped to shorter months.
 	const days = rows.map((row) => Number(row.date.slice(8, 10)));
 	const anchorDay = calendarAnchorDay(days, days[days.length - 1]);
-	const [year, month] = lastDate.split('-').map(Number);
+	const [year, month] = calendarPaymentDate(lastDate, anchorDay).split('-').map(Number);
+	return anchorDate(year, month - 1 + rule.months * cycles, anchorDay);
+}
+
+/** The calendar slot paid by a date, allowing early/late bank dates across a month boundary. */
+function calendarPaymentDate(date: string, anchorDay: number): string {
+	const [year, month] = date.split('-').map(Number);
 	// A payment made a few days early, across a month boundary, still pays the month it was due in.
-	const paidMonth = [-1, 0, 1]
-		.map((offset) => month - 1 + offset)
+	return [-1, 0, 1]
+		.map((offset) => anchorDate(year, month - 1 + offset, anchorDay))
 		.reduce((best, candidate) =>
-			Math.abs(toDayNumber(anchorDate(year, candidate, anchorDay)) - toDayNumber(lastDate)) <
-			Math.abs(toDayNumber(anchorDate(year, best, anchorDay)) - toDayNumber(lastDate))
+			Math.abs(toDayNumber(candidate) - toDayNumber(date)) < Math.abs(toDayNumber(best) - toDayNumber(date))
 				? candidate
 				: best,
 		);
-	return anchorDate(year, paidMonth + rule.months * cycles, anchorDay);
 }
 
 /**
