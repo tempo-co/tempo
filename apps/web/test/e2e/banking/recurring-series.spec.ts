@@ -71,7 +71,17 @@ function listOf(entries: RecurringSeries[]): RecurringSeriesList {
 async function mockRecurring(page: Page) {
   const state = {
     expenses: [
-      series({key: GYM_KEY, name: 'Example Gym'}),
+      series({
+        key: GYM_KEY,
+        name: 'Example Gym',
+        cadence: 'FOUR_WEEKLY',
+        typicalAmount: '24.00',
+        latestAmount: '24.00',
+        monthlyEquivalent: '26.00',
+        firstDate: '2026-04-17',
+        lastDate: '2026-09-04',
+        nextExpectedDate: '2026-10-02',
+      }),
       series({
         key: STREAMING_KEY,
         name: 'Example Streaming',
@@ -209,17 +219,23 @@ for (const viewport of [
     page,
   }) => {
     await page.setViewportSize(viewport);
+    await page.clock.setFixedTime(new Date('2026-10-01T10:00:00Z'));
     const state = await mockRecurring(page);
     await page.goto('/?recurring=open');
 
     await expect(page.getByRole('dialog', {name: 'Recurring payments'})).toBeVisible();
+    // Payment amount, monthly contribution and forecast date come from the API independently.
+    await expect(row(page, GYM_KEY)).toContainText('Every 4 weeks');
+    await expect(row(page, GYM_KEY).getByText('€24.00', {exact: true})).toBeVisible();
+    await expect(row(page, GYM_KEY)).toContainText('≈ €26.00 a month');
+    await expect(row(page, GYM_KEY)).toContainText('Next around 2 Oct');
     // Bills and income come from one request.
     await expect(page.getByRole('region', {name: 'Income'})).toBeVisible();
     expect(state.listReads).toHaveLength(1);
     expect(new URLSearchParams(state.listReads[0]).has('direction')).toBe(false);
     // Gym, streaming at its new price, energy and phone; the ended plan does not count.
     await expect(page.getByTestId('recurring-summary')).toHaveText(
-      '€135.49 a month across 4 payments.',
+      '€131.49 a month across 4 payments.',
     );
     for (const name of ['Confirm', 'Dismiss', 'Link', 'Keep separate']) {
       await expect(page.getByRole('button', {name, exact: true})).toHaveCount(0);
@@ -249,9 +265,7 @@ for (const viewport of [
     await expect(payments.getByRole('listitem').first()).toHaveAttribute('data-unusual', 'true');
     await expect(payments.getByRole('listitem').nth(1)).not.toHaveAttribute('data-unusual');
     await expect(payments.getByRole('listitem').last()).toContainText('€61.00');
-    // A fixed price stays exact: no estimate sign, range or history.
-    await expect(row(page, GYM_KEY)).toContainText('€30.00');
-    await expect(row(page, GYM_KEY)).not.toContainText('≈');
+    // The fixed per-payment price has no range or history.
     await expect(row(page, GYM_KEY).getByRole('button', {name: 'Recent payments'})).toHaveCount(0);
     // Ended series stay folded away until asked for.
     await expect(row(page, OLD_KEY)).toBeHidden();
@@ -262,26 +276,42 @@ for (const viewport of [
     await chooseFromRowMenu(page, 'Example Energy', 'Not recurring');
     await expect(page.getByText('Hidden from recurring payments.')).toBeVisible();
     await expect(page.getByTestId('recurring-summary')).toHaveText(
-      '€50.49 a month across 3 payments.',
+      '€46.49 a month across 3 payments.',
     );
     await expect(row(page, ENERGY_KEY)).toBeHidden();
     await page.getByRole('button', {name: 'Undo'}).click();
     await expect(row(page, ENERGY_KEY)).toBeVisible();
     await expect(page.getByTestId('recurring-summary')).toHaveText(
-      '€135.49 a month across 4 payments.',
+      '€131.49 a month across 4 payments.',
     );
 
-    // A hidden series can be restored from its fold.
+    // Hiding the four-weekly bill removes its monthly contribution, not its payment amount.
     await chooseFromRowMenu(page, 'Example Gym', 'Not recurring');
-    await expect(page.getByTestId('recurring-summary')).toContainText('3 payments');
+    await expect(page.getByTestId('recurring-summary')).toHaveText(
+      '€105.49 a month across 3 payments.',
+    );
+    await expect(row(page, GYM_KEY)).toBeHidden();
+    await page.getByRole('button', {name: 'Undo'}).last().click();
+    await expect(row(page, GYM_KEY)).toContainText('Every 4 weeks');
+    await expect(page.getByTestId('recurring-summary')).toHaveText(
+      '€131.49 a month across 4 payments.',
+    );
+
+    // A hidden series can also be restored from its fold after reload.
+    await chooseFromRowMenu(page, 'Example Gym', 'Not recurring');
+    await page.reload();
     await page.getByText('Hidden (1)').click();
     await row(page, GYM_KEY).getByRole('button', {name: 'Show Example Gym again'}).click();
-    await expect(page.getByTestId('recurring-summary')).toContainText('4 payments');
+    await expect(page.getByTestId('recurring-summary')).toHaveText(
+      '€131.49 a month across 4 payments.',
+    );
     await expectNoHorizontalOverflow(page);
 
     expect(state.writes).toEqual([
       {key: ENERGY_KEY, hidden: true},
       {key: ENERGY_KEY, hidden: false},
+      {key: GYM_KEY, hidden: true},
+      {key: GYM_KEY, hidden: false},
       {key: GYM_KEY, hidden: true},
       {key: GYM_KEY, hidden: false},
     ]);
@@ -388,7 +418,7 @@ test('says so when hiding could not be saved', async ({page}) => {
 });
 
 // The API owns consolidation and eligibility; this only verifies consumption of its DTOs.
-test('drills a series and a weekly bill through to exactly their payments', async ({page}) => {
+test('drills recurring series through to exactly their payments', async ({page}) => {
   const state = await mockRecurring(page);
   const cloudKey = 'a1'.repeat(16);
   const weeklyKey = 'd4'.repeat(16);
@@ -423,6 +453,18 @@ test('drills a series and a weekly bill through to exactly their payments', asyn
         }),
       ),
     },
+    {
+      entry: state.expenses.find(({key}) => key === GYM_KEY)!,
+      payments: ['2026-04-17', '2026-05-15', '2026-06-12', '2026-07-10', '2026-08-07', '2026-09-04'].map(
+        (bookingDate, index) =>
+          payment(40 + index, {
+            bookingDate,
+            displayDescription: 'Example Gym',
+            amount: '-24.00',
+            bankAccountAlias: 'Example Current Account',
+          }),
+      ),
+    },
   ];
   state.expenses = histories.map(({entry}) => entry);
   const drillKeys: Array<string | null> = [];
@@ -445,8 +487,11 @@ test('drills a series and a weekly bill through to exactly their payments', asyn
     await expect.poll(() => drillKeys[drillKeys.length - 1]).toBe(entry.key);
     const transactionRows = page.getByTestId(/^bank-transaction-row-/);
     await expect(transactionRows).toHaveCount(payments.length);
+    for (const source of payments) {
+      await expect(page.getByTestId(`bank-transaction-row-${source.id}`)).toBeVisible();
+    }
     await page.goBack();
-    await expect(page.getByTestId('recurring-summary')).toContainText('2 payments');
+    await expect(page.getByTestId('recurring-summary')).toContainText('3 payments');
   }
 });
 

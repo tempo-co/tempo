@@ -1,4 +1,10 @@
-export const RECURRING_CADENCES = ['WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY'] as const;
+export const RECURRING_CADENCES = [
+  'WEEKLY',
+  'FOUR_WEEKLY',
+  'MONTHLY',
+  'QUARTERLY',
+  'YEARLY',
+] as const;
 export type RecurringCadence = (typeof RECURRING_CADENCES)[number];
 
 export type RecurringSeriesDirection = 'EXPENSE' | 'INCOME';
@@ -80,6 +86,7 @@ export type RecurringSummary = {
 
 export const RECURRING_CADENCE_LABELS: Record<RecurringCadence, string> = {
   WEEKLY: 'Weekly',
+  FOUR_WEEKLY: 'Every 4 weeks',
   MONTHLY: 'Monthly',
   QUARTERLY: 'Quarterly',
   YEARLY: 'Yearly',
