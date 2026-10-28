@@ -4,7 +4,7 @@ import {toast} from 'sonner';
 import {HttpError, SessionChangedError, api, isAuthError} from '@/utils/api';
 
 import type {BankSyncRun} from '../types/bank-sync-run';
-import {getBankRefreshFeedback} from '../utils/bank-refresh-feedback';
+import {getBankRefreshToast} from '../utils/bank-refresh-feedback';
 import {invalidateBankDerivedData} from './invalidate-bank-derived-data';
 import {bankQueryKeys} from './query-keys';
 
@@ -22,14 +22,9 @@ export function useBankConnectionRefreshState(connectionId: string) {
     select: (mutation) => mutation.state,
   });
   const state = states.slice(-1)[0];
-  const connectionLost = state?.error instanceof HttpError && state.error.status === 0;
-  const cancelled =
-    (state?.variables as RefreshRequest | undefined)?.signal?.aborted && !connectionLost;
-  return {
-    isPending: !cancelled && state?.status === 'pending',
-    data: cancelled ? undefined : (state?.data as BankSyncRun | undefined),
-    error: cancelled ? undefined : state?.error,
-  };
+  // A cancelled refresh (hidden app, session change) is not shown as running.
+  const cancelled = (state?.variables as RefreshRequest | undefined)?.signal?.aborted;
+  return {isPending: !cancelled && state?.status === 'pending'};
 }
 
 export function useRefreshBankConnection() {
@@ -40,10 +35,8 @@ export function useRefreshBankConnection() {
       api.post<BankSyncRun>(`/bank-connections/${connectionId}/refresh`, undefined, {signal}),
     onSuccess: async (result, {signal}) => {
       if (signal?.aborted) return;
-      if (result.status !== 'SUCCEEDED') {
-        const feedback = getBankRefreshFeedback(result);
-        toast.error(feedback.title, {description: result.errorMessage || feedback.message});
-      }
+      const feedback = getBankRefreshToast(result);
+      if (feedback) toast.error(feedback.title, {description: feedback.description});
       await invalidateBankDerivedData(queryClient);
     },
     onError: (error, {signal}) => {

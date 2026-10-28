@@ -636,9 +636,6 @@ test.describe('bank connections', () => {
     await mockBankRefresh(page);
     await page.setViewportSize({width: 393, height: 852});
     await page.goto('/bank-connections');
-    await expect(page.getByTestId('bank-refresh-status')).toHaveText(
-      'Refresh complete. 0 new transactions.',
-    );
 
     const heading = page.getByRole('heading', {name: 'Bank connections'});
     const headingGroup = page.getByTestId('bank-connections-heading');
@@ -872,17 +869,13 @@ test.describe('mocked Enable Banking bank connection', () => {
         return fulfillJson(route, {message}, status);
       });
       await page.goto('/bank-connections');
-      const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-        `Refresh failed. ${message}`,
-      );
       await expect(page.getByText('Bank refresh failed', {exact: true})).toBeVisible();
       await page.clock.runFor(60_000);
       expect(requests).toBe(1);
     });
   }
 
-  test('shows an unconfirmed refresh after a lost response and never replays it on reconnect', async ({
+  test('reports a lost refresh response once and never replays it on reconnect', async ({
     page,
   }) => {
     let requests = 0;
@@ -900,20 +893,16 @@ test.describe('mocked Enable Banking bank connection', () => {
       return route.abort('failed');
     });
     await page.goto('/bank-connections');
-    const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-      'Refresh not confirmed. Cannot reach Tempo. Check bank data before trying again.',
-    );
+    await expect.poll(() => requests).toBe(1);
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
+    await expect(page.locator('[data-sonner-toast]')).toContainText('Cannot reach Tempo.');
+    await expect(page.getByRole('status').filter({hasText: /^Offline/})).toBeVisible();
     unreachable = false;
     await page.evaluate(() => window.dispatchEvent(new Event('online')));
     await page.clock.runFor(60_000);
     expect(requests).toBe(1);
     await page.reload();
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-      'Refresh not confirmed. Cannot reach Tempo. Check bank data before trying again.',
-    );
-    expect(requests).toBe(2);
+    await expect.poll(() => requests).toBe(2);
   });
 
   test('handles pending and completed connection removal during foreground refresh', async ({page}) => {
@@ -956,8 +945,9 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText('Refresh complete. 3 new transactions.');
+    await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id]);
     await card.getByTestId(/^connection-card-toggle-/).click();
+    await expect(card.getByRole('button', {name: 'Remove connection'})).toBeEnabled();
     await card.getByRole('button', {name: 'Remove connection'}).click();
     await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
     await page.getByRole('button', {name: 'Remove permanently', exact: true}).click();
@@ -972,7 +962,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         }
       });
       await expect.poll(() => reads).toBeGreaterThan(before);
-      await expect(card.getByTestId('bank-refresh-status')).toHaveText('Removing bank connection...');
+      await expect(card.getByRole('button', {name: 'Remove connection'})).toBeDisabled();
       expect(requests).toEqual([MOCK_CONNECTION.id]);
     } finally {
       releaseRemoval();
@@ -987,22 +977,26 @@ test.describe('mocked Enable Banking bank connection', () => {
       }
     });
     const firstCard = page.getByTestId(`bank-connection-${first.id}`);
+    let readsBeforeSettle = Number.POSITIVE_INFINITY;
     try {
-      await expect(firstCard.getByTestId('bank-refresh-status')).toHaveText('Refreshing bank data...');
+      await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id, first.id]);
       await card.getByRole('button', {name: 'Remove connection'}).click();
       await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
       await page.getByRole('button', {name: 'Remove permanently', exact: true}).click();
       await expect(page.getByText('Bank connection removed', {exact: true})).toBeVisible();
       await expect(card).toHaveCount(0);
+      // A settled refresh re-reads the saved connections.
+      readsBeforeSettle = reads;
     } finally {
       releaseRefresh();
     }
-    await expect(firstCard.getByTestId('bank-refresh-status')).toHaveText('Refresh complete. 3 new transactions.');
+    await expect.poll(() => reads).toBeGreaterThan(readsBeforeSettle);
+    await expect(firstCard).toBeVisible();
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     expect(requests).toEqual([MOCK_CONNECTION.id, first.id]);
   });
 
-  test('shows an API request limit inline with its retry guidance and one shared error toast', async ({
+  test('shows an API request limit as one shared error toast with retry guidance', async ({
     page,
   }) => {
     await mockBankConnections(page, [MOCK_CONNECTION]);
@@ -1022,20 +1016,11 @@ test.describe('mocked Enable Banking bank connection', () => {
       }),
     );
     await page.goto('/bank-connections');
-    const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-      'Refresh rate-limited. Please try again in about 2 minutes.',
-    );
-    await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
     await expect(page.getByText('Rate limit exceeded', {exact: true})).toBeVisible();
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
     await expect(page.locator('[data-sonner-toast]')).toContainText(
       'Please try again in about 2 minutes.',
     );
-    const guidance = 'Refresh rate-limited. Please try again in about 2 minutes.';
-    await page.context().setOffline(true);
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText(guidance);
-    await page.context().setOffline(false);
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText(guidance);
   });
 
   for (const {name, body, headers, guidance} of [
@@ -1075,10 +1060,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         route.fulfill({status: 429, headers, contentType: 'application/json', body}),
       );
       await page.goto('/bank-connections');
-      const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-        `Refresh rate-limited. ${guidance}`,
-      );
+      await expect(page.getByText('Rate limit exceeded', {exact: true})).toBeVisible();
       await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
       await expect(page.locator('[data-sonner-toast]')).toContainText(guidance);
     });
@@ -1145,13 +1127,10 @@ test.describe('mocked Enable Banking bank connection', () => {
   });
 
   for (const syncStatus of ['QUEUED', 'RUNNING'] as const) {
-    test(`shows in-progress synchronization and blocks removal while bank sync is ${syncStatus}`, async ({page}) => {
+    test(`blocks removal while bank sync is ${syncStatus}`, async ({page}) => {
       await mockBankConnections(page, [{...MOCK_CONNECTION, syncStatus}]);
       await page.goto('/bank-connections');
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-        'Bank sync is in progress.',
-      );
       await card.getByTestId(/^connection-card-toggle-/).click();
       await expect(card.getByRole('button', {name: 'Remove connection'})).toBeDisabled();
     });
@@ -1167,7 +1146,8 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText('Refresh complete. 3 new transactions.');
+    await expect.poll(() => requests).toBe(1);
+    await expect(card).toBeVisible();
     await page.clock.runFor(1100);
     await expect.poll(() => page.evaluate(() => !!localStorage.getItem('tempo-offline-cache'))).toBe(true);
     await page.addInitScript(() => {
@@ -1206,8 +1186,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         window.dispatchEvent(new Event('visibilitychange'));
       }
     });
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText('Refresh complete. 3 new transactions.');
-    expect(requests).toBe(2);
+    await expect.poll(() => requests).toBe(2);
   });
 
   for (const outcome of ['conflict', 'FAILED', 'PARTIAL'] as const) {
@@ -1236,8 +1215,13 @@ test.describe('mocked Enable Banking bank connection', () => {
       });
       await page.goto('/bank-connections');
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-        `${outcome === 'PARTIAL' ? 'Refresh incomplete. 1 new transaction.' : 'Refresh failed.'} Bank consent has expired. Please reconnect.`,
+      await expect(
+        page.getByText(outcome === 'PARTIAL' ? 'Bank refresh incomplete' : 'Bank refresh failed', {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(page.locator('[data-sonner-toast]')).toContainText(
+        'Bank consent has expired. Please reconnect.',
       );
       await expect(card.getByRole('button', {name: 'Re-authorize', exact: true})).toBeVisible();
       await expect(card.getByTestId('bank-connection-status')).toContainText('Expired');
@@ -1263,11 +1247,10 @@ test.describe('mocked Enable Banking bank connection', () => {
         });
       });
       await page.goto('/bank-connections');
-      const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-        `${status === 'PARTIAL' ? 'Refresh incomplete: bank rate limit. 1 new transaction.' : 'Refresh rate-limited.'} Example bank request limit reached. Please try again in about 2 minutes.`,
-      );
       await expect(page.getByText('Bank refresh rate-limited', {exact: true})).toBeVisible();
+      await expect(page.locator('[data-sonner-toast]')).toContainText(
+        'Example bank request limit reached. Please try again in about 2 minutes.',
+      );
       await page.clock.runFor(180_000);
       expect(requests).toBe(1);
     });
@@ -1309,7 +1292,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       await expect(page.getByTestId('account-menu-trigger')).toContainText('NE');
       await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id, next.id]);
       await page.getByRole('navigation', {name: 'Primary'}).getByRole('link', {name: 'Connections', exact: true}).click();
-      await expect(page.getByTestId(`bank-connection-${next.id}`).getByTestId('bank-refresh-status')).toHaveText('Refresh complete. 3 new transactions.');
+      await expect(page.getByTestId(`bank-connection-${next.id}`)).toBeVisible();
     } finally {
       release();
     }
@@ -1351,15 +1334,13 @@ test.describe('mocked Enable Banking bank connection', () => {
       await fulfillJson(route, REFRESH_RESULT);
     });
     await page.goto('/bank-connections');
-    const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText('Refreshing bank data...');
+    await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id]);
     try {
       await page.evaluate(() => {
         Object.defineProperty(document, 'visibilityState', {value: 'hidden', configurable: true});
         window.dispatchEvent(new Event('visibilitychange'));
       });
       await expect(page.locator('html')).toHaveAttribute('data-refresh-aborted', 'true');
-      await expect(card.getByTestId('bank-refresh-status')).toHaveCount(0);
       expect(requests).toEqual([MOCK_CONNECTION.id]);
       expect(await page.locator('[data-sonner-toast]').count()).toBe(0);
       expect(await page.getByRole('status').filter({hasText: /^Offline/}).count()).toBe(0);
@@ -1370,9 +1351,8 @@ test.describe('mocked Enable Banking bank connection', () => {
         window.dispatchEvent(new Event('visibilitychange'));
         window.dispatchEvent(new Event('visibilitychange'));
       });
-      await expect(page.getByTestId(`bank-connection-${third.id}`).getByTestId('bank-refresh-status')).toHaveText('Refresh complete. 3 new transactions.');
+      await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id, third.id]);
       expect(listReads).toBeGreaterThan(readsBefore);
-      expect(requests).toEqual([MOCK_CONNECTION.id, third.id]);
     } finally {
       release();
     }
@@ -1397,9 +1377,6 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-      'Refresh failed. Example bank is unavailable.',
-    );
     await expect(page.getByText('Bank refresh failed', {exact: true})).toBeVisible();
     expect(requests).toBe(1);
     await page.evaluate(() => {
@@ -1418,10 +1395,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         window.dispatchEvent(new Event('visibilitychange'));
       }
     });
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-      'Refresh complete. 3 new transactions.',
-    );
-    expect(requests).toBe(2);
+    await expect.poll(() => requests).toBe(2);
   });
 
   test('shows a partial refresh with saved balances and the bank error', async ({page}) => {
@@ -1446,10 +1420,10 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    await expect(card.getByTestId('bank-refresh-status')).toHaveText(
-      'Refresh incomplete. 1 new transaction. Example account is unavailable.',
-    );
     await expect(card.getByTestId('bank-connection-total')).toContainText('2,000.00');
+    await expect(page.locator('[data-sonner-toast]')).toContainText(
+      'Example account is unavailable.',
+    );
     await expect(page.getByText('Bank refresh incomplete', {exact: true})).toBeVisible();
   });
 
@@ -1638,10 +1612,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       await expect(connectionCard.getByText('Consent valid until', {exact: false})).toBeHidden();
       await expectNoHorizontalOverflow(page);
       try {
-        await expect(connectionCard.getByTestId('bank-refresh-status')).toHaveText(
-          'Refreshing bank data...',
-        );
-        await expect(connectionCard.getByRole('button', {name: /^Refresh/})).toHaveCount(0);
+        await expect.poll(() => refreshRequests).toBe(1);
         await page.screenshot({
           path: testInfo.outputPath(`refresh-pending-${width}-${theme}.png`),
           fullPage: true,
@@ -1654,9 +1625,6 @@ test.describe('mocked Enable Banking bank connection', () => {
       } finally {
         releaseRefresh();
       }
-      await expect(connectionCard.getByTestId('bank-refresh-status')).toHaveText(
-        'Refresh complete. 3 new transactions.',
-      );
       await expect(connectionCard.getByTestId('bank-connection-total')).toContainText('2,000.00');
       await expect(connectionCard.getByRole('button', {name: 'Remove connection'})).toBeEnabled();
       await page.screenshot({

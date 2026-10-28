@@ -19,7 +19,6 @@ import {
   ResponsiveDialogTrigger,
 } from '@/components/ui/responsive-dialog';
 import {Skeleton} from '@/components/ui/skeleton';
-import {useIsOnline} from '@/hooks/use-connection';
 import {HttpError} from '@/utils/api';
 import {cn} from '@/utils/cn';
 
@@ -33,7 +32,6 @@ import {
   BankConnectionAspsp,
   BankConnectionTransaction,
 } from '../types/bank-connection';
-import {getBankRefreshErrorFeedback, getBankRefreshFeedback} from '../utils/bank-refresh-feedback';
 import {
   type AutomaticSyncDetails,
   getAutomaticSyncDetailsForConnection,
@@ -219,7 +217,6 @@ function BankConnectionCard({
   onTransactionSelect: BankConnectionListProps['onTransactionSelect'];
 }) {
   const isAuthorized = connection.status === 'AUTHORIZED';
-  const isOnline = useIsOnline();
   const isRemovable = isRemovableConnection(connection.status);
   const isDestructive = isDestructiveConnection(connection.status);
   // Collapsed by default: the header already carries state, so the body is opt-in.
@@ -234,33 +231,10 @@ function BankConnectionCard({
   const disclosureContentId = `bank-connection-${connection.id}-content`;
   const metadataHeadingId = `bank-connection-${connection.id}-meta`;
   const {deleteBankConnection, isPending: isRemoving} = useDeleteBankConnection();
-  const {
-    isPending: isRefreshing,
-    data: refreshResult,
-    error: refreshError,
-  } = useBankConnectionRefreshState(connection.id);
+  const {isPending: isRefreshing} = useBankConnectionRefreshState(connection.id);
   const hasSynced = isAuthorized && !!connection.lastSyncedAt;
   const needsReauth = isReauthorizationRequired(connection);
   const isBankSyncInProgress = isSyncInProgress(connection);
-  const refreshFeedback = refreshError
-    ? getBankRefreshErrorFeedback(refreshError)
-    : refreshResult
-      ? getBankRefreshFeedback(refreshResult)
-      : null;
-  const refreshStatus = isRefreshing
-    ? {message: 'Refreshing bank data...', tone: 'info'}
-    : isRemoving
-      ? {message: 'Removing bank connection...', tone: 'info'}
-      : isAuthorized && !needsReauth && !isOnline
-        ? refreshError
-          ? refreshFeedback
-          : {message: 'Connect to refresh bank data.', tone: 'info'}
-        : isBankSyncInProgress
-          ? {
-              message: 'Bank sync is in progress.',
-              tone: 'info',
-            }
-          : refreshFeedback;
   const {
     transactions,
     total,
@@ -312,7 +286,6 @@ function BankConnectionCard({
         className={cn(
           'relative flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-0',
           isAuthorized && !needsReauth && 'max-sm:flex-row max-sm:items-center max-sm:gap-0',
-          refreshStatus && 'pb-2',
         )}
       >
         {hasBodyContent ? (
@@ -367,19 +340,6 @@ function BankConnectionCard({
           </Button>
         )}
       </CardHeader>
-      {refreshStatus && (
-        <p
-          role='status'
-          data-testid='bank-refresh-status'
-          className={cn(
-            'px-4 pb-2 text-sm',
-            refreshStatus.tone === 'warning' && 'text-warning',
-            refreshStatus.tone === 'error' && 'text-destructive',
-          )}
-        >
-          {refreshStatus.message}
-        </p>
-      )}
       {!isExpanded && <AutomaticSyncStatus details={syncDetails} />}
       {isExpanded && (
         <CardContent
