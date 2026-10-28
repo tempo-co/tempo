@@ -42,27 +42,69 @@ test.describe('Settings navigation', () => {
     }
   });
 
-  test('fits the section tabs on a narrow phone, aligned with the title', async ({page}) => {
-    await page.setViewportSize({width: 320, height: 700});
+  for (const {width, fontSize} of [
+    {width: 320, fontSize: 13},
+    {width: 359, fontSize: 13},
+    {width: 390, fontSize: 14},
+  ]) {
+    test(`spreads the section tabs across a ${width}px phone`, async ({page}) => {
+      await page.setViewportSize({width, height: 700});
+      await page.goto('/settings/security');
+
+      const sections = page.getByRole('navigation', {name: 'Settings sections'});
+      const tabs = sections.getByRole('link');
+      const nav = await boxOf(sections);
+      const boxes = await Promise.all((await tabs.all()).map(boxOf));
+      expect(Math.abs(boxes[0].x - nav.x)).toBeLessThan(1);
+      const last = boxes[boxes.length - 1];
+      expect(Math.abs(last.x + last.width - (nav.x + nav.width))).toBeLessThan(1);
+      for (const box of boxes) expect(box.height).toBeGreaterThanOrEqual(48);
+      const labels = await tabs.evaluateAll((links) =>
+        links.map((link) => {
+          const range = document.createRange();
+          range.selectNodeContents(link);
+          const text = range.getBoundingClientRect();
+          const box = link.getBoundingClientRect();
+          return {
+            fontSize: parseFloat(getComputedStyle(link).fontSize),
+            inside: text.left >= box.left && text.right <= box.right,
+            centreOffset: text.left + text.width / 2 - (box.left + box.width / 2),
+          };
+        }),
+      );
+      for (const label of labels) {
+        expect(label.fontSize).toBe(fontSize);
+        expect(label.inside).toBe(true);
+        expect(Math.abs(label.centreOffset)).toBeLessThan(1);
+      }
+      const underline = await sections
+        .locator('a[aria-current="page"]')
+        .evaluate((link) => [
+          parseFloat(getComputedStyle(link, '::after').width),
+          link.getBoundingClientRect().width,
+        ]);
+      expect(Math.abs(underline[0] - underline[1])).toBeLessThan(1);
+      await expectNoHorizontalOverflow(page);
+
+      await tabs.filter({hasText: 'Integrations'}).click();
+      await expect(page).toHaveURL(/\/settings\/integrations$/);
+      await expect(sections.locator('a[aria-current="page"]')).toHaveText('Integrations');
+    });
+  }
+
+  test('aligns the first section label with the title on desktop', async ({page}) => {
+    await page.setViewportSize({width: 1440, height: 900});
     await page.goto('/settings/security');
 
     const sections = page.getByRole('navigation', {name: 'Settings sections'});
-    const [title, nav, firstLabel, lastTab] = await Promise.all([
+    const [title, firstLabel] = await Promise.all([
       boxOf(page.getByRole('heading', {level: 1})),
-      boxOf(sections),
       sections.getByRole('link', {name: 'Account'}).evaluate((link) => {
         const range = document.createRange();
         range.selectNodeContents(link);
         return range.getBoundingClientRect().x;
       }),
-      boxOf(sections.getByRole('link', {name: 'Appearance'})),
     ]);
-    expect(lastTab.x + lastTab.width).toBeLessThanOrEqual(nav.x + nav.width);
     expect(Math.abs(firstLabel - title.x)).toBeLessThan(1);
-    await expectNoHorizontalOverflow(page);
-
-    await sections.getByRole('link', {name: 'Integrations'}).click();
-    await expect(page).toHaveURL(/\/settings\/integrations$/);
-    await expect(sections.locator('a[aria-current="page"]')).toHaveText('Integrations');
   });
 });

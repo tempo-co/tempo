@@ -27,19 +27,19 @@ function SettingsIndex() {
         <h1 className='text-page-title'>Settings</h1>
         {/* Same underline language as the header nav, one level down. */}
         <nav aria-label='Settings sections' className='mt-4 border-b'>
-          {/* Match the link inset so the first label aligns with the page title. */}
-          <ul className='-mb-px -ml-1.5 flex sm:-ml-3'>
+          {/* Phones share the full width; wider screens align the first label with the title. */}
+          <ul className='-mb-px flex sm:-ml-3'>
             {sections.map((section) => {
               const isActive = matchRoute({to: section.route, fuzzy: true}) !== false;
               return (
-                <li key={section.route}>
+                <li key={section.route} className='max-sm:flex-auto'>
                   <Link
                     to={section.route}
                     aria-current={isActive ? 'page' : undefined}
                     className={cn(
-                      'relative flex h-11 items-center px-1.5 text-xs whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:px-3 sm:text-sm',
+                      'relative flex h-12 items-center justify-center px-1 text-sm whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring max-[360px]:text-[13px] sm:h-11 sm:px-3',
                       isActive &&
-                        'font-medium text-foreground after:absolute after:inset-x-1.5 after:bottom-0 after:h-0.5 after:bg-primary sm:after:inset-x-3',
+                        'font-medium text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary sm:after:inset-x-3',
                     )}
                   >
                     {section.label}

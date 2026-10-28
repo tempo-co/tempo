@@ -10,8 +10,8 @@ export const Route = createFileRoute('/settings/integrations/')({
 function IntegrationsSettings() {
   return (
     <div className='space-y-8'>
-      <McpConnectionSettings />
       <AccessTokenSettings />
+      <McpConnectionSettings />
     </div>
   );
 }

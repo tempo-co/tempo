@@ -1,6 +1,6 @@
 import {API_URL, expect, test} from '../../fixtures';
 import {createHookHarness} from '../../utils/hook-harness';
-import {expectEvenRowActionSpacing, expectNoHorizontalOverflow} from '../../utils/layout';
+import {boxOf, expectEvenRowActionSpacing, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const account = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -97,12 +97,15 @@ for (const width of [1440, 320]) {
     });
     await page.goto('/settings/integrations');
     const connect = page.getByRole('region', {name: 'Connect an MCP client', exact: true});
+    const tokensSection = page.getByRole('region', {name: 'Access tokens', exact: true});
+    const [tokensBox, connectBox] = await Promise.all([boxOf(tokensSection), boxOf(connect)]);
+    expect(tokensBox.y + tokensBox.height).toBeLessThanOrEqual(connectBox.y);
     const serverUrl = new URL(`${API_URL.replace(/\/+$/, '')}/mcp`, page.url()).href;
     const urlField = connect.getByRole('textbox', {name: 'Server URL', exact: true});
     await expect(urlField).toHaveValue(serverUrl);
     const steps = connect.getByRole('list', {name: 'Connection steps'}).getByRole('listitem');
     await expect(steps).toHaveText([
-      /Create an access token below.*store it securely in your MCP client/,
+      /Create an access token and store it securely in your MCP client/,
       /Add an MCP server.*Streamable HTTP/,
       /Select Bearer token and enter your access token\. For headers, use Authorization: Bearer <access-token>/,
     ]);

@@ -65,8 +65,8 @@ export function McpConnectionSettings() {
         className='mt-4 list-decimal space-y-2 pl-5 text-sm text-muted-foreground'
       >
         <li>
-          Create an <strong className='font-medium text-foreground'>access token</strong> below and
-          store it securely in your MCP client.
+          Create an <strong className='font-medium text-foreground'>access token</strong> and store
+          it securely in your MCP client.
         </li>
         <li>
           Add an MCP server using this URL and the{' '}
