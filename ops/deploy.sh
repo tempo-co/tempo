@@ -64,6 +64,17 @@ compose() {
 
 repository() { echo "ghcr.io/tempo-co/tempo-$1"; }
 
+# Retry a registry pull so a short DNS or network blip does not fail the whole run.
+retry_pull() {
+    local attempt
+    for attempt in 1 2 3; do
+        "$@" && return 0
+        ((attempt < 3)) || return 1
+        log "pull failed (attempt $attempt of 3); retrying in $((attempt * 15))s" >&2
+        sleep $((attempt * 15))
+    done
+}
+
 running_image() {
     local ref
     ref=$(docker inspect --format '{{.Config.Image}}' "$COMPOSE_PROJECT-$1-1") || die "no running $1 container"
@@ -75,7 +86,7 @@ running_image() {
 resolve() {
     local repo output digest
     repo=$(repository "$1")
-    output=$(docker pull "$repo:$2") || die "could not pull $repo:$2"
+    output=$(retry_pull docker pull "$repo:$2") || die "could not pull $repo:$2"
     digest=$(sed -nE 's/^Digest: (sha256:[0-9a-f]{64})$/\1/p' <<<"$output")
     [[ -n $digest ]] || die "no digest for $repo:$2"
     echo "$repo@$digest"
@@ -143,7 +154,7 @@ update_pinned() {
     rm -f -- "$failed_file"
     ((${#changed[@]})) || return 0
     log "updating ${changed[*]} to the pinned images"
-    "$run" pull --quiet "${changed[@]}" || die "could not pull ${changed[*]}"
+    retry_pull "$run" pull --quiet "${changed[@]}" || die "could not pull ${changed[*]}"
     if [[ " ${changed[*]} " == *' postgres '* && -n ${BEFORE_DATA_CHANGE:-} ]]; then
         log "running pre-deploy step: $BEFORE_DATA_CHANGE"
         run_hook "$BEFORE_DATA_CHANGE" || die "pre-deploy step failed; ${changed[*]} not updated"

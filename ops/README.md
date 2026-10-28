@@ -17,7 +17,7 @@ CI builds one image per commit, publishes `ghcr.io/tempo-co/tempo-{api,web}:pr-<
 
 ## Production
 
-`tempo-deploy-production.timer` runs `deploy.sh production` every 5 minutes and deploys `:main`. Before any API image change it takes a validated database backup; a failed backup cancels the deploy. Images that fail to deploy are skipped until `:main` moves.
+`tempo-deploy-production.timer` runs `deploy.sh production` every 5 minutes and deploys `:main`. A failed image pull is retried twice, 15 and 30 seconds apart, before the run fails. Before any API image change it takes a validated database backup; a failed backup cancels the deploy. Images that fail to deploy are skipped until `:main` moves.
 
 PostgreSQL, Redis, Mailpit and Tailscale are pinned by `tag@digest` in the Compose files, and Dependabot proposes weekly bumps (no PostgreSQL or Redis majors). Before every deploy run, `tempo-sync-pins.service` (root, `sync-pins.sh`) copies a merged bump from `main` into the installed Compose files when the only change is a tag@digest `image:` line for the same image, major version and variant that moves forward (a higher version, or the same tag at the digest Docker Hub currently serves); downgrades and anything else still need `sudo ops/install.sh production`. The deploy run then recreates the services whose pin changed, taking the same backup first when PostgreSQL changes, and waits for health. There is no automatic rollback for these. After a failed pin update, deploys stop until a pin changes or the `failed-pins-*` file in the state directory is removed.
 
