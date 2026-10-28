@@ -37,6 +37,8 @@ export class BankTransactionResponseDto {
 	valueDate: string | null;
 	description: string | null;
 	displayDescription: string;
+	/** Path of the merchant's logo image, null when no confirmed logo exists. */
+	merchantLogoUrl: string | null;
 	counterpartyName: string | null;
 	amount: string;
 	currency: string;

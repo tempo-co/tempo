@@ -31,6 +31,7 @@ import type {
 	BankTransactionCategorizationStatus,
 } from '../categorization/bank-transaction-categorization.types';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
+import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {applyBankTransactionFilters} from './bank-transaction-filters';
@@ -46,6 +47,7 @@ export class BankTransactionService {
 		private readonly ownTransferService: OwnTransferService,
 		private readonly categorizationService: BankTransactionCategorizationService,
 		private readonly recurringSeriesService: RecurringSeriesService,
+		private readonly merchantLogoService: MerchantLogoService,
 	) {}
 
 	async findAll(
@@ -83,10 +85,7 @@ export class BankTransactionService {
 			.take(pageSize);
 
 		const [transactions, total] = await query.getManyAndCount();
-		return {
-			transactions: transactions.map((transaction) => this.toResponse(transaction)),
-			total,
-		};
+		return {transactions: await this.toResponses(accountId, transactions), total};
 	}
 
 	async findAllByConnectionId(
@@ -109,14 +108,19 @@ export class BankTransactionService {
 			.take(limit);
 
 		const [transactions, total] = await query.getManyAndCount();
+		const logos = await this.merchantLogoService.getLogoUrls(accountId, transactions);
 		return {
-			transactions: transactions.map((transaction) => this.toSharedResponseFields(transaction)),
+			transactions: transactions.map((transaction) =>
+				this.toSharedResponseFields(transaction, logos.get(transaction.id) ?? null),
+			),
 			total,
 		};
 	}
 
 	async findById(accountId: Account['id'], id: BankTransaction['id']): Promise<BankTransactionResponseDto> {
-		return this.toResponse(await this.findOwnedTransaction(accountId, id));
+		const transaction = await this.findOwnedTransaction(accountId, id);
+		const [response] = await this.toResponses(accountId, [transaction]);
+		return response;
 	}
 
 	async getCategoryImpact(
@@ -160,7 +164,8 @@ export class BankTransactionService {
 			applyToTransactionIds,
 		);
 		if (!saved) throw new NotFoundException(BANKING_TRANSACTION_NOT_FOUND);
-		return this.toResponse(transaction);
+		const [response] = await this.toResponses(accountId, [transaction]);
+		return response;
 	}
 
 	async updateOwnTransferOverride(
@@ -207,9 +212,18 @@ export class BankTransactionService {
 		);
 	}
 
-	private toResponse(transaction: BankTransaction): BankTransactionResponseDto {
+	/** Responses with each transaction's merchant logo, looked up once for the whole list. */
+	private async toResponses(
+		accountId: Account['id'],
+		transactions: BankTransaction[],
+	): Promise<BankTransactionResponseDto[]> {
+		const logos = await this.merchantLogoService.getLogoUrls(accountId, transactions);
+		return transactions.map((transaction) => this.toResponse(transaction, logos.get(transaction.id) ?? null));
+	}
+
+	private toResponse(transaction: BankTransaction, merchantLogoUrl: string | null): BankTransactionResponseDto {
 		return {
-			...this.toSharedResponseFields(transaction),
+			...this.toSharedResponseFields(transaction, merchantLogoUrl),
 			transactionDate: transaction.transactionDate,
 			direction: toBankTransactionDirection(transaction.creditDebitIndicator),
 			transactionType: transaction.transactionType ?? BANK_TRANSACTION_TYPES.OTHER,
@@ -259,7 +273,7 @@ export class BankTransactionService {
 		};
 	}
 
-	private toSharedResponseFields(transaction: BankTransaction) {
+	private toSharedResponseFields(transaction: BankTransaction, merchantLogoUrl: string | null) {
 		const direction = toBankTransactionDirection(transaction.creditDebitIndicator);
 		return {
 			id: transaction.id,
@@ -271,6 +285,7 @@ export class BankTransactionService {
 			transactionStatus: transaction.transactionStatus,
 			description: transaction.description,
 			displayDescription: transaction.displayDescription,
+			merchantLogoUrl,
 			counterpartyName: transaction.counterpartyName,
 			...toCategorizationFields(transaction),
 			financialEventType: transaction.financialEventType,

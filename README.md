@@ -32,6 +32,8 @@ Optional AI categorization uses Claude with model `claude-sonnet-5-5` at `high` 
 
 `AI_CATEGORIZATION_WEB_SEARCH_ENABLED=false` keeps merchant search off. When enabled, the one merchant search runs on the Anthropic API, or on the subscription bridge when the API refuses the request. Results retain the actual route (`claude-api` or `claude-subscription`) and configured model. If neither route is available, for the normal pass or the search, rows stay pending for queue retries and hourly reconciliation, preserving same-input categories and manual overrides.
 
+`MERCHANT_LOGOS_ENABLED=false` keeps merchant logos off. When enabled, the API identifies each new merchant once per owner through the same Claude routes as categorization, takes the logo from logo.dev when `LOGO_DEV_SECRET_KEY` is set, or from the merchant's official site when that one is larger, after the site's homepage confirms the brand, and serves it from `GET /merchant-logos/:id/:version` to the owner only. When a site serves no usable icon or refuses the server, the API asks DuckDuckGo's icon service for it. logo.dev and DuckDuckGo receive only the hostname; such a logo shows only when the model was sure of the site. Logos are stored in PostgreSQL, so backups include them.
+
 pgAdmin requires a login; its password defaults to `DB_PASSWORD` and can be overridden by setting `PGADMIN_DEFAULT_PASSWORD` in the environment.
 
 ## Development

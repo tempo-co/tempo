@@ -1,4 +1,5 @@
 import contract from './contract.json' with {type: 'json'};
+import merchantContract from './merchant-contract.json' with {type: 'json'};
 
 const categories = new Set(contract.schema.properties.classifications.items.properties.category.enum);
 const nullableFields = [
@@ -162,4 +163,61 @@ export function validRequest(body) {
 			return false;
 		return true;
 	});
+}
+
+const merchantFields = ['correlationId', 'name', 'location', 'transactionType', 'direction', 'searchSourceDomains'];
+const merchantKinds = new Set(merchantContract.schema.properties.merchants.items.properties.kind.enum);
+const hostname = (value) =>
+	typeof value === 'string' && /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(value);
+
+export function validMerchantRequest(body) {
+	if (
+		!keys(body, ['model', 'effort', 'input']) ||
+		!contract.models.includes(body.model) ||
+		!contract.efforts.includes(body.effort)
+	)
+		return false;
+	const {merchants} = body.input ?? {};
+	if (
+		!keys(body.input, ['merchants']) ||
+		!Array.isArray(merchants) ||
+		!merchants.length ||
+		merchants.length > merchantContract.maxMerchants
+	)
+		return false;
+	return merchants.every(
+		(merchant, index) =>
+			keys(merchant, merchantFields) &&
+			merchant.correlationId === String(index) &&
+			typeof merchant.name === 'string' &&
+			merchant.name.trim() !== '' &&
+			merchant.name.length <= merchantContract.maxNameLength &&
+			nullableText(merchant.location) &&
+			text(merchant.transactionType) &&
+			directions.includes(merchant.direction) &&
+			Array.isArray(merchant.searchSourceDomains) &&
+			merchant.searchSourceDomains.length <= merchantContract.maxSourceDomains &&
+			merchant.searchSourceDomains.every(hostname),
+	);
+}
+
+export function validMerchantResponse(output, input) {
+	if (
+		!keys(output, ['merchants']) ||
+		!Array.isArray(output.merchants) ||
+		output.merchants.length !== input.merchants.length
+	)
+		return false;
+	const ids = new Set(input.merchants.map((merchant) => merchant.correlationId));
+	return (
+		output.merchants.every(
+			(item) =>
+				keys(item, ['correlationId', 'kind', 'brand', 'domain', 'domainConfident']) &&
+				ids.delete(item.correlationId) &&
+				merchantKinds.has(item.kind) &&
+				nullableText(item.brand) &&
+				nullableText(item.domain) &&
+				typeof item.domainConfident === 'boolean',
+		) && ids.size === 0
+	);
 }

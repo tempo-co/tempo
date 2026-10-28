@@ -26,6 +26,7 @@ import {BankTransactionFxRate} from './bank-transaction-fx-rate.entity';
 import {BankTransaction} from './bank-transaction.entity';
 import {BankingService} from './banking.service';
 import {BankTransactionCategorizationModule} from './categorization/bank-transaction-categorization.module';
+import {MerchantLogoModule} from './merchant-logos/merchant-logo.module';
 import {RecurringContinuationUnlink} from './recurring/recurring-continuation-unlink.entity';
 import {RecurringSeriesHide} from './recurring/recurring-series-hide.entity';
 import {RecurringSeriesService} from './recurring/recurring-series.service';
@@ -69,6 +70,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		RedisModule,
 		BankingAuthorizationStateModule,
 		BankTransactionCategorizationModule,
+		MerchantLogoModule,
 	],
 	providers: [
 		BankingService,

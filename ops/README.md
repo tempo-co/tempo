@@ -48,11 +48,15 @@ systemctl --user enable --now tempo-claude-bridge.service
 
 Then set `AI_CATEGORIZATION_PROVIDER=claude`, `ANTHROPIC_API_KEY` and `TEMPO_CLAUDE_BRIDGE_DIR` (the bridge unit's socket directory) in the production env file, and remove `OPENAI_API_KEY`. When neither route is available, transactions stay pending and hourly reconciliation retries them.
 
+### Merchant logos
+
+`MERCHANT_LOGOS_ENABLED=true` in `/etc/tempo/production.env` turns merchant logos on. The first start identifies every existing merchant key in batches of 50 and then fetches each confirmed site's icon, so expect a few minutes of model calls and outbound HTTPS requests to merchant sites, `icons.duckduckgo.com` and, with `LOGO_DEV_SECRET_KEY` set, `api.logo.dev`. logo.dev's free plan has a monthly credit allowance; when it runs out, logos come from the merchants' sites and logo.dev is asked again the next day. Identification uses the subscription bridge's `/identify-merchants` route as its fallback, which needs the bridge reinstalled and restarted after the API release that adds it (see below).
+
 ### Contract compatibility
 
-The API fingerprints `contract.json` and sends `X-Tempo-Contract` on both subscription routes. The bridge refuses a missing or different fingerprint with `409 contract_mismatch` before starting Claude; the API logs an actionable warning. Reinstall **and restart** the bridge when the contract changes. The initial rollout needs the new API deployed before restarting the stricter bridge, since older APIs do not send the header.
+The API fingerprints `contract.json` (categorization) and `merchant-contract.json` (merchant identification) and sends the matching fingerprint as `X-Tempo-Contract` on each subscription route. The bridge refuses a missing or different fingerprint with `409 contract_mismatch` before starting Claude; the API logs an actionable warning. Reinstall **and restart** the bridge when either contract changes. The initial rollout needs the new API deployed before restarting the stricter bridge, since older APIs do not send the header.
 
-`GET /contract` on the private socket returns the bridge's loaded fingerprint without calling Claude. The host check compares it with the running API container, rather than with an installed file that may not have been reloaded:
+`GET /contract` on the private socket returns the bridge's loaded fingerprints without calling Claude. The host check compares it with the running API container, rather than with an installed file that may not have been reloaded:
 
 ```bash
 "$HOME/.local/bin/node" "$HOME/.local/lib/tempo-claude-bridge/check-contract.mjs"

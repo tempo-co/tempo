@@ -24,6 +24,7 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
 
 - `src/app/modules/banking/` (authorization, sync, deletion, identity, own transfers, exchanges, totals): `docs/banking-invariants.md`.
 - `src/app/modules/banking/categorization/` or `ops/claude-bridge/`: `docs/categorization.md`.
+- `src/app/modules/banking/merchant-logos/` (identification, icon choice, brand trust rules, site fetcher, image route): `docs/merchant-logos.md`. Display only: categories, merchant keys and recurring payments never read it.
 - Anything calling Enable Banking or Claude, or tests that mock them: `docs/provider-testing.md`.
 - E2E setup, seeds, Compose stacks, `NODE_ENV`, image consumers: `docs/e2e-and-seeding.md`.
 - `.github/workflows/`, `Dockerfile`, migrations, release tags: `docs/ci-and-images.md`.
@@ -49,7 +50,7 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
 ## Test conventions
 
 - E2E first: prove ownership, cascades, locking, delivery and queue behavior against real PostgreSQL, Redis and Mailpit. Unit tests are for ordering invariants before side effects, fault injection and pure functions over provider payloads; drop mocked wiring tests once E2E covers the property.
-- Reuse `test/setup/e2e.setup.ts` (`getApp`, `loginAgent`, `enableAiCategorizationE2e()` at module scope), `test/utils/auth-utils.ts` (`createVerifiedAccount`, `expectValidationMessage`), `test/utils/email-utils.ts` (Mailpit), `scripts/seed-data/banking-fixtures.ts` (`BankingFixtures` with valid defaults; pass only the fields a test depends on) and `test/fixtures/bank-transaction.fixture.ts` for unit tests.
+- Reuse `test/setup/e2e.setup.ts` (`getApp`, `loginAgent`, `enableAiCategorizationE2e()` or `enableMerchantLogosE2e()` at module scope), `test/utils/wait-utils.ts` (`waitFor` until background workers finish), `test/utils/auth-utils.ts` (`createVerifiedAccount`, `expectValidationMessage`), `test/utils/email-utils.ts` (Mailpit), `scripts/seed-data/banking-fixtures.ts` (`BankingFixtures` with valid defaults; pass only the fields a test depends on) and `test/fixtures/bank-transaction.fixture.ts` for unit tests.
 - Use the seeded account dedicated to a flow (`PW_CHANGE`, `PW_RESET`, `EMAIL_CHANGE`, `SESSION_TEST`) when a test changes account data, not the shared `VERIFIED` account. Don't assert on `seedBankingData` contents.
 - Route authentication (401, 403 `EMAIL_NOT_VERIFIED`, token-readable routes) is covered once in `test/e2e/auth/auth-guard.e2e.spec.ts`; add new protected routes to its tables.
 - Unit tests of services with many dependencies use the named-dependency builders in `banking.service.spec.ts` and `banking-sync.service.spec.ts`, not positional `{} as never` lists. Use `it.each` tables for validation cases.

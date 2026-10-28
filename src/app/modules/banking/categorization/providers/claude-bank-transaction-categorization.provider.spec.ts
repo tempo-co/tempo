@@ -8,6 +8,7 @@ import {join} from 'node:path';
 import {ConfigurationService} from '@core/config/config.service';
 
 import contract from '../../../../../../ops/claude-bridge/contract.json';
+import merchantContract from '../../../../../../ops/claude-bridge/merchant-contract.json';
 import {
 	toBankTransactionCategorizationInput,
 	toBankTransactionCategorizationWebSearchInput,
@@ -20,6 +21,7 @@ import {BankTransactionCategorizationUnavailableError} from '../bank-transaction
 import {
 	BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES,
 	type BankTransactionCategorizationInput,
+	MERCHANT_KINDS,
 } from '../bank-transaction-categorization.types';
 import {BANK_TRANSACTION_CATEGORIES, BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '../bank-transaction-category';
 import {ClaudeBankTransactionCategorizationProvider} from './claude-bank-transaction-categorization.provider';
@@ -164,6 +166,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(contract.webSearch.schema.properties.classifications.items.properties.evidenceType.enum).toEqual(
 			BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES,
 		);
+		expect(merchantContract.schema.properties.merchants.items.properties.kind.enum).toEqual(MERCHANT_KINDS);
 	});
 
 	it('sends the shared contract prompts and schemas on both API requests', async () => {
@@ -563,6 +566,125 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			name: 'BankTransactionCategorizationUnavailableError',
 			message: 'Claude categorization is temporarily unavailable.',
 			retryable: true,
+		});
+	});
+
+	describe('merchant identification', () => {
+		const merchant = (correlationId = 'merchant-1') => ({
+			correlationId,
+			name: 'Example Shop',
+			location: 'Example City',
+			transactionType: 'CARD_PAYMENT',
+			direction: 'EXPENSE' as const,
+			searchSourceDomains: ['shop.example.test'],
+		});
+		const merchantResponse = (merchants: unknown[]) => ({
+			stop_reason: 'end_turn',
+			content: [{type: 'text', text: JSON.stringify({merchants})}],
+			usage: {server_tool_use: {web_search_requests: 0}},
+		});
+
+		it('sends only merchant names with the merchant contract and keeps a well-formed official domain', async () => {
+			const {provider, create} = setup();
+			create.mockResolvedValue(
+				merchantResponse([
+					{
+						correlationId: '0',
+						kind: 'BUSINESS',
+						brand: ' Example  Shop ',
+						domain: 'WWW.Shop.Example.test',
+						domainConfident: true,
+					},
+					{
+						correlationId: '1',
+						kind: 'BUSINESS',
+						brand: 'Example Cafe',
+						domain: 'https://cafe.example.test/',
+						domainConfident: true,
+					},
+					{
+						correlationId: '2',
+						kind: 'PERSON',
+						brand: 'Example Person',
+						domain: 'person.example.test',
+						domainConfident: true,
+					},
+					{
+						correlationId: '3',
+						kind: 'PAYMENT_SERVICE',
+						brand: 'Example Pay',
+						domain: 'pay.example.test',
+						domainConfident: false,
+					},
+				]),
+			);
+			await expect(
+				provider.identifyMerchants([merchant('a'), merchant('b'), merchant('c'), merchant('d')]),
+			).resolves.toEqual([
+				{
+					correlationId: 'a',
+					kind: 'BUSINESS',
+					brand: 'Example Shop',
+					domain: 'shop.example.test',
+					domainConfident: true,
+				},
+				{correlationId: 'b', kind: 'BUSINESS', brand: 'Example Cafe', domain: null, domainConfident: false},
+				{correlationId: 'c', kind: 'PERSON', brand: null, domain: null, domainConfident: false},
+				{
+					correlationId: 'd',
+					kind: 'PAYMENT_SERVICE',
+					brand: 'Example Pay',
+					domain: 'pay.example.test',
+					domainConfident: false,
+				},
+			]);
+			const request = create.mock.calls[0][0];
+			expect(request.system).toBe(merchantContract.instructions);
+			expect(request.output_config.format.schema).toEqual(merchantContract.schema);
+			expect(request).not.toHaveProperty('tools');
+			expect(JSON.parse(request.messages[0].content)).toEqual({
+				merchants: ['0', '1', '2', '3'].map((correlationId) => ({...merchant(), correlationId})),
+			});
+		});
+
+		it('falls back to the subscription bridge, and stays pending only when both routes refused', async () => {
+			const reply = {
+				merchants: [{correlationId: '0', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false}],
+			};
+			await withBridge({body: reply}, async (socket, requests) => {
+				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
+				create.mockRejectedValue({status: 400});
+				await expect(provider.identifyMerchants([merchant()])).resolves.toEqual([
+					{correlationId: 'merchant-1', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false},
+				]);
+				expect(requests).toEqual([
+					{
+						url: '/identify-merchants',
+						body: {
+							model: 'claude-sonnet-5-5',
+							effort: 'high',
+							input: {merchants: [{...merchant(), correlationId: '0'}]},
+						},
+						hash: createHash('sha256').update(JSON.stringify(merchantContract)).digest('hex'),
+					},
+				]);
+			});
+			await withBridge(unavailable, async (socket) => {
+				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
+				create.mockRejectedValue({status: 429});
+				await expect(provider.identifyMerchants([merchant()])).rejects.toBeInstanceOf(
+					BankTransactionCategorizationUnavailableError,
+				);
+				// The API model ran but answered for an unknown merchant: an attempt that counts, not an outage.
+				create.mockResolvedValue(
+					merchantResponse([
+						{correlationId: '9', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false},
+					]),
+				);
+				await expect(provider.identifyMerchants([merchant()])).rejects.toMatchObject({
+					name: 'BankTransactionCategorizationProviderError',
+				});
+			});
 		});
 	});
 });

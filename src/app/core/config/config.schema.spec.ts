@@ -245,6 +245,19 @@ describe('categorization web-search configuration', () => {
 	});
 });
 
+describe('merchant logo configuration', () => {
+	it('defaults merchant logos off and enables them only with a model route', () => {
+		expect(configSchema.parse(baseConfig).MERCHANT_LOGOS_ENABLED).toBe(false);
+		expect(() => configSchema.parse({...baseConfig, MERCHANT_LOGOS_ENABLED: 'true'})).toThrow(
+			'when merchant logos are enabled',
+		);
+		const subscription = {AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/run/claude-bridge.sock'};
+		expect(configSchema.parse({...baseConfig, MERCHANT_LOGOS_ENABLED: 'true', ...subscription})).toMatchObject({
+			MERCHANT_LOGOS_ENABLED: true,
+		});
+	});
+});
+
 describe('banking integration configuration', () => {
 	it('defaults banking integration to enabled for production compatibility', () => {
 		const parsed = configSchema.parse(baseConfig);

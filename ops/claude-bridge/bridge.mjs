@@ -6,8 +6,15 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import contract from './contract.json' with {type: 'json'};
+import merchantContract from './merchant-contract.json' with {type: 'json'};
 import {createSubscriptionCheck, storedTokenExpiresAt} from './subscription.mjs';
-import {validRequest, validResponse, validSearchRequest} from './validation.mjs';
+import {
+	validMerchantRequest,
+	validMerchantResponse,
+	validRequest,
+	validResponse,
+	validSearchRequest,
+} from './validation.mjs';
 
 // Model and effort come from the validated request, so the CLI arguments start with them per call.
 const cliArgs = ({instructions, schema}, tools, extra = []) => [
@@ -30,8 +37,12 @@ const cliArgs = ({instructions, schema}, tools, extra = []) => [
 	JSON.stringify(schema),
 ];
 const CLI_ARGS = cliArgs(contract, '');
-// The API sends the hash of its own contract; a mismatch means one side was updated without the other.
-const CONTRACT_HASH = createHash('sha256').update(JSON.stringify(contract)).digest('hex');
+const MERCHANT_CLI_ARGS = cliArgs(merchantContract, '');
+// The API sends the hash of its own contract; a mismatch means one side was updated without the other. Merchant
+// identification has its own contract file, so changing it never affects the categorization routes.
+const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const CONTRACT_HASH = hash(contract);
+const MERCHANT_CONTRACT_HASH = hash(merchantContract);
 const hookPath = fileURLToPath(new URL('./search-hook.mjs', import.meta.url));
 if ([process.execPath, hookPath].some((part) => part.includes("'"))) throw new Error('Unsupported bridge path.');
 // dontAsk denies every tool call that no hook allows; the hook allows only the one pinned search.
@@ -47,10 +58,40 @@ const SEARCH_CLI_ARGS = cliArgs(contract.webSearch, 'WebSearch', [
 ]);
 
 const ROUTES = new Map([
-	['/categorize', {args: CLI_ARGS, tools: ['StructuredOutput'], valid: validRequest, search: false}],
+	[
+		'/categorize',
+		{
+			args: CLI_ARGS,
+			tools: ['StructuredOutput'],
+			valid: validRequest,
+			validOutput: validResponse,
+			search: false,
+			contractHash: CONTRACT_HASH,
+		},
+	],
 	[
 		'/categorize-with-search',
-		{args: SEARCH_CLI_ARGS, tools: ['StructuredOutput', 'WebSearch'], valid: validSearchRequest, search: true},
+		{
+			args: SEARCH_CLI_ARGS,
+			tools: ['StructuredOutput', 'WebSearch'],
+			valid: validSearchRequest,
+			validOutput: (output, input) => validResponse(output, input, true),
+			search: true,
+			contractHash: CONTRACT_HASH,
+		},
+	],
+	[
+		'/identify-merchants',
+		{
+			args: MERCHANT_CLI_ARGS,
+			tools: ['StructuredOutput'],
+			valid: validMerchantRequest,
+			validOutput: validMerchantResponse,
+			search: false,
+			contractHash: MERCHANT_CONTRACT_HASH,
+			// Any model output means the run used quota, so a failure after it counts as an attempt (502).
+			outputActs: true,
+		},
 	],
 ]);
 
@@ -207,13 +248,14 @@ export async function startBridge({
 				.writeHead(status, {'content-type': 'application/json', 'cache-control': 'no-store'})
 				.end(JSON.stringify(body));
 		};
-		if (req.method === 'GET' && req.url === '/contract') return reply(200, {hash: CONTRACT_HASH});
+		if (req.method === 'GET' && req.url === '/contract')
+			return reply(200, {hash: CONTRACT_HASH, merchantHash: MERCHANT_CONTRACT_HASH});
 		const route = ROUTES.get(req.url);
 		if (req.method !== 'POST' || !route) return reply(404, {error: 'not_found'});
 		const {search, tools} = route;
 		if (req.headers['content-type']?.split(';')[0].trim() !== 'application/json')
 			return reply(415, {error: 'unsupported_media_type'});
-		if (req.headers['x-tempo-contract'] !== CONTRACT_HASH) return reply(409, {error: 'contract_mismatch'});
+		if (req.headers['x-tempo-contract'] !== route.contractHash) return reply(409, {error: 'contract_mismatch'});
 		if (busy) return reply(503, {error: 'claude_busy'});
 		busy = true;
 		const caller = new AbortController();
@@ -273,6 +315,7 @@ export async function startBridge({
 						overageRejected = true;
 					}
 					for (const item of Array.isArray(event.message?.content) ? event.message.content : []) {
+						if (route.outputActs && event.type === 'assistant') modelActed = true;
 						if (item.type === 'tool_use' && item.name !== 'StructuredOutput') {
 							modelActed = true;
 							// One search, with exactly the pinned query; the hook enforces the same before it runs.
@@ -304,7 +347,7 @@ export async function startBridge({
 				!result ||
 				result.subtype !== 'success' ||
 				result.is_error !== false ||
-				!validResponse(result.structured_output, input, search) ||
+				!route.validOutput(result.structured_output, input) ||
 				(search && !domains)
 			)
 				throw new Error('Invalid result.');

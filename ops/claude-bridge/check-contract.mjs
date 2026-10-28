@@ -8,19 +8,22 @@ import {promisify} from 'node:util';
 const run = promisify(execFile);
 const hashPattern = /^[a-f0-9]{64}$/;
 const apiHashCommand = `const {createHash} = require('node:crypto');
-const contract = require('./dist/ops/claude-bridge/contract.json');
-process.stdout.write(createHash('sha256').update(JSON.stringify(contract)).digest('hex'));`;
+const hash = (file) => createHash('sha256').update(JSON.stringify(require(file))).digest('hex');
+process.stdout.write(JSON.stringify({
+	hash: hash('./dist/ops/claude-bridge/contract.json'),
+	merchantHash: hash('./dist/ops/claude-bridge/merchant-contract.json'),
+}));`;
 
-async function readProductionApiHash() {
+async function readProductionApiHashes() {
 	const {stdout} = await run(
 		'docker',
 		['exec', process.env.TEMPO_API_CONTAINER ?? 'tempo-api-production-api-1', 'node', '-e', apiHashCommand],
 		{timeout: 5000, maxBuffer: 4096},
 	);
-	return stdout;
+	return JSON.parse(stdout);
 }
 
-function readBridgeHash(socketPath) {
+function readBridgeHashes(socketPath) {
 	return new Promise((resolve, reject) => {
 		const request = http.get({socketPath, path: '/contract', signal: AbortSignal.timeout(5000)}, (response) => {
 			let body = '';
@@ -36,7 +39,7 @@ function readBridgeHash(socketPath) {
 			response.on('end', () => {
 				try {
 					if (response.statusCode !== 200) throw new Error('Bridge unavailable.');
-					resolve(JSON.parse(body).hash);
+					resolve(JSON.parse(body));
 				} catch (error) {
 					reject(error);
 				}
@@ -50,13 +53,15 @@ function readBridgeHash(socketPath) {
 export async function checkContract({
 	socketPath = process.env.TEMPO_CLAUDE_BRIDGE_SOCKET ??
 		path.join(homedir(), '.local/state/tempo-claude/bridge.sock'),
-	readApiHash = readProductionApiHash,
+	readApiHashes = readProductionApiHashes,
 } = {}) {
 	try {
-		const apiHash = await readApiHash();
-		const bridgeHash = await readBridgeHash(socketPath);
-		if (!hashPattern.test(apiHash) || !hashPattern.test(bridgeHash)) throw new Error('Invalid contract hash.');
-		return apiHash === bridgeHash
+		const api = await readApiHashes();
+		const bridge = await readBridgeHashes(socketPath);
+		const fields = ['hash', 'merchantHash'];
+		if (!fields.every((field) => hashPattern.test(api?.[field]) && hashPattern.test(bridge?.[field])))
+			throw new Error('Invalid contract hash.');
+		return fields.every((field) => api[field] === bridge[field])
 			? ''
 			: 'Claude fallback contract differs from the running API; reinstall and restart the bridge.';
 	} catch {

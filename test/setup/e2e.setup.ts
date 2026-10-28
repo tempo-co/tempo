@@ -11,6 +11,7 @@ import {mcpOriginMiddleware} from '@core/personal-access-token/mcp-origin.middle
 let app: INestApplication<Server>;
 let aiCategorizationEnabled = false;
 let aiCategorizationWebSearchEnabled = false;
+let merchantLogosEnabled = false;
 
 export function enableAiCategorizationE2e(): void {
 	aiCategorizationEnabled = true;
@@ -20,13 +21,19 @@ export function enableAiCategorizationWebSearchE2e(): void {
 	aiCategorizationWebSearchEnabled = true;
 }
 
+export function enableMerchantLogosE2e(): void {
+	merchantLogosEnabled = true;
+}
+
 beforeAll(async () => {
 	process.env.NODE_ENV = 'test';
 	process.env.AI_CATEGORIZATION_ENABLED = String(aiCategorizationEnabled);
 	process.env.AI_CATEGORIZATION_WEB_SEARCH_ENABLED = String(aiCategorizationWebSearchEnabled);
+	process.env.MERCHANT_LOGOS_ENABLED = String(merchantLogosEnabled);
 	delete process.env.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET;
 
-	if (aiCategorizationEnabled) {
+	// Merchant logos call the same model routes, so they need a key too; their specs replace the provider call.
+	if (aiCategorizationEnabled || merchantLogosEnabled) {
 		process.env.AI_CATEGORIZATION_PROVIDER = 'claude';
 		process.env.AI_CATEGORIZATION_MODEL = 'test-model';
 		process.env.ANTHROPIC_API_KEY = 'test-only-placeholder';

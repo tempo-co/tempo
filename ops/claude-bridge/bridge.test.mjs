@@ -37,9 +37,12 @@ const payload = {
 	},
 };
 const contractFile = fileURLToPath(new URL('./contract.json', import.meta.url));
-const contractHash = createHash('sha256')
-	.update(JSON.stringify(JSON.parse(await readFile(contractFile, 'utf8'))))
-	.digest('hex');
+const fileHash = async (file) =>
+	createHash('sha256')
+		.update(JSON.stringify(JSON.parse(await readFile(file, 'utf8'))))
+		.digest('hex');
+const contractHash = await fileHash(contractFile);
+const merchantContractHash = await fileHash(fileURLToPath(new URL('./merchant-contract.json', import.meta.url)));
 const expected = {classifications: [{correlationId: '0', category: 'SHOPPING', confidence: 0.9}]};
 
 function request(socketPath, body = payload, options = {}) {
@@ -158,7 +161,10 @@ test('rejects invalid or nonstandard inputs without spawning a categorizer', asy
 				})),
 			},
 		},
-		{...payload, input: {...payload.input, transactions: [payload.input.transactions[0], payload.input.transactions[0]]}},
+		{
+			...payload,
+			input: {...payload.input, transactions: [payload.input.transactions[0], payload.input.transactions[0]]},
+		},
 		{
 			...payload,
 			input: {
@@ -166,8 +172,14 @@ test('rejects invalid or nonstandard inputs without spawning a categorizer', asy
 				transactions: [{...payload.input.transactions[0], correlationId: 'private-row-identifier'}],
 			},
 		},
-		{...payload, input: {...payload.input, transactions: [{...payload.input.transactions[0], accountNumber: 'secret'}]}},
-		{...payload, input: {...payload.input, transactions: [{...payload.input.transactions[0], amount: {command: 'run'}}]}},
+		{
+			...payload,
+			input: {...payload.input, transactions: [{...payload.input.transactions[0], accountNumber: 'secret'}]},
+		},
+		{
+			...payload,
+			input: {...payload.input, transactions: [{...payload.input.transactions[0], amount: {command: 'run'}}]},
+		},
 		{
 			...payload,
 			input: {
@@ -198,7 +210,10 @@ test('rejects invalid or nonstandard inputs without spawning a categorizer', asy
 				],
 			},
 		},
-		{...payload, input: {...payload.input, categories: [{value: 'NOT_A_CATEGORY', label: 'Fake', description: 'Fake'}]}},
+		{
+			...payload,
+			input: {...payload.input, categories: [{value: 'NOT_A_CATEGORY', label: 'Fake', description: 'Fake'}]},
+		},
 		'not json',
 	];
 	for (const body of invalid) assert.equal((await request(socketPath, body)).status, 400);
@@ -568,6 +583,78 @@ test('rejects malformed search requests without spawning a categorizer', async (
 	assert.equal(calls.length, 1);
 });
 
+const merchantPayload = {
+	model: 'claude-sonnet-5-5',
+	effort: 'high',
+	input: {
+		merchants: [
+			{
+				correlationId: '0',
+				name: 'Example Shop',
+				location: 'Example City',
+				transactionType: 'CARD_PAYMENT',
+				direction: 'EXPENSE',
+				searchSourceDomains: ['shop.example.test'],
+			},
+		],
+	},
+};
+const merchantRequest = (socketPath, body = merchantPayload, hash = merchantContractHash) =>
+	request(socketPath, body, {
+		path: '/identify-merchants',
+		headers: {'content-type': 'application/json', 'x-tempo-contract': hash},
+	});
+
+test('identifies merchants with the merchant prompt and no tools, and validates both sides', async (t) => {
+	const {socketPath, calls} = await setup(t);
+	assert.deepEqual(await merchantRequest(socketPath), {
+		status: 200,
+		body: {
+			merchants: [
+				{
+					correlationId: '0',
+					kind: 'BUSINESS',
+					brand: 'Example Shop',
+					domain: 'shop.example.test',
+					domainConfident: true,
+				},
+			],
+		},
+	});
+	const contract = JSON.parse(await readFile(new URL('./merchant-contract.json', import.meta.url), 'utf8'));
+	const {args, stdin} = calls.at(-1);
+	const value = (flag) => args[args.indexOf(flag) + 1];
+	assert.equal(value('--tools'), '');
+	assert.equal(value('--system-prompt'), contract.instructions);
+	assert.equal(value('--json-schema'), JSON.stringify(contract.schema));
+	assert.deepEqual(JSON.parse(stdin), merchantPayload.input);
+
+	const spawned = calls.length;
+	const merchant = merchantPayload.input.merchants[0];
+	const withMerchants = (merchants) => ({...merchantPayload, input: {merchants}});
+	for (const body of [
+		withMerchants([]),
+		withMerchants([{...merchant, correlationId: 'private-row-identifier'}]),
+		withMerchants([{...merchant, amount: '-12.34'}]),
+		withMerchants([{...merchant, name: ''}]),
+		withMerchants([{...merchant, name: 'x'.repeat(161)}]),
+		withMerchants([{...merchant, searchSourceDomains: ['https://shop.example.test/path']}]),
+		withMerchants(Array.from({length: 51}, (_, i) => ({...merchant, correlationId: String(i)}))),
+		payload,
+	])
+		assert.equal((await merchantRequest(socketPath, body)).status, 400);
+	assert.equal(calls.length, spawned);
+
+	const {socketPath: invalidOutput} = await setup(t, {mode: 'bad-kind'});
+	assert.deepEqual(await merchantRequest(invalidOutput), {status: 502, body: {error: 'claude_failed'}});
+
+	// A merchant run that produced output before failing used quota: 502, so the API counts the attempt.
+	// The categorization route keeps treating the same exit as a refusal it may retry.
+	const {socketPath: outputThenExit} = await setup(t, {mode: 'output-then-exit'});
+	assert.deepEqual(await merchantRequest(outputThenExit), {status: 502, body: {error: 'claude_failed'}});
+	assert.deepEqual(await request(outputThenExit), {status: 503, body: {error: 'claude_unavailable'}});
+});
+
 export {payload, expected, request, setup};
 
 test('reports the running contract without starting Claude', async (t) => {
@@ -575,15 +662,17 @@ test('reports the running contract without starting Claude', async (t) => {
 	const before = calls.length;
 	assert.deepEqual(await request(socketPath, '', {method: 'GET', path: '/contract'}), {
 		status: 200,
-		body: {hash: contractHash},
+		body: {hash: contractHash, merchantHash: merchantContractHash},
 	});
 	assert.equal(calls.length, before);
 });
 
-for (const route of ['/categorize', '/categorize-with-search'])
+for (const route of ['/categorize', '/categorize-with-search', '/identify-merchants'])
 	for (const [name, hash] of [
 		['a different', 'a'.repeat(64)],
 		['no', undefined],
+		// Each route checks its own contract, so one route's fingerprint never opens another.
+		["the other contract's", route === '/identify-merchants' ? contractHash : merchantContractHash],
 	])
 		test(`${route} refuses ${name} contract hash before running Claude`, async (t) => {
 			const {socketPath, calls} = await setup(t);

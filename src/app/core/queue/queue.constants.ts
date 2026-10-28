@@ -21,3 +21,9 @@ export const BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE = 'bank-transaction-amount
 export const BACKFILL_BANK_TRANSACTION_AMOUNTS_JOB = 'backfill-bank-transaction-amounts';
 export const BANK_TRANSACTION_AMOUNT_CONVERSION_JOB = 'convert-bank-transaction-amounts';
 export const BANK_TRANSACTION_AMOUNT_CONVERSION_SCHEDULER_ID = 'bank-transaction-amount-conversion-scheduler';
+
+export const MERCHANT_LOGO_QUEUE = 'merchant-logos';
+export const IDENTIFY_MERCHANTS_JOB = 'identify-merchants';
+export const FETCH_MERCHANT_LOGO_JOB = 'fetch-merchant-logo';
+export const RECONCILE_MERCHANT_LOGOS_JOB = 'reconcile-merchant-logos';
+export const MERCHANT_LOGO_RECONCILE_SCHEDULER_ID = 'merchant-logo-reconciler';

@@ -25,6 +25,7 @@ export const BANKING_TRANSACTION_NOT_FOUND = 'Bank transaction not found.';
 export const BANKING_RECURRING_SERIES_NOT_FOUND = 'Recurring payment not found.';
 export const BANKING_RECURRING_CONTINUATION_CHANGED = 'This recurring payment changed. Please try again.';
 export const BANKING_RECURRING_SERIES_KEY_INVALID = 'Recurring payment key must be 32 lowercase hex characters.';
+export const MERCHANT_LOGO_NOT_FOUND = 'Merchant logo not found.';
 export const BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH = 'The summary month cannot start after the given date.';
 export const BANKING_BALANCE_TREND_RANGE =
 	'The balance trend range must run forward, end by the given date and cover at most 104 weeks, 60 months or 10 years.';

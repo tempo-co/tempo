@@ -74,6 +74,7 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['get', '/bank-connections/aspsps'],
 	['delete', `/bank-connections/${RESOURCE_ID}`],
 	['get', `/bank-connections/${RESOURCE_ID}/transactions`],
+	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}`],
 ];
 
 const VERIFIED_ROUTES: GuardedRoute[] = [
