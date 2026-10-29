@@ -246,7 +246,14 @@ describe('categorization web-search configuration', () => {
 });
 
 describe('merchant logo configuration', () => {
-	it('defaults merchant logos off and enables them only with a model route', () => {
+	it('allows cached-only display without a model route', () => {
+		expect(
+			configSchema.parse({...baseConfig, MERCHANT_LOGOS_ENABLED: 'true', MERCHANT_LOGOS_CACHED_ONLY: 'true'}),
+		).toMatchObject({MERCHANT_LOGOS_ENABLED: true, MERCHANT_LOGOS_CACHED_ONLY: true});
+		expect(configSchema.parse(baseConfig)).toMatchObject({MERCHANT_LOGOS_CACHED_ONLY: false});
+	});
+
+	it('defaults merchant logos off and enables acquisition only with a model route', () => {
 		expect(configSchema.parse(baseConfig).MERCHANT_LOGOS_ENABLED).toBe(false);
 		expect(() => configSchema.parse({...baseConfig, MERCHANT_LOGOS_ENABLED: 'true'})).toThrow(
 			'when merchant logos are enabled',
