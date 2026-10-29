@@ -2,6 +2,7 @@ import {Server} from 'node:net';
 import request from 'supertest';
 
 import {Account} from '@modules/account/account.entity';
+import {INVALID_CREDENTIALS} from '@modules/auth/api/constants/api-messages.constants';
 
 import {
 	VERIFIED_ACCOUNT_EMAIL,
@@ -45,6 +46,7 @@ describe('AuthController - Login', () => {
 			['an unknown email', {email: 'incorrect@email.com', password: VERIFIED_ACCOUNT_PASSWORD}],
 		])('should fail to log in with %s without setting a session', async (_case, credentials) => {
 			const response = await request(httpServer).post('/auth/login').send(credentials).expect(401);
+			expect(response.body.message).toBe(INVALID_CREDENTIALS);
 			expect(response.headers['set-cookie']).toBeUndefined();
 		});
 

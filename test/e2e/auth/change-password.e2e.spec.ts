@@ -2,7 +2,7 @@ import {faker} from '@faker-js/faker';
 import {Server} from 'node:net';
 import request from 'supertest';
 
-import {PASSWORD_CHANGE_SUCCESS} from '@modules/auth/api/constants/api-messages.constants';
+import {INVALID_PASSWORD, PASSWORD_CHANGE_SUCCESS} from '@modules/auth/api/constants/api-messages.constants';
 import {PasswordChangeDto} from '@modules/auth/api/dtos/password-change.dto';
 
 import {
@@ -72,7 +72,8 @@ describe('AuthController - Change password', () => {
 				newPassword: faker.internet.password({length: 12}),
 			};
 
-			await agent.post('/auth/change-password').send(changePasswordDto).expect(401);
+			const response = await agent.post('/auth/change-password').send(changePasswordDto).expect(401);
+			expect(response.body.message).toBe(INVALID_PASSWORD);
 			await agent.get('/accounts/me').expect(200);
 			await otherAgent.get('/accounts/me').expect(200);
 		});

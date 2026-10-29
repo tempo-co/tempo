@@ -7,6 +7,7 @@ import {DataSource} from 'typeorm';
 import {ConfigurationService} from '@core/config/config.service';
 import {REDIS} from '@core/redis/redis.constants';
 import {ACCOUNT_DELETED_EMAIL_SUBJECT, ACCOUNT_DELETED_MESSAGE} from '@modules/account/account-deletion.service';
+import {INVALID_PASSWORD} from '@modules/auth/api/constants/api-messages.constants';
 import {BankAccountBalance} from '@modules/banking/bank-account-balance.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
@@ -107,7 +108,8 @@ describe('AccountController - DELETE /accounts/me', () => {
 		expect(await redis.get(emailChangeKey)).not.toBeNull();
 
 		// Wrong password is rejected and the account survives.
-		await agent.delete('/accounts/me').send({password: 'wrong-password'}).expect(401);
+		const wrongPasswordResponse = await agent.delete('/accounts/me').send({password: 'wrong-password'}).expect(401);
+		expect(wrongPasswordResponse.body.message).toBe(INVALID_PASSWORD);
 		expect(await countOwnedAccounts(connectionRepository, accountId)).toBe(1);
 		expect(await redis.get(ownedStateKey)).not.toBeNull();
 

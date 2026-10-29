@@ -17,4 +17,6 @@ export const LOGOUT_SUCCESS = 'User logged out.';
 export const LOGIN_SUCCESS = 'User logged in.';
 
 export const INVALID_CREDENTIALS = 'Invalid credentials.';
+/** Sent with a 401 when a signed-in account's password confirmation is wrong, unlike a missing session. */
+export const INVALID_PASSWORD = 'Invalid password.';
 export const UNAUTHORIZED = 'Authentication required to access this resource.';

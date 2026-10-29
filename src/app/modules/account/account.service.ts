@@ -3,7 +3,7 @@ import {InjectRepository} from '@nestjs/typeorm';
 import argon2 from 'argon2';
 import {Repository} from 'typeorm';
 
-import {EMAIL_ALREADY_IN_USE} from '@modules/auth/api/constants/api-messages.constants';
+import {EMAIL_ALREADY_IN_USE, INVALID_PASSWORD} from '@modules/auth/api/constants/api-messages.constants';
 
 import {Account} from './account.entity';
 
@@ -52,10 +52,14 @@ export class AccountService {
 		return argon2.hash(password);
 	}
 
+	isPasswordValid(hash: Account['password'], password: Account['password']): Promise<boolean> {
+		return argon2.verify(hash, password);
+	}
+
+	/** Confirms a signed-in account's password; a wrong one is a 401 that names it, unlike a missing session. */
 	async verifyPassword(hash: Account['password'], password: Account['password']) {
-		const isPasswordValid = await argon2.verify(hash, password);
-		if (!isPasswordValid) {
-			throw new UnauthorizedException();
+		if (!(await this.isPasswordValid(hash, password))) {
+			throw new UnauthorizedException(INVALID_PASSWORD);
 		}
 	}
 
