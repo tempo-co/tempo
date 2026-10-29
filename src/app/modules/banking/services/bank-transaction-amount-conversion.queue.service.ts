@@ -3,12 +3,15 @@ import {Injectable, Logger, OnModuleInit} from '@nestjs/common';
 import {Queue} from 'bullmq';
 
 import {ConfigurationService} from '@core/config/config.service';
+import {bootstrapJobScheduler} from '@core/queue/job-scheduler';
 import {
 	BACKFILL_BANK_TRANSACTION_AMOUNTS_JOB,
 	BANK_TRANSACTION_AMOUNT_CONVERSION_JOB,
 	BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE,
 	BANK_TRANSACTION_AMOUNT_CONVERSION_SCHEDULER_ID,
 } from '@core/queue/queue.constants';
+
+import {safeErrorName} from '../banking.utils';
 
 export type BankTransactionAmountConversionJobData = Record<string, never>;
 
@@ -27,19 +30,30 @@ export class BankTransactionAmountConversionQueueService implements OnModuleInit
 	) {}
 
 	async onModuleInit(): Promise<void> {
-		if (this.configurationService.get('NODE_ENV') === 'test') return;
-		if (!this.configurationService.get('BANKING_INTEGRATION_ENABLED')) {
-			try {
-				await this.queue.removeJobScheduler(BANK_TRANSACTION_AMOUNT_CONVERSION_SCHEDULER_ID);
-			} catch (error) {
-				this.logger.warn(
-					`Could not remove disabled FX scheduler: ${error instanceof Error ? error.message : String(error)}`,
-				);
-				throw error;
-			}
-			return;
+		const enabled = Boolean(this.configurationService.get('BANKING_INTEGRATION_ENABLED'));
+		await bootstrapJobScheduler(
+			this.queue,
+			{
+				schedulerId: BANK_TRANSACTION_AMOUNT_CONVERSION_SCHEDULER_ID,
+				jobName: BANK_TRANSACTION_AMOUNT_CONVERSION_JOB,
+				everyMs: CONVERSION_INTERVAL_MS,
+			},
+			{
+				enabled,
+				configurationService: this.configurationService,
+				logger: this.logger,
+			},
+		);
+		if (!enabled || this.configurationService.get('NODE_ENV') === 'test') return;
+		try {
+			await this.enqueueBackfill();
+		} catch (error) {
+			// The 15-minute conversion run picks up the same rows.
+			this.logger.warn(`FX backfill enqueue failed: ${safeErrorName(error)}`);
 		}
+	}
 
+	private async enqueueBackfill(): Promise<void> {
 		const existingBackfill = await this.queue.getJob(BACKFILL_JOB_ID);
 		let shouldEnqueueBackfill = !existingBackfill;
 		if (existingBackfill && (await existingBackfill.getState()) === 'failed') {
@@ -53,15 +67,5 @@ export class BankTransactionAmountConversionQueueService implements OnModuleInit
 				{jobId: BACKFILL_JOB_ID, attempts: 3, removeOnComplete: false, removeOnFail: {age: 86_400, count: 10}},
 			);
 		}
-
-		await this.queue.upsertJobScheduler(
-			BANK_TRANSACTION_AMOUNT_CONVERSION_SCHEDULER_ID,
-			{every: CONVERSION_INTERVAL_MS},
-			{
-				name: BANK_TRANSACTION_AMOUNT_CONVERSION_JOB,
-				data: {},
-				opts: {attempts: 1, removeOnComplete: true, removeOnFail: {age: 86_400, count: 100}},
-			},
-		);
 	}
 }

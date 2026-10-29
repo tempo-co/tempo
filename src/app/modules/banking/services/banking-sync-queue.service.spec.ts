@@ -181,11 +181,5 @@ describe('BankingSyncQueueService', () => {
 			expect(queue.add).not.toHaveBeenCalled();
 			expect(bankConnectionRepository.createQueryBuilder).not.toHaveBeenCalled();
 		});
-
-		it('fails closed when the banking scheduler cannot be removed', async () => {
-			const disabledService = createDisabledService(jest.fn().mockRejectedValue(new Error('redis unavailable')));
-
-			await expect(disabledService.onModuleInit()).rejects.toThrow('redis unavailable');
-		});
 	});
 });

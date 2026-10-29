@@ -8,6 +8,7 @@ import {QueryDeepPartialEntity} from 'typeorm/query-builder/QueryPartialEntity';
 import {ConfigurationService} from '@core/config/config.service';
 import {createWebUrl} from '@core/config/web-url';
 import {EmailService} from '@core/email/email.service';
+import {bootstrapJobScheduler} from '@core/queue/job-scheduler';
 import {
 	BANK_CONNECTION_ALERT_QUEUE,
 	BANK_CONNECTION_ALERT_SCHEDULER_ID,
@@ -61,24 +62,15 @@ export class BankConnectionAlertService implements OnModuleInit {
 	}
 
 	async onModuleInit(): Promise<void> {
-		if (this.configurationService.get('NODE_ENV') === 'test') return;
-		try {
-			if (!this.isEnabled()) {
-				await this.queue.removeJobScheduler(BANK_CONNECTION_ALERT_SCHEDULER_ID);
-				return;
-			}
-			await this.queue.upsertJobScheduler(
-				BANK_CONNECTION_ALERT_SCHEDULER_ID,
-				{every: SCAN_INTERVAL_MS},
-				{
-					name: SCAN_BANK_CONNECTION_ALERTS_JOB,
-					data: {},
-					opts: {attempts: 1, removeOnComplete: true, removeOnFail: {age: 86_400, count: 100}},
-				},
-			);
-		} catch (error) {
-			this.logger.warn(`Bank connection alert scheduling failed: ${safeErrorName(error)}`);
-		}
+		await bootstrapJobScheduler(
+			this.queue,
+			{
+				schedulerId: BANK_CONNECTION_ALERT_SCHEDULER_ID,
+				jobName: SCAN_BANK_CONNECTION_ALERTS_JOB,
+				everyMs: SCAN_INTERVAL_MS,
+			},
+			{enabled: this.isEnabled(), configurationService: this.configurationService, logger: this.logger},
+		);
 	}
 
 	/** Emails each verified owner about connections whose consent is ending or that stopped syncing. */
