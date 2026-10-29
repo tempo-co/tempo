@@ -5,6 +5,7 @@ import {Queue} from 'bullmq';
 import {LessThanOrEqual, Not, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
+import {bootstrapJobScheduler} from '@core/queue/job-scheduler';
 import {
 	BANK_CONNECTION_SYNC_QUEUE,
 	BANK_CONNECTION_SYNC_SCHEDULER_ID,
@@ -44,26 +45,17 @@ export class BankingSyncQueueService implements OnModuleInit {
 	}
 
 	async onModuleInit(): Promise<void> {
-		if (this.configurationService.get('NODE_ENV') === 'test') return;
-		if (!this.bankingIntegrationEnabled) {
-			try {
-				await this.queue.removeJobScheduler(BANK_CONNECTION_SYNC_SCHEDULER_ID);
-			} catch (error) {
-				this.logger.warn(
-					`Could not remove disabled banking scheduler: ${error instanceof Error ? error.message : String(error)}`,
-				);
-				throw error;
-			}
-			return;
-		}
-
-		await this.queue.upsertJobScheduler(
-			BANK_CONNECTION_SYNC_SCHEDULER_ID,
-			{every: this.getDispatchIntervalMs()},
+		await bootstrapJobScheduler(
+			this.queue,
 			{
-				name: DISPATCH_BANK_CONNECTION_SYNCS_JOB,
-				data: {},
-				opts: {attempts: 1, removeOnComplete: true, removeOnFail: {age: 86_400, count: 100}},
+				schedulerId: BANK_CONNECTION_SYNC_SCHEDULER_ID,
+				jobName: DISPATCH_BANK_CONNECTION_SYNCS_JOB,
+				everyMs: this.getDispatchIntervalMs(),
+			},
+			{
+				enabled: this.bankingIntegrationEnabled,
+				configurationService: this.configurationService,
+				logger: this.logger,
 			},
 		);
 	}
