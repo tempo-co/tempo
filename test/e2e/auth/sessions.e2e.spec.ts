@@ -1,7 +1,10 @@
+import Redis from 'ioredis';
 import {Server} from 'net';
 import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
 
+import {ConfigurationService} from '@core/config/config.service';
+import {REDIS} from '@core/redis/redis.constants';
 import {
 	ALL_OTHER_SESSIONS_REVOKED,
 	CANNOT_REVOKE_CURRENT_SESSION,
@@ -10,7 +13,7 @@ import {
 	SESSION_REVOKE_SUCCESS,
 } from '@core/session/api-messages.constants';
 import {SessionResponseDto} from '@core/session/session-response.dto';
-import {SessionService} from '@core/session/session.service';
+import {LAST_SEEN_UPDATE_INTERVAL_MS, SessionService} from '@core/session/session.service';
 
 import {
 	SESSION_TEST_ACCOUNT_EMAIL,
@@ -23,10 +26,32 @@ import {expectValidationMessage} from '../../utils/auth-utils';
 
 describe('AuthController - Sessions', () => {
 	let httpServer: Server;
+	let redis: Redis;
+	let sessionPrefix: string;
 
 	beforeAll(async () => {
 		httpServer = getApp().getHttpServer();
+		redis = getApp().get<Redis>(REDIS);
+		sessionPrefix = `${getApp().get(ConfigurationService).get('SESSION_REDIS_KEY')}:`;
 	});
+
+	const readCurrentSessionId = async (agent: TestAgent) => {
+		const sessions: SessionResponseDto[] = (await agent.get('/auth/sessions').expect(200)).body;
+		return sessions.find((s) => s.isCurrent)!.id;
+	};
+
+	const readLastSeenAt = async (sessionId: string) =>
+		JSON.parse((await redis.get(sessionPrefix + sessionId))!).metadata.lastSeenAt as string;
+
+	/** Rewrites a stored session's `lastSeenAt` and gives it a short expiry, so a later save is visible. */
+	const storeLastSeenAt = async (sessionId: string, lastSeenAt: string, ttlSeconds = 60) => {
+		const key = sessionPrefix + sessionId;
+		const data = JSON.parse((await redis.get(key))!);
+		data.metadata.lastSeenAt = lastSeenAt;
+		await redis.set(key, JSON.stringify(data), 'EX', ttlSeconds);
+	};
+
+	const staleLastSeenAt = () => new Date(Date.now() - LAST_SEEN_UPDATE_INTERVAL_MS - 60_000).toISOString();
 
 	describe('GET /auth/sessions', () => {
 		let verifiedAgent1: TestAgent;
@@ -85,6 +110,34 @@ describe('AuthController - Sessions', () => {
 			expect(currentSessions2).toHaveLength(1);
 			// Verify agent 2's current session ID is different
 			expect(currentSessions2[0].id).not.toEqual(currentSession.id);
+		});
+	});
+
+	describe('authenticated requests', () => {
+		it('records when a session was last seen at most once per update interval', async () => {
+			const cookieName = getApp().get(ConfigurationService).get('SESSION_COOKIE_NAME');
+			const agent = await loginAgent(httpServer, VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
+			const sessionId = await readCurrentSessionId(agent);
+			const recent = await readLastSeenAt(sessionId);
+
+			// A request soon after the last recorded one leaves the stored session as it was, expiry included.
+			await storeLastSeenAt(sessionId, recent);
+			const recentResponse = await agent.get('/accounts/me').expect(200);
+			expect(await readLastSeenAt(sessionId)).toBe(recent);
+			expect(await redis.ttl(sessionPrefix + sessionId)).toBeLessThanOrEqual(60);
+			expect(recentResponse.headers['set-cookie']).toBeUndefined();
+
+			// Once the recorded time is older than the interval, the next request records it again and the
+			// session's expiry and cookie move forward with that save.
+			const stale = staleLastSeenAt();
+			await storeLastSeenAt(sessionId, stale);
+			const before = Date.now();
+			const staleResponse = await agent.get('/accounts/me').expect(200);
+			expect(Date.parse(await readLastSeenAt(sessionId))).toBeGreaterThanOrEqual(before - 1000);
+			expect(await redis.ttl(sessionPrefix + sessionId)).toBeGreaterThan(60);
+			expect(staleResponse.headers['set-cookie']).toEqual([
+				expect.stringMatching(new RegExp(`^${cookieName}=.*; Expires=`)),
+			]);
 		});
 	});
 
@@ -226,8 +279,9 @@ describe('AuthController - Sessions', () => {
 
 		it('should keep a session revoked when one of its requests was in flight', async () => {
 			const victim = await loginAgent(httpServer, VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
-			const victimSessions: SessionResponseDto[] = (await victim.get('/auth/sessions').expect(200)).body;
-			const victimId = victimSessions.find((s) => s.isCurrent)!.id;
+			const victimId = await readCurrentSessionId(victim);
+			// A stale lastSeenAt makes the in-flight request save its session when it ends.
+			await storeLastSeenAt(victimId, staleLastSeenAt(), 600);
 
 			// Hold the victim's next request in its handler, after its session has been loaded.
 			const sessionService = getApp().get(SessionService);

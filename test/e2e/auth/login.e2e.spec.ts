@@ -20,7 +20,11 @@ describe('AuthController - Login', () => {
 
 	describe('POST /auth/login', () => {
 		it('should log in with correct credentials and establish session', async () => {
-			const agent = await loginAgent(httpServer, VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
+			const agent = request.agent(httpServer);
+			const loginResponse = await agent
+				.post('/auth/login')
+				.send({email: VERIFIED_ACCOUNT_EMAIL, password: VERIFIED_ACCOUNT_PASSWORD})
+				.expect(200);
 			const response = await agent.get('/accounts/me').expect(200);
 
 			const account: Account = response.body;
@@ -29,7 +33,7 @@ describe('AuthController - Login', () => {
 			expect(account.name).toEqual(VERIFIED_ACCOUNT_NAME);
 			expect(account.password).toBeUndefined();
 
-			const sessionCookie = getSessionCookie(response);
+			const sessionCookie = getSessionCookie(loginResponse);
 			expect(sessionCookie).toMatch(/HttpOnly/);
 			expect(sessionCookie).toMatch(/Path=\//);
 			expect(sessionCookie).toMatch(/SameSite=Strict/);

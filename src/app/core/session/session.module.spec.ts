@@ -39,7 +39,7 @@ describe('SessionModule', () => {
 		const sessionMiddleware = new SessionMiddleware({} as SessionService);
 		await new SessionModule(redisClient, config, sessionMiddleware).configure(consumer);
 
-		expect(RedisStore).toHaveBeenCalledWith({client: redisClient, prefix: 'tempo:session:'});
+		expect(RedisStore).toHaveBeenCalledWith({client: redisClient, prefix: 'tempo:session:', disableTouch: true});
 		expect(forRoutes).toHaveBeenCalledWith('*');
 	});
 });
