@@ -61,6 +61,7 @@ export const configSchema = z
 
 		// --- Merchant logos ---
 		MERCHANT_LOGOS_ENABLED: strictBooleanEnvSchema.default(false),
+		MERCHANT_LOGOS_CACHED_ONLY: strictBooleanEnvSchema.default(false),
 		/** logo.dev's secret key; without it logos come from the merchants' own sites only. */
 		LOGO_DEV_SECRET_KEY: z.string().min(1).optional(),
 
@@ -185,6 +186,7 @@ export const configSchema = z
 
 		if (
 			config.MERCHANT_LOGOS_ENABLED &&
+			!config.MERCHANT_LOGOS_CACHED_ONLY &&
 			!config.ANTHROPIC_API_KEY &&
 			!config.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET
 		) {

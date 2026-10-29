@@ -1,7 +1,10 @@
 import {getQueueToken} from '@nestjs/bullmq';
 import {INestApplication} from '@nestjs/common';
+import {ConfigService} from '@nestjs/config';
 import {getRepositoryToken} from '@nestjs/typeorm';
 import {Queue} from 'bullmq';
+import Redis from 'ioredis';
+import {createHash} from 'node:crypto';
 import {Server} from 'node:net';
 import sharp from 'sharp';
 import request from 'supertest';
@@ -9,7 +12,8 @@ import TestAgent from 'supertest/lib/agent';
 import {Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
-import {MERCHANT_LOGO_QUEUE} from '@core/queue/queue.constants';
+import {MERCHANT_LOGO_QUEUE, MERCHANT_LOGO_RECONCILE_SCHEDULER_ID} from '@core/queue/queue.constants';
+import {REDIS} from '@core/redis/redis.constants';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {BankTransactionCategorizationUnavailableError} from '@modules/banking/categorization/bank-transaction-categorization.provider';
 import {
@@ -18,6 +22,8 @@ import {
 } from '@modules/banking/categorization/bank-transaction-categorization.types';
 import {ClaudeBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/claude-bank-transaction-categorization.provider';
 import {LogoDevClient, LogoDevResult} from '@modules/banking/merchant-logos/logo-dev.client';
+import * as maskConversion from '@modules/banking/merchant-logos/merchant-logo-mask';
+import {MerchantLogoMaskService} from '@modules/banking/merchant-logos/merchant-logo-mask.service';
 import {MerchantLogo} from '@modules/banking/merchant-logos/merchant-logo.entity';
 import {MerchantLogoService} from '@modules/banking/merchant-logos/merchant-logo.service';
 import {MerchantSiteFetcher, MerchantSiteResponse} from '@modules/banking/merchant-logos/merchant-site-fetcher';
@@ -50,6 +56,18 @@ const IDENTITIES: Record<string, Omit<MerchantIdentification, 'correlationId'>> 
 const FAVICON_SERVICE = 'https://icons.duckduckgo.com/ip3/';
 const LOGO_DEV_ASSET = 'https://img.logo.dev/assets/';
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MASK_CACHE_PREFIX = 'merchant-logo:mask-v1:';
+const maskKey = (source: Buffer) => MASK_CACHE_PREFIX + createHash('sha256').update(source).digest('hex');
+function getPng(agent: TestAgent, url: string) {
+	return agent
+		.get(url)
+		.buffer(true)
+		.parse((response, callback) => {
+			const chunks: Buffer[] = [];
+			response.on('data', (chunk: Buffer) => chunks.push(chunk));
+			response.on('end', () => callback(null, Buffer.concat(chunks)));
+		});
+}
 
 /** What logo.dev knows per domain: a vector logo, only a small original, still indexing, or nothing. */
 const LOGO_DEV: Record<string, LogoDevResult> = {
@@ -94,7 +112,17 @@ describe('Merchant logos', () => {
 		icon = await sharp({create: {width: 180, height: 180, channels: 4, background: '#cc3322'}})
 			.png()
 			.toBuffer();
+		// Synthetic artwork with a distinct foreground, rather than an empty solid-colour field.
 		largeIcon = await sharp({create: {width: 256, height: 256, channels: 4, background: '#22aa33'}})
+			.composite([
+				{
+					input: await sharp({create: {width: 96, height: 128, channels: 4, background: 'white'}})
+						.png()
+						.toBuffer(),
+					left: 80,
+					top: 64,
+				},
+			])
 			.png()
 			.toBuffer();
 		smallIcon = await sharp({create: {width: 32, height: 32, channels: 4, background: '#2233cc'}})
@@ -320,18 +348,69 @@ describe('Merchant logos', () => {
 			expect.arrayContaining([expect.objectContaining({id: purchase.id, merchantLogoUrl: logoUrl})]),
 		);
 
-		const image = await owner.agent
-			.get(logoUrl)
-			.buffer(true)
-			.parse((response, callback) => {
-				const chunks: Buffer[] = [];
-				response.on('data', (chunk: Buffer) => chunks.push(chunk));
-				response.on('end', () => callback(null, Buffer.concat(chunks)));
-			})
+		const image = await getPng(owner.agent, logoUrl)
 			.expect(200)
 			.expect('Content-Type', 'image/png')
 			.expect('Cache-Control', 'private, max-age=31536000, immutable');
 		expect(await sharp(image.body as Buffer).metadata()).toMatchObject({format: 'png', width: 128, height: 128});
+		const sourceBefore = Buffer.from(image.body as Buffer);
+		const metadataBefore = await logos.findOneByOrFail({domain: 'shop.example.test'});
+		const maskUrl = `${logoUrl}/mask-v1`;
+		const mask = await getPng(owner.agent, maskUrl)
+			.expect(200)
+			.expect('Content-Type', 'image/png')
+			.expect('Cache-Control', 'private, max-age=31536000, immutable')
+			.expect('Cross-Origin-Resource-Policy', 'same-site');
+		const {data: rgba, info} = await sharp(mask.body as Buffer)
+			.ensureAlpha()
+			.raw()
+			.toBuffer({resolveWithObject: true});
+		expect(info).toMatchObject({width: 128, height: 128, channels: 4});
+		const alpha = Array.from(rgba).filter((_, i) => i % 4 === 3);
+		expect(Math.max(...alpha)).toBe(255);
+		expect(alpha[0]).toBe(0);
+		expect(alpha.some((a) => a > 0 && a < 255)).toBe(true);
+		const redis = app.get<Redis>(REDIS);
+		expect(await redis.getBuffer(maskKey(sourceBefore))).toEqual(mask.body);
+		expect(await redis.ttl(maskKey(sourceBefore))).toBeGreaterThan(0);
+		expect(await redis.ttl(maskKey(sourceBefore))).toBeLessThanOrEqual(7 * 24 * 60 * 60);
+		expect((await getPng(owner.agent, maskUrl).expect(200)).body).toEqual(mask.body);
+		expect((await getPng(owner.agent, logoUrl).expect(200)).body).toEqual(sourceBefore);
+		expect(await logos.findOneByOrFail({domain: 'shop.example.test'})).toEqual(metadataBefore);
+
+		// Every refusal, including a cached derivative and a feature toggle, passes the source gate first.
+		const lookup = jest.spyOn(redis, 'getBuffer');
+		try {
+			for (const [agent, url] of [
+				[other.agent, maskUrl],
+				[owner.agent, `${logoUrl.replace(/[0-9a-f]{64}$/, 'b'.repeat(64))}/mask-v1`],
+			] as const) {
+				expect((await agent.get(url).expect(404)).headers).not.toHaveProperty('cache-control');
+			}
+			app.get(ConfigService).set('MERCHANT_LOGOS_ENABLED', false);
+			expect((await owner.agent.get(maskUrl).expect(404)).headers).not.toHaveProperty('cache-control');
+			app.get(ConfigService).set('MERCHANT_LOGOS_ENABLED', true);
+			await logos.update(metadataBefore.id, {status: 'MISSING'});
+			expect((await owner.agent.get(maskUrl).expect(404)).headers).not.toHaveProperty('cache-control');
+			expect(lookup).not.toHaveBeenCalled();
+		} finally {
+			app.get(ConfigService).set('MERCHANT_LOGOS_ENABLED', true);
+			await logos.update(metadataBefore.id, {status: 'READY'});
+			lookup.mockRestore();
+		}
+		// A uniform cached source has no foreground: keep the original available, refuse and never cache its mask.
+		const emptySource = (await getPng(owner.agent, paymentLogo).expect(200)).body as Buffer;
+		const emptyConversion = jest.spyOn(maskConversion, 'createMerchantLogoMask');
+		try {
+			for (let attempt = 0; attempt < 2; attempt++)
+				expect((await owner.agent.get(`${paymentLogo}/mask-v1`).expect(404)).headers).not.toHaveProperty(
+					'cache-control',
+				);
+			expect(emptyConversion).toHaveBeenCalledTimes(2);
+		} finally {
+			emptyConversion.mockRestore();
+		}
+		expect(await redis.exists(maskKey(emptySource))).toBe(0);
 
 		const refused = await other.agent.get(logoUrl).expect(404);
 		expect(refused.headers).not.toHaveProperty('cache-control');
@@ -375,6 +454,138 @@ describe('Merchant logos', () => {
 		expect(renewed.version).not.toBe(logo.version);
 		const refreshed = await owner.agent.get(`/bank-transactions/${purchase.id}`).expect(200);
 		expect(refreshed.body.merchantLogoUrl).toBe(`/merchant-logos/${logo.id}/${renewed.version}`);
+	});
+
+	it('serves cached logos with acquisition and identification disabled', async () => {
+		const config = app.get(ConfigService);
+		const service = app.get(MerchantLogoService);
+		const account = await createVerifiedAccount(
+			app.getHttpServer(),
+			app.get(ConfigurationService).get('EMAIL_UI_URL'),
+		);
+		const connection = await fixtures.createConnection({id: account.id});
+		const bankAccount = await fixtures.createBankAccount(connection);
+		const [purchase] = await fixtures.createTransactions(bankAccount, [
+			bookedRow('2026-10-12', '-3.00', {counterpartyName: 'Example Shop', transactionType: 'CARD_PAYMENT'}),
+			bookedRow('2026-10-12', '-4.00', {counterpartyName: 'Example Pending', transactionType: 'CARD_PAYMENT'}),
+			bookedRow('2026-10-12', '-5.00', {counterpartyName: 'Example Unseen', transactionType: 'CARD_PAYMENT'}),
+		]);
+		const original = await sharp(largeIcon).resize(128, 128).png().toBuffer();
+		const logo = await logos.save(
+			logos.create({
+				domain: 'cached.example.test',
+				status: 'READY',
+				image: original,
+				version: createHash('sha256').update(original).digest('hex'),
+				siteNames: ['Example Shop'],
+				homepageLoaded: true,
+				sourceSize: 256,
+				retryAfter: new Date(0),
+			}),
+		);
+		await merchants.save(
+			merchants.create({
+				accountId: account.id,
+				key: 'example shop',
+				status: 'IDENTIFIED',
+				brand: 'Example Shop',
+				domain: logo.domain,
+				domainConfident: true,
+				logoId: logo.id,
+			}),
+		);
+		const pending = await merchants.save(merchants.create({accountId: account.id, key: 'example pending'}));
+		const readMerchants = () => merchants.find({where: {accountId: account.id}, order: {id: 'ASC'}});
+		const before = await readMerchants();
+		const logoBefore = await logos.findOneByOrFail({id: logo.id});
+		const callsBefore = [
+			identifySpy.mock.calls.length,
+			fetchSpy.mock.calls.length,
+			jest.mocked(app.get(LogoDevClient).findLogo).mock.calls.length,
+		];
+		await queue.pause();
+		config.set('MERCHANT_LOGOS_CACHED_ONLY', true);
+		try {
+			const detail = await account.agent.get(`/bank-transactions/${purchase.id}`).expect(200);
+			expect(detail.body.merchantLogoUrl).toBe(`/merchant-logos/${logo.id}/${logo.version}`);
+			await getPng(account.agent, `${detail.body.merchantLogoUrl}/mask-v1`).expect(200);
+			for (const operation of [
+				() => service.enqueueForOwnerSafely(account.id),
+				() => service.reconcile(),
+				() => service.identifyMerchants([pending.id]),
+				() => service.fetchLogo(logo.id),
+			]) {
+				await operation();
+				expect(await readMerchants()).toEqual(before);
+				expect(await logos.findOneByOrFail({id: logo.id})).toEqual(logoBefore);
+				expect([
+					identifySpy.mock.calls.length,
+					fetchSpy.mock.calls.length,
+					jest.mocked(app.get(LogoDevClient).findLogo).mock.calls.length,
+				]).toEqual(callsBefore);
+			}
+			config.set('NODE_ENV', 'development');
+			await service.onApplicationBootstrap();
+			expect(await queue.getJobSchedulers()).toEqual([]);
+			const counts = await queue.getJobCounts('waiting', 'active', 'delayed');
+			expect(Object.values(counts).every((count) => count === 0)).toBe(true);
+			expect(await queue.getWaitingCount()).toBe(0);
+		} finally {
+			config.set('NODE_ENV', 'test');
+			config.set('MERCHANT_LOGOS_CACHED_ONLY', false);
+			await queue.removeJobScheduler(MERCHANT_LOGO_RECONCILE_SCHEDULER_ID);
+			await queue.drain(true);
+			await queue.resume();
+		}
+	});
+
+	it('deduplicates concurrent mask conversions and bounds the expiring source-hash cache', async () => {
+		const redis = app.get<Redis>(REDIS);
+		const masks = app.get(MerchantLogoMaskService);
+		const source = await sharp(largeIcon).resize(128, 128).png().toBuffer();
+		const key = maskKey(source);
+		await redis.del(key);
+		const conversion = jest.spyOn(maskConversion, 'createMerchantLogoMask');
+		try {
+			const images = await Promise.all(Array.from({length: 8}, () => masks.getImage(source)));
+			expect(conversion).toHaveBeenCalledTimes(1);
+			for (const image of images) expect(image).toEqual(images[0]);
+			expect(await masks.getImage(source)).toEqual(images[0]);
+			expect(conversion).toHaveBeenCalledTimes(1);
+			expect(await redis.getBuffer(key)).toEqual(images[0]);
+			// Populate a full cache with synthetic entries, then exercise atomic eviction through the real writer.
+			const index = MASK_CACHE_PREFIX + 'index';
+			const old = await redis.zrange(index, 0, -1);
+			if (old.length) await redis.del(...old);
+			await redis.del(index, key);
+			const keys = Array.from(
+				{length: 256},
+				(_, i) => MASK_CACHE_PREFIX + createHash('sha256').update(`synthetic-${i}`).digest('hex'),
+			);
+			const pipeline = redis.multi();
+			for (const [i, entry] of keys.entries()) {
+				pipeline.set(entry, images[0], 'EX', 60);
+				pipeline.zadd(index, i, entry);
+			}
+			await pipeline.exec();
+			await masks.getImage(source);
+			expect(await redis.zcard(index)).toBe(256);
+			expect(await redis.exists(keys[0])).toBe(0);
+			expect(await redis.exists(key)).toBe(1);
+			expect(await redis.ttl(index)).toBeGreaterThan(0);
+			for (const operation of ['getBuffer', 'eval'] as const) {
+				await redis.del(key);
+				const fault = jest.spyOn(redis, operation).mockRejectedValueOnce(new Error('Synthetic cache failure'));
+				try {
+					await expect(masks.getImage(source)).rejects.toThrow('Synthetic cache failure');
+					expect(await masks.getImage(source)).toEqual(images[0]);
+				} finally {
+					fault.mockRestore();
+				}
+			}
+		} finally {
+			conversion.mockRestore();
+		}
 	});
 
 	it('shows a logo only when the named website calls itself the brand, or the model was sure of a site that would not load', async () => {

@@ -100,6 +100,10 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		return this.configurationService.get('MERCHANT_LOGOS_ENABLED');
 	}
 
+	private canAcquire(): boolean {
+		return this.isEnabled() && !this.configurationService.get('MERCHANT_LOGOS_CACHED_ONLY');
+	}
+
 	async onApplicationBootstrap(): Promise<void> {
 		const scheduled = await bootstrapJobScheduler(
 			this.queue,
@@ -108,7 +112,7 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 				jobName: RECONCILE_MERCHANT_LOGOS_JOB,
 				everyMs: RECONCILE_INTERVAL_MS,
 			},
-			{enabled: this.isEnabled(), configurationService: this.configurationService, logger: this.logger},
+			{enabled: this.canAcquire(), configurationService: this.configurationService, logger: this.logger},
 		);
 		if (!scheduled) return;
 		try {
@@ -123,7 +127,7 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 	 * without failing the sync; the hourly reconcile picks up anything missed.
 	 */
 	async enqueueForOwnerSafely(accountId: string): Promise<void> {
-		if (!this.isEnabled()) return;
+		if (!this.canAcquire()) return;
 		try {
 			await this.addMerchants(accountId);
 			await this.enqueuePendingIdentifications();
@@ -134,7 +138,7 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 
 	/** Hourly: new merchants, identifications left pending, and logos due for a retry, recheck or refresh. */
 	async reconcile(): Promise<void> {
-		if (!this.isEnabled()) return;
+		if (!this.canAcquire()) return;
 		const owners: {accountId: string}[] = await this.dataSource.query(
 			'SELECT DISTINCT "accountId" FROM bank_connections',
 		);
@@ -149,7 +153,7 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 	}
 
 	async identifyMerchants(merchantIds: readonly string[]): Promise<void> {
-		if (!this.isEnabled()) return;
+		if (!this.canAcquire()) return;
 		const merchants = await this.merchants.find({
 			where: {id: In([...new Set(merchantIds)].slice(0, BATCH_SIZE)), status: PENDING},
 		});
@@ -198,7 +202,7 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 	 * monthly.
 	 */
 	async fetchLogo(logoId: string): Promise<void> {
-		if (!this.isEnabled()) return;
+		if (!this.canAcquire()) return;
 		const logo = await this.logos.findOneBy({id: logoId});
 		if (!logo || (logo.retryAfter && logo.retryAfter > new Date())) return;
 		const origin = `https://${logo.domain}/`;

@@ -7,8 +7,8 @@ How `src/app/modules/banking/merchant-logos/` finds, trusts, stores and serves a
 - Display only. Categories, `merchantKey`, category history and recurring detection never read `merchants` or `merchant_logos`, and nothing here writes to `bank_transactions`. Recurring responses show the logo of a series' latest payment through `getLogoUrls`, like any listed transaction.
 - No per-merchant rules (aliases, domain overrides, exception lists). Fix a miss with a general rule and a synthetic test, or leave the category icon.
 - Own transfers and currency exchanges never show a logo, even when they share a key with a purchase: rows with `ownTransferEvidence` or `financialEventType` are skipped in `addMerchants`, the identification input and `getLogoUrls`. Keep an E2E row of that shape.
-- The browser loads images only from `GET /merchant-logos/:id/:version`, never from merchant sites or logo services.
-- `MERCHANT_LOGOS_ENABLED=true` fails config validation without `ANTHROPIC_API_KEY` or `AI_CATEGORIZATION_SUBSCRIPTION_SOCKET`; merchants would otherwise stay pending forever.
+- The browser loads originals from `GET /merchant-logos/:id/:version` or display-only masks from `GET /merchant-logos/:id/:version/mask-v1`, never from merchant sites or logo services.
+- `MERCHANT_LOGOS_ENABLED=true` requires `ANTHROPIC_API_KEY` or `AI_CATEGORIZATION_SUBSCRIPTION_SOCKET` for acquisition; merchants would otherwise stay pending forever. Set `MERCHANT_LOGOS_CACHED_ONLY=true` to serve existing originals and masks without model credentials, identification, acquisition, reconciliation or their scheduling. This mode defaults off; the feature flag and owner checks govern reads in either mode.
 
 ## Data model
 
@@ -67,10 +67,13 @@ The model can name a plausible domain that belongs to someone else, so only the 
 - 404 unless the logo is `READY`, the version matches and one of the caller's `IDENTIFIED` merchants references it. The route is in `test/e2e/auth/auth-guard.e2e.spec.ts`.
 - Set `Cache-Control: private, max-age=31536000, immutable` inside the handler after the lookup (`@Res({passthrough: true})`, return a typed `StreamableFile`). `@Header()` runs before the handler and would cache a 404 as immutable; the E2E asserts a refusal has no `cache-control`.
 - The version is the image hash, so a new image gets a new URL.
+- `GET /merchant-logos/:id/:version/mask-v1` reuses `getLogoImage` before any derivative lookup, including cache hits. Feature-disabled, wrong-owner, non-READY and old-version requests remain 404. Empty or undecodable masks are uncacheable 404s; the original route and response URLs are unchanged.
+- Masks use white RGBA with continuous alpha, a 128px canvas and a maximum 104px mark extent. The pure TypeScript converter combines the AOSP QPR2 contrast core with the opaque-bitmap adapter and Pillow-compatible 8-bit LANCZOS placement.
+- Redis stores only successful derivative PNGs under `merchant-logo:mask-v1:<source-sha256>`. Atomic FIFO eviction caps each algorithm at 256 generated 128px PNG entries, with seven-day TTLs on entries and their index. The per-process in-flight map shares one conversion per algorithm/source hash and is cleared on success or failure. No database rows, source bytes or provider state change. Any pixel-affecting algorithm change requires a new route/cache algorithm version.
 
 ## Tests
 
 - E2E: `enableMerchantLogosE2e()` at module scope (sets the placeholder key); spy on `ClaudeBankTransactionCategorizationProvider.identifyMerchants`, `LogoDevClient.findLogo` and `MerchantSiteFetcher.fetch`; real queue, worker, database, HTTP; `waitFor` from `test/utils/wait-utils.ts`.
 - Failure branches: per-test `Set`s of unreachable or walled hostnames checked by the fetch spy and cleared in `afterEach`, not a second mock setup.
-- Units: `merchant-site.spec.ts`, `merchant-site-fetcher.spec.ts`, `logo-dev.client.spec.ts`.
+- Units: `merchant-site.spec.ts`, `merchant-site-fetcher.spec.ts`, `logo-dev.client.spec.ts`, `merchant-logo-mask.spec.ts`. Mask fixtures are generated synthetic artwork with decoded-pixel reference digests, not downloaded logos.
 - Fixtures are synthetic (`Example Shop`, `shop.example.test`).
