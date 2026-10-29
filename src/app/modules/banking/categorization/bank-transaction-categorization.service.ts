@@ -830,15 +830,17 @@ export class BankTransactionCategorizationService {
 		const added = this.queue.add(APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB, data, FOLLOW_UP_JOB_OPTIONS);
 		let timer: NodeJS.Timeout | undefined;
 		const timeout = new Promise<never>((_, reject) => {
-			timer = setTimeout(() => reject(new Error('EnqueueTimeout')), FOLLOW_UP_ENQUEUE_TIMEOUT_MS);
+			timer = setTimeout(() => {
+				const error = new Error('The follow-up job was not added in time');
+				error.name = 'EnqueueTimeout';
+				reject(error);
+			}, FOLLOW_UP_ENQUEUE_TIMEOUT_MS);
 		});
 		try {
 			await Promise.race([added, timeout]);
 		} catch (error) {
 			added.catch(() => undefined);
-			this.logger.warn(
-				`Manual category follow-up enqueue failed: ${error instanceof Error ? error.message : safeErrorName(error)}`,
-			);
+			this.logger.warn(`Manual category follow-up enqueue failed: ${safeErrorName(error)}`);
 		} finally {
 			clearTimeout(timer);
 		}
