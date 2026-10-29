@@ -17,7 +17,7 @@ import {
 
 import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '../bank-transaction-financial-event';
 import {BankTransaction} from '../bank-transaction.entity';
-import {safeErrorName} from '../banking.utils';
+import {chunkArray, safeErrorName} from '../banking.utils';
 import {isOwnTransferCategorized, notOwnTransferCategorizedSql} from '../own-transfer/own-transfer-category';
 import {
 	createBankTransactionCategorizationInputHash,
@@ -197,19 +197,14 @@ export class BankTransactionCategorizationService {
 		const categorizationIds = uniqueIds.filter((id) => !financialEventIds.has(id));
 		if (categorizationIds.length === 0) return;
 		const inputHashes = new Map(transactions.map(({id, categoryInputHash}) => [id, categoryInputHash]));
-		const jobs = [];
-		for (let index = 0; index < categorizationIds.length; index += BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE) {
-			const batch = categorizationIds.slice(index, index + BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE);
-			jobs.push({
+		await this.queue.addBulk(
+			chunkArray(categorizationIds, BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE).map((batch) => ({
 				name: CATEGORIZE_BANK_TRANSACTIONS_JOB,
-				data: {
-					transactionIds: batch,
-				},
+				data: {transactionIds: batch},
 				// An identical batch keeps its job ID, so a sweep while the job waits for a retry adds nothing.
 				opts: {jobId: this.createJobId(batch, inputHashes), ...CATEGORIZE_JOB_OPTIONS},
-			});
-		}
-		await this.queue.addBulk(jobs);
+			})),
+		);
 	}
 
 	async processTransactionJob(transactionIds: readonly string[]): Promise<void> {
@@ -967,17 +962,10 @@ export class BankTransactionCategorizationService {
 	}
 
 	private async claimTransaction(id: string, inputHash: string): Promise<boolean> {
-		const result = await this.repository
-			.createQueryBuilder()
-			.update(BankTransaction)
-			.set({categoryStatus: 'PROCESSING', categoryUpdatedAt: new Date()})
-			.where('id = :id', {id})
-			.andWhere(notManualCategorySourceSql())
-			.andWhere(notOwnTransferCategorizedSql())
-			.andWhere('"categoryInputHash" = :inputHash', {inputHash})
-			.andWhere('"financialEventType" IS DISTINCT FROM :financialEventType', {
-				financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-			})
+		const result = await this.guardedUpdate(id, inputHash, {
+			categoryStatus: 'PROCESSING',
+			categoryUpdatedAt: new Date(),
+		})
 			.andWhere(
 				`(
 					"categoryStatus" IN (:...claimableStatuses)
@@ -997,13 +985,9 @@ export class BankTransactionCategorizationService {
 		return (result.affected ?? 0) > 0;
 	}
 
-	private async updateCategorizationWithGuard(
-		id: string,
-		inputHash: string,
-		values: CategorizationUpdate,
-		status?: string,
-	): Promise<boolean> {
-		const query = this.repository
+	/** An update of one row that skips owner-set, own-transfer and currency-exchange rows and stale inputs. */
+	private guardedUpdate(id: string, inputHash: string, values: CategorizationUpdate) {
+		return this.repository
 			.createQueryBuilder()
 			.update(BankTransaction)
 			.set(values)
@@ -1014,6 +998,15 @@ export class BankTransactionCategorizationService {
 			.andWhere('"financialEventType" IS DISTINCT FROM :financialEventType', {
 				financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
 			});
+	}
+
+	private async updateCategorizationWithGuard(
+		id: string,
+		inputHash: string,
+		values: CategorizationUpdate,
+		status?: string,
+	): Promise<boolean> {
+		const query = this.guardedUpdate(id, inputHash, values);
 		if (status) query.andWhere('"categoryStatus" = :expectedStatus', {expectedStatus: status});
 		const result = await query.execute();
 		return (result.affected ?? 0) > 0;

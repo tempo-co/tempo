@@ -56,6 +56,7 @@ const DIRECT_DEBIT_BUSINESS_PATTERN = new RegExp(
 	`^([\\p{L}\\p{M}][\\p{L}\\p{M} &'’().,-]*?\\s+${DIRECT_DEBIT_LEGAL_FORM})(?=(?:\\s+[\\p{L}\\p{M}][\\p{L}\\p{M} .'-]*)?:|$)`,
 	'iu',
 );
+const DIRECT_DEBIT_LEGAL_FORM_PATTERN = new RegExp(`\\s+${DIRECT_DEBIT_LEGAL_FORM}(?=[\\s,]|$)`, 'gi');
 
 /**
  * A processor's structured SEPA direct-debit remittance can explicitly name the collecting business. Only the
@@ -78,11 +79,7 @@ export function extractProcessorCollectedBusinessName({
 	const remittance = text.match(/\bomschrijving:\s*(.*?)(?=\s+(?:kenmerk|machtiging|iban|bic|naam):|$)/i)?.[1];
 	if (!remittance || REMITTANCE_NARRATIVE_PREFIX_PATTERN.test(remittance)) return null;
 	// More than one legal entity before the reference separator is ambiguous, not a business plus a locality.
-	if (
-		remittance.split(':', 1)[0].match(new RegExp(`\\s+${DIRECT_DEBIT_LEGAL_FORM}(?=[\\s,]|$)`, 'gi'))?.length !== 1
-	) {
-		return null;
-	}
+	if (remittance.split(':', 1)[0].match(DIRECT_DEBIT_LEGAL_FORM_PATTERN)?.length !== 1) return null;
 	const businessName = remittance.match(DIRECT_DEBIT_BUSINESS_PATTERN)?.[1] ?? null;
 	return businessName && !isPaymentProcessorName(businessName) ? businessName : null;
 }

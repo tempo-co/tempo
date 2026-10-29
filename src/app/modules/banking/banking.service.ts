@@ -48,6 +48,7 @@ import {BankingEncryptionService} from './services/banking-encryption.service';
 import {BankingSyncQueueService} from './services/banking-sync-queue.service';
 import {BANK_CONNECTION_STATUSES, BANK_SYNC_STATUSES} from './services/banking-sync.constants';
 import {EnableBankingClient, EnableBankingClientError} from './services/enable-banking.client';
+import {findOwnedConnection} from './services/find-owned-connection';
 import {OwnTransferService} from './services/own-transfer.service';
 
 const PROVIDER = 'enable-banking';
@@ -248,10 +249,7 @@ export class BankingService {
 		connectionId: BankConnection['id'],
 		confirmation?: string,
 	): Promise<void> {
-		const ownedConnection = await this.bankConnectionRepository.findOne({
-			where: {id: connectionId, account: {id: accountId}},
-		});
-		if (!ownedConnection) throw new NotFoundException(BANKING_CONNECTION_NOT_FOUND);
+		await findOwnedConnection(this.bankConnectionRepository, accountId, connectionId);
 
 		const connectionLock = await this.connectionLockService.acquire(connectionId);
 		let deletionCommitted = false;
@@ -263,11 +261,7 @@ export class BankingService {
 				connectionLock.assertHealthy();
 				const connectionRepository = manager.getRepository(BankConnection);
 				const bankAccountRepository = manager.getRepository(BankAccount);
-				const candidateConnection = await connectionRepository.findOne({
-					where: {id: connectionId, account: {id: accountId}},
-				});
-
-				if (!candidateConnection) throw new NotFoundException(BANKING_CONNECTION_NOT_FOUND);
+				const candidateConnection = await findOwnedConnection(connectionRepository, accountId, connectionId);
 
 				// Lock pending reauthorizations before the existing connection. Callback persistence uses
 				// the same order, so deletion and callback cannot deadlock or recreate the connection.
