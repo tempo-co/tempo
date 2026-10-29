@@ -7,6 +7,7 @@ import {Strategy} from 'passport-local';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 
+import {INVALID_CREDENTIALS} from '../api/constants/api-messages.constants';
 import {LogInDto} from '../api/dtos/login.dto';
 
 @Injectable()
@@ -25,11 +26,10 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
 		}
 
 		const account = await this.accountService.findByEmail(credentials.email);
-		if (!account) {
-			throw new UnauthorizedException();
+		// The same answer for an unknown email and a wrong password, so the response body does not tell them apart.
+		if (!account || !(await this.accountService.isPasswordValid(account.password, credentials.password))) {
+			throw new UnauthorizedException(INVALID_CREDENTIALS);
 		}
-
-		await this.accountService.verifyPassword(account.password, credentials.password);
 		return account;
 	}
 }

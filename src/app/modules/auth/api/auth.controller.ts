@@ -33,6 +33,7 @@ import {
 	EMAIL_VERIFICATION_SENT,
 	EMAIL_VERIFICATION_SUCCESS,
 	INVALID_CREDENTIALS,
+	INVALID_PASSWORD,
 	LOGIN_SUCCESS,
 	LOGOUT_SUCCESS,
 	PASSWORD_CHANGE_SUCCESS,
@@ -189,7 +190,10 @@ export class AuthController {
 	@HttpCode(200)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
 	@ApiResponse({status: 200, description: PASSWORD_CHANGE_SUCCESS})
-	@ApiResponse({status: 401, description: UNAUTHORIZED})
+	@ApiResponse({
+		status: 401,
+		description: `${UNAUTHORIZED} "${INVALID_PASSWORD}" when the current password is wrong.`,
+	})
 	@ApiResponse({status: 429, description: TOO_MANY_REQUESTS})
 	@ApiOperation({summary: 'Changes the password for the current account.'})
 	async changePassword(@CurrentAccount() account: Account, @Body() dto: PasswordChangeDto, @Req() request: Request) {
