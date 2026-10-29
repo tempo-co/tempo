@@ -1,15 +1,7 @@
-import {ArrowLeftRight, ChevronDown} from 'lucide-react';
+import {ArrowLeftRight} from 'lucide-react';
 import * as React from 'react';
 
-import {Button} from '@/components/ui/button';
-import {
-  Command,
-  CommandGroup,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from '@/components/ui/command';
-import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
+import {Command, CommandGroup, CommandItem, CommandList} from '@/components/ui/command';
 import {useBankTransactionArrayFilter} from '@/hooks/use-bank-transaction-array-filter';
 import {cn} from '@/utils/cn';
 
@@ -20,7 +12,7 @@ import {
   BankTransactionFilterParams,
 } from '../types/bank-transaction';
 import {CASH_FLOW_LABELS} from '../utils/drill-filters';
-import {BankTransactionFilterSection} from './bank-transaction-filter-section';
+import {FacetedFilter, FilterResetGroup} from './bank-transaction-faceted-filter';
 import {FilterCheckIndicator, SelectedFilterSummary} from './bank-transaction-multi-select-filter';
 
 type BankTransactionCashFlowFilterProps = {
@@ -28,10 +20,6 @@ type BankTransactionCashFlowFilterProps = {
   variant?: 'popover' | 'mobile';
   className?: string;
 };
-
-function getEventLabel(eventType: BankTransactionCashFlowFilterValue) {
-  return CASH_FLOW_LABELS[eventType];
-}
 
 type InternalKind = (typeof BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS)[number];
 
@@ -85,7 +73,6 @@ export function BankTransactionCashFlowFilter({
         : [...selectedValues, value],
     );
   };
-  const selectedLabels = selectedValues.map(getEventLabel);
   const selectionDescriptionId = React.useId();
 
   const eventCommand = (
@@ -98,7 +85,7 @@ export function BankTransactionCashFlowFilter({
             return (
               <CommandItem
                 key={eventType}
-                value={getEventLabel(eventType)}
+                value={CASH_FLOW_LABELS[eventType]}
                 aria-describedby={`${selectionDescriptionId}-${eventType}`}
                 data-filter-selected={selection}
                 onSelect={() => void handleSelect(eventType)}
@@ -106,7 +93,7 @@ export function BankTransactionCashFlowFilter({
                 className={cn(isInternalKind(eventType) && 'pl-8')}
               >
                 <FilterCheckIndicator isSelected={isSelected} isMixed={selection === 'mixed'} />
-                <span className='truncate'>{getEventLabel(eventType)}</span>
+                <span className='truncate'>{CASH_FLOW_LABELS[eventType]}</span>
               </CommandItem>
             );
           })}
@@ -120,60 +107,31 @@ export function BankTransactionCashFlowFilter({
                 : 'Not selected'}
           </span>
         ))}
-        {selectedValues.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup>
-              <CommandItem
-                onSelect={() => void handleReset()}
-                className='justify-center text-center'
-              >
-                Reset
-              </CommandItem>
-            </CommandGroup>
-          </>
-        )}
+        <FilterResetGroup show={selectedValues.length > 0} onReset={() => void handleReset()} />
       </CommandList>
     </Command>
   );
 
-  if (variant === 'mobile') {
-    return (
-      <BankTransactionFilterSection label='Cash flow'>
-        <div className='overflow-hidden rounded-md border bg-background'>{eventCommand}</div>
-      </BankTransactionFilterSection>
-    );
-  }
-
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant='outline'
-          size='sm'
-          aria-label={
-            selectedLabels.length > 0 ? `Cash flow: ${selectedLabels.join(', ')}` : 'Cash flow'
-          }
-          className={cn(
-            'h-12 sm:h-8',
-            selectedValues.length === 0 ? 'border-dashed' : 'border',
-            className,
-          )}
-        >
-          <ArrowLeftRight />
-          Cash flow
-          <SelectedFilterSummary
-            items={selectedValues.map((value, index) => ({
-              key: value,
-              label: selectedLabels[index],
-            }))}
-          />
-          <ChevronDown className='text-muted-foreground' />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className='w-[240px] p-0' align='start'>
-        {eventCommand}
-      </PopoverContent>
-    </Popover>
+    <FacetedFilter
+      variant={variant}
+      label='Cash flow'
+      icon={<ArrowLeftRight />}
+      isActive={selectedValues.length > 0}
+      summary={
+        <SelectedFilterSummary
+          items={selectedValues.map((value) => ({key: value, label: CASH_FLOW_LABELS[value]}))}
+        />
+      }
+      ariaLabel={
+        selectedValues.length > 0
+          ? `Cash flow: ${selectedValues.map((value) => CASH_FLOW_LABELS[value]).join(', ')}`
+          : 'Cash flow'
+      }
+      contentClassName='w-[240px] p-0'
+      className={className}
+    >
+      {eventCommand}
+    </FacetedFilter>
   );
 }

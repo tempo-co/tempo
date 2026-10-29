@@ -2,7 +2,6 @@ import {format} from 'date-fns';
 import {useState} from 'react';
 import {Area, AreaChart, CartesianGrid, XAxis, YAxis} from 'recharts';
 
-import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {Skeleton} from '@/components/ui/skeleton';
@@ -14,12 +13,12 @@ import {cn} from '@/utils/cn';
 import {useGetBankBalanceTrend} from '../api/use-get-bank-balance-trend';
 import type {BalanceTrendPeriod} from '../types/bank-balance-trend';
 import type {CashFlowInterval} from '../types/bank-transaction-cash-flow';
-import {axisFormatter, axisTicks} from '../utils/chart-axis';
+import {axisFormatter, axisTicks, firstOfYear, labelEvery} from '../utils/chart-axis';
 import {parseCalendarDate} from '../utils/drill-links';
 import {formatMoney, formatWholeMoney, toCents} from '../utils/money';
 import {formatMonth, localDate} from '../utils/month';
 import {latestWindow, shownWeeks} from '../utils/period-window';
-import {IntervalToggle} from './interval-toggle';
+import {ChartCardError, ChartCardHeader} from './chart-card';
 
 const day = (value: string) => parseCalendarDate(value);
 
@@ -73,24 +72,18 @@ export function BalanceTrendCard({connections}: {connections: BankConnection[]})
 
   return (
     <Card className='@container grid min-w-0 gap-4 p-5 sm:p-6' data-testid='balance-trend'>
-      {/* The title and switch share the first row; the summary spans the card below them. */}
-      <header className='grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2.5'>
-        <h2 className='text-card-title'>Total balance</h2>
-        {/* Overhangs the title row so the title sits where it does on every other card. */}
-        <div className='-my-1.5'>
-          <IntervalToggle value={interval} onChange={setGrouping} label='Show total balance by' />
-        </div>
+      <ChartCardHeader
+        title='Total balance'
+        interval={interval}
+        onIntervalChange={setGrouping}
+        toggleLabel='Show total balance by'
+      >
         {loaded && periods.length > 1 && (
           <Change periods={periods} interval={interval} currency={loaded.baseCurrency} />
         )}
-      </header>
+      </ChartCardHeader>
       {isError && !loaded ? (
-        <div className='grid justify-items-start gap-3'>
-          <p className='text-sm'>Could not load the balance trend.</p>
-          <Button variant='outline' size='sm' onClick={() => void refetch()}>
-            Try again
-          </Button>
-        </div>
+        <ChartCardError message='Could not load the balance trend.' onRetry={refetch} />
       ) : isPending || !loaded ? (
         <Skeleton className='h-[17rem]' role='img' aria-label='Loading total balance' />
       ) : periods.length === 0 ? (
@@ -179,18 +172,13 @@ function BalanceChart({
   const data = periods.map((period) => ({start: period.start, total: Number(period.total)}));
   const last = periods[periods.length - 1];
   // Labelled like the cash flow chart above: counted back from the latest, years under months.
-  const labelEvery = interval === 'year' ? 1 : interval === 'week' ? 4 : isMobile ? 2 : 1;
+  const every = labelEvery(interval, isMobile);
   const labelled = new Map(
     periods
-      .filter((_, index) => (periods.length - 1 - index) % labelEvery === 0)
+      .filter((_, index) => (periods.length - 1 - index) % every === 0)
       .map((period) => [period.start, interval === 'week' ? period.end : period.start]),
   );
-  const labelledStarts = [...labelled.keys()];
-  const firstOfYear = new Set(
-    labelledStarts.filter(
-      (start, index) => index === 0 || labelledStarts[index - 1].slice(0, 4) !== start.slice(0, 4),
-    ),
-  );
+  const yearStarts = firstOfYear([...labelled.keys()]);
   // Months drop the year here; it sits under the first month of each year instead.
   const tickLabel = (start: string) =>
     interval === 'month' ? format(day(start), 'MMM') : DATE_LABEL[interval](start);
@@ -231,7 +219,7 @@ function BalanceChart({
                   className='fill-muted-foreground text-caption'
                 >
                   {tickLabel(date)}
-                  {interval === 'month' && firstOfYear.has(start) && (
+                  {interval === 'month' && yearStarts.has(start) && (
                     <tspan x={props.x} dy={13} className='text-caption'>
                       {start.slice(0, 4)}
                     </tspan>

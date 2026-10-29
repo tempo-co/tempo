@@ -1,12 +1,11 @@
 import {useNavigate} from '@tanstack/react-router';
 import {format, isSameDay, startOfDay, startOfYear, subYears} from 'date-fns';
-import {CalendarIcon, ChevronDown} from 'lucide-react';
+import {CalendarIcon} from 'lucide-react';
 import {useState} from 'react';
 import {DateRange} from 'react-day-picker';
 
 import {Button, buttonVariants} from '@/components/ui/button';
 import {Calendar} from '@/components/ui/calendar';
-import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
 import {Separator} from '@/components/ui/separator';
 import {cn} from '@/utils/cn';
 
@@ -16,7 +15,7 @@ import {
   BOOKING_DATE_PRESETS,
   BookingDateRange,
 } from '../utils/booking-date-presets';
-import {BankTransactionFilterSection} from './bank-transaction-filter-section';
+import {FacetedFilter} from './bank-transaction-faceted-filter';
 
 type BankTransactionDateFilterProps = {
   filters: BankTransactionFilterParams;
@@ -141,9 +140,28 @@ export function BankTransactionDateFilter({
     />
   );
 
-  if (variant === 'mobile') {
-    return (
-      <BankTransactionFilterSection label='Booking date'>
+  return (
+    <FacetedFilter
+      variant={variant}
+      label='Booking date'
+      icon={<CalendarIcon />}
+      isActive={!!filters.bookingDate}
+      summary={
+        fullBookingDateLabel && (
+          <>
+            <Separator orientation='vertical' className='mx-2 h-4' />
+            <span className='min-w-0 truncate text-secondary-foreground max-md:flex-1'>
+              <span className='max-md:hidden'>{fullBookingDateLabel}</span>
+              <span className='hidden max-md:inline'>{compactBookingDateLabel}</span>
+            </span>
+          </>
+        )
+      }
+      ariaLabel={fullBookingDateLabel ? `Booking date: ${fullBookingDateLabel}` : undefined}
+      contentClassName='w-auto p-0'
+      className={className}
+      onOpenChange={handleOpenChange}
+      mobileContent={
         <div
           className='overflow-hidden rounded-md border bg-background'
           data-testid='bank-transaction-mobile-calendar'
@@ -161,53 +179,22 @@ export function BankTransactionDateFilter({
             </>
           )}
         </div>
-      </BankTransactionFilterSection>
-    );
-  }
-
-  return (
-    <Popover onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <Button
-          variant='outline'
-          size='sm'
-          className={cn('h-12 sm:h-8', filters.bookingDate ? 'border' : 'border-dashed', className)}
-          aria-label={fullBookingDateLabel ? `Booking date: ${fullBookingDateLabel}` : undefined}
-        >
-          <CalendarIcon />
-          Booking date
-          {fullBookingDateLabel && (
-            <>
-              <Separator orientation='vertical' className='mx-2 h-4' />
-              <span className='min-w-0 truncate text-secondary-foreground max-md:flex-1'>
-                <span className='max-md:hidden'>{fullBookingDateLabel}</span>
-                <span className='hidden max-md:inline'>{compactBookingDateLabel}</span>
-              </span>
-            </>
-          )}
-          <ChevronDown className='text-muted-foreground' />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className='w-auto p-0' align='start'>
-        <div className='flex'>
-          {presets}
-          {calendar}
-        </div>
-        {filters.bookingDate !== undefined && (
-          <>
-            <Separator className='w-full' />
-            <div className='p-1'>
-              <Button
-                className='h-10 w-full rounded-sm sm:h-8'
-                variant='ghost'
-                onClick={handleReset}
-              >
-                Reset
-              </Button>
-            </div>
-          </>
-        )}
-      </PopoverContent>
-    </Popover>
+      }
+    >
+      <div className='flex'>
+        {presets}
+        {calendar}
+      </div>
+      {filters.bookingDate !== undefined && (
+        <>
+          <Separator className='w-full' />
+          <div className='p-1'>
+            <Button className='h-10 w-full rounded-sm sm:h-8' variant='ghost' onClick={handleReset}>
+              Reset
+            </Button>
+          </div>
+        </>
+      )}
+    </FacetedFilter>
   );
 }

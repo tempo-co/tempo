@@ -1,16 +1,7 @@
-import {ChevronDown, Sparkles} from 'lucide-react';
+import {Sparkles} from 'lucide-react';
 
-import {Button} from '@/components/ui/button';
-import {
-  Command,
-  CommandGroup,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from '@/components/ui/command';
-import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
+import {Command, CommandGroup, CommandItem, CommandList} from '@/components/ui/command';
 import {useBankTransactionArrayFilter} from '@/hooks/use-bank-transaction-array-filter';
-import {cn} from '@/utils/cn';
 
 import {
   BANK_TRANSACTION_CATEGORIZATION_SOURCES,
@@ -18,7 +9,7 @@ import {
   BankTransactionFilterParams,
 } from '../types/bank-transaction';
 import {formatBankTransactionCategorySource} from '../utils/formatters';
-import {BankTransactionFilterSection} from './bank-transaction-filter-section';
+import {FacetedFilter, FilterResetGroup} from './bank-transaction-faceted-filter';
 import {FilterCheckIndicator, SelectedFilterSummary} from './bank-transaction-multi-select-filter';
 
 type BankTransactionCategorySourceFilterProps = {
@@ -41,7 +32,6 @@ export function BankTransactionCategorySourceFilter({
     toggle: handleSelect,
     reset: handleReset,
   } = useBankTransactionArrayFilter(filters, 'categorySources');
-  const selectedLabels = selectedValues.map(getSourceLabel);
 
   const sourceCommand = (
     <Command>
@@ -61,55 +51,27 @@ export function BankTransactionCategorySourceFilter({
             );
           })}
         </CommandGroup>
-        {selectedValues.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup>
-              <CommandItem onSelect={handleReset} className='justify-center text-center'>
-                Reset
-              </CommandItem>
-            </CommandGroup>
-          </>
-        )}
+        <FilterResetGroup show={selectedValues.length > 0} onReset={handleReset} />
       </CommandList>
     </Command>
   );
 
-  if (variant === 'mobile') {
-    return (
-      <BankTransactionFilterSection label='Category source'>
-        <div className='overflow-hidden rounded-md border bg-background'>{sourceCommand}</div>
-      </BankTransactionFilterSection>
-    );
-  }
-
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant='outline'
-          size='sm'
-          aria-label='Category source'
-          className={cn(
-            'h-12 sm:h-8',
-            selectedValues.length === 0 ? 'border-dashed' : 'border',
-            className,
-          )}
-        >
-          <Sparkles />
-          Category source
-          <SelectedFilterSummary
-            items={selectedValues.map((value, index) => ({
-              key: value,
-              label: selectedLabels[index],
-            }))}
-          />
-          <ChevronDown className='text-muted-foreground' />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className='w-[240px] p-0' align='start'>
-        {sourceCommand}
-      </PopoverContent>
-    </Popover>
+    <FacetedFilter
+      variant={variant}
+      label='Category source'
+      icon={<Sparkles />}
+      isActive={selectedValues.length > 0}
+      summary={
+        <SelectedFilterSummary
+          items={selectedValues.map((value) => ({key: value, label: getSourceLabel(value)}))}
+        />
+      }
+      ariaLabel='Category source'
+      contentClassName='w-[240px] p-0'
+      className={className}
+    >
+      {sourceCommand}
+    </FacetedFilter>
   );
 }

@@ -3,7 +3,6 @@ import {format} from 'date-fns';
 import {useState} from 'react';
 import {Bar, BarChart, CartesianGrid, Cell, ReferenceArea, XAxis, YAxis} from 'recharts';
 
-import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {Skeleton} from '@/components/ui/skeleton';
@@ -12,7 +11,7 @@ import {cn} from '@/utils/cn';
 
 import {useGetBankTransactionCashFlow} from '../api/use-get-bank-transaction-cash-flow';
 import type {CashFlowInterval, CashFlowPeriod} from '../types/bank-transaction-cash-flow';
-import {axisFormatter, axisTicks} from '../utils/chart-axis';
+import {axisFormatter, axisTicks, firstOfYear, labelEvery} from '../utils/chart-axis';
 import {cashFlowDrill, parseCalendarDate} from '../utils/drill-links';
 import {formatMoney, formatWholeMoney, toCents} from '../utils/money';
 import {
@@ -24,7 +23,7 @@ import {
   shiftMonth,
 } from '../utils/month';
 import {MONTHS_SHOWN, latestWindow, shownWeeks} from '../utils/period-window';
-import {IntervalToggle} from './interval-toggle';
+import {ChartCardError, ChartCardHeader} from './chart-card';
 
 const day = (value: string) => parseCalendarDate(value);
 const monthOf = (period: CashFlowPeriod) => period.start.slice(0, 7);
@@ -89,22 +88,16 @@ export function CashFlowCard({month}: {month: string}) {
 
   return (
     <Card className='@container grid min-w-0 gap-4 p-5 sm:p-6' data-testid='cash-flow'>
-      {/* The title and switch share the first row; the summary spans the card below them. */}
-      <header className='grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2.5'>
-        <h2 className='text-card-title'>Cash flow</h2>
-        {/* Overhangs the title row so the title sits where it does on every other card. */}
-        <div className='-my-1.5'>
-          <IntervalToggle value={interval} onChange={setGrouping} label='Group cash flow by' />
-        </div>
+      <ChartCardHeader
+        title='Cash flow'
+        interval={interval}
+        onIntervalChange={setGrouping}
+        toggleLabel='Group cash flow by'
+      >
         {loaded && <Averages periods={shown} interval={interval} currency={loaded.baseCurrency} />}
-      </header>
+      </ChartCardHeader>
       {isError && !loaded ? (
-        <div className='grid justify-items-start gap-3'>
-          <p className='text-sm'>Could not load cash flow.</p>
-          <Button variant='outline' size='sm' onClick={() => void refetch()}>
-            Try again
-          </Button>
-        </div>
+        <ChartCardError message='Could not load cash flow.' onRetry={refetch} />
       ) : isPending || !loaded ? (
         <Skeleton className='h-[19rem]' role='img' aria-label='Loading cash flow' />
       ) : shown.length === 0 ? (
@@ -210,24 +203,20 @@ function CashFlowChart({
 
   // Months: every month (every other on phones), and the selected month always, clearing its
   // neighbours. Weeks: every fourth Monday, counted back from the latest. Years: all.
-  const labelEvery = interval === 'year' ? 1 : interval === 'week' ? 4 : isMobile ? 2 : 1;
+  const every = labelEvery(interval, isMobile);
   const selectedIndex = periods.findIndex((period) => period.start === selected);
   const labelled = new Set(
     periods
       .filter((period, index) =>
         period.start === selected
           ? true
-          : selectedIndex >= 0 && Math.abs(index - selectedIndex) < labelEvery
+          : selectedIndex >= 0 && Math.abs(index - selectedIndex) < every
             ? false
-            : (periods.length - 1 - index) % labelEvery === 0,
+            : (periods.length - 1 - index) % every === 0,
       )
       .map((period) => period.start),
   );
-  const firstOfYear = new Set(
-    [...labelled].filter(
-      (start, index, list) => index === 0 || list[index - 1].slice(0, 4) !== start.slice(0, 4),
-    ),
-  );
+  const yearStarts = firstOfYear([...labelled]);
   const tickLabel = (start: string) =>
     interval === 'year'
       ? start.slice(0, 4)
@@ -316,7 +305,7 @@ function CashFlowChart({
                   )}
                 >
                   {tickLabel(start)}
-                  {interval === 'month' && firstOfYear.has(start) && (
+                  {interval === 'month' && yearStarts.has(start) && (
                     <tspan
                       x={props.x}
                       dy={13}

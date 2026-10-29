@@ -1,17 +1,8 @@
 import {useNavigate} from '@tanstack/react-router';
-import {ChevronDown, Coins} from 'lucide-react';
+import {Coins} from 'lucide-react';
 import * as React from 'react';
 
-import {Button} from '@/components/ui/button';
-import {
-  Command,
-  CommandGroup,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from '@/components/ui/command';
-import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
-import {cn} from '@/utils/cn';
+import {Command, CommandGroup, CommandItem, CommandList} from '@/components/ui/command';
 
 import {useGetAllBankConnections} from '../api/use-get-all-bank-connections';
 import {
@@ -19,7 +10,7 @@ import {
   BankTransactionBaseAmountFilterValue,
   BankTransactionFilterParams,
 } from '../types/bank-transaction';
-import {BankTransactionFilterSection} from './bank-transaction-filter-section';
+import {FacetedFilter, FilterResetGroup} from './bank-transaction-faceted-filter';
 import {FilterCheckIndicator, SelectedFilterSummary} from './bank-transaction-multi-select-filter';
 
 const LABELS: Record<BankTransactionBaseAmountFilterValue, string> = {
@@ -67,53 +58,28 @@ export function BankTransactionBaseAmountFilter({
             {filters.baseAmount === value ? 'Selected' : 'Not selected'}
           </span>
         ))}
-        {filters.baseAmount && (
-          <>
-            <CommandSeparator />
-            <CommandGroup>
-              <CommandItem
-                onSelect={() => select(undefined)}
-                className='justify-center text-center'
-              >
-                Reset
-              </CommandItem>
-            </CommandGroup>
-          </>
-        )}
+        <FilterResetGroup show={!!filters.baseAmount} onReset={() => select(undefined)} />
       </CommandList>
     </Command>
   );
-  if (variant === 'mobile') {
-    return (
-      <BankTransactionFilterSection label={label}>
-        <div className='overflow-hidden rounded-md border bg-background'>{command}</div>
-      </BankTransactionFilterSection>
-    );
-  }
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant='outline'
-          size='sm'
-          aria-label={filters.baseAmount ? `${label}: ${LABELS[filters.baseAmount]}` : label}
-          className={cn('h-12 sm:h-8', filters.baseAmount ? 'border' : 'border-dashed', className)}
-        >
-          <Coins />
-          {label}
-          <SelectedFilterSummary
-            items={
-              filters.baseAmount
-                ? [{key: filters.baseAmount, label: LABELS[filters.baseAmount]}]
-                : []
-            }
-          />
-          <ChevronDown className='text-muted-foreground' />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className='w-[240px] p-0' align='start'>
-        {command}
-      </PopoverContent>
-    </Popover>
+    <FacetedFilter
+      variant={variant}
+      label={label}
+      icon={<Coins />}
+      isActive={!!filters.baseAmount}
+      summary={
+        <SelectedFilterSummary
+          items={
+            filters.baseAmount ? [{key: filters.baseAmount, label: LABELS[filters.baseAmount]}] : []
+          }
+        />
+      }
+      ariaLabel={filters.baseAmount ? `${label}: ${LABELS[filters.baseAmount]}` : label}
+      contentClassName='w-[240px] p-0'
+      className={className}
+    >
+      {command}
+    </FacetedFilter>
   );
 }

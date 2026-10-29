@@ -1,6 +1,5 @@
-import {ChevronDown, Tags} from 'lucide-react';
+import {Tags} from 'lucide-react';
 
-import {Button} from '@/components/ui/button';
 import {
   Command,
   CommandEmpty,
@@ -8,12 +7,9 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandSeparator,
 } from '@/components/ui/command';
-import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {useBankTransactionArrayFilter} from '@/hooks/use-bank-transaction-array-filter';
-import {cn} from '@/utils/cn';
 
 import {
   BANK_TRANSACTION_CATEGORIES,
@@ -23,7 +19,7 @@ import {
 } from '../types/bank-transaction';
 import {formatBankTransactionCategory} from '../utils/formatters';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
-import {BankTransactionFilterSection} from './bank-transaction-filter-section';
+import {FacetedFilter, FilterResetGroup} from './bank-transaction-faceted-filter';
 import {FilterCheckIndicator, SelectedFilterSummary} from './bank-transaction-multi-select-filter';
 
 type BankTransactionCategoryFilterProps = {
@@ -81,50 +77,23 @@ export function BankTransactionCategoryFilter({
             })}
           </CommandGroup>
         </ScrollArea>
-        {selectedValues.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup>
-              <CommandItem onSelect={handleReset} className='justify-center text-center'>
-                Reset
-              </CommandItem>
-            </CommandGroup>
-          </>
-        )}
+        <FilterResetGroup show={selectedValues.length > 0} onReset={handleReset} />
       </CommandList>
     </Command>
   );
 
-  if (variant === 'mobile') {
-    return (
-      <BankTransactionFilterSection label='Categories'>
-        <div className='overflow-hidden rounded-md border bg-background'>{categoryCommand}</div>
-      </BankTransactionFilterSection>
-    );
-  }
-
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant='outline'
-          size='sm'
-          aria-label='Categories'
-          className={cn(
-            'h-12 sm:h-8',
-            selectedValues.length === 0 ? 'border-dashed' : 'border',
-            className,
-          )}
-        >
-          <Tags />
-          Categories
-          <SelectedFilterSummary items={selectedItems} />
-          <ChevronDown className='text-muted-foreground' />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className='w-[280px] p-0' align='start'>
-        {categoryCommand}
-      </PopoverContent>
-    </Popover>
+    <FacetedFilter
+      variant={variant}
+      label='Categories'
+      icon={<Tags />}
+      isActive={selectedValues.length > 0}
+      summary={<SelectedFilterSummary items={selectedItems} />}
+      ariaLabel='Categories'
+      contentClassName='w-[280px] p-0'
+      className={className}
+    >
+      {categoryCommand}
+    </FacetedFilter>
   );
 }
