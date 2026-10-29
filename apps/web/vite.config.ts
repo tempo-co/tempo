@@ -1,4 +1,4 @@
-import {TanStackRouterVite} from '@tanstack/router-plugin/vite';
+import {tanstackRouter} from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react-swc';
 import path from 'path';
 import {type Plugin, defineConfig, loadEnv} from 'vite';
@@ -45,8 +45,9 @@ export default defineConfig(({mode}) => {
   return {
     base: basePath,
     plugins: [
+      // Must run before the React transform so it can split each route into its own chunk.
+      tanstackRouter({target: 'react', autoCodeSplitting: true}),
       react(),
-      TanStackRouterVite(),
       pwaManifestPlugin(basePath),
       offlineShellPlugin(basePath),
     ],

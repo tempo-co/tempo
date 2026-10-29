@@ -29,6 +29,9 @@ const savedStatus = (page: Page) => page.getByRole('status').filter({hasText: /^
 const unreachableHeading = (page: Page) => page.getByRole('heading', {name: 'Cannot reach Tempo'});
 const serverSessionStatus = async (page: Page) =>
   (await page.request.get(`${API_URL}/accounts/me`)).status();
+// Route components load as separate chunks; offline, only the service worker can serve them.
+const waitForOfflineShell = (page: Page) =>
+  expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
 /**
  * Runs the persister's throttled save (at most 1 s away), so a skipped or late write has had its
  * chance. Needs `clock.install()` before the page loads.
@@ -70,7 +73,7 @@ function withSecondAccount(connections: BankConnection[]) {
 async function saveTransactions(page: Page) {
   await page.goto('/bank-transactions');
   await expect(page.getByText('Coffee shop')).toBeVisible();
-  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await waitForOfflineShell(page);
   await expect
     .poll(() =>
       readCache(page).then(
@@ -417,6 +420,7 @@ test('logging out while Tempo is unreachable clears saved data', async ({
   await page.goto('/');
   await expect(homePage.accountName).toHaveText(freshAccount.name);
   await expect.poll(() => readCache(page)).not.toBe(null);
+  await waitForOfflineShell(page);
   await context.setOffline(true);
   await expect(savedStatus(page)).toBeVisible();
   await homePage.logOut();
@@ -491,6 +495,7 @@ test('a logout that could not reach Tempo is completed once it is reachable agai
   await page.goto('/bank-transactions');
   await expect(homePage.accountName).toHaveText(freshAccount.name);
   await expect.poll(() => readCache(page)).not.toBe(null);
+  await waitForOfflineShell(page);
   await context.setOffline(true);
   await expect(savedStatus(page)).toBeVisible();
   await homePage.logOut();
@@ -530,6 +535,7 @@ test('logout clears private data even when its pending marker cannot be stored',
       original.call(this, key, value);
     };
   });
+  await waitForOfflineShell(page);
   await context.setOffline(true);
   await expect(savedStatus(page)).toBeVisible();
   await homePage.logOut();
@@ -556,6 +562,8 @@ test('two reconnecting tabs finish a pending logout only once', async ({
   const otherHome = new HomePage(other);
   await other.goto('/');
   await expect(otherHome.accountName).toHaveText(freshAccount.name);
+  await waitForOfflineShell(page);
+  await waitForOfflineShell(other);
   await context.setOffline(true);
   await expect(savedStatus(page)).toBeVisible();
   await homePage.logOut();
@@ -871,7 +879,7 @@ for (const outage of ['browser offline', 'Tempo unreachable'] as const) {
     // Appearance has no data queries that could independently redirect on a 401.
     await page.goto('/settings/appearance');
     await expect(homePage.accountName).toHaveText(freshAccount.name);
-    await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+    await waitForOfflineShell(page);
     await expect.poll(() => readCache(page)).not.toBe(null);
 
     let unavailable = true;
@@ -914,7 +922,7 @@ test('a session revoked on the server clears saved data and is not reopened offl
   await page.reload();
   await expect(page).toHaveURL(/\/login$/);
   await expect.poll(() => readCache(page)).toBe(null);
-  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await waitForOfflineShell(page);
   await context.setOffline(true);
   await page.reload();
   await expect(unreachableHeading(page)).toBeVisible();
