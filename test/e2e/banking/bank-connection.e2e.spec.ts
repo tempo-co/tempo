@@ -1226,7 +1226,7 @@ describe('BankConnectionController', () => {
 			[{providerAccountId: 'sync-provider-account', identificationHash: 'hash-held-categorization'}],
 			'Revolut',
 		);
-		const [payment, exchange] = makeTransactions('held-categorization').map((transaction) => ({
+		const [payment, exchange, added] = makeTransactions('held-categorization').map((transaction) => ({
 			...transaction,
 			creditDebitIndicator: 'DBIT',
 		}));
@@ -1242,11 +1242,12 @@ describe('BankConnectionController', () => {
 			await synchronize([
 				{...payment, description: 'Corrected provider description'},
 				{...exchange, description: 'Exchanged to GBP'},
+				added,
 			]),
-		).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 0});
+		).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 1});
 
 		const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccounts[0].id});
-		expect(rows).toHaveLength(2);
+		expect(rows).toHaveLength(3);
 		expect(rows.find(({entryReference}) => entryReference === payment.entryReference)).toMatchObject({
 			description: payment.description,
 			financialEventType: null,

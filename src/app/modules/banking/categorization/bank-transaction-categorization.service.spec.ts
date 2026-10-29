@@ -377,6 +377,26 @@ describe('BankTransactionCategorizationService worker', () => {
 		expect(other.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION);
 	});
 
+	it('categorizes the rows it claimed and fails the job when another row cannot be claimed', async () => {
+		const failing = createBankTransaction({id: 'failing-transaction', counterpartyName: 'Cafe'});
+		const claimable = createBankTransaction({id: 'claimable-transaction', counterpartyName: 'Bakery'});
+		const {service, provider, repository} = createService({
+			rows: [failing, claimable],
+			providerResult: [{correlationId: claimable.id, category: 'FOOD_AND_DRINK', confidence: 0.9}],
+		});
+		const claimError = new Error('connection lost');
+		repository.update.mockImplementation(({id}: {id: string}) =>
+			id === failing.id ? Promise.reject(claimError) : Promise.resolve({affected: 1}),
+		);
+
+		await expect(service.processTransactionJob([failing.id, claimable.id])).rejects.toBe(claimError);
+
+		expect(provider.categorize).toHaveBeenCalledTimes(1);
+		expect(provider.categorize.mock.calls[0][0]).toEqual([expect.objectContaining({correlationId: claimable.id})]);
+		expect(claimable.category).toBe('FOOD_AND_DRINK');
+		expect(failing.categoryStatus).toBe('PENDING');
+	});
+
 	it('passes the transaction ASPSP when normalizing provider-specific codes', async () => {
 		const transaction = createBankTransaction({
 			id: 'numeric-card-transaction',

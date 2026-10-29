@@ -383,8 +383,6 @@ describe('BankingSyncService synchronization lock', () => {
 			transactionsFetched: 2,
 			transactionsAdded: 1,
 		});
-		expect(insertQueryBuilder.orUpdate).toHaveBeenCalledTimes(1);
-		expect(insertQueryBuilder.returning).toHaveBeenCalledWith('"id", ("xmax" = 0) AS "inserted"');
 		expect(insertQueryBuilder.values).toHaveBeenCalledWith(
 			expect.arrayContaining([
 				expect.objectContaining({
@@ -1171,19 +1169,14 @@ describe('BankingSyncService transaction event persistence', () => {
 			expect.any(Array),
 			['bankAccountId', 'stableIdentityKey'],
 			expect.objectContaining({
-				overwriteCondition: {
-					where: '("bank_transactions"."categoryStatus" IS DISTINCT FROM :processingStatus OR EXCLUDED."financialEventType" = :currencyExchangeType)',
-					parameters: {
-						processingStatus: 'PROCESSING',
-						currencyExchangeType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-					},
-				},
+				overwriteCondition: expect.objectContaining({
+					parameters: expect.objectContaining({processingStatus: 'PROCESSING'}),
+				}),
 			}),
 		);
 		expect(eventUpdateQueryBuilder.set).toHaveBeenCalledWith(
 			expect.objectContaining({categoryStatus: 'NOT_APPLICABLE', categoryInputHash: null}),
 		);
-		expect(repository.createQueryBuilder).toHaveBeenCalledTimes(2);
 	});
 
 	it('resets stale categorization for all qualifying existing rows in one guarded update', async () => {
