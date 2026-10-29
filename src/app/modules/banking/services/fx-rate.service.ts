@@ -3,7 +3,7 @@ import {InjectRepository} from '@nestjs/typeorm';
 import {Repository} from 'typeorm';
 
 import {BankTransactionFxRate} from '../bank-transaction-fx-rate.entity';
-import {addDays} from '../banking.utils';
+import {addDays, safeErrorName} from '../banking.utils';
 import {
 	FX_RATE_MAX_AGE_DAYS,
 	MAX_ECB_PUBLICATION_GAP_DAYS,
@@ -14,6 +14,14 @@ import {
 const ECB_DATA_API_URL = 'https://data-api.ecb.europa.eu/service/data/EXR';
 const ECB_PROVIDER = 'ECB';
 const REQUEST_TIMEOUT_MS = 15_000;
+
+/** An ECB reply Tempo could not use; its message is Tempo's own text, so it is safe to log. */
+class EcbResponseError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'EcbResponseError';
+	}
+}
 
 type FxRateRow = {
 	currency: string;
@@ -41,9 +49,8 @@ export class FxRateService {
 				const rates = await this.fetchRates(currency, fromDate, toDate);
 				if (rates.length > 0) await this.fxRateRepository.upsert(rates, ['currency', 'rateDate']);
 			} catch (error) {
-				this.logger.warn(
-					`Historical FX rate fetch failed for ${currency}: ${error instanceof Error ? error.message : 'unknown error'}`,
-				);
+				const reason = error instanceof EcbResponseError ? error.message : safeErrorName(error);
+				this.logger.warn(`Historical FX rate fetch failed for ${currency}: ${reason}`);
 			}
 		}
 	}
@@ -112,7 +119,7 @@ export class FxRateService {
 			headers: {Accept: 'text/csv'},
 			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 		});
-		if (!response.ok) throw new Error(`ECB responded with HTTP ${response.status}`);
+		if (!response.ok) throw new EcbResponseError(`ECB responded with HTTP ${response.status}`);
 
 		return this.parseCsv(await response.text(), currency);
 	}
@@ -123,7 +130,7 @@ export class FxRateService {
 		const headers = lines[0].split(',');
 		const dateIndex = headers.indexOf('TIME_PERIOD');
 		const valueIndex = headers.indexOf('OBS_VALUE');
-		if (dateIndex < 0 || valueIndex < 0) throw new Error('ECB response omitted rate columns');
+		if (dateIndex < 0 || valueIndex < 0) throw new EcbResponseError('ECB response omitted rate columns');
 
 		return lines.slice(1).flatMap((line) => {
 			const fields = line.split(',');
