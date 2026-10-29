@@ -68,7 +68,7 @@ The model can name a plausible domain that belongs to someone else, so only the 
 - Set `Cache-Control: private, max-age=31536000, immutable` inside the handler after the lookup (`@Res({passthrough: true})`, return a typed `StreamableFile`). `@Header()` runs before the handler and would cache a 404 as immutable; the E2E asserts a refusal has no `cache-control`.
 - The version is the image hash, so a new image gets a new URL.
 - `GET /merchant-logos/:id/:version/mask-v1` reuses `getLogoImage` before any derivative lookup, including cache hits. Feature-disabled, wrong-owner, non-READY and old-version requests remain 404. Empty or undecodable masks are uncacheable 404s; the original route and response URLs are unchanged.
-- Masks use white RGBA with continuous alpha, a 128px canvas and a maximum 104px mark extent. The pure TypeScript converter combines the AOSP QPR2 contrast core with the opaque-bitmap adapter and Pillow-compatible 8-bit LANCZOS placement. Attribution and licenses are in `licenses/` and ship in the runtime image.
+- Masks use white RGBA with continuous alpha, a 128px canvas and a maximum 104px mark extent. The pure TypeScript converter combines the AOSP QPR2 contrast core with the opaque-bitmap adapter and Pillow-compatible 8-bit LANCZOS placement.
 - Redis stores only successful derivative PNGs under `merchant-logo:mask-v1:<source-sha256>`. Atomic FIFO eviction caps each algorithm at 256 generated 128px PNG entries, with seven-day TTLs on entries and their index. The per-process in-flight map shares one conversion per algorithm/source hash and is cleared on success or failure. No database rows, source bytes or provider state change. Any pixel-affecting algorithm change requires a new route/cache algorithm version.
 
 ## Tests

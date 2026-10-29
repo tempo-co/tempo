@@ -9,7 +9,8 @@
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and limitations under the License.
  *
- * AOSP contrast core with an opaque-bitmap adapter and padded placement. See licenses/MASK-NOTICE.md.
+ * AOSP contrast core with an opaque-bitmap adapter and padded placement.
+ * Source: https://android.googlesource.com/platform/frameworks/libs/systemui/+/refs/heads/android16-qpr2-release/iconloaderlib/src/com/android/launcher3/icons/MonochromeIconFactory.java
  */
 import sharp, {OutputInfo} from 'sharp';
 

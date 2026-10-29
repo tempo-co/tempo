@@ -3,7 +3,7 @@
  * Copyright © 1997-2011 Secret Labs AB
  * Copyright © 1995-2011 Fredrik Lundh and contributors
  * Copyright © 2010 Jeffrey 'Alex' Clark and contributors
- * See licenses/PILLOW.txt for the MIT-CMU permission and warranty notice.
+ * Source: https://github.com/python-pillow/Pillow/blob/12.3.0/src/libImaging/Resample.c
  */
 
 const PRECISION = 2 ** 22;
