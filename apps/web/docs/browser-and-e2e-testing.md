@@ -74,6 +74,24 @@ A mocked spec is a UI integration test, not full-stack coverage. Report it separ
 - Theme: the storage key is `vite-ui-theme`. Set it with `page.addInitScript` and assert the rendered theme; a different key leaves both captures in the default theme.
 - Mobile filter drawers scroll inside the Radix scroll-area viewport (`[data-radix-scroll-area-viewport]`), not the nested command list.
 
+## Merchant logo rendering
+
+`test/e2e/banking/merchant-logos.spec.ts` drives transactions, the inspector, connection rows,
+Home recent rows and Home recurring rows at `1440px` and `390px` in both themes. Its synthetic
+`128px` white RGBA fixture contains transparent, quarter-, half-, three-quarter- and full-alpha
+bands. The pixel assertions decode actual browser screenshots of the tinted tile, not a canvas
+drawing of the unfiltered image. They compare the composited sRGB colors with the Clay field
+and ink, allowing one channel value of rounding error. Attachments record the tile pixels and
+synthetic transaction, inspector, connection and Home screens in the Playwright report.
+
+The same journey checks fallback colors, source-version recovery, theme switching with the
+same loaded mask, ordinary category metadata colors and row geometry. JSON responses are
+mocked, but images come from a loopback HTTP server that requires a synthetic cookie and
+sets the API's private cache and same-site CORP headers without CORS permission. This exercises
+real browser cookie and image-header enforcement. The fixture blocks service workers so
+page-level routes own image requests; offline behaviour is covered separately. Verify actual
+API authorization separately against the paired API.
+
 ## Visual checks that pass when they should not
 
 - `toBeVisible()` passes for `sr-only` content. Assert geometry and a real Tab/Enter path for anything revealed on focus.

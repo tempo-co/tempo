@@ -322,10 +322,25 @@ Quiet headers, dividers only for row scanning, right-aligned `numeric` amounts, 
 descriptions truncated but inspectable. Rows that navigate show a keyboard-visible focus
 state. Status text stays understandable without color.
 
-Every transaction row starts with a round tile: the merchant's logo when the API has one,
-otherwise the category icon in its category colors (the neutral activity icon for own
-transfers and currency exchanges). A logo that fails to load falls back to the icon. Logos are
-display only; the title stays the bank's description.
+Every transaction and recurring row starts with a round `36px` Clay tile: the merchant's
+monochrome alpha logo when available, otherwise the category glyph (the activity glyph for own
+transfers and currency exchanges). Rows stay `60px` tall, plus any `1px` divider; the transaction
+inspector keeps its `40px` tile. All leading tiles share these theme tokens:
+
+| Token | Light | Dark |
+|---|---|---|
+| `transaction-tile-field` | `#F1E3D8` | `#352A28` |
+| `transaction-tile-ink` | `#8F4032` | `#E59A7B` |
+| `transaction-tile-edge` | `#D0B8A9` | `#59413A` |
+
+The API's `mask-v1` derivative supplies a centred mark of at most `104px` on a `128px` canvas.
+The shared `MerchantLogoTile` tints its continuous alpha with the ink token; theme changes reuse
+the loaded image. Missing or failed derivatives fall back to the matching Clay glyph, including
+when an older API does not expose the derivative. A changed source version retries the image.
+Small text or fine detail can be lost in monochrome at tile size; there are no per-merchant
+exceptions. Logos are display only: names, identification and sourcing stay unchanged.
+Ordinary category metadata, labels and filters keep their category colors; financial-status
+colors keep their semantics.
 
 ### Status, loading, and feedback
 

@@ -24,6 +24,12 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 - `.dark` sets `color-scheme: dark` in `src/index.css`; without it native scrollbars and form controls render light.
 - `--clay` (mid-tone Clay) is for large accents and the logo's offset plane. Small text and controls on light use `--primary` (Clay strong). `DESIGN.md` holds the palette, contrast rules and component tokens.
 
+## Merchant logo tiles
+
+- Use `MerchantLogoTile` for leading transaction and recurring tiles, including category/activity fallbacks. Its Clay field, ink and edge tokens are defined in `src/index.css` and `DESIGN.md`; do not recolor the ordinary `BankTransactionCategoryIcon` globally.
+- DTOs retain the original `merchantLogoUrl`. The tile appends `/mask-v1` and loads the white RGBA derivative in an ordinary `img`, without `crossOrigin`. Development and E2E use a cross-origin API; anonymous CSS-mask requests omit the API session cookies. A per-tile SVG `SourceAlpha` filter applies the ink token directly in sRGB without changing alpha or fetching a second image on theme changes. Referencing the token in `floodColor` also invalidates the filter when the theme changes in WebKit; inherited `currentColor` can leave its rendered tint stale. Keep SVG definitions zero-sized and out of layout.
+- Missing or failed derivatives, including a 404 from an older API, show the fallback glyph. Failure state is keyed to the full source URL so a new version can recover. Never fall back to a full-color original or add merchant-specific artwork rules.
+
 ## Phone layouts
 
 - Drawers (`src/components/ui/drawer.tsx`, vaul) never pass `shouldScaleBackground` (vaul's default keeps it off). The fixed tab bar lives inside the app tree, and scaling would move it and blacken the body during close.

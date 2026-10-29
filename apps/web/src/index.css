@@ -76,6 +76,10 @@
 
   --color-clay: hsl(var(--clay));
 
+  --color-transaction-tile-field: var(--transaction-tile-field);
+  --color-transaction-tile-ink: var(--transaction-tile-ink);
+  --color-transaction-tile-edge: var(--transaction-tile-edge);
+
   --color-chart-primary: hsl(var(--chart-primary));
   --color-chart-secondary: hsl(var(--chart-secondary));
   --color-chart-secondary-edge: hsl(var(--chart-secondary-edge));
@@ -189,6 +193,11 @@
 
     --clay: 13.7 46.3% 51.8%; /* Clay #BD654B — large accents and logo plane */
 
+    /* Leading transaction tiles only; ordinary category/status colours keep their semantics. */
+    --transaction-tile-field: #F1E3D8;
+    --transaction-tile-ink: #8F4032;
+    --transaction-tile-edge: #D0B8A9;
+
     --chart-primary: 270 7% 30%;   /* Ink-led data series: spending, balance line */
     --chart-secondary: 37 16% 74%; /* light warm tint second series: income */
     --chart-secondary-edge: 37 12% 48%; /* its 1px outline, 3:1 on card */
@@ -259,6 +268,10 @@
     --accent-foreground: 38.6 31.8% 91.4%;
 
     --clay: 17.5 67.1% 69%;         /* Clay on dark — logo accent plane */
+
+    --transaction-tile-field: #352A28;
+    --transaction-tile-ink: #E59A7B;
+    --transaction-tile-edge: #59413A;
 
     --chart-primary: 38 28% 80%;
     --chart-secondary: 36 6% 48%;
