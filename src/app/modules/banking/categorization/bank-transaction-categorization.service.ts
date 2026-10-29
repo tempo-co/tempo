@@ -292,7 +292,9 @@ export class BankTransactionCategorizationService {
 
 	async onApplicationBootstrap(): Promise<void> {
 		await this.scheduleReconciliation();
-		await this.reconcilePendingTransactions();
+		// The startup sweep runs in the background: a large backlog or a stalled Redis connection must not hold up
+		// boot. It logs its own failures. Tests skip it because their schema is recreated empty on every boot.
+		if (this.configurationService.get('NODE_ENV') !== 'test') void this.reconcilePendingTransactions();
 	}
 
 	/** Hourly reconciliation picks up rows left PENDING when an enqueue failed, for example while Redis was down. */
