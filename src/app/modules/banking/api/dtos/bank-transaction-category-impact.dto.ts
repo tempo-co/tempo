@@ -1,4 +1,4 @@
-import {PickType} from '@nestjs/swagger';
+import {PickType} from '@nestjs/mapped-types';
 import {IsEnum} from 'class-validator';
 
 import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from '../../categorization/bank-transaction-category';

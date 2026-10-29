@@ -1,10 +1,8 @@
 import {Controller, Get} from '@nestjs/common';
-import {ApiOperation, ApiTags} from '@nestjs/swagger';
 import {HealthCheck, HealthCheckService, TypeOrmHealthIndicator} from '@nestjs/terminus';
 
 import {Public} from '@modules/auth/decorators/public.decorator';
 
-@ApiTags('Health check')
 @Controller('health')
 export class HealthController {
 	constructor(
@@ -15,7 +13,6 @@ export class HealthController {
 	@Get()
 	@Public()
 	@HealthCheck()
-	@ApiOperation({summary: 'Health check.'})
 	async check() {
 		return await this.health.check([async () => ({api: {status: 'up'}}), () => this.db.pingCheck('database')]);
 	}

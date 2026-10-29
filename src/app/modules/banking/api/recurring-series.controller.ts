@@ -1,5 +1,4 @@
 import {Body, Controller, Get, HttpCode, Param, Patch, Query} from '@nestjs/common';
-import {ApiTags} from '@nestjs/swagger';
 
 import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
@@ -13,7 +12,6 @@ import {
 } from './dtos/recurring-series.dto';
 import {SeriesKeyPipe} from './pipes/series-key.pipe';
 
-@ApiTags('Recurring series')
 @Controller('recurring-series')
 export class RecurringSeriesController {
 	constructor(private readonly recurringSeriesService: RecurringSeriesService) {}

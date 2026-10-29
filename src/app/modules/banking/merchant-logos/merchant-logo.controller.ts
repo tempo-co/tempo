@@ -1,5 +1,4 @@
 import {Controller, Get, Param, ParseUUIDPipe, Res, StreamableFile} from '@nestjs/common';
-import {ApiTags} from '@nestjs/swagger';
 import {Throttle, minutes} from '@nestjs/throttler';
 import {Response} from 'express';
 
@@ -10,7 +9,6 @@ import {MERCHANT_LOGO_MASK_VERSION} from './merchant-logo-mask';
 import {MerchantLogoMaskService} from './merchant-logo-mask.service';
 import {MerchantLogoService} from './merchant-logo.service';
 
-@ApiTags('Merchant logos')
 @Controller('merchant-logos')
 export class MerchantLogoController {
 	constructor(
