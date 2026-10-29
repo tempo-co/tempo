@@ -1,7 +1,7 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {toast} from 'sonner';
 
-import {HttpError, api, isAuthError} from '@/utils/api';
+import {HttpError, api, wasToasted} from '@/utils/api';
 
 import {
   BANK_TRANSACTION_UNCATEGORIZED,
@@ -76,8 +76,7 @@ export const useUpdateBankTransactionCategory = () => {
     try {
       return await mutateAsync(input);
     } catch (error) {
-      // An expired session or unverified email has its own toast and redirect.
-      if (!isAuthError(error)) {
+      if (!wasToasted(error)) {
         toast.error('Transaction category could not be saved. Please try again.');
       }
       throw error;

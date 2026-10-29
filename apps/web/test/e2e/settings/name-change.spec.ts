@@ -25,6 +25,22 @@ test.describe('Account Settings: Name change', () => {
     await expect(homePage.accountName).toHaveText(newName);
   });
 
+  test('reports a rate-limited save once and keeps the dialog open', async ({
+    page,
+    accountSettingsPage,
+  }) => {
+    await page.route('**/accounts/me', (route) =>
+      route.request().method() === 'PATCH'
+        ? route.fulfill({status: 429, json: {retryAfterSeconds: 30}})
+        : route.fallback(),
+    );
+    await accountSettingsPage.changeName('Example Name');
+
+    await expect(page.getByText('Rate limit exceeded', {exact: true})).toBeVisible();
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
+    await expect(page.getByRole('dialog')).toBeVisible();
+  });
+
   test('should show error for empty name', async ({page, accountSettingsPage}) => {
     await accountSettingsPage.changeName('');
     await expect(page.getByText('Please enter your name.')).toBeVisible();

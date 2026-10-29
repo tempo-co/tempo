@@ -359,9 +359,10 @@ test.describe('bank connections', () => {
 
     await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
   });
-  test('removes an incomplete bank connection', async ({page}) => {
+  test('removes an incomplete bank connection after a rate-limited attempt', async ({page}) => {
     const pendingConnectionId = '00000000-0000-4000-8000-000000000098';
     let pendingConnectionVisible = true;
+    let rateLimited = true;
     const pendingConnection = {
       id: pendingConnectionId,
       provider: 'enable-banking',
@@ -384,6 +385,11 @@ test.describe('bank connections', () => {
         await route.continue();
         return;
       }
+      if (rateLimited) {
+        rateLimited = false;
+        await fulfillJson(route, {retryAfterSeconds: 30}, 429);
+        return;
+      }
 
       pendingConnectionVisible = false;
       await route.fulfill({status: 204, body: ''});
@@ -396,6 +402,12 @@ test.describe('bank connections', () => {
     await expect(pendingCard.getByRole('button', {name: 'Remove'})).toBeVisible();
     await pendingCard.getByRole('button', {name: 'Remove'}).click();
 
+    // The rate limit has its own toast and the removal adds none; the card stays for a retry.
+    await expect(page.getByText('Rate limit exceeded', {exact: true})).toBeVisible();
+    await expect(page.getByText('Unable to remove bank connection', {exact: true})).toHaveCount(0);
+    await expect(pendingCard).toBeVisible();
+
+    await pendingCard.getByRole('button', {name: 'Remove'}).click();
     await expect(page.getByText('Bank connection removed', {exact: true})).toBeVisible();
     await expect(pendingCard).toHaveCount(0);
   });

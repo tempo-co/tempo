@@ -11,6 +11,9 @@ export class HttpError extends Error {
   ) {
     super(message);
   }
+
+  /** The api wrapper already showed a toast for this failure. */
+  toasted = false;
 }
 
 export class NetworkError extends HttpError {
@@ -31,6 +34,15 @@ export class EmailNotVerifiedError extends HttpError {}
 /** Errors the query client handles app-wide with its own toast and redirect. */
 export const isAuthError = (error: unknown) =>
   error instanceof SessionExpiredError || error instanceof EmailNotVerifiedError;
+
+/** Whether the api wrapper already toasted this failure, so the call site must not add its own. */
+export const wasToasted = (error: unknown) => error instanceof HttpError && error.toasted;
+
+/** Marks an error the wrapper has just toasted. */
+function toasted<E extends HttpError>(error: E): E {
+  error.toasted = true;
+  return error;
+}
 
 /** Message the API's auth guard sends with a 403 for accounts that have not verified their email. */
 const EMAIL_NOT_VERIFIED_MESSAGE = 'Email not verified.';
@@ -147,7 +159,7 @@ async function request<T = unknown>(
   const isWrite = !['GET', 'HEAD'].includes(init?.method ?? 'GET');
   if (isWrite && !onlineManager.isOnline()) {
     toast.error('Changes cannot be saved while Tempo is unreachable.');
-    throw new NetworkError();
+    throw toasted(new NetworkError());
   }
   const response = await fetch(url, {
     headers,
@@ -159,11 +171,11 @@ async function request<T = unknown>(
     if (init?.signal?.aborted && error instanceof DOMException && error.name === 'AbortError')
       throw error;
     onlineManager.setOnline(false);
-    if (isWrite)
-      toast.error(
-        'Cannot reach Tempo. Your change was not confirmed. Please check before trying again.',
-      );
-    throw new NetworkError();
+    if (!isWrite) throw new NetworkError();
+    toast.error(
+      'Cannot reach Tempo. Your change was not confirmed. Please check before trying again.',
+    );
+    throw toasted(new NetworkError());
   });
   // Any reply, including an error status, proves Tempo is reachable. The API itself answers 502/503
   // when the bank provider fails, so only a failed request means the connection is down.
@@ -177,7 +189,7 @@ async function request<T = unknown>(
         description: 'Please log in again to continue using the app.',
         id: 'session-expired',
       });
-      throw new SessionExpiredError(response.status, response.statusText);
+      throw toasted(new SessionExpiredError(response.status, response.statusText));
     }
     if (response.status === 429) {
       let retryAfterSeconds = parseRetryAfter(response);
@@ -201,7 +213,7 @@ async function request<T = unknown>(
         description: formatRetryAfter(retryAfterSeconds),
         id: 'rate-limit-exceeded',
       });
-      throw new HttpError(response.status, response.statusText, retryAfterSeconds);
+      throw toasted(new HttpError(response.status, response.statusText, retryAfterSeconds));
     }
     if (response.status >= 500) {
       throw new HttpError(response.status, 'Tempo is temporarily unavailable. Please try again.');
@@ -216,7 +228,7 @@ async function request<T = unknown>(
         description: 'Please verify your email to continue using the app.',
         id: 'email-not-verified',
       });
-      throw new EmailNotVerifiedError(response.status, error.message);
+      throw toasted(new EmailNotVerifiedError(response.status, error.message));
     }
     throw new HttpError(response.status, error.message);
   }

@@ -1,7 +1,7 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {toast} from 'sonner';
 
-import {HttpError, NetworkError, api, isAuthError} from '@/utils/api';
+import {HttpError, api, wasToasted} from '@/utils/api';
 
 import {CreatePersonalAccessTokenDto} from '../types/create-personal-access-token.dto';
 import {CreatedPersonalAccessToken, PersonalAccessToken} from '../types/personal-access-token';
@@ -43,7 +43,7 @@ export function useRevokePersonalAccessToken() {
       );
     },
     onError: (error) => {
-      if (error instanceof NetworkError || error.status === 429 || isAuthError(error)) return;
+      if (wasToasted(error)) return;
       toast.error('The token could not be revoked.');
     },
   });

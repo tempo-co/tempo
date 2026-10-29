@@ -1,9 +1,9 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import {toast} from 'sonner';
 
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
 import {Account} from '@/types/account';
 import {HttpError, api} from '@/utils/api';
+import {toastRequest} from '@/utils/toast-request';
 
 import {NameChangeDto} from '../types/name-change.dto';
 
@@ -20,7 +20,7 @@ export const usePatchAccount = () => {
   });
 
   const patchAccount = (dto: NameChangeDto) => {
-    return toast.promise(mutateAsync(dto), {
+    return toastRequest(mutateAsync(dto), {
       loading: 'Saving name...',
       success: 'Name saved.',
       error: 'Your name could not be saved. Please try again',

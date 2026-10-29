@@ -1,7 +1,7 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {toast} from 'sonner';
 
-import {HttpError, api, isAuthError} from '@/utils/api';
+import {HttpError, api, wasToasted} from '@/utils/api';
 
 import {recurringQueryKeys} from './recurring-query-keys';
 
@@ -50,8 +50,7 @@ export const useUpdateRecurringSeries = () => {
     try {
       await mutateAsync(change);
     } catch (error) {
-      // An expired session or unverified email has its own toast and redirect.
-      if (!isAuthError(error)) toast.error('Could not save. Please try again.');
+      if (!wasToasted(error)) toast.error('Could not save. Please try again.');
       return;
     }
     toast.success(

@@ -49,7 +49,7 @@ export function NameChangeDialog({currentName}: NameChangeDialogProps) {
       return;
     }
     try {
-      await patchAccount({name: trimmedName}).unwrap();
+      await patchAccount({name: trimmedName});
       setIsOpen(false);
     } catch {
       // The toast reports the failure; keep the dialog open so the edit is not lost.

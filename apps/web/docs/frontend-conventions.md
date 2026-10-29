@@ -11,6 +11,7 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 
 - An edit whose result shows where it was made (category select, inline fields) shows progress and outcome on the control and its status line, and toasts only on failure. `useUpdateBankTransactionCategory` is the reference: no `toast.promise`, `toast.error` for non-auth failures.
 - Toast failures and outcomes the screen does not show: email sent, session revoked, effects elsewhere, saves that can finish after a dialog closes.
+- The `api` wrapper toasts offline writes, lost write connections, expired sessions, rate limits and unverified email, and marks those errors. A call site that toasts a failure skips errors where `wasToasted(error)` (`src/utils/api.ts`) is true; with a loading toast, use `toastRequest` (`src/utils/toast-request.ts`) instead of `toast.promise`.
 - A toast Undo is a shortcut only. Every reversible choice (hide, unlink, dismiss) also needs a persistent way back on the affected row.
 - Toast actions are outlined in the toast's own colour, never a primary fill (`actionButton` in `src/components/ui/sonner.tsx`).
 - Toasts must stay clickable over modals. `src/components/ui/sonner.tsx` sets `pointer-events-auto` on the Toaster and `src/components/ui/responsive-dialog.tsx` ignores outside clicks that land on `[data-sonner-toaster]`; keep both when touching either.

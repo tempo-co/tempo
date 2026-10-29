@@ -257,7 +257,7 @@ for (const viewport of [
 
     test('does not save after a preview failure', async ({page}) => {
       const state = await mockCorrection(page);
-      state.previewStatus = 429;
+      state.previewStatus = 500;
       await chooseTravel(page);
       await expect(page.getByText(PREVIEW_FAILED)).toBeVisible();
       await expect(categorySelect(page)).toHaveText('Not categorized');
@@ -332,24 +332,34 @@ for (const viewport of [
       }
     });
 
-    test('retains the selection after a failed save so it can be retried', async ({page}) => {
-      const state = await mockCorrection(page);
-      state.saveStatus = 429;
-      await chooseTravel(page);
-      const dialog = impactDialog(page);
-      await dialog.getByRole('checkbox').nth(1).uncheck();
-      await dialog.getByRole('button', {name: 'Update selected (1)', exact: true}).click();
-      await expect(
-        page.getByText('Transaction category could not be saved. Please try again.'),
-      ).toBeVisible();
-      await expect(dialog.getByRole('checkbox').nth(1)).not.toBeChecked();
-      state.saveStatus = 200;
-      await dialog.getByRole('button', {name: 'Update selected (1)', exact: true}).click();
-      await expect(dialog).toBeHidden();
-      expect(state.writes).toEqual([
-        {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID]},
-        {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID]},
-      ]);
-    });
+    for (const {failure, status, message} of [
+      {
+        failure: 'failed',
+        status: 500,
+        message: 'Transaction category could not be saved. Please try again.',
+      },
+      {failure: 'rate-limited', status: 429, message: 'Rate limit exceeded'},
+    ]) {
+      test(`reports a ${failure} save once and retains the selection so it can be retried`, async ({
+        page,
+      }) => {
+        const state = await mockCorrection(page);
+        state.saveStatus = status;
+        await chooseTravel(page);
+        const dialog = impactDialog(page);
+        await dialog.getByRole('checkbox').nth(1).uncheck();
+        await dialog.getByRole('button', {name: 'Update selected (1)', exact: true}).click();
+        await expect(page.getByText(message, {exact: true})).toBeVisible();
+        await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
+        await expect(dialog.getByRole('checkbox').nth(1)).not.toBeChecked();
+        state.saveStatus = 200;
+        await dialog.getByRole('button', {name: 'Update selected (1)', exact: true}).click();
+        await expect(dialog).toBeHidden();
+        expect(state.writes).toEqual([
+          {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID]},
+          {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID]},
+        ]);
+      });
+    }
   });
 }

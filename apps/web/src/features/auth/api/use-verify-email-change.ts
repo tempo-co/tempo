@@ -3,7 +3,7 @@ import {toast} from 'sonner';
 
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
 import {Account} from '@/types/account';
-import {HttpError, api, isAuthError} from '@/utils/api';
+import {HttpError, api, wasToasted} from '@/utils/api';
 
 import {TokenSearchParams} from '../types/token.dto';
 
@@ -30,8 +30,7 @@ export const useVerifyEmailChange = () => {
       });
     },
     onError: (error) => {
-      // An auth error (ended session or unverified email) already has its own toast and redirect.
-      if (isAuthError(error)) {
+      if (wasToasted(error)) {
         toast.dismiss(TOAST_ID);
         return;
       }

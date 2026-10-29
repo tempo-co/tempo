@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/responsive-dialog';
 import {Skeleton} from '@/components/ui/skeleton';
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip';
-import {HttpError} from '@/utils/api';
+import {wasToasted} from '@/utils/api';
 import {cn} from '@/utils/cn';
 
 import {useDeleteBankConnection} from '../api/use-delete-bank-connection';
@@ -140,7 +140,7 @@ export function BankConnectionList({
       });
       window.location.assign(authorizationUrl);
     } catch (error) {
-      if (error instanceof HttpError && error.status === 429) return;
+      if (wasToasted(error)) return;
       toast.error('Unable to add bank connection', {
         description: 'Please try again in a moment.',
         id: 'bank-connection-start-failed',
@@ -264,7 +264,8 @@ function BankConnectionCard({
         id: `bank-connection-removed-${connection.id}`,
       });
       return true;
-    } catch {
+    } catch (error) {
+      if (wasToasted(error)) return false;
       toast.error('Unable to remove bank connection', {
         description: 'Please try again in a moment.',
         id: `bank-connection-remove-failed-${connection.id}`,

@@ -5,6 +5,9 @@ import {BankTransaction} from '../types/bank-transaction';
 import {formatOwnTransferEvidence} from '../utils/formatters';
 import {BankTransactionCounterpartLink} from './bank-transaction-counterpart-link';
 
+/** A failed save has already been toasted; the buttons stay as they were. */
+const reported = () => undefined;
+
 type BankTransactionOwnTransferProps = {
   transaction: BankTransaction;
 };
@@ -44,11 +47,11 @@ export function BankTransactionOwnTransfer({transaction}: BankTransactionOwnTran
             className='min-h-11'
             disabled={isPending}
             onClick={() =>
-              void updateBankTransactionOwnTransfer({
+              updateBankTransactionOwnTransfer({
                 id: transaction.id,
                 override: ownTransfer ? 'UNMARKED' : 'MARKED',
                 counterpartId: counterpart?.id ?? null,
-              })
+              }).catch(reported)
             }
           >
             {ownTransfer ? 'Not my own transfer' : 'Mark as own transfer'}
@@ -59,7 +62,9 @@ export function BankTransactionOwnTransfer({transaction}: BankTransactionOwnTran
               className='min-h-11'
               disabled={isPending}
               onClick={() =>
-                void updateBankTransactionOwnTransfer({id: transaction.id, override: null})
+                updateBankTransactionOwnTransfer({id: transaction.id, override: null}).catch(
+                  reported,
+                )
               }
             >
               Use automatic recognition

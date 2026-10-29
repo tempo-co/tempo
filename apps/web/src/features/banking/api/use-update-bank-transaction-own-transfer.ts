@@ -1,7 +1,7 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import {toast} from 'sonner';
 
 import {HttpError, api} from '@/utils/api';
+import {toastRequest} from '@/utils/toast-request';
 
 import {BankTransaction, OwnTransferOverride} from '../types/bank-transaction';
 import {invalidateBankDerivedData} from './invalidate-bank-derived-data';
@@ -52,7 +52,7 @@ export const useUpdateBankTransactionOwnTransfer = () => {
   };
 
   const updateBankTransactionOwnTransfer = (input: UpdateBankTransactionOwnTransferInput) =>
-    toast.promise(mutateAsync(input), {
+    toastRequest(mutateAsync(input), {
       loading: 'Saving...',
       success: () => {
         if (input.override === 'MARKED') {

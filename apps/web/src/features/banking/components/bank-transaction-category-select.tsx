@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {isAuthError} from '@/utils/api';
+import {wasToasted} from '@/utils/api';
 
 import {usePreviewBankTransactionCategory} from '../api/use-preview-bank-transaction-category';
 import {useUpdateBankTransactionCategory} from '../api/use-update-bank-transaction-category';
@@ -70,8 +70,7 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
           else void save(value, []);
         },
         onError: (error) => {
-          // An expired session or unverified email has its own toast and redirect.
-          if (!isAuthError(error)) {
+          if (!wasToasted(error)) {
             toast.error(
               'Category changes could not be previewed. Nothing was saved. Please try again.',
             );
