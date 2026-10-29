@@ -11,7 +11,10 @@ test.describe('auth errors during a session', () => {
     const response = await page.request.get(`${API_URL}/bank-connections`);
     expect(response.status()).toBe(200);
     const connections = (await response.json()) as BankConnection[];
-    await mockBankConnections(page, connections.map((connection) => ({...connection, status: 'EXPIRED'})));
+    await mockBankConnections(
+      page,
+      connections.map((connection) => ({...connection, status: 'EXPIRED'})),
+    );
     const connectionsResponse = page.waitForResponse(`${API_URL}/bank-connections`);
     await page.goto('/bank-transactions');
     await expect(page.getByText('Coffee shop')).toBeVisible();
@@ -76,6 +79,57 @@ test('redirects to login when the session expires before an email change is sent
   const requestResponse = page.waitForResponse(`${API_URL}/auth/change-email/request`);
   await accountSettingsPage.sendVerificationLinkButton.click();
   expect((await requestResponse).status()).toBe(401);
+
+  await expect(page.getByText('Your session has expired')).toBeVisible();
+  await loginPage.expectToBeOnPage();
+});
+
+test('redirects to login when the session expires before a password change is sent', async ({
+  page,
+  freshAccount,
+  securitySettingsPage,
+  loginPage,
+}) => {
+  // Finish the initial load before expiring the session so late responses cannot restore cookies.
+  const initialResponses = [
+    `${API_URL}/bank-connections`,
+    `${API_URL}/auth/sessions`,
+    `${API_URL}/accounts/me`,
+  ].map((url) => page.waitForResponse(url));
+  await securitySettingsPage.navigate();
+  for (const response of initialResponses) await (await response).finished();
+
+  await page.context().clearCookies();
+  const changeResponse = page.waitForResponse(`${API_URL}/auth/change-password`);
+  await securitySettingsPage.changePassword(freshAccount.password, 'newSecurePassword123');
+  expect((await changeResponse).status()).toBe(401);
+
+  await expect(page.getByText('Your session has expired')).toBeVisible();
+  await loginPage.expectToBeOnPage();
+});
+
+test('redirects to login when the session expires before an account deletion is sent', async ({
+  page,
+  freshAccount,
+  accountSettingsPage,
+  homePage,
+  loginPage,
+}) => {
+  // Finish the initial load before expiring the session so late responses cannot restore cookies.
+  const connectionsResponse = page.waitForResponse(`${API_URL}/bank-connections`);
+  await accountSettingsPage.navigate();
+  await expect(homePage.accountEmail).toHaveText(freshAccount.email);
+  await (await connectionsResponse).finished();
+
+  await accountSettingsPage.deleteAccountButton.click();
+  await accountSettingsPage.deletePasswordInput.fill(freshAccount.password);
+  await page.context().clearCookies();
+  const deleteResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'DELETE' && response.url() === `${API_URL}/accounts/me`,
+  );
+  await accountSettingsPage.deleteConfirmButton.click();
+  expect((await deleteResponse).status()).toBe(401);
 
   await expect(page.getByText('Your session has expired')).toBeVisible();
   await loginPage.expectToBeOnPage();

@@ -47,6 +47,9 @@ function toasted<E extends HttpError>(error: E): E {
 /** Message the API's auth guard sends with a 403 for accounts that have not verified their email. */
 const EMAIL_NOT_VERIFIED_MESSAGE = 'Email not verified.';
 
+/** Message the API sends with a 401 when a signed-in account's password confirmation is wrong. */
+export const INVALID_PASSWORD_MESSAGE = 'Invalid password.';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 let sessionEpoch = 0;
@@ -134,8 +137,9 @@ type RequestOptions = RequestInit & {
   /**
    * A 401 is an answer the caller handles, such as a wrong password, rather than an ended session.
    * It is then thrown as a plain HttpError, without the session-expired toast and sign-out.
+   * A message limits this to a 401 with that message; any other 401 is an ended session.
    */
-  expectUnauthorized?: boolean;
+  expectUnauthorized?: boolean | string;
 };
 /** Options for post/patch/delete, which take the JSON body as a value and serialize it. */
 type WriteOptions = Omit<RequestOptions, 'body'>;
@@ -184,7 +188,20 @@ async function request<T = unknown>(
   assertSameSession(epoch);
 
   if (!response.ok) {
-    if (response.status === 401 && !init?.expectUnauthorized) {
+    if (response.status === 401 && init?.expectUnauthorized !== true) {
+      const expectedMessage = init?.expectUnauthorized;
+      if (expectedMessage) {
+        const body: unknown = await response.json().catch(() => null);
+        assertSameSession(epoch);
+        init?.signal?.throwIfAborted();
+        if (
+          body !== null &&
+          typeof body === 'object' &&
+          'message' in body &&
+          body.message === expectedMessage
+        )
+          throw new HttpError(response.status, expectedMessage);
+      }
       toast.error('Your session has expired', {
         description: 'Please log in again to continue using the app.',
         id: 'session-expired',

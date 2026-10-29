@@ -6,6 +6,7 @@ import {Button} from '@/components/ui/button';
 import {Form, FormField} from '@/components/ui/form';
 import {PasswordInputField} from '@/components/ui/password-input-field';
 import {ResponsiveDialogClose} from '@/components/ui/responsive-dialog';
+import {isAuthError} from '@/utils/api';
 
 import {useChangePassword} from '../../api/use-change-password';
 import {PasswordChangeDto, passwordChangeDtoSchema} from '../../types/password-change.dto';
@@ -25,7 +26,7 @@ export function PasswordChangeForm({setIsOpen}: PasswordChangeFormProps) {
   async function onSubmit(formData: PasswordChangeDto) {
     await changePassword(formData, {
       onError: (error) => {
-        if (error.status === 401) {
+        if (error.status === 401 && !isAuthError(error)) {
           form.setError(
             'currentPassword',
             {message: 'Invalid current password.'},

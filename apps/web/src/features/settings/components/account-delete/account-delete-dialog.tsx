@@ -16,6 +16,7 @@ import {
   ResponsiveDialogTitle,
   ResponsiveDialogTrigger,
 } from '@/components/ui/responsive-dialog';
+import {isAuthError} from '@/utils/api';
 
 import {useDeleteAccount} from '../../api/use-delete-account';
 import {AccountDeleteDto, accountDeleteDtoSchema} from '../../types/account-delete.dto';
@@ -43,7 +44,7 @@ export function AccountDeleteDialog({children}: AccountDeleteDialogProps) {
   const onSubmit = async (dto: AccountDeleteDto) => {
     await deleteAccount(dto, {
       onError: (error) => {
-        if (error.status === 401) {
+        if (error.status === 401 && !isAuthError(error)) {
           form.setError('password', {message: 'Invalid password.'}, {shouldFocus: true});
         }
       },
