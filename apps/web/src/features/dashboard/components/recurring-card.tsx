@@ -22,7 +22,12 @@ export function RecurringCard() {
   if (isPending) return <Skeleton className='h-56' aria-label='Loading recurring payments' />;
 
   return (
-    <Card className='grid gap-4 p-5 sm:p-6' role='region' aria-label='Recurring payments'>
+    // One shrinkable column: an implicit grid track grows to a truncated name's full width.
+    <Card
+      className='grid grid-cols-1 gap-4 p-5 sm:p-6'
+      role='region'
+      aria-label='Recurring payments'
+    >
       {/* The 44px link overhangs the title row so the title and content line up with other cards. */}
       <header className='-my-2.5 flex flex-wrap items-center justify-between gap-x-2'>
         <h2 className='text-card-title'>Recurring</h2>

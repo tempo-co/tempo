@@ -30,7 +30,7 @@ const summary: RecurringSummary = {
     },
     {
       key: 'b'.repeat(32),
-      name: 'Example Energy',
+      name: 'Example Energy Supplier With A Long Contract Name',
       direction: 'EXPENSE',
       nextExpectedDate: '2026-10-08',
       typicalAmount: '78.50',
@@ -86,6 +86,10 @@ for (const viewport of [
     await expect(upcoming.nth(0)).toContainText('In 2 days');
     await expect(upcoming.nth(0)).toContainText('€30.00');
     await expect(upcoming.nth(0)).not.toContainText('≈');
+    // A long name stays inside the card.
+    await expect(upcoming.nth(1)).toContainText(
+      'Example Energy Supplier With A Long Contract Name',
+    );
     // A varying bill's next payment is an estimate.
     await expect(upcoming.nth(1)).toContainText('8 Oct');
     await expect(upcoming.nth(1)).toContainText('≈ €78.50');
