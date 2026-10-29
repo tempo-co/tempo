@@ -1,7 +1,7 @@
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {expect, test} from '../../fixtures';
-import {transformBankConnections} from '../../utils/api-mocks';
+import {fulfillJson, transformBankConnections} from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE});
@@ -53,6 +53,28 @@ test('shows foreign balance provenance and excludes missing conversions', async 
   await expect(balances).toContainText('not synced since 26 Aug');
   await expect(balances).toContainText('today');
   await expectNoHorizontalOverflow(page);
+});
+
+test('shows balances as calculating until the first sync is converted', async ({page}) => {
+  await transformBankConnections(page, (connections) =>
+    connections.map((connection) => ({
+      ...connection,
+      baseCurrency: null,
+      bankAccounts: connection.bankAccounts.map((account) => ({
+        ...account,
+        currentBalanceInBaseCurrency: null,
+        baseCurrencyRateDate: null,
+      })),
+    })),
+  );
+  await page.route('**/bank-transactions/balance-trend**', (route) =>
+    fulfillJson(route, {baseCurrency: null, interval: 'month', periods: []}),
+  );
+  await page.goto('/?month=2026-08');
+  await expect(page.getByRole('region', {name: 'Balances'})).toContainText('Calculating…');
+  await expect(page.getByTestId('balance-trend')).toContainText(
+    'The balance trend appears shortly after your first sync.',
+  );
 });
 
 test('recent transactions show only the booking date under each title', async ({page}) => {

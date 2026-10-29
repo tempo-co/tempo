@@ -127,7 +127,7 @@ export function BalancesList({
         <p className='text-right numeric'>
           {baseCurrency
             ? `${formatMoney(totalCents / 100, baseCurrency)}${missing.length ? ` excluding ${missing.map(({account}) => resolveBankAccountLabel(account)).join(', ')}` : ''}`
-            : 'Base currency not available yet'}
+            : 'Calculating…'}
         </p>
         {missing.length > 0 && (
           <p className='col-span-2 text-xs text-muted-foreground'>

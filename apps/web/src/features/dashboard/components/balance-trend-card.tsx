@@ -96,7 +96,7 @@ export function BalanceTrendCard({connections}: {connections: BankConnection[]})
       ) : periods.length === 0 ? (
         <p className='text-sm text-muted-foreground'>
           {!loaded.baseCurrency
-            ? 'The balance trend appears once Tempo has picked a base currency.'
+            ? 'The balance trend appears shortly after your first sync.'
             : withoutRate > 0
               ? 'The balance trend appears once exchange rates for your accounts are in.'
               : 'No balance history yet.'}
