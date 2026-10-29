@@ -2,7 +2,7 @@ import {Link} from '@tanstack/react-router';
 import {format} from 'date-fns';
 
 import {Card} from '@/components/ui/card';
-import {useGetSupportedBanks} from '@/features/banking/api/use-get-supported-banks';
+import {bankLogoKey, useBankLogos} from '@/features/banking/api/use-bank-logos';
 import {BankLogo} from '@/features/banking/components/bank-logo';
 import type {BankConnection} from '@/features/banking/types/bank-connection';
 import {getAutomaticSyncProblemForConnection} from '@/features/banking/utils/bank-sync-status';
@@ -20,7 +20,7 @@ export function BalancesList({
   connections: BankConnection[];
   isCurrentMonth: boolean;
 }) {
-  const {supportedBanks} = useGetSupportedBanks(connections.length > 0);
+  const bankLogos = useBankLogos(connections.length > 0);
   const accounts = connections.flatMap((connection) =>
     connection.bankAccounts
       .filter((account) => account.isActive)
@@ -67,11 +67,8 @@ export function BalancesList({
                     <BankLogo
                       bank={{
                         name: connection.aspspName,
-                        logoUrl: supportedBanks?.find(
-                          (bank) =>
-                            bank.name === connection.aspspName &&
-                            bank.country === connection.aspspCountry,
-                        )?.logoUrl,
+                        logoUrl:
+                          bankLogos[bankLogoKey(connection.aspspName, connection.aspspCountry)],
                       }}
                       className='h-14 w-14'
                       imageClassName='p-1.5'

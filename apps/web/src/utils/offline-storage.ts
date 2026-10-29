@@ -23,6 +23,7 @@ const RECENT_DATA_BUDGET = 2 * 1024 * 1024;
 const savedQueryRoots = new Map<unknown, 'kept' | 'recent'>([
   [CURRENT_ACCOUNT_KEY[0], 'kept'],
   [bankQueryKeys.connections[0], 'kept'],
+  [bankQueryKeys.connectedBankLogos[0], 'kept'],
   [bankQueryKeys.connectionTransactionsRoot[0], 'recent'],
   [bankQueryKeys.transactionsRoot[0], 'recent'],
   [bankQueryKeys.transactionRoot[0], 'recent'],
@@ -32,6 +33,22 @@ const SAVE_FAILED_TOAST = 'offline-save-failed';
 let saveFailed = false;
 
 type SavedQuery = PersistedClient['clientState']['queries'][number];
+
+/** JSON length of each saved data object: data unchanged since the last save is not measured again. */
+const dataSizes = new WeakMap<object, number>();
+
+/** The JSON length of a saved query. */
+function savedSize(query: SavedQuery) {
+  const {data} = query.state;
+  if (typeof data !== 'object' || data === null) return JSON.stringify(query).length;
+  let dataSize = dataSizes.get(data);
+  if (dataSize === undefined) {
+    dataSize = JSON.stringify(data).length;
+    dataSizes.set(data, dataSize);
+  }
+  const withoutData = JSON.stringify({...query, state: {...query.state, data: null}}).length;
+  return withoutData - 'null'.length + dataSize;
+}
 
 export const isAccountQuery = ({queryKey}: {queryKey: QueryKey}) =>
   queryKey[0] === CURRENT_ACCOUNT_KEY[0];
@@ -75,8 +92,12 @@ export function createOfflinePersistence(
       .filter((query) => !isKept(query))
       .sort((a, b) => b.state.dataUpdatedAt - a.state.dataUpdatedAt);
     let room = RECENT_DATA_BUDGET;
-    // Once the budget is used up, everything older is dropped too, even if it is small.
-    const dropped = new Set(recent.filter((query) => (room -= JSON.stringify(query).length) < 0));
+    const dropped = new Set<SavedQuery>();
+    for (const query of recent) {
+      // Once the budget is used up, everything older is dropped too, even if it is small.
+      if (room >= 0) room -= savedSize(query);
+      if (room < 0) dropped.add(query);
+    }
     return queries.filter((query) => !dropped.has(query));
   };
 

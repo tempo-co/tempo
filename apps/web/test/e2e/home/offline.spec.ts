@@ -11,12 +11,13 @@ import {
   mockBalanceTrend,
   mockBankConnections,
   mockCashFlow,
+  mockJson,
 } from '../../utils/api-mocks';
 
 const CACHE_KEY = 'tempo-offline-cache';
 type SavedCache = {
   timestamp: number;
-  clientState: {queries: {queryKey: unknown[]; state: {dataUpdatedAt: number}}[]};
+  clientState: {queries: {queryKey: unknown[]; state: {dataUpdatedAt: number; data: unknown}}[]};
 };
 const readCache = (page: Page) =>
   page.evaluate(
@@ -41,11 +42,18 @@ const connection: BankConnection = {
   baseCurrency: 'EUR',
   bankAccounts: [],
 };
+const LOGO_URL = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#2563eb"/></svg>',
+)}`;
 
 async function mockHome(page: Page, padding = 0) {
   const state = {refreshed: false};
   await page.clock.install({time: SEEDED_TRANSACTION_YEAR_NOW});
   await mockBankConnections(page, () => [connection]);
+  await mockJson(page, '**/bank-connections/aspsps', [
+    {name: 'Example Bank', country: 'NL', logoUrl: LOGO_URL},
+    {name: 'Other Bank', country: 'FI', logoUrl: LOGO_URL},
+  ]);
   await mockCashFlow(page);
   await mockBalanceTrend(page);
   await page.route('**/bank-transactions/summary**', (route) => {
@@ -91,6 +99,19 @@ test.describe('saved Home', () => {
     test.setTimeout(30000);
     const state = await mockHome(page);
     await openSavedHome(page);
+    // Only the connected banks' logos are saved, not the provider's whole bank list.
+    const savedQueries = async () => {
+      await page.clock.runFor(1100);
+      return (await readCache(page))?.clientState.queries ?? [];
+    };
+    await expect
+      .poll(
+        async () =>
+          (await savedQueries()).find((query) => query.queryKey[0] === 'connected-bank-logos')
+            ?.state.data,
+      )
+      .toEqual({'NL:example bank': LOGO_URL});
+    expect(JSON.stringify(await savedQueries())).not.toContain('Other Bank');
     await context.setOffline(true);
     await page.reload();
     await expect(offlineStatus(page)).toBeVisible();
@@ -104,6 +125,18 @@ test.describe('saved Home', () => {
     await expect(page.getByTestId('category-breakdown')).toHaveCount(0);
     await expect(attention(page)).toContainText('3 transactions');
     await page.getByRole('link', {name: 'Next month'}).click();
+    await expect(spending(page)).toBeVisible();
+
+    // The connected bank's logo is saved, so it shows offline too.
+    await page
+      .getByRole('navigation', {name: 'Primary'})
+      .getByRole('link', {name: 'Connections', exact: true})
+      .click();
+    await expect(page.getByTestId('bank-connection-logo').locator('img')).toHaveAttribute(
+      'src',
+      LOGO_URL,
+    );
+    await page.goBack();
     await expect(spending(page)).toBeVisible();
 
     state.refreshed = true;

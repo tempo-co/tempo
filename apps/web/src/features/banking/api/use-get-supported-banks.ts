@@ -8,6 +8,7 @@ import {bankQueryKeys} from './query-keys';
 export const useGetSupportedBanks = (enabled: boolean) => {
   const {
     data: supportedBanks,
+    dataUpdatedAt,
     isPending,
     isError,
     refetch,
@@ -22,5 +23,5 @@ export const useGetSupportedBanks = (enabled: boolean) => {
     retry: false,
   });
 
-  return {supportedBanks, isPending, isError, refetch};
+  return {supportedBanks, dataUpdatedAt, isPending, isError, refetch};
 };

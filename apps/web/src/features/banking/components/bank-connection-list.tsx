@@ -1,5 +1,5 @@
 import {AlertTriangle, Building2, ChevronDown, RefreshCw, Trash2} from 'lucide-react';
-import {useMemo, useState} from 'react';
+import {useState} from 'react';
 import {toast} from 'sonner';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
@@ -24,9 +24,9 @@ import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/compon
 import {wasToasted} from '@/utils/api';
 import {cn} from '@/utils/cn';
 
+import {bankLogoKey, useBankLogos} from '../api/use-bank-logos';
 import {useDeleteBankConnection} from '../api/use-delete-bank-connection';
 import {useGetBankConnectionTransactions} from '../api/use-get-bank-connection-transactions';
-import {useGetSupportedBanks} from '../api/use-get-supported-banks';
 import {useBankConnectionRefreshState} from '../api/use-refresh-bank-connection';
 import {useStartBankConnection} from '../api/use-start-bank-connection';
 import {
@@ -60,10 +60,6 @@ type BankConnectionListProps = {
     trigger: HTMLButtonElement,
   ) => void;
 };
-
-function aspspKey(name: string, country: string) {
-  return `${country.trim().toUpperCase()}:${name.trim().toLowerCase()}`;
-}
 
 function formatConnectionCount(count: number) {
   return `${count} ${count === 1 ? 'connection' : 'connections'}`;
@@ -123,14 +119,7 @@ export function BankConnectionList({
   onTransactionSelect,
 }: BankConnectionListProps) {
   const {startBankConnection, isPending: isStarting} = useStartBankConnection();
-  const {supportedBanks} = useGetSupportedBanks(!isPending && !isError);
-  const bankLogos = useMemo(() => {
-    const logos = new Map<string, string>();
-    for (const bank of supportedBanks ?? []) {
-      if (bank.logoUrl) logos.set(aspspKey(bank.name, bank.country), bank.logoUrl);
-    }
-    return logos;
-  }, [supportedBanks]);
+  const bankLogos = useBankLogos(!isPending && !isError);
 
   const connectBank = async (bank: BankConnectionAspsp) => {
     try {
@@ -194,7 +183,7 @@ export function BankConnectionList({
           <BankConnectionCard
             key={connection.id}
             connection={connection}
-            logoUrl={bankLogos.get(aspspKey(connection.aspspName, connection.aspspCountry))}
+            logoUrl={bankLogos[bankLogoKey(connection.aspspName, connection.aspspCountry)]}
             isStarting={isStarting}
             onReauthorize={reauthorizeBank}
             onTransactionSelect={onTransactionSelect}

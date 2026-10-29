@@ -7,7 +7,8 @@ import type {
 
 export const bankQueryKeys = {
   connections: ['bank-connections'] as const,
-  supportedBanks: ['bank-connections', 'supported-banks'] as const,
+  supportedBanks: ['supported-banks'] as const,
+  connectedBankLogos: ['connected-bank-logos'] as const,
   connectionTransactions: (connectionId: string, syncVersion: string | null) =>
     ['bank-connection-transactions', connectionId, syncVersion] as const,
   connectionTransactionsRoot: ['bank-connection-transactions'] as const,
