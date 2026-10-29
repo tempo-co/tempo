@@ -6,6 +6,7 @@ import {createHash} from 'node:crypto';
 import {In, IsNull, Repository, SelectQueryBuilder} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
+import {bootstrapJobScheduler} from '@core/queue/job-scheduler';
 import {
 	APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB,
 	BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE,
@@ -292,29 +293,22 @@ export class BankTransactionCategorizationService {
 
 	async onApplicationBootstrap(): Promise<void> {
 		await this.scheduleReconciliation();
-		await this.reconcilePendingTransactions();
+		// The startup sweep runs in the background: a large backlog or a stalled Redis connection must not hold up
+		// boot. It logs its own failures. Tests skip it because their schema is recreated empty on every boot.
+		if (this.configurationService.get('NODE_ENV') !== 'test') void this.reconcilePendingTransactions();
 	}
 
 	/** Hourly reconciliation picks up rows left PENDING when an enqueue failed, for example while Redis was down. */
 	private async scheduleReconciliation(): Promise<void> {
-		if (this.configurationService.get('NODE_ENV') === 'test') return;
-		try {
-			if (!this.isEnabled()) {
-				await this.queue.removeJobScheduler(BANK_TRANSACTION_CATEGORIZATION_RECONCILE_SCHEDULER_ID);
-				return;
-			}
-			await this.queue.upsertJobScheduler(
-				BANK_TRANSACTION_CATEGORIZATION_RECONCILE_SCHEDULER_ID,
-				{every: RECONCILE_INTERVAL_MS},
-				{
-					name: RECONCILE_BANK_TRANSACTION_CATEGORIZATION_JOB,
-					data: {},
-					opts: {attempts: 1, removeOnComplete: true, removeOnFail: {age: 86_400, count: 100}},
-				},
-			);
-		} catch (error) {
-			this.logger.warn(`Categorization reconciliation scheduling failed: ${safeErrorName(error)}`);
-		}
+		await bootstrapJobScheduler(
+			this.queue,
+			{
+				schedulerId: BANK_TRANSACTION_CATEGORIZATION_RECONCILE_SCHEDULER_ID,
+				jobName: RECONCILE_BANK_TRANSACTION_CATEGORIZATION_JOB,
+				everyMs: RECONCILE_INTERVAL_MS,
+			},
+			{enabled: this.isEnabled(), configurationService: this.configurationService, logger: this.logger},
+		);
 	}
 
 	private async categorizeClaimedBatch(batch: readonly ClaimedTransaction[]): Promise<void> {
@@ -836,15 +830,17 @@ export class BankTransactionCategorizationService {
 		const added = this.queue.add(APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB, data, FOLLOW_UP_JOB_OPTIONS);
 		let timer: NodeJS.Timeout | undefined;
 		const timeout = new Promise<never>((_, reject) => {
-			timer = setTimeout(() => reject(new Error('EnqueueTimeout')), FOLLOW_UP_ENQUEUE_TIMEOUT_MS);
+			timer = setTimeout(() => {
+				const error = new Error('The follow-up job was not added in time');
+				error.name = 'EnqueueTimeout';
+				reject(error);
+			}, FOLLOW_UP_ENQUEUE_TIMEOUT_MS);
 		});
 		try {
 			await Promise.race([added, timeout]);
 		} catch (error) {
 			added.catch(() => undefined);
-			this.logger.warn(
-				`Manual category follow-up enqueue failed: ${error instanceof Error ? error.message : safeErrorName(error)}`,
-			);
+			this.logger.warn(`Manual category follow-up enqueue failed: ${safeErrorName(error)}`);
 		} finally {
 			clearTimeout(timer);
 		}

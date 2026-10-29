@@ -1,11 +1,3 @@
-/*
- * Pillow-compatible 8-bit LANCZOS resampling, translated from libImaging/Resample.c.
- * Copyright © 1997-2011 Secret Labs AB
- * Copyright © 1995-2011 Fredrik Lundh and contributors
- * Copyright © 2010 Jeffrey 'Alex' Clark and contributors
- * Source: https://github.com/python-pillow/Pillow/blob/12.3.0/src/libImaging/Resample.c
- */
-
 const PRECISION = 2 ** 22;
 const clip = (value: number) => Math.max(0, Math.min(255, value));
 

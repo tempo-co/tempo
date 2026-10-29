@@ -47,13 +47,11 @@ describe('BankTransactionAmountConversionQueueService', () => {
 		expect(queue.removeJobScheduler).toHaveBeenCalledWith(BANK_TRANSACTION_AMOUNT_CONVERSION_SCHEDULER_ID);
 	});
 
-	it('fails closed when a disabled FX scheduler cannot be removed', async () => {
-		configurationService.get.mockImplementation((key: string) => (key === 'NODE_ENV' ? 'production' : false));
+	it('enqueues the one-time backfill and keeps booting when Redis refuses the scheduler or the backfill', async () => {
 		const queue = {
-			getJob: jest.fn(),
-			add: jest.fn(),
-			upsertJobScheduler: jest.fn(),
-			removeJobScheduler: jest.fn().mockRejectedValue(new Error('redis unavailable')),
+			getJob: jest.fn().mockResolvedValue(undefined),
+			add: jest.fn().mockRejectedValue(new Error('redis unavailable')),
+			upsertJobScheduler: jest.fn().mockRejectedValue(new Error('redis unavailable')),
 		};
 
 		await expect(
@@ -61,7 +59,10 @@ describe('BankTransactionAmountConversionQueueService', () => {
 				queue as never,
 				configurationService as never,
 			).onModuleInit(),
-		).rejects.toThrow('redis unavailable');
+		).resolves.toBeUndefined();
+
+		expect(queue.upsertJobScheduler).toHaveBeenCalledTimes(1);
+		expect(queue.add).toHaveBeenCalledTimes(1);
 	});
 
 	it('does not enqueue a completed one-time backfill again', async () => {

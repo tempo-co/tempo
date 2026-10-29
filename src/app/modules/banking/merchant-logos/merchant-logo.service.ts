@@ -6,6 +6,7 @@ import {createHash} from 'node:crypto';
 import {Brackets, DataSource, In, IsNull, LessThanOrEqual, Or, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
+import {bootstrapJobScheduler} from '@core/queue/job-scheduler';
 import {
 	FETCH_MERCHANT_LOGO_JOB,
 	IDENTIFY_MERCHANTS_JOB,
@@ -104,24 +105,20 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 	}
 
 	async onApplicationBootstrap(): Promise<void> {
-		if (this.configurationService.get('NODE_ENV') === 'test') return;
+		const scheduled = await bootstrapJobScheduler(
+			this.queue,
+			{
+				schedulerId: MERCHANT_LOGO_RECONCILE_SCHEDULER_ID,
+				jobName: RECONCILE_MERCHANT_LOGOS_JOB,
+				everyMs: RECONCILE_INTERVAL_MS,
+			},
+			{enabled: this.canAcquire(), configurationService: this.configurationService, logger: this.logger},
+		);
+		if (!scheduled) return;
 		try {
-			if (!this.canAcquire()) {
-				await this.queue.removeJobScheduler(MERCHANT_LOGO_RECONCILE_SCHEDULER_ID);
-				return;
-			}
-			await this.queue.upsertJobScheduler(
-				MERCHANT_LOGO_RECONCILE_SCHEDULER_ID,
-				{every: RECONCILE_INTERVAL_MS},
-				{
-					name: RECONCILE_MERCHANT_LOGOS_JOB,
-					data: {},
-					opts: {attempts: 1, removeOnComplete: true, removeOnFail: {age: 86_400, count: 100}},
-				},
-			);
 			await this.queue.add(RECONCILE_MERCHANT_LOGOS_JOB, {}, {removeOnComplete: true, removeOnFail: true});
 		} catch (error) {
-			this.logger.warn(`Merchant logo scheduling failed: ${safeErrorName(error)}`);
+			this.logger.warn(`Merchant logo reconcile enqueue failed: ${safeErrorName(error)}`);
 		}
 	}
 

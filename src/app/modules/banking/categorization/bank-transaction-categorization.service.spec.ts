@@ -257,7 +257,7 @@ describe('BankTransactionCategorizationService web-search reconciliation', () =>
 		queryBuilder.getRawMany.mockResolvedValueOnce([{id: exchange.id}]);
 		const {service, queue} = createService({rows: [exchange], webSearchEnabled: true, queryBuilder});
 
-		await service.onApplicationBootstrap();
+		await service.reconcilePendingTransactions();
 
 		expect(queryBuilder.getRawMany).toHaveBeenCalledTimes(1);
 		expect(queue.addBulk).not.toHaveBeenCalled();
@@ -1424,8 +1424,10 @@ describe('BankTransactionCategorizationService manual follow-up', () => {
 });
 
 describe('BankTransactionCategorizationService reconciliation schedule', () => {
-	it('schedules hourly reconciliation outside tests', async () => {
-		const {service, queue} = createService({nodeEnv: 'production'});
+	it('schedules hourly reconciliation and starts a sweep including FAILED rows without holding up boot', async () => {
+		const queryBuilder = createUpdateQueryBuilder();
+		queryBuilder.getRawMany.mockReturnValue(new Promise(() => undefined));
+		const {service, queue} = createService({nodeEnv: 'production', queryBuilder});
 
 		await service.onApplicationBootstrap();
 
@@ -1434,6 +1436,8 @@ describe('BankTransactionCategorizationService reconciliation schedule', () => {
 			{every: 60 * 60 * 1000},
 			expect.objectContaining({name: RECONCILE_BANK_TRANSACTION_CATEGORIZATION_JOB}),
 		);
+		const statusClause = queryBuilder.andWhere.mock.calls.find(([, params]) => params?.claimableStatuses);
+		expect(statusClause?.[1].claimableStatuses).toEqual(['PENDING', 'FAILED']);
 	});
 
 	it('removes the schedule when AI categorization is off', async () => {
