@@ -21,7 +21,7 @@ import {BankTransaction} from '../bank-transaction.entity';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {SQL_INTERNAL, createOwnerScopedQuery} from '../services/bank-transaction-filters';
-import {formatCents} from '../summary/bank-transaction-summary';
+import {daysInMonth, formatCents} from '../summary/bank-transaction-summary';
 import {type ContinuationPair, findContinuationPairs} from './recurring-continuation';
 import {RecurringContinuationUnlink} from './recurring-continuation-unlink.entity';
 import {type RecurringEvidence, inferRecurringIdentities} from './recurring-payee-identity';
@@ -494,8 +494,7 @@ function thisMonth(
 	asOf: string,
 ): RecurringThisMonthDto {
 	const month = asOf.slice(0, 7);
-	const [year, monthNumber] = month.split('-').map(Number);
-	const monthEnd = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+	const monthEnd = `${month}-${String(daysInMonth(month)).padStart(2, '0')}`;
 	let paidCents = 0n;
 	let remainingCents = 0n;
 	for (const entry of counted) {

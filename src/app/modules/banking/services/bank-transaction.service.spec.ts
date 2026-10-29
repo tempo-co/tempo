@@ -47,8 +47,8 @@ function createQueryBuilder<T extends ObjectLiteral>(): SelectQueryBuilder<T> & 
 		andWhere: jest.fn().mockReturnThis(),
 		orderBy: jest.fn().mockReturnThis(),
 		addOrderBy: jest.fn().mockReturnThis(),
-		skip: jest.fn().mockReturnThis(),
-		take: jest.fn().mockReturnThis(),
+		offset: jest.fn().mockReturnThis(),
+		limit: jest.fn().mockReturnThis(),
 		getOne: jest.fn(),
 		getManyAndCount: jest.fn(),
 	};

@@ -4,7 +4,7 @@ import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 
-import {BANKING_CONNECTION_NOT_FOUND, BANKING_TRANSACTION_NOT_FOUND} from '../api/constants/banking-messages.constants';
+import {BANKING_TRANSACTION_NOT_FOUND} from '../api/constants/banking-messages.constants';
 import {BankConnectionTransactionsResponseDto} from '../api/dtos/bank-connection-response.dto';
 import {BankTransactionCategoryImpactResponseDto} from '../api/dtos/bank-transaction-category-impact.dto';
 import {
@@ -34,7 +34,8 @@ import type {BankTransactionCategory} from '../categorization/bank-transaction-c
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
-import {applyBankTransactionFilters} from './bank-transaction-filters';
+import {applyBankTransactionFilters, createOwnerScopedQuery as createLedgerQuery} from './bank-transaction-filters';
+import {findOwnedConnection} from './find-owned-connection';
 import {OwnTransferService} from './own-transfer.service';
 
 @Injectable()
@@ -81,8 +82,9 @@ export class BankTransactionService {
 		query
 			.addOrderBy('transaction.valueDate', 'DESC', 'NULLS LAST')
 			.addOrderBy('transaction.id', 'DESC')
-			.skip(pageIndex * pageSize)
-			.take(pageSize);
+			// Every join is many-to-one, so a plain LIMIT pages rows without TypeORM's extra distinct-id query.
+			.offset(pageIndex * pageSize)
+			.limit(pageSize);
 
 		const [transactions, total] = await query.getManyAndCount();
 		return {transactions: await this.toResponses(accountId, transactions), total};
@@ -93,19 +95,14 @@ export class BankTransactionService {
 		connectionId: BankConnection['id'],
 		limit: number,
 	): Promise<BankConnectionTransactionsResponseDto> {
-		await this.findOwnedConnection(accountId, connectionId);
+		await findOwnedConnection(this.bankConnectionRepository, accountId, connectionId);
 
-		const query = this.bankTransactionRepository
-			.createQueryBuilder('transaction')
-			.innerJoin('transaction.bankAccount', 'bankAccount')
-			.innerJoin('bankAccount.bankConnection', 'connection')
-			.innerJoin('connection.account', 'account')
-			.where('connection.id = :connectionId', {connectionId})
-			.andWhere('account.id = :accountId', {accountId})
+		const query = createLedgerQuery(this.bankTransactionRepository, accountId)
+			.andWhere('connection.id = :connectionId', {connectionId})
 			.orderBy('transaction.bookingDate', 'DESC', 'NULLS LAST')
 			.addOrderBy('transaction.valueDate', 'DESC', 'NULLS LAST')
 			.addOrderBy('transaction.createdAt', 'DESC')
-			.take(limit);
+			.limit(limit);
 
 		const [transactions, total] = await query.getManyAndCount();
 		const logos = await this.merchantLogoService.getLogoUrls(accountId, transactions);
@@ -176,14 +173,6 @@ export class BankTransactionService {
 		const updated = await this.ownTransferService.updateOverride(accountId, id, override);
 		if (!updated) throw new NotFoundException(BANKING_TRANSACTION_NOT_FOUND);
 		return this.findById(accountId, id);
-	}
-
-	private async findOwnedConnection(accountId: Account['id'], connectionId: BankConnection['id']) {
-		const connection = await this.bankConnectionRepository.findOne({
-			where: {id: connectionId, account: {id: accountId}},
-		});
-		if (!connection) throw new NotFoundException(BANKING_CONNECTION_NOT_FOUND);
-		return connection;
 	}
 
 	private async findOwnedTransaction(accountId: Account['id'], id: BankTransaction['id']) {

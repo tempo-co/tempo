@@ -23,6 +23,7 @@ import type {
 } from '../api/dtos/bank-transaction-summary-response.dto';
 import type {BankTransactionTotalsResponseDto} from '../api/dtos/bank-transaction-totals-response.dto';
 import {BankTransaction} from '../bank-transaction.entity';
+import {addDays} from '../banking.utils';
 import {
 	BANK_TRANSACTION_UNCATEGORIZED,
 	type BankTransactionCategoryFilterValue,
@@ -358,16 +359,20 @@ export class BankTransactionSummaryService {
 		return counts!;
 	}
 
-	/** Spending and income per month, day and category key; amounts are raw base-currency sums. */
-	private findFlows(accountId: string, from: string, to: string): Promise<FlowRow[]> {
-		// The same filters a drill link sends, so every number reconciles with the list.
+	/** Spending and income with a base amount, on the same filters a drill link sends, so every number reconciles with the list. */
+	private createFlowQuery(accountId: string, from: string, to: string) {
 		const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
 		applyBankTransactionFilters(query, {
 			bookingDate: {from, to},
 			baseAmount: 'PRESENT',
 			cashFlows: ['SPENDING', 'INCOME'],
 		});
-		return query
+		return query;
+	}
+
+	/** Spending and income per month, day and category key; amounts are raw base-currency sums. */
+	private findFlows(accountId: string, from: string, to: string): Promise<FlowRow[]> {
+		return this.createFlowQuery(accountId, from, to)
 			.select(`to_char("transaction"."bookingDate", 'YYYY-MM')`, 'month')
 			.addSelect('EXTRACT(DAY FROM "transaction"."bookingDate")::int', 'day')
 			.addSelect(`CASE WHEN ${SQL_SPENDING} THEN 'SPENDING' ELSE 'INCOME' END`, 'flow')
@@ -383,13 +388,7 @@ export class BankTransactionSummaryService {
 
 	/** Raw signed spending and income sums per period, on the same filters as {@link findFlows}. */
 	private findPeriodFlows(accountId: string, interval: CashFlowInterval, from: string, to: string) {
-		const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
-		applyBankTransactionFilters(query, {
-			bookingDate: {from, to},
-			baseAmount: 'PRESENT',
-			cashFlows: ['SPENDING', 'INCOME'],
-		});
-		return query
+		return this.createFlowQuery(accountId, from, to)
 			.select(`to_char(date_trunc(:interval, "transaction"."bookingDate"::timestamp), 'YYYY-MM-DD')`, 'start')
 			.addSelect(`ROUND(COALESCE(SUM(${BASE_AMOUNT}) FILTER (WHERE ${SQL_SPENDING}), 0), 2)::text`, 'spending')
 			.addSelect(`ROUND(COALESCE(SUM(${BASE_AMOUNT}) FILTER (WHERE ${SQL_INCOME}), 0), 2)::text`, 'income')
@@ -443,12 +442,6 @@ function periodStarts(interval: CashFlowInterval, from: string, to: string, asOf
 /** Calendar dates as `YYYY-MM-DD`, computed in UTC so no local offset shifts a day. */
 function toDate(value: string): Date {
 	return new Date(`${value}T00:00:00Z`);
-}
-
-function addDays(value: string, days: number): string {
-	const date = toDate(value);
-	date.setUTCDate(date.getUTCDate() + days);
-	return date.toISOString().slice(0, 10);
 }
 
 /** The Monday, 1st or 1 January on or before `value`, like Postgres `date_trunc`. */
