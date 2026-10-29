@@ -831,7 +831,9 @@ test('hiding a series does not reload its payments', async ({page}) => {
   const paymentReads: string[] = [];
   await page.route('**/bank-transactions?**', (route) => {
     if (!['fetch', 'xhr'].includes(route.request().resourceType())) return route.continue();
-    paymentReads.push(route.request().url());
+    // Home's recent transactions share the endpoint; only the series' own reads count.
+    if (new URL(route.request().url()).searchParams.has('filter[recurringSeriesKey]'))
+      paymentReads.push(route.request().url());
     return fulfillJson(route, {transactions: [], total: 0});
   });
   await page.goto('/?recurring=open');

@@ -11,7 +11,7 @@ import {SecuritySettingsPage} from './pages/security-settings.page';
 import {SignupPage} from './pages/signup.page';
 import {VerifyEmailChangePage} from './pages/verify-email-change.page';
 import {VerifyEmailPage} from './pages/verify-email.page';
-import {mockBankConnections} from './utils/api-mocks';
+import {mockBankConnections, mockEmptyHome} from './utils/api-mocks';
 import {EmailUtils} from './utils/email-utils';
 
 export const API_URL = loadEnv('development', process.cwd(), '').VITE_API_URL;
@@ -64,8 +64,10 @@ export const test = base.extend<Fixtures>({
   defaultBankConnections: [
     async ({page, storageState}, provide) => {
       // Registered before the test body, so any later route for the same request wins.
-      if (typeof storageState === 'object' && storageState.cookies.length === 0)
+      if (typeof storageState === 'object' && storageState.cookies.length === 0) {
         await mockBankConnections(page, []);
+        await mockEmptyHome(page);
+      }
       await provide();
     },
     {auto: true},

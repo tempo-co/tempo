@@ -3,7 +3,12 @@ import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {septemberSpending} from '../../data/home-summary.data';
 import {expect, test} from '../../fixtures';
-import {mockBankConnections, mockJson, transformBankConnections} from '../../utils/api-mocks';
+import {
+  mockBankConnections,
+  mockJson,
+  routeBankConnectionsApi,
+  transformBankConnections,
+} from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.describe('Home without banks', () => {
@@ -51,6 +56,30 @@ test.describe('Home', () => {
     await homePage.backToThisMonthLink.click();
     await expect(page).toHaveURL(/\/$/);
     await expect(homePage.monthHeading).toHaveText('October 2026');
+  });
+
+  test('requests its cards while the bank connections are loading', async ({page, homePage}) => {
+    let releaseConnections = () => {};
+    const connectionsHeld = new Promise<void>((resolve) => (releaseConnections = resolve));
+    await routeBankConnectionsApi(page, async (route) => {
+      await connectionsHeld;
+      await route.continue();
+    });
+    const cardRequests = [
+      '**/bank-transactions/summary**',
+      '**/bank-transactions/cash-flow**',
+      '**/bank-transactions/review-counts',
+    ].map((url) => page.waitForRequest(url));
+
+    try {
+      await page.goto('/');
+      await Promise.all(cardRequests);
+    } finally {
+      releaseConnections();
+    }
+
+    await expect(homePage.syncStatus).toBeVisible();
+    await expect(page.getByRole('region', {name: 'Balances'})).toBeVisible();
   });
 
   test("does not show the old month's rows under the month being loaded", async ({page}) => {

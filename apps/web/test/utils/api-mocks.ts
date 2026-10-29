@@ -1,6 +1,13 @@
 import {Page, Route} from '@playwright/test';
 
 import type {BankConnection} from '../../src/features/banking/types/bank-connection';
+import type {RecurringSummary} from '../../src/features/banking/types/recurring-series';
+import type {BankBalanceTrend} from '../../src/features/dashboard/types/bank-balance-trend';
+import type {BankTransactionCashFlow} from '../../src/features/dashboard/types/bank-transaction-cash-flow';
+import type {
+  BankTransactionReviewCounts,
+  BankTransactionSummary,
+} from '../../src/features/dashboard/types/bank-transaction-summary';
 import {successfulBankRefresh} from '../data/bank-sync-run.data';
 
 export function fulfillJson(route: Route, body: unknown, status = 200) {
@@ -94,4 +101,64 @@ export function transformBankConnections(
     const connections = (await response.json()) as BankConnection[];
     await route.fulfill({response, json: transform(connections)});
   });
+}
+
+/**
+ * Answers Home's card requests with empty data. Home requests its cards while the connections load,
+ * so a fully mocked spec that opens Home without banks still sends them.
+ */
+export async function mockEmptyHome(page: Page) {
+  const interval = (route: Route) =>
+    new URL(route.request().url()).searchParams.get(
+      'interval',
+    ) as BankTransactionCashFlow['interval'];
+  await page.route('**/bank-transactions/summary?**', (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    return fulfillJson(route, {
+      month: params.get('month') ?? '',
+      through: params.get('asOf') ?? '',
+      daysInMonth: 30,
+      baseCurrency: null,
+      totals: {spending: '0.00', income: '0.00', net: '0.00', ownTransfers: '0.00'},
+      excluded: {unknownDirection: 0, missingBaseAmount: 0},
+      baseline: {months: []},
+      categories: [],
+    } satisfies BankTransactionSummary);
+  });
+  await page.route('**/bank-transactions/cash-flow?**', (route) =>
+    fulfillJson(route, {
+      baseCurrency: null,
+      interval: interval(route),
+      periods: [],
+    } satisfies BankTransactionCashFlow),
+  );
+  await page.route('**/bank-transactions/balance-trend?**', (route) =>
+    fulfillJson(route, {
+      baseCurrency: null,
+      interval: interval(route),
+      periods: [],
+    } satisfies BankBalanceTrend),
+  );
+  await mockJson(page, '**/bank-transactions/review-counts', {
+    needsReview: 0,
+    categorizationFailed: 0,
+    categorizing: 0,
+    unknownDirection: 0,
+    missingBaseAmount: 0,
+  } satisfies BankTransactionReviewCounts);
+  await mockJson(page, '**/recurring-series/summary?**', {
+    expenseMonthlyTotal: '0.00',
+    incomeMonthlyTotal: '0.00',
+    upcoming: [],
+    expenseUnconvertedCount: 0,
+    incomeUnconvertedCount: 0,
+    baseCurrency: null,
+    expenseThisMonth: {month: '', paid: '0.00', remaining: '0.00'},
+    incomeThisMonth: {month: '', paid: '0.00', remaining: '0.00'},
+  } satisfies RecurringSummary);
+  await page.route('**/bank-transactions?**', (route) =>
+    ['fetch', 'xhr'].includes(route.request().resourceType())
+      ? fulfillJson(route, {transactions: [], total: 0})
+      : route.continue(),
+  );
 }

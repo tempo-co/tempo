@@ -64,7 +64,7 @@ Reuse these instead of re-creating setup inline:
   - `freshAccount`: a new verified account with no bank data, with the test's browser context logged in as it.
   - `createVerifiedAccount(request)`: the same account without logging in, for tests that log in through the UI.
 - Shared seeded data: tests that change account data or depend on an account having no bank data use `freshAccount` rather than a seeded account, so they do not depend on test order and stay safe to retry. Do not change seeded data another test reads.
-- `test/utils/api-mocks.ts`: `mockBankConnections`, `transformBankConnections` and `routeBankConnectionsApi` intercept the `GET /bank-connections` API call while letting navigations to `/bank-connections` through. `mockJson` and `fulfillJson` answer other routes with JSON.
+- `test/utils/api-mocks.ts`: `mockBankConnections`, `transformBankConnections` and `routeBankConnectionsApi` intercept the `GET /bank-connections` API call while letting navigations to `/bank-connections` through. `mockJson` and `fulfillJson` answer other routes with JSON. `mockEmptyHome` answers Home's card requests with empty data; fully mocked specs get it and `mockBankConnections(page, [])` by default from `test/fixtures.ts`.
 - `test/utils/layout.ts`: `boxOf(locator)` returns a rendered element's bounding box, and `expectNoHorizontalOverflow(page)` checks for horizontal scrolling.
 - `test/utils/url.ts`: `withSearchParams(path, params)` builds URLs for the invalid-search-param cases in `test/data`.
 - `test/utils/email-utils.ts`: `EmailUtils.getVerificationCode(email)` reads a verification code from Mailpit; `ResetPasswordPage.openResetLink(email)` requests a reset and opens the emailed link.

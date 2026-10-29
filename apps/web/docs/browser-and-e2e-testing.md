@@ -21,7 +21,7 @@ A mocked spec is a UI integration test, not full-stack coverage. Report it separ
 ## Choosing what to run locally
 
 - Find the specs for a change with `git grep` over `test/e2e` for the route, component, label or test id. `--only-changed` finds nothing: specs drive the browser and do not import `src`.
-- Home layout specs measure geometry. `test/e2e/home/dashboard-density.spec.ts` mocks every Home request and measures row insets from row titles. When Home gains a query, add its mock there; when a row layout changes, grep `test/e2e` for `boxOf(` on the surface you changed and run those specs too.
+- Home layout specs measure geometry. `test/e2e/home/dashboard-density.spec.ts` mocks every Home request and measures row insets from row titles. When Home gains a query, add its mock there and to `mockEmptyHome` in `test/utils/api-mocks.ts`; when a row layout changes, grep `test/e2e` for `boxOf(` on the surface you changed and run those specs too.
 - Run the full suite locally only for cross-cutting changes (`src/utils/api.ts`, `src/query-client.ts`, routing, auth, providers, shared layout or `src/components/ui`) or to reproduce a CI failure the logs do not explain.
 
 ## Local runs and shared servers

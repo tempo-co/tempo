@@ -27,9 +27,7 @@ type HomeDashboardProps = {
 };
 
 export function HomeDashboard({month, isCurrentMonth}: HomeDashboardProps) {
-  const {bankConnections, isPending, isError, refetch} = useGetAllBankConnections();
-
-  if (isPending) return <HomeDashboardSkeleton />;
+  const {bankConnections, isError, refetch} = useGetAllBankConnections();
 
   if (isError) {
     return (
@@ -46,25 +44,39 @@ export function HomeDashboard({month, isCurrentMonth}: HomeDashboardProps) {
     );
   }
 
-  const connections = (bankConnections ?? []).filter(isConnectedBank);
-  if (connections.length === 0) return <ConnectBankPrompt />;
+  // The cards mount while the connections load, so their requests run alongside it instead of after.
+  const connections = bankConnections?.filter(isConnectedBank);
+  if (connections?.length === 0) return <ConnectBankPrompt />;
 
   return (
-    <div className='@container'>
+    <div className='@container' aria-busy={!connections || undefined}>
       <div className='flex flex-wrap items-center justify-between gap-x-6 gap-y-4'>
         <MonthNavigation month={month} isCurrentMonth={isCurrentMonth} />
-        <HomeSyncStatus connections={connections} />
+        {connections ? (
+          <HomeSyncStatus connections={connections} />
+        ) : (
+          // Hidden on a phone like an all-clear status, so the cards below do not jump when it loads.
+          <Skeleton
+            className='h-4 w-64 max-md:hidden'
+            role='img'
+            aria-label='Loading sync status'
+          />
+        )}
       </div>
       <div className='mt-6 grid gap-6 @[900px]:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]'>
         <div className='grid min-w-0 content-start gap-6'>
           <CashFlowCard month={month} />
-          <BalanceTrendCard connections={connections} />
+          <BalanceTrendCard connections={connections ?? []} />
           <MonthlySpending month={month} isCurrentMonth={isCurrentMonth} />
         </div>
         <div className='grid min-w-0 content-start gap-6'>
-          <HomeAttention baseCurrency={connections[0]?.baseCurrency ?? null} />
+          <HomeAttention baseCurrency={connections && (connections[0]?.baseCurrency ?? null)} />
           <RecurringCard />
-          <BalancesList connections={connections} isCurrentMonth={isCurrentMonth} />
+          {connections ? (
+            <BalancesList connections={connections} isCurrentMonth={isCurrentMonth} />
+          ) : (
+            <Skeleton className='h-56' role='img' aria-label='Loading balances' />
+          )}
           <RecentTransactions month={month} isCurrentMonth={isCurrentMonth} />
         </div>
       </div>
@@ -82,9 +94,11 @@ function MonthlySpending({month, isCurrentMonth}: HomeDashboardProps) {
   return <CategoryBreakdown summary={summary} isCurrentMonth={isCurrentMonth} />;
 }
 
-function HomeAttention({baseCurrency}: {baseCurrency: string | null}) {
+/** `baseCurrency` is undefined until the connections load. */
+function HomeAttention({baseCurrency}: {baseCurrency: string | null | undefined}) {
   const {reviewCounts, isPending, isError, refetch} = useGetBankTransactionReviewCounts();
-  if (isPending) return <Skeleton className='h-40' aria-label='Loading attention counts' />;
+  if (isPending || baseCurrency === undefined)
+    return <Skeleton className='h-40' aria-label='Loading attention counts' />;
   if (isError || !reviewCounts)
     return <SectionError message='Could not load attention counts.' onRetry={refetch} />;
   return <AttentionList reviewCounts={reviewCounts} baseCurrency={baseCurrency} />;
@@ -98,22 +112,6 @@ function SectionError({message, onRetry}: {message: string; onRetry: () => unkno
         Try again
       </Button>
     </Card>
-  );
-}
-
-function HomeDashboardSkeleton() {
-  return (
-    <div aria-busy='true' aria-label='Loading your month' className='grid gap-5'>
-      <div className='flex flex-wrap items-center justify-between gap-2.5'>
-        <Skeleton className='h-8 w-44' />
-        <Skeleton className='h-4 w-64' />
-      </div>
-      <Card className='grid gap-3 p-5 sm:p-6'>
-        <Skeleton className='h-8 w-2/5' />
-        <Skeleton className='h-4 w-1/2' />
-        <Skeleton className='h-52' />
-      </Card>
-    </div>
   );
 }
 
