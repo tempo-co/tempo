@@ -6,7 +6,6 @@ import {
 	Injectable,
 	InternalServerErrorException,
 	Logger,
-	NotFoundException,
 	RequestTimeoutException,
 	ServiceUnavailableException,
 } from '@nestjs/common';
@@ -20,7 +19,6 @@ import {Account} from '@modules/account/account.entity';
 
 import {
 	BANKING_CONNECTION_NOT_AUTHORIZED,
-	BANKING_CONNECTION_NOT_FOUND,
 	BANKING_CONNECTION_SESSION_UNAVAILABLE,
 	BANKING_CONSENT_EXPIRED,
 	BANKING_FAILED_SYNC_ERROR,
@@ -95,6 +93,7 @@ import {
 } from './banking-sync.constants';
 import {CurrencyExchangeService} from './currency-exchange.service';
 import {EnableBankingClient, EnableBankingClientError} from './enable-banking.client';
+import {findOwnedConnection} from './find-owned-connection';
 import {OwnTransferService} from './own-transfer.service';
 
 const SUCCEEDED = BANK_SYNC_STATUSES.SUCCEEDED;
@@ -219,7 +218,7 @@ export class BankingSyncService {
 		signal: AbortSignal,
 	): Promise<BankSyncRunResponseDto | null> {
 		if (!this.bankingIntegrationEnabled) throw new ServiceUnavailableException(BANKING_SERVICE_UNAVAILABLE);
-		await this.findOwnedConnection(accountId, connectionId);
+		await findOwnedConnection(this.bankConnectionRepository, accountId, connectionId);
 		return this.runSynchronization(accountId, connectionId, psu, signal);
 	}
 
@@ -243,7 +242,7 @@ export class BankingSyncService {
 
 		try {
 			lockLease.assertHealthy();
-			const connection = await this.findOwnedConnection(accountId, connectionId);
+			const connection = await findOwnedConnection(this.bankConnectionRepository, accountId, connectionId);
 			if (!psu && !this.isAutomaticSyncEligible(connection)) return null;
 			const providerSessionId = await this.validateConnection(connection, lockLease);
 			if (psu) {
@@ -416,14 +415,6 @@ export class BankingSyncService {
 		);
 	}
 
-	private async findOwnedConnection(accountId: Account['id'], connectionId: BankConnection['id']) {
-		const connection = await this.bankConnectionRepository.findOne({
-			where: {id: connectionId, account: {id: accountId}},
-		});
-		if (!connection) throw new NotFoundException(BANKING_CONNECTION_NOT_FOUND);
-		return connection;
-	}
-
 	private async validateConnection(connection: BankConnection, lockLease: BankingConnectionLock): Promise<string> {
 		if (connection.status !== BANK_CONNECTION_STATUSES.AUTHORIZED) {
 			throw new ConflictException(BANKING_CONNECTION_NOT_AUTHORIZED);
@@ -510,19 +501,8 @@ export class BankingSyncService {
 			recordFailure(error);
 		}
 
-		if (connectionExpired || rateLimit) {
-			return {
-				accounts,
-				knownAccounts: bankAccounts,
-				authoritativeAccountIds,
-				hasFailure,
-				hasSuccessfulEndpoint,
-				connectionExpired,
-				rateLimit,
-			};
-		}
-
 		for (const bankAccount of bankAccounts) {
+			if (connectionExpired || rateLimit) break;
 			lockLease.assertHealthy();
 			if (authoritativeAccountIds && !authoritativeAccountIds.has(bankAccount.providerAccountId)) continue;
 			if (!authoritativeAccountIds && !bankAccount.isActive) continue;
