@@ -7,8 +7,9 @@ import {getSessionSignal} from '@/utils/api';
 import {isAccountQuery} from '@/utils/offline-storage';
 
 import {isReauthorizationRequired, isSyncInProgress} from '../utils/bank-sync-status';
+import {invalidateBankDerivedData} from './invalidate-bank-derived-data';
 import {DELETE_BANK_CONNECTION_KEY} from './use-delete-bank-connection';
-import {bankConnectionsQueryOptions} from './use-get-all-bank-connections';
+import {bankConnectionsQueryOptions, hasSyncAdvanced} from './use-get-all-bank-connections';
 import {useRefreshBankConnection} from './use-refresh-bank-connection';
 
 /** Owns foreground work once per opening, not per route, query render, focus or reconnect. */
@@ -29,6 +30,18 @@ export function useAppOpenBankRefresh() {
         ? state.data
         : undefined;
     };
+    /**
+     * Re-reads the saved connections once per opening, so Home reloads once rather than once per
+     * bank. The re-read reloads bank-derived data when a sync moved on; a run it cannot see there
+     * (a failed run, or the list not on screen) reloads it here instead.
+     */
+    const rereadAfterRun = async (synced: boolean) => {
+      const queryKey = bankConnectionsQueryOptions.queryKey;
+      const before = queryClient.getQueryData(queryKey);
+      await queryClient.invalidateQueries({queryKey, exact: true});
+      if (synced && !hasSyncAdvanced(before, queryClient.getQueryData(queryKey)))
+        await invalidateBankDerivedData(queryClient);
+    };
     const refresh = async () => {
       const account = liveAccount();
       if (
@@ -46,6 +59,8 @@ export function useAppOpenBankRefresh() {
       const run = new AbortController();
       const signal = AbortSignal.any([run.signal, getSessionSignal()]);
       controller = run;
+      let settled = false;
+      let synced = false;
       try {
         // Always read the saved connection list for this opening, including current sync locks.
         const connections = await queryClient.fetchQuery(bankConnectionsQueryOptions);
@@ -76,9 +91,18 @@ export function useAppOpenBankRefresh() {
             })
           )
             continue;
-          await refreshBankConnection({connectionId: connection.id, signal}).catch(() => undefined);
+          // 204 (null): the bank synchronized moments ago, so nothing changed.
+          const result = await refreshBankConnection({connectionId: connection.id, signal}).catch(
+            () => null,
+          );
+          if (signal.aborted) continue;
+          settled = true;
+          if (result) synced = true;
         }
       } finally {
+        // A run cut short still shows what the banks it finished saved, unless the account changed.
+        if (settled && liveAccount()?.id === account.id)
+          void rereadAfterRun(synced).catch(() => undefined);
         inFlight = false;
         activeAccountId = undefined;
         // Only in-flight work is cancellable; aborting a finished run would hide its result.

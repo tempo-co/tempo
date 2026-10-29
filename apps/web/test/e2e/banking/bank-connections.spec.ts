@@ -1,4 +1,4 @@
-import {QueryObserver} from '@tanstack/react-query';
+import {type QueryClient, QueryObserver} from '@tanstack/react-query';
 
 import {dashboardQueryKeys} from '../../../src/features/banking/api/aggregate-query-keys';
 import {bankQueryKeys} from '../../../src/features/banking/api/query-keys';
@@ -1334,6 +1334,68 @@ test.describe('mocked Enable Banking bank connection', () => {
     expect(requests).toEqual([MOCK_CONNECTION.id, next.id]);
   });
 
+  for (const [name, status, advances] of [
+    ['succeeded', 'SUCCEEDED', true],
+    ['failed', 'FAILED', false],
+  ] as const) {
+    test(`reloads Home once after ${name} refreshes of every connection on opening`, async ({page}) => {
+      const second = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000097'};
+      // A succeeded refresh moves its connection's last sync forward; a failed one leaves it.
+      const synced = new Set<string>();
+      let listReads = 0;
+      await mockBankConnections(page, () => {
+        listReads++;
+        return [MOCK_CONNECTION, second].map((connection) => ({
+          ...connection,
+          lastSyncedAt: synced.has(connection.id) ? '2026-10-02T00:00:00.000Z' : '2026-10-01T00:00:00.000Z',
+        }));
+      });
+      await mockBalanceTrend(page);
+      await mockCashFlow(page);
+      await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
+      await mockJson(page, '**/recurring-series/summary?**', {expenseMonthlyTotal: '0.00', incomeMonthlyTotal: '0.00', expenseThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'}, incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'}, upcoming: [], expenseUnconvertedCount: 0, incomeUnconvertedCount: 0, baseCurrency: 'EUR'});
+      await mockJson(page, '**/bank-transactions?**', {transactions: [], total: 0});
+      let reviewCountReads = 0;
+      await page.route('**/bank-transactions/review-counts', (route) => {
+        reviewCountReads++;
+        return fulfillJson(route, {needsReview: 0, categorizationFailed: 0, categorizing: 0, unknownDirection: 0, missingBaseAmount: 0});
+      });
+      const requests: string[] = [];
+      const releases = new Map<string, () => void>();
+      const held = new Map(
+        [MOCK_CONNECTION.id, second.id].map((id) => [
+          id,
+          new Promise<void>((resolve) => releases.set(id, resolve)),
+        ]),
+      );
+      await page.route('**/bank-connections/*/refresh', async (route) => {
+        const id = new URL(route.request().url()).pathname.split('/')[2];
+        requests.push(id);
+        await held.get(id);
+        if (advances) synced.add(id);
+        await fulfillJson(route, {...REFRESH_RESULT, status});
+      });
+      await page.goto('/');
+      let readsBeforeRun = 0;
+      try {
+        await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id]);
+        await expect.poll(() => reviewCountReads).toBe(1);
+        readsBeforeRun = listReads;
+        releases.get(MOCK_CONNECTION.id)!();
+        // The next bank starts only after the previous refresh has settled.
+        await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id, second.id]);
+        expect(reviewCountReads).toBe(1);
+        expect(listReads).toBe(readsBeforeRun);
+      } finally {
+        releases.forEach((release) => release());
+      }
+      await expect.poll(() => reviewCountReads).toBe(2);
+      expect(listReads).toBe(readsBeforeRun + 1);
+      await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      expect(reviewCountReads).toBe(2);
+    });
+  }
+
   test('cancels hidden foreground work and reads current connection state on reopening', async ({page}) => {
     await page.addInitScript(() => {
       const fetch = window.fetch.bind(window);
@@ -1707,70 +1769,64 @@ test.describe('mocked Enable Banking bank connection', () => {
   }
 });
 
-test.describe('manual bank refresh caches', () => {
+test.describe('bank-derived caches', () => {
   test.use({storageState: {cookies: [], origins: []}});
 
-  for (const status of ['SUCCEEDED', 'PARTIAL', 'FAILED'] as const) {
-    test(`${status} manual refresh updates saved bank-derived data and reuses fresh supported banks`, async () => {
-      const {client, renderHook} = createHookHarness({
-        '@/utils/api': {api: {post: () => Promise.resolve({...REFRESH_RESULT, status})}},
-        sonner: {toast: {error: () => undefined}},
-      });
-      const keys = [
-        bankQueryKeys.connections,
-        bankQueryKeys.transactions(
-          {pageIndex: 0, pageSize: 10},
-          {cashFlows: ['SPENDING']},
-          undefined,
-        ),
-        bankQueryKeys.transaction('example-transaction'),
-        bankQueryKeys.connectionTransactions(MOCK_CONNECTION.id, null),
-        dashboardQueryKeys.summary('2026-09', '2026-10-01'),
-        dashboardQueryKeys.summary('2026-08', '2026-10-01'),
-        dashboardQueryKeys.balanceTrend('month', '2026-01-01', '2026-10-01', '2026-10-01'),
-        dashboardQueryKeys.cashFlow('month', '2026-01-01', '2026-10-01', '2026-10-01'),
-        dashboardQueryKeys.reviewCounts,
-        recurringQueryKeys.lists('2026-10-01'),
-        recurringQueryKeys.summary('2026-10-01'),
-      ];
-      keys.forEach((key) => client.setQueryData(key, {revision: 0}));
-      client.setQueryData(bankQueryKeys.supportedBanks, [TARGET_ASPSP]);
-      let catalogReads = 0;
-      const catalogObserver = new QueryObserver(client, {
-        queryKey: bankQueryKeys.supportedBanks,
-        staleTime: 60 * 60_000,
-        queryFn: () => {
-          catalogReads++;
-          return Promise.resolve([TARGET_ASPSP]);
-        },
-      });
-      const unsubscribeCatalog = catalogObserver.subscribe(() => {});
-      const unrelated = ['example-unrelated'];
-      client.setQueryData(unrelated, {revision: 0});
-      let reads = 0;
-      const observer = new QueryObserver(client, {
-        queryKey: dashboardQueryKeys.reviewCounts,
-        queryFn: () => Promise.resolve({revision: ++reads}),
-      });
-      const unsubscribe = observer.subscribe(() => {});
-      try {
-        const {refreshBankConnection} = renderHook<{
-          refreshBankConnection: (request: {connectionId: string}) => Promise<unknown>;
-        }>('src/features/banking/api/use-refresh-bank-connection.ts', 'useRefreshBankConnection');
-        await refreshBankConnection({connectionId: MOCK_CONNECTION.id});
-        expect(catalogReads).toBe(0);
-        expect(client.getQueryState(bankQueryKeys.supportedBanks)?.isInvalidated).toBe(false);
-        expect(client.getQueryData(dashboardQueryKeys.reviewCounts)).toEqual({revision: 1});
-        for (const key of keys.filter((key) => key !== dashboardQueryKeys.reviewCounts))
-          expect(client.getQueryState(key)?.isInvalidated, JSON.stringify(key)).toBe(true);
-        expect(client.getQueryState(unrelated)?.isInvalidated).toBe(false);
-      } finally {
-        unsubscribeCatalog();
-        unsubscribe();
-        client.clear();
-      }
+  test('bank-derived invalidation updates every bank-derived cache and reuses fresh supported banks', async () => {
+    const {client, load} = createHookHarness({});
+    const keys = [
+      bankQueryKeys.transactions(
+        {pageIndex: 0, pageSize: 10},
+        {cashFlows: ['SPENDING']},
+        undefined,
+      ),
+      bankQueryKeys.transaction('example-transaction'),
+      bankQueryKeys.connectionTransactions(MOCK_CONNECTION.id, null),
+      dashboardQueryKeys.summary('2026-09', '2026-10-01'),
+      dashboardQueryKeys.summary('2026-08', '2026-10-01'),
+      dashboardQueryKeys.balanceTrend('month', '2026-01-01', '2026-10-01', '2026-10-01'),
+      dashboardQueryKeys.cashFlow('month', '2026-01-01', '2026-10-01', '2026-10-01'),
+      dashboardQueryKeys.reviewCounts,
+      recurringQueryKeys.lists('2026-10-01'),
+      recurringQueryKeys.summary('2026-10-01'),
+    ];
+    keys.forEach((key) => client.setQueryData(key, {revision: 0}));
+    client.setQueryData(bankQueryKeys.supportedBanks, [TARGET_ASPSP]);
+    let catalogReads = 0;
+    const catalogObserver = new QueryObserver(client, {
+      queryKey: bankQueryKeys.supportedBanks,
+      staleTime: 60 * 60_000,
+      queryFn: () => {
+        catalogReads++;
+        return Promise.resolve([TARGET_ASPSP]);
+      },
     });
-  }
+    const unsubscribeCatalog = catalogObserver.subscribe(() => {});
+    const unrelated = ['example-unrelated'];
+    client.setQueryData(unrelated, {revision: 0});
+    let reads = 0;
+    const observer = new QueryObserver(client, {
+      queryKey: dashboardQueryKeys.reviewCounts,
+      queryFn: () => Promise.resolve({revision: ++reads}),
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    try {
+      const {invalidateBankDerivedData} = load(
+        'src/features/banking/api/invalidate-bank-derived-data.ts',
+      ) as {invalidateBankDerivedData: (client: QueryClient) => Promise<unknown>};
+      await invalidateBankDerivedData(client);
+      expect(catalogReads).toBe(0);
+      expect(client.getQueryState(bankQueryKeys.supportedBanks)?.isInvalidated).toBe(false);
+      expect(client.getQueryData(dashboardQueryKeys.reviewCounts)).toEqual({revision: 1});
+      for (const key of keys.filter((key) => key !== dashboardQueryKeys.reviewCounts))
+        expect(client.getQueryState(key)?.isInvalidated, JSON.stringify(key)).toBe(true);
+      expect(client.getQueryState(unrelated)?.isInvalidated).toBe(false);
+    } finally {
+      unsubscribeCatalog();
+      unsubscribe();
+      client.clear();
+    }
+  });
 });
 
 test.describe('bank connection card layout', () => {

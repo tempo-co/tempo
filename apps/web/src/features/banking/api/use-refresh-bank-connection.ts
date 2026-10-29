@@ -1,12 +1,10 @@
-import {useMutation, useMutationState, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useMutationState} from '@tanstack/react-query';
 import {toast} from 'sonner';
 
 import {HttpError, NetworkError, SessionChangedError, api, isAuthError} from '@/utils/api';
 
 import type {BankSyncRun} from '../types/bank-sync-run';
 import {getBankRefreshToast} from '../utils/bank-refresh-feedback';
-import {invalidateBankDerivedData} from './invalidate-bank-derived-data';
-import {bankQueryKeys} from './query-keys';
 
 const BANK_REFRESH_KEY = ['bank-refresh'];
 type RefreshRequest = {connectionId: string; signal?: AbortSignal};
@@ -27,8 +25,11 @@ export function useBankConnectionRefreshState(connectionId: string) {
   return {isPending: !cancelled && state?.status === 'pending'};
 }
 
+/**
+ * Refreshes one connection and reports its outcome. Re-reading the saved connections and
+ * bank-derived data is left to the caller, so a run over several banks reloads them once.
+ */
 export function useRefreshBankConnection() {
-  const queryClient = useQueryClient();
   const {mutateAsync, ...state} = useMutation({
     mutationKey: BANK_REFRESH_KEY,
     mutationFn: ({connectionId, signal}: RefreshRequest) =>
@@ -36,11 +37,10 @@ export function useRefreshBankConnection() {
       api.post<BankSyncRun | null>(`/bank-connections/${connectionId}/refresh`, undefined, {
         signal,
       }),
-    onSuccess: async (result, {signal}) => {
+    onSuccess: (result, {signal}) => {
       if (signal?.aborted || !result) return;
       const feedback = getBankRefreshToast(result);
       if (feedback) toast.error(feedback.title, {description: feedback.description});
-      await invalidateBankDerivedData(queryClient);
     },
     onError: (error, {signal}) => {
       if (signal?.aborted) return;
@@ -49,10 +49,6 @@ export function useRefreshBankConnection() {
         return;
       toast.error('Bank refresh failed', {description: error.message});
     },
-    onSettled: (_result, _error, {signal}) =>
-      signal?.aborted
-        ? undefined
-        : queryClient.invalidateQueries({queryKey: bankQueryKeys.connections, exact: true}),
   });
 
   return {refreshBankConnection: mutateAsync, ...state};

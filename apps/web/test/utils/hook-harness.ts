@@ -19,6 +19,7 @@ export function createHookHarness(stubs: Record<string, unknown>) {
   const require = createRequire(resolve('package.json'));
   const modules = new Map<string, {exports: ModuleExports}>();
 
+  /** Loads a `src` module with the stubs applied, for helpers that are not hooks. */
   function load(path: string): ModuleExports {
     const filename = resolve(path);
     const cached = modules.get(filename);
@@ -58,5 +59,5 @@ export function createHookHarness(stubs: Record<string, unknown>) {
     return result!;
   }
 
-  return {client, renderHook};
+  return {client, load, renderHook};
 }
