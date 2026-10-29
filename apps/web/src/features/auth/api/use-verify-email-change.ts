@@ -3,7 +3,7 @@ import {toast} from 'sonner';
 
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
 import {Account} from '@/types/account';
-import {HttpError, api} from '@/utils/api';
+import {HttpError, api, isAuthError} from '@/utils/api';
 
 import {TokenSearchParams} from '../types/token.dto';
 
@@ -29,7 +29,12 @@ export const useVerifyEmailChange = () => {
         description: `You'll now sign in with ${email}.`,
       });
     },
-    onError: () => {
+    onError: (error) => {
+      // An auth error (ended session or unverified email) already has its own toast and redirect.
+      if (isAuthError(error)) {
+        toast.dismiss(TOAST_ID);
+        return;
+      }
       toast.error('This verification link is invalid or has expired.', {
         id: TOAST_ID,
         description: 'Use Change email to send a new one.',

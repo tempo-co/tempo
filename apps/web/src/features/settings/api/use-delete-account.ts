@@ -9,7 +9,7 @@ import {AccountDeleteDto} from '../types/account-delete.dto';
 export const useDeleteAccount = () => {
   const {mutateAsync: deleteAccount, isPending} = useMutation<void, HttpError, AccountDeleteDto>({
     mutationFn: async (dto) => {
-      await api.delete('/accounts/me', dto);
+      await api.delete('/accounts/me', dto, {expectUnauthorized: true});
     },
     onSuccess: () => {
       toast.success('Account deleted.');

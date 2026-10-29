@@ -22,7 +22,7 @@ export const useCurrentAccount = ({skipFetch = false} = {}) => {
   const {data, isPending, error, refetch, dataUpdatedAt} = useQuery<Account, HttpError>({
     queryKey: CURRENT_ACCOUNT_KEY,
     queryFn: async () => {
-      return await api.get<Account>('/accounts/me');
+      return await api.get<Account>('/accounts/me', {expectUnauthorized: true});
     },
     enabled: !skipFetch,
     retry: false,

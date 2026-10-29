@@ -117,18 +117,14 @@ function assertSameSession(epoch: number) {
   if (epoch !== sessionEpoch) throw new SessionChangedError('Session changed');
 }
 
-const shouldRedirect = (resource: string, method?: string) => {
-  if (resource === '/auth/login') return false;
-  if (resource === '/auth/change-email/request') return false;
-  if (resource === '/auth/change-password') return false;
-  if (resource === '/auth/change-email/verify') return false;
-  if (resource === '/accounts/me' && method === 'GET') return false;
-  if (resource === '/accounts/me' && method === 'DELETE') return false;
-  if (resource.startsWith('/auth/sessions') && method === 'DELETE') return false;
-  return true;
+type RequestOptions = RequestInit & {
+  parseJson?: boolean;
+  /**
+   * A 401 is an answer the caller handles, such as a wrong password, rather than an ended session.
+   * It is then thrown as a plain HttpError, without the session-expired toast and sign-out.
+   */
+  expectUnauthorized?: boolean;
 };
-
-type RequestOptions = RequestInit & {parseJson?: boolean};
 /** Options for post/patch/delete, which take the JSON body as a value and serialize it. */
 type WriteOptions = Omit<RequestOptions, 'body'>;
 
@@ -176,7 +172,7 @@ async function request<T = unknown>(
   assertSameSession(epoch);
 
   if (!response.ok) {
-    if (response.status === 401 && shouldRedirect(resource, init?.method)) {
+    if (response.status === 401 && !init?.expectUnauthorized) {
       toast.error('Your session has expired', {
         description: 'Please log in again to continue using the app.',
         id: 'session-expired',

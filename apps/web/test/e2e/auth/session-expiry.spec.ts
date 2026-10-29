@@ -56,3 +56,27 @@ test.describe('auth errors during a session', () => {
     await expect(verifyEmailPage.pageTitle).toBeVisible();
   });
 });
+
+test('redirects to login when the session expires before an email change is sent', async ({
+  page,
+  freshAccount,
+  accountSettingsPage,
+  homePage,
+  loginPage,
+}) => {
+  // Finish the initial load before expiring the session so late responses cannot restore cookies.
+  const connectionsResponse = page.waitForResponse(`${API_URL}/bank-connections`);
+  await accountSettingsPage.navigate();
+  await expect(homePage.accountEmail).toHaveText(freshAccount.email);
+  await (await connectionsResponse).finished();
+
+  await accountSettingsPage.changeEmailButton.click();
+  await accountSettingsPage.newEmailInput.fill('new-user@example.com');
+  await page.context().clearCookies();
+  const requestResponse = page.waitForResponse(`${API_URL}/auth/change-email/request`);
+  await accountSettingsPage.sendVerificationLinkButton.click();
+  expect((await requestResponse).status()).toBe(401);
+
+  await expect(page.getByText('Your session has expired')).toBeVisible();
+  await loginPage.expectToBeOnPage();
+});
