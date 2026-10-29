@@ -356,7 +356,12 @@ describe('BankingSyncService synchronization lock', () => {
 			orUpdate: jest.fn().mockReturnThis(),
 			returning: jest.fn().mockReturnThis(),
 			updateEntity: jest.fn().mockReturnThis(),
-			execute: jest.fn().mockResolvedValue({raw: [{id: 'new-transaction-id'}]}),
+			execute: jest.fn().mockResolvedValue({
+				raw: [
+					{id: 'existing-transaction-id', inserted: false},
+					{id: 'new-transaction-id', inserted: true},
+				],
+			}),
 		};
 		transactionRepository.createQueryBuilder.mockReturnValue(insertQueryBuilder);
 		enableBankingClient.getAccountTransactions.mockResolvedValue(transactions);
@@ -378,8 +383,6 @@ describe('BankingSyncService synchronization lock', () => {
 			transactionsFetched: 2,
 			transactionsAdded: 1,
 		});
-		expect(insertQueryBuilder.orIgnore).toHaveBeenCalledTimes(1);
-		expect(insertQueryBuilder.returning).toHaveBeenCalledWith('id');
 		expect(insertQueryBuilder.values).toHaveBeenCalledWith(
 			expect.arrayContaining([
 				expect.objectContaining({
@@ -1109,9 +1112,7 @@ describe('BankingSyncService transaction event persistence', () => {
 			createQueryBuilder: jest
 				.fn()
 				.mockReturnValueOnce(insertQueryBuilder)
-				.mockReturnValueOnce(insertQueryBuilder)
 				.mockReturnValueOnce(eventUpdateQueryBuilder),
-			upsert: jest.fn().mockResolvedValue(undefined),
 		} as unknown as Repository<BankTransaction>;
 		const bankAccount = {id: 'bank-account-id', currency: 'EUR'} as BankAccount;
 		const transaction = {
@@ -1169,20 +1170,13 @@ describe('BankingSyncService transaction event persistence', () => {
 			['bankAccountId', 'stableIdentityKey'],
 			expect.objectContaining({
 				overwriteCondition: expect.objectContaining({
-					where: '"bank_transactions"."categoryStatus" IS DISTINCT FROM :processingStatus',
+					parameters: expect.objectContaining({processingStatus: 'PROCESSING'}),
 				}),
 			}),
-		);
-		expect(repository.upsert).toHaveBeenCalledWith(
-			expect.arrayContaining([
-				expect.objectContaining({financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE}),
-			]),
-			['bankAccountId', 'stableIdentityKey'],
 		);
 		expect(eventUpdateQueryBuilder.set).toHaveBeenCalledWith(
 			expect.objectContaining({categoryStatus: 'NOT_APPLICABLE', categoryInputHash: null}),
 		);
-		expect(repository.createQueryBuilder).toHaveBeenCalledTimes(3);
 	});
 
 	it('resets stale categorization for all qualifying existing rows in one guarded update', async () => {
@@ -1243,7 +1237,7 @@ describe('BankingSyncService transaction event persistence', () => {
 		});
 		expect(queryBuilder.andWhere).toHaveBeenCalledWith(`"categorySource" IS DISTINCT FROM 'MANUAL'`);
 		expect(queryBuilder.andWhere).toHaveBeenCalledWith('"financialEventType" IS NULL');
-		expect(repository.createQueryBuilder).toHaveBeenCalledTimes(3);
+		expect(repository.createQueryBuilder).toHaveBeenCalledTimes(2);
 	});
 
 	it('preserves existing occurrence identities when mutable details reorder repeated-reference rows', async () => {

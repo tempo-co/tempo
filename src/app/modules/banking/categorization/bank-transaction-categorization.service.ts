@@ -112,6 +112,8 @@ type CategorizationUpdate = {
 };
 
 const STALE_PROCESSING_AFTER_MS = 15 * 60 * 1000;
+/** Bounds the concurrent claim updates so a batch does not take the whole connection pool. */
+const CLAIM_CONCURRENCY = 5;
 const RECONCILE_INTERVAL_MS = 60 * 60 * 1000;
 // About 21 minutes of exponential backoff in total, enough to ride out a database or Redis restart.
 const FOLLOW_UP_JOB_OPTIONS = {
@@ -225,30 +227,40 @@ export class BankTransactionCategorizationService {
 			relations: {bankAccount: {bankConnection: true}},
 		});
 		const transactionsById = new Map(transactions.map((transaction) => [transaction.id, transaction]));
-		const claimed: ClaimedTransaction[] = [];
-
-		for (const id of batchIds) {
-			const transaction = transactionsById.get(id);
-			// Own transfers get their transfer category from the own-transfer rule, without a model call.
-			if (!transaction || this.isFinancialEvent(transaction) || isOwnTransferCategorized(transaction)) continue;
-
-			const input = toBankTransactionCategorizationInput({
-				...transaction,
-				aspspName: transaction.bankAccount?.bankConnection?.aspspName,
-			});
-			const inputHash = createBankTransactionCategorizationInputHash(input);
-			if (!(await this.refreshInputHashAndResetStaleClassification(transaction, inputHash))) continue;
-			if (isManualCategorySource(transaction.categorySource)) continue;
-
-			if (!this.isClaimable(transaction)) continue;
-			if (await this.claimTransaction(transaction.id, inputHash)) {
-				this.applyLocalUpdate(transaction, {categoryStatus: 'PROCESSING', categoryUpdatedAt: new Date()});
-				claimed.push({transaction, input, inputHash});
-			}
+		// Each claim is a guarded single-row update, so a few run at a time; the batch keeps job order.
+		const claimResults: PromiseSettledResult<ClaimedTransaction | null>[] = [];
+		for (const ids of chunkArray(batchIds, CLAIM_CONCURRENCY)) {
+			claimResults.push(
+				...(await Promise.allSettled(ids.map((id) => this.claimForBatch(transactionsById.get(id))))),
+			);
 		}
+		const claimed = claimResults.flatMap((result) =>
+			result.status === 'fulfilled' && result.value ? [result.value] : [],
+		);
 
 		// batchIds is capped at the batch size, so every claimed transaction fits in one provider batch.
 		if (claimed.length > 0) await this.categorizeClaimedBatch(claimed);
+		// Rows already claimed are categorized first, so a failed claim retries only the rows it left unclaimed.
+		const failedClaim = claimResults.find((result) => result.status === 'rejected');
+		if (failedClaim) throw failedClaim.reason;
+	}
+
+	private async claimForBatch(transaction: BankTransaction | undefined): Promise<ClaimedTransaction | null> {
+		// Own transfers get their transfer category from the own-transfer rule, without a model call.
+		if (!transaction || this.isFinancialEvent(transaction) || isOwnTransferCategorized(transaction)) return null;
+
+		const input = toBankTransactionCategorizationInput({
+			...transaction,
+			aspspName: transaction.bankAccount?.bankConnection?.aspspName,
+		});
+		const inputHash = createBankTransactionCategorizationInputHash(input);
+		if (!(await this.refreshInputHashAndResetStaleClassification(transaction, inputHash))) return null;
+		if (isManualCategorySource(transaction.categorySource)) return null;
+
+		if (!this.isClaimable(transaction)) return null;
+		if (!(await this.claimTransaction(transaction.id, inputHash))) return null;
+		this.applyLocalUpdate(transaction, {categoryStatus: 'PROCESSING', categoryUpdatedAt: new Date()});
+		return {transaction, input, inputHash};
 	}
 
 	/**
