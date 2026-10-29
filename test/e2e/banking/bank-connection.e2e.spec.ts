@@ -1220,6 +1220,46 @@ describe('BankConnectionController', () => {
 		expect(response.body.transactions[0].id).toBe(stored.id);
 	});
 
+	it('leaves a row the categorization worker holds unchanged on re-sync unless it becomes a currency exchange', async () => {
+		const {connection, bankAccounts} = await createAuthorizedConnectionFixture(
+			'held-categorization-session',
+			[{providerAccountId: 'sync-provider-account', identificationHash: 'hash-held-categorization'}],
+			'Revolut',
+		);
+		const [payment, exchange] = makeTransactions('held-categorization').map((transaction) => ({
+			...transaction,
+			creditDebitIndicator: 'DBIT',
+		}));
+		const synchronize = (transactions: EnableBankingTransaction[]) =>
+			synchronizeQueued(connection.id, transactions);
+		expect(await synchronize([payment, exchange])).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 2});
+		await bankTransactionRepository.update(
+			{bankAccountId: bankAccounts[0].id},
+			{categoryStatus: 'PROCESSING', categoryUpdatedAt: new Date()},
+		);
+
+		expect(
+			await synchronize([
+				{...payment, description: 'Corrected provider description'},
+				{...exchange, description: 'Exchanged to GBP'},
+			]),
+		).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 0});
+
+		const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccounts[0].id});
+		expect(rows).toHaveLength(2);
+		expect(rows.find(({entryReference}) => entryReference === payment.entryReference)).toMatchObject({
+			description: payment.description,
+			financialEventType: null,
+			categoryStatus: 'PROCESSING',
+		});
+		expect(rows.find(({entryReference}) => entryReference === exchange.entryReference)).toMatchObject({
+			description: 'Exchanged to GBP',
+			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+			categoryStatus: 'NOT_APPLICABLE',
+			categoryInputHash: null,
+		});
+	});
+
 	it('stores amounts already in the base currency when a sync saves them', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('same-currency-base-amount-session');
 		const [euro, dollar] = makeTransactions('same-currency-base-amount');

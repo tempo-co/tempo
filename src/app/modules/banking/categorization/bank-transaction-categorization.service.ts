@@ -224,30 +224,30 @@ export class BankTransactionCategorizationService {
 			relations: {bankAccount: {bankConnection: true}},
 		});
 		const transactionsById = new Map(transactions.map((transaction) => [transaction.id, transaction]));
-		const claimed: ClaimedTransaction[] = [];
-
-		for (const id of batchIds) {
-			const transaction = transactionsById.get(id);
-			// Own transfers get their transfer category from the own-transfer rule, without a model call.
-			if (!transaction || this.isFinancialEvent(transaction) || isOwnTransferCategorized(transaction)) continue;
-
-			const input = toBankTransactionCategorizationInput({
-				...transaction,
-				aspspName: transaction.bankAccount?.bankConnection?.aspspName,
-			});
-			const inputHash = createBankTransactionCategorizationInputHash(input);
-			if (!(await this.refreshInputHashAndResetStaleClassification(transaction, inputHash))) continue;
-			if (isManualCategorySource(transaction.categorySource)) continue;
-
-			if (!this.isClaimable(transaction)) continue;
-			if (await this.claimTransaction(transaction.id, inputHash)) {
-				this.applyLocalUpdate(transaction, {categoryStatus: 'PROCESSING', categoryUpdatedAt: new Date()});
-				claimed.push({transaction, input, inputHash});
-			}
-		}
+		// Each claim is a guarded single-row update, so rows are claimed concurrently; the batch keeps job order.
+		const claimResults = await Promise.all(batchIds.map((id) => this.claimForBatch(transactionsById.get(id))));
+		const claimed = claimResults.filter((result): result is ClaimedTransaction => result !== null);
 
 		// batchIds is capped at the batch size, so every claimed transaction fits in one provider batch.
 		if (claimed.length > 0) await this.categorizeClaimedBatch(claimed);
+	}
+
+	private async claimForBatch(transaction: BankTransaction | undefined): Promise<ClaimedTransaction | null> {
+		// Own transfers get their transfer category from the own-transfer rule, without a model call.
+		if (!transaction || this.isFinancialEvent(transaction) || isOwnTransferCategorized(transaction)) return null;
+
+		const input = toBankTransactionCategorizationInput({
+			...transaction,
+			aspspName: transaction.bankAccount?.bankConnection?.aspspName,
+		});
+		const inputHash = createBankTransactionCategorizationInputHash(input);
+		if (!(await this.refreshInputHashAndResetStaleClassification(transaction, inputHash))) return null;
+		if (isManualCategorySource(transaction.categorySource)) return null;
+
+		if (!this.isClaimable(transaction)) return null;
+		if (!(await this.claimTransaction(transaction.id, inputHash))) return null;
+		this.applyLocalUpdate(transaction, {categoryStatus: 'PROCESSING', categoryUpdatedAt: new Date()});
+		return {transaction, input, inputHash};
 	}
 
 	/**

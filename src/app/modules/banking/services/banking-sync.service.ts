@@ -880,44 +880,38 @@ export class BankingSyncService {
 			}
 		}
 
-		const insertResult = await repository
-			.createQueryBuilder()
-			.insert()
-			.into(BankTransaction)
-			.values(transactionValues)
-			.orIgnore()
-			.returning('id')
-			// RETURNING lists only inserted rows, so merging it back by position would hand new ids to
-			// existing rows, and the upserts below would then overwrite their primary keys.
-			.updateEntity(false)
-			.execute();
-		const transactionsAdded = Array.isArray(insertResult.raw) ? insertResult.raw.length : insertResult.raw ? 1 : 0;
-
 		const conflictColumns = ['bankAccountId', 'stableIdentityKey'];
 		const overwriteColumns = Object.keys(transactionValues[0]).filter(
 			(column) => !conflictColumns.includes(column),
 		);
-		await repository
+		const upsertResult = await repository
 			.createQueryBuilder()
 			.insert()
 			.into(BankTransaction)
 			.values(transactionValues)
 			.orUpdate(overwriteColumns, conflictColumns, {
+				// A row the categorization worker holds keeps its values until the worker finishes, except a currency
+				// exchange, which leaves categorization below.
 				overwriteCondition: {
-					where: '"bank_transactions"."categoryStatus" IS DISTINCT FROM :processingStatus',
-					parameters: {processingStatus: 'PROCESSING'},
+					where: '("bank_transactions"."categoryStatus" IS DISTINCT FROM :processingStatus OR EXCLUDED."financialEventType" = :currencyExchangeType)',
+					parameters: {
+						processingStatus: 'PROCESSING',
+						currencyExchangeType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+					},
 				},
 			})
-			// Rows skipped by the condition are missing from RETURNING; keep the values unmodified.
+			// xmax is 0 only on a freshly inserted row version, so it tells inserts apart from updates.
+			.returning('"id", ("xmax" = 0) AS "inserted"')
+			// Rows skipped by the condition are missing from RETURNING, so merging it back by position would hand
+			// the wrong ids to the values; keep them unmodified.
 			.updateEntity(false)
 			.execute();
+		const insertedTransactionIds = this.getInsertedTransactionIds(upsertResult.raw);
+		const transactionsAdded = insertedTransactionIds.length;
 
 		const eventTransactionValues = transactionValues.filter(
 			({financialEventType}) => financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
 		);
-		if (eventTransactionValues.length > 0) {
-			await repository.upsert(eventTransactionValues, conflictColumns);
-		}
 		await this.clearStaleBaseAmounts(repository, existingTransactions);
 		await this.copySameCurrencyBaseAmounts(repository, bankAccount.id);
 
@@ -987,9 +981,7 @@ export class BankingSyncService {
 			where: {bankAccountId: bankAccount.id, stableIdentityKey: In(stableIdentityKeys)},
 		});
 		const persistedTransactionIds =
-			persistedRows.length > 0
-				? persistedRows.map(({id}) => id)
-				: this.getInsertedTransactionIds(insertResult.raw);
+			persistedRows.length > 0 ? persistedRows.map(({id}) => id) : insertedTransactionIds;
 
 		return {transactionsAdded, persistedTransactionIds};
 	}
@@ -1294,8 +1286,8 @@ export class BankingSyncService {
 		const rows = Array.isArray(raw) ? raw : raw ? [raw] : [];
 		return rows.flatMap((row) => {
 			if (!row || typeof row !== 'object') return [];
-			const id = (row as {id?: unknown}).id;
-			return typeof id === 'string' ? [id] : [];
+			const {id, inserted} = row as {id?: unknown; inserted?: unknown};
+			return typeof id === 'string' && inserted === true ? [id] : [];
 		});
 	}
 
