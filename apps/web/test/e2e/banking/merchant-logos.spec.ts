@@ -122,9 +122,25 @@ async function mockMerchantLogos(page: Page) {
   await mockJson(page, '**/bank-connections/aspsps', []);
   await mockJson(page, '**/bank-transactions/summary**', septemberSummary);
   await mockJson(page, '**/recurring-series/summary?**', {
-    expenseMonthlyTotal: '0.00',
+    expenseMonthlyTotal: '24.50',
     incomeMonthlyTotal: '0.00',
-    upcoming: [],
+    expenseThisMonth: {month: '2026-10', paid: '0.00', remaining: '24.50'},
+    incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
+    // A recurring payment shows its latest payment's logo, like that payment's transaction row.
+    upcoming: [
+      {
+        key: 'a'.repeat(32),
+        name: 'Example Market',
+        direction: 'EXPENSE',
+        nextExpectedDate: '2026-10-11',
+        typicalAmount: '24.50',
+        amountKind: 'FIXED',
+        currency: 'EUR',
+        category: 'FOOD_AND_DRINK',
+        merchantLogoUrl: LOGO,
+        flags: [],
+      },
+    ],
     expenseUnconvertedCount: 0,
     incomeUnconvertedCount: 0,
     baseCurrency: 'EUR',
@@ -183,6 +199,14 @@ async function expectRowTiles(tileOf: (row: BankTransaction) => Locator) {
   await expect(tileOf(ownTransfer)).toHaveClass(/text-muted-foreground/);
 }
 
+/** Every list of transactions uses one row height and one tile size; the row may add a 1px divider. */
+async function expectTransactionRowSize(row: Locator, tile: Locator) {
+  const [rowBox, tileBox] = await Promise.all([boxOf(row), boxOf(tile)]);
+  expect({width: tileBox.width, height: tileBox.height}).toEqual({width: 36, height: 36});
+  expect(rowBox.height).toBeGreaterThanOrEqual(60);
+  expect(rowBox.height).toBeLessThanOrEqual(61);
+}
+
 /** The tile sits before the title on the same row and does not push the amount off screen. */
 async function expectTileBeforeTitle(tile: Locator, title: Locator) {
   const [tileBox, titleBox] = await Promise.all([boxOf(tile), boxOf(title)]);
@@ -212,6 +236,9 @@ for (const width of [1440, 390]) {
         tableTile(withLogo),
         tableRow(withLogo).getByText('Example Market', {exact: true}),
       );
+      await expectTransactionRowSize(tableRow(withLogo), tableTile(withLogo));
+      // A row whose category has a second line keeps the same height.
+      await expectTransactionRowSize(tableRow(ownTransfer), tableTile(ownTransfer));
       if (width < 1024) {
         // Phones keep the small category icon in the meta line under the title.
         const meta = tableRow(withLogo).getByTestId('bank-transaction-mobile-meta');
@@ -243,6 +270,10 @@ for (const width of [1440, 390]) {
         connectionRow(withLogo).getByTestId('merchant-logo-tile'),
         connectionRow(withLogo).getByText('Example Market', {exact: true}),
       );
+      await expectTransactionRowSize(
+        connectionRow(withLogo),
+        connectionRow(withLogo).getByTestId('merchant-logo-tile'),
+      );
       await expectNoHorizontalOverflow(page);
 
       await page.goto('/?month=2026-09');
@@ -253,6 +284,19 @@ for (const width of [1440, 390]) {
       await expectTileBeforeTitle(
         recentRow(withLogo).getByTestId('merchant-logo-tile'),
         recentRow(withLogo).getByText('Example Market', {exact: true}),
+      );
+      await expectTransactionRowSize(
+        recentRow(withLogo).getByRole('link'),
+        recentRow(withLogo).getByTestId('merchant-logo-tile'),
+      );
+      const upcoming = page
+        .getByRole('region', {name: 'Recurring payments'})
+        .getByRole('listitem')
+        .filter({hasText: 'Example Market'});
+      await expectLogo(upcoming.getByTestId('merchant-logo-tile'));
+      await expectTransactionRowSize(
+        upcoming.getByRole('button'),
+        upcoming.getByTestId('merchant-logo-tile'),
       );
       await expectNoHorizontalOverflow(page);
 

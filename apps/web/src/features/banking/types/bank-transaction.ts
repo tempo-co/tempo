@@ -180,6 +180,9 @@ export const BANK_TRANSACTION_SEARCH_MAX_LENGTH = 1000;
 
 const toDate = (value: unknown) => (typeof value === 'string' ? new Date(value) : value);
 
+/** A recurring series' key: 32 lowercase hex characters. */
+export const recurringSeriesKeySchema = z.string().regex(/^[0-9a-f]{32}$/);
+
 export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.extend({
   bookingDate: z
     .object({
@@ -209,10 +212,7 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
   categoryStatuses: z.array(z.enum(BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES)).optional(),
   search: z.string().max(BANK_TRANSACTION_SEARCH_MAX_LENGTH).optional(),
   /** Only the payments of one recurring series, from the recurring payments list. */
-  recurringSeriesKey: z
-    .string()
-    .regex(/^[0-9a-f]{32}$/)
-    .optional(),
+  recurringSeriesKey: recurringSeriesKeySchema.optional(),
   transactionId: z.string().optional(),
   sort: z
     .object({

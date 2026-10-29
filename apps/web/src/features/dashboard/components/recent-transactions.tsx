@@ -1,15 +1,10 @@
 import {Link} from '@tanstack/react-router';
 
-import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {Skeleton} from '@/components/ui/skeleton';
 import {useGetBankTransactions} from '@/features/banking/api/use-get-bank-transactions';
-import {MerchantLogoTile} from '@/features/banking/components/merchant-logo-tile';
-import {
-  formatBankTransactionCompactDate,
-  resolveBankTransactionDisplayTitle,
-} from '@/features/banking/utils/formatters';
+import {TransactionListRow} from '@/features/banking/components/transaction-list-row';
 
 import {HOME_REFRESH_INTERVAL_MS} from '../api/refresh-interval';
 import {parseCalendarDate} from '../utils/drill-links';
@@ -57,27 +52,13 @@ export function RecentTransactions({
         <ul className='-mx-3 -mb-3 divide-y divide-border/60'>
           {data.transactions.map((transaction) => (
             <li key={transaction.id}>
-              <Link
-                to='/bank-transactions'
-                search={{bookingDate, transactionId: transaction.id}}
-                className='grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
-              >
-                <MerchantLogoTile transaction={transaction} />
-                <div className='min-w-0'>
-                  <p className='truncate text-sm'>
-                    {resolveBankTransactionDisplayTitle(transaction)}
-                  </p>
-                  <p className='truncate text-xs text-muted-foreground'>
-                    {formatBankTransactionCompactDate(transaction.bookingDate)}
-                  </p>
-                </div>
-                <span className='text-sm'>
-                  <CurrencyAmount
-                    amount={Number(transaction.amount)}
-                    currency={transaction.currency}
-                  />
-                </span>
-              </Link>
+              <TransactionListRow
+                transaction={transaction}
+                link={{
+                  to: '/bank-transactions',
+                  search: {bookingDate, transactionId: transaction.id},
+                }}
+              />
             </li>
           ))}
         </ul>

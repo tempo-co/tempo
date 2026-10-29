@@ -14,9 +14,13 @@ import {useLocalDate} from '@/hooks/use-local-date';
 export function RecurringDialog({
   open,
   onOpenChange,
+  selectedKey,
+  onSelect,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  selectedKey: string | null;
+  onSelect: (seriesKey: string | null) => void;
 }) {
   const asOf = useLocalDate();
   return (
@@ -34,8 +38,16 @@ export function RecurringDialog({
             Bills and income found in your history.
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
-        <ScrollArea type='always' className='min-h-0 flex-1'>
-          <div className='p-5 sm:p-6'>{open && <RecurringSeriesOverview asOf={asOf} />}</div>
+        {/* Radix wraps content in a display:table div that grows to its widest row; keep it at the sheet's width. */}
+        <ScrollArea
+          type='always'
+          className='min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block'
+        >
+          <div className='p-5 sm:p-6'>
+            {open && (
+              <RecurringSeriesOverview asOf={asOf} selectedKey={selectedKey} onSelect={onSelect} />
+            )}
+          </div>
         </ScrollArea>
       </ResponsiveDialogContent>
     </ResponsiveDialog>

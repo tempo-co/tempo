@@ -1300,7 +1300,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     await mockBalanceTrend(page);
     await mockCashFlow(page);
     await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
-    await mockJson(page, '**/recurring-series/summary?**', {expenseMonthlyTotal: '0.00', incomeMonthlyTotal: '0.00', upcoming: []});
+    await mockJson(page, '**/recurring-series/summary?**', {expenseMonthlyTotal: '0.00', incomeMonthlyTotal: '0.00', expenseThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'}, incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'}, upcoming: [], expenseUnconvertedCount: 0, incomeUnconvertedCount: 0, baseCurrency: 'EUR'});
     await mockJson(page, '**/bank-transactions/review-counts', {needsReview: 0, categorizationFailed: 0, categorizing: 0, unknownDirection: 0, missingBaseAmount: 0});
     await mockJson(page, '**/bank-transactions?**', {transactions: [], total: 0});
     let release!: () => void;

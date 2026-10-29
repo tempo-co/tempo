@@ -1,3 +1,5 @@
+import type {BankTransactionCategory} from './bank-transaction';
+
 export const RECURRING_CADENCES = [
   'WEEKLY',
   'FOUR_WEEKLY',
@@ -55,13 +57,24 @@ export type RecurringSeries = {
   /** Marked as not recurring by the owner; left out of totals. */
   hidden: boolean;
   continuation: RecurringContinuation | null;
+  /** The latest payment's category. */
+  category: BankTransactionCategory | null;
+  /** Path of the latest payment's merchant logo on the API; null without a trusted logo. */
+  merchantLogoUrl: string | null;
 };
+
+/**
+ * One direction's calendar month in the base currency: what its counted series paid so far, and
+ * their usual amount for each payment still expected before it ends, late ones included.
+ */
+export type RecurringThisMonth = {month: string; paid: string; remaining: string};
 
 export type RecurringSeriesList = {
   series: RecurringSeries[];
   monthlyTotal: string;
   unconvertedCount: number;
   baseCurrency: string | null;
+  thisMonth: RecurringThisMonth;
 };
 
 /** Bills and income, from one read. */
@@ -72,7 +85,16 @@ export type RecurringSeriesLists = {
 
 export type RecurringUpcomingPayment = Pick<
   RecurringSeries,
-  'key' | 'name' | 'direction' | 'nextExpectedDate' | 'typicalAmount' | 'amountKind' | 'currency'
+  | 'key'
+  | 'name'
+  | 'direction'
+  | 'nextExpectedDate'
+  | 'typicalAmount'
+  | 'amountKind'
+  | 'currency'
+  | 'category'
+  | 'merchantLogoUrl'
+  | 'flags'
 >;
 
 export type RecurringSummary = {
@@ -82,6 +104,9 @@ export type RecurringSummary = {
   expenseUnconvertedCount: number;
   incomeUnconvertedCount: number;
   baseCurrency: string | null;
+  /** The bills and income lists' `thisMonth`. */
+  expenseThisMonth: RecurringThisMonth;
+  incomeThisMonth: RecurringThisMonth;
 };
 
 export const RECURRING_CADENCE_LABELS: Record<RecurringCadence, string> = {

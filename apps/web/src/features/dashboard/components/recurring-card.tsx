@@ -4,18 +4,22 @@ import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {Skeleton} from '@/components/ui/skeleton';
 import {useGetRecurringSummary} from '@/features/banking/api/use-get-recurring-summary';
-import {formatBankTransactionCompactDate} from '@/features/banking/utils/formatters';
+import {SeriesTile} from '@/features/banking/components/recurring-series-tile';
+import type {RecurringSummary} from '@/features/banking/types/recurring-series';
+import {formatAmount, formatDue} from '@/features/banking/utils/recurring-format';
 import {useLocalDate} from '@/hooks/use-local-date';
+import {cn} from '@/utils/cn';
 
 import {formatMoney, toCents} from '../utils/money';
 
-/** Recurring bills and income a month, and what is due next; the full list is one tap away. */
+/** Bills and income a month and what is due next; the full list is one tap away. */
 export function RecurringCard() {
   const asOf = useLocalDate();
   const {summary, isPending, isError, refetch} = useGetRecurringSummary(asOf);
   const navigate = useNavigate({from: '/'});
+  const open = () => void navigate({search: (prev) => ({...prev, recurring: 'open'})});
 
-  if (isPending) return <Skeleton className='h-48' aria-label='Loading recurring payments' />;
+  if (isPending) return <Skeleton className='h-56' aria-label='Loading recurring payments' />;
 
   return (
     <Card className='grid gap-4 p-5 sm:p-6' role='region' aria-label='Recurring payments'>
@@ -24,7 +28,7 @@ export function RecurringCard() {
         <h2 className='text-card-title'>Recurring</h2>
         <button
           type='button'
-          onClick={() => void navigate({search: (prev) => ({...prev, recurring: 'open'})})}
+          onClick={open}
           className='-mr-3 inline-flex min-h-11 items-center px-3 text-xs text-primary underline-offset-4 hover:bg-accent/50 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
           aria-label='See all recurring payments'
         >
@@ -42,46 +46,84 @@ export function RecurringCard() {
         <p className='text-sm text-muted-foreground'>No recurring payments found yet.</p>
       ) : (
         <>
-          <div className='grid gap-1'>
-            <p className='text-sm text-muted-foreground'>
-              <span className='numeric text-xl font-semibold text-foreground'>
-                {formatMoney(summary.expenseMonthlyTotal, summary.baseCurrency)}
-              </span>{' '}
-              a month in bills
-              {summary.expenseUnconvertedCount > 0 &&
-                `, excluding ${summary.expenseUnconvertedCount} not converted yet`}
-            </p>
-            {toCents(summary.incomeMonthlyTotal) > 0 && (
-              <p className='text-sm text-muted-foreground'>
-                <span className='numeric font-medium text-foreground'>
-                  {formatMoney(summary.incomeMonthlyTotal, summary.baseCurrency)}
-                </span>{' '}
-                a month in income
-              </p>
-            )}
-          </div>
+          <ThisMonth summary={summary} />
           {summary.upcoming.length > 0 && (
-            <div className='grid gap-2'>
-              <h3 className='text-xs font-medium text-muted-foreground'>Next up</h3>
-              <ul className='grid gap-2'>
-                {summary.upcoming.map((payment) => (
-                  <li key={payment.key} className='flex items-baseline gap-3 text-sm'>
-                    <span className='w-14 shrink-0 text-muted-foreground'>
-                      {formatBankTransactionCompactDate(payment.nextExpectedDate)}
-                    </span>
-                    <span className='min-w-0 flex-1 truncate'>{payment.name}</span>
-                    <span className='shrink-0 numeric'>
-                      {payment.amountKind === 'VARIABLE' && '≈ '}
-                      {payment.direction === 'INCOME' && '+'}
-                      {formatMoney(payment.typicalAmount, payment.currency)}
-                    </span>
+            <ul className='-mx-3 -mb-3 divide-y divide-border/60'>
+              {summary.upcoming.map((payment) => {
+                const due = formatDue(payment.nextExpectedDate, asOf);
+                const late = payment.flags.includes('LATE');
+                return (
+                  <li key={payment.key}>
+                    <button
+                      type='button'
+                      onClick={open}
+                      className='flex w-full items-center gap-3 px-3 py-3 text-left text-sm hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
+                    >
+                      <SeriesTile series={payment} />
+                      <span className='min-w-0 flex-1'>
+                        <span className='block truncate'>{payment.name}</span>
+                        <span
+                          className={cn(
+                            'block text-xs text-muted-foreground',
+                            late && 'text-warning',
+                          )}
+                        >
+                          {late ? 'Not paid yet' : due}
+                        </span>
+                      </span>
+                      <span
+                        className={cn(
+                          'shrink-0 numeric',
+                          payment.direction === 'INCOME' && 'text-success',
+                        )}
+                      >
+                        {payment.direction === 'INCOME' && '+'}
+                        {formatAmount(payment)}
+                      </span>
+                    </button>
                   </li>
-                ))}
-              </ul>
-            </div>
+                );
+              })}
+            </ul>
           )}
         </>
       )}
     </Card>
+  );
+}
+
+/** Bills and income a month side by side; bills also say what is still due this month. */
+function ThisMonth({summary}: {summary: RecurringSummary}) {
+  const currency = summary.baseCurrency;
+  const month = summary.expenseThisMonth;
+  const hasIncome = toCents(summary.incomeMonthlyTotal) > 0;
+
+  return (
+    <dl className={cn('grid gap-x-6 gap-y-3', hasIncome && 'grid-cols-2')}>
+      <div className='min-w-0'>
+        <dt className='text-xs text-muted-foreground'>Monthly bills</dt>
+        <dd className='numeric text-xl font-semibold'>
+          {formatMoney(summary.expenseMonthlyTotal, currency)}
+        </dd>
+        {toCents(month.remaining) > 0 && (
+          <dd className='text-xs whitespace-nowrap text-muted-foreground'>
+            <span className='numeric'>{formatMoney(month.remaining, currency)}</span> due this month
+          </dd>
+        )}
+        {summary.expenseUnconvertedCount > 0 && (
+          <dd className='text-xs text-muted-foreground'>
+            {summary.expenseUnconvertedCount} not converted yet
+          </dd>
+        )}
+      </div>
+      {hasIncome && (
+        <div className='min-w-0 text-right'>
+          <dt className='text-xs text-muted-foreground'>Monthly income</dt>
+          <dd className='numeric text-xl font-semibold text-success'>
+            +{formatMoney(summary.incomeMonthlyTotal, currency)}
+          </dd>
+        </div>
+      )}
+    </dl>
   );
 }

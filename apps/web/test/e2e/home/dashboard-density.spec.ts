@@ -74,6 +74,8 @@ test.beforeEach(async ({page}) => {
   await mockJson(page, '**/recurring-series/summary?**', {
     expenseMonthlyTotal: '0.00',
     incomeMonthlyTotal: '0.00',
+    expenseThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
+    incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
     upcoming: [],
     expenseUnconvertedCount: 0,
     incomeUnconvertedCount: 0,

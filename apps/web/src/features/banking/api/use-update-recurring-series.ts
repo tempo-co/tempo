@@ -38,7 +38,12 @@ export const useUpdateRecurringSeries = () => {
       const {url, body} = request(change);
       await api.patch<void>(url, JSON.stringify(body));
     },
-    onSuccess: () => queryClient.invalidateQueries({queryKey: recurringQueryKeys.root}),
+    // Hiding changes what counts, not which payments a series has; linking changes both.
+    onSuccess: (_, change) =>
+      queryClient.invalidateQueries({
+        queryKey: recurringQueryKeys.root,
+        predicate: ({queryKey}) => change.kind === 'linked' || queryKey[1] !== 'payments',
+      }),
   });
 
   const save = async (change: Change, undoable: boolean) => {

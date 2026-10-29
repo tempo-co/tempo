@@ -60,8 +60,14 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
 
       return (
         <div className='w-full min-w-0'>
-          <div className='flex h-6 min-w-0 items-center gap-2'>
-            <BankTransactionCategoryIcon category={category} activity={Boolean(financialEvent)} />
+          {/* 20px lines keep a two-line category within the 36px merchant tile's row height. */}
+          <div className='flex h-5 min-w-0 items-center gap-2'>
+            <BankTransactionCategoryIcon
+              category={category}
+              activity={Boolean(financialEvent)}
+              className='h-5 w-5'
+              iconClassName='h-3 w-3'
+            />
             <p className='overflow-hidden text-ellipsis whitespace-nowrap'>
               {financialEvent || formatBankTransactionCategory(row.original.category)}
             </p>

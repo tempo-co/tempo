@@ -24,6 +24,9 @@ const summary: RecurringSummary = {
       typicalAmount: '30.00',
       amountKind: 'FIXED',
       currency: 'EUR',
+      category: 'SUBSCRIPTIONS',
+      merchantLogoUrl: null,
+      flags: [],
     },
     {
       key: 'b'.repeat(32),
@@ -33,6 +36,9 @@ const summary: RecurringSummary = {
       typicalAmount: '78.50',
       amountKind: 'VARIABLE',
       currency: 'EUR',
+      category: 'HOUSING_AND_UTILITIES',
+      merchantLogoUrl: null,
+      flags: [],
     },
     {
       key: 'e'.repeat(32),
@@ -42,8 +48,13 @@ const summary: RecurringSummary = {
       typicalAmount: '2500.00',
       amountKind: 'FIXED',
       currency: 'EUR',
+      category: 'INCOME',
+      merchantLogoUrl: null,
+      flags: [],
     },
   ],
+  expenseThisMonth: {month: '2026-10', paid: '21.49', remaining: '108.50'},
+  incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '2500.00'},
   expenseUnconvertedCount: 0,
   incomeUnconvertedCount: 0,
   baseCurrency: 'EUR',
@@ -66,15 +77,17 @@ for (const viewport of [
     });
     await page.goto('/');
 
-    await expect(card(page)).toContainText('€129.99 a month in bills');
-    await expect(card(page)).toContainText('€2,500.00 a month in income');
+    await expect(card(page)).toContainText('Monthly bills€129.99');
+    await expect(card(page)).toContainText('€108.50 due this month');
+    await expect(card(page)).toContainText('Monthly income+€2,500.00');
     const upcoming = card(page).getByRole('listitem');
     await expect(upcoming).toHaveCount(3);
     await expect(upcoming.nth(0)).toContainText('Example Gym');
-    await expect(upcoming.nth(0)).toContainText('3 Oct');
+    await expect(upcoming.nth(0)).toContainText('In 2 days');
     await expect(upcoming.nth(0)).toContainText('€30.00');
     await expect(upcoming.nth(0)).not.toContainText('≈');
     // A varying bill's next payment is an estimate.
+    await expect(upcoming.nth(1)).toContainText('8 Oct');
     await expect(upcoming.nth(1)).toContainText('≈ €78.50');
     await expect(upcoming.nth(2)).toContainText('+€2,500.00');
     expect(dates).toEqual(['2026-10-01']);
@@ -132,7 +145,8 @@ test('says how many bills the total leaves out until they are converted', async 
     fulfillJson(route, {...summary, expenseUnconvertedCount: 2, incomeUnconvertedCount: 1}),
   );
   await page.goto('/');
-  await expect(card(page)).toContainText('€129.99 a month in bills, excluding 2 not converted yet');
+  await expect(card(page)).toContainText('€129.99');
+  await expect(card(page)).toContainText('2 not converted yet');
 
   // Unconverted income is not counted against the bills.
   await page.unrouteAll();
@@ -140,6 +154,6 @@ test('says how many bills the total leaves out until they are converted', async 
     fulfillJson(route, {...summary, incomeUnconvertedCount: 1}),
   );
   await page.reload();
-  await expect(card(page)).toContainText('€129.99 a month in bills');
+  await expect(card(page)).toContainText('Monthly bills€129.99');
   await expect(card(page)).not.toContainText('not converted');
 });
