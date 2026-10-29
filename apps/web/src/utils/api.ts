@@ -129,6 +129,8 @@ const shouldRedirect = (resource: string, method?: string) => {
 };
 
 type RequestOptions = RequestInit & {parseJson?: boolean};
+/** Options for post/patch/delete, which take the JSON body as a value and serialize it. */
+type WriteOptions = Omit<RequestOptions, 'body'>;
 
 /** API request with parseJson disabled; returns a Response. */
 function request(resource: string, init?: RequestOptions & {parseJson: false}): Promise<Response>;
@@ -246,16 +248,18 @@ function get<T = unknown>(resource: string, init?: RequestOptions): Promise<T> {
   return request<T>(resource, {...init, method: 'GET'});
 }
 
-function post<T = unknown>(resource: string, body?: BodyInit, init?: RequestOptions): Promise<T> {
-  return request<T>(resource, {...init, method: 'POST', body});
+const json = (body: unknown) => (body === undefined ? undefined : JSON.stringify(body));
+
+function post<T = unknown>(resource: string, body?: unknown, init?: WriteOptions): Promise<T> {
+  return request<T>(resource, {...init, method: 'POST', body: json(body)});
 }
 
-function patch<T = unknown>(resource: string, body?: BodyInit, init?: RequestOptions): Promise<T> {
-  return request<T>(resource, {...init, method: 'PATCH', body});
+function patch<T = unknown>(resource: string, body?: unknown, init?: WriteOptions): Promise<T> {
+  return request<T>(resource, {...init, method: 'PATCH', body: json(body)});
 }
 
-function _delete<T = unknown>(resource: string, init?: RequestOptions | null): Promise<T> {
-  return request<T>(resource, {...init, method: 'DELETE'});
+function _delete<T = unknown>(resource: string, body?: unknown, init?: WriteOptions): Promise<T> {
+  return request<T>(resource, {...init, method: 'DELETE', body: json(body)});
 }
 
 export const api = {head, get, post, patch, delete: _delete};

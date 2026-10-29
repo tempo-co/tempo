@@ -26,10 +26,7 @@ export const useUpdateBankTransactionOwnTransfer = () => {
     UpdateBankTransactionOwnTransferInput
   >({
     mutationFn: async ({id, override}) => {
-      return await api.patch<BankTransaction>(
-        `/bank-transactions/${id}/own-transfer`,
-        JSON.stringify({override}),
-      );
+      return await api.patch<BankTransaction>(`/bank-transactions/${id}/own-transfer`, {override});
     },
     onSuccess: async (updatedTransaction, {id}) => {
       queryClient.setQueryData(bankQueryKeys.transaction(id), updatedTransaction);

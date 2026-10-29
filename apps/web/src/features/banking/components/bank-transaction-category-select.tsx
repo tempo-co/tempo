@@ -24,6 +24,7 @@ import {
   formatBankTransactionCategorySource,
   formatBankTransactionCategoryStatus,
   isBankTransactionCategory,
+  toBankTransactionCategory,
 } from '../utils/formatters';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 import {BankTransactionCategoryImpactDialog} from './bank-transaction-category-impact-dialog';
@@ -42,10 +43,7 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
   } | null>(null);
   const selectId = `transaction-${transaction.id}-category`;
   const statusId = `transaction-${transaction.id}-category-status`;
-  const selectedCategory =
-    transaction.category && isBankTransactionCategory(transaction.category)
-      ? transaction.category
-      : '';
+  const selectedCategory = toBankTransactionCategory(transaction.category) ?? '';
   const statusLabel = formatBankTransactionCategoryStatus(transaction.categoryStatus);
   const sourceLabel = formatBankTransactionCategorySource(transaction.categorySource);
 

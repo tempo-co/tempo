@@ -20,7 +20,7 @@ export const useVerifyEmail = () => {
     reset,
   } = useMutation<Account, HttpError, EmailVerifyDto>({
     mutationFn: async (dto: EmailVerifyDto) => {
-      return await api.post<Account>('/auth/signup/verify', JSON.stringify(dto));
+      return await api.post<Account>('/auth/signup/verify', dto);
     },
     onSuccess: async () => {
       router.update({context: {isAuthenticated: true, isEmailVerified: true}});

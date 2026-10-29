@@ -16,7 +16,7 @@ export const useStartBankConnection = () => {
     mutationFn: async (request) => {
       return await api.post<BankConnectionAuthorizationResponse>(
         '/bank-connections/authorize',
-        JSON.stringify(request),
+        request,
       );
     },
   });

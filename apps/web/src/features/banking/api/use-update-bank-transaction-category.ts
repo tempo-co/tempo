@@ -28,10 +28,10 @@ export const useUpdateBankTransactionCategory = () => {
     UpdateBankTransactionCategoryInput
   >({
     mutationFn: async ({id, category, applyToTransactionIds}) => {
-      return await api.patch<BankTransaction>(
-        `/bank-transactions/${id}/category`,
-        JSON.stringify({category, applyToTransactionIds}),
-      );
+      return await api.patch<BankTransaction>(`/bank-transactions/${id}/category`, {
+        category,
+        applyToTransactionIds,
+      });
     },
     onSuccess: async (updatedTransaction, {id}) => {
       queryClient.setQueryData(bankQueryKeys.transaction(id), updatedTransaction);

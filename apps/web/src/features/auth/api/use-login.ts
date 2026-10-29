@@ -12,7 +12,7 @@ export const useLogIn = (redirectTo?: string) => {
 
   const {mutate: logIn, isPending} = useMutation<Account, HttpError, LogInDto>({
     mutationFn: async (logInDto: LogInDto) => {
-      return await api.post<Account>('/auth/login', JSON.stringify(logInDto));
+      return await api.post<Account>('/auth/login', logInDto);
     },
     onSuccess: (account) => {
       signIn(account);

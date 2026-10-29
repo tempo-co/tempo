@@ -8,7 +8,6 @@ import {Button} from '@/components/ui/button';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
 import {PasswordInputField} from '@/components/ui/password-input-field';
-import {cn} from '@/utils/cn';
 
 import {useLogIn} from '../api/use-login';
 import {LogInDto, logInDtoSchema} from '../types/login.dto';
@@ -61,7 +60,7 @@ export function LogInForm({redirectTo}: LogInFormProps) {
           <FormField
             control={form.control}
             name='email'
-            render={({field, fieldState}) => (
+            render={({field}) => (
               <FormItem>
                 <FormLabel htmlFor='email'>Email</FormLabel>
                 <FormControl>
@@ -75,7 +74,6 @@ export function LogInForm({redirectTo}: LogInFormProps) {
                     autoComplete='email'
                     autoCorrect='off'
                     disabled={isPending}
-                    className={cn(fieldState.error && 'border-destructive')}
                     data-testid='login-email-input'
                   />
                 </FormControl>

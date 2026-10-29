@@ -21,6 +21,7 @@ import {
   BANK_TRANSACTION_UNCATEGORIZED,
   BankTransactionFilterParams,
 } from '../types/bank-transaction';
+import {formatBankTransactionCategory} from '../utils/formatters';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 import {BankTransactionFilterSection} from './bank-transaction-filter-section';
 import {FilterCheckIndicator, SelectedFilterSummary} from './bank-transaction-multi-select-filter';
@@ -43,10 +44,7 @@ export function BankTransactionCategoryFilter({
   } = useBankTransactionArrayFilter(filters, 'categories');
   const selectedItems = selectedValues.map((value) => ({
     key: value,
-    label:
-      value === BANK_TRANSACTION_UNCATEGORIZED
-        ? 'Not categorized'
-        : BANK_TRANSACTION_CATEGORY_LABELS[value],
+    label: formatBankTransactionCategory(value),
   }));
 
   const categoryCommand = (

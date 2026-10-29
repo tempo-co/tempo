@@ -1,7 +1,7 @@
 import {differenceInCalendarDays, format} from 'date-fns';
 
 import type {BankConnection} from '@/features/banking/types/bank-connection';
-import {getAutomaticSyncDetailsForConnection} from '@/features/banking/utils/bank-sync-status';
+import {getAutomaticSyncProblemForConnection} from '@/features/banking/utils/bank-sync-status';
 
 const CONSENT_WARNING_DAYS = 7;
 
@@ -23,7 +23,7 @@ export function formatNotSyncedSince(connection: BankConnection) {
 
 export function getHomeSyncStatus(connections: BankConnection[], now = new Date()): HomeSyncStatus {
   const problems = connections.filter(
-    (connection) => getAutomaticSyncDetailsForConnection(connection)?.isProblem,
+    (connection) => getAutomaticSyncProblemForConnection(connection) !== null,
   );
   const expiringConsents = connections.flatMap((connection) => {
     if (problems.includes(connection) || !connection.consentValidUntil) return [];

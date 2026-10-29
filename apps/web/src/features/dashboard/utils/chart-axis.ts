@@ -1,3 +1,5 @@
+import {getFormatter} from './money';
+
 /** Round steps from zero that cover every value, so gridlines read as a ruler. Takes cents. */
 export function axisTicks(minCents: number, maxCents: number) {
   const low = Math.min(minCents, 0) / 100;
@@ -15,7 +17,7 @@ export function axisTicks(minCents: number, maxCents: number) {
 
 /** "€4K" on the axis; a plain "4K" before the owner has a base currency. */
 export function axisFormatter(currency: string | null) {
-  return new Intl.NumberFormat(undefined, {
+  return getFormatter(`axis:${currency ?? ''}`, {
     notation: 'compact',
     maximumFractionDigits: 1,
     ...(currency ? {style: 'currency', currency, currencyDisplay: 'narrowSymbol'} : {}),

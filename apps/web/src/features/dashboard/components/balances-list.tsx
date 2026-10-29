@@ -5,7 +5,7 @@ import {Card} from '@/components/ui/card';
 import {useGetSupportedBanks} from '@/features/banking/api/use-get-supported-banks';
 import {BankLogo} from '@/features/banking/components/bank-logo';
 import type {BankConnection} from '@/features/banking/types/bank-connection';
-import {getAutomaticSyncDetailsForConnection} from '@/features/banking/utils/bank-sync-status';
+import {getAutomaticSyncProblemForConnection} from '@/features/banking/utils/bank-sync-status';
 import {resolveBankAccountLabel} from '@/features/banking/utils/formatters';
 import {cn} from '@/utils/cn';
 
@@ -55,7 +55,7 @@ export function BalancesList({
       </header>
       <ul className='-mx-3 divide-y divide-border/60'>
         {accounts.map(({account, connection}) => {
-          const stale = getAutomaticSyncDetailsForConnection(connection)?.isProblem;
+          const stale = getAutomaticSyncProblemForConnection(connection) !== null;
           return (
             <li key={account.id}>
               <Link

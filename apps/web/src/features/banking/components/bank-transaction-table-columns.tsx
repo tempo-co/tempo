@@ -9,8 +9,8 @@ import {
   formatBankTransactionCategory,
   formatBankTransactionCategorySubtitle,
   formatBankTransactionDate,
-  isBankTransactionCategory,
   resolveBankTransactionDisplayTitle,
+  toBankTransactionCategory,
 } from '../utils/formatters';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 import {BankTransactionSourceCell} from './bank-transaction-source-cell';
@@ -52,10 +52,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
     header: ({column}) => <SortButton column={column}>Category</SortButton>,
     cell: ({row}) => {
       const financialEvent = formatBankTransactionActivity(row.original);
-      const category =
-        !row.original.category || !isBankTransactionCategory(row.original.category)
-          ? null
-          : row.original.category;
+      const category = toBankTransactionCategory(row.original.category);
       const subtitle = formatBankTransactionCategorySubtitle(row.original);
 
       return (

@@ -2,7 +2,8 @@ import {formatCurrency} from '@/utils/format-currency';
 
 const formatters = new Map<string, Intl.NumberFormat>();
 
-function getFormatter(key: string, options: Intl.NumberFormatOptions) {
+/** One shared Intl.NumberFormat per key; building a formatter is far costlier than using one. */
+export function getFormatter(key: string, options: Intl.NumberFormatOptions) {
   let formatter = formatters.get(key);
   if (!formatter) {
     formatter = new Intl.NumberFormat(undefined, options);

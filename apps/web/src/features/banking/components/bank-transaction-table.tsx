@@ -22,6 +22,7 @@ import {PaginationParams} from '@/types/pagination';
 import {cn} from '@/utils/cn';
 
 import {
+  BANK_TRANSACTION_FILTER_KEYS,
   BANK_TRANSACTION_SEARCH_MAX_LENGTH,
   BankTransaction,
   BankTransactionFilterParams,
@@ -30,13 +31,13 @@ import {
   BankTransactionSortParams,
   DEFAULT_BANK_TRANSACTION_SORT,
 } from '../types/bank-transaction';
-import {hasDrillFilters} from '../utils/drill-filters';
+import {countActiveFilters} from '../utils/drill-filters';
 import {
   formatBankTransactionActivity,
   formatBankTransactionCategory,
   formatBankTransactionCompactDate,
-  isBankTransactionCategory,
   resolveBankTransactionDisplayTitle,
+  toBankTransactionCategory,
 } from '../utils/formatters';
 import {BankTransactionAccountFilter} from './bank-transaction-account-filter';
 import {BankTransactionBaseAmountFilter} from './bank-transaction-base-amount-filter';
@@ -77,13 +78,7 @@ export function BankTransactionTable({
 }: BankTransactionTableProps) {
   const navigate = useNavigate({from: '/bank-transactions/'});
   const [searchInput, setSearchInput] = useState(filters.search || '');
-  const isFilteringApplied =
-    !!filters.bookingDate ||
-    (filters.bankAccountIds?.length ?? 0) > 0 ||
-    (filters.categories?.length ?? 0) > 0 ||
-    (filters.categorySources?.length ?? 0) > 0 ||
-    hasDrillFilters(filters) ||
-    !!filters.search?.trim();
+  const isFilteringApplied = countActiveFilters(filters) > 0 || !!filters.search?.trim();
 
   useEffect(() => {
     setSearchInput(filters.search || '');
@@ -142,15 +137,7 @@ export function BankTransactionTable({
     void navigate({
       search: (prev) => ({
         ...prev,
-        bookingDate: undefined,
-        bankAccountIds: undefined,
-        categories: undefined,
-        categorySources: undefined,
-        cashFlows: undefined,
-        baseAmount: undefined,
-        categoryStatuses: undefined,
-        recurringSeriesKey: undefined,
-        search: undefined,
+        ...Object.fromEntries(BANK_TRANSACTION_FILTER_KEYS.map((key) => [key, undefined])),
         pageIndex: 0,
       }),
     });
@@ -315,10 +302,7 @@ export function BankTransactionTable({
               table.getRowModel().rows.map((row) => {
                 const transactionLabel = resolveBankTransactionDisplayTitle(row.original);
                 const financialEvent = formatBankTransactionActivity(row.original);
-                const category =
-                  !row.original.category || !isBankTransactionCategory(row.original.category)
-                    ? null
-                    : row.original.category;
+                const category = toBankTransactionCategory(row.original.category);
 
                 return (
                   <TableRow

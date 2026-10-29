@@ -1,7 +1,7 @@
 import {useMutation, useMutationState, useQueryClient} from '@tanstack/react-query';
 import {toast} from 'sonner';
 
-import {HttpError, SessionChangedError, api, isAuthError} from '@/utils/api';
+import {HttpError, NetworkError, SessionChangedError, api, isAuthError} from '@/utils/api';
 
 import type {BankSyncRun} from '../types/bank-sync-run';
 import {getBankRefreshToast} from '../utils/bank-refresh-feedback';
@@ -45,7 +45,8 @@ export function useRefreshBankConnection() {
     onError: (error, {signal}) => {
       if (signal?.aborted) return;
       if (isAuthError(error) || error instanceof SessionChangedError) return;
-      if (error instanceof HttpError && (error.status === 0 || error.status === 429)) return;
+      if (error instanceof NetworkError || (error instanceof HttpError && error.status === 429))
+        return;
       toast.error('Bank refresh failed', {description: error.message});
     },
     onSettled: (_result, _error, {signal}) =>

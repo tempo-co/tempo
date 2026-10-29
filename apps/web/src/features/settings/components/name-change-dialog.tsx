@@ -1,8 +1,8 @@
 import {zodResolver} from '@hookform/resolvers/zod';
-import {Loader} from 'lucide-react';
 import {useState} from 'react';
 import {useForm} from 'react-hook-form';
 
+import {PendingLabel} from '@/components/shared/pending-label';
 import {Button} from '@/components/ui/button';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
@@ -17,7 +17,6 @@ import {
   ResponsiveDialogTrigger,
 } from '@/components/ui/responsive-dialog';
 import {Account} from '@/types/account';
-import {cn} from '@/utils/cn';
 
 import {usePatchAccount} from '../api/use-patch-account';
 import {NameChangeDto, nameChangeDtoSchema} from '../types/name-change.dto';
@@ -79,7 +78,7 @@ export function NameChangeDialog({currentName}: NameChangeDialogProps) {
               <FormField
                 control={form.control}
                 name='name'
-                render={({field, fieldState}) => (
+                render={({field}) => (
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
@@ -89,7 +88,6 @@ export function NameChangeDialog({currentName}: NameChangeDialogProps) {
                         type='text'
                         autoComplete='name'
                         disabled={isPending}
-                        className={cn(fieldState.error && 'border-destructive')}
                         data-testid='name-input'
                       />
                     </FormControl>
@@ -105,14 +103,7 @@ export function NameChangeDialog({currentName}: NameChangeDialogProps) {
                 className='md:order-2'
                 data-testid='save-name-button'
               >
-                {isPending ? (
-                  <>
-                    <span>Saving…</span>
-                    <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
-                  </>
-                ) : (
-                  'Save'
-                )}
+                {isPending ? <PendingLabel>Saving…</PendingLabel> : 'Save'}
               </Button>
               <ResponsiveDialogClose asChild>
                 <Button variant='outline' type='button' className='md:order-1'>

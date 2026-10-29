@@ -1,65 +1,21 @@
-import {Check, Copy} from 'lucide-react';
-import {useEffect, useRef, useState} from 'react';
-
-import {Button} from '@/components/ui/button';
-import {Label} from '@/components/ui/label';
-
 import {SettingsGroup} from '../settings-group';
+import {CopyField} from './copy-field';
 
 export function McpConnectionSettings() {
   const serverUrl = new URL(
     `${import.meta.env.VITE_API_URL.replace(/\/+$/, '')}/mcp`,
     window.location.origin,
   ).href;
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState(false);
-  const copiedTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(copiedTimer.current), []);
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(serverUrl);
-      setCopied(true);
-      setCopyError(false);
-      clearTimeout(copiedTimer.current);
-      copiedTimer.current = setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopyError(true);
-    }
-  };
 
   return (
     <SettingsGroup id='mcp-connection-heading' title='Connect an MCP client'>
-      <div className='space-y-2'>
-        <Label htmlFor='mcp-server-url'>Server URL</Label>
-        <div className='flex h-11 border bg-background max-sm:h-12'>
-          <input
-            id='mcp-server-url'
-            readOnly
-            value={serverUrl}
-            spellCheck={false}
-            onFocus={(event) => event.currentTarget.select()}
-            className='min-w-0 flex-1 bg-transparent px-3 font-mono text-sm text-ellipsis text-foreground outline-none selection:bg-primary selection:text-primary-foreground'
-          />
-          <Button
-            variant='ghost'
-            onClick={() => void copy()}
-            className='h-full shrink-0 border-l px-3'
-          >
-            {copied ? (
-              <Check className='size-4 text-success' aria-hidden='true' />
-            ) : (
-              <Copy className='size-4' aria-hidden='true' />
-            )}
-            {copied ? 'Copied' : 'Copy URL'}
-          </Button>
-        </div>
-        {copyError && (
-          <p role='alert' className='text-sm text-destructive'>
-            Could not copy the URL. Select it and copy it manually.
-          </p>
-        )}
-      </div>
+      <CopyField
+        id='mcp-server-url'
+        label='Server URL'
+        value={serverUrl}
+        copyLabel='Copy URL'
+        errorMessage='Could not copy the URL. Select it and copy it manually.'
+      />
       <ol
         aria-label='Connection steps'
         className='mt-4 list-decimal space-y-2 pl-5 text-sm text-muted-foreground'

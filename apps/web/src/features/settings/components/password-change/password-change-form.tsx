@@ -1,7 +1,7 @@
 import {zodResolver} from '@hookform/resolvers/zod';
-import {Loader} from 'lucide-react';
 import {useForm} from 'react-hook-form';
 
+import {PendingLabel} from '@/components/shared/pending-label';
 import {Button} from '@/components/ui/button';
 import {Form, FormField} from '@/components/ui/form';
 import {PasswordInputField} from '@/components/ui/password-input-field';
@@ -77,14 +77,7 @@ export function PasswordChangeForm({setIsOpen}: PasswordChangeFormProps) {
             className='order-1 md:order-2'
             data-testid='change-password-confirm'
           >
-            {isPending ? (
-              <>
-                <span>Changing password...</span>
-                <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
-              </>
-            ) : (
-              'Change password'
-            )}
+            {isPending ? <PendingLabel>Changing password...</PendingLabel> : 'Change password'}
           </Button>
           <ResponsiveDialogClose asChild className='order-2 md:order-1'>
             <Button variant='outline' type='button'>

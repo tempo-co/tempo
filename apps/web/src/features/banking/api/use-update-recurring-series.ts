@@ -36,7 +36,7 @@ export const useUpdateRecurringSeries = () => {
   const {mutateAsync, isPending} = useMutation<void, HttpError, Change>({
     mutationFn: async (change) => {
       const {url, body} = request(change);
-      await api.patch<void>(url, JSON.stringify(body));
+      await api.patch<void>(url, body);
     },
     // Hiding changes what counts, not which payments a series has; linking changes both.
     onSuccess: (_, change) =>

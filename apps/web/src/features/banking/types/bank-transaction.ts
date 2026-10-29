@@ -237,17 +237,22 @@ export const bankTransactionRouteSearchSchema = z.preprocess((search) => {
   return cashFlows.length > 0 ? {...rest, cashFlows} : rest;
 }, bankTransactionSearchParamsSchema) as unknown as typeof bankTransactionSearchParamsSchema;
 
+/** The search params that filter the transaction list; `search` is the free-text query. */
+export const BANK_TRANSACTION_FILTER_KEYS = [
+  'bookingDate',
+  'bankAccountIds',
+  'categories',
+  'categorySources',
+  'cashFlows',
+  'baseAmount',
+  'categoryStatuses',
+  'recurringSeriesKey',
+  'search',
+] as const satisfies readonly (keyof BankTransactionSearchParams)[];
+
 export type BankTransactionFilterParams = Pick<
   BankTransactionSearchParams,
-  | 'bookingDate'
-  | 'bankAccountIds'
-  | 'categories'
-  | 'categorySources'
-  | 'cashFlows'
-  | 'baseAmount'
-  | 'categoryStatuses'
-  | 'recurringSeriesKey'
-  | 'search'
+  (typeof BANK_TRANSACTION_FILTER_KEYS)[number]
 >;
 
 export type BankTransactionSortParams = BankTransactionSearchParams['sort'];

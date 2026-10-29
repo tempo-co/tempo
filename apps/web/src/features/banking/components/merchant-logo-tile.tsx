@@ -3,7 +3,7 @@ import {useState} from 'react';
 import {cn} from '@/utils/cn';
 
 import {BankTransaction} from '../types/bank-transaction';
-import {isBankTransactionCategory} from '../utils/formatters';
+import {toBankTransactionCategory} from '../utils/formatters';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 
 type MerchantLogoTileProps = {
@@ -29,7 +29,7 @@ export function MerchantLogoTile({transaction, className}: MerchantLogoTileProps
     const {category} = transaction;
     return (
       <BankTransactionCategoryIcon
-        category={category && isBankTransactionCategory(category) ? category : null}
+        category={toBankTransactionCategory(category)}
         activity={transaction.cashFlowTreatment === 'INTERNAL'}
         data-testid='merchant-logo-tile'
         className={cn(TILE_CLASS_NAME, className)}

@@ -1,8 +1,8 @@
 import {zodResolver} from '@hookform/resolvers/zod';
-import {Loader} from 'lucide-react';
 import {useState} from 'react';
 import {useForm} from 'react-hook-form';
 
+import {PendingLabel} from '@/components/shared/pending-label';
 import {Button} from '@/components/ui/button';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
@@ -18,7 +18,6 @@ import {
   ResponsiveDialogTrigger,
 } from '@/components/ui/responsive-dialog';
 import {Account} from '@/types/account';
-import {cn} from '@/utils/cn';
 
 import {useChangeEmailRequest} from '../../api/use-change-email-request';
 import {EmailChangeDto, emailChangeDtoSchema} from '../../types/email-change.dto';
@@ -139,7 +138,7 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
                   <FormField
                     control={form.control}
                     name='newEmail'
-                    render={({field, fieldState}) => (
+                    render={({field}) => (
                       <FormItem>
                         <FormLabel>New email</FormLabel>
                         <FormControl>
@@ -152,7 +151,6 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
                             autoCorrect='off'
                             spellCheck={false}
                             disabled={isPending}
-                            className={cn(fieldState.error && 'border-destructive')}
                             data-testid='new-email-input'
                           />
                         </FormControl>
@@ -168,14 +166,7 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
                     className='md:order-2'
                     data-testid='send-verification-link-button'
                   >
-                    {isPending ? (
-                      <>
-                        <span>Sending…</span>
-                        <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
-                      </>
-                    ) : (
-                      'Send verification link'
-                    )}
+                    {isPending ? <PendingLabel>Sending…</PendingLabel> : 'Send verification link'}
                   </Button>
                   <ResponsiveDialogClose asChild>
                     <Button

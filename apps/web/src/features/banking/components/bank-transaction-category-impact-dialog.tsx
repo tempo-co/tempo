@@ -1,7 +1,7 @@
-import {Loader} from 'lucide-react';
 import {useState} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
+import {PendingLabel} from '@/components/shared/pending-label';
 import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
 import {
@@ -126,10 +126,7 @@ export function BankTransactionCategoryImpactDialog({
             }
           >
             {isPending ? (
-              <>
-                <span>Saving…</span>
-                <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
-              </>
+              <PendingLabel>Saving…</PendingLabel>
             ) : (
               `Update selected (${selectedIds.size})`
             )}

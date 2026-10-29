@@ -1,9 +1,10 @@
-import {AlertTriangle, Building2, ChevronDown, Loader, RefreshCw, Trash2} from 'lucide-react';
+import {AlertTriangle, Building2, ChevronDown, RefreshCw, Trash2} from 'lucide-react';
 import {useMemo, useState} from 'react';
 import {toast} from 'sonner';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {EmptyState} from '@/components/shared/layout/app-empty-state';
+import {PendingLabel} from '@/components/shared/pending-label';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardHeader} from '@/components/ui/card';
@@ -34,8 +35,8 @@ import {
   BankConnectionTransaction,
 } from '../types/bank-connection';
 import {
-  type AutomaticSyncDetails,
-  getAutomaticSyncDetailsForConnection,
+  type AutomaticSyncProblem,
+  getAutomaticSyncProblemForConnection,
   isReauthorizationRequired,
   isSyncInProgress,
 } from '../utils/bank-sync-status';
@@ -254,7 +255,7 @@ function BankConnectionCard({
   // Sync status is only a card when it needs attention; that warning must stay
   // discoverable even while the card is collapsed, so it renders as a strip
   // between the header and footer.
-  const syncDetails = getAutomaticSyncDetailsForConnection(connection);
+  const syncProblem = getAutomaticSyncProblemForConnection(connection);
 
   const removeBank = async (): Promise<boolean> => {
     try {
@@ -272,10 +273,13 @@ function BankConnectionCard({
     }
   };
 
-  const headerMeta = [
-    formatCountry(connection.aspspCountry),
-    <ConnectionStatus key='status' status={connection.status} />,
-  ].filter(Boolean) as React.ReactNode[];
+  const headerContent = (
+    <ConnectionCardHeaderContent
+      connection={connection}
+      logoUrl={logoUrl}
+      connectionHeadingId={connectionHeadingId}
+    />
+  );
 
   return (
     <Card
@@ -304,12 +308,7 @@ function BankConnectionCard({
               needsReauth && 'sm:w-[calc(100%-8.5rem)] sm:shrink',
             )}
           >
-            <ConnectionCardHeaderContent
-              connection={connection}
-              logoUrl={logoUrl}
-              connectionHeadingId={connectionHeadingId}
-              headerMeta={headerMeta}
-            />
+            {headerContent}
             <ChevronDown
               aria-hidden='true'
               className={cn(
@@ -320,14 +319,7 @@ function BankConnectionCard({
             />
           </button>
         ) : (
-          <div className='flex min-w-0 flex-1 items-center gap-3'>
-            <ConnectionCardHeaderContent
-              connection={connection}
-              logoUrl={logoUrl}
-              connectionHeadingId={connectionHeadingId}
-              headerMeta={headerMeta}
-            />
-          </div>
+          <div className='flex min-w-0 flex-1 items-center gap-3'>{headerContent}</div>
         )}
         {needsReauth && (
           <Button
@@ -341,7 +333,7 @@ function BankConnectionCard({
           </Button>
         )}
       </CardHeader>
-      {!isExpanded && <AutomaticSyncStatus details={syncDetails} />}
+      {!isExpanded && <AutomaticSyncStatus problem={syncProblem} />}
       {isExpanded && (
         <CardContent
           id={disclosureContentId}
@@ -350,7 +342,7 @@ function BankConnectionCard({
           }
           className='space-y-6 px-4 pt-4 pb-5'
         >
-          <AutomaticSyncStatus details={syncDetails} />
+          <AutomaticSyncStatus problem={syncProblem} />
           <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
             <section aria-labelledby={accountsHeadingId} className='min-w-0'>
               <SectionHeading
@@ -480,13 +472,12 @@ function ConnectionCardHeaderContent({
   connection,
   logoUrl,
   connectionHeadingId,
-  headerMeta,
 }: {
   connection: BankConnection;
   logoUrl?: string;
   connectionHeadingId: string;
-  headerMeta: React.ReactNode[];
 }) {
+  const country = formatCountry(connection.aspspCountry);
   return (
     <>
       <BankLogo
@@ -506,11 +497,10 @@ function ConnectionCardHeaderContent({
           />
         </div>
         <p className='mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground'>
-          {headerMeta.map((item, index) => (
-            <span key={index} className='inline-flex min-w-0 shrink-0 items-center'>
-              {item}
-            </span>
-          ))}
+          {country && <span className='inline-flex min-w-0 shrink-0 items-center'>{country}</span>}
+          <span className='inline-flex min-w-0 shrink-0 items-center'>
+            <ConnectionStatus status={connection.status} />
+          </span>
         </p>
       </span>
     </>
@@ -546,12 +536,10 @@ const SYNC_IN_PROGRESS_REMOVAL =
 function RemoveConnectionButton({
   connectionId,
   isPending,
-  disabled = false,
   onClick,
 }: {
   connectionId: string;
   isPending: boolean;
-  disabled?: boolean;
   onClick?: () => void;
 }) {
   return (
@@ -559,7 +547,7 @@ function RemoveConnectionButton({
       variant='ghost'
       size='icon'
       onClick={onClick}
-      disabled={isPending || disabled}
+      disabled={isPending}
       aria-label='Remove connection'
       data-testid={`remove-bank-${connectionId}`}
       className='h-11 w-11 text-muted-foreground'
@@ -681,14 +669,7 @@ function DestructiveBankConnectionFooterButton({
                 className='order-1 md:order-2'
                 data-testid={`remove-bank-confirm-${connection.id}`}
               >
-                {isPending ? (
-                  <>
-                    <span>Removing...</span>
-                    <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
-                  </>
-                ) : (
-                  'Remove permanently'
-                )}
+                {isPending ? <PendingLabel>Removing...</PendingLabel> : 'Remove permanently'}
               </Button>
               <ResponsiveDialogClose asChild className='order-2 md:order-1'>
                 <Button variant='outline' type='button'>
@@ -746,19 +727,17 @@ function FreshnessLabel({value}: {value: string}) {
   );
 }
 
-function AutomaticSyncStatus({details}: {details: AutomaticSyncDetails | null}) {
-  if (!details?.isProblem) return null;
+function AutomaticSyncStatus({problem}: {problem: AutomaticSyncProblem | null}) {
+  if (!problem) return null;
 
-  // Background sync is automatic and silent by design: only surface it when it
-  // actually needs attention (rate-limited, overdue, failed, expired consent).
   return (
     <div
       data-testid='bank-connection-sync-status'
       role='alert'
       className='rounded-md border border-warning/40 bg-warning/5 px-3 py-3 text-sm'
     >
-      <p className='font-medium'>{details.title}</p>
-      <p className='mt-1 text-muted-foreground'>{details.description}</p>
+      <p className='font-medium'>{problem.title}</p>
+      <p className='mt-1 text-muted-foreground'>{problem.description}</p>
     </div>
   );
 }

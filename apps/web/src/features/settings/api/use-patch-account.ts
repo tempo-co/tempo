@@ -12,7 +12,7 @@ export const usePatchAccount = () => {
 
   const {mutateAsync, isPending} = useMutation<Account, HttpError, NameChangeDto>({
     mutationFn: async (dto) => {
-      return await api.patch<Account>('/accounts/me', JSON.stringify(dto));
+      return await api.patch<Account>('/accounts/me', dto);
     },
     onSuccess: (updatedAccount) => {
       queryClient.setQueryData(CURRENT_ACCOUNT_KEY, updatedAccount);

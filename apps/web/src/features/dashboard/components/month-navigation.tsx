@@ -3,17 +3,12 @@ import {ChevronLeft, ChevronRight} from 'lucide-react';
 
 import {Button} from '@/components/ui/button';
 
-import {currentMonth, formatMonth, shiftMonth} from '../utils/month';
+import {formatMonth, monthSearch, shiftMonth} from '../utils/month';
 
 type MonthNavigationProps = {
   month: string;
   isCurrentMonth: boolean;
 };
-
-/** The current month has no `month` param, so `/` always opens it. */
-function monthSearch(month: string) {
-  return month === currentMonth() ? {} : {month};
-}
 
 const arrowClassName = 'h-11 w-11 shrink-0 motion-safe:active:scale-[0.97]';
 

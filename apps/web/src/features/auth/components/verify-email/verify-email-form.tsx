@@ -1,8 +1,8 @@
 import {zodResolver} from '@hookform/resolvers/zod';
 import {REGEXP_ONLY_DIGITS} from 'input-otp';
-import {Loader} from 'lucide-react';
 import {useForm} from 'react-hook-form';
 
+import {PendingLabel} from '@/components/shared/pending-label';
 import {Button} from '@/components/ui/button';
 import {Form, FormControl, FormField, FormItem, FormMessage} from '@/components/ui/form';
 import {InputOTP, InputOTPGroup, InputOTPSlot} from '@/components/ui/input-otp';
@@ -75,14 +75,7 @@ export function VerifyEmailForm() {
           className='mt-1 w-full'
           data-testid='verify-button'
         >
-          {isVerifying ? (
-            <>
-              <span>Verifying...</span>
-              <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
-            </>
-          ) : (
-            <span>Verify email</span>
-          )}
+          {isVerifying ? <PendingLabel>Verifying...</PendingLabel> : <span>Verify email</span>}
         </Button>
       </form>
     </Form>

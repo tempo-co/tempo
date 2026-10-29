@@ -12,7 +12,7 @@ export const usePasswordResetRequest = () => {
     reset,
   } = useMutation<void, HttpError, PasswordResetRequestDto>({
     mutationFn: async (dto: PasswordResetRequestDto) => {
-      return await api.post<void>('/auth/reset-password/request', JSON.stringify(dto));
+      return await api.post<void>('/auth/reset-password/request', dto);
     },
   });
 

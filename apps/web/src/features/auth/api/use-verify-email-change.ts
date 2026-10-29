@@ -14,7 +14,7 @@ export const useVerifyEmailChange = () => {
 
   const {mutate: verifyEmailChange, isPending} = useMutation<void, HttpError, TokenSearchParams>({
     mutationFn: async (dto: TokenSearchParams) => {
-      await api.post('/auth/change-email/verify', JSON.stringify(dto));
+      await api.post('/auth/change-email/verify', dto);
     },
     onMutate: () => {
       toast.loading('Confirming your new email…', {id: TOAST_ID});

@@ -6,7 +6,6 @@ import {Button} from '@/components/ui/button';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
 import {PasswordInputField} from '@/components/ui/password-input-field';
-import {cn} from '@/utils/cn';
 
 import {useSignUp} from '../api/use-signup';
 import {SignUpDto, signUpDtoSchema} from '../types/signup.dto';
@@ -36,7 +35,7 @@ export function SignUpForm() {
           <FormField
             control={form.control}
             name='email'
-            render={({field, fieldState}) => (
+            render={({field}) => (
               <FormItem>
                 <FormLabel htmlFor='email'>Email</FormLabel>
                 <FormControl>
@@ -51,7 +50,6 @@ export function SignUpForm() {
                     autoComplete='email'
                     autoCorrect='off'
                     disabled={isPending}
-                    className={cn(fieldState.error && 'border-destructive')}
                   />
                 </FormControl>
                 <FormMessage />
@@ -61,7 +59,7 @@ export function SignUpForm() {
           <FormField
             control={form.control}
             name='name'
-            render={({field, fieldState}) => (
+            render={({field}) => (
               <FormItem>
                 <FormLabel htmlFor='name'>Name</FormLabel>
                 <FormControl>
@@ -75,7 +73,6 @@ export function SignUpForm() {
                     autoComplete='name'
                     autoCorrect='off'
                     disabled={isPending}
-                    className={cn(fieldState.error && 'border-destructive')}
                   />
                 </FormControl>
                 <FormMessage />

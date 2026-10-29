@@ -7,7 +7,6 @@ import {useForm} from 'react-hook-form';
 import {Button} from '@/components/ui/button';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
-import {cn} from '@/utils/cn';
 
 import {usePasswordResetRequest} from '../../api/use-password-reset-request';
 import {switchContentVariants} from '../../constants/animations';
@@ -129,7 +128,7 @@ export function ResetPasswordRequest() {
                   <FormField
                     control={form.control}
                     name='email'
-                    render={({field, fieldState}) => (
+                    render={({field}) => (
                       <FormItem>
                         <FormLabel htmlFor='email'>Email</FormLabel>
                         <FormControl>
@@ -143,7 +142,6 @@ export function ResetPasswordRequest() {
                             autoComplete='email'
                             autoCorrect='off'
                             disabled={isPending}
-                            className={cn(fieldState.error && 'border-destructive')}
                             data-testid='email-input'
                           />
                         </FormControl>

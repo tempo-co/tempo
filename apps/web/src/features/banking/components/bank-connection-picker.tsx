@@ -1,6 +1,7 @@
 import {Check, ChevronsUpDown, Loader, Plus} from 'lucide-react';
 import {type ReactNode, type WheelEvent as ReactWheelEvent, useMemo, useState} from 'react';
 
+import {PendingLabel} from '@/components/shared/pending-label';
 import {Button} from '@/components/ui/button';
 import {
   Command,
@@ -189,10 +190,7 @@ export function BankConnectionPicker({
                 className='min-h-11 w-full'
               >
                 {isStarting ? (
-                  <>
-                    <span>Taking you to {selectedBank?.name ?? 'your bank'}...</span>
-                    <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
-                  </>
+                  <PendingLabel>Taking you to {selectedBank?.name ?? 'your bank'}...</PendingLabel>
                 ) : selectedBank ? (
                   `Continue with ${selectedBank.name}`
                 ) : (

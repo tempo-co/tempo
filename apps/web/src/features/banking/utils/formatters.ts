@@ -13,6 +13,7 @@ import {
   BankTransactionFinancialEventType,
   OwnTransferEvidence,
 } from '../types/bank-transaction';
+import {formatBankAccountLabel} from './bank-account-label';
 
 export function formatBankTransactionDate(value: string | null) {
   return formatBankTransactionDateValue(value, 'MMM d, yyyy');
@@ -111,7 +112,7 @@ export function formatCounterpartAccount(counterpart: {
   bankAccountAlias: string | null;
   currency: string;
 }) {
-  return counterpart.bankAccountAlias || `${counterpart.bankName} · ${counterpart.currency}`;
+  return counterpart.bankAccountAlias || formatBankAccountLabel(counterpart);
 }
 
 export function formatBankingWords(value: string) {
@@ -127,10 +128,14 @@ export function isBankTransactionCategory(value: string): value is BankTransacti
   return (BANK_TRANSACTION_CATEGORIES as readonly string[]).includes(value);
 }
 
+/** The category when it is one the app knows, otherwise null. */
+export function toBankTransactionCategory(value: string | null | undefined) {
+  return value && isBankTransactionCategory(value) ? value : null;
+}
+
 export function formatBankTransactionCategory(value: string | null | undefined) {
-  return value && isBankTransactionCategory(value)
-    ? BANK_TRANSACTION_CATEGORY_LABELS[value]
-    : 'Not categorized';
+  const category = toBankTransactionCategory(value);
+  return category ? BANK_TRANSACTION_CATEGORY_LABELS[category] : 'Not categorized';
 }
 
 export function formatBankTransactionCategoryStatus(

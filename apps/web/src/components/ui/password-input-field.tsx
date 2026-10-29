@@ -46,11 +46,7 @@ export function PasswordInputField<T extends FieldValues, K extends FieldPath<T>
             autoComplete={autoComplete}
             autoCorrect='off'
             disabled={disabled}
-            className={cn(
-              'z-10',
-              field.value && 'rounded-r-none border-r-0',
-              fieldState.error && 'border-destructive',
-            )}
+            className={cn('z-10', field.value && 'rounded-r-none border-r-0')}
           />
         </FormControl>
         {field.value && (

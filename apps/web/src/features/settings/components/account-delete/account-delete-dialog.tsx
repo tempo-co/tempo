@@ -1,8 +1,8 @@
 import {zodResolver} from '@hookform/resolvers/zod';
-import {Loader} from 'lucide-react';
 import {isValidElement, useState} from 'react';
 import {useForm} from 'react-hook-form';
 
+import {PendingLabel} from '@/components/shared/pending-label';
 import {Button} from '@/components/ui/button';
 import {Form, FormField} from '@/components/ui/form';
 import {PasswordInputField} from '@/components/ui/password-input-field';
@@ -93,14 +93,7 @@ export function AccountDeleteDialog({children}: AccountDeleteDialogProps) {
                   className='order-1 md:order-2'
                   data-testid='delete-account-confirm'
                 >
-                  {isPending ? (
-                    <>
-                      <span>Deleting account...</span>
-                      <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
-                    </>
-                  ) : (
-                    'Delete account'
-                  )}
+                  {isPending ? <PendingLabel>Deleting account...</PendingLabel> : 'Delete account'}
                 </Button>
                 <ResponsiveDialogClose asChild className='order-2 md:order-1'>
                   <Button variant='outline' type='button'>

@@ -1,6 +1,6 @@
-import {Loader} from 'lucide-react';
 import {ReactNode, useState} from 'react';
 
+import {PendingLabel} from '@/components/shared/pending-label';
 import {Button, ButtonProps} from '@/components/ui/button';
 import {
   ResponsiveDialog,
@@ -62,14 +62,7 @@ export function ConfirmActionDialog({
             onClick={handleConfirm}
             data-testid={confirmTestId}
           >
-            {isPending ? (
-              <>
-                <span>{pendingLabel}</span>
-                <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
-              </>
-            ) : (
-              <span>{confirmLabel}</span>
-            )}
+            {isPending ? <PendingLabel>{pendingLabel}</PendingLabel> : <span>{confirmLabel}</span>}
           </Button>
           <ResponsiveDialogClose asChild className='order-2 md:order-1'>
             <Button variant='outline' type='button'>

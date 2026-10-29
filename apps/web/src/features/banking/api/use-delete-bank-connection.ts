@@ -17,9 +17,10 @@ export const useDeleteBankConnection = () => {
   >({
     mutationKey: DELETE_BANK_CONNECTION_KEY,
     mutationFn: async ({connectionId, confirmation}) => {
-      await api.delete<void>(`/bank-connections/${connectionId}`, {
-        body: confirmation ? JSON.stringify({confirmation}) : undefined,
-      });
+      await api.delete<void>(
+        `/bank-connections/${connectionId}`,
+        confirmation ? {confirmation} : undefined,
+      );
     },
     onSuccess: async () => {
       await Promise.all([

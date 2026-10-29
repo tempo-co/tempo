@@ -12,7 +12,7 @@ export const useSignUp = () => {
 
   const {mutateAsync: signUp, isPending} = useMutation<Account, HttpError, SignUpDto>({
     mutationFn: async (signUpDto: SignUpDto) => {
-      return await api.post<Account>('/auth/signup', JSON.stringify(signUpDto));
+      return await api.post<Account>('/auth/signup', signUpDto);
     },
     onSuccess: (account) => {
       signIn(account);

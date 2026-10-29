@@ -15,13 +15,19 @@ import type {CashFlowInterval, CashFlowPeriod} from '../types/bank-transaction-c
 import {axisFormatter, axisTicks} from '../utils/chart-axis';
 import {cashFlowDrill, parseCalendarDate} from '../utils/drill-links';
 import {formatMoney, formatWholeMoney, toCents} from '../utils/money';
-import {currentMonth, formatMonth, localDate, monthDates, shiftMonth} from '../utils/month';
+import {
+  currentMonth,
+  formatMonth,
+  localDate,
+  monthDates,
+  monthSearch,
+  shiftMonth,
+} from '../utils/month';
 import {MONTHS_SHOWN, latestWindow, shownWeeks} from '../utils/period-window';
 import {IntervalToggle} from './interval-toggle';
 
 const day = (value: string) => parseCalendarDate(value);
 const monthOf = (period: CashFlowPeriod) => period.start.slice(0, 7);
-const monthSearch = (month: string) => (month === currentMonth() ? {} : {month});
 
 /** "6–12 Oct", or "29 Sep – 5 Oct" across a month boundary. */
 function formatWeek(period: CashFlowPeriod) {

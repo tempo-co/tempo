@@ -11,6 +11,11 @@ export function currentMonth(now = new Date()) {
   return format(now, 'yyyy-MM');
 }
 
+/** The current month has no `month` param, so `/` always opens it. */
+export function monthSearch(month: string) {
+  return month === currentMonth() ? {} : {month};
+}
+
 /** The local calendar date the summary cuts the current month at. */
 export function localDate(now = new Date()) {
   return format(now, 'yyyy-MM-dd');

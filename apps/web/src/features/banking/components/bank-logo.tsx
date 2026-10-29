@@ -85,13 +85,15 @@ const ANALYSIS_SIZE = 64;
 const MAX_CHANNEL_DELTA = 0;
 const MIN_VISIBLE_ALPHA = 16;
 const ANIMATED_LOGO_URL_PATTERN = /\.(?:apng|gif|webp)(?:[?#]|$)/i;
-const logoAnalysisInFlight = new Map<string, Promise<LogoAnalysisResult>>();
+// A logo's classification never changes, so a completed analysis is reused for every later mount.
+// A failed load is forgotten so the next mount retries it.
+const logoAnalyses = new Map<string, Promise<LogoAnalysisResult>>();
 
 function getLogoAnalysis(url: string) {
   if (ANIMATED_LOGO_URL_PATTERN.test(url)) return Promise.resolve('unavailable' as const);
 
-  const inFlightAnalysis = logoAnalysisInFlight.get(url);
-  if (inFlightAnalysis) return inFlightAnalysis;
+  const knownAnalysis = logoAnalyses.get(url);
+  if (knownAnalysis) return knownAnalysis;
 
   const analysis = new Promise<LogoAnalysisResult>((resolve) => {
     const image = new Image();
@@ -100,19 +102,18 @@ function getLogoAnalysis(url: string) {
     image.onload = () => {
       image.onload = null;
       image.onerror = null;
-      logoAnalysisInFlight.delete(url);
       resolve(classifyLogoImage(image));
     };
     image.onerror = () => {
       image.onload = null;
       image.onerror = null;
-      logoAnalysisInFlight.delete(url);
+      logoAnalyses.delete(url);
       resolve('unavailable');
     };
     image.src = url;
   });
 
-  logoAnalysisInFlight.set(url, analysis);
+  logoAnalyses.set(url, analysis);
   return analysis;
 }
 

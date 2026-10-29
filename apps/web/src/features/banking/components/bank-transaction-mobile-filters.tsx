@@ -16,6 +16,7 @@ import {ScrollArea} from '@/components/ui/scroll-area';
 import {cn} from '@/utils/cn';
 
 import {BankTransactionFilterParams} from '../types/bank-transaction';
+import {countActiveFilters} from '../utils/drill-filters';
 import {BankTransactionAccountFilter} from './bank-transaction-account-filter';
 import {BankTransactionBaseAmountFilter} from './bank-transaction-base-amount-filter';
 import {BankTransactionCashFlowFilter} from './bank-transaction-cash-flow-filter';
@@ -38,16 +39,7 @@ export function BankTransactionMobileFilters({
 }: BankTransactionMobileFiltersProps) {
   const [open, setOpen] = React.useState(false);
   const mobileFiltersScrollAreaRef = React.useRef<HTMLDivElement>(null);
-  const activeFilterCount = [
-    Boolean(filters.bookingDate),
-    (filters.bankAccountIds?.length ?? 0) > 0,
-    (filters.categories?.length ?? 0) > 0,
-    (filters.categorySources?.length ?? 0) > 0,
-    (filters.cashFlows?.length ?? 0) > 0,
-    Boolean(filters.baseAmount),
-    (filters.categoryStatuses?.length ?? 0) > 0,
-    Boolean(filters.recurringSeriesKey),
-  ].filter(Boolean).length;
+  const activeFilterCount = countActiveFilters(filters);
 
   React.useEffect(() => {
     if (!open) return;

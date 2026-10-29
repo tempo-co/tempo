@@ -24,78 +24,50 @@ export function isReauthorizationRequired(connection: BankConnection) {
   return isPastTimestamp(connection.consentValidUntil);
 }
 
-export type AutomaticSyncStatus = BankConnection['syncStatus'];
-
-export type AutomaticSyncDetails = {
+export type AutomaticSyncProblem = {
   title: string;
   description: string;
-  isProblem: boolean;
 };
 
-function getAutomaticSyncDetails(
-  status: AutomaticSyncStatus,
+/**
+ * Background sync is automatic and silent by design: only a status that needs attention
+ * (rate-limited, failed, partial or expired consent) has anything to say.
+ */
+function getAutomaticSyncProblem(
+  status: BankConnection['syncStatus'],
   error: string | null,
-  lastSyncedAt: string | null,
-): AutomaticSyncDetails {
+): AutomaticSyncProblem | null {
   switch (status) {
     case 'RATE_LIMITED':
       return {
         title: 'Automatic sync is rate-limited',
         description: 'The bank is temporarily limiting background access.',
-        isProblem: true,
       };
     case 'EXPIRED':
       return {
         title: 'Re-authorization required',
         description: 'Consent expired. Re-authorize this bank connection to resume automatic sync.',
-        isProblem: true,
-      };
-    case 'RUNNING':
-      return {
-        title: 'Automatic sync is in progress',
-        description: 'Bank data is being refreshed in the background.',
-        isProblem: false,
-      };
-    case 'QUEUED':
-      return {
-        title: 'Automatic sync is queued',
-        description: 'The next bank refresh will run in the background.',
-        isProblem: false,
       };
     case 'FAILED':
       return {
         title: 'Automatic sync needs attention',
         description: error || 'The next automatic attempt will retry in the background.',
-        isProblem: true,
       };
     case 'PARTIAL':
       return {
         title: 'Automatic sync is partial',
         description: error || 'Some bank data could not be refreshed.',
-        isProblem: true,
-      };
-    case 'SUCCEEDED':
-      return {
-        title: lastSyncedAt ? 'Automatic sync is active' : 'Automatic sync is pending',
-        description: lastSyncedAt
-          ? 'Bank data is refreshed automatically.'
-          : 'The first bank refresh is running in the background.',
-        isProblem: false,
       };
     default:
-      return {
-        title: 'Automatic sync is pending',
-        description: 'The first bank refresh will run in the background.',
-        isProblem: false,
-      };
+      return null;
   }
 }
 
-export function getAutomaticSyncDetailsForConnection(
+export function getAutomaticSyncProblemForConnection(
   connection: BankConnection,
-): AutomaticSyncDetails | null {
+): AutomaticSyncProblem | null {
   if (!isConnectedBank(connection)) return null;
 
   const status = isReauthorizationRequired(connection) ? 'EXPIRED' : connection.syncStatus;
-  return getAutomaticSyncDetails(status, connection.lastSyncError, connection.lastSyncedAt);
+  return getAutomaticSyncProblem(status, connection.lastSyncError);
 }

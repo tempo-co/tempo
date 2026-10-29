@@ -1,7 +1,7 @@
 import {VariantProps} from 'class-variance-authority';
-import {Loader} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
+import {PendingLabel} from '@/components/shared/pending-label';
 import {Button, buttonVariants} from '@/components/ui/button';
 import {cn} from '@/utils/cn';
 
@@ -45,10 +45,7 @@ export function ResendCodeButton({variant = 'ghost', className, onSuccess}: Rese
       data-testid='resend-code-button'
     >
       {isPending ? (
-        <>
-          <span>Sending new verification email...</span>
-          <Loader className='ml-2 h-4 w-4 animate-slow-spin' />
-        </>
+        <PendingLabel>Sending new verification email...</PendingLabel>
       ) : cooldown > 0 ? (
         <span>Resend in {cooldown}s</span>
       ) : (

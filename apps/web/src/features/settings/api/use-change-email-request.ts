@@ -7,7 +7,7 @@ import {EmailChangeDto} from '../types/email-change.dto';
 export const useChangeEmailRequest = () => {
   const {mutate: changeEmailRequest, isPending} = useMutation<void, HttpError, EmailChangeDto>({
     mutationFn: async (dto) => {
-      await api.post('/auth/change-email/request', JSON.stringify(dto));
+      await api.post('/auth/change-email/request', dto);
     },
   });
 

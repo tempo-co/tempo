@@ -1,6 +1,6 @@
 import {zodResolver} from '@hookform/resolvers/zod';
-import {Check, Copy, Loader} from 'lucide-react';
-import {useEffect, useRef, useState} from 'react';
+import {Loader} from 'lucide-react';
+import {useEffect, useState} from 'react';
 import {useForm} from 'react-hook-form';
 
 import {Button} from '@/components/ui/button';
@@ -14,7 +14,6 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
-import {Label} from '@/components/ui/label';
 import {
   ResponsiveDialog,
   ResponsiveDialogBody,
@@ -39,6 +38,7 @@ import {
   TOKEN_LIFETIMES,
   createPersonalAccessTokenDtoSchema,
 } from '../../types/create-personal-access-token.dto';
+import {CopyField} from './copy-field';
 
 type CreateTokenDialogProps = {
   open: boolean;
@@ -49,21 +49,14 @@ type CreateTokenDialogProps = {
 
 export function CreateTokenDialog({open, onOpenChange, onClosed}: CreateTokenDialogProps) {
   const [secret, setSecret] = useState<string>();
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState(false);
   const create = useCreatePersonalAccessToken(setSecret);
   const form = useForm<CreatePersonalAccessTokenDto>({
     resolver: zodResolver(createPersonalAccessTokenDtoSchema),
     defaultValues: {name: '', expiresInDays: 90},
   });
 
-  const copiedTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(copiedTimer.current), []);
-
   const resetDialog = () => {
     setSecret(undefined);
-    setCopied(false);
-    setCopyError(false);
     create.reset();
     form.reset({name: '', expiresInDays: 90});
   };
@@ -90,20 +83,6 @@ export function CreateTokenDialog({open, onOpenChange, onClosed}: CreateTokenDia
     }
   };
 
-  const copy = async () => {
-    if (!secret) return;
-    try {
-      await navigator.clipboard.writeText(secret);
-      setCopied(true);
-      setCopyError(false);
-      // Confirm briefly, then return to the action so it never looks stuck.
-      clearTimeout(copiedTimer.current);
-      copiedTimer.current = setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopyError(true);
-    }
-  };
-
   return (
     <ResponsiveDialog open={open} onOpenChange={handleOpenChange}>
       <ResponsiveDialogContent className='md:max-w-132'>
@@ -120,38 +99,13 @@ export function CreateTokenDialog({open, onOpenChange, onClosed}: CreateTokenDia
         {secret ? (
           <>
             <ResponsiveDialogBody className='space-y-5'>
-              <div className='space-y-2'>
-                <Label htmlFor='created-access-token'>Access token</Label>
-                {/* Copy sits inside the field's border; focusing the field selects the whole token. */}
-                <div className='flex h-11 border bg-background max-sm:h-12'>
-                  <input
-                    id='created-access-token'
-                    readOnly
-                    value={secret}
-                    spellCheck={false}
-                    autoComplete='off'
-                    onFocus={(event) => event.currentTarget.select()}
-                    className='min-w-0 flex-1 bg-transparent px-3 font-mono text-sm text-ellipsis text-foreground outline-none selection:bg-primary selection:text-primary-foreground'
-                  />
-                  <Button
-                    variant='ghost'
-                    onClick={() => void copy()}
-                    className='h-full shrink-0 border-l px-3'
-                  >
-                    {copied ? (
-                      <Check className='size-4 text-success' aria-hidden='true' />
-                    ) : (
-                      <Copy className='size-4' aria-hidden='true' />
-                    )}
-                    {copied ? 'Copied' : 'Copy token'}
-                  </Button>
-                </div>
-                {copyError && (
-                  <p role='alert' className='text-sm text-destructive'>
-                    Could not copy. Select the token and copy it manually.
-                  </p>
-                )}
-              </div>
+              <CopyField
+                id='created-access-token'
+                label='Access token'
+                value={secret}
+                copyLabel='Copy token'
+                errorMessage='Could not copy. Select the token and copy it manually.'
+              />
             </ResponsiveDialogBody>
             <ResponsiveDialogFooter>
               <ResponsiveDialogClose asChild>

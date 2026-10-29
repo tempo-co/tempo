@@ -126,6 +126,9 @@ export function createOfflinePersistence(
       else dropSavedData(queryClient);
     }
   }, 60_000);
+  // The persister always serializes a client and then stores that string, so the account it holds
+  // is remembered here instead of parsing the whole saved cache back in setItem.
+  let serializedAccountId: string | undefined;
   const persister = createAsyncStoragePersister({
     key: CACHE_KEY,
     throttleTime: 1000,
@@ -153,30 +156,24 @@ export function createOfflinePersistence(
       setItem: (key, value) => {
         // A throttled save from the previous login must not resurrect private data after logout.
         // Skip it without removing storage: another tab may still be signed in and own that data.
-        const saved = JSON.parse(value) as PersistedClient;
-        const savedAccount = saved.clientState.queries.find(isAccountQuery)?.state.data as
-          Account | undefined;
         const account = queryClient.getQueryData<Account | null>(CURRENT_ACCOUNT_KEY);
-        if (!account || account.id !== savedAccount?.id) return;
+        if (!account || account.id !== serializedAccountId) return;
         localStorage.setItem(key, value);
         if (saveFailed) toast.dismiss(SAVE_FAILED_TOAST);
         saveFailed = false;
       },
     },
-    serialize: (client) =>
-      JSON.stringify({
-        ...client,
-        clientState: {
-          ...client.clientState,
-          // Keep the last successful data, not the subsequent reconnect error.
-          queries: withinBudget(
-            client.clientState.queries.map((query) => ({
-              ...query,
-              state: {...query.state, status: 'success', error: null, fetchFailureReason: null},
-            })),
-          ),
-        },
-      }),
+    serialize: (client) => {
+      // Keep the last successful data, not the subsequent reconnect error.
+      const queries = withinBudget(
+        client.clientState.queries.map((query) => ({
+          ...query,
+          state: {...query.state, status: 'success', error: null, fetchFailureReason: null},
+        })),
+      );
+      serializedAccountId = (queries.find(isAccountQuery)?.state.data as Account | undefined)?.id;
+      return JSON.stringify({...client, clientState: {...client.clientState, queries}});
+    },
   });
   return {
     persister,

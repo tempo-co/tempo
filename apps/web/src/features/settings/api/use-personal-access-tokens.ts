@@ -20,7 +20,7 @@ export function useCreatePersonalAccessToken(onCreated: (token: string) => void)
   const queryClient = useQueryClient();
   return useMutation<void, HttpError, CreatePersonalAccessTokenDto>({
     mutationFn: async (dto) => {
-      const created = await api.post<CreatedPersonalAccessToken>(RESOURCE, JSON.stringify(dto));
+      const created = await api.post<CreatedPersonalAccessToken>(RESOURCE, dto);
       // Only the open dialog owns the secret. Never return it into the mutation/query cache.
       onCreated(created.token);
     },
