@@ -2,6 +2,7 @@ import {ConflictException, Inject, Injectable, NotFoundException} from '@nestjs/
 import {Request} from 'express';
 import * as geoip from 'fast-geoip';
 import Redis from 'ioredis';
+import ms from 'ms';
 import {IResult, UAParser} from 'ua-parser-js';
 
 import {ConfigurationService} from '@core/config/config.service';
@@ -20,9 +21,17 @@ import {AuthenticatedSession} from './authenticated-session.interface';
 import {PRIVATE_NETWORK, isNonPublicIp} from './non-public-ip';
 import {SessionResponseDto, UNKNOWN} from './session-response.dto';
 
+/**
+ * How stale `lastSeenAt` must be before a request rewrites it. A request that changes nothing else leaves the
+ * stored session (and its expiry) alone, so this also bounds how far expiry lags behind the last request.
+ * Sessions shorter than twice this interval use half their lifetime instead, so active use keeps them alive.
+ */
+export const LAST_SEEN_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
+
 @Injectable()
 export class SessionService {
 	private readonly REDIS_KEY: string;
+	private readonly lastSeenUpdateIntervalMs: number;
 
 	constructor(
 		@Inject(REDIS) private readonly redisClient: Redis,
@@ -30,6 +39,8 @@ export class SessionService {
 		private readonly tokens: PersonalAccessTokenService,
 	) {
 		this.REDIS_KEY = this.configService.get('SESSION_REDIS_KEY');
+		const sessionLifetimeMs = ms(this.configService.get('SESSION_EXPIRATION') as ms.StringValue);
+		this.lastSeenUpdateIntervalMs = Math.min(LAST_SEEN_UPDATE_INTERVAL_MS, sessionLifetimeMs / 2);
 	}
 
 	/**
@@ -146,10 +157,13 @@ export class SessionService {
 		};
 	}
 
-	/** Updates the `lastSeenAt` timestamp in the session metadata. */
+	/** Updates the `lastSeenAt` timestamp in the session metadata once it is older than the update interval. */
 	updateLastSeen(session: AuthenticatedSession) {
 		if (!session.passport?.user || !session.metadata) return;
-		session.metadata.lastSeenAt = new Date().toISOString();
+
+		const now = Date.now();
+		if (now - Date.parse(session.metadata.lastSeenAt) < this.lastSeenUpdateIntervalMs) return;
+		session.metadata.lastSeenAt = new Date(now).toISOString();
 	}
 
 	/** Parses a user agent to summarize the client environment (OS, browser, device type). */

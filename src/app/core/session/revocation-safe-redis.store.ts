@@ -8,9 +8,12 @@ type Callback = (err?: unknown) => void;
 /**
  * A RedisStore that never recreates a session deleted while a request using it was in flight.
  *
- * Every authenticated request saves its session again (SessionMiddleware updates `lastSeenAt`), and
- * RedisStore saves with a plain SET. A request that loaded its session before a logout or revocation
- * would otherwise write the deleted session back and keep it usable.
+ * Authenticated requests save their session again whenever they change it (SessionMiddleware refreshes a
+ * stale `lastSeenAt`), and RedisStore saves with a plain SET. A request that loaded its session before a
+ * logout or revocation would otherwise write the deleted session back and keep it usable.
+ *
+ * Touch is disabled: unchanged sessions cost no Redis command, and the stored expiry moves only with a save,
+ * which is also the only time express-session sends the cookie again, so the two expire together.
  */
 export class RevocationSafeRedisStore extends RedisStore {
 	// Relies on express-session's Session#save passing the same object createSession returned.
@@ -20,7 +23,7 @@ export class RevocationSafeRedisStore extends RedisStore {
 		private readonly redis: Redis,
 		prefix: string,
 	) {
-		super({client: redis, prefix});
+		super({client: redis, prefix, disableTouch: true});
 	}
 
 	override createSession(req: Request, data: SessionData) {
