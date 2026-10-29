@@ -4,7 +4,7 @@ How `src/app/modules/banking/merchant-logos/` finds, trusts, stores and serves a
 
 ## Boundaries
 
-- Display only. Categories, `merchantKey`, category history and recurring series never read `merchants` or `merchant_logos`, and nothing here writes to `bank_transactions`.
+- Display only. Categories, `merchantKey`, category history and recurring detection never read `merchants` or `merchant_logos`, and nothing here writes to `bank_transactions`. Recurring responses show the logo of a series' latest payment through `getLogoUrls`, like any listed transaction.
 - No per-merchant rules (aliases, domain overrides, exception lists). Fix a miss with a general rule and a synthetic test, or leave the category icon.
 - Own transfers and currency exchanges never show a logo, even when they share a key with a purchase: rows with `ownTransferEvidence` or `financialEventType` are skipped in `addMerchants`, the identification input and `getLogoUrls`. Keep an E2E row of that shape.
 - The browser loads images only from `GET /merchant-logos/:id/:version`, never from merchant sites or logo services.

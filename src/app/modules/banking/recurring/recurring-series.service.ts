@@ -15,9 +15,11 @@ import type {
 	RecurringSeriesListDto,
 	RecurringSeriesListsResponseDto,
 	RecurringSeriesSummaryResponseDto,
+	RecurringThisMonthDto,
 } from '../api/dtos/recurring-series.dto';
 import {BankTransaction} from '../bank-transaction.entity';
 import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
+import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {SQL_INTERNAL, createOwnerScopedQuery} from '../services/bank-transaction-filters';
 import {formatCents} from '../summary/bank-transaction-summary';
 import {type ContinuationPair, findContinuationPairs} from './recurring-continuation';
@@ -28,6 +30,7 @@ import {
 	type UndatedRecurringSeries,
 	atDate,
 	detectUndatedRecurringSeries,
+	expectedDatesThrough,
 } from './recurring-series-detection';
 import {isOrdinaryRetailExpense} from './recurring-series-eligibility';
 import {RecurringSeriesHide} from './recurring-series-hide.entity';
@@ -39,7 +42,7 @@ const REFUND = 'REFUND' satisfies BankTransactionCategory;
  * `recurring-series-detection`, `recurring-payee-identity`, `recurring-continuation` or `recurring-series-eligibility`,
  * or the payload shape in `toPayload`. Stored detections from other rules are not reused.
  */
-export const RECURRING_DETECTION_RULES_VERSION = '9';
+export const RECURRING_DETECTION_RULES_VERSION = '10';
 const UPCOMING_COUNT = 3;
 /** Every payment field detection reads; the stored detection's version is a hash over all of them. */
 const CANDIDATE_COLUMNS: readonly [sql: string, alias: keyof CandidateRow][] = [
@@ -68,7 +71,7 @@ type Continuation = {
 };
 
 /** Cents stored as strings, since JSON has no bigint. */
-const CENTS_FIELDS = ['usualMonthlyEquivalent', 'paidMonthlyEquivalent'] as const;
+const CENTS_FIELDS = ['usualMonthlyEquivalent', 'usualBaseAmount', 'paidMonthlyEquivalent'] as const;
 type CentsField = (typeof CENTS_FIELDS)[number];
 /** A detected series as stored: amounts as strings, plus whether it is ordinary retail. */
 type StoredSeries = Omit<UndatedRecurringSeries, CentsField> & {[field in CentsField]: string | null} & {
@@ -127,6 +130,7 @@ export class RecurringSeriesService {
 		private readonly unlinkRepository: Repository<RecurringContinuationUnlink>,
 		@InjectRepository(RecurringSnapshot)
 		private readonly snapshotRepository: Repository<RecurringSnapshot>,
+		private readonly merchantLogoService: MerchantLogoService,
 	) {}
 
 	/** Keep each version available until overlapping reads have left their older database snapshots. */
@@ -138,10 +142,56 @@ export class RecurringSeriesService {
 		asOf: string,
 	): Promise<RecurringSeriesListsResponseDto> {
 		const state = await this.readState(accountId);
+		const [paid, logos] = await Promise.all([
+			this.paidThisMonth(accountId, state.detected, asOf),
+			this.latestPaymentLogos(accountId, state.detected),
+		]);
+		const extras = {paid, logos};
 		return {
-			expenses: listFor(state, 'EXPENSE', baseCurrency, asOf),
-			income: listFor(state, 'INCOME', baseCurrency, asOf),
+			expenses: listFor(state, 'EXPENSE', baseCurrency, asOf, extras),
+			income: listFor(state, 'INCOME', baseCurrency, asOf, extras),
 		};
+	}
+
+	/** Base-currency cents each series' payments add up to in `asOf`'s calendar month, through `asOf`. */
+	private async paidThisMonth(
+		accountId: Account['id'],
+		detected: readonly UndatedRecurringSeries[],
+		asOf: string,
+	): Promise<Map<string, bigint>> {
+		const seriesById = new Map(detected.flatMap((entry) => entry.transactionIds.map((id) => [id, entry.key])));
+		const paid = new Map<string, bigint>();
+		if (seriesById.size === 0) return paid;
+		const rows = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
+			.select('transaction.id', 'id')
+			.addSelect('ROUND(ABS("transaction"."amountInBaseCurrency") * 100)::text', 'baseAmountCents')
+			.andWhere('transaction.id = ANY(:ids)', {ids: [...seriesById.keys()]})
+			.andWhere('transaction.bookingDate BETWEEN :from AND :asOf', {from: `${asOf.slice(0, 7)}-01`, asOf})
+			.andWhere('transaction.amountInBaseCurrency IS NOT NULL')
+			.getRawMany<{id: string; baseAmountCents: string}>();
+		for (const {id, baseAmountCents} of rows) {
+			const key = seriesById.get(id)!;
+			paid.set(key, (paid.get(key) ?? 0n) + BigInt(baseAmountCents));
+		}
+		return paid;
+	}
+
+	/** Each series shows the logo of its latest payment's merchant, when it has a trusted one. */
+	private async latestPaymentLogos(
+		accountId: Account['id'],
+		detected: readonly UndatedRecurringSeries[],
+	): Promise<Map<string, string>> {
+		const latestIds = new Map(detected.map((entry) => [entry.transactionIds.at(-1)!, entry.key]));
+		const byKey = new Map<string, string>();
+		if (latestIds.size === 0) return byKey;
+		const rows = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
+			.select(['transaction.id', 'transaction.merchantKey', 'transaction.ownTransferEvidence'])
+			.addSelect('transaction.financialEventType')
+			.andWhere('transaction.id = ANY(:ids)', {ids: [...latestIds.keys()]})
+			.getMany();
+		const logos = await this.merchantLogoService.getLogoUrls(accountId, rows);
+		for (const [id, url] of logos) byKey.set(latestIds.get(id)!, url);
+		return byKey;
 	}
 
 	/** Both lists' totals and the next payments due, from one read. */
@@ -154,18 +204,36 @@ export class RecurringSeriesService {
 			.filter(({hidden, status}) => !hidden && status === 'ACTIVE')
 			.sort((a, b) => a.nextExpectedDate.localeCompare(b.nextExpectedDate) || a.key.localeCompare(b.key))
 			.slice(0, UPCOMING_COUNT)
-			.map(({key, name, direction, nextExpectedDate, typicalAmount, amountKind, currency}) => ({
-				key,
-				name,
-				direction,
-				nextExpectedDate,
-				typicalAmount,
-				amountKind,
-				currency,
-			}));
+			.map(
+				({
+					key,
+					name,
+					direction,
+					nextExpectedDate,
+					typicalAmount,
+					amountKind,
+					currency,
+					category,
+					merchantLogoUrl,
+					flags,
+				}) => ({
+					key,
+					name,
+					direction,
+					nextExpectedDate,
+					typicalAmount,
+					amountKind,
+					currency,
+					category,
+					merchantLogoUrl,
+					flags,
+				}),
+			);
 		return {
 			expenseMonthlyTotal: expenses.monthlyTotal,
 			incomeMonthlyTotal: income.monthlyTotal,
+			expenseThisMonth: expenses.thisMonth,
+			incomeThisMonth: income.thisMonth,
 			upcoming,
 			expenseUnconvertedCount: expenses.unconvertedCount,
 			incomeUnconvertedCount: income.unconvertedCount,
@@ -378,6 +446,7 @@ function listFor(
 	direction: RecurringSeriesDirection,
 	baseCurrency: string | null,
 	asOf: string,
+	{paid, logos}: {paid: ReadonlyMap<string, bigint>; logos: ReadonlyMap<string, string>},
 ): RecurringSeriesListDto {
 	const series = detected
 		.filter((entry) => entry.direction === direction)
@@ -400,11 +469,41 @@ function listFor(
 	const monthlyTotal = counted.reduce((sum, {entry}) => sum + (entry.monthlyEquivalent ?? 0n), 0n);
 
 	return {
-		series: series.map(({entry, hidden, continuation}) => toResponse(entry, hidden, continuation)),
+		series: series.map(({entry, hidden, continuation}) =>
+			toResponse(entry, hidden, continuation, logos.get(entry.key) ?? null),
+		),
 		monthlyTotal: formatCents(monthlyTotal),
 		unconvertedCount: counted.filter(({entry}) => entry.monthlyEquivalent === null).length,
+		thisMonth: thisMonth(
+			counted.map(({entry}) => entry),
+			paid,
+			asOf,
+		),
 		baseCurrency,
 	};
+}
+
+/**
+ * The counted series' payments so far in `asOf`'s calendar month, and their usual amount for each payment still
+ * expected before it ends, late ones included. Converted payments count as paid; a series without a usual base amount
+ * adds nothing still due, as it adds nothing to the total.
+ */
+function thisMonth(
+	counted: readonly DetectedRecurringSeries[],
+	paid: ReadonlyMap<string, bigint>,
+	asOf: string,
+): RecurringThisMonthDto {
+	const month = asOf.slice(0, 7);
+	const [year, monthNumber] = month.split('-').map(Number);
+	const monthEnd = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+	let paidCents = 0n;
+	let remainingCents = 0n;
+	for (const entry of counted) {
+		paidCents += paid.get(entry.key) ?? 0n;
+		if (entry.usualBaseAmount === null) continue;
+		remainingCents += entry.usualBaseAmount * BigInt(expectedDatesThrough(entry, monthEnd).length);
+	}
+	return {month, paid: formatCents(paidCents), remaining: formatCents(remainingCents)};
 }
 
 /**
@@ -458,6 +557,7 @@ function toResponse(
 	entry: DetectedRecurringSeries,
 	hidden: boolean,
 	continuation: RecurringContinuationDto | null,
+	merchantLogoUrl: string | null,
 ): RecurringSeriesDto {
 	return {
 		key: entry.key,
@@ -480,6 +580,8 @@ function toResponse(
 		priceChange: entry.priceChange,
 		hidden,
 		continuation,
+		category: entry.category,
+		merchantLogoUrl,
 	};
 }
 
