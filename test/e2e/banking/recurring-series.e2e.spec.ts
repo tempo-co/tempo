@@ -8,6 +8,7 @@ import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {MerchantLogoService} from '@modules/banking/merchant-logos/merchant-logo.service';
 import {RecurringContinuationUnlink} from '@modules/banking/recurring/recurring-continuation-unlink.entity';
 import * as detection from '@modules/banking/recurring/recurring-series-detection';
 import {seriesKey} from '@modules/banking/recurring/recurring-series-detection';
@@ -54,6 +55,8 @@ type SeriesBody = {
 	flags: string[];
 	priceChange: {amount: string; since: string} | null;
 	hidden: boolean;
+	category: string | null;
+	merchantLogoUrl: string | null;
 };
 
 /** A structured SEPA debit text naming `name` as the payee, the evidence that links a renamed payee. */
@@ -80,6 +83,7 @@ describe('RecurringSeries', () => {
 		series: SeriesBody[];
 		monthlyTotal: string;
 		unconvertedCount: number;
+		thisMonth: {month: string; paid: string; remaining: string};
 		baseCurrency: string | null;
 	};
 	/** Bills and income come from one read. */
@@ -1050,6 +1054,8 @@ describe('RecurringSeries', () => {
 					flags: [],
 					priceChange: null,
 					hidden: false,
+					category: 'SUBSCRIPTIONS',
+					merchantLogoUrl: null,
 				}),
 				// The same shop in another currency is its own series, costed in the base currency.
 				expect.objectContaining({currency: 'GBP', typicalAmount: '29.99', monthlyEquivalent: '34.50'}),
@@ -1068,7 +1074,12 @@ describe('RecurringSeries', () => {
 		]);
 		expect(byName(series, 'Example Magazine')).toEqual([expect.objectContaining({status: 'ENDED'})]);
 		expect(byName(series, 'Example Insurer')).toEqual([
-			expect.objectContaining({cadence: 'YEARLY', monthlyEquivalent: '10.00', hidden: false}),
+			expect.objectContaining({
+				cadence: 'YEARLY',
+				monthlyEquivalent: '10.00',
+				hidden: false,
+				category: 'INSURANCE',
+			}),
 		]);
 	});
 
@@ -1111,16 +1122,67 @@ describe('RecurringSeries', () => {
 				}),
 			]);
 			expect(paid.monthlyTotal).toBe('160.00');
-			// Next month the usual amount is expected again.
+			// October's bill is paid; the next one is due in November.
+			expect(paid.thisMonth).toEqual({month: '2026-10', paid: '160.00', remaining: '0.00'});
+			// Next month the usual amount is expected again, and is still due until it arrives.
 			const next = await read('2026-11-02');
 			expect(next.series).toEqual([expect.objectContaining({monthlyEquivalent: '78.50'})]);
 			expect(next.monthlyTotal).toBe('78.50');
+			expect(next.thisMonth).toEqual({month: '2026-11', paid: '0.00', remaining: '78.50'});
+			// A late bill is still due in the month it was expected.
+			const late = await read('2026-11-08');
+			expect(late.series).toEqual([expect.objectContaining({flags: expect.arrayContaining(['LATE'])})]);
+			expect(late.thisMonth).toEqual({month: '2026-11', paid: '0.00', remaining: '78.50'});
 			expect(
 				(await fresh.agent.get('/recurring-series/summary').query({asOf: AS_OF}).expect(200)).body,
 			).toMatchObject({
 				expenseMonthlyTotal: '160.00',
 				upcoming: [expect.objectContaining({typicalAmount: '78.50', amountKind: 'VARIABLE'})],
 			});
+		} finally {
+			await fixtures.connections.delete(connection.id);
+		}
+	});
+
+	it('counts this month’s paid and still-due bills, including one late from last month', async () => {
+		const fresh = await createVerifiedAccount(
+			app.getHttpServer(),
+			app.get(ConfigurationService).get('EMAIL_UI_URL'),
+		);
+		const freshOwner = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
+		await app.get(getRepositoryToken(Account)).update({id: freshOwner.id}, {baseCurrency: 'EUR'});
+		const connection = await fixtures.createConnection(freshOwner);
+		try {
+			const bank = await fixtures.createBankAccount(connection);
+			await fixtures.createTransactions(bank, [
+				// October's payment is late; November's is due too.
+				...MONTHS.slice(0, 5).map((month) =>
+					bookedRow(`${month}-28`, '-30.00', {
+						counterpartyName: 'Example Water',
+						description: 'Example Water',
+					}),
+				),
+				// Paid on 1 November; its first payment has no base-currency amount yet.
+				...['2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11'].map((month, index) =>
+					bookedRow(`${month}-01`, '-20.00', {
+						counterpartyName: 'Example Club',
+						description: 'Example Club',
+						...(index === 0 ? {amountInBaseCurrency: null} : {}),
+					}),
+				),
+			]);
+			const {expenses} = (await fresh.agent.get('/recurring-series').query({asOf: '2026-11-01'}).expect(200))
+				.body as {expenses: ListBody};
+
+			expect(byName(expenses.series, 'Example Water')).toEqual([
+				expect.objectContaining({status: 'ACTIVE', flags: ['LATE'], nextExpectedDate: '2026-10-28'}),
+			]);
+			expect(byName(expenses.series, 'Example Club')).toEqual([
+				expect.objectContaining({status: 'ACTIVE', monthlyEquivalent: null}),
+			]);
+			// The club's converted November payment counts as paid; its usual amount is unknown, so nothing is
+			// counted as still due for it. Both of the water bill's payments are still due.
+			expect(expenses.thisMonth).toEqual({month: '2026-11', paid: '20.00', remaining: '60.00'});
 		} finally {
 			await fixtures.connections.delete(connection.id);
 		}
@@ -1905,6 +1967,7 @@ describe('RecurringSeries', () => {
 					app.get(getRepositoryToken(RecurringSeriesHide)),
 					unlinks,
 					snapshots,
+					app.get(MerchantLogoService),
 				);
 				expect((await restarted.list(freshOwner, asOf)).expenses).toEqual(split);
 				const next = await fixtures.createTransaction(
@@ -2167,6 +2230,7 @@ describe('RecurringSeries', () => {
 			app.get(getRepositoryToken(RecurringSeriesHide)),
 			app.get(getRepositoryToken(RecurringContinuationUnlink)),
 			snapshots,
+			app.get(MerchantLogoService),
 		);
 		const readRestarted = async () =>
 			JSON.parse(JSON.stringify(await restarted.list({id: owner.id, baseCurrency: 'EUR'}, AS_OF))) as unknown;
@@ -2364,6 +2428,8 @@ describe('RecurringSeries', () => {
 		expect(result).toMatchObject({
 			expenseMonthlyTotal: expenses.monthlyTotal,
 			incomeMonthlyTotal: income.monthlyTotal,
+			expenseThisMonth: expenses.thisMonth,
+			incomeThisMonth: income.thisMonth,
 			expenseUnconvertedCount: expenses.unconvertedCount,
 			incomeUnconvertedCount: income.unconvertedCount,
 			baseCurrency: 'EUR',
@@ -2383,6 +2449,9 @@ describe('RecurringSeries', () => {
 			typicalAmount: due[0].typicalAmount,
 			amountKind: due[0].amountKind,
 			currency: due[0].currency,
+			category: due[0].category,
+			merchantLogoUrl: due[0].merchantLogoUrl,
+			flags: due[0].flags,
 		});
 
 		// A hidden series leaves both the total and the upcoming payments.

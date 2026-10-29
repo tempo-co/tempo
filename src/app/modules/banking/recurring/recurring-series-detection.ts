@@ -59,6 +59,8 @@ export type UndatedRecurringSeries = {
 	latestAmount: string;
 	/** The shown amount per month: the fixed price, or a variable amount's median. */
 	usualMonthlyEquivalent: bigint | null;
+	/** One usual payment in the base currency: the fixed price, or a variable amount's median. */
+	usualBaseAmount: bigint | null;
 	/** A variable monthly bill's cost in the month its latest payment was made: that payment. Null otherwise. */
 	paidMonthlyEquivalent: bigint | null;
 	/** A variable series' lowest and highest recent payment; null for a fixed price. */
@@ -75,6 +77,8 @@ export type UndatedRecurringSeries = {
 	nextExpectedDate: string;
 	/** A fixed price's recent change against the price before it, until the new price has been paid three times. */
 	priceChange: RecurringPriceChange | null;
+	/** The latest payment's category. */
+	category: string | null;
 };
 
 /** A detected history rendered on one date; never stored as the recognition result. */
@@ -226,6 +230,25 @@ export function atDate(entry: UndatedRecurringSeries, today: string): DetectedRe
 		priceChange: status === 'ACTIVE' ? entry.priceChange : null,
 		monthlyEquivalent: paidThisMonth ? entry.paidMonthlyEquivalent : entry.usualMonthlyEquivalent,
 	};
+}
+
+/**
+ * The dates an active series is still expected to pay from its next expected date (late or not) through `until`,
+ * stepping one cycle at a time.
+ */
+export function expectedDatesThrough(entry: UndatedRecurringSeries, until: string): string[] {
+	const rule = CADENCE_RULES.find(({cadence}) => cadence === entry.cadence)!;
+	const dates: string[] = [];
+	const anchorDay = Number(entry.nextExpectedDate.slice(8, 10));
+	const [year, month] = entry.nextExpectedDate.split('-').map(Number);
+	for (let cycles = 0; ; cycles++) {
+		const date =
+			rule.months > 0
+				? anchorDate(year, month - 1 + rule.months * cycles, anchorDay)
+				: addDays(entry.nextExpectedDate, rule.nominalDays * cycles);
+		if (date > until) return dates;
+		dates.push(date);
+	}
 }
 
 /**
@@ -1117,6 +1140,7 @@ function buildSeries(
 		firstDate: first.date,
 		lastDate: latest.date,
 		nextExpectedDate: expectedDate(rows),
+		category: latest.category,
 	};
 }
 
@@ -1124,6 +1148,7 @@ type SeriesAmounts = Pick<
 	UndatedRecurringSeries,
 	| 'typicalAmount'
 	| 'usualMonthlyEquivalent'
+	| 'usualBaseAmount'
 	| 'paidMonthlyEquivalent'
 	| 'amountRange'
 	| 'recentPayments'
@@ -1141,6 +1166,7 @@ function fixedAmounts(
 	return {
 		typicalAmount: formatCents(shown.amountCents),
 		usualMonthlyEquivalent: converted ? perMonth(shown.baseAmountCents!) : null,
+		usualBaseAmount: converted ? shown.baseAmountCents : null,
 		paidMonthlyEquivalent: null,
 		amountRange: null,
 		recentPayments: [],
@@ -1165,11 +1191,11 @@ function variableAmounts(
 	const latest = recent[recent.length - 1];
 	const before = amounts.slice(0, -1);
 	const highestBefore = before.length ? maxCents(before) : 0n;
+	const usualBaseAmount = converted ? medianCents(recent.map(({baseAmountCents}) => baseAmountCents!)) : null;
 	return {
 		typicalAmount: formatCents(medianCents(amounts)),
-		usualMonthlyEquivalent: converted
-			? perMonth(medianCents(recent.map(({baseAmountCents}) => baseAmountCents!)))
-			: null,
+		usualMonthlyEquivalent: usualBaseAmount === null ? null : perMonth(usualBaseAmount),
+		usualBaseAmount,
 		paidMonthlyEquivalent: converted && rule.cadence === 'MONTHLY' ? latest.baseAmountCents : null,
 		amountRange: {
 			low: formatCents(amounts.reduce((low, amount) => (amount < low ? amount : low))),

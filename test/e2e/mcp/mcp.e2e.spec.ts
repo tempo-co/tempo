@@ -372,6 +372,8 @@ describe('Hosted MCP', () => {
 				expect(recurringSummary).toEqual({
 					expenseMonthlyTotal: '47.50',
 					incomeMonthlyTotal: '1200.00',
+					expenseThisMonth: recurring.expenses.thisMonth,
+					incomeThisMonth: recurring.income.thisMonth,
 					expenseUnconvertedCount: 0,
 					incomeUnconvertedCount: 0,
 					baseCurrency: 'EUR',
@@ -388,7 +390,10 @@ describe('Hosted MCP', () => {
 								typicalAmount,
 								amountKind,
 								currency,
-							}: Record<string, string>) => ({
+								category,
+								merchantLogoUrl,
+								flags,
+							}: Record<string, unknown>) => ({
 								key,
 								name,
 								direction,
@@ -396,6 +401,9 @@ describe('Hosted MCP', () => {
 								typicalAmount,
 								amountKind,
 								currency,
+								category,
+								merchantLogoUrl,
+								flags,
 							}),
 						),
 				});

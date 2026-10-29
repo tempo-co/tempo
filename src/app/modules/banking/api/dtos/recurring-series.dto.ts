@@ -95,6 +95,21 @@ export class RecurringSeriesDto {
 	hidden: boolean;
 	/** Set while the series continues an earlier history, linked or unlinked. */
 	continuation: RecurringContinuationDto | null;
+	/** The latest payment's category. */
+	category: string | null;
+	/** Path of the latest payment's merchant logo; null when no trusted logo exists. */
+	merchantLogoUrl: string | null;
+}
+
+/**
+ * One direction's calendar month in the base currency: what its counted series paid so far, and their usual amount
+ * for each payment still expected before the month ends, late ones included.
+ */
+export class RecurringThisMonthDto {
+	/** `YYYY-MM` of `asOf`. */
+	month: string;
+	paid: string;
+	remaining: string;
 }
 
 /** One direction's series and total. */
@@ -105,6 +120,7 @@ export class RecurringSeriesListDto {
 	monthlyTotal: string;
 	/** Shown active series left out of the total because a payment is not converted yet. */
 	unconvertedCount: number;
+	thisMonth: RecurringThisMonthDto;
 	baseCurrency: string | null;
 }
 
@@ -117,6 +133,9 @@ export class RecurringUpcomingPaymentDto extends PickType(RecurringSeriesDto, [
 	'typicalAmount',
 	'amountKind',
 	'currency',
+	'category',
+	'merchantLogoUrl',
+	'flags',
 ] as const) {}
 
 /** Bills and income, from one read. */
@@ -129,6 +148,9 @@ export class RecurringSeriesSummaryResponseDto {
 	/** The bills and income lists' monthly totals. */
 	expenseMonthlyTotal: string;
 	incomeMonthlyTotal: string;
+	/** The bills and income lists' `thisMonth`. */
+	expenseThisMonth: RecurringThisMonthDto;
+	incomeThisMonth: RecurringThisMonthDto;
 	/** The three soonest next payments of shown active series, bills and income together. */
 	upcoming: RecurringUpcomingPaymentDto[];
 	/** Each list's shown active series left out of its total because a payment is not converted yet. */
