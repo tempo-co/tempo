@@ -1,4 +1,4 @@
-import {PickType} from '@nestjs/swagger';
+import {PickType} from '@nestjs/mapped-types';
 import {IsBoolean} from 'class-validator';
 
 import {IsCalendarDate} from '@core/validation/is-calendar-date';

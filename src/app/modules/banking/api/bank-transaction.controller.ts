@@ -1,5 +1,4 @@
 import {Body, Controller, Get, Param, ParseUUIDPipe, Patch, Query} from '@nestjs/common';
-import {ApiTags} from '@nestjs/swagger';
 import {Throttle, minutes} from '@nestjs/throttler';
 
 import {Account} from '@modules/account/account.entity';
@@ -21,7 +20,6 @@ import {BankTransactionSummaryQueryDto} from './dtos/bank-transaction-summary-qu
  */
 const BROWSING_THROTTLE = {default: {limit: 300, ttl: minutes(1)}};
 
-@ApiTags('Bank transactions')
 @Controller('bank-transactions')
 export class BankTransactionController {
 	constructor(

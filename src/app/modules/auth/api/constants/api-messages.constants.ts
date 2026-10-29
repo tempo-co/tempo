@@ -9,7 +9,6 @@ export const EMAIL_ALREADY_VERIFIED = 'Email is already verified.';
 export const EMAIL_VERIFICATION_SENT = 'Verification email sent.';
 export const EMAIL_VERIFICATION_SUCCESS = 'Email has been verified.';
 export const EMAIL_ALREADY_IN_USE = 'This email is already in use.';
-export const EMAIL_IS_AVAILABLE = 'Email is available';
 export const EMAIL_CHANGE_SUCCESS = 'Email has been changed.';
 export const EMAIL_NOT_VERIFIED = 'Email not verified.';
 
@@ -19,4 +18,3 @@ export const LOGIN_SUCCESS = 'User logged in.';
 export const INVALID_CREDENTIALS = 'Invalid credentials.';
 /** Sent with a 401 when a signed-in account's password confirmation is wrong, unlike a missing session. */
 export const INVALID_PASSWORD = 'Invalid password.';
-export const UNAUTHORIZED = 'Authentication required to access this resource.';

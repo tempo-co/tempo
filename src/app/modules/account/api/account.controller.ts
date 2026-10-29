@@ -1,5 +1,4 @@
 import {Body, Controller, Delete, Get, HttpCode, Patch} from '@nestjs/common';
-import {ApiTags} from '@nestjs/swagger';
 import {Throttle, minutes} from '@nestjs/throttler';
 
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
@@ -11,7 +10,6 @@ import {AccountService} from '../account.service';
 import {AccountDeleteDto} from './account-delete.dto';
 import {AccountUpdateDto} from './account-update.dto';
 
-@ApiTags('Accounts')
 @Controller('accounts')
 export class AccountController {
 	constructor(

@@ -12,7 +12,6 @@ import {
 	Res,
 	UseGuards,
 } from '@nestjs/common';
-import {ApiTags} from '@nestjs/swagger';
 import {Throttle, minutes} from '@nestjs/throttler';
 import {Request, Response} from 'express';
 
@@ -33,7 +32,6 @@ import {BankConnectionCallbackDto} from './dtos/bank-connection-callback.dto';
 import {BankConnectionRemoveDto} from './dtos/bank-connection-remove.dto';
 import {BankConnectionTransactionsQueryDto} from './dtos/bank-connection-transactions-query.dto';
 
-@ApiTags('Bank connections')
 @Controller('bank-connections')
 export class BankConnectionController {
 	constructor(
