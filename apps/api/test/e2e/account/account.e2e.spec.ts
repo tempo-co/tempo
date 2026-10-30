@@ -1,4 +1,3 @@
-import {faker} from '@faker-js/faker';
 import {INestApplication} from '@nestjs/common';
 import {Server} from 'node:net';
 import TestAgent from 'supertest/lib/agent';
@@ -13,7 +12,7 @@ import {
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
-import {expectValidationMessage} from '../../utils/auth-utils';
+import {expectValidationMessage, uniqueName} from '../../utils/auth-utils';
 
 describe('Account controller - /me', () => {
 	let httpServer: Server;
@@ -64,7 +63,7 @@ describe('Account controller - /me', () => {
 		});
 
 		it('should update the name for an authenticated VERIFIED account', async () => {
-			const newName = faker.person.fullName();
+			const newName = uniqueName();
 			const updateDto: AccountUpdateDto = {name: newName};
 
 			const patchResponse = await verifiedAgent.patch('/accounts/me').send(updateDto).expect(200);
