@@ -33,6 +33,23 @@ updates:
         update-types: ['version-update:semver-major']
 
   - package-ecosystem: npm
+    directory: /apps/api/mcp
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Keep Node types on the runtime major (Node 26 in the Dockerfile and CI).
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      # typescript-eslint accepts TypeScript below 6.1; loosen as it moves.
+      - dependency-name: typescript
+        versions: ['>= 6.1.0']
+
+  - package-ecosystem: npm
     directory: /apps/web
     schedule:
       interval: weekly
