@@ -65,7 +65,7 @@ test.describe.serial('Account Settings: Sessions', () => {
 
     await securitySettingsPage.revokeAllButton.click();
     await expect(
-      page1.getByRole('dialog').getByText('This also revokes all access tokens.'),
+      page1.getByRole('dialog').getByText('Log out every session except this one?'),
     ).toBeVisible();
     await securitySettingsPage.revokeAllButtonConfirm.click();
 

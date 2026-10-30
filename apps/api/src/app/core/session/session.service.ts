@@ -112,10 +112,17 @@ export class SessionService {
 		return {message: SESSION_REVOKE_SUCCESS};
 	}
 
-	/** Revokes all personal access tokens and all sessions of an account except the current session. */
-	async revokeAllOtherSessions(accountId: Account['id'], currentSessionId: string | null) {
-		// Every account-wide security revocation uses this path, including password changes and resets.
+	/**
+	 * Revokes all personal access tokens and all sessions of an account except the current session.
+	 * Password changes, password resets and account deletion use this; pass `null` to revoke every session.
+	 */
+	async revokeAllCredentials(accountId: Account['id'], currentSessionId: string | null) {
 		await this.tokens.revokeAll(accountId);
+		return await this.revokeAllOtherSessions(accountId, currentSessionId);
+	}
+
+	/** Revokes all sessions of an account except the current session. Personal access tokens keep working. */
+	async revokeAllOtherSessions(accountId: Account['id'], currentSessionId: string | null) {
 		const allSessions = await this.getSessions(accountId, currentSessionId);
 
 		const sessionsToRevoke = allSessions.filter((session) => !session.isCurrent);

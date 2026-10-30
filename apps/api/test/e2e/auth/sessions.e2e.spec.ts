@@ -162,7 +162,7 @@ describe('AuthController - Sessions', () => {
 			currentSessionIdAgent1 = currentSession!.id;
 		});
 
-		it('revokes other sessions and all personal access tokens for the authenticated account', async () => {
+		it('revokes other sessions of the authenticated account and keeps its personal access tokens working', async () => {
 			const {body: pat} = await verifiedAgent1
 				.post('/personal-access-tokens')
 				.set('Origin', 'http://localhost:5173')
@@ -187,7 +187,7 @@ describe('AuthController - Sessions', () => {
 			expect(finalSessions[0].isCurrent).toBe(true);
 			expect(finalSessions[0].id).toEqual(currentSessionIdAgent1);
 
-			await request(httpServer).get('/bank-transactions').auth(pat.token, {type: 'bearer'}).expect(401);
+			await request(httpServer).get('/bank-transactions').auth(pat.token, {type: 'bearer'}).expect(200);
 			await verifiedAgent2.get('/accounts/me').expect(401);
 			await verifiedAgent3.get('/accounts/me').expect(401);
 		});
@@ -199,15 +199,6 @@ describe('AuthController - Sessions', () => {
 			expect(initialResponse.body).toHaveLength(1);
 			expect(initialResponse.body[0].isCurrent).toBe(true);
 			const currentId = initialResponse.body[0].id;
-			const tokens = await Promise.all(
-				['Example one', 'Example two'].map((name) =>
-					agent
-						.post('/personal-access-tokens')
-						.set('Origin', 'http://localhost:5173')
-						.send({name})
-						.expect(201),
-				),
-			);
 
 			await agent
 				.delete('/auth/sessions')
@@ -219,9 +210,6 @@ describe('AuthController - Sessions', () => {
 			const finalResponse = await agent.get('/auth/sessions').expect(200);
 			expect(finalResponse.body).toHaveLength(1);
 			expect(finalResponse.body[0].id).toEqual(currentId);
-			for (const {body: pat} of tokens)
-				await request(httpServer).get('/bank-transactions').auth(pat.token, {type: 'bearer'}).expect(401);
-			expect((await agent.get('/personal-access-tokens').expect(200)).body).toEqual([]);
 		});
 	});
 

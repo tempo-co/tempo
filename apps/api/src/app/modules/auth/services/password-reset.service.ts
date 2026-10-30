@@ -68,7 +68,7 @@ export class PasswordResetService {
 		await this.accountService.updateFields(accountId, {password: hash});
 
 		await this.redisClient.del(key);
-		await this.sessionService.revokeAllOtherSessions(accountId, null);
+		await this.sessionService.revokeAllCredentials(accountId, null);
 
 		return {message: PASSWORD_RESET_SUCCESS};
 	}
