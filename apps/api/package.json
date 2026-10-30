@@ -39,7 +39,7 @@
 		"pretest:e2e:cov": "npm run generate:mcp"
 	},
 	"dependencies": {
-		"@anthropic-ai/sdk": "0.135.0",
+		"@anthropic-ai/sdk": "1.2.0",
 		"@modelcontextprotocol/sdk": "1.32.1",
 		"@nest-lab/throttler-storage-redis": "^1.2.0",
 		"@nestjs-modules/mailer": "^3.0.2",
