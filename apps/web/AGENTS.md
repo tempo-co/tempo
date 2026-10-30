@@ -31,11 +31,12 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
 ## Verification
 
 - Size local verification to the change: run relevant static checks and focused tests, including regression proof where appropriate. Let PR CI run the full suite on fresh services. Run the full suite locally for cross-cutting changes, gaps in CI, or failures requiring reproduction. A complete passing CI run on the current head is the delivery gate.
-- Fresh worktree: `npm ci`, then `npx playwright install chromium --with-deps` (as CI does) before any spec runs. Production and staging serve the app at `/`.
+- Fresh worktree: `npm ci`, then `npx playwright install chromium webkit --with-deps` (as CI does) before any spec runs. Production and staging serve the app at `/`.
 - Static checks: `npm run lint:check`, `npm run format:check`, `npm run build`. `npm run lint` and `npm run format` modify files.
 - There is no unit-test runner; all tests are Playwright specs under `test/`. Find the specs for a change by grepping `test/e2e` for the route, component or label; `--only-changed` finds nothing because specs do not import `src`.
 - `npm run test:e2e:local` resets the Docker services (`down -v`), starts them, seeds, and runs the whole suite. Fully mocked specs run without Docker; see `docs/browser-and-e2e-testing.md`.
-- CI runs lint/format, build (plus `ops/tests/tempo-web-security-headers-test.sh`) and four E2E shards; the required `E2E Tests` job fails unless every shard passes.
+- Every local worktree shares one E2E stack (`api` on `localhost:3000`), so a reset or a full run from one agent corrupts another's run. Locally, run only the specs for your change, and only when `pgrep -af 'playwright test'` shows no other run; push and let CI run the full suite, since each shard gets its own stack.
+- CI runs lint/format, build (plus `ops/tests/tempo-web-security-headers-test.sh`) and eight E2E shards (every spec in Chromium and WebKit); the required `E2E Tests` job fails unless every shard passes.
 
 ## Traps
 

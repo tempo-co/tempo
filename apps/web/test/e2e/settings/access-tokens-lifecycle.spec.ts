@@ -7,8 +7,12 @@ test.use({storageState: {cookies: [], origins: []}});
 test('a signed-in account creates a one-time token and revokes its read-only access', async ({
   page,
   freshAccount,
+  browserName,
 }) => {
-  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  // Only Chromium lets a test read the clipboard back; WebKit still runs the copy itself.
+  const canReadClipboard = browserName === 'chromium';
+  if (canReadClipboard)
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/settings/integrations');
   await expect(page.getByTestId('current-account-email')).toHaveText(freshAccount.email);
   await expect(page.getByText('No access tokens yet.', {exact: true})).toBeVisible();
@@ -29,7 +33,9 @@ test('a signed-in account creates a one-time token and revokes its read-only acc
   await expect(dialog.getByLabel('Access token', {exact: true})).toHaveValue(secret);
   await dialog.getByRole('button', {name: 'Copy token', exact: true}).click();
   await expect(dialog.getByRole('button', {name: 'Copied', exact: true})).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(secret);
+  if (canReadClipboard) {
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(secret);
+  }
   const bearerHeaders = {Authorization: `Bearer ${secret}`};
   expect(
     (await page.request.get(`${API_URL}/bank-connections`, {headers: bearerHeaders})).status(),

@@ -142,12 +142,15 @@ test('balances emphasize the bank with the account holder below it', async ({pag
     'src',
     'https://assets.example.test/bank.png',
   );
-  expect(
-    await row
-      .getByTestId('bank-balance-logo')
-      .locator('img')
-      .evaluate((image: HTMLImageElement) => image.naturalWidth),
-  ).toBeGreaterThan(0);
+  // The image loads after its src is set; WebKit often reads it before decoding.
+  await expect
+    .poll(() =>
+      row
+        .getByTestId('bank-balance-logo')
+        .locator('img')
+        .evaluate((image: HTMLImageElement) => image.naturalWidth),
+    )
+    .toBeGreaterThan(0);
   // Close to the Connections page logo (72px) while fitting a balance row.
   const logo = await boxOf(row.getByTestId('bank-balance-logo'));
   expect(logo.width).toBe(56);
@@ -245,7 +248,8 @@ for (const width of [1440, 390]) {
 }
 
 for (const width of [1440, 390]) {
-  test(`weekly balance labels identify the snapshot directly above them at ${width}px`, async ({page}) => {
+  test(`weekly balance labels identify the snapshot directly above them at ${width}px`, async ({page, browserName}) => {
+    test.skip(browserName !== 'chromium', 'Hover tooltips; on a phone the chart is inspected by touch.');
     await page.setViewportSize({width, height: 1000});
     await mockJson(page, '**/bank-transactions/balance-trend**', {
       baseCurrency: 'EUR',
@@ -292,6 +296,7 @@ test('pointer clicks leave chart surfaces and marks without focus outlines', asy
 
 test.describe('touch chart inspection', () => {
   test.use({hasTouch: true, isMobile: true, viewport: {width: 390, height: 844}});
+  test.skip(({browserName}) => browserName !== 'chromium', 'Touches are sent through Chromium CDP.');
 
   for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     test(`holding and scrubbing shows each period until release (${reducedMotion})`, async ({page, context}) => {

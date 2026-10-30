@@ -12,6 +12,7 @@ import {septemberSpending} from '../../data/home-summary.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
   fulfillJson,
+  fulfillRedirect,
   mockBalanceTrend,
   mockCashFlow,
   mockBankConnections,
@@ -623,7 +624,7 @@ test.describe('bank connections', () => {
     ]);
     await mockJson(page, '**/bank-connections/authorize', {authorizationUrl}, 201);
     await context.route('**/mock-bank-authorization', async (route) => {
-      await route.fulfill({status: 302, headers: {location: callbackUrl}});
+      await fulfillRedirect(route, callbackUrl);
     });
 
     let popupOpened = false;
@@ -1638,10 +1639,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       await page.route('**/bank-connections/callback**', async (route) => {
         callbackRequest = new URL(route.request().url());
         connectionPersisted = true;
-        await route.fulfill({
-          status: 302,
-          headers: {location: callbackRedirectUrl},
-        });
+        await fulfillRedirect(route, callbackRedirectUrl);
       });
 
       await page.route(`${MOCK_PROVIDER_ORIGIN}/consent`, async (route) => {

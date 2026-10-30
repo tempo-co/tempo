@@ -61,6 +61,11 @@ type Fixtures = {
 };
 
 export const test = base.extend<Fixtures>({
+  page: async ({page}, provide) => {
+    await provide(page);
+    // A route handler still awaiting `route.fetch()` would otherwise fail the test as it closes.
+    await page.unrouteAll({behavior: 'ignoreErrors'});
+  },
   defaultBankConnections: [
     async ({page, storageState}, provide) => {
       // Registered before the test body, so any later route for the same request wins.

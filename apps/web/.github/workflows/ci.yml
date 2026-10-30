@@ -75,8 +75,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
-        total: [4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        total: [8]
     steps:
       - name: Checkout web repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -132,7 +132,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers
-        run: npx playwright install chromium --with-deps
+        run: npx playwright install chromium webkit --with-deps
 
       - name: Wait for and seed Docker E2E environment
         env:

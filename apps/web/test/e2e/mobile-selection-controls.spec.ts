@@ -135,6 +135,10 @@ for (const width of [320, 820]) {
 }
 
 async function swipeFilterUp(page: Page) {
+  test.skip(
+    page.context().browser()?.browserType().name() !== 'chromium',
+    'Touches are sent through Chromium CDP.',
+  );
   const viewport = page
     .getByTestId('bank-transaction-mobile-filters-scroll-area')
     .locator(':scope > [data-radix-scroll-area-viewport]');
@@ -207,7 +211,8 @@ test('touch verification-code entry uses readable digits across the phone field'
   await input.fill('123456');
   const digit = page.getByText('1', {exact: true});
   await expect(digit).toHaveCSS('font-size', '16px');
-  expect((await boxOf(digit)).height).toBeGreaterThanOrEqual(44);
+  // The slots settle after the code fills them; WebKit can measure mid-transition.
+  await expect.poll(async () => (await boxOf(digit)).height).toBeGreaterThanOrEqual(44);
   expect(
     await input.evaluate((element) => parseFloat(getComputedStyle(element).fontSize)),
   ).toBeGreaterThanOrEqual(16);
@@ -298,7 +303,9 @@ for (const support of ['unavailable', 'restricted']) {
 
 test('cancelled touch selection leaves the value unchanged and keyboard selection stays quiet', async ({
   page,
+  browserName,
 }) => {
+  test.skip(browserName !== 'chromium', 'Touches are sent through Chromium CDP.');
   await page.goto('/bank-transactions');
   const size = page.getByRole('combobox', {name: 'Rows per page'});
   await size.tap();

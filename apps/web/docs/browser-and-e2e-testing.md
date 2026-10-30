@@ -92,6 +92,15 @@ real browser cookie and image-header enforcement. The fixture blocks service wor
 page-level routes own image requests; offline behaviour is covered separately. Verify actual
 API authorization separately against the paired API.
 
+## WebKit project
+
+Every iPhone browser is WebKit, so `playwright.config.ts` runs every spec a second time in the `webkit` project, a new spec included without listing it. It uses the same desktop default viewport as Chromium; a spec reaches iPhone layouts by setting a phone width (390 or 320) itself, so a layout check belongs at those widths. Install the browser locally with `npx playwright install webkit --with-deps` and run one spec with `--project=webkit`.
+
+- WebKit sends requests from a controlling service worker past `page.route`, so mocks stop applying once the worker takes over and requests leak to the real API. The project blocks service workers and ignores the saved-app specs that need one (`testIgnore` in `playwright.config.ts`); a new spec that needs the worker goes on that list.
+- Touch gestures are sent with Chromium CDP (`Input.dispatchTouchEvent`), and hover-tooltip checks need a mouse; both skip outside Chromium. Real iPhone touch is not covered.
+- WebKit cannot fulfill a mocked 3xx, so mock a redirect with `fulfillRedirect` from `test/utils/api-mocks.ts`. Only Chromium lets a test read the clipboard back; the copy itself still runs in WebKit.
+- Put worst-case data (long names, large amounts, flags) in layout specs: kind seed data fits any screen in any engine, and that is how a page-widening Recurring card shipped.
+
 ## Visual checks that pass when they should not
 
 - `toBeVisible()` passes for `sr-only` content. Assert geometry and a real Tab/Enter path for anything revealed on focus.

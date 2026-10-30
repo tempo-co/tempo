@@ -67,11 +67,15 @@ test.beforeEach(async ({page}) => {
 for (const width of [1440, 320]) {
   test(`creates, copies and inspects a one-time token, then revokes its access (${width}px)`, async ({
     page,
+    browserName,
   }) => {
     // The whole create, copy, revoke journey, including the 2 s copy confirmation.
     test.setTimeout(30_000);
     await page.setViewportSize({width, height: 900});
-    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    // Only Chromium lets a test read the clipboard back; WebKit still runs the copy itself.
+    const canReadClipboard = browserName === 'chromium';
+    if (canReadClipboard)
+      await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     let tokens: (typeof tokenMetadata)[] = [];
     let creates = 0;
     let revokes = 0;
@@ -122,7 +126,9 @@ for (const width of [1440, 320]) {
     if (width < 768) expect((await copyUrl.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await copyUrl.click();
     await expect(connect.getByRole('button', {name: 'Copied', exact: true})).toBeVisible();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(serverUrl);
+    if (canReadClipboard) {
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(serverUrl);
+    }
     await expect(copyUrl).toBeVisible({timeout: 4000});
     await expectNoHorizontalOverflow(page);
     await expect(page.getByText('No access tokens yet.', {exact: true})).toBeVisible();
@@ -190,7 +196,9 @@ for (const width of [1440, 320]) {
     await copyButton.click();
     await ringless();
     await expect(dialog.getByRole('button', {name: 'Copied', exact: true})).toBeVisible();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(secret);
+    if (canReadClipboard) {
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(secret);
+    }
     // The confirmation is brief, so the action is ready again for another copy.
     await expect(dialog.getByRole('button', {name: 'Copy token', exact: true})).toBeVisible({
       timeout: 4000,

@@ -30,5 +30,21 @@ export default defineConfig({
       use: {...devices['Desktop Chrome']},
       dependencies: ['setup'],
     },
+    {
+      // Every iPhone browser is WebKit. Specs that set a phone width cover iPhone layouts here.
+      name: 'webkit',
+      // Saved-app specs need the service worker, which this project blocks.
+      testIgnore: [
+        'e2e/home/offline.spec.ts',
+        'e2e/auth/network-resilience.spec.ts',
+        'e2e/banking/offline-retention.spec.ts',
+      ],
+      use: {
+        ...devices['Desktop Safari'],
+        // WebKit sends service-worker requests past page.route, so mocked responses would leak to the API.
+        serviceWorkers: 'block',
+      },
+      dependencies: ['setup'],
+    },
   ],
 });

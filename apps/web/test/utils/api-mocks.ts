@@ -14,6 +14,14 @@ export function fulfillJson(route: Route, body: unknown, status = 200) {
   return route.fulfill({status, contentType: 'application/json', body: JSON.stringify(body)});
 }
 
+/** Sends a navigation on to `location`; WebKit refuses to fulfill a mocked 3xx. */
+export function fulfillRedirect(route: Route, location: string) {
+  return route.fulfill({
+    contentType: 'text/html',
+    body: `<script>location.replace(${JSON.stringify(location)})</script>`,
+  });
+}
+
 /** Synthetic monthly totals for specs that mock Home without a real session. */
 export const syntheticCashFlow = {
   baseCurrency: 'EUR',
