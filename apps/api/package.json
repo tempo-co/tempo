@@ -37,8 +37,8 @@
 		"prestart:debug": "npm run generate",
 		"predb:seed": "npm run generate",
 		"predb:schema": "npm run generate",
-		"pretest:e2e": "npm run generate",
-		"pretest:e2e:cov": "npm run generate"
+		"pretest:e2e": "npm run generate:mcp",
+		"pretest:e2e:cov": "npm run generate:mcp"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "1.2.0",
