@@ -19,7 +19,7 @@ export function SessionRevokeAllDialog() {
         </Button>
       }
       title='Log out other sessions'
-      description='Log out every session except this one? This also revokes all access tokens.'
+      description='Log out every session except this one?'
       confirmLabel='Log out others'
       pendingLabel='Logging out...'
       confirmVariant='destructive'

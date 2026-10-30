@@ -27,7 +27,7 @@ function buildService() {
 		verifyPassword: jest.fn().mockResolvedValue(undefined),
 	};
 	const sessionService = {
-		revokeAllOtherSessions: jest.fn().mockResolvedValue({message: ''}),
+		revokeAllCredentials: jest.fn().mockResolvedValue({message: ''}),
 	};
 	const authorizationStateService = {
 		removeForAccount: jest.fn().mockResolvedValue(0),
@@ -78,7 +78,7 @@ describe('AccountDeletionService', () => {
 		accountService.verifyPassword.mockRejectedValue(new UnauthorizedException());
 
 		await expect(service.deleteAccount('account-id', 'wrong-password')).rejects.toThrow(UnauthorizedException);
-		expect(sessionService.revokeAllOtherSessions).not.toHaveBeenCalled();
+		expect(sessionService.revokeAllCredentials).not.toHaveBeenCalled();
 		expect(dataSource.transaction).not.toHaveBeenCalled();
 	});
 

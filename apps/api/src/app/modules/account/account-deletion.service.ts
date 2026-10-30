@@ -37,7 +37,7 @@ export class AccountDeletionService {
 
 		// null for the current session id: revoke ALL of the account's sessions,
 		// including the caller's own (same primitive the password-reset flow uses).
-		await this.sessionService.revokeAllOtherSessions(accountId, null);
+		await this.sessionService.revokeAllCredentials(accountId, null);
 
 		const email = account.email;
 		await this.dataSource.transaction(async (manager) => {
