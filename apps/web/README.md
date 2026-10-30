@@ -60,3 +60,4 @@ This uses `ghcr.io/tempo-co/tempo-api:main`. To test against an unmerged API cha
 CI runs the same suite on every pull request that changes either app and on `main`, against fresh services and the API image built from the same commit ([CI and images](../../docs/ci-and-images.md)).
 
 `docker:test:up` / `docker:test:down` manage the E2E services; each E2E run starts from a pristine database, and the E2E setup authenticates seeded users via `test/auth.setup.ts`.
+
