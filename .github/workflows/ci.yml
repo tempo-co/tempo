@@ -629,9 +629,9 @@ jobs:
                   for app in api web; do
                       changed_var=${app^^}_CHANGED
                       if [[ ${!changed_var} != true ]]; then
-                          echo "tempo-$app unchanged; its main tag stays"
+                          echo "$app unchanged; its main tag stays"
                           continue
                       fi
-                      image=ghcr.io/$OWNER/tempo-$app
+                      image=ghcr.io/$OWNER/$app
                       docker buildx imagetools create --tag "$image:main" "$image:sha-$GITHUB_SHA"
                   done
