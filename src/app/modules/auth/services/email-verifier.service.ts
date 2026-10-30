@@ -79,7 +79,7 @@ export class EmailVerifierService {
 		await this.emailService.send(
 			{
 				to: email,
-				subject: 'Welcome to Tempo - Please confirm your email',
+				subject: 'Confirm your email for Tempo',
 				template: 'welcome',
 				context: {name, verificationUrl, code, expiration},
 			},

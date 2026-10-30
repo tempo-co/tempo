@@ -36,6 +36,8 @@
         .email-card { background-color: #201E24 !important; border-color: #3A363E !important; }
         .email-code { background-color: #2A272E !important; border-color: #3A363E !important; color: #F0EBE2 !important; }
         .email-button { background-color: #E59A7B !important; color: #17161B !important; }
+        a.email-link { color: #E59A7B !important; }
+        p.email-muted { color: #B5AFA6 !important; }
       }
 
       [data-ogsc] h1, [data-ogsc] h2, [data-ogsc] p, [data-ogsc] .email-text { color: #F0EBE2 !important; }
@@ -44,11 +46,21 @@
       [data-ogsc] .email-code { color: #F0EBE2 !important; }
       [data-ogsb] .email-button { background-color: #E59A7B !important; }
       [data-ogsc] .email-button { color: #17161B !important; }
+      [data-ogsc] a.email-link { color: #E59A7B !important; }
+      [data-ogsc] p.email-muted { color: #B5AFA6 !important; }
     </style>
   </head>
   <body
     style="margin:0;padding:0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#28252B;"
   >
+    <div
+      class="email-preheader"
+      style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;mso-hide:all;"
+    >
+      {{preheader}}
+      <!-- Padding keeps clients from filling the inbox preview with body text. -->
+      &#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;
+    </div>
     <table
       role="presentation"
       border="0"
@@ -76,6 +88,12 @@
               </td>
             </tr>
           </table>
+          <p
+            class="email-muted"
+            style="max-width:500px;margin:16px auto 0;font-size:12px;line-height:1.5;color:#6E675E;text-align:center;"
+          >
+            Sent by Tempo because of activity on your account. Need help? Reply to this email.
+          </p>
         </td>
       </tr>
     </table>

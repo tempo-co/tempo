@@ -5,6 +5,8 @@ import {Account} from '@modules/account/account.entity';
 import {MailpitMessageSummaryResponse, MailpitResponse} from '../types/mailpit';
 import {SIX_DIGIT_REGEX, UUID_REGEX} from '../types/regex.constants';
 
+const EMAIL_FOOTER = 'Sent by Tempo because of activity on your account. Need help? Reply to this email.';
+
 export class EmailUtils {
 	static async clearEmails(apiUrl: string) {
 		await fetch(`${apiUrl}/api/v1/messages`, {method: 'DELETE'});
@@ -85,22 +87,24 @@ export class EmailUtils {
 	) {
 		const ex = ms(ms(expiration as ms.StringValue), {long: true});
 
-		return `Welcome to Tempo, ${name}.
-Please confirm your email address by clicking the button below.
-Verify email ( ${webUrl}/verify-email?email=${encodeURIComponent(email)}&code=${code} )
-This link and code expire in ${ex}. You can also manually enter the code below.
+		return `Welcome to Tempo, ${name}
+Confirm your email address to finish signing up.
+Confirm email ( ${webUrl}/verify-email?email=${encodeURIComponent(email)}&code=${code} )
+The link and code expire in ${ex}. You can also manually enter the code below.
 ${code}
-If you did not sign up for Tempo, please disregard this email.`;
+If you didn't sign up for Tempo, you can ignore this email.
+${EMAIL_FOOTER}`;
 	}
 
 	static getPasswordResetEmailBody(email: Account['email'], webUrl: string, token: string, expiration: string) {
 		const ex = ms(ms(expiration as ms.StringValue), {long: true});
 
 		return `Reset your Tempo password
-You requested a password reset for your Tempo account. Click the button below to proceed and set a new password.
+You asked to reset your Tempo password. Use the button below to choose a new one.
 Reset password ( ${webUrl}/reset-password?email=${encodeURIComponent(email)}&token=${token} )
-This link will expire in ${ex}.
-If you did not request this, please disregard this email.`;
+This link expires in ${ex}.
+If you didn't ask for this, you can ignore this email. Your password stays the same.
+${EMAIL_FOOTER}`;
 	}
 
 	static getVerifyNewEmailBody(email: Account['email'], webUrl: string, token: string, expiration: string) {
@@ -110,13 +114,15 @@ If you did not request this, please disregard this email.`;
 You asked to use this address for your Tempo account. Confirm it to finish the change.
 Confirm email ( ${webUrl}/verify-email-change?email=${encodeURIComponent(email)}&token=${token} )
 This link expires in ${ex}. Your current email keeps working until you confirm.
-If you didn't ask for this, you can ignore this email.`;
+If you didn't ask for this, you can ignore this email.
+${EMAIL_FOOTER}`;
 	}
 
 	static getEmailChangedBody(name: Account['name'], oldEmail: Account['email'], newEmail: Account['email']) {
 		return `Your Tempo email was changed, ${name}
 You now sign in with ${newEmail} instead of ${oldEmail}.
-If you didn't make this change, reset your password and contact us right away.`;
+If you didn't make this change, reset your password and reply to this email right away.
+${EMAIL_FOOTER}`;
 	}
 
 	private static _sleep(ms: number = 250) {

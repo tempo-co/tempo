@@ -2,6 +2,12 @@ import {ConfigurationService} from '@core/config/config.service';
 
 import {createMailerOptions} from './email.module';
 
+jest.mock('html-to-text', () => ({
+	convert: () => {
+		throw new Error('synthetic conversion failure');
+	},
+}));
+
 type EmailConfig = {
 	EMAIL_HOST: string;
 	EMAIL_PORT: number;
@@ -59,5 +65,18 @@ describe('EmailModule SMTP options', () => {
 		});
 		expect(options.transport).not.toHaveProperty('auth');
 		expect(options.defaults.from).toBe('"Tempo" <no-reply@localhost>');
+	});
+
+	it('reports a plain-text conversion failure through the template callback', async () => {
+		const options = createMailerOptions(
+			makeConfig({EMAIL_HOST: 'mailpit', EMAIL_PORT: 1025, EMAIL_SECURE: false, EMAIL_REQUIRE_TLS: false}),
+		);
+		const mail = {data: {template: 'account-deleted', context: {name: 'Example User'}}};
+
+		const error = await new Promise<Error | undefined>((resolve) =>
+			options.template.adapter.compile(mail, resolve, options),
+		);
+
+		expect(error?.message).toBe('synthetic conversion failure');
 	});
 });

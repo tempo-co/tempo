@@ -1,5 +1,8 @@
-{{#> layout subject=subject }}
-  <h1>Tempo can't sync {{bankName}}.</h1>
+{{#> layout
+    subject=subject
+    preheader=(concat "Check your " bankName " connection in Tempo.")
+}}
+  <h1>Tempo can't sync {{bankName}}</h1>
   <p>{{reason}} {{lastSyncDescription}}</p>
   <p>Open your bank connections in Tempo to check it, and reconnect the bank if Tempo asks you to.</p>
   {{> button

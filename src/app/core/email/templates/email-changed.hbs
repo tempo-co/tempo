@@ -1,5 +1,8 @@
-{{#> layout subject="Your Tempo email was changed" }}
+{{#> layout
+    subject="Your Tempo email was changed"
+    preheader=(concat "You now sign in to Tempo with " newEmail ".")
+}}
   <h1>Your Tempo email was changed, {{name}}</h1>
   <p>You now sign in with <strong>{{newEmail}}</strong> instead of <strong>{{oldEmail}}</strong>.</p>
-  <p>If you didn't make this change, reset your password and contact us right away.</p>
+  <p>If you didn't make this change, reset your password and reply to this email right away.</p>
 {{/layout}}
