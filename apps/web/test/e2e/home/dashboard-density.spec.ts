@@ -2,6 +2,8 @@ import {mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 
 import {septemberSummary} from '../../data/home-summary.data';
+import type {Locator, Page} from '@playwright/test';
+
 import {expect, test} from '../../fixtures';
 import {
   fulfillJson,
@@ -449,3 +451,167 @@ test('recent requests and shows only five transactions', async ({page}) => {
     page.getByRole('region', {name: 'Latest in September 2026'}).locator('li'),
   ).toHaveCount(5);
 });
+
+/** Realistic worst-case values: long names, six- and seven-figure amounts, foreign and unconverted accounts. */
+async function mockWorstCaseHome(page: Page) {
+  const account = {
+    details: null,
+    cashAccountType: null,
+    usage: null,
+    maskedIdentifier: null,
+    currentBalanceType: null,
+    balanceUpdatedAt: '2026-10-01T11:00:00Z',
+    isActive: true,
+    latestBalances: [],
+  };
+  await mockBankConnections(page, [
+    {
+      id: '00000000-0000-4000-8000-000000000002',
+      provider: 'EXAMPLE',
+      aspspName: 'Example Savings and Investment Bank International',
+      aspspCountry: 'NL',
+      status: 'AUTHORIZED',
+      consentValidUntil: '2026-10-04T00:00:00Z',
+      lastSyncedAt: '2026-09-27T11:00:00Z',
+      lastSyncError: null,
+      nextSyncAt: '2026-09-28T11:00:00Z',
+      syncStatus: 'FAILED',
+      baseCurrency: 'EUR',
+      bankAccounts: [
+        {
+          ...account,
+          id: '00000000-0000-4000-8000-000000000003',
+          name: 'Alexandria Wellington-Montgomery',
+          alias: 'Shared household account for bills and groceries',
+          currency: 'EUR',
+          currentBalanceAmount: '1234567.89',
+          currentBalanceInBaseCurrency: '1234567.89',
+          baseCurrencyRateDate: null,
+        },
+        {
+          ...account,
+          id: '00000000-0000-4000-8000-000000000004',
+          name: null,
+          alias: 'Travel wallet',
+          currency: 'USD',
+          currentBalanceAmount: '-98765.43',
+          currentBalanceInBaseCurrency: '-90123.45',
+          baseCurrencyRateDate: '2026-09-30',
+        },
+        {
+          ...account,
+          id: '00000000-0000-4000-8000-000000000005',
+          name: null,
+          alias: 'Long-term savings account for later',
+          currency: 'CHF',
+          currentBalanceAmount: '50000.00',
+          currentBalanceInBaseCurrency: null,
+          baseCurrencyRateDate: null,
+        },
+      ],
+    },
+  ]);
+  const payment = {
+    nextExpectedDate: '2026-10-08',
+    amountKind: 'VARIABLE',
+    currency: 'EUR',
+    merchantLogoUrl: null,
+  } as const;
+  await mockJson(page, '**/recurring-series/summary?**', {
+    expenseMonthlyTotal: '12345.67',
+    incomeMonthlyTotal: '234567.89',
+    expenseThisMonth: {month: '2026-10', paid: '1.00', remaining: '12344.67'},
+    incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '234567.89'},
+    upcoming: [
+      {
+        ...payment,
+        key: 'a'.repeat(32),
+        name: 'Example Health Insurer Supplementary Dental Package',
+        direction: 'EXPENSE',
+        typicalAmount: '1234.56',
+        category: 'INSURANCE',
+        flags: ['LATE'],
+      },
+      {
+        ...payment,
+        key: 'b'.repeat(32),
+        name: 'SEPA-DIRECT-DEBIT-EXAMPLEENERGYSUPPLIERINTERNATIONAL',
+        direction: 'EXPENSE',
+        typicalAmount: '98765.43',
+        category: 'HOUSING_AND_UTILITIES',
+        flags: [],
+      },
+      {
+        ...payment,
+        key: 'c'.repeat(32),
+        name: 'Example Employer International Holdings Salary',
+        direction: 'INCOME',
+        typicalAmount: '234567.89',
+        category: 'INCOME',
+        flags: [],
+      },
+    ],
+    expenseUnconvertedCount: 3,
+    incomeUnconvertedCount: 1,
+    baseCurrency: 'EUR',
+  });
+  await page.route('**/bank-transactions?**', (route) =>
+    fulfillJson(route, {
+      total: 1284,
+      transactions: [
+        ['Example Health Insurer Supplementary Dental Package October', '-1234.56'],
+        ['SEPA-DIRECT-DEBIT-NL91ABNA0417164300-MANDATE-EXAMPLECOMPANY', '-98765.43'],
+        ['X', '1234567.89'],
+      ].map(([description, amount], index) => ({
+        id: `00000000-0000-4000-8000-${String(index + 10).padStart(12, '0')}`,
+        bookingDate: '2026-09-30',
+        description,
+        amount,
+        currency: 'EUR',
+        category: 'OTHER',
+        categoryStatus: 'COMPLETED',
+        categorySource: 'MANUAL',
+        financialEventType: null,
+        cashFlowTreatment: Number(amount) < 0 ? 'EXPENSE' : 'INCOME',
+      })),
+    }),
+  );
+}
+
+/** How many lines an element's text wraps onto. */
+function lineCount(locator: Locator) {
+  return locator.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    return new Set(Array.from(range.getClientRects(), (rect) => Math.round(rect.top))).size;
+  });
+}
+
+for (const {width, textSize} of [
+  {width: 390, textSize: '100%'},
+  {width: 320, textSize: '100%'},
+  // Safari's text size and Chrome's text scaling enlarge the root font.
+  {width: 390, textSize: '150%'},
+]) {
+  test(`keeps worst-case data inside the screen at ${width}px with ${textSize} text`, async ({
+    page,
+  }) => {
+    await mockWorstCaseHome(page);
+    await page.setViewportSize({width, height: 1000});
+    await page.goto('/?month=2026-09');
+    await page.addStyleTag({content: `html { font-size: ${textSize}; }`});
+    const balances = page.getByRole('region', {name: 'Balances'});
+    await expect(balances).toContainText('Total€1,144,444.44');
+    await expect(balances).toContainText(
+      'Leaves out Long-term savings account for later until its balance is converted.',
+    );
+    const recurring = page.getByRole('region', {name: 'Recurring payments'});
+    const income = recurring.getByText('+€234,567.89');
+    await expect(income).toBeVisible();
+    expect(await lineCount(income)).toBe(1);
+    await expect(
+      page.getByRole('region', {name: 'Latest in September 2026'}).locator('li'),
+    ).toHaveCount(3);
+    await expectNoHorizontalOverflow(page);
+  });
+}

@@ -97,14 +97,14 @@ export function RecurringCard() {
   );
 }
 
-/** Bills and income a month side by side; bills also say what is still due this month. */
+/** Bills and income a month side by side, income below when both do not fit; bills also say what is still due. */
 function ThisMonth({summary}: {summary: RecurringSummary}) {
   const currency = summary.baseCurrency;
   const month = summary.expenseThisMonth;
   const hasIncome = toCents(summary.incomeMonthlyTotal) > 0;
 
   return (
-    <dl className={cn('grid gap-x-6 gap-y-3', hasIncome && 'grid-cols-2')}>
+    <dl className='flex flex-wrap justify-between gap-x-6 gap-y-3'>
       <div className='min-w-0'>
         <dt className='text-xs text-muted-foreground'>Monthly bills</dt>
         <dd className='numeric text-xl font-semibold'>
@@ -122,9 +122,9 @@ function ThisMonth({summary}: {summary: RecurringSummary}) {
         )}
       </div>
       {hasIncome && (
-        <div className='min-w-0 text-right'>
+        <div className='ml-auto min-w-0 text-right'>
           <dt className='text-xs text-muted-foreground'>Monthly income</dt>
-          <dd className='numeric text-xl font-semibold text-success'>
+          <dd className='numeric text-xl font-semibold whitespace-nowrap text-success'>
             +{formatMoney(summary.incomeMonthlyTotal, currency)}
           </dd>
         </div>

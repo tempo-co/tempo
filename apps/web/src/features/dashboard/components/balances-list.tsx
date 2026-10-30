@@ -93,13 +93,13 @@ export function BalancesList({
                         {[account.name, account.alias].filter(Boolean).join(' · ') ||
                           'Bank account'}
                       </p>
+                      {stale && (
+                        <p className='text-xs text-muted-foreground'>
+                          {formatNotSyncedSince(connection)}
+                        </p>
+                      )}
                     </div>
                   </div>
-                  {stale && (
-                    <p className='text-xs text-muted-foreground'>
-                      {formatNotSyncedSince(connection)}
-                    </p>
-                  )}
                 </div>
                 {account.currency !== baseCurrency &&
                   account.currentBalanceInBaseCurrency != null &&
@@ -122,13 +122,11 @@ export function BalancesList({
       <div className='grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 border-t pt-4 text-sm'>
         <span className='font-semibold'>Total</span>
         <p className='text-right numeric'>
-          {baseCurrency
-            ? `${formatMoney(totalCents / 100, baseCurrency)}${missing.length ? ` excluding ${missing.map(({account}) => resolveBankAccountLabel(account)).join(', ')}` : ''}`
-            : 'Calculating…'}
+          {baseCurrency ? formatMoney(totalCents / 100, baseCurrency) : 'Calculating…'}
         </p>
-        {missing.length > 0 && (
+        {baseCurrency && missing.length > 0 && (
           <p className='col-span-2 text-xs text-muted-foreground'>
-            Accounts without a converted balance are left out.
+            {`Leaves out ${missing.map(({account}) => resolveBankAccountLabel(account)).join(', ')} until ${missing.length === 1 ? 'its balance is' : 'their balances are'} converted.`}
           </p>
         )}
       </div>

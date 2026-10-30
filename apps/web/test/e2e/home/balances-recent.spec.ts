@@ -46,7 +46,8 @@ test('shows foreign balance provenance and excludes missing conversions', async 
   await page.goto('/?month=2026-08');
   const balances = page.getByRole('region', {name: 'Balances'});
   await expect(balances).toContainText('≈ €100.00 · ECB rate of 30 Sep 2026');
-  await expect(balances).toContainText('€100.00 excluding Travel wallet');
+  await expect(balances).toContainText('Total€100.00');
+  await expect(balances).toContainText('Leaves out Travel wallet until its balance is converted.');
   await expect(balances.getByRole('listitem').filter({hasText: 'Empty wallet'})).not.toContainText(
     'ECB rate',
   );

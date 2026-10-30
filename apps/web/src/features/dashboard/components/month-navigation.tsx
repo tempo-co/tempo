@@ -14,14 +14,15 @@ const arrowClassName = 'h-11 w-11 shrink-0 motion-safe:active:scale-[0.97]';
 
 export function MonthNavigation({month, isCurrentMonth}: MonthNavigationProps) {
   return (
-    <div className='flex flex-wrap items-center gap-x-4 gap-y-3'>
-      <div className='flex items-center gap-3 sm:gap-4'>
+    <div className='flex min-w-0 flex-wrap items-center gap-x-4 gap-y-3'>
+      <div className='flex min-w-0 items-center gap-3 sm:gap-4'>
         <Button asChild variant='outline' size='icon' className={arrowClassName}>
           <Link to='/' search={monthSearch(shiftMonth(month, -1))} aria-label='Previous month'>
             <ChevronLeft aria-hidden='true' />
           </Link>
         </Button>
-        <h1 className='w-[13ch] shrink-0 text-center text-xl leading-tight font-semibold whitespace-nowrap min-[360px]:text-page-title'>
+        {/* A fixed width keeps the arrows still between months; enlarged text wraps it instead of widening the page. */}
+        <h1 className='w-[13ch] min-w-0 text-center text-xl leading-tight font-semibold min-[360px]:text-page-title'>
           {formatMonth(month)}
         </h1>
         {isCurrentMonth ? (
