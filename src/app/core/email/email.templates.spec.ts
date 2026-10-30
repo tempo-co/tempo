@@ -61,43 +61,62 @@ const emailTemplates: Array<{name: string; context: Record<string, string>}> = [
 	},
 ];
 
-// Renders through the configured mailer adapter, including CSS inlining, as sent emails are.
+// Renders through the configured mailer adapter, including CSS inlining and the plain-text part, as sent emails are.
 const renderEmailTemplate = (name: string, context: Record<string, string>) =>
-	new Promise<string>((resolvePromise, reject) => {
-		const mail = {data: {template: name, context} as {template: string; context: object; html?: string}};
+	new Promise<{html: string; text: string}>((resolvePromise, reject) => {
+		const mail = {
+			data: {template: name, context} as {template: string; context: object; html?: string; text?: string},
+		};
 		mailerOptions.template.adapter.compile(
 			mail,
-			(error?: Error) => (error ? reject(error) : resolvePromise(mail.data.html ?? '')),
+			(error?: Error) =>
+				error ? reject(error) : resolvePromise({html: mail.data.html ?? '', text: mail.data.text ?? ''}),
 			mailerOptions,
 		);
 	});
 
 describe('Email templates', () => {
 	for (const {name, context} of emailTemplates) {
-		it(`${name} renders inside a centered, padded card`, async () => {
-			const html = await renderEmailTemplate(name, context);
+		it(`${name} renders inside a centered, padded card with preview text and a help footer`, async () => {
+			const {html, text} = await renderEmailTemplate(name, context);
 
 			expect(html).toContain('width="500"');
 			expect(html).toContain('align="center"');
 			expect(html).toContain('bgcolor="#FBF8F1"');
 			expect(html).toContain('border:1px solid #D0C8B9');
 			expect(html).toContain('padding:24px');
+			expect(html).toMatch(/<div class="email-preheader" style="display:none;[^"]*">\s*\S/);
+			expect(html).toContain(
+				'Sent by Tempo because of activity on your account. Need help? Reply to this email.',
+			);
+			expect(text).toContain('Need help? Reply to this email.');
 		});
 	}
 
-	it('renders the reset subject, copy, and supplied action URL', async () => {
-		const html = await renderEmailTemplate('reset-password', resetPasswordContext);
+	it('renders the reset subject, copy, action URL, preview text, and plain-text part', async () => {
+		const {html, text} = await renderEmailTemplate('reset-password', resetPasswordContext);
+		const resetUrl = resetPasswordContext.resetUrl;
 
 		expect(html).toContain('<title>Reset your Tempo password</title>');
 		expect(html).toMatch(/<h1[^>]*>Reset your Tempo password<\/h1>/);
-		expect(html).toContain(
-			'href="https://tempo.example.test/tempo/reset-password?email=example%40example.test&amp;token=00000000-0000-0000-0000-000000000000"',
+		expect(html).toContain('Choose a new password. The link expires in 1 hour.');
+		expect(html.split(`href="${resetUrl.replace('&', '&amp;')}"`)).toHaveLength(3);
+		expect(html).toContain("If the button doesn't work, copy this link into your browser:");
+		expect(html).toContain('This link expires in 1 hour.');
+		expect(text).toBe(
+			[
+				'Reset your Tempo password',
+				'You asked to reset your Tempo password. Use the button below to choose a new one.',
+				`Reset password ( ${resetUrl} )`,
+				'This link expires in 1 hour.',
+				"If you didn't ask for this, you can ignore this email. Your password stays the same.",
+				'Sent by Tempo because of activity on your account. Need help? Reply to this email.',
+			].join('\n\n'),
 		);
-		expect(html).toContain('This link will expire in 1 hour.');
 	});
 
 	it('renders the brand button colors and verification-code styling in light and dark themes', async () => {
-		const html = await renderEmailTemplate('welcome', welcomeContext);
+		const {html} = await renderEmailTemplate('welcome', welcomeContext);
 
 		expect(html).toContain('background-color: #8F4032');
 		expect(html).toContain('color: #F6F1E8');

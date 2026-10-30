@@ -51,7 +51,7 @@ describe('AuthController - Signup', () => {
 		const code = EmailUtils.extractCode(body);
 
 		expect(welcomeEmail?.To[0].Address).toEqual(email);
-		expect(welcomeEmail?.Subject).toBe('Welcome to Tempo - Please confirm your email');
+		expect(welcomeEmail?.Subject).toBe('Confirm your email for Tempo');
 		expect(body).toEqual(EmailUtils.getWelcomeEmailBody(email, name, webUrl, code, emailVerificationExpiration));
 	}
 

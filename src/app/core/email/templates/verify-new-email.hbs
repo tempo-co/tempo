@@ -1,4 +1,7 @@
-{{#> layout subject="Confirm your new Tempo email" }}
+{{#> layout
+    subject="Confirm your new Tempo email"
+    preheader=(concat "Confirm this address to finish changing your Tempo email. The link expires in " expiration ".")
+}}
   <h1>Confirm your new email</h1>
   <p>You asked to use this address for your Tempo account. Confirm it to finish the change.</p>
   {{> button

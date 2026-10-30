@@ -2,6 +2,7 @@ import {MailerModule} from '@nestjs-modules/mailer';
 import {HandlebarsAdapter} from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import {BullModule} from '@nestjs/bullmq';
 import {Module} from '@nestjs/common';
+import {type HtmlToTextOptions, convert} from 'html-to-text';
 import {join} from 'path';
 
 import {ConfigurationService} from '@core/config/config.service';
@@ -11,6 +12,42 @@ import {EmailProcessor} from './email.processor';
 import {EmailService} from './email.service';
 
 const DEFAULT_EMAIL_FROM = '"Tempo" <no-reply@localhost>';
+
+const PLAIN_TEXT_OPTIONS: HtmlToTextOptions = {
+	wordwrap: false,
+	selectors: [
+		// Same link format as Mailpit's derived text, which tempo-web's E2E helpers parse.
+		{selector: 'a', options: {linkBrackets: ['( ', ' )']}},
+		{selector: 'h1', options: {uppercase: false}},
+		{selector: 'h2', options: {uppercase: false}},
+		{selector: 'table', format: 'block'},
+		{selector: 'tr', format: 'block'},
+		{selector: 'td', format: 'block'},
+		{selector: '.email-preheader', format: 'skip'},
+		{selector: '.email-fallback', format: 'skip'},
+	],
+};
+
+/** Adds a plain-text part generated from the rendered HTML to every templated email. */
+export class EmailTemplateAdapter extends HandlebarsAdapter {
+	compile(...[mail, callback, mailerOptions]: Parameters<HandlebarsAdapter['compile']>) {
+		super.compile(
+			mail,
+			(error?: Error) => {
+				let failure = error;
+				if (!failure && mail.data.html) {
+					try {
+						mail.data.text = convert(mail.data.html, PLAIN_TEXT_OPTIONS);
+					} catch (conversionError) {
+						failure = conversionError as Error;
+					}
+				}
+				callback(failure);
+			},
+			mailerOptions,
+		);
+	}
+}
 
 export const createMailerOptions = (config: ConfigurationService) => {
 	const host = config.get('EMAIL_HOST');
@@ -30,7 +67,7 @@ export const createMailerOptions = (config: ConfigurationService) => {
 		template: {
 			dir: join(__dirname, 'templates'),
 			// Keep the <style> block after inlining so the dark-theme media query reaches the inbox.
-			adapter: new HandlebarsAdapter(undefined, {inlineCssOptions: {keepStyleTags: true}}),
+			adapter: new EmailTemplateAdapter(undefined, {inlineCssOptions: {keepStyleTags: true}}),
 			options: {strict: true},
 		},
 		options: {

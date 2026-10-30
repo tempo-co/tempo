@@ -1,5 +1,8 @@
-{{#> layout subject=subject }}
-  <h1>Your {{bankName}} connection needs renewing.</h1>
+{{#> layout
+    subject=subject
+    preheader=(concat "Reconnect " bankName " before " consentEndsOn " to keep it syncing.")
+}}
+  <h1>Your {{bankName}} connection needs renewing</h1>
   <p>The access you gave Tempo to {{bankName}} ends on {{consentEndsOn}}. After that, Tempo can no longer sync this bank.</p>
   <p>Reconnect the bank in Tempo before then to keep your data up to date.</p>
   {{> button

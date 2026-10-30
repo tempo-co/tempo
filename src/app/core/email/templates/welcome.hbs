@@ -1,13 +1,16 @@
-{{#> layout subject="Welcome to Tempo" }}
-  <h1>Welcome to Tempo, {{name}}.</h1>
-  <p>Please confirm your email address by clicking the button below.</p>
+{{#> layout
+    subject="Confirm your email for Tempo"
+    preheader=(concat "Your Tempo code is " code ". It expires in " expiration ".")
+}}
+  <h1>Welcome to Tempo, {{name}}</h1>
+  <p>Confirm your email address to finish signing up.</p>
   {{> button
       url=verificationUrl
-      text="Verify email"
+      text="Confirm email"
       bgColor="#8F4032"
       textColor="#F6F1E8"
   }}
-  <p>This link and code expire in {{expiration}}. You can also manually enter the code below.</p>
+  <p>The link and code expire in {{expiration}}. You can also manually enter the code below.</p>
   {{> code-block code=code }}
-  <p>If you did not sign up for Tempo, please disregard this email.</p>
+  <p>If you didn't sign up for Tempo, you can ignore this email.</p>
 {{/layout}}
