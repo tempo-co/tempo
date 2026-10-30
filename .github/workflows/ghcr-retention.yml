@@ -26,9 +26,9 @@ jobs:
             fail-fast: false
             matrix:
                 include:
-                    - package: tempo-api
+                    - package: api
                       directory: apps/api
-                    - package: tempo-web
+                    - package: web
                       directory: apps/web
         steps:
             - name: Checkout retention script

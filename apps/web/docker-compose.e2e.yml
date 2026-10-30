@@ -43,7 +43,7 @@ services:
       start_period: 5s
 
   api:
-    image: ${TEMPO_API_E2E_IMAGE:-ghcr.io/tempo-co/tempo-api:main}
+    image: ${TEMPO_API_E2E_IMAGE:-ghcr.io/tempo-co/api:main}
     container_name: api
     ports:
       - '3000:3000'

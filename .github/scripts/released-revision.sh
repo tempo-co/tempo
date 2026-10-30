@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Print the commit (org.opencontainers.image.revision label) a public GHCR image tag was built from.
 #
-#   released-revision.sh tempo-co/tempo-api main
+#   released-revision.sh tempo-co/api main
 set -euo pipefail
 repo=$1 tag=$2
 token=$(curl -fsS "https://ghcr.io/token?scope=repository:$repo:pull" | jq -r .token)

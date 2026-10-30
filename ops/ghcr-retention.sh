@@ -2,7 +2,7 @@
 # Delete old versions of one of a repository's GHCR images. Dry run unless --delete.
 #
 #   ghcr-retention.sh <owner>/<repo> <package> <app directory> [--delete]
-#   ghcr-retention.sh tempo-co/tempo tempo-api apps/api
+#   ghcr-retention.sh tempo-co/tempo api apps/api
 #
 # Keeps versions tagged `main`, the images of the last KEEP_MAIN (default 5) main commits
 # that changed the app directory (rollback targets), versions tagged `pr-<n>` for open PRs,

@@ -51,7 +51,7 @@ Rules:
 
 ## API image
 
-E2E runs the API image named in `docker-compose.e2e.yml`: `${TEMPO_API_E2E_IMAGE:-ghcr.io/tempo-co/tempo-api:main}`. A local run proves nothing about an unmerged API change unless `TEMPO_API_E2E_IMAGE` points at an image that contains it: build one from `apps/api` (`docker build -t tempo-api:local ../api`) or use a PR's `ghcr.io/tempo-co/tempo-api:pr-<n>`.
+E2E runs the API image named in `docker-compose.e2e.yml`: `${TEMPO_API_E2E_IMAGE:-ghcr.io/tempo-co/api:main}`. A local run proves nothing about an unmerged API change unless `TEMPO_API_E2E_IMAGE` points at an image that contains it: build one from `apps/api` (`docker build -t tempo-api:local ../api`) or use a PR's `ghcr.io/tempo-co/api:pr-<n>`.
 
 In CI, the `Select API image` step uses the API image built in the same run when the change touches `apps/api`, otherwise API `:main`, pinned by digest either way; the run summary records the image and revision used (root `docs/ci-and-images.md`). If only the feature that changed fails while unrelated pages pass, check that image for the route before suspecting the spec; never weaken an assertion to match an older API.
 
