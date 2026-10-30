@@ -19,3 +19,4 @@ Tempo is a private, self-hosted personal-finance app. It synchronizes real bank 
 | [`docs`](docs/ci-and-images.md) | CI and images for both apps |
 
 Each app has its own `package.json`, lockfile and tooling; run npm commands inside its directory (`cd apps/api && npm ci`). Both need Node.js 22.x and Docker.
+
