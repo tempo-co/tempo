@@ -1,4 +1,4 @@
-import {faker} from '@faker-js/faker';
+import {randomBytes, randomUUID} from 'node:crypto';
 import {Server} from 'node:net';
 import request, {Response} from 'supertest';
 import TestAgent from 'supertest/lib/agent';
@@ -8,11 +8,24 @@ import {SignUpDto} from '@modules/auth/api/dtos/signup.dto';
 import {loginAgent} from '../setup/e2e.setup';
 import {EmailUtils} from './email-utils';
 
+export function uniqueEmail(): string {
+	return `user-${randomUUID()}@example.test`;
+}
+
+/** A random 12-character password, within the 8–255 character limit. */
+export function uniquePassword(): string {
+	return randomBytes(9).toString('base64url');
+}
+
+export function uniqueName(): string {
+	return `Example User ${randomUUID().slice(0, 8)}`;
+}
+
 export function createAccountCredentials(): SignUpDto {
 	return {
-		name: faker.person.fullName(),
-		email: faker.internet.email().toLowerCase(),
-		password: faker.internet.password({length: 10}),
+		name: uniqueName(),
+		email: uniqueEmail(),
+		password: uniquePassword(),
 	};
 }
 

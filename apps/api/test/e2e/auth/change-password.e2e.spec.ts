@@ -1,4 +1,3 @@
-import {faker} from '@faker-js/faker';
 import {Server} from 'node:net';
 import request from 'supertest';
 
@@ -12,7 +11,7 @@ import {
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
-import {expectValidationMessage} from '../../utils/auth-utils';
+import {expectValidationMessage, uniquePassword} from '../../utils/auth-utils';
 
 describe('AuthController - Change password', () => {
 	let httpServer: Server;
@@ -31,7 +30,7 @@ describe('AuthController - Change password', () => {
 				.send({name: 'Example password client'})
 				.expect(201);
 
-			const newPassword = faker.internet.password({length: 12});
+			const newPassword = uniquePassword();
 			const changePasswordDto: PasswordChangeDto = {
 				currentPassword: PW_CHANGE_ACCOUNT_PASSWORD,
 				newPassword: newPassword,
@@ -69,7 +68,7 @@ describe('AuthController - Change password', () => {
 
 			const changePasswordDto: PasswordChangeDto = {
 				currentPassword: 'wrong-current-password',
-				newPassword: faker.internet.password({length: 12}),
+				newPassword: uniquePassword(),
 			};
 
 			const response = await agent.post('/auth/change-password').send(changePasswordDto).expect(401);
@@ -84,11 +83,7 @@ describe('AuthController - Change password', () => {
 				{currentPassword: VERIFIED_ACCOUNT_PASSWORD, newPassword: 'short'},
 				/newPassword must be longer than or equal to 8 characters/i,
 			],
-			[
-				'current password is missing',
-				{newPassword: faker.internet.password({length: 12})},
-				/currentPassword should not be empty/i,
-			],
+			['current password is missing', {newPassword: uniquePassword()}, /currentPassword should not be empty/i],
 			[
 				'new password is missing',
 				{currentPassword: VERIFIED_ACCOUNT_PASSWORD},

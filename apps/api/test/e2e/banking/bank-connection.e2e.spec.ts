@@ -1,8 +1,7 @@
-import {faker} from '@faker-js/faker';
 import {jest} from '@jest/globals';
 import {INestApplication} from '@nestjs/common';
 import Redis from 'ioredis';
-import {generateKeyPairSync} from 'node:crypto';
+import {generateKeyPairSync, randomUUID} from 'node:crypto';
 import {Server} from 'node:net';
 import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
@@ -100,7 +99,7 @@ describe('BankConnectionController', () => {
 		]);
 		startAuthorization.mockResolvedValue({
 			url: 'https://auth.example.test/authorize',
-			authorizationId: faker.string.uuid(),
+			authorizationId: randomUUID(),
 		});
 
 		verifiedAgent = await loginAgent(httpServer, VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
@@ -307,7 +306,7 @@ describe('BankConnectionController', () => {
 				.set('Origin', 'http://localhost:5173')
 				.expect(400);
 			await verifiedAgent
-				.post(`/bank-connections/${faker.string.uuid()}/refresh`)
+				.post(`/bank-connections/${randomUUID()}/refresh`)
 				.set('Origin', 'http://localhost:5173')
 				.expect(404);
 		} finally {

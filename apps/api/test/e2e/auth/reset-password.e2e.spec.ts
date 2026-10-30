@@ -1,4 +1,4 @@
-import {faker} from '@faker-js/faker';
+import {randomUUID} from 'node:crypto';
 import {Server} from 'node:net';
 import request from 'supertest';
 
@@ -14,7 +14,7 @@ import {PasswordResetVerifyDto} from '@modules/auth/api/dtos/password-reset-veri
 import {PW_RESET_ACCOUNT_EMAIL, PW_RESET_ACCOUNT_PASSWORD} from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 import {UUID_VALIDATION_REGEX} from '../../types/regex.constants';
-import {expectValidationMessage} from '../../utils/auth-utils';
+import {expectValidationMessage, uniqueEmail, uniquePassword} from '../../utils/auth-utils';
 import {EmailUtils} from '../../utils/email-utils';
 
 describe('AuthController - Reset Password', () => {
@@ -68,7 +68,7 @@ describe('AuthController - Reset Password', () => {
 		});
 
 		it('should return confirmation even if the email does not exist', async () => {
-			const nonExistentEmail = faker.internet.email();
+			const nonExistentEmail = uniqueEmail();
 
 			const response = await requestReset(nonExistentEmail).expect(200);
 			expect(response.body.message).toBe(PASSWORD_RESET_CONFIRMATION);
@@ -107,7 +107,7 @@ describe('AuthController - Reset Password', () => {
 				.set('Origin', 'http://localhost:5173')
 				.send({name: 'Example reset client'})
 				.expect(201);
-			const newPassword = faker.internet.password({length: 12});
+			const newPassword = uniquePassword();
 
 			const response = await verifyReset({token: resetToken, newPassword}).expect(200);
 			expect(response.body.message).toBe(PASSWORD_RESET_SUCCESS);
@@ -120,14 +120,14 @@ describe('AuthController - Reset Password', () => {
 
 		it('should fail with 400 Bad Request for a non-existent token', async () => {
 			const response = await verifyReset({
-				token: faker.string.uuid(),
-				newPassword: faker.internet.password({length: 12}),
+				token: randomUUID(),
+				newPassword: uniquePassword(),
 			}).expect(400);
 			expect(response.body.message).toBe(PASSWORD_RESET_INVALID_TOKEN);
 		});
 
 		it('should fail with 400 Bad Request if the token has already been used', async () => {
-			const verifyDto = {token: resetToken, newPassword: faker.internet.password({length: 12})};
+			const verifyDto = {token: resetToken, newPassword: uniquePassword()};
 
 			await verifyReset(verifyDto).expect(200);
 			currentPassword = verifyDto.newPassword;
@@ -144,14 +144,10 @@ describe('AuthController - Reset Password', () => {
 			],
 			[
 				'new password exceeds maximum length (255)',
-				(token) => ({token, newPassword: faker.string.alpha(256)}),
+				(token) => ({token, newPassword: 'a'.repeat(256)}),
 				/newPassword must be shorter than or equal to 255 characters/i,
 			],
-			[
-				'token is missing',
-				() => ({newPassword: faker.internet.password({length: 12})}),
-				/token should not be empty/i,
-			],
+			['token is missing', () => ({newPassword: uniquePassword()}), /token should not be empty/i],
 			['newPassword is missing', (token) => ({token}), /newPassword should not be empty/i],
 		])('should fail with 400 Bad Request if %s', async (_case, buildBody, message) => {
 			const response = await verifyReset(buildBody(resetToken)).expect(400);

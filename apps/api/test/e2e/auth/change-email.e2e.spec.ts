@@ -1,4 +1,4 @@
-import {faker} from '@faker-js/faker';
+import {randomUUID} from 'node:crypto';
 import {Server} from 'node:net';
 import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
@@ -28,7 +28,12 @@ import {
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 import {UUID_REGEX} from '../../types/regex.constants';
-import {createAccountCredentials, createVerifiedAccount, expectValidationMessage} from '../../utils/auth-utils';
+import {
+	createAccountCredentials,
+	createVerifiedAccount,
+	expectValidationMessage,
+	uniqueEmail,
+} from '../../utils/auth-utils';
 import {EmailUtils} from '../../utils/email-utils';
 
 const TEST_WEB_BASE_URL = 'https://app.example.test';
@@ -98,7 +103,7 @@ describe('AuthController - Change email', () => {
 		}
 
 		it('should return 204 No Content for an available email', async () => {
-			await check(faker.internet.email()).expect(204);
+			await check(uniqueEmail()).expect(204);
 		});
 
 		it.each([
@@ -120,7 +125,7 @@ describe('AuthController - Change email', () => {
 
 	describe('POST /auth/change-email/request', () => {
 		it('should send a verification email to the new email address for a verified account', async () => {
-			const newEmail = faker.internet.email().toLowerCase();
+			const newEmail = uniqueEmail();
 
 			const response = await requestChange(verifiedAgent, {newEmail}).expect(200);
 			expect(response.body.message).toBe(EMAIL_VERIFICATION_SENT);
@@ -138,7 +143,7 @@ describe('AuthController - Change email', () => {
 		it.each(REJECTED_ORIGINS)(
 			'should reject an email change request with a %s Origin before sending email',
 			async (_kind, origin) => {
-				const attackerEmail = `takeover-${faker.string.uuid()}@attacker.example.test`;
+				const attackerEmail = `takeover-${randomUUID()}@attacker.example.test`;
 
 				await sendWithOrigin(verifiedAgent.post('/auth/change-email/request'), origin, {
 					newEmail: attackerEmail,
@@ -149,7 +154,7 @@ describe('AuthController - Change email', () => {
 		);
 
 		it('should send the verification link to the normalized new email', async () => {
-			const newEmail = faker.internet.email().toLowerCase();
+			const newEmail = uniqueEmail();
 
 			await requestChange(verifiedAgent, {newEmail: ` ${newEmail.toUpperCase()} `}).expect(200);
 
@@ -181,7 +186,7 @@ describe('AuthController - Change email', () => {
 		beforeEach(async () => {
 			agent = await loginAgent(httpServer, accountEmail, EMAIL_CHANGE_ACCOUNT_PASSWORD);
 
-			newEmailAddress = faker.internet.email().toLowerCase();
+			newEmailAddress = uniqueEmail();
 			await requestChange(agent, {newEmail: newEmailAddress}).expect(200);
 			token = await EmailUtils.getToken(newEmailAddress, mailpitApiUrl);
 
@@ -213,7 +218,7 @@ describe('AuthController - Change email', () => {
 			const verifier = app.get(EmailVerifierService);
 			const account = await accounts.findByEmail(accountEmail);
 			expect(account).not.toBeNull();
-			const newerEmail = faker.internet.email().toLowerCase();
+			const newerEmail = uniqueEmail();
 			let release!: () => void;
 			let entered!: () => void;
 			const enteredValidation = new Promise<void>((resolve) => {
@@ -285,7 +290,7 @@ describe('AuthController - Change email', () => {
 		});
 
 		it('should not notify the old address when verification fails', async () => {
-			await verifyChange(agent, {token: faker.string.uuid(), email: newEmailAddress}).expect(400);
+			await verifyChange(agent, {token: randomUUID(), email: newEmailAddress}).expect(400);
 
 			expect(
 				await EmailUtils.findEmailByRecipient(accountEmail, mailpitApiUrl, EMAIL_CHANGED_SUBJECT),
@@ -308,9 +313,7 @@ describe('AuthController - Change email', () => {
 		);
 
 		it('should fail with 400 Bad Request for an invalid token', async () => {
-			const response = await verifyChange(agent, {token: faker.string.uuid(), email: newEmailAddress}).expect(
-				400,
-			);
+			const response = await verifyChange(agent, {token: randomUUID(), email: newEmailAddress}).expect(400);
 			expect(response.body.message).toBe(EMAIL_INVALID_TOKEN);
 		});
 
@@ -333,7 +336,7 @@ describe('AuthController - Change email', () => {
 		});
 
 		it('should reject an older link once a newer change has been requested', async () => {
-			const newerEmail = faker.internet.email().toLowerCase();
+			const newerEmail = uniqueEmail();
 			await requestChange(agent, {newEmail: newerEmail}).expect(200);
 			const newerToken = await EmailUtils.getToken(newerEmail, mailpitApiUrl);
 
@@ -362,7 +365,7 @@ describe('AuthController - Change email', () => {
 		it('should reject a link whose email does not match the requested one', async () => {
 			const response = await verifyChange(agent, {
 				token,
-				email: faker.internet.email().toLowerCase(),
+				email: uniqueEmail(),
 			}).expect(400);
 			expect(response.body.message).toBe(EMAIL_INVALID_TOKEN);
 			await expectAccountEmail(accountEmail);

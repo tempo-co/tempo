@@ -25,9 +25,7 @@ updates:
       # typescript-eslint accepts TypeScript below 6.1 and ts-jest below 7; loosen as they move.
       - dependency-name: typescript
         versions: ['>= 6.1.0']
-      # ESM-only from these majors; Jest loads them only with a transform or --experimental-vm-modules.
-      - dependency-name: '@faker-js/faker'
-        update-types: ['version-update:semver-major']
+      # ESM-only from this major; Jest loads it only with a transform or --experimental-vm-modules.
       - dependency-name: parse5
         update-types: ['version-update:semver-major']
 
