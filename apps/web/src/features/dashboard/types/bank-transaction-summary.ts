@@ -1,4 +1,4 @@
-import type {BankTransactionCategoryFilterValue} from '@/features/banking/types/bank-transaction';
+import type {BankTransactionCategoryFilterValue} from '@tempo/contracts';
 
 /** Money fields are decimal strings with two places in the owner's base currency. */
 export type BankTransactionSummaryCategory = {

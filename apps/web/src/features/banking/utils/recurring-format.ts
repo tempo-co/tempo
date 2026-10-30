@@ -1,9 +1,8 @@
+import type {RecurringSeries} from '@tempo/contracts';
 import {differenceInCalendarDays, format} from 'date-fns';
 
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatMoney} from '@/features/dashboard/utils/money';
-
-import type {RecurringSeries} from '../types/recurring-series';
 
 /** Counted in the totals: active and not hidden. */
 export const isCounted = (series: Pick<RecurringSeries, 'hidden' | 'status'>) =>

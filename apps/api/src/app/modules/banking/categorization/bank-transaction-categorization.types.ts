@@ -1,6 +1,7 @@
+import type {BankTransactionCategory} from '@tempo/contracts';
+
 import type {BankTransactionDirection} from '../bank-transaction-direction';
 import type {BankTransactionLocation} from '../bank-transaction-location';
-import type {BankTransactionCategory} from './bank-transaction-category';
 
 export const BANK_TRANSACTION_CATEGORIZATION_STATUSES = [
 	'PENDING',

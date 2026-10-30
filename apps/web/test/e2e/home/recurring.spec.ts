@@ -1,6 +1,6 @@
 import type {Page} from '@playwright/test';
+import type {RecurringSummary} from '@tempo/contracts';
 
-import type {RecurringSummary} from '../../../src/features/banking/types/recurring-series';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {API_URL, expect, test} from '../../fixtures';

@@ -1,21 +1,19 @@
+import type {
+	BankTransactionCategory,
+	RecurringAmountKind,
+	RecurringAmountRange,
+	RecurringCadence,
+	RecurringPayment,
+	RecurringPriceChange,
+	RecurringSeriesDirection,
+	RecurringSeriesFlag,
+	RecurringSeriesStatus,
+} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
 
 import {BANK_TRANSACTION_DIRECTIONS, type BankTransactionDirection} from '../bank-transaction-direction';
-import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
 import {parseMerchantKey} from '../categorization/bank-transaction-merchant-key';
 import {divideRounded, formatCents, medianCents} from '../summary/bank-transaction-summary';
-
-export const RECURRING_CADENCES = ['WEEKLY', 'FOUR_WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY'] as const;
-export type RecurringCadence = (typeof RECURRING_CADENCES)[number];
-
-export const RECURRING_AMOUNT_KINDS = ['FIXED', 'VARIABLE'] as const;
-export type RecurringAmountKind = (typeof RECURRING_AMOUNT_KINDS)[number];
-
-export const RECURRING_SERIES_STATUSES = ['ACTIVE', 'ENDED'] as const;
-export type RecurringSeriesStatus = (typeof RECURRING_SERIES_STATUSES)[number];
-
-export const RECURRING_SERIES_FLAGS = ['LATE', 'HIGHER_THAN_USUAL'] as const;
-export type RecurringSeriesFlag = (typeof RECURRING_SERIES_FLAGS)[number];
 
 /** One settled, non-internal payment with a merchant identity; amounts are positive magnitudes in cents. */
 export type RecurringCandidate = {
@@ -38,7 +36,7 @@ export type RecurringCandidate = {
 	amountCents: bigint;
 	baseAmountCents: bigint | null;
 	name: string;
-	category: string | null;
+	category: BankTransactionCategory | null;
 };
 
 export type UndatedRecurringSeries = {
@@ -46,7 +44,7 @@ export type UndatedRecurringSeries = {
 	/** The payee the series is grouped under; may differ from the merchant key stored on its transactions. */
 	merchantKey: string;
 	name: string;
-	direction: BankTransactionDirection;
+	direction: RecurringSeriesDirection;
 	cadence: RecurringCadence;
 	amountKind: RecurringAmountKind;
 	currency: string;
@@ -78,7 +76,7 @@ export type UndatedRecurringSeries = {
 	/** A fixed price's recent change against the price before it, until the new price has been paid three times. */
 	priceChange: RecurringPriceChange | null;
 	/** The latest payment's category. */
-	category: string | null;
+	category: BankTransactionCategory | null;
 };
 
 /** A detected history rendered on one date; never stored as the recognition result. */
@@ -87,17 +85,6 @@ export type DetectedRecurringSeries = UndatedRecurringSeries & {
 	flags: RecurringSeriesFlag[];
 	/** This month's actual cost for a varying monthly bill, otherwise its usual monthly cost. */
 	monthlyEquivalent: bigint | null;
-};
-
-export type RecurringAmountRange = {low: string; high: string};
-
-export type RecurringPayment = {date: string; amount: string};
-
-export type RecurringPriceChange = {
-	/** Signed difference, e.g. "1.50" or "-3.50". */
-	amount: string;
-	/** Date of the first payment at the new price. */
-	since: string;
 };
 
 type CadenceRule = {

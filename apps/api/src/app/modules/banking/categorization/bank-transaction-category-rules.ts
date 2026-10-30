@@ -1,5 +1,6 @@
+import type {BankTransactionCategory} from '@tempo/contracts';
+
 import type {BankTransaction} from '../bank-transaction.entity';
-import type {BankTransactionCategory} from './bank-transaction-category';
 
 export const BANK_TRANSACTION_CATEGORY_RULE_PROVIDER = 'rule';
 export const BANK_TRANSACTION_CATEGORY_RULE_VERSION = 'bank-transaction-category-rules-v1';

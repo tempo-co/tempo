@@ -1,6 +1,6 @@
+import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from '@tempo/contracts';
 import {ArrayMaxSize, IsArray, IsEnum, IsOptional, IsUUID} from 'class-validator';
 
-import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from '../../categorization/bank-transaction-category';
 import {MAX_MANUAL_CATEGORY_FOLLOW_UP_TRANSACTIONS} from '../../categorization/manual-category-follow-up';
 
 export class BankTransactionCategoryUpdateDto {

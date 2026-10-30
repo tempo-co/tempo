@@ -1,4 +1,5 @@
-import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
+import type {BankTransactionCategory} from '@tempo/contracts';
+
 import type {DetectedRecurringSeries, RecurringCandidate} from './recurring-series-detection';
 
 const ORDINARY_RETAIL_CATEGORIES: ReadonlySet<string> = new Set<BankTransactionCategory>([

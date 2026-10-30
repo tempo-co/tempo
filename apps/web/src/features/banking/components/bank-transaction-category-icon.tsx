@@ -1,8 +1,8 @@
+import {BankTransactionCategory} from '@tempo/contracts';
 import {RefreshCw, Tags} from 'lucide-react';
 
 import {cn} from '@/utils/cn';
 
-import {BankTransactionCategory} from '../types/bank-transaction';
 import {BANK_TRANSACTION_CATEGORY_META} from '../utils/bank-transaction-category-meta';
 
 type BankTransactionCategoryIconProps = {

@@ -1,9 +1,7 @@
+import type {BankTransactionCategoryFilterValue} from '@tempo/contracts';
 import {parse} from 'date-fns';
 
-import type {
-  BankTransactionCategoryFilterValue,
-  BankTransactionSearchParams,
-} from '@/features/banking/types/bank-transaction';
+import type {BankTransactionSearchParams} from '@/features/banking/types/bank-transaction';
 
 import type {BankTransactionReviewCounts} from '../types/bank-transaction-summary';
 

@@ -1,3 +1,8 @@
+import {
+  type RecurringSeries,
+  type RecurringSeriesDirection,
+  type RecurringSeriesList,
+} from '@tempo/contracts';
 import {format} from 'date-fns';
 import {ChevronRight, RefreshCw, Repeat} from 'lucide-react';
 import {useEffect, useState} from 'react';
@@ -12,12 +17,7 @@ import {cn} from '@/utils/cn';
 import {savedDataStatus} from '@/utils/query-status';
 
 import {useGetRecurringSeries} from '../api/use-get-recurring-series';
-import {
-  RECURRING_CADENCE_LABELS,
-  type RecurringSeries,
-  type RecurringSeriesDirection,
-  type RecurringSeriesList,
-} from '../types/recurring-series';
+import {RECURRING_CADENCE_LABELS} from '../types/recurring-series';
 import {formatBankTransactionCompactDate} from '../utils/formatters';
 import {
   formatAmount,

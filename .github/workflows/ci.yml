@@ -64,8 +64,9 @@ jobs:
                       ops_base=$BEFORE
                   fi
                   echo "bases: api=${api_base:-unknown} web=${web_base:-unknown} ops=${ops_base:-unknown}"
-                  api=$(touched "$api_base" '^apps/api/')
-                  web=$(touched "$web_base" '^apps/web/')
+                  # Both apps compile the shared contracts package into their images.
+                  api=$(touched "$api_base" '^(apps/api|packages/contracts)/|^\.dockerignore$')
+                  web=$(touched "$web_base" '^(apps/web|packages/contracts)/|^\.dockerignore$')
                   ops=$(touched "$ops_base" '^ops/')
                   e2e=false
                   if [[ $api == true || $web == true ]]; then e2e=true; fi
@@ -266,7 +267,8 @@ jobs:
               id: build
               uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
               with:
-                  context: apps/api
+                  context: .
+                  file: apps/api/Dockerfile
                   push: ${{ env.PUSH == 'true' }}
                   outputs: ${{ env.PUSH != 'true' && format('type=docker,dest={0}/api-image.tar', runner.temp) || '' }}
                   tags: ${{ steps.tags.outputs.tags }}
@@ -562,7 +564,7 @@ jobs:
             - name: Build and publish image
               uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
               with:
-                  context: apps/web
+                  context: .
                   file: apps/web/Dockerfile.production
                   push: ${{ env.PUSH == 'true' }}
                   tags: ${{ steps.tags.outputs.tags }}

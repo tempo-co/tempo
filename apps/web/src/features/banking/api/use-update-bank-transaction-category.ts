@@ -1,12 +1,11 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
+import {BANK_TRANSACTION_UNCATEGORIZED, BankTransactionCategory} from '@tempo/contracts';
 import {toast} from 'sonner';
 
 import {HttpError, api, wasToasted} from '@/utils/api';
 
 import {
-  BANK_TRANSACTION_UNCATEGORIZED,
   BankTransaction,
-  BankTransactionCategory,
   BankTransactionFilterParams,
   BankTransactionsResponse,
 } from '../types/bank-transaction';

@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type {MessageCreateParamsNonStreaming} from '@anthropic-ai/sdk/resources/messages';
 import {Injectable, Logger, Optional} from '@nestjs/common';
+import {BANK_TRANSACTION_CATEGORIES} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
 import {request as httpRequest} from 'node:http';
 import {z} from 'zod';
@@ -29,7 +30,6 @@ import {
 	MerchantIdentification,
 	MerchantIdentificationInput,
 } from '../bank-transaction-categorization.types';
-import {BANK_TRANSACTION_CATEGORIES} from '../bank-transaction-category';
 
 const categorizationClassificationSchema = z
 	.object({

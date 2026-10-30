@@ -1,7 +1,7 @@
 import {Page, Route} from '@playwright/test';
+import type {RecurringSummary} from '@tempo/contracts';
 
 import type {BankConnection} from '../../src/features/banking/types/bank-connection';
-import type {RecurringSummary} from '../../src/features/banking/types/recurring-series';
 import type {BankBalanceTrend} from '../../src/features/dashboard/types/bank-balance-trend';
 import type {BankTransactionCashFlow} from '../../src/features/dashboard/types/bank-transaction-cash-flow';
 import type {

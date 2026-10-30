@@ -1335,7 +1335,7 @@ describe('detectRecurringSeries', () => {
 	});
 
 	it('keeps one payer’s monthly payments as one stream through amount changes and one-off extras', () => {
-		const income = {merchantKey: 'INCOME:example grants office', category: 'INCOME'};
+		const income = {merchantKey: 'INCOME:example grants office', category: 'INCOME'} as const;
 		const levels = ['300.00', '300.00', '300.00', '640.00', '640.00', '640.00', '640.00', '500.00', '500.00'];
 		const levels2 = ['500.00', '220.00', '220.00', '320.00', '320.00', '320.00', '230.00', '230.00', '230.00'];
 		const monthlyRows = [...levels, ...levels2].map((amount, index) =>
@@ -1359,7 +1359,7 @@ describe('detectRecurringSeries', () => {
 	});
 
 	it('keeps a salary one stream from a small start through months that vary', () => {
-		const income = {merchantKey: 'INCOME:example employer', category: 'INCOME'};
+		const income = {merchantKey: 'INCOME:example employer', category: 'INCOME'} as const;
 		const amounts = ['250.00', '250.00', '250.00', '250.00', '250.00', null, '1150.00', '1170.00', '1260.00'];
 		const later = ['1330.00', '1240.00', '1500.00', '1120.00', '1220.00', '1160.00', '1210.00', '940.00', '215.00'];
 		const rows = [...amounts, ...later].flatMap((amount, index) =>
@@ -1386,7 +1386,11 @@ describe('detectRecurringSeries', () => {
 	});
 
 	it('keeps one stream when the payer also pays once from another account', () => {
-		const income = {merchantKey: 'INCOME:example grants office', category: 'INCOME', name: 'Example Grants Office'};
+		const income = {
+			merchantKey: 'INCOME:example grants office',
+			category: 'INCOME',
+			name: 'Example Grants Office',
+		} as const;
 		const stream = ['100.00', '140.00', '180.00', '220.00', '260.00', '300.00'].map((amount, index) =>
 			payment(isoMonth(2026, 1 + index, 24), amount, income),
 		);
@@ -1423,7 +1427,11 @@ describe('detectRecurringSeries', () => {
 	it.each(['EXPENSE', 'INCOME'] as const)(
 		'classifies a small quarterly subset of irregular %s payments',
 		(direction) => {
-			const venue = {merchantKey: `${direction}:example venue`, name: 'Example Venue', category: 'ENTERTAINMENT'};
+			const venue = {
+				merchantKey: `${direction}:example venue`,
+				name: 'Example Venue',
+				category: 'ENTERTAINMENT',
+			} as const;
 			const quarterly = ['2034-01-12', '2034-04-12', '2034-07-12', '2034-10-12'].map((date, index) =>
 				payment(date, ['17.00', '41.00', '23.00', '59.00'][index], venue),
 			);
@@ -1488,7 +1496,7 @@ describe('detectRecurringSeries', () => {
 			merchantKey: 'INCOME:transfer from example friend',
 			name: 'Transfer from EXAMPLE FRIEND',
 			category: 'TRANSFER_IN',
-		};
+		} as const;
 		const rows = [
 			payment('2024-01-26', '55.00', friend),
 			payment('2024-02-25', '22.66', friend),
@@ -1505,7 +1513,7 @@ describe('detectRecurringSeries', () => {
 			personTransfer: true,
 			name: 'Transfer to EXAMPLE LANDLORD',
 			category: 'TRANSFER_OUT',
-		};
+		} as const;
 		const rows = monthly(1, MAY_TO_OCT, '650.00', landlord);
 		expect(detectRecurringSeries(rows, '2026-10-03')).toEqual([
 			expect.objectContaining({amountKind: 'FIXED', transactionIds: rows.map(({id}) => id)}),
@@ -1513,7 +1521,11 @@ describe('detectRecurringSeries', () => {
 	});
 
 	it('keeps weekly pay that varies with hours worked as one income stream', () => {
-		const employer = {merchantKey: 'INCOME:example staffing payroll', name: 'EXAMPLE STAFFING', category: 'INCOME'};
+		const employer = {
+			merchantKey: 'INCOME:example staffing payroll',
+			name: 'EXAMPLE STAFFING',
+			category: 'INCOME',
+		} as const;
 		const amounts = [
 			'140.10',
 			'151.80',
@@ -1543,7 +1555,7 @@ describe('detectRecurringSeries', () => {
 			merchantKey: 'EXPENSE:example corner shop',
 			name: 'Example Corner Shop',
 			category: 'SUBSCRIPTIONS',
-		};
+		} as const;
 		const amounts = ['14.10', '31.80', '9.40', '22.25', '18.00', '27.80', '8.15', '33.90'];
 		const rows = amounts.map((amount, index) => payment(isoMonth(2024, 1, 3 + 7 * index), amount, shop));
 		expect(detectRecurringSeries(rows, '2024-03-01')).toEqual([]);
@@ -2329,7 +2341,7 @@ describe('detectRecurringSeries', () => {
 		const counterpartyFriend = [payment('2025-07-02', '30.00'), payment('2026-07-01', '30.00')].map((row) => ({
 			...row,
 			merchantKey: 'EXPENSE:sam other',
-			category: 'TRANSFER_OUT',
+			category: 'TRANSFER_OUT' as const,
 		}));
 
 		// A named person seen elsewhere as a transfer, now under a plain counterparty name.
@@ -2344,9 +2356,9 @@ describe('detectRecurringSeries', () => {
 		};
 		// Two transfers a year apart beside one uncategorised payment to the same payee.
 		const mixed = [
-			{...payment('2025-05-10', '40.00'), category: 'TRANSFER_OUT'},
+			{...payment('2025-05-10', '40.00'), category: 'TRANSFER_OUT' as const},
 			{...payment('2026-01-20', '12.00'), category: null},
-			{...payment('2026-05-09', '40.00'), category: 'TRANSFER_OUT'},
+			{...payment('2026-05-09', '40.00'), category: 'TRANSFER_OUT' as const},
 		].map((row) => ({...row, merchantKey: 'EXPENSE:pat mixed'}));
 
 		const rows = [...insurer, ...friend, ...counterpartyFriend, ...knownPerson, knownPersonTransfer, ...mixed];
@@ -2482,7 +2494,9 @@ describe('detectRecurringSeries', () => {
 
 	describe('a varying amount', () => {
 		const bill = (amounts: string[]) =>
-			amounts.map((amount, index) => payment(isoMonth(2026, 1 + index, 5), amount, {category: 'UTILITIES'}));
+			amounts.map((amount, index) =>
+				payment(isoMonth(2026, 1 + index, 5), amount, {category: 'HOUSING_AND_UTILITIES'}),
+			);
 
 		it('shows the median of the last six payments with their range and history, and costs the median a month', () => {
 			const rows = bill(['300.00', '61.00', '95.00', '48.00', '120.00', '77.00', '82.00']);
@@ -2512,7 +2526,11 @@ describe('detectRecurringSeries', () => {
 				detectRecurringSeries(bill(['61.00', '95.00', '48.00', '80.00', '77.00', '99.00']), '2026-06-10'),
 			).toEqual([expect.objectContaining({flags: []})]);
 			// Higher pay is not a warning.
-			const income = rows.map((row) => ({...row, merchantKey: 'INCOME:example employer', category: 'INCOME'}));
+			const income = rows.map((row) => ({
+				...row,
+				merchantKey: 'INCOME:example employer',
+				category: 'INCOME' as const,
+			}));
 			expect(detectRecurringSeries(income, '2026-06-10')).toEqual([expect.objectContaining({flags: []})]);
 			// An ended bill is not flagged.
 			expect(detectRecurringSeries(rows, '2026-09-01')).toEqual([

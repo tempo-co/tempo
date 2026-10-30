@@ -8,9 +8,9 @@ The `Changes` job sets four flags. A PR compares its merge commit with the base 
 
 | Flag | Set when the change touches | Jobs |
 |---|---|---|
-| `api` | `apps/api/**` | `API lint & format`, `API build`, `API unit tests`, `API E2E tests`, `API image` |
-| `web` | `apps/web/**` | `Web lint & format`, `Web build`, `Web image` |
-| `e2e` | `apps/api/**` or `apps/web/**` | `Web E2E shard 1/8`…`8/8`, `Web E2E tests` |
+| `api` | `apps/api/**`, `packages/contracts/**`, `.dockerignore` | `API lint & format`, `API build`, `API unit tests`, `API E2E tests`, `API image` |
+| `web` | `apps/web/**`, `packages/contracts/**`, `.dockerignore` | `Web lint & format`, `Web build`, `Web image` |
+| `e2e` | anything that sets `api` or `web` | `Web E2E shard 1/8`…`8/8`, `Web E2E tests` |
 | `ops` | `ops/**` | `Ops checks` |
 
 A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, and an area whose base commit is unknown (not in this history, or unreadable) runs. Other files (root docs, `AGENTS.md`, other workflows, Dependabot config) run no jobs. Jobs are gated with `if:`, never with `on: paths:`: a skipped job reports success, while a skipped workflow leaves a required check pending forever.
@@ -24,7 +24,7 @@ A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, an
 - `API build`: `npm run build` plus the `mcp/` build.
 - `API unit tests`: Jest, `node --test claude-bridge/*.test.mjs`, and the `mcp/` tests.
 - `API E2E tests`: `npm run test:e2e:cov` on fresh services. It normally takes a few minutes; a run far beyond that is stuck, not slow.
-- `API image` and `Web image`: build `apps/api/Dockerfile` and `apps/web/Dockerfile.production`. The API Dockerfile runs a runtime smoke check, so a built API image is a smoke-tested image. Same-repo, non-Dependabot PRs and pushes to `main` publish `ghcr.io/<owner>/api` and `ghcr.io/<owner>/web` as `:sha-<sha>` and `:pr-<n>`. Images carry `org.opencontainers.image.source` (this repository) and `org.opencontainers.image.revision` (the commit).
+- `API image` and `Web image`: build `apps/api/Dockerfile` and `apps/web/Dockerfile.production` with the repository root as context, so both can copy `packages/contracts`. The root `.dockerignore` allowlists the two apps and that package and keeps `node_modules`, `dist` and env files out. The API Dockerfile runs a runtime smoke check, so a built API image is a smoke-tested image. Same-repo, non-Dependabot PRs and pushes to `main` publish `ghcr.io/<owner>/api` and `ghcr.io/<owner>/web` as `:sha-<sha>` and `:pr-<n>`. Images carry `org.opencontainers.image.source` (this repository) and `org.opencontainers.image.revision` (the commit).
 - `Web build`: `npm run build` plus `scripts/tempo-web-security-headers-test.sh`, which builds the production web image and probes Nginx.
 - `Web E2E shard n/8`: the Playwright suite against the Docker stack in `apps/web/docker-compose.e2e.yml`. The API image is this run's `API image` when `api` is set (pinned by digest; a Dependabot or fork PR, which publishes nothing, passes it as a run artifact instead), otherwise `ghcr.io/tempo-co/api:main` pinned by digest. The run summary records the image and its revision. Every spec runs in Chromium and WebKit when `web` is set; an API-only change runs Chromium only, since WebKit catches browser-engine differences only a web change can introduce. `Web E2E tests` merges the shard reports and fails unless every shard passed.
 - `Release main images`: on `main` only, after `CI` passed, retags `sha-<sha>` as `:main` with `docker buildx imagetools create` (no rebuild), for each app whose flag is set, API before web. It is serialized and skips when `main` has moved on, so `:main` never moves backwards. Production deploys `:main` (`ops/README.md`), so an app a commit did not touch keeps running its previous image.

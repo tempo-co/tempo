@@ -1,3 +1,5 @@
+import type {BankTransactionCategory} from '@tempo/contracts';
+
 import type {BankTransactionDirection} from '../../bank-transaction-direction';
 import type {
 	BankTransactionCashFlowTreatment,
@@ -10,7 +12,6 @@ import type {
 	BankTransactionCategorizationSource,
 	BankTransactionCategorizationStatus,
 } from '../../categorization/bank-transaction-categorization.types';
-import type {BankTransactionCategory} from '../../categorization/bank-transaction-category';
 import type {OwnTransferEvidence, OwnTransferOverride} from '../../own-transfer/own-transfer-detection';
 
 /** The other leg of an own transfer or currency exchange. */

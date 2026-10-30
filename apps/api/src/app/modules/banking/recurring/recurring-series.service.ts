@@ -1,5 +1,15 @@
 import {ConflictException, Injectable, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
+import type {
+	BankTransactionCategory,
+	RecurringContinuation,
+	RecurringSeries,
+	RecurringSeriesDirection,
+	RecurringSeriesList,
+	RecurringSeriesLists,
+	RecurringSummary,
+	RecurringThisMonth,
+} from '@tempo/contracts';
 import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
@@ -8,17 +18,7 @@ import {
 	BANKING_RECURRING_CONTINUATION_CHANGED,
 	BANKING_RECURRING_SERIES_NOT_FOUND,
 } from '../api/constants/banking-messages.constants';
-import type {
-	RecurringContinuationDto,
-	RecurringSeriesDirection,
-	RecurringSeriesDto,
-	RecurringSeriesListDto,
-	RecurringSeriesListsResponseDto,
-	RecurringSeriesSummaryResponseDto,
-	RecurringThisMonthDto,
-} from '../api/dtos/recurring-series.dto';
 import {BankTransaction} from '../bank-transaction.entity';
-import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {SQL_INTERNAL, createOwnerScopedQuery} from '../services/bank-transaction-filters';
 import {daysInMonth, formatCents} from '../summary/bank-transaction-summary';
@@ -108,7 +108,7 @@ type CandidateRow = {
 	amountCents: string;
 	baseAmountCents: string | null;
 	name: string;
-	category: string | null;
+	category: BankTransactionCategory | null;
 	description: string | null;
 	counterpartyName: string | null;
 	counterpartyIban: string | null;
@@ -140,7 +140,7 @@ export class RecurringSeriesService {
 	async list(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
 		asOf: string,
-	): Promise<RecurringSeriesListsResponseDto> {
+	): Promise<RecurringSeriesLists> {
 		const state = await this.readState(accountId);
 		const [paid, logos] = await Promise.all([
 			this.paidThisMonth(accountId, state.detected, asOf),
@@ -198,7 +198,7 @@ export class RecurringSeriesService {
 	async summary(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
 		asOf: string,
-	): Promise<RecurringSeriesSummaryResponseDto> {
+	): Promise<RecurringSummary> {
 		const {expenses, income} = await this.list({id: accountId, baseCurrency}, asOf);
 		const upcoming = [...expenses.series, ...income.series]
 			.filter(({hidden, status}) => !hidden && status === 'ACTIVE')
@@ -447,7 +447,7 @@ function listFor(
 	baseCurrency: string | null,
 	asOf: string,
 	{paid, logos}: {paid: ReadonlyMap<string, bigint>; logos: ReadonlyMap<string, string>},
-): RecurringSeriesListDto {
+): RecurringSeriesList {
 	const series = detected
 		.filter((entry) => entry.direction === direction)
 		.map((entry) => ({
@@ -492,7 +492,7 @@ function thisMonth(
 	counted: readonly DetectedRecurringSeries[],
 	paid: ReadonlyMap<string, bigint>,
 	asOf: string,
-): RecurringThisMonthDto {
+): RecurringThisMonth {
 	const month = asOf.slice(0, 7);
 	const monthEnd = `${month}-${String(daysInMonth(month)).padStart(2, '0')}`;
 	let paidCents = 0n;
@@ -555,9 +555,9 @@ function answers(
 function toResponse(
 	entry: DetectedRecurringSeries,
 	hidden: boolean,
-	continuation: RecurringContinuationDto | null,
+	continuation: RecurringContinuation | null,
 	merchantLogoUrl: string | null,
-): RecurringSeriesDto {
+): RecurringSeries {
 	return {
 		key: entry.key,
 		name: entry.name,
@@ -591,7 +591,7 @@ function toResponse(
 function shownContinuation(
 	entry: UndatedRecurringSeries,
 	continuation: Continuation | undefined,
-): RecurringContinuationDto | null {
+): RecurringContinuation | null {
 	if (!continuation) return null;
 	const {linked, older, newer} = continuation;
 	if (linked ? entry === older || entry === newer : entry !== newer) return null;

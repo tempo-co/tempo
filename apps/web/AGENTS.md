@@ -13,7 +13,7 @@ React 19 + TypeScript SPA (Vite, TanStack Router/Query, Tailwind with shadcn-sty
 ## Verification
 
 - Prefer integration/E2E coverage against local services over mocks when testing external integrations.
-- E2E runs against `ghcr.io/tempo-co/api:main` by default; `TEMPO_API_E2E_IMAGE` points the stack at another API image, such as a local build of `apps/api`. In CI it runs against the API image built in the same run when the change touches `apps/api`, otherwise against API `:main`.
+- E2E runs against `ghcr.io/tempo-co/api:main` by default; `TEMPO_API_E2E_IMAGE` points the stack at another API image, such as a local build of `apps/api`. In CI it runs against the API image built in the same run when the change touches `apps/api` or `packages/contracts`, otherwise against API `:main`.
 - Fresh worktree: `npm ci`, then `npx playwright install chromium webkit --with-deps` (as CI does) before any spec runs. Production and staging serve the app at `/`.
 - Static checks: `npm run lint:check`, `npm run format:check`, `npm run build`. `npm run lint` and `npm run format` modify files.
 - There is no unit-test runner; all tests are Playwright specs under `test/`. Find the specs for a change by grepping `test/e2e` for the route, component or label; `--only-changed` finds nothing because specs do not import `src`.
@@ -53,6 +53,7 @@ Reuse these instead of re-creating setup inline:
 
 - Feature code lives in `src/features/<feature>/{api,components,types,utils}`; shared code in `src/components/shared`, `src/hooks`, `src/providers`, `src/types`, `src/utils`; primitives in `src/components/ui`. Import `src` through the `@/` alias.
 - Filenames are kebab-case; hooks export `useX` from `use-x.ts`. DTO files in feature `types` directories define a Zod schema and infer the exported type from it.
+- API request and response types and the fixed value lists they use come from `@tempo/contracts` (root `packages/contracts`); pass them to `api.get<T>()` and check request bodies with `satisfies`. Don't redefine them in `src`. Labels and other UI copy for those values stay in the feature's `types` or `utils`.
 - JSON API hooks use the `api` wrapper in `src/utils/api.ts` with TanStack Query; it sends cookies, maps failures to `HttpError` and owns the shared auth/network toasts and redirects. Mutations never retry or queue for replay (`src/query-client.ts`).
 - Use `cn` from `src/utils/cn.ts` to merge Tailwind classes.
 - Prettier covers `src/**/*.{js,jsx,ts,tsx}` only; edit `src/index.css` and Markdown by hand.

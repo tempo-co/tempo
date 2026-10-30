@@ -82,10 +82,11 @@ else:
 PY
 }
 
+# The image builds from the repository root, which holds the shared contracts package.
 docker build \
     --file "$repo_root/Dockerfile.production" \
     --tag "$image" \
-    "$repo_root" >/dev/null
+    "$repo_root/../.." >/dev/null
 
 # NET_ADMIN lets the test add the trusted proxy address inside the container and send requests from it.
 docker run --detach --name "$container" \
