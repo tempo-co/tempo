@@ -3,8 +3,7 @@ import {
   UNVERIFIED_ACCOUNT_PASSWORD,
   VERIFIED_ACCOUNT_EMAIL,
   VERIFIED_ACCOUNT_PASSWORD,
-} from 'test/constants/seed.constants';
-
+} from '../../constants/seed.constants';
 import {createVerifiedAccount, expect, test} from '../../fixtures';
 import {LoginPage} from '../../pages/login.page';
 import {fulfillJson} from '../../utils/api-mocks';

@@ -1,8 +1,8 @@
 import type {Locator, Page} from '@playwright/test';
-import {mockBankConnections, mockBankRefresh, mockEmptyHome} from 'test/utils/api-mocks';
-import {boxOf, expectNoHorizontalOverflow} from 'test/utils/layout';
 
 import {expect, test} from '../../fixtures';
+import {mockBankConnections, mockBankRefresh, mockEmptyHome} from '../../utils/api-mocks';
+import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 // The service worker would serve route code from its cache, past the delays below.
 test.use({storageState: {cookies: [], origins: []}, serviceWorkers: 'block'});

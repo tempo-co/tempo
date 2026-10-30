@@ -14,14 +14,14 @@
 		"outDir": "./dist",
 		"rootDir": "./",
 		"resolveJsonModule": true,
-		"baseUrl": "./",
 		"paths": {
-			"@core/*": ["src/app/core/*"],
-			"@modules/*": ["src/app/modules/*"]
+			"@core/*": ["./src/app/core/*"],
+			"@modules/*": ["./src/app/modules/*"]
 		},
 		"incremental": true,
 		"skipLibCheck": true,
 		"strictNullChecks": true,
+		"strictPropertyInitialization": false,
 		"noImplicitAny": true,
 		"strictBindCallApply": true,
 		"forceConsistentCasingInFileNames": true,

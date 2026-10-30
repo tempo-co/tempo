@@ -1,6 +1,5 @@
-import {PW_CHANGE_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
-import {PW_CHANGE_ACCOUNT_EMAIL, PW_CHANGE_ACCOUNT_PASSWORD} from 'test/constants/seed.constants';
-
+import {PW_CHANGE_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {PW_CHANGE_ACCOUNT_EMAIL, PW_CHANGE_ACCOUNT_PASSWORD} from '../../constants/seed.constants';
 import {expect, test} from '../../fixtures';
 
 test.use({storageState: PW_CHANGE_USER_AUTH_FILE});

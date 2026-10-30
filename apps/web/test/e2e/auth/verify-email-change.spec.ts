@@ -1,7 +1,7 @@
 import {faker} from '@faker-js/faker';
-import {UNVERIFIED_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
-import {invalidEmailChangeVerifySearchParams} from 'test/data/verify-email-change-params.data';
 
+import {UNVERIFIED_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {invalidEmailChangeVerifySearchParams} from '../../data/verify-email-change-params.data';
 import {createVerifiedAccount, expect, test} from '../../fixtures';
 import {withSearchParams} from '../../utils/url';
 
