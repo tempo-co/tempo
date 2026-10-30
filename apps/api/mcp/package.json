@@ -15,7 +15,7 @@
 		"smoke:api": "npm run build && node scripts/smoke-api.mjs"
 	},
 	"dependencies": {
-		"@modelcontextprotocol/sdk": "1.32.1",
+		"@modelcontextprotocol/sdk": "1.32.2",
 		"@tempo/contracts": "file:../../../packages/contracts",
 		"validator": "13.15.35",
 		"zod": "4.6.7"
