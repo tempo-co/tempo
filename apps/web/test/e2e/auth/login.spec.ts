@@ -6,8 +6,41 @@ import {
 } from 'test/constants/seed.constants';
 
 import {createVerifiedAccount, expect, test} from '../../fixtures';
+import {mockJson} from '../../utils/api-mocks';
 
 test.describe('Login', () => {
+  test.describe('Opening Tempo signed out', () => {
+    test.use({storageState: {cookies: [], origins: []}});
+
+    test('checks the session before loading page code, then shows the login form', async ({
+      page,
+      baseURL,
+      loginPage,
+    }) => {
+      await mockJson(page, '**/accounts/me', {message: 'Unauthorized'}, 401);
+      // Scripts named in index.html load with the app; any other script is code loaded for a page.
+      const html = await (await page.request.get('/')).text();
+      const appScripts = new Set(
+        [...html.matchAll(/(?:src|href)="([^"]+\.js)"/g)].map(
+          ([, src]) => new URL(src, baseURL).pathname,
+        ),
+      );
+      const events: string[] = [];
+      page.on('request', (request) => {
+        const {pathname} = new URL(request.url());
+        if (pathname.endsWith('/accounts/me')) events.push('session check');
+        else if (request.resourceType() === 'script' && !appScripts.has(pathname))
+          events.push('page code');
+      });
+
+      await page.goto('/');
+
+      await loginPage.expectToBeOnPage();
+      await expect(loginPage.emailInput).toBeVisible();
+      expect(events[0]).toBe('session check');
+    });
+  });
+
   test.describe('Successful login flow', () => {
     test('should login successfully with verified account and redirect to home page', async ({
       loginPage,
