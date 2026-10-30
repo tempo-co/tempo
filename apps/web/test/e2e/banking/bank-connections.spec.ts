@@ -195,6 +195,9 @@ test.describe('bank connections', () => {
     await page.goto('/bank-connections?result=connected');
 
     await expect(page.getByRole('heading', {name: 'Bank connections'})).toBeVisible();
+    // The toast times out, so check it on landing rather than after the inspector steps.
+    await expect(page.getByText('Bank connection added')).toBeVisible();
+    await expect(page).toHaveURL(new RegExp('/bank-connections$'));
     await expect(page.getByText('1 connection', {exact: true})).toBeVisible();
     const connectionCard = page
       .locator('[data-testid^="bank-connection-"]')
@@ -244,8 +247,6 @@ test.describe('bank connections', () => {
     await expect(inspector).toBeHidden();
     await expect(transactionTrigger).toBeFocused();
     expect(new URL(page.url()).searchParams.has('transactionId')).toBe(false);
-    await expect(page.getByText('Bank connection added')).toBeVisible();
-    await expect(page).toHaveURL(new RegExp('/bank-connections$'));
   });
 
   for (const {syncStatus, title, description} of [
