@@ -29,7 +29,8 @@ export const createMailerOptions = (config: ConfigurationService) => {
 		defaults: {from: config.get('EMAIL_FROM') ?? DEFAULT_EMAIL_FROM},
 		template: {
 			dir: join(__dirname, 'templates'),
-			adapter: new HandlebarsAdapter(),
+			// Keep the <style> block after inlining so the dark-theme media query reaches the inbox.
+			adapter: new HandlebarsAdapter(undefined, {inlineCssOptions: {keepStyleTags: true}}),
 			options: {strict: true},
 		},
 		options: {

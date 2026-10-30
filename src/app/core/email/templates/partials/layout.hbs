@@ -3,8 +3,11 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
     <title>{{subject}}</title>
     <style type="text/css">
+      :root { color-scheme: light dark; supported-color-schemes: light dark; }
       h1, h2, p { margin-top: 0; }
       h1 {
         color: #28252B;
@@ -27,11 +30,24 @@
         margin-bottom: 16px;
       }
       p:last-of-type { margin-bottom: 0; }
+
+      @media (prefers-color-scheme: dark) {
+        h1, h2, p, .email-text { color: #F0EBE2 !important; }
+        .email-card { background-color: #201E24 !important; border-color: #3A363E !important; }
+        .email-code { background-color: #2A272E !important; border-color: #3A363E !important; color: #F0EBE2 !important; }
+        .email-button { background-color: #E59A7B !important; color: #17161B !important; }
+      }
+
+      [data-ogsc] h1, [data-ogsc] h2, [data-ogsc] p, [data-ogsc] .email-text { color: #F0EBE2 !important; }
+      [data-ogsb] .email-card { background-color: #201E24 !important; border-color: #3A363E !important; }
+      [data-ogsb] .email-code { background-color: #2A272E !important; border-color: #3A363E !important; }
+      [data-ogsc] .email-code { color: #F0EBE2 !important; }
+      [data-ogsb] .email-button { background-color: #E59A7B !important; }
+      [data-ogsc] .email-button { color: #17161B !important; }
     </style>
   </head>
   <body
-    bgcolor="#F6F1E8"
-    style="margin:0;padding:0;background-color:#F6F1E8;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#28252B;"
+    style="margin:0;padding:0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#28252B;"
   >
     <table
       role="presentation"
@@ -39,8 +55,7 @@
       cellpadding="0"
       cellspacing="0"
       width="100%"
-      bgcolor="#F6F1E8"
-      style="width:100%;border-collapse:collapse;background-color:#F6F1E8;"
+      style="width:100%;border-collapse:collapse;"
     >
       <tr>
         <td align="center" style="padding:32px 16px;">
@@ -52,10 +67,11 @@
             width="500"
             align="center"
             bgcolor="#FBF8F1"
+            class="email-card"
             style="width:100%;max-width:500px;border:1px solid #D0C8B9;border-collapse:collapse;background-color:#FBF8F1;"
           >
             <tr>
-              <td style="padding:24px;line-height:1.5;color:#28252B;">
+              <td class="email-text" style="padding:24px;line-height:1.5;color:#28252B;">
                 {{> @partial-block }}
               </td>
             </tr>
