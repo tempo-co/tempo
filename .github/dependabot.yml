@@ -22,6 +22,9 @@ updates:
       # connect-redis 9+ dropped ioredis, which the session store uses.
       - dependency-name: connect-redis
         update-types: ['version-update:semver-major']
+      # Remove when typeorm's optional ioredis peer accepts 6 (it caps at ^5.0.4).
+      - dependency-name: ioredis
+        update-types: ['version-update:semver-major']
       # typescript-eslint accepts TypeScript below 6.1 and ts-jest below 7; loosen as they move.
       - dependency-name: typescript
         versions: ['>= 6.1.0']
