@@ -1,10 +1,12 @@
 import {Body, Controller, Delete, Get, Head, HttpCode, Param, Post, Query, Req, Res, UseGuards} from '@nestjs/common';
 import {Throttle, minutes} from '@nestjs/throttler';
+import type {Account as AccountResponse, MessageResponse, Session} from '@tempo/contracts';
 import {Request, Response} from 'express';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {SessionService} from '@core/session/session.service';
 import {Account} from '@modules/account/account.entity';
+import {toAccountResponse} from '@modules/account/api/account-response';
 
 import {CurrentAccount} from '../decorators/current-user.decorator';
 import {Public} from '../decorators/public.decorator';
@@ -40,8 +42,8 @@ export class AuthController {
 	@Post('signup')
 	@HttpCode(201)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
-	async signUp(@Body() dto: SignUpDto, @Req() request: Request) {
-		return await this.authService.signUp(dto, request);
+	async signUp(@Body() dto: SignUpDto, @Req() request: Request): Promise<AccountResponse> {
+		return toAccountResponse(await this.authService.signUp(dto, request));
 	}
 
 	@Public()
@@ -49,15 +51,15 @@ export class AuthController {
 	@HttpCode(200)
 	@UseGuards(LocalLogInGuard)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
-	async logIn(@Body() _dto: LogInDto, @CurrentAccount() account: Account) {
-		return account;
+	logIn(@Body() _dto: LogInDto, @CurrentAccount() account: Account): AccountResponse {
+		return toAccountResponse(account);
 	}
 
 	@Post('logout')
 	@HttpCode(200)
 	@SkipEmailVerification()
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
-	async logOut(@Req() request: Request, @Res({passthrough: true}) res: Response) {
+	async logOut(@Req() request: Request, @Res({passthrough: true}) res: Response): Promise<MessageResponse> {
 		res.clearCookie(this.configurationService.get('SESSION_COOKIE_NAME'), {
 			path: this.configurationService.get('SESSION_COOKIE_PATH'),
 		});
@@ -68,7 +70,7 @@ export class AuthController {
 	@HttpCode(200)
 	@SkipEmailVerification()
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
-	async resendWelcomeEmail(@CurrentAccount() account: Account) {
+	async resendWelcomeEmail(@CurrentAccount() account: Account): Promise<MessageResponse> {
 		return await this.emailVerifierService.sendWelcomeEmail(account);
 	}
 
@@ -76,7 +78,7 @@ export class AuthController {
 	@Post('signup/verify')
 	@HttpCode(200)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
-	async verifyEmail(@Body() dto: EmailVerifyDto, @Req() request: Request) {
+	async verifyEmail(@Body() dto: EmailVerifyDto, @Req() request: Request): Promise<MessageResponse> {
 		const user = await this.emailVerifierService.verifySignup(dto.code, dto.email);
 		if (!request.isAuthenticated()) {
 			await this.authService.logIn(user, request);
@@ -95,7 +97,10 @@ export class AuthController {
 	@UseGuards(CsrfOriginGuard)
 	@HttpCode(200)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
-	async requestEmailChange(@CurrentAccount() account: Account, @Body() dto: EmailChangeRequestDto) {
+	async requestEmailChange(
+		@CurrentAccount() account: Account,
+		@Body() dto: EmailChangeRequestDto,
+	): Promise<MessageResponse> {
 		return await this.emailVerifierService.requestEmailChange(account, dto.newEmail);
 	}
 
@@ -103,14 +108,21 @@ export class AuthController {
 	@UseGuards(CsrfOriginGuard)
 	@HttpCode(200)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
-	async verifyEmailChange(@CurrentAccount() account: Account, @Body() dto: EmailChangeVerifyDto) {
+	async verifyEmailChange(
+		@CurrentAccount() account: Account,
+		@Body() dto: EmailChangeVerifyDto,
+	): Promise<MessageResponse> {
 		return await this.emailVerifierService.verifyEmailChange(account, dto.token, dto.email);
 	}
 
 	@Post('change-password')
 	@HttpCode(200)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
-	async changePassword(@CurrentAccount() account: Account, @Body() dto: PasswordChangeDto, @Req() request: Request) {
+	async changePassword(
+		@CurrentAccount() account: Account,
+		@Body() dto: PasswordChangeDto,
+		@Req() request: Request,
+	): Promise<MessageResponse> {
 		return await this.authService.changePassword(account, dto, request.session.id);
 	}
 
@@ -118,7 +130,7 @@ export class AuthController {
 	@Post('reset-password/request')
 	@HttpCode(200)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
-	async requestPasswordReset(@Body() dto: PasswordResetRequestDto) {
+	async requestPasswordReset(@Body() dto: PasswordResetRequestDto): Promise<MessageResponse> {
 		return this.passwordResetService.requestPasswordReset(dto.email);
 	}
 
@@ -126,26 +138,33 @@ export class AuthController {
 	@Post('reset-password/verify')
 	@HttpCode(200)
 	@Throttle({default: {limit: 5, ttl: minutes(1)}})
-	async resetPassword(@Body() dto: PasswordResetVerifyDto) {
+	async resetPassword(@Body() dto: PasswordResetVerifyDto): Promise<MessageResponse> {
 		return this.passwordResetService.resetPassword(dto.newPassword, dto.token);
 	}
 
 	@Get('sessions')
 	@HttpCode(200)
-	async getSessions(@CurrentAccount() account: Account, @Req() request: Request) {
+	async getSessions(@CurrentAccount() account: Account, @Req() request: Request): Promise<Session[]> {
 		return await this.sessionService.getSessions(account.id, request.session.id);
 	}
 
 	@Delete('sessions/:sessionId')
 	@HttpCode(200)
-	async revokeSession(@CurrentAccount() account: Account, @Req() request: Request, @Param() dto: SessionRevokeDto) {
+	async revokeSession(
+		@CurrentAccount() account: Account,
+		@Req() request: Request,
+		@Param() dto: SessionRevokeDto,
+	): Promise<MessageResponse> {
 		return await this.sessionService.revokeSession(account.id, request.session.id, dto.sessionId);
 	}
 
 	@Delete('sessions')
 	@HttpCode(200)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
-	async revokeAllOtherSessions(@CurrentAccount() account: Account, @Req() request: Request) {
+	async revokeAllOtherSessions(
+		@CurrentAccount() account: Account,
+		@Req() request: Request,
+	): Promise<MessageResponse> {
 		return await this.sessionService.revokeAllOtherSessions(account.id, request.session.id);
 	}
 }

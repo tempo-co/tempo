@@ -1,9 +1,9 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
+import type {MessageResponse, Session} from '@tempo/contracts';
 import {toast} from 'sonner';
 
 import {HttpError, api} from '@/utils/api';
 
-import {Session} from '../types/session';
 import {SESSIONS_QUERY_KEY} from './query-keys';
 
 export const useRevokeSession = () => {
@@ -11,7 +11,7 @@ export const useRevokeSession = () => {
 
   const {mutateAsync, isPending} = useMutation<void, HttpError, {id: Session['id']}>({
     mutationFn: async ({id}) => {
-      await api.delete<Session>(`/auth/sessions/${id}`);
+      await api.delete<MessageResponse>(`/auth/sessions/${id}`);
     },
 
     onSuccess: (_data, data) => {

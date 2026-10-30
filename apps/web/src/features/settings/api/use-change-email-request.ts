@@ -1,11 +1,10 @@
 import {useMutation} from '@tanstack/react-query';
+import type {EmailChangeRequest} from '@tempo/contracts';
 
 import {HttpError, api} from '@/utils/api';
 
-import {EmailChangeDto} from '../types/email-change.dto';
-
 export const useChangeEmailRequest = () => {
-  const {mutate: changeEmailRequest, isPending} = useMutation<void, HttpError, EmailChangeDto>({
+  const {mutate: changeEmailRequest, isPending} = useMutation<void, HttpError, EmailChangeRequest>({
     mutationFn: async (dto) => {
       await api.post('/auth/change-email/request', dto);
     },

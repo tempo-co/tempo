@@ -65,7 +65,9 @@ describe('AuthController - Signup', () => {
 			expect(response.body?.name).toEqual(signUpDto.name);
 			expect(response.body?.id).toBeDefined();
 			expect(response.body?.isEmailVerified).toBe(false);
+			expect(response.body?.baseCurrency).toBeNull();
 			expect(response.body?.createdAt).toBeDefined();
+			expect(response.body?.password).toBeUndefined();
 
 			await expectWelcomeEmail(signUpDto.email, signUpDto.name);
 		});

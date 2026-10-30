@@ -1,19 +1,21 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
+import type {Account, EmailChangeVerifyRequest} from '@tempo/contracts';
 import {toast} from 'sonner';
 
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
-import {Account} from '@/types/account';
 import {HttpError, api, wasToasted} from '@/utils/api';
-
-import {TokenSearchParams} from '../types/token.dto';
 
 const TOAST_ID = 'verify-email-change';
 
 export const useVerifyEmailChange = () => {
   const queryClient = useQueryClient();
 
-  const {mutate: verifyEmailChange, isPending} = useMutation<void, HttpError, TokenSearchParams>({
-    mutationFn: async (dto: TokenSearchParams) => {
+  const {mutate: verifyEmailChange, isPending} = useMutation<
+    void,
+    HttpError,
+    EmailChangeVerifyRequest
+  >({
+    mutationFn: async (dto: EmailChangeVerifyRequest) => {
       await api.post('/auth/change-email/verify', dto);
     },
     onMutate: () => {
@@ -21,7 +23,7 @@ export const useVerifyEmailChange = () => {
     },
     onSuccess: async (_data, {email}) => {
       queryClient.setQueryData(CURRENT_ACCOUNT_KEY, (account?: Account) =>
-        account && email ? {...account, email} : account,
+        account ? {...account, email} : account,
       );
       await queryClient.invalidateQueries({queryKey: CURRENT_ACCOUNT_KEY});
       toast.success('Email changed', {

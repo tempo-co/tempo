@@ -1,16 +1,14 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
+import type {Account, AccountUpdateRequest} from '@tempo/contracts';
 
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
-import {Account} from '@/types/account';
 import {HttpError, api} from '@/utils/api';
 import {toastRequest} from '@/utils/toast-request';
-
-import {NameChangeDto} from '../types/name-change.dto';
 
 export const usePatchAccount = () => {
   const queryClient = useQueryClient();
 
-  const {mutateAsync, isPending} = useMutation<Account, HttpError, NameChangeDto>({
+  const {mutateAsync, isPending} = useMutation<Account, HttpError, AccountUpdateRequest>({
     mutationFn: async (dto) => {
       return await api.patch<Account>('/accounts/me', dto);
     },
@@ -19,7 +17,7 @@ export const usePatchAccount = () => {
     },
   });
 
-  const patchAccount = (dto: NameChangeDto) => {
+  const patchAccount = (dto: AccountUpdateRequest) => {
     return toastRequest(mutateAsync(dto), {
       loading: 'Saving name...',
       success: 'Name saved.',

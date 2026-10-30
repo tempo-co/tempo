@@ -1,8 +1,8 @@
 import {useQuery} from '@tanstack/react-query';
+import type {Session} from '@tempo/contracts';
 
 import {api} from '@/utils/api';
 
-import {Session} from '../types/session';
 import {SESSIONS_QUERY_KEY} from './query-keys';
 
 export const useGetSessions = () => {

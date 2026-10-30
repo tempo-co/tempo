@@ -1,8 +1,8 @@
 import {onlineManager, useQueryClient} from '@tanstack/react-query';
+import type {Account} from '@tempo/contracts';
 import {useEffect} from 'react';
 
 import {CURRENT_ACCOUNT_KEY, PAGE_LOADED_AT} from '@/hooks/use-current-account';
-import type {Account} from '@/types/account';
 import {getSessionSignal} from '@/utils/api';
 import {isAccountQuery} from '@/utils/offline-storage';
 

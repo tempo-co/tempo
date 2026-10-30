@@ -1,7 +1,8 @@
+import type {Session} from '@tempo/contracts';
+
 import {Button, ButtonProps} from '@/components/ui/button';
 
 import {useRevokeSession} from '../../api/use-revoke-session';
-import {Session} from '../../types/session';
 import {ConfirmActionDialog} from './confirm-action-dialog';
 
 type SessionRevokeDialogProps = {
