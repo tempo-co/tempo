@@ -1,18 +1,20 @@
+import type {OwnTransferEvidence, OwnTransferOverride} from '@tempo/contracts';
+
 import {extractStructuredCounterpartyName, normalizeBankTransactionText} from '../bank-transaction-display';
 import {BANK_TRANSACTION_TYPES} from '../bank-transaction-type';
+
+export type {OwnTransferEvidence, OwnTransferOverride};
 
 export const OWN_TRANSFER_EVIDENCE = {
 	IBAN: 'IBAN',
 	NAME: 'NAME',
 	MANUAL: 'MANUAL',
-} as const;
-export type OwnTransferEvidence = (typeof OWN_TRANSFER_EVIDENCE)[keyof typeof OWN_TRANSFER_EVIDENCE];
+} as const satisfies {[E in OwnTransferEvidence]: E};
 
 export const OWN_TRANSFER_OVERRIDES = {
 	MARKED: 'MARKED',
 	UNMARKED: 'UNMARKED',
-} as const;
-export type OwnTransferOverride = (typeof OWN_TRANSFER_OVERRIDES)[keyof typeof OWN_TRANSFER_OVERRIDES];
+} as const satisfies {[O in OwnTransferOverride]: O};
 
 /** Maximum distance between the booking dates of two legs of the same transfer. */
 export const OWN_TRANSFER_PAIR_WINDOW_DAYS = 5;

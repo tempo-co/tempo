@@ -1,9 +1,8 @@
+import type {BankConnectionAspsp} from '@tempo/contracts';
 import {Building2} from 'lucide-react';
 import {useState} from 'react';
 
 import {cn} from '@/utils/cn';
-
-import type {BankConnectionAspsp} from '../types/bank-connection';
 
 type BankLogoProps = {
   bank: Pick<BankConnectionAspsp, 'name' | 'logoUrl'>;

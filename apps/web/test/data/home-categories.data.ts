@@ -1,4 +1,5 @@
-import type {BankTransactionSummary} from '../../src/features/dashboard/types/bank-transaction-summary';
+import type {BankTransactionSummary} from '@tempo/contracts';
+
 import {septemberSummary} from './home-summary.data';
 
 /** Synthetic category totals, including two hidden categories and a refund. */

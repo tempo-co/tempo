@@ -1,6 +1,6 @@
+import type {BankConnection} from '@tempo/contracts';
 import {differenceInCalendarDays, format} from 'date-fns';
 
-import type {BankConnection} from '@/features/banking/types/bank-connection';
 import {getAutomaticSyncProblemForConnection} from '@/features/banking/utils/bank-sync-status';
 
 const CONSENT_WARNING_DAYS = 7;

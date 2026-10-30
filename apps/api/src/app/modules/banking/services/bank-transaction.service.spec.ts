@@ -1,6 +1,6 @@
+import type {BankTransaction as BankTransactionResponse} from '@tempo/contracts';
 import {ObjectLiteral, Repository, SelectQueryBuilder} from 'typeorm';
 
-import {BankTransactionResponseDto} from '../api/dtos/bank-transaction-response.dto';
 import {BankConnection} from '../bank-connection.entity';
 import {
 	BANK_TRANSACTION_CASH_FLOW_TREATMENTS,
@@ -82,7 +82,7 @@ describe('BankTransactionService display descriptions', () => {
 
 		const response = await service.findById('account-id', transaction.id);
 
-		expect(response).toMatchObject<Partial<BankTransactionResponseDto>>({
+		expect(response).toMatchObject<Partial<BankTransactionResponse>>({
 			description: transaction.description,
 			displayDescription: 'Example Payee',
 		});

@@ -1,4 +1,26 @@
-import {BANK_TRANSACTION_CATEGORY_FILTER_VALUES, type BankTransactionCategoryFilterValue} from '@tempo/contracts';
+import {
+	BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES,
+	BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES,
+	BANK_TRANSACTION_CATEGORIZATION_SOURCES,
+	BANK_TRANSACTION_CATEGORY_FILTER_VALUES,
+	BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES,
+	BANK_TRANSACTION_FINANCIAL_EVENT_FILTER_VALUES,
+	BANK_TRANSACTION_PAGE_SIZE_OPTIONS,
+	BANK_TRANSACTION_SEARCH_MAX_LENGTH,
+	BANK_TRANSACTION_SORT_FIELDS,
+	type BankTransactionBaseAmountFilterValue,
+	type BankTransactionCashFlowFilterValue,
+	type BankTransactionCategorizationSource,
+	type BankTransactionCategoryFilterValue,
+	type BankTransactionCategoryStatusFilterValue,
+	type BankTransactionFilter,
+	type BankTransactionFinancialEventFilterValue,
+	type BankTransactionSortField,
+	type BankTransactionTotalsQuery,
+	type BankTransactionsQuery,
+	SORT_ORDERS,
+	type SortOrder,
+} from '@tempo/contracts';
 import {Transform, Type} from 'class-transformer';
 import {
 	IsArray,
@@ -14,44 +36,16 @@ import {
 	ValidateNested,
 } from 'class-validator';
 
-import {DEFAULT_PAGE_INDEX, DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS} from '@core/pagination/pagination.constants';
+import {DEFAULT_PAGE_INDEX, DEFAULT_PAGE_SIZE} from '@core/pagination/pagination.constants';
 import {transformStrictDecimalInteger} from '@core/pagination/pagination.transform';
 import {IsCalendarDate} from '@core/validation/is-calendar-date';
 
-import {
-	BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES,
-	BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES,
-	BANK_TRANSACTION_FINANCIAL_EVENT_FILTER_VALUES,
-	type BankTransactionBaseAmountFilterValue,
-	type BankTransactionCashFlowFilterValue,
-	type BankTransactionFinancialEventFilterValue,
-} from '../../bank-transaction-financial-event';
-import {
-	BANK_TRANSACTION_CATEGORIZATION_SOURCES,
-	BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES,
-	type BankTransactionCategorizationSource,
-	type BankTransactionCategoryStatusFilterValue,
-} from '../../categorization/bank-transaction-categorization.types';
 import {SERIES_KEY_PATTERN} from '../pipes/series-key.pipe';
 
 export const DEFAULT_BANK_TRANSACTION_PAGE_INDEX = DEFAULT_PAGE_INDEX;
 export const DEFAULT_BANK_TRANSACTION_PAGE_SIZE = DEFAULT_PAGE_SIZE;
-// The Home dashboard shows its five most recent transactions.
-export const BANK_TRANSACTION_PAGE_SIZE_OPTIONS = [5, ...PAGE_SIZE_OPTIONS];
 
-export enum BankTransactionSortField {
-	BOOKING_DATE = 'bookingDate',
-	AMOUNT = 'amount',
-	CATEGORY = 'category',
-	SOURCE = 'source',
-}
-
-export enum BankTransactionSortOrder {
-	ASC = 'ASC',
-	DESC = 'DESC',
-}
-
-export class BankTransactionPaginationQueryDto {
+export class BankTransactionPaginationQueryDto implements NonNullable<BankTransactionsQuery['pagination']> {
 	@IsOptional()
 	@Transform(transformStrictDecimalInteger)
 	@IsInt()
@@ -66,15 +60,15 @@ export class BankTransactionPaginationQueryDto {
 	pageSize: number = DEFAULT_BANK_TRANSACTION_PAGE_SIZE;
 }
 
-export class BankTransactionSortQueryDto {
-	@IsEnum(BankTransactionSortField)
+export class BankTransactionSortQueryDto implements NonNullable<BankTransactionsQuery['sort']> {
+	@IsIn(BANK_TRANSACTION_SORT_FIELDS)
 	by: BankTransactionSortField;
 
-	@IsEnum(BankTransactionSortOrder)
-	order: BankTransactionSortOrder;
+	@IsIn(SORT_ORDERS)
+	order: SortOrder;
 }
 
-export class BankTransactionBookingDateFilterDto {
+export class BankTransactionBookingDateFilterDto implements NonNullable<BankTransactionFilter['bookingDate']> {
 	@IsOptional()
 	@IsCalendarDate()
 	from?: string;
@@ -84,7 +78,7 @@ export class BankTransactionBookingDateFilterDto {
 	to?: string;
 }
 
-export class BankTransactionFilterQueryDto {
+export class BankTransactionFilterQueryDto implements BankTransactionFilter {
 	@IsOptional()
 	@ValidateNested()
 	@Type(() => BankTransactionBookingDateFilterDto)
@@ -97,7 +91,7 @@ export class BankTransactionFilterQueryDto {
 
 	@IsOptional()
 	@IsString()
-	@MaxLength(1000)
+	@MaxLength(BANK_TRANSACTION_SEARCH_MAX_LENGTH)
 	search?: string;
 
 	@IsOptional()
@@ -136,14 +130,14 @@ export class BankTransactionFilterQueryDto {
 }
 
 /** Totals use the list's filter contract, without sort or pagination inputs. */
-export class BankTransactionTotalsQueryDto {
+export class BankTransactionTotalsQueryDto implements BankTransactionTotalsQuery {
 	@IsOptional()
 	@ValidateNested()
 	@Type(() => BankTransactionFilterQueryDto)
 	filter?: BankTransactionFilterQueryDto;
 }
 
-export class BankTransactionQueryDto extends BankTransactionTotalsQueryDto {
+export class BankTransactionQueryDto extends BankTransactionTotalsQueryDto implements BankTransactionsQuery {
 	@IsOptional()
 	@ValidateNested()
 	@Type(() => BankTransactionPaginationQueryDto)

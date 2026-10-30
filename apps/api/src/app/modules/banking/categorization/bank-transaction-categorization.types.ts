@@ -3,23 +3,8 @@ import type {BankTransactionCategory} from '@tempo/contracts';
 import type {BankTransactionDirection} from '../bank-transaction-direction';
 import type {BankTransactionLocation} from '../bank-transaction-location';
 
-export const BANK_TRANSACTION_CATEGORIZATION_STATUSES = [
-	'PENDING',
-	'PROCESSING',
-	'COMPLETED',
-	'FAILED',
-	'NOT_APPLICABLE',
-] as const;
-export type BankTransactionCategorizationStatus = (typeof BANK_TRANSACTION_CATEGORIZATION_STATUSES)[number];
 /** Statuses a categorization worker may claim a row from. */
 export const CLAIMABLE_CATEGORIZATION_STATUSES = ['PENDING', 'FAILED'] as const;
-
-/**
- * `HISTORY` rows took the owner's manual category for the same merchant because the owner selected them in a correction
- * preview. Manual choices are otherwise only a hint for the model and never applied on their own.
- */
-export const BANK_TRANSACTION_CATEGORIZATION_SOURCES = ['AI', 'HISTORY', 'MANUAL'] as const;
-export type BankTransactionCategorizationSource = (typeof BANK_TRANSACTION_CATEGORIZATION_SOURCES)[number];
 
 /** Manual categories belong to the owner: nothing automatic may overwrite them. */
 export function isManualCategorySource(source: string | null | undefined): boolean {
@@ -110,16 +95,6 @@ export type BankTransactionCategorizationResult = {
 	model?: string;
 	searchTrace?: BankTransactionCategorizationSearchTrace;
 };
-
-export type BankTransactionCategoryDefinition = {
-	value: BankTransactionCategory;
-	label: string;
-	description: string;
-};
-
-/** Categorization states a list can be filtered by: failed, or still waiting to be categorized. */
-export const BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES = ['FAILED', 'CATEGORIZING'] as const;
-export type BankTransactionCategoryStatusFilterValue = (typeof BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES)[number];
 
 export const MERCHANT_KINDS = ['BUSINESS', 'PERSON', 'PAYMENT_SERVICE', 'UNCLEAR'] as const;
 export type MerchantKind = (typeof MERCHANT_KINDS)[number];

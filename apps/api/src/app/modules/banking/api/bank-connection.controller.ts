@@ -13,6 +13,13 @@ import {
 	UseGuards,
 } from '@nestjs/common';
 import {Throttle, minutes} from '@nestjs/throttler';
+import type {
+	BankConnection,
+	BankConnectionAspsp,
+	BankConnectionAuthorizationResponse,
+	BankConnectionTransactionsResponse,
+	BankSyncRun,
+} from '@tempo/contracts';
 import {Request, Response} from 'express';
 
 import {ConfigurationService} from '@core/config/config.service';
@@ -44,18 +51,21 @@ export class BankConnectionController {
 	@Post('authorize')
 	@HttpCode(201)
 	@Throttle({default: {limit: 10, ttl: minutes(1)}})
-	async startAuthorization(@Body() dto: BankConnectionAuthorizeDto, @CurrentAccount() account: Account) {
+	async startAuthorization(
+		@Body() dto: BankConnectionAuthorizeDto,
+		@CurrentAccount() account: Account,
+	): Promise<BankConnectionAuthorizationResponse> {
 		return this.bankingService.startAuthorization(account.id, dto);
 	}
 
 	@Get('aspsps')
-	async getSupportedAspsps() {
+	async getSupportedAspsps(): Promise<BankConnectionAspsp[]> {
 		return this.bankingService.findSupportedAspsps();
 	}
 
 	@Get()
 	@TokenReadable()
-	async getConnections(@CurrentAccount() account: Account) {
+	async getConnections(@CurrentAccount() account: Account): Promise<BankConnection[]> {
 		return this.bankingService.findAll(account);
 	}
 
@@ -67,7 +77,7 @@ export class BankConnectionController {
 		@CurrentAccount() account: Account,
 		@Req() request: Request,
 		@Res({passthrough: true}) response: Response,
-	) {
+	): Promise<BankSyncRun | null> {
 		const abortController = new AbortController();
 		const abort = () => abortController.abort();
 		const close = () => {
@@ -122,7 +132,7 @@ export class BankConnectionController {
 		@Param('connectionId', new ParseUUIDPipe({version: '4'})) connectionId: string,
 		@Query() query: BankConnectionTransactionsQueryDto,
 		@CurrentAccount() account: Account,
-	) {
+	): Promise<BankConnectionTransactionsResponse> {
 		return this.bankTransactionService.findAllByConnectionId(account.id, connectionId, query.limit);
 	}
 }

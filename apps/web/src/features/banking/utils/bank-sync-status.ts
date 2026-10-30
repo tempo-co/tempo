@@ -1,4 +1,4 @@
-import type {BankConnection} from '../types/bank-connection';
+import type {BankConnection} from '@tempo/contracts';
 
 /** True when the ISO timestamp parses to a real moment that is not in the future. */
 function isPastTimestamp(value: string | null | undefined, now = Date.now()): boolean {

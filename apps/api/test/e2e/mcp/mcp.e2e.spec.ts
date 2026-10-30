@@ -3,6 +3,7 @@ import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/st
 import {CallToolResultSchema} from '@modelcontextprotocol/sdk/types.js';
 import {Logger} from '@nestjs/common';
 import {Throttle, seconds} from '@nestjs/throttler';
+import type {BankConnection as BankConnectionResponse, BankTransactionsResponse} from '@tempo/contracts';
 import Redis from 'ioredis';
 import {execFileSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
@@ -16,8 +17,6 @@ import {TEST_THROTTLER_NAME} from '@core/rate-limit/rate-limit.module';
 import {REDIS} from '@core/redis/redis.constants';
 import {SessionService} from '@core/session/session.service';
 import {Account} from '@modules/account/account.entity';
-import {BankConnectionResponseDto} from '@modules/banking/api/dtos/bank-connection-response.dto';
-import {BankTransactionsResponseDto} from '@modules/banking/api/dtos/bank-transaction-response.dto';
 import {McpController} from '@modules/banking/api/mcp.controller';
 
 import {BankingFixtures, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
@@ -287,7 +286,7 @@ describe('Hosted MCP', () => {
 						idempotentHint: true,
 						openWorldHint: true,
 					});
-				const accounts: BankConnectionResponseDto[] = await call('list_accounts');
+				const accounts: BankConnectionResponse[] = await call('list_accounts');
 				expect(accounts).toEqual(await rest('/bank-connections'));
 				expect(accounts.map(({id}) => id)).toEqual([connection.id]);
 				expect(accounts[0].bankAccounts.map(({id}) => id)).toEqual([bankAccount.id]);
@@ -300,7 +299,7 @@ describe('Hosted MCP', () => {
 					categories: ['SHOPPING'],
 					search: 'Example Shop',
 				};
-				const search: BankTransactionsResponseDto = await call('search_transactions', {filters, pageSize: 5});
+				const search: BankTransactionsResponse = await call('search_transactions', {filters, pageSize: 5});
 				expect(search.total).toBe(6);
 				expect(search.transactions).toHaveLength(5);
 				expect(search.transactions.every(({id}) => rows.some((row) => row.id === id))).toBe(true);

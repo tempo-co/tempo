@@ -1,3 +1,4 @@
+import type {BankTransactionBaseAmountMethod} from '@tempo/contracts';
 import {
 	Column,
 	CreateDateColumn,
@@ -20,7 +21,7 @@ import type {BankTransactionCategorizationSearchTrace} from './categorization/ba
 import type {OwnTransferEvidence, OwnTransferOverride} from './own-transfer/own-transfer-detection';
 
 /** How `amountInBaseCurrency` was derived: copied, taken from the bank's instructed amount, or via ECB rates. */
-export type BankTransactionBaseAmountMethod = 'SAME' | 'INSTRUCTED' | 'ECB';
+export type {BankTransactionBaseAmountMethod};
 
 @Entity('bank_transactions')
 @Index('idx_bank_transactions_own_transfer_counterpart', ['ownTransferCounterpartId'])

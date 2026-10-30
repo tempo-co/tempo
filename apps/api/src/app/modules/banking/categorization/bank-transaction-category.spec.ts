@@ -1,10 +1,9 @@
-import {BANK_TRANSACTION_CATEGORIES} from '@tempo/contracts';
-
 import {
+	BANK_TRANSACTION_CATEGORIES,
 	BANK_TRANSACTION_CATEGORIZATION_SOURCES,
 	BANK_TRANSACTION_CATEGORIZATION_STATUSES,
-} from './bank-transaction-categorization.types';
-import {BANK_TRANSACTION_CATEGORY_DEFINITIONS} from './bank-transaction-category';
+	BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+} from '@tempo/contracts';
 
 describe('bank transaction categorization contract', () => {
 	it('defines the stable category values and complete definitions', () => {

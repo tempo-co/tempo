@@ -1,5 +1,6 @@
 import {keepPreviousData, useQuery} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
+import {BankTransactionsResponse} from '@tempo/contracts';
 import {format} from 'date-fns';
 import {useEffect, useMemo} from 'react';
 
@@ -9,7 +10,6 @@ import {api} from '@/utils/api';
 import {
   BankTransactionFilterParams,
   BankTransactionSearchParams,
-  BankTransactionsResponse,
   DEFAULT_BANK_TRANSACTION_SORT,
 } from '../types/bank-transaction';
 import {bankQueryKeys} from './query-keys';

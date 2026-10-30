@@ -10,6 +10,13 @@ import {
 	ServiceUnavailableException,
 } from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
+import type {
+	BankAccount as BankAccountResponse,
+	BankConnectionAspsp,
+	BankConnection as BankConnectionResponse,
+	BankConnectionStatus,
+	BankSyncStatus,
+} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
 import {DataSource, In, Repository} from 'typeorm';
 
@@ -28,11 +35,6 @@ import {
 } from './api/constants/banking-messages.constants';
 import {BankConnectionAuthorizeDto} from './api/dtos/bank-connection-authorize.dto';
 import {BankConnectionCallbackDto} from './api/dtos/bank-connection-callback.dto';
-import {
-	BankAccountResponseDto,
-	BankConnectionAspspResponseDto,
-	BankConnectionResponseDto,
-} from './api/dtos/bank-connection-response.dto';
 import {BankAccountBalance} from './bank-account-balance.entity';
 import {BankAccount} from './bank-account.entity';
 import {BankConnectionCallbackResult} from './bank-connection-callback-result';
@@ -169,10 +171,10 @@ export class BankingService {
 		}
 	}
 
-	async findSupportedAspsps(): Promise<BankConnectionAspspResponseDto[]> {
+	async findSupportedAspsps(): Promise<BankConnectionAspsp[]> {
 		this.ensureIntegrationEnabled();
 		const aspsps = await this.getAspsps();
-		const uniqueAspsps = new Map<string, BankConnectionAspspResponseDto>();
+		const uniqueAspsps = new Map<string, BankConnectionAspsp>();
 
 		for (const {name, country, logoUrl} of aspsps) {
 			const key = `${country}:${name}`;
@@ -193,7 +195,7 @@ export class BankingService {
 	async findAll({
 		id: accountId,
 		baseCurrency,
-	}: Pick<Account, 'id' | 'baseCurrency'>): Promise<BankConnectionResponseDto[]> {
+	}: Pick<Account, 'id' | 'baseCurrency'>): Promise<BankConnectionResponse[]> {
 		const connections = await this.bankConnectionRepository
 			.createQueryBuilder('connection')
 			.where('connection.accountId = :accountId', {accountId})
@@ -227,12 +229,14 @@ export class BankingService {
 			provider: connection.provider,
 			aspspName: connection.aspspName,
 			aspspCountry: connection.aspspCountry,
-			status: connection.status,
-			consentValidUntil: connection.consentValidUntil,
-			lastSyncedAt: connection.lastSyncedAt,
+			// Written only from BANK_CONNECTION_STATUSES.
+			status: connection.status as BankConnectionStatus,
+			consentValidUntil: connection.consentValidUntil?.toISOString() ?? null,
+			lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null,
 			lastSyncError: connection.lastSyncError,
-			nextSyncAt: connection.nextSyncAt,
-			syncStatus: connection.syncStatus,
+			nextSyncAt: connection.nextSyncAt?.toISOString() ?? null,
+			// Written only from BANK_SYNC_STATUSES.
+			syncStatus: connection.syncStatus as BankSyncStatus,
 			baseCurrency,
 			bankAccounts: (bankAccountsByConnectionId.get(connection.id) ?? []).map((bankAccount) =>
 				this.toBankAccountResponse(
@@ -684,7 +688,7 @@ export class BankingService {
 		account: BankAccount,
 		latestBalances: BankAccountBalance[],
 		convertedBalance: ConvertedBalance | undefined,
-	): BankAccountResponseDto {
+	): BankAccountResponse {
 		const primaryBalance = this.selectPreferredBalance(latestBalances);
 
 		return {
@@ -700,16 +704,16 @@ export class BankingService {
 			currentBalanceType: account.currentBalanceType,
 			currentBalanceInBaseCurrency: convertedBalance?.amount ?? null,
 			baseCurrencyRateDate: convertedBalance?.rateDate ?? null,
-			balanceUpdatedAt: account.balanceUpdatedAt,
+			balanceUpdatedAt: account.balanceUpdatedAt?.toISOString() ?? null,
 			isActive: account.isActive,
 			latestBalances: latestBalances.map((balance) => ({
 				name: balance.name,
 				balanceType: balance.balanceType,
 				amount: balance.amount,
 				currency: balance.currency,
-				lastChangeDateTime: balance.lastChangeDateTime,
+				lastChangeDateTime: balance.lastChangeDateTime?.toISOString() ?? null,
 				referenceDate: balance.referenceDate,
-				observedAt: balance.observedAt,
+				observedAt: balance.observedAt.toISOString(),
 				isPrimary: primaryBalance?.id === balance.id,
 			})),
 		};

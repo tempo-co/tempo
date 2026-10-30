@@ -1,14 +1,14 @@
 import {Link} from '@tanstack/react-router';
-import {BANK_TRANSACTION_UNCATEGORIZED} from '@tempo/contracts';
+import {
+  BANK_TRANSACTION_UNCATEGORIZED,
+  type BankTransactionSummary,
+  type BankTransactionSummaryCategory,
+} from '@tempo/contracts';
 
 import {Card} from '@/components/ui/card';
 import {BANK_TRANSACTION_CATEGORY_META} from '@/features/banking/utils/bank-transaction-category-meta';
 import {cn} from '@/utils/cn';
 
-import type {
-  BankTransactionSummary,
-  BankTransactionSummaryCategory,
-} from '../types/bank-transaction-summary';
 import {categoryDrill} from '../utils/drill-links';
 import {formatMoney, toCents} from '../utils/money';
 import {monthDates} from '../utils/month';

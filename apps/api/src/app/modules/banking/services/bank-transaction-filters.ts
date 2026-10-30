@@ -1,17 +1,16 @@
-import {BANK_TRANSACTION_UNCATEGORIZED, type BankTransactionCategory} from '@tempo/contracts';
+import {
+	BANK_TRANSACTION_OWN_TRANSFER_FILTER,
+	BANK_TRANSACTION_UNCATEGORIZED,
+	type BankTransactionCashFlowFilterValue,
+	type BankTransactionCategorizationStatus,
+	type BankTransactionCategory,
+	type BankTransactionCategoryStatusFilterValue,
+} from '@tempo/contracts';
 import {Brackets, type Repository, SelectQueryBuilder} from 'typeorm';
 
 import type {BankTransactionFilterQueryDto} from '../api/dtos/bank-transaction-query.dto';
-import {
-	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
-	BANK_TRANSACTION_OWN_TRANSFER_FILTER,
-	type BankTransactionCashFlowFilterValue,
-} from '../bank-transaction-financial-event';
+import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '../bank-transaction-financial-event';
 import type {BankTransaction} from '../bank-transaction.entity';
-import type {
-	BankTransactionCategorizationStatus,
-	BankTransactionCategoryStatusFilterValue,
-} from '../categorization/bank-transaction-categorization.types';
 
 const REFUND = 'REFUND' satisfies BankTransactionCategory;
 const FAILED = 'FAILED' satisfies BankTransactionCategorizationStatus;

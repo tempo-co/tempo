@@ -1,5 +1,6 @@
+import {BankTransaction} from '@tempo/contracts';
+
 import {useActiveBankAccounts} from '../api/use-active-bank-accounts';
-import {BankTransaction} from '../types/bank-transaction';
 import {resolveBankTransactionAccountLabel} from '../utils/formatters';
 
 type BankTransactionSourceCellProps = {

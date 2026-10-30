@@ -1,10 +1,8 @@
 import {useQuery} from '@tanstack/react-query';
+import type {BankBalanceTrend, CashFlowInterval} from '@tempo/contracts';
 
 import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {api} from '@/utils/api';
-
-import type {BankBalanceTrend} from '../types/bank-balance-trend';
-import type {CashFlowInterval} from '../types/bank-transaction-cash-flow';
 
 /**
  * Balances change only when a sync lands, and the connections poll already invalidates Home then, so

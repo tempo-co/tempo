@@ -25,9 +25,9 @@ npm --prefix mcp test
 
 `test` builds the standalone package and runs synthetic integration tests against disposable loopback HTTP servers, plus real SDK stdio process tests. These package tests need no database, Docker or live credentials. Existing CI checks `Lint & Format`, `Build` and `Unit Tests` include this package without changing their names.
 
-Both builds generate category values from the root `packages/contracts/src/categories.ts` and their descriptions from `src/app/modules/banking/categorization/bank-transaction-category.ts`. Generated TypeScript and `dist/` are ignored. The API's CommonJS build compiles only the imported Nest-free registration and its dependencies; the standalone package builds as ESM and preserves `mcp/dist/stdio.js`. The Docker builder copies the shared source and generator, and runtime smoke loads the compiled API with production dependencies.
+Both builds import the input value lists and category definitions from `@tempo/contracts` (`packages/contracts`); the standalone `build` compiles that package first. `dist/` is ignored. The API's CommonJS build compiles only the imported Nest-free registration and its dependencies; the standalone package builds as ESM and preserves `mcp/dist/stdio.js`. The Docker builder copies `mcp/src/` and the contracts package, and runtime smoke loads the compiled API with production dependencies.
 
-Hosted E2E coverage lives in `test/e2e/mcp/mcp.e2e.spec.ts`. It binds a disposable API on loopback and uses the real `StreamableHTTPClientTransport` to initialize, list and call all eleven tools against synthetic PostgreSQL fixtures. It verifies ownership, REST output parity, decimal strings, safe errors, auth, Origin, body cap, throttling and Redis session isolation, including observed Redis commands. Use the normal disposable E2E stack or an isolated override as described in `docs/e2e-and-seeding.md`; generate categories with `npm run generate:mcp` before invoking Jest directly. The auth-guard and personal-token E2E suites cover the related REST contracts.
+Hosted E2E coverage lives in `test/e2e/mcp/mcp.e2e.spec.ts`. It binds a disposable API on loopback and uses the real `StreamableHTTPClientTransport` to initialize, list and call all eleven tools against synthetic PostgreSQL fixtures. It verifies ownership, REST output parity, decimal strings, safe errors, auth, Origin, body cap, throttling and Redis session isolation, including observed Redis commands. Use the normal disposable E2E stack or an isolated override as described in `docs/e2e-and-seeding.md`; run `npm run contracts:build` before invoking Jest directly. The auth-guard and personal-token E2E suites cover the related REST contracts.
 
 ## Tokens
 
@@ -41,10 +41,10 @@ Token management requires a session, not a bearer token. Creation and revocation
 
 The following environment variables apply to the optional stdio server and disposable smoke script:
 
-| Environment | Contract |
-| --- | --- |
-| `TEMPO_API_TOKEN` | Required bearer token. No whitespace or control characters. |
-| `TEMPO_API_URL` | API base URL, default `http://127.0.0.1:8080/api`. HTTPS, or HTTP only for `127.0.0.1`, `localhost` or `[::1]`. No embedded credentials, query or fragment. Trailing slashes are removed. |
+| Environment       | Contract                                                                                                                                                                                  |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TEMPO_API_TOKEN` | Required bearer token. No whitespace or control characters.                                                                                                                               |
+| `TEMPO_API_URL`   | API base URL, default `http://127.0.0.1:8080/api`. HTTPS, or HTTP only for `127.0.0.1`, `localhost` or `[::1]`. No embedded credentials, query or fragment. Trailing slashes are removed. |
 
 Choose the final API base URL: redirects, including same-origin redirects, are refused. Requests time out after 15 seconds. HTTP 401, 403, 404, 429 and 5xx errors become actionable MCP errors without copying response bodies or bearer credentials. Valid numeric or HTTP-date `Retry-After` headers are included for 429 responses. There are no automatic retries.
 
@@ -56,16 +56,16 @@ For a client that requires a local process, build the package and use an entry l
 
 ```json
 {
-  "mcpServers": {
-    "tempo": {
-      "command": "node",
-      "args": ["/absolute/path/to/tempo/apps/api/mcp/dist/stdio.js"],
-      "env": {
-        "TEMPO_API_URL": "http://127.0.0.1:8080/api",
-        "TEMPO_API_TOKEN": "<client-managed-secret>"
-      }
-    }
-  }
+	"mcpServers": {
+		"tempo": {
+			"command": "node",
+			"args": ["/absolute/path/to/tempo/apps/api/mcp/dist/stdio.js"],
+			"env": {
+				"TEMPO_API_URL": "http://127.0.0.1:8080/api",
+				"TEMPO_API_TOKEN": "<client-managed-secret>"
+			}
+		}
+	}
 }
 ```
 
@@ -75,19 +75,19 @@ Run `node .../mcp/dist/stdio.js` directly, not an npm command that prints a bann
 
 All inputs are strict: unknown fields are rejected, including caller-supplied owner/account IDs, bearer tokens and origins. `bankAccountIds` is an owner-scoped bank-account filter, not an owner selector. Every data tool uses only the token's account. Successful results are one compact JSON text block. API money strings, precision, nulls and metadata are preserved rather than converted to floating-point values. The table shows the equivalent REST reads; hosted calls use the owning services directly.
 
-| Tool | Input | API mapping |
-| --- | --- | --- |
-| `list_accounts` | `{}` | `GET /bank-connections`; connection array with bank accounts, current/latest balances, base-currency balance values and sync freshness. |
-| `list_recurring` | `{asOf?}` | `GET /recurring-series`; expense and income lists with per-series details, monthly totals and unconverted counts. |
-| `recurring_summary` | `{asOf?}` | `GET /recurring-series/summary`; monthly totals and the next three payments across shown active bills and income. |
-| `month_summary` | `{month, asOf?}` | `GET /bank-transactions/summary?month=...&asOf=...`. |
-| `cash_flow` | `{interval, from, to, asOf?}` | `GET /bank-transactions/cash-flow`. |
-| `balance_trend` | `{interval, from, to, asOf?}` | `GET /bank-transactions/balance-trend`. |
+| Tool                  | Input                                 | API mapping                                                                                                                                                  |
+| --------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `list_accounts`       | `{}`                                  | `GET /bank-connections`; connection array with bank accounts, current/latest balances, base-currency balance values and sync freshness.                      |
+| `list_recurring`      | `{asOf?}`                             | `GET /recurring-series`; expense and income lists with per-series details, monthly totals and unconverted counts.                                            |
+| `recurring_summary`   | `{asOf?}`                             | `GET /recurring-series/summary`; monthly totals and the next three payments across shown active bills and income.                                            |
+| `month_summary`       | `{month, asOf?}`                      | `GET /bank-transactions/summary?month=...&asOf=...`.                                                                                                         |
+| `cash_flow`           | `{interval, from, to, asOf?}`         | `GET /bank-transactions/cash-flow`.                                                                                                                          |
+| `balance_trend`       | `{interval, from, to, asOf?}`         | `GET /bank-transactions/balance-trend`.                                                                                                                      |
 | `search_transactions` | `{filters?, sort?, page?, pageSize?}` | `GET /bank-transactions` with `pagination[pageIndex]`, `pagination[pageSize]` nested `filter[...]` and optional `sort[by]` / `sort[order]` query parameters. |
-| `transaction_totals` | `{filters?}` | `GET /bank-transactions/totals`, no paging. |
-| `get_transaction` | `{id}` | `GET /bank-transactions/:id`, UUIDv4 only. |
-| `review_counts` | `{}` | `GET /bank-transactions/review-counts`. |
-| `list_categories` | `{}` | Local generated values, labels and descriptions, including filter-only `UNCATEGORIZED`. |
+| `transaction_totals`  | `{filters?}`                          | `GET /bank-transactions/totals`, no paging.                                                                                                                  |
+| `get_transaction`     | `{id}`                                | `GET /bank-transactions/:id`, UUIDv4 only.                                                                                                                   |
+| `review_counts`       | `{}`                                  | `GET /bank-transactions/review-counts`.                                                                                                                      |
+| `list_categories`     | `{}`                                  | Values, labels and descriptions from `@tempo/contracts`, including filter-only `UNCATEGORIZED`.                                                              |
 
 Routes above are relative to `TEMPO_API_URL`, including its `/api` prefix. Every tool declares `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true` and `openWorldHint: true`; server and API authorization, not annotations, enforce read-only access.
 

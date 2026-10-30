@@ -1,10 +1,12 @@
+import type {BankTransactionDirection} from '@tempo/contracts';
+
+export type {BankTransactionDirection};
+
 export const BANK_TRANSACTION_DIRECTIONS = {
 	INCOME: 'INCOME',
 	EXPENSE: 'EXPENSE',
 	UNKNOWN: 'UNKNOWN',
-} as const;
-
-export type BankTransactionDirection = (typeof BANK_TRANSACTION_DIRECTIONS)[keyof typeof BANK_TRANSACTION_DIRECTIONS];
+} as const satisfies {[D in BankTransactionDirection]: D};
 
 export function toBankTransactionDirection(indicator: string | null): BankTransactionDirection {
 	const normalizedIndicator = indicator?.toUpperCase();

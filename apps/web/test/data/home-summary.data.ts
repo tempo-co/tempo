@@ -1,4 +1,4 @@
-import type {BankTransactionSummary} from '../../src/features/dashboard/types/bank-transaction-summary';
+import type {BankTransactionSummary} from '@tempo/contracts';
 
 /** A synthetic September 2026 against a June–August baseline. */
 export const septemberSummary: BankTransactionSummary = {
@@ -8,7 +8,14 @@ export const septemberSummary: BankTransactionSummary = {
   baseCurrency: 'EUR',
   totals: {spending: '1200.00', income: '2500.00', net: '1300.00', ownTransfers: '300.00'},
   excluded: {unknownDirection: 1, missingBaseAmount: 2},
-  baseline: {months: ['2026-06', '2026-07', '2026-08']},
+  daily: [],
+  baseline: {
+    months: ['2026-06', '2026-07', '2026-08'],
+    daily: [],
+    spendingByThrough: null,
+    spendingRangeByThrough: null,
+    incomeByThrough: null,
+  },
   categories: [],
 };
 

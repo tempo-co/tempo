@@ -1,9 +1,9 @@
 import {Link} from '@tanstack/react-router';
+import {BankTransactionCounterpart} from '@tempo/contracts';
 import {ChevronRight} from 'lucide-react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 
-import {BankTransactionCounterpart} from '../types/bank-transaction';
 import {formatBankTransactionDate, formatCounterpartAccount} from '../utils/formatters';
 
 type BankTransactionCounterpartLinkProps = {

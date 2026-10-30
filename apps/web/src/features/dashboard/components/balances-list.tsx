@@ -1,10 +1,10 @@
 import {Link} from '@tanstack/react-router';
+import type {BankConnection} from '@tempo/contracts';
 import {format} from 'date-fns';
 
 import {Card} from '@/components/ui/card';
 import {bankLogoKey, useBankLogos} from '@/features/banking/api/use-bank-logos';
 import {BankLogo} from '@/features/banking/components/bank-logo';
-import type {BankConnection} from '@/features/banking/types/bank-connection';
 import {getAutomaticSyncProblemForConnection} from '@/features/banking/utils/bank-sync-status';
 import {resolveBankAccountLabel} from '@/features/banking/utils/formatters';
 import {cn} from '@/utils/cn';

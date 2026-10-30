@@ -1,4 +1,5 @@
-import type {CashFlowInterval} from '../types/bank-transaction-cash-flow';
+import type {CashFlowInterval} from '@tempo/contracts';
+
 import {getFormatter} from './money';
 
 /** Round steps from zero that cover every value, so gridlines read as a ruler. Takes cents. */

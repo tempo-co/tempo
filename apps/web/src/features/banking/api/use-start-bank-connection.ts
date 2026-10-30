@@ -1,11 +1,10 @@
 import {useMutation} from '@tanstack/react-query';
-
-import {api} from '@/utils/api';
-
 import {
   BankConnectionAuthorizationRequest,
   BankConnectionAuthorizationResponse,
-} from '../types/bank-connection';
+} from '@tempo/contracts';
+
+import {api} from '@/utils/api';
 
 export const useStartBankConnection = () => {
   const {mutateAsync: startBankConnection, isPending} = useMutation<

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {readFile} from 'node:fs/promises';
-import ts from 'typescript';
+import {BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@tempo/contracts';
 import {fixture, json, TOKEN, ID} from './helpers.mjs';
 
 test('list_recurring reads both recurring directions at the Amsterdam call date or explicit asOf', async (t) => {
@@ -169,17 +168,11 @@ test('search_transactions maps bounded paging and all DTO filters to nested API 
 	assert.match(tool.description, /transaction_totals/);
 });
 
-test('list_categories uses the API category source with descriptions and an uncategorized filter', async (t) => {
+test('list_categories uses the shared category definitions with descriptions and an uncategorized filter', async (t) => {
 	const f = await fixture(t);
-	const source = await readFile(
-		new URL('../../src/app/modules/banking/categorization/bank-transaction-category.ts', import.meta.url),
-		'utf8',
-	);
-	const code = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.ES2022}}).outputText;
-	const api = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 	const categories = json(await f.client.callTool({name: 'list_categories', arguments: {}}));
 	assert.deepEqual(categories, [
-		...api.BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+		...BANK_TRANSACTION_CATEGORY_DEFINITIONS,
 		{value: 'UNCATEGORIZED', label: 'Uncategorized', description: 'Filter transactions without a category.'},
 	]);
 	assert.deepEqual(f.requests, []);

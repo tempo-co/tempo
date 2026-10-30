@@ -1,10 +1,6 @@
 import type {Page} from '@playwright/test';
+import {BankTransaction, BankTransactionCategoryImpact} from '@tempo/contracts';
 
-import {
-  BankTransaction,
-  BankTransactionCategoryImpact,
-  BankTransactionDirection,
-} from '../../../src/features/banking/types/bank-transaction';
 import {expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections, mockJson} from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
@@ -23,7 +19,7 @@ const transaction: BankTransaction = {
   amount: '-10.00',
   currency: 'EUR',
   creditDebitIndicator: 'DBIT',
-  direction: BankTransactionDirection.EXPENSE,
+  direction: 'EXPENSE',
   transactionType: 'CARD_PAYMENT',
   transactionStatus: 'BOOK',
   providerTransactionDescription: null,
@@ -50,6 +46,13 @@ const transaction: BankTransaction = {
   financialEventSource: null,
   financialEventRuleVersion: null,
   cashFlowTreatment: 'EXPENSE',
+  merchantLogoUrl: null,
+  ownTransfer: null,
+  ownTransferOverride: null,
+  currencyExchangeCounterpart: null,
+  amountInBaseCurrency: null,
+  baseAmountMethod: null,
+  baseAmountRateDate: null,
 };
 
 const impact: BankTransactionCategoryImpact = {

@@ -1,5 +1,11 @@
 import {useNavigate} from '@tanstack/react-router';
 import {SortingState, flexRender, getCoreRowModel, useReactTable} from '@tanstack/react-table';
+import {
+  BANK_TRANSACTION_SEARCH_MAX_LENGTH,
+  BANK_TRANSACTION_SORT_FIELDS,
+  type BankTransaction,
+  type BankTransactionSortField,
+} from '@tempo/contracts';
 import {RefreshCw, Search, SearchX} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
@@ -23,11 +29,7 @@ import {cn} from '@/utils/cn';
 
 import {
   BANK_TRANSACTION_FILTER_KEYS,
-  BANK_TRANSACTION_SEARCH_MAX_LENGTH,
-  BankTransaction,
   BankTransactionFilterParams,
-  BankTransactionSortField,
-  BankTransactionSortOrder,
   BankTransactionSortParams,
   DEFAULT_BANK_TRANSACTION_SORT,
 } from '../types/bank-transaction';
@@ -97,9 +99,7 @@ export function BankTransactionTable({
     return () => window.clearTimeout(timeoutId);
   }, [filters.search, navigate, searchInput]);
 
-  const sorting: SortingState = sort
-    ? [{id: sort.by, desc: sort.order === BankTransactionSortOrder.DESC}]
-    : [];
+  const sorting: SortingState = sort ? [{id: sort.by, desc: sort.order === 'DESC'}] : [];
 
   const handleSortingChange = (
     updaterOrValue: SortingState | ((prev: SortingState) => SortingState),
@@ -107,11 +107,11 @@ export function BankTransactionTable({
     const updatedSorting =
       typeof updaterOrValue === 'function' ? updaterOrValue(sorting) : updaterOrValue;
     const firstSort = updatedSorting[0];
-    const nextSort =
+    const nextSort: NonNullable<BankTransactionSortParams> =
       firstSort && isBankTransactionSortField(firstSort.id)
         ? {
             by: firstSort.id,
-            order: firstSort.desc ? BankTransactionSortOrder.DESC : BankTransactionSortOrder.ASC,
+            order: firstSort.desc ? 'DESC' : 'ASC',
           }
         : DEFAULT_BANK_TRANSACTION_SORT;
 
@@ -411,5 +411,5 @@ export function BankTransactionTable({
 }
 
 function isBankTransactionSortField(value: string): value is BankTransactionSortField {
-  return Object.values(BankTransactionSortField).includes(value as BankTransactionSortField);
+  return (BANK_TRANSACTION_SORT_FIELDS as readonly string[]).includes(value);
 }

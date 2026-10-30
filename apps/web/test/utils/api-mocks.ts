@@ -1,13 +1,13 @@
 import {Page, Route} from '@playwright/test';
-import type {RecurringSummary} from '@tempo/contracts';
-
-import type {BankConnection} from '../../src/features/banking/types/bank-connection';
-import type {BankBalanceTrend} from '../../src/features/dashboard/types/bank-balance-trend';
-import type {BankTransactionCashFlow} from '../../src/features/dashboard/types/bank-transaction-cash-flow';
 import type {
+  BankBalanceTrend,
+  BankConnection,
+  BankTransactionCashFlow,
   BankTransactionReviewCounts,
   BankTransactionSummary,
-} from '../../src/features/dashboard/types/bank-transaction-summary';
+  RecurringSummary,
+} from '@tempo/contracts';
+
 import {successfulBankRefresh} from '../data/bank-sync-run.data';
 
 export function fulfillJson(route: Route, body: unknown, status = 200) {
@@ -129,7 +129,14 @@ export async function mockEmptyHome(page: Page) {
       baseCurrency: null,
       totals: {spending: '0.00', income: '0.00', net: '0.00', ownTransfers: '0.00'},
       excluded: {unknownDirection: 0, missingBaseAmount: 0},
-      baseline: {months: []},
+      daily: [],
+      baseline: {
+        months: [],
+        daily: [],
+        spendingByThrough: null,
+        spendingRangeByThrough: null,
+        incomeByThrough: null,
+      },
       categories: [],
     } satisfies BankTransactionSummary);
   });

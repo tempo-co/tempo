@@ -1,7 +1,8 @@
+import type {BankConnectionAuthorizationRequest} from '@tempo/contracts';
 import {Transform} from 'class-transformer';
 import {IsNotEmpty, IsString, Length, Matches, MaxLength} from 'class-validator';
 
-export class BankConnectionAuthorizeDto {
+export class BankConnectionAuthorizeDto implements BankConnectionAuthorizationRequest {
 	@IsString()
 	@IsNotEmpty()
 	@MaxLength(255)

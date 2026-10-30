@@ -1,3 +1,4 @@
+import {BankTransaction} from '@tempo/contracts';
 import {FileQuestion, RefreshCw} from 'lucide-react';
 
 import {EmptyState} from '@/components/shared/layout/app-empty-state';
@@ -17,7 +18,6 @@ import {useIsOnline} from '@/hooks/use-connection';
 import {HttpError} from '@/utils/api';
 
 import {useGetBankTransaction} from '../api/use-get-bank-transaction';
-import {BankTransaction} from '../types/bank-transaction';
 import {resolveBankTransactionDisplayTitle} from '../utils/formatters';
 import {BankTransactionDetails} from './bank-transaction-details';
 import {MerchantLogoTile} from './merchant-logo-tile';

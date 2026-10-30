@@ -1,7 +1,8 @@
+import {BankTransaction} from '@tempo/contracts';
+
 import {Button} from '@/components/ui/button';
 
 import {useUpdateBankTransactionOwnTransfer} from '../api/use-update-bank-transaction-own-transfer';
-import {BankTransaction} from '../types/bank-transaction';
 import {formatOwnTransferEvidence} from '../utils/formatters';
 import {BankTransactionCounterpartLink} from './bank-transaction-counterpart-link';
 

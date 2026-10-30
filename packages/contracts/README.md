@@ -1,6 +1,6 @@
 # @tempo/contracts
 
-The HTTP request and response shapes the API serves, plus the fixed value lists they use (categories, cadences, directions). The API and the web app import them, so a renamed or dropped field fails type-checking in both in the same PR. The MCP package's generated category list (`apps/api/mcp/scripts/generate-categories.mjs`) reads `src/categories.ts`.
+The HTTP request and response shapes the API serves, plus the fixed value lists they use (categories, cadences, directions). The API and the web app import them, so a renamed or dropped field fails type-checking in both in the same PR. The MCP package imports them too, for its input schemas and the category list it serves.
 
 ## Rules
 
@@ -11,8 +11,9 @@ The HTTP request and response shapes the API serves, plus the fixed value lists 
 
 ## How each consumer loads it
 
-- API: a `file:../../packages/contracts` dependency. `npm run contracts:build` compiles `dist/`; the API's build, start and seed/schema hooks run it first. Jest and ts-jest (`tsconfig.jest.json`) map the import to `src/`, so unit tests need no build. After editing the package, rerun `npm run contracts:build` (or restart `start:dev`) so a running API and the editor pick up the change.
+- API: a `file:../../packages/contracts` dependency. `npm run contracts:build` compiles `dist/`; the API's build, start, seed/schema and E2E hooks run it first. Jest and ts-jest (`tsconfig.jest.json`) map the import to `src/`, so unit tests need no build. After editing the package, rerun `npm run contracts:build` (or restart `start:dev`) so a running API and the editor pick up the change.
 - Web: an alias to `src/` in `vite.config.ts` and `tsconfig.app.json`; nothing to build.
+- MCP (`apps/api/mcp`): a `file:../../../packages/contracts` dependency. Its `build` compiles the package before itself.
 - Docker: both images build from the repository root and place this package two levels above the app directory, matching the checkout.
 
 Formatting follows `.prettierrc` here and runs with the API's `format` and `format:check` scripts.

@@ -1,13 +1,13 @@
+import {
+  BANK_TRANSACTION_CATEGORIZATION_SOURCES,
+  BankTransactionCategorizationSource,
+} from '@tempo/contracts';
 import {Sparkles} from 'lucide-react';
 
 import {Command, CommandGroup, CommandItem, CommandList} from '@/components/ui/command';
 import {useBankTransactionArrayFilter} from '@/hooks/use-bank-transaction-array-filter';
 
-import {
-  BANK_TRANSACTION_CATEGORIZATION_SOURCES,
-  BankTransactionCategorizationSource,
-  BankTransactionFilterParams,
-} from '../types/bank-transaction';
+import {BankTransactionFilterParams} from '../types/bank-transaction';
 import {formatBankTransactionCategorySource} from '../utils/formatters';
 import {FacetedFilter, FilterResetGroup} from './bank-transaction-faceted-filter';
 import {FilterCheckIndicator, SelectedFilterSummary} from './bank-transaction-multi-select-filter';

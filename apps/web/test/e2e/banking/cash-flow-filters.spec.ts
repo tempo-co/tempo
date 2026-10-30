@@ -1,7 +1,4 @@
-import {
-  type BankTransaction,
-  BankTransactionDirection,
-} from '@/features/banking/types/bank-transaction';
+import {type BankTransaction} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, expect, test} from '../../fixtures';
@@ -46,14 +43,14 @@ for (const [value, label] of [
         }
         if (value === 'SPENDING') {
           expect(
-            row.direction === BankTransactionDirection.EXPENSE ||
-              (row.direction === BankTransactionDirection.INCOME && row.category === 'REFUND'),
+            row.direction === 'EXPENSE' ||
+              (row.direction === 'INCOME' && row.category === 'REFUND'),
           ).toBe(true);
         }
         if (value === 'CURRENCY_EXCHANGE') expect(row.financialEventType).toBe('CURRENCY_EXCHANGE');
         if (value === 'OWN_TRANSFER') expect(row.ownTransfer).not.toBeNull();
         if (value === 'INCOME') {
-          expect(row.direction).toBe(BankTransactionDirection.INCOME);
+          expect(row.direction).toBe('INCOME');
           expect(row.category).not.toBe('REFUND');
         }
       }

@@ -1,9 +1,9 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
+import {BankTransaction, OwnTransferOverride} from '@tempo/contracts';
 
 import {HttpError, api} from '@/utils/api';
 import {toastRequest} from '@/utils/toast-request';
 
-import {BankTransaction, OwnTransferOverride} from '../types/bank-transaction';
 import {invalidateBankDerivedData} from './invalidate-bank-derived-data';
 import {bankQueryKeys} from './query-keys';
 import {bankTransactionQueryOptions} from './use-get-bank-transaction';

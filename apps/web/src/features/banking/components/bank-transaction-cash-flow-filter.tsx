@@ -1,3 +1,7 @@
+import {
+  BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES,
+  BankTransactionCashFlowFilterValue,
+} from '@tempo/contracts';
 import {ArrowLeftRight} from 'lucide-react';
 import * as React from 'react';
 
@@ -6,9 +10,7 @@ import {useBankTransactionArrayFilter} from '@/hooks/use-bank-transaction-array-
 import {cn} from '@/utils/cn';
 
 import {
-  BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES,
   BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS,
-  BankTransactionCashFlowFilterValue,
   BankTransactionFilterParams,
 } from '../types/bank-transaction';
 import {CASH_FLOW_LABELS} from '../utils/drill-filters';

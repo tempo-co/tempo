@@ -1,9 +1,9 @@
+import {BankTransaction} from '@tempo/contracts';
 import * as React from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {cn} from '@/utils/cn';
 
-import {BankTransaction} from '../types/bank-transaction';
 import {
   formatBankTransactionCashFlowTreatment,
   formatBankTransactionCategoryStatus,

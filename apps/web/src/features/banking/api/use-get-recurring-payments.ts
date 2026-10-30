@@ -1,8 +1,8 @@
 import {useInfiniteQuery} from '@tanstack/react-query';
+import type {BankTransactionsResponse} from '@tempo/contracts';
 
 import {api} from '@/utils/api';
 
-import type {BankTransactionsResponse} from '../types/bank-transaction';
 import {recurringQueryKeys} from './recurring-query-keys';
 
 /** Payments per "Load more"; one of the page sizes the API accepts. */

@@ -1,8 +1,8 @@
 import {useQuery} from '@tanstack/react-query';
+import {BankConnectionAspsp} from '@tempo/contracts';
 
 import {api} from '@/utils/api';
 
-import {BankConnectionAspsp} from '../types/bank-connection';
 import {bankQueryKeys} from './query-keys';
 
 export const useGetSupportedBanks = (enabled: boolean) => {

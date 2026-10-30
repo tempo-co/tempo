@@ -1,3 +1,7 @@
+import type {BankTransactionType} from '@tempo/contracts';
+
+export type {BankTransactionType};
+
 export const BANK_TRANSACTION_TYPES = {
 	CARD_PAYMENT: 'CARD_PAYMENT',
 	TRANSFER: 'TRANSFER',
@@ -8,9 +12,7 @@ export const BANK_TRANSACTION_TYPES = {
 	SALARY: 'SALARY',
 	REFUND: 'REFUND',
 	OTHER: 'OTHER',
-} as const;
-
-export type BankTransactionType = (typeof BANK_TRANSACTION_TYPES)[keyof typeof BANK_TRANSACTION_TYPES];
+} as const satisfies {[T in BankTransactionType]: T};
 
 type BankTransactionClassification = {
 	code?: string;

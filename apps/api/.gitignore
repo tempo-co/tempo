@@ -4,7 +4,6 @@
 /build
 /mcp/node_modules
 /mcp/dist
-/mcp/src/*.generated.ts
 
 # Logs
 logs

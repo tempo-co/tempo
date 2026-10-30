@@ -1,37 +1,48 @@
 import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
 import {z} from 'zod';
-import {CATEGORY_DEFINITIONS} from './categories.generated.js';
+import {
+	BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+	BANK_TRANSACTION_UNCATEGORIZED,
+	type BankBalanceTrend,
+	type BankConnection,
+	type BankTransaction,
+	type BankTransactionCashFlow,
+	type BankTransactionCashFlowQuery,
+	type BankTransactionReviewCounts,
+	type BankTransactionSummary,
+	type BankTransactionSummaryQuery,
+	type BankTransactionTotals,
+	type BankTransactionsResponse,
+	type RecurringSeriesLists,
+	type RecurringSeriesQuery,
+	type RecurringSummary,
+} from '@tempo/contracts';
 import {filtersSchema, sortSchema} from './inputs.js';
 import {ToolReadError} from './errors.js';
 import type {CallToolResult} from '@modelcontextprotocol/sdk/types.js';
 
-export interface PeriodInput {
-	interval: 'week' | 'month' | 'year';
-	from: string;
-	to: string;
-	asOf: string;
-}
+export type PeriodInput = BankTransactionCashFlowQuery;
 
 export type TransactionFilters = z.infer<typeof filtersSchema>;
 export type TransactionSort = z.infer<typeof sortSchema>;
 
 /** Operations return the public REST response shape, never persistence entities. */
 export interface ToolReader {
-	listAccounts(): Promise<unknown>;
-	listRecurring(input: {asOf: string}): Promise<unknown>;
-	recurringSummary(input: {asOf: string}): Promise<unknown>;
-	monthSummary(input: {month: string; asOf: string}): Promise<unknown>;
-	cashFlow(input: PeriodInput): Promise<unknown>;
-	balanceTrend(input: PeriodInput): Promise<unknown>;
+	listAccounts(): Promise<BankConnection[]>;
+	listRecurring(input: RecurringSeriesQuery): Promise<RecurringSeriesLists>;
+	recurringSummary(input: RecurringSeriesQuery): Promise<RecurringSummary>;
+	monthSummary(input: BankTransactionSummaryQuery): Promise<BankTransactionSummary>;
+	cashFlow(input: PeriodInput): Promise<BankTransactionCashFlow>;
+	balanceTrend(input: PeriodInput): Promise<BankBalanceTrend>;
 	searchTransactions(input: {
 		filters?: TransactionFilters;
 		sort?: TransactionSort;
 		page: number;
 		pageSize: number;
-	}): Promise<unknown>;
-	transactionTotals(input: {filters?: TransactionFilters}): Promise<unknown>;
-	getTransaction(id: string): Promise<unknown>;
-	reviewCounts(): Promise<unknown>;
+	}): Promise<BankTransactionsResponse>;
+	transactionTotals(input: {filters?: TransactionFilters}): Promise<BankTransactionTotals>;
+	getTransaction(id: string): Promise<BankTransaction>;
+	reviewCounts(): Promise<BankTransactionReviewCounts>;
 }
 
 export function createToolServer(reader: ToolReader, now: () => Date = () => new Date()): McpServer {
@@ -125,9 +136,9 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 				{
 					type: 'text',
 					text: JSON.stringify([
-						...CATEGORY_DEFINITIONS,
+						...BANK_TRANSACTION_CATEGORY_DEFINITIONS,
 						{
-							value: 'UNCATEGORIZED',
+							value: BANK_TRANSACTION_UNCATEGORIZED,
 							label: 'Uncategorized',
 							description: 'Filter transactions without a category.',
 						},

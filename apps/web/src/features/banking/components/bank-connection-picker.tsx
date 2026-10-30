@@ -1,3 +1,4 @@
+import type {BankConnectionAspsp} from '@tempo/contracts';
 import {Check, ChevronsUpDown, Loader, Plus} from 'lucide-react';
 import {type ReactNode, type WheelEvent as ReactWheelEvent, useMemo, useState} from 'react';
 
@@ -24,7 +25,6 @@ import {ScrollArea} from '@/components/ui/scroll-area';
 import {cn} from '@/utils/cn';
 
 import {useGetSupportedBanks} from '../api/use-get-supported-banks';
-import type {BankConnectionAspsp} from '../types/bank-connection';
 import {BankLogo} from './bank-logo';
 
 type BankConnectionPickerProps = {

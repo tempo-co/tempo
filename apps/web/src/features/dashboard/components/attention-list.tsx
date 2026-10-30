@@ -1,4 +1,5 @@
 import {Link} from '@tanstack/react-router';
+import type {BankTransactionReviewCounts} from '@tempo/contracts';
 import {ArrowUpRight} from 'lucide-react';
 import {useId} from 'react';
 
@@ -6,7 +7,6 @@ import {Card} from '@/components/ui/card';
 import {BANK_TRANSACTION_CATEGORY_LABELS} from '@/features/banking/types/bank-transaction';
 import {CASH_FLOW_LABELS, CATEGORY_STATUS_LABELS} from '@/features/banking/utils/drill-filters';
 
-import type {BankTransactionReviewCounts} from '../types/bank-transaction-summary';
 import {reviewDrills} from '../utils/drill-links';
 
 type AttentionListProps = {

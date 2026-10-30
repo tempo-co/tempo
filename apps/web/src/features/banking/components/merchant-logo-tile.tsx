@@ -1,8 +1,8 @@
+import {BankTransaction} from '@tempo/contracts';
 import {useId, useState} from 'react';
 
 import {cn} from '@/utils/cn';
 
-import {BankTransaction} from '../types/bank-transaction';
 import {toBankTransactionCategory} from '../utils/formatters';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 

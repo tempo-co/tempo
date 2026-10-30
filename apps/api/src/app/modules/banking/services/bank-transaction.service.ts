@@ -1,36 +1,32 @@
 import {Injectable, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
-import type {BankTransactionCategory} from '@tempo/contracts';
+import type {
+	BankConnectionTransactionsResponse,
+	BankTransactionCategorizationSource,
+	BankTransactionCategorizationStatus,
+	BankTransactionCategory,
+	BankTransactionCategoryImpact,
+	BankTransactionCounterpart,
+	BankTransactionOwnTransfer,
+	BankTransaction as BankTransactionResponse,
+	BankTransactionsResponse,
+} from '@tempo/contracts';
 import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 
 import {BANKING_TRANSACTION_NOT_FOUND} from '../api/constants/banking-messages.constants';
-import {BankConnectionTransactionsResponseDto} from '../api/dtos/bank-connection-response.dto';
-import {BankTransactionCategoryImpactResponseDto} from '../api/dtos/bank-transaction-category-impact.dto';
 import {
 	BankTransactionQueryDto,
-	BankTransactionSortField,
-	BankTransactionSortOrder,
 	DEFAULT_BANK_TRANSACTION_PAGE_INDEX,
 	DEFAULT_BANK_TRANSACTION_PAGE_SIZE,
 } from '../api/dtos/bank-transaction-query.dto';
-import {
-	BankTransactionCounterpartDto,
-	BankTransactionOwnTransferDto,
-	BankTransactionResponseDto,
-	BankTransactionsResponseDto,
-} from '../api/dtos/bank-transaction-response.dto';
 import {BankConnection} from '../bank-connection.entity';
 import {toBankTransactionDirection} from '../bank-transaction-direction';
 import {getBankTransactionCashFlowTreatment} from '../bank-transaction-financial-event';
 import {BANK_TRANSACTION_TYPES} from '../bank-transaction-type';
 import {BankTransaction} from '../bank-transaction.entity';
 import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
-import type {
-	BankTransactionCategorizationSource,
-	BankTransactionCategorizationStatus,
-} from '../categorization/bank-transaction-categorization.types';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
@@ -51,10 +47,7 @@ export class BankTransactionService {
 		private readonly merchantLogoService: MerchantLogoService,
 	) {}
 
-	async findAll(
-		accountId: Account['id'],
-		queryParams: BankTransactionQueryDto,
-	): Promise<BankTransactionsResponseDto> {
+	async findAll(accountId: Account['id'], queryParams: BankTransactionQueryDto): Promise<BankTransactionsResponse> {
 		const pageIndex = queryParams.pagination?.pageIndex ?? DEFAULT_BANK_TRANSACTION_PAGE_INDEX;
 		const pageSize = queryParams.pagination?.pageSize ?? DEFAULT_BANK_TRANSACTION_PAGE_SIZE;
 		const query = this.createOwnerScopedQuery(accountId);
@@ -65,18 +58,18 @@ export class BankTransactionService {
 			: undefined;
 		applyBankTransactionFilters(query, queryParams.filter, recurringIds);
 
-		const sortField = queryParams.sort?.by ?? BankTransactionSortField.BOOKING_DATE;
-		const sortOrder = queryParams.sort?.order ?? BankTransactionSortOrder.DESC;
+		const sortField = queryParams.sort?.by ?? 'bookingDate';
+		const sortOrder = queryParams.sort?.order ?? 'DESC';
 		const sortColumn =
-			sortField === BankTransactionSortField.AMOUNT
+			sortField === 'amount'
 				? 'transaction.amountInBaseCurrency'
-				: sortField === BankTransactionSortField.CATEGORY
+				: sortField === 'category'
 					? 'transaction.category'
-					: sortField === BankTransactionSortField.SOURCE
+					: sortField === 'source'
 						? 'connection.aspspName'
 						: 'transaction.bookingDate';
 		query.orderBy(sortColumn, sortOrder, 'NULLS LAST');
-		if (sortField !== BankTransactionSortField.BOOKING_DATE) {
+		if (sortField !== 'bookingDate') {
 			query.addOrderBy('transaction.bookingDate', 'DESC', 'NULLS LAST');
 		}
 		query
@@ -94,7 +87,7 @@ export class BankTransactionService {
 		accountId: Account['id'],
 		connectionId: BankConnection['id'],
 		limit: number,
-	): Promise<BankConnectionTransactionsResponseDto> {
+	): Promise<BankConnectionTransactionsResponse> {
 		await findOwnedConnection(this.bankConnectionRepository, accountId, connectionId);
 
 		const query = createLedgerQuery(this.bankTransactionRepository, accountId)
@@ -114,7 +107,7 @@ export class BankTransactionService {
 		};
 	}
 
-	async findById(accountId: Account['id'], id: BankTransaction['id']): Promise<BankTransactionResponseDto> {
+	async findById(accountId: Account['id'], id: BankTransaction['id']): Promise<BankTransactionResponse> {
 		const transaction = await this.findOwnedTransaction(accountId, id);
 		const [response] = await this.toResponses(accountId, [transaction]);
 		return response;
@@ -124,7 +117,7 @@ export class BankTransactionService {
 		accountId: Account['id'],
 		id: BankTransaction['id'],
 		category: BankTransactionCategory,
-	): Promise<BankTransactionCategoryImpactResponseDto> {
+	): Promise<BankTransactionCategoryImpact> {
 		const transaction = await this.findOwnedTransaction(accountId, id);
 		const {followUp, transactions, total} = await this.categorizationService.previewManualCategory(
 			accountId,
@@ -152,7 +145,7 @@ export class BankTransactionService {
 		id: BankTransaction['id'],
 		category: BankTransactionCategory,
 		applyToTransactionIds?: readonly string[],
-	): Promise<BankTransactionResponseDto> {
+	): Promise<BankTransactionResponse> {
 		const transaction = await this.findOwnedTransaction(accountId, id);
 		const saved = await this.categorizationService.setManualCategory(
 			accountId,
@@ -169,7 +162,7 @@ export class BankTransactionService {
 		accountId: Account['id'],
 		id: BankTransaction['id'],
 		override: OwnTransferOverride | null,
-	): Promise<BankTransactionResponseDto> {
+	): Promise<BankTransactionResponse> {
 		const updated = await this.ownTransferService.updateOverride(accountId, id, override);
 		if (!updated) throw new NotFoundException(BANKING_TRANSACTION_NOT_FOUND);
 		return this.findById(accountId, id);
@@ -205,12 +198,12 @@ export class BankTransactionService {
 	private async toResponses(
 		accountId: Account['id'],
 		transactions: BankTransaction[],
-	): Promise<BankTransactionResponseDto[]> {
+	): Promise<BankTransactionResponse[]> {
 		const logos = await this.merchantLogoService.getLogoUrls(accountId, transactions);
 		return transactions.map((transaction) => this.toResponse(transaction, logos.get(transaction.id) ?? null));
 	}
 
-	private toResponse(transaction: BankTransaction, merchantLogoUrl: string | null): BankTransactionResponseDto {
+	private toResponse(transaction: BankTransaction, merchantLogoUrl: string | null): BankTransactionResponse {
 		return {
 			...this.toSharedResponseFields(transaction, merchantLogoUrl),
 			transactionDate: transaction.transactionDate,
@@ -239,7 +232,7 @@ export class BankTransactionService {
 		};
 	}
 
-	private toOwnTransferResponse(transaction: BankTransaction): BankTransactionOwnTransferDto | null {
+	private toOwnTransferResponse(transaction: BankTransaction): BankTransactionOwnTransfer | null {
 		if (!transaction.ownTransferEvidence) return null;
 		return {
 			evidence: transaction.ownTransferEvidence,
@@ -247,9 +240,7 @@ export class BankTransactionService {
 		};
 	}
 
-	private toCounterpartResponse(
-		counterpart: BankTransaction | null | undefined,
-	): BankTransactionCounterpartDto | null {
+	private toCounterpartResponse(counterpart: BankTransaction | null | undefined): BankTransactionCounterpart | null {
 		if (!counterpart) return null;
 		return {
 			id: counterpart.id,
@@ -295,7 +286,7 @@ export class BankTransactionService {
 /** The stored categorization columns as the API reports them; a row categorization has not reached is PENDING. */
 function toCategorizationFields(
 	transaction: Pick<BankTransaction, 'category' | 'categoryStatus' | 'categorySource'>,
-): Pick<BankTransactionResponseDto, 'category' | 'categoryStatus' | 'categorySource'> {
+): Pick<BankTransactionResponse, 'category' | 'categoryStatus' | 'categorySource'> {
 	return {
 		category: (transaction.category as BankTransactionCategory | null) ?? null,
 		categoryStatus: (transaction.categoryStatus ?? 'PENDING') as BankTransactionCategorizationStatus,

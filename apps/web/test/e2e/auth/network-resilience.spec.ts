@@ -1,6 +1,6 @@
 import type {Page, Request, Route} from '@playwright/test';
+import type {BankConnection} from '@tempo/contracts';
 
-import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, createVerifiedAccount, expect, test} from '../../fixtures';
 import {HomePage} from '../../pages/home.page';

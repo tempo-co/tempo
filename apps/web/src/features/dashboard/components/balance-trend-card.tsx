@@ -1,3 +1,4 @@
+import type {BankBalanceTrendPeriod, BankConnection, CashFlowInterval} from '@tempo/contracts';
 import {format} from 'date-fns';
 import {useState} from 'react';
 import {Area, AreaChart, CartesianGrid, XAxis, YAxis} from 'recharts';
@@ -5,14 +6,11 @@ import {Area, AreaChart, CartesianGrid, XAxis, YAxis} from 'recharts';
 import {Card} from '@/components/ui/card';
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {Skeleton} from '@/components/ui/skeleton';
-import type {BankConnection} from '@/features/banking/types/bank-connection';
 import {resolveBankAccountLabel} from '@/features/banking/utils/formatters';
 import {useIsMobile} from '@/hooks/use-is-mobile';
 import {cn} from '@/utils/cn';
 
 import {useGetBankBalanceTrend} from '../api/use-get-bank-balance-trend';
-import type {BalanceTrendPeriod} from '../types/bank-balance-trend';
-import type {CashFlowInterval} from '../types/bank-transaction-cash-flow';
 import {axisFormatter, axisTicks, firstOfYear, labelEvery} from '../utils/chart-axis';
 import {parseCalendarDate} from '../utils/drill-links';
 import {formatMoney, formatWholeMoney, toCents} from '../utils/money';
@@ -23,8 +21,8 @@ import {ChartCardError, ChartCardHeader} from './chart-card';
 const day = (value: string) => parseCalendarDate(value);
 
 /** A point with a total; points without one are left off the line. */
-type TotalPeriod = BalanceTrendPeriod & {total: string};
-const hasTotal = (period: BalanceTrendPeriod): period is TotalPeriod => period.total !== null;
+type TotalPeriod = BankBalanceTrendPeriod & {total: string};
+const hasTotal = (period: BankBalanceTrendPeriod): period is TotalPeriod => period.total !== null;
 
 /** How a date reads at each zoom level: "2026", "Aug 2026" or "5 Aug". */
 const DATE_LABEL: Record<CashFlowInterval, (date: string) => string> = {
@@ -34,12 +32,12 @@ const DATE_LABEL: Record<CashFlowInterval, (date: string) => string> = {
 };
 
 /** "31 Aug 2026" for a past period's end; "today" while it is running. */
-function pointName(period: BalanceTrendPeriod) {
+function pointName(period: BankBalanceTrendPeriod) {
   return period.complete ? format(day(period.end), 'd MMM yyyy') : 'Today';
 }
 
 /** "on 26 Apr", "at the end of November 2025" or "at the end of 2021". */
-function startName(period: BalanceTrendPeriod, interval: CashFlowInterval) {
+function startName(period: BankBalanceTrendPeriod, interval: CashFlowInterval) {
   return interval === 'week'
     ? `on ${DATE_LABEL.week(period.end)}`
     : `at the end of ${DATE_LABEL[interval](period.start)}`;

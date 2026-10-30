@@ -1,9 +1,9 @@
 import {useQuery} from '@tanstack/react-query';
+import type {BankTransactionCashFlow, CashFlowInterval} from '@tempo/contracts';
 
 import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {api} from '@/utils/api';
 
-import type {BankTransactionCashFlow, CashFlowInterval} from '../types/bank-transaction-cash-flow';
 import {HOME_REFRESH_INTERVAL_MS} from './refresh-interval';
 
 /** Spending and income per week, month or year between two local dates (`YYYY-MM-DD`), as of today. */
