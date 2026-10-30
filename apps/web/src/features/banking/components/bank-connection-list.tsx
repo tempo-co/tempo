@@ -540,7 +540,7 @@ function RemoveConnectionButton({
       disabled={isPending}
       aria-label='Remove connection'
       data-testid={`remove-bank-${connectionId}`}
-      className='h-11 w-11 text-muted-foreground'
+      className='h-11 w-11 shrink-0 text-muted-foreground'
     >
       <Trash2 />
       <span className='sr-only'>Remove connection</span>
@@ -591,7 +591,7 @@ function DestructiveBankConnectionFooterButton({
                 aria-label='Remove connection'
                 aria-describedby={isBlocked ? blockedReasonId : undefined}
                 data-testid={`remove-bank-${connection.id}`}
-                className='h-11 w-11 text-muted-foreground aria-disabled:opacity-50'
+                className='h-11 w-11 shrink-0 text-muted-foreground aria-disabled:opacity-50'
                 onClick={(event) => {
                   if (!isBlocked) return;
                   // Stops the dialog opening and Radix closing the tooltip; phones open it by tap.

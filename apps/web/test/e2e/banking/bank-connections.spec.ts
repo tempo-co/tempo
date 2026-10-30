@@ -1844,47 +1844,53 @@ test.describe('bank-derived caches', () => {
 test.describe('bank connection card layout', () => {
   test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
-  test('shows footer actions only while a connection card is expanded', async ({page}) => {
-    await page.goto('/bank-connections');
+  for (const width of [1280, 390, 320]) {
+    test(`shows footer actions only while a connection card is expanded at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({width, height: 900});
+      await page.goto('/bank-connections');
 
-    const card = page.locator('[data-testid^="bank-connection-"][aria-labelledby]').first();
-    const toggle = card.getByTestId(/^connection-card-toggle-/);
-    const accounts = card.getByTestId(/^bank-accounts-/);
-    const transactions = card.getByTestId(/^bank-transactions-/);
-    const removeButton = card.getByTestId(/^remove-bank-/);
-    const consentText = card.getByText(/Consent valid until/);
+      const card = page.locator('[data-testid^="bank-connection-"][aria-labelledby]').first();
+      const toggle = card.getByTestId(/^connection-card-toggle-/);
+      const accounts = card.getByTestId(/^bank-accounts-/);
+      const transactions = card.getByTestId(/^bank-transactions-/);
+      const removeButton = card.getByTestId(/^remove-bank-/);
+      const consentText = card.getByText(/Consent valid until/);
 
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(accounts).toBeHidden();
-    await expect(transactions).toBeHidden();
-    await expect(removeButton).toBeHidden();
-    await expect(consentText).toBeHidden();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await expect(accounts).toBeHidden();
+      await expect(transactions).toBeHidden();
+      await expect(removeButton).toBeHidden();
+      await expect(consentText).toBeHidden();
 
-    await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    await expect(accounts).toBeVisible();
-    await expect(transactions).toBeVisible();
-    await expect(removeButton).toBeVisible();
-    await expect(consentText).toBeVisible();
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      await expect(accounts).toBeVisible();
+      await expect(transactions).toBeVisible();
+      await expect(removeButton).toBeVisible();
+      await expect(consentText).toBeVisible();
 
-    const [cardBox, , expandedRemoveBox] = await Promise.all([
-      boxOf(card),
-      boxOf(consentText),
-      boxOf(removeButton),
-    ]);
-    expect(expandedRemoveBox.width).toBe(44);
-    expect(expandedRemoveBox.height).toBe(44);
-    expect(
-      cardBox.x + cardBox.width - (expandedRemoveBox.x + expandedRemoveBox.width),
-    ).toBeGreaterThanOrEqual(16);
+      const [cardBox, , expandedRemoveBox] = await Promise.all([
+        boxOf(card),
+        boxOf(consentText),
+        boxOf(removeButton),
+      ]);
+      expect(expandedRemoveBox.width).toBe(44);
+      expect(expandedRemoveBox.height).toBe(44);
+      expect(
+        cardBox.x + cardBox.width - (expandedRemoveBox.x + expandedRemoveBox.width),
+      ).toBeGreaterThanOrEqual(16);
+      await expectNoHorizontalOverflow(page);
 
-    await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(accounts).toBeHidden();
-    await expect(transactions).toBeHidden();
-    await expect(removeButton).toBeHidden();
-    await expect(consentText).toBeHidden();
-  });
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await expect(accounts).toBeHidden();
+      await expect(transactions).toBeHidden();
+      await expect(removeButton).toBeHidden();
+      await expect(consentText).toBeHidden();
+    });
+  }
 });
 
 test.describe('bank connection loading errors', () => {
