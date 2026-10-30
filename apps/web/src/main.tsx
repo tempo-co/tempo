@@ -11,6 +11,7 @@ import {App} from './app';
 import './index.css';
 import {queryClient, signOut} from './query-client';
 import {router} from './router';
+import {HttpError} from './utils/api';
 import {createOfflinePersistence, hasSavedAccount} from './utils/offline-storage';
 import {registerOfflineShell} from './utils/register-offline-shell';
 
@@ -44,18 +45,22 @@ if (!('locks' in navigator)) {
       /* The router loads the chunk again, and reloads the page if it is gone. */
     });
   // Without a saved account this browser is often signed out (new, or its data was cleared), so the
-  // session check comes first and the page's code loads only for a session. Without one, Tempo
-  // renders at once and the router shows login. With one, its result is dropped so App checks the
-  // session itself after rendering, the same start as without this early check.
+  // session check comes first. When Tempo answers that there is no session, it renders at once and
+  // the router shows login. Otherwise the early result is dropped and the start continues as with a
+  // saved account: App checks the session itself once the page's code has loaded.
+  const loadInitialPageForSession = async () => {
+    queryClient.removeQueries({queryKey: CURRENT_ACCOUNT_KEY, exact: true});
+    await loadInitialPage();
+  };
   const ready = hasSavedAccount()
     ? loadInitialPage()
-    : queryClient.fetchQuery(currentAccountQuery).then(
-        async () => {
-          queryClient.removeQueries({queryKey: CURRENT_ACCOUNT_KEY, exact: true});
-          await loadInitialPage();
-        },
-        () => undefined,
-      );
+    : queryClient
+        .fetchQuery(currentAccountQuery)
+        .then(loadInitialPageForSession, (error: unknown) =>
+          error instanceof HttpError && error.status === 401
+            ? undefined
+            : loadInitialPageForSession(),
+        );
   void ready.then(() =>
     root.render(import.meta.env.DEV ? <React.StrictMode>{appRoot}</React.StrictMode> : appRoot),
   );

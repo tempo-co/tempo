@@ -125,10 +125,11 @@ check unicode-search "/bank-transactions?search=$encoded_search" spa
 check api /api/health proxy
 check mcp /api/mcp proxy
 check callback /bank-connections/callback proxy
-app_script=$(curl -sS --max-time 5 "http://127.0.0.1:$port/" | grep -o '/assets/[^"]*\.js' | head -n 1)
-app_styles=$(curl -sS --max-time 5 "http://127.0.0.1:$port/" | grep -o '/assets/[^"]*\.css' | head -n 1)
-check app-script "$app_script" compressed
-check app-styles "$app_styles" compressed
+index_html=$(curl -sS --max-time 5 "http://127.0.0.1:$port/")
+for asset in js css; do
+    [[ $index_html =~ (/assets/[^\"]+\.$asset) ]] || { echo "index.html links no .$asset asset" >&2; exit 1; }
+    check "app-$asset" "${BASH_REMATCH[1]}" compressed
+done
 
 # The first streamed event must arrive before a second request releases the final event.
 # Sharing only the network namespace keeps the synthetic API isolated from host services.
