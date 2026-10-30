@@ -1,13 +1,33 @@
 import type {
-	BankConnectionStatus,
-	BankSyncStatus,
 	BankTransactionCashFlowTreatment,
 	BankTransactionCategorizationSource,
 	BankTransactionCategorizationStatus,
 	BankTransactionFinancialEventSource,
 	BankTransactionFinancialEventType,
-} from './banking-values.js';
+} from './transactions.js';
 import type {BankTransactionCategory} from './categories.js';
+
+export const BANK_CONNECTION_STATUSES = [
+	'AUTHORIZED',
+	'EXPIRED',
+	'RUNNING',
+	'PENDING_AUTHORIZATION',
+	'CANCELLED',
+	'FAILED',
+] as const;
+export type BankConnectionStatus = (typeof BANK_CONNECTION_STATUSES)[number];
+
+export const BANK_SYNC_STATUSES = [
+	'IDLE',
+	'QUEUED',
+	'RUNNING',
+	'SUCCEEDED',
+	'PARTIAL',
+	'FAILED',
+	'RATE_LIMITED',
+	'EXPIRED',
+] as const;
+export type BankSyncStatus = (typeof BANK_SYNC_STATUSES)[number];
 
 /** `GET /bank-connections/aspsps`: a bank that can be connected. */
 export type BankConnectionAspsp = {

@@ -6,7 +6,8 @@ The HTTP request and response shapes the API serves, plus the fixed value lists 
 
 - Describe the JSON on the wire: dates and amounts are `string`, absent values are `null`, no `Date`, entities or class instances.
 - No dependencies. No Nest, class-validator, zod or browser APIs; the code must compile under both the API's and the web app's compiler settings.
-- One file per API area, re-exported from `src/index.ts`. Relative imports end in `.js` (the package is ESM).
+- One file per API area, holding both its shapes and its value lists, re-exported from `src/index.ts`. Add a value list to the area that owns it, not to a shared file. Relative imports end in `.js` (the package is ESM).
+- Keep changes additive across a deploy. The API and web roll out separately, so for a few minutes one side runs the old contract: add the new field or value, ship it, and remove the old one in a later PR. Type-checking catches drift inside a PR, not between running versions.
 - UI copy such as labels and icons stays in the web app. API-internal types (entities, detection state) stay in the API.
 
 ## How each consumer loads it
