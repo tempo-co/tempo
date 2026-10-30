@@ -4,7 +4,7 @@ Workflow: `.github/workflows/ci.yml` (`CI/CD`). One workflow runs for every PR a
 
 ## Which jobs run
 
-The `Changes` job compares a PR's merge commit with its base (or a push with the previous `main`) and sets four flags:
+The `Changes` job sets four flags. A PR compares its merge commit with the base branch. A push to `main` compares each app with the commit its current `:main` image was built from (read from GHCR by `.github/scripts/released-revision.sh`), so a change whose release was skipped because `main` moved on is released by the next push; `ops` compares with the previous `main`.
 
 | Flag | Set when the change touches | Jobs |
 |---|---|---|
@@ -13,7 +13,7 @@ The `Changes` job compares a PR's merge commit with its base (or a push with the
 | `e2e` | `apps/api/**` or `apps/web/**` | `Web E2E shard 1/8`…`8/8`, `Web E2E tests` |
 | `ops` | `ops/**` | `Ops checks` |
 
-A change to `.github/workflows/ci.yml` sets every flag, and so does a push whose previous `main` is unknown. Other files (root docs, `AGENTS.md`, other workflows, Dependabot config) run no jobs. Jobs are gated with `if:`, never with `on: paths:`: a skipped job reports success, while a skipped workflow leaves a required check pending forever.
+A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, and an area whose base commit is unknown (not in this history, or unreadable) runs. Other files (root docs, `AGENTS.md`, other workflows, Dependabot config) run no jobs. Jobs are gated with `if:`, never with `on: paths:`: a skipped job reports success, while a skipped workflow leaves a required check pending forever.
 
 `CI` needs every job and fails if any of them failed or was cancelled; skipped jobs count as passing. It is the only required check, so job names can change without touching the ruleset.
 

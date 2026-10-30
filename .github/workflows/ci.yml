@@ -32,29 +32,41 @@ jobs:
                   persist-credentials: false
                   fetch-depth: 0
 
-            # A PR is checked out as its merge commit, whose first parent is the base branch.
-            # A push compares with the previous main; without one (new branch, force push) everything runs.
+            # A PR compares its merge commit with the base branch (the merge commit's first parent).
+            # A push to main compares each app with the commit its current `:main` image was built
+            # from, so a change whose release was skipped (main moved on) is still released by the
+            # next push; ops compares with the previous main. When a base is unknown, the area runs.
             - name: Detect changed areas
               id: paths
               env:
                   BEFORE: ${{ github.event.before }}
+                  OWNER: ${{ github.repository_owner }}
               run: |
                   set -euo pipefail
+                  # Everything runs when CI itself changes.
+                  shared='^\.github/(workflows/ci\.yml|scripts/)'
+                  # Usage: touched <base commit or empty> <path regex>
+                  touched() {
+                      local files
+                      if [[ -z $1 || $1 =~ ^0+$ ]] || ! git cat-file -e "$1^{commit}" 2>/dev/null; then
+                          echo true
+                          return
+                      fi
+                      files=$(git diff --name-only "$1" HEAD)
+                      if grep -qE "$shared|$2" <<<"$files"; then echo true; else echo false; fi
+                  }
                   if [[ $GITHUB_EVENT_NAME == pull_request ]]; then
-                      files=$(git diff --name-only HEAD^1 HEAD)
-                  elif [[ -n $BEFORE && ! $BEFORE =~ ^0+$ ]] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-                      files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+                      base=$(git rev-parse HEAD^1)
+                      api_base=$base web_base=$base ops_base=$base
                   else
-                      files=.github/workflows/ci.yml
+                      api_base=$(.github/scripts/released-revision.sh "$OWNER/tempo-api" main) || api_base=''
+                      web_base=$(.github/scripts/released-revision.sh "$OWNER/tempo-web" main) || web_base=''
+                      ops_base=$BEFORE
                   fi
-                  printf '%s\n' "$files"
-                  changed() { if grep -qE "$1" <<<"$files"; then echo true; else echo false; fi; }
-                  # A change to this workflow runs everything.
-                  if grep -qxF .github/workflows/ci.yml <<<"$files"; then
-                      api=true web=true ops=true
-                  else
-                      api=$(changed '^apps/api/') web=$(changed '^apps/web/') ops=$(changed '^ops/')
-                  fi
+                  echo "bases: api=${api_base:-unknown} web=${web_base:-unknown} ops=${ops_base:-unknown}"
+                  api=$(touched "$api_base" '^apps/api/')
+                  web=$(touched "$web_base" '^apps/web/')
+                  ops=$(touched "$ops_base" '^ops/')
                   e2e=false
                   if [[ $api == true || $web == true ]]; then e2e=true; fi
                   printf 'api=%s\nweb=%s\nops=%s\ne2e=%s\n' "$api" "$web" "$ops" "$e2e" | tee -a "$GITHUB_OUTPUT"
