@@ -33,7 +33,11 @@ export function createHookHarness(stubs: Record<string, unknown>) {
       if (name in stubs) return stubs[name];
       if (name === '@tanstack/react-query') return reactQuery;
       if (name.startsWith('@/')) return load(resolve('src', `${name.slice(2)}.ts`));
-      if (name.startsWith('.')) return load(resolve(filename, '..', `${name}.ts`));
+      if (name === '@tempo/contracts')
+        return load(resolve('../../packages/contracts/src/index.ts'));
+      // The contracts package is ESM, so its relative imports end in `.js`.
+      if (name.startsWith('.'))
+        return load(resolve(filename, '..', `${name.replace(/\.js$/, '')}.ts`));
       return require(name);
     };
     const execute = runInThisContext(`(function(require, module, exports) {${code}\n})`, {
