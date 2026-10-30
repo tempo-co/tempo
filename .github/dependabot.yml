@@ -22,6 +22,14 @@ updates:
       # connect-redis 9+ dropped ioredis, which the session store uses.
       - dependency-name: connect-redis
         update-types: ['version-update:semver-major']
+      # typescript-eslint accepts TypeScript below 6.1 and ts-jest below 7; loosen as they move.
+      - dependency-name: typescript
+        versions: ['>= 6.1.0']
+      # ESM-only from these majors; Jest on Node 22 can't load them without a transform.
+      - dependency-name: '@faker-js/faker'
+        update-types: ['version-update:semver-major']
+      - dependency-name: parse5
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: npm
     directory: /apps/web
@@ -44,12 +52,22 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
     ignore:
-      # date-fns 4 needs react-day-picker 9, which changes the calendar component's API.
+      # date-fns 4 needs react-day-picker 9+, which changes the calendar component's API.
       - dependency-name: date-fns
+        update-types: ['version-update:semver-major']
+      - dependency-name: react-day-picker
         update-types: ['version-update:semver-major']
       # Remove when eslint-plugin-react supports ESLint 10 and the lint stack is upgraded together.
       - dependency-name: eslint
         versions: ['10.x.x']
+      - dependency-name: '@eslint/js'
+        versions: ['10.x.x']
+      # typescript-eslint accepts TypeScript below 6.1; loosen as it moves.
+      - dependency-name: typescript
+        versions: ['>= 6.1.0']
+      # v9 rewrites the table API; migrate deliberately.
+      - dependency-name: '@tanstack/react-table'
+        versions: ['9.x.x']
       # Remove when route validators are migrated from the Zod 3-only TanStack adapter.
       - dependency-name: zod
         versions: ['4.x.x']
