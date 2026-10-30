@@ -6,38 +6,39 @@ import {
 } from 'test/constants/seed.constants';
 
 import {createVerifiedAccount, expect, test} from '../../fixtures';
-import {mockJson} from '../../utils/api-mocks';
+import {LoginPage} from '../../pages/login.page';
+import {fulfillJson} from '../../utils/api-mocks';
 
 test.describe('Login', () => {
   test.describe('Opening Tempo signed out', () => {
-    test.use({storageState: {cookies: [], origins: []}});
+    // Every script must pass through page.route, not the offline shell.
+    test.use({storageState: {cookies: [], origins: []}, serviceWorkers: 'block'});
 
-    test('checks the session before loading page code, then shows the login form', async ({
+    test('shows the login form while the requested page is still loading', async ({
       page,
-      baseURL,
+      context,
       loginPage,
     }) => {
-      await mockJson(page, '**/accounts/me', {message: 'Unauthorized'}, 401);
-      // Scripts named in index.html load with the app; any other script is code loaded for a page.
-      const html = await (await page.request.get('/')).text();
-      const appScripts = new Set(
-        [...html.matchAll(/(?:src|href)="([^"]+\.js)"/g)].map(
-          ([, src]) => new URL(src, baseURL).pathname,
-        ),
+      await context.route('**/accounts/me', (route) =>
+        fulfillJson(route, {message: 'Unauthorized'}, 401),
       );
-      const events: string[] = [];
-      page.on('request', (request) => {
-        const {pathname} = new URL(request.url());
-        if (pathname.endsWith('/accounts/me')) events.push('session check');
-        else if (request.resourceType() === 'script' && !appScripts.has(pathname))
-          events.push('page code');
+      const loginScripts = new Set<string>();
+      const loginTab = await context.newPage();
+      loginTab.on('request', (request) => {
+        if (request.resourceType() === 'script') loginScripts.add(request.url());
+      });
+      await loginTab.goto('/login');
+      await expect(new LoginPage(loginTab).emailInput).toBeVisible();
+      await loginTab.close();
+      // Any other page's code is left unanswered, so it never arrives.
+      await page.route('**/*.js', async (route) => {
+        if (loginScripts.has(route.request().url())) await route.continue();
       });
 
       await page.goto('/');
 
       await loginPage.expectToBeOnPage();
       await expect(loginPage.emailInput).toBeVisible();
-      expect(events[0]).toBe('session check');
     });
   });
 
@@ -86,7 +87,8 @@ test.describe('Login', () => {
       await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
       await homePage.expectToBeOnPage();
 
-      await loginPage.navigate();
+      // The redirect home can come before the page's load event, which would interrupt goto.
+      await page.goto('/login', {waitUntil: 'commit'});
 
       await homePage.expectToBeOnPage();
       await homePage.expectUserLoggedIn();
