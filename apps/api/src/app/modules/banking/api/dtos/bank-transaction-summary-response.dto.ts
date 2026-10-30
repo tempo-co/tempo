@@ -1,4 +1,5 @@
-import type {BankTransactionCategoryFilterValue} from '../../categorization/bank-transaction-category';
+import type {BankTransactionCategoryFilterValue} from '@tempo/contracts';
+
 import type {BaselineDay, SpendingPaceDay} from '../../summary/bank-transaction-summary';
 
 /** Money fields are decimal strings with two places in the owner's base currency. */

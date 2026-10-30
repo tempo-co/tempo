@@ -1,3 +1,4 @@
+import {BANK_TRANSACTION_CATEGORY_FILTER_VALUES, type BankTransactionCategoryFilterValue} from '@tempo/contracts';
 import {Transform, Type} from 'class-transformer';
 import {
 	IsArray,
@@ -31,10 +32,6 @@ import {
 	type BankTransactionCategorizationSource,
 	type BankTransactionCategoryStatusFilterValue,
 } from '../../categorization/bank-transaction-categorization.types';
-import {
-	BANK_TRANSACTION_CATEGORY_FILTER_VALUES,
-	type BankTransactionCategoryFilterValue,
-} from '../../categorization/bank-transaction-category';
 import {SERIES_KEY_PATTERN} from '../pipes/series-key.pipe';
 
 export const DEFAULT_BANK_TRANSACTION_PAGE_INDEX = DEFAULT_PAGE_INDEX;

@@ -37,6 +37,7 @@ NestJS backend for Tempo, a personal-finance app that syncs real bank data throu
 - No `forwardRef`. When two modules need each other, extract a leaf module around the shared dependency (as `BankingAuthorizationStateModule` does) and delegate to the owning service instead of duplicating its logic.
 - When a service moves into `core`, move the smallest shared contract (response type, error code, message constant) down with it; don't leave `core` importing a feature's DTOs or message constants. Keep the HTTP shape and messages unchanged and type-check test files too, since the Nest build (`tsconfig.build.json`) excludes them.
 - Use `@core/*` and `@modules/*` across features and relative imports inside one.
+- HTTP request and response shapes come from `@tempo/contracts` (root `packages/contracts`). Controllers declare return types with them, request DTO classes keep their validators and `implements` the contract type, and response shapes are not redefined in the API. Rerun `npm run contracts:build` after editing the package.
 - Expected races and refusals use the module's typed error codes (e.g. `BankingAuthorizationStateError('state_superseded')`) or Nest HTTP exceptions with a stated status, never a bare `Error`.
 - Every account-owned query includes the owner's account id.
 - Bearer-token requests are told apart by `isBearerRequest` both in `session.module.ts` (session middleware skipped) and in `auth.guard.ts`. A new auth path needs the same discriminator at both, or token requests read and refresh sessions.

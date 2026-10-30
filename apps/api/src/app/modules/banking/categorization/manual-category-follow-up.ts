@@ -1,7 +1,7 @@
+import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from '@tempo/contracts';
 import type {WhereExpressionBuilder} from 'typeorm';
 
 import {CLAIMABLE_CATEGORIZATION_STATUSES, notManualCategorySourceSql} from './bank-transaction-categorization.types';
-import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from './bank-transaction-category';
 
 /**
  * What a manual correction does to the other rows from the same merchant that the owner selected in the preview:

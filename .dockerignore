@@ -1,0 +1,21 @@
+# Both images build from the repository root (see docs/ci-and-images.md); only these paths reach a build.
+*
+!apps/api/
+!apps/web/
+!packages/contracts/
+
+**/node_modules/
+**/dist/
+**/coverage/
+**/.env
+**/.env.*
+**/*.local
+**/npm-debug.log*
+**/.DS_Store
+**/Thumbs.db
+**/.vscode/
+apps/web/build/
+apps/web/dist-ssr/
+apps/web/playwright/.cache/
+apps/web/playwright-report/
+apps/web/test-results/

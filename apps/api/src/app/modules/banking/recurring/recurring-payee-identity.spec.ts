@@ -1,3 +1,5 @@
+import type {BankTransactionCategory} from '@tempo/contracts';
+
 import {getBankTransactionMerchantKey} from '../categorization/bank-transaction-merchant-key';
 import {type RecurringEvidence, inferRecurringIdentities} from './recurring-payee-identity';
 
@@ -14,7 +16,7 @@ function row(overrides: Partial<RecurringEvidence> = {}): RecurringEvidence {
 		counterpartyName: 'Example Service' as string | null,
 		description: null as string | null,
 		transactionType: 'OTHER' as string | null,
-		category: 'SUBSCRIPTIONS' as string | null,
+		category: 'SUBSCRIPTIONS' as BankTransactionCategory | null,
 		...overrides,
 	};
 	const indicator = overrides.merchantKey?.startsWith('INCOME:') ? 'CRDT' : 'DBIT';

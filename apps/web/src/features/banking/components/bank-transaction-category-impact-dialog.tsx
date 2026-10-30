@@ -1,3 +1,4 @@
+import {BankTransactionCategory} from '@tempo/contracts';
 import {useState} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
@@ -13,7 +14,7 @@ import {
   ResponsiveDialogTitle,
 } from '@/components/ui/responsive-dialog';
 
-import {BankTransactionCategory, BankTransactionCategoryImpact} from '../types/bank-transaction';
+import {BankTransactionCategoryImpact} from '../types/bank-transaction';
 import {formatBankTransactionCategory, formatBankTransactionDate} from '../utils/formatters';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 

@@ -1,11 +1,11 @@
 import {useNavigate} from '@tanstack/react-router';
+import type {RecurringSummary} from '@tempo/contracts';
 
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {Skeleton} from '@/components/ui/skeleton';
 import {useGetRecurringSummary} from '@/features/banking/api/use-get-recurring-summary';
 import {SeriesTile} from '@/features/banking/components/recurring-series-tile';
-import type {RecurringSummary} from '@/features/banking/types/recurring-series';
 import {formatAmount, formatDue} from '@/features/banking/utils/recurring-format';
 import {useLocalDate} from '@/hooks/use-local-date';
 import {cn} from '@/utils/cn';

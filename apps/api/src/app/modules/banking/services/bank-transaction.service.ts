@@ -1,5 +1,6 @@
 import {Injectable, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
+import type {BankTransactionCategory} from '@tempo/contracts';
 import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
@@ -30,7 +31,6 @@ import type {
 	BankTransactionCategorizationSource,
 	BankTransactionCategorizationStatus,
 } from '../categorization/bank-transaction-categorization.types';
-import type {BankTransactionCategory} from '../categorization/bank-transaction-category';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';

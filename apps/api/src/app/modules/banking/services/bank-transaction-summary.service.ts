@@ -1,5 +1,6 @@
 import {BadRequestException, Injectable} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
+import {BANK_TRANSACTION_UNCATEGORIZED, type BankTransactionCategoryFilterValue} from '@tempo/contracts';
 import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
@@ -24,10 +25,6 @@ import type {
 import type {BankTransactionTotalsResponseDto} from '../api/dtos/bank-transaction-totals-response.dto';
 import {BankTransaction} from '../bank-transaction.entity';
 import {addDays} from '../banking.utils';
-import {
-	BANK_TRANSACTION_UNCATEGORIZED,
-	type BankTransactionCategoryFilterValue,
-} from '../categorization/bank-transaction-category';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {
 	averageCents,

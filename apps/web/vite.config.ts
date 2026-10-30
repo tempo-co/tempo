@@ -54,6 +54,7 @@ export default defineConfig(({mode}) => {
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, './src'),
+        '@tempo/contracts': path.resolve(import.meta.dirname, '../../packages/contracts/src'),
       },
     },
   };

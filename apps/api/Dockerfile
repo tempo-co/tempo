@@ -1,18 +1,22 @@
+# Built from the repository root. `@tempo/contracts` is a `file:../../packages/contracts` dependency, so it sits two
+# levels above the app directory here too.
 FROM node:26-alpine AS builder
 WORKDIR /usr/src/app
 
 RUN apk add --no-cache python3 make g++
 
-COPY package*.json ./
+COPY packages/contracts/package.json packages/contracts/tsconfig.json /usr/packages/contracts/
+COPY packages/contracts/src/ /usr/packages/contracts/src/
+COPY apps/api/package*.json ./
 RUN npm ci
 
-COPY tsconfig*.json ./
-COPY src/ ./src/
-COPY mcp/src/ ./mcp/src/
-COPY mcp/scripts/generate-categories.mjs ./mcp/scripts/
-COPY claude-bridge/contract.json claude-bridge/merchant-contract.json ./claude-bridge/
-COPY scripts/ ./scripts/
-COPY nest-cli.json ./
+COPY apps/api/tsconfig*.json ./
+COPY apps/api/src/ ./src/
+COPY apps/api/mcp/src/ ./mcp/src/
+COPY apps/api/mcp/scripts/generate-categories.mjs ./mcp/scripts/
+COPY apps/api/claude-bridge/contract.json apps/api/claude-bridge/merchant-contract.json ./claude-bridge/
+COPY apps/api/scripts/ ./scripts/
+COPY apps/api/nest-cli.json ./
 RUN npm run build
 
 FROM node:26-alpine AS runtime-dependencies
@@ -21,7 +25,9 @@ RUN apk add --no-cache python3 make g++
 
 WORKDIR /usr/src/app
 
-COPY package*.json ./
+COPY --from=builder /usr/packages/contracts/package.json /usr/packages/contracts/
+COPY --from=builder /usr/packages/contracts/dist/ /usr/packages/contracts/dist/
+COPY apps/api/package*.json ./
 RUN node -e 'require("node:fs").writeFileSync("/tmp/dev-dependencies.json", JSON.stringify(Object.keys(require("./package.json").devDependencies)))' \
     && npm pkg delete devDependencies \
     && npm install --package-lock-only --ignore-scripts \
@@ -39,8 +45,9 @@ RUN apk add --no-cache curl libstdc++
 WORKDIR /usr/src/app
 
 COPY --from=runtime-dependencies --chown=node:node /usr/src/app/ ./
+COPY --from=runtime-dependencies --chown=node:node /usr/packages/ /usr/packages/
 COPY --from=runtime-dependencies /tmp/dev-dependencies.json /tmp/dev-dependencies.json
-COPY scripts/runtime-image-smoke.js /tmp/runtime-image-smoke.js
+COPY apps/api/scripts/runtime-image-smoke.js /tmp/runtime-image-smoke.js
 RUN node /tmp/runtime-image-smoke.js \
     && rm /tmp/dev-dependencies.json /tmp/runtime-image-smoke.js
 

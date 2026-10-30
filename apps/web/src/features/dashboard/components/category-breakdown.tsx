@@ -1,7 +1,7 @@
 import {Link} from '@tanstack/react-router';
+import {BANK_TRANSACTION_UNCATEGORIZED} from '@tempo/contracts';
 
 import {Card} from '@/components/ui/card';
-import {BANK_TRANSACTION_UNCATEGORIZED} from '@/features/banking/types/bank-transaction';
 import {BANK_TRANSACTION_CATEGORY_META} from '@/features/banking/utils/bank-transaction-category-meta';
 import {cn} from '@/utils/cn';
 

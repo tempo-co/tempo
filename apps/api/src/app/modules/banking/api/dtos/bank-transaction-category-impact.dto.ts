@@ -1,7 +1,7 @@
 import {PickType} from '@nestjs/mapped-types';
+import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from '@tempo/contracts';
 import {IsEnum} from 'class-validator';
 
-import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from '../../categorization/bank-transaction-category';
 import type {ManualCategoryFollowUpAction} from '../../categorization/manual-category-follow-up';
 import {BankTransactionResponseDto} from './bank-transaction-response.dto';
 

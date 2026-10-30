@@ -1,3 +1,7 @@
+import {
+  BANK_TRANSACTION_CATEGORY_FILTER_VALUES,
+  type BankTransactionCategory,
+} from '@tempo/contracts';
 import {z} from 'zod';
 
 import {paginationSearchParamsSchema} from '@/types/pagination';
@@ -81,38 +85,6 @@ export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = [
 ] as const;
 export type BankTransactionCashFlowTreatment =
   (typeof BANK_TRANSACTION_CASH_FLOW_TREATMENTS)[number];
-
-export const BANK_TRANSACTION_CATEGORIES = [
-  'HOUSING_AND_UTILITIES',
-  'FOOD_AND_DRINK',
-  'TRANSPORTATION',
-  'SHOPPING',
-  'SUBSCRIPTIONS',
-  'HEALTH',
-  'TRAVEL',
-  'ENTERTAINMENT',
-  'PERSONAL_CARE',
-  'EDUCATION',
-  'INSURANCE',
-  'FEES',
-  'CASH_WITHDRAWAL',
-  'INCOME',
-  'REFUND',
-  'TRANSFER_IN',
-  'TRANSFER_OUT',
-  'NEEDS_REVIEW',
-  'OTHER',
-] as const;
-
-export type BankTransactionCategory = (typeof BANK_TRANSACTION_CATEGORIES)[number];
-
-export const BANK_TRANSACTION_UNCATEGORIZED = 'UNCATEGORIZED' as const;
-export const BANK_TRANSACTION_CATEGORY_FILTER_VALUES = [
-  ...BANK_TRANSACTION_CATEGORIES,
-  BANK_TRANSACTION_UNCATEGORIZED,
-] as const;
-export type BankTransactionCategoryFilterValue =
-  (typeof BANK_TRANSACTION_CATEGORY_FILTER_VALUES)[number];
 
 export const BANK_TRANSACTION_CATEGORY_LABELS: Record<BankTransactionCategory, string> = {
   HOUSING_AND_UTILITIES: 'Housing and utilities',

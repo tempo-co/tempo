@@ -1,4 +1,5 @@
 import {Logger} from '@nestjs/common';
+import {BANK_TRANSACTION_CATEGORIES} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {createServer} from 'node:http';
@@ -23,7 +24,7 @@ import {
 	type BankTransactionCategorizationInput,
 	MERCHANT_KINDS,
 } from '../bank-transaction-categorization.types';
-import {BANK_TRANSACTION_CATEGORIES, BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '../bank-transaction-category';
+import {BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '../bank-transaction-category';
 import {ClaudeBankTransactionCategorizationProvider} from './claude-bank-transaction-categorization.provider';
 
 function input(correlationId = 'transaction-1'): BankTransactionCategorizationInput {

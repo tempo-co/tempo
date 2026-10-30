@@ -1,4 +1,5 @@
 import {Link} from '@tanstack/react-router';
+import {type RecurringSeries} from '@tempo/contracts';
 import {format} from 'date-fns';
 import {ArrowLeft, ArrowUpRight, Eye, EyeOff, Link2, Link2Off} from 'lucide-react';
 import {Bar, BarChart, Cell, XAxis} from 'recharts';
@@ -14,7 +15,7 @@ import {cn} from '@/utils/cn';
 import {useGetRecurringPayments} from '../api/use-get-recurring-payments';
 import {useUpdateRecurringSeries} from '../api/use-update-recurring-series';
 import type {BankTransaction} from '../types/bank-transaction';
-import {RECURRING_CADENCE_LABELS, type RecurringSeries} from '../types/recurring-series';
+import {RECURRING_CADENCE_LABELS} from '../types/recurring-series';
 import {formatBankTransactionCompactDate} from '../utils/formatters';
 import {
   formatAmount,

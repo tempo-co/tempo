@@ -4,11 +4,12 @@
 	"testEnvironment": "node",
 	"testRegex": ".e2e.spec.ts$",
 	"transform": {
-		"^.+\\.(t|j)s$": "ts-jest"
+		"^.+\\.(t|j)s$": ["ts-jest", {"tsconfig": "<rootDir>/tsconfig.jest.json"}]
 	},
 	"moduleNameMapper": {
 		"^@core/(.*)$": "<rootDir>/src/app/core/$1",
 		"^@modules/(.*)$": "<rootDir>/src/app/modules/$1",
+		"^@tempo/contracts$": "<rootDir>/../../packages/contracts/src",
 		"^(\\.{1,2}/.*)\\.js$": "$1"
 	},
 	"setupFilesAfterEnv": ["<rootDir>/test/setup/e2e.setup.ts"]

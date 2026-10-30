@@ -1,3 +1,4 @@
+import {BANK_TRANSACTION_CATEGORIES, BANK_TRANSACTION_UNCATEGORIZED} from '@tempo/contracts';
 import {Tags} from 'lucide-react';
 
 import {
@@ -12,9 +13,7 @@ import {ScrollArea} from '@/components/ui/scroll-area';
 import {useBankTransactionArrayFilter} from '@/hooks/use-bank-transaction-array-filter';
 
 import {
-  BANK_TRANSACTION_CATEGORIES,
   BANK_TRANSACTION_CATEGORY_LABELS,
-  BANK_TRANSACTION_UNCATEGORIZED,
   BankTransactionFilterParams,
 } from '../types/bank-transaction';
 import {formatBankTransactionCategory} from '../utils/formatters';

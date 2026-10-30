@@ -1,14 +1,10 @@
 import type {Page} from '@playwright/test';
+import type {RecurringSeries, RecurringSeriesList, RecurringSeriesLists} from '@tempo/contracts';
 
 import {
   type BankTransaction,
   BankTransactionDirection,
 } from '../../../src/features/banking/types/bank-transaction';
-import type {
-  RecurringSeries,
-  RecurringSeriesList,
-  RecurringSeriesLists,
-} from '../../../src/features/banking/types/recurring-series';
 import {formatBankTransactionCompactDate} from '../../../src/features/banking/utils/formatters';
 import {expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections, mockJson} from '../../utils/api-mocks';

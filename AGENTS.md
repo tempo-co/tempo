@@ -6,10 +6,11 @@ Tempo is a personal-finance app that syncs real bank data through Enable Banking
 
 - `apps/api`: NestJS backend, plus the local MCP package (`apps/api/mcp`) and the Claude subscription bridge (`apps/api/claude-bridge`). Read `apps/api/AGENTS.md` before touching it.
 - `apps/web`: React SPA. Read `apps/web/AGENTS.md` before touching it.
+- `packages/contracts`: `@tempo/contracts`, the HTTP request and response shapes and fixed value lists both apps import. Read `packages/contracts/README.md` before touching it.
 - `ops/`: deploy, install, backup and staging scripts, host units, the production and Tailscale Compose files. Read `ops/README.md` before touching it.
 - `.github/`: one CI workflow for everything, GHCR retention and Dependabot. Read `docs/ci-and-images.md` before touching workflows, Dockerfiles or image tags.
 - In task descriptions, “backend” means `apps/api` and “frontend” means `apps/web`.
-- Each app has its own `package.json`, lockfile, ESLint and Prettier config (API: tabs; web: two spaces). Run npm commands inside the app directory and format only with that app's config. The apps share no code; web reaches the API only over HTTP.
+- Each app has its own `package.json`, lockfile, ESLint and Prettier config (API: tabs; web: two spaces). Run npm commands inside the app directory and format only with that app's config. The apps share only `@tempo/contracts`; web reaches the API only over HTTP.
 
 ## Product direction and workflow
 

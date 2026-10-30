@@ -1,3 +1,4 @@
+import {BankTransactionCategory} from '@tempo/contracts';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -21,7 +22,7 @@ import {
 } from 'lucide-react';
 import type {LucideIcon} from 'lucide-react';
 
-import {BANK_TRANSACTION_CATEGORY_LABELS, BankTransactionCategory} from '../types/bank-transaction';
+import {BANK_TRANSACTION_CATEGORY_LABELS} from '../types/bank-transaction';
 
 export type BankTransactionCategoryMeta = {
   label: string;

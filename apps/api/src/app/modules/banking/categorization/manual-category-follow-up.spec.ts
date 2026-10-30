@@ -1,4 +1,5 @@
-import type {BankTransactionCategory} from './bank-transaction-category';
+import type {BankTransactionCategory} from '@tempo/contracts';
+
 import {
 	ManualCategoryCounts,
 	planManualCategoryFollowUp,

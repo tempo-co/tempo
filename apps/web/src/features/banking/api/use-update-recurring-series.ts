@@ -1,4 +1,5 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
+import type {RecurringContinuationUpdate, RecurringSeriesHiddenUpdate} from '@tempo/contracts';
 import {toast} from 'sonner';
 
 import {HttpError, api, wasToasted} from '@/utils/api';
@@ -11,8 +12,14 @@ type Change =
 
 const request = (change: Change) =>
   change.kind === 'hidden'
-    ? {url: `/recurring-series/${change.key}/hidden`, body: {hidden: change.hidden}}
-    : {url: `/recurring-series/${change.key}/continuation`, body: {linked: change.linked}};
+    ? {
+        url: `/recurring-series/${change.key}/hidden`,
+        body: {hidden: change.hidden} satisfies RecurringSeriesHiddenUpdate,
+      }
+    : {
+        url: `/recurring-series/${change.key}/continuation`,
+        body: {linked: change.linked} satisfies RecurringContinuationUpdate,
+      };
 
 const inverse = (change: Change): Change =>
   change.kind === 'hidden'

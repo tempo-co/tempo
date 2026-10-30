@@ -11,8 +11,8 @@
 	},
 	"scripts": {
 		"build": "rimraf dist && nest build",
-		"format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-		"format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+		"format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"../../packages/contracts/{src/**/*.ts,*.json}\"",
+		"format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"../../packages/contracts/{src/**/*.ts,*.json}\"",
 		"start": "docker compose -p tempo-api-development -f docker-compose.dev.yml --env-file .env.development up -d && nest start",
 		"start:dev": "docker compose -p tempo-api-development -f docker-compose.dev.yml --env-file .env.development up -d && rimraf dist && nest start --watch",
 		"start:debug": "docker compose -p tempo-api-development -f docker-compose.dev.yml --env-file .env.development up -d && rimraf dist && nest start --debug --watch",
@@ -28,15 +28,17 @@
 		"test:e2e:cov": "npm run docker:test:down && npm run docker:test:up && rimraf dist && jest --config ./test/jest-e2e.json --verbose --coverage --runInBand",
 		"db:seed": "ts-node -r tsconfig-paths/register ./scripts/seed.ts",
 		"db:schema": "ts-node -r tsconfig-paths/register ./scripts/schema.ts",
+		"contracts:build": "tsc -p ../../packages/contracts",
+		"generate": "npm run contracts:build && npm run generate:mcp",
 		"generate:mcp": "node mcp/scripts/generate-categories.mjs",
-		"prebuild": "npm run generate:mcp",
-		"prestart": "npm run generate:mcp",
-		"prestart:dev": "npm run generate:mcp",
-		"prestart:debug": "npm run generate:mcp",
-		"predb:seed": "npm run generate:mcp",
-		"predb:schema": "npm run generate:mcp",
-		"pretest:e2e": "npm run generate:mcp",
-		"pretest:e2e:cov": "npm run generate:mcp"
+		"prebuild": "npm run generate",
+		"prestart": "npm run generate",
+		"prestart:dev": "npm run generate",
+		"prestart:debug": "npm run generate",
+		"predb:seed": "npm run generate",
+		"predb:schema": "npm run generate",
+		"pretest:e2e": "npm run generate",
+		"pretest:e2e:cov": "npm run generate"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "1.2.0",
@@ -54,6 +56,7 @@
 		"@nestjs/terminus": "^11.1.1",
 		"@nestjs/throttler": "^6.7.1",
 		"@nestjs/typeorm": "^11.0.3",
+		"@tempo/contracts": "file:../../packages/contracts",
 		"argon2": "^0.45.1",
 		"bullmq": "^6.4.0",
 		"class-transformer": "^0.5.1",
@@ -116,6 +119,7 @@
 		"moduleNameMapper": {
 			"^@core/(.*)$": "<rootDir>/src/app/core/$1",
 			"^@modules/(.*)$": "<rootDir>/src/app/modules/$1",
+			"^@tempo/contracts$": "<rootDir>/../../packages/contracts/src",
 			"^(\\.{1,2}/.*)\\.js$": "$1"
 		},
 		"moduleFileExtensions": [
@@ -128,7 +132,12 @@
 			"<rootDir>/src/**/*.spec.ts"
 		],
 		"transform": {
-			"^.+\\.(t|j)s$": "ts-jest"
+			"^.+\\.(t|j)s$": [
+				"ts-jest",
+				{
+					"tsconfig": "<rootDir>/tsconfig.jest.json"
+				}
+			]
 		},
 		"collectCoverageFrom": [
 			"src/**/*.{!(module|repository.module),}.(t|j)s"

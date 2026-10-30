@@ -1,7 +1,8 @@
+import type {RecurringSeries} from '@tempo/contracts';
+
 import {formatMoney} from '@/features/dashboard/utils/money';
 import {cn} from '@/utils/cn';
 
-import type {RecurringSeries} from '../types/recurring-series';
 import {formatPriceChange, isPast} from '../utils/recurring-format';
 import {MerchantLogoTile} from './merchant-logo-tile';
 

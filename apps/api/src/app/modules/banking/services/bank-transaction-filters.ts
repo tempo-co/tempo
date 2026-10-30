@@ -1,3 +1,4 @@
+import {BANK_TRANSACTION_UNCATEGORIZED, type BankTransactionCategory} from '@tempo/contracts';
 import {Brackets, type Repository, SelectQueryBuilder} from 'typeorm';
 
 import type {BankTransactionFilterQueryDto} from '../api/dtos/bank-transaction-query.dto';
@@ -11,10 +12,6 @@ import type {
 	BankTransactionCategorizationStatus,
 	BankTransactionCategoryStatusFilterValue,
 } from '../categorization/bank-transaction-categorization.types';
-import {
-	BANK_TRANSACTION_UNCATEGORIZED,
-	type BankTransactionCategory,
-} from '../categorization/bank-transaction-category';
 
 const REFUND = 'REFUND' satisfies BankTransactionCategory;
 const FAILED = 'FAILED' satisfies BankTransactionCategorizationStatus;

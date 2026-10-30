@@ -1,3 +1,5 @@
+import type {BankTransactionCategory} from '@tempo/contracts';
+
 import type {
 	BankTransactionCashFlowTreatment,
 	BankTransactionFinancialEventSource,
@@ -7,7 +9,6 @@ import type {
 	BankTransactionCategorizationSource,
 	BankTransactionCategorizationStatus,
 } from '../../categorization/bank-transaction-categorization.types';
-import type {BankTransactionCategory} from '../../categorization/bank-transaction-category';
 
 export class BankConnectionAspspResponseDto {
 	name: string;

@@ -1,12 +1,9 @@
 import {useMutation} from '@tanstack/react-query';
+import {BankTransactionCategory} from '@tempo/contracts';
 
 import {api} from '@/utils/api';
 
-import {
-  BankTransaction,
-  BankTransactionCategory,
-  BankTransactionCategoryImpact,
-} from '../types/bank-transaction';
+import {BankTransaction, BankTransactionCategoryImpact} from '../types/bank-transaction';
 
 type PreviewBankTransactionCategoryInput = {
   id: BankTransaction['id'];
