@@ -23,6 +23,8 @@ export function BankTransactionCounterpartLink({
         ...prev,
         transactionId: counterpart.id,
       })}
+      // Close returns past every leg visited, to where the inspector opened.
+      state={(prev) => ({transactionOpenedAt: prev.transactionOpenedAt ?? prev.__TSR_index})}
       data-testid={testId}
       className='group mt-2 flex min-h-14 w-full max-w-md items-center gap-3 rounded-md border bg-background px-3 py-2 transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
     >

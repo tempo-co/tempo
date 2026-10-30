@@ -293,57 +293,60 @@ test('pointer clicks leave chart surfaces and marks without focus outlines', asy
 test.describe('touch chart inspection', () => {
   test.use({hasTouch: true, isMobile: true, viewport: {width: 390, height: 844}});
 
-  test('holding and scrubbing shows each period until release', async ({page, context}) => {
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, 'vibrate', {value: () => {
-        const root = document.documentElement;
-        root.dataset.chartPulses = String(Number(root.dataset.chartPulses ?? 0) + 1);
-        return true;
-      }});
-    });
-    await page.goto('/?month=2026-09');
-    const touch = await context.newCDPSession(page);
-    for (const [name, first, last] of [
-      ['balance-trend', '31 Jul 2026', '30 Sep 2026'],
-      ['cash-flow', 'July 2026', 'September 2026'],
-    ]) {
-      const card = page.getByTestId(name);
-      const plot = card.locator('[data-slot="chart"]');
-      await plot.scrollIntoViewIfNeeded();
-      const labels = card.locator('.recharts-xAxis-tick-labels text');
-      const start = await boxOf(labels.first());
-      const end = await boxOf(labels.last());
-      const box = await boxOf(plot);
-      const y = Math.round(box.y + box.height / 2);
-      const x = Math.round(start.x + start.width / 2);
-      const tooltip = card.locator('.recharts-tooltip-wrapper');
-      const url = page.url();
-      await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y}]});
-      await expect(tooltip).not.toBeVisible();
-      await expect(tooltip).toBeVisible();
-      await expect(tooltip).toContainText(first);
-      const pulses = Number(await page.locator('html').getAttribute('data-chart-pulses'));
-      expect(pulses).toBeGreaterThan(0);
-      await touch.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: x + 1, y}]});
-      await expect(page.locator('html')).toHaveAttribute('data-chart-pulses', String(pulses));
-      await touch.send('Input.dispatchTouchEvent', {
-        type: 'touchMove', touchPoints: [{x: Math.round(end.x + end.width / 2), y}],
+  for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+    test(`holding and scrubbing shows each period until release (${reducedMotion})`, async ({page, context}) => {
+      await page.emulateMedia({reducedMotion});
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'vibrate', {value: () => {
+          const root = document.documentElement;
+          root.dataset.chartPulses = String(Number(root.dataset.chartPulses ?? 0) + 1);
+          return true;
+        }});
       });
-      await expect(tooltip).toContainText(last);
-      await expect(page.locator('html')).toHaveAttribute('data-chart-pulses', String(pulses + 1));
-      const readout = await boxOf(tooltip);
-      expect(readout.y + readout.height).toBeLessThan(y);
-      expect(readout.x).toBeGreaterThanOrEqual(0);
-      expect(readout.x + readout.width).toBeLessThanOrEqual(390);
-      if (process.env.HOME_DENSITY_CAPTURE_DIR) {
-        await page.screenshot({path: join(process.env.HOME_DENSITY_CAPTURE_DIR, `${name}-touch.png`)});
+      await page.goto('/?month=2026-09');
+      const touch = await context.newCDPSession(page);
+      for (const [name, first, last] of [
+        ['balance-trend', '31 Jul 2026', '30 Sep 2026'],
+        ['cash-flow', 'July 2026', 'September 2026'],
+      ]) {
+        const card = page.getByTestId(name);
+        const plot = card.locator('[data-slot="chart"]');
+        await plot.scrollIntoViewIfNeeded();
+        const labels = card.locator('.recharts-xAxis-tick-labels text');
+        const start = await boxOf(labels.first());
+        const end = await boxOf(labels.last());
+        const box = await boxOf(plot);
+        const y = Math.round(box.y + box.height / 2);
+        const x = Math.round(start.x + start.width / 2);
+        const tooltip = card.locator('.recharts-tooltip-wrapper');
+        const url = page.url();
+        await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y}]});
+        await expect(tooltip).not.toBeVisible();
+        await expect(tooltip).toBeVisible();
+        await expect(tooltip).toContainText(first);
+        const pulses = Number(await page.locator('html').getAttribute('data-chart-pulses'));
+        expect(pulses).toBeGreaterThan(0);
+        await touch.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: x + 1, y}]});
+        await expect(page.locator('html')).toHaveAttribute('data-chart-pulses', String(pulses));
+        await touch.send('Input.dispatchTouchEvent', {
+          type: 'touchMove', touchPoints: [{x: Math.round(end.x + end.width / 2), y}],
+        });
+        await expect(tooltip).toContainText(last);
+        await expect(page.locator('html')).toHaveAttribute('data-chart-pulses', String(pulses + 1));
+        const readout = await boxOf(tooltip);
+        expect(readout.y + readout.height).toBeLessThan(y);
+        expect(readout.x).toBeGreaterThanOrEqual(0);
+        expect(readout.x + readout.width).toBeLessThanOrEqual(390);
+        if (process.env.HOME_DENSITY_CAPTURE_DIR) {
+          await page.screenshot({path: join(process.env.HOME_DENSITY_CAPTURE_DIR, `${name}-touch.png`)});
+        }
+        await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+        await expect(tooltip).not.toBeVisible();
+        await expect(card.locator('.recharts-tooltip-cursor')).toHaveCount(0);
+        await expect(page).toHaveURL(url);
       }
-      await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
-      await expect(tooltip).not.toBeVisible();
-      await expect(card.locator('.recharts-tooltip-cursor')).toHaveCount(0);
-      await expect(page).toHaveURL(url);
-    }
-  });
+    });
+  }
 
   test('horizontal scrubbing inspects while a short tap selects a month', async ({page, context}) => {
     // Safari has no Vibration API; inspection is complete without it.

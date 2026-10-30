@@ -110,7 +110,7 @@ export function BankConnectionPicker({
         </Button>
       </ResponsiveDialogTrigger>
       <ResponsiveDialogContent
-        className='max-h-[85vh] overflow-hidden sm:max-w-xl'
+        className='max-h-[85dvh] sm:max-w-xl'
         data-testid='bank-connection-picker'
       >
         <ResponsiveDialogHeader className='text-start'>

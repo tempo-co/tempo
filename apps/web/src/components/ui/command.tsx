@@ -4,6 +4,7 @@ import {Search} from 'lucide-react';
 import * as React from 'react';
 
 import {cn} from '@/utils/cn';
+import {selectionHaptic} from '@/utils/haptics';
 
 import {Dialog, DialogContent} from './dialog';
 
@@ -44,7 +45,7 @@ const CommandInput = React.forwardRef<
     <CommandPrimitive.Input
       ref={ref}
       className={cn(
-        'flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-hidden placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50',
+        'flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-hidden placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 max-sm:text-base pointer-coarse:text-base',
         className,
       )}
       {...props}
@@ -107,16 +108,34 @@ CommandSeparator.displayName = CommandPrimitive.Separator.displayName;
 const CommandItem = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
->(({className, ...props}, ref) => (
-  <CommandPrimitive.Item
-    ref={ref}
-    className={cn(
-      "relative flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-[selected='true']:bg-accent data-[selected=true]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
-      className,
-    )}
-    {...props}
-  />
-));
+>(({className, onClickCapture, onSelect, ...props}, ref) => {
+  const sourceRef = React.useRef('');
+  return (
+    <CommandPrimitive.Item
+      ref={ref}
+      className={cn(
+        "relative flex cursor-pointer touch-manipulation items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-[selected='true']:bg-accent data-[selected=true]:text-accent-foreground max-sm:min-h-11 pointer-coarse:min-h-11 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+        className,
+      )}
+      {...props}
+      onClickCapture={(event) => {
+        onClickCapture?.(event);
+        sourceRef.current =
+          !event.defaultPrevented &&
+          'pointerType' in event.nativeEvent &&
+          event.nativeEvent.pointerType === 'touch'
+            ? 'touch'
+            : '';
+      }}
+      onSelect={(value) => {
+        const pointerType = sourceRef.current;
+        sourceRef.current = '';
+        if (!props.disabled) selectionHaptic(pointerType);
+        onSelect?.(value);
+      }}
+    />
+  );
+});
 
 CommandItem.displayName = CommandPrimitive.Item.displayName;
 

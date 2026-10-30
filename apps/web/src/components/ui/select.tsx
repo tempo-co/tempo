@@ -3,8 +3,35 @@ import {Check, ChevronDown, ChevronUp} from 'lucide-react';
 import * as React from 'react';
 
 import {cn} from '@/utils/cn';
+import {selectionHaptic} from '@/utils/haptics';
 
-const Select = SelectPrimitive.Root;
+// Radix owns the commit; each item only records its initiating input source.
+const SelectTouchSource = React.createContext<React.RefObject<string> | null>(null);
+
+function Select({
+  onValueChange,
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Root>) {
+  const sourceRef = React.useRef('');
+  return (
+    <SelectTouchSource.Provider value={sourceRef}>
+      <SelectPrimitive.Root
+        {...props}
+        onValueChange={(value) => {
+          const pointerType = sourceRef.current;
+          sourceRef.current = '';
+          selectionHaptic(pointerType);
+          onValueChange?.(value);
+        }}
+        onOpenChange={(open) => {
+          sourceRef.current = '';
+          onOpenChange?.(open);
+        }}
+      />
+    </SelectTouchSource.Provider>
+  );
+}
 
 const SelectGroup = SelectPrimitive.Group;
 
@@ -17,7 +44,7 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 data-placeholder:text-muted-foreground [&>span]:line-clamp-1',
+      'flex h-10 w-full touch-manipulation items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 data-placeholder:text-muted-foreground max-sm:min-h-11 pointer-coarse:min-h-11 [&>span]:line-clamp-1',
       className,
     )}
     {...props}
@@ -66,7 +93,7 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        'relative z-50 max-h-(--radix-select-content-available-height) min-w-32 origin-(--radix-select-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
+        'overlay-motion relative z-50 max-h-(--radix-select-content-available-height) min-w-32 origin-(--radix-select-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
         position === 'popper' &&
           'data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1',
         className,
@@ -105,24 +132,48 @@ SelectLabel.displayName = SelectPrimitive.Label.displayName;
 const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({className, children, ...props}, ref) => (
-  <SelectPrimitive.Item
-    ref={ref}
-    className={cn(
-      'relative flex w-full cursor-default items-center rounded-sm py-1.5 pr-2 pl-8 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50',
-      className,
-    )}
-    {...props}
-  >
-    <span className='absolute left-2 flex h-3.5 w-3.5 items-center justify-center'>
-      <SelectPrimitive.ItemIndicator>
-        <Check className='h-4 w-4' />
-      </SelectPrimitive.ItemIndicator>
-    </span>
+>(
+  (
+    {className, children, onPointerDownCapture, onPointerCancelCapture, onKeyDownCapture, ...props},
+    ref,
+  ) => {
+    const sourceRef = React.useContext(SelectTouchSource);
+    return (
+      <SelectPrimitive.Item
+        ref={ref}
+        className={cn(
+          'relative flex w-full cursor-default touch-manipulation items-center rounded-sm py-1.5 pr-2 pl-8 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 max-sm:min-h-11 pointer-coarse:min-h-11',
+          className,
+        )}
+        {...props}
+        onPointerDownCapture={(event) => {
+          onPointerDownCapture?.(event);
+          if (sourceRef)
+            sourceRef.current =
+              !props.disabled && !event.defaultPrevented && event.isPrimary
+                ? event.pointerType
+                : '';
+        }}
+        onPointerCancelCapture={(event) => {
+          if (sourceRef) sourceRef.current = '';
+          onPointerCancelCapture?.(event);
+        }}
+        onKeyDownCapture={(event) => {
+          if (sourceRef) sourceRef.current = '';
+          onKeyDownCapture?.(event);
+        }}
+      >
+        <span className='absolute left-2 flex h-3.5 w-3.5 items-center justify-center'>
+          <SelectPrimitive.ItemIndicator>
+            <Check className='h-4 w-4' />
+          </SelectPrimitive.ItemIndicator>
+        </span>
 
-    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
-  </SelectPrimitive.Item>
-));
+        <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+      </SelectPrimitive.Item>
+    );
+  },
+);
 SelectItem.displayName = SelectPrimitive.Item.displayName;
 
 const SelectSeparator = React.forwardRef<

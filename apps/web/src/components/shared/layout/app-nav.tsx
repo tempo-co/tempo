@@ -129,7 +129,7 @@ export function AccountMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className='flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[state=open]:ring-2 data-[state=open]:ring-border'
+        className='flex size-9 shrink-0 touch-manipulation items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:bg-accent data-[state=open]:ring-2 data-[state=open]:ring-border max-sm:size-11 pointer-coarse:size-11'
         aria-label={`Account menu, ${currentAccount.name} (${currentAccount.email})`}
         data-testid='account-menu-trigger'
       >

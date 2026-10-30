@@ -76,7 +76,10 @@ export function BankTransactionMobileFilters({
           )}
         </Button>
       </DrawerTrigger>
-      <DrawerContent data-testid='bank-transaction-mobile-filters' className='max-h-[90vh] p-0'>
+      <DrawerContent
+        data-testid='bank-transaction-mobile-filters'
+        className='max-h-[90dvh] overflow-hidden p-0'
+      >
         <DrawerHeader className='border-b px-4 pt-3 pb-4 text-left'>
           <DrawerTitle>Filters</DrawerTitle>
         </DrawerHeader>

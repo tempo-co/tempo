@@ -9,7 +9,12 @@ const account = {
   isEmailVerified: true,
 };
 
-test.use({viewport: {width: 320, height: 850}, storageState: {cookies: [], origins: []}});
+test.use({
+  viewport: {width: 320, height: 850},
+  hasTouch: true,
+  isMobile: true,
+  storageState: {cookies: [], origins: []},
+});
 
 test.beforeEach(async ({page}) => {
   await page.route('**/accounts/me', (route) => route.fulfill({json: account}));
@@ -17,7 +22,12 @@ test.beforeEach(async ({page}) => {
 
 test('account menu has phone-sized tap targets', async ({page}) => {
   await page.goto('/settings/account');
-  await page.getByTestId('account-menu-trigger').click();
+  const trigger = page.getByTestId('account-menu-trigger');
+  await expect(trigger).toBeVisible();
+  const target = await trigger.boundingBox();
+  expect(target!.height).toBeGreaterThanOrEqual(44);
+  expect(target!.width).toBeGreaterThanOrEqual(44);
+  await trigger.tap();
   await expect(page.getByRole('menu')).toBeVisible();
   // Measure settled CSS height rather than the dropdown's temporary animation scale.
   const heights = await page
@@ -68,9 +78,14 @@ test('a pending name save can be closed without cancelling the save', async ({pa
     await route.fulfill({json: {...account, name: 'Another Example'}});
   });
   await page.goto('/settings/account');
-  await page.getByTestId('edit-name-button').click();
+  const edit = page.getByTestId('edit-name-button');
+  await expect(edit).toBeVisible();
+  expect((await edit.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await edit.tap();
   await page.getByTestId('name-input').fill('Another Example');
-  await page.getByTestId('save-name-button').click();
+  const save = page.getByTestId('save-name-button');
+  expect((await save.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await save.tap();
   const dialog = page.getByRole('dialog');
   await expect(
     dialog.locator('form').getByRole('button', {name: 'Close', exact: true}),

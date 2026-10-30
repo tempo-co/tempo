@@ -72,3 +72,49 @@ for (const {path, trigger: testId} of drawers) {
     });
   }
 }
+
+for (const {path, trigger: testId} of drawers) {
+  test(`${testId} can be scrolled and cancelled in a short phone viewport`, async ({page}) => {
+    await page.setViewportSize({width: 568, height: 320});
+    await page.goto(path);
+    const trigger = page.getByTestId(testId);
+    await trigger.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    });
+    const bounds = await dialog.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(320);
+    await dialog.hover();
+    await page.mouse.wheel(0, 1000);
+    const cancel = dialog.getByRole('button', {name: 'Cancel', exact: true});
+    await expect(cancel).toBeInViewport({ratio: 1});
+    await cancel.click();
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+}
+
+for (const width of [390, 1024]) {
+  test(`settings dialogs respect reduced motion at ${width}px`, async ({page}) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    await page.setViewportSize({width, height: 850});
+    await page.goto('/settings/account');
+    const trigger = page.getByTestId('edit-name-button');
+    await trigger.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const motion = await dialog.evaluate((element) => ({
+      animation: getComputedStyle(element).animationName,
+      transition: getComputedStyle(element).transitionDuration,
+    }));
+    expect(motion.animation).toBe('none');
+    expect(motion.transition.split(',').every((duration) => parseFloat(duration) === 0)).toBe(true);
+    await dialog.getByRole('button', {name: 'Cancel', exact: true}).click();
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+}

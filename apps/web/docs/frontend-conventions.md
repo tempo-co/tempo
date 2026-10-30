@@ -36,6 +36,14 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 - The tab bar, toasts and drawer footers pad with `env(safe-area-inset-bottom)`. `index.html`'s viewport meta has no `viewport-fit=cover`, so the inset is 0 on iOS until that is added.
 - Touch targets inside composite controls still need 44px on phones (`max-sm:h-12` on the token field).
 - Phones cannot hover: no information only in a `title` tooltip.
+- Shared Button, Select and Command choices have 44px minimum touch targets on phones and coarse-pointer devices. Calendar days fill their seven-column cells on narrow phones; do not force seven 44px columns into a 320px viewport. Search and verification-code inputs use 16px text for touch entry.
+- Ordinary dialogs and drawers own bounded vertical scrolling; fixed-header inspector layouts can override it with their own scrolling body. Drawer content hides vaul's below-sheet `::after` filler, which otherwise creates empty scroll space. Drawer footers include the bottom safe area.
+
+## Interaction feedback and motion
+
+- Select and Command choices request a brief haptic only on committed touch selection. Mouse, keyboard, cancelled gestures and reduced-motion selections stay quiet. Vibration is optional; unsupported or restricted feedback never blocks the action. Do not add haptics to every Button or overlay opening.
+- Overlay primitives share `overlay-motion`: 180ms ease-out for anchored/centred overlays and 250ms for drawers. Preserve trigger transform origins, and let vaul own drag transforms and release behavior. Reduced motion disables overlay animation and transition, including vaul's injected styles.
+- `press-feedback` gives coarse-pointer buttons a subtle press scale without animating layout. Reduced motion keeps the press static; navigation, lists and financial values do not get decorative entry motion.
 
 ## Charts
 

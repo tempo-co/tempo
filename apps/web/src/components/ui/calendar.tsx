@@ -8,7 +8,7 @@ import {cn} from '@/utils/cn';
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
 const dropdownClassName =
-  'relative inline-flex h-7 items-center rounded-md border border-input bg-background px-2 hover:bg-accent has-[select:focus-visible]:ring-2 has-[select:focus-visible]:ring-ring';
+  'relative inline-flex h-7 max-sm:h-12 pointer-coarse:h-12 items-center rounded-md border border-input bg-background px-2 hover:bg-accent has-[select:focus-visible]:ring-2 has-[select:focus-visible]:ring-ring';
 
 function Calendar({className, classNames, showOutsideDays = true, ...props}: CalendarProps) {
   return (
@@ -18,7 +18,8 @@ function Calendar({className, classNames, showOutsideDays = true, ...props}: Cal
       classNames={{
         months: 'flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0',
         month: 'space-y-4',
-        caption: 'flex justify-center pt-1 relative items-center',
+        caption:
+          'flex justify-center pt-1 relative items-center max-sm:min-h-12 pointer-coarse:min-h-12',
         caption_label: 'flex items-center gap-1 text-sm font-medium',
         caption_dropdowns: 'flex items-center justify-center gap-1',
         dropdown_month: dropdownClassName,
@@ -41,7 +42,7 @@ function Calendar({className, classNames, showOutsideDays = true, ...props}: Cal
         cell: 'h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 has-aria-[selected]:bg-accent first:has-aria-[selected]:rounded-l-md last:has-aria-[selected]:rounded-r-md focus-within:relative focus-within:z-20',
         day: cn(
           buttonVariants({variant: 'ghost'}),
-          'h-9 w-9 p-0 font-normal aria-selected:opacity-100',
+          'h-9 w-9 p-0 font-normal aria-selected:opacity-100 max-sm:min-w-0 pointer-coarse:min-w-0',
         ),
         day_range_end: 'day-range-end',
         day_selected:

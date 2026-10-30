@@ -95,7 +95,19 @@ const ownTransfer = transaction(4, 'Example Savings', {
   category: 'TRANSFER_OUT',
   transactionType: 'TRANSFER',
   cashFlowTreatment: 'INTERNAL',
-  ownTransfer: {evidence: 'IBAN', counterpart: null},
+  // The other leg is a listed transaction, so the inspector can move between them.
+  ownTransfer: {
+    evidence: 'IBAN',
+    counterpart: {
+      id: '00000000-0000-4000-8000-000000000702',
+      bankName: 'Example Bank',
+      bankAccountName: 'Example account',
+      bankAccountAlias: null,
+      amount: '-24.50',
+      currency: 'EUR',
+      bookingDate: '2026-09-12',
+    },
+  },
 });
 const rows = [withLogo, withoutLogo, brokenLogo, ownTransfer];
 
@@ -335,7 +347,7 @@ for (const width of [1440, 390]) {
     test.describe(`merchant logo tiles at ${width}px in ${theme}`, () => {
       test.use({viewport: {width, height: 1000}});
 
-      test('show Clay alpha logos and matching fallbacks across transaction surfaces', async ({
+      test('show Clay alpha logos across transaction surfaces with inspectors returning to their origin', async ({
         page,
       }) => {
         test.slow();
@@ -343,7 +355,14 @@ for (const width of [1440, 390]) {
         await page.clock.install({time: new Date('2026-10-01T12:00:00Z')});
         const state = await mockMerchantLogos(page);
 
-        await page.goto('/bank-transactions');
+        await page.goto('/?month=2026-09');
+        const homeUrl = page.url();
+        await page
+          .getByRole('region', {name: 'Latest in September 2026'})
+          .getByRole('link', {name: 'View all', exact: true})
+          .click();
+        await expect(page).toHaveURL(/\/bank-transactions\?.*bookingDate=/);
+        const listUrl = page.url();
         const tableRow = (row: BankTransaction) =>
           page.getByTestId(`bank-transaction-row-${row.id}`);
         const tableTile = (row: BankTransaction) =>
@@ -400,9 +419,10 @@ for (const width of [1440, 390]) {
           contentType: 'image/png',
         });
 
-        await tableRow(withLogo)
-          .getByRole('button', {name: 'View Example Market transaction details'})
-          .click();
+        const transactionTrigger = tableRow(withLogo).getByRole('button', {
+          name: 'View Example Market transaction details',
+        });
+        await transactionTrigger.click();
         const inspector = page.getByTestId('bank-transaction-inspector');
         const inspectorTile = inspector.getByTestId('merchant-logo-tile');
         await expectLogo(inspectorTile, theme);
@@ -421,8 +441,74 @@ for (const width of [1440, 390]) {
         );
         await page.getByRole('button', {name: 'Close transaction details', exact: true}).click();
         await expect(inspector).toBeHidden();
+        await expect(page).toHaveURL(listUrl);
+        await expect(transactionTrigger).toBeFocused();
+        await page.goBack();
+        await expect(page).toHaveURL(homeUrl);
+        await page.goForward();
+        await expect(page).toHaveURL(listUrl);
 
-        await page.goto('/bank-connections');
+        await transactionTrigger.press('Enter');
+        await expect(inspector).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(inspector).toBeHidden();
+        await expect(page).toHaveURL(listUrl);
+        await expect(transactionTrigger).toBeFocused();
+        await page.goBack();
+        await expect(page).toHaveURL(homeUrl);
+        await page.goForward();
+        await expect(page).toHaveURL(listUrl);
+
+        await transactionTrigger.click();
+        await expect(inspector).toBeVisible();
+        await page.goBack();
+        await expect(inspector).toBeHidden();
+        await expect(page).toHaveURL(listUrl);
+        await page.goForward();
+        await expect(inspector).toBeVisible();
+        await page.getByRole('button', {name: 'Close transaction details', exact: true}).click();
+        await expect(inspector).toBeHidden();
+        await expect(page).toHaveURL(listUrl);
+
+        // Following the other leg keeps Back between transactions; Close leaves the inspector.
+        const transferTrigger = tableRow(ownTransfer).getByRole('button', {
+          name: 'View Example Savings transaction details',
+        });
+        await transferTrigger.click();
+        await inspector.getByTestId('bank-transaction-own-transfer-counterpart').click();
+        await expect(
+          inspector.getByRole('heading', {name: 'Example Bakery', exact: true}),
+        ).toBeVisible();
+        await page.goBack();
+        await expect(
+          inspector.getByRole('heading', {name: 'Example Savings', exact: true}),
+        ).toBeVisible();
+        await page.goForward();
+        await expect(
+          inspector.getByRole('heading', {name: 'Example Bakery', exact: true}),
+        ).toBeVisible();
+        await page.getByRole('button', {name: 'Close transaction details', exact: true}).click();
+        await expect(inspector).toBeHidden();
+        await expect(page).toHaveURL(listUrl);
+        await expect(transferTrigger).toBeFocused();
+        // Returning to the other leg through history, or reloading it, still closes in one step.
+        for (const reload of [false, true]) {
+          await page.goForward();
+          await page.goForward();
+          await expect(
+            inspector.getByRole('heading', {name: 'Example Bakery', exact: true}),
+          ).toBeVisible();
+          if (reload) await page.reload();
+          await page.getByRole('button', {name: 'Close transaction details', exact: true}).click();
+          await expect(inspector).toBeHidden();
+          await expect(page).toHaveURL(listUrl);
+        }
+        await page.goBack();
+        await expect(page).toHaveURL(homeUrl);
+        await page.goForward();
+        await expect(page).toHaveURL(listUrl);
+
+        await page.getByRole('link', {name: 'Connections', exact: true}).click();
         await page.getByTestId(`connection-card-toggle-${CONNECTION_ID}`).click();
         const connectionRow = (row: BankTransaction) =>
           page.getByTestId(`bank-transaction-row-${row.id}`);
@@ -440,6 +526,19 @@ for (const width of [1440, 390]) {
           body: await page.screenshot({fullPage: true}),
           contentType: 'image/png',
         });
+        const connectionsUrl = page.url();
+        const connectionTrigger = page.getByRole('button', {
+          name: 'View transaction details for Example Market',
+          exact: true,
+        });
+        await connectionTrigger.click();
+        await expect(inspector).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(inspector).toBeHidden();
+        await expect(page).toHaveURL(connectionsUrl);
+        await expect(connectionTrigger).toBeFocused();
+        await page.goBack();
+        await expect(page).toHaveURL(listUrl);
 
         await page.goto('/?month=2026-09');
         const recent = page.getByRole('region', {name: 'Latest in September 2026'});
@@ -466,6 +565,16 @@ for (const width of [1440, 390]) {
         );
         await expectNoHorizontalOverflow(page);
 
+        await recentRow(withLogo).getByRole('link').click();
+        await expect(inspector).toBeVisible();
+        await expect(
+          inspector.getByRole('heading', {name: 'Example Market', exact: true}),
+        ).toBeVisible();
+        await page.getByRole('button', {name: 'Close transaction details', exact: true}).click();
+        await expect(inspector).toBeHidden();
+        await expect(page).toHaveURL(homeUrl);
+        await expect(recent).toBeVisible();
+
         // The existing failed tile recovers when a later refresh supplies a new source version.
         const recoveringTile = recentRow(brokenLogo).getByTestId('merchant-logo-tile');
         await recentRow(brokenLogo).evaluate((el) => el.setAttribute('data-mounted-row', 'same'));
@@ -484,6 +593,19 @@ for (const width of [1440, 390]) {
         ).toBe(true);
         expect(state.servedImages.length).toBeGreaterThan(0);
         expect(state.servedImages.every(({authenticated}) => authenticated)).toBe(true);
+        for (const path of ['/bank-transactions', '/bank-connections']) {
+          const deepLink = new URL(path === '/bank-transactions' ? listUrl : connectionsUrl);
+          deepLink.searchParams.set('transactionId', withLogo.id);
+          await page.goto(deepLink.href);
+          await expect(inspector).toBeVisible();
+          await expect(
+            inspector.getByRole('heading', {name: 'Example Market', exact: true}),
+          ).toBeVisible();
+          await page.getByRole('button', {name: 'Close transaction details', exact: true}).click();
+          await expect(inspector).toBeHidden();
+          deepLink.searchParams.delete('transactionId');
+          await expect(page).toHaveURL(deepLink.href);
+        }
         expect(state.unexpected).toEqual([]);
       });
     });

@@ -24,7 +24,7 @@ export function ChartCardHeader({
     <header className='grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2.5'>
       <h2 className='text-card-title'>{title}</h2>
       {/* Overhangs the title row so the title sits where it does on every other card. */}
-      <div className='-my-1.5'>
+      <div className='-my-1.5 max-sm:-my-2.5 pointer-coarse:-my-2.5'>
         <IntervalToggle value={interval} onChange={onIntervalChange} label={toggleLabel} />
       </div>
       {children}
