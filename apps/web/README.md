@@ -55,7 +55,7 @@ For a fully deterministic local run (reset services, fresh database and seed):
 $ npm run test:e2e:local
 ```
 
-This uses `ghcr.io/tempo-co/tempo-api:main`. To test against an unmerged API change, set `TEMPO_API_E2E_IMAGE` to an image built from `apps/api` or a PR image (`ghcr.io/tempo-co/tempo-api:pr-<n>`).
+This uses `ghcr.io/tempo-co/api:main`. To test against an unmerged API change, set `TEMPO_API_E2E_IMAGE` to an image built from `apps/api` or a PR image (`ghcr.io/tempo-co/api:pr-<n>`).
 
 CI runs the same suite on every pull request that changes either app and on `main`, against fresh services and the API image built from the same commit ([CI and images](../../docs/ci-and-images.md)).
 

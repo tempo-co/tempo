@@ -59,8 +59,8 @@ jobs:
                       base=$(git rev-parse HEAD^1)
                       api_base=$base web_base=$base ops_base=$base
                   else
-                      api_base=$(.github/scripts/released-revision.sh "$OWNER/tempo-api" main) || api_base=''
-                      web_base=$(.github/scripts/released-revision.sh "$OWNER/tempo-web" main) || web_base=''
+                      api_base=$(.github/scripts/released-revision.sh "$OWNER/api" main) || api_base=''
+                      web_base=$(.github/scripts/released-revision.sh "$OWNER/web" main) || web_base=''
                       ops_base=$BEFORE
                   fi
                   echo "bases: api=${api_base:-unknown} web=${web_base:-unknown} ops=${ops_base:-unknown}"
@@ -227,7 +227,7 @@ jobs:
         outputs:
             image: ${{ steps.image.outputs.image }}
         env:
-            IMAGE: ghcr.io/${{ github.repository_owner }}/tempo-api
+            IMAGE: ghcr.io/${{ github.repository_owner }}/api
             SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
             # Same-repo PRs and main pushes publish; fork and Dependabot PRs only build.
             PUSH: ${{ github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
@@ -268,7 +268,7 @@ jobs:
               with:
                   context: apps/api
                   push: ${{ env.PUSH == 'true' }}
-                  outputs: ${{ env.PUSH != 'true' && format('type=docker,dest={0}/tempo-api-image.tar', runner.temp) || '' }}
+                  outputs: ${{ env.PUSH != 'true' && format('type=docker,dest={0}/api-image.tar', runner.temp) || '' }}
                   tags: ${{ steps.tags.outputs.tags }}
                   cache-from: type=gha,scope=api
                   cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=api,mode=max' || 'type=gha,scope=api,mode=min' }}
@@ -291,8 +291,8 @@ jobs:
               if: env.PUSH != 'true'
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
               with:
-                  name: tempo-api-image
-                  path: ${{ runner.temp }}/tempo-api-image.tar
+                  name: api-image
+                  path: ${{ runner.temp }}/api-image.tar
                   retention-days: 1
                   if-no-files-found: error
 
@@ -390,13 +390,13 @@ jobs:
               if: env.API_CHANGED == 'true' && !contains(env.API_IMAGE, '@sha256:')
               uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               with:
-                  name: tempo-api-image
+                  name: api-image
                   path: ${{ runner.temp }}
 
             - name: Select API image
               id: api-image
               env:
-                  ARCHIVE: ${{ runner.temp }}/tempo-api-image.tar
+                  ARCHIVE: ${{ runner.temp }}/api-image.tar
               run: |
                   set -euo pipefail
                   if [[ $API_CHANGED == true && -f $ARCHIVE ]]; then
@@ -408,11 +408,11 @@ jobs:
                           ref=$API_IMAGE
                           source='this run'
                       else
-                          ref=ghcr.io/tempo-co/tempo-api:main
+                          ref=ghcr.io/tempo-co/api:main
                           source='main'
                       fi
                       docker pull "$ref"
-                      image=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ref" | grep -m1 '^ghcr.io/tempo-co/tempo-api@sha256:')
+                      image=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ref" | grep -m1 '^ghcr.io/tempo-co/api@sha256:')
                   fi
                   revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
                   echo "image=$image" >> "$GITHUB_OUTPUT"
@@ -526,7 +526,7 @@ jobs:
             contents: read
             packages: write
         env:
-            IMAGE: ghcr.io/${{ github.repository_owner }}/tempo-web
+            IMAGE: ghcr.io/${{ github.repository_owner }}/web
             SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
             # Same-repo PRs and main pushes publish; fork and Dependabot PRs only build.
             PUSH: ${{ github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
@@ -629,9 +629,9 @@ jobs:
                   for app in api web; do
                       changed_var=${app^^}_CHANGED
                       if [[ ${!changed_var} != true ]]; then
-                          echo "tempo-$app unchanged; its main tag stays"
+                          echo "$app unchanged; its main tag stays"
                           continue
                       fi
-                      image=ghcr.io/$OWNER/tempo-$app
+                      image=ghcr.io/$OWNER/$app
                       docker buildx imagetools create --tag "$image:main" "$image:sha-$GITHUB_SHA"
                   done

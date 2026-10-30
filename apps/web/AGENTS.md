@@ -13,7 +13,7 @@ React 19 + TypeScript SPA (Vite, TanStack Router/Query, Tailwind with shadcn-sty
 ## Verification
 
 - Prefer integration/E2E coverage against local services over mocks when testing external integrations.
-- E2E runs against `ghcr.io/tempo-co/tempo-api:main` by default; `TEMPO_API_E2E_IMAGE` points the stack at another API image, such as a local build of `apps/api`. In CI it runs against the API image built in the same run when the change touches `apps/api`, otherwise against API `:main`.
+- E2E runs against `ghcr.io/tempo-co/api:main` by default; `TEMPO_API_E2E_IMAGE` points the stack at another API image, such as a local build of `apps/api`. In CI it runs against the API image built in the same run when the change touches `apps/api`, otherwise against API `:main`.
 - Fresh worktree: `npm ci`, then `npx playwright install chromium webkit --with-deps` (as CI does) before any spec runs. Production and staging serve the app at `/`.
 - Static checks: `npm run lint:check`, `npm run format:check`, `npm run build`. `npm run lint` and `npm run format` modify files.
 - There is no unit-test runner; all tests are Playwright specs under `test/`. Find the specs for a change by grepping `test/e2e` for the route, component or label; `--only-changed` finds nothing because specs do not import `src`.
@@ -31,7 +31,7 @@ React 19 + TypeScript SPA (Vite, TanStack Router/Query, Tailwind with shadcn-sty
 - The E2E API drops its schema on boot (`NODE_ENV=test`). Seed only after it is healthy; a full local run changes seeded accounts, so reset the stack before rerunning.
 - A web change that needs an API change is tested in CI when both are in the same PR. Locally, point `TEMPO_API_E2E_IMAGE` at an image built from `apps/api`; a stack on API `:main` lacks the change. Never weaken assertions to match an older API.
 - `scripts/tempo-web-security-headers-test.sh` builds the production image and probes the SPA and the API proxy (needs Docker). Update it with any change to `nginx/`.
-- CI publishes `ghcr.io/tempo-co/tempo-web:pr-<n>` for same-repo PRs and retags the tested image as `:main` after `main` passes. `:main` is what production deploys, so a merge to `main` ships.
+- CI publishes `ghcr.io/tempo-co/web:pr-<n>` for same-repo PRs and retags the tested image as `:main` after `main` passes. `:main` is what production deploys, so a merge to `main` ships.
 
 ## E2E test helpers
 

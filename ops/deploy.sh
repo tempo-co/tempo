@@ -62,7 +62,7 @@ compose() {
     docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --env-file "$IMAGES_FILE" "$@"
 }
 
-repository() { echo "ghcr.io/tempo-co/tempo-$1"; }
+repository() { echo "ghcr.io/tempo-co/$1"; }
 
 # Retry a registry pull so a short DNS or network blip does not fail the whole run.
 retry_pull() {
@@ -78,7 +78,8 @@ retry_pull() {
 running_image() {
     local ref
     ref=$(docker inspect --format '{{.Config.Image}}' "$COMPOSE_PROJECT-$1-1") || die "no running $1 container"
-    [[ $ref == "$(repository "$1")@sha256:"* ]] || die "running $1 image is not a pinned digest: $ref"
+    # Also accepts the pre-rename ghcr.io/tempo-co/tempo-<component> images.
+    [[ $ref == ghcr.io/tempo-co/?(tempo-)"$1"@sha256:* ]] || die "running $1 image is not a pinned digest: $ref"
     echo "$ref"
 }
 
