@@ -1,7 +1,9 @@
+import type {Session} from '@tempo/contracts';
+
 export const UNKNOWN = 'Unknown';
 const DEFAULT_DATE = new Date(0).toISOString();
 
-export class SessionResponseDto {
+export class SessionResponseDto implements Session {
 	id: string;
 	ip: string;
 	deviceType: string;

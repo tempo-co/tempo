@@ -1,4 +1,5 @@
 import {Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, UseGuards} from '@nestjs/common';
+import type {CreatedPersonalAccessToken, PersonalAccessToken} from '@tempo/contracts';
 
 import {PersonalAccessTokenService} from '@core/personal-access-token/personal-access-token.service';
 import {Account} from '@modules/account/account.entity';
@@ -12,20 +13,26 @@ export class PersonalAccessTokenController {
 	constructor(private readonly tokens: PersonalAccessTokenService) {}
 
 	@Get()
-	list(@CurrentAccount() account: Account) {
+	list(@CurrentAccount() account: Account): Promise<PersonalAccessToken[]> {
 		return this.tokens.list(account.id);
 	}
 
 	@Post()
 	@UseGuards(CsrfOriginGuard)
-	create(@CurrentAccount() account: Account, @Body() dto: PersonalAccessTokenCreateDto) {
+	create(
+		@CurrentAccount() account: Account,
+		@Body() dto: PersonalAccessTokenCreateDto,
+	): Promise<CreatedPersonalAccessToken> {
 		return this.tokens.create(account.id, dto.name, dto.expiresInDays);
 	}
 
 	@Delete(':id')
 	@HttpCode(204)
 	@UseGuards(CsrfOriginGuard)
-	async revoke(@CurrentAccount() account: Account, @Param('id', new ParseUUIDPipe({version: '4'})) id: string) {
+	async revoke(
+		@CurrentAccount() account: Account,
+		@Param('id', new ParseUUIDPipe({version: '4'})) id: string,
+	): Promise<void> {
 		await this.tokens.revoke(account.id, id);
 	}
 }

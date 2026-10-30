@@ -1,10 +1,11 @@
+import type {LogInRequest} from '@tempo/contracts';
 import {IsEmail, IsNotEmpty, IsString, Length, MaxLength, MinLength} from 'class-validator';
 
 import {Account} from '@modules/account/account.entity';
 
 import {NormalizeEmail} from './normalize-email';
 
-export class LogInDto {
+export class LogInDto implements LogInRequest {
 	@NormalizeEmail()
 	@IsNotEmpty()
 	@IsEmail()

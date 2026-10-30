@@ -1,4 +1,5 @@
-import type {CreatedPersonalAccessToken} from '../../../src/features/settings/types/personal-access-token';
+import type {CreatedPersonalAccessToken} from '@tempo/contracts';
+
 import {API_URL, expect, test} from '../../fixtures';
 
 // This journey uses the paired API implementation, not browser-intercepted token responses.

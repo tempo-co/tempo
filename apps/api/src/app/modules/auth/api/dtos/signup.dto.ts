@@ -1,10 +1,11 @@
+import type {SignUpRequest} from '@tempo/contracts';
 import {IsEmail, IsNotEmpty, IsString, Length} from 'class-validator';
 
 import {Account} from '@modules/account/account.entity';
 
 import {NormalizeEmail} from './normalize-email';
 
-export class SignUpDto {
+export class SignUpDto implements SignUpRequest {
 	@IsNotEmpty()
 	@IsString()
 	@Length(1, 255)

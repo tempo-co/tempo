@@ -1,10 +1,12 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import type {
+  CreatedPersonalAccessToken,
+  PersonalAccessToken,
+  PersonalAccessTokenCreateRequest,
+} from '@tempo/contracts';
 import {toast} from 'sonner';
 
 import {HttpError, api, wasToasted} from '@/utils/api';
-
-import {CreatePersonalAccessTokenDto} from '../types/create-personal-access-token.dto';
-import {CreatedPersonalAccessToken, PersonalAccessToken} from '../types/personal-access-token';
 
 const TOKENS_QUERY_KEY = ['personal-access-tokens'] as const;
 const RESOURCE = '/personal-access-tokens';
@@ -18,7 +20,7 @@ export function usePersonalAccessTokens() {
 
 export function useCreatePersonalAccessToken(onCreated: (token: string) => void) {
   const queryClient = useQueryClient();
-  return useMutation<void, HttpError, CreatePersonalAccessTokenDto>({
+  return useMutation<void, HttpError, PersonalAccessTokenCreateRequest>({
     mutationFn: async (dto) => {
       const created = await api.post<CreatedPersonalAccessToken>(RESOURCE, dto);
       // Only the open dialog owns the secret. Never return it into the mutation/query cache.

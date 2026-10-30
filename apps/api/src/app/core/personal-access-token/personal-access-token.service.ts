@@ -1,5 +1,10 @@
 import {Injectable, NotFoundException, UnauthorizedException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
+import type {
+	CreatedPersonalAccessToken,
+	PersonalAccessToken as PersonalAccessTokenResponse,
+	PersonalAccessTokenScope,
+} from '@tempo/contracts';
 import {createHash, randomBytes} from 'node:crypto';
 import {IsNull, Repository} from 'typeorm';
 
@@ -10,7 +15,7 @@ export class PersonalAccessTokenService {
 	constructor(@InjectRepository(PersonalAccessToken) private readonly tokens: Repository<PersonalAccessToken>) {}
 
 	/** `expiresInDays` null keeps the token until it is revoked. */
-	async create(accountId: string, name: string, expiresInDays: number | null) {
+	async create(accountId: string, name: string, expiresInDays: number | null): Promise<CreatedPersonalAccessToken> {
 		const token = `tempo_pat_${randomBytes(32).toString('base64url')}`;
 		const saved = await this.tokens.save(
 			this.tokens.create({
@@ -27,7 +32,7 @@ export class PersonalAccessTokenService {
 		return {...this.metadata(saved), token};
 	}
 
-	async list(accountId: string) {
+	async list(accountId: string): Promise<PersonalAccessTokenResponse[]> {
 		return (await this.tokens.find({where: {accountId, revokedAt: IsNull()}, order: {createdAt: 'DESC'}})).map(
 			(token) => this.metadata(token),
 		);
@@ -67,7 +72,24 @@ export class PersonalAccessTokenService {
 			.execute();
 	}
 
-	private metadata({id, name, prefix, scopes, createdAt, lastUsedAt, expiresAt}: PersonalAccessToken) {
-		return {id, name, prefix, scopes, createdAt, lastUsedAt, expiresAt};
+	private metadata({
+		id,
+		name,
+		prefix,
+		scopes,
+		createdAt,
+		lastUsedAt,
+		expiresAt,
+	}: PersonalAccessToken): PersonalAccessTokenResponse {
+		return {
+			id,
+			name,
+			prefix,
+			// create() writes only 'read'.
+			scopes: scopes as PersonalAccessTokenScope[],
+			createdAt: createdAt.toISOString(),
+			lastUsedAt: lastUsedAt?.toISOString() ?? null,
+			expiresAt: expiresAt?.toISOString() ?? null,
+		};
 	}
 }

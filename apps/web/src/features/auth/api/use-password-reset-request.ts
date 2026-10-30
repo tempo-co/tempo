@@ -1,8 +1,7 @@
 import {useMutation} from '@tanstack/react-query';
+import type {MessageResponse, PasswordResetRequest} from '@tempo/contracts';
 
 import {HttpError, api} from '@/utils/api';
-
-import {PasswordResetRequestDto} from '../types/password-reset-request.dto';
 
 export const usePasswordResetRequest = () => {
   const {
@@ -10,9 +9,9 @@ export const usePasswordResetRequest = () => {
     isPending,
     isSuccess,
     reset,
-  } = useMutation<void, HttpError, PasswordResetRequestDto>({
-    mutationFn: async (dto: PasswordResetRequestDto) => {
-      return await api.post<void>('/auth/reset-password/request', dto);
+  } = useMutation<MessageResponse, HttpError, PasswordResetRequest>({
+    mutationFn: async (dto: PasswordResetRequest) => {
+      return await api.post<MessageResponse>('/auth/reset-password/request', dto);
     },
   });
 

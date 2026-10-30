@@ -5,12 +5,12 @@ import {
   type PersistRetryer,
   type PersistedClient,
 } from '@tanstack/react-query-persist-client';
+import type {Account} from '@tempo/contracts';
 import {toast} from 'sonner';
 
 import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {bankQueryKeys} from '@/features/banking/api/query-keys';
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
-import type {Account} from '@/types/account';
 
 const CACHE_KEY = 'tempo-offline-cache';
 export const OFFLINE_MAX_AGE = 24 * 60 * 60 * 1000;

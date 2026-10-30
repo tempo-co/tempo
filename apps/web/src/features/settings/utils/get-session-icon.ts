@@ -1,3 +1,4 @@
+import type {Session} from '@tempo/contracts';
 import {Monitor, Smartphone, Tablet, TvMinimal} from 'lucide-react';
 
 import Chrome from '@/assets/icons/browsers/chrome';
@@ -6,8 +7,6 @@ import Firefox from '@/assets/icons/browsers/firefox';
 import Opera from '@/assets/icons/browsers/opera';
 import Safari from '@/assets/icons/browsers/safari';
 import SamsungInternet from '@/assets/icons/browsers/samsung-internet';
-
-import {Session} from '../types/session';
 
 const getDeviceIcon = (deviceType: Session['deviceType']) => {
   switch (deviceType?.toLowerCase()) {

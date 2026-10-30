@@ -1,12 +1,12 @@
 import {zodResolver} from '@hookform/resolvers/zod';
 import {Link} from '@tanstack/react-router';
+import type {Account} from '@tempo/contracts';
 import {Loader} from 'lucide-react';
 import {useForm} from 'react-hook-form';
 
 import {Button} from '@/components/ui/button';
 import {Form, FormField} from '@/components/ui/form';
 import {PasswordInputField} from '@/components/ui/password-input-field';
-import {Account} from '@/types/account';
 import {HttpError} from '@/utils/api';
 
 import {usePasswordResetVerify} from '../../api/use-password-reset-verify';

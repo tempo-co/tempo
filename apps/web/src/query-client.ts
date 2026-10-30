@@ -5,13 +5,13 @@ import {
   QueryClient,
   type QueryKey,
 } from '@tanstack/react-query';
+import type {Account} from '@tempo/contracts';
 
 import {
   CURRENT_ACCOUNT_KEY,
   PAGE_LOADED_AT,
   wasSavedSessionShown,
 } from '@/hooks/use-current-account';
-import {Account} from '@/types/account';
 import {
   EmailNotVerifiedError,
   HttpError,

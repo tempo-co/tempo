@@ -1,17 +1,15 @@
 import {useMutation} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
+import type {Account, LogInRequest} from '@tempo/contracts';
 
 import {signIn} from '@/query-client';
-import {Account} from '@/types/account';
 import {HttpError, api} from '@/utils/api';
-
-import {LogInDto} from '../types/login.dto';
 
 export const useLogIn = (redirectTo?: string) => {
   const navigate = useNavigate();
 
-  const {mutate: logIn, isPending} = useMutation<Account, HttpError, LogInDto>({
-    mutationFn: async (logInDto: LogInDto) => {
+  const {mutate: logIn, isPending} = useMutation<Account, HttpError, LogInRequest>({
+    mutationFn: async (logInDto: LogInRequest) => {
       return await api.post<Account>('/auth/login', logInDto, {expectUnauthorized: true});
     },
     onSuccess: (account) => {

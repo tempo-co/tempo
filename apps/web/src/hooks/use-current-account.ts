@@ -1,6 +1,6 @@
 import {useQuery} from '@tanstack/react-query';
+import type {Account} from '@tempo/contracts';
 
-import {Account} from '@/types/account';
 import {HttpError, api} from '@/utils/api';
 
 export const CURRENT_ACCOUNT_KEY = ['currentAccount'];

@@ -1,3 +1,4 @@
+import type {Session} from '@tempo/contracts';
 import {format, formatDistanceToNowStrict} from 'date-fns';
 import {createElement} from 'react';
 
@@ -10,7 +11,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import {Session} from '@/features/settings/types/session';
 
 import {getSessionIcon} from '../../utils/get-session-icon';
 import {LogOutDialog} from './log-out-dialog';

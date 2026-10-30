@@ -1,12 +1,10 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {useNavigate, useRouter} from '@tanstack/react-router';
+import type {EmailVerifyRequest, MessageResponse} from '@tempo/contracts';
 import {toast} from 'sonner';
 
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
-import {Account} from '@/types/account';
 import {HttpError, api} from '@/utils/api';
-
-import {EmailVerifyDto} from '../types/email-verify.dto';
 
 export const useVerifyEmail = () => {
   const queryClient = useQueryClient();
@@ -18,9 +16,9 @@ export const useVerifyEmail = () => {
     isPending,
     error,
     reset,
-  } = useMutation<Account, HttpError, EmailVerifyDto>({
-    mutationFn: async (dto: EmailVerifyDto) => {
-      return await api.post<Account>('/auth/signup/verify', dto);
+  } = useMutation<MessageResponse, HttpError, EmailVerifyRequest>({
+    mutationFn: async (dto: EmailVerifyRequest) => {
+      return await api.post<MessageResponse>('/auth/signup/verify', dto);
     },
     onSuccess: async () => {
       router.update({context: {isAuthenticated: true, isEmailVerified: true}});

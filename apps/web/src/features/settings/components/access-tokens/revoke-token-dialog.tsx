@@ -1,3 +1,4 @@
+import type {PersonalAccessToken} from '@tempo/contracts';
 import {useState} from 'react';
 
 import {Button, ButtonProps} from '@/components/ui/button';
@@ -14,7 +15,6 @@ import {
 } from '@/components/ui/responsive-dialog';
 
 import {useRevokePersonalAccessToken} from '../../api/use-personal-access-tokens';
-import {PersonalAccessToken} from '../../types/personal-access-token';
 
 type RevokeTokenDialogProps = {
   token: PersonalAccessToken;

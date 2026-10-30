@@ -1,3 +1,4 @@
+import type {PersonalAccessToken} from '@tempo/contracts';
 import {format, isPast, isToday, isYesterday} from 'date-fns';
 import {KeyRound} from 'lucide-react';
 import {ReactNode} from 'react';
@@ -12,7 +13,6 @@ import {
 } from '@/components/ui/dialog';
 import {cn} from '@/utils/cn';
 
-import {PersonalAccessToken} from '../../types/personal-access-token';
 import {RevokeTokenDialog} from './revoke-token-dialog';
 
 export function AccessTokenCard({token}: {token: PersonalAccessToken}) {

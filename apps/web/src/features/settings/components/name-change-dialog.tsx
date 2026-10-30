@@ -1,4 +1,5 @@
 import {zodResolver} from '@hookform/resolvers/zod';
+import type {Account} from '@tempo/contracts';
 import {useState} from 'react';
 import {useForm} from 'react-hook-form';
 
@@ -16,7 +17,6 @@ import {
   ResponsiveDialogTitle,
   ResponsiveDialogTrigger,
 } from '@/components/ui/responsive-dialog';
-import {Account} from '@/types/account';
 
 import {usePatchAccount} from '../api/use-patch-account';
 import {NameChangeDto, nameChangeDtoSchema} from '../types/name-change.dto';
