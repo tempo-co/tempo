@@ -1,4 +1,4 @@
-import {Link, useMatchRoute} from '@tanstack/react-router';
+import {Link, useLocation} from '@tanstack/react-router';
 import {ArrowLeftRight, Home, Landmark, LogOut, Settings} from 'lucide-react';
 
 import {
@@ -38,9 +38,13 @@ const tabItems: NavItem[] = [
 ];
 
 function useIsActive() {
-  const matchRoute = useMatchRoute();
+  // The location being opened, which Link also marks: matchRoute keeps the previous page until the next one loads.
+  const pathname = useLocation({select: (location) => location.pathname});
   // Home only matches itself; every other item covers its subtree.
-  return (item: NavItem) => !!matchRoute({to: item.match, fuzzy: item.match !== '/'});
+  return (item: NavItem) =>
+    item.match === '/'
+      ? pathname === '/'
+      : pathname === item.match || pathname.startsWith(`${item.match}/`);
 }
 
 /** Primary destinations inline in the header, from tablet width up. */

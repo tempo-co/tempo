@@ -257,6 +257,9 @@ function CashFlowChart({
           margin={{left: 0, right: 18, top: 8, bottom: 0}}
           barGap={1}
           barCategoryGap={periods.length > 16 ? '18%' : '24%'}
+          // The touch bridge points with a mousemove just before a tap's click; frame-throttled,
+          // the click would still see the previous bar or none.
+          throttledEvents={['touchmove', 'pointermove', 'scroll', 'wheel']}
           onClick={(state) => {
             const index = Number(state.activeTooltipIndex);
             if (Number.isInteger(index) && periods[index]) open(periods[index]);

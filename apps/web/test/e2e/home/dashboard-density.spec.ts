@@ -371,19 +371,24 @@ test.describe('touch chart inspection', () => {
     await expect(card.locator('.recharts-tooltip-wrapper')).toContainText('September 2026');
     await touch.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x, y}]});
     await expect(card.locator('.recharts-tooltip-wrapper')).toContainText('July 2026');
+    // The finger settles before it lifts. Released mid-jump, the browser reads a flick and,
+    // like a phone, swallows the next tap; that is browser behaviour, not this chart's.
+    await page.waitForTimeout(300);
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x, y}]});
     await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
     await expect(card.locator('.recharts-tooltip-wrapper')).not.toBeVisible();
     // A browser compatibility click after a scrub must not activate its bar.
     await card.locator('.recharts-wrapper').dispatchEvent('click', {clientX: x, clientY: y, detail: 1});
     await expect(page).toHaveURL(url);
-    await page.touchscreen.tap(x, y);
-    await expect(page).toHaveURL(/month=2026-07/);
-    await expect(card.locator('.recharts-tooltip-wrapper')).not.toBeVisible();
-    const august = card.getByRole('link', {name: 'August 2026', includeHidden: true});
-    await august.focus();
-    await expect(august).toBeInViewport();
-    await page.keyboard.press('Enter');
+    // August is the middle of three bars; phones label only the first and last.
+    await page.touchscreen.tap(Math.round((x + end.x + end.width / 2) / 2), y);
     await expect(page).toHaveURL(/month=2026-08/);
+    await expect(card.locator('.recharts-tooltip-wrapper')).not.toBeVisible();
+    const july = card.getByRole('link', {name: 'July 2026', includeHidden: true});
+    await july.focus();
+    await expect(july).toBeInViewport();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/month=2026-07/);
   });
 
   for (const interval of ['Week', 'Year']) {

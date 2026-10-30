@@ -1,4 +1,4 @@
-import {Link, Outlet, createFileRoute, useMatchRoute} from '@tanstack/react-router';
+import {Link, Outlet, createFileRoute, useLocation} from '@tanstack/react-router';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {cn} from '@/utils/cn';
@@ -19,7 +19,8 @@ const sections = [
 ] as const;
 
 function SettingsIndex() {
-  const matchRoute = useMatchRoute();
+  // The location being opened, which Link also marks: matchRoute keeps the previous section until the next one loads.
+  const pathname = useLocation({select: (location) => location.pathname});
 
   return (
     <AppBodyLayout>
@@ -30,7 +31,8 @@ function SettingsIndex() {
           {/* Phones share the full width; wider screens align the first label with the title. */}
           <ul className='-mb-px flex sm:-ml-3'>
             {sections.map((section) => {
-              const isActive = matchRoute({to: section.route, fuzzy: true}) !== false;
+              const isActive =
+                pathname === section.route || pathname.startsWith(`${section.route}/`);
               return (
                 <li key={section.route} className='max-sm:flex-auto'>
                   <Link

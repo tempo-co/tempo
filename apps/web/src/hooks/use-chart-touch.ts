@@ -17,6 +17,7 @@ export function useChartTouch() {
   const ref = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const suppressClick = useRef(false);
+  const tapped = useRef(false);
   const [touch, setTouch] = useState(false);
   const [inspecting, setInspecting] = useState(false);
 
@@ -28,13 +29,17 @@ export function useChartTouch() {
       ?.dispatchEvent(new window.MouseEvent('mousemove', {bubbles: true, clientX: x, clientY: y}));
   };
 
+  const leave = () => {
+    ref.current
+      ?.querySelector('.recharts-wrapper')
+      ?.dispatchEvent(new window.MouseEvent('mouseout', {bubbles: true}));
+  };
+
   const finish = useCallback(() => {
     if (gesture.current) clearTimeout(gesture.current.timer);
     gesture.current = null;
     setInspecting(false);
-    ref.current
-      ?.querySelector('.recharts-wrapper')
-      ?.dispatchEvent(new window.MouseEvent('mouseout', {bubbles: true}));
+    leave();
   }, []);
 
   useEffect(() => {
@@ -60,6 +65,7 @@ export function useChartTouch() {
 
   const onPointerDownCapture = (event: PointerEvent<HTMLDivElement>) => {
     suppressClick.current = false;
+    tapped.current = false;
     if (event.pointerType === 'mouse') {
       setTouch(false);
       return;
@@ -103,7 +109,13 @@ export function useChartTouch() {
   };
 
   const end = (event: PointerEvent<HTMLDivElement>) => {
-    if (gesture.current?.id === event.pointerId) finish();
+    const current = gesture.current;
+    if (current?.id !== event.pointerId) return;
+    if (current.inspecting || event.type !== 'pointerup') return finish();
+    // A tap's click follows and reads the bar under the finger; the pointer leaves after it.
+    clearTimeout(current.timer);
+    gesture.current = null;
+    tapped.current = true;
   };
 
   return {
@@ -123,6 +135,11 @@ export function useChartTouch() {
       onKeyDownCapture: () => setTouch(false),
       onContextMenu: (event: MouseEvent<HTMLDivElement>) => {
         if (gesture.current) event.preventDefault();
+      },
+      onClick: () => {
+        if (!tapped.current) return;
+        tapped.current = false;
+        leave();
       },
       onClickCapture: (event: MouseEvent<HTMLDivElement>) => {
         if (suppressClick.current && event.detail > 0) {
