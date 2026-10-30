@@ -137,6 +137,9 @@
 		"testEnvironment": "node"
 	},
 	"overrides": {
+		"@nestjs/platform-express": {
+			"multer": "^2.5.0"
+		},
 		"preview-email": {
 			"mailparser": "3.9.28",
 			"nodemailer": "$nodemailer"
