@@ -1,10 +1,10 @@
 import {faker} from '@faker-js/faker';
-import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
-import {UNVERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_EMAIL} from 'test/constants/seed.constants';
-import {EmailUtils} from 'test/utils/email-utils';
-import {boxOf} from 'test/utils/layout';
 
+import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {UNVERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_EMAIL} from '../../constants/seed.constants';
 import {expect, test} from '../../fixtures';
+import {EmailUtils} from '../../utils/email-utils';
+import {boxOf} from '../../utils/layout';
 
 test.describe('Account Settings: Email change', () => {
   test('should change email through the emailed link', async ({

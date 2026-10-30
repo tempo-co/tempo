@@ -1,11 +1,11 @@
 import {faker} from '@faker-js/faker';
-import {UNVERIFIED_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
-import {UNVERIFIED_ACCOUNT_EMAIL} from 'test/constants/seed.constants';
-import {invalidEmailVerifySearchParams} from 'test/data/verify-email-params.data';
-import {EmailUtils} from 'test/utils/email-utils';
 
+import {UNVERIFIED_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {UNVERIFIED_ACCOUNT_EMAIL} from '../../constants/seed.constants';
+import {invalidEmailVerifySearchParams} from '../../data/verify-email-params.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
+import {EmailUtils} from '../../utils/email-utils';
 import {withSearchParams} from '../../utils/url';
 
 const verifyEmailUrl = (params: object) => withSearchParams('/verify-email', params);

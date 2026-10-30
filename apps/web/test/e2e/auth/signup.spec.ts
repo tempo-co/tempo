@@ -1,9 +1,9 @@
 import {faker} from '@faker-js/faker';
-import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
-import {VERIFIED_ACCOUNT_EMAIL} from 'test/constants/seed.constants';
-import {EmailUtils} from 'test/utils/email-utils';
 
+import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {VERIFIED_ACCOUNT_EMAIL} from '../../constants/seed.constants';
 import {expect, test} from '../../fixtures';
+import {EmailUtils} from '../../utils/email-utils';
 
 test.describe('Signup', () => {
   test.beforeEach(async ({signupPage}) => {

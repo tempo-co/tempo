@@ -2,8 +2,7 @@ import {InjectQueue} from '@nestjs/bullmq';
 import {Injectable, Logger, OnModuleInit} from '@nestjs/common';
 import {InjectDataSource} from '@nestjs/typeorm';
 import {Queue} from 'bullmq';
-import {DataSource} from 'typeorm';
-import {QueryDeepPartialEntity} from 'typeorm/query-builder/QueryPartialEntity';
+import {DataSource, QueryDeepPartialEntity} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {createWebUrl} from '@core/config/web-url';

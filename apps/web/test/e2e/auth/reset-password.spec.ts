@@ -1,10 +1,10 @@
 import {faker} from '@faker-js/faker';
-import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
-import {PW_RESET_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_EMAIL} from 'test/constants/seed.constants';
-import {invalidResetPasswordSearchParams} from 'test/data/reset-password-params.data';
-import {EmailUtils} from 'test/utils/email-utils';
 
+import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {PW_RESET_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_EMAIL} from '../../constants/seed.constants';
+import {invalidResetPasswordSearchParams} from '../../data/reset-password-params.data';
 import {expect, test} from '../../fixtures';
+import {EmailUtils} from '../../utils/email-utils';
 import {withSearchParams} from '../../utils/url';
 
 test.describe.serial('Password Reset', () => {

@@ -1,7 +1,7 @@
 import {NestFactory} from '@nestjs/core';
-import {AppModule} from 'src/app.module';
 import {DataSource, QueryRunner} from 'typeorm';
 
+import {AppModule} from '../src/app.module';
 import {seedAccounts} from './seed-data/seed-accounts';
 import {seedBankingData} from './seed-data/seed-banking-data';
 import {seedOwnTransferData} from './seed-data/seed-own-transfer-data';

@@ -1,6 +1,7 @@
 import {expect, test} from '@playwright/test';
-import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
-import {boxOf, expectNoHorizontalOverflow} from 'test/utils/layout';
+
+import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE});
 

@@ -1,5 +1,4 @@
-import {VERIFIED_USER_AUTH_FILE} from 'test/constants/auth.constants';
-
+import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {expect, test} from '../../fixtures';
 import {AppearanceSettingsPage} from '../../pages/appearance-settings.page';
 
