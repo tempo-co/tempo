@@ -6,8 +6,42 @@ import {
 } from 'test/constants/seed.constants';
 
 import {createVerifiedAccount, expect, test} from '../../fixtures';
+import {LoginPage} from '../../pages/login.page';
+import {fulfillJson} from '../../utils/api-mocks';
 
 test.describe('Login', () => {
+  test.describe('Opening Tempo signed out', () => {
+    // Every script must pass through page.route, not the offline shell.
+    test.use({storageState: {cookies: [], origins: []}, serviceWorkers: 'block'});
+
+    test('shows the login form while the requested page is still loading', async ({
+      page,
+      context,
+      loginPage,
+    }) => {
+      await context.route('**/accounts/me', (route) =>
+        fulfillJson(route, {message: 'Unauthorized'}, 401),
+      );
+      const loginScripts = new Set<string>();
+      const loginTab = await context.newPage();
+      loginTab.on('request', (request) => {
+        if (request.resourceType() === 'script') loginScripts.add(request.url());
+      });
+      await loginTab.goto('/login');
+      await expect(new LoginPage(loginTab).emailInput).toBeVisible();
+      await loginTab.close();
+      // Any other page's code is left unanswered, so it never arrives.
+      await page.route('**/*.js', async (route) => {
+        if (loginScripts.has(route.request().url())) await route.continue();
+      });
+
+      await page.goto('/');
+
+      await loginPage.expectToBeOnPage();
+      await expect(loginPage.emailInput).toBeVisible();
+    });
+  });
+
   test.describe('Successful login flow', () => {
     test('should login successfully with verified account and redirect to home page', async ({
       loginPage,
@@ -53,7 +87,8 @@ test.describe('Login', () => {
       await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
       await homePage.expectToBeOnPage();
 
-      await loginPage.navigate();
+      // The redirect home can come before the page's load event, which would interrupt goto.
+      await page.goto('/login', {waitUntil: 'commit'});
 
       await homePage.expectToBeOnPage();
       await homePage.expectUserLoggedIn();

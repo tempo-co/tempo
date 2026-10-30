@@ -16,16 +16,19 @@ export const markSavedSessionShown = () => {
 /** Once shown, the saved account stays on screen while Tempo confirms it after reconnecting. */
 export const wasSavedSessionShown = () => savedSessionShown;
 
+/** The signed-in check: the account, or a 401 when this browser has no session. */
+export const currentAccountQuery = {
+  queryKey: CURRENT_ACCOUNT_KEY,
+  queryFn: async () => await api.get<Account>('/accounts/me', {expectUnauthorized: true}),
+  retry: false,
+};
+
 export const useCurrentAccount = ({skipFetch = false} = {}) => {
   // Read only fields that change with the result: a re-render when a refetch merely starts would
   // push this stale account into the router context while a caller is about to navigate.
   const {data, isPending, error, refetch, dataUpdatedAt} = useQuery<Account, HttpError>({
-    queryKey: CURRENT_ACCOUNT_KEY,
-    queryFn: async () => {
-      return await api.get<Account>('/accounts/me', {expectUnauthorized: true});
-    },
+    ...currentAccountQuery,
     enabled: !skipFetch,
-    retry: false,
     refetchOnWindowFocus: false,
   });
 

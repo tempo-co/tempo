@@ -60,6 +60,10 @@ if mode == 'spa':
         "connect-src 'self'",
     ):
         assert directive in csp, f'CSP missing {directive!r}'
+elif mode == 'compressed':
+    assert status == 200, f'expected HTTP 200, got {status}'
+    assert headers.get('content-encoding') == 'gzip', f'{headers_path} is not gzip-compressed'
+    assert 'accept-encoding' in headers.get('vary', '').lower(), f'{headers_path} lacks Vary: Accept-Encoding'
 elif mode == 'proxy':
     assert status == 502, f'expected isolated upstream HTTP 502, got {status}'
     for name in (
@@ -70,6 +74,7 @@ elif mode == 'proxy':
         'referrer-policy',
         'permissions-policy',
         'strict-transport-security',
+        'content-encoding',
     ):
         assert name not in headers, f'SPA {name} leaked to proxied response'
 else:
@@ -104,9 +109,11 @@ if [[ "$ready" != 1 ]]; then
     exit 1
 fi
 
+# Every request offers gzip, so only the app's own files coming back compressed passes.
 check() {
     local name=$1 path=$2 kind=$3
-    curl -sS --max-time 5 -D "$tmp_dir/$name.headers" -o /dev/null "http://127.0.0.1:$port$path"
+    curl -sS --max-time 5 -H 'Accept-Encoding: gzip' -D "$tmp_dir/$name.headers" -o /dev/null \
+        "http://127.0.0.1:$port$path"
     assert_headers "$tmp_dir/$name.headers" "$kind"
 }
 check spa / spa
@@ -118,6 +125,11 @@ check unicode-search "/bank-transactions?search=$encoded_search" spa
 check api /api/health proxy
 check mcp /api/mcp proxy
 check callback /bank-connections/callback proxy
+index_html=$(curl -sS --max-time 5 "http://127.0.0.1:$port/")
+for asset in js css; do
+    [[ $index_html =~ (/assets/[^\"]+\.$asset) ]] || { echo "index.html links no .$asset asset" >&2; exit 1; }
+    check "app-$asset" "${BASH_REMATCH[1]}" compressed
+done
 
 # The first streamed event must arrive before a second request releases the final event.
 # Sharing only the network namespace keeps the synthetic API isolated from host services.

@@ -63,6 +63,15 @@ function clearOfflineCache() {
   }
 }
 
+/** Whether this browser kept a signed-in account's data from an earlier visit. */
+export function hasSavedAccount() {
+  try {
+    return localStorage.getItem(CACHE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 /** Removes the account and all loaded data from this tab and from storage. */
 export function dropSavedData(queryClient: QueryClient) {
   queryClient.removeQueries({predicate: (query) => !isAccountQuery(query)});

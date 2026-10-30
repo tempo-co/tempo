@@ -1915,6 +1915,30 @@ test.describe('bank connection loading errors', () => {
     expect(retryButtonBox.height).toBeGreaterThanOrEqual(44);
     expect(connectionRequests).toBe(1);
   });
+
+  test('loads connections once when Tempo answers after an unanswered first session check', async ({
+    page,
+  }) => {
+    let connectionRequests = 0;
+    await routeBankConnectionsApi(page, async (route) => {
+      connectionRequests += 1;
+      await fulfillJson(route, {message: 'Service unavailable'}, 503);
+    });
+    let sessionChecks = 0;
+    await page.route('**/accounts/me', (route) =>
+      sessionChecks++ === 0 ? route.abort('failed') : route.continue(),
+    );
+
+    await page.goto('/bank-connections');
+    await expect(page.getByRole('heading', {name: 'Cannot reach Tempo'})).toBeVisible();
+    // Focus makes Tempo check its connection now instead of on its next timer.
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+
+    await expect(
+      page.getByRole('heading', {name: 'Could not load bank connections'}),
+    ).toBeVisible();
+    expect(connectionRequests).toBe(1);
+  });
 });
 
 test.describe('bank connections without bank connections', () => {
