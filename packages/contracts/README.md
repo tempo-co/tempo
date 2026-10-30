@@ -6,7 +6,8 @@ The HTTP request and response shapes the API serves, plus the fixed value lists 
 
 - Describe the JSON on the wire: dates and amounts are `string`, absent values are `null`, no `Date`, entities or class instances.
 - No dependencies. No Nest, class-validator, zod or browser APIs; the code must compile under both the API's and the web app's compiler settings.
-- One file per API area, re-exported from `src/index.ts`. Relative imports end in `.js` (the package is ESM).
+- One file per API area, holding both its shapes and its value lists, re-exported from `src/index.ts`. Add a value list to the area that owns it, not to a shared file. Relative imports end in `.js` (the package is ESM).
+- API and web deploy together (one CI run publishes both images, and the deployer rolls them out in one pass), so a contract change can be breaking in a single PR. When a response shape changes in a way old data can't satisfy, bump the offline cache `buster` in `apps/web/src/utils/offline-storage.ts`, or the web app may read old-shaped saved responses after the update. Already-open tabs keep the old web code until they reload.
 - UI copy such as labels and icons stays in the web app. API-internal types (entities, detection state) stay in the API.
 
 ## How each consumer loads it

@@ -1,5 +1,7 @@
-import type {CashFlowInterval} from './banking-values.js';
 import type {BankTransactionCategoryFilterValue} from './categories.js';
+
+export const CASH_FLOW_INTERVALS = ['week', 'month', 'year'] as const;
+export type CashFlowInterval = (typeof CASH_FLOW_INTERVALS)[number];
 
 /** `GET /bank-transactions/summary` query. */
 export type BankTransactionSummaryQuery = {
