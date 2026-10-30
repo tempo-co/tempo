@@ -1,0 +1,84 @@
+import {BrowserContext, Page, expect, test} from '@playwright/test';
+import {SESSION_TEST_USER_AUTH_FILE} from 'test/constants/auth.constants';
+import {
+  SESSION_TEST_ACCOUNT_EMAIL,
+  SESSION_TEST_ACCOUNT_PASSWORD,
+} from 'test/constants/seed.constants';
+import {HomePage} from 'test/pages/home.page';
+
+import {LoginPage} from '../../pages/login.page';
+import {SecuritySettingsPage} from '../../pages/security-settings.page';
+
+test.describe.serial('Account Settings: Sessions', () => {
+  let page1: Page;
+  let loginPage1: LoginPage;
+  let page2: Page;
+  let loginPage2: LoginPage;
+  let homePage2: HomePage;
+
+  let securitySettingsPage: SecuritySettingsPage;
+  let contexts: BrowserContext[] = [];
+
+  test.beforeEach(async ({browser}) => {
+    const context1 = await browser.newContext({storageState: SESSION_TEST_USER_AUTH_FILE});
+    page1 = await context1.newPage();
+    loginPage1 = new LoginPage(page1);
+
+    const context2 = await browser.newContext();
+    contexts = [context1, context2];
+    page2 = await context2.newPage();
+    loginPage2 = new LoginPage(page2);
+    homePage2 = new HomePage(page2);
+    await loginPage2.login(SESSION_TEST_ACCOUNT_EMAIL, SESSION_TEST_ACCOUNT_PASSWORD);
+    await homePage2.expectToBeOnPage();
+
+    securitySettingsPage = new SecuritySettingsPage(page1);
+    await securitySettingsPage.navigate();
+  });
+
+  test.afterEach(async () => {
+    await Promise.all(contexts.map((context) => context.close()));
+  });
+
+  test('should revoke another session successfully', async () => {
+    const otherSessionCard = securitySettingsPage.otherSessionCards.first();
+    await securitySettingsPage.getRevokeButton(otherSessionCard).click();
+    await securitySettingsPage.revokeButtonConfirm.click();
+
+    await expect(securitySettingsPage.sessionRevokeSuccessToast).toBeVisible();
+    await expect(otherSessionCard).not.toBeVisible();
+
+    // Check that the other session is logged out
+    await page2.reload();
+    await loginPage2.expectToBeOnPage();
+  });
+
+  test('should revoke all other sessions', async () => {
+    await expect(securitySettingsPage.otherSessionCards.first()).toBeVisible();
+    const otherSessionCount = await securitySettingsPage.otherSessionCards.count();
+    await expect(securitySettingsPage.otherSessionsHeading).toHaveText(
+      `Other sessions (${otherSessionCount})`,
+    );
+    const otherSessionsSection = securitySettingsPage.otherSessionsSection;
+    await expect(otherSessionsSection.getByTestId('session-card')).toHaveCount(otherSessionCount);
+    await expect(otherSessionsSection.locator('[data-current-session="true"]')).toHaveCount(0);
+
+    await securitySettingsPage.revokeAllButton.click();
+    await expect(
+      page1.getByRole('dialog').getByText('This also revokes all access tokens.'),
+    ).toBeVisible();
+    await securitySettingsPage.revokeAllButtonConfirm.click();
+
+    await expect(securitySettingsPage.currentSessionCard).toBeVisible();
+    await expect(securitySettingsPage.sessionCards).toHaveCount(1);
+    await expect(securitySettingsPage.revokeAllButton).not.toBeVisible();
+    await expect(securitySettingsPage.otherSessionsHeading).not.toBeVisible();
+  });
+
+  test('should log out of the current session', async () => {
+    await securitySettingsPage.logOutButton.click();
+    await securitySettingsPage.logOutButtonConfirm.click();
+
+    await loginPage1.expectToBeOnPage();
+  });
+});

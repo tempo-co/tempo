@@ -1,0 +1,15 @@
+import {useMutation} from '@tanstack/react-query';
+
+import {HttpError, api} from '@/utils/api';
+
+import {EmailChangeDto} from '../types/email-change.dto';
+
+export const useChangeEmailRequest = () => {
+  const {mutate: changeEmailRequest, isPending} = useMutation<void, HttpError, EmailChangeDto>({
+    mutationFn: async (dto) => {
+      await api.post('/auth/change-email/request', dto);
+    },
+  });
+
+  return {changeEmailRequest, isPending};
+};

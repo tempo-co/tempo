@@ -1,0 +1,108 @@
+import {NavigateOptions, useNavigate} from '@tanstack/react-router';
+import {ChevronFirst, ChevronLast, ChevronLeft, ChevronRight} from 'lucide-react';
+
+import {Button} from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {PAGE_SIZE_OPTIONS, PaginationParams} from '@/types/pagination';
+
+type PaginationProps = {
+  totalItems: number;
+  pagination: PaginationParams;
+  navigateOptions: NavigateOptions;
+};
+
+export function Pagination({totalItems, pagination, navigateOptions}: PaginationProps) {
+  const navigate = useNavigate(navigateOptions);
+
+  const totalPages = Math.ceil(totalItems / pagination.pageSize);
+  const startIndex = pagination.pageIndex * pagination.pageSize + 1;
+  const endIndex = Math.min((pagination.pageIndex + 1) * pagination.pageSize, totalItems);
+  const canGoNext = pagination.pageIndex < totalPages - 1;
+  const [start, end, total] = [startIndex, endIndex, totalItems].map((value) =>
+    value.toLocaleString(),
+  );
+
+  const goToPage = (pageIndex: number) => navigate({search: (prev) => ({...prev, pageIndex})});
+
+  const handlePageSizeChange = (pageSize: string) =>
+    navigate({search: (prev) => ({...prev, pageSize: Number(pageSize), pageIndex: 0})});
+
+  return (
+    <div
+      data-testid='pagination'
+      className='mt-4 flex w-full flex-nowrap items-center justify-between gap-1 sm:justify-end sm:gap-10'
+    >
+      <div className='flex items-center gap-2'>
+        <p className='text-sm font-medium whitespace-nowrap'>
+          <span className='sm:hidden'>Rows</span>
+          <span className='hidden sm:inline'>Rows per page</span>
+        </p>
+        <Select value={`${pagination.pageSize}`} onValueChange={handlePageSizeChange}>
+          <SelectTrigger aria-label='Rows per page' className='h-11 w-18 gap-2 sm:h-8 sm:w-[70px]'>
+            <SelectValue placeholder={pagination.pageSize} />
+          </SelectTrigger>
+          <SelectContent side='top'>
+            {PAGE_SIZE_OPTIONS.map((pageSize) => (
+              <SelectItem key={pageSize} value={`${pageSize}`}>
+                {pageSize}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <p className='text-sm whitespace-nowrap'>
+        <span className='sr-only'>{`Showing ${start}-${end} of ${total} rows`}</span>
+        <span aria-hidden='true' className='sm:hidden'>
+          {start}-{end} / {total}
+        </span>
+        <span aria-hidden='true' className='hidden sm:inline'>
+          {start}-{end} of {total}
+        </span>
+      </p>
+      <div className='flex shrink-0 gap-2'>
+        <Button
+          onClick={() => goToPage(0)}
+          disabled={pagination.pageIndex < 1}
+          variant='outline'
+          className='hidden h-11 w-11 p-0 sm:inline-flex sm:h-8 sm:w-8'
+        >
+          <span className='sr-only'>Go to first page</span>
+          <ChevronFirst className='h-4 w-4' />
+        </Button>
+        <Button
+          onClick={() => goToPage(Math.max(pagination.pageIndex - 1, 0))}
+          disabled={pagination.pageIndex < 1}
+          variant='outline'
+          className='h-11 w-11 p-0 sm:h-8 sm:w-8'
+        >
+          <span className='sr-only'>Go to previous page</span>
+          <ChevronLeft className='h-4 w-4' />
+        </Button>
+        <Button
+          onClick={() => goToPage(pagination.pageIndex + 1)}
+          disabled={!canGoNext}
+          variant='outline'
+          className='h-11 w-11 p-0 sm:h-8 sm:w-8'
+        >
+          <span className='sr-only'>Go to next page</span>
+          <ChevronRight className='h-4 w-4' />
+        </Button>
+        <Button
+          onClick={() => goToPage(totalPages - 1)}
+          disabled={!canGoNext}
+          variant='outline'
+          className='hidden h-11 w-11 p-0 sm:inline-flex sm:h-8 sm:w-8'
+        >
+          <span className='sr-only'>Go to last page</span>
+          <ChevronLast className='h-4 w-4' />
+        </Button>
+      </div>
+    </div>
+  );
+}

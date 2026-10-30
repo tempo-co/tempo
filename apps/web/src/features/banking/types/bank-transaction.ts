@@ -1,0 +1,355 @@
+import {z} from 'zod';
+
+import {paginationSearchParamsSchema} from '@/types/pagination';
+
+export enum BankTransactionSortField {
+  BOOKING_DATE = 'bookingDate',
+  AMOUNT = 'amount',
+  CATEGORY = 'category',
+  SOURCE = 'source',
+}
+
+export enum BankTransactionSortOrder {
+  ASC = 'ASC',
+  DESC = 'DESC',
+}
+
+export enum BankTransactionDirection {
+  INCOME = 'INCOME',
+  EXPENSE = 'EXPENSE',
+  UNKNOWN = 'UNKNOWN',
+}
+
+export const BANK_TRANSACTION_FINANCIAL_EVENT_TYPES = ['CURRENCY_EXCHANGE'] as const;
+export type BankTransactionFinancialEventType =
+  (typeof BANK_TRANSACTION_FINANCIAL_EVENT_TYPES)[number];
+
+/** Filter-only activity value for transfers between the owner's own accounts. */
+export const BANK_TRANSACTION_OWN_TRANSFER_FILTER = 'OWN_TRANSFER' as const;
+export const BANK_TRANSACTION_ACTIVITY_FILTER_VALUES = [
+  ...BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
+  BANK_TRANSACTION_OWN_TRANSFER_FILTER,
+] as const;
+export type BankTransactionActivityFilterValue =
+  (typeof BANK_TRANSACTION_ACTIVITY_FILTER_VALUES)[number];
+
+export const BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES = ['RULE'] as const;
+export type BankTransactionFinancialEventSource =
+  (typeof BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES)[number];
+
+export const BANK_TRANSACTION_FINANCIAL_EVENT_LABELS: Record<
+  BankTransactionFinancialEventType,
+  string
+> = {
+  CURRENCY_EXCHANGE: 'Currency exchange',
+};
+
+export const BANK_TRANSACTION_ACTIVITY_LABELS: Record<BankTransactionActivityFilterValue, string> =
+  {
+    ...BANK_TRANSACTION_FINANCIAL_EVENT_LABELS,
+    OWN_TRANSFER: 'Own transfer',
+  };
+
+export const OWN_TRANSFER_EVIDENCE = ['IBAN', 'NAME', 'MANUAL'] as const;
+export type OwnTransferEvidence = (typeof OWN_TRANSFER_EVIDENCE)[number];
+
+export const OWN_TRANSFER_OVERRIDES = ['MARKED', 'UNMARKED'] as const;
+export type OwnTransferOverride = (typeof OWN_TRANSFER_OVERRIDES)[number];
+
+/** The other leg of an own transfer or currency exchange. */
+export type BankTransactionCounterpart = {
+  id: string;
+  bankName: string;
+  bankAccountName: string | null;
+  bankAccountAlias: string | null;
+  amount: string;
+  currency: string;
+  bookingDate: string | null;
+};
+
+export type BankTransactionOwnTransfer = {
+  evidence: OwnTransferEvidence;
+  /** The other leg, or null when no matching transaction is in the connected accounts. */
+  counterpart: BankTransactionCounterpart | null;
+};
+
+export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = [
+  'INCOME',
+  'EXPENSE',
+  'INTERNAL',
+  'UNKNOWN',
+] as const;
+export type BankTransactionCashFlowTreatment =
+  (typeof BANK_TRANSACTION_CASH_FLOW_TREATMENTS)[number];
+
+export const BANK_TRANSACTION_CATEGORIES = [
+  'HOUSING_AND_UTILITIES',
+  'FOOD_AND_DRINK',
+  'TRANSPORTATION',
+  'SHOPPING',
+  'SUBSCRIPTIONS',
+  'HEALTH',
+  'TRAVEL',
+  'ENTERTAINMENT',
+  'PERSONAL_CARE',
+  'EDUCATION',
+  'INSURANCE',
+  'FEES',
+  'CASH_WITHDRAWAL',
+  'INCOME',
+  'REFUND',
+  'TRANSFER_IN',
+  'TRANSFER_OUT',
+  'NEEDS_REVIEW',
+  'OTHER',
+] as const;
+
+export type BankTransactionCategory = (typeof BANK_TRANSACTION_CATEGORIES)[number];
+
+export const BANK_TRANSACTION_UNCATEGORIZED = 'UNCATEGORIZED' as const;
+export const BANK_TRANSACTION_CATEGORY_FILTER_VALUES = [
+  ...BANK_TRANSACTION_CATEGORIES,
+  BANK_TRANSACTION_UNCATEGORIZED,
+] as const;
+export type BankTransactionCategoryFilterValue =
+  (typeof BANK_TRANSACTION_CATEGORY_FILTER_VALUES)[number];
+
+export const BANK_TRANSACTION_CATEGORY_LABELS: Record<BankTransactionCategory, string> = {
+  HOUSING_AND_UTILITIES: 'Housing and utilities',
+  FOOD_AND_DRINK: 'Food and drink',
+  TRANSPORTATION: 'Transportation',
+  SHOPPING: 'Shopping',
+  SUBSCRIPTIONS: 'Subscriptions',
+  HEALTH: 'Health',
+  TRAVEL: 'Travel',
+  ENTERTAINMENT: 'Entertainment',
+  PERSONAL_CARE: 'Personal care',
+  EDUCATION: 'Education',
+  INSURANCE: 'Insurance',
+  FEES: 'Fees',
+  CASH_WITHDRAWAL: 'Cash withdrawal',
+  INCOME: 'Income',
+  REFUND: 'Refund',
+  TRANSFER_IN: 'Transfer in',
+  TRANSFER_OUT: 'Transfer out',
+  NEEDS_REVIEW: 'Needs review',
+  OTHER: 'Other',
+};
+
+export const BANK_TRANSACTION_CATEGORIZATION_STATUSES = [
+  'PENDING',
+  'PROCESSING',
+  'COMPLETED',
+  'FAILED',
+  'NOT_APPLICABLE',
+] as const;
+
+export type BankTransactionCategorizationStatus =
+  (typeof BANK_TRANSACTION_CATEGORIZATION_STATUSES)[number];
+
+export const BANK_TRANSACTION_CATEGORIZATION_SOURCES = ['AI', 'HISTORY', 'MANUAL'] as const;
+
+export type BankTransactionCategorizationSource =
+  (typeof BANK_TRANSACTION_CATEGORIZATION_SOURCES)[number];
+
+/** Cash flows, in picker order. Currency exchanges and own transfers are the two kinds of internal movement. */
+export const BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES = [
+  'SPENDING',
+  'INCOME',
+  'INTERNAL',
+  'CURRENCY_EXCHANGE',
+  BANK_TRANSACTION_OWN_TRANSFER_FILTER,
+  'UNKNOWN',
+] as const;
+export const BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS = [
+  'CURRENCY_EXCHANGE',
+  'OWN_TRANSFER',
+] as const;
+export type BankTransactionCashFlowFilterValue =
+  (typeof BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES)[number];
+
+export const BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES = ['PRESENT', 'MISSING'] as const;
+export type BankTransactionBaseAmountFilterValue =
+  (typeof BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES)[number];
+
+export const BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES = ['FAILED', 'CATEGORIZING'] as const;
+export type BankTransactionCategoryStatusFilterValue =
+  (typeof BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES)[number];
+
+export const BANK_TRANSACTION_SEARCH_MAX_LENGTH = 1000;
+
+const toDate = (value: unknown) => (typeof value === 'string' ? new Date(value) : value);
+
+/** A recurring series' key: 32 lowercase hex characters. */
+export const recurringSeriesKeySchema = z.string().regex(/^[0-9a-f]{32}$/);
+
+export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.extend({
+  bookingDate: z
+    .object({
+      from: z.preprocess(toDate, z.date()).optional(),
+      to: z.preprocess(toDate, z.date()).optional(),
+    })
+    .optional(),
+  bankAccountIds: z.array(z.string().uuid()).optional(),
+  categories: z.array(z.enum(BANK_TRANSACTION_CATEGORY_FILTER_VALUES)).optional(),
+  categorySources: z.array(z.enum(BANK_TRANSACTION_CATEGORIZATION_SOURCES)).optional(),
+  cashFlows: z
+    .array(z.enum(BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES))
+    .transform((values) => {
+      const allInternal =
+        values.includes('INTERNAL') ||
+        BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS.every((kind) => values.includes(kind));
+      return BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES.filter((value) =>
+        value === 'INTERNAL'
+          ? allInternal
+          : (BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS as readonly string[]).includes(value)
+            ? !allInternal && values.includes(value)
+            : values.includes(value),
+      );
+    })
+    .optional(),
+  baseAmount: z.enum(BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES).optional(),
+  categoryStatuses: z.array(z.enum(BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES)).optional(),
+  search: z.string().max(BANK_TRANSACTION_SEARCH_MAX_LENGTH).optional(),
+  /** Only the payments of one recurring series, from the recurring payments list. */
+  recurringSeriesKey: recurringSeriesKeySchema.optional(),
+  transactionId: z.string().optional(),
+  sort: z
+    .object({
+      by: z.nativeEnum(BankTransactionSortField),
+      order: z.nativeEnum(BankTransactionSortOrder),
+    })
+    .optional(),
+});
+
+export type BankTransactionSearchParams = z.infer<typeof bankTransactionSearchParamsSchema>;
+
+/**
+ * The route schema. It also accepts `financialEventTypes`, which older shared links use for the cash-flow filter,
+ * and merges its values into `cashFlows` so those links filter the same rows.
+ */
+export const bankTransactionRouteSearchSchema = z.preprocess((search) => {
+  if (!search || typeof search !== 'object' || !('financialEventTypes' in search)) return search;
+  const {financialEventTypes, ...rest} = search as Record<string, unknown>;
+  const legacy: unknown[] = Array.isArray(financialEventTypes) ? financialEventTypes : [];
+  const current: unknown[] = Array.isArray(rest.cashFlows) ? rest.cashFlows : [];
+  const cashFlows = [...new Set([...current, ...legacy])];
+  return cashFlows.length > 0 ? {...rest, cashFlows} : rest;
+}, bankTransactionSearchParamsSchema) as unknown as typeof bankTransactionSearchParamsSchema;
+
+/** The search params that filter the transaction list; `search` is the free-text query. */
+export const BANK_TRANSACTION_FILTER_KEYS = [
+  'bookingDate',
+  'bankAccountIds',
+  'categories',
+  'categorySources',
+  'cashFlows',
+  'baseAmount',
+  'categoryStatuses',
+  'recurringSeriesKey',
+  'search',
+] as const satisfies readonly (keyof BankTransactionSearchParams)[];
+
+export type BankTransactionFilterParams = Pick<
+  BankTransactionSearchParams,
+  (typeof BANK_TRANSACTION_FILTER_KEYS)[number]
+>;
+
+export type BankTransactionSortParams = BankTransactionSearchParams['sort'];
+
+export const DEFAULT_BANK_TRANSACTION_SORT: NonNullable<BankTransactionSortParams> = {
+  by: BankTransactionSortField.BOOKING_DATE,
+  order: BankTransactionSortOrder.DESC,
+};
+
+export type BankTransactionCategorizationFields = {
+  category: BankTransactionCategory | null;
+  categoryStatus: BankTransactionCategorizationStatus;
+  categorySource: BankTransactionCategorizationSource | null;
+  categoryConfidence: string | null;
+};
+
+export type BankTransactionFinancialEventFields = {
+  financialEventType: BankTransactionFinancialEventType | null;
+  financialEventSource: BankTransactionFinancialEventSource | null;
+  financialEventRuleVersion: string | null;
+  cashFlowTreatment: BankTransactionCashFlowTreatment;
+  /**
+   * The other leg of a currency exchange, or null when the legs could not be matched. Absent on
+   * connection summaries.
+   */
+  currencyExchangeCounterpart?: BankTransactionCounterpart | null;
+};
+
+export type BankTransactionOwnTransferFields = {
+  /** Absent on connection summaries, which only carry the treatment. */
+  ownTransfer?: BankTransactionOwnTransfer | null;
+  ownTransferOverride?: OwnTransferOverride | null;
+};
+
+export type BankTransaction = BankTransactionCategorizationFields &
+  BankTransactionFinancialEventFields &
+  BankTransactionOwnTransferFields & {
+    id: string;
+    transactionDate: string | null;
+    bookingDate: string | null;
+    valueDate: string | null;
+    description: string | null;
+    displayDescription?: string | null;
+    /** Path of the merchant's logo on the API; null or absent when no confirmed logo exists. */
+    merchantLogoUrl?: string | null;
+    counterpartyName: string | null;
+    amount: string;
+    currency: string;
+    creditDebitIndicator: string | null;
+    direction: BankTransactionDirection;
+    transactionType: string;
+    transactionStatus: string | null;
+    providerTransactionDescription: string | null;
+    merchantCategoryCode: string | null;
+    remittanceInformation: string | null;
+    balanceAfterAmount: string | null;
+    balanceAfterCurrency: string | null;
+    instructedAmount: string | null;
+    instructedCurrency: string | null;
+    exchangeRate: string | null;
+    exchangeRateUnitCurrency: string | null;
+    exchangeRateType: string | null;
+    referenceNumber: string | null;
+    referenceNumberScheme: string | null;
+    bankName: string;
+    bankCountry: string;
+    bankAccountName: string | null;
+    bankAccountAlias: string | null;
+  };
+
+export type BankTransactionsResponse = {
+  transactions: BankTransaction[];
+  total: number;
+};
+
+/** One of the owner's other rows that a category correction would change. */
+export type BankTransactionCategoryImpactTransaction = Pick<
+  BankTransaction,
+  | 'id'
+  | 'transactionDate'
+  | 'bookingDate'
+  | 'amount'
+  | 'currency'
+  | 'category'
+  | 'categoryStatus'
+  | 'categorySource'
+> & {displayDescription: string};
+
+/**
+ * What a category correction would do to the owner's other rows from the same merchant. `APPLY`
+ * sets `category` on them; `RECHECK` sends them back to AI categorization. `null` when no other row
+ * would change.
+ */
+export type BankTransactionCategoryImpact = {
+  action: 'APPLY' | 'RECHECK' | null;
+  category: BankTransactionCategory | null;
+  /** Newest first, capped by the API; `total` counts every affected row. */
+  transactions: BankTransactionCategoryImpactTransaction[];
+  total: number;
+};

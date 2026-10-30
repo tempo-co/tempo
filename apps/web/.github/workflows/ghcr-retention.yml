@@ -1,0 +1,24 @@
+name: GHCR retention
+
+# Weekly cleanup of old tempo-web image versions, using tempo-api's retention workflow.
+# Scheduled runs are dry runs until the repository variable GHCR_RETENTION_DELETE is 'true'.
+on:
+    schedule:
+        - cron: '27 4 * * 1'
+    workflow_dispatch:
+        inputs:
+            delete:
+                description: Delete versions (otherwise dry run)
+                type: boolean
+                default: false
+
+permissions:
+    contents: read
+    packages: write
+    pull-requests: read
+
+jobs:
+    retention:
+        uses: tempo-co/tempo-api/.github/workflows/ghcr-retention.yml@main
+        with:
+            delete: ${{ inputs.delete == true }}

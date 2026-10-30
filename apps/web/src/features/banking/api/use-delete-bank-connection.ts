@@ -1,0 +1,37 @@
+import {useMutation, useQueryClient} from '@tanstack/react-query';
+
+import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
+import {HttpError, api} from '@/utils/api';
+
+import {bankQueryKeys} from './query-keys';
+
+export const DELETE_BANK_CONNECTION_KEY = ['delete-bank-connection'];
+
+export const useDeleteBankConnection = () => {
+  const queryClient = useQueryClient();
+
+  const {mutateAsync: deleteMutation, isPending} = useMutation<
+    void,
+    HttpError,
+    {connectionId: string; confirmation?: string}
+  >({
+    mutationKey: DELETE_BANK_CONNECTION_KEY,
+    mutationFn: async ({connectionId, confirmation}) => {
+      await api.delete<void>(
+        `/bank-connections/${connectionId}`,
+        confirmation ? {confirmation} : undefined,
+      );
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey: bankQueryKeys.connections}),
+        queryClient.invalidateQueries({queryKey: dashboardQueryKeys.root}),
+      ]);
+    },
+  });
+
+  const deleteBankConnection = (connectionId: string, confirmation?: string) =>
+    deleteMutation({connectionId, confirmation});
+
+  return {deleteBankConnection, isPending};
+};

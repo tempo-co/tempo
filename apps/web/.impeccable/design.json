@@ -1,0 +1,475 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-18T12:52:00+02:00",
+  "title": "Design System: Tempo",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Clay Strong / Clay on Dark",
+        "canonical": "hsl(17.5 67.1% 69%)",
+        "tonalRamp": [
+          "hsl(17.5 67.1% 15%)",
+          "hsl(17.5 67.1% 25%)",
+          "hsl(17.5 67.1% 35%)",
+          "hsl(17.5 67.1% 45%)",
+          "hsl(17.5 67.1% 55%)",
+          "hsl(17.5 67.1% 65%)",
+          "hsl(17.5 67.1% 80%)",
+          "hsl(17.5 67.1% 95%)"
+        ]
+      },
+      "clay": {
+        "role": "accent",
+        "displayName": "Clay",
+        "canonical": "hsl(13.7 46.3% 51.8%)",
+        "tonalRamp": [
+          "hsl(13.7 46.3% 15%)",
+          "hsl(13.7 46.3% 25%)",
+          "hsl(13.7 46.3% 35%)",
+          "hsl(13.7 46.3% 45%)",
+          "hsl(13.7 46.3% 55%)",
+          "hsl(13.7 46.3% 65%)",
+          "hsl(13.7 46.3% 80%)",
+          "hsl(13.7 46.3% 95%)"
+        ]
+      },
+      "clay-strong": {
+        "role": "accent",
+        "displayName": "Clay Strong",
+        "canonical": "hsl(9 48.2% 37.8%)",
+        "tonalRamp": [
+          "hsl(9 48.2% 15%)",
+          "hsl(9 48.2% 25%)",
+          "hsl(9 48.2% 35%)",
+          "hsl(9 48.2% 45%)",
+          "hsl(9 48.2% 55%)",
+          "hsl(9 48.2% 65%)",
+          "hsl(9 48.2% 80%)",
+          "hsl(9 48.2% 95%)"
+        ]
+      },
+      "clay-on-dark": {
+        "role": "accent",
+        "displayName": "Clay on Dark",
+        "canonical": "hsl(17.5 67.1% 69%)",
+        "tonalRamp": [
+          "hsl(17.5 67.1% 15%)",
+          "hsl(17.5 67.1% 25%)",
+          "hsl(17.5 67.1% 35%)",
+          "hsl(17.5 67.1% 45%)",
+          "hsl(17.5 67.1% 55%)",
+          "hsl(17.5 67.1% 65%)",
+          "hsl(17.5 67.1% 80%)",
+          "hsl(17.5 67.1% 95%)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "hsl(270 7.5% 15.7%)",
+        "tonalRamp": [
+          "hsl(270 7.5% 15%)",
+          "hsl(270 7.5% 25%)",
+          "hsl(270 7.5% 35%)",
+          "hsl(270 7.5% 45%)",
+          "hsl(270 7.5% 55%)",
+          "hsl(270 7.5% 65%)",
+          "hsl(270 7.5% 80%)",
+          "hsl(270 7.5% 95%)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "hsl(38.6 43.8% 93.7%)",
+        "tonalRamp": [
+          "hsl(38.6 43.8% 15%)",
+          "hsl(38.6 43.8% 25%)",
+          "hsl(38.6 43.8% 35%)",
+          "hsl(38.6 43.8% 45%)",
+          "hsl(38.6 43.8% 55%)",
+          "hsl(38.6 43.8% 65%)",
+          "hsl(38.6 43.8% 80%)",
+          "hsl(38.6 43.8% 95%)"
+        ]
+      },
+      "fold-shadow": {
+        "role": "neutral",
+        "displayName": "Fold Shadow",
+        "canonical": "hsl(37.9 20% 81.4%)",
+        "tonalRamp": [
+          "hsl(37.9 20.0% 15%)",
+          "hsl(37.9 20.0% 25%)",
+          "hsl(37.9 20.0% 35%)",
+          "hsl(37.9 20.0% 45%)",
+          "hsl(37.9 20.0% 55%)",
+          "hsl(37.9 20.0% 65%)",
+          "hsl(37.9 20.0% 80%)",
+          "hsl(37.9 20.0% 95%)"
+        ]
+      },
+      "night": {
+        "role": "neutral",
+        "displayName": "Night",
+        "canonical": "hsl(252 10.2% 9.6%)",
+        "tonalRamp": [
+          "hsl(252 10.2% 15%)",
+          "hsl(252 10.2% 25%)",
+          "hsl(252 10.2% 35%)",
+          "hsl(252 10.2% 45%)",
+          "hsl(252 10.2% 55%)",
+          "hsl(252 10.2% 65%)",
+          "hsl(252 10.2% 80%)",
+          "hsl(252 10.2% 95%)"
+        ]
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "Night Field / Paper Field",
+        "canonical": "hsl(252 10.2% 9.6%)",
+        "tonalRamp": [
+          "hsl(252 10.2% 15%)",
+          "hsl(252 10.2% 25%)",
+          "hsl(252 10.2% 35%)",
+          "hsl(252 10.2% 45%)",
+          "hsl(252 10.2% 55%)",
+          "hsl(252 10.2% 65%)",
+          "hsl(252 10.2% 80%)",
+          "hsl(252 10.2% 95%)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Night Surface",
+        "canonical": "hsl(260 9.1% 12.9%)",
+        "tonalRamp": [
+          "hsl(260 9.1% 15%)",
+          "hsl(260 9.1% 25%)",
+          "hsl(260 9.1% 35%)",
+          "hsl(260 9.1% 45%)",
+          "hsl(260 9.1% 55%)",
+          "hsl(260 9.1% 65%)",
+          "hsl(260 9.1% 80%)",
+          "hsl(260 9.1% 95%)"
+        ]
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Paper Ink",
+        "canonical": "hsl(38.6 31.8% 91.4%)",
+        "tonalRamp": [
+          "hsl(38.6 31.8% 15%)",
+          "hsl(38.6 31.8% 25%)",
+          "hsl(38.6 31.8% 35%)",
+          "hsl(38.6 31.8% 45%)",
+          "hsl(38.6 31.8% 55%)",
+          "hsl(38.6 31.8% 65%)",
+          "hsl(38.6 31.8% 80%)",
+          "hsl(38.6 31.8% 95%)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Night Muted",
+        "canonical": "hsl(266.7 8.7% 20.2%)",
+        "tonalRamp": [
+          "hsl(266.7 8.7% 15%)",
+          "hsl(266.7 8.7% 25%)",
+          "hsl(266.7 8.7% 35%)",
+          "hsl(266.7 8.7% 45%)",
+          "hsl(266.7 8.7% 55%)",
+          "hsl(266.7 8.7% 65%)",
+          "hsl(266.7 8.7% 80%)",
+          "hsl(266.7 8.7% 95%)"
+        ]
+      },
+      "muted-foreground": {
+        "role": "neutral",
+        "displayName": "Night Muted Ink",
+        "canonical": "hsl(36 9.2% 68%)",
+        "tonalRamp": [
+          "hsl(36 9.2% 15%)",
+          "hsl(36 9.2% 25%)",
+          "hsl(36 9.2% 35%)",
+          "hsl(36 9.2% 45%)",
+          "hsl(36 9.2% 55%)",
+          "hsl(36 9.2% 65%)",
+          "hsl(36 9.2% 80%)",
+          "hsl(36 9.2% 95%)"
+        ]
+      },
+      "accent": {
+        "role": "neutral",
+        "displayName": "Night Accent Wash",
+        "canonical": "hsl(262.5 9.1% 17.3%)",
+        "tonalRamp": [
+          "hsl(262.5 9.1% 15%)",
+          "hsl(262.5 9.1% 25%)",
+          "hsl(262.5 9.1% 35%)",
+          "hsl(262.5 9.1% 45%)",
+          "hsl(262.5 9.1% 55%)",
+          "hsl(262.5 9.1% 65%)",
+          "hsl(262.5 9.1% 80%)",
+          "hsl(262.5 9.1% 95%)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Night Rule",
+        "canonical": "hsl(270 6.9% 22.7%)",
+        "tonalRamp": [
+          "hsl(270 6.9% 15%)",
+          "hsl(270 6.9% 25%)",
+          "hsl(270 6.9% 35%)",
+          "hsl(270 6.9% 45%)",
+          "hsl(270 6.9% 55%)",
+          "hsl(270 6.9% 65%)",
+          "hsl(270 6.9% 80%)",
+          "hsl(270 6.9% 95%)"
+        ]
+      },
+      "secondary": {
+        "role": "neutral",
+        "displayName": "Night Secondary",
+        "canonical": "hsl(265.7 8.2% 16.7%)",
+        "tonalRamp": [
+          "hsl(265.7 8.2% 15%)",
+          "hsl(265.7 8.2% 25%)",
+          "hsl(265.7 8.2% 35%)",
+          "hsl(265.7 8.2% 45%)",
+          "hsl(265.7 8.2% 55%)",
+          "hsl(265.7 8.2% 65%)",
+          "hsl(265.7 8.2% 80%)",
+          "hsl(265.7 8.2% 95%)"
+        ]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "Confirmed Green",
+        "canonical": "hsl(142 76% 36%)",
+        "tonalRamp": [
+          "hsl(142 76.0% 15%)",
+          "hsl(142 76.0% 25%)",
+          "hsl(142 76.0% 35%)",
+          "hsl(142 76.0% 45%)",
+          "hsl(142 76.0% 55%)",
+          "hsl(142 76.0% 65%)",
+          "hsl(142 76.0% 80%)",
+          "hsl(142 76.0% 95%)"
+        ]
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "Caution Amber",
+        "canonical": "hsl(32 95% 44%)",
+        "tonalRamp": [
+          "hsl(32 95.0% 15%)",
+          "hsl(32 95.0% 25%)",
+          "hsl(32 95.0% 35%)",
+          "hsl(32 95.0% 45%)",
+          "hsl(32 95.0% 55%)",
+          "hsl(32 95.0% 65%)",
+          "hsl(32 95.0% 80%)",
+          "hsl(32 95.0% 95%)"
+        ]
+      },
+      "info": {
+        "role": "semantic",
+        "displayName": "Information Blue",
+        "canonical": "hsl(200 98% 39%)",
+        "tonalRamp": [
+          "hsl(200 98.0% 15%)",
+          "hsl(200 98.0% 25%)",
+          "hsl(200 98.0% 35%)",
+          "hsl(200 98.0% 45%)",
+          "hsl(200 98.0% 55%)",
+          "hsl(200 98.0% 65%)",
+          "hsl(200 98.0% 80%)",
+          "hsl(200 98.0% 95%)"
+        ]
+      },
+      "destructive": {
+        "role": "semantic",
+        "displayName": "Error Red",
+        "canonical": "hsl(2 84% 31%)",
+        "tonalRamp": [
+          "hsl(2 84.0% 15%)",
+          "hsl(2 84.0% 25%)",
+          "hsl(2 84.0% 35%)",
+          "hsl(2 84.0% 45%)",
+          "hsl(2 84.0% 55%)",
+          "hsl(2 84.0% 65%)",
+          "hsl(2 84.0% 80%)",
+          "hsl(2 84.0% 95%)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "page-title": {
+        "displayName": "Page title",
+        "purpose": "Major authenticated surface titles."
+      },
+      "section-title": {
+        "displayName": "Section title",
+        "purpose": "Meaningful subsections and grouped tasks."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Primary explanatory copy and comfortable reading text."
+      },
+      "body-sm": {
+        "displayName": "Body small",
+        "purpose": "Supporting descriptions, table content, secondary controls."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Metadata, field labels, compact status context."
+      },
+      "numeric": {
+        "displayName": "Numeric / technical",
+        "purpose": "Currency amounts, transaction IDs, rates, and exact values."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-resting",
+        "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "purpose": "Restrained separation for resting cards. Prefer tonal separation for new surfaces."
+      },
+      {
+        "name": "overlay",
+        "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+        "purpose": "Temporary elevation for dialogs, popovers, dropdowns, and sheets."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-state",
+        "value": "transition-colors 200ms ease-out",
+        "purpose": "Default hover, focus, active, and selected-state changes."
+      },
+      {
+        "name": "auth-layout",
+        "value": "300ms ease-out",
+        "purpose": "Subtle authentication title and card transitions."
+      },
+      {
+        "name": "logo-affordance",
+        "value": "200ms ease-out",
+        "purpose": "Small hover/tap response for the logo link."
+      },
+      {
+        "name": "loading-indicator",
+        "value": "1.6s linear infinite",
+        "purpose": "Pending-action loading spinner."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single most important local action. Clay-on-dark fill on the dark canvas; Clay strong on light.",
+      "html": "<button class=\"ds-btn-primary\">Connect a bank</button>",
+      "css": ".ds-btn-primary { background: hsl(17.5 67.1% 69%); color: hsl(252 10.2% 9.6%); padding: 8px 16px; min-height: 40px; border: 0; border-radius: 0; font: 500 14px/20px Inter Variable, Inter, sans-serif; transition: background 200ms ease-out; } .ds-btn-primary:hover { background: hsl(17.5 67.1% 63%); } .ds-btn-primary:focus-visible { outline: 2px solid hsl(17.5 67.1% 69%); outline-offset: 2px; }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A quiet field for search and filters.",
+      "html": "<input class=\"ds-input-search\" placeholder=\"Search transactions...\" aria-label=\"Search transactions\" />",
+      "css": ".ds-input-search { width: 100%; height: 40px; padding: 8px 12px; border: 1px solid hsl(270 6.9% 22.7%); border-radius: 0; background: hsl(252 10.2% 9.6%); color: hsl(38.6 31.8% 91.4%); font: 400 14px/20px Inter Variable, Inter, sans-serif; } .ds-input-search::placeholder { color: hsl(36 9.2% 68%); } .ds-input-search:focus-visible { outline: 2px solid hsl(17.5 67.1% 69%); outline-offset: 2px; }"
+    },
+    {
+      "name": "Grouped Surface",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "A bordered, quiet surface for information that belongs together.",
+      "html": "<section class=\"ds-card\"><h2>Connected bank</h2><p>Last synchronized recently</p></section>",
+      "css": ".ds-card { padding: 24px; border: 1px solid hsl(270 6.9% 22.7%); border-radius: 0; background: hsl(260 9.1% 12.9%); color: hsl(38.6 31.8% 91.4%); box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); font-family: Inter Variable, Inter, sans-serif; } .ds-card h2 { font-size: 16px; font-weight: 600; margin: 0 0 4px; } .ds-card p { font-size: 14px; color: hsl(36 9.2% 68%); margin: 0; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "Compact text-first context for a categorical state.",
+      "html": "<span class=\"ds-status-badge\">AUTHORIZED</span>",
+      "css": ".ds-status-badge { display: inline-flex; align-items: center; padding: 2px 10px; border: 1px solid hsl(270 6.9% 22.7%); border-radius: 9999px; background: transparent; color: hsl(38.6 31.8% 91.4%); font: 500 12px/16px Inter Variable, Inter, sans-serif; letter-spacing: 0.02em; }"
+    },
+    {
+      "name": "Quiet Navigation Item",
+      "kind": "nav",
+      "refersTo": "button-ghost",
+      "description": "A sidebar route with a modest active wash and clear label.",
+      "html": "<a class=\"ds-nav-item\" href=\"#transactions\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h14M13 6l6 6-6 6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" /></svg><span>Bank Transactions</span></a>",
+      "css": ".ds-nav-item { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 8px; border-radius: 0; color: hsl(38.6 31.8% 91.4%); font: 400 14px/20px Inter Variable, Inter, sans-serif; text-decoration: none; transition: background 200ms ease-out, color 200ms ease-out; } .ds-nav-item:hover, .ds-nav-item:focus-visible, .ds-nav-item[aria-current=\"page\"] { background: hsl(262.5 9.1% 17.3%); } .ds-nav-item:focus-visible { outline: 2px solid hsl(17.5 67.1% 69%); outline-offset: 2px; } .ds-nav-item svg { width: 16px; height: 16px; flex: none; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Quiet paper-and-ink record with a scarce clay signal",
+    "overview": "Tempo is a private personal-finance overview and bank account tracker: balances, transactions, categories, and cash movement in one calm view. The interface is quiet and trustworthy, data-forward without density for its own sake, and distinctive through proportion, spacing, and a small number of deliberate forms \u2014 never through effects.\n\nThe authenticated product is primarily an Operate experience: a screen should make the current financial state, the next useful action, and the path to inspect detail obvious. Dark, light, and system themes are first-class; dark is a warm Night canvas, light is warm Paper \u2014 the same clay identity in both.",
+    "keyCharacteristics": [
+      "Quiet, private, and trustworthy.",
+      "Data-forward without being dense for its own sake.",
+      "Clay accent, scarce and warm, on a paper-and-ink field.",
+      "Mostly flat tonal layers with transient elevation.",
+      "Precise numbers paired with plain-language status."
+    ],
+    "rules": [
+      {
+        "name": "The Quiet Signal Rule",
+        "body": "Tempo earns attention with hierarchy and relevance first. Color, motion, and ornament are supporting signals, never the content of the screen.",
+        "section": "overview"
+      },
+      {
+        "name": "The One Accent Rule",
+        "body": "Clay is scarce enough to remain meaningful. A screen has a clear primary action or active state, not a clay wash.",
+        "section": "colors"
+      },
+      {
+        "name": "The Plain Number Rule",
+        "body": "Monetary values and dates stay easy to scan, compare, and copy.",
+        "section": "typography"
+      },
+      {
+        "name": "The Record Before Ornament Rule",
+        "body": "The financial record is the visual subject. No decorative headers, metric-tile mosaics, or hero space before the data.",
+        "section": "layout"
+      }
+    ],
+    "dos": [
+      "Make state, task, and next action clear before visual personality.",
+      "Treat Clay as a scarce, meaningful signal on a paper/ink field.",
+      "Verify dark, light, and system themes, keyboard focus, reduced motion, and narrow widths before calling a surface finished.",
+      "Use real product terminology and honest data states; label synthetic data as synthetic."
+    ],
+    "donts": [
+      "Don't use blue/violet gradients, glassmorphism, glowing borders, or metric-tile rows.",
+      "Don't make every section a card or every action a pill.",
+      "Don't introduce a second accent color or decorative gradients without a product reason.",
+      "Don't fabricate balances, transactions, financial claims, or synchronization outcomes.",
+      "Don't change typography, the radius vocabulary, or theme behavior as a side effect."
+    ]
+  }
+}
