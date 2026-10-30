@@ -14,7 +14,7 @@ Non-browser requests may omit Origin. A present Origin must exactly equal the or
 
 ## Build and verify
 
-From `apps/api`, with Node.js 22.13 or later:
+From `apps/api`, with Node.js 26 or later:
 
 ```bash
 NODE_ENV=development npm --prefix mcp ci --include=dev

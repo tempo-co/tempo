@@ -3,7 +3,7 @@
     <img src="https://github.com/tempo-co/tempo/actions/workflows/ci.yml/badge.svg" alt="Build Status" />
   </a>
   <a href="https://nodejs.org/" target="_blank">
-    <img src="https://img.shields.io/badge/node.js-22.13%2B-brightgreen" alt="Node.js Version" />
+    <img src="https://img.shields.io/badge/node.js-26%2B-brightgreen" alt="Node.js Version" />
   </a>
 </p>
 
@@ -18,4 +18,4 @@ Tempo is a private, self-hosted personal-finance app. It synchronizes real bank 
 | [`ops`](ops/README.md) | Deployment: deploy, install and backup scripts, host units, production and staging Compose files |
 | [`docs`](docs/ci-and-images.md) | CI and images for both apps |
 
-Each app has its own `package.json`, lockfile and tooling; run npm commands inside its directory (`cd apps/api && npm ci`). Both need Node.js 22.x and Docker.
+Each app has its own `package.json`, lockfile and tooling; run npm commands inside its directory (`cd apps/api && npm ci`). Both need Node.js 26.x and Docker.

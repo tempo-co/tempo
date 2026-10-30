@@ -1,4 +1,4 @@
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /usr/src/app
 
 RUN apk add --no-cache python3 make g++
@@ -15,7 +15,7 @@ COPY scripts/ ./scripts/
 COPY nest-cli.json ./
 RUN npm run build
 
-FROM node:22-alpine AS runtime-dependencies
+FROM node:26-alpine AS runtime-dependencies
 
 RUN apk add --no-cache python3 make g++
 
@@ -29,7 +29,7 @@ RUN node -e 'require("node:fs").writeFileSync("/tmp/dev-dependencies.json", JSON
 
 COPY --from=builder --chown=node:node /usr/src/app/dist ./dist
 
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 
 # Without NODE_ENV the config falls back to development, which this image has no env file for.
 ENV NODE_ENV=production

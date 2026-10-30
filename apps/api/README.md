@@ -6,7 +6,7 @@ Tempo API is a backend service built with [NestJS](https://nestjs.com) for perso
 
 Make sure you have the following installed on your system:
 
-- [Node.js](https://nodejs.org/) (v20.19.0+, v22.13.0+, or v24.x+)
+- [Node.js](https://nodejs.org/) (v26+)
 - [Docker Engine](https://docs.docker.com/engine/) (v28.0.0 or later)
 
 ## Installation
