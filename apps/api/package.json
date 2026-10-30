@@ -40,7 +40,7 @@
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "1.2.0",
-		"@modelcontextprotocol/sdk": "1.32.1",
+		"@modelcontextprotocol/sdk": "1.32.2",
 		"@nest-lab/throttler-storage-redis": "^1.2.0",
 		"@nestjs-modules/mailer": "^3.0.2",
 		"@nestjs/bullmq": "^11.0.5",
