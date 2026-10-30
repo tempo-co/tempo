@@ -16,7 +16,7 @@ const DEFAULT_EMAIL_FROM = '"Tempo" <no-reply@localhost>';
 const PLAIN_TEXT_OPTIONS: HtmlToTextOptions = {
 	wordwrap: false,
 	selectors: [
-		// Same link format as Mailpit's derived text, which tempo-web's E2E helpers parse.
+		// Same link format as Mailpit's derived text, which the web E2E helpers (apps/web) parse.
 		{selector: 'a', options: {linkBrackets: ['( ', ' )']}},
 		{selector: 'h1', options: {uppercase: false}},
 		{selector: 'h2', options: {uppercase: false}},
