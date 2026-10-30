@@ -13,7 +13,7 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
     ignore:
-      # Keep Node types on the runtime major (Node 22 in the Dockerfile and CI).
+      # Keep Node types on the runtime major (Node 26 in the Dockerfile and CI).
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
       # Nest 12 waits until @nest-lab/throttler-storage-redis accepts it as a peer.
@@ -25,7 +25,7 @@ updates:
       # typescript-eslint accepts TypeScript below 6.1 and ts-jest below 7; loosen as they move.
       - dependency-name: typescript
         versions: ['>= 6.1.0']
-      # ESM-only from these majors; Jest on Node 22 can't load them without a transform.
+      # ESM-only from these majors; Jest loads them only with a transform or --experimental-vm-modules.
       - dependency-name: '@faker-js/faker'
         update-types: ['version-update:semver-major']
       - dependency-name: parse5

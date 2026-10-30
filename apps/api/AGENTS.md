@@ -15,7 +15,7 @@ NestJS backend for Tempo, a personal-finance app that syncs real bank data throu
 
 ## Commands
 
-- Setup: Node.js 22.x, Docker Engine 28+, `npm ci`. Development: `npm run start:dev` (starts `docker-compose.dev.yml`, then Nest in watch mode).
+- Setup: Node.js 26.x, Docker Engine 28+, `npm ci`. Development: `npm run start:dev` (starts `docker-compose.dev.yml`, then Nest in watch mode).
 - `src/app/core/config/config.schema.ts` is the source of truth for environment variables. Local secrets go in `.env.<env>.local`, never in Git.
 - Checks: `npm run lint:check`, `npm run format:check`, `npm run build`. `lint` and `format` rewrite files. Run Prettier only on files you changed; edit Markdown by hand.
 - Unit: `npm run test`. E2E: `npm run test:e2e` (serial, recreates the test containers). Bridge: `node --test claude-bridge/*.test.mjs`. MCP: `npm --prefix mcp test`.

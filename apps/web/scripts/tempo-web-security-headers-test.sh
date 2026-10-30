@@ -136,7 +136,7 @@ done
 docker run --detach --name "$mcp_upstream" \
     --network "container:$container" \
     --volume "$repo_root/scripts/mcp-proxy-server.mjs:/server.mjs:ro" \
-    node:22-alpine node /server.mjs >/dev/null
+    node:26-alpine node /server.mjs >/dev/null
 python3 - "$port" <<'PY'
 import time
 import urllib.error
