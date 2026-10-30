@@ -10,7 +10,7 @@ COPY tsconfig*.json ./
 COPY src/ ./src/
 COPY mcp/src/ ./mcp/src/
 COPY mcp/scripts/generate-categories.mjs ./mcp/scripts/
-COPY ops/claude-bridge/contract.json ops/claude-bridge/merchant-contract.json ./ops/claude-bridge/
+COPY claude-bridge/contract.json claude-bridge/merchant-contract.json ./claude-bridge/
 COPY scripts/ ./scripts/
 COPY nest-cli.json ./
 RUN npm run build
@@ -40,7 +40,7 @@ WORKDIR /usr/src/app
 
 COPY --from=runtime-dependencies --chown=node:node /usr/src/app/ ./
 COPY --from=runtime-dependencies /tmp/dev-dependencies.json /tmp/dev-dependencies.json
-COPY ops/runtime-image-smoke.js /tmp/runtime-image-smoke.js
+COPY scripts/runtime-image-smoke.js /tmp/runtime-image-smoke.js
 RUN node /tmp/runtime-image-smoke.js \
     && rm /tmp/dev-dependencies.json /tmp/runtime-image-smoke.js
 

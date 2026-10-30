@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
-# Delete old versions of a repository's GHCR image. Dry run unless --delete.
+# Delete old versions of one of a repository's GHCR images. Dry run unless --delete.
 #
-#   ghcr-retention.sh <owner>/<repo> [--delete]
+#   ghcr-retention.sh <owner>/<repo> <package> <app directory> [--delete]
+#   ghcr-retention.sh tempo-co/tempo tempo-api apps/api
 #
 # Keeps versions tagged `main`, the images of the last KEEP_MAIN (default 5) main commits
-# (rollback targets), versions tagged `pr-<n>` for open PRs, versions younger than KEEP_DAYS
-# (default 30), and every manifest those versions reference (the platform image and its
-# attestation, which GHCR lists as untagged versions).
+# that changed the app directory (rollback targets), versions tagged `pr-<n>` for open PRs,
+# versions younger than KEEP_DAYS (default 30), and every manifest those versions reference
+# (the platform image and its attestation, which GHCR lists as untagged versions).
 set -Eeuo pipefail
 shopt -s inherit_errexit
 
-REPO=${1:?usage: ghcr-retention.sh <owner>/<repo> [--delete]}
+usage='usage: ghcr-retention.sh <owner>/<repo> <package> <app directory> [--delete]'
+REPO=${1:?$usage}
+PACKAGE=${2:?$usage}
+APP_DIR=${3:?$usage}
 OWNER=${REPO%/*}
-PACKAGE=${REPO#*/}
 DELETE=0
-[[ ${2:-} == --delete ]] && DELETE=1
+[[ ${4:-} == --delete ]] && DELETE=1
 KEEP_DAYS=${KEEP_DAYS:-30}
 KEEP_MAIN=${KEEP_MAIN:-5}
 VERSIONS_API=orgs/$OWNER/packages/container/$PACKAGE/versions
@@ -23,7 +26,7 @@ export GH_TOKEN
 
 versions=$(gh api --paginate "$VERSIONS_API?per_page=100" | jq -s 'add')
 open_prs=$(gh pr list -R "$REPO" --state open --limit 1000 --json number --jq '[.[].number | "pr-\(.)"]')
-recent_main=$(gh api "repos/$REPO/commits?sha=main&per_page=$KEEP_MAIN" --jq '[.[].sha | "sha-\(.)"]')
+recent_main=$(gh api "repos/$REPO/commits?sha=main&path=$APP_DIR&per_page=$KEEP_MAIN" --jq '[.[].sha | "sha-\(.)"]')
 cutoff=$(date -u -d "-$KEEP_DAYS days" +%Y-%m-%dT%H:%M:%SZ)
 
 jq -e 'any(.[]; .metadata.container.tags | index("main"))' <<<"$versions" >/dev/null ||

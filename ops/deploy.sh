@@ -214,9 +214,7 @@ rm -f -- "$FAILED_FILE"
 log 'deployed and healthy'
 
 # Remove Tempo images that no container (running or stopped) uses.
-for component in api web; do
-    docker image prune --all --force --filter "label=org.opencontainers.image.source=https://github.com/tempo-co/tempo-$component" >/dev/null || true
-done
+docker image prune --all --force --filter 'label=org.opencontainers.image.source=https://github.com/tempo-co/tempo' >/dev/null || true
 
 if [[ -n ${AFTER_DEPLOY:-} ]]; then
     log "running post-deploy step: $AFTER_DEPLOY"

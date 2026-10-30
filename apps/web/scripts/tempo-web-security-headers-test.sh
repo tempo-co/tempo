@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/tempo-web-security-headers.XXXXXX")
 suffix=${tmp_dir##*/}
 image="tempo-web-security-headers:${suffix}"
@@ -123,7 +123,7 @@ check callback /bank-connections/callback proxy
 # Sharing only the network namespace keeps the synthetic API isolated from host services.
 docker run --detach --name "$mcp_upstream" \
     --network "container:$container" \
-    --volume "$repo_root/ops/tests/mcp-proxy-server.mjs:/server.mjs:ro" \
+    --volume "$repo_root/scripts/mcp-proxy-server.mjs:/server.mjs:ro" \
     node:22-alpine node /server.mjs >/dev/null
 python3 - "$port" <<'PY'
 import time

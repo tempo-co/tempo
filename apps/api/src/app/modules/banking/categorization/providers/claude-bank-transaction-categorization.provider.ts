@@ -7,8 +7,8 @@ import {z} from 'zod';
 
 import {ConfigurationService} from '@core/config/config.service';
 
-import contract from '../../../../../../ops/claude-bridge/contract.json';
-import merchantContract from '../../../../../../ops/claude-bridge/merchant-contract.json';
+import contract from '../../../../../../claude-bridge/contract.json';
+import merchantContract from '../../../../../../claude-bridge/merchant-contract.json';
 import {normalizeBankTransactionText} from '../../bank-transaction-display';
 import {normalizeBankTransactionLocation} from '../../bank-transaction-location';
 import {isHostname} from '../../banking.utils';

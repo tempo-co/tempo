@@ -1,6 +1,6 @@
 import {z} from 'zod';
 
-import categorizationContract from '../../../../ops/claude-bridge/contract.json';
+import categorizationContract from '../../../../claude-bridge/contract.json';
 
 const portSchema = z.coerce.number().int().min(0).max(65535);
 

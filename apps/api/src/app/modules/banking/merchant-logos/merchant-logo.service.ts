@@ -15,7 +15,7 @@ import {
 	RECONCILE_MERCHANT_LOGOS_JOB,
 } from '@core/queue/queue.constants';
 
-import merchantContract from '../../../../../ops/claude-bridge/merchant-contract.json';
+import merchantContract from '../../../../../claude-bridge/merchant-contract.json';
 import {MERCHANT_LOGO_NOT_FOUND} from '../api/constants/banking-messages.constants';
 import {BankTransaction} from '../bank-transaction.entity';
 import {chunkArray, safeErrorName} from '../banking.utils';

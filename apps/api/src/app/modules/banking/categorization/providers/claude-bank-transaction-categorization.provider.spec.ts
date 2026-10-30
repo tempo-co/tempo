@@ -7,8 +7,8 @@ import {join} from 'node:path';
 
 import {ConfigurationService} from '@core/config/config.service';
 
-import contract from '../../../../../../ops/claude-bridge/contract.json';
-import merchantContract from '../../../../../../ops/claude-bridge/merchant-contract.json';
+import contract from '../../../../../../claude-bridge/contract.json';
+import merchantContract from '../../../../../../claude-bridge/merchant-contract.json';
 import {
 	toBankTransactionCategorizationInput,
 	toBankTransactionCategorizationWebSearchInput,
