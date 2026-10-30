@@ -14,12 +14,12 @@ umask 022
 # The PIN pattern is the security boundary; keep its character ranges ASCII-only.
 export LC_ALL=C
 
-REPO_URL=https://github.com/tempo-co/tempo-api
+REPO_URL=https://github.com/tempo-co/tempo
 # Fetched by commit, not branch: the raw CDN caches branch files and could serve an older pin.
 SOURCE=${SYNC_PINS_SOURCE:-}
 STATE=${STATE_DIRECTORY:-/var/lib/tempo-sync-pins}
 declare -A FILES=(
-    [docker-compose.production.yml]=${SYNC_PINS_ETC:-/etc/tempo/compose}/production.compose.yml
+    [ops/production.compose.yml]=${SYNC_PINS_ETC:-/etc/tempo/compose}/production.compose.yml
     [ops/tailscale.compose.yml]=${SYNC_PINS_ETC:-/etc/tempo/compose}/tailscale.compose.yml
 )
 PIN='^( +)image: ([a-z0-9._/-]+):([A-Za-z0-9._-]+)@(sha256:[0-9a-f]{64})$'
@@ -82,7 +82,7 @@ fetch() {
         local sha
         sha=$(timeout 20 git ls-remote "$REPO_URL" refs/heads/main | cut -f1) || return 1
         [[ $sha =~ ^[0-9a-f]{40}$ ]] || return 1
-        SOURCE=https://raw.githubusercontent.com/tempo-co/tempo-api/$sha
+        SOURCE=https://raw.githubusercontent.com/tempo-co/tempo/$sha
     fi
     local path
     for path in "${!FILES[@]}"; do

@@ -1,8 +1,7 @@
 name: GHCR retention
 
-# Weekly cleanup of old image versions (see ops/ghcr-retention.sh). tempo-web calls this
-# workflow for its own package. Scheduled runs are dry runs until the calling repository's
-# variable GHCR_RETENTION_DELETE is 'true'.
+# Weekly cleanup of old image versions of both packages (see ops/ghcr-retention.sh).
+# Scheduled runs are dry runs until the repository variable GHCR_RETENTION_DELETE is 'true'.
 on:
     schedule:
         - cron: '17 4 * * 1'
@@ -10,11 +9,6 @@ on:
         inputs:
             delete:
                 description: Delete versions (otherwise dry run)
-                type: boolean
-                default: false
-    workflow_call:
-        inputs:
-            delete:
                 type: boolean
                 default: false
 
@@ -25,14 +19,21 @@ permissions:
 
 jobs:
     retention:
-        name: GHCR retention
+        name: GHCR retention (${{ matrix.package }})
         runs-on: ubuntu-latest
-        concurrency: ghcr-retention-${{ github.repository }}
+        concurrency: ghcr-retention-${{ matrix.package }}
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - package: tempo-api
+                      directory: apps/api
+                    - package: tempo-web
+                      directory: apps/web
         steps:
             - name: Checkout retention script
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
-                  repository: tempo-co/tempo-api
                   persist-credentials: false
                   sparse-checkout: ops/ghcr-retention.sh
                   sparse-checkout-cone-mode: false
@@ -41,6 +42,8 @@ jobs:
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   DELETE: ${{ inputs.delete || (github.event_name == 'schedule' && vars.GHCR_RETENTION_DELETE == 'true') }}
+                  PACKAGE: ${{ matrix.package }}
+                  APP_DIR: ${{ matrix.directory }}
               run: |
                   if [[ "$DELETE" == true ]]; then set -- --delete; fi
-                  bash ops/ghcr-retention.sh "$GITHUB_REPOSITORY" "$@"
+                  bash ops/ghcr-retention.sh "$GITHUB_REPOSITORY" "$PACKAGE" "$APP_DIR" "$@"

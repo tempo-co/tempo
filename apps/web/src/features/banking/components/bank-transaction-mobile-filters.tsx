@@ -1,0 +1,112 @@
+import {SlidersHorizontal} from 'lucide-react';
+import * as React from 'react';
+
+import {Badge} from '@/components/ui/badge';
+import {Button} from '@/components/ui/button';
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/ui/drawer';
+import {ScrollArea} from '@/components/ui/scroll-area';
+import {cn} from '@/utils/cn';
+
+import {BankTransactionFilterParams} from '../types/bank-transaction';
+import {countActiveFilters} from '../utils/drill-filters';
+import {BankTransactionAccountFilter} from './bank-transaction-account-filter';
+import {BankTransactionBaseAmountFilter} from './bank-transaction-base-amount-filter';
+import {BankTransactionCashFlowFilter} from './bank-transaction-cash-flow-filter';
+import {BankTransactionCategoryFilter} from './bank-transaction-category-filter';
+import {BankTransactionCategorySourceFilter} from './bank-transaction-category-source-filter';
+import {BankTransactionDateFilter} from './bank-transaction-date-filter';
+
+type BankTransactionMobileFiltersProps = {
+  filters: BankTransactionFilterParams;
+  isFilteringApplied: boolean;
+  onClearFilters: () => void;
+  className?: string;
+};
+
+export function BankTransactionMobileFilters({
+  filters,
+  isFilteringApplied,
+  onClearFilters,
+  className,
+}: BankTransactionMobileFiltersProps) {
+  const [open, setOpen] = React.useState(false);
+  const mobileFiltersScrollAreaRef = React.useRef<HTMLDivElement>(null);
+  const activeFilterCount = countActiveFilters(filters);
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    const frame = requestAnimationFrame(() => {
+      const scrollArea = mobileFiltersScrollAreaRef.current;
+      scrollArea?.scrollTo({top: 0});
+      const viewport = scrollArea?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');
+      viewport?.scrollTo({top: 0});
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
+
+  return (
+    <Drawer open={open} onOpenChange={setOpen}>
+      <DrawerTrigger asChild>
+        <Button
+          variant='outline'
+          size='sm'
+          className={cn(
+            'h-12 shrink-0 px-3',
+            activeFilterCount > 0 ? 'border' : 'border-dashed',
+            className,
+          )}
+          data-testid='bank-transaction-mobile-filters-trigger'
+        >
+          <SlidersHorizontal aria-hidden='true' />
+          Filters
+          {activeFilterCount > 0 && (
+            <Badge variant='secondary' className='rounded-sm px-1 font-normal'>
+              {activeFilterCount}
+            </Badge>
+          )}
+        </Button>
+      </DrawerTrigger>
+      <DrawerContent
+        data-testid='bank-transaction-mobile-filters'
+        className='max-h-[90dvh] overflow-hidden p-0'
+      >
+        <DrawerHeader className='border-b px-4 pt-3 pb-4 text-left'>
+          <DrawerTitle>Filters</DrawerTitle>
+        </DrawerHeader>
+        <ScrollArea
+          type='always'
+          className='flex h-full min-h-0 flex-1 flex-col *:data-radix-scroll-area-viewport:h-auto *:data-radix-scroll-area-viewport:min-h-0 *:data-radix-scroll-area-viewport:flex-1'
+          data-testid='bank-transaction-mobile-filters-scroll-area'
+          ref={mobileFiltersScrollAreaRef}
+        >
+          <div className='px-4 py-4' data-testid='bank-transaction-mobile-filters-body'>
+            <BankTransactionDateFilter filters={filters} variant='mobile' />
+            <BankTransactionCategoryFilter filters={filters} variant='mobile' />
+            <BankTransactionCategorySourceFilter filters={filters} variant='mobile' />
+            <BankTransactionCashFlowFilter filters={filters} variant='mobile' />
+            <BankTransactionBaseAmountFilter filters={filters} variant='mobile' />
+            <BankTransactionAccountFilter filters={filters} variant='mobile' />
+          </div>
+        </ScrollArea>
+        <DrawerFooter className='mt-0 flex-row items-center justify-end gap-2 border-t px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
+          <Button variant='ghost' onClick={onClearFilters} disabled={!isFilteringApplied}>
+            Clear all
+          </Button>
+          <DrawerClose asChild>
+            <Button>Done</Button>
+          </DrawerClose>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
+  );
+}

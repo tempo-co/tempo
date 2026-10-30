@@ -1,0 +1,112 @@
+import {FileQuestion, RefreshCw} from 'lucide-react';
+
+import {EmptyState} from '@/components/shared/layout/app-empty-state';
+import {Button} from '@/components/ui/button';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogCornerClose,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
+import {ScrollArea} from '@/components/ui/scroll-area';
+import {Skeleton} from '@/components/ui/skeleton';
+import {useIsOnline} from '@/hooks/use-connection';
+import {HttpError} from '@/utils/api';
+
+import {useGetBankTransaction} from '../api/use-get-bank-transaction';
+import {BankTransaction} from '../types/bank-transaction';
+import {resolveBankTransactionDisplayTitle} from '../utils/formatters';
+import {BankTransactionDetails} from './bank-transaction-details';
+import {MerchantLogoTile} from './merchant-logo-tile';
+
+type BankTransactionDetailsDialogProps = {
+  transactionId: BankTransaction['id'];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+export function BankTransactionDetailsDialog({
+  transactionId,
+  open,
+  onOpenChange,
+}: BankTransactionDetailsDialogProps) {
+  const isOnline = useIsOnline();
+  const {transaction, isPending, isFetching, isError, error, refetch} = useGetBankTransaction(
+    transactionId,
+    open,
+  );
+  const isNotFound = error instanceof HttpError && error.status === 404;
+  const isLoading = isPending || (isFetching && !transaction);
+  const transactionTitle = transaction
+    ? resolveBankTransactionDisplayTitle(transaction)
+    : 'Transaction details';
+
+  return (
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent
+        data-testid='bank-transaction-inspector'
+        className='flex h-[min(90dvh,56rem)] max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-h-[90vh] sm:max-w-4xl [&>button:last-child]:hidden'
+      >
+        <ResponsiveDialogCornerClose label='Close transaction details' />
+        <ResponsiveDialogHeader className='shrink-0 border-b px-5 pt-5 pr-16 pb-4 text-left sm:px-6'>
+          <div className='flex min-w-0 items-center gap-3'>
+            {transaction && <MerchantLogoTile transaction={transaction} className='h-10 w-10' />}
+            <ResponsiveDialogTitle className='min-w-0 text-xl leading-tight wrap-anywhere sm:text-2xl sm:leading-8'>
+              {transactionTitle}
+            </ResponsiveDialogTitle>
+          </div>
+          <ResponsiveDialogDescription className='mt-1 md:mt-0'>
+            {transaction ? 'Bank transaction' : 'Transaction details'}
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+
+        <ScrollArea
+          type='always'
+          data-testid='bank-transaction-inspector-body'
+          className='min-h-0 flex-1'
+          aria-busy={isPending || isFetching}
+        >
+          {isLoading ? (
+            <div role='status' aria-label='Loading bank transaction' className='p-5 sm:p-6'>
+              <Skeleton className='h-80 w-full rounded-lg bg-card sm:h-96' />
+            </div>
+          ) : !transaction || (isError && isOnline) ? (
+            <div role='alert' className='p-5 sm:p-6'>
+              {isNotFound ? (
+                <EmptyState
+                  framed={false}
+                  icon={FileQuestion}
+                  title='Transaction not found'
+                  description='This transaction may have been removed or the details may be out of date.'
+                >
+                  <ResponsiveDialogClose asChild>
+                    <Button variant='outline' className='min-h-11'>
+                      Close
+                    </Button>
+                  </ResponsiveDialogClose>
+                </EmptyState>
+              ) : (
+                <EmptyState
+                  tone='error'
+                  framed={false}
+                  icon={RefreshCw}
+                  title='Could not load bank transaction'
+                  description='The transaction service did not respond. Try again in a moment.'
+                >
+                  <Button variant='outline' onClick={() => void refetch()} className='min-h-11'>
+                    Try again
+                  </Button>
+                </EmptyState>
+              )}
+            </div>
+          ) : (
+            <BankTransactionDetails transaction={transaction} />
+          )}
+        </ScrollArea>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
+  );
+}

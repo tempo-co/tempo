@@ -1,0 +1,115 @@
+import {loadEnv} from 'vite';
+
+type Message = {
+  ID: string;
+  To: {Address: string}[];
+};
+
+export class EmailUtils {
+  static readonly EMAIL_UI_URL = loadEnv('development', process.cwd(), '').VITE_EMAIL_UI_URL;
+
+  static async clearEmails() {
+    await fetch(`${this.EMAIL_UI_URL}/api/v1/messages`, {method: 'DELETE'});
+  }
+
+  static async findEmailByRecipient(
+    recipientEmail: string,
+    retries: number = 10,
+    delayMs: number = 200,
+  ) {
+    while (retries > 0) {
+      const messages = await this._fetchMessages();
+      const email = messages.find((msg) => this._hasRecipient(msg, recipientEmail));
+
+      if (email) {
+        const res = await fetch(`${this.EMAIL_UI_URL}/api/v1/message/${email.ID}`);
+        const fullEmail = (await res.json()) as {Text: string};
+        return fullEmail;
+      }
+
+      retries--;
+      if (retries > 0) await this._sleep(delayMs);
+    }
+  }
+
+  static async countEmailsByRecipient(
+    recipientEmail: string,
+    expectedCount: number,
+    retries: number = 20,
+    delayMs: number = 200,
+  ) {
+    let lastKnownCount = 0;
+    for (let i = 0; i < retries; i++) {
+      const messages = await this._fetchMessages();
+      const currentCount = messages.filter((msg) => this._hasRecipient(msg, recipientEmail)).length;
+
+      lastKnownCount = currentCount;
+      if (currentCount === expectedCount) {
+        return currentCount;
+      }
+
+      if (i < retries - 1) {
+        await this._sleep(delayMs);
+      }
+    }
+    return lastKnownCount;
+  }
+
+  /** Reads the six-digit code from the latest verification email sent to `recipientEmail`. */
+  static async getVerificationCode(recipientEmail: string) {
+    const message = await this.findEmailByRecipient(recipientEmail);
+    return this.extractCode(message?.Text);
+  }
+
+  static extractOnboardingVerifyEmailLink(body?: string) {
+    if (!body) return '';
+    const linkRegex =
+      /\(\s*((?:https?:\/\/)[^\s)]+\/verify-email\?email=[^&"]+&code=\d{6}[^\s)]*)\s*\)/i;
+    const match = body.match(linkRegex);
+    return match ? match[1] : '';
+  }
+
+  static extractEmailChangeLink(body?: string) {
+    return this._extractTokenLink('verify-email-change', body);
+  }
+
+  static extractResetPasswordLink(body?: string) {
+    return this._extractTokenLink('reset-password', body);
+  }
+
+  private static _extractTokenLink(path: string, body?: string) {
+    if (!body) return '';
+    const linkRegex = new RegExp(
+      `(https?:\\/\\/[^\\s"'<>]*\\/${path}\\?email=[^&"\\s<>]+&token=[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}[^\\s"'<>]*)`,
+      'i',
+    );
+    const match = body.match(linkRegex);
+    return match ? match[1] : '';
+  }
+
+  static extractCode(body?: string) {
+    if (!body) return '';
+    const SIX_DIGIT_REGEX = /(\d{6})/i;
+    const pattern = new RegExp(
+      `You can also manually enter the code below.?\\s*(${SIX_DIGIT_REGEX.source})`,
+      'i',
+    );
+    const match = body.match(pattern);
+    return match ? match[1] : '';
+  }
+
+  private static async _fetchMessages() {
+    const res = await fetch(`${this.EMAIL_UI_URL}/api/v1/messages`);
+    const data = (await res.json()) as {messages: Message[]};
+    return data.messages;
+  }
+
+  private static _hasRecipient(message: Message, recipientEmail: string) {
+    const normalizedRecipient = recipientEmail.toLowerCase();
+    return message.To.some((recipient) => recipient.Address.toLowerCase() === normalizedRecipient);
+  }
+
+  private static _sleep(ms: number = 250) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+}

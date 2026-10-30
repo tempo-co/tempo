@@ -1,0 +1,74 @@
+import {createFileRoute, stripSearchParams} from '@tanstack/react-router';
+import {zodValidator} from '@tanstack/zod-adapter';
+
+import {AppBodyLayout} from '@/components/shared/layout/app-body';
+import {LoadingBar} from '@/components/shared/loading-bar';
+import {useGetBankTransactions} from '@/features/banking/api/use-get-bank-transactions';
+import {BankTransactionDetailsDialog} from '@/features/banking/components/bank-transaction-details-dialog';
+import {BankTransactionTable} from '@/features/banking/components/bank-transaction-table';
+import {bankTransactionRouteSearchSchema} from '@/features/banking/types/bank-transaction';
+import {useBankTransactionInspector} from '@/hooks/use-bank-transaction-inspector';
+import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
+import {savedDataStatus} from '@/utils/query-status';
+
+export const Route = createFileRoute('/bank-transactions/')({
+  component: BankTransactionsIndex,
+  validateSearch: zodValidator(bankTransactionRouteSearchSchema),
+  // The schema folds the former Activity filter into Cash flow; drop its key so clearing Cash flow clears it.
+  search: {middlewares: [stripSearchParams(['financialEventTypes'] as never)]},
+  beforeLoad: ({context}) => {
+    handleAuthenticatedRedirect(context);
+  },
+});
+
+function BankTransactionsIndex() {
+  const searchParams = Route.useSearch();
+  const transactionId = searchParams.transactionId;
+  const {openTransaction, closeTransaction} = useBankTransactionInspector('/bank-transactions/');
+  const {data, isPlaceholderData, refetch, pagination, filters, sort, ...query} =
+    useGetBankTransactions(searchParams);
+  const {isPending, isError: showError} = savedDataStatus({...query, data});
+  const totalTransactions = data?.total ?? 0;
+  const transactionCountLabel = totalTransactions === 1 ? 'transaction' : 'transactions';
+  const resultSummary = isPending
+    ? 'Loading synchronized records...'
+    : showError
+      ? 'Transaction data is unavailable right now'
+      : `${totalTransactions.toLocaleString()} ${transactionCountLabel}`;
+
+  return (
+    <>
+      <LoadingBar isPending={isPending} />
+      <AppBodyLayout className='max-md:my-6'>
+        <div className='space-y-6 max-md:space-y-4'>
+          <div
+            data-testid='bank-transactions-heading'
+            className='max-md:flex max-md:flex-wrap max-md:items-baseline max-md:justify-between max-md:gap-x-3 max-md:gap-y-1'
+          >
+            <h1 className='text-page-title'>Bank transactions</h1>
+            <p className='mt-1 text-sm text-muted-foreground max-md:mt-0 max-md:text-right'>
+              {resultSummary}
+            </p>
+          </div>
+          <BankTransactionTable
+            transactions={data?.transactions || []}
+            totalTransactions={totalTransactions}
+            isPending={isPending}
+            isPlaceholderData={isPlaceholderData}
+            pagination={pagination}
+            filters={filters}
+            sort={sort}
+            isError={showError}
+            onRetry={() => void refetch()}
+            onTransactionSelect={openTransaction}
+          />
+        </div>
+      </AppBodyLayout>
+      <BankTransactionDetailsDialog
+        transactionId={transactionId ?? ''}
+        open={Boolean(transactionId)}
+        onOpenChange={closeTransaction}
+      />
+    </>
+  );
+}

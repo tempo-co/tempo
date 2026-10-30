@@ -1,17 +1,17 @@
 # Tempo operations
 
-CI builds one image per commit, publishes `ghcr.io/tempo-co/tempo-{api,web}:pr-<n>` for every same-repo PR, and tags `:main` after tests pass on `main`. `ops/deploy.sh` deploys those images to both targets: it resolves tags to digests, recreates API and web (plus any pinned service whose pin changed, see below), waits for health, and restores the previous images if the new ones are unhealthy. Database migrations are not rolled back.
+CI builds an image of each app a commit changes, publishes `ghcr.io/tempo-co/tempo-{api,web}:pr-<n>` for same-repo PRs, and tags `:main` after tests pass on `main` (`docs/ci-and-images.md`). `ops/deploy.sh` deploys those images to both targets: it resolves tags to digests, recreates API and web (plus any pinned service whose pin changed, see below), waits for health, and restores the previous images if the new ones are unhealthy. Database migrations are not rolled back.
 
 | File | Purpose |
 |---|---|
 | `deploy.sh` | Deploy script for both targets |
 | `targets/{production,staging}.env` | Non-secret per-target settings |
 | `backup.sh` | Validated `pg_dump`, scheduled and pre-deploy |
-| `install.sh` | Copies the above to the host |
+| `install.sh` | Copies the above to the host; `install.sh claude-bridge` installs the bridge from `apps/api/claude-bridge` |
 | `sync-pins.sh` | Applies image-pin-only Compose changes from `main` before each production deploy |
+| `production.compose.yml` | Production stack: PostgreSQL, Redis, API and web |
 | `tailscale.compose.yml` | Tailscale sidecar giving production its own tailnet device |
-| `runtime-image-smoke.js` | Runtime image check run by the `Dockerfile` |
-| `ghcr-retention.sh` | Weekly GHCR cleanup (`.github/workflows/ghcr-retention.yml`, also used by tempo-web): keeps `main`, open PRs' `pr-<n>` and anything newer than 30 days. Also keeps the last 5 `main` images as rollback targets. Dry run until the repo variable `GHCR_RETENTION_DELETE=true`; GitHub pauses scheduled workflows after 60 days without repo activity |
+| `ghcr-retention.sh` | Weekly GHCR cleanup of both packages (`.github/workflows/ghcr-retention.yml`): keeps `main`, open PRs' `pr-<n>` and anything newer than 30 days. Also keeps the images of the last 5 `main` commits that changed the app as rollback targets. Dry run until the repo variable `GHCR_RETENTION_DELETE=true`; GitHub pauses scheduled workflows after 60 days without repo activity |
 | `systemd/` | Production deploy and backup timers (installed by `install.sh`); staging Docker daemon (user unit, installed once by hand) |
 | `staging/` | Staging Compose file, env template, database refresh |
 
@@ -28,7 +28,7 @@ cat /var/lib/tempo-deploy/deployed.env                # what is deployed
 
 `tempo-backup.timer` runs `backup.sh` on a schedule and keeps a fixed number of timestamped archives; manual `tempo-pre-*.dump` files are never pruned. Schedule, directory and retention are set by the units `install.sh` installs. Staging refreshes from these archives.
 
-After changing anything else in `ops/` or `docker-compose.production.yml`, install from a clean `main` checkout:
+After changing anything else in `ops/`, install from a clean `main` checkout:
 
 ```bash
 git fetch && git checkout --detach origin/main
@@ -68,7 +68,7 @@ The check is silent on success and prints a safe failure reason with exit status
 
 PostgreSQL, Redis and the API share the `default` network. The API also joins the internal `frontend` network; web joins `frontend`, the web-only `ingress` network that publishes its loopback port, and the `tailscale` network it shares with the Tailscale sidecar. Web therefore has no network path to the database or cache. Do not mark `default` internal: the API needs outbound access.
 
-The `tailscale` network has a fixed subnet so the sidecar gets the static address `10.213.47.2`, outside the range Docker assigns to web. Web's Nginx takes the client address from `X-Forwarded-For` only on requests from that address, so the API sees tailnet clients' `100.x` addresses while local processes and other containers cannot set their own. Changing the address needs the matching change in tempo-web's `nginx/tempo.conf`. Compose changes to either network reach running containers only when they are recreated: after `sudo ops/install.sh production`, recreate web (`deploy.sh` only does that when an image changes) and then the sidecar.
+The `tailscale` network has a fixed subnet so the sidecar gets the static address `10.213.47.2`, outside the range Docker assigns to web. Web's Nginx takes the client address from `X-Forwarded-For` only on requests from that address, so the API sees tailnet clients' `100.x` addresses while local processes and other containers cannot set their own. Changing the address needs the matching change in `apps/web/nginx/tempo.conf`. Compose changes to either network reach running containers only when they are recreated: after `sudo ops/install.sh production`, recreate web (`deploy.sh` only does that when an image changes) and then the sidecar.
 
 ## Staging
 

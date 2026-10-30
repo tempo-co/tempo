@@ -1,35 +1,42 @@
 # CI and images
 
-Workflow: `.github/workflows/ci.yml` (`CI/CD`). Jobs: `Lint & Format`, `Build`, `Unit Tests`, `E2E Tests`, `Image`, `Release main image`.
+Workflow: `.github/workflows/ci.yml` (`CI/CD`). One workflow runs for every PR and every push to `main`; its jobs run only for the parts of the repository a change touches. API image and migration rules: `apps/api/docs/migrations-and-image.md`.
+
+## Which jobs run
+
+The `Changes` job sets four flags. A PR compares its merge commit with the base branch. A push to `main` compares each app with the commit its current `:main` image was built from (read from GHCR by `.github/scripts/released-revision.sh`), so a change whose release was skipped because `main` moved on is released by the next push; `ops` compares with the previous `main`.
+
+| Flag | Set when the change touches | Jobs |
+|---|---|---|
+| `api` | `apps/api/**` | `API lint & format`, `API build`, `API unit tests`, `API E2E tests`, `API image` |
+| `web` | `apps/web/**` | `Web lint & format`, `Web build`, `Web image` |
+| `e2e` | `apps/api/**` or `apps/web/**` | `Web E2E shard 1/8`…`8/8`, `Web E2E tests` |
+| `ops` | `ops/**` | `Ops checks` |
+
+A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, and an area whose base commit is unknown (not in this history, or unreadable) runs. Other files (root docs, `AGENTS.md`, other workflows, Dependabot config) run no jobs. Jobs are gated with `if:`, never with `on: paths:`: a skipped job reports success, while a skipped workflow leaves a required check pending forever.
+
+`CI` needs every job and fails if any of them failed or was cancelled; skipped jobs count as passing. It is the only required check, so job names can change without touching the ruleset.
 
 ## What each job covers
 
-- `Lint & Format`: root `lint:check`/`format:check`, the `mcp/` package's lint/format, `shellcheck -x` on the `ops/` scripts, and `docker compose config -q` on the production, Tailscale and staging Compose files with synthetic values for every required variable. A new `${VAR:?}` in a Compose file needs a synthetic export there.
-- `Build`: `npm run build` plus the `mcp/` build.
-- `Unit Tests`: Jest, `node --test ops/claude-bridge/*.test.mjs`, and the `mcp/` tests.
-- `E2E Tests`: `npm run test:e2e:cov` on fresh services. It normally takes a few minutes; a run far beyond that is stuck, not slow.
-- `Image`: builds the Dockerfile, which runs `ops/runtime-image-smoke.js` (no dev dependencies, no env files, email templates present), so a built image is a smoke-tested image. Same-repo, non-Dependabot PRs and pushes to main publish `ghcr.io/<owner>/tempo-api:sha-<sha>` and `:pr-<n>`.
-- `Release main image`: on main only, after every other job passed, retags `sha-<sha>` as `:main` with `docker buildx imagetools create` (no rebuild). It is serialized and skips when main has moved on, so `:main` never moves backwards. Deployments track `:main`.
+- `Ops checks`: `shellcheck -x` on the `ops/` scripts, and `docker compose config -q` on the production, Tailscale and staging Compose files with synthetic values for every required variable. A new `${VAR:?}` in a Compose file needs a synthetic export there.
+- `API lint & format`: the API's `lint:check`/`format:check` and the `mcp/` package's lint/format.
+- `API build`: `npm run build` plus the `mcp/` build.
+- `API unit tests`: Jest, `node --test claude-bridge/*.test.mjs`, and the `mcp/` tests.
+- `API E2E tests`: `npm run test:e2e:cov` on fresh services. It normally takes a few minutes; a run far beyond that is stuck, not slow.
+- `API image` and `Web image`: build `apps/api/Dockerfile` and `apps/web/Dockerfile.production`. The API Dockerfile runs a runtime smoke check, so a built API image is a smoke-tested image. Same-repo, non-Dependabot PRs and pushes to `main` publish `ghcr.io/<owner>/tempo-api` and `ghcr.io/<owner>/tempo-web` as `:sha-<sha>` and `:pr-<n>`. Images carry `org.opencontainers.image.source` (this repository) and `org.opencontainers.image.revision` (the commit).
+- `Web build`: `npm run build` plus `scripts/tempo-web-security-headers-test.sh`, which builds the production web image and probes Nginx.
+- `Web E2E shard n/8`: the Playwright suite against the Docker stack in `apps/web/docker-compose.e2e.yml`. The API image is this run's `API image` when `api` is set (pinned by digest; a Dependabot or fork PR, which publishes nothing, passes it as a run artifact instead), otherwise `ghcr.io/tempo-co/tempo-api:main` pinned by digest. The run summary records the image and its revision. Every spec runs in Chromium and WebKit when `web` is set; an API-only change runs Chromium only, since WebKit catches browser-engine differences only a web change can introduce. `Web E2E tests` merges the shard reports and fails unless every shard passed.
+- `Release main images`: on `main` only, after `CI` passed, retags `sha-<sha>` as `:main` with `docker buildx imagetools create` (no rebuild), for each app whose flag is set, API before web. It is serialized and skips when `main` has moved on, so `:main` never moves backwards. Production deploys `:main` (`ops/README.md`), so an app a commit did not touch keeps running its previous image.
 
 ## Rules
 
-- Keep job names unchanged: they are required checks. Grep for a job or file name before renaming it.
 - Never publish a tag deployments track from a pre-test job.
-- Cross-repo contract changes: a tempo-web PR that needs this API's unmerged change declares `Depends-on: tempo-api#<n>` in its body and runs against `:pr-<n>`. Merge the API PR first, and only drop the `Depends-on` line once `Release main image` for the merge commit is green; a web run started earlier pulls the old `:main` and fails on the new endpoints.
+- An API contract change and the web code that uses it belong in one PR, so web E2E runs against the API that serves it.
 - No CI run after a push usually means the PR conflicts with main; merge main into the branch rather than pushing empty commits.
-- When two PRs both edit `AGENTS.md` or the same docs, simulate the second merge (`git merge-tree --write-tree`) before handing them over.
+- When two PRs both edit an `AGENTS.md` or the same docs, simulate the second merge (`git merge-tree --write-tree`) before handing them over.
+- Image cleanup on a host must filter on `org.opencontainers.image.source` and pass `--all`; tagged leftovers are never dangling.
 
-## Images
+## GHCR retention
 
-- The runtime stage sets `NODE_ENV=production` and ships only `dist/` and production dependencies. `ops/claude-bridge/contract.json` is copied into the build because the config schema imports it; a new contract file must be added to the `Dockerfile` too.
-- Email `.hbs` templates are copied to `dist/` by `nest-cli.json` assets and checked by the smoke script; keep templates under `src/app/core/email/templates`.
-- The `mcp/` package is excluded from the API build's file discovery (`tsconfig.build.json`). The hosted controller explicitly imports the Nest-free tool registration, so that shared dependency closure is compiled into `dist/mcp/src/` as CommonJS. The stdio runtime remains excluded; its own build emits ESM to `mcp/dist/stdio.js`. Do not copy `mcp/package.json` into `dist/mcp/`, where its `type: module` would change how the API's CommonJS output loads.
-- Root build, start, seed/schema and test npm hooks generate the shared category catalog before compilation. Direct Jest or TypeScript invocations need `npm run generate:mcp` first. The Docker builder copies `mcp/src/` and `mcp/scripts/generate-categories.mjs`; it needs no separate MCP install. The root SDK version matches the standalone lockfile. The runtime image smoke loads the API module and its compiled shared registration with production dependencies.
-- Root `ts-node` commands treat `mcp/src/` as CommonJS and resolve its `.js` source specifiers to TypeScript through the root `tsconfig.json` overrides. Keep those overrides scoped to root commands; the standalone package remains ESM.
-- Image cleanup must filter on `org.opencontainers.image.source` and pass `--all`; tagged leftovers are never dangling.
-
-## Migrations
-
-- Migrations live in `src/app/core/database/migrations/` and run automatically only in production. After merging main, check for a timestamp collision with an unshipped branch migration; rename the file and its class/`name` together.
-- Prove a migration with the real QueryRunner against disposable PostgreSQL: up, read/write through the migrated schema, down, up again, and a second run that applies nothing. Fingerprint unrelated tables (row count plus an md5 over rows) before and after to show they did not change.
-- A data-migration spec may ship with its migration and be removed once the migration has run everywhere it needs to.
+`.github/workflows/ghcr-retention.yml` runs `ops/ghcr-retention.sh` weekly for both packages (see `ops/README.md`). Scheduled runs only report until the repository variable `GHCR_RETENTION_DELETE` is `true`. The `tempo-web` package's Actions access must grant this repository write and admin, or its image pushes and deletions fail with 403.
