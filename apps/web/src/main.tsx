@@ -1,4 +1,5 @@
 import '@fontsource-variable/inter';
+import {onlineManager} from '@tanstack/react-query';
 import {PersistQueryClientProvider} from '@tanstack/react-query-persist-client';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -52,15 +53,17 @@ if (!('locks' in navigator)) {
     queryClient.removeQueries({queryKey: CURRENT_ACCOUNT_KEY, exact: true});
     await loadInitialPage();
   };
-  const ready = hasSavedAccount()
-    ? loadInitialPage()
-    : queryClient
-        .fetchQuery(currentAccountQuery)
-        .then(loadInitialPageForSession, (error: unknown) =>
-          error instanceof HttpError && error.status === 401
-            ? undefined
-            : loadInitialPageForSession(),
-        );
+  // Offline, the check would wait for a connection; App shows that Tempo cannot be reached instead.
+  const ready =
+    hasSavedAccount() || !onlineManager.isOnline()
+      ? loadInitialPage()
+      : queryClient
+          .fetchQuery(currentAccountQuery)
+          .then(loadInitialPageForSession, (error: unknown) =>
+            error instanceof HttpError && error.status === 401
+              ? undefined
+              : loadInitialPageForSession(),
+          );
   void ready.then(() =>
     root.render(import.meta.env.DEV ? <React.StrictMode>{appRoot}</React.StrictMode> : appRoot),
   );
