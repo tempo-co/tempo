@@ -1,6 +1,6 @@
 # Tempo Web Agent Instructions
 
-React 19 + TypeScript SPA (Vite, TanStack Router/Query, Tailwind with shadcn-style Radix wrappers, Playwright E2E). `package.json`, `vite.config.ts`, `playwright.config.ts` and `.github/workflows/ci.yml` are authoritative; when `README.md` differs, trust them.
+React 19 + TypeScript SPA (Vite, TanStack Router/Query, Tailwind with shadcn-style Radix wrappers, Playwright E2E). `package.json`, `vite.config.ts`, `playwright.config.ts` and the root `.github/workflows/ci.yml` are authoritative; when `README.md` differs, trust them. Paths below are relative to `apps/web` unless they start at the repository root. Repo-wide rules (product direction, workflow, privacy, writing tests) are in the root `AGENTS.md`.
 
 ## Read before touching
 
@@ -10,33 +10,16 @@ React 19 + TypeScript SPA (Vite, TanStack Router/Query, Tailwind with shadcn-sty
 - `docs/pwa.md`: before changing the manifest, icons, base path or offline shell.
 - `DESIGN.md`: palette, typography and component tokens. `PRODUCT.md`: product scope.
 
-## Product direction and cross-repo workflow
-
-- Tempo is personal-use-first, not a public multi-tenant SaaS. A private self-hosted production deployment exists; do not assume managed cloud services or public SaaS behavior.
-- The intended deployment model is a self-hosted 24/7 instance with real bank data from Enable Banking and access from other devices. Keep that separate from local development and test environments.
-- Do not push directly to `main`; use a pull request with passing CI. Use Conventional Commit-style messages such as `feat: ...` and `fix: ...`.
-- The adjacent backend repository is `../tempo-api`; in task descriptions, “frontend” means this `tempo-web` repo and “backend” means `tempo-api`. For cross-repo work, inspect both repositories and their `AGENTS.md` files.
-- Frontend E2E runs against `ghcr.io/tempo-co/tempo-api:main` by default; `TEMPO_API_E2E_IMAGE` can point the stack at a different API image. In CI, a web PR whose body contains a line `Depends-on: tempo-api#<n>` runs E2E against that open API PR's `pr-<n>` image (published for same-repo, non-Dependabot API PRs); a merged or closed API PR falls back to `main`, which includes the change once the API main release job has finished. Editing the PR body reruns CI; pushing to the API PR does not, so rerun the web E2E job after the API PR's Image job finishes.
-- Prefer integration/E2E coverage against local services over mocks when testing external integrations.
-
-## Privacy
-
-This repository and everything attached to it (commits, PRs, comments, issues, CI logs, images) are public. Tempo handles real bank data, so none of it may appear there.
-
-- Never put real personal data in code, tests, fixtures, docs, commits, PR descriptions or comments: names, emails, addresses, locations, transaction details (merchants, amounts, dates, references), IBANs or card numbers, host names, IPs or home-directory paths.
-- Use obviously fake values: `user@example.com`, "Example Shop", `example.ts.net`, published example IBANs such as `NL91ABNA0417164300`.
-- Build fixtures from scratch; never copy a real payload. Refer to production rows by UUID only.
-- If you find real personal data, stop and tell the owner instead of fixing it in a PR: the diff would publish it again.
-
 ## Verification
 
-- Size local verification to the change: run relevant static checks and focused tests, including regression proof where appropriate. Let PR CI run the full suite on fresh services. Run the full suite locally for cross-cutting changes, gaps in CI, or failures requiring reproduction. A complete passing CI run on the current head is the delivery gate.
+- Prefer integration/E2E coverage against local services over mocks when testing external integrations.
+- E2E runs against `ghcr.io/tempo-co/tempo-api:main` by default; `TEMPO_API_E2E_IMAGE` points the stack at another API image, such as a local build of `apps/api`. In CI it runs against the API image built in the same run when the change touches `apps/api`, otherwise against API `:main`.
 - Fresh worktree: `npm ci`, then `npx playwright install chromium webkit --with-deps` (as CI does) before any spec runs. Production and staging serve the app at `/`.
 - Static checks: `npm run lint:check`, `npm run format:check`, `npm run build`. `npm run lint` and `npm run format` modify files.
 - There is no unit-test runner; all tests are Playwright specs under `test/`. Find the specs for a change by grepping `test/e2e` for the route, component or label; `--only-changed` finds nothing because specs do not import `src`.
 - `npm run test:e2e:local` resets the Docker services (`down -v`), starts them, seeds, and runs the whole suite. Fully mocked specs run without Docker; see `docs/browser-and-e2e-testing.md`.
 - Every local worktree shares one E2E stack (`api` on `localhost:3000`), so a reset or a full run from one agent corrupts another's run. Locally, run only the specs for your change, and only when `pgrep -af 'playwright test'` shows no other run; push and let CI run the full suite, since each shard gets its own stack.
-- CI runs lint/format, build (plus `ops/tests/tempo-web-security-headers-test.sh`) and eight E2E shards (every spec in Chromium and WebKit); the required `E2E Tests` job fails unless every shard passes.
+- CI runs lint/format, build (plus `scripts/tempo-web-security-headers-test.sh`) and eight E2E shards (every spec in Chromium and WebKit; Chromium only when the change touches `apps/api` but not `apps/web`). `Web E2E tests`, and with it the required `CI` check, fails unless every shard passes.
 
 ## Traps
 
@@ -46,16 +29,9 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
 - Playwright reuses any server already on `VITE_APP_URL` locally (`reuseExistingServer`). Another worktree's preview on port 5173 means you are testing the wrong build; check the listener first.
 - `docker-compose.e2e.yml` has fixed container names and host ports (1025, 8025, 6379, 5432, 3000). Check for other stacks before `docker:test:up`; `docker:test:down` deletes volumes.
 - The E2E API drops its schema on boot (`NODE_ENV=test`). Seed only after it is healthy; a full local run changes seeded accounts, so reset the stack before rerunning.
-- A web change that needs an unmerged API change is only tested when `TEMPO_API_E2E_IMAGE` (locally) or `Depends-on:` (CI) selects an image containing it. A missing image is version skew: wait for it; never weaken assertions.
-- `ops/tests/tempo-web-security-headers-test.sh` builds the production image and probes the SPA and the API proxy (needs Docker). Update it with any change to `nginx/`.
+- A web change that needs an API change is tested in CI when both are in the same PR. Locally, point `TEMPO_API_E2E_IMAGE` at an image built from `apps/api`; a stack on API `:main` lacks the change. Never weaken assertions to match an older API.
+- `scripts/tempo-web-security-headers-test.sh` builds the production image and probes the SPA and the API proxy (needs Docker). Update it with any change to `nginx/`.
 - CI publishes `ghcr.io/tempo-co/tempo-web:pr-<n>` for same-repo PRs and retags the tested image as `:main` after `main` passes. `:main` is what production deploys, so a merge to `main` ships.
-
-## Writing tests
-
-- Test current behavior. Name and assert what the software does now ("saving shows a pending state, then the saved value"), never the change that led to it ("…instead of X", "no longer…", "still…"). Change history belongs in commits and PRs.
-- Don't assert that removed behavior stays removed. Assert that something doesn't happen only when that is a requirement in its own right: a cancelled action writes nothing, a failed check leaves data unchanged, an unauthorized request is refused.
-- One test per flow. A flow is a user journey in the UI, a request through an API endpoint, or a module's public contract. When a change adds or alters a step in an existing flow, extend that flow's test (action → pending state → result) instead of adding a test for the step. Add a separate test only for a distinct flow or outcome: a failure, a cancellation, another entry point, a different kind of input.
-- Regression tests follow the same rules. Strengthen the test for the flow where the bug happened so it fails on the old code, and name it for the behavior, not the bug.
 
 ## E2E test helpers
 

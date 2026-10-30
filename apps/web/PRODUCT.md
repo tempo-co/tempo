@@ -47,7 +47,7 @@ Tempo is intended to be a private, read-only financial record for one person: re
 ## Evidence on Hand
 
 - The implemented frontend feature areas are under `src/features/auth`, `src/features/banking`, and `src/features/settings`, with routes under `src/routes`.
-- The adjacent backend contains the Enable Banking integration and bank connection, account, balance, synchronization, and transaction services under `../tempo-api/src/app/modules`.
+- The backend in `apps/api` contains the Enable Banking integration and bank connection, account, balance, synchronization, and transaction services under `apps/api/src/app/modules`.
 - The current repository contains working authentication, bank connection, synchronization, balance, transaction review, and transaction categorization flows; spending insights and prediction features are not yet evidence of shipped functionality.
 
 ## Product Principles

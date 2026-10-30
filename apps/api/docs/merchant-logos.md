@@ -1,6 +1,6 @@
 # Merchant logos
 
-How `src/app/modules/banking/merchant-logos/` finds, trusts, stores and serves a merchant's logo. Setup and outbound hosts are in `README.md` and `ops/README.md`; variables in `src/app/core/config/config.schema.ts`.
+How `src/app/modules/banking/merchant-logos/` finds, trusts, stores and serves a merchant's logo. Setup and outbound hosts are in `README.md` and the root `ops/README.md`; variables in `src/app/core/config/config.schema.ts`.
 
 ## Boundaries
 
@@ -21,7 +21,7 @@ How `src/app/modules/banking/merchant-logos/` finds, trusts, stores and serves a
 One `merchant-logos` queue, concurrency 1.
 
 1. After a sync persists rows, `enqueueForOwnerSafely` adds new merchants and queues identification without failing the sync. The hourly reconcile repeats that and picks logos with a due `retryAfter`, or `PENDING` with a null one.
-2. Before identification, rows recognized by `isTransferDescriptionMerchantKey` are excluded: explicit `Transfer to/from …` text without a separate card merchant or counterparty name. A key with only those rows becomes `NONE` without AI; otherwise use its newest eligible row and up to 20 eligible rows' search hostnames, filtering before sampling so older business evidence is not hidden. Identification sends up to `maxMerchants` (50) per call from `ops/claude-bridge/merchant-contract.json`: sanitized name, location, type, direction, earlier search hostnames; no amounts, dates or references. `toMerchantIdentificationName` keeps hostnames, unlike the web-search sanitizer. `BUSINESS`/`PAYMENT_SERVICE` with a brand become `IDENTIFIED`, the rest `NONE`.
+2. Before identification, rows recognized by `isTransferDescriptionMerchantKey` are excluded: explicit `Transfer to/from …` text without a separate card merchant or counterparty name. A key with only those rows becomes `NONE` without AI; otherwise use its newest eligible row and up to 20 eligible rows' search hostnames, filtering before sampling so older business evidence is not hidden. Identification sends up to `maxMerchants` (50) per call from `claude-bridge/merchant-contract.json`: sanitized name, location, type, direction, earlier search hostnames; no amounts, dates or references. `toMerchantIdentificationName` keeps hostnames, unlike the web-search sanitizer. `BUSINESS`/`PAYMENT_SERVICE` with a brand become `IDENTIFIED`, the rest `NONE`.
 3. Fetch per domain (below). Failures retry after 1 and 3 days, then `MISSING` with a monthly recheck; `READY` refreshes after about six months.
 
 The `/identify-merchants` bridge route has its own contract file and fingerprint so the categorization routes keep working on a bridge not yet reinstalled (`docs/categorization.md` § The bridge contract). It answers 502 once the model produced output, so the failure counts as an attempt. `BankTransactionCategorizationUnavailableError` (both routes refused before the model ran) leaves merchants pending without an attempt.

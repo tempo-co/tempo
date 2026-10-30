@@ -1,34 +1,16 @@
 # Tempo API Agent Instructions
 
-NestJS backend for Tempo, a personal-finance app that syncs real bank data through Enable Banking.
-
-## Product direction and workflow
-
-- Tempo is personal-use-first, not a public multi-tenant SaaS. A private self-hosted production deployment exists; do not assume managed cloud services or public SaaS behavior.
-- The intended deployment model is a self-hosted 24/7 instance using real bank data fetched through Enable Banking, with access from other devices. Keep that separate from local development and test environments.
-- Do not push directly to `main`; use a pull request with passing CI. Use Conventional Commit-style messages such as `feat: ...` and `fix: ...`.
-- The adjacent frontend repository is `../tempo-web`; in task descriptions, “frontend” means `tempo-web` and “backend” means this `tempo-api`. For cross-repo work, inspect both repositories and their `AGENTS.md` files.
-- CI publishes `ghcr.io/tempo-co/tempo-api:pr-<n>` for every same-repo PR and, after tests pass on `main`, tags that commit's image `:main`, which production deploys. Frontend E2E uses `:main`, or `:pr-<n>` when the web PR body contains `Depends-on: tempo-api#<n>`; coordinate API contract changes with frontend E2E coverage.
-- Personal-use-first is not permission for person-specific behavior. Automatic features use general, tested rules over stored transaction evidence, never hidden merchant or account exception lists. Owner actions (category corrections, confirm/dismiss choices) are legitimate inputs.
-
-## Privacy
-
-This repository and everything attached to it (commits, PRs, comments, issues, CI logs, images) are public. Tempo handles real bank data, so none of it may appear there.
-
-- Never put real personal data in code, tests, fixtures, docs, commits, PR descriptions or comments: names, emails, addresses, locations, transaction details (merchants, amounts, dates, references), IBANs or card numbers, host names, IPs or home-directory paths.
-- Use obviously fake values: `user@example.com`, "Example Shop", `example.ts.net`, published example IBANs such as `NL91ABNA0417164300`.
-- Build fixtures from scratch; never copy a real payload. Refer to production rows by UUID only.
-- If you find real personal data, stop and tell the owner instead of fixing it in a PR: the diff would publish it again.
+NestJS backend for Tempo, a personal-finance app that syncs real bank data through Enable Banking. Paths below are relative to `apps/api` unless they start at the repository root. Repo-wide rules (product direction, workflow, privacy, writing tests) are in the root `AGENTS.md`.
 
 ## Read before touching
 
 - `src/app/modules/banking/` (authorization, sync, deletion, identity, own transfers, exchanges, totals): `docs/banking-invariants.md`.
-- `src/app/modules/banking/categorization/` or `ops/claude-bridge/`: `docs/categorization.md`.
+- `src/app/modules/banking/categorization/` or `claude-bridge/`: `docs/categorization.md`.
 - `src/app/modules/banking/merchant-logos/` (identification, icon choice, brand trust rules, site fetcher, image route): `docs/merchant-logos.md`. Display only: categories, merchant keys and recurring payments never read it.
 - Anything calling Enable Banking or Claude, or tests that mock them: `docs/provider-testing.md`.
 - E2E setup, seeds, Compose stacks, `NODE_ENV`, image consumers: `docs/e2e-and-seeding.md`.
-- `.github/workflows/`, `Dockerfile`, migrations, release tags: `docs/ci-and-images.md`.
-- Deploy scripts, host units and staging: `ops/README.md`.
+- `Dockerfile`, migrations: `docs/migrations-and-image.md`. CI workflows and release tags: root `docs/ci-and-images.md`.
+- Deploy scripts, host units and staging: root `ops/README.md`.
 - Local MCP package: `mcp/README.md`.
 
 ## Commands
@@ -36,16 +18,9 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
 - Setup: Node.js 22.x, Docker Engine 28+, `npm ci`. Development: `npm run start:dev` (starts `docker-compose.dev.yml`, then Nest in watch mode).
 - `src/app/core/config/config.schema.ts` is the source of truth for environment variables. Local secrets go in `.env.<env>.local`, never in Git.
 - Checks: `npm run lint:check`, `npm run format:check`, `npm run build`. `lint` and `format` rewrite files. Run Prettier only on files you changed; edit Markdown by hand.
-- Unit: `npm run test`. E2E: `npm run test:e2e` (serial, recreates the test containers). Bridge: `node --test ops/claude-bridge/*.test.mjs`. MCP: `npm --prefix mcp test`.
-- Size local verification to the change: run relevant static checks and focused tests, including regression proof where appropriate. Let PR CI run the full suite on fresh services. Run the full suite locally for cross-cutting changes, gaps in CI, or failures requiring reproduction. A complete passing CI run on the current head is the delivery gate.
+- Unit: `npm run test`. E2E: `npm run test:e2e` (serial, recreates the test containers). Bridge: `node --test claude-bridge/*.test.mjs`. MCP: `npm --prefix mcp test`.
+- CI publishes `ghcr.io/tempo-co/tempo-api:pr-<n>` for every same-repo PR that changes `apps/api` and, after tests pass on `main`, tags that commit's image `:main`, which production deploys. The same run's web E2E uses that image, so an API contract change needs web E2E coverage in the same PR.
 - Jest unit tests match `src/**/*.spec.ts`; E2E tests match `test/**/*.e2e.spec.ts`. A spec named any other way (for example `*.spec.ts.ts`, or a `test/` file without `.e2e.`) silently never runs.
-
-## Writing tests
-
-- Test current behavior. Name and assert what the software does now ("saving shows a pending state, then the saved value"), never the change that led to it ("…instead of X", "no longer…", "still…"). Change history belongs in commits and PRs.
-- Don't assert that removed behavior stays removed. Assert that something doesn't happen only when that is a requirement in its own right: a cancelled action writes nothing, a failed check leaves data unchanged, an unauthorized request is refused.
-- One test per flow. A flow is a user journey in the UI, a request through an API endpoint, or a module's public contract. When a change adds or alters a step in an existing flow, extend that flow's test (action → pending state → result) instead of adding a test for the step. Add a separate test only for a distinct flow or outcome: a failure, a cancellation, another entry point, a different kind of input.
-- Regression tests follow the same rules. Strengthen the test for the flow where the bug happened so it fails on the old code, and name it for the behavior, not the bug.
 
 ## Test conventions
 
@@ -76,6 +51,6 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
 - `npm run db:seed` truncates and recreates the `public` schema. Run it only against a disposable database.
 - Compose files use fixed container names and env-interpolated host ports; stale containers or another worktree's stack block startup. Check `docker compose ls --all` before starting or tearing anything down.
 - Process environment overrides the env files, so an inherited `NODE_ENV` or `DB_*` silently retargets tests and seeds. Prefix with `NODE_ENV=test` when unsure.
-- The runtime image ships no env files and `NODE_ENV=production`; the image smoke check fails the build if an env file appears. tempo-web E2E passes its own synthetic config when it runs the image with `NODE_ENV=test`.
-- Changing `ops/claude-bridge/contract.json` changes the fingerprint the bridge checks; an un-reinstalled bridge then refuses every fallback call. See `docs/categorization.md` before editing it.
+- The runtime image ships no env files and `NODE_ENV=production`; the image smoke check fails the build if an env file appears. Web E2E (`apps/web/docker-compose.e2e.yml`) passes its own synthetic config when it runs the image with `NODE_ENV=test`.
+- Changing `claude-bridge/contract.json` changes the fingerprint the bridge checks; an un-reinstalled bridge then refuses every fallback call. See `docs/categorization.md` before editing it.
 - `dist/` and `coverage/` are generated.

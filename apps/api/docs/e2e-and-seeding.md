@@ -40,13 +40,13 @@ Consequences:
 - Data a test counts as a whole goes under its own seeded owner (see `seed-own-transfer-data.ts`), so default pagination fixtures keep their counts.
 - Fixture text must be synthetic and must not be derived from real merchants, names or places.
 
-## Frontend E2E against this API
+## Web E2E against this API
 
-tempo-web's E2E pulls an API image (`:main`, or `:pr-<n>` with `Depends-on: tempo-api#<n>` in the web PR body) and seeds it inside the container. A seed or route change here reaches web CI only once the image is published.
+Web E2E (`apps/web`) runs an API image and seeds it inside the container. In CI that image is built from the same commit whenever the change touches `apps/api`, so a seed or route change here reaches web E2E in the same PR.
 
-- If only the feature that changed across repos fails while auth and unrelated pages pass, check the image first: inspect `dist` in the pulled image for the route, field or seed marker. A missing route is version skew; never weaken web assertions to match an older API.
-- To test an unmerged API locally with the web suite, build an image from this checkout and point the web Compose service at it through a temporary override.
-- The runtime image ships no env files (`ops/runtime-image-smoke.js` fails the build if one appears). Consumers that run it with `NODE_ENV=test` pass their own synthetic config; before dropping a file or default from the image, grep the web repo's Compose files and workflows for what they rely on.
+- If only the changed feature fails in web E2E while auth and unrelated pages pass, check the image first: inspect `dist` in the pulled image for the route, field or seed marker. A missing route is version skew; never weaken web assertions to match an older API.
+- To run the web suite locally against this checkout's API, build an image from `apps/api` and set `TEMPO_API_E2E_IMAGE` to it.
+- The runtime image ships no env files (`scripts/runtime-image-smoke.js` fails the build if one appears). Consumers that run it with `NODE_ENV=test` pass their own synthetic config; before dropping a file or default from the image, grep `apps/web/docker-compose.e2e.yml` and `.github/workflows/ci.yml` for what they rely on.
 
 ## Timeouts
 

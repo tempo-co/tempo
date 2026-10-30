@@ -1,6 +1,6 @@
 # Transaction categorization
 
-How AI categorization in `src/app/modules/banking/categorization/` and the subscription bridge in `ops/claude-bridge/` fit together, and the rules that keep them safe. Configuration variables are in `src/app/core/config/config.schema.ts`.
+How AI categorization in `src/app/modules/banking/categorization/` and the subscription bridge in `claude-bridge/` fit together, and the rules that keep them safe. Configuration variables are in `src/app/core/config/config.schema.ts`.
 
 ## Record and lifecycle
 
@@ -53,12 +53,12 @@ The Anthropic API is tried first, then the host-side subscription bridge over a 
 
 ## The bridge contract
 
-`ops/claude-bridge/contract.json` holds the prompt, schema, category enum and the allowed `models`/`efforts`. The API and the bridge both fingerprint `sha256(JSON.stringify(contract))` and the API sends it as `x-tempo-contract`; the bridge answers 409 on a mismatch. Fingerprint the parsed JSON, never file bytes: the built copy is formatted differently.
+`claude-bridge/contract.json` holds the prompt, schema, category enum and the allowed `models`/`efforts`. The API and the bridge both fingerprint `sha256(JSON.stringify(contract))` and the API sends it as `x-tempo-contract`; the bridge answers 409 on a mismatch. Fingerprint the parsed JSON, never file bytes: the built copy is formatted differently.
 
-- Any change to `contract.json` (prompt, enum, models) changes the fingerprint. A bridge still running the old contract then refuses every fallback call, so the bridge must be reinstalled (`ops/install.sh claude-bridge`) after the API that carries the new contract is deployed. A bridge change that leaves the contract alone can be installed first.
-- A new bridge route gets its own contract file and fingerprint rather than a new section in `contract.json`, so existing routes keep working on a bridge that has not been reinstalled. Add the file to the `Dockerfile` and `ops/install.sh`, and pin in `bridge.test.mjs` that each route refuses the other's fingerprint.
+- Any change to `contract.json` (prompt, enum, models) changes the fingerprint. A bridge still running the old contract then refuses every fallback call, so the bridge must be reinstalled (root `ops/install.sh claude-bridge`) after the API that carries the new contract is deployed. A bridge change that leaves the contract alone can be installed first.
+- A new bridge route gets its own contract file and fingerprint rather than a new section in `contract.json`, so existing routes keep working on a bridge that has not been reinstalled. Add the file to the `Dockerfile` and the root `ops/install.sh`, and pin in `bridge.test.mjs` that each route refuses the other's fingerprint.
 - A prompt change bumps `BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION` (pinned in the service spec).
-- `ops/claude-bridge/validation.mjs` checks input keys exactly. A new input field or example key needs the validator and `bridge.test.mjs` updated in the same PR, or the fallback rejects every request that carries it. Also assert in the provider spec that the field reaches the serialized bridge request: an E2E that spies on `provider.categorize` passes even when the provider drops it.
+- `claude-bridge/validation.mjs` checks input keys exactly. A new input field or example key needs the validator and `bridge.test.mjs` updated in the same PR, or the fallback rejects every request that carries it. Also assert in the provider spec that the field reaches the serialized bridge request: an E2E that spies on `provider.categorize` passes even when the provider drops it.
 - `AI_CATEGORIZATION_MODEL`/`AI_CATEGORIZATION_EFFORT` are validated against the contract lists at config load.
 
 ### Bridge status codes
@@ -69,7 +69,7 @@ The Anthropic API is tried first, then the host-side subscription bridge over a 
 
 ### Bridge tests
 
-- `node --test ops/claude-bridge/*.test.mjs` (CI runs it). `fake-claude.mjs` has one mode per stream violation; add a mode for every new failure shape.
+- `node --test claude-bridge/*.test.mjs` (CI runs it). `fake-claude.mjs` has one mode per stream violation; add a mode for every new failure shape.
 - When a check makes several HTTP calls, the fake takes settings per endpoint and each failure case asserts the call count, so a failure injected for the second call is not tripped by the first.
 - To prove a new bridge test fails on the old source, run it under `timeout` with `--test-timeout`: an old bridge can leave requests hanging forever.
 

@@ -16,7 +16,7 @@ VITE_API_URL=http://localhost:3000 VITE_APP_URL=http://localhost:5173 VITE_EMAIL
 
 Leave `NODE_ENV` unset. Without `--no-deps` the `setup` project needs the seeded API. A seeded spec run with `--no-deps` fails at once with ENOENT on `playwright/.auth/*.json`.
 
-A mocked spec is a UI integration test, not full-stack coverage. Report it separately from seeded runs, and keep backend behaviour (matching, validation, rejection) proved in the seeded suite or in `tempo-api`.
+A mocked spec is a UI integration test, not full-stack coverage. Report it separately from seeded runs, and keep backend behaviour (matching, validation, rejection) proved in the seeded suite or in `apps/api`.
 
 ## Choosing what to run locally
 
@@ -113,8 +113,8 @@ Every iPhone browser is WebKit, so `playwright.config.ts` runs every spec a seco
 
 The transaction search cap is one constant, `BANK_TRANSACTION_SEARCH_MAX_LENGTH` in `src/features/banking/types/bank-transaction.ts`, used by both the route schema and the input's `maxLength`. To change it:
 
-1. Trace input → debounced `navigate` → route schema → request → API DTO. Raising one boundary alone leaves the router error or turns it into an API rejection; coordinate the `tempo-api` validator.
-2. Percent-encoded three-byte characters cost nine request-line bytes each. `nginx/tempo.conf` sizes `large_client_header_buffers` for the current cap, and `ops/tests/tempo-web-security-headers-test.sh` sends 1000 `€` through both the SPA route and the API proxy. Update both with the cap.
+1. Trace input → debounced `navigate` → route schema → request → API DTO. Raising one boundary alone leaves the router error or turns it into an API rejection; change the API validator in `apps/api` in the same PR.
+2. Percent-encoded three-byte characters cost nine request-line bytes each. `nginx/tempo.conf` sizes `large_client_header_buffers` for the current cap, and `scripts/tempo-web-security-headers-test.sh` sends 1000 `€` through both the SPA route and the API proxy. Update both with the cap.
 3. In the existing search journey, type exactly the maximum, check the full value in the request and URL plus the pagination reset, reload and check the restored input, then try one extra character and confirm the input stays bounded.
 
 ## Cash flow filters

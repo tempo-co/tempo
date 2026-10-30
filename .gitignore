@@ -1,0 +1,3 @@
+# Each app keeps its own .gitignore; this one covers the repository root.
+node_modules/
+.worktrees/

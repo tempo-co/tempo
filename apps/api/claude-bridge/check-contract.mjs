@@ -10,8 +10,8 @@ const hashPattern = /^[a-f0-9]{64}$/;
 const apiHashCommand = `const {createHash} = require('node:crypto');
 const hash = (file) => createHash('sha256').update(JSON.stringify(require(file))).digest('hex');
 process.stdout.write(JSON.stringify({
-	hash: hash('./dist/ops/claude-bridge/contract.json'),
-	merchantHash: hash('./dist/ops/claude-bridge/merchant-contract.json'),
+	hash: hash('./dist/claude-bridge/contract.json'),
+	merchantHash: hash('./dist/claude-bridge/merchant-contract.json'),
 }));`;
 
 async function readProductionApiHashes() {

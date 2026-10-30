@@ -51,9 +51,9 @@ Rules:
 
 ## API image
 
-E2E runs the API image named in `docker-compose.e2e.yml`: `${TEMPO_API_E2E_IMAGE:-ghcr.io/tempo-co/tempo-api:main}`. A green web run proves nothing about an unmerged API change unless `TEMPO_API_E2E_IMAGE` points at an image that contains it (a local build or `ghcr.io/tempo-co/tempo-api:pr-<n>`).
+E2E runs the API image named in `docker-compose.e2e.yml`: `${TEMPO_API_E2E_IMAGE:-ghcr.io/tempo-co/tempo-api:main}`. A local run proves nothing about an unmerged API change unless `TEMPO_API_E2E_IMAGE` points at an image that contains it: build one from `apps/api` (`docker build -t tempo-api:local ../api`) or use a PR's `ghcr.io/tempo-co/tempo-api:pr-<n>`.
 
-In CI, the `Select API image` step reads the PR body for `Depends-on: tempo-api#<n>`; an open API PR selects `pr-<n>`, otherwise `main`. The `Pull API image` step fails with "does not exist yet" until that API PR's Image job has published, and the run summary records the digest and revision used. A missing image is version skew: wait and rerun, never weaken the assertion.
+In CI, the `Select API image` step uses the API image built in the same run when the change touches `apps/api`, otherwise API `:main`, pinned by digest either way; the run summary records the image and revision used (root `docs/ci-and-images.md`). If only the feature that changed fails while unrelated pages pass, check that image for the route before suspecting the spec; never weaken an assertion to match an older API.
 
 ## Seeded preview for manual review
 
@@ -64,4 +64,4 @@ In CI, the `Select API image` step reads the PR body for `Depends-on: tempo-api#
 
 ## Production image
 
-`Dockerfile.production` builds with `VITE_API_URL=/api` and `VITE_BASE_PATH=/`, then serves `dist` from Nginx on port 8080 with `nginx/tempo.conf`. `nginx/tempo.conf` proxies `/api/` and `/bank-connections/callback` to `api:3000` and applies `nginx/security-headers.conf` to the SPA. The exact `/api/mcp` endpoint uses HTTP/1.1, disables response buffering, has a 60-second upstream read timeout and limits request bodies to 100 KiB. Integrations derives the absolute MCP server URL from `VITE_API_URL` and the browser origin. `ops/tests/tempo-web-security-headers-test.sh` builds the image and probes both the SPA and the API proxy, including MCP event delivery and the request limit; update it with any `nginx/` change.
+`Dockerfile.production` builds with `VITE_API_URL=/api` and `VITE_BASE_PATH=/`, then serves `dist` from Nginx on port 8080 with `nginx/tempo.conf`. `nginx/tempo.conf` proxies `/api/` and `/bank-connections/callback` to `api:3000` and applies `nginx/security-headers.conf` to the SPA. The exact `/api/mcp` endpoint uses HTTP/1.1, disables response buffering, has a 60-second upstream read timeout and limits request bodies to 100 KiB. Integrations derives the absolute MCP server URL from `VITE_API_URL` and the browser origin. `scripts/tempo-web-security-headers-test.sh` builds the image and probes both the SPA and the API proxy, including MCP event delivery and the request limit; update it with any `nginx/` change.

@@ -14,7 +14,7 @@ Non-browser requests may omit Origin. A present Origin must exactly equal the or
 
 ## Build and verify
 
-From the API repository root, with Node.js 22.13 or later:
+From `apps/api`, with Node.js 22.13 or later:
 
 ```bash
 NODE_ENV=development npm --prefix mcp ci --include=dev
@@ -59,7 +59,7 @@ For a client that requires a local process, build the package and use an entry l
   "mcpServers": {
     "tempo": {
       "command": "node",
-      "args": ["/absolute/path/to/tempo-api/mcp/dist/stdio.js"],
+      "args": ["/absolute/path/to/tempo/apps/api/mcp/dist/stdio.js"],
       "env": {
         "TEMPO_API_URL": "http://127.0.0.1:8080/api",
         "TEMPO_API_TOKEN": "<client-managed-secret>"

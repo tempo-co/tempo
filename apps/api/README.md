@@ -1,15 +1,6 @@
-<p align="center">
-  <a href="https://github.com/tempo-co/tempo-api/actions" target="_blank">
-    <img src="https://github.com/tempo-co/tempo-api/actions/workflows/ci.yml/badge.svg" alt="Build Status" />
-  </a>
-  <a href="https://nodejs.org/" target="_blank">
-    <img src="https://img.shields.io/badge/node.js-22.13%2B-brightgreen" alt="Node.js Version" />
-  </a>
-</p>
-
 ## Tempo
 
-Tempo API is a backend service built with [NestJS](https://nestjs.com) for personal finances. It synchronizes real bank data through [Enable Banking](https://enablebanking.com) and serves accounts, balances, and transactions to the [web client](https://github.com/tempo-co/tempo-web).
+Tempo API is a backend service built with [NestJS](https://nestjs.com) for personal finances. It synchronizes real bank data through [Enable Banking](https://enablebanking.com) and serves accounts, balances, and transactions to the [web client](../web/README.md).
 
 ## Prerequisites
 
