@@ -73,3 +73,4 @@ $ npm run db:seed
 ```
 
 This truncates and recreates the PostgreSQL `public` schema, then seeds initial data. It runs against whatever database `DB_NAME` points to.
+
