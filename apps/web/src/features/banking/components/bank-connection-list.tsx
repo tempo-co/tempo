@@ -1,3 +1,4 @@
+import {BankConnection, BankConnectionAspsp, BankConnectionTransaction} from '@tempo/contracts';
 import {AlertTriangle, Building2, ChevronDown, RefreshCw, Trash2} from 'lucide-react';
 import {useState} from 'react';
 import {toast} from 'sonner';
@@ -29,11 +30,6 @@ import {useDeleteBankConnection} from '../api/use-delete-bank-connection';
 import {useGetBankConnectionTransactions} from '../api/use-get-bank-connection-transactions';
 import {useBankConnectionRefreshState} from '../api/use-refresh-bank-connection';
 import {useStartBankConnection} from '../api/use-start-bank-connection';
-import {
-  BankConnection,
-  BankConnectionAspsp,
-  BankConnectionTransaction,
-} from '../types/bank-connection';
 import {
   type AutomaticSyncProblem,
   getAutomaticSyncProblemForConnection,

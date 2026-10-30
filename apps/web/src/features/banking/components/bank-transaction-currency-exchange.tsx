@@ -1,4 +1,5 @@
-import {BankTransaction} from '../types/bank-transaction';
+import {BankTransaction} from '@tempo/contracts';
+
 import {BankTransactionCounterpartLink} from './bank-transaction-counterpart-link';
 
 type BankTransactionCurrencyExchangeProps = {

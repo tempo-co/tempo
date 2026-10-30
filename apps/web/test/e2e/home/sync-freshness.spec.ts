@@ -1,8 +1,8 @@
 import {QueryObserver} from '@tanstack/react-query';
+import type {BankConnection} from '@tempo/contracts';
 
 import {dashboardQueryKeys} from '../../../src/features/banking/api/aggregate-query-keys';
 import {bankQueryKeys} from '../../../src/features/banking/api/query-keys';
-import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {septemberSpending} from '../../data/home-summary.data';

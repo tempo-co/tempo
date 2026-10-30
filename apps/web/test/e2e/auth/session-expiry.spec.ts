@@ -1,4 +1,5 @@
-import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
+import type {BankConnection} from '@tempo/contracts';
+
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections} from '../../utils/api-mocks';

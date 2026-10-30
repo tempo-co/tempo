@@ -1,9 +1,9 @@
 import {ColumnDef} from '@tanstack/react-table';
+import type {BankTransaction} from '@tempo/contracts';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {SortButton} from '@/components/shared/sort-button';
 
-import {BankTransaction, BankTransactionSortField} from '../types/bank-transaction';
 import {
   formatBankTransactionActivity,
   formatBankTransactionCategory,
@@ -18,7 +18,7 @@ import {MerchantLogoTile} from './merchant-logo-tile';
 
 export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
   {
-    accessorKey: BankTransactionSortField.BOOKING_DATE,
+    accessorKey: 'bookingDate',
     header: ({column}) => <SortButton column={column}>Booking date</SortButton>,
     cell: ({row}) => <p>{formatBankTransactionDate(row.original.bookingDate)}</p>,
   },
@@ -85,7 +85,7 @@ export const bankTransactionTableColumns: ColumnDef<BankTransaction>[] = [
     cell: ({row}) => <BankTransactionSourceCell transaction={row.original} />,
   },
   {
-    accessorKey: BankTransactionSortField.AMOUNT,
+    accessorKey: 'amount',
     header: ({column}) => (
       <SortButton column={column} className='justify-end text-right'>
         Amount

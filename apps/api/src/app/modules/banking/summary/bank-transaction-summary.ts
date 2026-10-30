@@ -2,6 +2,7 @@
  * Pure monthly spending math for the Home summary. Money is integer cents (`bigint`) throughout; amounts enter as
  * Postgres decimal strings with at most two decimals and leave through {@link formatCents}. No floats.
  */
+import type {BaselineDay, BaselineTotal, SpendingPaceDay} from '@tempo/contracts';
 
 /** Spending of one calendar month, keyed by day of month. */
 export type DailyCents = ReadonlyMap<number, bigint>;
@@ -15,9 +16,7 @@ export type SpendingPaceInput = {
 	baseline: ReadonlyArray<{days: number; daily: DailyCents}>;
 };
 
-export type SpendingPaceDay = {day: number; spending: string; cumulative: string};
-export type BaselineTotal = {average: string; low: string | null; high: string | null};
-export type BaselineDay = {day: number} & BaselineTotal;
+export type {BaselineDay, BaselineTotal, SpendingPaceDay};
 
 export function buildSpendingPace(input: SpendingPaceInput): {daily: SpendingPaceDay[]; baseline: BaselineDay[]} {
 	let cumulative = 0n;

@@ -1,3 +1,4 @@
+import type {BankConnectionStatus, BankSyncStatus} from '@tempo/contracts';
 import ms from 'ms';
 
 export const BANK_CONNECTION_STATUSES = {
@@ -7,7 +8,7 @@ export const BANK_CONNECTION_STATUSES = {
 	PENDING_AUTHORIZATION: 'PENDING_AUTHORIZATION',
 	CANCELLED: 'CANCELLED',
 	FAILED: 'FAILED',
-} as const;
+} as const satisfies {[S in BankConnectionStatus]: S};
 
 export const BANK_SYNC_STATUSES = {
 	IDLE: 'IDLE',
@@ -18,7 +19,7 @@ export const BANK_SYNC_STATUSES = {
 	FAILED: 'FAILED',
 	RATE_LIMITED: 'RATE_LIMITED',
 	EXPIRED: 'EXPIRED',
-} as const;
+} as const satisfies {[S in BankSyncStatus]: S};
 
 export const BANKING_DEFAULT_RETRY_AFTER_SECONDS = 6 * 60 * 60;
 export const BANKING_MAX_RETRY_AFTER_SECONDS = 8_000_000_000_000;

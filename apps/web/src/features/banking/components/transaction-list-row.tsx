@@ -1,8 +1,8 @@
 import {Link, type LinkProps} from '@tanstack/react-router';
+import type {BankTransaction} from '@tempo/contracts';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 
-import type {BankTransaction} from '../types/bank-transaction';
 import {
   formatBankTransactionCompactDate,
   resolveBankTransactionDisplayTitle,

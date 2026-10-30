@@ -1,4 +1,4 @@
-import type {BankTransactionSummary} from '@/features/dashboard/types/bank-transaction-summary';
+import type {BankTransactionSummary} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, expect, test} from '../../fixtures';

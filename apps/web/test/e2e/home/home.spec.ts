@@ -1,4 +1,5 @@
-import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
+import type {BankConnection} from '@tempo/contracts';
+
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {septemberSpending} from '../../data/home-summary.data';
@@ -252,6 +253,7 @@ test.describe('Home', () => {
         lastSyncError: null,
         nextSyncAt: null,
         syncStatus: 'IDLE',
+        baseCurrency: null,
         bankAccounts: [],
       },
     ]);

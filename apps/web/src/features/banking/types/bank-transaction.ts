@@ -1,45 +1,26 @@
 import {
+  BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES,
+  BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES,
+  BANK_TRANSACTION_CATEGORIZATION_SOURCES,
   BANK_TRANSACTION_CATEGORY_FILTER_VALUES,
+  BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES,
+  BANK_TRANSACTION_FINANCIAL_EVENT_FILTER_VALUES,
+  BANK_TRANSACTION_SEARCH_MAX_LENGTH,
+  BANK_TRANSACTION_SORT_FIELDS,
+  type BankTransaction,
   type BankTransactionCategory,
+  type BankTransactionFinancialEventFilterValue,
+  type BankTransactionFinancialEventType,
+  SORT_ORDERS,
 } from '@tempo/contracts';
 import {z} from 'zod';
 
 import {paginationSearchParamsSchema} from '@/types/pagination';
 
-export enum BankTransactionSortField {
-  BOOKING_DATE = 'bookingDate',
-  AMOUNT = 'amount',
-  CATEGORY = 'category',
-  SOURCE = 'source',
-}
-
-export enum BankTransactionSortOrder {
-  ASC = 'ASC',
-  DESC = 'DESC',
-}
-
-export enum BankTransactionDirection {
-  INCOME = 'INCOME',
-  EXPENSE = 'EXPENSE',
-  UNKNOWN = 'UNKNOWN',
-}
-
-export const BANK_TRANSACTION_FINANCIAL_EVENT_TYPES = ['CURRENCY_EXCHANGE'] as const;
-export type BankTransactionFinancialEventType =
-  (typeof BANK_TRANSACTION_FINANCIAL_EVENT_TYPES)[number];
-
-/** Filter-only activity value for transfers between the owner's own accounts. */
-export const BANK_TRANSACTION_OWN_TRANSFER_FILTER = 'OWN_TRANSFER' as const;
-export const BANK_TRANSACTION_ACTIVITY_FILTER_VALUES = [
-  ...BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
-  BANK_TRANSACTION_OWN_TRANSFER_FILTER,
-] as const;
-export type BankTransactionActivityFilterValue =
-  (typeof BANK_TRANSACTION_ACTIVITY_FILTER_VALUES)[number];
-
-export const BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES = ['RULE'] as const;
-export type BankTransactionFinancialEventSource =
-  (typeof BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES)[number];
+/** The activity part of the cash-flow filter, in picker order. */
+export const BANK_TRANSACTION_ACTIVITY_FILTER_VALUES =
+  BANK_TRANSACTION_FINANCIAL_EVENT_FILTER_VALUES;
+export type BankTransactionActivityFilterValue = BankTransactionFinancialEventFilterValue;
 
 export const BANK_TRANSACTION_FINANCIAL_EVENT_LABELS: Record<
   BankTransactionFinancialEventType,
@@ -53,38 +34,6 @@ export const BANK_TRANSACTION_ACTIVITY_LABELS: Record<BankTransactionActivityFil
     ...BANK_TRANSACTION_FINANCIAL_EVENT_LABELS,
     OWN_TRANSFER: 'Own transfer',
   };
-
-export const OWN_TRANSFER_EVIDENCE = ['IBAN', 'NAME', 'MANUAL'] as const;
-export type OwnTransferEvidence = (typeof OWN_TRANSFER_EVIDENCE)[number];
-
-export const OWN_TRANSFER_OVERRIDES = ['MARKED', 'UNMARKED'] as const;
-export type OwnTransferOverride = (typeof OWN_TRANSFER_OVERRIDES)[number];
-
-/** The other leg of an own transfer or currency exchange. */
-export type BankTransactionCounterpart = {
-  id: string;
-  bankName: string;
-  bankAccountName: string | null;
-  bankAccountAlias: string | null;
-  amount: string;
-  currency: string;
-  bookingDate: string | null;
-};
-
-export type BankTransactionOwnTransfer = {
-  evidence: OwnTransferEvidence;
-  /** The other leg, or null when no matching transaction is in the connected accounts. */
-  counterpart: BankTransactionCounterpart | null;
-};
-
-export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = [
-  'INCOME',
-  'EXPENSE',
-  'INTERNAL',
-  'UNKNOWN',
-] as const;
-export type BankTransactionCashFlowTreatment =
-  (typeof BANK_TRANSACTION_CASH_FLOW_TREATMENTS)[number];
 
 export const BANK_TRANSACTION_CATEGORY_LABELS: Record<BankTransactionCategory, string> = {
   HOUSING_AND_UTILITIES: 'Housing and utilities',
@@ -108,48 +57,11 @@ export const BANK_TRANSACTION_CATEGORY_LABELS: Record<BankTransactionCategory, s
   OTHER: 'Other',
 };
 
-export const BANK_TRANSACTION_CATEGORIZATION_STATUSES = [
-  'PENDING',
-  'PROCESSING',
-  'COMPLETED',
-  'FAILED',
-  'NOT_APPLICABLE',
-] as const;
-
-export type BankTransactionCategorizationStatus =
-  (typeof BANK_TRANSACTION_CATEGORIZATION_STATUSES)[number];
-
-export const BANK_TRANSACTION_CATEGORIZATION_SOURCES = ['AI', 'HISTORY', 'MANUAL'] as const;
-
-export type BankTransactionCategorizationSource =
-  (typeof BANK_TRANSACTION_CATEGORIZATION_SOURCES)[number];
-
-/** Cash flows, in picker order. Currency exchanges and own transfers are the two kinds of internal movement. */
-export const BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES = [
-  'SPENDING',
-  'INCOME',
-  'INTERNAL',
-  'CURRENCY_EXCHANGE',
-  BANK_TRANSACTION_OWN_TRANSFER_FILTER,
-  'UNKNOWN',
-] as const;
+/** The two kinds of internal movement in the cash-flow filter. */
 export const BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS = [
   'CURRENCY_EXCHANGE',
   'OWN_TRANSFER',
 ] as const;
-export type BankTransactionCashFlowFilterValue =
-  (typeof BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES)[number];
-
-export const BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES = ['PRESENT', 'MISSING'] as const;
-export type BankTransactionBaseAmountFilterValue =
-  (typeof BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES)[number];
-
-export const BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES = ['FAILED', 'CATEGORIZING'] as const;
-export type BankTransactionCategoryStatusFilterValue =
-  (typeof BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES)[number];
-
-export const BANK_TRANSACTION_SEARCH_MAX_LENGTH = 1000;
-
 const toDate = (value: unknown) => (typeof value === 'string' ? new Date(value) : value);
 
 /** A recurring series' key: 32 lowercase hex characters. */
@@ -188,8 +100,8 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
   transactionId: z.string().optional(),
   sort: z
     .object({
-      by: z.nativeEnum(BankTransactionSortField),
-      order: z.nativeEnum(BankTransactionSortOrder),
+      by: z.enum(BANK_TRANSACTION_SORT_FIELDS),
+      order: z.enum(SORT_ORDERS),
     })
     .optional(),
 });
@@ -230,98 +142,23 @@ export type BankTransactionFilterParams = Pick<
 export type BankTransactionSortParams = BankTransactionSearchParams['sort'];
 
 export const DEFAULT_BANK_TRANSACTION_SORT: NonNullable<BankTransactionSortParams> = {
-  by: BankTransactionSortField.BOOKING_DATE,
-  order: BankTransactionSortOrder.DESC,
+  by: 'bookingDate',
+  order: 'DESC',
 };
 
-export type BankTransactionCategorizationFields = {
-  category: BankTransactionCategory | null;
-  categoryStatus: BankTransactionCategorizationStatus;
-  categorySource: BankTransactionCategorizationSource | null;
-  categoryConfidence: string | null;
-};
-
-export type BankTransactionFinancialEventFields = {
-  financialEventType: BankTransactionFinancialEventType | null;
-  financialEventSource: BankTransactionFinancialEventSource | null;
-  financialEventRuleVersion: string | null;
-  cashFlowTreatment: BankTransactionCashFlowTreatment;
-  /**
-   * The other leg of a currency exchange, or null when the legs could not be matched. Absent on
-   * connection summaries.
-   */
-  currencyExchangeCounterpart?: BankTransactionCounterpart | null;
-};
-
-export type BankTransactionOwnTransferFields = {
-  /** Absent on connection summaries, which only carry the treatment. */
-  ownTransfer?: BankTransactionOwnTransfer | null;
-  ownTransferOverride?: OwnTransferOverride | null;
-};
-
-export type BankTransaction = BankTransactionCategorizationFields &
-  BankTransactionFinancialEventFields &
-  BankTransactionOwnTransferFields & {
-    id: string;
-    transactionDate: string | null;
-    bookingDate: string | null;
-    valueDate: string | null;
-    description: string | null;
-    displayDescription?: string | null;
-    /** Path of the merchant's logo on the API; null or absent when no confirmed logo exists. */
-    merchantLogoUrl?: string | null;
-    counterpartyName: string | null;
-    amount: string;
-    currency: string;
-    creditDebitIndicator: string | null;
-    direction: BankTransactionDirection;
-    transactionType: string;
-    transactionStatus: string | null;
-    providerTransactionDescription: string | null;
-    merchantCategoryCode: string | null;
-    remittanceInformation: string | null;
-    balanceAfterAmount: string | null;
-    balanceAfterCurrency: string | null;
-    instructedAmount: string | null;
-    instructedCurrency: string | null;
-    exchangeRate: string | null;
-    exchangeRateUnitCurrency: string | null;
-    exchangeRateType: string | null;
-    referenceNumber: string | null;
-    referenceNumberScheme: string | null;
-    bankName: string;
-    bankCountry: string;
-    bankAccountName: string | null;
-    bankAccountAlias: string | null;
-  };
-
-export type BankTransactionsResponse = {
-  transactions: BankTransaction[];
-  total: number;
-};
-
-/** One of the owner's other rows that a category correction would change. */
-export type BankTransactionCategoryImpactTransaction = Pick<
+export type BankTransactionCategorizationFields = Pick<
   BankTransaction,
-  | 'id'
-  | 'transactionDate'
-  | 'bookingDate'
-  | 'amount'
-  | 'currency'
-  | 'category'
-  | 'categoryStatus'
-  | 'categorySource'
-> & {displayDescription: string};
+  'category' | 'categoryStatus' | 'categorySource' | 'categoryConfidence'
+>;
 
-/**
- * What a category correction would do to the owner's other rows from the same merchant. `APPLY`
- * sets `category` on them; `RECHECK` sends them back to AI categorization. `null` when no other row
- * would change.
- */
-export type BankTransactionCategoryImpact = {
-  action: 'APPLY' | 'RECHECK' | null;
-  category: BankTransactionCategory | null;
-  /** Newest first, capped by the API; `total` counts every affected row. */
-  transactions: BankTransactionCategoryImpactTransaction[];
-  total: number;
-};
+/** Shared by list rows and connection summaries; summaries omit the currency-exchange counterpart. */
+export type BankTransactionFinancialEventFields = Pick<
+  BankTransaction,
+  'financialEventType' | 'financialEventSource' | 'financialEventRuleVersion' | 'cashFlowTreatment'
+> &
+  Partial<Pick<BankTransaction, 'currencyExchangeCounterpart'>>;
+
+/** Absent on connection summaries, which only carry the treatment. */
+export type BankTransactionOwnTransferFields = Partial<
+  Pick<BankTransaction, 'ownTransfer' | 'ownTransferOverride'>
+>;

@@ -1,9 +1,9 @@
 import {type QueryClient, QueryObserver} from '@tanstack/react-query';
+import type {BankConnection} from '@tempo/contracts';
 
 import {dashboardQueryKeys} from '../../../src/features/banking/api/aggregate-query-keys';
 import {bankQueryKeys} from '../../../src/features/banking/api/query-keys';
 import {recurringQueryKeys} from '../../../src/features/banking/api/recurring-query-keys';
-import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
 import type {BankSyncRun} from '../../../src/features/banking/types/bank-sync-run';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
@@ -14,9 +14,9 @@ import {
   fulfillJson,
   fulfillRedirect,
   mockBalanceTrend,
-  mockCashFlow,
   mockBankConnections,
   mockBankRefresh,
+  mockCashFlow,
   mockJson,
   routeBankConnectionsApi,
   transformBankConnections,
@@ -50,6 +50,7 @@ const MOCK_CONNECTION: BankConnection = {
   lastSyncError: null,
   nextSyncAt: '2030-01-01T00:00:00.000Z',
   syncStatus: 'SUCCEEDED',
+  baseCurrency: null,
   bankAccounts: [
     {
       id: '00000000-0000-4000-8000-000000000097',
@@ -63,6 +64,8 @@ const MOCK_CONNECTION: BankConnection = {
       currentBalanceAmount: '1234.56',
       currentBalanceType: 'AVAILABLE',
       balanceUpdatedAt: null,
+      currentBalanceInBaseCurrency: null,
+      baseCurrencyRateDate: null,
       isActive: true,
       latestBalances: [],
     },
@@ -78,6 +81,8 @@ const MOCK_CONNECTION: BankConnection = {
       currentBalanceAmount: '100.44',
       currentBalanceType: 'AVAILABLE',
       balanceUpdatedAt: null,
+      currentBalanceInBaseCurrency: null,
+      baseCurrencyRateDate: null,
       isActive: true,
       latestBalances: [],
     },
@@ -821,7 +826,8 @@ test.describe('mocked Enable Banking bank connection', () => {
       if (url.origin === API_URL && url.pathname === '/bank-connections/aspsps')
         return fulfillJson(route, []);
       if (url.origin === API_URL && url.pathname === '/health') return fulfillJson(route, {});
-      if (url.origin === API_URL && url.pathname.endsWith('/refresh')) return fulfillJson(route, REFRESH_RESULT);
+      if (url.origin === API_URL && url.pathname.endsWith('/refresh'))
+        return fulfillJson(route, REFRESH_RESULT);
       await route.abort('blockedbyclient');
       throw new Error(`Unmocked request: ${route.request().method()} ${url}`);
     });
@@ -850,10 +856,12 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     await expect(confirm).toBeDisabled();
     await expect(
-      page.getByRole('dialog').getByText(
-        'Bank sync is in progress. Wait for it to finish before removing this connection.',
-        {exact: true},
-      ),
+      page
+        .getByRole('dialog')
+        .getByText(
+          'Bank sync is in progress. Wait for it to finish before removing this connection.',
+          {exact: true},
+        ),
     ).toBeVisible();
   });
 
@@ -889,9 +897,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
   }
 
-  test('reports a lost refresh response once and never replays it on reconnect', async ({
-    page,
-  }) => {
+  test('reports a lost refresh response once and never replays it on reconnect', async ({page}) => {
     let requests = 0;
     let unreachable = false;
     await page.clock.install();
@@ -919,7 +925,9 @@ test.describe('mocked Enable Banking bank connection', () => {
     await expect.poll(() => requests).toBe(2);
   });
 
-  test('handles pending and completed connection removal during foreground refresh', async ({page}) => {
+  test('handles pending and completed connection removal during foreground refresh', async ({
+    page,
+  }) => {
     const first = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000091'};
     const requests: string[] = [];
     let reads = 0;
@@ -938,7 +946,11 @@ test.describe('mocked Enable Banking bank connection', () => {
       const id = new URL(route.request().url()).pathname.split('/')[2];
       requests.push(id);
       if (id === first.id) await refreshHeld;
-      await fulfillJson(route, removed && id === MOCK_CONNECTION.id ? {message: 'Not found'} : REFRESH_RESULT, removed && id === MOCK_CONNECTION.id ? 404 : 200);
+      await fulfillJson(
+        route,
+        removed && id === MOCK_CONNECTION.id ? {message: 'Not found'} : REFRESH_RESULT,
+        removed && id === MOCK_CONNECTION.id ? 404 : 200,
+      );
     });
     await page.route(`**/bank-connections/${first.id}/transactions*`, (route) =>
       fulfillJson(route, {transactions: [], total: 0}),
@@ -1006,7 +1018,12 @@ test.describe('mocked Enable Banking bank connection', () => {
     }
     await expect.poll(() => reads).toBeGreaterThan(readsBeforeSettle);
     await expect(firstCard).toBeVisible();
-    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
     expect(requests).toEqual([MOCK_CONNECTION.id, first.id]);
   });
 
@@ -1087,10 +1104,20 @@ test.describe('mocked Enable Banking bank connection', () => {
     await page.addInitScript(() => {
       const fetch = window.fetch.bind(window);
       window.fetch = async (...args) => {
-        const url = typeof args[0] === 'string' ? args[0] : args[0] instanceof URL ? args[0].href : args[0].url;
-        if (url.endsWith('/refresh')) args[1]?.signal?.addEventListener('abort', () => {
-          document.documentElement.dataset.refreshAborted = 'true';
-        }, {once: true});
+        const url =
+          typeof args[0] === 'string'
+            ? args[0]
+            : args[0] instanceof URL
+              ? args[0].href
+              : args[0].url;
+        if (url.endsWith('/refresh'))
+          args[1]?.signal?.addEventListener(
+            'abort',
+            () => {
+              document.documentElement.dataset.refreshAborted = 'true';
+            },
+            {once: true},
+          );
         const response = await fetch(...args);
         if (response.url.endsWith('/refresh') && response.status === 429) {
           const readJson = response.json.bind(response);
@@ -1147,7 +1174,8 @@ test.describe('mocked Enable Banking bank connection', () => {
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
       await card.getByTestId(/^connection-card-toggle-/).click();
       const remove = card.getByRole('button', {name: 'Remove connection'});
-      const reason = 'Bank sync is in progress. Wait for it to finish before removing this connection.';
+      const reason =
+        'Bank sync is in progress. Wait for it to finish before removing this connection.';
       await expect(remove).toHaveAttribute('aria-disabled', 'true');
       await expect(remove).toHaveAccessibleDescription(reason);
       await remove.hover();
@@ -1185,7 +1213,9 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
   });
 
-  test('opens saved bank data offline without replaying refresh work on reconnect', async ({page}) => {
+  test('opens saved bank data offline without replaying refresh work on reconnect', async ({
+    page,
+  }) => {
     let requests = 0;
     await page.clock.install();
     await mockBankConnections(page, [MOCK_CONNECTION]);
@@ -1198,7 +1228,9 @@ test.describe('mocked Enable Banking bank connection', () => {
     await expect.poll(() => requests).toBe(1);
     await expect(card).toBeVisible();
     await page.clock.runFor(1100);
-    await expect.poll(() => page.evaluate(() => !!localStorage.getItem('tempo-offline-cache'))).toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => !!localStorage.getItem('tempo-offline-cache')))
+      .toBe(true);
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'onLine', {value: false, configurable: true});
     });
@@ -1305,17 +1337,36 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
   }
 
-  test('refreshes the next signed-in account without dispatching the previous account tail', async ({page, homePage, loginPage}) => {
+  test('refreshes the next signed-in account without dispatching the previous account tail', async ({
+    page,
+    homePage,
+    loginPage,
+  }) => {
     const next = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000093'};
     const tail = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000092'};
     let nextSession = false;
     const requests: string[] = [];
-    await mockBankConnections(page, () => nextSession ? [next] : [MOCK_CONNECTION, tail]);
+    await mockBankConnections(page, () => (nextSession ? [next] : [MOCK_CONNECTION, tail]));
     await mockBalanceTrend(page);
     await mockCashFlow(page);
     await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
-    await mockJson(page, '**/recurring-series/summary?**', {expenseMonthlyTotal: '0.00', incomeMonthlyTotal: '0.00', expenseThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'}, incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'}, upcoming: [], expenseUnconvertedCount: 0, incomeUnconvertedCount: 0, baseCurrency: 'EUR'});
-    await mockJson(page, '**/bank-transactions/review-counts', {needsReview: 0, categorizationFailed: 0, categorizing: 0, unknownDirection: 0, missingBaseAmount: 0});
+    await mockJson(page, '**/recurring-series/summary?**', {
+      expenseMonthlyTotal: '0.00',
+      incomeMonthlyTotal: '0.00',
+      expenseThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
+      incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
+      upcoming: [],
+      expenseUnconvertedCount: 0,
+      incomeUnconvertedCount: 0,
+      baseCurrency: 'EUR',
+    });
+    await mockJson(page, '**/bank-transactions/review-counts', {
+      needsReview: 0,
+      categorizationFailed: 0,
+      categorizing: 0,
+      unknownDirection: 0,
+      missingBaseAmount: 0,
+    });
     await mockJson(page, '**/bank-transactions?**', {transactions: [], total: 0});
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
@@ -1328,7 +1379,13 @@ test.describe('mocked Enable Banking bank connection', () => {
     await mockJson(page, `${API_URL}/auth/logout`, {});
     await page.route(`${API_URL}/auth/login`, (route) => {
       nextSession = true;
-      return fulfillJson(route, {id: '00000000-0000-4000-8000-000000000002', name: 'Next Example', email: 'next@example.test', isEmailVerified: true, createdAt: '2026-01-01T00:00:00Z'});
+      return fulfillJson(route, {
+        id: '00000000-0000-4000-8000-000000000002',
+        name: 'Next Example',
+        email: 'next@example.test',
+        isEmailVerified: true,
+        createdAt: '2026-01-01T00:00:00Z',
+      });
     });
     await page.goto('/bank-connections');
     await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id]);
@@ -1340,7 +1397,10 @@ test.describe('mocked Enable Banking bank connection', () => {
       await loginPage.submitButton.click();
       await expect(page.getByTestId('account-menu-trigger')).toContainText('NE');
       await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id, next.id]);
-      await page.getByRole('navigation', {name: 'Primary'}).getByRole('link', {name: 'Connections', exact: true}).click();
+      await page
+        .getByRole('navigation', {name: 'Primary'})
+        .getByRole('link', {name: 'Connections', exact: true})
+        .click();
       await expect(page.getByTestId(`bank-connection-${next.id}`)).toBeVisible();
     } finally {
       release();
@@ -1352,7 +1412,9 @@ test.describe('mocked Enable Banking bank connection', () => {
     ['succeeded', 'SUCCEEDED', true],
     ['failed', 'FAILED', false],
   ] as const) {
-    test(`reloads Home once after ${name} refreshes of every connection on opening`, async ({page}) => {
+    test(`reloads Home once after ${name} refreshes of every connection on opening`, async ({
+      page,
+    }) => {
       const second = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000097'};
       // A succeeded refresh moves its connection's last sync forward; a failed one leaves it.
       const synced = new Set<string>();
@@ -1361,18 +1423,35 @@ test.describe('mocked Enable Banking bank connection', () => {
         listReads++;
         return [MOCK_CONNECTION, second].map((connection) => ({
           ...connection,
-          lastSyncedAt: synced.has(connection.id) ? '2026-10-02T00:00:00.000Z' : '2026-10-01T00:00:00.000Z',
+          lastSyncedAt: synced.has(connection.id)
+            ? '2026-10-02T00:00:00.000Z'
+            : '2026-10-01T00:00:00.000Z',
         }));
       });
       await mockBalanceTrend(page);
       await mockCashFlow(page);
       await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
-      await mockJson(page, '**/recurring-series/summary?**', {expenseMonthlyTotal: '0.00', incomeMonthlyTotal: '0.00', expenseThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'}, incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'}, upcoming: [], expenseUnconvertedCount: 0, incomeUnconvertedCount: 0, baseCurrency: 'EUR'});
+      await mockJson(page, '**/recurring-series/summary?**', {
+        expenseMonthlyTotal: '0.00',
+        incomeMonthlyTotal: '0.00',
+        expenseThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
+        incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
+        upcoming: [],
+        expenseUnconvertedCount: 0,
+        incomeUnconvertedCount: 0,
+        baseCurrency: 'EUR',
+      });
       await mockJson(page, '**/bank-transactions?**', {transactions: [], total: 0});
       let reviewCountReads = 0;
       await page.route('**/bank-transactions/review-counts', (route) => {
         reviewCountReads++;
-        return fulfillJson(route, {needsReview: 0, categorizationFailed: 0, categorizing: 0, unknownDirection: 0, missingBaseAmount: 0});
+        return fulfillJson(route, {
+          needsReview: 0,
+          categorizationFailed: 0,
+          categorizing: 0,
+          unknownDirection: 0,
+          missingBaseAmount: 0,
+        });
       });
       const requests: string[] = [];
       const releases = new Map<string, () => void>();
@@ -1405,20 +1484,32 @@ test.describe('mocked Enable Banking bank connection', () => {
       }
       await expect.poll(() => reviewCountReads).toBe(2);
       expect(listReads).toBe(readsBeforeRun + 1);
-      await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
       expect(reviewCountReads).toBe(2);
     });
   }
 
-  test('cancels hidden foreground work and reads current connection state on reopening', async ({page}) => {
+  test('cancels hidden foreground work and reads current connection state on reopening', async ({
+    page,
+  }) => {
     await page.addInitScript(() => {
       const fetch = window.fetch.bind(window);
       window.fetch = (input, init) => {
-        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
         if (url.endsWith('/refresh')) {
-          init?.signal?.addEventListener('abort', () => {
-            document.documentElement.dataset.refreshAborted = 'true';
-          }, {once: true});
+          init?.signal?.addEventListener(
+            'abort',
+            () => {
+              document.documentElement.dataset.refreshAborted = 'true';
+            },
+            {once: true},
+          );
         }
         return fetch(input, init);
       };
@@ -1430,11 +1521,9 @@ test.describe('mocked Enable Banking bank connection', () => {
     const requests: string[] = [];
     await mockBankConnections(page, () => {
       listReads++;
-      return reopened ? [
-        {...MOCK_CONNECTION, syncStatus: 'RUNNING'},
-        {...second, status: 'EXPIRED'},
-        third,
-      ] : [MOCK_CONNECTION, second];
+      return reopened
+        ? [{...MOCK_CONNECTION, syncStatus: 'RUNNING'}, {...second, status: 'EXPIRED'}, third]
+        : [MOCK_CONNECTION, second];
     });
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
@@ -1454,7 +1543,12 @@ test.describe('mocked Enable Banking bank connection', () => {
       await expect(page.locator('html')).toHaveAttribute('data-refresh-aborted', 'true');
       expect(requests).toEqual([MOCK_CONNECTION.id]);
       expect(await page.locator('[data-sonner-toast]').count()).toBe(0);
-      expect(await page.getByRole('status').filter({hasText: /^Offline/}).count()).toBe(0);
+      expect(
+        await page
+          .getByRole('status')
+          .filter({hasText: /^Offline/})
+          .count(),
+      ).toBe(0);
       reopened = true;
       const readsBefore = listReads;
       await page.evaluate(() => {
@@ -1469,7 +1563,9 @@ test.describe('mocked Enable Banking bank connection', () => {
     }
   });
 
-  test('refreshes once per visible opening and retries a failed bank on reopening', async ({page}) => {
+  test('refreshes once per visible opening and retries a failed bank on reopening', async ({
+    page,
+  }) => {
     let requests = 0;
     await mockBankConnections(page, [MOCK_CONNECTION]);
     await page.route(`**/bank-connections/${MOCK_CONNECTION.id}/refresh`, (route) => {

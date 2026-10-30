@@ -1,8 +1,8 @@
 import {QueryClient, useQuery, useQueryClient} from '@tanstack/react-query';
+import {BankTransaction, BankTransactionsResponse} from '@tempo/contracts';
 
 import {api} from '@/utils/api';
 
-import {BankTransaction, BankTransactionsResponse} from '../types/bank-transaction';
 import {bankQueryKeys} from './query-keys';
 
 /** The same transaction from an already-loaded transactions page, if any. */

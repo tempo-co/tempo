@@ -1,6 +1,7 @@
+import type {CashFlowInterval} from '@tempo/contracts';
+
 import {Button} from '@/components/ui/button';
 
-import type {CashFlowInterval} from '../types/bank-transaction-cash-flow';
 import {IntervalToggle} from './interval-toggle';
 
 type ChartCardHeaderProps = {

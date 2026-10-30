@@ -1,4 +1,9 @@
-import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from '@tempo/contracts';
+import {
+  BANK_TRANSACTION_CATEGORIES,
+  BankTransaction,
+  BankTransactionCategory,
+  BankTransactionCategoryImpact,
+} from '@tempo/contracts';
 import {useState} from 'react';
 import {toast} from 'sonner';
 
@@ -13,7 +18,6 @@ import {wasToasted} from '@/utils/api';
 
 import {usePreviewBankTransactionCategory} from '../api/use-preview-bank-transaction-category';
 import {useUpdateBankTransactionCategory} from '../api/use-update-bank-transaction-category';
-import {BankTransaction, BankTransactionCategoryImpact} from '../types/bank-transaction';
 import {BANK_TRANSACTION_CATEGORY_META} from '../utils/bank-transaction-category-meta';
 import {
   formatBankTransactionCategory,

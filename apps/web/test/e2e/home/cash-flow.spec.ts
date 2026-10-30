@@ -1,6 +1,5 @@
 import type {Page} from '@playwright/test';
-
-import type {BankTransactionSummary} from '@/features/dashboard/types/bank-transaction-summary';
+import type {BankTransactionSummary} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';

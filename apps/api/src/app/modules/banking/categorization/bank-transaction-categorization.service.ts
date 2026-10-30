@@ -1,7 +1,13 @@
 import {InjectQueue} from '@nestjs/bullmq';
 import {Inject, Injectable, Logger} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
-import {BankTransactionCategory, isBankTransactionCategory} from '@tempo/contracts';
+import {
+	BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+	type BankTransactionCategorizationSource,
+	type BankTransactionCategorizationStatus,
+	type BankTransactionCategory,
+	isBankTransactionCategory,
+} from '@tempo/contracts';
 import {Queue} from 'bullmq';
 import {createHash} from 'node:crypto';
 import {In, IsNull, Repository, SelectQueryBuilder} from 'typeorm';
@@ -49,15 +55,12 @@ import {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
 	BankTransactionCategorizationSearchTrace,
-	BankTransactionCategorizationSource,
-	BankTransactionCategorizationStatus,
 	CLAIMABLE_CATEGORIZATION_STATUSES,
 	PreviousManualCategory,
 	SameAmountPayment,
 	isManualCategorySource,
 	notManualCategorySourceSql,
 } from './bank-transaction-categorization.types';
-import {BANK_TRANSACTION_CATEGORY_DEFINITIONS} from './bank-transaction-category';
 import {
 	BANK_TRANSACTION_CATEGORY_RULE_PROVIDER,
 	BANK_TRANSACTION_CATEGORY_RULE_VERSION,

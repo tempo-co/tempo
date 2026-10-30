@@ -1,4 +1,5 @@
-import type {BankTransactionReviewCounts} from '../../../src/features/dashboard/types/bank-transaction-summary';
+import type {BankTransactionReviewCounts} from '@tempo/contracts';
+
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {septemberSummary} from '../../data/home-summary.data';

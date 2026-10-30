@@ -1,4 +1,5 @@
 import {Link, useNavigate} from '@tanstack/react-router';
+import type {BankTransactionCashFlowPeriod, CashFlowInterval} from '@tempo/contracts';
 import {format} from 'date-fns';
 import {useState} from 'react';
 import {Bar, BarChart, CartesianGrid, Cell, ReferenceArea, XAxis, YAxis} from 'recharts';
@@ -10,7 +11,6 @@ import {useIsMobile} from '@/hooks/use-is-mobile';
 import {cn} from '@/utils/cn';
 
 import {useGetBankTransactionCashFlow} from '../api/use-get-bank-transaction-cash-flow';
-import type {CashFlowInterval, CashFlowPeriod} from '../types/bank-transaction-cash-flow';
 import {axisFormatter, axisTicks, firstOfYear, labelEvery} from '../utils/chart-axis';
 import {cashFlowDrill, parseCalendarDate} from '../utils/drill-links';
 import {formatMoney, formatWholeMoney, toCents} from '../utils/money';
@@ -26,10 +26,10 @@ import {MONTHS_SHOWN, latestWindow, shownWeeks} from '../utils/period-window';
 import {ChartCardError, ChartCardHeader} from './chart-card';
 
 const day = (value: string) => parseCalendarDate(value);
-const monthOf = (period: CashFlowPeriod) => period.start.slice(0, 7);
+const monthOf = (period: BankTransactionCashFlowPeriod) => period.start.slice(0, 7);
 
 /** "6–12 Oct", or "29 Sep – 5 Oct" across a month boundary. */
-function formatWeek(period: CashFlowPeriod) {
+function formatWeek(period: BankTransactionCashFlowPeriod) {
   const start = day(period.start);
   const end = day(period.end);
   return start.getMonth() === end.getMonth()
@@ -37,7 +37,7 @@ function formatWeek(period: CashFlowPeriod) {
     : `${format(start, 'd MMM')} – ${format(end, 'd MMM')}`;
 }
 
-function periodName(period: CashFlowPeriod, interval: CashFlowInterval) {
+function periodName(period: BankTransactionCashFlowPeriod, interval: CashFlowInterval) {
   if (interval === 'week') return formatWeek(period);
   if (interval === 'month') return formatMonth(monthOf(period));
   return period.start.slice(0, 4);
@@ -115,7 +115,11 @@ export function CashFlowCard({month}: {month: string}) {
 }
 
 /** "21 Apr – 12 Oct", "Nov 2025 – Sep 2026" or "2022–2025": the full periods the averages cover. */
-function formatSpan(first: CashFlowPeriod, last: CashFlowPeriod, interval: CashFlowInterval) {
+function formatSpan(
+  first: BankTransactionCashFlowPeriod,
+  last: BankTransactionCashFlowPeriod,
+  interval: CashFlowInterval,
+) {
   if (interval === 'year') return `${first.start.slice(0, 4)}–${last.start.slice(0, 4)}`;
   const pattern =
     interval === 'month'
@@ -132,7 +136,7 @@ function Averages({
   interval,
   currency,
 }: {
-  periods: CashFlowPeriod[];
+  periods: BankTransactionCashFlowPeriod[];
   interval: CashFlowInterval;
   currency: string | null;
 }) {
@@ -176,7 +180,7 @@ function CashFlowChart({
   selectedMonth,
   currency,
 }: {
-  periods: CashFlowPeriod[];
+  periods: BankTransactionCashFlowPeriod[];
   interval: CashFlowInterval;
   selectedMonth: string;
   currency: string | null;
@@ -224,7 +228,7 @@ function CashFlowChart({
         ? format(day(start), 'MMM')
         : format(day(start), 'd MMM');
 
-  const open = (period: CashFlowPeriod) => {
+  const open = (period: BankTransactionCashFlowPeriod) => {
     if (interval === 'month') void navigate({to: '/', search: monthSearch(monthOf(period))});
     else void navigate({to: '/bank-transactions', search: cashFlowDrill(period.start, period.end)});
   };

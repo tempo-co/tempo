@@ -1,15 +1,15 @@
 import {useNavigate} from '@tanstack/react-router';
+import {
+  BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES,
+  BankTransactionBaseAmountFilterValue,
+} from '@tempo/contracts';
 import {Coins} from 'lucide-react';
 import * as React from 'react';
 
 import {Command, CommandGroup, CommandItem, CommandList} from '@/components/ui/command';
 
 import {useGetAllBankConnections} from '../api/use-get-all-bank-connections';
-import {
-  BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES,
-  BankTransactionBaseAmountFilterValue,
-  BankTransactionFilterParams,
-} from '../types/bank-transaction';
+import {BankTransactionFilterParams} from '../types/bank-transaction';
 import {FacetedFilter, FilterResetGroup} from './bank-transaction-faceted-filter';
 import {FilterCheckIndicator, SelectedFilterSummary} from './bank-transaction-multi-select-filter';
 

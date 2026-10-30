@@ -1,3 +1,4 @@
+import type {BankConnectionTransactionsQuery} from '@tempo/contracts';
 import {Transform} from 'class-transformer';
 import {IsInt, IsOptional, Max, Min} from 'class-validator';
 
@@ -6,7 +7,7 @@ import {transformStrictDecimalInteger} from '@core/pagination/pagination.transfo
 export const DEFAULT_BANK_CONNECTION_TRANSACTION_LIMIT = 25;
 export const MAX_BANK_CONNECTION_TRANSACTION_LIMIT = 100;
 
-export class BankConnectionTransactionsQueryDto {
+export class BankConnectionTransactionsQueryDto implements BankConnectionTransactionsQuery {
 	@IsOptional()
 	@Transform(transformStrictDecimalInteger)
 	@IsInt()

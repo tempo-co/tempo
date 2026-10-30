@@ -1,26 +1,22 @@
+import type {
+	BankTransactionCashFlowTreatment,
+	BankTransactionFinancialEventSource,
+	BankTransactionFinancialEventType,
+} from '@tempo/contracts';
+
 import type {BankTransactionDirection} from './bank-transaction-direction';
 import {normalizeBankTransactionText} from './bank-transaction-display';
 import {normalizeCurrency} from './services/bank-transaction-amount-conversion.utils';
 
+export type {BankTransactionCashFlowTreatment, BankTransactionFinancialEventSource, BankTransactionFinancialEventType};
+
 export const BANK_TRANSACTION_FINANCIAL_EVENT_TYPES = {
 	CURRENCY_EXCHANGE: 'CURRENCY_EXCHANGE',
-} as const;
-export type BankTransactionFinancialEventType =
-	(typeof BANK_TRANSACTION_FINANCIAL_EVENT_TYPES)[keyof typeof BANK_TRANSACTION_FINANCIAL_EVENT_TYPES];
-
-/** Filter-only value: transactions recognized as transfers between the owner's own accounts. */
-export const BANK_TRANSACTION_OWN_TRANSFER_FILTER = 'OWN_TRANSFER' as const;
-export const BANK_TRANSACTION_FINANCIAL_EVENT_FILTER_VALUES = [
-	...Object.values(BANK_TRANSACTION_FINANCIAL_EVENT_TYPES),
-	BANK_TRANSACTION_OWN_TRANSFER_FILTER,
-] as const;
-export type BankTransactionFinancialEventFilterValue = (typeof BANK_TRANSACTION_FINANCIAL_EVENT_FILTER_VALUES)[number];
+} as const satisfies {[T in BankTransactionFinancialEventType]: T};
 
 export const BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES = {
 	RULE: 'RULE',
-} as const;
-export type BankTransactionFinancialEventSource =
-	(typeof BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES)[keyof typeof BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES];
+} as const satisfies {[S in BankTransactionFinancialEventSource]: S};
 
 export const BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION = 'revolut-currency-exchange-v1';
 
@@ -29,27 +25,7 @@ export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = {
 	EXPENSE: 'EXPENSE',
 	INTERNAL: 'INTERNAL',
 	UNKNOWN: 'UNKNOWN',
-} as const;
-export type BankTransactionCashFlowTreatment =
-	(typeof BANK_TRANSACTION_CASH_FLOW_TREATMENTS)[keyof typeof BANK_TRANSACTION_CASH_FLOW_TREATMENTS];
-
-/**
- * List and summary cash flows. Unlike the per-row treatment, refunds count as (negative) spending and payments to
- * other people count as spending, so totals reconcile with the Home dashboard.
- */
-export const BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES = [
-	'SPENDING',
-	'INCOME',
-	'INTERNAL',
-	// The two kinds of internal movement, for narrowing `INTERNAL`.
-	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-	BANK_TRANSACTION_OWN_TRANSFER_FILTER,
-	'UNKNOWN',
-] as const;
-export type BankTransactionCashFlowFilterValue = (typeof BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES)[number];
-
-export const BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES = ['PRESENT', 'MISSING'] as const;
-export type BankTransactionBaseAmountFilterValue = (typeof BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES)[number];
+} as const satisfies {[T in BankTransactionCashFlowTreatment]: T};
 
 export type BankTransactionFinancialEvent = {
 	type: BankTransactionFinancialEventType;

@@ -1,6 +1,18 @@
 import {BadRequestException, Injectable} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
-import {BANK_TRANSACTION_UNCATEGORIZED, type BankTransactionCategoryFilterValue} from '@tempo/contracts';
+import {
+	BANK_TRANSACTION_UNCATEGORIZED,
+	type BankBalanceTrend,
+	type BankBalanceTrendPeriod,
+	type BankTransactionCashFlow,
+	type BankTransactionCashFlowPeriod,
+	type BankTransactionCategoryFilterValue,
+	type BankTransactionReviewCounts,
+	type BankTransactionSummary,
+	type BankTransactionSummaryCategory,
+	type BankTransactionTotals,
+	type CashFlowInterval,
+} from '@tempo/contracts';
 import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
@@ -10,19 +22,9 @@ import {
 	BANKING_TRANSACTION_CASH_FLOW_RANGE,
 	BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH,
 } from '../api/constants/banking-messages.constants';
-import type {BankTransactionCashFlowQueryDto, CashFlowInterval} from '../api/dtos/bank-transaction-cash-flow-query.dto';
+import type {BankTransactionCashFlowQueryDto} from '../api/dtos/bank-transaction-cash-flow-query.dto';
 import type {BankTransactionTotalsQueryDto} from '../api/dtos/bank-transaction-query.dto';
 import type {BankTransactionSummaryQueryDto} from '../api/dtos/bank-transaction-summary-query.dto';
-import type {
-	BankBalanceTrendPeriodDto,
-	BankBalanceTrendResponseDto,
-	BankTransactionCashFlowPeriodDto,
-	BankTransactionCashFlowResponseDto,
-	BankTransactionReviewCountsResponseDto,
-	BankTransactionSummaryCategoryDto,
-	BankTransactionSummaryResponseDto,
-} from '../api/dtos/bank-transaction-summary-response.dto';
-import type {BankTransactionTotalsResponseDto} from '../api/dtos/bank-transaction-totals-response.dto';
 import {BankTransaction} from '../bank-transaction.entity';
 import {addDays} from '../banking.utils';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
@@ -80,7 +82,7 @@ export class BankTransactionSummaryService {
 	async getSummary(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
 		{month, asOf}: BankTransactionSummaryQueryDto,
-	): Promise<BankTransactionSummaryResponseDto> {
+	): Promise<BankTransactionSummary> {
 		const monthDays = daysInMonth(month);
 		const monthStart = `${month}-01`;
 		const monthEnd = `${month}-${monthDays}`;
@@ -182,7 +184,7 @@ export class BankTransactionSummaryService {
 			},
 			categories: [...categories.entries()]
 				.sort(compareCategories)
-				.map(([category, total]): BankTransactionSummaryCategoryDto => ({
+				.map(([category, total]): BankTransactionSummaryCategory => ({
 					category,
 					spending: formatCents(total.cents),
 					count: total.count,
@@ -197,7 +199,7 @@ export class BankTransactionSummaryService {
 	async getCashFlow(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
 		{interval, from, to, asOf}: BankTransactionCashFlowQueryDto,
-	): Promise<BankTransactionCashFlowResponseDto> {
+	): Promise<BankTransactionCashFlow> {
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(BANKING_TRANSACTION_CASH_FLOW_RANGE);
 
@@ -206,7 +208,7 @@ export class BankTransactionSummaryService {
 			this.findPeriodFlows(accountId, interval, starts[0], to),
 		]);
 		const totals = new Map(rows.map((row) => [row.start, row]));
-		const periods: BankTransactionCashFlowPeriodDto[] = [];
+		const periods: BankTransactionCashFlowPeriod[] = [];
 		for (const start of starts) {
 			const periodEnd = addDays(nextPeriodStart(start, interval), -1);
 			if (!firstBookingDate || periodEnd < firstBookingDate) continue;
@@ -236,7 +238,7 @@ export class BankTransactionSummaryService {
 	async getBalanceTrend(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
 		{interval, from, to, asOf}: BankTransactionCashFlowQueryDto,
-	): Promise<BankBalanceTrendResponseDto> {
+	): Promise<BankBalanceTrend> {
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(BANKING_BALANCE_TREND_RANGE);
 		const windows = starts.map((start) => {
@@ -293,7 +295,7 @@ export class BankTransactionSummaryService {
 			if (group) group.push(row);
 			else byEnd.set(row.end, [row]);
 		}
-		const periods: BankBalanceTrendPeriodDto[] = [];
+		const periods: BankBalanceTrendPeriod[] = [];
 		for (const {start, periodEnd, end} of windows) {
 			const accounts = byEnd.get(end) ?? [];
 			const counted = accounts.filter((row) => row.included);
@@ -312,7 +314,7 @@ export class BankTransactionSummaryService {
 	async getTotals(
 		{id, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
 		{filter}: BankTransactionTotalsQueryDto,
-	): Promise<BankTransactionTotalsResponseDto> {
+	): Promise<BankTransactionTotals> {
 		const query = createOwnerScopedQuery(this.bankTransactionRepository, id);
 		const recurringIds = filter?.recurringSeriesKey
 			? await this.recurringSeriesService.findTransactionIds(id, filter.recurringSeriesKey)
@@ -345,14 +347,14 @@ export class BankTransactionSummaryService {
 		};
 	}
 
-	async getReviewCounts(accountId: Account['id']): Promise<BankTransactionReviewCountsResponseDto> {
+	async getReviewCounts(accountId: Account['id']): Promise<BankTransactionReviewCounts> {
 		const counts = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
 			.select(`COUNT(*) FILTER (WHERE "transaction"."category" = 'NEEDS_REVIEW')::int`, 'needsReview')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_CATEGORIZATION_FAILED})::int`, 'categorizationFailed')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_CATEGORIZING})::int`, 'categorizing')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_UNKNOWN_DIRECTION})::int`, 'unknownDirection')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_MISSING_BASE_AMOUNT})::int`, 'missingBaseAmount')
-			.getRawOne<BankTransactionReviewCountsResponseDto>();
+			.getRawOne<BankTransactionReviewCounts>();
 		return counts!;
 	}
 

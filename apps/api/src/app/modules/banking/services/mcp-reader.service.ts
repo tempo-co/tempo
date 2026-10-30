@@ -29,11 +29,11 @@ export class McpReaderService {
 	forAccount(account: Account): ToolReader {
 		const query = <T>(value: unknown, metatype: new () => T): Promise<T> =>
 			this.validation.transform(value, {type: 'query', metatype});
-		const read = async (operation: () => Promise<unknown>) => {
+		const read = async <T>(operation: () => Promise<T>): Promise<T> => {
 			try {
-				// These services explicitly map entities to the same public DTOs used by REST.
-				// Apply the global REST ClassSerializerInterceptor's class-transformer boundary too.
-				return instanceToPlain(await operation());
+				// These services explicitly map entities to the same @tempo/contracts shapes REST returns.
+				// Apply the global REST ClassSerializerInterceptor's class-transformer boundary too; it keeps the shape.
+				return instanceToPlain(await operation()) as T;
 			} catch (error) {
 				throw new ToolReadError(error instanceof HttpException ? error.getStatus() : 500);
 			}

@@ -1,16 +1,19 @@
-import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from '@tempo/contracts';
+import {
+  BANK_TRANSACTION_CATEGORIES,
+  BankTransaction,
+  BankTransactionCashFlowTreatment,
+  BankTransactionCategorizationSource,
+  BankTransactionCategorizationStatus,
+  BankTransactionCategory,
+  BankTransactionFinancialEventType,
+  OwnTransferEvidence,
+} from '@tempo/contracts';
 import {format, isThisYear, parseISO} from 'date-fns';
 
 import {
   BANK_TRANSACTION_ACTIVITY_LABELS,
   BANK_TRANSACTION_CATEGORY_LABELS,
   BANK_TRANSACTION_FINANCIAL_EVENT_LABELS,
-  BankTransaction,
-  BankTransactionCashFlowTreatment,
-  BankTransactionCategorizationSource,
-  BankTransactionCategorizationStatus,
-  BankTransactionFinancialEventType,
-  OwnTransferEvidence,
 } from '../types/bank-transaction';
 import {formatBankAccountLabel} from './bank-account-label';
 

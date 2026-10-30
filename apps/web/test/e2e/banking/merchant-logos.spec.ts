@@ -1,12 +1,8 @@
 import type {Locator, Page} from '@playwright/test';
+import {type BankConnection, BankTransaction} from '@tempo/contracts';
 import {type Server, createServer} from 'node:http';
 import type {AddressInfo} from 'node:net';
 
-import type {BankConnection} from '../../../src/features/banking/types/bank-connection';
-import {
-  BankTransaction,
-  BankTransactionDirection,
-} from '../../../src/features/banking/types/bank-transaction';
 import {septemberSummary} from '../../data/home-summary.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
@@ -57,7 +53,7 @@ function transaction(
     amount: '-24.50',
     currency: 'EUR',
     creditDebitIndicator: 'DBIT',
-    direction: BankTransactionDirection.EXPENSE,
+    direction: 'EXPENSE',
     transactionType: 'CARD_PAYMENT',
     transactionStatus: 'BOOK',
     providerTransactionDescription: null,
@@ -84,6 +80,12 @@ function transaction(
     financialEventSource: null,
     financialEventRuleVersion: null,
     cashFlowTreatment: 'EXPENSE',
+    ownTransfer: null,
+    ownTransferOverride: null,
+    currencyExchangeCounterpart: null,
+    amountInBaseCurrency: null,
+    baseAmountMethod: null,
+    baseAmountRateDate: null,
     ...overrides,
   };
 }
@@ -122,6 +124,7 @@ const connection: BankConnection = {
   lastSyncError: null,
   nextSyncAt: '2026-10-02T11:00:00Z',
   syncStatus: 'SUCCEEDED',
+  baseCurrency: null,
   bankAccounts: [],
 };
 
@@ -543,7 +546,7 @@ for (const width of [1440, 390]) {
         await page.goto('/?month=2026-09');
         const recent = page.getByRole('region', {name: 'Latest in September 2026'});
         const recentRow = (row: BankTransaction) =>
-          recent.locator('li').filter({hasText: row.displayDescription!});
+          recent.locator('li').filter({hasText: row.displayDescription});
         await expectRowTiles((row) => recentRow(row).getByTestId('merchant-logo-tile'), theme);
         await expectTileBeforeTitle(
           recentRow(withLogo).getByTestId('merchant-logo-tile'),

@@ -1,6 +1,6 @@
 import {useQuery} from '@tanstack/react-query';
+import {BankConnectionTransactionsResponse} from '@tempo/contracts';
 
-import {BankConnectionTransactionsResponse} from '@/features/banking/types/bank-connection';
 import {api} from '@/utils/api';
 import {savedDataStatus} from '@/utils/query-status';
 

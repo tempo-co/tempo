@@ -1,6 +1,6 @@
+import type {CashFlowInterval} from '@tempo/contracts';
 import {format, startOfWeek, subWeeks} from 'date-fns';
 
-import type {CashFlowInterval} from '../types/bank-transaction-cash-flow';
 import {parseCalendarDate} from './drill-links';
 import {currentMonth, localDate, shiftMonth} from './month';
 

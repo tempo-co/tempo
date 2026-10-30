@@ -1,9 +1,10 @@
-import type {BankTransactionCategoryFilterValue} from '@tempo/contracts';
+import type {
+  BankTransactionCategoryFilterValue,
+  BankTransactionReviewCounts,
+} from '@tempo/contracts';
 import {parse} from 'date-fns';
 
 import type {BankTransactionSearchParams} from '@/features/banking/types/bank-transaction';
-
-import type {BankTransactionReviewCounts} from '../types/bank-transaction-summary';
 
 /** Search params for a `/bank-transactions/` link; the list fills in pagination defaults. */
 export type BankTransactionDrillSearch = Partial<BankTransactionSearchParams>;

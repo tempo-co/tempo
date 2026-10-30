@@ -7,7 +7,7 @@
 		"node": ">=26.0.0"
 	},
 	"scripts": {
-		"build": "node scripts/generate-categories.mjs && tsc -p tsconfig.json",
+		"build": "tsc -p ../../../packages/contracts && tsc -p tsconfig.json",
 		"start": "node dist/stdio.js",
 		"test": "npm run build && node --test test/*.test.mjs",
 		"lint:check": "eslint src test scripts",
@@ -16,6 +16,7 @@
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "1.32.1",
+		"@tempo/contracts": "file:../../../packages/contracts",
 		"validator": "13.15.35",
 		"zod": "4.6.7"
 	},

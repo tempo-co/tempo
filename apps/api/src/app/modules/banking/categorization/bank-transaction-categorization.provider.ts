@@ -1,8 +1,9 @@
+import type {BankTransactionCategoryDefinition} from '@tempo/contracts';
+
 import type {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
 	BankTransactionCategorizationWebSearchInput,
-	BankTransactionCategoryDefinition,
 } from './bank-transaction-categorization.types';
 
 export const BANK_TRANSACTION_CATEGORIZATION_PROVIDER = Symbol('BANK_TRANSACTION_CATEGORIZATION_PROVIDER');

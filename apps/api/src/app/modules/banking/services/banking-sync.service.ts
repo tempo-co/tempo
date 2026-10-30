@@ -10,6 +10,7 @@ import {
 	ServiceUnavailableException,
 } from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
+import type {BankSyncRun as BankSyncRunResponse, BankSyncStatus} from '@tempo/contracts';
 import {createHash, randomUUID} from 'node:crypto';
 import {isIP} from 'node:net';
 import {DataSource, FindOptionsSelect, In, IsNull, Not, Repository} from 'typeorm';
@@ -31,7 +32,6 @@ import {
 	BANKING_SERVICE_UNAVAILABLE,
 	BANKING_SUPPORTED_BANKS_UNAVAILABLE,
 } from '../api/constants/banking-messages.constants';
-import {BankSyncRunResponseDto} from '../api/dtos/bank-connection-response.dto';
 import {BankAccountBalance} from '../bank-account-balance.entity';
 import {BankAccount} from '../bank-account.entity';
 import {BankConnection} from '../bank-connection.entity';
@@ -198,7 +198,7 @@ export class BankingSyncService {
 		this.bankingIntegrationEnabled = configurationService.get('BANKING_INTEGRATION_ENABLED') !== false;
 	}
 
-	async synchronizeAutomatically(connectionId: BankConnection['id']): Promise<BankSyncRunResponseDto | null> {
+	async synchronizeAutomatically(connectionId: BankConnection['id']): Promise<BankSyncRunResponse | null> {
 		if (!this.bankingIntegrationEnabled) return null;
 
 		const connection = await this.bankConnectionRepository.findOne({
@@ -216,7 +216,7 @@ export class BankingSyncService {
 		connectionId: BankConnection['id'],
 		psu: EnableBankingPsuContext,
 		signal: AbortSignal,
-	): Promise<BankSyncRunResponseDto | null> {
+	): Promise<BankSyncRunResponse | null> {
 		if (!this.bankingIntegrationEnabled) throw new ServiceUnavailableException(BANKING_SERVICE_UNAVAILABLE);
 		await findOwnedConnection(this.bankConnectionRepository, accountId, connectionId);
 		return this.runSynchronization(accountId, connectionId, psu, signal);
@@ -227,7 +227,7 @@ export class BankingSyncService {
 		connectionId: BankConnection['id'],
 		psu?: EnableBankingPsuContext,
 		requestSignal?: AbortSignal,
-	): Promise<BankSyncRunResponseDto | null> {
+	): Promise<BankSyncRunResponse | null> {
 		const lease = await this.connectionLockService.acquire(connectionId);
 		const stopRenewal = () => lease.stop();
 		requestSignal?.addEventListener('abort', stopRenewal, {once: true});
@@ -1295,12 +1295,13 @@ export class BankingSyncService {
 		run: BankSyncRun,
 		transactionsAdded: number,
 		rateLimit?: SyncRateLimit,
-	): BankSyncRunResponseDto {
+	): BankSyncRunResponse {
 		return {
 			id: run.id,
-			status: run.status,
-			startedAt: run.startedAt,
-			finishedAt: run.finishedAt,
+			// Written only from BANK_SYNC_STATUSES.
+			status: run.status as BankSyncStatus,
+			startedAt: run.startedAt.toISOString(),
+			finishedAt: run.finishedAt?.toISOString() ?? null,
 			requestedFrom: run.requestedFrom,
 			requestedTo: run.requestedTo,
 			accountsFetched: run.accountsFetched,

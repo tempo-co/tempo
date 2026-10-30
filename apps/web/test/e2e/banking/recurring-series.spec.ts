@@ -1,10 +1,11 @@
 import type {Page} from '@playwright/test';
-import type {RecurringSeries, RecurringSeriesList, RecurringSeriesLists} from '@tempo/contracts';
-
 import {
   type BankTransaction,
-  BankTransactionDirection,
-} from '../../../src/features/banking/types/bank-transaction';
+  type RecurringSeries,
+  type RecurringSeriesList,
+  type RecurringSeriesLists,
+} from '@tempo/contracts';
+
 import {formatBankTransactionCompactDate} from '../../../src/features/banking/utils/formatters';
 import {expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections, mockJson} from '../../utils/api-mocks';
@@ -183,7 +184,7 @@ function payment(
     counterpartyName: fields.displayDescription ?? null,
     currency: 'EUR',
     creditDebitIndicator: 'DBIT',
-    direction: BankTransactionDirection.EXPENSE,
+    direction: 'EXPENSE',
     transactionType: 'DIRECT_DEBIT',
     transactionStatus: 'BOOK',
     providerTransactionDescription: null,
@@ -209,6 +210,13 @@ function payment(
     financialEventSource: null,
     financialEventRuleVersion: null,
     cashFlowTreatment: 'EXPENSE',
+    merchantLogoUrl: null,
+    ownTransfer: null,
+    ownTransferOverride: null,
+    currencyExchangeCounterpart: null,
+    amountInBaseCurrency: null,
+    baseAmountMethod: null,
+    baseAmountRateDate: null,
     ...fields,
   };
 }

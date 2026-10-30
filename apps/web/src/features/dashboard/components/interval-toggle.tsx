@@ -1,6 +1,6 @@
-import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
+import type {CashFlowInterval} from '@tempo/contracts';
 
-import type {CashFlowInterval} from '../types/bank-transaction-cash-flow';
+import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
 
 const INTERVALS: {value: CashFlowInterval; label: string}[] = [
   {value: 'week', label: 'Week'},

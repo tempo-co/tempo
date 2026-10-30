@@ -1,7 +1,7 @@
 import {Link} from '@tanstack/react-router';
+import type {BankConnection} from '@tempo/contracts';
 import {formatDistanceToNow} from 'date-fns';
 
-import type {BankConnection} from '@/features/banking/types/bank-connection';
 import {isReauthorizationRequired} from '@/features/banking/utils/bank-sync-status';
 import {cn} from '@/utils/cn';
 

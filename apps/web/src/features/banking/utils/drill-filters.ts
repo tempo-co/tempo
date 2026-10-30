@@ -1,7 +1,10 @@
 import {
-  BANK_TRANSACTION_FILTER_KEYS,
   type BankTransactionCashFlowFilterValue,
   type BankTransactionCategoryStatusFilterValue,
+} from '@tempo/contracts';
+
+import {
+  BANK_TRANSACTION_FILTER_KEYS,
   type BankTransactionFilterParams,
 } from '../types/bank-transaction';
 
