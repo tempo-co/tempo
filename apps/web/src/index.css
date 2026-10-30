@@ -191,7 +191,7 @@
     --accent: 37.1 36.8% 88.8%;
     --accent-foreground: 270 7.5% 15.7%;
 
-    --clay: 13.7 46.3% 51.8%; /* Clay #BD654B — large accents and logo plane */
+    --clay: 13.7 46.3% 51.8%; /* Clay #BD654B — large accents */
 
     /* Leading transaction tiles only; ordinary category/status colours keep their semantics. */
     --transaction-tile-field: #F1E3D8;
@@ -267,7 +267,7 @@
     --accent: 262.5 9.1% 17.3%;
     --accent-foreground: 38.6 31.8% 91.4%;
 
-    --clay: 17.5 67.1% 69%;         /* Clay on dark — logo accent plane */
+    --clay: 17.5 67.1% 69%;         /* Clay on dark — large accents */
 
     --transaction-tile-field: #352A28;
     --transaction-tile-ink: #E59A7B;

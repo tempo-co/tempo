@@ -22,7 +22,7 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 
 - Destructive buttons keep the `destructive` variant's `text-destructive-foreground` (`src/components/ui/button.tsx`). Never add a text-colour override on a destructive fill; contrast falls well below AA. For "inconsistent colour" reports, grep for per-call overrides of the variant and measure computed colours in both themes.
 - `.dark` sets `color-scheme: dark` in `src/index.css`; without it native scrollbars and form controls render light.
-- `--clay` (mid-tone Clay) is for large accents and the logo's offset plane. Small text and controls on light use `--primary` (Clay strong). `DESIGN.md` holds the palette, contrast rules and component tokens.
+- `--clay` (mid-tone Clay) is for large accents. Small text and controls on light use `--primary` (Clay strong). `DESIGN.md` holds the palette, contrast rules and component tokens.
 
 ## Merchant logo tiles
 
