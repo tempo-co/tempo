@@ -2,15 +2,17 @@ import type {Session} from '@tempo/contracts';
 import {format, formatDistanceToNowStrict} from 'date-fns';
 import {createElement} from 'react';
 
+import {Button} from '@/components/ui/button';
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogTrigger,
+} from '@/components/ui/responsive-dialog';
 
 import {getSessionIcon} from '../../utils/get-session-icon';
 import {LogOutDialog} from './log-out-dialog';
@@ -27,13 +29,13 @@ export function SessionCard({session}: SessionCardProps) {
   const lastSeenAtRelative = formatDistanceToNowStrict(session.lastSeenAt, {addSuffix: true});
 
   return (
-    <Dialog>
+    <ResponsiveDialog>
       <div
         className='flex min-h-16 items-center gap-4 pr-4'
         data-testid='session-card'
         data-current-session={session.isCurrent}
       >
-        <DialogTrigger asChild>
+        <ResponsiveDialogTrigger asChild>
           <button
             type='button'
             className='flex min-w-0 flex-1 items-center gap-3 self-stretch py-3 pl-4 text-left transition-colors hover:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
@@ -64,45 +66,50 @@ export function SessionCard({session}: SessionCardProps) {
               </span>
             </span>
           </button>
-        </DialogTrigger>
+        </ResponsiveDialogTrigger>
         {session.isCurrent ? <LogOutDialog /> : <SessionRevokeDialog session={session} />}
       </div>
-      <DialogContent className='sm:max-w-md'>
-        <DialogHeader>
-          <DialogTitle className='wrap-anywhere'>{session.name}</DialogTitle>
-        </DialogHeader>
-        <dl className='divide-y text-sm'>
-          <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3 capitalize'>
-            <dt className='text-muted-foreground'>Device</dt>
-            <dd className='text-right wrap-anywhere'>{session.deviceType}</dd>
-          </div>
-          <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3'>
-            <dt className='text-muted-foreground'>IP address</dt>
-            <dd className='text-right font-mono wrap-anywhere'>{session.ip}</dd>
-          </div>
-          <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3'>
-            <dt className='text-muted-foreground'>Location</dt>
-            <dd className='text-right wrap-anywhere'>{session.location}</dd>
-          </div>
-          <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3'>
-            <dt className='text-muted-foreground'>Signed in</dt>
-            <dd className='text-right wrap-anywhere'>{createdAt}</dd>
-          </div>
-          <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3'>
-            <dt className='text-muted-foreground'>Last active</dt>
-            <dd className='text-right wrap-anywhere'>{lastSeenAt}</dd>
-          </div>
-        </dl>
-        <DialogFooter>
-          <DialogClose asChild>
+      <ResponsiveDialogContent className='md:max-w-md'>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle className='wrap-anywhere'>{session.name}</ResponsiveDialogTitle>
+        </ResponsiveDialogHeader>
+        <ResponsiveDialogBody>
+          <dl className='divide-y text-sm'>
+            <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3 capitalize'>
+              <dt className='text-muted-foreground'>Device</dt>
+              <dd className='text-right wrap-anywhere'>{session.deviceType}</dd>
+            </div>
+            <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3'>
+              <dt className='text-muted-foreground'>IP address</dt>
+              <dd className='text-right font-mono wrap-anywhere'>{session.ip}</dd>
+            </div>
+            <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3'>
+              <dt className='text-muted-foreground'>Location</dt>
+              <dd className='text-right wrap-anywhere'>{session.location}</dd>
+            </div>
+            <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3'>
+              <dt className='text-muted-foreground'>Signed in</dt>
+              <dd className='text-right wrap-anywhere'>{createdAt}</dd>
+            </div>
+            <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3'>
+              <dt className='text-muted-foreground'>Last active</dt>
+              <dd className='text-right wrap-anywhere'>{lastSeenAt}</dd>
+            </div>
+          </dl>
+        </ResponsiveDialogBody>
+        <ResponsiveDialogFooter>
+          <ResponsiveDialogClose asChild>
             {session.isCurrent ? (
               <LogOutDialog triggerVariant='destructive' />
             ) : (
               <SessionRevokeDialog session={session} triggerVariant='destructive' />
             )}
-          </DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </ResponsiveDialogClose>
+          <ResponsiveDialogClose asChild className='md:hidden'>
+            <Button variant='outline'>Close</Button>
+          </ResponsiveDialogClose>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

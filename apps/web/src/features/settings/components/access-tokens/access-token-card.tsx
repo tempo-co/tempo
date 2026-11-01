@@ -3,23 +3,26 @@ import {format, isPast, isToday, isYesterday} from 'date-fns';
 import {KeyRound} from 'lucide-react';
 import {ReactNode} from 'react';
 
+import {Button} from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogTrigger,
+} from '@/components/ui/responsive-dialog';
 import {cn} from '@/utils/cn';
 
 import {RevokeTokenDialog} from './revoke-token-dialog';
 
 export function AccessTokenCard({token}: {token: PersonalAccessToken}) {
   return (
-    <Dialog>
+    <ResponsiveDialog>
       <div className='flex min-h-16 items-center gap-4 pr-4' data-testid='access-token-row'>
-        <DialogTrigger asChild>
+        <ResponsiveDialogTrigger asChild>
           <button
             type='button'
             aria-label={`View ${token.name}`}
@@ -40,34 +43,36 @@ export function AccessTokenCard({token}: {token: PersonalAccessToken}) {
               </span>
             </span>
           </button>
-        </DialogTrigger>
+        </ResponsiveDialogTrigger>
         <RevokeTokenDialog token={token} />
       </div>
-      <DialogContent
-        aria-describedby={undefined}
-        className='max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md [&>button]:max-sm:top-1 [&>button]:max-sm:right-1 [&>button]:max-sm:grid [&>button]:max-sm:size-11 [&>button]:max-sm:place-items-center'
-      >
-        <DialogHeader className='pr-8 text-start'>
-          <DialogTitle className='wrap-anywhere'>{token.name}</DialogTitle>
-        </DialogHeader>
-        <dl className='divide-y text-sm'>
-          <TokenDetail label='Token prefix'>
-            <span className='font-mono'>{token.prefix}…</span>
-          </TokenDetail>
-          <TokenDetail label='Permissions'>Read-only</TokenDetail>
-          <TokenDetail label='Created'>{formatTimestamp(token.createdAt)}</TokenDetail>
-          <TokenDetail label='Last used'>
-            {token.lastUsedAt ? formatTimestamp(token.lastUsedAt) : 'Never used'}
-          </TokenDetail>
-          <TokenDetail label='Expiration'>
-            <TokenExpiry expiresAt={token.expiresAt} />
-          </TokenDetail>
-        </dl>
-        <DialogFooter>
+      <ResponsiveDialogContent aria-describedby={undefined} className='md:max-w-md'>
+        <ResponsiveDialogHeader className='pr-8 text-start'>
+          <ResponsiveDialogTitle className='wrap-anywhere'>{token.name}</ResponsiveDialogTitle>
+        </ResponsiveDialogHeader>
+        <ResponsiveDialogBody>
+          <dl className='divide-y text-sm'>
+            <TokenDetail label='Token prefix'>
+              <span className='font-mono'>{token.prefix}…</span>
+            </TokenDetail>
+            <TokenDetail label='Permissions'>Read-only</TokenDetail>
+            <TokenDetail label='Created'>{formatTimestamp(token.createdAt)}</TokenDetail>
+            <TokenDetail label='Last used'>
+              {token.lastUsedAt ? formatTimestamp(token.lastUsedAt) : 'Never used'}
+            </TokenDetail>
+            <TokenDetail label='Expiration'>
+              <TokenExpiry expiresAt={token.expiresAt} />
+            </TokenDetail>
+          </dl>
+        </ResponsiveDialogBody>
+        <ResponsiveDialogFooter>
           <RevokeTokenDialog token={token} triggerVariant='destructive' />
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <ResponsiveDialogClose asChild className='md:hidden'>
+            <Button variant='outline'>Close</Button>
+          </ResponsiveDialogClose>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
 

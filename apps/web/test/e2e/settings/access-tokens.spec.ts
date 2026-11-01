@@ -232,6 +232,13 @@ for (const width of [1440, 320]) {
     await page.keyboard.press('Enter');
     const details = page.getByRole('dialog', {name: tokenMetadata.name, exact: true});
     await expect(details).toBeVisible();
+    if (width < 768) {
+      await expect(details).toHaveAttribute('data-vaul-drawer', '');
+      await expect.poll(async () => {
+        const box = await details.boundingBox();
+        return box !== null && Math.abs(box.y + box.height - 900) <= 1;
+      }).toBe(true);
+    }
     await expect(details.locator('dt')).toHaveText([
       'Token prefix',
       'Permissions',
@@ -435,15 +442,13 @@ test('retries a failed list load and retains a token until revocation succeeds',
       return box !== null && box.y >= 0 && box.y + box.height <= 320;
     })
     .toBe(true);
-  await expect(expiredDetails.getByRole('button', {name: 'Close', exact: true})).toBeInViewport({
-    ratio: 1,
-  });
   await expiredDetails.hover();
   await page.mouse.wheel(0, 600);
   await expect
     .poll(() => expiredDetails.evaluate((element) => element.scrollTop))
     .toBeGreaterThan(0);
   await expect(expiredDetails.getByRole('button', {name: /^Revoke /})).toBeInViewport({ratio: 1});
+  await expect(expiredDetails.getByRole('button', {name: 'Close', exact: true})).toBeInViewport({ratio: 1});
   await page.keyboard.press('Escape');
   await expect(expiredDetails).toBeHidden();
   await page.setViewportSize({width: 320, height: 900});
