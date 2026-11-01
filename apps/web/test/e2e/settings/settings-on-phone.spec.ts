@@ -61,12 +61,20 @@ test('session details wrap long IPv6 and location values on a phone', async ({pa
   await row.getByRole('button').first().click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute('data-vaul-drawer', '');
+  await expect.poll(async () => {
+    const box = await dialog.boundingBox();
+    return box !== null && Math.abs(box.y + box.height - 850) <= 1;
+  }).toBe(true);
   await expect(dialog).toContainText('2001:db8:1234:5678:1234:5678:1234:5678');
   const widths = await dialog.evaluate((element) => ({
     content: element.clientWidth,
     scroll: element.scrollWidth,
   }));
   expect(widths.scroll).toBeLessThanOrEqual(widths.content);
+  await dialog.getByRole('button', {name: 'Close', exact: true}).tap();
+  await expect(dialog).toBeHidden();
+  await expect(row.getByRole('button').first()).toBeFocused();
 });
 
 test('a pending name save can be closed without cancelling the save', async ({page}) => {
