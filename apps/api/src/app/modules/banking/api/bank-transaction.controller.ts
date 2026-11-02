@@ -1,5 +1,5 @@
 import {Body, Controller, Get, Param, ParseUUIDPipe, Patch, Query} from '@nestjs/common';
-import {Throttle, minutes} from '@nestjs/throttler';
+import {Throttle} from '@nestjs/throttler';
 import type {
 	BankBalanceTrend,
 	BankTransaction,
@@ -17,18 +17,13 @@ import {TokenReadable} from '@modules/auth/decorators/token-readable.decorator';
 
 import {BankTransactionSummaryService} from '../services/bank-transaction-summary.service';
 import {BankTransactionService} from '../services/bank-transaction.service';
+import {BROWSING_THROTTLE} from './constants/throttle.constants';
 import {BankTransactionCashFlowQueryDto} from './dtos/bank-transaction-cash-flow-query.dto';
 import {BankTransactionCategoryImpactQueryDto} from './dtos/bank-transaction-category-impact.dto';
 import {BankTransactionCategoryUpdateDto} from './dtos/bank-transaction-category-update.dto';
 import {BankTransactionOwnTransferUpdateDto} from './dtos/bank-transaction-own-transfer-update.dto';
 import {BankTransactionQueryDto, BankTransactionTotalsQueryDto} from './dtos/bank-transaction-query.dto';
 import {BankTransactionSummaryQueryDto} from './dtos/bank-transaction-summary-query.dto';
-
-/**
- * Browsing months or paging through results sends one request per view, and every month or page
- * shares one per-route allowance, so these reads need more than the global default.
- */
-const BROWSING_THROTTLE = {default: {limit: 300, ttl: minutes(1)}};
 
 @Controller('bank-transactions')
 export class BankTransactionController {

@@ -18,6 +18,7 @@ import {
 	type BankTransactionSortField,
 	type BankTransactionTotalsQuery,
 	type BankTransactionsQuery,
+	MERCHANT_GROUP_ID_PATTERN,
 	SORT_ORDERS,
 	type SortOrder,
 } from '@tempo/contracts';
@@ -127,6 +128,11 @@ export class BankTransactionFilterQueryDto implements BankTransactionFilter {
 	@IsOptional()
 	@Matches(SERIES_KEY_PATTERN)
 	recurringSeriesKey?: string;
+
+	/** Only the rows of one merchant group. */
+	@IsOptional()
+	@Matches(new RegExp(MERCHANT_GROUP_ID_PATTERN))
+	merchantGroup?: string;
 }
 
 /** Totals use the list's filter contract, without sort or pagination inputs. */

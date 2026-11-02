@@ -11,6 +11,7 @@ import {Brackets, type Repository, SelectQueryBuilder} from 'typeorm';
 import type {BankTransactionFilterQueryDto} from '../api/dtos/bank-transaction-query.dto';
 import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '../bank-transaction-financial-event';
 import type {BankTransaction} from '../bank-transaction.entity';
+import {MERCHANT_STATUSES} from '../merchant-logos/merchant.entity';
 
 const REFUND = 'REFUND' satisfies BankTransactionCategory;
 const FAILED = 'FAILED' satisfies BankTransactionCategorizationStatus;
@@ -28,6 +29,15 @@ export const SQL_INCOME = `(NOT ${SQL_INTERNAL} AND ${INDICATOR_SQL} = 'CRDT' AN
 export const SQL_UNKNOWN_DIRECTION = `(NOT ${SQL_INTERNAL} AND COALESCE(${INDICATOR_SQL}, '') NOT IN ('CRDT', 'DBIT'))`;
 export const SQL_OWN_TRANSFER_DEBIT = `("transaction"."ownTransferEvidence" IS NOT NULL AND ${INDICATOR_SQL} = 'DBIT')`;
 export const SQL_MISSING_BASE_AMOUNT = `(NOT ${SQL_INTERNAL} AND "transaction"."amountInBaseCurrency" IS NULL)`;
+
+/** The SQL form of getMerchantKeyName: the stored merchant key without its direction. */
+export const SQL_MERCHANT_KEY_NAME = `substring("transaction"."merchantKey" from position(':' in "transaction"."merchantKey") + 1)`;
+/**
+ * The row's merchant group (`MERCHANT_GROUP_ID_PATTERN`): the owner's merchant identified with a brand groups by the
+ * lowercased brand, any other merchant key is its own group. Own transfers, currency exchanges and rows without a
+ * merchant key have none. Needs the owner-scoped `connection` alias.
+ */
+export const SQL_MERCHANT_GROUP = `(CASE WHEN "transaction"."merchantKey" IS NULL OR ${SQL_INTERNAL} OR ${SQL_MERCHANT_KEY_NAME} = '' THEN NULL ELSE COALESCE((SELECT 'b_' || md5(lower(btrim(merchant."brand"))) FROM "merchants" merchant WHERE merchant."accountId" = "connection"."accountId" AND merchant."key" = ${SQL_MERCHANT_KEY_NAME} AND merchant."status" = '${MERCHANT_STATUSES.IDENTIFIED}' AND btrim(merchant."brand") <> ''), 'k_' || md5(${SQL_MERCHANT_KEY_NAME})) END)`;
 
 const CASH_FLOW_SQL: Record<BankTransactionCashFlowFilterValue, string> = {
 	SPENDING: SQL_SPENDING,
@@ -130,6 +140,9 @@ export function applyBankTransactionFilters(
 	}
 	if (filter?.categoryStatuses && filter.categoryStatuses.length > 0) {
 		query.andWhere(anyOf(filter.categoryStatuses.map((status) => CATEGORY_STATUS_SQL[status])));
+	}
+	if (filter?.merchantGroup) {
+		query.andWhere(`${SQL_MERCHANT_GROUP} = :merchantGroup`, {merchantGroup: filter.merchantGroup});
 	}
 
 	const search = filter?.search?.trim();

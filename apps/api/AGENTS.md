@@ -6,7 +6,7 @@ NestJS backend for Tempo, a personal-finance app that syncs real bank data throu
 
 - `src/app/modules/banking/` (authorization, sync, deletion, identity, own transfers, exchanges, totals): `docs/banking-invariants.md`.
 - `src/app/modules/banking/categorization/` or `claude-bridge/`: `docs/categorization.md`.
-- `src/app/modules/banking/merchant-logos/` (identification, icon choice, brand trust rules, site fetcher, image route): `docs/merchant-logos.md`. Display only: categories, merchant keys and recurring payments never read it.
+- `src/app/modules/banking/merchant-logos/` (identification, icon choice, brand trust rules, site fetcher, image route): `docs/merchant-logos.md`. Read for display and merchant spending totals only: categories, merchant keys and recurring payments never read it.
 - Anything calling Enable Banking or Claude, or tests that mock them: `docs/provider-testing.md`.
 - E2E setup, seeds, Compose stacks, `NODE_ENV`, image consumers: `docs/e2e-and-seeding.md`.
 - `Dockerfile`, migrations: `docs/migrations-and-image.md`. CI workflows and release tags: root `docs/ci-and-images.md`.

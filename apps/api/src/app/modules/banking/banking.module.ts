@@ -17,6 +17,7 @@ import {BankConnectionAlertService} from './alerts/bank-connection-alert.service
 import {BankConnectionController} from './api/bank-connection.controller';
 import {BankTransactionController} from './api/bank-transaction.controller';
 import {McpController} from './api/mcp.controller';
+import {MerchantController} from './api/merchant.controller';
 import {RecurringSeriesController} from './api/recurring-series.controller';
 import {BankAccountBalance} from './bank-account-balance.entity';
 import {BankAccount} from './bank-account.entity';
@@ -46,6 +47,7 @@ import {CurrencyExchangeService} from './services/currency-exchange.service';
 import {EnableBankingClient} from './services/enable-banking.client';
 import {FxRateService} from './services/fx-rate.service';
 import {McpReaderService} from './services/mcp-reader.service';
+import {MerchantSpendingService} from './services/merchant-spending.service';
 import {OwnTransferService} from './services/own-transfer.service';
 
 @Module({
@@ -81,6 +83,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankingSyncProcessor,
 		BankTransactionService,
 		BankTransactionSummaryService,
+		MerchantSpendingService,
 		BankTransactionAmountConversionService,
 		BankTransactionAmountConversionQueueService,
 		BankTransactionAmountConversionProcessor,
@@ -93,6 +96,12 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankConnectionAlertProcessor,
 		RecurringSeriesService,
 	],
-	controllers: [BankConnectionController, BankTransactionController, RecurringSeriesController, McpController],
+	controllers: [
+		BankConnectionController,
+		BankTransactionController,
+		MerchantController,
+		RecurringSeriesController,
+		McpController,
+	],
 })
 export class BankingModule {}
