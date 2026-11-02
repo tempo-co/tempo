@@ -15,12 +15,14 @@
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx}\"",
     "lint": "eslint \"{src,test}/**/*.{ts,tsx}\" --report-unused-disable-directives --max-warnings 0 --fix",
-    "lint:check": "eslint \"{src,test}/**/*.{ts,tsx}\" --report-unused-disable-directives --max-warnings 0",
+    "lint:check": "npm run design:check && node --test scripts/design-context.test.mjs && eslint \"{src,test}/**/*.{ts,tsx}\" --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview --port 5173",
     "db:seed:e2e": "docker compose -p tempo-web -f docker-compose.e2e.yml exec -T api node ./dist/scripts/seed.js",
     "test:e2e:local": "npm run docker:test:down && npm run docker:test:up && npm run db:seed:e2e && npx playwright test",
     "docker:test:up": "docker compose -p tempo-web -f docker-compose.e2e.yml up -d --wait",
-    "docker:test:down": "docker compose -p tempo-web -f docker-compose.e2e.yml down -v --remove-orphans"
+    "docker:test:down": "docker compose -p tempo-web -f docker-compose.e2e.yml down -v --remove-orphans",
+    "design:check": "node scripts/design-context.mjs",
+    "design:reviewed": "node scripts/design-context.mjs --reviewed"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
@@ -84,6 +86,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
+    "js-yaml": "^4.3.2",
     "postcss": "^8.5.31",
     "prettier": "^3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",

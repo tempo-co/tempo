@@ -33,8 +33,9 @@ Tempo is intended to be a private, read-only financial record for one person: re
 - The current banking flow connects real bank accounts through Enable Banking, retrieves accounts and balances, synchronizes them automatically in the background (right after authorization, then on a recurring schedule), and provides searchable, filterable, sortable, paginated, read-only transaction lists and detail views with automatic category suggestions and manual correction.
 - Opening the verified, signed-in app in the foreground refreshes eligible bank connections while saved data remains visible. Returning from a hidden app starts a fresh opening; route changes, ordinary focus, polling and reconnect do not trigger bank refreshes. The refresh runs quietly: there is no Refresh button and no inline progress or result text; failed, incomplete or rate-limited refreshes and lost connections raise a toast, and the connection card shows expired consent and problem sync states. Foreground work stops when the app hides or the session changes; requests are never queued or automatically replayed. A completed refresh updates saved banking and derived financial views, including partial or failed ingestion.
 - The application is read-only toward banks. Transaction categories are Tempo metadata and may be suggested automatically or corrected manually; Tempo must not initiate payments or mutate bank-account data.
-- Bank-statement upload was removed because Enable Banking synchronization replaces that workflow. Do not reintroduce statement upload as a default solution.
-- Spending insights, statistics about habits, and future predictions are future direction rather than current implemented capability.
+- Bank-statement upload is outside the current product; Enable Banking synchronization supplies bank data.
+- Home provides weekly/monthly/yearly cash flow, balance history, category spending, recurring bills and income, account balances, recent transactions and review counts. Recurring-payment details link to their underlying transaction history. These are history-based views, not a general prediction engine.
+- Integrations provides expiring, revocable, read-only access tokens and a hosted Streamable HTTP MCP endpoint; clients connect with the server URL and a bearer token. The stdio MCP package is an alternative for local clients.
 - Privacy, security, and financial-data correctness take priority over growth or multi-tenant SaaS concerns.
 - Exact long-term hosting, supported bank/country coverage, currency scope, and the accessibility target remain open decisions where the provider or product has not yet established them.
 
@@ -48,7 +49,7 @@ Tempo is intended to be a private, read-only financial record for one person: re
 
 - The implemented frontend feature areas are under `src/features/auth`, `src/features/banking`, and `src/features/settings`, with routes under `src/routes`.
 - The backend in `apps/api` contains the Enable Banking integration and bank connection, account, balance, synchronization, and transaction services under `apps/api/src/app/modules`.
-- The current repository contains working authentication, bank connection, synchronization, balance, transaction review, and transaction categorization flows; spending insights and prediction features are not yet evidence of shipped functionality.
+- The current repository contains authentication, bank connection, synchronization, balance history, cash-flow and category-spending views, recurring-payment discovery and review, transaction inspection and categorization, and hosted read-only MCP access. Dashboard components live under `src/features/dashboard`, and recurring-payment components live under `src/features/banking/components`.
 
 ## Product Principles
 

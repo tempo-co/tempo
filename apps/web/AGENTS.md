@@ -16,10 +16,16 @@ React 19 + TypeScript SPA (Vite, TanStack Router/Query, Tailwind with shadcn-sty
 - E2E runs against `ghcr.io/tempo-co/api:main` by default; `TEMPO_API_E2E_IMAGE` points the stack at another API image, such as a local build of `apps/api`. In CI it runs against the API image built in the same run when the change touches `apps/api` or `packages/contracts`, otherwise against API `:main`.
 - Fresh worktree: `npm ci`, then `npx playwright install chromium webkit --with-deps` (as CI does) before any spec runs. Production and staging serve the app at `/`.
 - Static checks: `npm run lint:check`, `npm run format:check`, `npm run build`. `npm run lint` and `npm run format` modify files.
-- There is no unit-test runner; all tests are Playwright specs under `test/`. Find the specs for a change by grepping `test/e2e` for the route, component or label; `--only-changed` finds nothing because specs do not import `src`.
+- UI tests are Playwright specs under `test/`; the design-context maintenance script uses Node's built-in test runner (`node --test scripts/design-context.test.mjs`). Find the specs for a change by grepping `test/e2e` for the route, component or label; `--only-changed` finds nothing because specs do not import `src`.
 - `npm run test:e2e:local` resets the Docker services (`down -v`), starts them, seeds, and runs the whole suite. Fully mocked specs run without Docker; see `docs/browser-and-e2e-testing.md`.
 - Every local worktree shares one E2E stack (`api` on `localhost:3000`), so a reset or a full run from one agent corrupts another's run. Locally, run only the specs for your change, and only when `pgrep -af 'playwright test'` shows no other run; push and let CI run the full suite, since each shard gets its own stack.
 - CI runs lint/format, build (plus `scripts/tempo-web-security-headers-test.sh`) and eight E2E shards (every spec in Chromium and WebKit; Chromium only when the change touches `apps/api` but not `apps/web`). `Web E2E tests`, and with it the required `CI` check, fails unless every shard passes.
+
+## Impeccable context
+
+- `DESIGN.md` describes the implemented visual system; `PRODUCT.md` describes current product behavior. `.impeccable/design.json` extends the design spec for the Impeccable panel. Keep all three aligned with the code.
+- `npm run design:check` runs in `lint:check` and CI. It compares content hashes for the documented foundation sources, not modification times. When it names changed files, review them against both documents and the sidecar, correct any drift, then run `npm run design:reviewed` to acknowledge the reviewed content. This records provenance; it does not regenerate or validate prose for you.
+- Add a new foundational surface to the source list in `scripts/design-context.mjs`. Do not acknowledge changed hashes just to make CI green. Extend `scripts/design-context.test.mjs` when changing that checker.
 
 ## Traps
 
