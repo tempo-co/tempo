@@ -116,6 +116,8 @@ export function transformBankConnections(
  * so a fully mocked spec that opens Home without banks still sends them.
  */
 export async function mockEmptyHome(page: Page) {
+  // Registered by the fully mocked fixture before each spec's more specific routes.
+  await mockJson(page, '**/bank-transactions/*/recurring?**', null);
   const interval = (route: Route) =>
     new URL(route.request().url()).searchParams.get(
       'interval',

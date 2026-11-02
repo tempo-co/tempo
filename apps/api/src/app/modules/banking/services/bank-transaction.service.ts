@@ -8,6 +8,7 @@ import type {
 	BankTransactionCategoryImpact,
 	BankTransactionCounterpart,
 	BankTransactionOwnTransfer,
+	BankTransactionRecurring,
 	BankTransaction as BankTransactionResponse,
 	BankTransactionsResponse,
 } from '@tempo/contracts';
@@ -111,6 +112,15 @@ export class BankTransactionService {
 		const transaction = await this.findOwnedTransaction(accountId, id);
 		const [response] = await this.toResponses(accountId, [transaction]);
 		return response;
+	}
+
+	async getRecurring(
+		accountId: Account['id'],
+		id: BankTransaction['id'],
+		asOf: string,
+	): Promise<BankTransactionRecurring | null> {
+		await this.findOwnedTransaction(accountId, id);
+		return this.recurringSeriesService.findByTransactionId(accountId, id, asOf);
 	}
 
 	async getCategoryImpact(

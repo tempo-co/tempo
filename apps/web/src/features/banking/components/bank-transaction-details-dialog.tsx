@@ -1,6 +1,8 @@
 import {BankTransaction} from '@tempo/contracts';
+import {ArrowDownLeft, ArrowUpRight, CalendarDays, CreditCard} from 'lucide-react';
 import {FileQuestion, RefreshCw} from 'lucide-react';
 
+import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {EmptyState} from '@/components/shared/layout/app-empty-state';
 import {Button} from '@/components/ui/button';
 import {
@@ -16,9 +18,15 @@ import {ScrollArea} from '@/components/ui/scroll-area';
 import {Skeleton} from '@/components/ui/skeleton';
 import {useIsOnline} from '@/hooks/use-connection';
 import {HttpError} from '@/utils/api';
+import {cn} from '@/utils/cn';
+import {getCurrencyFormatter} from '@/utils/format-currency';
 
 import {useGetBankTransaction} from '../api/use-get-bank-transaction';
-import {resolveBankTransactionDisplayTitle} from '../utils/formatters';
+import {
+  formatBankTransactionDate,
+  formatBankTransactionType,
+  resolveBankTransactionDisplayTitle,
+} from '../utils/formatters';
 import {BankTransactionDetails} from './bank-transaction-details';
 import {MerchantLogoTile} from './merchant-logo-tile';
 
@@ -40,41 +48,95 @@ export function BankTransactionDetailsDialog({
   );
   const isNotFound = error instanceof HttpError && error.status === 404;
   const isLoading = isPending || (isFetching && !transaction);
-  const transactionTitle = transaction
+  const title = transaction
     ? resolveBankTransactionDisplayTitle(transaction)
     : 'Transaction details';
+  const internal = transaction?.cashFlowTreatment === 'INTERNAL';
+  const incoming = transaction?.direction === 'INCOME';
+  const DirectionIcon = incoming ? ArrowDownLeft : ArrowUpRight;
+  const longAmount =
+    transaction &&
+    getCurrencyFormatter(transaction.currency).format(Number(transaction.amount)).length > 14;
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
       <ResponsiveDialogContent
         data-testid='bank-transaction-inspector'
-        className='flex h-[min(90dvh,56rem)] max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-h-[90vh] sm:max-w-4xl [&>button:last-child]:hidden'
+        className='flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-h-[86dvh] sm:max-w-2xl [&>button:last-child]:hidden'
       >
         <ResponsiveDialogCornerClose label='Close transaction details' />
-        <ResponsiveDialogHeader className='shrink-0 border-b px-5 pt-5 pr-16 pb-4 text-left sm:px-6'>
-          <div className='flex min-w-0 items-center gap-3'>
-            {transaction && <MerchantLogoTile transaction={transaction} className='h-10 w-10' />}
-            <ResponsiveDialogTitle className='min-w-0 text-xl leading-tight wrap-anywhere sm:text-2xl sm:leading-8'>
-              {transactionTitle}
+        <ResponsiveDialogHeader className='shrink-0 grid-cols-[minmax(0,1fr)] border-b px-5 pt-5 pb-6 text-left sm:px-8 sm:pt-8 sm:pb-7'>
+          <div className='flex min-w-0 items-center gap-3 pr-11'>
+            {transaction && (
+              <MerchantLogoTile transaction={transaction} className='h-10 w-10 shrink-0' />
+            )}
+            <ResponsiveDialogTitle className='min-w-0 text-section-title leading-snug wrap-anywhere'>
+              {title}
             </ResponsiveDialogTitle>
           </div>
-          <ResponsiveDialogDescription className='mt-1 md:mt-0'>
-            {transaction ? 'Bank transaction' : 'Transaction details'}
+          <ResponsiveDialogDescription className='sr-only'>
+            Payment summary and editable transaction details
           </ResponsiveDialogDescription>
+          {transaction && (
+            <div className='mt-6'>
+              <div className='flex items-center gap-2'>
+                <DirectionIcon
+                  aria-hidden='true'
+                  className={cn(
+                    'size-5 shrink-0 text-muted-foreground',
+                    incoming && !internal && 'text-success',
+                  )}
+                />
+                <p
+                  data-testid='bank-transaction-detail-amount'
+                  className={cn(
+                    'min-w-0 numeric text-3xl leading-tight font-medium tracking-tight sm:text-4xl',
+                    longAmount && 'text-xl',
+                    incoming && !internal && 'text-success',
+                  )}
+                >
+                  <CurrencyAmount
+                    amount={Number(transaction.amount)}
+                    currency={transaction.currency}
+                  />
+                </p>
+                <span className='ml-1 self-end pb-1 text-label text-muted-foreground'>
+                  {transaction.currency}
+                </span>
+              </div>
+              <div className='mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground'>
+                <span className='inline-flex items-center gap-1.5'>
+                  <CalendarDays className='size-4' aria-hidden='true' />
+                  {transaction.transactionDate || transaction.bookingDate
+                    ? formatBankTransactionDate(
+                        transaction.transactionDate || transaction.bookingDate,
+                      )
+                    : 'Date unavailable'}
+                </span>
+                <span className='inline-flex items-center gap-1.5'>
+                  <CreditCard className='size-4' aria-hidden='true' />
+                  {transaction.financialEventType === 'CURRENCY_EXCHANGE'
+                    ? 'Currency exchange'
+                    : transaction.ownTransfer
+                      ? 'Own transfer'
+                      : formatBankTransactionType(transaction.transactionType)}
+                </span>
+              </div>
+            </div>
+          )}
         </ResponsiveDialogHeader>
-
         <ScrollArea
-          type='always'
+          type='auto'
           data-testid='bank-transaction-inspector-body'
-          className='min-h-0 flex-1'
+          className='grid min-h-0 grid-rows-[minmax(0,1fr)] [&_[data-radix-scroll-area-viewport]>div]:block! [&>[data-radix-scroll-area-viewport]]:min-h-0 [&>[data-radix-scroll-area-viewport]]:overscroll-contain'
           aria-busy={isPending || isFetching}
         >
           {isLoading ? (
-            <div role='status' aria-label='Loading bank transaction' className='p-5 sm:p-6'>
-              <Skeleton className='h-80 w-full rounded-lg bg-card sm:h-96' />
+            <div role='status' aria-label='Loading bank transaction' className='p-5 sm:p-8'>
+              <Skeleton className='h-72 w-full bg-card' />
             </div>
           ) : !transaction || (isError && isOnline) ? (
-            <div role='alert' className='p-5 sm:p-6'>
+            <div role='alert' className='p-5 sm:p-8'>
               {isNotFound ? (
                 <EmptyState
                   framed={false}
@@ -103,7 +165,7 @@ export function BankTransactionDetailsDialog({
               )}
             </div>
           ) : (
-            <BankTransactionDetails transaction={transaction} />
+            <BankTransactionDetails key={transaction.id} transaction={transaction} />
           )}
         </ScrollArea>
       </ResponsiveDialogContent>

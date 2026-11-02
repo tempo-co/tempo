@@ -181,7 +181,10 @@ async function mockMerchantLogos(page: Page) {
     .addCookies([{name: 'logo-session', value: 'synthetic', domain: 'localhost', path: '/'}]);
   const api = new URL(API_URL ?? '/api', 'http://localhost');
   await page.route(
-    (url) => url.origin === api.origin && url.pathname.startsWith(api.pathname.replace(/\/$/, '')),
+    (url) =>
+      url.origin === api.origin &&
+      url.pathname.startsWith(api.pathname.replace(/\/$/, '')) &&
+      !/\/bank-transactions\/[^/]+\/recurring$/.test(url.pathname),
     (route) => {
       if (route.request().resourceType() === 'document') return route.continue();
       state.unexpected.push(new URL(route.request().url()).pathname);
@@ -428,6 +431,11 @@ for (const width of [1440, 390]) {
         await transactionTrigger.click();
         const inspector = page.getByTestId('bank-transaction-inspector');
         const inspectorTile = inspector.getByTestId('merchant-logo-tile');
+        const category = inspector.getByTestId('bank-transaction-category-control');
+        await expect(category.locator('dt')).toContainText('Transaction category');
+        await expect(category.getByTestId('bank-transaction-category-status')).toHaveText(
+          'Suggested by AI',
+        );
         await expectLogo(inspectorTile, theme);
         await inspector.evaluate((el) =>
           Promise.all(el.getAnimations({subtree: true}).map((animation) => animation.finished)),
@@ -478,7 +486,7 @@ for (const width of [1440, 390]) {
           name: 'View Example Savings transaction details',
         });
         await transferTrigger.click();
-        await inspector.getByTestId('bank-transaction-own-transfer-counterpart').click();
+        await inspector.getByTestId('movement-counterpart').click();
         await expect(
           inspector.getByRole('heading', {name: 'Example Bakery', exact: true}),
         ).toBeVisible();

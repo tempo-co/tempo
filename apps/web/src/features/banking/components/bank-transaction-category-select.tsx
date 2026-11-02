@@ -82,8 +82,25 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
 
   return (
     <div className='col-span-2 min-w-0' data-testid='bank-transaction-category-control'>
-      <dt className='text-xs font-medium text-muted-foreground'>
-        <label htmlFor={selectId}>Transaction category</label>
+      <dt className='flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground'>
+        <label htmlFor={selectId} className='shrink-0'>
+          Transaction category
+        </label>
+        <span
+          id={statusId}
+          role='status'
+          aria-live='polite'
+          data-testid='bank-transaction-category-status'
+          className='text-right font-normal'
+        >
+          {isChecking
+            ? 'Checking other transactions…'
+            : isPending
+              ? 'Saving…'
+              : transaction.categoryStatus === 'COMPLETED'
+                ? (sourceLabel ?? statusLabel)
+                : statusLabel}
+        </span>
       </dt>
       <dd className='mt-2'>
         <Select
@@ -95,7 +112,7 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
             id={selectId}
             aria-label='Transaction category'
             aria-describedby={statusId}
-            className='max-w-md'
+            className='h-14 w-full max-w-none border-0 bg-accent/50 px-3 text-base shadow-none hover:bg-accent'
           >
             <SelectValue placeholder={formatBankTransactionCategory(transaction.category)}>
               {selectedCategory && <BankTransactionCategoryOption category={selectedCategory} />}
@@ -109,23 +126,6 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
             ))}
           </SelectContent>
         </Select>
-      </dd>
-      <dd
-        id={statusId}
-        role='status'
-        aria-live='polite'
-        data-testid='bank-transaction-category-status'
-        className='mt-2 text-xs text-muted-foreground'
-      >
-        <span>
-          {isChecking ? 'Checking other transactions…' : isPending ? 'Saving…' : statusLabel}
-        </span>
-        {sourceLabel && (
-          <>
-            <span aria-hidden='true'> · </span>
-            <span>{sourceLabel}</span>
-          </>
-        )}
       </dd>
       {draft && (
         <BankTransactionCategoryImpactDialog

@@ -48,6 +48,7 @@ const TOKEN_READABLE_PATHS = [
 	'/recurring-series?asOf=2026-10-18',
 	'/recurring-series/summary?asOf=2026-10-18',
 	`/bank-transactions/${RESOURCE_ID}`,
+	`/bank-transactions/${RESOURCE_ID}/recurring?asOf=2026-10-18`,
 ];
 
 // Routes that require a session for an account with a verified email; personal tokens are refused.
@@ -149,7 +150,7 @@ describe('AuthGuard - protected routes', () => {
 		await request(httpServer)
 			.get(path)
 			.auth(token, {type: 'bearer'})
-			.expect(path === `/bank-transactions/${RESOURCE_ID}` ? 404 : 200);
+			.expect(path.startsWith(`/bank-transactions/${RESOURCE_ID}`) ? 404 : 200);
 	});
 
 	it.each(TOKEN_DENIED_ROUTES)('%s %s rejects a valid personal token with 403', async (method, path) => {

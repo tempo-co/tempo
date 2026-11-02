@@ -1,4 +1,15 @@
 import type {BankTransactionCategory, BankTransactionCategoryFilterValue} from './categories.js';
+import type {RecurringCadence, RecurringSeriesStatus} from './recurring.js';
+
+/** `GET /bank-transactions/:id/recurring`; null when the payment has no visible detected series. */
+export type BankTransactionRecurring = {
+	key: string;
+	cadence: RecurringCadence;
+	status: RecurringSeriesStatus;
+	nextExpectedDate: string;
+	/** The newest three series payments in ledger order, with their original signed amounts. */
+	payments: Array<Pick<BankTransaction, 'id' | 'transactionDate' | 'bookingDate' | 'amount' | 'currency'>>;
+};
 
 export const BANK_TRANSACTION_DIRECTIONS = ['INCOME', 'EXPENSE', 'UNKNOWN'] as const;
 export type BankTransactionDirection = (typeof BANK_TRANSACTION_DIRECTIONS)[number];

@@ -1,249 +1,390 @@
-import {BankTransaction} from '@tempo/contracts';
-import * as React from 'react';
+import {Link} from '@tanstack/react-router';
+import {BankTransaction, BankTransactionCounterpart} from '@tempo/contracts';
+import {ArrowDown, ArrowRight, Check, ChevronRight, Landmark, Wallet} from 'lucide-react';
+import {useState} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
-import {cn} from '@/utils/cn';
+import {Button} from '@/components/ui/button';
+import {useLocalDate} from '@/hooks/use-local-date';
 
+import {useGetBankTransactionRecurring} from '../api/use-get-bank-transaction-recurring';
+import {useUpdateBankTransactionOwnTransfer} from '../api/use-update-bank-transaction-own-transfer';
+import {RECURRING_CADENCE_LABELS} from '../types/recurring-series';
 import {
-  formatBankTransactionCashFlowTreatment,
-  formatBankTransactionCategoryStatus,
   formatBankTransactionDate,
-  formatBankTransactionFinancialEvent,
   formatBankTransactionType,
+  formatCounterpartAccount,
+  formatOwnTransferEvidence,
   resolveBankTransactionAccountLabel,
-  resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
 import {BankTransactionCategorySelect} from './bank-transaction-category-select';
-import {BankTransactionCurrencyExchange} from './bank-transaction-currency-exchange';
-import {BankTransactionOwnTransfer} from './bank-transaction-own-transfer';
+import {MerchantLogoTile} from './merchant-logo-tile';
 
-type BankTransactionDetailsProps = {
-  transaction: BankTransaction;
-};
-
-export function BankTransactionDetails({transaction}: BankTransactionDetailsProps) {
-  const transactionTitle = resolveBankTransactionDisplayTitle(transaction);
-  const financialEvent = formatBankTransactionFinancialEvent(transaction.financialEventType);
-  const hasManualCategory = Boolean(financialEvent && transaction.categorySource === 'MANUAL');
-  const detailsHeadingId = `transaction-${transaction.id}-details-heading`;
-  const datesHeadingId = `transaction-${transaction.id}-dates-heading`;
-  const accountHeadingId = `transaction-${transaction.id}-account-heading`;
-  const classificationHeadingId = `transaction-${transaction.id}-classification-heading`;
-  const settlementHeadingId = `transaction-${transaction.id}-settlement-heading`;
-  const referenceHeadingId = `transaction-${transaction.id}-reference-heading`;
+export function BankTransactionDetails({transaction}: {transaction: BankTransaction}) {
+  const [bankDetailsOpen, setBankDetailsOpen] = useState(false);
+  const bankDetailsId = `bank-details-${transaction.id}`;
+  const isExchange = transaction.financialEventType === 'CURRENCY_EXCHANGE';
+  const isMovement = isExchange || Boolean(transaction.ownTransfer);
+  const counterpart = isExchange
+    ? transaction.currencyExchangeCounterpart
+    : transaction.ownTransfer?.counterpart;
 
   return (
-    <div data-testid='bank-transaction-details' className='min-w-0'>
-      <section
-        aria-label={`${transactionTitle} amount and currency`}
-        className='border-b px-5 py-5 sm:px-6 sm:py-6'
-      >
-        <div className='flex items-end justify-between gap-3 sm:gap-4'>
+    <div data-testid='bank-transaction-details' className='min-w-0 px-5 pb-5 sm:px-8 sm:pb-7'>
+      {isMovement ? (
+        <Movement transaction={transaction} counterpart={counterpart} />
+      ) : (
+        <section aria-label='Category' className='border-b py-5'>
+          <dl>
+            <BankTransactionCategorySelect key={transaction.id} transaction={transaction} />
+          </dl>
+        </section>
+      )}
+      {!isMovement && (
+        <section aria-label='Account' className='flex items-center gap-3 border-b py-5'>
+          <Landmark className='size-5 shrink-0 text-muted-foreground' aria-hidden='true' />
           <div className='min-w-0 flex-1'>
-            <p className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>
-              Amount
+            <p className='text-label text-muted-foreground'>
+              {transaction.direction === 'INCOME' ? 'Received into' : 'Paid from'}
             </p>
-            <p
-              data-testid='bank-transaction-detail-amount'
-              className='mt-1 w-fit max-w-full text-3xl font-medium tracking-tight whitespace-nowrap'
-            >
-              <CurrencyAmount amount={Number(transaction.amount)} currency={transaction.currency} />
+            <p className='mt-1 font-medium wrap-anywhere'>
+              {resolveBankTransactionAccountLabel(transaction)}
             </p>
           </div>
-          <span
-            data-testid='bank-transaction-detail-currency'
-            className='shrink-0 pb-1 text-sm text-muted-foreground'
-          >
-            {transaction.currency}
-          </span>
-        </div>
-      </section>
-
-      <div className='space-y-8 px-5 py-5 sm:px-6 sm:py-6'>
-        <section aria-labelledby={detailsHeadingId} data-testid='bank-transaction-details-sections'>
-          <h2 id={detailsHeadingId} className='text-section-title'>
-            Transaction details
-          </h2>
-          <div className='mt-5 grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-8'>
-            <Detail
-              label='Description'
-              value={transaction.description || '—'}
-              className='col-span-1 md:col-span-2'
-              wrap
-            />
-            <DetailGroup id={datesHeadingId} title='Dates'>
+          <p className='max-w-[45%] text-right text-sm wrap-anywhere text-muted-foreground'>
+            {transaction.bankName}
+          </p>
+        </section>
+      )}
+      {!isMovement && <Recurring transaction={transaction} />}
+      <section className='pt-2' data-testid='bank-details-fold'>
+        <Button
+          variant='ghost'
+          size='sm'
+          aria-expanded={bankDetailsOpen}
+          aria-controls={bankDetailsId}
+          onClick={() => setBankDetailsOpen(!bankDetailsOpen)}
+          className='-ml-3 justify-start text-muted-foreground max-sm:h-11'
+        >
+          <ChevronRight
+            className={`transition-transform motion-reduce:transition-none ${bankDetailsOpen ? 'rotate-90' : ''}`}
+            aria-hidden='true'
+          />
+          Bank details
+        </Button>
+        {bankDetailsOpen && (
+          <div id={bankDetailsId} className='space-y-5 pt-3 pb-4'>
+            <div>
+              <p className='text-label text-muted-foreground'>Original description</p>
+              <p className='mt-2 text-sm leading-relaxed wrap-anywhere'>
+                {transaction.description || 'Not provided by your bank'}
+              </p>
+            </div>
+            <dl className='grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2'>
               <Detail
                 label='Transaction date'
-                value={formatBankTransactionDate(transaction.transactionDate)}
+                value={
+                  transaction.transactionDate
+                    ? formatBankTransactionDate(transaction.transactionDate)
+                    : null
+                }
               />
               <Detail
                 label='Booking date'
-                value={formatBankTransactionDate(transaction.bookingDate)}
+                value={
+                  transaction.bookingDate
+                    ? formatBankTransactionDate(transaction.bookingDate)
+                    : null
+                }
               />
-              <Detail label='Value date' value={formatBankTransactionDate(transaction.valueDate)} />
-            </DetailGroup>
-
-            <DetailGroup id={accountHeadingId} title='Account'>
               <Detail
-                label='Bank account'
-                value={resolveBankTransactionAccountLabel(transaction)}
+                label='Value date'
+                value={
+                  transaction.valueDate ? formatBankTransactionDate(transaction.valueDate) : null
+                }
               />
-              <Detail label='Bank' value={`${transaction.bankName} (${transaction.bankCountry})`} />
-              <Detail label='Counterparty' value={transaction.counterpartyName || '—'} />
-            </DetailGroup>
-
-            <DetailGroup id={classificationHeadingId} title='Classification'>
-              {financialEvent ? (
-                <>
-                  <Detail label='Activity' value={financialEvent} />
-                  {hasManualCategory ? (
-                    <BankTransactionCategorySelect key={transaction.id} transaction={transaction} />
-                  ) : (
-                    <Detail
-                      label='Category'
-                      value={formatBankTransactionCategoryStatus(transaction.categoryStatus)}
-                    />
-                  )}
-                </>
-              ) : transaction.ownTransfer ? null : (
-                <BankTransactionCategorySelect key={transaction.id} transaction={transaction} />
-              )}
-              {financialEvent || transaction.ownTransfer ? (
-                <Detail
-                  label='Cash-flow treatment'
-                  value={formatBankTransactionCashFlowTreatment(transaction.cashFlowTreatment)}
-                />
-              ) : null}
-              {transaction.financialEventType === 'CURRENCY_EXCHANGE' ? (
-                <BankTransactionCurrencyExchange transaction={transaction} />
-              ) : financialEvent ? null : (
-                <BankTransactionOwnTransfer transaction={transaction} />
-              )}
+              <Detail label='Counterparty' value={transaction.counterpartyName} />
               <Detail
                 label='Transaction type'
                 value={formatBankTransactionType(transaction.transactionType)}
               />
-              <Detail
-                label='Merchant category code'
-                value={transaction.merchantCategoryCode || '—'}
-              />
+              <Detail label='Bank' value={`${transaction.bankName} (${transaction.bankCountry})`} />
+              <Detail label='Merchant category code' value={transaction.merchantCategoryCode} />
               <Detail
                 label='Provider classification'
-                value={transaction.providerTransactionDescription || '—'}
+                value={transaction.providerTransactionDescription}
               />
-            </DetailGroup>
-
-            <DetailGroup id={settlementHeadingId} title='Settlement'>
               <Detail
                 label='Balance after transaction'
-                value={formatAmount(
-                  transaction.balanceAfterAmount,
-                  transaction.balanceAfterCurrency,
-                )}
+                value={
+                  transaction.balanceAfterAmount && transaction.balanceAfterCurrency
+                    ? `${Number(transaction.balanceAfterAmount).toFixed(2)} ${transaction.balanceAfterCurrency}`
+                    : null
+                }
               />
               <Detail
                 label='Instructed amount'
-                value={formatAmount(transaction.instructedAmount, transaction.instructedCurrency)}
+                value={
+                  transaction.instructedAmount && transaction.instructedCurrency
+                    ? `${Number(transaction.instructedAmount).toFixed(2)} ${transaction.instructedCurrency}`
+                    : null
+                }
               />
               <Detail
                 label='Exchange rate'
-                value={formatExchangeRate(transaction)}
-                className='col-span-2'
+                value={
+                  transaction.exchangeRate
+                    ? `${Number(transaction.exchangeRate)
+                        .toFixed(4)
+                        .replace(
+                          /\.?0+$/,
+                          '',
+                        )}${transaction.exchangeRateUnitCurrency ? ` ${transaction.exchangeRateUnitCurrency}` : ''}${transaction.exchangeRateType ? ` (${transaction.exchangeRateType})` : ''}`
+                    : null
+                }
               />
-            </DetailGroup>
-
-            <DetailGroup id={referenceHeadingId} title='Reference'>
               <Detail
                 label='Payment reference'
-                value={formatReference(
-                  transaction.referenceNumber,
-                  transaction.referenceNumberScheme,
-                )}
-                className='col-span-2'
+                value={
+                  transaction.referenceNumber
+                    ? `${transaction.referenceNumber}${transaction.referenceNumberScheme ? ` (${transaction.referenceNumberScheme})` : ''}`
+                    : null
+                }
               />
-            </DetailGroup>
+            </dl>
+            {transaction.ownTransfer && (
+              <p className='text-sm text-muted-foreground'>
+                {formatOwnTransferEvidence(transaction.ownTransfer.evidence)}
+              </p>
+            )}
           </div>
-        </section>
-      </div>
+        )}
+      </section>
+      {!isExchange && <TransferSetting transaction={transaction} />}
     </div>
   );
 }
 
-function DetailGroup({
-  id,
-  title,
-  children,
-}: {
-  id: string;
-  title: string;
-  children: React.ReactNode;
-}) {
+function Detail({label, value}: {label: string; value: string | null}) {
+  if (!value) return null;
   return (
-    <section
-      aria-labelledby={id}
-      className='min-w-0 [&_dd]:truncate [&_dd]:whitespace-nowrap [&_dt]:truncate [&_dt]:whitespace-nowrap'
+    <div className='min-w-0'>
+      <dt className='text-label text-muted-foreground'>{label}</dt>
+      <dd className='mt-1 text-sm wrap-anywhere'>{value}</dd>
+    </div>
+  );
+}
+
+function Movement({
+  transaction,
+  counterpart,
+}: {
+  transaction: BankTransaction;
+  counterpart: BankTransactionCounterpart | null | undefined;
+}) {
+  const incoming = transaction.direction === 'INCOME';
+  const isExchange = transaction.financialEventType === 'CURRENCY_EXCHANGE';
+  const own = (
+    <div className='flex min-w-0 flex-1 items-start gap-3 py-3'>
+      <Wallet className='mt-1 size-5 shrink-0 text-muted-foreground' aria-hidden='true' />
+      <div className='min-w-0'>
+        <p className='text-label text-muted-foreground'>{incoming ? 'To' : 'From'}</p>
+        <p className='mt-1 font-medium wrap-anywhere'>
+          {resolveBankTransactionAccountLabel(transaction)}
+        </p>
+        <p className='mt-1 text-sm text-muted-foreground'>
+          {transaction.bankName} · {transaction.currency}
+        </p>
+      </div>
+    </div>
+  );
+  const other = counterpart ? (
+    <Link
+      to='.'
+      search={(prev) => ({...prev, transactionId: counterpart.id})}
+      state={(prev) => ({transactionOpenedAt: prev.transactionOpenedAt ?? prev.__TSR_index})}
+      data-testid='movement-counterpart'
+      className='flex min-w-0 flex-1 items-start gap-3 py-3 hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
     >
-      <h3 id={id} className='text-sm font-semibold'>
-        {title}
-      </h3>
-      <dl className='mt-3 grid grid-cols-2 gap-x-6 gap-y-3 sm:gap-y-4'>{children}</dl>
+      <Wallet className='mt-1 size-5 shrink-0 text-muted-foreground' aria-hidden='true' />
+      <div className='min-w-0 flex-1'>
+        <p className='text-label text-muted-foreground'>{incoming ? 'From' : 'To'}</p>
+        <p className='mt-1 font-medium wrap-anywhere'>{formatCounterpartAccount(counterpart)}</p>
+        <p className='mt-1 text-sm text-muted-foreground'>
+          {counterpart.bankName} · {counterpart.currency}
+        </p>
+        <p className='mt-2 numeric text-sm font-medium'>
+          <CurrencyAmount amount={Number(counterpart.amount)} currency={counterpart.currency} />
+        </p>
+      </div>
+      <ChevronRight className='mt-6 size-4 shrink-0 text-muted-foreground' aria-hidden='true' />
+    </Link>
+  ) : (
+    <div className='min-w-0 flex-1 py-3 text-sm text-muted-foreground'>
+      {isExchange ? 'Other side not matched' : 'Other side not in your connected accounts'}
+    </div>
+  );
+  return (
+    <section aria-label='Money movement' className='border-b py-5'>
+      <h2 className='text-card-title'>
+        {isExchange ? 'One currency to another' : 'Between your accounts'}
+      </h2>
+      <div className='mt-3 flex flex-col sm:flex-row sm:items-center sm:gap-5'>
+        {incoming ? other : own}
+        <ArrowRight
+          className='hidden size-5 shrink-0 text-muted-foreground sm:block'
+          aria-hidden='true'
+        />
+        <ArrowDown className='ml-0.5 size-5 text-muted-foreground sm:hidden' aria-hidden='true' />
+        {incoming ? own : other}
+      </div>
+      {isExchange && (
+        <p className='mt-2 text-sm text-muted-foreground'>
+          {transaction.exchangeRate
+            ? `Rate: ${transaction.exchangeRate}${transaction.exchangeRateUnitCurrency ? ` ${transaction.exchangeRateUnitCurrency}` : ''}`
+            : 'Exchange rate unavailable'}
+        </p>
+      )}
+      <p className='mt-4 flex items-start gap-2 text-sm text-muted-foreground'>
+        <Check className='mt-0.5 size-4 shrink-0' aria-hidden='true' />
+        {transaction.cashFlowTreatment === 'INTERNAL'
+          ? 'Excluded from income and spending'
+          : transaction.cashFlowTreatment === 'INCOME'
+            ? 'Counts toward income'
+            : transaction.cashFlowTreatment === 'EXPENSE'
+              ? 'Counts toward spending'
+              : 'Cash-flow treatment unknown'}
+      </p>
+      {isExchange && transaction.categorySource === 'MANUAL' && (
+        <dl className='mt-4'>
+          <BankTransactionCategorySelect transaction={transaction} />
+        </dl>
+      )}
     </section>
   );
 }
 
-function formatAmount(amount: string | null, currency: string | null) {
-  if (!amount || !currency) return '—';
-  const numericAmount = Number(amount);
-  return Number.isFinite(numericAmount)
-    ? `${numericAmount.toFixed(2)} ${currency}`
-    : `${amount} ${currency}`;
-}
-
-function formatExchangeRate(transaction: BankTransaction) {
-  if (!transaction.exchangeRate) {
-    return transaction.financialEventType === 'CURRENCY_EXCHANGE' ? 'Rate unavailable' : '—';
-  }
-  const numericRate = Number(transaction.exchangeRate);
-  const rate = Number.isFinite(numericRate)
-    ? numericRate.toFixed(4).replace(/\.?0+$/, '')
-    : transaction.exchangeRate;
-  const unitCurrency = transaction.exchangeRateUnitCurrency
-    ? ` ${transaction.exchangeRateUnitCurrency}`
-    : '';
-  const rateType = transaction.exchangeRateType ? ` (${transaction.exchangeRateType})` : '';
-  return `${rate}${unitCurrency}${rateType}`;
-}
-
-function formatReference(referenceNumber: string | null, referenceNumberScheme: string | null) {
-  if (!referenceNumber) return '—';
-  return referenceNumberScheme ? `${referenceNumber} (${referenceNumberScheme})` : referenceNumber;
-}
-
-function Detail({
-  label,
-  value,
-  className,
-  wrap = false,
-}: {
-  label: string;
-  value: string;
-  className?: string;
-  wrap?: boolean;
-}) {
+function Recurring({transaction}: {transaction: BankTransaction}) {
+  const [expanded, setExpanded] = useState(false);
+  const asOf = useLocalDate();
+  const {data: recurring, isError, refetch} = useGetBankTransactionRecurring(transaction.id, asOf);
+  const historyId = `recurring-history-${transaction.id}`;
+  if (isError)
+    return (
+      <div className='flex items-center gap-2 py-2 text-sm text-muted-foreground'>
+        <span>Recurring details unavailable.</span>
+        <Button variant='ghost' size='sm' onClick={() => void refetch()}>
+          Try again
+        </Button>
+      </div>
+    );
+  if (!recurring) return null;
   return (
-    <div className={cn('min-w-0', className)}>
-      <dt title={label} className='text-xs font-medium text-muted-foreground'>
-        {label}
-      </dt>
-      <dd
-        title={value}
-        className={cn(
-          'mt-1 text-sm sm:text-base',
-          wrap ? 'wrap-anywhere wrap-break-word' : 'truncate whitespace-nowrap',
-        )}
+    <section className='border-b py-2' data-testid='recurring-fold'>
+      <Button
+        variant='ghost'
+        size='sm'
+        aria-expanded={expanded}
+        aria-controls={historyId}
+        onClick={() => setExpanded(!expanded)}
+        className='-ml-3 justify-start text-muted-foreground max-sm:h-11'
       >
-        {value}
-      </dd>
+        <ChevronRight
+          className={`transition-transform motion-reduce:transition-none ${expanded ? 'rotate-90' : ''}`}
+          aria-hidden='true'
+        />
+        Recurring payment
+      </Button>
+      <p className='mb-2 pl-6 text-sm text-muted-foreground'>
+        {RECURRING_CADENCE_LABELS[recurring.cadence]} ·{' '}
+        {recurring.status === 'ENDED'
+          ? 'Ended'
+          : `Next expected ${formatBankTransactionDate(recurring.nextExpectedDate)}`}
+      </p>
+      {expanded && (
+        <div id={historyId} className='pb-4 pl-6'>
+          <p className='mb-3 text-label text-muted-foreground'>Recent payments</p>
+          {recurring.payments.map((payment) => (
+            <div key={payment.id} className='flex h-[60px] items-center gap-3 border-t'>
+              <MerchantLogoTile transaction={transaction} className='size-9' />
+              <span className='min-w-0 flex-1 text-sm'>
+                <span className='block'>
+                  {formatBankTransactionDate(payment.transactionDate || payment.bookingDate)}
+                </span>
+                {payment.id === transaction.id && (
+                  <span className='mt-0.5 block text-label text-muted-foreground'>
+                    This payment
+                  </span>
+                )}
+              </span>
+              <span className='numeric text-sm'>
+                <CurrencyAmount amount={Number(payment.amount)} currency={payment.currency} />
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TransferSetting({transaction}: {transaction: BankTransaction}) {
+  const {updateBankTransactionOwnTransfer, isPending} = useUpdateBankTransactionOwnTransfer();
+  const [expanded, setExpanded] = useState(false);
+  const own = Boolean(transaction.ownTransfer);
+  return (
+    <div>
+      <Button
+        variant='ghost'
+        size='sm'
+        aria-expanded={expanded}
+        aria-controls={`transfer-settings-${transaction.id}`}
+        onClick={() => setExpanded(!expanded)}
+        className='-ml-3 justify-start text-muted-foreground max-sm:h-11'
+      >
+        <ChevronRight
+          aria-hidden='true'
+          className={`transition-transform motion-reduce:transition-none ${expanded ? 'rotate-90' : ''}`}
+        />
+        Transfer settings
+      </Button>
+      {expanded && (
+        <div id={`transfer-settings-${transaction.id}`} className='space-y-3 pt-3 pb-2'>
+          <p className='text-sm text-muted-foreground'>
+            {own
+              ? 'This payment is recognised as movement between your own accounts.'
+              : 'A transfer between your own accounts should not count as income or spending.'}
+          </p>
+          <div className='flex flex-wrap gap-2'>
+            <Button
+              variant='outline'
+              disabled={isPending}
+              onClick={() =>
+                void updateBankTransactionOwnTransfer({
+                  id: transaction.id,
+                  override: own ? 'UNMARKED' : 'MARKED',
+                  counterpartId: transaction.ownTransfer?.counterpart?.id,
+                }).catch(() => undefined)
+              }
+            >
+              {isPending ? 'Saving…' : own ? 'Not my own transfer' : 'Mark as own transfer'}
+            </Button>
+            {transaction.ownTransferOverride && (
+              <Button
+                variant='ghost'
+                disabled={isPending}
+                onClick={() =>
+                  void updateBankTransactionOwnTransfer({id: transaction.id, override: null}).catch(
+                    () => undefined,
+                  )
+                }
+              >
+                Use automatic recognition
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

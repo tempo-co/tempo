@@ -2,6 +2,7 @@ import {ConflictException, Injectable, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import type {
 	BankTransactionCategory,
+	BankTransactionRecurring,
 	RecurringContinuation,
 	RecurringSeries,
 	RecurringSeriesDirection,
@@ -299,6 +300,45 @@ export class RecurringSeriesService {
 				});
 			}
 		});
+	}
+
+	/** Exact membership after the owner's hides and continuation answers, dated like the recurring lists. */
+	async findByTransactionId(
+		accountId: Account['id'],
+		transactionId: BankTransaction['id'],
+		asOf: string,
+	): Promise<BankTransactionRecurring | null> {
+		const {detected, hidesBySeries} = await this.readState(accountId);
+		const series = detected.find((entry) => entry.transactionIds.includes(transactionId));
+		if (!series || isHidden(series, hidesBySeries.get(series.key) ?? [])) return null;
+		const {key, cadence, status, nextExpectedDate} = atDate(series, asOf);
+		const rows = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
+			.select([
+				'transaction.id',
+				'transaction.transactionDate',
+				'transaction.bookingDate',
+				'transaction.amount',
+				'transaction.currency',
+			])
+			.andWhere('transaction.id = ANY(:ids)', {ids: series.transactionIds})
+			.orderBy('transaction.bookingDate', 'DESC', 'NULLS LAST')
+			.addOrderBy('transaction.valueDate', 'DESC', 'NULLS LAST')
+			.addOrderBy('transaction.id', 'DESC')
+			.limit(3)
+			.getMany();
+		return {
+			key,
+			cadence,
+			status,
+			nextExpectedDate,
+			payments: rows.map(({id, transactionDate, bookingDate, amount, currency}) => ({
+				id,
+				transactionDate,
+				bookingDate,
+				amount,
+				currency,
+			})),
+		};
 	}
 
 	/** The ids of a series' payments, for the transactions list's drill-through filter. */

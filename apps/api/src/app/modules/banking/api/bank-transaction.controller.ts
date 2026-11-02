@@ -1,15 +1,17 @@
-import {Body, Controller, Get, Param, ParseUUIDPipe, Patch, Query} from '@nestjs/common';
+import {Body, Controller, Get, Param, ParseUUIDPipe, Patch, Query, Res} from '@nestjs/common';
 import {Throttle, minutes} from '@nestjs/throttler';
 import type {
 	BankBalanceTrend,
 	BankTransaction,
 	BankTransactionCashFlow,
 	BankTransactionCategoryImpact,
+	BankTransactionRecurring,
 	BankTransactionReviewCounts,
 	BankTransactionSummary,
 	BankTransactionTotals,
 	BankTransactionsResponse,
 } from '@tempo/contracts';
+import {Response} from 'express';
 
 import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
@@ -23,6 +25,7 @@ import {BankTransactionCategoryUpdateDto} from './dtos/bank-transaction-category
 import {BankTransactionOwnTransferUpdateDto} from './dtos/bank-transaction-own-transfer-update.dto';
 import {BankTransactionQueryDto, BankTransactionTotalsQueryDto} from './dtos/bank-transaction-query.dto';
 import {BankTransactionSummaryQueryDto} from './dtos/bank-transaction-summary-query.dto';
+import {RecurringSeriesQueryDto} from './dtos/recurring-series.dto';
 
 /**
  * Browsing months or paging through results sends one request per view, and every month or page
@@ -101,6 +104,21 @@ export class BankTransactionController {
 		@Param('id', new ParseUUIDPipe({version: '4'})) id: string,
 	): Promise<BankTransaction> {
 		return this.bankTransactionService.findById(account.id, id);
+	}
+
+	@Get(':id/recurring')
+	@TokenReadable()
+	@Throttle(BROWSING_THROTTLE)
+	async getRecurring(
+		@CurrentAccount() account: Account,
+		@Param('id', new ParseUUIDPipe({version: '4'})) id: string,
+		@Query() query: RecurringSeriesQueryDto,
+		@Res() response: Response,
+	): Promise<BankTransactionRecurring | null> {
+		const recurring = await this.bankTransactionService.getRecurring(account.id, id, query.asOf);
+		// Nest's default null response is empty; this read's wire contract is JSON null.
+		response.json(recurring);
+		return recurring;
 	}
 
 	/** Lists the owner's other rows a category correction would change, without saving anything. */
