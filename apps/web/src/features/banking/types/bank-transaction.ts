@@ -11,6 +11,7 @@ import {
   type BankTransactionCategory,
   type BankTransactionFinancialEventFilterValue,
   type BankTransactionFinancialEventType,
+  MERCHANT_GROUP_ID_PATTERN,
   SORT_ORDERS,
 } from '@tempo/contracts';
 import {z} from 'zod';
@@ -97,6 +98,8 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
   search: z.string().max(BANK_TRANSACTION_SEARCH_MAX_LENGTH).optional(),
   /** Only the payments of one recurring series, from the recurring payments list. */
   recurringSeriesKey: recurringSeriesKeySchema.optional(),
+  /** Only one merchant group's rows, from a merchant page. */
+  merchantGroup: z.string().regex(new RegExp(MERCHANT_GROUP_ID_PATTERN)).optional(),
   transactionId: z.string().optional(),
   sort: z
     .object({
@@ -131,6 +134,7 @@ export const BANK_TRANSACTION_FILTER_KEYS = [
   'baseAmount',
   'categoryStatuses',
   'recurringSeriesKey',
+  'merchantGroup',
   'search',
 ] as const satisfies readonly (keyof BankTransactionSearchParams)[];
 

@@ -20,6 +20,7 @@ import {HttpError} from '@/utils/api';
 import {useGetBankTransaction} from '../api/use-get-bank-transaction';
 import {resolveBankTransactionDisplayTitle} from '../utils/formatters';
 import {BankTransactionDetails} from './bank-transaction-details';
+import {MerchantHistoryLink} from './merchant-history-link';
 import {MerchantLogoTile} from './merchant-logo-tile';
 
 type BankTransactionDetailsDialogProps = {
@@ -61,6 +62,7 @@ export function BankTransactionDetailsDialog({
           <ResponsiveDialogDescription className='mt-1 md:mt-0'>
             {transaction ? 'Bank transaction' : 'Transaction details'}
           </ResponsiveDialogDescription>
+          {transaction && <MerchantHistoryLink transaction={transaction} />}
         </ResponsiveDialogHeader>
 
         <ScrollArea
