@@ -28,6 +28,7 @@ import {
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
 import {BankTransactionDetails} from './bank-transaction-details';
+import {MerchantHistoryLink} from './merchant-history-link';
 import {MerchantLogoTile} from './merchant-logo-tile';
 
 type BankTransactionDetailsDialogProps = {
@@ -124,6 +125,7 @@ export function BankTransactionDetailsDialog({
               </div>
             </div>
           )}
+          {transaction && <MerchantHistoryLink transaction={transaction} />}
         </ResponsiveDialogHeader>
         <ScrollArea
           type='auto'

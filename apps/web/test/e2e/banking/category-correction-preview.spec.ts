@@ -47,6 +47,7 @@ const transaction: BankTransaction = {
   financialEventRuleVersion: null,
   cashFlowTreatment: 'EXPENSE',
   merchantLogoUrl: null,
+  merchantGroupId: null,
   ownTransfer: null,
   ownTransferOverride: null,
   currencyExchangeCounterpart: null,

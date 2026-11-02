@@ -130,6 +130,8 @@ export type BankTransaction = {
 	displayDescription: string;
 	/** Path of the merchant's logo image, null when no confirmed logo exists. */
 	merchantLogoUrl: string | null;
+	/** The merchant group the row counts toward; null for own transfers, currency exchanges and rows without a merchant. */
+	merchantGroupId: string | null;
 	counterpartyName: string | null;
 	amount: string;
 	currency: string;
@@ -193,6 +195,8 @@ export type BankTransactionFilter = {
 	categoryStatuses?: BankTransactionCategoryStatusFilterValue[];
 	/** Only the payments of one detected recurring series. */
 	recurringSeriesKey?: string;
+	/** Only the rows of one merchant group (see `MERCHANT_GROUP_ID_PATTERN`). */
+	merchantGroup?: string;
 };
 
 /** `GET /bank-transactions/totals` query: the list's filters without sort or pagination. */

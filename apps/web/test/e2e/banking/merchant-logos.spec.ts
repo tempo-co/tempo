@@ -12,6 +12,7 @@ import {
   mockBankRefresh,
   mockCashFlow,
   mockJson,
+  mockMerchantRanking,
 } from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
@@ -45,6 +46,7 @@ function transaction(
     id: `00000000-0000-4000-8000-00000000070${index}`,
     displayDescription,
     merchantLogoUrl: null,
+    merchantGroupId: null,
     description: `CARD ${displayDescription.toUpperCase()} TERMINAL 0${index}`,
     counterpartyName: null,
     transactionDate: `2026-09-1${index}`,
@@ -228,6 +230,7 @@ async function mockMerchantLogos(page: Page) {
   });
   await mockCashFlow(page);
   await mockBalanceTrend(page);
+  await mockMerchantRanking(page);
   await mockJson(page, '**/bank-transactions/review-counts', {
     needsReview: 0,
     categorizationFailed: 0,

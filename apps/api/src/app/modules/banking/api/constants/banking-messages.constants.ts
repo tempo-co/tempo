@@ -31,3 +31,8 @@ export const BANKING_BALANCE_TREND_RANGE =
 	'The balance trend range must run forward, end by the given date and cover at most 104 weeks, 60 months or 10 years.';
 export const BANKING_TRANSACTION_CASH_FLOW_RANGE =
 	'The cash flow range must run forward, end by the given date and cover at most 104 weeks, 60 months or 10 years.';
+export const MERCHANT_NOT_FOUND = 'Merchant not found.';
+export const MERCHANT_GROUP_ID_INVALID = 'Merchant id must be b_ or k_ followed by 32 lowercase hex characters.';
+export const MERCHANT_PERIODS_RANGE =
+	'The merchant period range must run forward, end by the given date and cover at most 104 weeks, 60 months or 10 years.';
+export const MERCHANT_RANKING_FUTURE_PERIOD = 'The ranked period cannot start after the given date.';

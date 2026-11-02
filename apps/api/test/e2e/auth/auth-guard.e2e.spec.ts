@@ -22,6 +22,7 @@ type GuardedRoute = [method: Method, path: string];
 const SESSION_ID = 'a'.repeat(32);
 const RESOURCE_ID = randomUUID();
 const SERIES_KEY = 'b'.repeat(32);
+const MERCHANT_GROUP_ID = `k_${'c'.repeat(32)}`;
 const MCP_TOKEN_ROUTES: GuardedRoute[] = [
 	['post', '/mcp'],
 	['get', '/mcp'],
@@ -47,9 +48,15 @@ const TOKEN_READABLE_PATHS = [
 	'/bank-transactions/review-counts',
 	'/recurring-series?asOf=2026-10-18',
 	'/recurring-series/summary?asOf=2026-10-18',
+	'/merchants',
+	'/merchants/ranking?interval=month&period=2026-10-01&asOf=2026-10-18',
 	`/bank-transactions/${RESOURCE_ID}`,
 	`/bank-transactions/${RESOURCE_ID}/recurring?asOf=2026-10-18`,
+	`/merchants/${MERCHANT_GROUP_ID}`,
+	`/merchants/${MERCHANT_GROUP_ID}/periods?interval=month&from=2026-01-01&to=2026-10-18&asOf=2026-10-18`,
 ];
+// Token-readable paths naming a resource that does not exist.
+const MISSING_RESOURCE_PATHS = new Set(TOKEN_READABLE_PATHS.slice(-4));
 
 // Routes that require a session for an account with a verified email; personal tokens are refused.
 const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
@@ -150,7 +157,7 @@ describe('AuthGuard - protected routes', () => {
 		await request(httpServer)
 			.get(path)
 			.auth(token, {type: 'bearer'})
-			.expect(path.startsWith(`/bank-transactions/${RESOURCE_ID}`) ? 404 : 200);
+			.expect(MISSING_RESOURCE_PATHS.has(path) ? 404 : 200);
 	});
 
 	it.each(TOKEN_DENIED_ROUTES)('%s %s rejects a valid personal token with 403', async (method, path) => {

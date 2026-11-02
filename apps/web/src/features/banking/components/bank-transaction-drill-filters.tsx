@@ -6,7 +6,7 @@ import {Button} from '@/components/ui/button';
 import {BankTransactionFilterParams} from '../types/bank-transaction';
 import {CATEGORY_STATUS_LABELS} from '../utils/drill-filters';
 
-type DrillFilterKey = 'categoryStatuses' | 'recurringSeriesKey';
+type DrillFilterKey = 'categoryStatuses' | 'recurringSeriesKey' | 'merchantGroup';
 
 function describeDrillFilters(filters: BankTransactionFilterParams) {
   const chips: {key: DrillFilterKey; label: string}[] = [];
@@ -19,6 +19,9 @@ function describeDrillFilters(filters: BankTransactionFilterParams) {
   if (filters.recurringSeriesKey) {
     chips.push({key: 'recurringSeriesKey', label: 'One recurring payment'});
   }
+  if (filters.merchantGroup) {
+    chips.push({key: 'merchantGroup', label: 'One merchant'});
+  }
   return chips;
 }
 
@@ -27,7 +30,7 @@ type BankTransactionDrillFiltersProps = {
 };
 
 /**
- * Categorization-status and recurring-payment drills remain removable chips; neither has a picker.
+ * Categorization-status, recurring-payment and merchant drills remain removable chips; none has a picker.
  */
 export function BankTransactionDrillFilters({filters}: BankTransactionDrillFiltersProps) {
   const navigate = useNavigate({from: '/bank-transactions/'});

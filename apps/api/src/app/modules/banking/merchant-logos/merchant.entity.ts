@@ -18,7 +18,8 @@ export type MerchantStatus = (typeof MERCHANT_STATUSES)[keyof typeof MERCHANT_ST
 
 /**
  * One merchant of an owner, keyed by the transactions' merchant key without its direction, so a purchase and its
- * refund share it. Display-only: categories, merchant keys and recurring payments never read it.
+ * refund share it. Read for display and for merchant spending totals, which group keys by `brand`; categories,
+ * merchant keys and recurring payments never read it.
  */
 @Entity('merchants')
 @Index('idx_merchants_account_key', ['accountId', 'key'], {unique: true})

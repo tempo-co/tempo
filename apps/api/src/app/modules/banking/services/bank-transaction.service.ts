@@ -31,7 +31,11 @@ import {BankTransactionCategorizationService} from '../categorization/bank-trans
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
-import {applyBankTransactionFilters, createOwnerScopedQuery as createLedgerQuery} from './bank-transaction-filters';
+import {
+	SQL_MERCHANT_GROUP,
+	applyBankTransactionFilters,
+	createOwnerScopedQuery as createLedgerQuery,
+} from './bank-transaction-filters';
 import {findOwnedConnection} from './find-owned-connection';
 import {OwnTransferService} from './own-transfer.service';
 
@@ -204,18 +208,42 @@ export class BankTransactionService {
 		);
 	}
 
-	/** Responses with each transaction's merchant logo, looked up once for the whole list. */
+	/** Responses with each transaction's merchant logo and group, looked up once for the whole list. */
 	private async toResponses(
 		accountId: Account['id'],
 		transactions: BankTransaction[],
 	): Promise<BankTransactionResponse[]> {
-		const logos = await this.merchantLogoService.getLogoUrls(accountId, transactions);
-		return transactions.map((transaction) => this.toResponse(transaction, logos.get(transaction.id) ?? null));
+		const [logos, groups] = await Promise.all([
+			this.merchantLogoService.getLogoUrls(accountId, transactions),
+			this.findMerchantGroupIds(accountId, transactions),
+		]);
+		return transactions.map((transaction) =>
+			this.toResponse(transaction, logos.get(transaction.id) ?? null, groups.get(transaction.id) ?? null),
+		);
 	}
 
-	private toResponse(transaction: BankTransaction, merchantLogoUrl: string | null): BankTransactionResponse {
+	private async findMerchantGroupIds(
+		accountId: Account['id'],
+		transactions: readonly BankTransaction[],
+	): Promise<Map<string, string>> {
+		const ids = transactions.filter((transaction) => transaction.merchantKey).map(({id}) => id);
+		if (ids.length === 0) return new Map();
+		const rows = await createLedgerQuery(this.bankTransactionRepository, accountId)
+			.select('"transaction"."id"', 'id')
+			.addSelect(SQL_MERCHANT_GROUP, 'groupId')
+			.andWhere('"transaction"."id" IN (:...ids)', {ids})
+			.getRawMany<{id: string; groupId: string | null}>();
+		return new Map(rows.flatMap(({id, groupId}) => (groupId ? [[id, groupId] as const] : [])));
+	}
+
+	private toResponse(
+		transaction: BankTransaction,
+		merchantLogoUrl: string | null,
+		merchantGroupId: string | null,
+	): BankTransactionResponse {
 		return {
 			...this.toSharedResponseFields(transaction, merchantLogoUrl),
+			merchantGroupId,
 			transactionDate: transaction.transactionDate,
 			direction: toBankTransactionDirection(transaction.creditDebitIndicator),
 			transactionType: transaction.transactionType ?? BANK_TRANSACTION_TYPES.OTHER,

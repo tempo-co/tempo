@@ -2,7 +2,9 @@
  * Pure monthly spending math for the Home summary. Money is integer cents (`bigint`) throughout; amounts enter as
  * Postgres decimal strings with at most two decimals and leave through {@link formatCents}. No floats.
  */
-import type {BaselineDay, BaselineTotal, SpendingPaceDay} from '@tempo/contracts';
+import type {BaselineDay, BaselineTotal, CashFlowInterval, SpendingPaceDay} from '@tempo/contracts';
+
+import {addDays} from '../banking.utils';
 
 /** Spending of one calendar month, keyed by day of month. */
 export type DailyCents = ReadonlyMap<number, bigint>;
@@ -104,4 +106,37 @@ function cumulativeSeries(daily: DailyCents, monthDays: number): bigint[] {
 
 function days(count: number): number[] {
 	return Array.from({length: count}, (_, index) => index + 1);
+}
+
+/** The most periods one cash-flow style request may cover. */
+const CASH_FLOW_MAX_PERIODS: Record<CashFlowInterval, number> = {week: 104, month: 60, year: 10};
+
+/** Period starts from `from` through `to`, or null when the range is backwards, ends after `asOf` or is too long. */
+export function periodStarts(interval: CashFlowInterval, from: string, to: string, asOf: string): string[] | null {
+	const starts: string[] = [];
+	for (let start = periodStart(from, interval); start <= to; start = nextPeriodStart(start, interval)) {
+		starts.push(start);
+		if (starts.length > CASH_FLOW_MAX_PERIODS[interval]) break;
+	}
+	return from > to || to > asOf || starts.length > CASH_FLOW_MAX_PERIODS[interval] ? null : starts;
+}
+
+/** Calendar dates as `YYYY-MM-DD`, computed in UTC so no local offset shifts a day. */
+function toDate(value: string): Date {
+	return new Date(`${value}T00:00:00Z`);
+}
+
+/** The Monday, 1st or 1 January on or before `value`, like Postgres `date_trunc`. */
+export function periodStart(value: string, interval: CashFlowInterval): string {
+	if (interval === 'year') return `${value.slice(0, 4)}-01-01`;
+	if (interval === 'month') return `${value.slice(0, 7)}-01`;
+	return addDays(value, -((toDate(value).getUTCDay() + 6) % 7));
+}
+
+export function nextPeriodStart(start: string, interval: CashFlowInterval): string {
+	if (interval === 'week') return addDays(start, 7);
+	const date = toDate(start);
+	if (interval === 'year') date.setUTCFullYear(date.getUTCFullYear() + 1);
+	else date.setUTCMonth(date.getUTCMonth() + 1);
+	return date.toISOString().slice(0, 10);
 }

@@ -18,6 +18,7 @@ import {
   mockBankRefresh,
   mockCashFlow,
   mockJson,
+  mockMerchantRanking,
   routeBankConnectionsApi,
   transformBankConnections,
 } from '../../utils/api-mocks';
@@ -1353,6 +1354,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     await mockBankConnections(page, () => (nextSession ? [next] : [MOCK_CONNECTION, tail]));
     await mockBalanceTrend(page);
     await mockCashFlow(page);
+    await mockMerchantRanking(page);
     await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
     await mockJson(page, '**/recurring-series/summary?**', {
       expenseMonthlyTotal: '0.00',
@@ -1434,6 +1436,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       });
       await mockBalanceTrend(page);
       await mockCashFlow(page);
+      await mockMerchantRanking(page);
       await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
       await mockJson(page, '**/recurring-series/summary?**', {
         expenseMonthlyTotal: '0.00',
