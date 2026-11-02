@@ -338,11 +338,13 @@ async function mockMerchants(page: Page) {
   return requests;
 }
 
+const dialog = (page: Page) => page.getByRole('dialog', {name: 'Merchants'});
+
 for (const viewport of [
   {width: 1280, height: 900},
   {width: 375, height: 812},
 ]) {
-  test(`Home ranks the month's top merchants against their usual at ${viewport.width}px`, async ({
+  test(`Home ranks the month's top merchants and opens them over Home at ${viewport.width}px`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
@@ -353,7 +355,7 @@ for (const viewport of [
     const card = page.getByRole('region', {name: 'Top merchants'});
     const rows = card.getByRole('listitem');
     await expect(rows).toHaveCount(5);
-    expect(requests.find((params) => params.has('limit'))?.toString()).toBe(
+    expect(requests.find((params) => params.get('limit') === '5')?.toString()).toBe(
       new URLSearchParams({
         interval: 'month',
         period: '2026-10-01',
@@ -377,34 +379,48 @@ for (const viewport of [
     }
     await expectNoHorizontalOverflow(page);
 
-    await rows.nth(1).getByRole('link').click();
-    await expect(page).toHaveURL(`/merchants/${BRAND}`);
+    await rows.nth(1).getByRole('button').click();
+    await expect(page).toHaveURL(`/?merchants=open&merchant=${BRAND}`);
+    await expect(dialog(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
+    await dialog(page).getByRole('button', {name: 'All merchants'}).click();
+    await expect(page).toHaveURL('/?merchants=open');
+    await expect(dialog(page).getByRole('region', {name: 'All merchants'})).toBeVisible();
     await page.goBack();
-    await card.getByRole('link', {name: 'See all merchants'}).click();
-    await expect(page).toHaveURL('/merchants?period=2026-10-01');
-    await expect(page.getByRole('heading', {name: 'Merchants', level: 1})).toBeVisible();
+    await expect(dialog(page)).toBeHidden();
+    await expect(page).toHaveURL('/');
+
+    await card.getByRole('button', {name: 'See all merchants'}).click();
+    await expect(page).toHaveURL('/?merchants=open');
+    await expect(dialog(page).getByRole('region', {name: 'Top merchants'})).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await dialog(page).getByRole('button', {name: 'Close merchants'}).click();
+    await expect(dialog(page)).toBeHidden();
+    await expect(page).toHaveURL('/');
   });
 }
 
-test('the merchants page ranks by week, month or year and searches every merchant', async ({
+test('the merchants dialog ranks by week, month or year and searches every merchant', async ({
   page,
 }) => {
   await page.setViewportSize({width: 375, height: 812});
   await mockSignedIn(page);
   const requests = await mockMerchants(page);
-  await page.goto('/merchants');
+  await page.goto('/?merchants=open');
 
-  const top = page.getByRole('region', {name: 'Top merchants'});
+  const top = dialog(page).getByRole('region', {name: 'Top merchants'});
   await expect(top.getByRole('heading', {name: 'This month'})).toBeVisible();
   await expect(top).toContainText('Compared with the last 6 months by this point.');
   await expect(top.getByRole('listitem')).toHaveCount(5);
   await expect(top).toContainText('Top 5 of 7 merchants.');
   await top.getByRole('radio', {name: 'Year'}).click();
   await expect(top.getByRole('heading', {name: 'This year'})).toBeVisible();
-  await expect(page).toHaveURL('/merchants?interval=year');
   expect(requests.some((params) => params.get('interval') === 'year')).toBe(true);
+  // Opening a merchant and coming back keeps the period.
+  await top.getByRole('listitem').nth(1).getByRole('button').click();
+  await dialog(page).getByRole('button', {name: 'All merchants'}).click();
+  await expect(top.getByRole('radio', {name: 'Year'})).toBeChecked();
 
-  const all = page.getByRole('region', {name: 'All merchants'});
+  const all = dialog(page).getByRole('region', {name: 'All merchants'});
   await expect(all).toContainText('5 merchants, most spent first');
   await expect(all.getByRole('listitem')).toHaveCount(2);
   await all.getByRole('button', {name: 'Load more'}).click();
@@ -418,39 +434,47 @@ test('the merchants page ranks by week, month or year and searches every merchan
   await expect(all.getByRole('listitem').nth(2)).toContainText('1,284 transactions · last 12 Oct');
   await expectNoHorizontalOverflow(page);
 
-  await page.getByRole('searchbox', {name: 'Search merchants and people'}).fill('burger');
-  const results = page.getByRole('region', {name: 'Search results'});
+  await dialog(page).getByRole('searchbox', {name: 'Search merchants and people'}).fill('burger');
+  const results = dialog(page).getByRole('region', {name: 'Search results'});
   await expect(results).toContainText('1 match');
   await expect(results.getByRole('listitem')).toHaveCount(1);
   await expect(top).toBeHidden();
-  await expect(page).toHaveURL('/merchants?interval=year&q=burger');
-  await page.getByRole('searchbox', {name: 'Search merchants and people'}).fill('nobody');
+  // Opening a result and coming back keeps the search.
+  await results.getByRole('button').click();
+  await expect(dialog(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
+  await dialog(page).getByRole('button', {name: 'All merchants'}).click();
+  await expect(
+    dialog(page).getByRole('searchbox', {name: 'Search merchants and people'}),
+  ).toHaveValue('burger');
+  await expect(results.getByRole('listitem')).toHaveCount(1);
+  await dialog(page).getByRole('searchbox', {name: 'Search merchants and people'}).fill('nobody');
   await expect(results).toContainText('No merchant or person matches that name.');
 });
 
-test('a merchant page shows all-time totals, periods, grouped names and transactions', async ({
+test('merchant details show all-time totals, periods, grouped names and transactions', async ({
   page,
 }) => {
   await page.setViewportSize({width: 375, height: 812});
   await mockSignedIn(page);
   const requests = await mockMerchants(page);
-  await page.goto(`/merchants/${BRAND}`);
+  await page.goto(`/?merchants=open&merchant=${BRAND}`);
 
-  await expect(page.getByRole('heading', {name: 'Example Burger', level: 1})).toBeVisible();
-  await expect(page.getByText('2 names grouped by brand')).toBeVisible();
-  await expect(page.getByText('Spent all time€310.40')).toBeVisible();
-  await expect(page.getByText('€320.40 paid, €10.00 refunded')).toBeVisible();
-  await expect(page.getByTestId('merchant-fact')).toHaveText([
+  const details = dialog(page);
+  await expect(details.getByRole('heading', {name: 'Example Burger'})).toBeVisible();
+  await expect(details.getByText('2 names grouped by brand')).toBeVisible();
+  await expect(details.getByText('Spent all time€310.40')).toBeVisible();
+  await expect(details.getByText('€320.40 paid, €10.00 refunded')).toBeVisible();
+  await expect(details.getByTestId('merchant-fact')).toHaveText([
     'Payments40',
     'Average payment€8.01',
     'Since 20 Oct 2025Last 14 Oct',
     'How oftenAbout weekly',
   ]);
   await expect(
-    page.getByText('2 transactions without a converted amount or direction are not counted.'),
+    details.getByText('2 transactions without a converted amount or direction are not counted.'),
   ).toBeVisible();
 
-  const overTime = page.getByRole('region', {name: 'Spending over time'});
+  const overTime = details.getByRole('region', {name: 'Spending over time'});
   await expect(
     overTime.getByRole('table', {name: 'Spending per month'}).getByRole('row'),
   ).toHaveCount(4);
@@ -462,11 +486,11 @@ test('a merchant page shows all-time totals, periods, grouped names and transact
     ),
   ).toBe(true);
 
-  const grouped = page.getByRole('region', {name: 'Grouped names'});
+  const grouped = details.getByRole('region', {name: 'Grouped names'});
   await expect(grouped.getByRole('listitem')).toHaveCount(2);
   await expect(grouped.getByRole('listitem').first()).toContainText('25 transactions€200.40');
 
-  const transactions = page.getByRole('region', {name: 'Transactions'});
+  const transactions = details.getByRole('region', {name: 'Transactions'});
   await expect(transactions.getByRole('heading', {name: '2 transactions'})).toBeVisible();
   expect(requests.some((params) => params.get('filter[merchantGroup]') === BRAND)).toBe(true);
   await expectNoHorizontalOverflow(page);
@@ -483,15 +507,25 @@ test('transaction details open the payment history of their merchant', async ({p
 
   const inspector = page.getByTestId('bank-transaction-inspector');
   await inspector.getByRole('link', {name: 'Payment history'}).click();
-  await expect(page).toHaveURL(`/merchants/${BRAND}`);
-  await expect(page.getByRole('heading', {name: 'Example Burger', level: 1})).toBeVisible();
+  await expect(page).toHaveURL(`/?merchants=open&merchant=${BRAND}`);
+  await expect(dialog(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
+  // Closing returns to the transaction it was opened from.
+  await dialog(page).getByRole('button', {name: 'Close merchants'}).click();
+  await expect(page).toHaveURL(new RegExp(`transactionId=${burgerTransaction(4).id}`));
 });
 
 test('a merchant without transactions shows not found', async ({page}) => {
   await mockSignedIn(page);
   await mockMerchants(page);
-  await page.goto(`/merchants/${PERSON}`);
-  await expect(page.getByRole('heading', {name: 'Merchant not found'})).toBeVisible();
-  await page.goto('/merchants/not-a-merchant');
-  await expect(page.getByRole('heading', {name: 'Merchant not found'})).toBeVisible();
+  await page.goto(`/?merchants=open&merchant=${PERSON}`);
+  await expect(dialog(page).getByRole('heading', {name: 'Merchant not found'})).toBeVisible();
+  await dialog(page).getByRole('button', {name: 'All merchants'}).click();
+  await expect(dialog(page).getByRole('region', {name: 'All merchants'})).toBeVisible();
+});
+
+test('an invalid merchant id in the link opens the list', async ({page}) => {
+  await mockSignedIn(page);
+  await mockMerchants(page);
+  await page.goto('/?merchants=open&merchant=not-a-merchant');
+  await expect(dialog(page).getByRole('region', {name: 'All merchants'})).toBeVisible();
 });

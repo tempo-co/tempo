@@ -1,4 +1,3 @@
-import {useNavigate} from '@tanstack/react-router';
 import {
   type CashFlowInterval,
   MERCHANT_RANKING_DEFAULT_LIMIT,
@@ -10,7 +9,6 @@ import {Search} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
 import {Button} from '@/components/ui/button';
-import {Card} from '@/components/ui/card';
 import {Input} from '@/components/ui/input';
 import {Skeleton} from '@/components/ui/skeleton';
 import {formatBankTransactionCompactDate} from '@/features/banking/utils/formatters';
@@ -25,59 +23,59 @@ import {countLabel, formatUsualComparison} from '../utils/merchant-format';
 import {MerchantRow} from './merchant-row';
 
 type MerchantsOverviewProps = {
-  search: string;
+  /** Home's viewed month (`YYYY-MM`); the month ranking opens on it. */
+  month: string;
+  onSelect: (merchantId: string) => void;
+  /** Kept by the caller so a merchant's details and back keep them. */
+  searchInput: string;
+  onSearchInputChange: (value: string) => void;
   interval: CashFlowInterval;
-  /** Any day in the ranked period; today when absent. */
-  period: string | undefined;
+  onIntervalChange: (interval: CashFlowInterval) => void;
 };
 
 /** Where the money went this week, month or year by merchant, and every merchant, searchable. */
-export function MerchantsOverview({search, interval, period}: MerchantsOverviewProps) {
-  const navigate = useNavigate({from: '/merchants/'});
-  const [searchInput, setSearchInput] = useState(search);
+export function MerchantsOverview({
+  month,
+  onSelect,
+  searchInput,
+  onSearchInputChange,
+  interval,
+  onIntervalChange,
+}: MerchantsOverviewProps) {
+  const [search, setSearch] = useState(searchInput.trim());
 
-  useEffect(() => setSearchInput(search), [search]);
   useEffect(() => {
     const next = searchInput.trim();
     if (next === search) return;
-    const timeoutId = window.setTimeout(() => {
-      void navigate({replace: true, search: (prev) => ({...prev, q: next || undefined})});
-    }, 300);
+    const timeoutId = window.setTimeout(() => setSearch(next), 300);
     return () => window.clearTimeout(timeoutId);
-  }, [navigate, search, searchInput]);
+  }, [search, searchInput]);
 
   return (
-    <div className='grid grid-cols-1 gap-6'>
-      <div className='grid gap-4'>
-        <h1 className='text-page-title'>Merchants</h1>
-        <div className='relative min-w-0 md:max-w-sm'>
-          <Search className='absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
-          <Input
-            type='search'
-            value={searchInput}
-            maxLength={MERCHANT_SEARCH_MAX_LENGTH}
-            onChange={(event) => setSearchInput(event.target.value)}
-            placeholder='Search merchants and people'
-            aria-label='Search merchants and people'
-            className='h-12 pl-9 text-base sm:h-9 sm:text-sm'
-          />
-        </div>
+    <div className='grid grid-cols-1 gap-8'>
+      <div className='relative min-w-0'>
+        <Search className='absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
+        <Input
+          type='search'
+          value={searchInput}
+          maxLength={MERCHANT_SEARCH_MAX_LENGTH}
+          onChange={(event) => onSearchInputChange(event.target.value)}
+          placeholder='Search merchants and people'
+          aria-label='Search merchants and people'
+          className='h-12 pl-9 text-base sm:h-9 sm:text-sm'
+        />
       </div>
       {search ? (
-        <AllMerchants search={search} />
+        <AllMerchants search={search} onSelect={onSelect} />
       ) : (
         <>
           <Ranking
             interval={interval}
-            period={period}
-            onIntervalChange={(next) =>
-              void navigate({
-                replace: true,
-                search: (prev) => ({...prev, interval: next, period: undefined}),
-              })
-            }
+            period={interval === 'month' ? `${month}-01` : undefined}
+            onIntervalChange={onIntervalChange}
+            onSelect={onSelect}
           />
-          <AllMerchants search='' />
+          <AllMerchants search='' onSelect={onSelect} />
         </>
       )}
     </div>
@@ -88,10 +86,12 @@ function Ranking({
   interval,
   period,
   onIntervalChange,
+  onSelect,
 }: {
   interval: CashFlowInterval;
   period: string | undefined;
   onIntervalChange: (interval: CashFlowInterval) => void;
+  onSelect: (merchantId: string) => void;
 }) {
   const asOf = useLocalDate();
   const {ranking, isPending, isError, refetch} = useGetMerchantRanking(
@@ -104,7 +104,7 @@ function Ranking({
   const running = loaded ? loaded.through < loaded.end : true;
 
   return (
-    <Card className='grid grid-cols-1 gap-4 p-5 sm:p-6' role='region' aria-label='Top merchants'>
+    <section className='grid grid-cols-1 gap-4' aria-label='Top merchants'>
       <ChartCardHeader
         title={loaded ? rankingTitle(loaded.start, loaded.end, interval, running) : 'Top merchants'}
         interval={interval}
@@ -126,13 +126,14 @@ function Ranking({
       ) : loaded.merchants.length === 0 ? (
         <p className='text-sm text-muted-foreground'>No spending this {interval}.</p>
       ) : (
-        <ol className='-mx-3 -mb-3 divide-y divide-border/60'>
+        <ol className='-mx-3 divide-y divide-border/60'>
           {loaded.merchants.map((merchant) => {
             const comparison = formatUsualComparison(merchant, loaded.baseCurrency);
             return (
               <li key={merchant.id}>
                 <MerchantRow
                   merchant={merchant}
+                  onSelect={onSelect}
                   detail={
                     <>
                       {countLabel(merchant.count, 'transaction')}
@@ -151,7 +152,7 @@ function Ranking({
           Top {loaded.merchants.length} of {loaded.total.toLocaleString()} merchants.
         </p>
       )}
-    </Card>
+    </section>
   );
 }
 
@@ -164,7 +165,13 @@ function rankingTitle(start: string, end: string, interval: CashFlowInterval, ru
     : `Week of ${format(first, 'd MMM')} – ${format(parseCalendarDate(end), 'd MMM')}`;
 }
 
-function AllMerchants({search}: {search: string}) {
+function AllMerchants({
+  search,
+  onSelect,
+}: {
+  search: string;
+  onSelect: (merchantId: string) => void;
+}) {
   const {data, isPending, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage} =
     useGetMerchants(search);
   const merchants = data?.pages.flatMap((page) => page.merchants) ?? [];
@@ -172,9 +179,8 @@ function AllMerchants({search}: {search: string}) {
   const currency = last?.baseCurrency ?? null;
 
   return (
-    <Card
-      className='grid grid-cols-1 gap-4 p-5 sm:p-6'
-      role='region'
+    <section
+      className='grid grid-cols-1 gap-4'
       aria-label={search ? 'Search results' : 'All merchants'}
     >
       <header className='flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1'>
@@ -206,6 +212,7 @@ function AllMerchants({search}: {search: string}) {
               <li key={merchant.id}>
                 <MerchantRow
                   merchant={merchant}
+                  onSelect={onSelect}
                   detail={merchantDetail(merchant)}
                   {...listAmount(merchant, currency)}
                 />
@@ -225,7 +232,7 @@ function AllMerchants({search}: {search: string}) {
           )}
         </>
       )}
-    </Card>
+    </section>
   );
 }
 

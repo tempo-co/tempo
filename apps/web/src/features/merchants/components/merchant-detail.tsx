@@ -6,7 +6,6 @@ import {useState} from 'react';
 import {Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis} from 'recharts';
 
 import {Button} from '@/components/ui/button';
-import {Card} from '@/components/ui/card';
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {Skeleton} from '@/components/ui/skeleton';
 import {TransactionListRow} from '@/features/banking/components/transaction-list-row';
@@ -26,7 +25,7 @@ import {countLabel, formatFrequency} from '../utils/merchant-format';
 import {MerchantTile} from './merchant-tile';
 
 /** One merchant or person: what was paid all time, per period, under which names, and every transaction. */
-export function MerchantDetail({merchant}: {merchant: MerchantGroup}) {
+export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onBack: () => void}) {
   const currency = merchant.baseCurrency;
   const hasIncome = toCents(merchant.received) > 0;
   const frequency = formatFrequency(merchant);
@@ -37,19 +36,17 @@ export function MerchantDetail({merchant}: {merchant: MerchantGroup}) {
       <Button
         variant='ghost'
         size='sm'
-        asChild
+        onClick={onBack}
         className='-my-1 -ml-3 justify-self-start text-muted-foreground max-sm:h-11'
       >
-        <Link to='/merchants'>
-          <ArrowLeft aria-hidden />
-          Merchants
-        </Link>
+        <ArrowLeft aria-hidden />
+        All merchants
       </Button>
 
       <header className='grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4'>
         <MerchantTile merchant={merchant} className='h-12 w-12' />
         <div className='min-w-0'>
-          <h1 className='text-page-title wrap-anywhere'>{merchant.name}</h1>
+          <h3 className='text-section-title wrap-anywhere'>{merchant.name}</h3>
           {merchant.variants.length > 1 && (
             <p className='mt-0.5 text-sm text-muted-foreground'>
               {merchant.variants.length} names grouped by brand
@@ -58,7 +55,7 @@ export function MerchantDetail({merchant}: {merchant: MerchantGroup}) {
         </div>
       </header>
 
-      <Card className='grid grid-cols-1 gap-5 p-5 sm:p-6'>
+      <section aria-label='All-time totals' className='grid grid-cols-1 gap-5'>
         <dl className='flex flex-wrap justify-between gap-x-8 gap-y-4'>
           <div className='min-w-0'>
             <dt className='text-xs text-muted-foreground'>Spent all time</dt>
@@ -112,23 +109,19 @@ export function MerchantDetail({merchant}: {merchant: MerchantGroup}) {
             {excluded === 1 ? 'is' : 'are'} not counted.
           </p>
         )}
-      </Card>
+      </section>
 
       <PeriodsCard merchant={merchant} hasIncome={hasIncome} />
 
       {merchant.variants.length > 1 && (
-        <Card
-          className='grid grid-cols-1 gap-3 p-5 sm:p-6'
-          role='region'
-          aria-label='Grouped names'
-        >
+        <section className='grid grid-cols-1 gap-3' aria-label='Grouped names'>
           <div>
             <h2 className='text-card-title'>Grouped names</h2>
             <p className='mt-1 text-xs text-muted-foreground'>
               These appear under one brand, so their totals add up above.
             </p>
           </div>
-          <ul className='-mx-3 -mb-3 divide-y divide-border/60'>
+          <ul className='-mx-3 divide-y divide-border/60'>
             {merchant.variants.map((variant) => (
               <li
                 key={variant.key}
@@ -146,7 +139,7 @@ export function MerchantDetail({merchant}: {merchant: MerchantGroup}) {
               </li>
             ))}
           </ul>
-        </Card>
+        </section>
       )}
 
       <Transactions merchant={merchant} />
@@ -183,11 +176,7 @@ function PeriodsCard({merchant, hasIncome}: {merchant: MerchantGroup; hasIncome:
   const hasActivity = shown.some((period) => period.count > 0);
 
   return (
-    <Card
-      className='grid min-w-0 grid-cols-1 gap-4 p-5 sm:p-6'
-      role='region'
-      aria-label='Spending over time'
-    >
+    <section className='grid min-w-0 grid-cols-1 gap-4' aria-label='Spending over time'>
       <ChartCardHeader
         title='Over time'
         interval={interval}
@@ -210,7 +199,7 @@ function PeriodsCard({merchant, hasIncome}: {merchant: MerchantGroup; hasIncome:
           showReceived={hasIncome}
         />
       )}
-    </Card>
+    </section>
   );
 }
 
@@ -339,7 +328,7 @@ function PeriodsChart({
       </ChartContainer>
       {running && (
         <p className='mt-2 text-xs text-muted-foreground'>
-          The lighter bar is {periodLabel(running, interval).replace(/^Week of/, 'the week of')} so
+          The faded bar is {periodLabel(running, interval).replace(/^Week of/, 'the week of')} so
           far.
         </p>
       )}
@@ -379,7 +368,7 @@ function Transactions({merchant}: {merchant: MerchantGroup}) {
   const total = data?.pages[data.pages.length - 1].total ?? merchant.count;
 
   return (
-    <Card className='grid grid-cols-1 gap-3 p-5 sm:p-6' role='region' aria-label='Transactions'>
+    <section className='grid grid-cols-1 gap-3' aria-label='Transactions'>
       <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-2'>
         <h2 className='text-card-title'>{countLabel(total, 'transaction')}</h2>
         <Button variant='outline' size='sm' asChild className='max-sm:h-11'>
@@ -429,6 +418,6 @@ function Transactions({merchant}: {merchant: MerchantGroup}) {
           )}
         </>
       )}
-    </Card>
+    </section>
   );
 }

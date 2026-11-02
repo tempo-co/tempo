@@ -1,4 +1,4 @@
-import {Link} from '@tanstack/react-router';
+import {useNavigate} from '@tanstack/react-router';
 
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
@@ -29,6 +29,10 @@ export function TopMerchantsCard({
     SHOWN,
   );
 
+  const navigate = useNavigate({from: '/'});
+  const open = (merchant?: string) =>
+    void navigate({search: (prev) => ({...prev, merchants: 'open', merchant})});
+
   if (isPending) return <Skeleton className='h-72' aria-label='Loading top merchants' />;
 
   return (
@@ -36,14 +40,14 @@ export function TopMerchantsCard({
     <Card className='grid grid-cols-1 gap-4 p-5 sm:p-6' role='region' aria-label='Top merchants'>
       <header className='-my-2.5 flex flex-wrap items-center justify-between gap-x-2'>
         <h2 className='text-card-title'>Top merchants</h2>
-        <Link
-          to='/merchants'
-          search={{period: `${month}-01`}}
+        <button
+          type='button'
+          onClick={() => open()}
           className='-mr-3 inline-flex min-h-11 items-center px-3 text-xs text-primary underline-offset-4 hover:bg-accent/50 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
           aria-label='See all merchants'
         >
           See all
-        </Link>
+        </button>
       </header>
       {isError || !ranking ? (
         <div className='grid justify-items-start gap-3'>
@@ -70,6 +74,7 @@ export function TopMerchantsCard({
                 <li key={merchant.id}>
                   <MerchantRow
                     merchant={merchant}
+                    onSelect={open}
                     detail={
                       <>
                         {countLabel(merchant.count, 'transaction')}
