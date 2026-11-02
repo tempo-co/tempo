@@ -167,7 +167,10 @@ function Fact({label, value, numeric = false}: {label: string; value: string; nu
 function PeriodsCard({merchant, hasIncome}: {merchant: MerchantGroup; hasIncome: boolean}) {
   const [interval, setInterval] = useState<CashFlowInterval>('month');
   const asOf = useLocalDate();
-  const {from, to} = latestWindow(interval);
+  const range = latestWindow(interval);
+  const {from} = range;
+  // `useLocalDate` can lag the clock by a moment after midnight; the API refuses a range ending after `asOf`.
+  const to = range.to > asOf ? asOf : range.to;
   const {periods, isPending, isError, refetch} = useGetMerchantPeriods(
     merchant.id,
     interval,

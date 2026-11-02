@@ -1,4 +1,4 @@
-import type {CashFlowInterval, MerchantGroup, MerchantRankingItem} from '@tempo/contracts';
+import type {MerchantGroup, MerchantRankingItem} from '@tempo/contracts';
 
 import {formatMoney, toCents} from '@/features/dashboard/utils/money';
 
@@ -35,12 +35,6 @@ export function formatUsualComparison(
   if (Math.abs(difference) * 100 < usual * 25) return 'about usual';
   return `${difference > 0 ? '+' : '−'}${Math.round((Math.abs(difference) / usual) * 100)}% vs usual`;
 }
-
-export const INTERVAL_NOUNS: Record<CashFlowInterval, string> = {
-  week: 'week',
-  month: 'month',
-  year: 'year',
-};
 
 export function countLabel(count: number, singular: string, plural = `${singular}s`) {
   return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;

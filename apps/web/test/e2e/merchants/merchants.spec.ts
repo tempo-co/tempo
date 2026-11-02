@@ -19,7 +19,7 @@ const PERSON = `k_${'2'.repeat(32)}`;
 const LONG = `k_${'3'.repeat(32)}`;
 const UNBROKEN = `k_${'4'.repeat(32)}`;
 const EMPLOYER = `k_${'5'.repeat(32)}`;
-const LONG_NAME = 'Aleksandra Wiśniewska-Kowalczyk Catering & Events International Holdings';
+const LONG_NAME = 'Example Długoszewska-Przykładowa Catering & Events International Holdings';
 const UNBROKEN_NAME = 'ExampleSuperLongMerchantNameWithoutAnySpacesAtAllBV';
 
 /** Worst-case rows first: long and unbreakable names, a large amount, a count of one and none. */
