@@ -4,7 +4,12 @@ import {
   SEEDED_TRANSACTION_YEAR_NOW,
 } from '../../constants/seed.constants';
 import {expect, test} from '../../fixtures';
-import {fulfillJson, mockJson, transformBankConnections} from '../../utils/api-mocks';
+import {
+  fulfillJson,
+  mockBankRefresh,
+  mockJson,
+  transformBankConnections,
+} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const DETAIL_TRANSACTION_ID = '00000000-0000-4000-8000-000000000011';
@@ -496,6 +501,8 @@ test.describe('bank transactions', () => {
   });
 
   test('presents transaction detail in a responsive inspector', async ({page}) => {
+    test.slow();
+    await mockBankRefresh(page);
     for (const viewport of [
       {width: 1440, height: 900},
       {width: 393, height: 852},

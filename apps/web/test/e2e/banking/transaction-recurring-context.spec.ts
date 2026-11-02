@@ -147,6 +147,9 @@ for (const width of [320, 390, 1440]) {
       const source = inspector.getByTestId('bank-transaction-category-status');
       await expect(source).toHaveText('Suggested by AI');
       const category = inspector.getByTestId('bank-transaction-category-control');
+      await inspector.evaluate((el) =>
+        Promise.all(el.getAnimations({subtree: true}).map((animation) => animation.finished)),
+      );
       const before = await boxOf(category);
       const bank = inspector.getByRole('button', {name: 'Bank details', exact: true});
       const settings = inspector.getByRole('button', {name: 'Transfer settings', exact: true});
