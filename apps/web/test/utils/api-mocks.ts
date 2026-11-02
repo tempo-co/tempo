@@ -177,7 +177,12 @@ export async function mockEmptyHome(page: Page) {
       ? fulfillJson(route, {transactions: [], total: 0})
       : route.continue(),
   );
-  await page.route('**/merchants/ranking?**', (route) => {
+  await mockMerchantRanking(page);
+}
+
+/** Answers Home's Top merchants card with an empty ranking, for specs that mock Home's other cards. */
+export function mockMerchantRanking(page: Page) {
+  return page.route('**/merchants/ranking?**', (route) => {
     const params = new URL(route.request().url()).searchParams;
     return fulfillJson(route, {
       baseCurrency: null,

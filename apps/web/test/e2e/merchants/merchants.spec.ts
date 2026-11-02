@@ -261,6 +261,7 @@ async function mockSignedIn(page: Page) {
     isEmailVerified: true,
   });
   await mockBankRefresh(page);
+  await mockJson(page, '**/bank-connections/aspsps', []);
   await mockBankConnections(page, [
     {
       id: '00000000-0000-4000-8000-000000000002',

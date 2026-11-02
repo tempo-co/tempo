@@ -12,6 +12,7 @@ import {
   mockBankRefresh,
   mockCashFlow,
   mockJson,
+  mockMerchantRanking,
 } from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
@@ -226,6 +227,7 @@ async function mockMerchantLogos(page: Page) {
   });
   await mockCashFlow(page);
   await mockBalanceTrend(page);
+  await mockMerchantRanking(page);
   await mockJson(page, '**/bank-transactions/review-counts', {
     needsReview: 0,
     categorizationFailed: 0,
