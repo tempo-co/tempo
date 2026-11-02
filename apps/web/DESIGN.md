@@ -1,3 +1,4 @@
+---
 version: alpha
 name: Tempo
 description: A calm, considered interface for a private personal-finance overview and bank account tracker.
@@ -10,8 +11,10 @@ colors:
   fold-shadow: "#D9D2C6"
   night: "#17161B"
   clay-on-dark: "#E59A7B"
-  primary: "hsl(9 48.2% 37.8%)"
-  primary-foreground: "hsl(38.6 43.8% 93.7%)"
+  primary: "hsl(17.5 67.1% 69%)"
+  primary-foreground: "hsl(252 10.2% 9.6%)"
+  light-primary: "hsl(9 48.2% 37.8%)"
+  light-primary-foreground: "hsl(38.6 43.8% 93.7%)"
   background: "hsl(252 10.2% 9.6%)"
   surface: "hsl(260 9.1% 12.9%)"
   foreground: "hsl(38.6 31.8% 91.4%)"
@@ -31,6 +34,13 @@ colors:
   destructive-foreground: "hsl(4 40% 12%)"
   chart-primary: "hsl(38 28% 80%)"
   chart-secondary: "hsl(36 6% 48%)"
+  chart-secondary-edge: "hsl(36 6% 48%)"
+  transaction-tile-field: "#352A28"
+  transaction-tile-ink: "#E59A7B"
+  transaction-tile-edge: "#59413A"
+  light-transaction-tile-field: "#F1E3D8"
+  light-transaction-tile-ink: "#8F4032"
+  light-transaction-tile-edge: "#D0B8A9"
   scrim: "hsl(252 12% 3%)"
   light-scrim: "hsl(252 10.2% 9.6%)"
   light-background: "hsl(38.6 43.8% 93.7%)"
@@ -296,8 +306,9 @@ under `public/` with `manifest.webmanifest`; see `index.html` for the wiring.
 ### Buttons
 
 Compact and action-oriented; default ~40px tall (36 small / 44 large), 16px icons with 8px
-gap, specific labels ("Connect a bank", "Re-authorize"). Primary uses Clay strong with a
-Paper label on light, and Clay on dark with a Night label on dark. Ghost uses the accent wash
+gap, specific labels ("Connect a bank", "Re-authorize"). Phone and coarse-pointer targets
+are at least 44px. Primary uses Clay strong with a Paper label on light, and Clay on dark
+with a Night label on dark. Ghost uses the accent wash
 only on hover/focus/active. Destructive buttons carry a `destructive-foreground` label.
 Disabled and pending states preserve the label's meaning and pair motion with text
 ("Connecting...").
@@ -361,22 +372,24 @@ financial values continuously.
 ### Navigation
 
 Navigation is a quiet index with no breadcrumbs; the page title and the active item say
-where you are. From `md` up the header carries the logo, Home, Connections, Transactions and
-Recurring with a clay underline on the active item, and an initials account menu (name, email,
-Settings, Log out) on the right. Below `md` a five-tab bottom bar (Home, Connections,
-Transactions, Recurring, Settings) keeps every destination one tap away: icon over label, active tab in
+where you are. From `md` up the header carries the logo, Home, Connections and Transactions
+with a clay underline on the active item, and an initials account menu (name, email,
+Settings, Log out) on the right. Below `md` a four-tab bottom bar (Home, Connections,
+Transactions, Settings) keeps every destination one tap away: icon over label, active tab in
 clay with a top rule and heavier label, padded for the safe area. Toasts sit above it.
 
 Settings is one page titled "Settings" with a row of text section tabs (Account, Security,
 Integrations, Appearance) on a bottom rule inside the `40rem` column, at every width. Compact
-spacing and labels keep all four tabs visible on narrow phones. The active section
+spacing and labels keep all four tabs visible on narrow phones, sharing the full width with
+48px targets and centered labels; desktop tabs stay content-sized. The active section
 gets the same clay underline as the header; no icons, no side column, no segmented control.
 Under the tabs, settings are grouped rows: a small group heading, then one bordered list of
 `divide-y` rows (label, muted value, small outline action of a shared minimum width), the
 same pattern as bank account lists. Row actions stay visible without hover. Edits open a
-dialog with an explicit Save. Account deletion is its own one-row group with an outline
-button; destructive red appears only in the confirmation dialog. Selected values (the theme
-picker) use a clay ring, never the navigation underline.
+responsive overlay with an explicit Save: a bottom drawer on phones and a dialog on desktop.
+Session and access-token details use the same responsive presentation. Account deletion is its
+own one-row group with an outline button; destructive actions use the shared destructive
+variant. Selected values (the theme picker) use a clay ring, never the navigation underline.
 
 ## Do's and Don'ts
 
