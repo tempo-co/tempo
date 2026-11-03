@@ -64,7 +64,7 @@ export function BankTransactionDetails({transaction}: {transaction: BankTransact
           aria-expanded={bankDetailsOpen}
           aria-controls={bankDetailsId}
           onClick={() => setBankDetailsOpen(!bankDetailsOpen)}
-          className='-ml-3 justify-start text-muted-foreground max-sm:h-11'
+          className='w-full justify-start px-0 text-muted-foreground max-sm:h-11'
         >
           <ChevronRight
             className={`transition-transform motion-reduce:transition-none ${bankDetailsOpen ? 'rotate-90' : ''}`}
@@ -340,7 +340,7 @@ function TransferSetting({transaction}: {transaction: BankTransaction}) {
         aria-expanded={expanded}
         aria-controls={`transfer-settings-${transaction.id}`}
         onClick={() => setExpanded(!expanded)}
-        className='-ml-3 justify-start text-muted-foreground max-sm:h-11'
+        className='w-full justify-start px-0 text-muted-foreground max-sm:h-11'
       >
         <ChevronRight
           aria-hidden='true'
@@ -353,7 +353,7 @@ function TransferSetting({transaction}: {transaction: BankTransaction}) {
           <p className='text-sm text-muted-foreground'>
             {own
               ? 'This payment is recognised as movement between your own accounts.'
-              : 'A transfer between your own accounts should not count as income or spending.'}
+              : 'Mark this as an own transfer to exclude it from income and spending.'}
           </p>
           <div className='flex flex-wrap gap-2'>
             <Button

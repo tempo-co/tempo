@@ -241,8 +241,6 @@ function PeriodsChart({
     spent: Math.max(0, Number(period.spent)),
     received: Number(period.received),
   }));
-  const last = shown[shown.length - 1];
-  const running = last.complete ? undefined : last;
   const tickLabel = (start: string) =>
     interval === 'year'
       ? start.slice(0, 4)
@@ -326,12 +324,6 @@ function PeriodsChart({
           </Bar>
         </BarChart>
       </ChartContainer>
-      {running && (
-        <p className='mt-2 text-xs text-muted-foreground'>
-          The faded bar is {periodLabel(running, interval).replace(/^Week of/, 'the week of')} so
-          far.
-        </p>
-      )}
       <div className='sr-only focus-within:not-sr-only focus-within:mt-4 focus-within:max-w-full focus-within:overflow-x-auto'>
         <table
           aria-label={`Spending per ${interval}`}

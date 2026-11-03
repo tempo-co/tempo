@@ -154,6 +154,10 @@ for (const width of [320, 390, 1440]) {
       const before = await boxOf(category);
       const bank = inspector.getByRole('button', {name: 'Bank details', exact: true});
       const settings = inspector.getByRole('button', {name: 'Transfer settings', exact: true});
+      for (const disclosure of [bank, settings]) {
+        const box = await boxOf(disclosure);
+        expect({x: box.x, width: box.width}).toEqual({x: before.x, width: before.width});
+      }
       const hoverColor = await page.evaluate(() => {
         const probe = document.createElement('span');
         probe.className = 'bg-accent';
@@ -171,8 +175,17 @@ for (const width of [320, 390, 1440]) {
       await inspector.getByRole('button', {name: 'Recurring payment', exact: true}).click();
       await expect(inspector.getByText('This payment', {exact: true})).toBeVisible();
       await expect(inspector.getByText('Sep 29, 2026', {exact: true})).toBeVisible();
-      await bank.click();
-      await settings.click();
+      for (const disclosure of [bank, settings]) {
+        const box = await boxOf(disclosure);
+        await disclosure.click({position: {x: box.width - 8, y: box.height / 2}});
+        await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+      }
+      await expect(
+        inspector.getByText(
+          'Mark this as an own transfer to exclude it from income and spending.',
+          {exact: true},
+        ),
+      ).toBeVisible();
       const after = await boxOf(category);
       expect(after.x).toBe(before.x);
       expect(after.width).toBe(before.width);

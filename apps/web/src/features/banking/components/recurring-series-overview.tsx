@@ -273,7 +273,7 @@ function FoldedSection({
       <summary
         className={cn(
           buttonVariants({variant: 'ghost', size: 'sm'}),
-          '-ml-3 cursor-pointer list-none justify-start text-muted-foreground max-sm:h-11 [&::-webkit-details-marker]:hidden',
+          'w-full cursor-pointer list-none justify-start px-0 text-muted-foreground max-sm:h-11 [&::-webkit-details-marker]:hidden',
         )}
       >
         <ChevronRight aria-hidden className='size-4 transition-transform group-open:rotate-90' />
