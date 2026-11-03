@@ -1,22 +1,25 @@
 import {Link} from '@tanstack/react-router';
 import {BankTransaction, BankTransactionCounterpart} from '@tempo/contracts';
-import {ArrowDown, ArrowRight, Check, ChevronRight, Landmark, Wallet} from 'lucide-react';
+import {ArrowDown, ArrowRight, Check, ChevronRight, Landmark} from 'lucide-react';
 import {useState} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {Button} from '@/components/ui/button';
 import {useLocalDate} from '@/hooks/use-local-date';
 
+import {bankLogoKey, useBankLogos} from '../api/use-bank-logos';
 import {useGetBankTransactionRecurring} from '../api/use-get-bank-transaction-recurring';
 import {useUpdateBankTransactionOwnTransfer} from '../api/use-update-bank-transaction-own-transfer';
 import {RECURRING_CADENCE_LABELS} from '../types/recurring-series';
 import {
   formatBankTransactionDate,
+  formatBankTransactionExchangeRate,
   formatBankTransactionType,
   formatCounterpartAccount,
   formatOwnTransferEvidence,
   resolveBankTransactionAccountLabel,
 } from '../utils/formatters';
+import {BankLogo} from './bank-logo';
 import {BankTransactionCategorySelect} from './bank-transaction-category-select';
 import {MerchantLogoTile} from './merchant-logo-tile';
 
@@ -134,12 +137,7 @@ export function BankTransactionDetails({transaction}: {transaction: BankTransact
                 label='Exchange rate'
                 value={
                   transaction.exchangeRate
-                    ? `${Number(transaction.exchangeRate)
-                        .toFixed(4)
-                        .replace(
-                          /\.?0+$/,
-                          '',
-                        )}${transaction.exchangeRateUnitCurrency ? ` ${transaction.exchangeRateUnitCurrency}` : ''}${transaction.exchangeRateType ? ` (${transaction.exchangeRateType})` : ''}`
+                    ? `${formatBankTransactionExchangeRate(transaction)}${transaction.exchangeRateType ? ` (${transaction.exchangeRateType})` : ''}`
                     : null
                 }
               />
@@ -184,18 +182,25 @@ function Movement({
 }) {
   const incoming = transaction.direction === 'INCOME';
   const isExchange = transaction.financialEventType === 'CURRENCY_EXCHANGE';
+  const bankLogos = useBankLogos(true);
+  // The counterpart supplies no country: use its exact bank name only when the saved logos agree.
+  const otherLogos = new Set(
+    Object.entries(bankLogos)
+      .filter(
+        ([key]) => key.slice(key.indexOf(':') + 1) === counterpart?.bankName.trim().toLowerCase(),
+      )
+      .map(([, url]) => url),
+  );
+  const accountClassName =
+    'grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)_auto] gap-x-3 gap-y-1 py-3 sm:row-span-4 sm:grid-rows-subgrid';
   const own = (
-    <div className='flex min-w-0 flex-1 items-start gap-3 py-3'>
-      <Wallet className='mt-1 size-5 shrink-0 text-muted-foreground' aria-hidden='true' />
-      <div className='min-w-0'>
-        <p className='text-label text-muted-foreground'>{incoming ? 'To' : 'From'}</p>
-        <p className='mt-1 font-medium wrap-anywhere'>
-          {resolveBankTransactionAccountLabel(transaction)}
-        </p>
-        <p className='mt-1 text-sm text-muted-foreground'>
-          {transaction.bankName} · {transaction.currency}
-        </p>
-      </div>
+    <div data-testid='movement-own' className={accountClassName}>
+      <MovementAccount
+        label={incoming ? 'To' : 'From'}
+        account={transaction}
+        name={resolveBankTransactionAccountLabel(transaction)}
+        logoUrl={bankLogos[bankLogoKey(transaction.bankName, transaction.bankCountry)]}
+      />
     </div>
   );
   const other = counterpart ? (
@@ -204,23 +209,21 @@ function Movement({
       search={(prev) => ({...prev, transactionId: counterpart.id})}
       state={(prev) => ({transactionOpenedAt: prev.transactionOpenedAt ?? prev.__TSR_index})}
       data-testid='movement-counterpart'
-      className='flex min-w-0 flex-1 items-start gap-3 py-3 hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
+      className={`${accountClassName} hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring`}
     >
-      <Wallet className='mt-1 size-5 shrink-0 text-muted-foreground' aria-hidden='true' />
-      <div className='min-w-0 flex-1'>
-        <p className='text-label text-muted-foreground'>{incoming ? 'From' : 'To'}</p>
-        <p className='mt-1 font-medium wrap-anywhere'>{formatCounterpartAccount(counterpart)}</p>
-        <p className='mt-1 text-sm text-muted-foreground'>
-          {counterpart.bankName} · {counterpart.currency}
-        </p>
-        <p className='mt-2 numeric text-sm font-medium'>
-          <CurrencyAmount amount={Number(counterpart.amount)} currency={counterpart.currency} />
-        </p>
-      </div>
-      <ChevronRight className='mt-6 size-4 shrink-0 text-muted-foreground' aria-hidden='true' />
+      <MovementAccount
+        label={incoming ? 'From' : 'To'}
+        account={counterpart}
+        name={formatCounterpartAccount(counterpart)}
+        logoUrl={otherLogos.size === 1 ? otherLogos.values().next().value : undefined}
+      />
+      <ChevronRight
+        className='col-start-3 row-start-2 size-4 self-center text-muted-foreground'
+        aria-hidden='true'
+      />
     </Link>
   ) : (
-    <div className='min-w-0 flex-1 py-3 text-sm text-muted-foreground'>
+    <div className='min-w-0 py-3 text-sm text-muted-foreground sm:row-span-4'>
       {isExchange ? 'Other side not matched' : 'Other side not in your connected accounts'}
     </div>
   );
@@ -229,19 +232,19 @@ function Movement({
       <h2 className='text-card-title'>
         {isExchange ? 'One currency to another' : 'Between your accounts'}
       </h2>
-      <div className='mt-3 flex flex-col sm:flex-row sm:items-center sm:gap-5'>
+      <div className='mt-3 flex flex-col sm:grid sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-1'>
         {incoming ? other : own}
         <ArrowRight
-          className='hidden size-5 shrink-0 text-muted-foreground sm:block'
+          className='hidden size-5 self-center text-muted-foreground sm:row-span-4 sm:block'
           aria-hidden='true'
         />
-        <ArrowDown className='ml-0.5 size-5 text-muted-foreground sm:hidden' aria-hidden='true' />
+        <ArrowDown className='ml-2.5 size-5 text-muted-foreground sm:hidden' aria-hidden='true' />
         {incoming ? own : other}
       </div>
       {isExchange && (
         <p className='mt-2 text-sm text-muted-foreground'>
           {transaction.exchangeRate
-            ? `Rate: ${transaction.exchangeRate}${transaction.exchangeRateUnitCurrency ? ` ${transaction.exchangeRateUnitCurrency}` : ''}`
+            ? formatBankTransactionExchangeRate(transaction)
             : 'Exchange rate unavailable'}
         </p>
       )}
@@ -261,6 +264,54 @@ function Movement({
         </dl>
       )}
     </section>
+  );
+}
+
+function MovementAccount({
+  label,
+  account,
+  name,
+  logoUrl,
+}: {
+  label: 'From' | 'To';
+  account: Pick<BankTransactionCounterpart, 'bankName' | 'currency' | 'amount'>;
+  name: string;
+  logoUrl?: string;
+}) {
+  const bank = `${account.bankName} · ${account.currency}`;
+  return (
+    <>
+      <p
+        data-testid='movement-label'
+        className='col-start-2 row-start-1 text-label text-muted-foreground'
+      >
+        {label}
+      </p>
+      <BankLogo
+        bank={{name: account.bankName, logoUrl}}
+        className='col-start-1 row-span-2 row-start-2 size-10 self-start'
+      />
+      <p
+        data-testid='movement-account'
+        className='col-start-2 row-start-2 min-w-0 font-medium wrap-anywhere'
+      >
+        {name}
+      </p>
+      {bank !== name && (
+        <p
+          data-testid='movement-bank'
+          className='col-start-2 row-start-3 text-sm wrap-anywhere text-muted-foreground'
+        >
+          {bank}
+        </p>
+      )}
+      <p
+        data-testid='movement-amount'
+        className='col-start-2 row-start-4 min-w-0 numeric text-sm font-medium wrap-anywhere [&>span]:whitespace-normal'
+      >
+        <CurrencyAmount amount={Number(account.amount)} currency={account.currency} />
+      </p>
+    </>
   );
 }
 

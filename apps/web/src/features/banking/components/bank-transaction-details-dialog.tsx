@@ -19,7 +19,6 @@ import {Skeleton} from '@/components/ui/skeleton';
 import {useIsOnline} from '@/hooks/use-connection';
 import {HttpError} from '@/utils/api';
 import {cn} from '@/utils/cn';
-import {getCurrencyFormatter} from '@/utils/format-currency';
 
 import {useGetBankTransaction} from '../api/use-get-bank-transaction';
 import {
@@ -55,9 +54,6 @@ export function BankTransactionDetailsDialog({
   const internal = transaction?.cashFlowTreatment === 'INTERNAL';
   const incoming = transaction?.direction === 'INCOME';
   const DirectionIcon = incoming ? ArrowDownLeft : ArrowUpRight;
-  const longAmount =
-    transaction &&
-    getCurrencyFormatter(transaction.currency).format(Number(transaction.amount)).length > 14;
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
@@ -79,53 +75,54 @@ export function BankTransactionDetailsDialog({
             Payment summary and editable transaction details
           </ResponsiveDialogDescription>
           {transaction && (
-            <div className='mt-6'>
-              <div className='flex items-center gap-2'>
-                <DirectionIcon
-                  aria-hidden='true'
-                  className={cn(
-                    'size-5 shrink-0 text-muted-foreground',
-                    incoming && !internal && 'text-success',
-                  )}
-                />
-                <p
-                  data-testid='bank-transaction-detail-amount'
-                  className={cn(
-                    'min-w-0 numeric text-3xl leading-tight font-medium tracking-tight sm:text-4xl',
-                    longAmount && 'text-xl',
-                    incoming && !internal && 'text-success',
-                  )}
-                >
-                  <CurrencyAmount
-                    amount={Number(transaction.amount)}
-                    currency={transaction.currency}
+            <div className='mt-6 flex flex-wrap items-start justify-between gap-x-6 gap-y-2'>
+              <div className='min-w-0 flex-1 basis-64'>
+                <div className='flex min-w-0 items-center gap-2'>
+                  <DirectionIcon
+                    aria-hidden='true'
+                    className={cn(
+                      'size-5 shrink-0 text-muted-foreground',
+                      incoming && !internal && 'text-success',
+                    )}
                   />
-                </p>
-                <span className='ml-1 self-end pb-1 text-label text-muted-foreground'>
-                  {transaction.currency}
-                </span>
+                  <p
+                    data-testid='bank-transaction-detail-amount'
+                    className={cn(
+                      'min-w-0 numeric text-3xl leading-tight font-medium tracking-tight wrap-anywhere sm:text-4xl [&>span]:whitespace-normal',
+                      incoming && !internal && 'text-success',
+                    )}
+                  >
+                    <CurrencyAmount
+                      amount={Number(transaction.amount)}
+                      currency={transaction.currency}
+                    />
+                  </p>
+                  <span className='ml-1 shrink-0 self-end pb-1 text-label text-muted-foreground'>
+                    {transaction.currency}
+                  </span>
+                </div>
+                <div className='mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground'>
+                  <span className='inline-flex items-center gap-1.5'>
+                    <CalendarDays className='size-4' aria-hidden='true' />
+                    {transaction.transactionDate || transaction.bookingDate
+                      ? formatBankTransactionDate(
+                          transaction.transactionDate || transaction.bookingDate,
+                        )
+                      : 'Date unavailable'}
+                  </span>
+                  <span className='inline-flex items-center gap-1.5'>
+                    <CreditCard className='size-4' aria-hidden='true' />
+                    {transaction.financialEventType === 'CURRENCY_EXCHANGE'
+                      ? 'Currency exchange'
+                      : transaction.ownTransfer
+                        ? 'Own transfer'
+                        : formatBankTransactionType(transaction.transactionType)}
+                  </span>
+                </div>
               </div>
-              <div className='mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground'>
-                <span className='inline-flex items-center gap-1.5'>
-                  <CalendarDays className='size-4' aria-hidden='true' />
-                  {transaction.transactionDate || transaction.bookingDate
-                    ? formatBankTransactionDate(
-                        transaction.transactionDate || transaction.bookingDate,
-                      )
-                    : 'Date unavailable'}
-                </span>
-                <span className='inline-flex items-center gap-1.5'>
-                  <CreditCard className='size-4' aria-hidden='true' />
-                  {transaction.financialEventType === 'CURRENCY_EXCHANGE'
-                    ? 'Currency exchange'
-                    : transaction.ownTransfer
-                      ? 'Own transfer'
-                      : formatBankTransactionType(transaction.transactionType)}
-                </span>
-              </div>
+              <MerchantHistoryLink transaction={transaction} />
             </div>
           )}
-          {transaction && <MerchantHistoryLink transaction={transaction} />}
         </ResponsiveDialogHeader>
         <ScrollArea
           type='auto'

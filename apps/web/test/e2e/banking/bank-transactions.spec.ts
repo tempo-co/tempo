@@ -69,7 +69,7 @@ test.describe('bank transactions', () => {
     await expect(transactionDetails.getByText('Provider classification')).toBeVisible();
     await expect(inspector.getByText('100.50 EUR')).toBeVisible();
     await expect(inspector.getByText('4.50 USD')).toBeVisible();
-    await expect(inspector.getByText('0.9234 USD (SPOT)', {exact: true})).toBeVisible();
+    await expect(inspector.getByText('1 USD ≈ 0.9234 EUR (SPOT)', {exact: true})).toBeVisible();
     await expect(
       inspector.getByText('0.923400000000000000 USD (SPOT)', {exact: true}),
     ).not.toBeVisible();
