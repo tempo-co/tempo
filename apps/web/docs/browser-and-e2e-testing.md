@@ -67,7 +67,7 @@ A mocked spec is a UI integration test, not full-stack coverage. Report it separ
 ## Dialogs, drawers and phone layouts
 
 - Dialog open state that should close on Back lives in a search param on the host route; see `recurring` in `src/routes/index.tsx`. Close with `router.history.back()` when `useCanGoBack()` is true and with `navigate({replace: true})` only for a deep link. Test: open, Escape, then `page.goBack()` must leave the page.
-- A `flex flex-col` dialog with only `max-h-[90dvh]` gives its inner `ScrollArea` no definite height, so a long list grows off screen. Give the content a definite height as the transaction details and recurring dialogs do (`h-[min(90dvh,56rem)]` plus `max-h`). Test scrolling with `page.mouse.wheel` over the dialog; `scrollIntoViewIfNeeded()` scrolls programmatically and passes on a broken dialog. Poll a phone sheet's bounding box until its slide-in finishes before asserting it fits.
+- Constrain a dialog's inner `ScrollArea`, either with a definite content height (as in the recurring dialog) or with a `min-h-0` grid and a `minmax(0,1fr)` row inside the maximum-height flex shell (as in transaction details). An unconstrained viewport grows off screen. Test real mouse-wheel scrolling and Chromium touch swipes with `Input.dispatchTouchEvent` and animation-frame-separated moves; `scrollIntoViewIfNeeded()` is programmatic and passes on a broken dialog. Await opening animations before measuring; verify the final action is reachable and overflow adds no native gutter or content-width shift.
 - `src/components/ui/drawer.tsx` never passes vaul's `shouldScaleBackground` (off by default); never add it. Turning it on transforms the app wrapper, which becomes the containing block for the fixed tab bar (`app-nav.tsx`) and blackens the body during close. `test/e2e/settings/dialog-focus.spec.ts` dismisses every settings drawer with Escape and Cancel; extend that loop for drawer regressions.
 - On phone viewports, the fixed tab bar and stacked toasts cover controls near the bottom. Use `focus()` plus `keyboard.press('Enter')`, or scroll the control to the centre first.
 - Wait out open animations (about 300 ms) before screenshots; a mid-fade dialog looks transparent. Check the computed `backgroundColor`/`opacity` at rest before changing styles.
@@ -88,7 +88,8 @@ The same journey checks fallback colors, source-version recovery, theme switchin
 same loaded mask, ordinary category metadata colors and row geometry. JSON responses are
 mocked, but images come from a loopback HTTP server that requires a synthetic cookie and
 sets the API's private cache and same-site CORP headers without CORS permission. This exercises
-real browser cookie and image-header enforcement. The fixture blocks service workers so
+real browser cookie and image-header enforcement. Local runs must use localhost for both the
+web and API URLs, matching the fixture cookie and same-site image origin. The fixture blocks service workers so
 page-level routes own image requests; offline behaviour is covered separately. Verify actual
 API authorization separately against the paired API.
 

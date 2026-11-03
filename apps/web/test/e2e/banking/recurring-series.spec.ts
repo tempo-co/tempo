@@ -316,7 +316,10 @@ for (const viewport of [
     }
     // Ended series stay folded away until asked for.
     await expect(row(page, OLD_KEY)).toBeHidden();
-    await page.getByText('Ended (1)').click();
+    const ended = page.getByText('Ended (1)', {exact: true});
+    const [endedBox, foldBox] = await Promise.all([boxOf(ended), boxOf(ended.locator('..'))]);
+    expect({x: endedBox.x, width: endedBox.width}).toEqual({x: foldBox.x, width: foldBox.width});
+    await ended.click({position: {x: endedBox.width - 8, y: endedBox.height / 2}});
     await expect(row(page, OLD_KEY)).toContainText('Last 3 Mar');
     await expectNoHorizontalOverflow(page);
 

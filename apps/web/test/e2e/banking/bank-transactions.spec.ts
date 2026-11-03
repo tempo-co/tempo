@@ -4,7 +4,12 @@ import {
   SEEDED_TRANSACTION_YEAR_NOW,
 } from '../../constants/seed.constants';
 import {expect, test} from '../../fixtures';
-import {fulfillJson, mockJson, transformBankConnections} from '../../utils/api-mocks';
+import {
+  fulfillJson,
+  mockBankRefresh,
+  mockJson,
+  transformBankConnections,
+} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const DETAIL_TRANSACTION_ID = '00000000-0000-4000-8000-000000000011';
@@ -44,21 +49,27 @@ test.describe('bank transactions', () => {
     expect(openedUrl.searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
     await expect(inspector).toBeVisible();
     await expect(inspector.getByRole('heading', {name: 'Coffee shop'})).toBeVisible();
-    await expect(inspector.getByText('Bank transaction', {exact: true})).toBeVisible();
-    const transactionDetails = inspector.getByTestId('bank-transaction-details-sections');
+    await expect(inspector.getByTestId('bank-transaction-detail-amount')).toHaveText('-€4.50');
+    await expect(inspector.getByRole('region', {name: 'Account', exact: true})).toContainText(
+      'Daily spending',
+    );
+    await expect(inspector.getByText('Card Payment', {exact: true})).toBeVisible();
+    const bankDetails = inspector.getByRole('button', {name: 'Bank details', exact: true});
+    await expect(bankDetails).toHaveAttribute('aria-expanded', 'false');
+    await expect(inspector.getByText('Original description', {exact: true})).toBeHidden();
+    await bankDetails.click();
+    await expect(bankDetails).toHaveAttribute('aria-expanded', 'true');
+    const transactionDetails = inspector.getByTestId('bank-details-fold');
     const descriptionDetail = transactionDetails
-      .getByText('Description', {exact: true})
+      .getByText('Original description', {exact: true})
       .locator('..');
     await expect(descriptionDetail).toContainText('Coffee shop');
-    await expect(inspector.getByText('Merchant category code')).toBeVisible();
-    await expect(inspector.getByText('Bank account', {exact: true})).toBeVisible();
-    await expect(inspector.getByText('Daily spending')).toBeVisible();
-    await expect(inspector.getByText('Transaction date')).toBeVisible();
-    await expect(inspector.getByText('Card payment', {exact: true})).toBeVisible();
-    await expect(inspector.getByText('Provider classification')).toBeVisible();
+    await expect(transactionDetails.getByText('Merchant category code')).toBeVisible();
+    await expect(transactionDetails.getByText('Transaction date')).toBeVisible();
+    await expect(transactionDetails.getByText('Provider classification')).toBeVisible();
     await expect(inspector.getByText('100.50 EUR')).toBeVisible();
     await expect(inspector.getByText('4.50 USD')).toBeVisible();
-    await expect(inspector.getByText('0.9234 USD (SPOT)', {exact: true})).toBeVisible();
+    await expect(inspector.getByText('1 USD ≈ 0.9234 EUR (SPOT)', {exact: true})).toBeVisible();
     await expect(
       inspector.getByText('0.923400000000000000 USD (SPOT)', {exact: true}),
     ).not.toBeVisible();
@@ -160,12 +171,11 @@ test.describe('bank transactions', () => {
     const inspector = page.getByTestId('bank-transaction-inspector');
     await expect(inspector).toBeVisible();
     await expect(inspector.getByText('Currency exchange', {exact: true}).first()).toBeVisible();
-    await expect(inspector.getByText('Internal movement', {exact: true})).toBeVisible();
-    await expect(
-      inspector.getByText('Category not applicable', {exact: true}).first(),
-    ).toBeVisible();
+    const movement = inspector.getByRole('region', {name: 'Money movement'});
+    await expect(movement.getByRole('heading', {name: 'One currency to another'})).toBeVisible();
+    await expect(movement).toContainText('Excluded from income and spending');
     await expect(inspector.getByRole('combobox', {name: 'Transaction category'})).toHaveCount(0);
-    await expect(inspector.getByText('Rate unavailable', {exact: true})).toBeVisible();
+    await expect(movement.getByText('Exchange rate unavailable', {exact: true})).toBeVisible();
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
 
     await page.getByRole('button', {name: 'Cash flow', exact: true}).click();
@@ -295,7 +305,7 @@ test.describe('bank transactions', () => {
 
     await expect(categorySelect).toHaveText(target.name);
     await expect(categorySelect.locator(target.icon).locator('..')).toHaveClass(target.className);
-    await expect(inspector.getByText('Manual', {exact: true})).toBeVisible();
+    await expect(inspector.getByTestId('bank-transaction-category-status')).toHaveText('Manual');
 
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
     await expect(inspector).toBeHidden();
@@ -307,7 +317,7 @@ test.describe('bank transactions', () => {
       .click();
     await expect(inspector).toBeVisible();
     await expect(categorySelect).toHaveText(target.name);
-    await expect(inspector.getByText('Manual')).toBeVisible();
+    await expect(inspector.getByTestId('bank-transaction-category-status')).toHaveText('Manual');
   });
 
   test('does not show the bank account filter when there is one account', async ({page}) => {
@@ -467,6 +477,7 @@ test.describe('bank transactions', () => {
       .click();
     const inspector = page.getByTestId('bank-transaction-inspector');
     await expect(inspector.getByRole('heading', {name: 'API detail title'})).toBeVisible();
+    await inspector.getByRole('button', {name: 'Bank details', exact: true}).click();
     await expect(inspector.getByText(googlePayDescription, {exact: true})).toBeVisible();
   });
 
@@ -490,6 +501,8 @@ test.describe('bank transactions', () => {
   });
 
   test('presents transaction detail in a responsive inspector', async ({page}) => {
+    test.slow();
+    await mockBankRefresh(page);
     for (const viewport of [
       {width: 1440, height: 900},
       {width: 393, height: 852},
@@ -513,13 +526,18 @@ test.describe('bank transactions', () => {
         viewport.width < 768,
       );
       await expect(inspector.getByRole('heading', {name: 'Coffee shop'})).toBeVisible();
-      await expect(
-        inspector.getByRole('heading', {level: 2, name: 'Transaction details'}),
-      ).toBeVisible();
-      await expect(inspector.getByRole('heading', {level: 3, name: 'Dates'})).toBeVisible();
-      await expect(inspector.getByRole('heading', {level: 3, name: 'Account'})).toBeVisible();
+      await expect(inspector.getByRole('region', {name: 'Category', exact: true})).toBeVisible();
+      await expect(inspector.getByRole('region', {name: 'Account', exact: true})).toContainText(
+        'Daily spending',
+      );
+      const bankDetails = inspector.getByRole('button', {name: 'Bank details', exact: true});
+      await expect(bankDetails).toHaveAttribute('aria-expanded', 'false');
+      await bankDetails.click();
+      await expect(bankDetails).toHaveAttribute('aria-expanded', 'true');
+      await expect(inspector.getByText('Original description', {exact: true})).toBeVisible();
+      await expect(inspector.getByText('Transaction date', {exact: true})).toBeVisible();
       const amount = inspector.getByTestId('bank-transaction-detail-amount');
-      const currency = inspector.getByTestId('bank-transaction-detail-currency');
+      const currency = amount.locator('..').getByText('EUR', {exact: true});
       await expect(amount).toBeVisible();
       await expect(currency).toHaveText('EUR');
       const [amountBox, currencyBox] = await Promise.all([boxOf(amount), boxOf(currency)]);
@@ -527,42 +545,34 @@ test.describe('bank transactions', () => {
       expect(currencyBox.y).toBeLessThan(amountBox.y + amountBox.height);
       expect(currencyBox.y + currencyBox.height).toBeGreaterThan(amountBox.y);
 
-      if (viewport.width < 768) {
-        const detailGrid = inspector
-          .getByTestId('bank-transaction-details-sections')
-          .locator(':scope > div');
-        const detailGridColumns = await detailGrid.evaluate(
-          (element) => getComputedStyle(element).gridTemplateColumns.split(' ').length,
-        );
-        expect(detailGridColumns).toBe(1);
-        const datesGrid = inspector
-          .getByRole('heading', {name: 'Dates'})
-          .locator('..')
-          .locator('dl');
-        const datesGridColumns = await datesGrid.evaluate(
-          (element) => getComputedStyle(element).gridTemplateColumns.split(' ').length,
-        );
-        expect(datesGridColumns).toBe(2);
-        const detailFieldWrapping = await inspector
-          .getByTestId('bank-transaction-details-sections')
-          .locator('dl dt, dl dd')
-          .evaluateAll((elements) =>
-            elements.map((element) => getComputedStyle(element).whiteSpace),
-          );
-        expect(detailFieldWrapping.every((whiteSpace) => whiteSpace === 'nowrap')).toBe(true);
-      }
+      const bankDetailsFields = inspector.getByTestId('bank-details-fold').locator('dl');
+      const detailColumns = await bankDetailsFields.evaluate(
+        (element) => getComputedStyle(element).gridTemplateColumns.split(' ').length,
+      );
+      expect(detailColumns).toBe(viewport.width < 640 ? 1 : 2);
       await expectNoHorizontalOverflow(page);
 
       const inspectorBox = await boxOf(inspector);
       expect(inspectorBox.width).toBeLessThanOrEqual(viewport.width);
       const inspectorBody = inspector.getByTestId('bank-transaction-inspector-body');
       const inspectorViewport = inspectorBody.locator('[data-radix-scroll-area-viewport]');
-      const inspectorScrollbar = inspectorBody.locator('[data-orientation="vertical"]');
-      await expect(inspectorScrollbar).toBeVisible();
-      await expect(inspectorScrollbar.locator('.bg-border')).toBeVisible();
+      await expect(inspectorViewport).toHaveCount(1);
       expect(await inspectorViewport.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
         await inspectorViewport.evaluate((element) => element.clientHeight),
       );
+      const title = inspector.getByRole('heading', {name: 'Coffee shop', exact: true});
+      const titleBeforeScroll = await boxOf(title);
+      const amountBeforeScroll = await boxOf(amount);
+      await inspectorViewport.hover();
+      await page.mouse.wheel(0, 500);
+      await expect
+        .poll(() => inspectorViewport.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(0);
+      expect((await boxOf(title)).y).toBeCloseTo(titleBeforeScroll.y, 0);
+      expect((await boxOf(amount)).y).toBeCloseTo(amountBeforeScroll.y, 0);
+      await expect(
+        inspector.getByRole('button', {name: 'Transfer settings', exact: true}),
+      ).toBeVisible();
 
       const closeButton = inspector.getByRole('button', {name: 'Close transaction details'});
       await closeButton.click();
@@ -1289,6 +1299,7 @@ test.describe('bank transactions', () => {
       if (transaction) await fulfillJson(route, transaction);
       else await route.continue();
     });
+    await mockJson(page, '**/bank-transactions/*/recurring?**', null);
 
     const rows = page.getByTestId(/^bank-transaction-row-/);
     const readClippedAmounts = () =>
@@ -1328,6 +1339,39 @@ test.describe('bank transactions', () => {
       await expect(rows.nth(3)).not.toContainText('-€0.00');
       expect(await readClippedAmounts()).toEqual([]);
       await expectNoHorizontalOverflow(page);
+      for (const index of [0, 1]) {
+        await rows
+          .nth(index)
+          .getByRole('button', {name: /^View .* transaction details$/})
+          .click();
+        const inspector = page.getByTestId('bank-transaction-inspector');
+        const amount = inspector.getByTestId('bank-transaction-detail-amount');
+        await expect(amount).toBeVisible();
+        await inspector.evaluate((el) =>
+          Promise.all(el.getAnimations({subtree: true}).map((animation) => animation.finished)),
+        );
+        const [inspectorBox, amountBox] = await Promise.all([
+          boxOf(inspector),
+          boxOf(amount.locator('span')),
+        ]);
+        expect(amountBox.x + amountBox.width).toBeLessThanOrEqual(
+          inspectorBox.x + inspectorBox.width - 16,
+        );
+        const overflow = await inspector.evaluate((el) => {
+          const edge = el.getBoundingClientRect().right;
+          return [...el.querySelectorAll('*')]
+            .filter((node) => node.getBoundingClientRect().right > edge + 1)
+            .map((node) => ({
+              tag: node.tagName,
+              text: node.textContent?.slice(0, 70),
+              width: node.getBoundingClientRect().width,
+              right: node.getBoundingClientRect().right,
+              classes: node.className,
+            }));
+        });
+        expect(overflow, `${viewport.width}px transaction ${index}`).toEqual([]);
+        await inspector.getByRole('button', {name: 'Close transaction details'}).click();
+      }
     }
 
     await page.setViewportSize({width: 393, height: 852});

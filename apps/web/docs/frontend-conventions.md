@@ -39,6 +39,12 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 - Shared Button, Select and Command choices have 44px minimum touch targets on phones and coarse-pointer devices. Calendar days fill their seven-column cells on narrow phones; do not force seven 44px columns into a 320px viewport. Search and verification-code inputs use 16px text for touch entry.
 - Ordinary dialogs and drawers own bounded vertical scrolling; fixed-header inspector layouts can override it with their own scrolling body. Drawer content hides vaul's below-sheet `::after` filler, which otherwise creates empty scroll space. Drawer footers include the bottom safe area.
 
+## Scrolling and secondary disclosures
+
+- Use the shared shadcn `ScrollArea` for scrollable content, not native browser scrollbars. Keep content position and width stable when overflow appears; the overlay scrollbar must not create a native gutter.
+- A content-sized flex dialog with a maximum height can constrain its ScrollArea with a local `min-h-0` grid and `grid-rows-[minmax(0,1fr)]`. Verify actual Radix viewport wheel/touch scrolling and reachability of the final action, not only programmatic scrolling.
+- Secondary folds reuse the existing ghost Button with a leading chevron and consistent hover/focus/touch targets. Transaction category provenance sits at the right edge of its label row.
+
 ## Interaction feedback and motion
 
 - Select and Command choices request a brief haptic only on committed touch selection. Mouse, keyboard, cancelled gestures and reduced-motion selections stay quiet. Vibration is optional; unsupported or restricted feedback never blocks the action. Do not add haptics to every Button or overlay opening.

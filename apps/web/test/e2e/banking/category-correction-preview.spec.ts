@@ -235,7 +235,16 @@ for (const viewport of [
         releaseSave();
       }
       await expect(categorySelect(page)).toHaveText('Travel');
-      await expect(status).toHaveText('Categorized · Manual');
+      await expect(status).toHaveText('Manual');
+      const labelBox = await page.getByText('Transaction category', {exact: true}).boundingBox();
+      const statusBox = await status.boundingBox();
+      const controlBox = await page.getByTestId('bank-transaction-category-control').boundingBox();
+      expect(
+        Math.abs(labelBox!.y + labelBox!.height / 2 - statusBox!.y - statusBox!.height / 2),
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(statusBox!.x + statusBox!.width - controlBox!.x - controlBox!.width),
+      ).toBeLessThanOrEqual(1);
       expect(state.writes).toEqual([{category: 'TRAVEL', applyToTransactionIds: []}]);
     });
 

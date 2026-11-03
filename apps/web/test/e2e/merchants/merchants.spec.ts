@@ -9,7 +9,7 @@ import type {
 
 import {API_URL, expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections, mockBankRefresh, mockJson} from '../../utils/api-mocks';
-import {expectNoHorizontalOverflow} from '../../utils/layout';
+import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 // Every response is synthetic: these checks never read or mutate a shared API stack.
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
@@ -500,19 +500,99 @@ test('merchant details show all-time totals, periods, grouped names and transact
   await expect(page.getByRole('button', {name: 'Remove filter: One merchant'})).toBeVisible();
 });
 
-test('transaction details open the payment history of their merchant', async ({page}) => {
-  await mockSignedIn(page);
-  await mockMerchants(page);
-  await page.goto(`/bank-transactions?transactionId=${burgerTransaction(4).id}`);
+for (const scenario of [
+  {name: 'desktop', width: 1440, scale: 1},
+  {name: 'tablet', width: 768, scale: 1},
+  {name: 'phone', width: 390, scale: 1},
+  {name: 'narrow phone', width: 320, scale: 1},
+  {name: 'large amounts', width: 320, scale: 1, amount: '-12345678.90', currency: 'CHF'},
+  {name: 'large text', width: 320, scale: 2},
+]) {
+  test(`transaction details open the payment history of their merchant on ${scenario.name}`, async ({
+    page,
+  }) => {
+    await mockSignedIn(page);
+    await mockMerchants(page);
+    const transaction = burgerTransaction(4, {
+      amount: scenario.amount ?? '-8.00',
+      currency: scenario.currency ?? 'EUR',
+    });
+    await mockJson(page, `${API_URL}/bank-transactions/${transaction.id}`, transaction);
+    await page.setViewportSize({width: scenario.width, height: 844});
+    await page.goto(`/bank-transactions?transactionId=${transaction.id}`);
 
-  const inspector = page.getByTestId('bank-transaction-inspector');
-  await inspector.getByRole('link', {name: 'Payment history'}).click();
-  await expect(page).toHaveURL(`/?merchants=open&merchant=${BRAND}`);
-  await expect(dialog(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
-  // Closing returns to the transaction it was opened from.
-  await dialog(page).getByRole('button', {name: 'Close merchants'}).click();
-  await expect(page).toHaveURL(new RegExp(`transactionId=${burgerTransaction(4).id}`));
-});
+    const inspector = page.getByTestId('bank-transaction-inspector');
+    const history = inspector.getByRole('link', {name: 'Payment history'});
+    await expect(history).toBeVisible();
+    if (scenario.scale > 1) {
+      // Enlarge text without also doubling rem-based padding and icon dimensions.
+      await inspector.evaluate((root, scale) => {
+        const text = [...root.querySelectorAll<HTMLElement>('h2, p, span, a')].map((el) => ({
+          el,
+          size: parseFloat(getComputedStyle(el).fontSize),
+          line: parseFloat(getComputedStyle(el).lineHeight),
+        }));
+        for (const {el, size, line} of text) {
+          el.style.fontSize = `${size * scale}px`;
+          if (Number.isFinite(line)) el.style.lineHeight = `${line * scale}px`;
+        }
+      }, scenario.scale);
+    }
+    await inspector.evaluate(async (element) => {
+      await Promise.all(
+        element
+          .getAnimations({subtree: true})
+          .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+          .map((animation) => animation.finished),
+      );
+    });
+    const amount = inspector.getByTestId('bank-transaction-detail-amount');
+    const currency = amount.locator('..').getByText(transaction.currency, {exact: true});
+    const date = inspector.getByText('Oct 14, 2026', {exact: true});
+    const type = inspector.getByText('Card Payment', {exact: true});
+    const [amountBox, currencyBox, dateBox, typeBox, historyBox, inspectorBox] = await Promise.all(
+      [amount, currency, date, type, history, inspector].map(boxOf),
+    );
+    expect(currencyBox.x).toBeGreaterThanOrEqual(amountBox.x + amountBox.width);
+    expect(currencyBox.y).toBeLessThan(amountBox.y + amountBox.height);
+    expect(dateBox.y).toBeGreaterThanOrEqual(amountBox.y + amountBox.height);
+    if (scenario.scale === 1) expect(Math.abs(dateBox.y - typeBox.y)).toBeLessThan(1);
+    if (scenario.width >= 768) {
+      expect(historyBox.x).toBeGreaterThan(amountBox.x + amountBox.width);
+      expect(historyBox.y).toBeLessThan(dateBox.y);
+    } else {
+      expect(historyBox.y).toBeGreaterThanOrEqual(
+        Math.max(dateBox.y + dateBox.height, typeBox.y + typeBox.height),
+      );
+      expect(historyBox.height).toBeGreaterThanOrEqual(44);
+    }
+    for (const locator of [amount, currency, date, type, history]) {
+      await expect(locator).toBeInViewport();
+      const box = await boxOf(locator);
+      expect(box.x).toBeGreaterThanOrEqual(inspectorBox.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(inspectorBox.x + inspectorBox.width);
+      expect(await locator.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    }
+    const font = await amount.evaluate((el) => ({
+      size: parseFloat(getComputedStyle(el).fontSize),
+      root: parseFloat(getComputedStyle(document.documentElement).fontSize),
+    }));
+    expect(font.size).toBeGreaterThanOrEqual(font.root * 1.875);
+    if (scenario.amount) await expect(amount).toContainText('12,345,678.90');
+    await expectNoHorizontalOverflow(page);
+    if (scenario.scale > 1) {
+      await history.focus();
+      await page.keyboard.press('Enter');
+    } else {
+      await history.click();
+    }
+    await expect(page).toHaveURL(`/?merchants=open&merchant=${BRAND}`);
+    await expect(dialog(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
+    // Closing returns to the transaction it was opened from.
+    await dialog(page).getByRole('button', {name: 'Close merchants'}).click();
+    await expect(page).toHaveURL(new RegExp(`transactionId=${transaction.id}`));
+  });
+}
 
 test('a merchant without transactions shows not found', async ({page}) => {
   await mockSignedIn(page);

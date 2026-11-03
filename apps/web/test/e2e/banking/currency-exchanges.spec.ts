@@ -14,19 +14,21 @@ test.describe('currency exchanges', () => {
     await page.setViewportSize({width: 1280, height: 720});
     await page.goto(`/bank-transactions?transactionId=${EXCHANGE_OUTGOING_ID}`);
     const inspector = page.getByTestId('bank-transaction-inspector');
-    const exchange = inspector.getByTestId('bank-transaction-currency-exchange');
+    const exchange = inspector.getByRole('region', {name: 'Money movement'});
     await expect(inspector.getByText('Currency exchange', {exact: true})).toBeVisible();
+    await expect(exchange.getByRole('heading', {name: 'One currency to another'})).toBeVisible();
+    await expect(exchange).toContainText('Excluded from income and spending');
     // Exchanges are never offered as own transfers.
-    await expect(inspector.getByTestId('bank-transaction-own-transfer')).toHaveCount(0);
+    await expect(inspector.getByRole('button', {name: 'Transfer settings', exact: true})).toHaveCount(0);
 
-    const counterpartCard = exchange.getByTestId('bank-transaction-currency-exchange-counterpart');
+    const counterpartCard = exchange.getByTestId('movement-counterpart');
     await expect(counterpartCard).toContainText('Revolut · USD');
     await expect(counterpartCard).toHaveAccessibleName(/\$92\.00/);
     await counterpartCard.click();
 
     await expect(page).toHaveURL(new RegExp(`transactionId=${EXCHANGE_INCOMING_ID}`));
     await expect(inspector.getByTestId('bank-transaction-detail-amount')).toContainText('92');
-    const backCard = exchange.getByTestId('bank-transaction-currency-exchange-counterpart');
+    const backCard = exchange.getByTestId('movement-counterpart');
     await expect(backCard).toContainText('Travel');
     await expect(backCard).toHaveAccessibleName(/€80\.00/);
     await backCard.click();
@@ -35,16 +37,16 @@ test.describe('currency exchanges', () => {
 
   test('says when the other side is not matched', async ({page}) => {
     await page.goto(`/bank-transactions?transactionId=${UNMATCHED_EXCHANGE_ID}`);
-    const exchange = page.getByTestId('bank-transaction-currency-exchange');
-    await expect(exchange).toContainText('Not matched');
+    const exchange = page.getByRole('region', {name: 'Money movement'});
+    await expect(exchange).toContainText('Other side not matched');
     await expect(exchange.getByRole('link')).toHaveCount(0);
   });
 
   test('fits the other side on mobile', async ({page}) => {
     await page.setViewportSize({width: 393, height: 852});
     await page.goto(`/bank-transactions?transactionId=${EXCHANGE_OUTGOING_ID}`);
-    const exchange = page.getByTestId('bank-transaction-currency-exchange');
-    const counterpartCard = exchange.getByTestId('bank-transaction-currency-exchange-counterpart');
+    const exchange = page.getByRole('region', {name: 'Money movement'});
+    const counterpartCard = exchange.getByTestId('movement-counterpart');
     await expect(counterpartCard).toBeVisible();
     await expect
       .poll(() => counterpartCard.evaluate((element) => element.scrollWidth <= element.clientWidth))

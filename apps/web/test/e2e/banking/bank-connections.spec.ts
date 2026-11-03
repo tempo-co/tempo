@@ -248,7 +248,11 @@ test.describe('bank connections', () => {
     await expect(inspector).toBeVisible();
     expect(new URL(page.url()).searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
     await expect(inspector.getByRole('heading', {name: 'Provider purchase'})).toBeVisible();
-    await expect(inspector.getByText('Bank transaction', {exact: true})).toBeVisible();
+    await expect(inspector.getByTestId('bank-transaction-detail-amount')).toHaveText('-€12.50');
+    await expect(inspector.getByRole('button', {name: 'Bank details', exact: true})).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
     await expect(inspector).toBeHidden();
     await expect(transactionTrigger).toBeFocused();

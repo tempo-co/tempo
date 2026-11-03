@@ -1,5 +1,7 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
+import type {BankTransactionRecurring} from '@tempo/contracts';
+import {randomUUID} from 'node:crypto';
 import TestAgent from 'supertest/lib/agent';
 import {ArrayContains, DataSource, In, Repository, SelectQueryBuilder} from 'typeorm';
 
@@ -96,6 +98,16 @@ describe('RecurringSeries', () => {
 	const byName = <T extends SeriesBody>(series: T[], name: string) => series.filter((entry) => entry.name === name);
 	const hide = (agent: TestAgent, key: string, hidden = true) =>
 		agent.patch(`/recurring-series/${key}/hidden`).send({hidden});
+	const recurring = async (agent: TestAgent, id: string, asOf: string = AS_OF) =>
+		(await agent.get(`/bank-transactions/${id}/recurring`).query({asOf}).expect(200).expect('Content-Type', /json/))
+			.body as BankTransactionRecurring | null;
+	const payments = async (rows: BankTransaction[]) => {
+		const saved = await fixtures.transactions.findBy({id: In(rows.map(({id}) => id))});
+		return rows.map((row) => {
+			const {id, transactionDate, bookingDate, amount, currency} = saved.find(({id}) => id === row.id)!;
+			return {id, transactionDate, bookingDate, amount, currency};
+		});
+	};
 
 	beforeAll(async () => {
 		app = getApp();
@@ -247,6 +259,35 @@ describe('RecurringSeries', () => {
 				),
 			);
 			expect(streamDrills).toEqual([parallel, moved].map((part) => part.map(({id}) => id).sort()));
+			// A transaction belongs to its exact stream, not every plan with the same payee name.
+			for (const part of [parallel, moved]) {
+				const entry = byName(series, 'Example Stream')[
+					streamDrills.findIndex((ids) => ids.includes(part[0].id))
+				];
+				const ledger = await fresh.agent
+					.get('/bank-transactions')
+					.query({filter: {recurringSeriesKey: entry.key}, pagination: {pageIndex: 0, pageSize: 5}})
+					.expect(200);
+				const lookup = await fresh.agent
+					.get(`/bank-transactions/${part[0].id}/recurring`)
+					.query({asOf: AS_OF})
+					.expect(200);
+				expect(lookup.body).toEqual({
+					key: entry.key,
+					cadence: entry.cadence,
+					status: entry.status,
+					nextExpectedDate: entry.nextExpectedDate,
+					payments: ledger.body.transactions
+						.slice(0, 3)
+						.map(({id, transactionDate, bookingDate, amount, currency}: BankTransaction) => ({
+							id,
+							transactionDate,
+							bookingDate,
+							amount,
+							currency,
+						})),
+				});
+			}
 			const [academy] = byName(series, 'Example Academy');
 			const drill = await fresh.agent
 				.get('/bank-transactions')
@@ -1261,6 +1302,24 @@ describe('RecurringSeries', () => {
 			expect(names).not.toContain(excluded);
 		}
 		expect((await list(otherAgent)).series.map(({name}) => name)).toEqual(['Example Club']);
+		const excluded = await fixtures.transactions.findBy({
+			bankAccountId: ownerBankAccount.id,
+			counterpartyName: In([
+				'Example Shop',
+				'Example Savings',
+				'Example Exchange',
+				'Example Refunder',
+				'Example Pending',
+			]),
+		});
+		for (const row of excluded) expect(await recurring(ownerAgent, row.id)).toBeNull();
+		const [owned] = await fixtures.transactions.findBy({bankAccountId: ownerBankAccount.id});
+		await otherAgent.get(`/bank-transactions/${owned.id}/recurring`).query({asOf: AS_OF}).expect(404);
+		await ownerAgent.get(`/bank-transactions/${randomUUID()}/recurring`).query({asOf: AS_OF}).expect(404);
+	});
+
+	it.each(['', '2026-02-30', 'invalid'])('rejects an invalid recurring lookup date %p', async (asOf) => {
+		await ownerAgent.get(`/bank-transactions/${randomUUID()}/recurring`).query({asOf}).expect(400);
 	});
 
 	it('lists recurring income apart from bills in the same read', async () => {
@@ -1269,6 +1328,12 @@ describe('RecurringSeries', () => {
 			expect.objectContaining({name: 'Example Employer', cadence: 'MONTHLY', typicalAmount: '2500.00'}),
 		]);
 		expect(expenses.series.every(({name}) => name !== 'Example Employer')).toBe(true);
+		const rows = await fixtures.transactions.find({
+			where: {bankAccountId: ownerBankAccount.id, counterpartyName: 'Example Employer'},
+			order: {bookingDate: 'DESC'},
+		});
+		expect((await recurring(ownerAgent, rows.at(-1)!.id))?.payments).toEqual(await payments(rows.slice(0, 3)));
+		expect((await recurring(ownerAgent, rows[0].id))?.payments).toEqual(await payments(rows.slice(0, 3)));
 	});
 
 	it('counts every series by default and hides one without touching its transactions', async () => {
@@ -1292,6 +1357,8 @@ describe('RecurringSeries', () => {
 
 		const after = await list(ownerAgent);
 		expect(after.series.at(-1)).toMatchObject({key: streaming.key, hidden: true});
+		const streamingRow = gymRows.find(({counterpartyName}) => counterpartyName === 'Example Streaming')!;
+		expect(await recurring(ownerAgent, streamingRow.id)).toBeNull();
 		expect(parseCents(after.monthlyTotal) - parseCents(before.monthlyTotal)).toBe(-1150n);
 
 		const rowsAfter = await fixtures.transactions.find({
@@ -1309,6 +1376,7 @@ describe('RecurringSeries', () => {
 		).toEqual(snapshot);
 		await hide(ownerAgent, streaming.key, false).expect(204);
 		expect((await list(ownerAgent)).monthlyTotal).toBe(before.monthlyTotal);
+		expect(await recurring(ownerAgent, streamingRow.id)).toMatchObject({key: streaming.key, status: 'ACTIVE'});
 	});
 
 	it('keeps one hide when two hides of the same series arrive at once', async () => {
@@ -1714,6 +1782,15 @@ describe('RecurringSeries', () => {
 				expect(linked.monthlyTotal).toBe('25.00');
 				const [joined] = linked.series;
 				expect(await drill(joined.key)).toEqual([...ids].sort());
+				for (const row of [older[0], newer[0]]) {
+					expect(await recurring(fresh.agent, row.id)).toEqual({
+						key: joined.key,
+						cadence: joined.cadence,
+						status: 'ACTIVE',
+						nextExpectedDate: joined.nextExpectedDate,
+						payments: await payments(newer.slice(-3).reverse()),
+					});
+				}
 				await link(joined.key, true).expect(404);
 
 				// Unlinking shows both histories apart; only the newer one still counts.
@@ -1737,6 +1814,18 @@ describe('RecurringSeries', () => {
 				expect(unlinked.monthlyTotal).toBe('25.00');
 				expect(await drill(previous.key)).toEqual(sorted(older));
 				expect(await drill(current.key)).toEqual(sorted(newer));
+				expect(await recurring(fresh.agent, older[0].id)).toEqual({
+					key: previous.key,
+					cadence: previous.cadence,
+					status: 'ENDED',
+					nextExpectedDate: previous.nextExpectedDate,
+					payments: await payments([...older].reverse()),
+				});
+				expect(await recurring(fresh.agent, newer[0].id)).toMatchObject({
+					key: current.key,
+					status: 'ACTIVE',
+					payments: await payments(newer.slice(-3).reverse()),
+				});
 				const unlinks: Repository<RecurringContinuationUnlink> = app.get(
 					getRepositoryToken(RecurringContinuationUnlink),
 				);
@@ -1877,6 +1966,14 @@ describe('RecurringSeries', () => {
 				]);
 				const joined = linked.series[0];
 				expect(linked.monthlyTotal).toBe('480.00');
+				expect(await recurring(fresh.agent, older[0].id, asOf)).toEqual({
+					key: joined.key,
+					cadence: joined.cadence,
+					status: 'ACTIVE',
+					nextExpectedDate: due,
+					payments: await payments([...older, ...newer].slice(-3).reverse()),
+				});
+				for (const extra of extras) expect(await recurring(fresh.agent, extra.id, asOf)).toBeNull();
 				expect(await drill(joined.key)).toEqual([...billIds].sort());
 				// Changing only retained recipient evidence invalidates the stored result and blocks the join.
 				const inputVersion = (await snapshots.findOneByOrFail({accountId: freshOwner.id})).inputVersion;

@@ -21,6 +21,30 @@ export function formatBankTransactionDate(value: string | null) {
   return formatBankTransactionDateValue(value, 'MMM d, yyyy');
 }
 
+/** A readable quote from the provider's unit currency, without guessing a missing pair. */
+export function formatBankTransactionExchangeRate(
+  transaction: Pick<
+    BankTransaction,
+    | 'exchangeRate'
+    | 'exchangeRateUnitCurrency'
+    | 'currency'
+    | 'instructedCurrency'
+    | 'currencyExchangeCounterpart'
+  >,
+) {
+  if (!transaction.exchangeRate) return null;
+  const rate = new Intl.NumberFormat('en-US', {maximumSignificantDigits: 5}).format(
+    Number(transaction.exchangeRate),
+  );
+  const unit = transaction.exchangeRateUnitCurrency;
+  const quote = [
+    transaction.currency,
+    transaction.instructedCurrency,
+    transaction.currencyExchangeCounterpart?.currency,
+  ].find((currency) => currency && currency !== unit);
+  return unit && quote ? `1 ${unit} ≈ ${rate} ${quote}` : `≈ ${rate}${unit ? ` per ${unit}` : ''}`;
+}
+
 /** Day and month, with the year only when it is not the current one. */
 export function formatBankTransactionCompactDate(value: string | null) {
   return formatBankTransactionDateValue(value, (date) =>

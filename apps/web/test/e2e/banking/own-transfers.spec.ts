@@ -10,12 +10,21 @@ const IBAN_PAIR_INCOMING_ID = '00000000-0000-4000-8000-000000000102';
 const ONE_SIDED_ID = '00000000-0000-4000-8000-000000000105';
 const COINCIDENCE_OUTGOING_ID = '00000000-0000-4000-8000-000000000106';
 
+async function openDisclosure(page: Page, name: 'Bank details' | 'Transfer settings') {
+  const inspector = page.getByTestId('bank-transaction-inspector');
+  const disclosure = inspector.getByRole('button', {name, exact: true});
+  await expect(disclosure).toBeVisible();
+  if ((await disclosure.getAttribute('aria-expanded')) === 'false') await disclosure.click();
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+  return inspector.locator(`[id="${await disclosure.getAttribute('aria-controls')}"]`);
+}
+
 /** Clears an override left by an earlier failed attempt, so every test starts from the seed. */
 async function restoreAutomaticRecognition(page: Page, transactionId: string) {
   await page.goto(`/bank-transactions?transactionId=${transactionId}`);
-  const ownTransfer = page.getByTestId('bank-transaction-own-transfer');
-  await expect(ownTransfer.getByRole('button').first()).toBeVisible();
-  const restore = ownTransfer.getByRole('button', {name: 'Use automatic recognition'});
+  const settings = await openDisclosure(page, 'Transfer settings');
+  await expect(settings.getByRole('button').first()).toBeVisible();
+  const restore = settings.getByRole('button', {name: 'Use automatic recognition'});
   if (await restore.isVisible()) {
     await restore.click();
     await expect(restore).toBeHidden();
@@ -51,14 +60,14 @@ test.describe('own transfers', () => {
 
     await page.goto(`/bank-transactions?transactionId=${IBAN_PAIR_OUTGOING_ID}`);
     const inspector = page.getByTestId('bank-transaction-inspector');
-    const ownTransfer = inspector.getByTestId('bank-transaction-own-transfer');
-    await expect(ownTransfer).toContainText('Matched by IBAN');
-    await expect(inspector.getByText('Internal movement', {exact: true})).toBeVisible();
+    const movement = inspector.getByRole('region', {name: 'Money movement'});
+    await expect(movement.getByRole('heading', {name: 'Between your accounts'})).toBeVisible();
+    await expect(movement).toContainText('Excluded from income and spending');
     await expect(inspector.getByRole('combobox', {name: 'Transaction category'})).toHaveCount(0);
+    await expect(await openDisclosure(page, 'Bank details')).toContainText('Matched by IBAN');
 
-    // The other side is a card with the account, date and amount, not the description.
-    const counterpartCard = ownTransfer.getByTestId('bank-transaction-own-transfer-counterpart');
-    // The visible account, date and amount name the link.
+    // The visible account and original amount name the link to the other side.
+    const counterpartCard = movement.getByTestId('movement-counterpart');
     await expect(counterpartCard).toHaveAccessibleName(/€200\.00/);
     await expect(counterpartCard).toContainText('200');
     await expect
@@ -67,14 +76,10 @@ test.describe('own transfers', () => {
     await counterpartCard.click();
     await expect(page).toHaveURL(new RegExp(`transactionId=${IBAN_PAIR_INCOMING_ID}`));
     await expect(inspector.getByTestId('bank-transaction-detail-amount')).toContainText('200');
-    await expect(inspector.getByTestId('bank-transaction-own-transfer')).toContainText(
-      'Matched by IBAN',
-    );
+    await expect(await openDisclosure(page, 'Bank details')).toContainText('Matched by IBAN');
 
     await page.goto(`/bank-transactions?transactionId=${ONE_SIDED_ID}`);
-    await expect(inspector.getByTestId('bank-transaction-own-transfer')).toContainText(
-      'Not in your connected accounts',
-    );
+    await expect(movement).toContainText('Other side not in your connected accounts');
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
 
     await page.getByRole('button', {name: 'Cash flow', exact: true}).click();
@@ -89,19 +94,22 @@ test.describe('own transfers', () => {
     // Every step ends on automatic recognition, so the test is retry-safe and leaves the seed as-is.
     await page.goto(`/bank-transactions?transactionId=${COINCIDENCE_OUTGOING_ID}`);
     const inspector = page.getByTestId('bank-transaction-inspector');
-    const ownTransfer = inspector.getByTestId('bank-transaction-own-transfer');
+    let settings = await openDisclosure(page, 'Transfer settings');
 
-    await ownTransfer.getByRole('button', {name: 'Mark as own transfer'}).click();
-    await expect(ownTransfer).toContainText('Marked by you');
-    await expect(inspector.getByText('Internal movement', {exact: true})).toBeVisible();
+    await settings.getByRole('button', {name: 'Mark as own transfer'}).click();
+    await expect(await openDisclosure(page, 'Bank details')).toContainText('Marked by you');
+    await expect(inspector.getByRole('region', {name: 'Money movement'})).toContainText(
+      'Excluded from income and spending',
+    );
 
-    await ownTransfer.getByRole('button', {name: 'Use automatic recognition'}).click();
-    await expect(ownTransfer).toContainText('Not recognized');
+    await settings.getByRole('button', {name: 'Use automatic recognition'}).click();
+    await expect(settings.getByRole('button', {name: 'Mark as own transfer'})).toBeVisible();
     await expect(inspector.getByRole('combobox', {name: 'Transaction category'})).toBeVisible();
 
     await page.goto(`/bank-transactions?transactionId=${IBAN_PAIR_OUTGOING_ID}`);
-    await ownTransfer.getByRole('button', {name: 'Not my own transfer'}).click();
-    await expect(ownTransfer.getByRole('button', {name: 'Mark as own transfer'})).toBeVisible();
+    settings = await openDisclosure(page, 'Transfer settings');
+    await settings.getByRole('button', {name: 'Not my own transfer'}).click();
+    await expect(settings.getByRole('button', {name: 'Mark as own transfer'})).toBeVisible();
     // The other leg keeps its own name evidence, and the toast says so.
     await expect(
       page.getByText(
@@ -111,27 +119,31 @@ test.describe('own transfers', () => {
 
     // Unmarking one leg unpairs the other; it keeps its own evidence and stays undoable on its own.
     await page.goto(`/bank-transactions?transactionId=${IBAN_PAIR_INCOMING_ID}`);
-    await expect(ownTransfer).toContainText('Matched by account holder name');
-    await expect(ownTransfer).toContainText('Not in your connected accounts');
+    await expect(await openDisclosure(page, 'Bank details')).toContainText(
+      'Matched by account holder name',
+    );
+    await expect(inspector.getByRole('region', {name: 'Money movement'})).toContainText(
+      'Other side not in your connected accounts',
+    );
 
     await page.goto(`/bank-transactions?transactionId=${IBAN_PAIR_OUTGOING_ID}`);
-    await ownTransfer.getByRole('button', {name: 'Use automatic recognition'}).click();
-    await expect(ownTransfer).toContainText('Matched by IBAN');
+    settings = await openDisclosure(page, 'Transfer settings');
+    await settings.getByRole('button', {name: 'Use automatic recognition'}).click();
+    await expect(await openDisclosure(page, 'Bank details')).toContainText('Matched by IBAN');
   });
 
   test('shows own transfers on mobile', async ({page}) => {
     await page.setViewportSize({width: 393, height: 852});
     await page.goto(`/bank-transactions?transactionId=${IBAN_PAIR_OUTGOING_ID}`);
-    const ownTransfer = page.getByTestId('bank-transaction-own-transfer');
-    await expect(ownTransfer).toContainText('Matched by IBAN');
+    await expect(await openDisclosure(page, 'Bank details')).toContainText('Matched by IBAN');
     await page.goto(`/bank-transactions?transactionId=${ONE_SIDED_ID}`);
-    // The one-sided wording fits on one line on a phone.
-    const oneSided = ownTransfer.getByText('Not in your connected accounts');
+    const movement = page.getByRole('region', {name: 'Money movement'});
+    const oneSided = movement.getByText('Other side not in your connected accounts');
     await expect(oneSided).toBeVisible();
     await expect
       .poll(() => oneSided.evaluate((element) => element.scrollWidth <= element.clientWidth))
       .toBe(true);
-    expect((await boxOf(ownTransfer)).width).toBeLessThanOrEqual(393);
+    expect((await boxOf(movement)).width).toBeLessThanOrEqual(393);
     await page.keyboard.press('Escape');
     await expect(
       page
