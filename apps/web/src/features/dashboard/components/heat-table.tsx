@@ -13,6 +13,7 @@ import {categoryLabel, signedPct} from '../utils/format';
 import {formatWholeMoney, toCents} from '../utils/money';
 import {type MonthPoint, monthsCovered, partCents} from '../utils/overview';
 import {CategoryIconSpacer, CategoryName} from './category-name';
+import {DataTip, TIP_FOCUS, TruncatedText} from './data-tip';
 import {TextAction} from './text-action';
 
 type Period = BankTransactionBreakdownPeriod;
@@ -97,22 +98,24 @@ export function HeatTable({
   const rest = keys.filter((key) => !top.includes(key));
   const [latest, previous] = periods;
   const yearOf = (period: Period) => period.start.slice(0, 4);
-  const yearLabel = (period: Period) => `${yearOf(period)}${period.complete ? '' : '*'}`;
   const historyStart = `${months[0].month}-01`;
   const oldest = periods[periods.length - 1];
+  // A part year says so under its year, as the year table does: the first year from its first month, the latest so far.
   const startNote =
     historyStart > oldest.start && `from ${format(parseCalendarDate(historyStart), 'MMM')}`;
-  const endNote =
-    latest.end < `${yearOf(latest)}-12-31` &&
-    `up to ${format(parseCalendarDate(latest.end), 'd MMM')}`;
-  const partNote = (
-    latest === oldest
-      ? [
-          [startNote, endNote].some(Boolean) &&
-            [yearOf(latest), startNote, endNote].filter(Boolean).join(' '),
-        ]
-      : [startNote && `${yearOf(oldest)} ${startNote}`, endNote && `${yearOf(latest)} ${endNote}`]
-  ).filter(Boolean);
+  const last = months[months.length - 1];
+  const running = !last.complete && last.month.startsWith(yearOf(latest));
+  const yearLabel = (period: Period) => {
+    const note = [period === oldest && startNote, period === latest && running && 'so far']
+      .filter(Boolean)
+      .join(' · ');
+    return (
+      <span className='numeric'>
+        {yearOf(period)}
+        {note && <span className='block text-xs font-normal text-muted-foreground'>{note}</span>}
+      </span>
+    );
+  };
   const unit = kind === 'category' ? ['category', 'categories'] : ['source', 'sources'];
 
   const rows: Row[] = [
@@ -211,21 +214,22 @@ export function HeatTable({
           <thead>
             {/* Each header has its column's padding, so headings and figures share one edge. */}
             <tr className='text-label text-muted-foreground'>
-              <th className='sticky left-0 z-[1] bg-card pr-2 pb-2 pl-5 text-left font-medium'>
+              <th className='sticky left-0 z-[1] bg-card pr-2 pb-2 pl-5 text-left align-top font-medium'>
                 {kind === 'category' ? 'Category' : 'Source'}
               </th>
-              <th
-                className='pr-3 pb-2 pl-2 text-right font-normal'
-                title={
-                  previous
-                    ? `${yearOf(latest)} against ${yearOf(previous)}, a month on average`
-                    : undefined
-                }
-              >
-                {previous ? `vs ${yearOf(previous)}` : ''}
+              <th className='pr-3 pb-2 pl-2 text-right align-top font-normal'>
+                {previous && (
+                  <DataTip
+                    tip={`${yearOf(latest)} against ${yearOf(previous)}, a month on average`}
+                  >
+                    <span tabIndex={0} className={TIP_FOCUS}>
+                      vs {yearOf(previous)}
+                    </span>
+                  </DataTip>
+                )}
               </th>
               {periods.map((period) => (
-                <th key={period.start} className='px-2.5 pb-2 text-right numeric font-medium'>
+                <th key={period.start} className='px-2.5 pb-2 text-right align-top font-medium'>
                   {yearLabel(period)}
                 </th>
               ))}
@@ -248,9 +252,7 @@ export function HeatTable({
                     <CategoryName category={row.category} className='min-h-10 pr-2' />
                   ) : (
                     <span className='flex min-h-10 min-w-0 items-center pr-2'>
-                      <span className='truncate' title={row.name}>
-                        {row.name}
-                      </span>
+                      <TruncatedText className='truncate'>{row.name}</TruncatedText>
                     </span>
                   )}
                 </th>
@@ -286,15 +288,11 @@ export function HeatTable({
         fewer={fewer}
         columnWidth={columnWidth}
       />
-      <p className='px-5 pb-4 text-xs text-muted-foreground'>
-        Darker = more than that row&apos;s other years
-        {partNote.length > 0 && ` · * part year: ${partNote.join(', ')}`}
-      </p>
     </Card>
   );
 }
 
-/** A year's monthly average, shaded against the row's other years, opening its transactions. */
+/** A year's monthly average, shaded against the row's other years, opening its transactions; its tip names both. */
 function YearValue({item, lead, className}: {item: Cell; lead?: ReactNode; className?: string}) {
   const classes = cn(
     'numeric items-center text-right',
@@ -305,26 +303,29 @@ function YearValue({item, lead, className}: {item: Cell; lead?: ReactNode; class
   const amount = lead ? <span className='numeric whitespace-nowrap'>{item.body}</span> : item.body;
   if (!item.search)
     return (
-      <span title={item.value !== 0 ? item.tip : undefined} className={classes}>
-        {lead}
-        {amount}
-      </span>
+      <DataTip tip={item.value !== 0 && item.tip}>
+        <span tabIndex={item.value !== 0 ? 0 : undefined} className={cn(classes, TIP_FOCUS)}>
+          {lead}
+          {amount}
+        </span>
+      </DataTip>
     );
   return (
-    <Link
-      to='/bank-transactions'
-      search={item.search}
-      title={item.tip}
-      aria-label={item.tip}
-      className={cn(
-        classes,
-        'hover:outline-1 hover:outline-foreground focus-visible:outline-2 focus-visible:outline-ring',
-      )}
-      style={{background: item.alpha ? `hsl(var(--primary) / ${item.alpha})` : undefined}}
-    >
-      {lead}
-      {amount}
-    </Link>
+    <DataTip tip={item.tip}>
+      <Link
+        to='/bank-transactions'
+        search={item.search}
+        aria-label={item.tip}
+        className={cn(
+          classes,
+          'hover:outline-1 hover:outline-foreground focus-visible:outline-2 focus-visible:outline-ring',
+        )}
+        style={{background: item.alpha ? `hsl(var(--primary) / ${item.alpha})` : undefined}}
+      >
+        {lead}
+        {amount}
+      </Link>
+    </DataTip>
   );
 }
 
@@ -349,7 +350,7 @@ function PhoneRows({
   rows: Row[];
   latest: Period;
   previous: Period | undefined;
-  yearLabel: (period: Period) => string;
+  yearLabel: (period: Period) => ReactNode;
   change: (row: Row) => string;
   cells: (row: Row) => Cell[];
   onMore: () => void;
@@ -370,7 +371,7 @@ function PhoneRows({
         <span className='text-right font-normal'>
           {previous ? `vs ${previous.start.slice(0, 4)}` : ''}
         </span>
-        <span className='text-right numeric'>{yearLabel(latest)}</span>
+        <span className='text-right'>{yearLabel(latest)}</span>
       </p>
       <ul>
         {rows.map((row) => {
@@ -440,7 +441,7 @@ function PhoneRows({
                   <span className='flex min-w-0 items-center gap-2'>
                     {/* Every name starts at the same place, icon or not. */}
                     {kind === 'category' && <CategoryIconSpacer />}
-                    <span className={name}>{row.name}</span>
+                    <TruncatedText className={name}>{row.name}</TruncatedText>
                   </span>
                 )}
                 {figures}
@@ -459,7 +460,7 @@ function PhoneRows({
                       <YearValue
                         item={item}
                         lead={
-                          <span className='font-normal text-muted-foreground'>
+                          <span className='text-left font-normal text-muted-foreground'>
                             {yearLabel(item.period)}
                           </span>
                         }

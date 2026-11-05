@@ -124,7 +124,7 @@ export function RecurringSeriesOverview({
             className='min-h-9 px-3 text-xs data-[state=on]:bg-secondary data-[state=on]:font-semibold data-[state=on]:text-secondary-foreground max-sm:min-h-11 max-sm:flex-1'
           >
             {label}
-            <span className='ml-1.5 font-normal text-muted-foreground'>
+            <span className='ml-1.5 numeric font-normal text-muted-foreground'>
               {list.series.filter(isCounted).length}
             </span>
           </ToggleGroupItem>

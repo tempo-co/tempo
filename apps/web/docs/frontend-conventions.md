@@ -56,7 +56,9 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 Use `ChartContainer` and `ChartTooltip` for the shared pointer behavior. Mouse hover follows
 Recharts; touch inspection begins with a brief hold or a horizontal drag and ends on release
 or cancellation. Vertical gestures scroll the page and pinch zoom remains available. A short
-tap keeps the chart's click action; releasing an inspection must not navigate.
+tap keeps the chart's click action; releasing an inspection must not navigate. Marks beside a
+chart that share its x slots sit in the same `ChartTouchArea` and show the chart's readout on
+mouse hover and keyboard focus through `inspectChartAt`, so both mark one period.
 
 Touch readouts sit at the top of the plot without movement animation. Supported browsers can
 request a brief vibration when the inspected period changes; Safari has no Vibration API.

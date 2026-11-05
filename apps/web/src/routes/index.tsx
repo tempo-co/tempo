@@ -5,6 +5,7 @@ import {useCallback} from 'react';
 import {z} from 'zod';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
+import {TooltipProvider} from '@/components/ui/tooltip';
 import {recurringSeriesKeySchema} from '@/features/banking/types/bank-transaction';
 import {HomeDashboard} from '@/features/dashboard/components/home-dashboard';
 import {MerchantsDialog} from '@/features/dashboard/components/merchants-dialog';
@@ -76,33 +77,36 @@ function Index() {
   };
 
   return (
-    <AppBodyLayout>
-      <HomeDashboard today={today} onOpenMonth={openMonth} />
-      <MonthDialog
-        month={month}
-        today={today}
-        onStep={stepMonth}
-        onOpenChange={(open) => {
-          if (!open) closeDialog({month: undefined});
-        }}
-      />
-      <RecurringDialog
-        open={search.recurring === 'open'}
-        selectedKey={search.series ?? null}
-        onSelect={selectSeries}
-        onOpenChange={(open) => {
-          if (!open) closeDialog({recurring: undefined, series: undefined});
-        }}
-      />
-      <MerchantsDialog
-        open={search.merchants === 'open'}
-        month={thisMonth}
-        selectedId={search.merchant ?? null}
-        onSelect={selectMerchant}
-        onOpenChange={(open) => {
-          if (!open) closeDialog({merchants: undefined, merchant: undefined});
-        }}
-      />
-    </AppBodyLayout>
+    // One provider for Home and its dialogs, so moving between figures shows the next tip without a new delay.
+    <TooltipProvider delayDuration={300}>
+      <AppBodyLayout>
+        <HomeDashboard today={today} onOpenMonth={openMonth} />
+        <MonthDialog
+          month={month}
+          today={today}
+          onStep={stepMonth}
+          onOpenChange={(open) => {
+            if (!open) closeDialog({month: undefined});
+          }}
+        />
+        <RecurringDialog
+          open={search.recurring === 'open'}
+          selectedKey={search.series ?? null}
+          onSelect={selectSeries}
+          onOpenChange={(open) => {
+            if (!open) closeDialog({recurring: undefined, series: undefined});
+          }}
+        />
+        <MerchantsDialog
+          open={search.merchants === 'open'}
+          month={thisMonth}
+          selectedId={search.merchant ?? null}
+          onSelect={selectMerchant}
+          onOpenChange={(open) => {
+            if (!open) closeDialog({merchants: undefined, merchant: undefined});
+          }}
+        />
+      </AppBodyLayout>
+    </TooltipProvider>
   );
 }

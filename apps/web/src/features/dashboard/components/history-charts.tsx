@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 
 import {ChartContainer, ChartTooltip, ChartTouchArea} from '@/components/ui/chart';
-import {useChartTouchState} from '@/hooks/use-chart-touch';
+import {endChartInspection, inspectChartAt, useChartTouchState} from '@/hooks/use-chart-touch';
 import {cn} from '@/utils/cn';
 
 import {axisFormatter, axisTicks} from '../utils/chart-axis';
@@ -154,13 +154,20 @@ function BalanceChart({
           />
           <ChartTooltip
             cursor={{stroke: 'hsl(var(--border))'}}
+            // A month without a balance still reads out what was kept.
+            filterNull={false}
             content={({active, payload}) => {
               const row = payload?.[0]?.payload as (typeof data)[number] | undefined;
               if (!active || !row) return null;
               const point = row.point;
               return (
                 <div className='grid min-w-48 gap-1 border bg-card p-2.5 text-xs shadow-sm'>
-                  <p className='font-semibold'>{formatMonth(point.month, 'MMMM yyyy')}</p>
+                  <p className='font-semibold'>
+                    {formatMonth(point.month, 'MMMM yyyy')}
+                    {!point.complete && (
+                      <span className='font-normal text-muted-foreground'> · so far</span>
+                    )}
+                  </p>
                   <TipRow label='Balance' value={wholeCents(point.balance, currency)} strong />
                   <TipRow label='Kept' value={signed(point.kept, currency)} />
                 </div>
@@ -183,7 +190,19 @@ function TipRow({label, value, strong}: {label: string; value: string; strong?: 
   );
 }
 
-/** What was kept each month, on the same slots as the line above: up is kept, down is more out than in. */
+/** The chart area around a bar, whose line shows the readout for the bar's month. */
+const areaOf = (bar: Element) => bar.closest('[data-slot="chart-touch-area"]');
+
+/** Shows the line's readout for the month of `bar`, which sits on that month's x slot. */
+function inspectBar(bar: Element) {
+  const box = bar.getBoundingClientRect();
+  inspectChartAt(areaOf(bar), box.left + box.width / 2);
+}
+
+/**
+ * What was kept each month, on the same slots as the line above: up is kept, down is more out than in. Hovering or
+ * focusing a bar shows the line's readout for its month, so both charts mark one month and give one answer.
+ */
 function KeptStrip({
   months,
   currency,
@@ -212,7 +231,6 @@ function KeptStrip({
             <i aria-hidden='true' className='h-2.5 w-1.5 bg-warning' />
             more out than in
           </span>
-          <span>faded = so far</span>
         </span>
       </p>
       <ol
@@ -229,7 +247,18 @@ function KeptStrip({
                 type='button'
                 data-active={index === active || undefined}
                 onClick={() => onPick(point.month)}
-                title={label}
+                onPointerEnter={(event) => {
+                  if (event.pointerType === 'mouse') inspectBar(event.currentTarget);
+                }}
+                onPointerLeave={(event) => {
+                  if (event.pointerType === 'mouse')
+                    endChartInspection(areaOf(event.currentTarget));
+                }}
+                onFocus={(event) => {
+                  if (event.currentTarget.matches(':focus-visible'))
+                    inspectBar(event.currentTarget);
+                }}
+                onBlur={(event) => endChartInspection(areaOf(event.currentTarget))}
                 aria-label={label}
                 className='group absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring data-active:bg-accent'
               >

@@ -2,8 +2,16 @@ import type {Locator, Page} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 
-import {USUAL_SPENDING, homeHistory, mockSyntheticHome} from '../../data/home-history.data';
+import {
+  MARKET_ID,
+  RENT_KEY,
+  USUAL_SPENDING,
+  homeHistory,
+  mockSyntheticHome,
+  monthTransactions,
+} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
+import {fulfillJson} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const layouts = [
@@ -234,7 +242,10 @@ for (const {width, rows} of [
   });
 }
 
-test('Home’s and the month’s text actions share one style', async ({page, homePage}) => {
+test('Home’s text actions share one style with the month’s, the Merchants’ and the Recurring ones', async ({
+  page,
+  homePage,
+}) => {
   await page.setViewportSize({width: 1440, height: 1000});
   await mockSyntheticHome(page);
   await page.goto('/');
@@ -267,6 +278,46 @@ test('Home’s and the month’s text actions share one style', async ({page, ho
     .getByRole('region', {name: 'Transactions'});
   styles.push(await style(transactions.getByRole('link', {name: 'Open in Transactions'})));
   styles.push(await style(transactions.getByRole('button', {name: 'Show all 15'})));
+
+  // A merchant's and a recurring payment's transactions: more pages than one, opening in Transactions.
+  await page.route(`**/merchants/${MARKET_ID}`, (route) =>
+    fulfillJson(route, {
+      id: MARKET_ID,
+      name: 'Example Market',
+      kind: 'MERCHANT',
+      logoUrl: null,
+      spent: '500.00',
+      received: '0.00',
+      count: 45,
+      lastDate: '2026-10-28',
+      baseCurrency: 'EUR',
+      paid: '500.00',
+      refunded: '0.00',
+      paymentCount: 45,
+      averagePayment: '11.11',
+      firstDate: '2025-01-02',
+      excluded: {unknownDirection: 0, missingBaseAmount: 0},
+      variants: [],
+    }),
+  );
+  await page.route(`**/merchants/${MARKET_ID}/periods?**`, (route) =>
+    fulfillJson(route, {baseCurrency: 'EUR', interval: 'month', periods: []}),
+  );
+  await page.route('**/bank-transactions?**', (route) =>
+    fulfillJson(route, {...monthTransactions('2026-10', 20), total: 45}),
+  );
+  await page.goto(`/?merchants=open&merchant=${MARKET_ID}`);
+  const merchant = page.getByRole('dialog', {name: 'Merchants'});
+  styles.push(await style(merchant.getByRole('link', {name: 'Open in Transactions'})));
+  styles.push(await style(merchant.getByRole('button', {name: 'Load more'})));
+  await page.goto(`/?recurring=open&series=${RENT_KEY}`);
+  styles.push(
+    await style(
+      page
+        .getByRole('dialog', {name: 'Recurring payments'})
+        .getByRole('button', {name: 'Load more'}),
+    ),
+  );
 
   expect(styles[0].height).toBe(36);
   for (const item of styles) expect(item).toEqual(styles[0]);

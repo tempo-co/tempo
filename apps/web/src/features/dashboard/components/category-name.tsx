@@ -4,6 +4,7 @@ import {BankTransactionCategoryIcon} from '@/features/banking/components/bank-tr
 import {cn} from '@/utils/cn';
 
 import {categoryLabel} from '../utils/format';
+import {TruncatedText} from './data-tip';
 
 const ICON_SIZE = 'size-5';
 
@@ -25,9 +26,7 @@ export function CategoryName({
         category={isBankTransactionCategory(category) ? category : null}
         className={ICON_SIZE}
       />
-      <span className={labelClassName} title={label}>
-        {label}
-      </span>
+      <TruncatedText className={labelClassName}>{label}</TruncatedText>
     </span>
   );
 }

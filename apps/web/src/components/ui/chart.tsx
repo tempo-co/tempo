@@ -19,7 +19,13 @@ function ChartTouchArea({className, children, ...props}: React.ComponentProps<'d
   const {ref, touch, inspecting, handlers} = useChartTouch();
   return (
     <ChartTouchContext value={{touch, inspecting}}>
-      <div ref={ref} className={cn(TOUCH_CLASSES, className)} {...props} {...handlers}>
+      <div
+        ref={ref}
+        data-slot='chart-touch-area'
+        className={cn(TOUCH_CLASSES, className)}
+        {...props}
+        {...handlers}
+      >
         {children}
       </div>
     </ChartTouchContext>

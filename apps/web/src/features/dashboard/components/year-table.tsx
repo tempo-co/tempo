@@ -1,4 +1,4 @@
-import {Link} from '@tanstack/react-router';
+import {Link, useNavigate} from '@tanstack/react-router';
 import {ChevronRight} from 'lucide-react';
 import {type CSSProperties, Fragment, useState} from 'react';
 
@@ -248,13 +248,21 @@ function MonthLine({
   currency: string | null;
   maxFlow: number;
 }) {
+  const navigate = useNavigate();
   return (
-    <tr className='border-b border-border/60 bg-muted/20'>
+    // The month's link is the row's keyboard and screen-reader control; a click anywhere else on the row opens it too.
+    <tr
+      onClick={(event) => {
+        if ((event.target as Element).closest('a')) return;
+        void navigate({to: '/', search: (prev) => ({...prev, month: point.month})});
+      }}
+      className='cursor-pointer border-b border-border/60 bg-muted/20 hover:bg-accent/50 has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-ring'
+    >
       <td className='py-0.5 pr-1 pl-7 sm:pr-3 sm:pl-12'>
         <Link
           to='/'
           search={(prev) => ({...prev, month: point.month})}
-          className='inline-flex min-h-11 min-w-11 items-center underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring sm:min-h-8'
+          className='inline-flex min-h-11 min-w-11 items-center outline-none sm:min-h-8'
         >
           {formatMonth(point.month, 'MMMM')}
         </Link>

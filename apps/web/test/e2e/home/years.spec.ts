@@ -1,6 +1,6 @@
 import type {Locator} from '@playwright/test';
 
-import {homeHistory, mockSyntheticHome} from '../../data/home-history.data';
+import {EMPLOYER, homeHistory, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {boxOf, expectCategoryIcon, expectNoHorizontalOverflow} from '../../utils/layout';
 
@@ -94,9 +94,25 @@ test('year by year shows each year, newest first and open; a click anywhere on a
     '+€16,000 40% of in',
     '€17,000 +€16,000',
   ]);
-  await table.getByRole('link', {name: 'June'}).click();
+  // A month's whole row opens it, with a hover state on every cell; its link opens it from the keyboard.
+  const june = table.getByRole('row').filter({has: page.getByRole('link', {name: 'June'})});
+  const kept = june.getByRole('cell').nth(3);
+  const plain = await june.evaluate((row) => getComputedStyle(row).backgroundColor);
+  await kept.hover();
+  await expect(june).not.toHaveCSS('background-color', plain);
+  await kept.click();
   await expect(page).toHaveURL(/[?&]month=2025-06/);
   await expect(homePage.monthDialog('June 2025')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(homePage.monthDialog('June 2025')).toBeHidden();
+  const july = table.getByRole('link', {name: 'July'});
+  await july.focus();
+  await expect(
+    table.getByRole('row').filter({has: page.getByRole('link', {name: 'July'})}),
+  ).toHaveCSS('outline-style', 'solid');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/[?&]month=2025-07/);
+  await expect(homePage.monthDialog('July 2025')).toBeVisible();
 });
 
 test('spending by category shows a month on average per year, with small categories folded', async ({
@@ -107,7 +123,14 @@ test('spending by category shows a month on average per year, with small categor
 
   const table = page.getByRole('region', {name: 'Spending by category'});
   const rows = table.getByRole('row');
-  expect(await cells(rows.nth(0))).toEqual(['Category', 'vs 2025', '2026*', '2025', '2024*']);
+  // Part years say so under the year: history starts in December 2024, and 2026 is still running.
+  expect(await cells(rows.nth(0))).toEqual([
+    'Category',
+    'vs 2025',
+    '2026 so far',
+    '2025',
+    '2024 from Dec',
+  ]);
   // 2026 has ten whole months and 5 of November's 30 days: €13,200 of housing is €1,298 a month.
   expect(await cells(rows.nth(1))).toEqual([
     'Housing and utilities',
@@ -122,7 +145,6 @@ test('spending by category shows a month on average per year, with small categor
   const more = table.getByRole('button', {name: '3 more categories'});
   expect(await cells(rows.nth(5))).toEqual(['3 more categories', '−2%', '€98', '€100', '€100']);
   expect(await cells(rows.last())).toEqual(['Total', '+12%', '€2,233', '€2,000', '€2,000']);
-  await expect(table).toContainText('* part year: 2024 from Dec, 2026 up to 5 Nov');
 
   // Shading compares a row's years; December 2024 alone is too thin to shade.
   const housing = rows.nth(1).getByRole('link');
@@ -131,6 +153,19 @@ test('spending by category shows a month on average per year, with small categor
     'Housing and utilities, 2026: €1,298 a month · €13,200 in the year so far',
   );
   await expect(housing.nth(0)).toHaveCSS('font-weight', '600');
+  // A focused cell shows the same as a tip; figures carry no native browser tooltips.
+  await housing.nth(0).focus();
+  await expect(page.getByRole('tooltip')).toHaveText(
+    'Housing and utilities, 2026: €1,298 a month · €13,200 in the year so far',
+  );
+  await expect(page.getByRole('main').locator('[title]')).toHaveCount(0);
+  // So does a figure without a link, such as a year's total.
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+  await rows.last().getByText('€2,233').focus();
+  await expect(page.getByRole('tooltip')).toHaveText(
+    'Total, 2026: €2,233 a month · €22,700 in the year so far',
+  );
   await expect(housing.nth(2)).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const search = async (link: Locator) =>
     decodeURIComponent((await link.getAttribute('href')) ?? '');
@@ -155,7 +190,7 @@ test('on a phone, each category shows its latest year and change, and opens into
 
   const table = page.getByRole('region', {name: 'Spending by category'});
   await expect(table.getByRole('table')).toBeHidden();
-  await expect(table).toContainText('Categoryvs 20252026*');
+  await expect(table).toContainText('Categoryvs 20252026so far');
   const rows = table.getByRole('button');
   await expect(rows).toHaveText([
     'Housing and utilities+8%€1,298',
@@ -172,13 +207,12 @@ test('on a phone, each category shows its latest year and change, and opens into
   ).toHaveText('3 more categories−2%€98');
   for (const row of await rows.all()) expect((await boxOf(row)).height).toBeGreaterThanOrEqual(44);
   await expectCategoryIcon(rows.first(), 'Housing and utilities');
-  await expect(table).toContainText('* part year: 2024 from Dec, 2026 up to 5 Nov');
 
   // A row opens in place into each year, newest first, each opening its transactions.
   await rows.first().click();
   await expect(rows.first()).toHaveAttribute('aria-expanded', 'true');
   const years = table.getByRole('list', {name: 'Housing and utilities by year'}).getByRole('link');
-  await expect(years).toHaveText(['2026*€1,298', '2025€1,200', '2024*€1,200']);
+  await expect(years).toHaveText(['2026so far€1,298', '2025€1,200', '2024from Dec€1,200']);
   await expect(years.first()).toHaveAttribute(
     'aria-label',
     'Housing and utilities, 2026: €1,298 a month · €13,200 in the year so far',
@@ -198,18 +232,22 @@ test('on a phone, each category shows its latest year and change, and opens into
 });
 
 test('income by source names each source and lines up with the spending years', async ({page}) => {
-  await mockSyntheticHome(page);
+  const history = homeHistory();
+  const long = 'Example Employer Holding International Services Group Benelux Payroll Department';
+  for (const period of history.breakdown.year.source)
+    for (const part of period.parts) if (part.key === EMPLOYER) part.label = long;
+  await mockSyntheticHome(page, {history});
   await page.goto('/');
 
   const table = page.getByRole('region', {name: 'Income by source'});
   const rows = table.getByRole('row');
-  expect(await cells(rows.nth(1))).toEqual([
-    'Example Employer',
-    '−2%',
-    '€2,951',
-    '€3,000',
-    '€3,000',
-  ]);
+  // A name cut short shows in full on hover; one that fits has no tip.
+  await rows.nth(2).getByText('Example Bonus').hover();
+  await page.waitForTimeout(500);
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+  await rows.nth(1).getByText(long).hover();
+  await expect(page.getByRole('tooltip')).toHaveText(long);
+  expect(await cells(rows.nth(1))).toEqual([long, '−2%', '€2,951', '€3,000', '€3,000']);
   expect(await cells(rows.nth(2))).toEqual(['Example Bonus', '−100%', '–', '€333', '–']);
   await expect(rows.nth(1).getByRole('link').first()).toHaveAttribute(
     'href',
@@ -217,9 +255,9 @@ test('income by source names each source and lines up with the spending years', 
   );
 
   const spending = page.getByRole('region', {name: 'Spending by category'});
-  for (const year of ['2026*', '2025']) {
-    const a = await spending.getByRole('columnheader', {name: year, exact: true}).boundingBox();
-    const b = await table.getByRole('columnheader', {name: year, exact: true}).boundingBox();
+  for (const year of [/^2026/, /^2025$/]) {
+    const a = await spending.getByRole('columnheader', {name: year}).boundingBox();
+    const b = await table.getByRole('columnheader', {name: year}).boundingBox();
     expect(Math.round(b!.x)).toBe(Math.round(a!.x));
   }
 });
@@ -241,8 +279,11 @@ test('a single month of history is one part year with no comparison', async ({pa
   await page.goto('/');
 
   const table = page.getByRole('region', {name: 'Spending by category'});
-  expect(await cells(table.getByRole('row').nth(0))).toEqual(['Category', '', '2026*']);
-  await expect(table).toContainText('* part year: 2026 from Nov up to 5 Nov');
+  expect(await cells(table.getByRole('row').nth(0))).toEqual([
+    'Category',
+    '',
+    '2026 from Nov · so far',
+  ]);
   // Nothing came in, so there is no income table.
   await expect(page.getByRole('region', {name: 'Income by source'})).toHaveCount(0);
 });

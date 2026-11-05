@@ -1,7 +1,7 @@
 import {Link} from '@tanstack/react-router';
 import type {CashFlowInterval, MerchantGroup, MerchantGroupPeriod} from '@tempo/contracts';
 import {format} from 'date-fns';
-import {ArrowLeft, ArrowUpRight} from 'lucide-react';
+import {ArrowLeft} from 'lucide-react';
 import {useState} from 'react';
 import {Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis} from 'recharts';
 
@@ -11,6 +11,7 @@ import {Skeleton} from '@/components/ui/skeleton';
 import {TransactionListRow} from '@/features/banking/components/transaction-list-row';
 import {formatBankTransactionCompactDate} from '@/features/banking/utils/formatters';
 import {ChartCardError, ChartCardHeader} from '@/features/dashboard/components/chart-card';
+import {TextAction} from '@/features/dashboard/components/text-action';
 import {axisFormatter, axisTicks} from '@/features/dashboard/utils/chart-axis';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatMoney, formatWholeMoney, toCents} from '@/features/dashboard/utils/money';
@@ -79,7 +80,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
           )}
         </dl>
         <dl className='grid grid-cols-2 gap-px border bg-border sm:grid-cols-4'>
-          <Fact label='Payments' value={merchant.paymentCount.toLocaleString()} />
+          <Fact label='Payments' value={merchant.paymentCount.toLocaleString()} numeric />
           <Fact
             label='Average payment'
             value={
@@ -363,12 +364,11 @@ function Transactions({merchant}: {merchant: MerchantGroup}) {
     <section className='grid grid-cols-1 gap-3' aria-label='Transactions'>
       <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-2'>
         <h2 className='text-card-title'>{countLabel(total, 'transaction')}</h2>
-        <Button variant='outline' size='sm' asChild className='max-sm:h-11'>
+        <TextAction asChild className='-mr-2'>
           <Link to='/bank-transactions' search={{merchantGroup: merchant.id}}>
-            <ArrowUpRight aria-hidden />
             Open in Transactions
           </Link>
-        </Button>
+        </TextAction>
       </header>
       {isPending ? (
         <Skeleton className='h-40' aria-label='Loading transactions' />
@@ -398,15 +398,14 @@ function Transactions({merchant}: {merchant: MerchantGroup}) {
             ))}
           </ul>
           {hasNextPage && (
-            <Button
-              variant='ghost'
-              className='w-full text-muted-foreground max-sm:h-11'
+            <TextAction
               disabled={isFetchingNextPage}
               aria-busy={isFetchingNextPage || undefined}
               onClick={() => void fetchNextPage()}
+              className='-ml-2'
             >
               Load more
-            </Button>
+            </TextAction>
           )}
         </>
       )}

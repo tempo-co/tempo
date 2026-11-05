@@ -62,7 +62,7 @@ test('on the last day of a month, a span is measured from the month end a span b
   await expect(homePage.whereYouStand).toContainText('since 30 Apr 2026');
 });
 
-test('kept bars open their month, and the running month reads as so far', async ({
+test('kept bars show the line’s readout on hover and focus, and open their month', async ({
   page,
   homePage,
 }) => {
@@ -70,10 +70,24 @@ test('kept bars open their month, and the running month reads as so far', async 
   await page.goto('/');
 
   const bars = homePage.whereYouStand.getByRole('list', {name: 'Kept each month'});
+  const readout = homePage.whereYouStand.locator('.recharts-tooltip-wrapper');
   await expect(bars.getByRole('button')).toHaveCount(14);
   await expect(bars.getByRole('button').last()).toHaveAccessibleName(
     'November 2026 so far: kept −€1,200',
   );
+  // Hovering a bar shows the line's readout for its month and marks that bar.
+  await bars.getByRole('button', {name: 'March 2026: kept −€500'}).hover();
+  await expect(readout).toBeVisible();
+  await expect(readout).toContainText('March 2026');
+  await expect(readout).toContainText('Kept−€500');
+  await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^March 2026/);
+  await page.mouse.move(0, 0);
+  await expect(readout).not.toBeVisible();
+  // So does focusing one, and the running month reads as so far.
+  await bars.getByRole('button').last().focus();
+  await expect(readout).toContainText('November 2026 · so far');
+  await expect(readout).toContainText('Kept−€1,200');
+  await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^November 2026/);
   await bars.getByRole('button', {name: 'March 2026: kept −€500'}).click();
   await expect(page).toHaveURL(/[?&]month=2026-03/);
   await expect(homePage.monthDialog('March 2026')).toBeVisible();
@@ -155,6 +169,15 @@ test('a month without an exchange rate has no balance, and the change is left ou
   await expect(homePage.totalBalance).toHaveText('—');
   await expect(homePage.whereYouStand).not.toContainText('since');
   await expect(homePage.yearTable.getByRole('row').nth(1)).toContainText('—');
+  // The month's readout still shows what was kept.
+  await homePage.whereYouStand
+    .getByRole('list', {name: 'Kept each month'})
+    .getByRole('button')
+    .last()
+    .hover();
+  const readout = homePage.whereYouStand.locator('.recharts-tooltip-wrapper');
+  await expect(readout).toContainText('Balance—');
+  await expect(readout).toContainText('Kept−€1,200');
 });
 
 test('a click on the balance chart opens its month and leaves no focus outline', async ({

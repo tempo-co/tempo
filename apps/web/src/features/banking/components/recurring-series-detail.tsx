@@ -8,6 +8,7 @@ import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {Skeleton} from '@/components/ui/skeleton';
+import {TextAction} from '@/features/dashboard/components/text-action';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatMoney, formatWholeMoney} from '@/features/dashboard/utils/money';
 import {cn} from '@/utils/cn';
@@ -265,15 +266,14 @@ function PaymentHistory({series}: {series: RecurringSeries}) {
           ))}
         </ul>
         {hasNextPage && (
-          <Button
-            variant='ghost'
-            className='w-full text-muted-foreground max-sm:h-11'
+          <TextAction
             disabled={isFetchingNextPage}
             aria-busy={isFetchingNextPage || undefined}
             onClick={() => void fetchNextPage()}
+            className='-ml-2'
           >
             Load more
-          </Button>
+          </TextAction>
         )}
       </section>
     </>
