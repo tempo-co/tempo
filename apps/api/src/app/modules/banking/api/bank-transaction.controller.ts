@@ -3,8 +3,10 @@ import {Throttle} from '@nestjs/throttler';
 import type {
 	BankBalanceTrend,
 	BankTransaction,
+	BankTransactionBreakdown,
 	BankTransactionCashFlow,
 	BankTransactionCategoryImpact,
+	BankTransactionEvents,
 	BankTransactionRecurring,
 	BankTransactionReviewCounts,
 	BankTransactionSummary,
@@ -17,9 +19,14 @@ import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 import {TokenReadable} from '@modules/auth/decorators/token-readable.decorator';
 
+import {BankTransactionHistoryService} from '../services/bank-transaction-history.service';
 import {BankTransactionSummaryService} from '../services/bank-transaction-summary.service';
 import {BankTransactionService} from '../services/bank-transaction.service';
 import {BROWSING_THROTTLE} from './constants/throttle.constants';
+import {
+	BankTransactionBreakdownQueryDto,
+	BankTransactionEventsQueryDto,
+} from './dtos/bank-transaction-breakdown-query.dto';
 import {BankTransactionCashFlowQueryDto} from './dtos/bank-transaction-cash-flow-query.dto';
 import {BankTransactionCategoryImpactQueryDto} from './dtos/bank-transaction-category-impact.dto';
 import {BankTransactionCategoryUpdateDto} from './dtos/bank-transaction-category-update.dto';
@@ -33,6 +40,7 @@ export class BankTransactionController {
 	constructor(
 		private readonly bankTransactionService: BankTransactionService,
 		private readonly bankTransactionSummaryService: BankTransactionSummaryService,
+		private readonly bankTransactionHistoryService: BankTransactionHistoryService,
 	) {}
 
 	@Get()
@@ -84,6 +92,26 @@ export class BankTransactionController {
 		@Query() query: BankTransactionCashFlowQueryDto,
 	): Promise<BankBalanceTrend> {
 		return this.bankTransactionSummaryService.getBalanceTrend(account, query);
+	}
+
+	@Get('breakdown')
+	@TokenReadable()
+	@Throttle(BROWSING_THROTTLE)
+	getBreakdown(
+		@CurrentAccount() account: Account,
+		@Query() query: BankTransactionBreakdownQueryDto,
+	): Promise<BankTransactionBreakdown> {
+		return this.bankTransactionHistoryService.getBreakdown(account, query);
+	}
+
+	@Get('events')
+	@TokenReadable()
+	@Throttle(BROWSING_THROTTLE)
+	getEvents(
+		@CurrentAccount() account: Account,
+		@Query() query: BankTransactionEventsQueryDto,
+	): Promise<BankTransactionEvents> {
+		return this.bankTransactionHistoryService.getEvents(account, query);
 	}
 
 	@Get('review-counts')

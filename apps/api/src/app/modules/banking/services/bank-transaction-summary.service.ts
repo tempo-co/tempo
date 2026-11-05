@@ -50,6 +50,7 @@ import {
 	SQL_UNKNOWN_DIRECTION,
 	applyBankTransactionFilters,
 	createOwnerScopedQuery,
+	findFirstBookingDate,
 } from './bank-transaction-filters';
 import {BANK_CONNECTION_STATUSES} from './banking-sync.constants';
 
@@ -95,7 +96,7 @@ export class BankTransactionSummaryService {
 		const candidateMonths = previousMonths(month, BASELINE_MONTHS);
 		// Flows cover every candidate month; months before the first booking simply have no rows.
 		const [firstBookingDate, flows, period] = await Promise.all([
-			this.findFirstBookingDate(accountId),
+			findFirstBookingDate(this.bankTransactionRepository, accountId),
 			this.findFlows(accountId, `${candidateMonths[0]}-01`, through),
 			this.findPeriodCounts(accountId, monthStart, through),
 		]);
@@ -205,7 +206,7 @@ export class BankTransactionSummaryService {
 		if (!starts) throw new BadRequestException(BANKING_TRANSACTION_CASH_FLOW_RANGE);
 
 		const [firstBookingDate, rows] = await Promise.all([
-			this.findFirstBookingDate(accountId),
+			findFirstBookingDate(this.bankTransactionRepository, accountId),
 			this.findPeriodFlows(accountId, interval, starts[0], to),
 		]);
 		const totals = new Map(rows.map((row) => [row.start, row]));
@@ -409,13 +410,6 @@ export class BankTransactionSummaryService {
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_MISSING_BASE_AMOUNT})::int`, 'missingBaseAmount')
 			.getRawOne<{ownTransfers: string; unknownDirection: number; missingBaseAmount: number}>();
 		return counts!;
-	}
-
-	private async findFirstBookingDate(accountId: string): Promise<string | null> {
-		const row = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
-			.select(`to_char(MIN("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'first')
-			.getRawOne<{first: string | null}>();
-		return row?.first ?? null;
 	}
 }
 

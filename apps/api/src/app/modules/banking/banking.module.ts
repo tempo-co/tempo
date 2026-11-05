@@ -35,6 +35,7 @@ import {RecurringSnapshot} from './recurring/recurring-snapshot.entity';
 import {BankTransactionAmountConversionProcessor} from './services/bank-transaction-amount-conversion.processor';
 import {BankTransactionAmountConversionQueueService} from './services/bank-transaction-amount-conversion.queue.service';
 import {BankTransactionAmountConversionService} from './services/bank-transaction-amount-conversion.service';
+import {BankTransactionHistoryService} from './services/bank-transaction-history.service';
 import {BankTransactionSummaryService} from './services/bank-transaction-summary.service';
 import {BankTransactionService} from './services/bank-transaction.service';
 import {BankingAuthorizationStateModule} from './services/banking-authorization-state.module';
@@ -83,6 +84,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankingSyncProcessor,
 		BankTransactionService,
 		BankTransactionSummaryService,
+		BankTransactionHistoryService,
 		MerchantSpendingService,
 		BankTransactionAmountConversionService,
 		BankTransactionAmountConversionQueueService,

@@ -567,8 +567,8 @@ describe('BankTransactionSummary', () => {
 
 		it.each([
 			['104 weeks', {interval: 'week', from: '2024-10-21', to: '2026-10-18', asOf: '2026-10-18'}],
-			['60 months', {interval: 'month', from: '2021-11-01', to: '2026-10-18', asOf: '2026-10-18'}],
-			['10 years', {interval: 'year', from: '2017-01-01', to: '2026-10-18', asOf: '2026-10-18'}],
+			['240 months', {interval: 'month', from: '2006-11-01', to: '2026-10-18', asOf: '2026-10-18'}],
+			['20 years', {interval: 'year', from: '2007-01-01', to: '2026-10-18', asOf: '2026-10-18'}],
 		])('accepts exactly %s', async (_case, query) => {
 			await ownerAgent.get(CASH_FLOW).query(query).expect(200);
 		});
@@ -579,8 +579,8 @@ describe('BankTransactionSummary', () => {
 				{interval: 'month', from: '2026-10-02', to: '2026-10-01', asOf: '2026-10-01'},
 			],
 			['more than 104 weeks', {interval: 'week', from: '2024-10-01', to: '2026-10-18', asOf: '2026-10-18'}],
-			['more than 60 months', {interval: 'month', from: '2021-10-01', to: '2026-10-18', asOf: '2026-10-18'}],
-			['more than 10 years', {interval: 'year', from: '2016-12-31', to: '2026-10-18', asOf: '2026-10-18'}],
+			['more than 240 months', {interval: 'month', from: '2006-10-01', to: '2026-10-18', asOf: '2026-10-18'}],
+			['more than 20 years', {interval: 'year', from: '2006-12-31', to: '2026-10-18', asOf: '2026-10-18'}],
 			[
 				'an end after the given date',
 				{interval: 'month', from: '2026-10-01', to: '2026-10-19', asOf: '2026-10-18'},
@@ -715,7 +715,7 @@ describe('BankTransactionSummary', () => {
 				'a range past the given day',
 				{interval: 'month', from: '2019-01-01', to: '2019-03-31', asOf: '2019-03-30'},
 			],
-			['more than 10 years', {interval: 'year', from: '2009-01-01', to: '2019-12-31', asOf: '2026-10-18'}],
+			['more than 20 years', {interval: 'year', from: '1999-01-01', to: '2019-12-31', asOf: '2026-10-18'}],
 		])('rejects %s', async (_, query) => {
 			const response = await ownerAgent.get(TREND).query(query).expect(400);
 			expect(response.body.message).toBe(BANKING_BALANCE_TREND_RANGE);
