@@ -70,6 +70,10 @@ PostgreSQL, Redis and the API share the `default` network. The API also joins th
 
 The `tailscale` network has a fixed subnet so the sidecar gets the static address `10.213.47.2`, outside the range Docker assigns to web. Web's Nginx takes the client address from `X-Forwarded-For` only on requests from that address, so the API sees tailnet clients' `100.x` addresses while local processes and other containers cannot set their own. Changing the address needs the matching change in `apps/web/nginx/tempo.conf`. Compose changes to either network reach running containers only when they are recreated: after `sudo ops/install.sh production`, recreate web (`deploy.sh` only does that when an image changes) and then the sidecar.
 
+### Container privileges
+
+Every production container runs with `no-new-privileges` and drops all Linux capabilities. The API runs as uid 1000, the image's `node` user, set by number in the host-owned Compose file so an image cannot switch itself to root. The official PostgreSQL, Redis and Nginx images start as root to fix ownership and switch to their service user, so they keep only `CHOWN`, `SETUID` and `SETGID` (PostgreSQL also `DAC_OVERRIDE` and `FOWNER`). The Tailscale sidecar uses userspace networking and needs none. Like network changes, these settings reach running containers only when they are recreated: after `sudo ops/install.sh production`, recreate PostgreSQL, Redis, API and web, then the sidecar.
+
 ## Staging
 
 An isolated rootless Docker daemon (`tempo-staging-docker.service`) runs a separate copy of the stack on `http://127.0.0.1:8119/`. Deploy any API/web pair with one command; an omitted component keeps its current image:

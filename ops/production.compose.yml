@@ -1,9 +1,17 @@
 name: tempo-api-production
 
+# Every service drops all capabilities and cannot gain privileges; see "Container privileges" in ops/README.md.
+x-no-new-privileges: &no-new-privileges
+  security_opt:
+    - no-new-privileges:true
+
 services:
   postgres:
     image: postgres:17.11@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
     restart: unless-stopped
+    <<: *no-new-privileges
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     environment:
       POSTGRES_USER: ${DB_USERNAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -19,6 +27,9 @@ services:
   redis:
     image: redis:7.4.11@sha256:44960b3100c48159a66d28c18b0588c193492e25f7551d60e51dd464fc3eca5b
     restart: unless-stopped
+    <<: *no-new-privileges
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID]
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -28,6 +39,10 @@ services:
   api:
     image: ${TEMPO_API_IMAGE:?TEMPO_API_IMAGE must be set}
     restart: unless-stopped
+    # The image's node user, set here by number so an image cannot choose to run as root.
+    user: '1000:1000'
+    <<: *no-new-privileges
+    cap_drop: [ALL]
     env_file:
       - ${TEMPO_PRODUCTION_ENV_FILE:-/etc/tempo/production.env}
     environment:
@@ -73,6 +88,10 @@ services:
   web:
     image: ${TEMPO_WEB_IMAGE:?TEMPO_WEB_IMAGE must be set}
     restart: unless-stopped
+    <<: *no-new-privileges
+    cap_drop: [ALL]
+    # The Nginx master starts as root and switches its workers to the nginx user.
+    cap_add: [CHOWN, SETGID, SETUID]
     ports:
       - '127.0.0.1:8080:8080'
     networks:
