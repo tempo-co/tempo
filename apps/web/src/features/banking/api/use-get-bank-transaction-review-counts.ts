@@ -13,6 +13,7 @@ export const useGetBankTransactionReviewCounts = () => {
     refetchInterval: HOME_REFRESH_INTERVAL_MS,
     // The navigation and Home's drill links read it too; one read serves them all until the next refresh.
     staleTime: HOME_REFRESH_INTERVAL_MS,
+    refetchOnReconnect: 'always',
   });
 
   return {reviewCounts: data, isPending, isError, refetch};

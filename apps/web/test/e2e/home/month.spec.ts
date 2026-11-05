@@ -1,5 +1,6 @@
 import {MARKET_ID, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
+import {fulfillJson} from '../../utils/api-mocks';
 
 // Every response is synthetic: these checks never read or mutate a shared API stack.
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
@@ -115,7 +116,13 @@ test('Escape and the close button leave the month', async ({page, homePage}) => 
 
 test('a merchant opens its page in Merchants', async ({page, homePage}) => {
   await mockSyntheticHome(page);
-  await page.route('**/merchants/*/**', (route) => route.abort());
+  // The merchant's own page is not part of this check; answer it without reaching an API.
+  await page.route(`**/merchants/${MARKET_ID}**`, (route) =>
+    fulfillJson(route, {message: 'Merchant not found.'}, 404),
+  );
+  await page.route('**/merchants?**', (route) =>
+    fulfillJson(route, {baseCurrency: 'EUR', merchants: [], total: 0}),
+  );
   await page.goto('/?month=2026-10');
 
   const merchants = homePage
