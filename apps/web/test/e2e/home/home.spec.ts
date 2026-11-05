@@ -4,7 +4,7 @@ import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {HOME_CONNECTION, HOME_NOW, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
-import {mockBankConnections, routeBankConnectionsApi} from '../../utils/api-mocks';
+import {mockBankConnections, mockJson, routeBankConnectionsApi} from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.describe('Home without banks', () => {
@@ -132,6 +132,7 @@ test.describe('Home navigation badges', () => {
     await mockSyntheticHome(page, {
       connections: [consentEndingIn('00000000-0000-4000-8000-0000000000c3', 3)],
     });
+    await mockJson(page, '**/bank-connections/aspsps', []);
     await page.goto('/');
     const connections = page
       .getByRole('navigation', {name: 'Primary'})
@@ -155,6 +156,7 @@ test.describe('Home navigation badges', () => {
         {...consentEndingIn('00000000-0000-4000-8000-0000000000ca', 3), syncStatus: 'RATE_LIMITED'},
       ],
     });
+    await mockJson(page, '**/bank-connections/aspsps', []);
     await page.goto('/bank-connections');
     const notice = page.getByTestId('bank-connection-sync-status');
     await expect(notice).toContainText('Automatic sync is rate-limited');
