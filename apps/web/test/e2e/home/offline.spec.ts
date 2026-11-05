@@ -96,7 +96,18 @@ test.describe('saved Home', () => {
     test.setTimeout(30000);
     const state = await mockHome(page);
     await openSavedHome(page);
-    // Only the connected banks' logos are saved, not the provider's whole bank list.
+    // Connections shows the bank's logo; only the connected banks' logos are saved, not the provider's
+    // whole bank list.
+    await page
+      .getByRole('navigation', {name: 'Primary'})
+      .getByRole('link', {name: 'Connections', exact: true})
+      .click();
+    await expect(page.getByTestId('bank-connection-logo').locator('img')).toHaveAttribute(
+      'src',
+      LOGO_URL,
+    );
+    await page.goBack();
+    await expect(totalBalance(page)).toHaveText('€24,300');
     const savedQueries = async () => {
       await page.clock.runFor(1100);
       return (await readCache(page))?.clientState.queries ?? [];
