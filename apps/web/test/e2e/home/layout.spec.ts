@@ -69,21 +69,30 @@ function worstCase() {
 
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
 
-/** Visible amounts that are cut short or broken across lines. */
+/** Visible amounts that are cut short, run out of their box or break across lines. */
 const brokenAmounts = (page: Page) =>
   page.evaluate(() =>
     Array.from(document.querySelectorAll<HTMLElement>('main .numeric, [role="dialog"] .numeric'))
       .filter((element) => element.offsetParent !== null && element.children.length === 0)
+      .filter((element) => !element.closest('svg'))
       .filter((element) => {
-        // Text on more than one line has client rects at more than one height; cut text runs past its box.
         const range = document.createRange();
         range.selectNodeContents(element);
+        // Text on more than one line has client rects at more than one height.
         const lines = new Set(
           Array.from(range.getClientRects()).map((rect) => Math.round(rect.bottom)),
         );
+        if (lines.size > 1) return true;
+        // The text stays inside every box around it, up to the one that scrolls or clips.
         const text = range.getBoundingClientRect();
-        const box = element.getBoundingClientRect();
-        return lines.size > 1 || text.left < box.left - 1 || text.right > box.right + 1;
+        for (let box: HTMLElement | null = element; box; box = box.parentElement) {
+          const overflow = getComputedStyle(box).overflowX;
+          if (overflow === 'auto' || overflow === 'scroll') return false;
+          const rect = box.getBoundingClientRect();
+          if (text.left < rect.left - 1 || text.right > rect.right + 1) return true;
+          if (overflow !== 'visible') return false;
+        }
+        return false;
       })
       .map((element) => element.textContent),
   );
@@ -135,7 +144,17 @@ for (const [name, history] of [
       await expectNoHorizontalOverflow(page);
       expect.soft(await brokenAmounts(page)).toEqual([]);
       // Every control is a full tap target on a phone.
-      if (width < 640) expect.soft(await smallTargets(page, 'main')).toEqual([]);
+      if (width < 640) {
+        expect.soft(await smallTargets(page, 'main')).toEqual([]);
+        // An opened row lists every year, the tightest place for an amount.
+        for (const title of ['Spending by category', 'Income by source']) {
+          const table = page.getByRole('region', {name: title});
+          await table.getByRole('button', {name: /^Total/}).click();
+          await expect(table.getByRole('list', {name: /by year$/})).toHaveCount(1);
+        }
+        expect.soft(await brokenAmounts(page)).toEqual([]);
+        expect.soft(await smallTargets(page, 'main')).toEqual([]);
+      }
 
       await homePage.whereYouStand.getByRole('button', {name: 'All', exact: true}).click();
       await capture('home-all');
@@ -190,7 +209,7 @@ for (const width of [1000, 1024, 1440]) {
       for (const span of ['6M', '1Y', '3Y', 'All']) {
         await homePage.whereYouStand.getByRole('button', {name: span, exact: true}).click();
         await expect(homePage.whereYouStand.getByRole('region', {name: 'This span'})).toBeVisible();
-        expect.soft(await columnGap(page), `${count} one-offs, ${span}`).toBeLessThanOrEqual(48);
+        expect.soft(await columnGap(page), `${count} one-offs, ${span}`).toBeLessThanOrEqual(8);
       }
     }
   });

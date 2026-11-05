@@ -20,42 +20,45 @@ export function YearTable({overview}: {overview: Overview}) {
   const maxFlow = Math.max(1, ...overview.years.map((y) => Math.max(y.income, y.spending)));
   return (
     <Card role='region' aria-label='Year by year' className='min-w-0 overflow-hidden'>
-      <table className='w-full text-sm'>
-        <thead>
-          <tr className='border-b text-left text-label text-muted-foreground [&>th]:px-2 [&>th]:py-2.5 [&>th]:font-medium sm:[&>th]:px-3'>
-            <th className='pl-4 sm:pl-5'>Year</th>
-            <th className='text-right max-[34rem]:hidden'>In</th>
-            <th className='text-right max-[34rem]:hidden'>Out</th>
-            <th className='text-right'>Kept</th>
-            <th className='text-right'>Balance</th>
-            <th className='max-[60rem]:hidden'>One-off payments</th>
-          </tr>
-        </thead>
-        <tbody>
-          {years.map((row) => (
-            <Fragment key={row.year}>
-              <YearLine
-                row={row}
-                currency={currency}
-                maxFlow={maxFlow}
-                open={open === row.year}
-                onToggle={() => setOpen(open === row.year ? null : row.year)}
-              />
-              {open === row.year &&
-                [...row.months]
-                  .reverse()
-                  .map((point) => (
-                    <MonthLine
-                      key={point.month}
-                      point={point}
-                      currency={currency}
-                      maxFlow={maxFlow / 12}
-                    />
-                  ))}
-            </Fragment>
-          ))}
-        </tbody>
-      </table>
+      {/* Scrolls rather than clips when amounts are too long for a phone. */}
+      <div className='overflow-x-auto'>
+        <table className='w-full text-sm'>
+          <thead>
+            <tr className='border-b text-left text-label text-muted-foreground [&>th]:px-2 [&>th]:py-2.5 [&>th]:font-medium sm:[&>th]:px-3'>
+              <th className='pl-4 sm:pl-5'>Year</th>
+              <th className='text-right max-[34rem]:hidden'>In</th>
+              <th className='text-right max-[34rem]:hidden'>Out</th>
+              <th className='text-right'>Kept</th>
+              <th className='text-right'>Balance</th>
+              <th className='max-[60rem]:hidden'>One-off payments</th>
+            </tr>
+          </thead>
+          <tbody>
+            {years.map((row) => (
+              <Fragment key={row.year}>
+                <YearLine
+                  row={row}
+                  currency={currency}
+                  maxFlow={maxFlow}
+                  open={open === row.year}
+                  onToggle={() => setOpen(open === row.year ? null : row.year)}
+                />
+                {open === row.year &&
+                  [...row.months]
+                    .reverse()
+                    .map((point) => (
+                      <MonthLine
+                        key={point.month}
+                        point={point}
+                        currency={currency}
+                        maxFlow={maxFlow / 12}
+                      />
+                    ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }

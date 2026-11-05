@@ -310,11 +310,12 @@ function YearValue({item, lead, className}: {item: Cell; lead?: ReactNode; class
     item.alpha > 0.38 && 'font-semibold',
     className,
   );
+  const amount = lead ? <span className='numeric whitespace-nowrap'>{item.body}</span> : item.body;
   if (!item.search)
     return (
       <span title={item.value !== 0 ? item.tip : undefined} className={classes}>
         {lead}
-        {item.body}
+        {amount}
       </span>
     );
   return (
@@ -330,7 +331,7 @@ function YearValue({item, lead, className}: {item: Cell; lead?: ReactNode; class
       style={{background: item.alpha ? `hsl(var(--primary) / ${item.alpha})` : undefined}}
     >
       {lead}
-      {item.body}
+      {amount}
     </Link>
   );
 }
@@ -365,7 +366,7 @@ function PhoneRows({
   const [open, setOpen] = useState<string | null>(null);
   const line = 'grid items-center gap-x-2';
   // The latest year's column is as wide as the table's year columns, less their padding.
-  const columns = {gridTemplateColumns: `minmax(0,1fr) 3.25rem calc(${columnWidth} - 1.25rem)`};
+  const columns = {gridTemplateColumns: `minmax(0,1fr) 3.5rem calc(${columnWidth} - 1.25rem)`};
   return (
     <div className='pb-2 sm:hidden'>
       <p
@@ -392,7 +393,9 @@ function PhoneRows({
                   {row.name}
                 </span>
               </span>
-              <span className='text-right numeric text-muted-foreground'>{change(row)}</span>
+              <span className='text-right numeric whitespace-nowrap text-muted-foreground'>
+                {change(row)}
+              </span>
               <span
                 className={cn(
                   'text-right numeric whitespace-nowrap',
@@ -450,7 +453,11 @@ function PhoneRows({
               {expanded && (
                 <ul
                   aria-label={`${row.label} by year`}
-                  className='grid grid-cols-2 gap-1 bg-muted/20 px-4 py-2 min-[25rem]:grid-cols-3'
+                  className='grid gap-1 bg-muted/20 px-4 py-2'
+                  // As many columns as fit a year and its amount, so a large amount never runs into the next.
+                  style={{
+                    gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, calc(${columnWidth} + 3rem)), 1fr))`,
+                  }}
                 >
                   {cells(row).map((item) => (
                     <li key={item.period.start}>

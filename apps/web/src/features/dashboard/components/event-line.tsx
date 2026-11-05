@@ -58,7 +58,8 @@ export function EventChips({
 }) {
   if (events.length === 0) return null;
   return (
-    <ul className='flex flex-wrap gap-1.5 py-1'>
+    // No width of its own, so a long name never widens the table cell it sits in; it fills the cell instead.
+    <ul className='flex w-0 min-w-full flex-wrap gap-1.5 py-1'>
       {events.map((event) => {
         const income = event.direction === 'INCOME';
         const Icon = income ? ArrowUpRight : ArrowDownRight;

@@ -175,8 +175,8 @@ export function monthsCovered(period: BankTransactionBreakdownPeriod, months: Mo
 }
 
 /**
- * The width of a year column, from the longest monthly average either table shows (a year's total, which no
- * row exceeds), so large amounts fit and the two tables' years still line up.
+ * The width of a year column, from the longest monthly average either table shows, so large amounts fit and the
+ * two tables' years still line up.
  */
 export function yearColumnWidth(
   periods: BankTransactionBreakdownPeriod[],
@@ -185,9 +185,13 @@ export function yearColumnWidth(
 ) {
   const longest = Math.max(
     0,
-    ...periods.map((period) => {
+    ...periods.flatMap((period) => {
       const cover = monthsCovered(period, months);
-      return cover > 0 ? formatWholeMoney(toCents(period.total) / 100 / cover, currency).length : 0;
+      if (cover === 0) return [];
+      // A part can outgrow the total when refunds make another part negative.
+      return [period.total, ...period.parts.map((part) => part.amount)].map(
+        (amount) => formatWholeMoney(toCents(amount) / 100 / cover, currency).length,
+      );
     }),
   );
   return `${Math.max(5, Math.ceil((longest * 0.55 + 1.5) * 4) / 4)}rem`;
