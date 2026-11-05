@@ -3,7 +3,9 @@ import {InjectRepository} from '@nestjs/typeorm';
 import {
 	BANK_TRANSACTION_UNCATEGORIZED,
 	type BankTransactionBreakdown,
+	type BankTransactionBreakdownPart,
 	type BankTransactionBreakdownPeriod,
+	type BankTransactionCategory,
 } from '@tempo/contracts';
 import {Repository} from 'typeorm';
 
@@ -13,6 +15,7 @@ import {BANKING_TRANSACTION_BREAKDOWN_RANGE} from '../api/constants/banking-mess
 import type {BankTransactionBreakdownQueryDto} from '../api/dtos/bank-transaction-breakdown-query.dto';
 import {BankTransaction} from '../bank-transaction.entity';
 import {addDays} from '../banking.utils';
+import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {formatCents, nextPeriodStart, parseCents, periodStarts} from '../summary/bank-transaction-summary';
 import {applyBankTransactionFilters, createOwnerScopedQuery, findFirstBookingDate} from './bank-transaction-filters';
 
@@ -21,6 +24,7 @@ const CATEGORY_KEY = `COALESCE("transaction"."category", '${BANK_TRANSACTION_UNC
 const SOURCE_KEY = `COALESCE(NULLIF("transaction"."merchantKey", ''), "transaction"."displayDescription")`;
 
 type PartRow = {start: string; key: string; amount: string};
+type SourceRow = {key: string; label: string; latestId: string};
 
 /** Where the owner's money went and came from over the years, on the summary's definitions. */
 @Injectable()
@@ -28,6 +32,7 @@ export class BankTransactionHistoryService {
 	constructor(
 		@InjectRepository(BankTransaction)
 		private readonly bankTransactionRepository: Repository<BankTransaction>,
+		private readonly merchantLogoService: MerchantLogoService,
 	) {}
 
 	/**
@@ -54,7 +59,7 @@ export class BankTransactionHistoryService {
 			return query.setParameter('interval', interval);
 		};
 
-		const [firstBookingDate, totals, parts, labels] = await Promise.all([
+		const [firstBookingDate, totals, parts, sources] = await Promise.all([
 			findFirstBookingDate(this.bankTransactionRepository, accountId),
 			flowQuery()
 				.select(period, 'start')
@@ -72,16 +77,21 @@ export class BankTransactionHistoryService {
 				? flowQuery()
 						.select(key, 'key')
 						.addSelect(`mode() WITHIN GROUP (ORDER BY "transaction"."displayDescription")`, 'label')
+						.addSelect(
+							`(array_agg("transaction"."id" ORDER BY "transaction"."bookingDate" DESC, "transaction"."id" DESC))[1]`,
+							'latestId',
+						)
 						.groupBy('1')
-						.getRawMany<{key: string; label: string}>()
+						.getRawMany<SourceRow>()
 				: Promise.resolve([]),
 		]);
+		const looks = await this.sourceLooks(accountId, sources);
 		// Spending sums are negative in the ledger; the breakdown reports them as positive amounts.
 		const sign = by === 'category' ? -1n : 1n;
 		const totalByStart = new Map(totals.map((row) => [row.start, sign * parseCents(row.amount)]));
 		const partsByStart = new Map<string, PartRow[]>();
 		for (const row of parts) partsByStart.set(row.start, [...(partsByStart.get(row.start) ?? []), row]);
-		const labelByKey = new Map(labels.map((row) => [row.key, row.label]));
+		const labelByKey = new Map(sources.map((row) => [row.key, row.label]));
 
 		const periods: BankTransactionBreakdownPeriod[] = [];
 		for (const start of starts) {
@@ -103,9 +113,37 @@ export class BankTransactionHistoryService {
 					key: part.key,
 					label: labelByKey.get(part.key) ?? part.key,
 					amount: formatCents(part.cents),
+					...looks.get(part.key),
 				})),
 			});
 		}
 		return {baseCurrency, interval, by, periods};
+	}
+
+	/** Each source looks like its latest income: that merchant's logo when it has a trusted one, else its category. */
+	private async sourceLooks(
+		accountId: Account['id'],
+		sources: readonly SourceRow[],
+	): Promise<Map<string, Pick<BankTransactionBreakdownPart, 'merchantLogoUrl' | 'category'>>> {
+		const looks = new Map<string, Pick<BankTransactionBreakdownPart, 'merchantLogoUrl' | 'category'>>();
+		if (sources.length === 0) return looks;
+		const rows = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
+			.select([
+				'transaction.id',
+				'transaction.merchantKey',
+				'transaction.ownTransferEvidence',
+				'transaction.category',
+			])
+			.addSelect('transaction.financialEventType')
+			.andWhere('transaction.id = ANY(:ids)', {ids: sources.map((source) => source.latestId)})
+			.getMany();
+		const logos = await this.merchantLogoService.getLogoUrls(accountId, rows);
+		const byId = new Map(rows.map((row) => [row.id, row]));
+		for (const {key, latestId} of sources)
+			looks.set(key, {
+				merchantLogoUrl: logos.get(latestId) ?? null,
+				category: (byId.get(latestId)?.category as BankTransactionCategory | null | undefined) ?? null,
+			});
+		return looks;
 	}
 }

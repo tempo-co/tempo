@@ -1,5 +1,5 @@
 import {Link} from '@tanstack/react-router';
-import type {BankTransactionBreakdownPeriod} from '@tempo/contracts';
+import type {BankTransactionBreakdownPart, BankTransactionBreakdownPeriod} from '@tempo/contracts';
 import {format} from 'date-fns';
 import {ChevronRight} from 'lucide-react';
 import {type ReactNode, useState} from 'react';
@@ -12,7 +12,7 @@ import {categoryDrill, flowDrill, parseCalendarDate} from '../utils/drill-links'
 import {categoryLabel, signedPct} from '../utils/format';
 import {formatWholeMoney, toCents} from '../utils/money';
 import {type MonthPoint, monthsCovered, partCents} from '../utils/overview';
-import {CategoryIconSpacer, CategoryName} from './category-name';
+import {CategoryIconSpacer, CategoryName, SourceName} from './category-name';
 import {DataTip, TIP_FOCUS, TruncatedText} from './data-tip';
 import {TextAction} from './text-action';
 
@@ -34,6 +34,8 @@ type Row = {
   label: string;
   /** The category a category row is, shown with its icon. */
   category?: string;
+  /** The source a source row is, shown with its logo or icon. */
+  source?: BankTransactionBreakdownPart;
   values: (period: Period) => number;
   /** `more` opens the folded rows; `total` is plain. */
   role?: 'more' | 'total';
@@ -86,11 +88,11 @@ export function HeatTable({
   );
   keys.sort((a, b) => allTime.get(b)! - allTime.get(a)!);
   const grand = keys.reduce((sum, key) => sum + allTime.get(key)!, 0);
-  const labels = new Map(
-    periods.flatMap((period) => period.parts.map((part) => [part.key, part.label] as const)),
+  const sources = new Map(
+    periods.flatMap((period) => period.parts.map((part) => [part.key, part] as const)),
   );
   const nameOf = (key: string) =>
-    kind === 'category' ? categoryLabel(key) : (labels.get(key) ?? key);
+    kind === 'category' ? categoryLabel(key) : (sources.get(key)?.label ?? key);
   const top = keys.filter(
     (key, index) =>
       index < MIN_ROWS || (index < MAX_ROWS && allTime.get(key)! >= grand * FOLD_SHARE),
@@ -124,6 +126,7 @@ export function HeatTable({
       label: nameOf(key),
       name: nameOf(key),
       category: kind === 'category' ? key : undefined,
+      source: kind === 'source' ? sources.get(key) : undefined,
       values: (period: Period) => cell(period, key),
     })),
     ...(rest.length > 0 && !all
@@ -250,6 +253,8 @@ export function HeatTable({
                     </span>
                   ) : row.category ? (
                     <CategoryName category={row.category} className='min-h-10 pr-2' />
+                  ) : row.source ? (
+                    <SourceName source={row.source} label={row.name} className='min-h-10 pr-2' />
                   ) : (
                     <span className='flex min-h-10 min-w-0 items-center pr-2'>
                       <TruncatedText className='truncate'>{row.name}</TruncatedText>
@@ -401,7 +406,7 @@ function PhoneRows({
                 className={cn(line, 'border-b border-border/60 py-1.5 pr-4 pl-8 text-sm')}
               >
                 <span className='flex min-w-0 items-center gap-2'>
-                  {kind === 'category' && <CategoryIconSpacer />}
+                  <CategoryIconSpacer />
                   <TextAction onClick={onMore} className='-ml-2'>
                     {row.name}
                   </TextAction>
@@ -437,10 +442,12 @@ function PhoneRows({
                 />
                 {row.category ? (
                   <CategoryName category={row.category} labelClassName={name} />
+                ) : row.source ? (
+                  <SourceName source={row.source} label={row.name} labelClassName={name} />
                 ) : (
                   <span className='flex min-w-0 items-center gap-2'>
                     {/* Every name starts at the same place, icon or not. */}
-                    {kind === 'category' && <CategoryIconSpacer />}
+                    <CategoryIconSpacer />
                     <TruncatedText className={name}>{row.name}</TruncatedText>
                   </span>
                 )}

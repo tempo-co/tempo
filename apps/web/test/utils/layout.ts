@@ -33,6 +33,33 @@ export async function expectCategoryIcon(scope: Locator, name: string) {
   expect(labelBox.x - (iconBox.x + iconBox.width)).toBe(8);
 }
 
+/**
+ * Checks that the income source `name` in `scope` has its tile where a category's icon would be: 20px, centred
+ * on the name and 8px before it, showing the logo image or, without one, the fallback icon.
+ */
+export async function expectSourceTile(scope: Locator, name: string, shows: 'logo' | 'icon') {
+  const label = scope.getByText(name, {exact: true});
+  const tileTest = '@data-testid="merchant-logo-tile"';
+  const tile = label.locator(
+    `xpath=ancestor-or-self::*[preceding-sibling::*[${tileTest}]][1]/preceding-sibling::*[${tileTest}][1]`,
+  );
+  if (shows === 'logo') {
+    await expect(tile.locator('img')).toBeVisible();
+    await expect
+      .poll(() => tile.locator('img').evaluate((el: HTMLImageElement) => el.naturalWidth))
+      .toBe(1);
+  } else {
+    await expect(tile.locator('img')).toHaveCount(0);
+    await expect(tile.locator('svg')).toBeVisible();
+  }
+  const [tileBox, labelBox] = await Promise.all([boxOf(tile), boxOf(label)]);
+  expect(tileBox).toMatchObject({width: 20, height: 20});
+  expect(
+    Math.abs(tileBox.y + tileBox.height / 2 - (labelBox.y + labelBox.height / 2)),
+  ).toBeLessThanOrEqual(1);
+  expect(labelBox.x - (tileBox.x + tileBox.width)).toBe(8);
+}
+
 /** Waits until the page no longer scrolls horizontally. */
 export async function expectNoHorizontalOverflow(page: Page) {
   await expect

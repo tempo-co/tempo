@@ -92,15 +92,15 @@ test('a month viewed in the last 30 seconds opens again from cache', async ({pag
   await page.goto('/?month=2026-09');
   const transactions = (title: string) =>
     homePage.monthDialog(title).getByRole('region', {name: 'Transactions'}).getByRole('listitem');
-  await expect(transactions('September 2026')).toHaveCount(12);
+  await expect(transactions('September 2026')).toHaveCount(15);
   await expect.poll(() => reads.length).toBe(2);
 
   await page.getByRole('button', {name: 'Previous month'}).click();
-  await expect(transactions('August 2026')).toHaveCount(12);
+  await expect(transactions('August 2026')).toHaveCount(15);
   await expect.poll(() => reads.length).toBe(4);
 
   await page.getByRole('button', {name: 'Next month'}).click();
-  await expect(transactions('September 2026')).toHaveCount(12);
+  await expect(transactions('September 2026')).toHaveCount(15);
   expect(reads.length).toBe(4);
 });
 

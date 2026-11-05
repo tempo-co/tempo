@@ -4,6 +4,7 @@ import type {
   BankConnection,
   BankTransaction,
   BankTransactionBreakdown,
+  BankTransactionBreakdownPart,
   BankTransactionBreakdownPeriod,
   BankTransactionCashFlow,
   BankTransactionReviewCounts,
@@ -140,6 +141,20 @@ const RUNNING = HOME_TODAY.slice(0, 7);
 
 export const EMPLOYER = 'INCOME:example employer';
 export const BONUS_SOURCE = 'INCOME:example bonus';
+/** The employer's logo; the bonus has none, so it shows its category's icon. */
+export const EMPLOYER_LOGO = `/merchant-logos/00000000-0000-4000-8000-0000000000e1/${'e'.repeat(64)}`;
+const SOURCE_LOOKS: Record<
+  string,
+  Pick<BankTransactionBreakdownPart, 'merchantLogoUrl' | 'category'>
+> = {
+  [EMPLOYER]: {merchantLogoUrl: EMPLOYER_LOGO, category: 'INCOME'},
+  [BONUS_SOURCE]: {merchantLogoUrl: null, category: 'INCOME'},
+};
+/** A 1×1 opaque PNG, synthetic, served for every logo. */
+const LOGO_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
 
 const defaultSpending = (month: string): Record<string, number> => {
   if (month === RUNNING) return {HOUSING_AND_UTILITIES: 1200};
@@ -204,6 +219,7 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
     complete: boolean,
     amounts: Record<string, number>,
     labelOf: (key: string) => string,
+    looks: (key: string) => Partial<BankTransactionBreakdownPart> = () => ({}),
   ): BankTransactionBreakdownPeriod => ({
     start,
     end,
@@ -212,7 +228,7 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
     parts: Object.entries(amounts)
       .filter(([, amount]) => amount !== 0)
       .sort(([a, x], [b, y]) => y - x || a.localeCompare(b))
-      .map(([key, amount]) => ({key, label: labelOf(key), amount: money(amount)})),
+      .map(([key, amount]) => ({key, label: labelOf(key), amount: money(amount), ...looks(key)})),
   });
   const add = (into: Record<string, number>, from: Record<string, number>) => {
     for (const [key, amount] of Object.entries(from)) into[key] = (into[key] ?? 0) + amount;
@@ -222,6 +238,7 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
   const yearly = (
     of: (month: string) => Record<string, number>,
     labelOf: (key: string) => string,
+    looks?: (key: string) => Partial<BankTransactionBreakdownPart>,
   ) =>
     years.map((year) => {
       const months = allMonths.filter((month) => month.startsWith(year));
@@ -233,24 +250,33 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
         last !== RUNNING && !(year === firstMonth.slice(0, 4) && firstMonth !== `${year}-01`),
         amounts,
         labelOf,
+        looks,
       );
     });
   const monthly = (
     of: (month: string) => Record<string, number>,
     labelOf: (key: string) => string,
+    looks?: (key: string) => Partial<BankTransactionBreakdownPart>,
   ) =>
     allMonths.map((month) =>
-      period(`${month}-01`, monthEnd(month), month !== RUNNING, of(month), labelOf),
+      period(`${month}-01`, monthEnd(month), month !== RUNNING, of(month), labelOf, looks),
     );
   const category = (key: string) => key;
   const source = (key: string) => sourceLabels[key] ?? key;
+  const sourceLooks = (key: string) => SOURCE_LOOKS[key] ?? {merchantLogoUrl: null, category: null};
 
   return {
     trend,
     flow,
     breakdown: {
-      year: {category: yearly(spendingOf, category), source: yearly(incomeOf, source)},
-      month: {category: monthly(spendingOf, category), source: monthly(incomeOf, source)},
+      year: {
+        category: yearly(spendingOf, category),
+        source: yearly(incomeOf, source, sourceLooks),
+      },
+      month: {
+        category: monthly(spendingOf, category),
+        source: monthly(incomeOf, source, sourceLooks),
+      },
     },
     balances,
   };
@@ -392,8 +418,12 @@ export function homeRanking(period: string): MerchantRanking {
   };
 }
 
-/** `count` synthetic payments booked in `month`, newest first. */
-export function monthTransactions(month: string, count: number): BankTransactionsResponse {
+/** `count` synthetic payments booked in `month`, newest first; `page` answers one page of them. */
+export function monthTransactions(
+  month: string,
+  count: number,
+  page?: {index: number; size: number},
+): BankTransactionsResponse {
   const transactions = Array.from({length: count}, (_, index) => {
     const day = `${month}-${pad(Math.max(1, 28 - index))}`;
     return {
@@ -445,7 +475,12 @@ export function monthTransactions(month: string, count: number): BankTransaction
       bankAccountId: '00000000-0000-4000-8000-0000000000a1',
     } as unknown as BankTransaction;
   });
-  return {transactions, total: count};
+  return {
+    transactions: page
+      ? transactions.slice(page.index * page.size, (page.index + 1) * page.size)
+      : transactions,
+    total: count,
+  };
 }
 
 const params = (route: Route) => new URL(route.request().url()).searchParams;
@@ -488,11 +523,18 @@ export async function mockHomeHistory(
   await page.route('**/bank-transactions?**', (route) => {
     if (!['fetch', 'xhr'].includes(route.request().resourceType())) return route.continue();
     const from = params(route).get('filter[bookingDate][from]');
+    const pagination = {
+      index: Number(params(route).get('pagination[pageIndex]') ?? 0),
+      size: Number(params(route).get('pagination[pageSize]') ?? transactionsPerMonth),
+    };
     return fulfillJson(
       route,
       from
-        ? monthTransactions(from.slice(0, 7), transactionsPerMonth)
+        ? monthTransactions(from.slice(0, 7), transactionsPerMonth, pagination)
         : {transactions: [], total: 0},
     );
   });
+  await page.route('**/merchant-logos/**', (route) =>
+    route.fulfill({status: 200, contentType: 'image/png', body: LOGO_PNG}),
+  );
 }

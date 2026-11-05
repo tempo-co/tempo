@@ -398,14 +398,15 @@ function Transactions({merchant}: {merchant: MerchantGroup}) {
             ))}
           </ul>
           {hasNextPage && (
-            <TextAction
+            <Button
+              variant='ghost'
+              className='w-full text-muted-foreground max-sm:h-11'
               disabled={isFetchingNextPage}
               aria-busy={isFetchingNextPage || undefined}
               onClick={() => void fetchNextPage()}
-              className='-ml-2'
             >
               Load more
-            </TextAction>
+            </Button>
           )}
         </>
       )}

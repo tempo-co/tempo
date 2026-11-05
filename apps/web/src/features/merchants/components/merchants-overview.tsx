@@ -13,7 +13,6 @@ import {Input} from '@/components/ui/input';
 import {Skeleton} from '@/components/ui/skeleton';
 import {formatBankTransactionCompactDate} from '@/features/banking/utils/formatters';
 import {ChartCardError, ChartCardHeader} from '@/features/dashboard/components/chart-card';
-import {TextAction} from '@/features/dashboard/components/text-action';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatMoney, toCents} from '@/features/dashboard/utils/money';
 import {useLocalDate} from '@/hooks/use-local-date';
@@ -221,14 +220,15 @@ function AllMerchants({
             ))}
           </ul>
           {hasNextPage && (
-            <TextAction
+            <Button
+              variant='ghost'
+              className='w-full text-muted-foreground max-sm:h-11'
               disabled={isFetchingNextPage}
               aria-busy={isFetchingNextPage || undefined}
               onClick={() => void fetchNextPage()}
-              className='-ml-2'
             >
               Load more
-            </TextAction>
+            </Button>
           )}
         </>
       )}

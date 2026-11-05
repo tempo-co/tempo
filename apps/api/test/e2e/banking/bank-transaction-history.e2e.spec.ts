@@ -1,5 +1,7 @@
 import {INestApplication} from '@nestjs/common';
+import {ConfigService} from '@nestjs/config';
 import {getRepositoryToken} from '@nestjs/typeorm';
+import {createHash} from 'node:crypto';
 import TestAgent from 'supertest/lib/agent';
 import type {DeepPartial} from 'typeorm';
 import {Repository} from 'typeorm';
@@ -8,6 +10,8 @@ import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
 import {BANKING_TRANSACTION_BREAKDOWN_RANGE} from '@modules/banking/api/constants/banking-messages.constants';
 import type {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {MerchantLogo} from '@modules/banking/merchant-logos/merchant-logo.entity';
+import {Merchant} from '@modules/banking/merchant-logos/merchant.entity';
 
 import {BankingFixtures, CURRENCY_EXCHANGE_EVENT, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {getApp} from '../../setup/e2e.setup';
@@ -49,12 +53,14 @@ describe('Bank transaction history', () => {
 	describe('breakdown', () => {
 		let agent: TestAgent;
 		let otherAgent: TestAgent;
+		let ownerId: string;
 		const ASOF = '2026-03-10';
 
 		beforeAll(async () => {
 			const owner = await verifiedOwner();
 			const other = await verifiedOwner();
 			agent = owner.agent;
+			ownerId = owner.id;
 			otherAgent = other.agent;
 			const employer = {merchantKey: 'INCOME:example employer'};
 			await fixtures.createTransactions(owner.bankAccount, [
@@ -80,6 +86,8 @@ describe('Bank transaction history', () => {
 				named('2026-01-11', '-999.00', 'Foreign Shop', {category: 'SHOPPING', amountInBaseCurrency: null}),
 				named('2026-02-03', '60.00', 'Example Store', {category: 'REFUND'}),
 				named('2026-02-04', '-10.00', 'Corner Shop', {category: 'FOOD_AND_DRINK'}),
+				// A person paying the owner back.
+				named('2026-02-10', '150.00', 'Jane Example', {category: 'TRANSFER_IN'}),
 				named('2026-03-02', '-20.00', 'Corner Shop', {category: 'FOOD_AND_DRINK'}),
 			]);
 			await fixtures.createTransactions(other.bankAccount, [
@@ -147,44 +155,93 @@ describe('Bank transaction history', () => {
 			);
 		});
 
-		it('splits each year’s income by source, labelled by its most common name', async () => {
-			const query = {interval: 'year', from: '2025-01-01', to: ASOF, asOf: ASOF};
-			const [{body}, {body: flow}] = await Promise.all([
-				agent
-					.get(BREAKDOWN)
-					.query({...query, by: 'source'})
-					.expect(200),
-				agent.get(CASH_FLOW).query(query).expect(200),
-			]);
-
-			const employer = {key: 'INCOME:example employer', label: 'Example Employer'};
-			expect(body).toEqual({
-				baseCurrency: 'EUR',
-				interval: 'year',
-				by: 'source',
-				periods: [
-					{
-						start: '2025-01-01',
-						end: '2025-12-31',
-						complete: false,
-						total: '2025.00',
-						parts: [
-							{...employer, amount: '2000.00'},
-							{key: 'Market Stall', label: 'Market Stall', amount: '25.00'},
-						],
-					},
-					{
-						start: '2026-01-01',
-						end: ASOF,
-						complete: false,
-						total: '1000.00',
-						parts: [{...employer, amount: '1000.00'}],
-					},
-				],
-			});
-			expect(body.periods.map(({total}: {total: string}) => total)).toEqual(
-				flow.periods.map(({income}: {income: string}) => income),
+		it('splits each year’s income by source, labelled by its most common name and shown with its latest merchant’s logo', async () => {
+			// The employer has a trusted logo; the person and the source without a merchant key have none.
+			const merchants = app.get<Repository<Merchant>>(getRepositoryToken(Merchant));
+			const logos = app.get<Repository<MerchantLogo>>(getRepositoryToken(MerchantLogo));
+			const image = Buffer.from('synthetic logo');
+			const logo = await logos.save(
+				logos.create({
+					domain: 'employer.example.test',
+					status: 'READY',
+					image,
+					version: createHash('sha256').update(image).digest('hex'),
+					siteNames: ['Example Employer'],
+					homepageLoaded: true,
+					sourceSize: 256,
+					retryAfter: new Date(0),
+				}),
 			);
+			await merchants.save([
+				merchants.create({
+					accountId: ownerId,
+					key: 'example employer',
+					status: 'IDENTIFIED',
+					brand: 'Example Employer',
+					domain: logo.domain,
+					domainConfident: true,
+					logoId: logo.id,
+				}),
+				merchants.create({accountId: ownerId, key: 'jane example', status: 'NONE'}),
+			]);
+			const config = app.get(ConfigService);
+			config.set('MERCHANT_LOGOS_ENABLED', true);
+			const query = {interval: 'year', from: '2025-01-01', to: ASOF, asOf: ASOF};
+			try {
+				const [{body}, {body: flow}] = await Promise.all([
+					agent
+						.get(BREAKDOWN)
+						.query({...query, by: 'source'})
+						.expect(200),
+					agent.get(CASH_FLOW).query(query).expect(200),
+				]);
+
+				const employer = {
+					key: 'INCOME:example employer',
+					label: 'Example Employer',
+					merchantLogoUrl: `/merchant-logos/${logo.id}/${logo.version}`,
+					category: 'INCOME',
+				};
+				const stall = {key: 'Market Stall', label: 'Market Stall', merchantLogoUrl: null, category: null};
+				const person = {
+					key: 'INCOME:jane example',
+					label: 'Jane Example',
+					merchantLogoUrl: null,
+					category: 'TRANSFER_IN',
+				};
+				expect(body).toEqual({
+					baseCurrency: 'EUR',
+					interval: 'year',
+					by: 'source',
+					periods: [
+						{
+							start: '2025-01-01',
+							end: '2025-12-31',
+							complete: false,
+							total: '2025.00',
+							parts: [
+								{...employer, amount: '2000.00'},
+								{...stall, amount: '25.00'},
+							],
+						},
+						{
+							start: '2026-01-01',
+							end: ASOF,
+							complete: false,
+							total: '1150.00',
+							parts: [
+								{...employer, amount: '1000.00'},
+								{...person, amount: '150.00'},
+							],
+						},
+					],
+				});
+				expect(body.periods.map(({total}: {total: string}) => total)).toEqual(
+					flow.periods.map(({income}: {income: string}) => income),
+				);
+			} finally {
+				config.set('MERCHANT_LOGOS_ENABLED', false);
+			}
 		});
 
 		it('leaves out another owner’s rows', async () => {

@@ -7,4 +7,7 @@ export const dashboardQueryKeys = {
   breakdown: (interval: string, by: string, from: string, to: string, asOf: string) =>
     ['bank-dashboard', 'breakdown', interval, by, from, to, asOf] as const,
   reviewCounts: ['bank-dashboard', 'review-counts'] as const,
+  /** Pages of a month's transactions; kept apart from transaction lists, whose caches hold one page. */
+  monthTransactions: (from: string, to: string) =>
+    ['bank-dashboard', 'month-transactions', from, to] as const,
 };

@@ -242,12 +242,12 @@ for (const {width, rows} of [
   });
 }
 
-test('Home’s text actions share one style with the month’s, the Merchants’ and the Recurring ones', async ({
+test('Home’s text actions and Load more buttons share one style with the month’s, the Merchants’ and the Recurring ones', async ({
   page,
   homePage,
 }) => {
   await page.setViewportSize({width: 1440, height: 1000});
-  await mockSyntheticHome(page);
+  await mockSyntheticHome(page, {transactionsPerMonth: 45});
   await page.goto('/');
 
   const style = (action: Locator) =>
@@ -277,7 +277,8 @@ test('Home’s text actions share one style with the month’s, the Merchants’
     .monthDialog('March 2026')
     .getByRole('region', {name: 'Transactions'});
   styles.push(await style(transactions.getByRole('link', {name: 'Open in Transactions'})));
-  styles.push(await style(transactions.getByRole('button', {name: 'Show all 15'})));
+  // Paged lists end in a full-width Load more.
+  const loadMores = [await style(transactions.getByRole('button', {name: 'Load more'}))];
 
   // A merchant's and a recurring payment's transactions: more pages than one, opening in Transactions.
   await page.route(`**/merchants/${MARKET_ID}`, (route) =>
@@ -309,9 +310,9 @@ test('Home’s text actions share one style with the month’s, the Merchants’
   await page.goto(`/?merchants=open&merchant=${MARKET_ID}`);
   const merchant = page.getByRole('dialog', {name: 'Merchants'});
   styles.push(await style(merchant.getByRole('link', {name: 'Open in Transactions'})));
-  styles.push(await style(merchant.getByRole('button', {name: 'Load more'})));
+  loadMores.push(await style(merchant.getByRole('button', {name: 'Load more'})));
   await page.goto(`/?recurring=open&series=${RENT_KEY}`);
-  styles.push(
+  loadMores.push(
     await style(
       page
         .getByRole('dialog', {name: 'Recurring payments'})
@@ -321,4 +322,5 @@ test('Home’s text actions share one style with the month’s, the Merchants’
 
   expect(styles[0].height).toBe(36);
   for (const item of styles) expect(item).toEqual(styles[0]);
+  for (const item of loadMores) expect(item).toEqual(loadMores[0]);
 });

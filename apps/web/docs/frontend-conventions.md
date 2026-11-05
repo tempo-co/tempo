@@ -44,6 +44,8 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 - Use the shared shadcn `ScrollArea` for scrollable content, not native browser scrollbars. Keep content position and width stable when overflow appears; the overlay scrollbar must not create a native gutter.
 - A content-sized flex dialog with a maximum height can constrain its ScrollArea with a local `min-h-0` grid and `grid-rows-[minmax(0,1fr)]`. Verify actual Radix viewport wheel/touch scrolling and reachability of the final action, not only programmatic scrolling.
 - Secondary folds reuse the existing ghost Button with a leading chevron and consistent hover/focus/touch targets. Transaction category provenance sits at the right edge of its label row.
+- A paged list ends in one full-width ghost Button, "Load more" (`w-full text-muted-foreground max-sm:h-11`), that adds one page per press and disappears after the last one. Other text actions use `TextAction`.
+- Hoverable list rows keep their text on the section's edge: each row pads its sides and the list takes the same negative margin (`px-2` and `-mx-2` on Home's own rows), so the hover wash extends past the text on both sides.
 
 ## Interaction feedback and motion
 

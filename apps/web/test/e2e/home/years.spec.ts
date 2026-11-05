@@ -2,7 +2,12 @@ import type {Locator} from '@playwright/test';
 
 import {EMPLOYER, homeHistory, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
-import {boxOf, expectCategoryIcon, expectNoHorizontalOverflow} from '../../utils/layout';
+import {
+  boxOf,
+  expectCategoryIcon,
+  expectNoHorizontalOverflow,
+  expectSourceTile,
+} from '../../utils/layout';
 
 // Every response is synthetic: these checks never read or mutate a shared API stack.
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
@@ -231,7 +236,10 @@ test('on a phone, each category shows its latest year and change, and opens into
   await expectNoHorizontalOverflow(page);
 });
 
-test('income by source names each source and lines up with the spending years', async ({page}) => {
+test('income by source names each source with its logo or icon and lines up with the spending years', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 1440, height: 1000});
   const history = homeHistory();
   const long = 'Example Employer Holding International Services Group Benelux Payroll Department';
   for (const period of history.breakdown.year.source)
@@ -253,6 +261,8 @@ test('income by source names each source and lines up with the spending years', 
     'href',
     /search=Example(\+|%20)Employer/,
   );
+  await expectSourceTile(rows.nth(1), long, 'logo');
+  await expectSourceTile(rows.nth(2), 'Example Bonus', 'icon');
 
   const spending = page.getByRole('region', {name: 'Spending by category'});
   for (const year of [/^2026/, /^2025$/]) {
@@ -260,6 +270,13 @@ test('income by source names each source and lines up with the spending years', 
     const b = await table.getByRole('columnheader', {name: year}).boundingBox();
     expect(Math.round(b!.x)).toBe(Math.round(a!.x));
   }
+
+  // On a phone each source row shows the same tile.
+  await page.setViewportSize({width: 390, height: 900});
+  const phoneRows = table.getByRole('button');
+  await expect(phoneRows.first()).toBeVisible();
+  await expectSourceTile(phoneRows.nth(0), long, 'logo');
+  await expectSourceTile(phoneRows.nth(1), 'Example Bonus', 'icon');
 });
 
 test('a single month of history is one part year with no comparison', async ({page}) => {

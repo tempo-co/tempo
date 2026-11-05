@@ -9,6 +9,8 @@ import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 type MerchantLogoTileProps = {
   transaction: Pick<BankTransaction, 'merchantLogoUrl' | 'category' | 'cashFlowTreatment'>;
   className?: string;
+  /** The fallback icon's size, for tiles smaller than the default. */
+  iconClassName?: string;
 };
 
 const TILE_CLASS_NAME =
@@ -19,7 +21,11 @@ const TILE_CLASS_NAME =
  * the category icon. Own transfers and currency exchanges (internal movements) show the activity
  * icon. Both the alpha logo and fallback glyph use the leading tile's Clay palette.
  */
-export function MerchantLogoTile({transaction, className}: MerchantLogoTileProps) {
+export function MerchantLogoTile({
+  transaction,
+  className,
+  iconClassName = 'h-4 w-4',
+}: MerchantLogoTileProps) {
   const filterId = useId();
   const src = transaction.merchantLogoUrl
     ? `${import.meta.env.VITE_API_URL}${transaction.merchantLogoUrl}/mask-v1`
@@ -35,7 +41,7 @@ export function MerchantLogoTile({transaction, className}: MerchantLogoTileProps
         activity={transaction.cashFlowTreatment === 'INTERNAL'}
         data-testid='merchant-logo-tile'
         className={cn(TILE_CLASS_NAME, className)}
-        iconClassName='h-4 w-4'
+        iconClassName={iconClassName}
       />
     );
   }

@@ -4,7 +4,7 @@ import type {
   BankTransactionCategoryFilterValue,
 } from '@tempo/contracts';
 import {ChevronLeft, ChevronRight} from 'lucide-react';
-import {type KeyboardEvent, type ReactNode, useState} from 'react';
+import {type KeyboardEvent, type ReactNode} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {
@@ -18,27 +18,23 @@ import {
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {Skeleton} from '@/components/ui/skeleton';
 import {useHasMissingBaseAmounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
-import {useGetBankTransactions} from '@/features/banking/api/use-get-bank-transactions';
 import {TransactionListRow} from '@/features/banking/components/transaction-list-row';
 import {useGetMerchantRanking} from '@/features/merchants/api/use-get-merchant-ranking';
 import {MerchantRow} from '@/features/merchants/components/merchant-row';
 import {countLabel, formatUsualComparison} from '@/features/merchants/utils/merchant-format';
 import {cn} from '@/utils/cn';
 
-import {HOME_REFRESH_INTERVAL_MS} from '../api/refresh-interval';
 import {useGetBankTransactionBreakdown} from '../api/use-get-bank-transaction-breakdown';
+import {useGetMonthTransactions} from '../api/use-get-month-transactions';
 import {useOverview} from '../api/use-overview';
-import {categoryDrill, flowDrill, parseCalendarDate, periodDrill} from '../utils/drill-links';
+import {categoryDrill, flowDrill, periodDrill} from '../utils/drill-links';
 import {pct, signed, signedPct, wholeCents} from '../utils/format';
 import {formatMoney, toCents} from '../utils/money';
 import {formatMonth, monthDates, shiftMonth} from '../utils/month';
 import {historyFrom, partCents} from '../utils/overview';
-import {CategoryName} from './category-name';
+import {CategoryName, SourceTile} from './category-name';
 import {TextAction} from './text-action';
 
-/** Rows shown before "Show all"; the list itself asks for one API page. */
-const FIRST_ROWS = 12;
-const PAGE_SIZE = 100;
 /** A category's usual is the mean of this many months before, every one inside the history. */
 const USUAL_MONTHS = 12;
 
@@ -82,10 +78,14 @@ export function MonthDialog({
         className='flex h-[94dvh] max-h-[94dvh] flex-col gap-0 overflow-hidden p-0 sm:h-[min(94vh,72rem)] sm:max-h-[94vh] sm:max-w-6xl [&>button:last-child]:hidden'
       >
         <ResponsiveDialogCornerClose label='Close the month' />
-        <ResponsiveDialogHeader className='shrink-0 border-b px-3 py-2 pr-16 text-left sm:px-4'>
+        <ResponsiveDialogHeader className='shrink-0 border-b py-2 pr-16 pl-1 text-left sm:pl-4'>
           <nav aria-label='Months' className='flex items-center gap-1'>
             <StepButton month={prev} label='Previous month' icon={ChevronLeft} onStep={onStep} />
-            <ResponsiveDialogTitle className='min-w-[10ch] text-center text-xl leading-tight sm:text-2xl'>
+            {/*
+              As wide as the longest month, "September 2026" (8.1em in Inter semibold), whatever month it shows, so the
+              arrows stay put while stepping. In em, so it grows with the text; a narrow phone takes a size down to fit.
+            */}
+            <ResponsiveDialogTitle className='w-[8.5em] shrink-0 text-center text-xl leading-tight whitespace-nowrap max-[22rem]:text-lg sm:text-2xl'>
               {month ? formatMonth(month) : ''}
             </ResponsiveDialogTitle>
             <StepButton month={next} label='Next month' icon={ChevronRight} onStep={onStep} />
@@ -94,7 +94,7 @@ export function MonthDialog({
             What came in and went out, and where it went.
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
-        {/* Keyed by month, so stepping starts at the top with the list folded again. */}
+        {/* Keyed by month, so stepping starts at the top. */}
         <ScrollArea
           key={month}
           type='always'
@@ -305,12 +305,12 @@ function WhereItWent({
         {hasUsual && (
           // The bars and their ticks are hidden on a phone, where each row reads "on usual" instead.
           <span className='inline-flex items-center gap-1.5 text-xs text-muted-foreground max-sm:hidden'>
-            <i aria-hidden='true' className='h-3 w-0.5 bg-foreground' /> usual, last 12 months
+            <i aria-hidden='true' className='h-5 w-0.5 bg-foreground' /> usual, last 12 months
           </span>
         )}
       </header>
       {parts.length === 0 && <p className='text-sm text-muted-foreground'>No spending.</p>}
-      <ul className='grid gap-1'>
+      <ul className='-mx-2 grid gap-1'>
         {parts.map((part) => {
           const value = toCents(part.amount);
           const usual = usualOf(part.key);
@@ -324,17 +324,20 @@ function WhereItWent({
                   to,
                   missingBaseAmounts,
                 )}
-                className='grid min-h-11 grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-center gap-3 text-sm hover:bg-accent/40 focus-visible:outline-2 focus-visible:outline-ring max-sm:grid-cols-[minmax(0,1fr)_auto]'
+                className='grid min-h-11 grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-center gap-3 px-2 text-sm hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring max-sm:grid-cols-[minmax(0,1fr)_auto]'
               >
                 <CategoryName category={part.key} />
                 <span aria-hidden='true' className='relative block h-3 bg-muted max-sm:hidden'>
+                  {/* The quieter series with its outline, so the usual's foreground line reads across it. */}
                   <span
-                    className='absolute inset-y-0 left-0 bg-chart-primary'
+                    data-mark='amount'
+                    className='absolute inset-y-0 left-0 border border-chart-secondary-edge bg-chart-secondary'
                     style={{width: `${(value / max) * 100}%`}}
                   />
                   {usual !== null && usual > 0 && (
                     <span
-                      className='absolute -inset-y-1 w-0.5 bg-foreground'
+                      data-mark='usual'
+                      className='absolute -inset-y-1 w-0.5 -translate-x-1/2 bg-foreground'
                       style={{left: `${(usual / max) * 100}%`}}
                     />
                   )}
@@ -360,14 +363,9 @@ function WhereItWent({
 }
 
 function MonthTransactions({from, to}: {from: string; to: string}) {
-  const [showAll, setShowAll] = useState(false);
-  const bookingDate = {from: parseCalendarDate(from), to: parseCalendarDate(to)};
-  const {data, isPending, isError, refetch} = useGetBankTransactions(
-    {pageIndex: 0, pageSize: PAGE_SIZE, bookingDate},
-    // Fresh like the rest of Home while the month stays open, so late categorization and logos show up.
-    {staleTime: HOME_REFRESH_INTERVAL_MS, refetchInterval: HOME_REFRESH_INTERVAL_MS},
-  );
-  const rows = data ? data.transactions.slice(0, showAll ? undefined : FIRST_ROWS) : [];
+  const {data, isPending, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage} =
+    useGetMonthTransactions(from, to);
+  const transactions = data?.pages.flatMap((page) => page.transactions) ?? [];
   return (
     <section aria-label='Transactions' className='min-w-0 border bg-card'>
       <header className='flex items-center justify-between gap-3 px-5 pt-3 pb-1'>
@@ -387,36 +385,35 @@ function MonthTransactions({from, to}: {from: string; to: string}) {
             Try again
           </Button>
         </div>
-      ) : data.transactions.length === 0 ? (
+      ) : transactions.length === 0 ? (
         <p className='px-5 pb-5 text-sm text-muted-foreground'>No transactions this month.</p>
       ) : (
-        <ul className='divide-y divide-border/60 px-2 pb-2'>
-          {rows.map((transaction) => (
-            <li key={transaction.id}>
-              <TransactionListRow
-                transaction={transaction}
-                link={{
-                  to: '/bank-transactions',
-                  search: {...periodDrill(from, to), transactionId: transaction.id},
-                }}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-      {data && data.transactions.length > FIRST_ROWS && !showAll && (
-        <footer className='border-t px-3 py-1'>
-          <TextAction onClick={() => setShowAll(true)}>Show all {data.total}</TextAction>
-        </footer>
-      )}
-      {data && showAll && data.total > data.transactions.length && (
-        <footer className='border-t px-3 py-1'>
-          <TextAction asChild>
-            <Link to='/bank-transactions' search={periodDrill(from, to)}>
-              The other {data.total - data.transactions.length} in Transactions
-            </Link>
-          </TextAction>
-        </footer>
+        <>
+          <ul className='divide-y divide-border/60 px-2 pb-2'>
+            {transactions.map((transaction) => (
+              <li key={transaction.id}>
+                <TransactionListRow
+                  transaction={transaction}
+                  link={{
+                    to: '/bank-transactions',
+                    search: {...periodDrill(from, to), transactionId: transaction.id},
+                  }}
+                />
+              </li>
+            ))}
+          </ul>
+          {hasNextPage && (
+            <Button
+              variant='ghost'
+              className='w-full text-muted-foreground max-sm:h-11'
+              disabled={isFetchingNextPage}
+              aria-busy={isFetchingNextPage || undefined}
+              onClick={() => void fetchNextPage()}
+            >
+              Load more
+            </Button>
+          )}
+        </>
       )}
     </section>
   );
@@ -443,17 +440,19 @@ function WhereItCameFrom({
     <section aria-label='Where it came from' className='grid gap-3 border bg-card p-5'>
       <h2 className='text-card-title'>Where it came from</h2>
       {parts.length === 0 && <p className='text-sm text-muted-foreground'>No income.</p>}
-      <ul className='grid gap-1'>
+      <ul className='-mx-2 grid gap-1'>
         {top.map((part) => (
           <li key={part.key}>
             <Link
               to='/bank-transactions'
               search={{...flowDrill('INCOME', from, to, missingBaseAmounts), search: part.label}}
-              className='grid min-h-11 grid-cols-[minmax(0,1fr)_6rem] items-center gap-x-3 text-sm hover:bg-accent/40 focus-visible:outline-2 focus-visible:outline-ring'
+              className='grid min-h-11 grid-cols-[minmax(0,1fr)_6rem] items-center gap-x-3 px-2 text-sm hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
             >
-              <span className='min-w-0'>
-                <span className='block truncate'>{part.label}</span>
-                <span aria-hidden='true' className='mt-1 block h-1 bg-muted'>
+              {/* The tile sits beside the name, as a category's icon does; the bar runs under the name. */}
+              <span className='grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2'>
+                <SourceTile source={part} />
+                <span className='truncate'>{part.label}</span>
+                <span aria-hidden='true' className='col-start-2 mt-1 block h-1 bg-muted'>
                   <span
                     className='block h-full bg-success'
                     style={{width: `${(toCents(part.amount) / max) * 100}%`}}

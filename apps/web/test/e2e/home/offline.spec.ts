@@ -174,16 +174,14 @@ test.describe('saved Home', () => {
       await expect(monthRows(page, title)).toHaveCount(3);
       await page.clock.runFor(1100);
     }
-    // Each month's transactions are saved under the local month start, 1 July being 30 June 22:00 UTC.
+    // Each month's transactions are saved under its first day.
     const savedMonths = async () =>
       (await readCache(page))?.clientState.queries
-        .filter((query) => query.queryKey[0] === 'bank-transactions')
-        .map((query) => JSON.stringify(query.queryKey).match(/"from":"(\d{4}-\d{2})-(\d{2})T22/))
-        .filter((match) => match !== null)
-        .map((match) => match[1])
+        .filter((query) => query.queryKey[1] === 'month-transactions')
+        .map((query) => String(query.queryKey[2]).slice(0, 7))
         .sort();
     // On-screen September is exempt; both earlier months fit the shared budget.
-    await expect.poll(savedMonths).toEqual(['2026-06', '2026-07', '2026-08']);
+    await expect.poll(savedMonths).toEqual(['2026-07', '2026-08', '2026-09']);
     await page.keyboard.press('Escape');
     await page
       .getByRole('link', {name: /^Transactions/})
@@ -191,15 +189,21 @@ test.describe('saved Home', () => {
       .click();
     await expect(page.getByRole('heading', {name: 'No bank transactions found'})).toBeVisible();
     await page.clock.runFor(1100);
-    await expect.poll(savedMonths).toEqual(['2026-07', '2026-08']);
+    await expect.poll(savedMonths).toEqual(['2026-08', '2026-09']);
     await page.getByRole('link', {name: 'Connections', exact: true}).first().click();
     await expect(page.locator('[data-testid^="connection-card-toggle-"]').first()).toBeVisible();
     await page.clock.runFor(1100);
     // Inactive transactions share one budget rather than each view getting its own.
-    await expect.poll(savedMonths).toEqual(['2026-08']);
+    await expect.poll(savedMonths).toEqual(['2026-09']);
     const queries = (await readCache(page))!.clientState.queries;
     expect(queries.some((query) => query.queryKey[0] === 'currentAccount')).toBe(true);
-    expect(queries.some((query) => query.queryKey[0] === 'bank-dashboard')).toBe(true);
+    // Home's own figures are saved too, beside the month's transactions.
+    expect(
+      queries.some(
+        (query) =>
+          query.queryKey[0] === 'bank-dashboard' && query.queryKey[1] !== 'month-transactions',
+      ),
+    ).toBe(true);
   });
 });
 
