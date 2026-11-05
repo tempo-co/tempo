@@ -4,7 +4,7 @@ import type {
   BankTransactionCashFlow,
   BankTransactionEvent,
 } from '@tempo/contracts';
-import {getDaysInMonth} from 'date-fns';
+import {format, getDaysInMonth, subMonths} from 'date-fns';
 
 import {parseCalendarDate} from './drill-links';
 import {toCents} from './money';
@@ -142,9 +142,14 @@ export type Span = (typeof SPANS)[number]['value'];
 export function spanMonths(overview: Overview, span: Span) {
   const count = SPANS.find((option) => option.value === span)!.months;
   const all = overview.months;
-  // The running month is last; the base is the month end before the same month `count` months back.
-  const index = all.length - 2 - count;
-  if (index < 0) return {shown: all, base: null, change: overview.total};
+  const shownAll = {shown: all, base: null, change: overview.total};
+  if (!Number.isFinite(count)) return shownAll;
+  const target = format(subMonths(parseCalendarDate(overview.today), count), 'yyyy-MM-dd');
+  let index = -1;
+  all.forEach((point, at) => {
+    if (point.complete && point.end <= target) index = at;
+  });
+  if (index < 0) return shownAll;
   const base = all[index];
   const change =
     overview.total === null || base.balance === null ? null : overview.total - base.balance;

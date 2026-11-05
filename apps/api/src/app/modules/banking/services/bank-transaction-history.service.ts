@@ -186,6 +186,7 @@ export class BankTransactionHistoryService {
 				ROUND(ABS(l."base"), 2)::text AS "amount", ROUND(l."usual", 2)::text AS "usualMonth",
 				ROUND(ABS(l."base") / l."usual", 2)::text AS "share"
 			FROM large l
+			-- Regular means repeating with the same merchant; a payment without a merchant key has none, so it never is.
 			WHERE (
 				SELECT COUNT(*) FROM counted p
 				WHERE p."merchantKey" = l."merchantKey" AND p."direction" = l."direction" AND p."id" <> l."id"

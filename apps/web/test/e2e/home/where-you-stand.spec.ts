@@ -54,6 +54,23 @@ test('shows the total, its change over each span, and the span’s money in and 
   await expect(homePage.monthDialog('June 2025')).toBeVisible();
 });
 
+test('on the last day of a month, a span is measured from the month end a span back', async ({
+  page,
+  homePage,
+}) => {
+  const history = homeHistory();
+  for (const periods of [history.trend.periods, history.flow.periods])
+    periods[periods.length - 1].end = '2026-11-30';
+  await mockSyntheticHome(page, {history});
+  await page.clock.setFixedTime(new Date('2026-11-30T12:00:00.000Z'));
+  await page.goto('/');
+
+  // A year back from 30 November is 30 November 2025 itself, when the balance was €16,000.
+  await expect(homePage.whereYouStand).toContainText('+€8,300+52%since 30 Nov 2025');
+  await homePage.whereYouStand.getByRole('button', {name: '6M', exact: true}).click();
+  await expect(homePage.whereYouStand).toContainText('since 30 Apr 2026');
+});
+
 test('kept bars open their month, and the running month reads as so far', async ({
   page,
   homePage,

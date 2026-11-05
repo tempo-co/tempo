@@ -202,7 +202,7 @@ function MonthView({month, today}: {month: string; today: string}) {
     <div className='grid gap-6'>
       <section
         aria-label='The month'
-        className='grid grid-cols-1 gap-x-6 gap-y-4 border bg-card p-5 sm:p-6 @[21rem]:grid-cols-2 @[760px]:grid-cols-4'
+        className='grid grid-cols-1 gap-x-6 gap-y-4 border bg-card p-5 sm:p-6 @[760px]:grid-cols-4 @[21rem]:grid-cols-2'
       >
         <Figure label='In' value={wholeCents(point.income, currency)} tone='text-success' />
         <Figure label='Out' value={wholeCents(point.spending, currency)} />
