@@ -11,11 +11,6 @@ export function currentMonth(now = new Date()) {
   return format(now, 'yyyy-MM');
 }
 
-/** The current month has no `month` param, so `/` always opens it. */
-export function monthSearch(month: string) {
-  return month === currentMonth() ? {} : {month};
-}
-
 /** The local calendar date the summary cuts the current month at. */
 export function localDate(now = new Date()) {
   return format(now, 'yyyy-MM-dd');
@@ -23,11 +18,6 @@ export function localDate(now = new Date()) {
 
 export function shiftMonth(month: string, months: number) {
   return format(addMonths(parseMonth(month), months), 'yyyy-MM');
-}
-
-/** "October 2026". */
-export function formatMonth(month: string) {
-  return format(parseMonth(month), 'MMMM yyyy');
 }
 
 /** First and last calendar dates of the month, as `YYYY-MM-DD`. */

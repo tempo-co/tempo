@@ -8,7 +8,6 @@ import type {BankSyncRun} from '../../../src/features/banking/types/bank-sync-ru
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {successfulBankRefresh} from '../../data/bank-sync-run.data';
-import {septemberSpending} from '../../data/home-summary.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
   fulfillJson,
@@ -249,10 +248,9 @@ test.describe('bank connections', () => {
     expect(new URL(page.url()).searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
     await expect(inspector.getByRole('heading', {name: 'Provider purchase'})).toBeVisible();
     await expect(inspector.getByTestId('bank-transaction-detail-amount')).toHaveText('-€12.50');
-    await expect(inspector.getByRole('button', {name: 'Bank details', exact: true})).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
+    await expect(
+      inspector.getByRole('button', {name: 'Bank details', exact: true}),
+    ).toHaveAttribute('aria-expanded', 'false');
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
     await expect(inspector).toBeHidden();
     await expect(transactionTrigger).toBeFocused();
@@ -1355,7 +1353,6 @@ test.describe('mocked Enable Banking bank connection', () => {
     await mockBalanceTrend(page);
     await mockCashFlow(page);
     await mockMerchantRanking(page);
-    await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
     await mockJson(page, '**/recurring-series/summary?**', {
       expenseMonthlyTotal: '0.00',
       incomeMonthlyTotal: '0.00',
@@ -1437,7 +1434,6 @@ test.describe('mocked Enable Banking bank connection', () => {
       await mockBalanceTrend(page);
       await mockCashFlow(page);
       await mockMerchantRanking(page);
-      await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
       await mockJson(page, '**/recurring-series/summary?**', {
         expenseMonthlyTotal: '0.00',
         incomeMonthlyTotal: '0.00',
@@ -1896,8 +1892,8 @@ test.describe('bank-derived caches', () => {
       ),
       bankQueryKeys.transaction('example-transaction'),
       bankQueryKeys.connectionTransactions(MOCK_CONNECTION.id, null),
-      dashboardQueryKeys.summary('2026-09', '2026-10-01'),
-      dashboardQueryKeys.summary('2026-08', '2026-10-01'),
+      dashboardQueryKeys.breakdown('year', 'category', '2007-01-01', '2026-10-01', '2026-10-01'),
+      dashboardQueryKeys.events('2007-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.balanceTrend('month', '2026-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.cashFlow('month', '2026-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.reviewCounts,

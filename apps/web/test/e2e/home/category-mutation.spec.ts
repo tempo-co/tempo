@@ -148,11 +148,12 @@ for (const [filename, exportName, method, input] of [
     'example-connection',
   ],
 ] as const) {
-  test(`${method} invalidates every cached dashboard period and review counts`, async () => {
+  test(`${method} invalidates every cached Home history and review counts`, async () => {
     const {client, hook} = mutationHarness({id: 'example-transaction', category: 'OTHER'});
     const keys = [
-      dashboardQueryKeys.summary('2026-09', '2026-10-04'),
-      dashboardQueryKeys.summary('2026-08', '2026-10-04'),
+      dashboardQueryKeys.breakdown('year', 'category', '2007-01-01', '2026-10-04', '2026-10-04'),
+      dashboardQueryKeys.breakdown('month', 'source', '2007-01-01', '2026-10-04', '2026-10-04'),
+      dashboardQueryKeys.events('2007-01-01', '2026-10-04', '2026-10-04'),
       dashboardQueryKeys.reviewCounts,
     ];
     keys.forEach((key) => client.setQueryData(key, {cached: true}));

@@ -12,7 +12,16 @@ export const useGetBankTransactionReviewCounts = () => {
     queryKey: dashboardQueryKeys.reviewCounts,
     queryFn: () => api.get<BankTransactionReviewCounts>('/bank-transactions/review-counts'),
     refetchInterval: HOME_REFRESH_INTERVAL_MS,
+    // The navigation and Home's drill links read it too; one read serves them all until the next refresh.
+    staleTime: HOME_REFRESH_INTERVAL_MS,
   });
 
   return {reviewCounts: data, isPending, isError, refetch};
 };
+
+/**
+ * Whether any transaction still waits for a base-currency amount. Totals leave those out, so a drill from a total
+ * then lists only rows that have one.
+ */
+export const useHasMissingBaseAmounts = () =>
+  (useGetBankTransactionReviewCounts().reviewCounts?.missingBaseAmount ?? 0) > 0;

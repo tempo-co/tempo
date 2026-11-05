@@ -2,10 +2,12 @@ import {Page, Route} from '@playwright/test';
 import type {
   BankBalanceTrend,
   BankConnection,
+  BankTransactionBreakdown,
   BankTransactionCashFlow,
+  BankTransactionEvents,
   BankTransactionReviewCounts,
-  BankTransactionSummary,
   MerchantRanking,
+  RecurringSeriesLists,
   RecurringSummary,
 } from '@tempo/contracts';
 
@@ -113,8 +115,9 @@ export function transformBankConnections(
 }
 
 /**
- * Answers Home's card requests with empty data. Home requests its cards while the connections load,
- * so a fully mocked spec that opens Home without banks still sends them.
+ * Answers Home's requests, and the navigation's review counts, with empty data. Home requests its
+ * history while the connections load, so a fully mocked spec that opens Home without banks still
+ * sends them.
  */
 export async function mockEmptyHome(page: Page) {
   // Registered by the fully mocked fixture before each spec's more specific routes.
@@ -123,26 +126,6 @@ export async function mockEmptyHome(page: Page) {
     new URL(route.request().url()).searchParams.get(
       'interval',
     ) as BankTransactionCashFlow['interval'];
-  await page.route('**/bank-transactions/summary?**', (route) => {
-    const params = new URL(route.request().url()).searchParams;
-    return fulfillJson(route, {
-      month: params.get('month') ?? '',
-      through: params.get('asOf') ?? '',
-      daysInMonth: 30,
-      baseCurrency: null,
-      totals: {spending: '0.00', income: '0.00', net: '0.00', ownTransfers: '0.00'},
-      excluded: {unknownDirection: 0, missingBaseAmount: 0},
-      daily: [],
-      baseline: {
-        months: [],
-        daily: [],
-        spendingByThrough: null,
-        spendingRangeByThrough: null,
-        incomeByThrough: null,
-      },
-      categories: [],
-    } satisfies BankTransactionSummary);
-  });
   await page.route('**/bank-transactions/cash-flow?**', (route) =>
     fulfillJson(route, {
       baseCurrency: null,
@@ -157,6 +140,19 @@ export async function mockEmptyHome(page: Page) {
       periods: [],
     } satisfies BankBalanceTrend),
   );
+  await page.route('**/bank-transactions/breakdown?**', (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    return fulfillJson(route, {
+      baseCurrency: null,
+      interval: params.get('interval') as BankTransactionBreakdown['interval'],
+      by: params.get('by') as BankTransactionBreakdown['by'],
+      periods: [],
+    } satisfies BankTransactionBreakdown);
+  });
+  await mockJson(page, '**/bank-transactions/events?**', {
+    baseCurrency: null,
+    events: [],
+  } satisfies BankTransactionEvents);
   await mockJson(page, '**/bank-transactions/review-counts', {
     needsReview: 0,
     categorizationFailed: 0,
@@ -174,6 +170,17 @@ export async function mockEmptyHome(page: Page) {
     expenseThisMonth: {month: '', paid: '0.00', remaining: '0.00'},
     incomeThisMonth: {month: '', paid: '0.00', remaining: '0.00'},
   } satisfies RecurringSummary);
+  const emptyRecurring = {
+    series: [],
+    monthlyTotal: '0.00',
+    unconvertedCount: 0,
+    thisMonth: {month: '', paid: '0.00', remaining: '0.00'},
+    baseCurrency: null,
+  };
+  await mockJson(page, '**/recurring-series?**', {
+    expenses: emptyRecurring,
+    income: emptyRecurring,
+  } satisfies RecurringSeriesLists);
   await page.route('**/bank-transactions?**', (route) =>
     ['fetch', 'xhr'].includes(route.request().resourceType())
       ? fulfillJson(route, {transactions: [], total: 0})
@@ -182,7 +189,7 @@ export async function mockEmptyHome(page: Page) {
   await mockMerchantRanking(page);
 }
 
-/** Answers Home's Top merchants card with an empty ranking, for specs that mock Home's other cards. */
+/** Answers the merchant ranking (the month's biggest merchants) with an empty ranking. */
 export function mockMerchantRanking(page: Page) {
   return page.route('**/merchants/ranking?**', (route) => {
     const params = new URL(route.request().url()).searchParams;

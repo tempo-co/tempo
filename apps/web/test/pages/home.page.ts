@@ -11,12 +11,9 @@ export class HomePage {
   readonly alreadyVerifiedToastTitle: Locator;
   readonly emptyStateTitle: Locator;
   readonly connectBankLink: Locator;
-  readonly monthHeading: Locator;
-  readonly previousMonthLink: Locator;
-  readonly nextMonthLink: Locator;
-  readonly nextMonthButton: Locator;
-  readonly backToThisMonthLink: Locator;
-  readonly syncStatus: Locator;
+  readonly whereYouStand: Locator;
+  readonly totalBalance: Locator;
+  readonly yearTable: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -27,14 +24,20 @@ export class HomePage {
     this.welcomeToastTitle = page.getByText('Welcome to Tempo!');
     this.welcomeToastDescription = page.getByText('Your email has been verified.');
     this.alreadyVerifiedToastTitle = page.getByText('Your email has already been verified.');
-    this.emptyStateTitle = page.getByRole('heading', {name: 'Connect a bank to see your month'});
+    this.emptyStateTitle = page.getByRole('heading', {
+      name: 'Connect a bank to see where you stand',
+    });
     this.connectBankLink = page.getByRole('link', {name: 'Connect bank'});
-    this.monthHeading = page.getByRole('heading', {level: 1});
-    this.previousMonthLink = page.getByRole('link', {name: 'Previous month'});
-    this.nextMonthLink = page.getByRole('link', {name: 'Next month'});
-    this.nextMonthButton = page.getByRole('button', {name: 'Next month'});
-    this.backToThisMonthLink = page.getByRole('link', {name: 'Back to this month'});
-    this.syncStatus = page.getByTestId('home-sync-status');
+    this.whereYouStand = page.getByRole('region', {name: 'Where you stand'});
+    this.totalBalance = this.whereYouStand
+      .getByRole('heading', {name: 'Total balance'})
+      .locator('xpath=following-sibling::p[1]');
+    this.yearTable = page.getByRole('region', {name: 'Year by year'});
+  }
+
+  /** The month dialog, named by its title ("March 2026"). */
+  monthDialog(title: string) {
+    return this.page.getByRole('dialog', {name: title});
   }
 
   async expectToBeOnPage() {

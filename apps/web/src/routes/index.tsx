@@ -8,11 +8,14 @@ import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {recurringSeriesKeySchema} from '@/features/banking/types/bank-transaction';
 import {HomeDashboard} from '@/features/dashboard/components/home-dashboard';
 import {MerchantsDialog} from '@/features/dashboard/components/merchants-dialog';
+import {MonthDialog} from '@/features/dashboard/components/month-dialog';
 import {RecurringDialog} from '@/features/dashboard/components/recurring-dialog';
-import {MONTH_PATTERN, currentMonth} from '@/features/dashboard/utils/month';
+import {MONTH_PATTERN} from '@/features/dashboard/utils/month';
+import {useLocalDate} from '@/hooks/use-local-date';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 const homeSearchSchema = z.object({
+  /** The month open over Home; in the URL so Back closes it. */
   month: z.string().regex(MONTH_PATTERN).optional().catch(undefined),
   /** The recurring payments dialog is open; in the URL so Back closes it. */
   recurring: z.literal('open').optional().catch(undefined),
@@ -37,9 +40,19 @@ function Index() {
   const navigate = Route.useNavigate();
   const router = useRouter();
   const canGoBack = useCanGoBack();
-  const thisMonth = currentMonth();
-  // Future months have no data yet, so they show the current month.
-  const month = search.month && search.month < thisMonth ? search.month : thisMonth;
+  const today = useLocalDate();
+  const thisMonth = today.slice(0, 7);
+  // A future month has no history yet, so it opens nothing.
+  const month = search.month && search.month <= thisMonth ? search.month : null;
+  const openMonth = useCallback(
+    (next: string) => void navigate({search: (prev) => ({...prev, month: next})}),
+    [navigate],
+  );
+  // Stepping replaces the entry, so Back still closes the month in one step.
+  const stepMonth = useCallback(
+    (next: string) => void navigate({replace: true, search: (prev) => ({...prev, month: next})}),
+    [navigate],
+  );
   // Replace rather than push, so closing the dialog still steps back over one entry.
   const selectSeries = useCallback(
     (series: string | null) =>
@@ -56,7 +69,7 @@ function Index() {
   );
   // Opened from Home: step back over that entry. Opened from a link: there is nothing to step back to.
   const closeDialog = (
-    keys: Partial<Record<'recurring' | 'series' | 'merchants' | 'merchant', undefined>>,
+    keys: Partial<Record<'month' | 'recurring' | 'series' | 'merchants' | 'merchant', undefined>>,
   ) => {
     if (canGoBack) router.history.back();
     else void navigate({replace: true, search: (prev) => ({...prev, ...keys})});
@@ -64,7 +77,15 @@ function Index() {
 
   return (
     <AppBodyLayout>
-      <HomeDashboard month={month} isCurrentMonth={month === thisMonth} />
+      <HomeDashboard today={today} onOpenMonth={openMonth} />
+      <MonthDialog
+        month={month}
+        today={today}
+        onStep={stepMonth}
+        onOpenChange={(open) => {
+          if (!open) closeDialog({month: undefined});
+        }}
+      />
       <RecurringDialog
         open={search.recurring === 'open'}
         selectedKey={search.series ?? null}
@@ -75,7 +96,7 @@ function Index() {
       />
       <MerchantsDialog
         open={search.merchants === 'open'}
-        month={month}
+        month={thisMonth}
         selectedId={search.merchant ?? null}
         onSelect={selectMerchant}
         onOpenChange={(open) => {
