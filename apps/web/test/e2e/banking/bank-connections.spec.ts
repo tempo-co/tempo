@@ -1,3 +1,4 @@
+import type {Page} from '@playwright/test';
 import {type QueryClient, QueryObserver} from '@tanstack/react-query';
 import type {BankConnection} from '@tempo/contracts';
 
@@ -8,14 +9,13 @@ import type {BankSyncRun} from '../../../src/features/banking/types/bank-sync-ru
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {successfulBankRefresh} from '../../data/bank-sync-run.data';
+import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
   fulfillJson,
   fulfillRedirect,
-  mockBalanceTrend,
   mockBankConnections,
   mockBankRefresh,
-  mockCashFlow,
   mockJson,
   mockMerchantRanking,
   routeBankConnectionsApi,
@@ -23,6 +23,18 @@ import {
 } from '../../utils/api-mocks';
 import {createHookHarness} from '../../utils/hook-harness';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
+
+/** Home's recurring lists, empty: the Repeats block reads them beside the recurring summary. */
+function mockEmptyRecurringLists(page: Page) {
+  const empty = {
+    series: [],
+    monthlyTotal: '0.00',
+    unconvertedCount: 0,
+    thisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
+    baseCurrency: 'EUR',
+  };
+  return mockJson(page, '**/recurring-series?**', {expenses: empty, income: empty});
+}
 
 const DETAIL_TRANSACTION_ID = '00000000-0000-4000-8000-000000000014';
 const MOCK_PROVIDER_ORIGIN = 'https://enablebanking.test';
@@ -1359,8 +1371,8 @@ test.describe('mocked Enable Banking bank connection', () => {
     let nextSession = false;
     const requests: string[] = [];
     await mockBankConnections(page, () => (nextSession ? [next] : [MOCK_CONNECTION, tail]));
-    await mockBalanceTrend(page);
-    await mockCashFlow(page);
+    await mockHistoryEndpoints(page);
+    await mockEmptyRecurringLists(page);
     await mockMerchantRanking(page);
     await mockJson(page, '**/recurring-series/summary?**', {
       expenseMonthlyTotal: '0.00',
@@ -1440,8 +1452,8 @@ test.describe('mocked Enable Banking bank connection', () => {
             : '2026-10-01T00:00:00.000Z',
         }));
       });
-      await mockBalanceTrend(page);
-      await mockCashFlow(page);
+      await mockHistoryEndpoints(page);
+      await mockEmptyRecurringLists(page);
       await mockMerchantRanking(page);
       await mockJson(page, '**/recurring-series/summary?**', {
         expenseMonthlyTotal: '0.00',
