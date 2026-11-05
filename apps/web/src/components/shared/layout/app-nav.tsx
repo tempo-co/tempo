@@ -10,8 +10,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
+import {useGetBankTransactionReviewCounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
 import {getAutomaticSyncProblemForConnection} from '@/features/banking/utils/bank-sync-status';
-import {useGetBankTransactionReviewCounts} from '@/features/dashboard/api/use-get-bank-transaction-review-counts';
 import {useCurrentAccount} from '@/hooks/use-current-account';
 import {useLogOut} from '@/hooks/use-logout';
 import {cn} from '@/utils/cn';

@@ -4,13 +4,13 @@ import {format} from 'date-fns';
 import {type ReactNode, useState} from 'react';
 
 import {Card} from '@/components/ui/card';
+import {useHasMissingBaseAmounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
 import {cn} from '@/utils/cn';
 
-import {useHasMissingBaseAmounts} from '../api/use-get-bank-transaction-review-counts';
 import {categoryDrill, flowDrill, parseCalendarDate} from '../utils/drill-links';
 import {categoryColor, categoryLabel, signedPct} from '../utils/format';
 import {formatWholeMoney, toCents} from '../utils/money';
-import {type MonthPoint, monthsCovered} from '../utils/overview';
+import {type MonthPoint, monthsCovered, partCents} from '../utils/overview';
 
 type Period = BankTransactionBreakdownPeriod;
 
@@ -49,8 +49,7 @@ export function HeatTable({
   const keys = [...new Set(periods.flatMap((period) => period.parts.map((part) => part.key)))];
   if (keys.length === 0 || months.length === 0) return null;
   const thin = (period: Period) => (cover.get(period.start) ?? 0) < THIN_MONTHS;
-  const cell = (period: Period, key: string) =>
-    toCents(period.parts.find((part) => part.key === key)?.amount ?? '0');
+  const cell = partCents;
   const monthly = (period: Period, cents: number) => cents / (cover.get(period.start) ?? 1);
   const allTime = new Map(
     keys.map((key) => [key, periods.reduce((sum, period) => sum + cell(period, key), 0)]),

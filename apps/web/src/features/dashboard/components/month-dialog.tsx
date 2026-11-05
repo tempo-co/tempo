@@ -3,7 +3,6 @@ import type {
   BankTransactionBreakdownPeriod,
   BankTransactionCategoryFilterValue,
 } from '@tempo/contracts';
-import {format} from 'date-fns';
 import {ChevronLeft, ChevronRight} from 'lucide-react';
 import {type KeyboardEvent, useState} from 'react';
 
@@ -18,6 +17,7 @@ import {
 } from '@/components/ui/responsive-dialog';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {Skeleton} from '@/components/ui/skeleton';
+import {useHasMissingBaseAmounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
 import {useGetBankTransactions} from '@/features/banking/api/use-get-bank-transactions';
 import {TransactionListRow} from '@/features/banking/components/transaction-list-row';
 import {useGetMerchantRanking} from '@/features/merchants/api/use-get-merchant-ranking';
@@ -27,7 +27,6 @@ import {cn} from '@/utils/cn';
 
 import {HOME_REFRESH_INTERVAL_MS} from '../api/refresh-interval';
 import {useGetBankTransactionBreakdown} from '../api/use-get-bank-transaction-breakdown';
-import {useHasMissingBaseAmounts} from '../api/use-get-bank-transaction-review-counts';
 import {useOverview} from '../api/use-overview';
 import {
   categoryDrill,
@@ -38,8 +37,8 @@ import {
 } from '../utils/drill-links';
 import {categoryColor, categoryLabel, pct, signed, signedPct, wholeCents} from '../utils/format';
 import {formatMoney, toCents} from '../utils/money';
-import {monthDates, shiftMonth} from '../utils/month';
-import {historyFrom} from '../utils/overview';
+import {formatMonth, monthDates, shiftMonth} from '../utils/month';
+import {historyFrom, partCents} from '../utils/overview';
 import {EventLine} from './event-line';
 
 /** Rows shown before "Show all"; the list itself asks for one API page. */
@@ -47,8 +46,6 @@ const FIRST_ROWS = 12;
 const PAGE_SIZE = 100;
 /** A category's usual is the mean of this many months before, every one inside the history. */
 const USUAL_MONTHS = 12;
-
-const monthTitle = (month: string) => format(parseCalendarDate(`${month}-01`), 'MMMM yyyy');
 
 /** One month over Home, at `?month=YYYY-MM`: Back or Escape closes it, the arrows (or ← →) step months. */
 export function MonthDialog({
@@ -62,7 +59,8 @@ export function MonthDialog({
   onStep: (month: string) => void;
   onOpenChange: (open: boolean) => void;
 }) {
-  const {overview} = useOverview(today);
+  const history = useOverview(today);
+  const {overview} = history;
   const index =
     overview && month ? overview.months.findIndex((point) => point.month === month) : -1;
   const prev = overview && index > 0 ? overview.months[index - 1].month : null;
@@ -93,7 +91,7 @@ export function MonthDialog({
           <nav aria-label='Months' className='flex items-center gap-1'>
             <StepButton month={prev} label='Previous month' icon={ChevronLeft} onStep={onStep} />
             <ResponsiveDialogTitle className='min-w-[10ch] text-center text-xl leading-tight sm:text-2xl'>
-              {month ? monthTitle(month) : ''}
+              {month ? formatMonth(month) : ''}
             </ResponsiveDialogTitle>
             <StepButton month={next} label='Next month' icon={ChevronRight} onStep={onStep} />
           </nav>
@@ -108,7 +106,7 @@ export function MonthDialog({
           className='min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block'
         >
           <div className='@container p-4 sm:p-6'>
-            {month && <MonthView month={month} today={today} />}
+            {month && <MonthView month={month} today={today} history={history} />}
           </div>
         </ScrollArea>
       </ResponsiveDialogContent>
@@ -144,8 +142,15 @@ function StepButton({
  * What came in and went out, what was kept and the balance the month ended on; where the money went (with each
  * category's usual), the transactions, one-off payments, where it came from and the biggest merchants.
  */
-function MonthView({month, today}: {month: string; today: string}) {
-  const {overview, isError, refetch} = useOverview(today);
+function MonthView({
+  month,
+  today,
+  history: {overview, isError, refetch},
+}: {
+  month: string;
+  today: string;
+  history: ReturnType<typeof useOverview>;
+}) {
   const from = historyFrom(today);
   const categories = useGetBankTransactionBreakdown('month', 'category', from, today, today);
   const sources = useGetBankTransactionBreakdown('month', 'source', from, today, today);
@@ -174,7 +179,7 @@ function MonthView({month, today}: {month: string; today: string}) {
   if (!overview || !categories.breakdown || !sources.breakdown)
     return <Skeleton className='h-[36rem]' role='img' aria-label='Loading the month' />;
   if (!point)
-    return <p className='text-sm text-muted-foreground'>No history for {monthTitle(month)}.</p>;
+    return <p className='text-sm text-muted-foreground'>No history for {formatMonth(month)}.</p>;
 
   const currency = overview.currency;
   const index = overview.months.indexOf(point);
@@ -190,11 +195,7 @@ function MonthView({month, today}: {month: string; today: string}) {
   const usualOf = (key: string) =>
     earlier.length < USUAL_MONTHS
       ? null
-      : earlier.reduce(
-          (sum, period) =>
-            sum + toCents(period.parts.find((part) => part.key === key)?.amount ?? '0'),
-          0,
-        ) / USUAL_MONTHS;
+      : earlier.reduce((sum, period) => sum + partCents(period, key), 0) / USUAL_MONTHS;
   const balanceChange =
     before?.balance != null && point.balance !== null ? point.balance - before.balance : null;
 
@@ -217,7 +218,7 @@ function MonthView({month, today}: {month: string; today: string}) {
           value={wholeCents(point.balance, currency)}
           sub={
             before && balanceChange !== null
-              ? `${signed(balanceChange, currency)} on ${format(parseCalendarDate(`${before.month}-01`), 'MMM')}`
+              ? `${signed(balanceChange, currency)} on ${formatMonth(before.month, 'MMM')}`
               : undefined
           }
         />

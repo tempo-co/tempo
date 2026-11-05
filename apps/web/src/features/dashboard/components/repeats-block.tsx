@@ -14,6 +14,7 @@ import {cn} from '@/utils/cn';
 
 import {parseCalendarDate} from '../utils/drill-links';
 import {formatWholeMoney, toCents} from '../utils/money';
+import {formatMonth} from '../utils/month';
 
 /** Four rows at most, so the block stays about as tall as the chart beside it. */
 const ROWS = 4;
@@ -35,7 +36,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
     void navigate({search: (prev) => ({...prev, recurring: 'open', series: key})});
   const paid = toCents(summary.expenseThisMonth.paid);
   const left = toCents(summary.expenseThisMonth.remaining);
-  const monthName = format(parseCalendarDate(`${summary.expenseThisMonth.month}-01`), 'MMMM');
+  const monthName = formatMonth(summary.expenseThisMonth.month, 'MMMM');
   const flagged = series.expenses.series
     .filter(
       (item) =>

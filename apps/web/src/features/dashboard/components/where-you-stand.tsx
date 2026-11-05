@@ -7,6 +7,7 @@ import {cn} from '@/utils/cn';
 
 import {parseCalendarDate, periodDrill} from '../utils/drill-links';
 import {pct, signed, signedPct, wholeCents} from '../utils/format';
+import {formatMonth} from '../utils/month';
 import {type MonthPoint, type Overview, SPANS, type Span, spanMonths} from '../utils/overview';
 import {EventLine} from './event-line';
 import {BalanceChart, KeptStrip, Y_WIDTH} from './history-charts';
@@ -29,7 +30,7 @@ export function WhereYouStand({
   const total = wholeCents(overview.total, currency);
   const since = base
     ? format(parseCalendarDate(base.end), 'd MMM yyyy')
-    : format(parseCalendarDate(`${overview.months[0].month}-01`), 'MMM yyyy');
+    : formatMonth(overview.months[0].month, 'MMM yyyy');
 
   return (
     <Card

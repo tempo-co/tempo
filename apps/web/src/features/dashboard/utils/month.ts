@@ -7,6 +7,11 @@ function parseMonth(month: string) {
   return parse(month, 'yyyy-MM', new Date());
 }
 
+/** A `YYYY-MM` month as a label, "March 2026" by default. */
+export function formatMonth(month: string, pattern = 'MMMM yyyy') {
+  return format(parseMonth(month), pattern);
+}
+
 export function currentMonth(now = new Date()) {
   return format(now, 'yyyy-MM');
 }

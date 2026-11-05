@@ -1,13 +1,12 @@
 import {Link} from '@tanstack/react-router';
-import {format} from 'date-fns';
 import {ChevronRight} from 'lucide-react';
 import {Fragment, useState} from 'react';
 
 import {Card} from '@/components/ui/card';
 import {cn} from '@/utils/cn';
 
-import {parseCalendarDate} from '../utils/drill-links';
 import {pct, signed, wholeCents} from '../utils/format';
+import {formatMonth} from '../utils/month';
 import type {MonthPoint, Overview, YearRow} from '../utils/overview';
 import {EventChips} from './event-line';
 
@@ -183,7 +182,7 @@ function MonthLine({
           search={(prev) => ({...prev, month: point.month})}
           className='inline-flex min-h-11 items-center underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring sm:min-h-8'
         >
-          {format(parseCalendarDate(`${point.month}-01`), 'MMMM')}
+          {formatMonth(point.month, 'MMMM')}
         </Link>
         {point.events.length > 0 && (
           <span className='block max-w-[6rem] sm:max-w-[10rem] min-[60rem]:hidden'>

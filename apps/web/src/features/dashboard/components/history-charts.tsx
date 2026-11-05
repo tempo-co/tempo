@@ -1,4 +1,3 @@
-import {format} from 'date-fns';
 import {useRef} from 'react';
 import {Area, CartesianGrid, ComposedChart, ReferenceDot, XAxis, YAxis} from 'recharts';
 
@@ -6,16 +5,13 @@ import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {cn} from '@/utils/cn';
 
 import {axisFormatter, axisTicks} from '../utils/chart-axis';
-import {parseCalendarDate} from '../utils/drill-links';
 import {signed, signedEvent, wholeCents} from '../utils/format';
+import {formatMonth} from '../utils/month';
 import type {MonthPoint} from '../utils/overview';
 
 /** Both charts share these insets, so a month's dot sits right above its bar. */
 export const Y_WIDTH = 52;
 const RIGHT = 12;
-
-const monthName = (month: string, pattern: string) =>
-  format(parseCalendarDate(`${month}-01`), pattern);
 
 /** Month-end balance as one line; one-off payments are dots on it. Months sit at slot centres, like the bars below. */
 export function BalanceChart({
@@ -81,7 +77,7 @@ export function BalanceChart({
             tickFormatter={(index: number) => {
               const month = data[index]?.month;
               if (!month) return '';
-              return n > 40 ? month.slice(0, 4) : monthName(month, n > 14 ? 'MMM yy' : 'MMM');
+              return n > 40 ? month.slice(0, 4) : formatMonth(month, n > 14 ? 'MMM yy' : 'MMM');
             }}
           />
           <YAxis
@@ -130,7 +126,7 @@ export function BalanceChart({
               const point = row.point;
               return (
                 <div className='grid min-w-48 gap-1 border bg-card p-2.5 text-xs shadow-sm'>
-                  <p className='font-semibold'>{monthName(point.month, 'MMMM yyyy')}</p>
+                  <p className='font-semibold'>{formatMonth(point.month, 'MMMM yyyy')}</p>
                   <TipRow label='Balance' value={wholeCents(point.balance, currency)} strong />
                   <TipRow label='Kept' value={signed(point.kept, currency)} />
                   {point.events.map((event) => (
@@ -196,7 +192,7 @@ export function KeptStrip({
       >
         {months.map((point) => {
           const up = point.kept >= 0;
-          const label = `${monthName(point.month, 'MMMM yyyy')}${point.complete ? '' : ' so far'}: kept ${signed(point.kept, currency)}`;
+          const label = `${formatMonth(point.month, 'MMMM yyyy')}${point.complete ? '' : ' so far'}: kept ${signed(point.kept, currency)}`;
           return (
             <li key={point.month} className='relative min-w-0 flex-1'>
               <button

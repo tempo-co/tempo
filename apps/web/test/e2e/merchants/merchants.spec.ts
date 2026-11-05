@@ -7,6 +7,7 @@ import type {
   MerchantRanking,
 } from '@tempo/contracts';
 
+import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections, mockBankRefresh, mockJson} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
@@ -344,26 +345,28 @@ for (const viewport of [
   {width: 1280, height: 900},
   {width: 375, height: 812},
 ]) {
-  test(`Home ranks the month's top merchants and opens them over Home at ${viewport.width}px`, async ({
+  test(`a month ranks its biggest merchants and opens them over Home at ${viewport.width}px`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
     await mockSignedIn(page);
+    await mockHistoryEndpoints(page);
     const requests = await mockMerchants(page);
-    await page.goto('/');
+    await page.goto('/?month=2026-10');
 
-    const card = page.getByRole('region', {name: 'Top merchants'});
+    const card = page
+      .getByRole('dialog', {name: 'October 2026'})
+      .getByRole('region', {name: 'Biggest merchants'});
     const rows = card.getByRole('listitem');
-    await expect(rows).toHaveCount(5);
-    expect(requests.find((params) => params.get('limit') === '5')?.toString()).toBe(
+    await expect(rows).toHaveCount(Math.min(8, ranking.merchants.length));
+    expect(requests.find((params) => params.get('limit') === '8')?.toString()).toBe(
       new URLSearchParams({
         interval: 'month',
         period: '2026-10-01',
         asOf: '2026-10-18',
-        limit: '5',
+        limit: '8',
       }).toString(),
     );
-    await expect(card).toContainText('Compared with usual by this day of the month.');
     await expect(rows.nth(0)).toContainText(LONG_NAME);
     await expect(rows.nth(0)).toContainText('1 transaction · usually nothing');
     await expect(rows.nth(0)).toContainText('€123,456.78');
@@ -379,23 +382,17 @@ for (const viewport of [
     }
     await expectNoHorizontalOverflow(page);
 
+    // A merchant opens over the month, and Back returns to it.
     await rows.nth(1).getByRole('button').click();
-    await expect(page).toHaveURL(`/?merchants=open&merchant=${BRAND}`);
+    await expect(page).toHaveURL(`/?month=2026-10&merchants=open&merchant=${BRAND}`);
     await expect(dialog(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
     await dialog(page).getByRole('button', {name: 'All merchants'}).click();
-    await expect(page).toHaveURL('/?merchants=open');
+    await expect(page).toHaveURL('/?month=2026-10&merchants=open');
     await expect(dialog(page).getByRole('region', {name: 'All merchants'})).toBeVisible();
     await page.goBack();
     await expect(dialog(page)).toBeHidden();
-    await expect(page).toHaveURL('/');
-
-    await card.getByRole('button', {name: 'See all merchants'}).click();
-    await expect(page).toHaveURL('/?merchants=open');
-    await expect(dialog(page).getByRole('region', {name: 'Top merchants'})).toBeVisible();
-    await expectNoHorizontalOverflow(page);
-    await dialog(page).getByRole('button', {name: 'Close merchants'}).click();
-    await expect(dialog(page)).toBeHidden();
-    await expect(page).toHaveURL('/');
+    await expect(page).toHaveURL('/?month=2026-10');
+    await expect(card).toBeVisible();
   });
 }
 

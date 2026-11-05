@@ -156,6 +156,11 @@ export function spanMonths(overview: Overview, span: Span) {
   return {shown: all.slice(index), base, change};
 }
 
+/** A breakdown part's amount in cents, zero when the period has no such part. */
+export function partCents(period: BankTransactionBreakdownPeriod, key: string) {
+  return toCents(period.parts.find((part) => part.key === key)?.amount ?? '0');
+}
+
 /** Months of history inside a period: whole months, and a running one as its share of days so far. */
 export function monthsCovered(period: BankTransactionBreakdownPeriod, months: MonthPoint[]) {
   const from = period.start.slice(0, 7);
