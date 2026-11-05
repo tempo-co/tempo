@@ -15,6 +15,7 @@ import {cn} from '@/utils/cn';
 import {parseCalendarDate} from '../utils/drill-links';
 import {formatWholeMoney, toCents} from '../utils/money';
 import {formatMonth} from '../utils/month';
+import {TextAction} from './text-action';
 
 /** Four rows at most, so the block stays about as tall as the chart beside it. */
 const ROWS = 4;
@@ -54,14 +55,13 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
     <section aria-label='Repeats' className={cn('grid content-start gap-4', className)}>
       <header className='-my-2.5 flex items-center justify-between gap-2'>
         <h2 className='text-card-title'>Repeats</h2>
-        <button
-          type='button'
+        <TextAction
           onClick={() => open()}
           aria-label='All recurring payments'
-          className='-mr-2 inline-flex min-h-11 items-center gap-0.5 px-2 text-sm text-primary hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-ring'
+          className='-mr-2 gap-0.5'
         >
-          All <ChevronRight aria-hidden='true' className='size-4' />
-        </button>
+          All <ChevronRight aria-hidden='true' />
+        </TextAction>
       </header>
       <dl className='grid grid-cols-2 gap-x-4'>
         <div className='min-w-0'>

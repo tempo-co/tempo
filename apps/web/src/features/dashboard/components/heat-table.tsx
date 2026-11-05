@@ -9,9 +9,11 @@ import {useHasMissingBaseAmounts} from '@/features/banking/api/use-get-bank-tran
 import {cn} from '@/utils/cn';
 
 import {categoryDrill, flowDrill, parseCalendarDate} from '../utils/drill-links';
-import {categoryColor, categoryLabel, signedPct} from '../utils/format';
+import {categoryLabel, signedPct} from '../utils/format';
 import {formatWholeMoney, toCents} from '../utils/money';
 import {type MonthPoint, monthsCovered, partCents} from '../utils/overview';
+import {CategoryIconSpacer, CategoryName} from './category-name';
+import {TextAction} from './text-action';
 
 type Period = BankTransactionBreakdownPeriod;
 
@@ -29,8 +31,8 @@ type Row = {
   /** The row's heading; `label` names it in tooltips and searches. */
   name: string;
   label: string;
-  /** A category's colour. */
-  color?: string;
+  /** The category a category row is, shown with its icon. */
+  category?: string;
   values: (period: Period) => number;
   /** `more` opens the folded rows; `total` is plain. */
   role?: 'more' | 'total';
@@ -118,7 +120,7 @@ export function HeatTable({
       key,
       label: nameOf(key),
       name: nameOf(key),
-      color: kind === 'category' ? categoryColor(key) : undefined,
+      category: kind === 'category' ? key : undefined,
       values: (period: Period) => cell(period, key),
     })),
     ...(rest.length > 0 && !all
@@ -182,13 +184,9 @@ export function HeatTable({
     });
   };
   const fewer = rest.length > 0 && all && (
-    <button
-      type='button'
-      onClick={() => setAll(false)}
-      className='min-h-11 text-sm text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring sm:min-h-10'
-    >
+    <TextAction onClick={() => setAll(false)} className='-ml-2'>
       Show fewer
-    </button>
+    </TextAction>
   );
 
   return (
@@ -211,12 +209,13 @@ export function HeatTable({
             ))}
           </colgroup>
           <thead>
-            <tr className='text-label text-muted-foreground [&>th]:px-2.5 [&>th]:pb-2 [&>th]:font-medium'>
-              <th className='sticky left-0 z-[1] bg-card pl-5 text-left'>
+            {/* Each header has its column's padding, so headings and figures share one edge. */}
+            <tr className='text-label text-muted-foreground'>
+              <th className='sticky left-0 z-[1] bg-card pr-2 pb-2 pl-5 text-left font-medium'>
                 {kind === 'category' ? 'Category' : 'Source'}
               </th>
               <th
-                className='text-right font-normal'
+                className='pr-3 pb-2 pl-2 text-right font-normal'
                 title={
                   previous
                     ? `${yearOf(latest)} against ${yearOf(previous)}, a month on average`
@@ -226,7 +225,7 @@ export function HeatTable({
                 {previous ? `vs ${yearOf(previous)}` : ''}
               </th>
               {periods.map((period) => (
-                <th key={period.start} className='text-right numeric'>
+                <th key={period.start} className='px-2.5 pb-2 text-right numeric font-medium'>
                   {yearLabel(period)}
                 </th>
               ))}
@@ -236,32 +235,30 @@ export function HeatTable({
             {rows.map((row) => (
               <tr
                 key={row.key}
-                className={cn(
-                  '[&>td]:p-0.5',
-                  row.role === 'total' && 'border-t text-muted-foreground',
-                )}
+                className={cn(row.role === 'total' && 'border-t text-muted-foreground')}
               >
                 <th scope='row' className='sticky left-0 z-[1] bg-card pl-5 text-left font-normal'>
                   {row.role === 'more' ? (
-                    <button
-                      type='button'
-                      onClick={() => setAll(true)}
-                      className='flex min-h-10 w-full items-center gap-2 pr-2 text-left text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring'
-                    >
-                      <span className='truncate'>{row.name}</span>
-                    </button>
+                    <span className='flex min-h-10 items-center'>
+                      <TextAction onClick={() => setAll(true)} className='-ml-2'>
+                        {row.name}
+                      </TextAction>
+                    </span>
+                  ) : row.category ? (
+                    <CategoryName category={row.category} className='min-h-10 pr-2' />
                   ) : (
-                    <span className='flex min-h-10 min-w-0 items-center gap-2 pr-2'>
-                      <Swatch color={row.color} />
+                    <span className='flex min-h-10 min-w-0 items-center pr-2'>
                       <span className='truncate' title={row.name}>
                         {row.name}
                       </span>
                     </span>
                   )}
                 </th>
-                <td className='pr-3 text-right numeric text-muted-foreground'>{change(row)}</td>
+                <td className='pr-3 pl-2 text-right numeric text-muted-foreground'>
+                  {change(row)}
+                </td>
                 {cells(row).map((item) => (
-                  <td key={item.period.start}>
+                  <td key={item.period.start} className='p-0.5'>
                     <YearValue item={item} className='flex min-h-10 justify-end px-2' />
                   </td>
                 ))}
@@ -295,11 +292,6 @@ export function HeatTable({
       </p>
     </Card>
   );
-}
-
-function Swatch({color, spacer}: {color?: string; spacer?: boolean}) {
-  if (!color && !spacer) return null;
-  return <i aria-hidden='true' className='size-2.5 shrink-0' style={{background: color}} />;
 }
 
 /** A year's monthly average, shaded against the row's other years, opening its transactions. */
@@ -384,15 +376,9 @@ function PhoneRows({
         {rows.map((row) => {
           const expanded = open === row.key;
           const latestCell = cells(row)[0];
-          const summary = (
+          const name = 'line-clamp-2 leading-tight [overflow-wrap:anywhere]';
+          const figures = (
             <>
-              <span className='flex min-w-0 items-center gap-2'>
-                {/* Every name starts at the same place, swatch or not. */}
-                <Swatch color={row.color} spacer={kind === 'category'} />
-                <span className='line-clamp-2 leading-tight [overflow-wrap:anywhere]'>
-                  {row.name}
-                </span>
-              </span>
               <span className='text-right numeric whitespace-nowrap text-muted-foreground'>
                 {change(row)}
               </span>
@@ -408,18 +394,18 @@ function PhoneRows({
           );
           if (row.role === 'more')
             return (
-              <li key={row.key} className='border-b border-border/60'>
-                <button
-                  type='button'
-                  onClick={onMore}
-                  style={columns}
-                  className={cn(
-                    line,
-                    'min-h-11 w-full py-1.5 pr-4 pl-8 text-left text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring [&>span:first-child]:text-primary',
-                  )}
-                >
-                  {summary}
-                </button>
+              <li
+                key={row.key}
+                style={columns}
+                className={cn(line, 'border-b border-border/60 py-1.5 pr-4 pl-8 text-sm')}
+              >
+                <span className='flex min-w-0 items-center gap-2'>
+                  {kind === 'category' && <CategoryIconSpacer />}
+                  <TextAction onClick={onMore} className='-ml-2'>
+                    {row.name}
+                  </TextAction>
+                </span>
+                {figures}
               </li>
             );
           return (
@@ -448,7 +434,16 @@ function PhoneRows({
                     expanded && 'rotate-90',
                   )}
                 />
-                {summary}
+                {row.category ? (
+                  <CategoryName category={row.category} labelClassName={name} />
+                ) : (
+                  <span className='flex min-w-0 items-center gap-2'>
+                    {/* Every name starts at the same place, icon or not. */}
+                    {kind === 'category' && <CategoryIconSpacer />}
+                    <span className={name}>{row.name}</span>
+                  </span>
+                )}
+                {figures}
               </button>
               {expanded && (
                 <ul

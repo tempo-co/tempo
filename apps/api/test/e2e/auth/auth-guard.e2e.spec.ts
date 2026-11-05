@@ -46,7 +46,6 @@ const TOKEN_READABLE_PATHS = [
 	'/bank-transactions/cash-flow?interval=month&from=2026-01-01&to=2026-10-18&asOf=2026-10-18',
 	'/bank-transactions/balance-trend?interval=month&from=2026-01-01&to=2026-10-18&asOf=2026-10-18',
 	'/bank-transactions/breakdown?interval=year&by=category&from=2026-01-01&to=2026-10-18&asOf=2026-10-18',
-	'/bank-transactions/events?from=2026-01-01&to=2026-10-18&asOf=2026-10-18',
 	'/bank-transactions/review-counts',
 	'/recurring-series?asOf=2026-10-18',
 	'/recurring-series/summary?asOf=2026-10-18',

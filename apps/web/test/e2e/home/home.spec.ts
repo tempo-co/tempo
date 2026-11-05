@@ -44,7 +44,6 @@ test.describe('Home', () => {
     const historyRequests = [
       '**/bank-transactions/balance-trend?**',
       '**/bank-transactions/cash-flow?**',
-      '**/bank-transactions/events?**',
       '**/bank-transactions/breakdown?**',
       '**/bank-transactions/review-counts',
     ].map((url) => page.waitForRequest(url));

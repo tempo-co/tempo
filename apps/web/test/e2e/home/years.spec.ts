@@ -2,10 +2,29 @@ import type {Locator} from '@playwright/test';
 
 import {homeHistory, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
-import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
+import {boxOf, expectCategoryIcon, expectNoHorizontalOverflow} from '../../utils/layout';
 
 // Every response is synthetic: these checks never read or mutate a shared API stack.
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
+
+/** Where the text in each of a row's cells starts and ends, in px; a cell without text has nulls. */
+const textEdges = (row: Locator) =>
+  row.locator('th, td').evaluateAll((cells) =>
+    cells.map((cell) => {
+      const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+      const boxes: DOMRect[] = [];
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        boxes.push(...Array.from(range.getClientRects()).filter((box) => box.width > 0));
+      }
+      if (boxes.length === 0) return {left: null, right: null};
+      return {
+        left: Math.min(...boxes.map((box) => box.left)),
+        right: Math.max(...boxes.map((box) => box.right)),
+      };
+    }),
+  );
 
 /** A table row's cells as one line of text each, once the row is on screen. */
 async function cells(row: Locator) {
@@ -14,7 +33,7 @@ async function cells(row: Locator) {
   return texts.map((text) => text.replace(/\s+/g, ' ').trim());
 }
 
-test('year by year shows each year, newest first and open, and its months open the month', async ({
+test('year by year shows each year, newest first and open; a click anywhere on a year opens it', async ({
   page,
   homePage,
 }) => {
@@ -33,7 +52,6 @@ test('year by year shows each year, newest first and open, and its months open t
     '€22,700',
     '+€7,300 24% of in',
     '€24,300 +€7,300',
-    'Example Airline −€1,500',
   ]);
   // The open year lists its months, newest first.
   const months = table.getByRole('link', {name: /^[A-Z][a-z]+$/});
@@ -51,6 +69,21 @@ test('year by year shows each year, newest first and open, and its months open t
     'January',
   ]);
 
+  // The whole row is the control: a click on its balance closes it, with a hover state on every cell.
+  const current = table.getByRole('row').nth(1);
+  const balance = current.getByRole('cell').last();
+  const idle = await current.evaluate((row) => getComputedStyle(row).backgroundColor);
+  await balance.hover();
+  await expect(current).not.toHaveCSS('background-color', idle);
+  await balance.click();
+  await expect(years.nth(0)).toHaveAttribute('aria-expanded', 'false');
+  await expect(months).toHaveCount(0);
+  // From the keyboard, the year's button opens it, and the focused row is outlined.
+  await years.nth(0).focus();
+  await page.keyboard.press('Enter');
+  await expect(years.nth(0)).toHaveAttribute('aria-expanded', 'true');
+  await expect(current).toHaveCSS('outline-style', 'solid');
+  await expect(months).toHaveCount(11);
   await years.nth(0).click();
   await expect(months).toHaveCount(0);
   await years.nth(1).click();
@@ -60,7 +93,6 @@ test('year by year shows each year, newest first and open, and its months open t
     '€24,000',
     '+€16,000 40% of in',
     '€17,000 +€16,000',
-    'Example Bonus +€4,000',
   ]);
   await table.getByRole('link', {name: 'June'}).click();
   await expect(page).toHaveURL(/[?&]month=2025-06/);
@@ -85,6 +117,7 @@ test('spending by category shows a month on average per year, with small categor
     '€1,200',
   ]);
   expect(await cells(rows.nth(4))).toEqual(['Travel', 'new', '€148', '–', '–']);
+  await expectCategoryIcon(rows.nth(1), 'Housing and utilities');
   // Transport, entertainment and health are each under 3% of all spending.
   const more = table.getByRole('button', {name: '3 more categories'});
   expect(await cells(rows.nth(5))).toEqual(['3 more categories', '−2%', '€98', '€100', '€100']);
@@ -129,10 +162,16 @@ test('on a phone, each category shows its latest year and change, and opens into
     'Food and drink−2%€492',
     'Shopping−2%€197',
     'Travelnew€148',
-    '3 more categories−2%€98',
+    '3 more categories',
     'Total+12%€2,233',
   ]);
+  await expect(
+    table
+      .getByRole('listitem')
+      .filter({has: page.getByRole('button', {name: '3 more categories'})}),
+  ).toHaveText('3 more categories−2%€98');
   for (const row of await rows.all()) expect((await boxOf(row)).height).toBeGreaterThanOrEqual(44);
+  await expectCategoryIcon(rows.first(), 'Housing and utilities');
   await expect(table).toContainText('* part year: 2024 from Dec, 2026 up to 5 Nov');
 
   // A row opens in place into each year, newest first, each opening its transactions.
@@ -189,7 +228,6 @@ test('a single month of history is one part year with no comparison', async ({pa
   const history = homeHistory({
     spending: (month): Record<string, number> => (month === '2026-11' ? {FOOD_AND_DRINK: 40} : {}),
     income: () => ({}),
-    events: [],
   });
   const keep = (period: {start: string}) => period.start >= '2026-11';
   history.trend.periods = history.trend.periods.filter(keep);
@@ -208,3 +246,59 @@ test('a single month of history is one part year with no comparison', async ({pa
   // Nothing came in, so there is no income table.
   await expect(page.getByRole('region', {name: 'Income by source'})).toHaveCount(0);
 });
+
+for (const width of [1440, 1024]) {
+  test(`each per-year heading lines up with its column's figures at ${width}px`, async ({page}) => {
+    await page.setViewportSize({width, height: 1000});
+    await mockSyntheticHome(page);
+    await page.goto('/');
+
+    for (const title of ['Income by source', 'Spending by category']) {
+      const rows = page.getByRole('region', {name: title}).getByRole('row');
+      await expect(rows.nth(1)).toBeVisible();
+      const [heads, body] = await Promise.all([textEdges(rows.nth(0)), textEdges(rows.nth(1))]);
+      const first = await rows
+        .nth(1)
+        .locator('th')
+        .first()
+        .evaluate((cell) => {
+          const box = cell.firstElementChild!.getBoundingClientRect();
+          return box.left;
+        });
+      // The name column starts where its names (and their icons) do; every figure ends under its heading.
+      expect.soft(Math.abs(heads[0].left! - first), `${title} name`).toBeLessThanOrEqual(1);
+      for (let index = 1; index < heads.length; index++)
+        expect
+          .soft(Math.abs(heads[index].right! - body[index].right!), `${title} column ${index}`)
+          .toBeLessThanOrEqual(1);
+    }
+  });
+}
+
+for (const width of [1440, 390]) {
+  test(`opening a year moves no column at ${width}px`, async ({page, homePage}) => {
+    await page.setViewportSize({width, height: 1000});
+    await mockSyntheticHome(page);
+    await page.goto('/');
+
+    const table = homePage.yearTable;
+    const columns = () =>
+      table.locator('thead th').evaluateAll((heads) =>
+        heads
+          .filter((head) => (head as HTMLElement).offsetParent !== null)
+          .map((head) => {
+            const box = head.getBoundingClientRect();
+            return {x: box.x, width: box.width};
+          }),
+      );
+    const year = table.getByRole('button', {name: /^2026/});
+    await expect(year).toHaveAttribute('aria-expanded', 'true');
+    const open = await columns();
+    expect(open.length).toBe(width < 640 ? 3 : 5);
+    await year.click();
+    await expect(year).toHaveAttribute('aria-expanded', 'false');
+    expect(await columns()).toEqual(open);
+    await table.getByRole('button', {name: /^2024/}).click();
+    expect(await columns()).toEqual(open);
+  });
+}

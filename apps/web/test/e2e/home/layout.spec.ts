@@ -1,15 +1,8 @@
-import type {Page} from '@playwright/test';
-import type {BankTransactionEvent} from '@tempo/contracts';
+import type {Locator, Page} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 
-import {
-  HOME_EVENTS,
-  USUAL_SPENDING,
-  homeHistory,
-  mockSyntheticHome,
-  oneOffs,
-} from '../../data/home-history.data';
+import {USUAL_SPENDING, homeHistory, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
@@ -32,8 +25,7 @@ const FIRST_MONTH = '2007-01';
 
 /**
  * Worst-case Home: twenty years of history, every amount a thousand times the demo's (balances in the tens of
- * millions), forty income sources (one with a long legal name), and fifteen one-offs in the last year with long,
- * unbreakable and two-letter names, all synthetic.
+ * millions) and forty income sources, one with a long legal name, all synthetic.
  */
 function worstCase() {
   const spending = (month: string): Record<string, number> => {
@@ -51,20 +43,12 @@ function worstCase() {
     if (month === '2025-06') sources['INCOME:example bonus'] = 4000 * SCALE;
     return sources;
   };
-  const events: BankTransactionEvent[] = [
-    ...HOME_EVENTS.map((event) => ({
-      ...event,
-      amount: (Number(event.amount) * SCALE).toFixed(2),
-      usualMonth: (2000 * SCALE).toFixed(2),
-    })),
-    ...oneOffs(15, SCALE),
-  ];
   const sourceLabels: Record<string, string> = {
     [LONG_SOURCE]: 'Example International Holdings Netherlands B.V. Payroll Department',
   };
   for (let index = 1; index <= 39; index++)
     sourceLabels[`INCOME:example source ${index}`] = `Example Source ${index}`;
-  return homeHistory({spending, income, events, sourceLabels, firstMonth: FIRST_MONTH});
+  return homeHistory({spending, income, sourceLabels, firstMonth: FIRST_MONTH});
 }
 
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
@@ -196,20 +180,21 @@ async function columnGap(page: Page) {
 }
 
 for (const width of [1000, 1024, 1440]) {
-  test(`the chart and the span details end level at ${width}px, whatever the one-offs`, async ({
+  test(`the chart and the span details end level at ${width}px, at every span`, async ({
     page,
     homePage,
   }) => {
-    // Four histories, four spans each.
-    test.setTimeout(60_000);
     await page.setViewportSize({width, height: 1000});
-    for (const count of [0, 1, 2, 15]) {
-      await mockSyntheticHome(page, {history: homeHistory({events: oneOffs(count)})});
+    for (const [name, history] of [
+      ['demo', homeHistory],
+      ['worst-case', worstCase],
+    ] as const) {
+      await mockSyntheticHome(page, {history: history()});
       await page.goto('/');
       for (const span of ['6M', '1Y', '3Y', 'All']) {
         await homePage.whereYouStand.getByRole('button', {name: span, exact: true}).click();
         await expect(homePage.whereYouStand.getByRole('region', {name: 'This span'})).toBeVisible();
-        expect.soft(await columnGap(page), `${count} one-offs, ${span}`).toBeLessThanOrEqual(8);
+        expect.soft(await columnGap(page), `${name}, ${span}`).toBeLessThanOrEqual(8);
       }
     }
   });
@@ -248,3 +233,41 @@ for (const {width, rows} of [
     }
   });
 }
+
+test('Home’s and the month’s text actions share one style', async ({page, homePage}) => {
+  await page.setViewportSize({width: 1440, height: 1000});
+  await mockSyntheticHome(page);
+  await page.goto('/');
+
+  const style = (action: Locator) =>
+    action.evaluate((element) => {
+      const css = getComputedStyle(element);
+      const {height} = element.getBoundingClientRect();
+      return {
+        font: `${css.fontSize} ${css.fontWeight}`,
+        color: css.color,
+        padding: css.padding,
+        height: Math.round(height),
+      };
+    });
+  const card = homePage.whereYouStand;
+  const spending = page.getByRole('region', {name: 'Spending by category'});
+  const actions = [
+    card.getByRole('button', {name: 'All recurring payments'}),
+    card.getByRole('link', {name: 'Transactions in this span'}),
+    spending.getByRole('button', {name: '3 more categories'}),
+  ];
+  const styles = [];
+  for (const action of actions) styles.push(await style(action));
+  await actions[2].click();
+  styles.push(await style(spending.getByRole('button', {name: 'Show fewer'})));
+  await page.goto('/?month=2026-03');
+  const transactions = homePage
+    .monthDialog('March 2026')
+    .getByRole('region', {name: 'Transactions'});
+  styles.push(await style(transactions.getByRole('link', {name: 'Open in Transactions'})));
+  styles.push(await style(transactions.getByRole('button', {name: 'Show all 15'})));
+
+  expect(styles[0].height).toBe(36);
+  for (const item of styles) expect(item).toEqual(styles[0]);
+});

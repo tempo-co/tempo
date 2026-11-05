@@ -28,18 +28,13 @@ import {cn} from '@/utils/cn';
 import {HOME_REFRESH_INTERVAL_MS} from '../api/refresh-interval';
 import {useGetBankTransactionBreakdown} from '../api/use-get-bank-transaction-breakdown';
 import {useOverview} from '../api/use-overview';
-import {
-  categoryDrill,
-  eventDrill,
-  flowDrill,
-  parseCalendarDate,
-  periodDrill,
-} from '../utils/drill-links';
-import {categoryColor, categoryLabel, pct, signed, signedPct, wholeCents} from '../utils/format';
+import {categoryDrill, flowDrill, parseCalendarDate, periodDrill} from '../utils/drill-links';
+import {pct, signed, signedPct, wholeCents} from '../utils/format';
 import {formatMoney, toCents} from '../utils/money';
 import {formatMonth, monthDates, shiftMonth} from '../utils/month';
 import {historyFrom, partCents} from '../utils/overview';
-import {EventLine} from './event-line';
+import {CategoryName} from './category-name';
+import {TextAction} from './text-action';
 
 /** Rows shown before "Show all"; the list itself asks for one API page. */
 const FIRST_ROWS = 12;
@@ -140,7 +135,7 @@ function StepButton({
 
 /**
  * What came in and went out, what was kept and the balance the month ended on; where the money went (with each
- * category's usual), the transactions, one-off payments, where it came from and the biggest merchants.
+ * category's usual), the transactions, where it came from and the biggest merchants.
  */
 function MonthView({
   month,
@@ -191,7 +186,7 @@ function MonthView({
     const start = period.start.slice(0, 7);
     return start < month && start >= shiftMonth(month, -USUAL_MONTHS);
   });
-  // As for one-off payments: no usual without a full year of history before the month.
+  // No usual without a full year of history before the month.
   const usualOf = (key: string) =>
     earlier.length < USUAL_MONTHS
       ? null
@@ -240,24 +235,6 @@ function MonthView({
           <MonthTransactions from={dates.from} to={end} />
         </div>
         <div className='grid min-w-0 content-start gap-6'>
-          {point.events.length > 0 && (
-            <section aria-label='One-off payments' className='grid gap-2 border bg-card p-5'>
-              <h2 className='text-card-title'>One-off payments</h2>
-              <ul className='-mx-2 grid'>
-                {point.events.map((event) => (
-                  <li key={event.id}>
-                    <Link
-                      to='/bank-transactions'
-                      search={eventDrill(event)}
-                      className='block px-2 py-2 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-ring'
-                    >
-                      <EventLine event={event} currency={currency} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
           <WhereItCameFrom
             period={periodOf(sources.breakdown.periods)}
             currency={currency}
@@ -349,14 +326,7 @@ function WhereItWent({
                 )}
                 className='grid min-h-11 grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-center gap-3 text-sm hover:bg-accent/40 focus-visible:outline-2 focus-visible:outline-ring max-sm:grid-cols-[minmax(0,1fr)_auto]'
               >
-                <span className='flex min-w-0 items-center gap-2'>
-                  <i
-                    aria-hidden='true'
-                    className='size-2.5 shrink-0'
-                    style={{background: categoryColor(part.key)}}
-                  />
-                  <span className='truncate'>{categoryLabel(part.key)}</span>
-                </span>
+                <CategoryName category={part.key} />
                 <span aria-hidden='true' className='relative block h-3 bg-muted max-sm:hidden'>
                   <span
                     className='absolute inset-y-0 left-0 bg-chart-primary'
@@ -402,13 +372,11 @@ function MonthTransactions({from, to}: {from: string; to: string}) {
     <section aria-label='Transactions' className='min-w-0 border bg-card'>
       <header className='flex items-center justify-between gap-3 px-5 pt-3 pb-1'>
         <h2 className='text-card-title'>Transactions</h2>
-        <Link
-          to='/bank-transactions'
-          search={periodDrill(from, to)}
-          className='-mr-2 inline-flex min-h-11 items-center px-2 text-xs text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring'
-        >
-          Open in Transactions
-        </Link>
+        <TextAction asChild className='-mr-2'>
+          <Link to='/bank-transactions' search={periodDrill(from, to)}>
+            Open in Transactions
+          </Link>
+        </TextAction>
       </header>
       {isPending ? (
         <Skeleton className='m-5 h-40' />
@@ -437,22 +405,18 @@ function MonthTransactions({from, to}: {from: string; to: string}) {
         </ul>
       )}
       {data && data.transactions.length > FIRST_ROWS && !showAll && (
-        <button
-          type='button'
-          onClick={() => setShowAll(true)}
-          className='flex min-h-11 w-full items-center justify-center border-t text-sm text-primary hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
-        >
-          Show all {data.total}
-        </button>
+        <footer className='border-t px-3 py-1'>
+          <TextAction onClick={() => setShowAll(true)}>Show all {data.total}</TextAction>
+        </footer>
       )}
       {data && showAll && data.total > data.transactions.length && (
-        <Link
-          to='/bank-transactions'
-          search={periodDrill(from, to)}
-          className='flex min-h-11 w-full items-center justify-center border-t text-sm text-primary hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
-        >
-          The other {data.total - data.transactions.length} in Transactions
-        </Link>
+        <footer className='border-t px-3 py-1'>
+          <TextAction asChild>
+            <Link to='/bank-transactions' search={periodDrill(from, to)}>
+              The other {data.total - data.transactions.length} in Transactions
+            </Link>
+          </TextAction>
+        </footer>
       )}
     </section>
   );

@@ -153,7 +153,6 @@ for (const [filename, exportName, method, input] of [
     const keys = [
       dashboardQueryKeys.breakdown('year', 'category', '2007-01-01', '2026-10-04', '2026-10-04'),
       dashboardQueryKeys.breakdown('month', 'source', '2007-01-01', '2026-10-04', '2026-10-04'),
-      dashboardQueryKeys.events('2007-01-01', '2026-10-04', '2026-10-04'),
       dashboardQueryKeys.reviewCounts,
     ];
     keys.forEach((key) => client.setQueryData(key, {cached: true}));

@@ -1,4 +1,4 @@
-import type {BankTransactionCategoryFilterValue, BankTransactionEvent} from '@tempo/contracts';
+import type {BankTransactionCategoryFilterValue} from '@tempo/contracts';
 import {parse} from 'date-fns';
 
 import type {BankTransactionSearchParams} from '@/features/banking/types/bank-transaction';
@@ -18,13 +18,6 @@ function bookingRange(from: string, to: string) {
 /** Every transaction booked between two calendar dates. */
 export function periodDrill(from: string, to: string): BankTransactionDrillSearch {
   return {bookingDate: bookingRange(from, to)};
-}
-
-/** The transaction behind a one-off payment, open in its day's list. */
-export function eventDrill(
-  event: Pick<BankTransactionEvent, 'id' | 'date'>,
-): BankTransactionDrillSearch {
-  return {...periodDrill(event.date, event.date), transactionId: event.id};
 }
 
 /**

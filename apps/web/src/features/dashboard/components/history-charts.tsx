@@ -1,11 +1,11 @@
 import {useRef} from 'react';
-import {Area, CartesianGrid, ComposedChart, ReferenceDot, XAxis, YAxis} from 'recharts';
+import {Area, CartesianGrid, ComposedChart, XAxis, YAxis} from 'recharts';
 
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {cn} from '@/utils/cn';
 
 import {axisFormatter, axisTicks} from '../utils/chart-axis';
-import {signed, signedEvent, wholeCents} from '../utils/format';
+import {signed, wholeCents} from '../utils/format';
 import {formatMonth} from '../utils/month';
 import type {MonthPoint} from '../utils/overview';
 
@@ -13,7 +13,7 @@ import type {MonthPoint} from '../utils/overview';
 export const Y_WIDTH = 52;
 const RIGHT = 12;
 
-/** Month-end balance as one line; one-off payments are dots on it. Months sit at slot centres, like the bars below. */
+/** Month-end balance as one line. Months sit at slot centres, like the bars below. */
 export function BalanceChart({
   months,
   currency,
@@ -41,8 +41,11 @@ export function BalanceChart({
   const first = known[0];
   const last = known[known.length - 1];
   return (
-    // In a column taller than the chart, it grows (to 40rem) instead of leaving a gap below the bars.
-    <div ref={plotRef} className='flex min-h-56 flex-1 flex-col sm:min-h-64 @[60rem]:max-h-[40rem]'>
+    // Beside the details it fills their height (12rem to 40rem), so neither column leaves a gap below it.
+    <div
+      ref={plotRef}
+      className='flex min-h-56 flex-1 flex-col sm:min-h-64 @[60rem]:max-h-[40rem] @[60rem]:min-h-48'
+    >
       <ChartContainer
         className='aspect-auto min-h-0 w-full flex-1'
         config={{balance: {color: 'hsl(var(--chart-primary))'}}}
@@ -50,7 +53,7 @@ export function BalanceChart({
         aria-label={
           first === undefined
             ? 'Total balance at each month end.'
-            : `Total balance at each month end, from ${wholeCents(first, currency)} to ${wholeCents(last, currency)}. One-off payments are marked.`
+            : `Total balance at each month end, from ${wholeCents(first, currency)} to ${wholeCents(last, currency)}.`
         }
       >
         <ComposedChart
@@ -100,25 +103,6 @@ export function BalanceChart({
             isAnimationActive={false}
             activeDot={{r: 4}}
           />
-          {data.flatMap((d) =>
-            d.balance === null
-              ? []
-              : d.point.events.map((event) => (
-                  <ReferenceDot
-                    key={event.id}
-                    x={d.index}
-                    y={d.balance!}
-                    r={4.5}
-                    fill={
-                      event.direction === 'INCOME'
-                        ? 'hsl(var(--success))'
-                        : 'hsl(var(--foreground))'
-                    }
-                    stroke='hsl(var(--card))'
-                    strokeWidth={2}
-                  />
-                )),
-          )}
           <ChartTooltip
             cursor={{stroke: 'hsl(var(--border))'}}
             content={({active, payload}) => {
@@ -130,13 +114,6 @@ export function BalanceChart({
                   <p className='font-semibold'>{formatMonth(point.month, 'MMMM yyyy')}</p>
                   <TipRow label='Balance' value={wholeCents(point.balance, currency)} strong />
                   <TipRow label='Kept' value={signed(point.kept, currency)} />
-                  {point.events.map((event) => (
-                    <TipRow
-                      key={event.id}
-                      label={event.name}
-                      value={signedEvent(event, currency)}
-                    />
-                  ))}
                 </div>
               );
             }}

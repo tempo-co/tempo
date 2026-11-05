@@ -6,7 +6,5 @@ export const dashboardQueryKeys = {
     ['bank-dashboard', 'balance-trend', interval, from, to, asOf] as const,
   breakdown: (interval: string, by: string, from: string, to: string, asOf: string) =>
     ['bank-dashboard', 'breakdown', interval, by, from, to, asOf] as const,
-  events: (from: string, to: string, asOf: string) =>
-    ['bank-dashboard', 'events', from, to, asOf] as const,
   reviewCounts: ['bank-dashboard', 'review-counts'] as const,
 };

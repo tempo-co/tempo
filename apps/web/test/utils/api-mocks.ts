@@ -4,7 +4,6 @@ import type {
   BankConnection,
   BankTransactionBreakdown,
   BankTransactionCashFlow,
-  BankTransactionEvents,
   BankTransactionReviewCounts,
   MerchantRanking,
   RecurringSeriesLists,
@@ -149,10 +148,6 @@ export async function mockEmptyHome(page: Page) {
       periods: [],
     } satisfies BankTransactionBreakdown);
   });
-  await mockJson(page, '**/bank-transactions/events?**', {
-    baseCurrency: null,
-    events: [],
-  } satisfies BankTransactionEvents);
   await mockJson(page, '**/bank-transactions/review-counts', {
     needsReview: 0,
     categorizationFailed: 0,

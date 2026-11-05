@@ -2,7 +2,6 @@ import {
 	BREAKDOWN_DIMENSIONS,
 	BREAKDOWN_INTERVALS,
 	type BankTransactionBreakdownQuery,
-	type BankTransactionEventsQuery,
 	type BreakdownDimension,
 	type BreakdownInterval,
 } from '@tempo/contracts';
@@ -17,17 +16,6 @@ export class BankTransactionBreakdownQueryDto implements BankTransactionBreakdow
 	@IsIn(BREAKDOWN_DIMENSIONS)
 	by: BreakdownDimension;
 
-	@IsCalendarDate()
-	from: string;
-
-	@IsCalendarDate()
-	to: string;
-
-	@IsCalendarDate()
-	asOf: string;
-}
-
-export class BankTransactionEventsQueryDto implements BankTransactionEventsQuery {
 	@IsCalendarDate()
 	from: string;
 

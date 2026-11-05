@@ -1,4 +1,4 @@
-import type {BankTransactionCategory, BankTransactionCategoryFilterValue} from './categories.js';
+import type {BankTransactionCategoryFilterValue} from './categories.js';
 
 export const CASH_FLOW_INTERVALS = ['week', 'month', 'year'] as const;
 export type CashFlowInterval = (typeof CASH_FLOW_INTERVALS)[number];
@@ -146,41 +146,6 @@ export type BankTransactionBreakdown = {
 	by: BreakdownDimension;
 	/** Every period from the first booked transaction (or `from`) through `to`, including empty ones. */
 	periods: BankTransactionBreakdownPeriod[];
-};
-
-/** `GET /bank-transactions/events` query. */
-export type BankTransactionEventsQuery = {
-	/** First day to look at. */
-	from: string;
-	/** Last day to look at, on or before `asOf`. */
-	to: string;
-	/** The client's local date; its month is still running and has no events. */
-	asOf: string;
-};
-
-/**
- * A single payment of at least half a usual month's spending that is not regular. The usual month is the mean
- * spending of the 12 calendar months before, all of them inside the owner's history.
- */
-export type BankTransactionEvent = {
-	/** The transaction's id. */
-	id: string;
-	/** Booking date. */
-	date: string;
-	name: string;
-	category: BankTransactionCategory | null;
-	direction: 'INCOME' | 'EXPENSE';
-	/** The base-currency amount, positive. */
-	amount: string;
-	usualMonth: string;
-	/** `amount` ÷ `usualMonth`, two places. */
-	share: number;
-};
-
-/** `GET /bank-transactions/events`: one-off payments, oldest first. */
-export type BankTransactionEvents = {
-	baseCurrency: string | null;
-	events: BankTransactionEvent[];
 };
 
 /** `GET /bank-transactions/review-counts`. */

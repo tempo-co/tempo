@@ -76,7 +76,6 @@ Defined in `services/bank-transaction-filters.ts`; read `SQL_SPENDING` / `SQL_IN
 - Own transfers: evidence is a counterparty IBAN of another owned account in the same currency, the holder's own name (never for card payments), or an owner override (`MARKED`/`UNMARKED`). `TRANSFER` transaction type, names, or matching amount/date alone are leads, not evidence. Never delete, merge or rewrite either leg.
 - Never add amounts across currencies.
 - The breakdown (`/bank-transactions/breakdown`) splits cash flow's spending by category and its income by source (merchant key, else display name) on the same definitions, so each period's total equals cash flow's. Refund credits stay in their `REFUND` part, which can be negative.
-- One-off events (`/bank-transactions/events`) are single spending or income payments, never refunds, of at least half a usual month: the mean spending, net of refunds, of the 12 calendar months before, every one inside the owner's history (from the month of the first booking). A payment is regular, and no event, when the same merchant key and direction has at least two other payments within three months either side, each within 25% of its amount. Regularity reads payments up to `asOf`, so a recent event disappears once the payment repeats. The running month has none.
 - Merchant totals (`/merchants`) use the same definitions over `SQL_MERCHANT_GROUP` and reconcile with the list filtered by `merchantGroup`; own transfers and currency exchanges belong to no group.
 
 ## Concurrency patterns used here

@@ -1,4 +1,4 @@
-import {PHONE_KEY, homeHistory, mockSyntheticHome, oneOffs} from '../../data/home-history.data';
+import {PHONE_KEY, homeHistory, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
 import {boxOf} from '../../utils/layout';
@@ -28,8 +28,6 @@ test('shows the total, its change over each span, and the span’s money in and 
   ]) {
     await expect(span.getByText(label, {exact: true}).locator('..')).toHaveText(`${label}${value}`);
   }
-  await expect(span).toContainText('One-off payments · 1');
-  await expect(span.getByRole('button', {name: /Example Airline/})).toContainText('−€1,500');
   await expect(span.getByRole('link', {name: 'Transactions in this span'})).toHaveAttribute(
     'href',
     /bookingDate/,
@@ -38,47 +36,13 @@ test('shows the total, its change over each span, and the span’s money in and 
   await card.getByRole('button', {name: '6M'}).click();
   await expect(card.getByRole('button', {name: '6M'})).toHaveAttribute('aria-pressed', 'true');
   await expect(card).toContainText('+€4,800+25%since 30 Apr 2026');
-  await expect(span).toContainText('No one-off payments');
 
   // Longer than the history: measured from zero, before the first month.
   for (const name of ['3Y', 'All']) {
     await card.getByRole('button', {name, exact: true}).click();
     await expect(card).toContainText('+€24,300since Dec 2024');
     await expect(span.getByRole('heading', {level: 2})).toHaveText('Dec 2024 – now');
-    await expect(span).toContainText('One-off payments · 2');
   }
-
-  // A one-off in the span opens its month.
-  await span.getByRole('button', {name: /Example Bonus/}).click();
-  await expect(page).toHaveURL(/[?&]month=2025-06/);
-  await expect(homePage.monthDialog('June 2025')).toBeVisible();
-});
-
-test('a span with many one-offs lists three and opens the rest in place', async ({
-  page,
-  homePage,
-}) => {
-  await mockSyntheticHome(page, {history: homeHistory({events: oneOffs(15)})});
-  await page.goto('/');
-
-  const span = homePage.whereYouStand.getByRole('region', {name: 'This span'});
-  await expect(span).toContainText('One-off payments · 12');
-  const events = span.getByRole('listitem');
-  await expect(events).toHaveCount(3);
-  // Oldest first, like the chart.
-  await expect(events.first()).toContainText('Example Private Hospital and Specialist Clinic 12');
-  const more = span.getByRole('button', {name: 'Show all 12'});
-  await expect(more).toHaveAttribute('aria-expanded', 'false');
-  await more.click();
-  await expect(events).toHaveCount(12);
-  await span.getByRole('button', {name: 'Show fewer'}).click();
-  await expect(events).toHaveCount(3);
-
-  // Another span starts folded again.
-  await homePage.whereYouStand.getByRole('button', {name: 'All', exact: true}).click();
-  await expect(span).toContainText('One-off payments · 15');
-  await expect(events).toHaveCount(3);
-  await expect(span.getByRole('button', {name: 'Show all 15'})).toBeVisible();
 });
 
 test('on the last day of a month, a span is measured from the month end a span back', async ({
@@ -167,7 +131,7 @@ test('leaves out repeats when nothing recurring is found', async ({page, homePag
 test('offers a retry when the history fails to load', async ({page, homePage}) => {
   await mockSyntheticHome(page);
   let fail = true;
-  await page.route('**/bank-transactions/events?**', (route) =>
+  await page.route('**/bank-transactions/cash-flow?**', (route) =>
     fail ? fulfillJson(route, {message: 'Too many requests'}, 429) : route.fallback(),
   );
   await page.goto('/');

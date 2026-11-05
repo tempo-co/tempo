@@ -6,7 +6,6 @@ import type {
 	BankTransactionBreakdown,
 	BankTransactionCashFlow,
 	BankTransactionCategoryImpact,
-	BankTransactionEvents,
 	BankTransactionRecurring,
 	BankTransactionReviewCounts,
 	BankTransactionSummary,
@@ -23,10 +22,7 @@ import {BankTransactionHistoryService} from '../services/bank-transaction-histor
 import {BankTransactionSummaryService} from '../services/bank-transaction-summary.service';
 import {BankTransactionService} from '../services/bank-transaction.service';
 import {BROWSING_THROTTLE} from './constants/throttle.constants';
-import {
-	BankTransactionBreakdownQueryDto,
-	BankTransactionEventsQueryDto,
-} from './dtos/bank-transaction-breakdown-query.dto';
+import {BankTransactionBreakdownQueryDto} from './dtos/bank-transaction-breakdown-query.dto';
 import {BankTransactionCashFlowQueryDto} from './dtos/bank-transaction-cash-flow-query.dto';
 import {BankTransactionCategoryImpactQueryDto} from './dtos/bank-transaction-category-impact.dto';
 import {BankTransactionCategoryUpdateDto} from './dtos/bank-transaction-category-update.dto';
@@ -102,16 +98,6 @@ export class BankTransactionController {
 		@Query() query: BankTransactionBreakdownQueryDto,
 	): Promise<BankTransactionBreakdown> {
 		return this.bankTransactionHistoryService.getBreakdown(account, query);
-	}
-
-	@Get('events')
-	@TokenReadable()
-	@Throttle(BROWSING_THROTTLE)
-	getEvents(
-		@CurrentAccount() account: Account,
-		@Query() query: BankTransactionEventsQueryDto,
-	): Promise<BankTransactionEvents> {
-		return this.bankTransactionHistoryService.getEvents(account, query);
 	}
 
 	@Get('review-counts')

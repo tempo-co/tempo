@@ -4,49 +4,23 @@ import {
 	BANK_TRANSACTION_UNCATEGORIZED,
 	type BankTransactionBreakdown,
 	type BankTransactionBreakdownPeriod,
-	type BankTransactionEvent,
-	type BankTransactionEvents,
 } from '@tempo/contracts';
 import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 
-import {
-	BANKING_TRANSACTION_BREAKDOWN_RANGE,
-	BANKING_TRANSACTION_EVENTS_RANGE,
-} from '../api/constants/banking-messages.constants';
-import type {
-	BankTransactionBreakdownQueryDto,
-	BankTransactionEventsQueryDto,
-} from '../api/dtos/bank-transaction-breakdown-query.dto';
+import {BANKING_TRANSACTION_BREAKDOWN_RANGE} from '../api/constants/banking-messages.constants';
+import type {BankTransactionBreakdownQueryDto} from '../api/dtos/bank-transaction-breakdown-query.dto';
 import {BankTransaction} from '../bank-transaction.entity';
 import {addDays} from '../banking.utils';
 import {formatCents, nextPeriodStart, parseCents, periodStarts} from '../summary/bank-transaction-summary';
-import {
-	SQL_INCOME,
-	SQL_SPENDING,
-	applyBankTransactionFilters,
-	createOwnerScopedQuery,
-	findFirstBookingDate,
-} from './bank-transaction-filters';
+import {applyBankTransactionFilters, createOwnerScopedQuery, findFirstBookingDate} from './bank-transaction-filters';
 
 const BASE_AMOUNT = '"transaction"."amountInBaseCurrency"';
 const CATEGORY_KEY = `COALESCE("transaction"."category", '${BANK_TRANSACTION_UNCATEGORIZED}')`;
 const SOURCE_KEY = `COALESCE(NULLIF("transaction"."merchantKey", ''), "transaction"."displayDescription")`;
 
-/** A single payment is an event from this share of a usual month's spending. */
-const EVENT_SHARE_OF_USUAL_MONTH = 0.5;
-/** The usual month averages this many calendar months before it, every one inside the owner's history. */
-const USUAL_MONTHS = 12;
-/** A payment is regular with this many other payments of the same merchant and direction nearby... */
-const REGULAR_OTHER_PAYMENTS = 2;
-/** ...booked within this many months either side... */
-const REGULAR_WINDOW_MONTHS = 3;
-/** ...each within this share of its amount. */
-const REGULAR_AMOUNT_TOLERANCE = 0.25;
-
 type PartRow = {start: string; key: string; amount: string};
-type EventRow = Omit<BankTransactionEvent, 'share'> & {share: string};
 
 /** Where the owner's money went and came from over the years, on the summary's definitions. */
 @Injectable()
@@ -133,79 +107,5 @@ export class BankTransactionHistoryService {
 			});
 		}
 		return {baseCurrency, interval, by, periods};
-	}
-
-	/**
-	 * One-off payments: a spending or income transaction (never a refund) of at least half a usual month's spending
-	 * that is not regular. The usual month is the mean spending, net of refunds, of the 12 calendar months before the
-	 * payment's month; every one of them must lie inside the owner's history (from the month of the first booking),
-	 * or the month has no events. Regular means the same merchant key in the same direction has at least two other
-	 * payments within three months either side, each within 25% of this one's amount. The running month (`asOf`'s)
-	 * has none, and an event can stop being one once later payments make it regular.
-	 */
-	async getEvents(
-		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
-		{from, to, asOf}: BankTransactionEventsQueryDto,
-	): Promise<BankTransactionEvents> {
-		if (from > to || to > asOf) throw new BadRequestException(BANKING_TRANSACTION_EVENTS_RANGE);
-		const rows: EventRow[] = await this.bankTransactionRepository.manager.query(
-			`
-			WITH owned AS (
-				SELECT t.* FROM "bank_transactions" t
-				JOIN "bank_accounts" a ON a."id" = t."bankAccountId"
-				JOIN "bank_connections" c ON c."id" = a."bankConnectionId"
-				WHERE c."accountId" = $1 AND t."bookingDate" <= $4::date
-			), counted AS (
-				SELECT "transaction"."id", "transaction"."bookingDate" AS "day",
-					date_trunc('month', "transaction"."bookingDate")::date AS "month",
-					"transaction"."merchantKey", "transaction"."category", "transaction"."displayDescription" AS "name",
-					"transaction"."amountInBaseCurrency" AS "base",
-					CASE
-						WHEN ${SQL_INCOME} THEN 'INCOME'
-						WHEN "transaction"."creditDebitIndicator" = 'DBIT' THEN 'EXPENSE'
-						ELSE 'REFUND'
-					END AS "direction"
-				FROM owned "transaction"
-				WHERE "transaction"."amountInBaseCurrency" IS NOT NULL AND (${SQL_SPENDING} OR ${SQL_INCOME})
-			), spending AS (
-				SELECT "month", -SUM("base") FILTER (WHERE "direction" <> 'INCOME') AS "spent" FROM counted GROUP BY "month"
-			), usual AS (
-				SELECT m."month", (
-					SELECT COALESCE(SUM(s."spent"), 0) / $5::int FROM spending s
-					WHERE s."month" >= m."month" - make_interval(months => $5::int) AND s."month" < m."month"
-				) AS "usual"
-				FROM (SELECT DISTINCT "month" FROM counted) m
-				WHERE m."month" >= (SELECT date_trunc('month', MIN("bookingDate")) FROM owned) + make_interval(months => $5::int)
-					AND m."month" < date_trunc('month', $4::date)
-			), large AS MATERIALIZED (
-				SELECT c.*, u."usual" FROM counted c JOIN usual u ON u."month" = c."month"
-				WHERE c."direction" <> 'REFUND' AND c."day" BETWEEN $2::date AND $3::date
-					AND u."usual" > 0 AND ABS(c."base") >= $6::numeric * u."usual"
-			)
-			SELECT l."id", to_char(l."day", 'YYYY-MM-DD') AS "date", l."name", l."category", l."direction",
-				ROUND(ABS(l."base"), 2)::text AS "amount", ROUND(l."usual", 2)::text AS "usualMonth",
-				ROUND(ABS(l."base") / l."usual", 2)::text AS "share"
-			FROM large l
-			-- Regular means repeating with the same merchant; a payment without a merchant key has none, so it never is.
-			WHERE (
-				SELECT COUNT(*) FROM counted p
-				WHERE p."merchantKey" = l."merchantKey" AND p."direction" = l."direction" AND p."id" <> l."id"
-					AND p."day" BETWEEN l."day" - make_interval(months => $7::int) AND l."day" + make_interval(months => $7::int)
-					AND ABS(p."base") BETWEEN ABS(l."base") * (1 - $8::numeric) AND ABS(l."base") * (1 + $8::numeric)
-			) < $9::int
-			ORDER BY l."day", l."id"`,
-			[
-				accountId,
-				from,
-				to,
-				asOf,
-				USUAL_MONTHS,
-				EVENT_SHARE_OF_USUAL_MONTH,
-				REGULAR_WINDOW_MONTHS,
-				REGULAR_AMOUNT_TOLERANCE,
-				REGULAR_OTHER_PAYMENTS,
-			],
-		);
-		return {baseCurrency, events: rows.map((row) => ({...row, share: Number(row.share)}))};
 	}
 }

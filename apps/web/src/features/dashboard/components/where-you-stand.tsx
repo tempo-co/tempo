@@ -9,13 +9,13 @@ import {parseCalendarDate, periodDrill} from '../utils/drill-links';
 import {pct, signed, signedPct, wholeCents} from '../utils/format';
 import {formatMonth} from '../utils/month';
 import {type MonthPoint, type Overview, SPANS, type Span, spanMonths} from '../utils/overview';
-import {EventLine} from './event-line';
 import {BalanceChart, KeptStrip, Y_WIDTH} from './history-charts';
 import {RepeatsBlock} from './repeats-block';
+import {TextAction} from './text-action';
 
 /**
- * Where the owner stands over a span: the total balance and its change, the balance line with one-off dots, what
- * was kept each month on the same axis, the span's figures and what repeats. Any month opens over Home.
+ * Where the owner stands over a span: the total balance and its change, the balance line, what was kept each
+ * month on the same axis, the span's figures and what repeats. Any month opens over Home.
  */
 export function WhereYouStand({
   overview,
@@ -78,25 +78,12 @@ export function WhereYouStand({
           className='-mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground'
           style={{paddingLeft: Y_WIDTH}}
         >
-          <span className='inline-flex items-center gap-1.5'>
-            <i aria-hidden='true' className='size-2.5 rounded-full bg-success' />
-            one-off in
-          </span>
-          <span className='inline-flex items-center gap-1.5'>
-            <i aria-hidden='true' className='size-2.5 rounded-full bg-foreground' />
-            one-off out
-          </span>
           <span>Tap a month to open it</span>
         </p>
         <KeptStrip months={shown} currency={currency} onPick={onOpenMonth} />
       </div>
       <div className='grid min-w-0 content-start gap-6 border-t pt-5 @[60rem]:border-t-0 @[60rem]:border-l @[60rem]:pt-0 @[60rem]:pl-6'>
-        <SpanDetails
-          key={span}
-          overview={overview}
-          months={base ? shown.slice(1) : shown}
-          onOpenMonth={onOpenMonth}
-        />
+        <SpanDetails key={span} overview={overview} months={base ? shown.slice(1) : shown} />
         <RepeatsBlock today={overview.today} className='border-t pt-5' />
       </div>
     </Card>
@@ -126,26 +113,12 @@ function SpanSwitch({value, onChange}: {value: Span; onChange: (value: Span) => 
   );
 }
 
-/** One-off rows shown before "Show all", so a span with many keeps the details beside the chart. */
-const EVENT_ROWS = 3;
-
-/** The span's money in, out and kept, the balance it moved between, and its one-off payments. */
-function SpanDetails({
-  overview,
-  months,
-  onOpenMonth,
-}: {
-  overview: Overview;
-  months: MonthPoint[];
-  onOpenMonth: (month: string) => void;
-}) {
+/** The span's money in, out and kept, and the balance it moved between. */
+function SpanDetails({overview, months}: {overview: Overview; months: MonthPoint[]}) {
   const currency = overview.currency;
   const income = months.reduce((sum, point) => sum + point.income, 0);
   const spending = months.reduce((sum, point) => sum + point.spending, 0);
   const kept = income - spending;
-  const [allEvents, setAllEvents] = useState(false);
-  const events = months.flatMap((point) => point.events);
-  const shownEvents = allEvents ? events : events.slice(0, EVENT_ROWS);
   const startIndex = overview.months.indexOf(months[0]) - 1;
   const startBalance = startIndex >= 0 ? overview.months[startIndex].balance : 0;
   const from = `${months[0].month}-01`;
@@ -172,43 +145,11 @@ function SpanDetails({
           wide
         />
       </dl>
-      <div className='grid gap-1'>
-        <h3 className='text-label text-muted-foreground'>
-          {events.length === 0 ? 'No one-off payments' : `One-off payments · ${events.length}`}
-        </h3>
-        {events.length > 0 && (
-          <ul className='-mx-2 grid'>
-            {shownEvents.map((event) => (
-              <li key={event.id}>
-                <button
-                  type='button'
-                  onClick={() => onOpenMonth(event.date.slice(0, 7))}
-                  className='block min-h-11 w-full px-2 py-2 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
-                >
-                  <EventLine event={event} currency={currency} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {events.length > EVENT_ROWS && (
-          <button
-            type='button'
-            aria-expanded={allEvents}
-            onClick={() => setAllEvents(!allEvents)}
-            className='inline-flex min-h-11 w-fit items-center text-sm text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring'
-          >
-            {allEvents ? 'Show fewer' : `Show all ${events.length}`}
-          </button>
-        )}
-      </div>
-      <Link
-        to='/bank-transactions'
-        search={periodDrill(from, overview.today)}
-        className='inline-flex min-h-11 w-fit items-center text-sm text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring'
-      >
-        Transactions in this span
-      </Link>
+      <TextAction asChild className='-ml-2'>
+        <Link to='/bank-transactions' search={periodDrill(from, overview.today)}>
+          Transactions in this span
+        </Link>
+      </TextAction>
     </section>
   );
 }

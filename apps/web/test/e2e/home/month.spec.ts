@@ -1,6 +1,7 @@
 import {MARKET_ID, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
+import {expectCategoryIcon} from '../../utils/layout';
 
 // Every response is synthetic: these checks never read or mutate a shared API stack.
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
@@ -27,10 +28,8 @@ test('a month shows its money, where it went against the usual, and where it cam
   expect(decodeURIComponent((await categories.nth(0).getAttribute('href')) ?? '')).toContain(
     'categories=["TRAVEL"]',
   );
+  await expectCategoryIcon(categories.nth(1), 'Housing and utilities');
 
-  await expect(dialog.getByRole('region', {name: 'One-off payments'})).toContainText(
-    'Example Airline',
-  );
   const came = dialog.getByRole('region', {name: 'Where it came from'});
   await expect(came.getByRole('link')).toHaveText(['Example Employer€3,000']);
 

@@ -33,7 +33,6 @@ export const BANKING_TRANSACTION_CASH_FLOW_RANGE =
 	'The cash flow range must run forward, end by the given date and cover at most 104 weeks, 240 months or 20 years.';
 export const BANKING_TRANSACTION_BREAKDOWN_RANGE =
 	'The breakdown range must run forward, end by the given date and cover at most 240 months or 20 years.';
-export const BANKING_TRANSACTION_EVENTS_RANGE = 'The events range must run forward and end by the given date.';
 export const MERCHANT_NOT_FOUND = 'Merchant not found.';
 export const MERCHANT_GROUP_ID_INVALID = 'Merchant id must be b_ or k_ followed by 32 lowercase hex characters.';
 export const MERCHANT_PERIODS_RANGE =

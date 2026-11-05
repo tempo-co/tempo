@@ -1914,7 +1914,6 @@ test.describe('bank-derived caches', () => {
       bankQueryKeys.transaction('example-transaction'),
       bankQueryKeys.connectionTransactions(MOCK_CONNECTION.id, null),
       dashboardQueryKeys.breakdown('year', 'category', '2007-01-01', '2026-10-01', '2026-10-01'),
-      dashboardQueryKeys.events('2007-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.balanceTrend('month', '2026-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.cashFlow('month', '2026-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.reviewCounts,

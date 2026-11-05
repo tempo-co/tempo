@@ -2,7 +2,6 @@ import type {
   BankBalanceTrend,
   BankTransactionBreakdownPeriod,
   BankTransactionCashFlow,
-  BankTransactionEvent,
 } from '@tempo/contracts';
 import {format, getDaysInMonth, subMonths} from 'date-fns';
 
@@ -25,7 +24,6 @@ export type MonthPoint = {
   income: number;
   spending: number;
   kept: number;
-  events: BankTransactionEvent[];
 };
 
 export type YearRow = {
@@ -37,7 +35,6 @@ export type YearRow = {
   income: number;
   spending: number;
   kept: number;
-  events: BankTransactionEvent[];
   months: MonthPoint[];
 };
 
@@ -52,19 +49,17 @@ export type Overview = {
   total: number | null;
 };
 
-/** Month-end balances, monthly flows and one-offs on one monthly axis, and the same rolled up by year. */
+/** Month-end balances and monthly flows on one monthly axis, and the same rolled up by year. */
 export function buildOverview({
   today,
   trend,
   flow,
-  events,
   categories,
   sources,
 }: {
   today: string;
   trend: BankBalanceTrend;
   flow: BankTransactionCashFlow;
-  events: BankTransactionEvent[];
   categories: BankTransactionBreakdownPeriod[];
   sources: BankTransactionBreakdownPeriod[];
 }): Overview {
@@ -82,7 +77,6 @@ export function buildOverview({
       income,
       spending,
       kept: income - spending,
-      events: events.filter((event) => event.date.slice(0, 7) === month),
     };
   });
 
@@ -100,7 +94,6 @@ export function buildOverview({
         income: 0,
         spending: 0,
         kept: 0,
-        events: [],
         months: [],
       };
       years.push(row);
@@ -110,7 +103,6 @@ export function buildOverview({
     row.income += point.income;
     row.spending += point.spending;
     row.kept += point.kept;
-    row.events.push(...point.events);
     row.complete = point.month.endsWith('-12') && point.complete;
   });
 

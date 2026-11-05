@@ -6,8 +6,6 @@ import type {
   BankTransactionBreakdown,
   BankTransactionBreakdownPeriod,
   BankTransactionCashFlow,
-  BankTransactionEvent,
-  BankTransactionEvents,
   BankTransactionReviewCounts,
   BankTransactionsResponse,
   MerchantRanking,
@@ -89,7 +87,7 @@ export async function mockSyntheticHome(
 
 /**
  * A synthetic history for Home, every value made up: from December 2024 to 5 November 2026, €3,000 of income and
- * €2,000 of spending a month, a €4,000 bonus in June 2025 and a €1,500 flight in March 2026 (both one-offs), and
+ * €2,000 of spending a month, a €4,000 bonus in June 2025 and a €1,500 flight in March 2026, and
  * the running month with only the rent so far. The balance starts at zero, so each month end is the sum of what
  * was kept: €24,300 today, €15,000 at the end of October 2025.
  */
@@ -115,7 +113,6 @@ export type HomeHistoryOptions = {
   spending?: (month: string) => Record<string, number>;
   /** Income per source and month; defaults to the employer's €3,000 plus the bonus. */
   income?: (month: string) => Record<string, number>;
-  events?: BankTransactionEvent[];
   sourceLabels?: Record<string, string>;
   /** `YYYY-MM` the history starts in; defaults to {@link HOME_FIRST_MONTH}. */
   firstMonth?: string;
@@ -155,65 +152,12 @@ const defaultIncome = (month: string): Record<string, number> => {
     : {[EMPLOYER]: 3000};
 };
 
-export const HOME_EVENTS: BankTransactionEvent[] = [
-  {
-    id: '00000000-0000-4000-8000-00000000e001',
-    date: BONUS.date,
-    name: 'Example Bonus',
-    category: 'INCOME',
-    direction: 'INCOME',
-    amount: money(BONUS.amount),
-    usualMonth: '2000.00',
-    share: 2,
-  },
-  {
-    id: '00000000-0000-4000-8000-00000000e002',
-    date: FLIGHT.date,
-    name: 'Example Airline',
-    category: 'TRAVEL',
-    direction: 'EXPENSE',
-    amount: money(FLIGHT.amount),
-    usualMonth: '2000.00',
-    share: 0.75,
-  },
-];
-
-const LONG_NAMES = [
-  'Example Furniture and Interior Design Warehouse Outlet',
-  'Example Private Hospital and Specialist Clinic',
-  'Exampleverylongmerchantnamewithoutanyspaces',
-  'Example Car Dealership',
-  'Ex',
-];
-
-/**
- * `count` synthetic one-off payments, one a month back from October 2026, every fifth one income, with long,
- * unbreakable and two-letter names.
- */
-export function oneOffs(count: number, scale = 1): BankTransactionEvent[] {
-  return Array.from({length: count}, (_, index) => {
-    const date = new Date(Date.UTC(2026, 9 - index, 12));
-    const income = index % 5 === 4;
-    return {
-      id: `00000000-0000-4000-8000-0000000f${String(index).padStart(4, '0')}`,
-      date: date.toISOString().slice(0, 10),
-      name: `${LONG_NAMES[index % LONG_NAMES.length]} ${index + 1}`,
-      category: income ? 'INCOME' : index % 2 ? 'HEALTH' : 'SHOPPING',
-      direction: income ? 'INCOME' : 'EXPENSE',
-      amount: ((1200 + index * 10) * scale).toFixed(2),
-      usualMonth: (2000 * scale).toFixed(2),
-      share: Number(((1200 + index * 10) / 2000).toFixed(2)),
-    } satisfies BankTransactionEvent;
-  });
-}
-
 const sum = (values: Record<string, number>) => Object.values(values).reduce((a, b) => a + b, 0);
 
 /** Every response Home and the month dialog read, consistent with each other. */
 export function homeHistory(options: HomeHistoryOptions = {}) {
   const spendingOf = options.spending ?? defaultSpending;
   const incomeOf = options.income ?? defaultIncome;
-  const events = options.events ?? HOME_EVENTS;
   const firstMonth = options.firstMonth ?? HOME_FIRST_MONTH;
   const allMonths = monthsBetween(firstMonth, RUNNING);
   const sourceLabels: Record<string, string> = {
@@ -304,7 +248,6 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
   return {
     trend,
     flow,
-    events: {baseCurrency: 'EUR', events} satisfies BankTransactionEvents,
     breakdown: {
       year: {category: yearly(spendingOf, category), source: yearly(incomeOf, source)},
       month: {category: monthly(spendingOf, category), source: monthly(incomeOf, source)},
@@ -507,7 +450,7 @@ export function monthTransactions(month: string, count: number): BankTransaction
 
 const params = (route: Route) => new URL(route.request().url()).searchParams;
 
-/** Answers Home's history requests (balances, flows, one-offs and breakdowns) from {@link homeHistory}. */
+/** Answers Home's history requests (balances, flows and breakdowns) from {@link homeHistory}. */
 export async function mockHistoryEndpoints(page: Page, history: HomeHistory = homeHistory()) {
   await page.route('**/bank-transactions/balance-trend?**', (route) =>
     fulfillJson(route, history.trend),
@@ -515,7 +458,6 @@ export async function mockHistoryEndpoints(page: Page, history: HomeHistory = ho
   await page.route('**/bank-transactions/cash-flow?**', (route) =>
     fulfillJson(route, history.flow),
   );
-  await page.route('**/bank-transactions/events?**', (route) => fulfillJson(route, history.events));
   await page.route('**/bank-transactions/breakdown?**', (route) => {
     const interval = params(route).get('interval') as 'year' | 'month';
     const by = params(route).get('by') as 'category' | 'source';
