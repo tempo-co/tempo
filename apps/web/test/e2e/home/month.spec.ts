@@ -1,4 +1,9 @@
-import {MARKET_ID, mockSyntheticHome} from '../../data/home-history.data';
+import {
+  MARKET_ID,
+  homeHistory,
+  mockSourceLogo,
+  mockSyntheticHome,
+} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
 import {boxOf, expectCategoryIcon, expectSourceTile} from '../../utils/layout';
@@ -10,7 +15,11 @@ test('a month shows its money, where it went against the usual, where it came fr
   page,
   homePage,
 }) => {
-  await mockSyntheticHome(page, {transactionsPerMonth: 45});
+  await mockSyntheticHome(page, {
+    history: homeHistory({sourceLogos: true}),
+    transactionsPerMonth: 45,
+  });
+  await mockSourceLogo(page);
   await page.goto('/?month=2026-03');
 
   const dialog = homePage.monthDialog('March 2026');
@@ -67,7 +76,8 @@ test('a month shows its money, where it went against the usual, where it came fr
 });
 
 test('a month without a full year of history before it has no usual', async ({page, homePage}) => {
-  await mockSyntheticHome(page);
+  await mockSyntheticHome(page, {history: homeHistory({sourceLogos: true})});
+  await mockSourceLogo(page);
   await page.goto('/?month=2025-06');
 
   const dialog = homePage.monthDialog('June 2025');

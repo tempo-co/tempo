@@ -1,6 +1,11 @@
 import type {Locator} from '@playwright/test';
 
-import {EMPLOYER, homeHistory, mockSyntheticHome} from '../../data/home-history.data';
+import {
+  EMPLOYER,
+  homeHistory,
+  mockSourceLogo,
+  mockSyntheticHome,
+} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {
   boxOf,
@@ -240,11 +245,12 @@ test('income by source names each source with its logo or icon and lines up with
   page,
 }) => {
   await page.setViewportSize({width: 1440, height: 1000});
-  const history = homeHistory();
+  const history = homeHistory({sourceLogos: true});
   const long = 'Example Employer Holding International Services Group Benelux Payroll Department';
   for (const period of history.breakdown.year.source)
     for (const part of period.parts) if (part.key === EMPLOYER) part.label = long;
   await mockSyntheticHome(page, {history});
+  await mockSourceLogo(page);
   await page.goto('/');
 
   const table = page.getByRole('region', {name: 'Income by source'});

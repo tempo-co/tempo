@@ -115,6 +115,8 @@ export type HomeHistoryOptions = {
   /** Income per source and month; defaults to the employer's €3,000 plus the bonus. */
   income?: (month: string) => Record<string, number>;
   sourceLabels?: Record<string, string>;
+  /** Gives the employer the logo {@link EMPLOYER_LOGO}; specs that turn it on answer its image too. */
+  sourceLogos?: boolean;
   /** `YYYY-MM` the history starts in; defaults to {@link HOME_FIRST_MONTH}. */
   firstMonth?: string;
 };
@@ -141,16 +143,9 @@ const RUNNING = HOME_TODAY.slice(0, 7);
 
 export const EMPLOYER = 'INCOME:example employer';
 export const BONUS_SOURCE = 'INCOME:example bonus';
-/** The employer's logo; the bonus has none, so it shows its category's icon. */
+/** The employer's logo with `sourceLogos`; the bonus never has one, so it shows its category's icon. */
 export const EMPLOYER_LOGO = `/merchant-logos/00000000-0000-4000-8000-0000000000e1/${'e'.repeat(64)}`;
-const SOURCE_LOOKS: Record<
-  string,
-  Pick<BankTransactionBreakdownPart, 'merchantLogoUrl' | 'category'>
-> = {
-  [EMPLOYER]: {merchantLogoUrl: EMPLOYER_LOGO, category: 'INCOME'},
-  [BONUS_SOURCE]: {merchantLogoUrl: null, category: 'INCOME'},
-};
-/** A 1×1 opaque PNG, synthetic, served for every logo. */
+/** A 1×1 opaque PNG, synthetic, for {@link mockSourceLogo}. */
 const LOGO_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
   'base64',
@@ -263,7 +258,10 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
     );
   const category = (key: string) => key;
   const source = (key: string) => sourceLabels[key] ?? key;
-  const sourceLooks = (key: string) => SOURCE_LOOKS[key] ?? {merchantLogoUrl: null, category: null};
+  const sourceLooks = (key: string): Partial<BankTransactionBreakdownPart> => ({
+    merchantLogoUrl: options.sourceLogos && key === EMPLOYER ? EMPLOYER_LOGO : null,
+    category: key === EMPLOYER || key === BONUS_SOURCE ? 'INCOME' : null,
+  });
 
   return {
     trend,
@@ -534,7 +532,11 @@ export async function mockHomeHistory(
         : {transactions: [], total: 0},
     );
   });
-  await page.route('**/merchant-logos/**', (route) =>
+}
+
+/** Answers {@link EMPLOYER_LOGO}'s image, for histories built with `sourceLogos`. */
+export async function mockSourceLogo(page: Page) {
+  await page.route(`**${EMPLOYER_LOGO}/mask-v1`, (route) =>
     route.fulfill({status: 200, contentType: 'image/png', body: LOGO_PNG}),
   );
 }
