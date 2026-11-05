@@ -41,9 +41,10 @@ export function BalanceChart({
   const first = known[0];
   const last = known[known.length - 1];
   return (
-    <div ref={plotRef}>
+    // In a column taller than the chart, it grows (to 40rem) instead of leaving a gap below the bars.
+    <div ref={plotRef} className='flex min-h-56 flex-1 flex-col sm:min-h-64 @[60rem]:max-h-[40rem]'>
       <ChartContainer
-        className='aspect-auto h-56 w-full sm:h-64'
+        className='aspect-auto min-h-0 w-full flex-1'
         config={{balance: {color: 'hsl(var(--chart-primary))'}}}
         role='img'
         aria-label={

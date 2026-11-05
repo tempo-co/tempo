@@ -1,6 +1,6 @@
 import {Link} from '@tanstack/react-router';
 import {format} from 'date-fns';
-import {useState} from 'react';
+import {type ReactNode, useState} from 'react';
 
 import {Card} from '@/components/ui/card';
 import {cn} from '@/utils/cn';
@@ -36,9 +36,10 @@ export function WhereYouStand({
     <Card
       role='region'
       aria-label='Where you stand'
-      className='grid gap-6 p-5 sm:p-6 @[1000px]:grid-cols-[minmax(0,1fr)_19rem]'
+      className='grid gap-6 p-5 sm:p-6 @[60rem]:grid-cols-[minmax(0,1fr)_19rem]'
     >
-      <div className='grid min-w-0 content-start gap-5'>
+      {/* Beside the details, the balance chart grows to the details' height so neither column ends early. */}
+      <div className='flex min-w-0 flex-col gap-5'>
         <div className='flex flex-wrap items-end justify-between gap-x-6 gap-y-3'>
           <div className='min-w-0'>
             <h2 className='text-label text-muted-foreground'>Total balance</h2>
@@ -55,14 +56,14 @@ export function WhereYouStand({
               <p className='mt-2 text-sm'>
                 <span
                   className={cn(
-                    'numeric font-medium',
+                    'numeric font-medium whitespace-nowrap',
                     change >= 0 ? 'text-success' : 'text-warning',
                   )}
                 >
                   {signed(change, currency)}
                 </span>
                 {base?.balance != null && base.balance > 0 && (
-                  <span className='ml-1.5 numeric text-muted-foreground'>
+                  <span className='ml-1.5 numeric whitespace-nowrap text-muted-foreground'>
                     {signedPct(change / base.balance)}
                   </span>
                 )}
@@ -72,27 +73,26 @@ export function WhereYouStand({
           </div>
           <SpanSwitch value={span} onChange={setSpan} />
         </div>
-        <div className='grid gap-1'>
-          <BalanceChart months={shown} currency={currency} onPick={onOpenMonth} />
-          <p
-            className='flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground'
-            style={{paddingLeft: Y_WIDTH}}
-          >
-            <span className='inline-flex items-center gap-1.5'>
-              <i aria-hidden='true' className='size-2.5 rounded-full bg-success' />
-              one-off in
-            </span>
-            <span className='inline-flex items-center gap-1.5'>
-              <i aria-hidden='true' className='size-2.5 rounded-full bg-foreground' />
-              one-off out
-            </span>
-            <span>Tap a month to open it</span>
-          </p>
-        </div>
+        <BalanceChart months={shown} currency={currency} onPick={onOpenMonth} />
+        <p
+          className='-mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground'
+          style={{paddingLeft: Y_WIDTH}}
+        >
+          <span className='inline-flex items-center gap-1.5'>
+            <i aria-hidden='true' className='size-2.5 rounded-full bg-success' />
+            one-off in
+          </span>
+          <span className='inline-flex items-center gap-1.5'>
+            <i aria-hidden='true' className='size-2.5 rounded-full bg-foreground' />
+            one-off out
+          </span>
+          <span>Tap a month to open it</span>
+        </p>
         <KeptStrip months={shown} currency={currency} onPick={onOpenMonth} />
       </div>
-      <div className='grid min-w-0 content-start gap-6 border-t pt-5 @[1000px]:border-t-0 @[1000px]:border-l @[1000px]:pt-0 @[1000px]:pl-6'>
+      <div className='grid min-w-0 content-start gap-6 border-t pt-5 @[60rem]:border-t-0 @[60rem]:border-l @[60rem]:pt-0 @[60rem]:pl-6'>
         <SpanDetails
+          key={span}
           overview={overview}
           months={base ? shown.slice(1) : shown}
           onOpenMonth={onOpenMonth}
@@ -126,6 +126,9 @@ function SpanSwitch({value, onChange}: {value: Span; onChange: (value: Span) => 
   );
 }
 
+/** One-off rows shown before "Show all", so a span with many keeps the details beside the chart. */
+const EVENT_ROWS = 3;
+
 /** The span's money in, out and kept, the balance it moved between, and its one-off payments. */
 function SpanDetails({
   overview,
@@ -140,7 +143,9 @@ function SpanDetails({
   const income = months.reduce((sum, point) => sum + point.income, 0);
   const spending = months.reduce((sum, point) => sum + point.spending, 0);
   const kept = income - spending;
+  const [allEvents, setAllEvents] = useState(false);
   const events = months.flatMap((point) => point.events);
+  const shownEvents = allEvents ? events : events.slice(0, EVENT_ROWS);
   const startIndex = overview.months.indexOf(months[0]) - 1;
   const startBalance = startIndex >= 0 ? overview.months[startIndex].balance : 0;
   const from = `${months[0].month}-01`;
@@ -158,7 +163,12 @@ function SpanDetails({
         <Fact label='Kept of income' value={income > 0 ? pct(kept / income) : '—'} />
         <Fact
           label='Balance'
-          value={`${wholeCents(startBalance, currency)} → ${wholeCents(overview.total, currency)}`}
+          value={
+            <>
+              <span className='whitespace-nowrap'>{wholeCents(startBalance, currency)}</span> →{' '}
+              <span className='whitespace-nowrap'>{wholeCents(overview.total, currency)}</span>
+            </>
+          }
           wide
         />
       </dl>
@@ -168,7 +178,7 @@ function SpanDetails({
         </h3>
         {events.length > 0 && (
           <ul className='-mx-2 grid'>
-            {events.map((event) => (
+            {shownEvents.map((event) => (
               <li key={event.id}>
                 <button
                   type='button'
@@ -180,6 +190,16 @@ function SpanDetails({
               </li>
             ))}
           </ul>
+        )}
+        {events.length > EVENT_ROWS && (
+          <button
+            type='button'
+            aria-expanded={allEvents}
+            onClick={() => setAllEvents(!allEvents)}
+            className='inline-flex min-h-11 w-fit items-center text-sm text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring'
+          >
+            {allEvents ? 'Show fewer' : `Show all ${events.length}`}
+          </button>
         )}
       </div>
       <Link
@@ -200,14 +220,25 @@ function Fact({
   wide,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   tone?: string;
   wide?: boolean;
 }) {
+  // A long amount steps down a size rather than wrap its sign onto a line of its own.
+  const long = typeof value === 'string' ? value.length > 10 : false;
   return (
     <div className={cn('min-w-0', wide && 'col-span-2')}>
       <dt className='text-label text-muted-foreground'>{label}</dt>
-      <dd className={cn('numeric text-lg font-semibold max-[22rem]:text-base', tone)}>{value}</dd>
+      <dd
+        className={cn(
+          'numeric text-lg font-semibold max-[22rem]:text-base',
+          typeof value === 'string' && 'whitespace-nowrap',
+          long && 'text-base max-[22rem]:text-sm',
+          tone,
+        )}
+      >
+        {value}
+      </dd>
     </div>
   );
 }

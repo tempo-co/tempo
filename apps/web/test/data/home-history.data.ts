@@ -117,6 +117,8 @@ export type HomeHistoryOptions = {
   income?: (month: string) => Record<string, number>;
   events?: BankTransactionEvent[];
   sourceLabels?: Record<string, string>;
+  /** `YYYY-MM` the history starts in; defaults to {@link HOME_FIRST_MONTH}. */
+  firstMonth?: string;
 };
 
 const pad = (value: number) => String(value).padStart(2, '0');
@@ -176,6 +178,35 @@ export const HOME_EVENTS: BankTransactionEvent[] = [
   },
 ];
 
+const LONG_NAMES = [
+  'Example Furniture and Interior Design Warehouse Outlet',
+  'Example Private Hospital and Specialist Clinic',
+  'Exampleverylongmerchantnamewithoutanyspaces',
+  'Example Car Dealership',
+  'Ex',
+];
+
+/**
+ * `count` synthetic one-off payments, one a month back from October 2026, every fifth one income, with long,
+ * unbreakable and two-letter names.
+ */
+export function oneOffs(count: number, scale = 1): BankTransactionEvent[] {
+  return Array.from({length: count}, (_, index) => {
+    const date = new Date(Date.UTC(2026, 9 - index, 12));
+    const income = index % 5 === 4;
+    return {
+      id: `00000000-0000-4000-8000-0000000f${String(index).padStart(4, '0')}`,
+      date: date.toISOString().slice(0, 10),
+      name: `${LONG_NAMES[index % LONG_NAMES.length]} ${index + 1}`,
+      category: income ? 'INCOME' : index % 2 ? 'HEALTH' : 'SHOPPING',
+      direction: income ? 'INCOME' : 'EXPENSE',
+      amount: ((1200 + index * 10) * scale).toFixed(2),
+      usualMonth: (2000 * scale).toFixed(2),
+      share: Number(((1200 + index * 10) / 2000).toFixed(2)),
+    } satisfies BankTransactionEvent;
+  });
+}
+
 const sum = (values: Record<string, number>) => Object.values(values).reduce((a, b) => a + b, 0);
 
 /** Every response Home and the month dialog read, consistent with each other. */
@@ -183,20 +214,22 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
   const spendingOf = options.spending ?? defaultSpending;
   const incomeOf = options.income ?? defaultIncome;
   const events = options.events ?? HOME_EVENTS;
+  const firstMonth = options.firstMonth ?? HOME_FIRST_MONTH;
+  const allMonths = monthsBetween(firstMonth, RUNNING);
   const sourceLabels: Record<string, string> = {
     [EMPLOYER]: 'Example Employer',
     [BONUS_SOURCE]: 'Example Bonus',
     ...options.sourceLabels,
   };
   let balance = 0;
-  const balances = HOME_MONTHS.map(
+  const balances = allMonths.map(
     (month) => (balance += sum(incomeOf(month)) - sum(spendingOf(month))),
   );
 
   const trend: BankBalanceTrend = {
     baseCurrency: 'EUR',
     interval: 'month',
-    periods: HOME_MONTHS.map((month, index) => ({
+    periods: allMonths.map((month, index) => ({
       start: `${month}-01`,
       end: monthEnd(month),
       complete: month !== RUNNING,
@@ -207,7 +240,7 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
   const flow: BankTransactionCashFlow = {
     baseCurrency: 'EUR',
     interval: 'month',
-    periods: HOME_MONTHS.map((month) => {
+    periods: allMonths.map((month) => {
       const income = sum(incomeOf(month));
       const spending = sum(spendingOf(month));
       return {
@@ -241,20 +274,19 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
     for (const [key, amount] of Object.entries(from)) into[key] = (into[key] ?? 0) + amount;
     return into;
   };
-  const years = [...new Set(HOME_MONTHS.map((month) => month.slice(0, 4)))];
+  const years = [...new Set(allMonths.map((month) => month.slice(0, 4)))];
   const yearly = (
     of: (month: string) => Record<string, number>,
     labelOf: (key: string) => string,
   ) =>
     years.map((year) => {
-      const months = HOME_MONTHS.filter((month) => month.startsWith(year));
+      const months = allMonths.filter((month) => month.startsWith(year));
       const amounts = months.reduce((into, month) => add(into, of(month)), {});
       const last = months[months.length - 1];
       return period(
         `${year}-01-01`,
         last === RUNNING ? HOME_TODAY : `${year}-12-31`,
-        last !== RUNNING &&
-          !(year === HOME_FIRST_MONTH.slice(0, 4) && HOME_FIRST_MONTH !== `${year}-01`),
+        last !== RUNNING && !(year === firstMonth.slice(0, 4) && firstMonth !== `${year}-01`),
         amounts,
         labelOf,
       );
@@ -263,7 +295,7 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
     of: (month: string) => Record<string, number>,
     labelOf: (key: string) => string,
   ) =>
-    HOME_MONTHS.map((month) =>
+    allMonths.map((month) =>
       period(`${month}-01`, monthEnd(month), month !== RUNNING, of(month), labelOf),
     );
   const category = (key: string) => key;

@@ -4,7 +4,7 @@ import type {
   BankTransactionCategoryFilterValue,
 } from '@tempo/contracts';
 import {ChevronLeft, ChevronRight} from 'lucide-react';
-import {type KeyboardEvent, useState} from 'react';
+import {type KeyboardEvent, type ReactNode, useState} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {
@@ -201,9 +201,10 @@ function MonthView({
 
   return (
     <div className='grid gap-6'>
+      {/* One card in four cells, split by hairlines: two by two on a phone, one row when there is room. */}
       <section
         aria-label='The month'
-        className='grid grid-cols-1 gap-x-6 gap-y-4 border bg-card p-5 sm:p-6 @[760px]:grid-cols-4 @[21rem]:grid-cols-2'
+        className='grid grid-cols-2 gap-px border bg-border @[760px]:grid-cols-4'
       >
         <Figure label='In' value={wholeCents(point.income, currency)} tone='text-success' />
         <Figure label='Out' value={wholeCents(point.spending, currency)} />
@@ -217,9 +218,12 @@ function MonthView({
           label={point.complete ? 'Balance at month end' : 'Balance now'}
           value={wholeCents(point.balance, currency)}
           sub={
-            before && balanceChange !== null
-              ? `${signed(balanceChange, currency)} on ${formatMonth(before.month, 'MMM')}`
-              : undefined
+            before && balanceChange !== null ? (
+              <>
+                <span className='whitespace-nowrap'>{signed(balanceChange, currency)}</span> on{' '}
+                {formatMonth(before.month, 'MMM')}
+              </>
+            ) : undefined
           }
         />
       </section>
@@ -276,13 +280,18 @@ function Figure({
   label: string;
   value: string;
   tone?: string;
-  sub?: string;
+  sub?: ReactNode;
 }) {
   return (
-    <div className='min-w-0'>
+    <div className='min-w-0 bg-card p-3 @[24rem]:p-4 @[40rem]:p-5'>
       <p className='text-label text-muted-foreground'>{label}</p>
+      {/* On a phone a long amount steps down a size, so it stays whole in its half of the card. */}
       <p
-        className={cn('numeric text-2xl font-semibold whitespace-nowrap max-[30rem]:text-xl', tone)}
+        className={cn(
+          'numeric text-2xl font-semibold whitespace-nowrap @max-[30rem]:text-lg',
+          value.length > 10 && '@max-[30rem]:text-base',
+          tone,
+        )}
       >
         {value}
       </p>
@@ -317,7 +326,8 @@ function WhereItWent({
       <header className='flex flex-wrap items-baseline justify-between gap-x-3'>
         <h2 className='text-card-title'>Where it went</h2>
         {hasUsual && (
-          <span className='inline-flex items-center gap-1.5 text-xs text-muted-foreground'>
+          // The bars and their ticks are hidden on a phone, where each row reads "on usual" instead.
+          <span className='inline-flex items-center gap-1.5 text-xs text-muted-foreground max-sm:hidden'>
             <i aria-hidden='true' className='h-3 w-0.5 bg-foreground' /> usual, last 12 months
           </span>
         )}

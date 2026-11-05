@@ -9,6 +9,7 @@ import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-
 import {isConnectedBank} from '@/features/banking/utils/bank-sync-status';
 
 import {useOverview} from '../api/use-overview';
+import {yearColumnWidth} from '../utils/overview';
 import {HeatTable} from './heat-table';
 import {WhereYouStand} from './where-you-stand';
 import {YearTable} from './year-table';
@@ -70,6 +71,11 @@ function HomeHistory({today, onOpenMonth}: HomeDashboardProps) {
         description='Balances and spending appear here once the first transactions have synced.'
       />
     );
+  const columnWidth = yearColumnWidth(
+    [...overview.categories, ...overview.sources],
+    overview.months,
+    overview.currency,
+  );
   return (
     <div className='grid gap-6'>
       <WhereYouStand overview={overview} onOpenMonth={onOpenMonth} />
@@ -80,6 +86,7 @@ function HomeHistory({today, onOpenMonth}: HomeDashboardProps) {
         months={overview.months}
         currency={overview.currency}
         kind='category'
+        columnWidth={columnWidth}
       />
       <HeatTable
         title='Income by source'
@@ -87,6 +94,7 @@ function HomeHistory({today, onOpenMonth}: HomeDashboardProps) {
         months={overview.months}
         currency={overview.currency}
         kind='source'
+        columnWidth={columnWidth}
       />
     </div>
   );

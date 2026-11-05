@@ -2,6 +2,7 @@ import type {Locator} from '@playwright/test';
 
 import {homeHistory, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
+import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 // Every response is synthetic: these checks never read or mutate a shared API stack.
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
@@ -110,6 +111,51 @@ test('spending by category shows a month on average per year, with small categor
   await expect(rows.nth(5)).toContainText('Transportation');
   await table.getByRole('button', {name: 'Show fewer'}).click();
   await expect(more).toBeVisible();
+});
+
+test('on a phone, each category shows its latest year and change, and opens into every year', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 390, height: 900});
+  await mockSyntheticHome(page);
+  await page.goto('/');
+
+  const table = page.getByRole('region', {name: 'Spending by category'});
+  await expect(table.getByRole('table')).toBeHidden();
+  await expect(table).toContainText('Categoryvs 20252026*');
+  const rows = table.getByRole('button');
+  await expect(rows).toHaveText([
+    'Housing and utilities+8%€1,298',
+    'Food and drink−2%€492',
+    'Shopping−2%€197',
+    'Travelnew€148',
+    '3 more categories−2%€98',
+    'Total+12%€2,233',
+  ]);
+  for (const row of await rows.all()) expect((await boxOf(row)).height).toBeGreaterThanOrEqual(44);
+  await expect(table).toContainText('* part year: 2024 from Dec, 2026 up to 5 Nov');
+
+  // A row opens in place into each year, newest first, each opening its transactions.
+  await rows.first().click();
+  await expect(rows.first()).toHaveAttribute('aria-expanded', 'true');
+  const years = table.getByRole('list', {name: 'Housing and utilities by year'}).getByRole('link');
+  await expect(years).toHaveText(['2026*€1,298', '2025€1,200', '2024*€1,200']);
+  await expect(years.first()).toHaveAttribute(
+    'aria-label',
+    'Housing and utilities, 2026: €1,298 a month · €13,200 in the year so far',
+  );
+  expect(decodeURIComponent((await years.first().getAttribute('href')) ?? '')).toContain(
+    'categories=["HOUSING_AND_UTILITIES"]',
+  );
+  await rows.first().click();
+  await expect(years).toHaveCount(0);
+
+  await table.getByRole('button', {name: /^3 more categories/}).click();
+  await expect(rows).toHaveCount(9);
+  await expect(rows.nth(4)).toHaveText('Transportation−2%€59');
+  await table.getByRole('button', {name: 'Show fewer'}).click();
+  await expect(rows).toHaveCount(6);
+  await expectNoHorizontalOverflow(page);
 });
 
 test('income by source names each source and lines up with the spending years', async ({page}) => {

@@ -7,7 +7,7 @@ import type {
 import {format, getDaysInMonth, subMonths} from 'date-fns';
 
 import {parseCalendarDate} from './drill-links';
-import {toCents} from './money';
+import {formatWholeMoney, toCents} from './money';
 
 /** The API's longest range is 20 years, so the whole history fits in one request from this day. */
 export function historyFrom(today: string) {
@@ -172,4 +172,23 @@ export function monthsCovered(period: BankTransactionBreakdownPeriod, months: Mo
       const end = parseCalendarDate(point.end);
       return sum + end.getDate() / getDaysInMonth(end);
     }, 0);
+}
+
+/**
+ * The width of a year column, from the longest monthly average either table shows (a year's total, which no
+ * row exceeds), so large amounts fit and the two tables' years still line up.
+ */
+export function yearColumnWidth(
+  periods: BankTransactionBreakdownPeriod[],
+  months: MonthPoint[],
+  currency: string | null,
+) {
+  const longest = Math.max(
+    0,
+    ...periods.map((period) => {
+      const cover = monthsCovered(period, months);
+      return cover > 0 ? formatWholeMoney(toCents(period.total) / 100 / cover, currency).length : 0;
+    }),
+  );
+  return `${Math.max(5, Math.ceil((longest * 0.55 + 1.5) * 4) / 4)}rem`;
 }

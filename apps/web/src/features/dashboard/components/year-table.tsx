@@ -174,21 +174,21 @@ function MonthLine({
   currency: string | null;
   maxFlow: number;
 }) {
-  return (
-    <tr className='border-b border-border/60 bg-muted/20'>
+  const line = (
+    <tr
+      className={cn(
+        'border-b border-border/60 bg-muted/20',
+        point.events.length > 0 && 'max-[60rem]:border-b-0',
+      )}
+    >
       <td className='py-0.5 pr-1 pl-7 sm:pr-3 sm:pl-12'>
         <Link
           to='/'
           search={(prev) => ({...prev, month: point.month})}
-          className='inline-flex min-h-11 items-center underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring sm:min-h-8'
+          className='inline-flex min-h-11 min-w-11 items-center underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring sm:min-h-8'
         >
           {formatMonth(point.month, 'MMMM')}
         </Link>
-        {point.events.length > 0 && (
-          <span className='block max-w-[6rem] sm:max-w-[10rem] min-[60rem]:hidden'>
-            <EventChips events={point.events} currency={currency} compact />
-          </span>
-        )}
       </td>
       <FlowCell
         value={point.income}
@@ -219,5 +219,17 @@ function MonthLine({
         <EventChips events={point.events} currency={currency} />
       </td>
     </tr>
+  );
+  if (point.events.length === 0) return line;
+  // Without the one-offs column, a month's one-offs get a line of their own under it, the table's full width.
+  return (
+    <>
+      {line}
+      <tr className='border-b border-border/60 bg-muted/20 min-[60rem]:hidden'>
+        <td colSpan={6} className='pt-0 pr-4 pb-1 pl-7 sm:pl-12'>
+          <EventChips events={point.events} currency={currency} />
+        </td>
+      </tr>
+    </>
   );
 }

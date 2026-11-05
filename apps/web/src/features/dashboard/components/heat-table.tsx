@@ -1,6 +1,7 @@
 import {Link} from '@tanstack/react-router';
 import type {BankTransactionBreakdownPeriod} from '@tempo/contracts';
 import {format} from 'date-fns';
+import {ChevronRight} from 'lucide-react';
 import {type ReactNode, useState} from 'react';
 
 import {Card} from '@/components/ui/card';
@@ -22,11 +23,34 @@ const FOLD_SHARE = 0.03;
 const MIN_ROWS = 3;
 const MAX_ROWS = 8;
 
+/** One row of the table: a category or source, the folded rest, or the total. */
+type Row = {
+  key: string;
+  /** The row's heading; `label` names it in tooltips and searches. */
+  name: string;
+  label: string;
+  /** A category's colour. */
+  color?: string;
+  values: (period: Period) => number;
+  /** `more` opens the folded rows; `total` is plain. */
+  role?: 'more' | 'total';
+};
+
+/** A row's figures for one year: the monthly average, its shading, and where it links. */
+type Cell = {
+  period: Period;
+  value: number;
+  body: string;
+  tip: string;
+  alpha: number;
+  search?: ReturnType<typeof categoryDrill>;
+};
+
 /**
  * Rows are categories (or sources), columns years, newest first. A cell is a month on average in that year, so a
  * part year compares fairly with a whole one. Each row is shaded against its own highest year; the first numeric
  * column is the change on the year before. Small rows fold into one "more" row that opens them. Every cell opens
- * its transactions.
+ * its transactions. On a phone each row shows the latest year and its change, and opens into the other years.
  */
 export function HeatTable({
   title,
@@ -34,12 +58,15 @@ export function HeatTable({
   months,
   currency,
   kind,
+  columnWidth,
 }: {
   title: string;
   periods: Period[];
   months: MonthPoint[];
   currency: string | null;
   kind: 'category' | 'source';
+  /** A CSS width shared by both tables' year columns, from {@link yearColumnWidth}. */
+  columnWidth: string;
 }) {
   const [all, setAll] = useState(false);
   const missingBaseAmounts = useHasMissingBaseAmounts();
@@ -66,9 +93,9 @@ export function HeatTable({
       index < MIN_ROWS || (index < MAX_ROWS && allTime.get(key)! >= grand * FOLD_SHARE),
   );
   const rest = keys.filter((key) => !top.includes(key));
-  const shown = all ? keys : top;
   const [latest, previous] = periods;
   const yearOf = (period: Period) => period.start.slice(0, 4);
+  const yearLabel = (period: Period) => `${yearOf(period)}${period.complete ? '' : '*'}`;
   const historyStart = `${months[0].month}-01`;
   const oldest = periods[periods.length - 1];
   const startNote =
@@ -86,103 +113,83 @@ export function HeatTable({
   ).filter(Boolean);
   const unit = kind === 'category' ? ['category', 'categories'] : ['source', 'sources'];
 
-  const row = ({
-    rowKey,
-    name,
-    label,
-    values,
-    total,
-    onClick,
-  }: {
-    rowKey: string;
-    name: ReactNode;
-    label: string;
-    values: (period: Period) => number;
-    total?: boolean;
-    onClick?: () => void;
-  }) => {
-    const plain = total || onClick;
+  const rows: Row[] = [
+    ...(all ? keys : top).map((key) => ({
+      key,
+      label: nameOf(key),
+      name: nameOf(key),
+      color: kind === 'category' ? categoryColor(key) : undefined,
+      values: (period: Period) => cell(period, key),
+    })),
+    ...(rest.length > 0 && !all
+      ? [
+          {
+            key: 'more',
+            label: `${rest.length} more`,
+            name: `${rest.length} more ${unit[rest.length === 1 ? 0 : 1]}`,
+            values: (period: Period) => rest.reduce((sum, key) => sum + cell(period, key), 0),
+            role: 'more' as const,
+          },
+        ]
+      : []),
+    {
+      key: 'total',
+      label: 'Total',
+      name: 'Total',
+      values: (period: Period) => toCents(period.total),
+      role: 'total' as const,
+    },
+  ];
+
+  const change = (row: Row) => {
+    if (!previous) return '';
+    const now = monthly(latest, row.values(latest));
+    const before = monthly(previous, row.values(previous));
+    return before > 0 ? signedPct((now - before) / before) : now > 0 ? 'new' : '–';
+  };
+  const cells = (row: Row): Cell[] => {
     const rowMax = Math.max(
       1,
-      ...periods.filter((period) => !thin(period)).map((period) => monthly(period, values(period))),
+      ...periods
+        .filter((period) => !thin(period))
+        .map((period) => monthly(period, row.values(period))),
     );
-    const now = monthly(latest, values(latest));
-    const before = previous ? monthly(previous, values(previous)) : 0;
-    const change = !previous
-      ? ''
-      : before > 0
-        ? signedPct((now - before) / before)
-        : now > 0
-          ? 'new'
-          : '–';
-    return (
-      <tr key={rowKey} className={cn('[&>td]:p-0.5', total && 'border-t text-muted-foreground')}>
-        <th scope='row' className='sticky left-0 z-[1] bg-card pl-5 text-left font-normal'>
-          {onClick ? (
-            <button
-              type='button'
-              onClick={onClick}
-              className='flex min-h-11 w-full items-center gap-2 pr-2 text-left text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring sm:min-h-10'
-            >
-              <span className='truncate'>{name}</span>
-            </button>
-          ) : (
-            <span className='flex min-h-10 min-w-0 items-center gap-2 pr-2'>{name}</span>
-          )}
-        </th>
-        <td className='pr-3 text-right numeric text-muted-foreground'>{change}</td>
-        {periods.map((period) => {
-          const value = values(period);
-          const average = monthly(period, value);
-          const alpha =
-            !plain && !thin(period) && value > 0 ? 0.05 + (Math.max(0, average) / rowMax) * 0.4 : 0;
-          const from = period.start < historyStart ? historyStart : period.start;
-          const tip = `${label}, ${yearOf(period)}: ${formatWholeMoney(average / 100, currency)} a month · ${formatWholeMoney(value / 100, currency)} in the year${period.complete ? '' : ' so far'}`;
-          const body = value !== 0 ? formatWholeMoney(average / 100, currency) : '–';
-          const className = cn(
-            'numeric flex min-h-10 items-center justify-end px-2 text-right',
-            value === 0 && 'text-muted-foreground',
-            alpha > 0.38 && 'font-semibold',
-          );
-          return (
-            <td key={period.start}>
-              {value !== 0 && !plain ? (
-                <Link
-                  to='/bank-transactions'
-                  search={
-                    kind === 'category'
-                      ? categoryDrill(
-                          rowKey as Parameters<typeof categoryDrill>[0],
-                          from,
-                          period.end,
-                          missingBaseAmounts,
-                        )
-                      : {
-                          ...flowDrill('INCOME', from, period.end, missingBaseAmounts),
-                          search: label,
-                        }
-                  }
-                  title={tip}
-                  aria-label={tip}
-                  className={cn(
-                    className,
-                    'hover:outline-1 hover:outline-foreground focus-visible:outline-2 focus-visible:outline-ring',
-                  )}
-                  style={{background: alpha ? `hsl(var(--primary) / ${alpha})` : undefined}}
-                >
-                  {body}
-                </Link>
-              ) : (
-                <span title={value !== 0 ? tip : undefined} className={className}>
-                  {body}
-                </span>
-              )}
-            </td>
-          );
-        })}
-      </tr>
-    );
+    return periods.map((period) => {
+      const value = row.values(period);
+      const average = monthly(period, value);
+      const from = period.start < historyStart ? historyStart : period.start;
+      return {
+        period,
+        value,
+        body: value !== 0 ? formatWholeMoney(average / 100, currency) : '–',
+        tip: `${row.label}, ${yearOf(period)}: ${formatWholeMoney(average / 100, currency)} a month · ${formatWholeMoney(value / 100, currency)} in the year${period.complete ? '' : ' so far'}`,
+        alpha:
+          !row.role && !thin(period) && value > 0
+            ? 0.05 + (Math.max(0, average) / rowMax) * 0.4
+            : 0,
+        search:
+          value === 0 || row.role
+            ? undefined
+            : kind === 'category'
+              ? categoryDrill(
+                  row.key as Parameters<typeof categoryDrill>[0],
+                  from,
+                  period.end,
+                  missingBaseAmounts,
+                )
+              : {...flowDrill('INCOME', from, period.end, missingBaseAmounts), search: row.label},
+      };
+    });
   };
+  const fewer = rest.length > 0 && all && (
+    <button
+      type='button'
+      onClick={() => setAll(false)}
+      className='min-h-11 text-sm text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring sm:min-h-10'
+    >
+      Show fewer
+    </button>
+  );
 
   return (
     <Card role='region' aria-label={title} className='min-w-0 overflow-hidden'>
@@ -190,15 +197,18 @@ export function HeatTable({
         <h2 className='text-card-title'>{title}</h2>
         <p className='text-sm text-muted-foreground'>A month, on average, in each year</p>
       </header>
-      <div className='overflow-x-auto pb-2'>
+      <div className='overflow-x-auto pb-2 max-sm:hidden'>
         {/* Fixed columns, so the two tables' years line up one above the other. */}
         <table
           className='w-full table-fixed text-sm'
-          style={{minWidth: `${14 + periods.length * 5}rem`}}
+          style={{minWidth: `calc(16.5rem + ${periods.length} * ${columnWidth})`}}
         >
           <colgroup>
-            <col className='w-[9rem] sm:w-[12rem]' />
+            <col className='w-[12rem]' />
             <col className='w-[4.5rem]' />
+            {periods.map((period) => (
+              <col key={period.start} style={{width: columnWidth}} />
+            ))}
           </colgroup>
           <thead>
             <tr className='text-label text-muted-foreground [&>th]:px-2.5 [&>th]:pb-2 [&>th]:font-medium'>
@@ -217,70 +227,251 @@ export function HeatTable({
               </th>
               {periods.map((period) => (
                 <th key={period.start} className='text-right numeric'>
-                  {yearOf(period)}
-                  {!period.complete && '*'}
+                  {yearLabel(period)}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {shown.map((key) =>
-              row({
-                rowKey: key,
-                label: nameOf(key),
-                name: (
-                  <>
-                    {kind === 'category' && (
-                      <i
-                        aria-hidden='true'
-                        className='size-2.5 shrink-0'
-                        style={{background: categoryColor(key)}}
-                      />
-                    )}
-                    <span className='truncate' title={nameOf(key)}>
-                      {nameOf(key)}
+            {rows.map((row) => (
+              <tr
+                key={row.key}
+                className={cn(
+                  '[&>td]:p-0.5',
+                  row.role === 'total' && 'border-t text-muted-foreground',
+                )}
+              >
+                <th scope='row' className='sticky left-0 z-[1] bg-card pl-5 text-left font-normal'>
+                  {row.role === 'more' ? (
+                    <button
+                      type='button'
+                      onClick={() => setAll(true)}
+                      className='flex min-h-10 w-full items-center gap-2 pr-2 text-left text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring'
+                    >
+                      <span className='truncate'>{row.name}</span>
+                    </button>
+                  ) : (
+                    <span className='flex min-h-10 min-w-0 items-center gap-2 pr-2'>
+                      <Swatch color={row.color} />
+                      <span className='truncate' title={row.name}>
+                        {row.name}
+                      </span>
                     </span>
-                  </>
-                ),
-                values: (period) => cell(period, key),
-              }),
-            )}
-            {rest.length > 0 &&
-              !all &&
-              row({
-                rowKey: 'more',
-                label: `${rest.length} more`,
-                name: `${rest.length} more ${unit[rest.length === 1 ? 0 : 1]}`,
-                values: (period) => rest.reduce((sum, key) => sum + cell(period, key), 0),
-                onClick: () => setAll(true),
-              })}
-            {rest.length > 0 && all && (
+                  )}
+                </th>
+                <td className='pr-3 text-right numeric text-muted-foreground'>{change(row)}</td>
+                {cells(row).map((item) => (
+                  <td key={item.period.start}>
+                    <YearValue item={item} className='flex min-h-10 justify-end px-2' />
+                  </td>
+                ))}
+              </tr>
+            ))}
+            {fewer && (
               <tr>
                 <td colSpan={2} className='sticky left-0 z-[1] bg-card pl-5'>
-                  <button
-                    type='button'
-                    onClick={() => setAll(false)}
-                    className='min-h-11 text-sm text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring sm:min-h-10'
-                  >
-                    Show fewer
-                  </button>
+                  {fewer}
                 </td>
               </tr>
             )}
-            {row({
-              rowKey: 'total',
-              label: 'Total',
-              name: 'Total',
-              values: (period) => toCents(period.total),
-              total: true,
-            })}
           </tbody>
         </table>
       </div>
+      <PhoneRows
+        kind={kind}
+        rows={rows}
+        latest={latest}
+        previous={previous}
+        yearLabel={yearLabel}
+        change={change}
+        cells={cells}
+        onMore={() => setAll(true)}
+        fewer={fewer}
+        columnWidth={columnWidth}
+      />
       <p className='px-5 pb-4 text-xs text-muted-foreground'>
         Darker = more than that row&apos;s other years
         {partNote.length > 0 && ` · * part year: ${partNote.join(', ')}`}
       </p>
     </Card>
+  );
+}
+
+function Swatch({color, spacer}: {color?: string; spacer?: boolean}) {
+  if (!color && !spacer) return null;
+  return <i aria-hidden='true' className='size-2.5 shrink-0' style={{background: color}} />;
+}
+
+/** A year's monthly average, shaded against the row's other years, opening its transactions. */
+function YearValue({item, lead, className}: {item: Cell; lead?: ReactNode; className?: string}) {
+  const classes = cn(
+    'numeric items-center text-right',
+    item.value === 0 && 'text-muted-foreground',
+    item.alpha > 0.38 && 'font-semibold',
+    className,
+  );
+  if (!item.search)
+    return (
+      <span title={item.value !== 0 ? item.tip : undefined} className={classes}>
+        {lead}
+        {item.body}
+      </span>
+    );
+  return (
+    <Link
+      to='/bank-transactions'
+      search={item.search}
+      title={item.tip}
+      aria-label={item.tip}
+      className={cn(
+        classes,
+        'hover:outline-1 hover:outline-foreground focus-visible:outline-2 focus-visible:outline-ring',
+      )}
+      style={{background: item.alpha ? `hsl(var(--primary) / ${item.alpha})` : undefined}}
+    >
+      {lead}
+      {item.body}
+    </Link>
+  );
+}
+
+/**
+ * The phone layout: each row shows the latest year's monthly average and its change on the year before, and opens
+ * in place into every year, newest first. The fold row opens the folded rows, as in the table.
+ */
+function PhoneRows({
+  kind,
+  rows,
+  latest,
+  previous,
+  yearLabel,
+  change,
+  cells,
+  onMore,
+  fewer,
+  columnWidth,
+}: {
+  kind: 'category' | 'source';
+  columnWidth: string;
+  rows: Row[];
+  latest: Period;
+  previous: Period | undefined;
+  yearLabel: (period: Period) => string;
+  change: (row: Row) => string;
+  cells: (row: Row) => Cell[];
+  onMore: () => void;
+  fewer: ReactNode;
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+  const line = 'grid items-center gap-x-2';
+  // The latest year's column is as wide as the table's year columns, less their padding.
+  const columns = {gridTemplateColumns: `minmax(0,1fr) 3.25rem calc(${columnWidth} - 1.25rem)`};
+  return (
+    <div className='pb-2 sm:hidden'>
+      <p
+        className={cn(line, 'border-b pr-4 pb-2 pl-8 text-label font-medium text-muted-foreground')}
+        style={columns}
+        aria-hidden='true'
+      >
+        <span>{kind === 'category' ? 'Category' : 'Source'}</span>
+        <span className='text-right font-normal'>
+          {previous ? `vs ${previous.start.slice(0, 4)}` : ''}
+        </span>
+        <span className='text-right numeric'>{yearLabel(latest)}</span>
+      </p>
+      <ul>
+        {rows.map((row) => {
+          const expanded = open === row.key;
+          const latestCell = cells(row)[0];
+          const summary = (
+            <>
+              <span className='flex min-w-0 items-center gap-2'>
+                {/* Every name starts at the same place, swatch or not. */}
+                <Swatch color={row.color} spacer={kind === 'category'} />
+                <span className='line-clamp-2 leading-tight [overflow-wrap:anywhere]'>
+                  {row.name}
+                </span>
+              </span>
+              <span className='text-right numeric text-muted-foreground'>{change(row)}</span>
+              <span
+                className={cn(
+                  'text-right numeric whitespace-nowrap',
+                  latestCell.value === 0 && 'text-muted-foreground',
+                )}
+              >
+                {latestCell.body}
+              </span>
+            </>
+          );
+          if (row.role === 'more')
+            return (
+              <li key={row.key} className='border-b border-border/60'>
+                <button
+                  type='button'
+                  onClick={onMore}
+                  style={columns}
+                  className={cn(
+                    line,
+                    'min-h-11 w-full py-1.5 pr-4 pl-8 text-left text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring [&>span:first-child]:text-primary',
+                  )}
+                >
+                  {summary}
+                </button>
+              </li>
+            );
+          return (
+            <li
+              key={row.key}
+              className={cn(
+                'border-b border-border/60',
+                row.role === 'total' && 'border-b-0 text-muted-foreground',
+              )}
+            >
+              <button
+                type='button'
+                aria-expanded={expanded}
+                onClick={() => setOpen(expanded ? null : row.key)}
+                style={columns}
+                className={cn(
+                  line,
+                  'relative min-h-11 w-full py-1.5 pr-4 pl-8 text-left text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+                  expanded && 'bg-accent/40',
+                )}
+              >
+                <ChevronRight
+                  aria-hidden='true'
+                  className={cn(
+                    'absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground transition-transform',
+                    expanded && 'rotate-90',
+                  )}
+                />
+                {summary}
+              </button>
+              {expanded && (
+                <ul
+                  aria-label={`${row.label} by year`}
+                  className='grid grid-cols-2 gap-1 bg-muted/20 px-4 py-2 min-[25rem]:grid-cols-3'
+                >
+                  {cells(row).map((item) => (
+                    <li key={item.period.start}>
+                      <YearValue
+                        item={item}
+                        lead={
+                          <span className='font-normal text-muted-foreground'>
+                            {yearLabel(item.period)}
+                          </span>
+                        }
+                        className='flex min-h-11 justify-between gap-2 px-2 text-sm'
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {fewer && <div className='px-4'>{fewer}</div>}
+    </div>
   );
 }

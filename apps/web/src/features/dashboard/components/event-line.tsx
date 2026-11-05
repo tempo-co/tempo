@@ -52,11 +52,9 @@ export function EventLine({
 export function EventChips({
   events,
   currency,
-  compact,
 }: {
   events: BankTransactionEvent[];
   currency: string | null;
-  compact?: boolean;
 }) {
   if (events.length === 0) return null;
   return (
@@ -70,19 +68,17 @@ export function EventChips({
             <Link
               to='/bank-transactions'
               search={eventDrill(event)}
-              title={`${format(parseCalendarDate(event.date), 'd MMM yyyy')} · ${eventShare(event)}`}
+              title={`${event.name} · ${format(parseCalendarDate(event.date), 'd MMM yyyy')} · ${eventShare(event)}`}
               className={cn(
-                'inline-flex min-h-8 max-w-full items-center gap-1 border px-2 py-1 text-xs hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring',
+                'inline-flex min-h-11 max-w-full min-w-11 items-center gap-1 border px-2 py-1 text-xs hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring sm:min-h-8',
                 income ? 'border-success/40 text-success' : 'border-border text-foreground',
               )}
             >
               <Icon aria-hidden='true' className='size-3.5 shrink-0' />
               <span className='min-w-0 truncate'>{event.name}</span>
-              {!compact && (
-                <span className='shrink-0 numeric text-muted-foreground'>
-                  {signedEvent(event, currency)}
-                </span>
-              )}
+              <span className='shrink-0 numeric text-muted-foreground'>
+                {signedEvent(event, currency)}
+              </span>
             </Link>
           </li>
         );

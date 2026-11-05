@@ -1,4 +1,4 @@
-import {PHONE_KEY, homeHistory, mockSyntheticHome} from '../../data/home-history.data';
+import {PHONE_KEY, homeHistory, mockSyntheticHome, oneOffs} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
 import {boxOf} from '../../utils/layout';
@@ -52,6 +52,33 @@ test('shows the total, its change over each span, and the span’s money in and 
   await span.getByRole('button', {name: /Example Bonus/}).click();
   await expect(page).toHaveURL(/[?&]month=2025-06/);
   await expect(homePage.monthDialog('June 2025')).toBeVisible();
+});
+
+test('a span with many one-offs lists three and opens the rest in place', async ({
+  page,
+  homePage,
+}) => {
+  await mockSyntheticHome(page, {history: homeHistory({events: oneOffs(15)})});
+  await page.goto('/');
+
+  const span = homePage.whereYouStand.getByRole('region', {name: 'This span'});
+  await expect(span).toContainText('One-off payments · 12');
+  const events = span.getByRole('listitem');
+  await expect(events).toHaveCount(3);
+  // Oldest first, like the chart.
+  await expect(events.first()).toContainText('Example Private Hospital and Specialist Clinic 12');
+  const more = span.getByRole('button', {name: 'Show all 12'});
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  await more.click();
+  await expect(events).toHaveCount(12);
+  await span.getByRole('button', {name: 'Show fewer'}).click();
+  await expect(events).toHaveCount(3);
+
+  // Another span starts folded again.
+  await homePage.whereYouStand.getByRole('button', {name: 'All', exact: true}).click();
+  await expect(span).toContainText('One-off payments · 15');
+  await expect(events).toHaveCount(3);
+  await expect(span.getByRole('button', {name: 'Show all 15'})).toBeVisible();
 });
 
 test('on the last day of a month, a span is measured from the month end a span back', async ({
