@@ -1,13 +1,7 @@
 import type {Page} from '@playwright/test';
 
+import {mockSyntheticHome} from '../data/home-history.data';
 import {expect, test} from '../fixtures';
-import {
-  mockBankConnections,
-  mockBankRefresh,
-  mockCashFlow,
-  mockEmptyHome,
-  mockJson,
-} from '../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../utils/layout';
 
 test.use({
@@ -220,35 +214,19 @@ test('touch verification-code entry uses readable digits across the phone field'
   await expectNoHorizontalOverflow(page);
 });
 
-test('touch chart grouping offers finger-sized interval choices', async ({page}) => {
+test('Home span choices are finger-sized and select quietly', async ({page}) => {
   // Home's reads are all answered here; CI's real API would sign the fake session out.
-  await mockEmptyHome(page);
-  await mockCashFlow(page);
-  await mockJson(page, '**/bank-connections/aspsps', []);
-  await mockBankRefresh(page);
-  await mockBankConnections(page, [
-    {
-      id: '00000000-0000-4000-8000-000000000002',
-      provider: 'EXAMPLE',
-      aspspName: 'Example Bank',
-      aspspCountry: 'NL',
-      status: 'AUTHORIZED',
-      consentValidUntil: '2027-01-01T00:00:00Z',
-      lastSyncedAt: '2026-10-15T11:00:00Z',
-      lastSyncError: null,
-      nextSyncAt: '2026-10-16T11:00:00Z',
-      syncStatus: 'SUCCEEDED',
-      baseCurrency: 'EUR',
-      bankAccounts: [],
-    },
-  ]);
+  await mockSyntheticHome(page);
   await page.goto('/');
-  const grouping = page.getByRole('radiogroup', {name: 'Group cash flow by'});
-  const week = grouping.getByRole('radio', {name: 'Week', exact: true});
-  await expect(week).toBeVisible();
-  expect((await boxOf(week)).height).toBeGreaterThanOrEqual(44);
-  await week.tap();
-  await expect(week).toHaveAttribute('aria-checked', 'true');
+  const spans = page
+    .getByRole('region', {name: 'Where you stand'})
+    .getByRole('group', {name: 'Span'});
+  const threeYears = spans.getByRole('button', {name: '3Y', exact: true});
+  await expect(threeYears).toBeVisible();
+  for (const button of await spans.getByRole('button').all())
+    expect((await boxOf(button)).height).toBeGreaterThanOrEqual(44);
+  await threeYears.tap();
+  await expect(threeYears).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => Reflect.get(window, 'selectionHaptics') as number[])).toEqual(
     [],
   );

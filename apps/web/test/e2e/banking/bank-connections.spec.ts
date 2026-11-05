@@ -829,6 +829,15 @@ test.describe('mocked Enable Banking bank connection', () => {
       if (url.origin === API_URL && url.pathname === '/bank-connections/aspsps')
         return fulfillJson(route, []);
       if (url.origin === API_URL && url.pathname === '/health') return fulfillJson(route, {});
+      // The navigation's review badge reads these on every page.
+      if (url.origin === API_URL && url.pathname === '/bank-transactions/review-counts')
+        return fulfillJson(route, {
+          needsReview: 0,
+          categorizationFailed: 0,
+          categorizing: 0,
+          unknownDirection: 0,
+          missingBaseAmount: 0,
+        });
       if (url.origin === API_URL && url.pathname.endsWith('/refresh'))
         return fulfillJson(route, REFRESH_RESULT);
       await route.abort('blockedbyclient');

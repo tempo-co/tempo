@@ -75,9 +75,11 @@ async function mockHome(page: Page, padding = 0) {
   return state;
 }
 
+/** Opens September's transactions, then Home with its review badge, and waits for both to be saved. */
 async function openSavedHome(page: Page) {
   await page.goto('/?month=2026-09');
   await expect(monthRows(page, 'September 2026')).toHaveCount(3);
+  await page.keyboard.press('Escape');
   await expect(reviewBadge(page, 4)).toBeVisible();
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
   await page.clock.runFor(1100);
@@ -110,17 +112,21 @@ test.describe('saved Home', () => {
     await context.setOffline(true);
     await page.reload();
     await expect(offlineStatus(page)).toBeVisible();
-    await expect(monthRows(page, 'September 2026')).toHaveCount(3);
+    await expect(totalBalance(page)).toHaveText('€24,300');
     await expect(reviewBadge(page, 4)).toBeVisible();
 
-    // A month whose transactions were never loaded must not show another month's.
+    // A saved month reopens; one whose transactions were never loaded must not show another month's.
+    await page
+      .getByRole('region', {name: 'Year by year'})
+      .getByRole('link', {name: 'September'})
+      .click();
+    await expect(monthRows(page, 'September 2026')).toHaveCount(3);
     await page.getByRole('button', {name: 'Previous month'}).click();
     await expect(page).toHaveURL(/month=2026-08/);
     await expect(page.getByRole('dialog', {name: 'August 2026'})).toContainText('In€3,000');
     await expect(monthRows(page, 'August 2026')).toHaveCount(0);
     await page.getByRole('button', {name: 'Next month'}).click();
     await expect(monthRows(page, 'September 2026')).toHaveCount(3);
-
     await page.keyboard.press('Escape');
     await expect(totalBalance(page)).toHaveText('€24,300');
 
@@ -167,7 +173,11 @@ test.describe('saved Home', () => {
         .sort();
     // On-screen September is exempt; both earlier months fit the shared budget.
     await expect.poll(savedMonths).toEqual(['2026-06', '2026-07', '2026-08']);
-    await page.getByRole('link', {name: 'Transactions', exact: true}).first().click();
+    await page.keyboard.press('Escape');
+    await page
+      .getByRole('link', {name: /^Transactions/})
+      .first()
+      .click();
     await expect(page.getByRole('heading', {name: 'No bank transactions found'})).toBeVisible();
     await page.clock.runFor(1100);
     await expect.poll(savedMonths).toEqual(['2026-07', '2026-08']);
