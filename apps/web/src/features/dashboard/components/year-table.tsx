@@ -256,7 +256,8 @@ function MonthLine({
         if ((event.target as Element).closest('a')) return;
         void navigate({to: '/', search: (prev) => ({...prev, month: point.month})});
       }}
-      className='cursor-pointer border-b border-border/60 bg-muted/20 hover:bg-accent/50 has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-ring'
+      // Month rows already sit on a tint, so their hover is the full accent to show against it.
+      className='cursor-pointer border-b border-border/60 bg-muted/20 hover:bg-accent has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-ring'
     >
       <td className='py-0.5 pr-1 pl-7 sm:pr-3 sm:pl-12'>
         <Link
