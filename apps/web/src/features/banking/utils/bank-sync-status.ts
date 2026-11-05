@@ -24,6 +24,19 @@ export function isReauthorizationRequired(connection: BankConnection) {
   return isPastTimestamp(connection.consentValidUntil);
 }
 
+/**
+ * How long before consent ends a bank counts as needing re-authorization soon. Mirrors the API's
+ * CONSENT_EXPIRING_ALERT_WINDOW_MS, which emails the owner seven days ahead.
+ */
+export const CONSENT_ENDING_SOON_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** An authorized bank whose consent is still valid but ends within the alert window. */
+export function isConsentEndingSoon(connection: BankConnection, now = Date.now()) {
+  if (connection.status !== 'AUTHORIZED' || isReauthorizationRequired(connection)) return false;
+  const timestamp = Date.parse(connection.consentValidUntil ?? '');
+  return timestamp - now <= CONSENT_ENDING_SOON_MS;
+}
+
 export type AutomaticSyncProblem = {
   title: string;
   description: string;

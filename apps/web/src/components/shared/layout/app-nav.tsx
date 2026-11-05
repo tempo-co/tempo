@@ -11,7 +11,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
 import {useGetBankTransactionReviewCounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
-import {getAutomaticSyncProblemForConnection} from '@/features/banking/utils/bank-sync-status';
+import {
+  getAutomaticSyncProblemForConnection,
+  isConsentEndingSoon,
+} from '@/features/banking/utils/bank-sync-status';
 import {useCurrentAccount} from '@/hooks/use-current-account';
 import {useLogOut} from '@/hooks/use-logout';
 import {cn} from '@/utils/cn';
@@ -44,7 +47,7 @@ type NavBadge = {count: number | null; label: string};
 
 /**
  * What needs the owner sits on the tab that settles it: transactions to review as a count on Transactions, a bank
- * whose automatic sync needs attention as a dot on Connections.
+ * whose automatic sync needs attention, or whose consent ends within a week, as a dot on Connections.
  */
 function useNavBadges() {
   const {reviewCounts} = useGetBankTransactionReviewCounts();
@@ -52,15 +55,27 @@ function useNavBadges() {
   const review = reviewCounts
     ? reviewCounts.needsReview + reviewCounts.categorizationFailed + reviewCounts.unknownDirection
     : 0;
-  const problems = (bankConnections ?? []).filter(getAutomaticSyncProblemForConnection).length;
+  const connections = bankConnections ?? [];
+  const problems = connections.filter(getAutomaticSyncProblemForConnection).length;
+  const endingSoon = connections.filter((connection) => isConsentEndingSoon(connection)).length;
+  const banksLabel = [
+    problems === 0
+      ? null
+      : problems === 1
+        ? 'a bank needs attention'
+        : `${problems} banks need attention`,
+    endingSoon === 0
+      ? null
+      : endingSoon === 1
+        ? 'a bank needs re-authorizing soon'
+        : `${endingSoon} banks need re-authorizing soon`,
+  ]
+    .filter(Boolean)
+    .join(' and ');
   return (item: NavItem): NavBadge | null => {
     if (item.to === '/bank-transactions' && review > 0)
       return {count: review, label: `${review} to review`};
-    if (item.to === '/bank-connections' && problems > 0)
-      return {
-        count: null,
-        label: problems === 1 ? 'a bank needs attention' : `${problems} banks need attention`,
-      };
+    if (item.to === '/bank-connections' && banksLabel) return {count: null, label: banksLabel};
     return null;
   };
 }

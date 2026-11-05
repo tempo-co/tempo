@@ -187,20 +187,55 @@ test('a click on the balance chart opens its month and leaves no focus outline',
   expect(outlines).toEqual([]);
 });
 
+/** Six months, so the first and last month are both labelled on a phone. */
+const shortHistory = () => {
+  const history = homeHistory();
+  history.trend.periods = history.trend.periods.slice(-6);
+  history.flow.periods = history.flow.periods.slice(-6);
+  return history;
+};
+
 test.describe('touch chart inspection', () => {
+  test.use({hasTouch: true, isMobile: true, viewport: {width: 390, height: 844}});
+
+  test('a short tap opens the month', async ({page, homePage}) => {
+    await mockSyntheticHome(page, {history: shortHistory()});
+    await page.goto('/');
+    await homePage.whereYouStand.getByRole('button', {name: 'All', exact: true}).click();
+    const plot = homePage.whereYouStand.locator('[data-slot="chart"]');
+    await plot.scrollIntoViewIfNeeded();
+    // The bars below share the line's month slots (WebKit misplaces SVG tick label boxes).
+    const slot = await boxOf(
+      homePage.whereYouStand
+        .getByRole('list', {name: 'Kept each month'})
+        .getByRole('button')
+        .first(),
+    );
+    const box = await boxOf(plot);
+    await page.touchscreen.tap(slot.x + slot.width / 2, box.y + box.height / 2);
+    await expect(page).toHaveURL(/[?&]month=2026-06/);
+    await expect(homePage.monthDialog('June 2026')).toBeVisible();
+  });
+
+  test('a short tap on a kept bar opens that month', async ({page, homePage}) => {
+    await mockSyntheticHome(page);
+    await page.goto('/');
+    const bars = homePage.whereYouStand.getByRole('list', {name: 'Kept each month'});
+    const bar = bars.getByRole('button', {name: 'March 2026: kept −€500'});
+    await bar.scrollIntoViewIfNeeded();
+    const box = await boxOf(bar);
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(page).toHaveURL(/[?&]month=2026-03(?:&|$)/);
+    await expect(homePage.monthDialog('March 2026')).toBeVisible();
+  });
+});
+
+test.describe('touch chart inspection by sliding', () => {
   test.use({hasTouch: true, isMobile: true, viewport: {width: 390, height: 844}});
   test.skip(
     ({browserName}) => browserName !== 'chromium',
-    'Touches are sent through Chromium CDP.',
+    'Touch moves are sent through Chromium CDP.',
   );
-
-  /** Six months, so the first and last month are both labelled on a phone. */
-  const shortHistory = () => {
-    const history = homeHistory();
-    history.trend.periods = history.trend.periods.slice(-6);
-    history.flow.periods = history.flow.periods.slice(-6);
-    return history;
-  };
 
   for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     test(`holding and scrubbing shows each month until release (${reducedMotion})`, async ({
@@ -244,26 +279,74 @@ test.describe('touch chart inspection', () => {
       });
       await expect(tooltip).toContainText('November 2026');
       await expect(page.locator('html')).toHaveAttribute('data-chart-pulses', String(pulses + 1));
+      // The line and the bars share their months: the bar under the readout is marked too.
+      const bars = homePage.whereYouStand.getByRole('list', {name: 'Kept each month'});
+      await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^November 2026/);
       const readout = await boxOf(tooltip);
       expect(readout.x).toBeGreaterThanOrEqual(0);
       expect(readout.x + readout.width).toBeLessThanOrEqual(390);
       await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
       await expect(tooltip).not.toBeVisible();
+      await expect(bars.locator('[data-active]')).toHaveCount(0);
       await expect(page).toHaveURL(url);
     });
   }
 
-  test('a short tap opens the month', async ({page, homePage}) => {
-    await mockSyntheticHome(page, {history: shortHistory()});
+  test('sliding along the kept bars reads the month under the finger and opens nothing', async ({
+    page,
+    context,
+    homePage,
+  }) => {
+    await mockSyntheticHome(page);
     await page.goto('/');
-    await homePage.whereYouStand.getByRole('button', {name: 'All', exact: true}).click();
-    const plot = homePage.whereYouStand.locator('[data-slot="chart"]');
-    await plot.scrollIntoViewIfNeeded();
-    const label = await boxOf(plot.locator('.recharts-xAxis-tick-labels text').first());
-    const box = await boxOf(plot);
-    await page.touchscreen.tap(label.x + label.width / 2, box.y + box.height / 2);
-    await expect(page).toHaveURL(/[?&]month=2026-06/);
-    await expect(homePage.monthDialog('June 2026')).toBeVisible();
+    const bars = homePage.whereYouStand.getByRole('list', {name: 'Kept each month'});
+    await bars.scrollIntoViewIfNeeded();
+    const centre = async (name: string) => {
+      const box = await boxOf(bars.getByRole('button', {name}));
+      return {x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2)};
+    };
+    const start = await centre('March 2026: kept −€500');
+    const end = await centre('August 2026: kept +€1,000');
+    const tooltip = homePage.whereYouStand.locator('.recharts-tooltip-wrapper');
+    const url = page.url();
+    const touch = await context.newCDPSession(page);
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [start]});
+    // Five slots along in steps narrower than a slot, as a finger slides.
+    for (let step = 1; step <= 10; step++) {
+      await touch.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{x: Math.round(start.x + ((end.x - start.x) * step) / 10), y: start.y}],
+      });
+    }
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toContainText('August 2026');
+    await expect(tooltip).toContainText('Balance');
+    await expect(tooltip).toContainText('Kept+€1,000');
+    await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^August 2026/);
+    await expect(homePage.whereYouStand.locator('.recharts-active-dot')).toBeVisible();
+    // Along the line's month labels, between the plot and the bars, the readout still follows the finger.
+    const plot = await boxOf(homePage.whereYouStand.locator('[data-slot="chart"]'));
+    const labels = Math.round(plot.y + plot.height - 6);
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{x: end.x, y: labels}],
+    });
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{x: start.x, y: labels}],
+    });
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toContainText('March 2026');
+    await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^March 2026/);
+    const readout = await boxOf(tooltip);
+    expect(readout.x).toBeGreaterThanOrEqual(0);
+    expect(readout.x + readout.width).toBeLessThanOrEqual(390);
+
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+    await expect(tooltip).not.toBeVisible();
+    await expect(bars.locator('[data-active]')).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page).toHaveURL(url);
   });
 
   test('vertical gestures scroll the page and cancellation ends inspection', async ({
@@ -274,25 +357,32 @@ test.describe('touch chart inspection', () => {
     await mockSyntheticHome(page);
     await page.goto('/');
     const plot = homePage.whereYouStand.locator('[data-slot="chart"]');
-    await plot.scrollIntoViewIfNeeded();
-    const box = await boxOf(plot);
-    const x = Math.round(box.x + box.width / 2);
-    const y = Math.round(box.y + box.height / 2);
-    const before = await page.evaluate(() => window.scrollY);
-    const touch = await context.newCDPSession(page);
-    await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y}]});
-    for (const distance of [20, 50, 90]) {
-      await touch.send('Input.dispatchTouchEvent', {
-        type: 'touchMove',
-        touchPoints: [{x, y: y - distance}],
-      });
-    }
-    await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before);
+    const bars = homePage.whereYouStand.getByRole('list', {name: 'Kept each month'});
     const tooltip = plot.locator('.recharts-tooltip-wrapper');
-    await expect(tooltip).not.toBeVisible();
+    const touch = await context.newCDPSession(page);
+    // Upward swipes on the line and on the bars below it both scroll the page.
+    for (const surface of [plot, bars]) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await surface.scrollIntoViewIfNeeded();
+      const box = await boxOf(surface);
+      const x = Math.round(box.x + box.width / 2);
+      const y = Math.round(box.y + box.height / 2);
+      const before = await page.evaluate(() => window.scrollY);
+      await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y}]});
+      for (const distance of [20, 50, 90]) {
+        await touch.send('Input.dispatchTouchEvent', {
+          type: 'touchMove',
+          touchPoints: [{x, y: y - distance}],
+        });
+      }
+      await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before);
+      await expect(tooltip).not.toBeVisible();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+    }
     await plot.scrollIntoViewIfNeeded();
     const next = await boxOf(plot);
+    const x = Math.round(next.x + next.width / 2);
     await touch.send('Input.dispatchTouchEvent', {
       type: 'touchStart',
       touchPoints: [{x, y: Math.round(next.y + next.height / 2)}],

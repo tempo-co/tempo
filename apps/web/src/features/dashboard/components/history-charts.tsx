@@ -1,7 +1,16 @@
-import {useRef} from 'react';
-import {Area, CartesianGrid, ComposedChart, XAxis, YAxis} from 'recharts';
+import {useEffect, useRef, useState} from 'react';
+import {
+  Area,
+  CartesianGrid,
+  ComposedChart,
+  XAxis,
+  YAxis,
+  useActiveTooltipLabel,
+  useIsTooltipActive,
+} from 'recharts';
 
-import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
+import {ChartContainer, ChartTooltip, ChartTouchArea} from '@/components/ui/chart';
+import {useChartTouchState} from '@/hooks/use-chart-touch';
 import {cn} from '@/utils/cn';
 
 import {axisFormatter, axisTicks} from '../utils/chart-axis';
@@ -10,11 +19,14 @@ import {formatMonth} from '../utils/month';
 import type {MonthPoint} from '../utils/overview';
 
 /** Both charts share these insets, so a month's dot sits right above its bar. */
-export const Y_WIDTH = 52;
+const Y_WIDTH = 52;
 const RIGHT = 12;
 
-/** Month-end balance as one line. Months sit at slot centres, like the bars below. */
-export function BalanceChart({
+/**
+ * The balance line, then what was kept each month on the same x slots. One press-and-slide surface covers both:
+ * the readout follows the finger and both charts mark the month under it; a quick tap opens that month.
+ */
+export function HistoryCharts({
   months,
   currency,
   onPick,
@@ -22,6 +34,43 @@ export function BalanceChart({
   months: MonthPoint[];
   currency: string | null;
   onPick: (month: string) => void;
+}) {
+  const [active, setActive] = useState<number | null>(null);
+  return (
+    <ChartTouchArea className='flex min-h-0 flex-1 flex-col gap-5'>
+      <BalanceChart months={months} currency={currency} onPick={onPick} onActive={setActive} />
+      <p
+        className='-mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground'
+        style={{paddingLeft: Y_WIDTH}}
+      >
+        <span>Tap a month to open it</span>
+      </p>
+      <KeptStrip months={months} currency={currency} onPick={onPick} active={active} />
+    </ChartTouchArea>
+  );
+}
+
+/** Reports the month the line's tooltip is on: while hovered, or while a touch is inspecting. */
+function ActiveMonth({onChange}: {onChange: (index: number | null) => void}) {
+  const {touch, inspecting} = useChartTouchState();
+  const label = Number(useActiveTooltipLabel());
+  const shown = useIsTooltipActive();
+  const index = (touch ? inspecting : shown) && Number.isInteger(label) ? label : null;
+  useEffect(() => onChange(index), [index, onChange]);
+  return null;
+}
+
+/** Month-end balance as one line. Months sit at slot centres, like the bars below. */
+function BalanceChart({
+  months,
+  currency,
+  onPick,
+  onActive,
+}: {
+  months: MonthPoint[];
+  currency: string | null;
+  onPick: (month: string) => void;
+  onActive: (index: number | null) => void;
 }) {
   const plotRef = useRef<HTMLDivElement>(null);
   const axis = axisFormatter(currency);
@@ -118,6 +167,7 @@ export function BalanceChart({
               );
             }}
           />
+          <ActiveMonth onChange={onActive} />
         </ComposedChart>
       </ChartContainer>
     </div>
@@ -134,14 +184,16 @@ function TipRow({label, value, strong}: {label: string; value: string; strong?: 
 }
 
 /** What was kept each month, on the same slots as the line above: up is kept, down is more out than in. */
-export function KeptStrip({
+function KeptStrip({
   months,
   currency,
   onPick,
+  active,
 }: {
   months: MonthPoint[];
   currency: string | null;
   onPick: (month: string) => void;
+  active: number | null;
 }) {
   const max = Math.max(1, ...months.map((point) => Math.abs(point.kept)));
   return (
@@ -168,17 +220,18 @@ export function KeptStrip({
         style={{paddingLeft: Y_WIDTH, paddingRight: RIGHT}}
         aria-label='Kept each month'
       >
-        {months.map((point) => {
+        {months.map((point, index) => {
           const up = point.kept >= 0;
           const label = `${formatMonth(point.month, 'MMMM yyyy')}${point.complete ? '' : ' so far'}: kept ${signed(point.kept, currency)}`;
           return (
             <li key={point.month} className='relative min-w-0 flex-1'>
               <button
                 type='button'
+                data-active={index === active || undefined}
                 onClick={() => onPick(point.month)}
                 title={label}
                 aria-label={label}
-                className='group absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
+                className='group absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring data-active:bg-accent'
               >
                 <span aria-hidden='true' className='absolute inset-x-0 top-1/2 h-px bg-border' />
                 <span

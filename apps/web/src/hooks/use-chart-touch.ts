@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {createContext, useCallback, useContext, useEffect, useRef, useState} from 'react';
 import type {MouseEvent, PointerEvent, TouchEvent} from 'react';
 
 const HOLD_MS = 250;
@@ -12,6 +12,16 @@ type Gesture = {
   timer: ReturnType<typeof setTimeout>;
 };
 
+type ChartTouchState = {touch: boolean; inspecting: boolean};
+
+/** Set by a chart's touch area; null outside one. */
+export const ChartTouchContext = createContext<ChartTouchState | null>(null);
+
+/** Whether a touch is inspecting the surrounding chart, for marks drawn beside it. */
+export function useChartTouchState(): ChartTouchState {
+  return useContext(ChartTouchContext) ?? {touch: false, inspecting: false};
+}
+
 /** Touch inspects only while held; a tap remains the chart's normal click action. */
 export function useChartTouch() {
   const ref = useRef<HTMLDivElement>(null);
@@ -23,10 +33,19 @@ export function useChartTouch() {
 
   // Recharts handles mouse/touch-move, but not pointer events or stationary touch-down.
   // Bridge inspection coordinates through its normal mouse event path, including a hold.
-  const point = (x: number, y: number) => {
-    ref.current
-      ?.querySelector('.recharts-wrapper')
-      ?.dispatchEvent(new window.MouseEvent('mousemove', {bubbles: true, clientX: x, clientY: y}));
+  // Only x picks the month, so a finger on the axis labels or on marks beside the chart (sharing its x slots)
+  // inspects at the chart's middle height, which lies inside the plot.
+  const point = (x: number) => {
+    const chart = ref.current?.querySelector('.recharts-wrapper');
+    if (!chart) return;
+    const box = chart.getBoundingClientRect();
+    chart.dispatchEvent(
+      new window.MouseEvent('mousemove', {
+        bubbles: true,
+        clientX: x,
+        clientY: box.top + box.height / 2,
+      }),
+    );
   };
 
   const leave = () => {
@@ -76,7 +95,7 @@ export function useChartTouch() {
       finish();
       return;
     }
-    point(event.clientX, event.clientY);
+    point(event.clientX);
     const current: Gesture = {
       id: event.pointerId,
       x: event.clientX,
@@ -105,7 +124,7 @@ export function useChartTouch() {
       }
       activate(current);
     }
-    point(event.clientX, event.clientY);
+    point(event.clientX);
   };
 
   const end = (event: PointerEvent<HTMLDivElement>) => {

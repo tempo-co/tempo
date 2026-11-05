@@ -9,7 +9,7 @@ import {parseCalendarDate, periodDrill} from '../utils/drill-links';
 import {pct, signed, signedPct, wholeCents} from '../utils/format';
 import {formatMonth} from '../utils/month';
 import {type MonthPoint, type Overview, SPANS, type Span, spanMonths} from '../utils/overview';
-import {BalanceChart, KeptStrip, Y_WIDTH} from './history-charts';
+import {HistoryCharts} from './history-charts';
 import {RepeatsBlock} from './repeats-block';
 import {TextAction} from './text-action';
 
@@ -73,14 +73,7 @@ export function WhereYouStand({
           </div>
           <SpanSwitch value={span} onChange={setSpan} />
         </div>
-        <BalanceChart months={shown} currency={currency} onPick={onOpenMonth} />
-        <p
-          className='-mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground'
-          style={{paddingLeft: Y_WIDTH}}
-        >
-          <span>Tap a month to open it</span>
-        </p>
-        <KeptStrip months={shown} currency={currency} onPick={onOpenMonth} />
+        <HistoryCharts months={shown} currency={currency} onPick={onOpenMonth} />
       </div>
       <div className='grid min-w-0 content-start gap-6 border-t pt-5 @[60rem]:border-t-0 @[60rem]:border-l @[60rem]:pt-0 @[60rem]:pl-6'>
         <SpanDetails key={span} overview={overview} months={base ? shown.slice(1) : shown} />

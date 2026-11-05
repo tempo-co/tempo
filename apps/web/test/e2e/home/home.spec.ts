@@ -2,7 +2,7 @@ import type {BankConnection} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
-import {HOME_CONNECTION, mockSyntheticHome} from '../../data/home-history.data';
+import {HOME_CONNECTION, HOME_NOW, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {mockBankConnections, routeBankConnectionsApi} from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
@@ -112,6 +112,97 @@ test.describe('Home navigation badges', () => {
     await transactions.click();
     await expect(page).toHaveURL(/\/bank-transactions/);
   });
+
+  /** An authorized bank whose consent ends `days` after now. */
+  const consentEndingIn = (id: string, days: number): BankConnection => ({
+    ...HOME_CONNECTION,
+    id,
+    consentValidUntil: new Date(HOME_NOW.getTime() + days * 24 * 60 * 60 * 1000).toISOString(),
+  });
+  const expired: BankConnection = {
+    ...HOME_CONNECTION,
+    id: '00000000-0000-4000-8000-0000000000c9',
+    status: 'EXPIRED',
+    syncStatus: 'EXPIRED',
+  };
+
+  test('Connections flags a bank whose consent ends within a week, and its card offers re-authorizing', async ({
+    page,
+  }) => {
+    await mockSyntheticHome(page, {
+      connections: [consentEndingIn('00000000-0000-4000-8000-0000000000c3', 3)],
+    });
+    await page.goto('/');
+    const connections = page
+      .getByRole('navigation', {name: 'Primary'})
+      .first()
+      .getByRole('link', {name: 'Connections, a bank needs re-authorizing soon'});
+    await expect(connections).toBeVisible();
+
+    await connections.click();
+    await expect(page).toHaveURL(/\/bank-connections$/);
+    const notice = page.getByTestId('bank-connection-sync-status');
+    await expect(notice).toContainText('Consent ends soon');
+    await expect(notice).toContainText(
+      'Re-authorize this bank connection to keep automatic sync running.',
+    );
+    await expect(page.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
+  });
+
+  test('a bank with a sync problem also says its consent ends soon', async ({page}) => {
+    await mockSyntheticHome(page, {
+      connections: [
+        {...consentEndingIn('00000000-0000-4000-8000-0000000000ca', 3), syncStatus: 'RATE_LIMITED'},
+      ],
+    });
+    await page.goto('/bank-connections');
+    const notice = page.getByTestId('bank-connection-sync-status');
+    await expect(notice).toContainText('Automatic sync is rate-limited');
+    await expect(notice).toContainText('Consent ends soon');
+    await expect(page.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
+  });
+
+  for (const {name, connections, label} of [
+    {
+      name: 'consent ending in 10 days carries no badge',
+      connections: [consentEndingIn('00000000-0000-4000-8000-0000000000c4', 10)],
+      label: 'Connections',
+    },
+    {
+      name: 'several banks ending soon read as a count',
+      connections: [
+        consentEndingIn('00000000-0000-4000-8000-0000000000c5', 1),
+        consentEndingIn('00000000-0000-4000-8000-0000000000c6', 6),
+      ],
+      label: 'Connections, 2 banks need re-authorizing soon',
+    },
+    {
+      name: 'a bank with a sync problem whose consent also ends soon is named for both',
+      connections: [
+        {
+          ...consentEndingIn('00000000-0000-4000-8000-0000000000c8', 3),
+          syncStatus: 'RATE_LIMITED' as const,
+        },
+      ],
+      label: 'Connections, a bank needs attention and a bank needs re-authorizing soon',
+    },
+    {
+      name: 'a broken bank and one ending soon are named together',
+      connections: [expired, consentEndingIn('00000000-0000-4000-8000-0000000000c7', 3)],
+      label: 'Connections, a bank needs attention and a bank needs re-authorizing soon',
+    },
+  ]) {
+    test(`Connections badge: ${name}`, async ({page}) => {
+      await mockSyntheticHome(page, {connections});
+      await page.goto('/');
+      const link = page
+        .getByRole('navigation', {name: 'Primary'})
+        .first()
+        .getByRole('link', {name: label, exact: true});
+      await expect(link).toBeVisible();
+      await expect(link.locator('i')).toHaveCount(label === 'Connections' ? 0 : 1);
+    });
+  }
 
   test('without anything to review or reconnect, the tabs carry no badge', async ({page}) => {
     await mockSyntheticHome(page, {

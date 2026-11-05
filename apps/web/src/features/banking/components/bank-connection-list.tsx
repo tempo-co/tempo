@@ -33,6 +33,7 @@ import {useStartBankConnection} from '../api/use-start-bank-connection';
 import {
   type AutomaticSyncProblem,
   getAutomaticSyncProblemForConnection,
+  isConsentEndingSoon,
   isReauthorizationRequired,
   isSyncInProgress,
 } from '../utils/bank-sync-status';
@@ -221,6 +222,9 @@ function BankConnectionCard({
   const {isPending: isRefreshing} = useBankConnectionRefreshState(connection.id);
   const hasSynced = isAuthorized && !!connection.lastSyncedAt;
   const needsReauth = isReauthorizationRequired(connection);
+  // Consent that ends within a week offers re-authorizing early, before automatic sync stops.
+  const consentEndsSoon = isConsentEndingSoon(connection);
+  const offersReauth = needsReauth || consentEndsSoon;
   const isBankSyncInProgress = isSyncInProgress(connection);
   const {
     transactions,
@@ -241,6 +245,14 @@ function BankConnectionCard({
   // discoverable even while the card is collapsed, so it renders as a strip
   // between the header and footer.
   const syncProblem = getAutomaticSyncProblemForConnection(connection);
+  const consentNotice =
+    consentEndsSoon && connection.consentValidUntil
+      ? {
+          title: 'Consent ends soon',
+          description: `Consent ends ${formatDate(connection.consentValidUntil)}. Re-authorize this bank connection to keep automatic sync running.`,
+        }
+      : null;
+  const problems = [syncProblem, consentNotice].filter((problem) => problem !== null);
 
   const removeBank = async (): Promise<boolean> => {
     try {
@@ -276,7 +288,7 @@ function BankConnectionCard({
       <CardHeader
         className={cn(
           'relative flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-0',
-          isAuthorized && !needsReauth && 'max-sm:flex-row max-sm:items-center max-sm:gap-0',
+          isAuthorized && !offersReauth && 'max-sm:flex-row max-sm:items-center max-sm:gap-0',
         )}
       >
         {hasBodyContent ? (
@@ -291,7 +303,7 @@ function BankConnectionCard({
             data-testid={`connection-card-toggle-${connection.id}`}
             className={cn(
               'flex w-full min-w-0 items-center gap-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:flex-1 sm:self-auto',
-              needsReauth && 'sm:w-[calc(100%-8.5rem)] sm:shrink',
+              offersReauth && 'sm:w-[calc(100%-8.5rem)] sm:shrink',
             )}
           >
             {headerContent}
@@ -299,7 +311,7 @@ function BankConnectionCard({
               aria-hidden='true'
               className={cn(
                 'mr-2 ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
-                needsReauth && 'sm:ml-1',
+                offersReauth && 'sm:ml-1',
                 !isExpanded && '-rotate-90',
               )}
             />
@@ -307,7 +319,7 @@ function BankConnectionCard({
         ) : (
           <div className='flex min-w-0 flex-1 items-center gap-3'>{headerContent}</div>
         )}
-        {needsReauth && (
+        {offersReauth && (
           <Button
             variant='outline'
             size='sm'
@@ -319,7 +331,7 @@ function BankConnectionCard({
           </Button>
         )}
       </CardHeader>
-      {!isExpanded && <AutomaticSyncStatus problem={syncProblem} />}
+      {!isExpanded && <AutomaticSyncStatus problems={problems} />}
       {isExpanded && (
         <CardContent
           id={disclosureContentId}
@@ -328,7 +340,7 @@ function BankConnectionCard({
           }
           className='space-y-6 px-4 pt-4 pb-5'
         >
-          <AutomaticSyncStatus problem={syncProblem} />
+          <AutomaticSyncStatus problems={problems} />
           <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
             <section aria-labelledby={accountsHeadingId} className='min-w-0'>
               <SectionHeading
@@ -713,17 +725,21 @@ function FreshnessLabel({value}: {value: string}) {
   );
 }
 
-function AutomaticSyncStatus({problem}: {problem: AutomaticSyncProblem | null}) {
-  if (!problem) return null;
+function AutomaticSyncStatus({problems}: {problems: AutomaticSyncProblem[]}) {
+  if (problems.length === 0) return null;
 
   return (
     <div
       data-testid='bank-connection-sync-status'
       role='alert'
-      className='rounded-md border border-warning/40 bg-warning/5 px-3 py-3 text-sm'
+      className='space-y-3 rounded-md border border-warning/40 bg-warning/5 px-3 py-3 text-sm'
     >
-      <p className='font-medium'>{problem.title}</p>
-      <p className='mt-1 text-muted-foreground'>{problem.description}</p>
+      {problems.map((problem) => (
+        <div key={problem.title}>
+          <p className='font-medium'>{problem.title}</p>
+          <p className='mt-1 text-muted-foreground'>{problem.description}</p>
+        </div>
+      ))}
     </div>
   );
 }
