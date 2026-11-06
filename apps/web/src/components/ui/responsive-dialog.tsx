@@ -106,7 +106,11 @@ const keepOpenForToasts = (event: {target: EventTarget | null; preventDefault: (
     event.preventDefault();
 };
 
-const ResponsiveDialogContent = ({className, children, ...props}: ResponsiveDialogProps) => {
+const ResponsiveDialogContent = ({
+  className,
+  children,
+  ...props
+}: ResponsiveDialogProps & {onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>}) => {
   const {isDesktop} = useResponsiveDialogContext();
   const ResponsiveDialogContent = isDesktop ? DialogContent : DrawerContent;
 

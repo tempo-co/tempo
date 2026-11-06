@@ -3,11 +3,15 @@ import type {BankConnection} from '@tempo/contracts';
 
 import {dashboardQueryKeys} from '../../../src/features/banking/api/aggregate-query-keys';
 import {bankQueryKeys} from '../../../src/features/banking/api/query-keys';
-import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
-import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
-import {septemberSpending} from '../../data/home-summary.data';
+import {
+  HOME_CONNECTION,
+  HOME_REVIEW_COUNTS,
+  USUAL_SPENDING,
+  homeHistory,
+  mockSyntheticHome,
+} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
-import {fulfillJson, mockBankConnections} from '../../utils/api-mocks';
+import {fulfillJson} from '../../utils/api-mocks';
 import {createHookHarness} from '../../utils/hook-harness';
 
 const connection: BankConnection = {
@@ -25,75 +29,64 @@ const connection: BankConnection = {
   bankAccounts: [],
 };
 
-test.use({storageState: VERIFIED_USER_AUTH_FILE});
+test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
 
-test('Home refreshes spending, review counts and recent transactions when a polled sync completes', async ({
+test('Home refreshes its history and the review badge when a polled sync completes', async ({
   page,
+  homePage,
 }) => {
-  let current = connection;
+  let current: BankConnection = {...HOME_CONNECTION, syncStatus: 'QUEUED'};
   let completed = false;
   let connectionReads = 0;
-  const reads = {summary: 0, review: 0, recent: 0};
-  await page.clock.install({time: SEEDED_TRANSACTION_YEAR_NOW});
-  await mockBankConnections(page, () => {
-    connectionReads++;
-    return [current];
+  const reads = {flow: 0, review: 0};
+  const before = homeHistory();
+  // The sync brings in October's last €400 of spending.
+  const after = homeHistory({
+    spending: (month) =>
+      month === '2026-11'
+        ? {HOUSING_AND_UTILITIES: 1200}
+        : {
+            ...USUAL_SPENDING,
+            ...(month === '2026-10' ? {SHOPPING: 600} : {}),
+            ...(month === '2026-03' ? {TRAVEL: 1500} : {}),
+          },
   });
-  await page.route('**/bank-transactions/summary**', (route) => {
-    reads.summary++;
-    return fulfillJson(route, septemberSpending(completed ? '1400.00' : '1200.00'));
+  await mockSyntheticHome(page, {
+    history: before,
+    clock: 'installed',
+    connections: () => {
+      connectionReads++;
+      return [current];
+    },
+  });
+  await page.route('**/bank-transactions/cash-flow?**', (route) => {
+    reads.flow++;
+    return fulfillJson(route, (completed ? after : before).flow);
   });
   await page.route('**/bank-transactions/review-counts', (route) => {
     reads.review++;
-    return fulfillJson(route, {
-      needsReview: completed ? 2 : 1,
-      categorizationFailed: 0,
-      categorizing: 0,
-      unknownDirection: 0,
-      missingBaseAmount: 0,
-    });
+    return fulfillJson(route, {...HOME_REVIEW_COUNTS, needsReview: completed ? 3 : 2});
   });
-  await page.route('**/bank-transactions?**', (route) => {
-    reads.recent++;
-    return fulfillJson(route, {
-      transactions: completed
-        ? [
-            {
-              id: '00000000-0000-4000-8000-000000000002',
-              bookingDate: '2026-09-30',
-              amount: '-200.00',
-              currency: 'EUR',
-              displayDescription: 'Example synced shop',
-              category: 'OTHER',
-              categoryStatus: 'COMPLETED',
-            },
-          ]
-        : [],
-      total: completed ? 1 : 0,
-    });
-  });
-  await page.goto('/?month=2026-09');
-  const spending = page.getByTestId('category-breakdown');
-  const attention = page.getByRole('region', {name: 'Needs attention', exact: true});
-  const recent = page.getByRole('region', {name: 'Latest in September 2026'});
-  await expect(spending.getByText('€1,200.00', {exact: true})).toBeVisible();
-  await expect(attention).toContainText('1 transaction · all months');
-  await expect(recent).toContainText('No transactions this month.');
-  expect(reads).toEqual({summary: 1, review: 1, recent: 1});
+  await page.goto('/');
+  const october = homePage.whereYouStand
+    .getByRole('list', {name: 'Kept each month'})
+    .getByRole('button', {name: /^October 2026/});
+  await expect(october).toHaveAccessibleName('October 2026: kept +€1,000');
+  await expect(page.getByRole('link', {name: 'Transactions, 4 to review'}).first()).toBeVisible();
+  expect(reads).toEqual({flow: 1, review: 1});
 
   // Let timers continue while responses and derived-data invalidation finish. A request count
   // alone does not mean the query has settled and re-armed its polling timer.
   test.setTimeout(40_000);
   await page.clock.resume();
-  current = {...connection, syncStatus: 'RUNNING'};
+  current = {...current, syncStatus: 'RUNNING'};
   await expect.poll(() => connectionReads, {timeout: 15_000}).toBe(2);
   completed = true;
-  current = {...connection, syncStatus: 'SUCCEEDED', lastSyncedAt: '2026-10-01T00:00:00Z'};
+  current = {...current, syncStatus: 'SUCCEEDED', lastSyncedAt: '2026-11-05T12:00:30.000Z'};
   await expect.poll(() => connectionReads, {timeout: 15_000}).toBe(3);
-  await expect(spending.getByText('€1,400.00', {exact: true})).toBeVisible();
-  await expect(attention).toContainText('2 transactions · all months');
-  await expect(recent).toContainText('Example synced shop');
-  await expect(page).toHaveURL(/\?month=2026-09$/);
+  await expect(october).toHaveAccessibleName('October 2026: kept +€600');
+  await expect(page.getByRole('link', {name: 'Transactions, 5 to review'}).first()).toBeVisible();
+  await expect(page).toHaveURL('/');
 });
 
 // The backend has no public sync fixture endpoint. Load the real hook with only HTTP replaced;
@@ -128,8 +121,7 @@ function syncHarness() {
 }
 
 const cachedKeys = [
-  dashboardQueryKeys.summary('2026-09', '2026-10-01'),
-  dashboardQueryKeys.summary('2026-08', '2026-10-01'),
+  dashboardQueryKeys.breakdown('year', 'category', '2007-01-01', '2026-10-01', '2026-10-01'),
   dashboardQueryKeys.reviewCounts,
   bankQueryKeys.transactions({pageIndex: 0, pageSize: 10}, {cashFlows: ['SPENDING']}, undefined),
   bankQueryKeys.transaction('example-transaction'),

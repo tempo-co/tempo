@@ -111,7 +111,7 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 			name,
 			{
 				description:
-					'Read period analytics. asOf defaults to today in Europe/Amsterdam. API enforces range limits: week 104, month 60, year 10 periods; to must be on or before asOf.',
+					'Read period analytics. asOf defaults to today in Europe/Amsterdam. API enforces range limits: week 104, month 240, year 20 periods; to must be on or before asOf.',
 				inputSchema: z.strictObject({
 					interval: z.enum(['week', 'month', 'year']),
 					from: z.iso.date(),

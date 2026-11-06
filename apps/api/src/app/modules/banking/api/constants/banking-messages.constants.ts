@@ -28,11 +28,13 @@ export const BANKING_RECURRING_SERIES_KEY_INVALID = 'Recurring payment key must 
 export const MERCHANT_LOGO_NOT_FOUND = 'Merchant logo not found.';
 export const BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH = 'The summary month cannot start after the given date.';
 export const BANKING_BALANCE_TREND_RANGE =
-	'The balance trend range must run forward, end by the given date and cover at most 104 weeks, 60 months or 10 years.';
+	'The balance trend range must run forward, end by the given date and cover at most 104 weeks, 240 months or 20 years.';
 export const BANKING_TRANSACTION_CASH_FLOW_RANGE =
-	'The cash flow range must run forward, end by the given date and cover at most 104 weeks, 60 months or 10 years.';
+	'The cash flow range must run forward, end by the given date and cover at most 104 weeks, 240 months or 20 years.';
+export const BANKING_TRANSACTION_BREAKDOWN_RANGE =
+	'The breakdown range must run forward, end by the given date and cover at most 240 months or 20 years.';
 export const MERCHANT_NOT_FOUND = 'Merchant not found.';
 export const MERCHANT_GROUP_ID_INVALID = 'Merchant id must be b_ or k_ followed by 32 lowercase hex characters.';
 export const MERCHANT_PERIODS_RANGE =
-	'The merchant period range must run forward, end by the given date and cover at most 104 weeks, 60 months or 10 years.';
+	'The merchant period range must run forward, end by the given date and cover at most 104 weeks, 240 months or 20 years.';
 export const MERCHANT_RANKING_FUTURE_PERIOD = 'The ranked period cannot start after the given date.';

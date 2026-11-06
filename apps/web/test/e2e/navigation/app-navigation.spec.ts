@@ -1,6 +1,8 @@
 import {expect, test} from '@playwright/test';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {mockSyntheticHome} from '../../data/home-history.data';
+import {fulfillJson} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE});
@@ -83,4 +85,43 @@ test('navigates from the header and account menu on wider screens', async ({page
 
   await page.getByRole('link', {name: 'Tempo home'}).click();
   await expect(page).toHaveURL(/^https?:\/\/[^/]+\/(?:\?|$)/);
+});
+
+test.describe('the Tempo mark', () => {
+  test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
+
+  for (const width of [390, 1440]) {
+    test(`the header mark is 36px inside a 44px home link at ${width}px`, async ({page}) => {
+      await page.setViewportSize({width, height: 844});
+      await mockSyntheticHome(page);
+      await page.goto('/');
+      const header = await boxOf(page.getByRole('banner'));
+      const link = page.getByRole('banner').getByRole('link', {name: 'Tempo home'});
+      const target = await boxOf(link);
+      const mark = await boxOf(link.locator('svg'));
+      expect(target.width).toBeGreaterThanOrEqual(44);
+      expect(target.height).toBeGreaterThanOrEqual(44);
+      expect(mark.width).toBe(36);
+      expect(mark.height).toBe(36);
+      // The header keeps its 48px row and bottom border, and the mark sits in the row's middle and at its inset.
+      expect(header.height).toBe(49);
+      expect(Math.abs(mark.y + mark.height / 2 - (header.y + 24))).toBeLessThanOrEqual(1);
+      expect(target.y).toBeGreaterThanOrEqual(header.y);
+      expect(mark.x).toBe(width >= 1280 ? (width - 1280) / 2 + 16 : 16);
+
+      await link.click();
+      await expect(page).toHaveURL(/^https?:\/\/[^/]+\/(?:\?|$)/);
+    });
+  }
+
+  test('auth pages show the mark at 48px', async ({page}) => {
+    await page.setViewportSize({width: 390, height: 844});
+    await page.route('**/accounts/me', (route) =>
+      fulfillJson(route, {message: 'Unauthorized'}, 401),
+    );
+    await page.goto('/login');
+    const mark = await boxOf(page.getByRole('link', {name: 'Tempo home'}).locator('svg'));
+    expect(mark.width).toBe(48);
+    expect(mark.height).toBe(48);
+  });
 });

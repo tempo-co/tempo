@@ -109,7 +109,7 @@ function days(count: number): number[] {
 }
 
 /** The most periods one cash-flow style request may cover. */
-const CASH_FLOW_MAX_PERIODS: Record<CashFlowInterval, number> = {week: 104, month: 60, year: 10};
+const CASH_FLOW_MAX_PERIODS: Record<CashFlowInterval, number> = {week: 104, month: 240, year: 20};
 
 /** Period starts from `from` through `to`, or null when the range is backwards, ends after `asOf` or is too long. */
 export function periodStarts(interval: CashFlowInterval, from: string, to: string, asOf: string): string[] | null {

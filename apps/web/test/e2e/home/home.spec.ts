@@ -2,15 +2,10 @@ import type {BankConnection} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
-import {septemberSpending} from '../../data/home-summary.data';
+import {HOME_CONNECTION, HOME_NOW, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
-import {
-  mockBankConnections,
-  mockJson,
-  routeBankConnectionsApi,
-  transformBankConnections,
-} from '../../utils/api-mocks';
-import {expectNoHorizontalOverflow} from '../../utils/layout';
+import {mockBankConnections, mockJson, routeBankConnectionsApi} from '../../utils/api-mocks';
+import {expectLoaded, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.describe('Home without banks', () => {
   test('prompts to connect a bank', async ({page, homePage, freshAccount}) => {
@@ -18,6 +13,9 @@ test.describe('Home without banks', () => {
     await expect(homePage.accountEmail).toHaveText(freshAccount.email);
 
     await expect(homePage.emptyStateTitle).toBeVisible();
+    await expect(page.getByRole('main')).toContainText(
+      'where your money went once at least one account has synced.',
+    );
     await homePage.connectBankLink.click();
     await expect(page).toHaveURL(/\/bank-connections$/);
   });
@@ -33,211 +31,34 @@ test.describe('Home', () => {
     await page.clock.setFixedTime(SEEDED_TRANSACTION_YEAR_NOW);
   });
 
-  test('moves between months and back to the current one', async ({page, homePage}) => {
-    await page.goto('/');
-
-    await expect(homePage.monthHeading).toHaveText('October 2026');
-    await expect(homePage.nextMonthButton).toBeDisabled();
-    await expect(homePage.backToThisMonthLink).toBeHidden();
-
-    await homePage.previousMonthLink.click();
-    await expect(page).toHaveURL(/\?month=2026-09$/);
-    await expect(homePage.monthHeading).toHaveText('September 2026');
-
-    await homePage.previousMonthLink.click();
-    await expect(page).toHaveURL(/\?month=2026-08$/);
-    await homePage.nextMonthLink.click();
-    await expect(page).toHaveURL(/\?month=2026-09$/);
-
-    await homePage.nextMonthLink.click();
-    await expect(page).toHaveURL(/\/$/);
-    await expect(homePage.monthHeading).toHaveText('October 2026');
-
-    await page.goto('/?month=2026-08');
-    await homePage.backToThisMonthLink.click();
-    await expect(page).toHaveURL(/\/$/);
-    await expect(homePage.monthHeading).toHaveText('October 2026');
-  });
-
-  test('requests its cards while the bank connections are loading', async ({page, homePage}) => {
+  test('shows where the seeded owner stands, and requests it while the connections load', async ({
+    page,
+    homePage,
+  }) => {
     let releaseConnections = () => {};
     const connectionsHeld = new Promise<void>((resolve) => (releaseConnections = resolve));
     await routeBankConnectionsApi(page, async (route) => {
       await connectionsHeld;
       await route.continue();
     });
-    const cardRequests = [
-      '**/bank-transactions/summary**',
-      '**/bank-transactions/cash-flow**',
+    const historyRequests = [
+      '**/bank-transactions/balance-trend?**',
+      '**/bank-transactions/cash-flow?**',
+      '**/bank-transactions/breakdown?**',
       '**/bank-transactions/review-counts',
     ].map((url) => page.waitForRequest(url));
 
     try {
       await page.goto('/');
-      await Promise.all(cardRequests);
+      await Promise.all(historyRequests);
     } finally {
       releaseConnections();
     }
 
-    await expect(homePage.syncStatus).toBeVisible();
-    await expect(page.getByRole('region', {name: 'Balances'})).toBeVisible();
-  });
-
-  test("does not show the old month's rows under the month being loaded", async ({page}) => {
-    await page.goto('/?month=2026-08');
-    await expect(
-      page
-        .getByRole('region', {name: 'Latest in August 2026'})
-        .getByRole('link', {name: /Coffee shop/}),
-    ).toBeVisible();
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    await page.route('**/bank-transactions?**', async (route) => {
-      if (
-        new URL(route.request().url()).searchParams.get('filter[bookingDate][from]') ===
-        '2026-07-01'
-      ) {
-        await gate;
-        await route.fulfill({
-          contentType: 'application/json',
-          body: JSON.stringify({transactions: [], total: 0}),
-        });
-      } else await route.continue();
-    });
-    try {
-      const request = page.waitForRequest(
-        (request) =>
-          new URL(request.url()).searchParams.get('filter[bookingDate][from]') === '2026-07-01',
-      );
-      await page.getByRole('link', {name: 'Previous month'}).click();
-      await request;
-      await expect(
-        page
-          .getByRole('region', {name: 'Latest in July 2026'})
-          .getByRole('link', {name: /Coffee shop/}),
-      ).toHaveCount(0);
-    } finally {
-      release();
-      await page.unrouteAll({behavior: 'wait'});
-    }
-  });
-
-  test('shows the current month for a future or invalid month', async ({page, homePage}) => {
-    await page.goto('/?month=2027-01');
-    await expect(homePage.monthHeading).toHaveText('October 2026');
-    await expect(homePage.nextMonthButton).toBeDisabled();
-
-    await page.goto('/?month=2026-13');
-    await expect(homePage.monthHeading).toHaveText('October 2026');
-
-    await page.goto('/?month=0000-01');
-    await expect(homePage.monthHeading).toHaveText('October 2026');
-  });
-
-  test('says when the seeded bank last synced', async ({homePage, page}) => {
-    await page.goto('/');
-    await expect(homePage.syncStatus).toHaveText('Your bank synced about 1 month ago');
-  });
-
-  test('leaves out the all-synced line on a phone', async ({homePage, page}) => {
-    await page.setViewportSize({width: 390, height: 844});
-    await page.goto('/');
-    await expect(homePage.monthHeading).toBeVisible();
-    await expect(homePage.syncStatus).toBeHidden();
-  });
-
-  test('warns about consent that ends within a week', async ({page, homePage}) => {
-    await transformBankConnections(page, (connections: BankConnection[]) =>
-      connections.map((connection) => ({
-        ...connection,
-        consentValidUntil: '2026-10-05T10:00:00.000Z',
-      })),
-    );
-    await page.goto('/');
-
-    const warning = homePage.syncStatus.getByRole('link', {
-      name: 'ABN AMRO consent expires in 4 days',
-    });
-    await expect(warning).toBeVisible();
-    await warning.click();
-    await expect(page).toHaveURL(/\/bank-connections$/);
-  });
-
-  test('flags a bank whose consent ended', async ({page, homePage}) => {
-    await transformBankConnections(page, (connections: BankConnection[]) =>
-      connections.map((connection) => ({
-        ...connection,
-        status: 'EXPIRED',
-        syncStatus: 'EXPIRED',
-      })),
-    );
-    await page.goto('/');
-
-    await expect(homePage.syncStatus).toContainText('ABN AMRO has not synced since 26 Aug');
-    await expect(homePage.syncStatus).toContainText('Totals may be missing recent activity.');
-    await homePage.syncStatus.getByRole('link', {name: 'Reconnect'}).click();
-    await expect(page).toHaveURL(/\/bank-connections$/);
-  });
-
-  test('retains totals for a sanitized expired connection and offers reconnect', async ({
-    page,
-    homePage,
-  }) => {
-    await mockBankConnections(page, [
-      {
-        id: '00000000-0000-4000-8000-0000000000bb',
-        provider: 'enable-banking',
-        aspspName: 'Sample Bank',
-        aspspCountry: 'NL',
-        status: 'EXPIRED',
-        syncStatus: 'IDLE',
-        consentValidUntil: null,
-        lastSyncedAt: null,
-        lastSyncError: null,
-        nextSyncAt: null,
-        baseCurrency: 'EUR',
-        bankAccounts: [
-          {
-            id: '00000000-0000-4000-8000-0000000000cc',
-            name: 'Sample retained account',
-            details: null,
-            alias: null,
-            currency: 'EUR',
-            cashAccountType: null,
-            usage: null,
-            maskedIdentifier: null,
-            currentBalanceAmount: '100.00',
-            currentBalanceInBaseCurrency: '100.00',
-            baseCurrencyRateDate: null,
-            currentBalanceType: 'CLBD',
-            balanceUpdatedAt: '2026-09-30T10:00:00.000Z',
-            isActive: true,
-            latestBalances: [],
-          },
-        ],
-      },
-    ]);
-    await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
-    await page.goto('/?month=2026-09');
-
-    await expect(homePage.monthHeading).toHaveText('September 2026');
-    await expect(homePage.emptyStateTitle).toBeHidden();
-    await expect(
-      page.getByTestId('category-breakdown').getByText('€1,200.00', {exact: true}),
-    ).toBeVisible();
-    const balances = page.getByRole('region', {name: 'Balances'});
-    await expect(
-      balances
-        .getByRole('link', {name: /Sample retained account/})
-        .getByText('€100.00', {exact: true}),
-    ).toBeVisible();
-    await expect(balances.getByText('Total', {exact: true}).locator('..')).toContainText('€100.00');
-    await expect(homePage.syncStatus).toContainText('Sample Bank has not synced yet');
-    await expect(homePage.syncStatus).toContainText('Totals may be missing recent activity.');
-    await homePage.syncStatus.getByRole('link', {name: 'Reconnect', exact: true}).click();
-    await expect(page).toHaveURL(/\/bank-connections$/);
+    await expect(homePage.totalBalance).toHaveText(/^€[\d,]+$/);
+    await expect(homePage.yearTable.getByRole('button', {name: /^2026/})).toBeVisible();
+    await expect(page.getByRole('region', {name: 'Spending by category'})).toBeVisible();
+    await expectLoaded(page.getByRole('main'));
   });
 
   test('ignores connections that never finished authorizing', async ({page, homePage}) => {
@@ -261,12 +82,178 @@ test.describe('Home', () => {
 
     await expect(homePage.emptyStateTitle).toBeVisible();
   });
+});
 
-  test('fits a phone screen', async ({page, homePage}) => {
+test.describe('Home navigation badges', () => {
+  test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
+
+  test('Transactions counts what needs review and Connections flags a bank to reconnect', async ({
+    page,
+    homePage,
+  }) => {
+    const expired: BankConnection = {
+      ...HOME_CONNECTION,
+      id: '00000000-0000-4000-8000-0000000000c2',
+      aspspName: 'Sample Bank',
+      status: 'EXPIRED',
+      syncStatus: 'EXPIRED',
+    };
+    await mockSyntheticHome(page, {connections: [HOME_CONNECTION, expired]});
+    await page.goto('/');
+
+    const primary = page.getByRole('navigation', {name: 'Primary'}).first();
+    // Two to review, one failed and one without a direction; the five still categorizing are not counted.
+    const transactions = primary.getByRole('link', {name: 'Transactions, 4 to review'});
+    await expect(transactions).toHaveText('Transactions4');
+    await expect(
+      primary.getByRole('link', {name: 'Connections, a bank needs attention'}),
+    ).toBeVisible();
+    // A retained expired bank still counts towards the totals.
+    await expect(homePage.totalBalance).toHaveText('€24,300');
+
+    await transactions.click();
+    await expect(page).toHaveURL(/\/bank-transactions/);
+  });
+
+  /** An authorized bank whose consent ends `days` after now. */
+  const consentEndingIn = (id: string, days: number): BankConnection => ({
+    ...HOME_CONNECTION,
+    id,
+    consentValidUntil: new Date(HOME_NOW.getTime() + days * 24 * 60 * 60 * 1000).toISOString(),
+  });
+  const expired: BankConnection = {
+    ...HOME_CONNECTION,
+    id: '00000000-0000-4000-8000-0000000000c9',
+    status: 'EXPIRED',
+    syncStatus: 'EXPIRED',
+  };
+
+  test('Connections flags a bank whose consent ends within a week, and its card offers re-authorizing', async ({
+    page,
+  }) => {
+    await mockSyntheticHome(page, {
+      connections: [consentEndingIn('00000000-0000-4000-8000-0000000000c3', 3)],
+    });
+    await mockJson(page, '**/bank-connections/aspsps', []);
+    await page.goto('/');
+    const connections = page
+      .getByRole('navigation', {name: 'Primary'})
+      .first()
+      .getByRole('link', {name: 'Connections, a bank needs re-authorizing soon'});
+    await expect(connections).toBeVisible();
+
+    await connections.click();
+    await expect(page).toHaveURL(/\/bank-connections$/);
+    const notice = page.getByTestId('bank-connection-sync-status');
+    await expect(notice).toContainText('Consent ends soon');
+    await expect(notice).toContainText(
+      'Re-authorize this bank connection to keep automatic sync running.',
+    );
+    await expect(page.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
+  });
+
+  test('a bank with a sync problem also says its consent ends soon', async ({page}) => {
+    await mockSyntheticHome(page, {
+      connections: [
+        {...consentEndingIn('00000000-0000-4000-8000-0000000000ca', 3), syncStatus: 'RATE_LIMITED'},
+      ],
+    });
+    await mockJson(page, '**/bank-connections/aspsps', []);
+    await page.goto('/bank-connections');
+    const notice = page.getByTestId('bank-connection-sync-status');
+    await expect(notice).toContainText('Automatic sync is rate-limited');
+    await expect(notice).toContainText('Consent ends soon');
+    await expect(page.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
+  });
+
+  for (const {name, connections, label} of [
+    {
+      name: 'consent ending in 10 days carries no badge',
+      connections: [consentEndingIn('00000000-0000-4000-8000-0000000000c4', 10)],
+      label: 'Connections',
+    },
+    {
+      name: 'several banks ending soon read as a count',
+      connections: [
+        consentEndingIn('00000000-0000-4000-8000-0000000000c5', 1),
+        consentEndingIn('00000000-0000-4000-8000-0000000000c6', 6),
+      ],
+      label: 'Connections, 2 banks need re-authorizing soon',
+    },
+    {
+      name: 'a bank with a sync problem whose consent also ends soon is named for both',
+      connections: [
+        {
+          ...consentEndingIn('00000000-0000-4000-8000-0000000000c8', 3),
+          syncStatus: 'RATE_LIMITED' as const,
+        },
+      ],
+      label: 'Connections, a bank needs attention and a bank needs re-authorizing soon',
+    },
+    {
+      name: 'a broken bank and one ending soon are named together',
+      connections: [expired, consentEndingIn('00000000-0000-4000-8000-0000000000c7', 3)],
+      label: 'Connections, a bank needs attention and a bank needs re-authorizing soon',
+    },
+  ]) {
+    test(`Connections badge: ${name}`, async ({page}) => {
+      await mockSyntheticHome(page, {connections});
+      await page.goto('/');
+      const link = page
+        .getByRole('navigation', {name: 'Primary'})
+        .first()
+        .getByRole('link', {name: label, exact: true});
+      await expect(link).toBeVisible();
+      await expect(link.locator('i')).toHaveCount(label === 'Connections' ? 0 : 1);
+    });
+  }
+
+  test('without anything to review or reconnect, the tabs carry no badge', async ({page}) => {
+    await mockSyntheticHome(page, {
+      reviewCounts: {
+        needsReview: 0,
+        categorizationFailed: 0,
+        categorizing: 4,
+        unknownDirection: 0,
+        missingBaseAmount: 2,
+      },
+    });
+    await page.goto('/');
+    const primary = page.getByRole('navigation', {name: 'Primary'}).first();
+    await expect(page.getByRole('region', {name: 'Where you stand'})).toBeVisible();
+    await expect(primary.getByRole('link', {name: 'Transactions', exact: true})).toHaveText(
+      'Transactions',
+    );
+    await expect(primary.getByRole('link', {name: 'Connections', exact: true})).toBeVisible();
+  });
+
+  test('the phone tab bar carries the same badges', async ({page}) => {
     await page.setViewportSize({width: 390, height: 844});
-    await page.goto('/?month=2026-08');
+    await mockSyntheticHome(page, {
+      connections: [{...HOME_CONNECTION, status: 'EXPIRED', syncStatus: 'EXPIRED'}],
+    });
+    await page.goto('/');
+    const tabs = page.getByRole('navigation', {name: 'Primary'}).last();
+    await expect(tabs.getByRole('link', {name: 'Transactions, 4 to review'})).toBeVisible();
+    await expect(
+      tabs.getByRole('link', {name: 'Connections, a bank needs attention'}),
+    ).toBeVisible();
+  });
+});
 
-    await expect(homePage.monthHeading).toHaveText('August 2026');
+test.describe('Home on a phone', () => {
+  test.use({
+    storageState: {cookies: [], origins: []},
+    timezoneId: 'Europe/Amsterdam',
+    viewport: {width: 390, height: 844},
+  });
+
+  test('fits the screen', async ({page, homePage}) => {
+    await mockSyntheticHome(page);
+    await page.goto('/');
+    await expect(homePage.totalBalance).toHaveText('€24,300');
+    await expect(page.getByRole('region', {name: 'Income by source'})).toBeVisible();
+    await expectLoaded(page.getByRole('main'));
     await expectNoHorizontalOverflow(page);
   });
 });

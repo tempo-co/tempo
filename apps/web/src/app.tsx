@@ -41,7 +41,7 @@ export function App() {
     <ThemeProvider storageKey='vite-ui-theme'>
       {isUnavailable || (!isOnline && !isAuthenticated) ? (
         <div className='flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center'>
-          <Logo className='h-12 w-12 text-primary' />
+          <Logo className='h-16 w-16 text-primary' />
           <h1 className='text-page-title'>Cannot reach Tempo</h1>
           <p className='max-w-sm text-sm text-muted-foreground'>
             Your session has not been checked yet. Reconnect to continue.
@@ -71,7 +71,7 @@ function LoadingScreen() {
         animate={{scale: 1.3, opacity: 1}}
         transition={{duration: 3, ease: 'easeOut', delay: 0.5}}
       >
-        <Logo className='h-16 w-16 text-primary' />
+        <Logo className='h-20 w-20 text-primary' />
       </motion.div>
     </div>
   );

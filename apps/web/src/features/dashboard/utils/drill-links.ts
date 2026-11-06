@@ -1,7 +1,4 @@
-import type {
-  BankTransactionCategoryFilterValue,
-  BankTransactionReviewCounts,
-} from '@tempo/contracts';
+import type {BankTransactionCategoryFilterValue} from '@tempo/contracts';
 import {parse} from 'date-fns';
 
 import type {BankTransactionSearchParams} from '@/features/banking/types/bank-transaction';
@@ -21,11 +18,6 @@ function bookingRange(from: string, to: string) {
 /** Every transaction booked between two calendar dates. */
 export function periodDrill(from: string, to: string): BankTransactionDrillSearch {
   return {bookingDate: bookingRange(from, to)};
-}
-
-/** Exactly the rows behind a cash flow bar: spending and income with a base-currency amount. */
-export function cashFlowDrill(from: string, to: string): BankTransactionDrillSearch {
-  return {...periodDrill(from, to), cashFlows: ['SPENDING', 'INCOME'], baseAmount: 'PRESENT'};
 }
 
 /**
@@ -57,13 +49,3 @@ export function categoryDrill(
     categories: Array.isArray(categories) ? categories : [categories],
   };
 }
-
-/** All-time rows behind each review count. */
-export const reviewDrills = {
-  needsReview: {categories: ['NEEDS_REVIEW']},
-  categorizationFailed: {categoryStatuses: ['FAILED']},
-  categorizing: {categoryStatuses: ['CATEGORIZING']},
-  unknownDirection: {cashFlows: ['UNKNOWN']},
-  // Internal rows are left out of the count, so they are left out of the list too.
-  missingBaseAmount: {cashFlows: ['SPENDING', 'INCOME', 'UNKNOWN'], baseAmount: 'MISSING'},
-} as const satisfies Record<keyof BankTransactionReviewCounts, BankTransactionDrillSearch>;

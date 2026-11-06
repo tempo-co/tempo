@@ -1,7 +1,7 @@
 import * as React from 'react';
 import * as RechartsPrimitive from 'recharts';
 
-import {useChartTouch} from '@/hooks/use-chart-touch';
+import {ChartTouchContext, useChartTouch, useChartTouchState} from '@/hooks/use-chart-touch';
 import {cn} from '@/utils/cn';
 
 // Format: { THEME_NAME: CSS_SELECTOR }
@@ -9,7 +9,28 @@ const THEMES = {light: '', dark: '.dark'} as const;
 
 const INITIAL_DIMENSION = {width: 320, height: 200} as const;
 
-const ChartTouchContext = React.createContext({touch: false, inspecting: false});
+const TOUCH_CLASSES = 'touch-pan-y touch-pinch-zoom select-none [-webkit-touch-callout:none]';
+
+/**
+ * One hold-and-slide surface around a chart and marks that share its x slots, such as bars drawn beside it:
+ * a press anywhere inside inspects the chart's month under the finger.
+ */
+function ChartTouchArea({className, children, ...props}: React.ComponentProps<'div'>) {
+  const {ref, touch, inspecting, handlers} = useChartTouch();
+  return (
+    <ChartTouchContext value={{touch, inspecting}}>
+      <div
+        ref={ref}
+        data-slot='chart-touch-area'
+        className={cn(TOUCH_CLASSES, className)}
+        {...props}
+        {...handlers}
+      >
+        {children}
+      </div>
+    </ChartTouchContext>
+  );
+}
 
 export type ChartConfig = Record<
   string,
@@ -35,29 +56,33 @@ function ChartContainer({
     height: number;
   };
 }) {
-  const {ref, touch, inspecting, handlers} = useChartTouch();
   const uniqueId = React.useId();
   const chartId = `chart-${id ?? uniqueId.replace(/:/g, '')}`;
+  const frame = {
+    'data-slot': 'chart',
+    'data-chart': chartId,
+    className: cn(
+      "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick-value]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-surface]:outline-hidden [&_svg_*]:outline-none",
+      className,
+    ),
+    ...props,
+  };
+  const content = (
+    <>
+      <ChartStyle id={chartId} config={config} />
+      <RechartsPrimitive.ResponsiveContainer initialDimension={initialDimension}>
+        {children}
+      </RechartsPrimitive.ResponsiveContainer>
+    </>
+  );
 
-  return (
-    <ChartTouchContext value={{touch, inspecting}}>
-      <div
-        ref={ref}
-        data-slot='chart'
-        data-chart={chartId}
-        className={cn(
-          "flex aspect-video touch-pan-y touch-pinch-zoom justify-center text-xs select-none [-webkit-touch-callout:none] [&_.recharts-cartesian-axis-tick-value]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-surface]:outline-hidden [&_svg_*]:outline-none",
-          className,
-        )}
-        {...props}
-        {...handlers}
-      >
-        <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer initialDimension={initialDimension}>
-          {children}
-        </RechartsPrimitive.ResponsiveContainer>
-      </div>
-    </ChartTouchContext>
+  // Inside a touch area the area owns the gesture; on its own the chart is its own touch area.
+  return React.useContext(ChartTouchContext) ? (
+    <div {...frame} className={cn(TOUCH_CLASSES, frame.className)}>
+      {content}
+    </div>
+  ) : (
+    <ChartTouchArea {...frame}>{content}</ChartTouchArea>
   );
 }
 
@@ -93,7 +118,7 @@ ${colorConfig
 };
 
 function ChartTooltip(props: React.ComponentProps<typeof RechartsPrimitive.Tooltip>) {
-  const {touch, inspecting} = React.useContext(ChartTouchContext);
+  const {touch, inspecting} = useChartTouchState();
   const label = RechartsPrimitive.useActiveTooltipLabel();
   const lastLabel = React.useRef<string | number | undefined>(undefined);
   React.useEffect(() => {
@@ -117,4 +142,4 @@ function ChartTooltip(props: React.ComponentProps<typeof RechartsPrimitive.Toolt
   );
 }
 
-export {ChartContainer, ChartStyle, ChartTooltip};
+export {ChartContainer, ChartStyle, ChartTooltip, ChartTouchArea};

@@ -9,6 +9,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
+import {useGetBankTransactionReviewCounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
+import {
+  getAutomaticSyncProblemForConnection,
+  isConsentEndingSoon,
+} from '@/features/banking/utils/bank-sync-status';
 import {useCurrentAccount} from '@/hooks/use-current-account';
 import {useLogOut} from '@/hooks/use-logout';
 import {cn} from '@/utils/cn';
@@ -37,6 +43,59 @@ const tabItems: NavItem[] = [
   {label: 'Settings', to: '/settings/account', match: '/settings', icon: Settings},
 ];
 
+type NavBadge = {count: number | null; label: string};
+
+/**
+ * What needs the owner sits on the tab that settles it: transactions to review as a count on Transactions, a bank
+ * whose automatic sync needs attention, or whose consent ends within a week, as a dot on Connections.
+ */
+function useNavBadges() {
+  const {reviewCounts} = useGetBankTransactionReviewCounts();
+  const {bankConnections} = useGetAllBankConnections();
+  const review = reviewCounts
+    ? reviewCounts.needsReview + reviewCounts.categorizationFailed + reviewCounts.unknownDirection
+    : 0;
+  const connections = bankConnections ?? [];
+  const problems = connections.filter(getAutomaticSyncProblemForConnection).length;
+  const endingSoon = connections.filter((connection) => isConsentEndingSoon(connection)).length;
+  const banksLabel = [
+    problems === 0
+      ? null
+      : problems === 1
+        ? 'a bank needs attention'
+        : `${problems} banks need attention`,
+    endingSoon === 0
+      ? null
+      : endingSoon === 1
+        ? 'a bank needs re-authorizing soon'
+        : `${endingSoon} banks need re-authorizing soon`,
+  ]
+    .filter(Boolean)
+    .join(' and ');
+  return (item: NavItem): NavBadge | null => {
+    if (item.to === '/bank-transactions' && review > 0)
+      return {count: review, label: `${review} to review`};
+    if (item.to === '/bank-connections' && banksLabel) return {count: null, label: banksLabel};
+    return null;
+  };
+}
+
+function Badge({badge, className}: {badge: NavBadge; className?: string}) {
+  return badge.count === null ? (
+    <i aria-hidden='true' className={cn('size-2 rounded-full bg-warning', className)} />
+  ) : (
+    <span
+      aria-hidden='true'
+      className={cn(
+        'grid h-[1.125rem] min-w-[1.125rem] place-items-center bg-primary px-1 numeric text-[0.6875rem] leading-none font-semibold text-primary-foreground',
+        className,
+      )}
+    >
+      {badge.count > 99 ? '99+' : badge.count}
+    </span>
+  );
+}
+
 function useIsActive() {
   // The location being opened, which Link also marks: matchRoute keeps the previous page until the next one loads.
   const pathname = useLocation({select: (location) => location.pathname});
@@ -50,16 +109,19 @@ function useIsActive() {
 /** Primary destinations inline in the header, from tablet width up. */
 export function AppTopNav() {
   const isActive = useIsActive();
+  const badgeOf = useNavBadges();
 
   return (
     <nav aria-label='Primary' className='flex items-center max-md:hidden'>
       {navItems.map((item) => {
         const active = isActive(item);
+        const badge = badgeOf(item);
         return (
           <Link
             key={item.label}
             to={item.to}
             aria-current={active ? 'page' : undefined}
+            aria-label={badge ? `${item.label}, ${badge.label}` : undefined}
             className={cn(
               'relative flex h-12 items-center gap-2 px-3 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
               active &&
@@ -68,6 +130,7 @@ export function AppTopNav() {
           >
             <item.icon className='size-4' aria-hidden />
             {item.label}
+            {badge && <Badge badge={badge} />}
           </Link>
         );
       })}
@@ -78,6 +141,7 @@ export function AppTopNav() {
 /** Phone navigation: every destination one tap away, with the current one always visible. */
 export function AppTabBar() {
   const isActive = useIsActive();
+  const badgeOf = useNavBadges();
 
   return (
     <nav
@@ -88,18 +152,23 @@ export function AppTabBar() {
       <ul className='grid auto-cols-fr grid-flow-col'>
         {tabItems.map((item) => {
           const active = isActive(item);
+          const badge = badgeOf(item);
           return (
             <li key={item.label} className='min-w-0'>
               <Link
                 to={item.to}
                 aria-current={active ? 'page' : undefined}
+                aria-label={badge ? `${item.label}, ${badge.label}` : undefined}
                 className={cn(
                   'relative flex h-14 flex-col items-center justify-center gap-1 px-1 text-caption text-muted-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
                   active &&
                     'font-semibold text-primary before:absolute before:inset-x-5 before:top-0 before:h-0.5 before:bg-primary',
                 )}
               >
-                <item.icon className='size-5' aria-hidden strokeWidth={active ? 2.25 : 1.75} />
+                <span className='relative'>
+                  <item.icon className='size-5' aria-hidden strokeWidth={active ? 2.25 : 1.75} />
+                  {badge && <Badge badge={badge} className='absolute -top-1.5 left-3' />}
+                </span>
                 <span className='max-w-full truncate'>{item.label}</span>
               </Link>
             </li>

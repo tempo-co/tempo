@@ -1,3 +1,4 @@
+import type {Page} from '@playwright/test';
 import {type QueryClient, QueryObserver} from '@tanstack/react-query';
 import type {BankConnection} from '@tempo/contracts';
 
@@ -8,15 +9,13 @@ import type {BankSyncRun} from '../../../src/features/banking/types/bank-sync-ru
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {successfulBankRefresh} from '../../data/bank-sync-run.data';
-import {septemberSpending} from '../../data/home-summary.data';
+import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
   fulfillJson,
   fulfillRedirect,
-  mockBalanceTrend,
   mockBankConnections,
   mockBankRefresh,
-  mockCashFlow,
   mockJson,
   mockMerchantRanking,
   routeBankConnectionsApi,
@@ -24,6 +23,18 @@ import {
 } from '../../utils/api-mocks';
 import {createHookHarness} from '../../utils/hook-harness';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
+
+/** Home's recurring lists, empty: the Repeats block reads them beside the recurring summary. */
+function mockEmptyRecurringLists(page: Page) {
+  const empty = {
+    series: [],
+    monthlyTotal: '0.00',
+    unconvertedCount: 0,
+    thisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
+    baseCurrency: 'EUR',
+  };
+  return mockJson(page, '**/recurring-series?**', {expenses: empty, income: empty});
+}
 
 const DETAIL_TRANSACTION_ID = '00000000-0000-4000-8000-000000000014';
 const MOCK_PROVIDER_ORIGIN = 'https://enablebanking.test';
@@ -249,10 +260,9 @@ test.describe('bank connections', () => {
     expect(new URL(page.url()).searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
     await expect(inspector.getByRole('heading', {name: 'Provider purchase'})).toBeVisible();
     await expect(inspector.getByTestId('bank-transaction-detail-amount')).toHaveText('-€12.50');
-    await expect(inspector.getByRole('button', {name: 'Bank details', exact: true})).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
+    await expect(
+      inspector.getByRole('button', {name: 'Bank details', exact: true}),
+    ).toHaveAttribute('aria-expanded', 'false');
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
     await expect(inspector).toBeHidden();
     await expect(transactionTrigger).toBeFocused();
@@ -831,6 +841,15 @@ test.describe('mocked Enable Banking bank connection', () => {
       if (url.origin === API_URL && url.pathname === '/bank-connections/aspsps')
         return fulfillJson(route, []);
       if (url.origin === API_URL && url.pathname === '/health') return fulfillJson(route, {});
+      // The navigation's review badge reads these on every page.
+      if (url.origin === API_URL && url.pathname === '/bank-transactions/review-counts')
+        return fulfillJson(route, {
+          needsReview: 0,
+          categorizationFailed: 0,
+          categorizing: 0,
+          unknownDirection: 0,
+          missingBaseAmount: 0,
+        });
       if (url.origin === API_URL && url.pathname.endsWith('/refresh'))
         return fulfillJson(route, REFRESH_RESULT);
       await route.abort('blockedbyclient');
@@ -1352,10 +1371,9 @@ test.describe('mocked Enable Banking bank connection', () => {
     let nextSession = false;
     const requests: string[] = [];
     await mockBankConnections(page, () => (nextSession ? [next] : [MOCK_CONNECTION, tail]));
-    await mockBalanceTrend(page);
-    await mockCashFlow(page);
+    await mockHistoryEndpoints(page);
+    await mockEmptyRecurringLists(page);
     await mockMerchantRanking(page);
-    await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
     await mockJson(page, '**/recurring-series/summary?**', {
       expenseMonthlyTotal: '0.00',
       incomeMonthlyTotal: '0.00',
@@ -1434,10 +1452,9 @@ test.describe('mocked Enable Banking bank connection', () => {
             : '2026-10-01T00:00:00.000Z',
         }));
       });
-      await mockBalanceTrend(page);
-      await mockCashFlow(page);
+      await mockHistoryEndpoints(page);
+      await mockEmptyRecurringLists(page);
       await mockMerchantRanking(page);
-      await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
       await mockJson(page, '**/recurring-series/summary?**', {
         expenseMonthlyTotal: '0.00',
         incomeMonthlyTotal: '0.00',
@@ -1896,8 +1913,7 @@ test.describe('bank-derived caches', () => {
       ),
       bankQueryKeys.transaction('example-transaction'),
       bankQueryKeys.connectionTransactions(MOCK_CONNECTION.id, null),
-      dashboardQueryKeys.summary('2026-09', '2026-10-01'),
-      dashboardQueryKeys.summary('2026-08', '2026-10-01'),
+      dashboardQueryKeys.breakdown('year', 'category', '2007-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.balanceTrend('month', '2026-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.cashFlow('month', '2026-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.reviewCounts,

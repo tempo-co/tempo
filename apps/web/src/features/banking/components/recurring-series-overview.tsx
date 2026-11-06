@@ -12,7 +12,7 @@ import {Button, buttonVariants} from '@/components/ui/button';
 import {Skeleton} from '@/components/ui/skeleton';
 import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
-import {formatMoney, toCents} from '@/features/dashboard/utils/money';
+import {formatWholeMoney, toCents} from '@/features/dashboard/utils/money';
 import {cn} from '@/utils/cn';
 import {savedDataStatus} from '@/utils/query-status';
 
@@ -124,7 +124,7 @@ export function RecurringSeriesOverview({
             className='min-h-9 px-3 text-xs data-[state=on]:bg-secondary data-[state=on]:font-semibold data-[state=on]:text-secondary-foreground max-sm:min-h-11 max-sm:flex-1'
           >
             {label}
-            <span className='ml-1.5 font-normal text-muted-foreground'>
+            <span className='ml-1.5 numeric font-normal text-muted-foreground'>
               {list.series.filter(isCounted).length}
             </span>
           </ToggleGroupItem>
@@ -166,7 +166,7 @@ function DirectionView({
         <section key={group.id} aria-label={group.title} className='grid grid-cols-1 gap-2'>
           <h3
             className={cn(
-              'text-xs font-medium tracking-wide text-muted-foreground uppercase',
+              'text-label text-muted-foreground',
               group.id === 'late' && 'text-warning',
             )}
           >
@@ -186,7 +186,10 @@ function DirectionView({
   );
 }
 
-/** The usual monthly total, with this month's paid and still-due amounts beside it. */
+/**
+ * The usual monthly total, with this month's paid and still-due amounts beside it; whole amounts, like
+ * Home's Repeats, so the two read the same.
+ */
 function MonthHeader({
   data,
   isIncome,
@@ -216,19 +219,21 @@ function MonthHeader({
             )}
           >
             {isIncome && '+'}
-            {formatMoney(data.monthlyTotal, currency)}
+            {formatWholeMoney(data.monthlyTotal, currency)}
           </p>
           <p className='mt-1.5 text-sm text-muted-foreground'>
             a month · {activeCount} {noun}
           </p>
         </div>
         <dl className='grid grid-cols-[auto_auto] items-baseline gap-x-3 gap-y-0.5 text-sm'>
-          <dd className='text-right numeric font-medium'>{formatMoney(month.paid, currency)}</dd>
+          <dd className='text-right numeric font-medium'>
+            {formatWholeMoney(month.paid, currency)}
+          </dd>
           <dt className='text-muted-foreground'>
             {isIncome ? 'received' : 'paid'} in {monthName}
           </dt>
           <dd className='text-right numeric font-medium'>
-            {formatMoney(month.remaining, currency)}
+            {formatWholeMoney(month.remaining, currency)}
           </dd>
           <dt className='text-muted-foreground'>{isIncome ? 'still to come' : 'still due'}</dt>
         </dl>
@@ -268,12 +273,13 @@ function FoldedSection({
   onOpen: (key: string) => void;
 }) {
   if (series.length === 0) return null;
+  // The summary reads like Home's "N more" text actions: the same type, padding and link colour.
   return (
     <details className='group min-w-0' aria-label={title}>
       <summary
         className={cn(
           buttonVariants({variant: 'ghost', size: 'sm'}),
-          'w-full cursor-pointer list-none justify-start px-0 text-muted-foreground max-sm:h-11 [&::-webkit-details-marker]:hidden',
+          '-ml-2 w-fit cursor-pointer list-none px-2 font-normal text-primary hover:text-primary [&::-webkit-details-marker]:hidden',
         )}
       >
         <ChevronRight aria-hidden className='size-4 transition-transform group-open:rotate-90' />

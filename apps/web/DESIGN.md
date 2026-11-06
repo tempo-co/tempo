@@ -265,7 +265,8 @@ The authenticated shell is a sticky `48px` header aligned to the ~`80rem` conten
 below `md`, navigation moves to a fixed bottom tab bar. Settings uses a ~`40rem` reading
 column. Spacing follows a 4px rhythm: `8px` compact controls, `12px` control padding, `16px`
 related content, `24px` between groups, `32–48px` section breaks. Responsive behavior is
-structural, not scaled: navigation becomes a tab bar, tables scroll horizontally, rows stay
+structural, not scaled: navigation becomes a tab bar, tables scroll horizontally (or, when a
+phone needs only their latest column, become rows that open in place into the rest), rows stay
 understandable without hover.
 
 Empty, loading, error, syncing, and filtered-empty states belong to the layout with a clear
@@ -360,10 +361,11 @@ colors keep their semantics.
 ### Status, loading, and feedback
 
 Top loading bar for route/data progress, skeletons for known shapes, toasts for background
-outcomes. An inline control whose result shows where it was edited confirms in place (its own
-pending state and status line); toasts carry failures, saves finished after a dialog closed,
-and outcomes the screen does not show. They stack collapsed and use the library's default
-lifetime. Empty and failed loads use the one `EmptyState` component: a framed card with a 48px
+outcomes. A skeleton keeps its section's loaded size and static labels, and each section fills in
+when its own data arrives, so nothing on screen moves as a page loads. An inline control whose
+result shows where it was edited confirms in place (its own pending state and status line);
+toasts carry failures, saves finished after a dialog closed, and outcomes the screen does not show.
+They stack collapsed and use the library's default lifetime. Empty and failed loads use the one `EmptyState` component: a framed card with a 48px
 icon, a `text-section-title` heading, a muted description and the next action. `tone='error'`
 marks a failed load with a destructive icon; inside a dialog it drops its frame. Distinct states get distinct copy; never imply data changed before the server
 confirms it. Motion is brief (0.2–0.3s), subtle, reduced-motion aware; never animate

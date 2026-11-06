@@ -6,6 +6,7 @@ import {fulfillJson, mockJson} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const ID = '00000000-0000-4000-8000-000000000851';
+const OLDER_ID = '00000000-0000-4000-8000-000000000852';
 const transaction: BankTransaction = {
   id: ID,
   displayDescription: 'Example Subscription',
@@ -67,10 +68,10 @@ const series: BankTransactionRecurring = {
       currency: 'EUR',
     },
     {
-      id: '00000000-0000-4000-8000-000000000852',
+      id: OLDER_ID,
       transactionDate: '2026-09-29',
       bookingDate: '2026-09-30',
-      amount: '-12.99',
+      amount: '-11.49',
       currency: 'EUR',
     },
     {
@@ -128,6 +129,14 @@ for (const width of [320, 390, 1440]) {
         reads++;
         return fulfillJson(route, recurring);
       });
+      await mockJson(page, `**/bank-transactions/${OLDER_ID}`, {
+        ...transaction,
+        id: OLDER_ID,
+        transactionDate: '2026-09-29',
+        bookingDate: '2026-09-30',
+        amount: '-11.49',
+      });
+      await mockJson(page, `**/bank-transactions/${OLDER_ID}/recurring?**`, series);
       await mockJson(page, `**/bank-transactions/${ID}/category-impact?**`, {
         action: null,
         category: null,
@@ -154,7 +163,11 @@ for (const width of [320, 390, 1440]) {
       const before = await boxOf(category);
       const bank = inspector.getByRole('button', {name: 'Bank details', exact: true});
       const settings = inspector.getByRole('button', {name: 'Transfer settings', exact: true});
-      for (const disclosure of [bank, settings]) {
+      const recurringToggle = inspector.getByRole('button', {
+        name: 'Recurring payment',
+        exact: true,
+      });
+      for (const disclosure of [recurringToggle, bank, settings]) {
         const box = await boxOf(disclosure);
         expect({x: box.x, width: box.width}).toEqual({x: before.x, width: before.width});
       }
@@ -186,6 +199,24 @@ for (const width of [320, 390, 1440]) {
           {exact: true},
         ),
       ).toBeVisible();
+      const fold = inspector.getByTestId('recurring-fold');
+      const contentLeft = (await boxOf(inspector.locator(`#bank-details-${ID}`))).x;
+      const rows = fold.getByTestId('recurring-payment');
+      await expect(rows).toHaveCount(3);
+      for (const row of await rows.all()) expect((await boxOf(row)).height).toBe(60);
+      for (const edge of [
+        fold.getByTestId('recurring-summary'),
+        fold.getByText('Recent payments', {exact: true}),
+        ...(await rows.all()).map((row) => row.locator('> *').first()),
+      ])
+        expect(Math.abs((await boxOf(edge)).x - contentLeft)).toBeLessThanOrEqual(1);
+      const current = rows.filter({hasText: 'This payment'});
+      await expect(current).not.toHaveAttribute('href');
+      await expect(fold.getByRole('link')).toHaveCount(3);
+      await expect(fold.getByRole('link', {name: 'All payments', exact: true})).toHaveAttribute(
+        'href',
+        `/?recurring=open&series=${series.key}`,
+      );
       const after = await boxOf(category);
       expect(after.x).toBe(before.x);
       expect(after.width).toBe(before.width);
@@ -221,6 +252,22 @@ for (const width of [320, 390, 1440]) {
         ).toBeInViewport();
       }
       await expectNoHorizontalOverflow(page);
+      const older = fold.getByRole('link', {name: /Sep 29, 2026/});
+      if (width >= 768) {
+        const rest = await older.evaluate((el) => getComputedStyle(el).backgroundColor);
+        await older.hover();
+        await expect
+          .poll(() => older.evaluate((el) => getComputedStyle(el).backgroundColor))
+          .not.toBe(rest);
+      }
+      await older.click();
+      await expect(page).toHaveURL(new RegExp(`transactionId=${OLDER_ID}`));
+      const amount = inspector.getByTestId('bank-transaction-detail-amount');
+      await expect(amount).toContainText('11.49');
+      await expect(inspector.getByText('Sep 29, 2026', {exact: true}).first()).toBeVisible();
+      await page.goBack();
+      await expect(page).toHaveURL(new RegExp(`transactionId=${ID}`));
+      await expect(amount).toContainText('12.99');
       await page.clock.resume();
       await inspector.getByRole('combobox', {name: 'Transaction category'}).click();
       await page.getByRole('option', {name: 'Other', exact: true}).click();

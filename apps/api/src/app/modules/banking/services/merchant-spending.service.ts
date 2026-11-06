@@ -48,6 +48,7 @@ import {
 	SQL_UNKNOWN_DIRECTION,
 	applyBankTransactionFilters,
 	createOwnerScopedQuery,
+	findFirstBookingDate,
 } from './bank-transaction-filters';
 
 const BASE_AMOUNT = '"transaction"."amountInBaseCurrency"';
@@ -126,7 +127,7 @@ export class MerchantSpendingService {
 		if (!starts) throw new BadRequestException(MERCHANT_PERIODS_RANGE);
 		const [exists, firstBookingDate] = await Promise.all([
 			this.groupExists(accountId, groupId),
-			this.findFirstBookingDate(accountId),
+			findFirstBookingDate(this.bankTransactionRepository, accountId),
 		]);
 		if (!exists) throw new NotFoundException(MERCHANT_NOT_FOUND);
 
@@ -175,7 +176,7 @@ export class MerchantSpendingService {
 		const through = running ? asOf : end;
 		const elapsedDays = daysBetween(start, through);
 
-		const firstBookingDate = await this.findFirstBookingDate(accountId);
+		const firstBookingDate = await findFirstBookingDate(this.bankTransactionRepository, accountId);
 		const baseline: Array<{start: string; through: string}> = [];
 		for (let earlier = start, index = 0; index < MERCHANT_RANKING_BASELINE_PERIODS; index++) {
 			earlier = periodStart(addDays(earlier, -1), interval);
@@ -347,13 +348,6 @@ export class MerchantSpendingService {
 			.limit(1)
 			.getRawOne();
 		return Boolean(row);
-	}
-
-	private async findFirstBookingDate(accountId: string): Promise<string | null> {
-		const row = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
-			.select(`to_char(MIN("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'first')
-			.getRawOne<{first: string | null}>();
-		return row?.first ?? null;
 	}
 }
 

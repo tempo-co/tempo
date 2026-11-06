@@ -16,7 +16,7 @@ export function LogoLink({className, disabled = false}: LogoLinkProps) {
         whileTap={{scale: 0.95}}
         transition={{duration: 0.2, ease: 'easeOut'}}
       >
-        <Logo className='h-8 w-8 text-foreground' />
+        <Logo className='h-12 w-12 text-foreground' />
       </motion.div>
     </Link>
   );

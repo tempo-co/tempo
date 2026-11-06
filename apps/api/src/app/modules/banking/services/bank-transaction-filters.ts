@@ -67,6 +67,17 @@ export function createOwnerScopedQuery(repository: Repository<BankTransaction>, 
 		.where('connection.accountId = :accountId', {accountId});
 }
 
+/** The owner's first booking date over every row, internal ones included: where their history starts. */
+export async function findFirstBookingDate(
+	repository: Repository<BankTransaction>,
+	accountId: string,
+): Promise<string | null> {
+	const row = await createOwnerScopedQuery(repository, accountId)
+		.select(`to_char(MIN("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'first')
+		.getRawOne<{first: string | null}>();
+	return row?.first ?? null;
+}
+
 /**
  * Applies the Transactions list filters to an owner-scoped query whose transaction alias is `transaction` and whose
  * bank account alias is `bankAccount`. Shared so every summary number reconciles with a filtered list.
