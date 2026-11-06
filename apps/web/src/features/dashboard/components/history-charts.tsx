@@ -233,10 +233,18 @@ function KeptStrip({
           </span>
         </span>
       </p>
+      {/* Margins, not padding, so leaving the bars for the gutters ends the inspection. Moving bar to bar keeps it. */}
       <ol
         className='flex h-24'
-        style={{paddingLeft: Y_WIDTH, paddingRight: RIGHT}}
+        style={{marginLeft: Y_WIDTH, marginRight: RIGHT}}
         aria-label='Kept each month'
+        onPointerLeave={(event) => {
+          if (event.pointerType === 'mouse') endChartInspection(areaOf(event.currentTarget));
+        }}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget))
+            endChartInspection(areaOf(event.currentTarget));
+        }}
       >
         {months.map((point, index) => {
           const up = point.kept >= 0;
@@ -250,15 +258,10 @@ function KeptStrip({
                 onPointerEnter={(event) => {
                   if (event.pointerType === 'mouse') inspectBar(event.currentTarget);
                 }}
-                onPointerLeave={(event) => {
-                  if (event.pointerType === 'mouse')
-                    endChartInspection(areaOf(event.currentTarget));
-                }}
                 onFocus={(event) => {
                   if (event.currentTarget.matches(':focus-visible'))
                     inspectBar(event.currentTarget);
                 }}
-                onBlur={(event) => endChartInspection(areaOf(event.currentTarget))}
                 aria-label={label}
                 className='group absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring data-active:bg-accent'
               >

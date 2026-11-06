@@ -1,3 +1,5 @@
+import type {Locator} from '@playwright/test';
+
 import {PHONE_KEY, homeHistory, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
@@ -62,10 +64,29 @@ test('on the last day of a month, a span is measured from the month end a span b
   await expect(homePage.whereYouStand).toContainText('since 30 Apr 2026');
 });
 
+/** The readout's position and visibility on every frame for the next 400 ms. */
+function framesOf(readout: Locator) {
+  return readout.evaluate(
+    (wrapper) =>
+      new Promise<{x: number; width: number; visibility: string}[]>((resolve) => {
+        const seen: {x: number; width: number; visibility: string}[] = [];
+        const start = performance.now();
+        const sample = () => {
+          const box = wrapper.getBoundingClientRect();
+          seen.push({x: box.x, width: box.width, visibility: getComputedStyle(wrapper).visibility});
+          if (performance.now() - start < 400) requestAnimationFrame(sample);
+          else resolve(seen);
+        };
+        requestAnimationFrame(sample);
+      }),
+  );
+}
+
 test('kept bars show the line’s readout on hover and focus, and open their month', async ({
   page,
   homePage,
 }) => {
+  await page.setViewportSize({width: 1440, height: 1000});
   await mockSyntheticHome(page);
   await page.goto('/');
 
@@ -76,15 +97,38 @@ test('kept bars show the line’s readout on hover and focus, and open their mon
     'November 2026 so far: kept −€1,200',
   );
   // Hovering a bar shows the line's readout for its month and marks that bar.
-  await bars.getByRole('button', {name: 'March 2026: kept −€500'}).hover();
+  const march = bars.getByRole('button', {name: 'March 2026: kept −€500'});
+  const april = bars.getByRole('button', {name: /^April 2026/});
+  await march.hover();
   await expect(readout).toBeVisible();
   await expect(readout).toContainText('March 2026');
   await expect(readout).toContainText('Kept−€500');
   await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^March 2026/);
+  // Moving on to the next bar keeps the readout up and slides it from one month to the next, as on the line.
+  // Like the line's, it first slides in from the chart's edge; let that settle.
+  await expect
+    .poll(async () => new Set((await framesOf(readout)).map((frame) => frame.x)).size)
+    .toBe(1);
+  const [from, to] = [await boxOf(march), await boxOf(april)];
+  const frames = framesOf(readout);
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, {steps: 4});
+  const left = from.x + from.width / 2;
+  const right = to.x + to.width / 2;
+  for (const frame of await frames) {
+    expect(frame.visibility).toBe('visible');
+    expect(frame.x).toBeGreaterThanOrEqual(left - frame.width);
+    expect(frame.x).toBeLessThanOrEqual(right + frame.width);
+  }
+  await expect(readout).toContainText('April 2026');
+  await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^April 2026/);
   await page.mouse.move(0, 0);
   await expect(readout).not.toBeVisible();
-  // So does focusing one, and the running month reads as so far.
-  await bars.getByRole('button').last().focus();
+  // So does focusing one, and the running month reads as so far. Tabbing on keeps the readout up.
+  await bars.getByRole('button').nth(-2).focus();
+  await expect(readout).toContainText('October 2026');
+  const tabbed = framesOf(readout);
+  await page.keyboard.press('Tab');
+  for (const frame of await tabbed) expect(frame.visibility).toBe('visible');
   await expect(readout).toContainText('November 2026 · so far');
   await expect(readout).toContainText('Kept−€1,200');
   await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^November 2026/);
