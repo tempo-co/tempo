@@ -20,12 +20,22 @@ import {signed, wholeCents} from '../utils/format';
 import {formatMonth} from '../utils/month';
 import type {MonthPoint} from '../utils/overview';
 import {Readout, ReadoutRow, ReadoutTitle} from './data-tip';
+import {Bone} from './loading';
 
 /** Both charts share these insets, so a month's dot sits right above its bar. */
 const Y_WIDTH = 52;
 const RIGHT = 12;
+/** The month axis under the line. */
+const X_HEIGHT = 30;
 /** With a mouse, a month on either chart shows a pointer, since a click opens it. */
 const POINTER = '[@media(hover:hover)_and_(pointer:fine)]:cursor-pointer';
+/** Both charts' column: the line takes the room the strip leaves. */
+const CHARTS = 'flex min-h-0 flex-1 flex-col gap-5';
+/** The line's box. Beside the details it fills their height (12rem to 40rem), so neither column leaves a gap below it. */
+const BALANCE_BOX =
+  'flex min-h-56 flex-1 flex-col sm:min-h-64 @[60rem]:max-h-[40rem] @[60rem]:min-h-48';
+/** The strip's height; its bars grow up and down from the middle. */
+const STRIP = 'flex h-24';
 
 /**
  * The balance line, then what was kept each month on the same x slots. One press-and-slide surface covers both:
@@ -42,10 +52,33 @@ export function HistoryCharts({
 }) {
   const [active, setActive] = useState<number | null>(null);
   return (
-    <ChartTouchArea className='flex min-h-0 flex-1 flex-col gap-5'>
+    <ChartTouchArea className={CHARTS}>
       <BalanceChart months={months} currency={currency} onPick={onPick} onActive={setActive} />
       <KeptStrip months={months} currency={currency} onPick={onPick} active={active} />
     </ChartTouchArea>
+  );
+}
+
+/** Both charts' boxes at their loaded size, with quiet placeholders where the line and bars will be. */
+export function HistoryChartsSkeleton() {
+  return (
+    <div className={CHARTS}>
+      <div className={BALANCE_BOX}>
+        {/* The plot, inside the axes' room. */}
+        <div
+          className='flex min-h-0 flex-1'
+          style={{margin: `10px ${RIGHT}px ${X_HEIGHT}px ${Y_WIDTH}px`}}
+        >
+          <Bone className='flex-1 opacity-60' />
+        </div>
+      </div>
+      <div>
+        <KeptLegend />
+        <div className={STRIP} style={{marginLeft: Y_WIDTH, marginRight: RIGHT}}>
+          <Bone className='flex-1 opacity-60' />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -92,11 +125,7 @@ function BalanceChart({
   const ambiguous = (month: string) =>
     months.filter((point) => point.month.slice(5) === month.slice(5)).length > 1;
   return (
-    // Beside the details it fills their height (12rem to 40rem), so neither column leaves a gap below it.
-    <div
-      ref={plotRef}
-      className='flex min-h-56 flex-1 flex-col sm:min-h-64 @[60rem]:max-h-[40rem] @[60rem]:min-h-48'
-    >
+    <div ref={plotRef} className={BALANCE_BOX}>
       <ChartContainer
         className={cn('aspect-auto min-h-0 w-full flex-1', POINTER)}
         config={{balance: {color: 'hsl(var(--chart-primary))'}}}
@@ -249,25 +278,10 @@ function KeptStrip({
   const max = Math.max(1, ...months.map((point) => Math.abs(point.kept)));
   return (
     <div>
-      <p
-        className='mb-1 flex flex-wrap items-baseline justify-between gap-x-3 text-label text-muted-foreground'
-        style={{paddingLeft: Y_WIDTH, paddingRight: RIGHT}}
-      >
-        <span>Kept each month</span>
-        <span className='inline-flex flex-wrap gap-x-3 font-normal'>
-          <span className='inline-flex items-center gap-1'>
-            <i aria-hidden='true' className='h-2.5 w-1.5 bg-chart-primary' />
-            kept
-          </span>
-          <span className='inline-flex items-center gap-1'>
-            <i aria-hidden='true' className='h-2.5 w-1.5 bg-warning' />
-            more out than in
-          </span>
-        </span>
-      </p>
+      <KeptLegend />
       {/* Margins, not padding, so leaving the bars for the gutters ends the inspection. Moving bar to bar keeps it. */}
       <ol
-        className='flex h-24'
+        className={STRIP}
         style={{marginLeft: Y_WIDTH, marginRight: RIGHT}}
         aria-label='Kept each month'
         onPointerLeave={(event) => {
@@ -316,5 +330,27 @@ function KeptStrip({
         })}
       </ol>
     </div>
+  );
+}
+
+/** The strip's name and what its colours mean, above the bars. */
+function KeptLegend() {
+  return (
+    <p
+      className='mb-1 flex flex-wrap items-baseline justify-between gap-x-3 text-label text-muted-foreground'
+      style={{paddingLeft: Y_WIDTH, paddingRight: RIGHT}}
+    >
+      <span>Kept each month</span>
+      <span className='inline-flex flex-wrap gap-x-3 font-normal'>
+        <span className='inline-flex items-center gap-1'>
+          <i aria-hidden='true' className='h-2.5 w-1.5 bg-chart-primary' />
+          kept
+        </span>
+        <span className='inline-flex items-center gap-1'>
+          <i aria-hidden='true' className='h-2.5 w-1.5 bg-warning' />
+          more out than in
+        </span>
+      </span>
+    </p>
   );
 }

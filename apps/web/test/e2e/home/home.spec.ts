@@ -5,7 +5,7 @@ import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {HOME_CONNECTION, HOME_NOW, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {mockBankConnections, mockJson, routeBankConnectionsApi} from '../../utils/api-mocks';
-import {expectNoHorizontalOverflow} from '../../utils/layout';
+import {expectLoaded, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.describe('Home without banks', () => {
   test('prompts to connect a bank', async ({page, homePage, freshAccount}) => {
@@ -58,6 +58,7 @@ test.describe('Home', () => {
     await expect(homePage.totalBalance).toHaveText(/^€[\d,]+$/);
     await expect(homePage.yearTable.getByRole('button', {name: /^2026/})).toBeVisible();
     await expect(page.getByRole('region', {name: 'Spending by category'})).toBeVisible();
+    await expectLoaded(page.getByRole('main'));
   });
 
   test('ignores connections that never finished authorizing', async ({page, homePage}) => {
@@ -88,6 +89,7 @@ test.describe('Home navigation badges', () => {
 
   test('Transactions counts what needs review and Connections flags a bank to reconnect', async ({
     page,
+    homePage,
   }) => {
     const expired: BankConnection = {
       ...HOME_CONNECTION,
@@ -107,7 +109,7 @@ test.describe('Home navigation badges', () => {
       primary.getByRole('link', {name: 'Connections, a bank needs attention'}),
     ).toBeVisible();
     // A retained expired bank still counts towards the totals.
-    await expect(page.getByRole('region', {name: 'Where you stand'})).toBeVisible();
+    await expect(homePage.totalBalance).toHaveText('€24,300');
 
     await transactions.click();
     await expect(page).toHaveURL(/\/bank-transactions/);
@@ -251,6 +253,7 @@ test.describe('Home on a phone', () => {
     await page.goto('/');
     await expect(homePage.totalBalance).toHaveText('€24,300');
     await expect(page.getByRole('region', {name: 'Income by source'})).toBeVisible();
+    await expectLoaded(page.getByRole('main'));
     await expectNoHorizontalOverflow(page);
   });
 });

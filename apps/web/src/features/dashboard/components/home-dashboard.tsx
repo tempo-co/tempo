@@ -4,15 +4,14 @@ import {History, Landmark, RefreshCw} from 'lucide-react';
 import {EmptyState} from '@/components/shared/layout/app-empty-state';
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
-import {Skeleton} from '@/components/ui/skeleton';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
 import {isConnectedBank} from '@/features/banking/utils/bank-sync-status';
 
-import {useOverview} from '../api/use-overview';
-import {yearColumnWidth} from '../utils/overview';
-import {HeatTable} from './heat-table';
+import {useOverview, useYearBreakdowns} from '../api/use-overview';
+import {type Overview, yearColumnWidth} from '../utils/overview';
+import {HeatTable, HeatTableSkeleton} from './heat-table';
 import {WhereYouStand} from './where-you-stand';
-import {YearTable} from './year-table';
+import {YearTable, YearTableSkeleton} from './year-table';
 
 type HomeDashboardProps = {
   /** The local date everything is judged at. */
@@ -50,20 +49,11 @@ export function HomeDashboard({today, onOpenMonth}: HomeDashboardProps) {
   );
 }
 
+/** Each section shows as soon as its own data arrives, in a placeholder of its loaded size until then. */
 function HomeHistory({today, onOpenMonth}: HomeDashboardProps) {
   const {overview, isError, refetch} = useOverview(today);
-  if (isError)
-    return (
-      <Card className='grid justify-items-start gap-4 p-5 sm:p-6'>
-        <p>Could not load your history.</p>
-        <Button variant='outline' onClick={() => void refetch()}>
-          Try again
-        </Button>
-      </Card>
-    );
-  if (!overview)
-    return <Skeleton className='h-[36rem]' role='img' aria-label='Loading your history' />;
-  if (overview.months.length === 0)
+  if (isError) return <LoadError what='your history' onRetry={refetch} />;
+  if (overview?.months.length === 0)
     return (
       <EmptyState
         icon={History}
@@ -71,18 +61,36 @@ function HomeHistory({today, onOpenMonth}: HomeDashboardProps) {
         description='Balances and spending appear here once the first transactions have synced.'
       />
     );
+  return (
+    <div className='grid gap-6'>
+      <WhereYouStand overview={overview} today={today} onOpenMonth={onOpenMonth} />
+      {overview ? <YearTable overview={overview} /> : <YearTableSkeleton />}
+      <YearBreakdowns today={today} overview={overview} />
+    </div>
+  );
+}
+
+/** Spending by category and income by source, year by year; their year columns line up. */
+function YearBreakdowns({today, overview}: {today: string; overview: Overview | null}) {
+  const {breakdowns, isError, refetch} = useYearBreakdowns(today);
+  if (isError) return <LoadError what='spending and income by year' onRetry={refetch} />;
+  if (!overview || !breakdowns)
+    return (
+      <>
+        <HeatTableSkeleton title='Spending by category' kind='category' />
+        <HeatTableSkeleton title='Income by source' kind='source' />
+      </>
+    );
   const columnWidth = yearColumnWidth(
-    [...overview.categories, ...overview.sources],
+    [...breakdowns.categories, ...breakdowns.sources],
     overview.months,
     overview.currency,
   );
   return (
-    <div className='grid gap-6'>
-      <WhereYouStand overview={overview} onOpenMonth={onOpenMonth} />
-      <YearTable overview={overview} />
+    <>
       <HeatTable
         title='Spending by category'
-        periods={overview.categories}
+        periods={breakdowns.categories}
         months={overview.months}
         currency={overview.currency}
         kind='category'
@@ -90,13 +98,24 @@ function HomeHistory({today, onOpenMonth}: HomeDashboardProps) {
       />
       <HeatTable
         title='Income by source'
-        periods={overview.sources}
+        periods={breakdowns.sources}
         months={overview.months}
         currency={overview.currency}
         kind='source'
         columnWidth={columnWidth}
       />
-    </div>
+    </>
+  );
+}
+
+function LoadError({what, onRetry}: {what: string; onRetry: () => unknown}) {
+  return (
+    <Card className='grid justify-items-start gap-4 p-5 sm:p-6'>
+      <p>Could not load {what}.</p>
+      <Button variant='outline' onClick={() => void onRetry()}>
+        Try again
+      </Button>
+    </Card>
   );
 }
 

@@ -4,6 +4,7 @@ import {differenceInCalendarMonths, format} from 'date-fns';
 import {ArrowLeft, Eye, EyeOff, Link2, Link2Off} from 'lucide-react';
 import {Bar, BarChart, Cell, XAxis} from 'recharts';
 
+import {LoadMore} from '@/components/shared/load-more';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
@@ -228,20 +229,18 @@ const CHART_SIZE = 12;
  * a page at a time.
  */
 function PaymentHistory({series}: {series: RecurringSeries}) {
-  const {data, isPending, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage} =
-    useGetRecurringPayments(series.key);
+  const query = useGetRecurringPayments(series.key);
+  const {data, isPending, refetch} = query;
 
   const transactions = data?.pages.flatMap((page) => page.transactions) ?? [];
   const total = data?.pages[data.pages.length - 1].total ?? series.transactionCount;
   return (
     <>
       {data && <PaymentChart series={series} transactions={transactions.slice(0, CHART_SIZE)} />}
-      <section aria-label='Payments' className='grid grid-cols-1 gap-2'>
-        {/* Placed as in a merchant's and a month's transactions. */}
+      <section aria-label='Payments' className='grid grid-cols-1 gap-3'>
+        {/* Placed and styled as a merchant's and a month's transactions. */}
         <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-2'>
-          <h4 className='text-xs font-medium text-muted-foreground'>
-            {total === 1 ? '1 payment' : `All ${total} payments`}
-          </h4>
+          <h4 className='text-card-title'>{total === 1 ? '1 payment' : `All ${total} payments`}</h4>
           <TextAction asChild className='-mr-2'>
             <Link to='/bank-transactions' search={{recurringSeriesKey: series.key}}>
               Open in Transactions
@@ -250,7 +249,7 @@ function PaymentHistory({series}: {series: RecurringSeries}) {
         </header>
         {isPending ? (
           <Skeleton className='h-40' aria-label='Loading payments' />
-        ) : isError || !data ? (
+        ) : !data ? (
           <div className='grid justify-items-start gap-2'>
             <p className='text-sm'>Could not load payments.</p>
             <Button variant='outline' className='max-sm:h-11' onClick={() => void refetch()}>
@@ -275,17 +274,7 @@ function PaymentHistory({series}: {series: RecurringSeries}) {
                 </li>
               ))}
             </ul>
-            {hasNextPage && (
-              <Button
-                variant='ghost'
-                className='w-full text-muted-foreground max-sm:h-11'
-                disabled={isFetchingNextPage}
-                aria-busy={isFetchingNextPage || undefined}
-                onClick={() => void fetchNextPage()}
-              >
-                Load more
-              </Button>
-            )}
+            <LoadMore query={query} />
           </>
         )}
       </section>

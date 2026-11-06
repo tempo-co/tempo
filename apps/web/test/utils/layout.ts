@@ -7,6 +7,15 @@ export async function boxOf(locator: Locator) {
   return box!;
 }
 
+/** Waits until no part of `scope` is still loading (`aria-busy`), so checks see the loaded layout, not placeholders. */
+export async function expectLoaded(scope: Page | Locator) {
+  if (!('goto' in scope)) {
+    await expect(scope).toBeVisible();
+    await expect(scope).not.toHaveAttribute('aria-busy', 'true');
+  }
+  await expect(scope.locator('[aria-busy="true"]')).toHaveCount(0);
+}
+
 /** Checks the visible action's equal insets while the row's main control is hovered. */
 export async function expectEvenRowActionSpacing(row: Locator) {
   const buttons = row.getByRole('button');

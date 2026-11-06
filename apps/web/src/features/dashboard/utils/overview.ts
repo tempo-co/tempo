@@ -43,8 +43,6 @@ export type Overview = {
   currency: string | null;
   months: MonthPoint[];
   years: YearRow[];
-  categories: BankTransactionBreakdownPeriod[];
-  sources: BankTransactionBreakdownPeriod[];
   /** Cents; null when today's total could not be converted. */
   total: number | null;
 };
@@ -54,14 +52,10 @@ export function buildOverview({
   today,
   trend,
   flow,
-  categories,
-  sources,
 }: {
   today: string;
   trend: BankBalanceTrend;
   flow: BankTransactionCashFlow;
-  categories: BankTransactionBreakdownPeriod[];
-  sources: BankTransactionBreakdownPeriod[];
 }): Overview {
   const flowByMonth = new Map(flow.periods.map((period) => [period.start.slice(0, 7), period]));
   const months: MonthPoint[] = trend.periods.map((period) => {
@@ -111,8 +105,6 @@ export function buildOverview({
     currency: trend.baseCurrency ?? flow.baseCurrency,
     months,
     years,
-    categories,
-    sources,
     total: months[months.length - 1]?.balance ?? null,
   };
 }

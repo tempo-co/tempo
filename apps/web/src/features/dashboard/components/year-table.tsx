@@ -8,6 +8,7 @@ import {cn} from '@/utils/cn';
 import {pct, signed, wholeCents} from '../utils/format';
 import {formatMonth} from '../utils/month';
 import type {MonthPoint, Overview, YearRow} from '../utils/overview';
+import {LoadingLabel, TextBone} from './loading';
 
 /**
  * Years newest first; a click anywhere on a year opens it into its months. Columns drop away on narrow screens, and
@@ -115,6 +116,67 @@ export function YearTable({overview}: {overview: Overview}) {
           </tbody>
         </table>
       </div>
+    </Card>
+  );
+}
+
+/** Month rows a loading table holds under its open year, about what a year in progress shows. */
+const SKELETON_MONTHS = 6;
+
+/** The table while the history loads: its header, the open year with some months, and the year before. */
+export function YearTableSkeleton() {
+  const year = (
+    <tr className='border-b'>
+      <td className='py-2 pr-1 pl-1 sm:pr-3 sm:pl-2'>
+        <span className='flex min-h-11 items-center gap-1.5 px-1'>
+          <ChevronRight aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' />
+          <TextBone className='w-[3em]' />
+        </span>
+      </td>
+      {['max-[34rem]:hidden', 'max-[34rem]:hidden', '', ''].map((hidden, index) => (
+        <td key={index} className={cn('px-3 py-2 text-right', hidden)}>
+          <TextBone className='w-[5em]' />
+        </td>
+      ))}
+    </tr>
+  );
+  return (
+    <Card
+      role='region'
+      aria-label='Year by year'
+      aria-busy='true'
+      className='min-w-0 overflow-hidden'
+    >
+      <LoadingLabel>Loading year by year</LoadingLabel>
+      <table className='w-full table-fixed text-sm'>
+        <thead>
+          <tr className='border-b text-left text-label text-muted-foreground [&>th]:py-2.5 [&>th]:font-medium'>
+            <th className='pr-1 pl-2 sm:pr-3 sm:pl-3'>Year</th>
+            <th className='w-1/5 px-3 text-right max-[34rem]:hidden'>In</th>
+            <th className='w-1/5 px-3 text-right max-[34rem]:hidden'>Out</th>
+            <th className='w-1/5 px-2 text-right sm:px-3'>Kept</th>
+            <th className='w-1/5 pr-4 pl-2 text-right sm:pr-5 sm:pl-3'>Balance</th>
+          </tr>
+        </thead>
+        <tbody aria-hidden='true'>
+          {year}
+          {Array.from({length: SKELETON_MONTHS}, (_, index) => (
+            <tr key={index} className='border-b border-border/60 bg-muted/20'>
+              <td className='py-0.5 pr-1 pl-7 sm:pr-3 sm:pl-12'>
+                <span className='flex min-h-11 items-center sm:min-h-8'>
+                  <TextBone className='w-[4.5em]' />
+                </span>
+              </td>
+              {['max-[34rem]:hidden', 'max-[34rem]:hidden', '', ''].map((hidden, cell) => (
+                <td key={cell} className={cn('px-3 py-0.5 text-right', hidden)}>
+                  <TextBone className='w-[4em]' />
+                </td>
+              ))}
+            </tr>
+          ))}
+          {year}
+        </tbody>
+      </table>
     </Card>
   );
 }

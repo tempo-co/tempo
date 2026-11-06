@@ -6,6 +6,7 @@ import type {
 import {ChevronLeft, ChevronRight} from 'lucide-react';
 import {type KeyboardEvent, type ReactNode} from 'react';
 
+import {LoadMore} from '@/components/shared/load-more';
 import {Button} from '@/components/ui/button';
 import {
   ResponsiveDialog,
@@ -16,7 +17,6 @@ import {
   ResponsiveDialogTitle,
 } from '@/components/ui/responsive-dialog';
 import {ScrollArea} from '@/components/ui/scroll-area';
-import {Skeleton} from '@/components/ui/skeleton';
 import {useHasMissingBaseAmounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
 import {TransactionListRow} from '@/features/banking/components/transaction-list-row';
 import {useGetMerchantRanking} from '@/features/merchants/api/use-get-merchant-ranking';
@@ -31,8 +31,9 @@ import {categoryDrill, flowDrill, periodDrill} from '../utils/drill-links';
 import {pct, signed, signedPct, wholeCents} from '../utils/format';
 import {formatMoney, toCents} from '../utils/money';
 import {formatMonth, monthDates, shiftMonth} from '../utils/month';
-import {historyFrom, partCents} from '../utils/overview';
+import {type MonthPoint, type Overview, historyFrom, partCents} from '../utils/overview';
 import {CategoryName, SourceTile} from './category-name';
+import {Bone, LoadingLabel, TextBone, TileRowsSkeleton} from './loading';
 import {TextAction} from './text-action';
 
 /** A category's usual is the mean of this many months before, every one inside the history. */
@@ -151,7 +152,9 @@ function MonthView({
   const sources = useGetBankTransactionBreakdown('month', 'source', from, today, today);
   const dates = monthDates(month);
   const point = overview?.months.find((item) => item.month === month);
-  const end = point?.end ?? dates.to;
+  const running = month === today.slice(0, 7);
+  // Where the history ends the month (today while it runs), known before the history loads.
+  const end = running ? today : dates.to;
 
   if (isError || categories.isError || sources.isError)
     return (
@@ -171,18 +174,14 @@ function MonthView({
         </Button>
       </div>
     );
-  if (!overview || !categories.breakdown || !sources.breakdown)
-    return <Skeleton className='h-[36rem]' role='img' aria-label='Loading the month' />;
-  if (!point)
+  if (overview && !point)
     return <p className='text-sm text-muted-foreground'>No history for {formatMonth(month)}.</p>;
 
-  const currency = overview.currency;
-  const index = overview.months.indexOf(point);
-  const before = index > 0 ? overview.months[index - 1] : null;
-  const share = point.income > 0 ? point.kept / point.income : null;
+  // Each part shows once its own data is in, in a placeholder of its loaded size until then.
+  const currency = overview?.currency ?? null;
   const periodOf = (periods: BankTransactionBreakdownPeriod[]) =>
     periods.find((period) => period.start.slice(0, 7) === month);
-  const earlier = categories.breakdown.periods.filter((period) => {
+  const earlier = (categories.breakdown?.periods ?? []).filter((period) => {
     const start = period.start.slice(0, 7);
     return start < month && start >= shiftMonth(month, -USUAL_MONTHS);
   });
@@ -191,60 +190,143 @@ function MonthView({
     earlier.length < USUAL_MONTHS
       ? null
       : earlier.reduce((sum, period) => sum + partCents(period, key), 0) / USUAL_MONTHS;
-  const balanceChange =
-    before?.balance != null && point.balance !== null ? point.balance - before.balance : null;
 
   return (
     <div className='grid gap-6'>
-      {/* One card in four cells, split by hairlines: two by two on a phone, one row when there is room. */}
-      <section
-        aria-label='The month'
-        className='grid grid-cols-2 gap-px border bg-border @[760px]:grid-cols-4'
-      >
-        <Figure label='In' value={wholeCents(point.income, currency)} tone='text-success' />
-        <Figure label='Out' value={wholeCents(point.spending, currency)} />
-        <Figure
-          label={point.complete ? 'Kept' : 'Kept so far'}
-          value={signed(point.kept, currency)}
-          tone={point.kept < 0 ? 'text-warning' : undefined}
-          sub={share === null ? undefined : `${pct(share)} of in`}
-        />
-        <Figure
-          label={point.complete ? 'Balance at month end' : 'Balance now'}
-          value={wholeCents(point.balance, currency)}
-          sub={
-            before && balanceChange !== null ? (
-              <>
-                <span className='whitespace-nowrap'>{signed(balanceChange, currency)}</span> on{' '}
-                {formatMonth(before.month, 'MMM')}
-              </>
-            ) : undefined
-          }
-        />
-      </section>
+      <MonthFigures point={point} overview={overview} running={running} />
 
       <div className='grid gap-6 @[1000px]:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]'>
         <div className='grid min-w-0 content-start gap-6'>
-          <WhereItWent
-            period={periodOf(categories.breakdown.periods)}
-            usualOf={usualOf}
-            currency={currency}
-            from={dates.from}
-            to={end}
-          />
+          {overview && categories.breakdown ? (
+            <WhereItWent
+              period={periodOf(categories.breakdown.periods)}
+              usualOf={usualOf}
+              currency={currency}
+              from={dates.from}
+              to={end}
+            />
+          ) : (
+            <PartsSkeleton title='Where it went' rows={6} className='sm:p-6' />
+          )}
           <MonthTransactions from={dates.from} to={end} />
         </div>
         <div className='grid min-w-0 content-start gap-6'>
-          <WhereItCameFrom
-            period={periodOf(sources.breakdown.periods)}
-            currency={currency}
-            from={dates.from}
-            to={end}
-          />
+          {overview && sources.breakdown ? (
+            <WhereItCameFrom
+              period={periodOf(sources.breakdown.periods)}
+              currency={currency}
+              from={dates.from}
+              to={end}
+            />
+          ) : (
+            <PartsSkeleton title='Where it came from' rows={2} />
+          )}
           <BiggestMerchants month={month} today={today} />
         </div>
       </div>
     </div>
+  );
+}
+
+/** What came in and went out, what was kept and the balance; the labels stand while the figures load. */
+function MonthFigures({
+  point,
+  overview,
+  running,
+}: {
+  point: MonthPoint | undefined;
+  overview: Overview | null;
+  running: boolean;
+}) {
+  const labels = {
+    kept: running ? 'Kept so far' : 'Kept',
+    balance: running ? 'Balance now' : 'Balance at month end',
+  };
+  if (!overview || !point)
+    return (
+      // The same four cells as loaded, in the same order, so each fills in where it stands.
+      <FigureCells loading>
+        <Figure label='In' value={null} />
+        <Figure label='Out' value={null} />
+        <Figure label={labels.kept} value={null} sub={<TextBone className='w-[5em]' />} />
+        <Figure label={labels.balance} value={null} sub={<TextBone className='w-[7em]' />} />
+      </FigureCells>
+    );
+  const currency = overview.currency;
+  const index = overview.months.indexOf(point);
+  const before = index > 0 ? overview.months[index - 1] : null;
+  const share = point.income > 0 ? point.kept / point.income : null;
+  const balanceChange =
+    before?.balance != null && point.balance !== null ? point.balance - before.balance : null;
+  return (
+    <FigureCells>
+      <Figure label='In' value={wholeCents(point.income, currency)} tone='text-success' />
+      <Figure label='Out' value={wholeCents(point.spending, currency)} />
+      <Figure
+        label={labels.kept}
+        value={signed(point.kept, currency)}
+        tone={point.kept < 0 ? 'text-warning' : undefined}
+        sub={share === null ? undefined : `${pct(share)} of in`}
+      />
+      <Figure
+        label={labels.balance}
+        value={wholeCents(point.balance, currency)}
+        sub={
+          before && balanceChange !== null ? (
+            <>
+              <span className='whitespace-nowrap'>{signed(balanceChange, currency)}</span> on{' '}
+              {formatMonth(before.month, 'MMM')}
+            </>
+          ) : undefined
+        }
+      />
+    </FigureCells>
+  );
+}
+
+/** One card in four cells, split by hairlines: two by two on a phone, one row when there is room. */
+function FigureCells({loading, children}: {loading?: boolean; children: ReactNode}) {
+  return (
+    <section
+      aria-label='The month'
+      aria-busy={loading || undefined}
+      className='grid grid-cols-2 gap-px border bg-border @[760px]:grid-cols-4'
+    >
+      {children}
+      {loading && <LoadingLabel>Loading the month</LoadingLabel>}
+    </section>
+  );
+}
+
+/** A month's parts (categories or sources) while they load: the title and rows at their loaded height. */
+function PartsSkeleton({
+  title,
+  rows,
+  className,
+}: {
+  title: string;
+  rows: number;
+  className?: string;
+}) {
+  return (
+    <section
+      aria-label={title}
+      aria-busy='true'
+      className={cn('grid gap-3 border bg-card p-5', className)}
+    >
+      <LoadingLabel>{`Loading ${title.toLowerCase()}`}</LoadingLabel>
+      <h2 className='text-card-title'>{title}</h2>
+      <ul aria-hidden='true' className='-mx-2 grid gap-1'>
+        {Array.from({length: rows}, (_, index) => (
+          <li key={index} className='flex min-h-11 items-center gap-3 px-2 text-sm'>
+            <Bone className='size-5' />
+            <TextBone className='w-[8em]' />
+            <Bone className='h-3 flex-1 max-sm:hidden' />
+            <TextBone className='ml-auto w-[4em]' />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -255,7 +337,8 @@ function Figure({
   sub,
 }: {
   label: string;
-  value: string;
+  /** Null while it loads. */
+  value: string | null;
   tone?: string;
   sub?: ReactNode;
 }) {
@@ -266,11 +349,11 @@ function Figure({
       <p
         className={cn(
           'numeric text-2xl font-semibold whitespace-nowrap @max-[30rem]:text-lg',
-          value.length > 10 && '@max-[30rem]:text-base',
+          value !== null && value.length > 10 && '@max-[30rem]:text-base',
           tone,
         )}
       >
-        {value}
+        {value ?? <TextBone className='w-[4.5em]' />}
       </p>
       {sub && <p className='numeric text-xs text-muted-foreground'>{sub}</p>}
     </div>
@@ -363,8 +446,8 @@ function WhereItWent({
 }
 
 function MonthTransactions({from, to}: {from: string; to: string}) {
-  const {data, isPending, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage} =
-    useGetMonthTransactions(from, to);
+  const query = useGetMonthTransactions(from, to);
+  const {data, isPending, refetch} = query;
   const transactions = data?.pages.flatMap((page) => page.transactions) ?? [];
   return (
     <section aria-label='Transactions' className='min-w-0 border bg-card'>
@@ -377,8 +460,13 @@ function MonthTransactions({from, to}: {from: string; to: string}) {
         </TextAction>
       </header>
       {isPending ? (
-        <Skeleton className='m-5 h-40' />
-      ) : isError || !data ? (
+        <div aria-busy='true'>
+          <LoadingLabel>Loading transactions</LoadingLabel>
+          <ul aria-hidden='true' className='divide-y divide-border/60 px-2 pb-2'>
+            <TileRowsSkeleton count={5} />
+          </ul>
+        </div>
+      ) : !data ? (
         <div className='grid justify-items-start gap-3 px-5 pb-5'>
           <p className='text-sm'>Could not load transactions.</p>
           <Button variant='outline' onClick={() => void refetch()}>
@@ -402,17 +490,7 @@ function MonthTransactions({from, to}: {from: string; to: string}) {
               </li>
             ))}
           </ul>
-          {hasNextPage && (
-            <Button
-              variant='ghost'
-              className='w-full text-muted-foreground max-sm:h-11'
-              disabled={isFetchingNextPage}
-              aria-busy={isFetchingNextPage || undefined}
-              onClick={() => void fetchNextPage()}
-            >
-              Load more
-            </Button>
-          )}
+          <LoadMore query={query} />
         </>
       )}
     </section>
@@ -494,7 +572,12 @@ function BiggestMerchants({month, today}: {month: string; today: string}) {
     <section aria-label='Biggest merchants' className='grid gap-3 border bg-card p-5'>
       <h2 className='text-card-title'>Biggest merchants</h2>
       {isPending ? (
-        <Skeleton className='h-40' />
+        <div aria-busy='true'>
+          <LoadingLabel>Loading merchants</LoadingLabel>
+          <ul aria-hidden='true' className='-mx-3 -mb-3 divide-y divide-border/60'>
+            <TileRowsSkeleton count={5} />
+          </ul>
+        </div>
       ) : isError || !ranking ? (
         <div className='grid justify-items-start gap-3'>
           <p className='text-sm'>Could not load merchants.</p>

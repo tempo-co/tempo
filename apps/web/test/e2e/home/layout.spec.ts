@@ -13,7 +13,7 @@ import {
 } from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
-import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
+import {boxOf, expectLoaded, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const layouts = [
   {width: 1440, theme: 'light'},
@@ -124,6 +124,7 @@ for (const [name, history] of [
       await mockSyntheticHome(page, {history: history()});
       await page.goto('/');
       await expect(page.getByRole('region', {name: 'Income by source'})).toBeVisible();
+      await expectLoaded(page);
       await page.evaluate(() => document.fonts.ready);
       const capture = async (view: string) => {
         if (!process.env.HOME_POLISH_CAPTURE_DIR) return;
@@ -157,6 +158,7 @@ for (const [name, history] of [
       await page.goto('/?month=2025-09');
       const dialog = homePage.monthDialog('September 2025');
       await expect(dialog.getByRole('region', {name: 'Biggest merchants'})).toBeVisible();
+      await expectLoaded(dialog);
       await capture('month');
       expect.soft(await brokenAmounts(page)).toEqual([]);
       if (width < 640) expect.soft(await smallTargets(page, '[role="dialog"]')).toEqual([]);
@@ -200,6 +202,7 @@ for (const width of [1000, 1024, 1440]) {
     ] as const) {
       await mockSyntheticHome(page, {history: history()});
       await page.goto('/');
+      await expectLoaded(homePage.whereYouStand);
       for (const span of ['6M', '1Y', '3Y', 'All']) {
         await homePage.whereYouStand.getByRole('button', {name: span, exact: true}).click();
         await expect(homePage.whereYouStand.getByRole('region', {name: 'This span'})).toBeVisible();
@@ -222,6 +225,7 @@ for (const {width, rows} of [
     await page.goto('/?month=2026-03');
 
     const figures = homePage.monthDialog('March 2026').getByRole('region', {name: 'The month'});
+    await expectLoaded(figures);
     const card = await boxOf(figures);
     const cells = await figures.evaluate((element) =>
       Array.from(element.children).map((cell) => {
@@ -243,7 +247,7 @@ for (const {width, rows} of [
   });
 }
 
-test('Home’s text actions and Load more buttons share one style with the month’s, the Merchants’ and the Recurring ones', async ({
+test('Home’s text actions and Load more buttons share one style with the month’s, the Merchants’ and the Recurring ones, as do their transaction lists’ headings', async ({
   page,
   homePage,
 }) => {
@@ -262,6 +266,11 @@ test('Home’s text actions and Load more buttons share one style with the month
         height: element.offsetHeight,
       };
     });
+  const heading = (title: Locator) =>
+    title.evaluate((element: HTMLElement) => {
+      const css = getComputedStyle(element);
+      return `${css.fontSize}/${css.lineHeight} ${css.fontWeight} ${css.color}`;
+    });
   const card = homePage.whereYouStand;
   const spending = page.getByRole('region', {name: 'Spending by category'});
   const actions = [
@@ -278,6 +287,7 @@ test('Home’s text actions and Load more buttons share one style with the month
     .monthDialog('March 2026')
     .getByRole('region', {name: 'Transactions'});
   styles.push(await style(transactions.getByRole('link', {name: 'Open in Transactions'})));
+  const headings = [await heading(transactions.getByRole('heading', {name: 'Transactions'}))];
   // Paged lists end in a full-width Load more.
   const loadMores = [await style(transactions.getByRole('button', {name: 'Load more'}))];
 
@@ -312,6 +322,7 @@ test('Home’s text actions and Load more buttons share one style with the month
   const merchant = page.getByRole('dialog', {name: 'Merchants'});
   styles.push(await style(merchant.getByRole('link', {name: 'Open in Transactions'})));
   loadMores.push(await style(merchant.getByRole('button', {name: 'Load more'})));
+  headings.push(await heading(merchant.getByRole('heading', {name: '45 transactions'})));
   await page.goto(`/?recurring=open&series=${RENT_KEY}`);
   const recurring = page.getByRole('dialog', {name: 'Recurring payments'});
   styles.push(
@@ -322,6 +333,13 @@ test('Home’s text actions and Load more buttons share one style with the month
     ),
   );
   loadMores.push(await style(recurring.getByRole('button', {name: 'Load more'})));
+  headings.push(
+    await heading(
+      recurring
+        .getByRole('region', {name: 'Payments'})
+        .getByRole('heading', {name: 'All 45 payments'}),
+    ),
+  );
   // The recurring list's folds open like Home's "N more" rows.
   const {lists} = homeRecurring();
   const [rent, energy] = lists.expenses.series;
@@ -337,4 +355,5 @@ test('Home’s text actions and Load more buttons share one style with the month
   expect(styles[0].height).toBe(36);
   for (const item of styles) expect(item).toEqual(styles[0]);
   for (const item of loadMores) expect(item).toEqual(loadMores[0]);
+  for (const item of headings) expect(item).toEqual(headings[0]);
 });

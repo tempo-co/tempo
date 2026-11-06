@@ -27,6 +27,7 @@ import {
   TIP_FOCUS,
   TruncatedText,
 } from './data-tip';
+import {Bone, LoadingLabel, TextBone} from './loading';
 import {TextAction} from './text-action';
 
 type Period = BankTransactionBreakdownPeriod;
@@ -369,6 +370,37 @@ export function HeatTable({
         fewer={fewer}
         columnWidth={columnWidth}
       />
+    </Card>
+  );
+}
+
+/** Rows a loading table holds: about the usual top rows, the "more" row and the total. */
+const SKELETON_ROWS = 8;
+
+/** A table while its data loads: its title, header and rows at their loaded height. */
+export function HeatTableSkeleton({title, kind}: {title: string; kind: 'category' | 'source'}) {
+  return (
+    <Card role='region' aria-label={title} aria-busy='true' className='min-w-0 overflow-hidden'>
+      <LoadingLabel>{`Loading ${title.toLowerCase()}`}</LoadingLabel>
+      <header className='px-5 pt-5 pb-3'>
+        <h2 className='text-card-title'>{title}</h2>
+        <p className='text-sm text-muted-foreground'>A month, on average, in each year</p>
+      </header>
+      <div aria-hidden='true' className='pb-2'>
+        <p className='border-b pr-4 pb-2 pl-5 text-label font-medium text-muted-foreground'>
+          {kind === 'category' ? 'Category' : 'Source'}
+        </p>
+        {Array.from({length: SKELETON_ROWS}, (_, index) => (
+          <div
+            key={index}
+            className='flex min-h-11 items-center gap-2 border-b border-border/60 pr-4 pl-5 text-sm last:border-b-0'
+          >
+            <Bone className='size-5' />
+            <TextBone className='w-[8em]' />
+            <TextBone className='ml-auto w-[4em]' />
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }

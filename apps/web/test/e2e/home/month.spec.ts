@@ -5,8 +5,8 @@ import {
   mockSyntheticHome,
 } from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
-import {fulfillJson} from '../../utils/api-mocks';
-import {boxOf, expectCategoryIcon, expectSourceTile} from '../../utils/layout';
+import {expectFailedPageRetried, failLaterPages, fulfillJson} from '../../utils/api-mocks';
+import {boxOf, expectCategoryIcon, expectLoaded, expectSourceTile} from '../../utils/layout';
 
 // Every response is synthetic: these checks never read or mutate a shared API stack.
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
@@ -73,6 +73,28 @@ test('a month shows its money, where it went against the usual, where it came fr
     'href',
     /bookingDate=/,
   );
+});
+
+test('a later page of the month’s transactions that fails keeps the loaded ones and tries that page again', async ({
+  page,
+  homePage,
+}) => {
+  await mockSyntheticHome(page, {transactionsPerMonth: 45});
+  const later = await failLaterPages(page, '**/bank-transactions?**', (params) => {
+    const index = params.get('pagination[pageIndex]');
+    return params.has('filter[bookingDate][from]') && index && index !== '0' ? index : null;
+  });
+  await page.goto('/?month=2026-03');
+
+  const transactions = homePage
+    .monthDialog('March 2026')
+    .getByRole('region', {name: 'Transactions'});
+  await expectFailedPageRetried(transactions, transactions.getByRole('listitem'), later, {
+    loaded: 20,
+    after: 40,
+  });
+  await expect(transactions.getByRole('listitem').nth(20)).toContainText('Example Shop 21');
+  await expect(transactions.getByRole('button', {name: 'Load more'})).toBeVisible();
 });
 
 test('a month without a full year of history before it has no usual', async ({page, homePage}) => {
@@ -244,6 +266,7 @@ for (const width of [1440, 390]) {
     await mockSyntheticHome(page);
     await page.goto('/?month=2026-03');
     const dialog = homePage.monthDialog('March 2026');
+    await expectLoaded(dialog);
     for (const name of ['Where it went', 'Where it came from']) {
       const section = dialog.getByRole('region', {name});
       const heading = await boxOf(section.getByRole('heading'));
@@ -281,6 +304,7 @@ test.describe('on a phone', () => {
     await page.goto('/?month=2026-03');
     const dialog = homePage.monthDialog('March 2026');
     await expect(dialog.getByRole('region', {name: 'Where it went'})).toBeVisible();
+    await expectLoaded(dialog);
     const box = await dialog.boundingBox();
     expect(box!.height).toBeGreaterThan(844 * 0.9);
     const overflow = await dialog.evaluate((element) =>

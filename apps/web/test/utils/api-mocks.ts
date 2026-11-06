@@ -1,4 +1,4 @@
-import {Page, Route} from '@playwright/test';
+import {Locator, Page, Route, expect} from '@playwright/test';
 import type {
   BankBalanceTrend,
   BankConnection,
@@ -65,6 +65,56 @@ export function mockBalanceTrend(page: Page) {
     const interval = new URL(route.request().url()).searchParams.get('interval');
     return fulfillJson(route, {...syntheticBalanceTrend, interval});
   });
+}
+
+/**
+ * Fails the API reads of `url` that `isLater` picks (a paged list's later pages) with a final error until
+ * `failing` is turned off; every other read goes on to the mocks behind. `pages` records each later page asked
+ * for, failed or not, by what `isLater` returns for it.
+ */
+export async function failLaterPages(
+  page: Page,
+  url: string,
+  isLater: (params: URLSearchParams) => string | null,
+) {
+  const state = {failing: true, pages: [] as string[]};
+  await page.route(url, (route) => {
+    const request = route.request();
+    const later = ['fetch', 'xhr'].includes(request.resourceType())
+      ? isLater(new URL(request.url()).searchParams)
+      : null;
+    if (later === null) return route.fallback();
+    state.pages.push(later);
+    // 429 is final, so the query does not retry it on its own.
+    if (state.failing) return fulfillJson(route, {message: 'Too Many Requests'}, 429);
+    return route.fallback();
+  });
+  return state;
+}
+
+/**
+ * Presses `scope`'s Load more while {@link failLaterPages} fails the next page: the `loaded` rows stay with a note
+ * under them, and Retry asks for the same page again and adds its rows, `after` in all.
+ */
+export async function expectFailedPageRetried(
+  scope: Locator,
+  rows: Locator,
+  later: Awaited<ReturnType<typeof failLaterPages>>,
+  {loaded, after}: {loaded: number; after: number},
+) {
+  await expect(rows).toHaveCount(loaded);
+  await scope.getByRole('button', {name: 'Load more'}).click();
+  const note = scope.getByRole('status').filter({hasText: "Couldn't load more."});
+  await expect(note).toBeVisible();
+  await expect(rows).toHaveCount(loaded);
+  await expect(scope.getByRole('button', {name: 'Load more'})).toHaveCount(0);
+  expect(later.pages).toHaveLength(1);
+
+  later.failing = false;
+  await scope.getByRole('button', {name: 'Retry'}).click();
+  await expect(rows).toHaveCount(after);
+  await expect(note).toHaveCount(0);
+  expect(later.pages).toEqual([later.pages[0], later.pages[0]]);
 }
 
 /** Answers every request to `url` with the same JSON response. */

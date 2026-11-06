@@ -15,26 +15,100 @@ import {cn} from '@/utils/cn';
 import {parseCalendarDate} from '../utils/drill-links';
 import {formatWholeMoney, toCents} from '../utils/money';
 import {formatMonth} from '../utils/month';
+import {Bone, LoadingLabel, TextBone} from './loading';
 import {TextAction} from './text-action';
 
 /** Four rows at most, so the block stays about as tall as the chart beside it. */
 const ROWS = 4;
 
 /**
+ * Beside the chart the block always takes the room of its tallest usual shape: the totals, this month's bar and
+ * four rows. The chart grows to the side column's height, so a block that loads, shrinks or turns out empty
+ * leaves the chart where it was. Under the chart, on narrower screens, it is the card's last part and takes only
+ * what it shows. 349px is that shape's height with its top border and padding: four 48px rows, the bar, the
+ * totals and the header.
+ */
+const RESERVE = '@[60rem]:min-h-[21.8125rem]';
+
+const ROW =
+  'grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-2 py-1.5 text-left text-sm';
+
+/**
  * What repeats beside the history: bills and income a month, how far this month's bills are paid, late or
  * higher-than-usual bills, then the next payments. Each row opens its series in the recurring dialog.
  */
 export function RepeatsBlock({today, className}: {today: string; className?: string}) {
-  const series = useGetRecurringSeries(today).data;
-  const {summary} = useGetRecurringSummary(today);
+  const lists = useGetRecurringSeries(today);
+  const series = lists.data;
+  const {summary, isError} = useGetRecurringSummary(today);
   const navigate = useNavigate({from: '/'});
-  if (!summary || !series) return null;
+  const open = (key?: string) =>
+    void navigate({search: (prev) => ({...prev, recurring: 'open', series: key})});
+  const header = (
+    <header className='-my-2.5 flex items-center justify-between gap-2'>
+      <h2 className='text-card-title'>Repeats</h2>
+      <TextAction
+        onClick={() => open()}
+        aria-label='All recurring payments'
+        className='-mr-2 gap-0.5'
+      >
+        All <ChevronRight aria-hidden='true' />
+      </TextAction>
+    </header>
+  );
+  // Nothing to show: beside the chart the room stays, so the chart keeps its height.
+  const absent = <div aria-hidden='true' className={cn('@max-[60rem]:hidden', RESERVE)} />;
+  if ((!summary && isError) || (!series && lists.isError)) return absent;
+  if (!summary || !series)
+    return (
+      <section
+        aria-label='Repeats'
+        aria-busy='true'
+        className={cn('grid content-start gap-4', RESERVE, className)}
+      >
+        {header}
+        <dl className='grid grid-cols-2 gap-x-4'>
+          {['Bills a month', 'Income a month'].map((label) => (
+            <div key={label} className='min-w-0'>
+              <dt className='text-label text-muted-foreground'>{label}</dt>
+              <dd className='numeric text-lg font-semibold'>
+                <TextBone className='w-[4em]' />
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <div className='grid gap-1.5'>
+          <Bone className='h-1.5' />
+          <p className='numeric text-xs'>
+            <TextBone className='w-[16em]' />
+          </p>
+        </div>
+        <ul aria-hidden='true' className='-mx-2 grid'>
+          {Array.from({length: ROWS}, (_, index) => (
+            <li key={index} className={ROW}>
+              <Bone className='size-7' />
+              <span className='min-w-0'>
+                <span className='block'>
+                  <TextBone className='w-[8em]' />
+                </span>
+                <span className='block text-xs'>
+                  <TextBone className='w-[9em]' />
+                </span>
+              </span>
+              <span className='numeric'>
+                <TextBone className='w-[3.5em]' />
+              </span>
+            </li>
+          ))}
+        </ul>
+        {/* Last, so each part above is where its loaded self will be. */}
+        <LoadingLabel>Loading what repeats</LoadingLabel>
+      </section>
+    );
   const currency = summary.baseCurrency;
   const bills = toCents(summary.expenseMonthlyTotal);
   const income = toCents(summary.incomeMonthlyTotal);
-  if (bills === 0 && income === 0) return null;
-  const open = (key?: string) =>
-    void navigate({search: (prev) => ({...prev, recurring: 'open', series: key})});
+  if (bills === 0 && income === 0) return absent;
   const paid = toCents(summary.expenseThisMonth.paid);
   const left = toCents(summary.expenseThisMonth.remaining);
   const monthName = formatMonth(summary.expenseThisMonth.month, 'MMMM');
@@ -48,21 +122,14 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
   const upcoming = summary.upcoming
     .filter((payment) => !flagged.some((item) => item.key === payment.key))
     .slice(0, Math.max(0, ROWS - flagged.length));
-  const row =
-    'grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-2 py-1.5 text-left text-sm hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
+  const row = cn(
+    ROW,
+    'hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+  );
 
   return (
-    <section aria-label='Repeats' className={cn('grid content-start gap-4', className)}>
-      <header className='-my-2.5 flex items-center justify-between gap-2'>
-        <h2 className='text-card-title'>Repeats</h2>
-        <TextAction
-          onClick={() => open()}
-          aria-label='All recurring payments'
-          className='-mr-2 gap-0.5'
-        >
-          All <ChevronRight aria-hidden='true' />
-        </TextAction>
-      </header>
+    <section aria-label='Repeats' className={cn('grid content-start gap-4', RESERVE, className)}>
+      {header}
       <dl className='grid grid-cols-2 gap-x-4'>
         <div className='min-w-0'>
           <dt className='text-label text-muted-foreground'>Bills a month</dt>

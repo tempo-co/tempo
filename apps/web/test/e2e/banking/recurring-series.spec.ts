@@ -8,7 +8,13 @@ import {
 
 import {formatBankTransactionCompactDate} from '../../../src/features/banking/utils/formatters';
 import {expect, test} from '../../fixtures';
-import {fulfillJson, mockBankConnections, mockJson} from '../../utils/api-mocks';
+import {
+  expectFailedPageRetried,
+  failLaterPages,
+  fulfillJson,
+  mockBankConnections,
+  mockJson,
+} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 // Every API call is mocked, so no seeded session is needed.
@@ -740,6 +746,44 @@ for (const wakeAfterMidnight of [false, true]) {
     await expect(row(page, GYM_KEY)).toContainText('Last 3 Sep');
   });
 }
+
+test('a later page of a series’ payments that fails keeps the loaded ones and tries that page again', async ({
+  page,
+}) => {
+  await mockRecurring(page);
+  const payments = Array.from({length: 25}, (_, index) =>
+    payment(index, {
+      bookingDate: new Date(Date.UTC(2026, 8, 25 - index)).toISOString().slice(0, 10),
+      displayDescription: 'Example Gym',
+      amount: '-24.00',
+      bankAccountAlias: 'Example Current Account',
+    }),
+  );
+  await page.route('**/bank-transactions?**', (route) => {
+    if (!['fetch', 'xhr'].includes(route.request().resourceType())) return route.continue();
+    const params = new URL(route.request().url()).searchParams;
+    if (!params.has('filter[recurringSeriesKey]'))
+      return fulfillJson(route, {transactions: [], total: 0});
+    const size = Number(params.get('pagination[pageSize]'));
+    const start = Number(params.get('pagination[pageIndex]')) * size;
+    return fulfillJson(route, {transactions: payments.slice(start, start + size), total: 25});
+  });
+  const later = await failLaterPages(page, '**/bank-transactions?**', (params) => {
+    const index = params.get('pagination[pageIndex]');
+    return params.has('filter[recurringSeriesKey]') && index && index !== '0' ? index : null;
+  });
+  await page.goto('/?recurring=open');
+  await openSeries(page, GYM_KEY);
+
+  const list = detail(page).getByRole('list', {name: 'Payments to Example Gym'});
+  await expectFailedPageRetried(detail(page), list.getByRole('listitem'), later, {
+    loaded: 20,
+    after: 25,
+  });
+  await expect(list.getByRole('listitem').last()).toContainText(
+    formatBankTransactionCompactDate(payments[24].bookingDate),
+  );
+});
 
 test('lists recurring income on its own tab', async ({page}) => {
   await mockRecurring(page);

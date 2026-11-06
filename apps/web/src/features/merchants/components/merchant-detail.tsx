@@ -5,6 +5,7 @@ import {ArrowLeft} from 'lucide-react';
 import {useState} from 'react';
 import {Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis} from 'recharts';
 
+import {LoadMore} from '@/components/shared/load-more';
 import {Button} from '@/components/ui/button';
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {Skeleton} from '@/components/ui/skeleton';
@@ -355,8 +356,8 @@ function PeriodsChart({
 }
 
 function Transactions({merchant}: {merchant: MerchantGroup}) {
-  const {data, isPending, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage} =
-    useGetMerchantTransactions(merchant.id);
+  const query = useGetMerchantTransactions(merchant.id);
+  const {data, isPending, refetch} = query;
   const transactions = data?.pages.flatMap((page) => page.transactions) ?? [];
   const total = data?.pages[data.pages.length - 1].total ?? merchant.count;
 
@@ -372,7 +373,7 @@ function Transactions({merchant}: {merchant: MerchantGroup}) {
       </header>
       {isPending ? (
         <Skeleton className='h-40' aria-label='Loading transactions' />
-      ) : isError || !data ? (
+      ) : !data ? (
         <div className='grid justify-items-start gap-2'>
           <p className='text-sm'>Could not load transactions.</p>
           <Button variant='outline' className='max-sm:h-11' onClick={() => void refetch()}>
@@ -397,17 +398,7 @@ function Transactions({merchant}: {merchant: MerchantGroup}) {
               </li>
             ))}
           </ul>
-          {hasNextPage && (
-            <Button
-              variant='ghost'
-              className='w-full text-muted-foreground max-sm:h-11'
-              disabled={isFetchingNextPage}
-              aria-busy={isFetchingNextPage || undefined}
-              onClick={() => void fetchNextPage()}
-            >
-              Load more
-            </Button>
-          )}
+          <LoadMore query={query} />
         </>
       )}
     </section>

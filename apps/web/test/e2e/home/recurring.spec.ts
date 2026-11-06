@@ -5,7 +5,7 @@ import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {API_URL, expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
-import {expectNoHorizontalOverflow} from '../../utils/layout';
+import {expectLoaded, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE, timezoneId: 'Europe/Amsterdam'});
 test.beforeEach(async ({page}) => {
@@ -118,6 +118,7 @@ test('repeats show what the real summary endpoint returns for the seeded owner',
   const real = (await response.json()) as RecurringSummary;
   await page.goto('/');
   await expect(page.getByRole('region', {name: 'Where you stand'})).toBeVisible();
+  await expectLoaded(page.getByRole('region', {name: 'Where you stand'}));
   if (Number(real.expenseMonthlyTotal) === 0 && Number(real.incomeMonthlyTotal) === 0) {
     await expect(repeats(page)).toHaveCount(0);
   } else if (real.upcoming.length > 0) {

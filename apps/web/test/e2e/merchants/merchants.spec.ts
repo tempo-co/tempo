@@ -9,7 +9,14 @@ import type {
 
 import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
-import {fulfillJson, mockBankConnections, mockBankRefresh, mockJson} from '../../utils/api-mocks';
+import {
+  expectFailedPageRetried,
+  failLaterPages,
+  fulfillJson,
+  mockBankConnections,
+  mockBankRefresh,
+  mockJson,
+} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 // Every response is synthetic: these checks never read or mutate a shared API stack.
@@ -446,6 +453,54 @@ test('the merchants dialog ranks by week, month or year and searches every merch
   await expect(results.getByRole('listitem')).toHaveCount(1);
   await dialog(page).getByRole('searchbox', {name: 'Search merchants and people'}).fill('nobody');
   await expect(results).toContainText('No merchant or person matches that name.');
+});
+
+test('a later page of merchants or of a merchant’s transactions that fails keeps the loaded ones and tries that page again', async ({
+  page,
+}) => {
+  await mockSignedIn(page);
+  await mockMerchants(page);
+  const merchantsLater = await failLaterPages(page, `${API_URL}/merchants?**`, (params) => {
+    const offset = params.get('offset');
+    return offset && offset !== '0' ? offset : null;
+  });
+  await page.goto('/?merchants=open');
+
+  const all = dialog(page).getByRole('region', {name: 'All merchants'});
+  await expectFailedPageRetried(all, all.getByRole('listitem'), merchantsLater, {
+    loaded: 2,
+    after: 4,
+  });
+
+  const transactions = Array.from({length: 25}, (_, index) => {
+    const date = `2026-10-${String(25 - index).padStart(2, '0')}`;
+    return burgerTransaction(index, {
+      id: `00000000-0000-4000-8000-${String(1000 + index).padStart(12, '0')}`,
+      transactionDate: date,
+      bookingDate: date,
+      valueDate: date,
+    });
+  });
+  await page.route(`${API_URL}/bank-transactions?**`, (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const start = Number(params.get('pagination[pageIndex]')) * 20;
+    return fulfillJson(route, {transactions: transactions.slice(start, start + 20), total: 25});
+  });
+  const transactionsLater = await failLaterPages(
+    page,
+    `${API_URL}/bank-transactions?**`,
+    (params) => {
+      const index = params.get('pagination[pageIndex]');
+      return params.has('filter[merchantGroup]') && index && index !== '0' ? index : null;
+    },
+  );
+  await page.goto(`/?merchants=open&merchant=${BRAND}`);
+  const list = dialog(page).getByRole('region', {name: 'Transactions'});
+  await expect(list.getByRole('heading', {name: '25 transactions'})).toBeVisible();
+  await expectFailedPageRetried(list, list.getByRole('listitem'), transactionsLater, {
+    loaded: 20,
+    after: 25,
+  });
 });
 
 test('merchant details show all-time totals, periods, grouped names and transactions', async ({
