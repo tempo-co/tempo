@@ -83,7 +83,7 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['delete', `/bank-connections/${RESOURCE_ID}`],
 	['get', `/bank-connections/${RESOURCE_ID}/transactions`],
 	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}`],
-	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}/mask-v1`],
+	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}/mask-v2`],
 ];
 
 const VERIFIED_ROUTES: GuardedRoute[] = [
