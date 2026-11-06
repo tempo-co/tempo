@@ -252,14 +252,14 @@ test('Home’s text actions and Load more buttons share one style with the month
   await page.goto('/');
 
   const style = (action: Locator) =>
-    action.evaluate((element) => {
+    action.evaluate((element: HTMLElement) => {
       const css = getComputedStyle(element);
-      const {height} = element.getBoundingClientRect();
       return {
         font: `${css.fontSize} ${css.fontWeight}`,
         color: css.color,
         padding: css.padding,
-        height: Math.round(height),
+        // Layout height, unaffected by a dialog's opening zoom.
+        height: element.offsetHeight,
       };
     });
   const card = homePage.whereYouStand;
