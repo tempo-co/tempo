@@ -84,7 +84,9 @@ services:
         restart: unless-stopped
         environment:
             NODE_ENV: production
-            WEB_BASE_URL: http://127.0.0.1:8119
+            # The tailnet origin in staging.env when the Tailscale sidecar is set up; the only origin
+            # CORS, CSRF checks and emailed links accept.
+            WEB_BASE_URL: ${STAGING_WEB_BASE_URL:-http://127.0.0.1:8119}
             API_URL: http://api:3000
             PORT: '3000'
             DB_HOST: postgres
@@ -108,7 +110,7 @@ services:
             BANKING_INTEGRATION_ENABLED: 'false'
             ENABLE_BANKING_API_URL: https://disabled.invalid
             ENABLE_BANKING_APPLICATION_ID: tempo-staging-disabled
-            ENABLE_BANKING_REDIRECT_URL: http://127.0.0.1:8119/bank-connections/callback
+            ENABLE_BANKING_REDIRECT_URL: ${STAGING_WEB_BASE_URL:-http://127.0.0.1:8119}/bank-connections/callback
             BANKING_SESSION_ENCRYPTION_KEY_B64: ${BANKING_SESSION_ENCRYPTION_KEY_B64:?BANKING_SESSION_ENCRYPTION_KEY_B64 must be set}
             BANKING_SYNC_INTERVAL: 6h
             BANKING_SYNC_DISPATCH_INTERVAL: 10m
@@ -157,6 +159,7 @@ services:
         networks:
             - edge
             - ingress
+            - tailscale
         depends_on:
             api:
                 condition: service_healthy
@@ -186,3 +189,12 @@ networks:
         internal: true
     ingress:
         name: tempo-staging-ingress
+    # Joins web and the Tailscale sidecar (tailscale.compose.yml). The fixed subnet gives the sidecar a
+    # static address outside the dynamic range, the only address web's Nginx trusts for X-Forwarded-For.
+    tailscale:
+        name: tempo-staging-tailscale
+        ipam:
+            config:
+                - subnet: 10.213.47.0/28
+                  gateway: 10.213.47.1
+                  ip_range: 10.213.47.8/29
