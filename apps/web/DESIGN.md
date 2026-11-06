@@ -189,9 +189,9 @@ product per theme.
 | Token | Hex | Role |
 |---|---|---|
 | Ink | `#28252B` | High-emphasis text and logo tile (light theme foreground) |
-| Clay | `#BD654B` | Logo sun, large accent areas |
+| Clay | `#BD654B` | Logo crossbar, large accent areas |
 | Clay strong | `#8F4032` | Small accent text, controls, focus ring on light (`--primary` in light) |
-| Paper | `#F6F1E8` | Light canvas, logo block |
+| Paper | `#F6F1E8` | Light canvas, logo stem |
 | Fold shadow | `#D9D2C6` | Quiet supporting planes and borders only — never a drop shadow |
 | Night | `#17161B` | Dark canvas |
 | Clay on dark | `#E59A7B` | Accent plane, links, controls on dark (`--primary` in dark) |
@@ -290,16 +290,16 @@ consistent within a component family.
 
 ## Logo
 
-The logo is the icon-only Tempo mark in `src/assets/logo.tsx`, the "corner sun": a paper block
-whose top-right corner is a clay quarter sun, on an Ink tile. On a 24-unit grid the tile is 19×19
-(radius 2.5), the block 14×14 (radius 2.2) scaled to 84% about the centre, the sun radius 7, and a
-1.3 gap between sun and block. The block fades `#FBF8F2`→`#E3D8C6` and the sun clay-on-dark→Clay;
-a long 45° shadow (`#19171C`, glyph copies every 0.12 units, clipped to the tile and faded) gives
-it the same construction as Ember's icon. The tile is the same in light and dark themes. Do not
-add text to the mark, recolor it per theme, or decorate it. Favicons (16–48 px and
-`favicon.svg`) use a tab-size cut with no shadow, a larger block and a wider gap; installed-app
-icons use the full mark, full-bleed for `apple-touch-icon` and the maskable icons. All icons live
-under `public/` with `manifest.webmanifest`; see `index.html` for the wiring.
+The logo is the icon-only Tempo mark in `src/assets/logo.tsx`: an italic T whose clay crossbar
+sweeps up from a tapered left tip over a paper stem that leans about 16° and flares into a flat
+foot, on an Ink tile. On a 24-unit grid the tile is 19×19 with radius 4.16, and the two pieces are
+separate flat shapes with an Ink gap between them. It is flat: no gradients, shadows or outlines,
+and the tile is the same in light and dark themes. Do not add text to the mark, recolor it per
+theme, or decorate it. Every icon uses the same drawing: the PWA icons on the inset tile;
+`favicon.svg` and the 16–48 px favicons on a larger 23-unit tab tile so both pieces survive at
+16 px; `apple-touch-icon` and the maskable icons full-bleed, with the maskable glyph kept inside
+the 40% safe circle. All icons live under `public/` with
+`manifest.webmanifest`; see `index.html` for the wiring.
 
 ## Components
 

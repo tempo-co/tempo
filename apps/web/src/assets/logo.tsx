@@ -1,77 +1,26 @@
-import {SVGProps, useId} from 'react';
+import {SVGProps} from 'react';
 
-// Same drawing as the installed-app icons in public/: a paper block with a clay quarter sun in its
-// top-right corner, on an ink tile with a long 45° shadow (glyph copies clipped to the tile, faded out).
+// Same drawing as the icons in public/: an italic T, a clay crossbar over a paper stem, on an ink tile.
 const TILE =
-  'M5 2.5H19A2.5 2.5 0 0 1 21.5 5V19A2.5 2.5 0 0 1 19 21.5H5A2.5 2.5 0 0 1 2.5 19V5A2.5 2.5 0 0 1 5 2.5Z';
-const BLOCK =
-  'M10.7 5A8.3 8.3 0 0 0 19 13.3V16.8A2.2 2.2 0 0 1 16.8 19H7.2A2.2 2.2 0 0 1 5 16.8V7.2A2.2 2.2 0 0 1 7.2 5Z';
-const SUN = 'M12 5H16.8A2.2 2.2 0 0 1 19 7.2V12A7 7 0 0 1 12 5Z';
-const GLYPH = 'translate(12 12) scale(0.84) translate(-12 -12)';
-const SHADOW_STEPS = Array.from({length: 83}, (_, i) => ((i + 1) * 0.12).toFixed(2));
+  'M6.66 2.5H17.34A4.16 4.16 0 0 1 21.5 6.66V17.34A4.16 4.16 0 0 1 17.34 21.5H6.66A4.16 4.16 0 0 1 2.5 17.34V6.66A4.16 4.16 0 0 1 6.66 2.5Z';
+const BAR =
+  'M4.58 11.48C4.54 11.44 4.54 11.32 4.59 11.04C5.02 8.29 6.81 6.68 9.69 6.46C9.79 6.45 10.41 6.44 11.07 6.44C12.30 6.43 14.15 6.42 15.94 6.39C17.53 6.37 18.85 6.37 18.91 6.40C19.03 6.45 19.03 6.56 18.94 7.16C18.83 7.89 18.73 8.21 18.51 8.54C18.13 9.12 17.51 9.42 16.59 9.46C16.50 9.46 15.88 9.47 15.22 9.48C13.20 9.50 12.13 9.52 11.74 9.53C11.54 9.54 11.18 9.55 10.94 9.56C9.97 9.59 9.28 9.64 8.81 9.71C8.23 9.79 8.15 9.80 7.94 9.84C6.65 10.11 5.61 10.61 4.84 11.32C4.63 11.51 4.62 11.52 4.58 11.48Z';
+const STEM =
+  'M6.51 18.27C6.42 18.23 6.43 18.22 6.74 17.87C7.30 17.25 7.74 16.51 8.13 15.53C8.26 15.22 8.28 15.16 8.73 13.77C8.99 13.00 9.05 12.82 9.16 12.53C9.67 11.21 10.41 10.49 11.61 10.13C12.04 10.00 12.35 9.97 13.40 9.96C14.50 9.95 14.43 9.91 14.25 10.39C14.06 10.92 13.84 11.58 13.68 12.10C13.64 12.24 13.57 12.46 13.53 12.58C13.50 12.70 13.42 12.94 13.38 13.10C13.33 13.27 13.25 13.53 13.20 13.68C13.15 13.83 13.08 14.08 13.03 14.24C12.99 14.39 12.93 14.58 12.90 14.66C12.88 14.74 12.81 14.97 12.74 15.17C12.16 17.06 11.08 18.01 9.24 18.24C9.01 18.27 6.58 18.30 6.51 18.27Z';
 
-const Logo = (props: SVGProps<SVGSVGElement>) => {
-  const id = useId();
-  const ref = (name: string) => `${id}-${name}`;
-  return (
-    <svg
-      xmlns='http://www.w3.org/2000/svg'
-      width='1rem'
-      height='1rem'
-      viewBox='0 0 24 24'
-      role='img'
-      aria-hidden='true'
-      {...props}
-    >
-      <defs>
-        <linearGradient
-          id={ref('block')}
-          gradientUnits='userSpaceOnUse'
-          x1='5'
-          y1='5'
-          x2='19'
-          y2='19'
-        >
-          <stop offset='0' stopColor='#FBF8F2' />
-          <stop offset='1' stopColor='#E3D8C6' />
-        </linearGradient>
-        <linearGradient
-          id={ref('sun')}
-          gradientUnits='userSpaceOnUse'
-          x1='12'
-          y1='5'
-          x2='19'
-          y2='12'
-        >
-          <stop offset='0' stopColor='#E59A7B' />
-          <stop offset='1' stopColor='#BD654B' />
-        </linearGradient>
-        <linearGradient id={ref('fade')} x1='0.3' y1='0.3' x2='1' y2='1'>
-          <stop offset='0' stopColor='#fff' />
-          <stop offset='1' stopColor='#fff' stopOpacity='0' />
-        </linearGradient>
-        <clipPath id={ref('clip')}>
-          <path d={TILE} />
-        </clipPath>
-        <mask id={ref('mask')}>
-          <rect width='24' height='24' fill={`url(#${ref('fade')})`} />
-        </mask>
-        <g id={ref('glyph')} transform={GLYPH}>
-          <path d={BLOCK} />
-          <path d={SUN} />
-        </g>
-      </defs>
-      <path fill='#28252B' d={TILE} />
-      <g clipPath={`url(#${ref('clip')})`} mask={`url(#${ref('mask')})`} fill='#19171C'>
-        {SHADOW_STEPS.map((step) => (
-          <use key={step} href={`#${ref('glyph')}`} transform={`translate(${step} ${step})`} />
-        ))}
-      </g>
-      <g transform={GLYPH}>
-        <path fill={`url(#${ref('block')})`} d={BLOCK} />
-        <path fill={`url(#${ref('sun')})`} d={SUN} />
-      </g>
-    </svg>
-  );
-};
+const Logo = (props: SVGProps<SVGSVGElement>) => (
+  <svg
+    xmlns='http://www.w3.org/2000/svg'
+    width='1rem'
+    height='1rem'
+    viewBox='0 0 24 24'
+    role='img'
+    aria-hidden='true'
+    {...props}
+  >
+    <path fill='#28252B' d={TILE} />
+    <path fill='#BD654B' d={BAR} />
+    <path fill='#F6F1E8' d={STEM} />
+  </svg>
+);
 export default Logo;
