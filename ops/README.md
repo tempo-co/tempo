@@ -13,7 +13,7 @@ CI builds an image of each app a commit changes, publishes `ghcr.io/tempo-co/{ap
 | `tailscale.compose.yml` | Tailscale sidecar giving production its own tailnet device |
 | `ghcr-retention.sh` | Weekly GHCR cleanup of both packages (`.github/workflows/ghcr-retention.yml`): keeps `main`, open PRs' `pr-<n>` and anything newer than 30 days. Also keeps the images of the last 5 `main` commits that changed the app as rollback targets. Dry run until the repo variable `GHCR_RETENTION_DELETE=true`; GitHub pauses scheduled workflows after 60 days without repo activity |
 | `systemd/` | Production deploy and backup timers (installed by `install.sh`); staging Docker daemon (user unit, installed once by hand) |
-| `staging/` | Staging Compose file, env template, database refresh |
+| `staging/` | Staging Compose files (stack and Tailscale sidecar), env template, database refresh |
 
 ## Production
 
@@ -68,7 +68,7 @@ The check is silent on success and prints a safe failure reason with exit status
 
 PostgreSQL, Redis and the API share the `default` network. The API also joins the internal `frontend` network; web joins `frontend`, the web-only `ingress` network that publishes its loopback port, and the `tailscale` network it shares with the Tailscale sidecar. Web therefore has no network path to the database or cache. Do not mark `default` internal: the API needs outbound access.
 
-The `tailscale` network has a fixed subnet so the sidecar gets the static address `10.213.47.2`, outside the range Docker assigns to web. Web's Nginx takes the client address from `X-Forwarded-For` only on requests from that address, so the API sees tailnet clients' `100.x` addresses while local processes and other containers cannot set their own. Changing the address needs the matching change in `apps/web/nginx/tempo.conf`. Compose changes to either network reach running containers only when they are recreated: after `sudo ops/install.sh production`, recreate web (`deploy.sh` only does that when an image changes) and then the sidecar.
+The `tailscale` network has a fixed subnet so the sidecar gets the static address `10.213.47.2`, outside the range Docker assigns to web. Web's Nginx takes the client address from `X-Forwarded-For` only on requests from that address, so the API sees tailnet clients' `100.x` addresses while local processes and other containers cannot set their own. Staging's sidecar uses the same address on its own daemon (`staging/README.md`). Changing the address needs the matching change in `apps/web/nginx/tempo.conf` and in both environments' Compose files. Compose changes to either network reach running containers only when they are recreated: after `sudo ops/install.sh production`, recreate web (`deploy.sh` only does that when an image changes) and then the sidecar.
 
 ### Container privileges
 
@@ -76,11 +76,11 @@ Every production container runs with `no-new-privileges` and drops all Linux cap
 
 ## Staging
 
-An isolated rootless Docker daemon (`tempo-staging-docker.service`) runs a separate copy of the stack on `http://127.0.0.1:8119/`. Deploy any API/web pair with one command; an omitted component keeps its current image:
+An isolated rootless Docker daemon (`tempo-staging-docker.service`) runs a separate copy of the stack on `http://127.0.0.1:8119/` and, through its own Tailscale sidecar, at `https://tempo-staging.<tailnet>.ts.net/` for testing from a phone. Deploy any API/web pair with one command; an omitted component keeps its current image:
 
 ```bash
 ops/install.sh staging                         # after changing ops/
 tempo-deploy staging --api pr-115 --web main
 ```
 
-A successful deploy refreshes the staging database from the newest production backup, so keep staging on loopback. See [`staging/README.md`](staging/README.md).
+A successful deploy refreshes the staging database from the newest production backup, so staging stays on loopback and the tailnet: no Funnel, port forward or other route. See [`staging/README.md`](staging/README.md).
