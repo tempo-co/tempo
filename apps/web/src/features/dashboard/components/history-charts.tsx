@@ -3,8 +3,10 @@ import {
   Area,
   CartesianGrid,
   ComposedChart,
+  DefaultZIndexes,
   XAxis,
   YAxis,
+  ZIndexLayer,
   useActiveTooltipLabel,
   useIsTooltipActive,
 } from 'recharts';
@@ -17,10 +19,13 @@ import {axisFormatter, axisTicks} from '../utils/chart-axis';
 import {signed, wholeCents} from '../utils/format';
 import {formatMonth} from '../utils/month';
 import type {MonthPoint} from '../utils/overview';
+import {Readout, ReadoutRow, ReadoutTitle} from './data-tip';
 
 /** Both charts share these insets, so a month's dot sits right above its bar. */
 const Y_WIDTH = 52;
 const RIGHT = 12;
+/** With a mouse, a month on either chart shows a pointer, since a click opens it. */
+const POINTER = '[@media(hover:hover)_and_(pointer:fine)]:cursor-pointer';
 
 /**
  * The balance line, then what was kept each month on the same x slots. One press-and-slide surface covers both:
@@ -39,12 +44,6 @@ export function HistoryCharts({
   return (
     <ChartTouchArea className='flex min-h-0 flex-1 flex-col gap-5'>
       <BalanceChart months={months} currency={currency} onPick={onPick} onActive={setActive} />
-      <p
-        className='-mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground'
-        style={{paddingLeft: Y_WIDTH}}
-      >
-        <span>Tap a month to open it</span>
-      </p>
       <KeptStrip months={months} currency={currency} onPick={onPick} active={active} />
     </ChartTouchArea>
   );
@@ -89,6 +88,9 @@ function BalanceChart({
     .map((d) => d.index);
   const first = known[0];
   const last = known[known.length - 1];
+  // A month's name alone says which one opens, unless the span holds that month in two years.
+  const ambiguous = (month: string) =>
+    months.filter((point) => point.month.slice(5) === month.slice(5)).length > 1;
   return (
     // Beside the details it fills their height (12rem to 40rem), so neither column leaves a gap below it.
     <div
@@ -96,7 +98,7 @@ function BalanceChart({
       className='flex min-h-56 flex-1 flex-col sm:min-h-64 @[60rem]:max-h-[40rem] @[60rem]:min-h-48'
     >
       <ChartContainer
-        className='aspect-auto min-h-0 w-full flex-1'
+        className={cn('aspect-auto min-h-0 w-full flex-1', POINTER)}
         config={{balance: {color: 'hsl(var(--chart-primary))'}}}
         role='img'
         aria-label={
@@ -108,6 +110,8 @@ function BalanceChart({
         <ComposedChart
           data={data}
           margin={{left: 0, right: RIGHT, top: 10, bottom: 0}}
+          // Recharts sets its own cursor; the container's applies instead.
+          style={{cursor: 'inherit'}}
           onClick={(_state, event) => {
             // From where the click landed, not the tooltip: a tap or click without a hover first has no active month.
             const plot = plotRef.current?.getBoundingClientRect();
@@ -153,7 +157,7 @@ function BalanceChart({
             activeDot={{r: 4}}
           />
           <ChartTooltip
-            cursor={{stroke: 'hsl(var(--border))'}}
+            cursor={<MonthBand count={n} />}
             // A month without a balance still reads out what was kept.
             filterNull={false}
             content={({active, payload}) => {
@@ -161,16 +165,17 @@ function BalanceChart({
               if (!active || !row) return null;
               const point = row.point;
               return (
-                <div className='grid min-w-48 gap-1 border bg-card p-2.5 text-xs shadow-sm'>
-                  <p className='font-semibold'>
+                <Readout>
+                  <ReadoutTitle note={point.complete ? undefined : 'so far'}>
                     {formatMonth(point.month, 'MMMM yyyy')}
-                    {!point.complete && (
-                      <span className='font-normal text-muted-foreground'> · so far</span>
-                    )}
+                  </ReadoutTitle>
+                  <ReadoutRow label='Balance' value={wholeCents(point.balance, currency)} strong />
+                  <ReadoutRow label='Kept' value={signed(point.kept, currency)} />
+                  {/* The month's slot is what opens it; this only says so. */}
+                  <p className='whitespace-nowrap text-muted-foreground'>
+                    Open {formatMonth(point.month, ambiguous(point.month) ? 'MMMM yyyy' : 'MMMM')} ›
                   </p>
-                  <TipRow label='Balance' value={wholeCents(point.balance, currency)} strong />
-                  <TipRow label='Kept' value={signed(point.kept, currency)} />
-                </div>
+                </Readout>
               );
             }}
           />
@@ -181,12 +186,39 @@ function BalanceChart({
   );
 }
 
-function TipRow({label, value, strong}: {label: string; value: string; strong?: boolean}) {
+/** The line's cursor: the active month's whole x slot, behind the grid and line as the bar below sits on its mark. */
+function MonthBand({
+  count,
+  points,
+  top,
+  width,
+  height,
+  className,
+}: {
+  count: number;
+  points?: {x: number}[];
+  top?: number;
+  width?: number;
+  height?: number;
+  className?: string;
+}) {
+  const x = points?.[0]?.x;
+  if (x === undefined || width === undefined) return null;
+  const slot = width / count;
   return (
-    <p className='flex items-center justify-between gap-4'>
-      <span className='truncate text-muted-foreground'>{label}</span>
-      <span className={strong ? 'numeric font-semibold' : 'numeric'}>{value}</span>
-    </p>
+    <ZIndexLayer zIndex={DefaultZIndexes.grid - 1}>
+      <rect
+        data-slot='month-band'
+        className={className}
+        x={x - slot / 2}
+        y={top}
+        width={slot}
+        height={height}
+        fill='hsl(var(--accent))'
+        stroke='none'
+        pointerEvents='none'
+      />
+    </ZIndexLayer>
   );
 }
 
@@ -263,7 +295,10 @@ function KeptStrip({
                     inspectBar(event.currentTarget);
                 }}
                 aria-label={label}
-                className='group absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring data-active:bg-accent'
+                className={cn(
+                  'group absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring data-active:bg-accent',
+                  POINTER,
+                )}
               >
                 <span aria-hidden='true' className='absolute inset-x-0 top-1/2 h-px bg-border' />
                 <span

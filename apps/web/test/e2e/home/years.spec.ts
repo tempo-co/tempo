@@ -1,4 +1,4 @@
-import type {Locator} from '@playwright/test';
+import type {Locator, Page} from '@playwright/test';
 
 import {
   EMPLOYER,
@@ -35,6 +35,38 @@ const textEdges = (row: Locator) =>
       };
     }),
   );
+
+/** Scrolls `region` into view and waits for its scroll event, which would close a tip opened before it. */
+const scrollIntoView = (region: Locator) =>
+  region.evaluate(
+    (element) =>
+      new Promise((resolve) => {
+        const before = window.scrollY;
+        element.scrollIntoView({block: 'center'});
+        if (window.scrollY === before) resolve(null);
+        else window.addEventListener('scroll', () => resolve(null), {once: true});
+      }),
+  );
+
+/** The open readout tip, not one still fading out. */
+const openReadout = (page: Page) =>
+  page.locator('[data-slot="readout"]:not([data-state="closed"])');
+
+/** The open readout tip's lines, each checked to sit on one line of text. */
+async function readoutLines(page: Page) {
+  const readout = openReadout(page);
+  await expect(readout).toBeVisible();
+  const lines = await readout.locator('p').evaluateAll((items) =>
+    items.map((item) => ({
+      text: item.textContent ?? '',
+      // Layout height, unaffected by the tip's opening zoom.
+      height: (item as HTMLElement).offsetHeight,
+      line: parseFloat(getComputedStyle(item).lineHeight),
+    })),
+  );
+  for (const {text, height, line} of lines) expect(height, text).toBe(line);
+  return lines.map((item) => item.text);
+}
 
 /** A table row's cells as one line of text each, once the row is on screen. */
 async function cells(row: Locator) {
@@ -128,6 +160,7 @@ test('year by year shows each year, newest first and open; a click anywhere on a
 test('spending by category shows a month on average per year, with small categories folded', async ({
   page,
 }) => {
+  await page.setViewportSize({width: 1440, height: 1000});
   await mockSyntheticHome(page);
   await page.goto('/');
 
@@ -163,12 +196,40 @@ test('spending by category shows a month on average per year, with small categor
     'Housing and utilities, 2026: €1,298 a month · €13,200 in the year so far',
   );
   await expect(housing.nth(0)).toHaveCSS('font-weight', '600');
-  // A focused cell shows the same as a tip; figures carry no native browser tooltips.
+  // A focused cell reads out its year as a tip, each figure on its own line, and the change on the year before;
+  // screen readers hear it as one sentence. Figures carry no native browser tooltips.
+  await scrollIntoView(table);
   await housing.nth(0).focus();
   await expect(page.getByRole('tooltip')).toHaveText(
     'Housing and utilities, 2026: €1,298 a month · €13,200 in the year so far',
   );
+  expect(await readoutLines(page)).toEqual([
+    'Housing and utilities · 2026 so far',
+    'A month€1,298',
+    'So far this year€13,200',
+    'vs 2025+8%',
+  ]);
+  await expect(page.locator('[data-slot="readout"] svg')).toBeVisible();
   await expect(page.getByRole('main').locator('[title]')).toHaveCount(0);
+  // Hovering does the same; the first year has no year before it.
+  await housing.nth(2).hover();
+  await expect(openReadout(page)).toContainText('2024 from Dec');
+  expect(await readoutLines(page)).toEqual([
+    'Housing and utilities · 2024 from Dec',
+    'A month€1,200',
+    'In the year€1,200',
+  ]);
+  // The folded row names its largest categories in that year.
+  await rows.nth(5).getByText('€100').first().focus();
+  await expect(openReadout(page)).toContainText('3 more categories · 2025');
+  expect(await readoutLines(page)).toEqual([
+    '3 more categories · 2025',
+    'A month€100',
+    'In the year€1,200',
+    'Transportation€60 a month',
+    'Entertainment€30 a month',
+    'Health€10 a month',
+  ]);
   // So does a figure without a link, such as a year's total.
   await page.keyboard.press('Escape');
   await expect(page.getByRole('tooltip')).toHaveCount(0);
@@ -176,6 +237,11 @@ test('spending by category shows a month on average per year, with small categor
   await expect(page.getByRole('tooltip')).toHaveText(
     'Total, 2026: €2,233 a month · €22,700 in the year so far',
   );
+  expect(await readoutLines(page)).toEqual([
+    'Total · 2026 so far',
+    'A month€2,233',
+    'So far this year€22,700',
+  ]);
   await expect(housing.nth(2)).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const search = async (link: Locator) =>
     decodeURIComponent((await link.getAttribute('href')) ?? '');
@@ -269,6 +335,26 @@ test('income by source names each source with its logo or icon and lines up with
   );
   await expectSourceTile(rows.nth(1), long, 'logo');
   await expectSourceTile(rows.nth(2), 'Example Bonus', 'icon');
+  // A cell's tip leads with the source's tile; a long name is cut short and every line stays one line.
+  await page.keyboard.press('Escape');
+  await scrollIntoView(table);
+  await rows.nth(1).getByRole('link').nth(1).focus();
+  const readout = openReadout(page);
+  await expect(readout).toContainText('· 2025');
+  expect(await readoutLines(page)).toEqual([
+    `${long} · 2025`,
+    'A month€3,000',
+    'In the year€36,000',
+    'vs 20240%',
+  ]);
+  await expect(readout.locator('img')).toBeVisible();
+  expect(
+    await readout
+      .locator('p')
+      .first()
+      .locator('.truncate')
+      .evaluate((name) => name.scrollWidth > name.clientWidth),
+  ).toBe(true);
 
   const spending = page.getByRole('region', {name: 'Spending by category'});
   for (const year of [/^2026/, /^2025$/]) {

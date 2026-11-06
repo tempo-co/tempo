@@ -96,14 +96,32 @@ test('kept bars show the line’s readout on hover and focus, and open their mon
   await expect(bars.getByRole('button').last()).toHaveAccessibleName(
     'November 2026 so far: kept −€1,200',
   );
-  // Hovering a bar shows the line's readout for its month and marks that bar.
+  // Hovering a bar shows the line's readout for its month, ending in what a click opens, and marks that bar and
+  // the month's whole slot on the line. Both charts show a pointer.
   const march = bars.getByRole('button', {name: 'March 2026: kept −€500'});
   const april = bars.getByRole('button', {name: /^April 2026/});
   await march.hover();
   await expect(readout).toBeVisible();
-  await expect(readout).toContainText('March 2026');
-  await expect(readout).toContainText('Kept−€500');
+  await expect(readout.locator('p')).toHaveText([
+    'March 2026',
+    'Balance€18,500',
+    'Kept−€500',
+    'Open March ›',
+  ]);
   await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^March 2026/);
+  const band = homePage.whereYouStand.locator('[data-slot="month-band"]');
+  const [slot, bar] = [await boxOf(band), await boxOf(march)];
+  expect(Math.abs(slot.x - bar.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(slot.width - bar.width)).toBeLessThanOrEqual(1);
+  // The band sits behind the line, which stays in view across it.
+  expect(
+    await band.evaluate((rect) => {
+      const curve = rect.closest('svg')!.querySelector('.recharts-area-curve')!;
+      return !!(rect.compareDocumentPosition(curve) & Node.DOCUMENT_POSITION_FOLLOWING);
+    }),
+  ).toBe(true);
+  await expect(march).toHaveCSS('cursor', 'pointer');
+  await expect(homePage.whereYouStand.locator('.recharts-surface')).toHaveCSS('cursor', 'pointer');
   // Moving on to the next bar keeps the readout up and slides it from one month to the next, as on the line.
   // Like the line's, it first slides in from the chart's edge; let that settle.
   await expect
@@ -126,6 +144,8 @@ test('kept bars show the line’s readout on hover and focus, and open their mon
   // So does focusing one, and the running month reads as so far. Tabbing on keeps the readout up.
   await bars.getByRole('button').nth(-2).focus();
   await expect(readout).toContainText('October 2026');
+  // October is in the span twice, so what opens names its year.
+  await expect(readout).toContainText('Open October 2026 ›');
   const tabbed = framesOf(readout);
   await page.keyboard.press('Tab');
   for (const frame of await tabbed) expect(frame.visibility).toBe('visible');

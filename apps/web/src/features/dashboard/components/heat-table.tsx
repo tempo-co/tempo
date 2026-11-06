@@ -12,8 +12,21 @@ import {categoryDrill, flowDrill, parseCalendarDate} from '../utils/drill-links'
 import {categoryLabel, signedPct} from '../utils/format';
 import {formatWholeMoney, toCents} from '../utils/money';
 import {type MonthPoint, monthsCovered, partCents} from '../utils/overview';
-import {CategoryIconSpacer, CategoryName, SourceName} from './category-name';
-import {DataTip, TIP_FOCUS, TruncatedText} from './data-tip';
+import {
+  CategoryIconSpacer,
+  CategoryName,
+  ReadoutCategoryIcon,
+  SourceName,
+  SourceTile,
+} from './category-name';
+import {
+  DataTip,
+  ReadoutRow,
+  type ReadoutTip,
+  ReadoutTitle,
+  TIP_FOCUS,
+  TruncatedText,
+} from './data-tip';
 import {TextAction} from './text-action';
 
 type Period = BankTransactionBreakdownPeriod;
@@ -41,12 +54,15 @@ type Row = {
   role?: 'more' | 'total';
 };
 
-/** A row's figures for one year: the monthly average, its shading, and where it links. */
+/** How many of the folded rows a "more" cell's tip names. */
+const TIP_FOLDED = 3;
+
+/** A row's figures for one year: the monthly average, its shading, its tip, and where it links. */
 type Cell = {
   period: Period;
   value: number;
   body: string;
-  tip: string;
+  tip: ReadoutTip;
   alpha: number;
   search?: ReturnType<typeof categoryDrill>;
 };
@@ -107,10 +123,12 @@ export function HeatTable({
     historyStart > oldest.start && `from ${format(parseCalendarDate(historyStart), 'MMM')}`;
   const last = months[months.length - 1];
   const running = !last.complete && last.month.startsWith(yearOf(latest));
-  const yearLabel = (period: Period) => {
-    const note = [period === oldest && startNote, period === latest && running && 'so far']
+  const partNote = (period: Period) =>
+    [period === oldest && startNote, period === latest && running && 'so far']
       .filter(Boolean)
       .join(' · ');
+  const yearLabel = (period: Period) => {
+    const note = partNote(period);
     return (
       <span className='numeric'>
         {yearOf(period)}
@@ -149,11 +167,69 @@ export function HeatTable({
     },
   ];
 
-  const change = (row: Row) => {
-    if (!previous) return '';
-    const now = monthly(latest, row.values(latest));
-    const before = monthly(previous, row.values(previous));
-    return before > 0 ? signedPct((now - before) / before) : now > 0 ? 'new' : '–';
+  /** A row's monthly average in `period` against the year before's, as the change column shows it. */
+  const changeIn = (row: Row, period: Period, before: Period) => {
+    const now = monthly(period, row.values(period));
+    const then = monthly(before, row.values(before));
+    return then > 0 ? signedPct((now - then) / then) : now > 0 ? 'new' : '–';
+  };
+  const change = (row: Row) => (previous ? changeIn(row, latest, previous) : '');
+  const money = (cents: number) => formatWholeMoney(cents / 100, currency);
+  /** A cell's readout: the row and year, a month on average, the year's total, and the change on the year before. */
+  const tipOf = (row: Row, period: Period, index: number): ReadoutTip => {
+    const value = row.values(period);
+    const average = monthly(period, value);
+    const before = periods[index + 1];
+    const note = [yearOf(period), partNote(period)].filter(Boolean).join(' ');
+    // Only the running year is so far; a first year cut at the start of history is whole from there.
+    const soFar = period === latest && running;
+    const folded =
+      row.role === 'more'
+        ? rest
+            .map((key) => ({key, cents: cell(period, key)}))
+            .filter((part) => part.cents > 0)
+            .sort((a, b) => b.cents - a.cents)
+            .slice(0, TIP_FOLDED)
+        : [];
+    return {
+      label: `${row.label}, ${yearOf(period)}: ${money(average)} a month · ${money(value)} in the year${soFar ? ' so far' : ''}`,
+      readout: (
+        <>
+          <ReadoutTitle
+            note={note}
+            icon={
+              row.category ? (
+                <ReadoutCategoryIcon category={row.category} />
+              ) : row.source ? (
+                <SourceTile source={row.source} small />
+              ) : undefined
+            }
+          >
+            {row.name}
+          </ReadoutTitle>
+          <ReadoutRow label='A month' value={money(average)} strong />
+          <ReadoutRow label={soFar ? 'So far this year' : 'In the year'} value={money(value)} />
+          {!row.role && before && (
+            <ReadoutRow
+              label={`vs ${yearOf(before)}`}
+              value={changeIn(row, period, before)}
+              muted
+            />
+          )}
+          {folded.length > 0 && (
+            <div className='mt-1 grid grid-cols-1 gap-1'>
+              {folded.map((part) => (
+                <ReadoutRow
+                  key={part.key}
+                  label={nameOf(part.key)}
+                  value={`${money(monthly(period, part.cents))} a month`}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      ),
+    };
   };
   const cells = (row: Row): Cell[] => {
     const rowMax = Math.max(
@@ -162,7 +238,7 @@ export function HeatTable({
         .filter((period) => !thin(period))
         .map((period) => monthly(period, row.values(period))),
     );
-    return periods.map((period) => {
+    return periods.map((period, index) => {
       const value = row.values(period);
       const average = monthly(period, value);
       const from = period.start < historyStart ? historyStart : period.start;
@@ -170,7 +246,7 @@ export function HeatTable({
         period,
         value,
         body: value !== 0 ? formatWholeMoney(average / 100, currency) : '–',
-        tip: `${row.label}, ${yearOf(period)}: ${formatWholeMoney(average / 100, currency)} a month · ${formatWholeMoney(value / 100, currency)} in the year${period.complete ? '' : ' so far'}`,
+        tip: tipOf(row, period, index),
         alpha:
           !row.role && !thin(period) && value > 0
             ? 0.05 + (Math.max(0, average) / rowMax) * 0.4
@@ -320,7 +396,7 @@ function YearValue({item, lead, className}: {item: Cell; lead?: ReactNode; class
       <Link
         to='/bank-transactions'
         search={item.search}
-        aria-label={item.tip}
+        aria-label={item.tip.label}
         className={cn(
           classes,
           'hover:outline-1 hover:outline-foreground focus-visible:outline-2 focus-visible:outline-ring',
