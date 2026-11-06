@@ -287,7 +287,6 @@ const RECURRING_SERIES_BASE = {
   cadence: 'MONTHLY',
   amountKind: 'FIXED',
   currency: 'EUR',
-  monthlyEquivalent: null,
   amountRange: null,
   recentPayments: [],
   transactionCount: 12,
@@ -319,6 +318,7 @@ export function homeRecurring() {
     name,
     typicalAmount: amount,
     latestAmount: amount,
+    monthlyEquivalent: amount,
     nextExpectedDate: '2026-12-01',
     ...extra,
   });

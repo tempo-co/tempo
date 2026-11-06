@@ -7,6 +7,7 @@ import {
   RENT_KEY,
   USUAL_SPENDING,
   homeHistory,
+  homeRecurring,
   mockSyntheticHome,
   monthTransactions,
 } from '../../data/home-history.data';
@@ -312,13 +313,26 @@ test('Home’s text actions and Load more buttons share one style with the month
   styles.push(await style(merchant.getByRole('link', {name: 'Open in Transactions'})));
   loadMores.push(await style(merchant.getByRole('button', {name: 'Load more'})));
   await page.goto(`/?recurring=open&series=${RENT_KEY}`);
-  loadMores.push(
+  const recurring = page.getByRole('dialog', {name: 'Recurring payments'});
+  styles.push(
     await style(
-      page
-        .getByRole('dialog', {name: 'Recurring payments'})
-        .getByRole('button', {name: 'Load more'}),
+      recurring
+        .getByRole('region', {name: 'Payments'})
+        .getByRole('link', {name: 'Open in Transactions'}),
     ),
   );
+  loadMores.push(await style(recurring.getByRole('button', {name: 'Load more'})));
+  // The recurring list's folds open like Home's "N more" rows.
+  const {lists} = homeRecurring();
+  const [rent, energy] = lists.expenses.series;
+  lists.expenses.series.push(
+    {...rent, key: 'd4'.repeat(16), name: 'Example Old Plan', status: 'ENDED'},
+    {...energy, key: 'e5'.repeat(16), name: 'Example Hidden Plan', hidden: true, flags: []},
+  );
+  await page.route('**/recurring-series?**', (route) => fulfillJson(route, lists));
+  await page.goto('/?recurring=open');
+  styles.push(await style(recurring.getByText('Ended (1)', {exact: true})));
+  styles.push(await style(recurring.getByText('Hidden (1)', {exact: true})));
 
   expect(styles[0].height).toBe(36);
   for (const item of styles) expect(item).toEqual(styles[0]);
