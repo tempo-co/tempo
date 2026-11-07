@@ -1,0 +1,45 @@
+# Gives staging its own tailnet device (https://tempo-staging.<tailnet>.ts.net) for testing from
+# other tailnet devices such as a phone. Installed to ~/.config/tempo-staging/tailscale.compose.yml
+# by `ops/install.sh staging` and run on the staging rootless daemon. The node is logged in once and
+# keeps its identity in the state volume, so no auth key is passed after that. Separate project, so
+# staging deploys never recreate it unless its pinned image changes.
+name: tempo-staging-tailscale
+
+services:
+  tailscale:
+    image: tailscale/tailscale:v1.104.4@sha256:ed6480b33c6eb67c9cbd203ed42b9fb57e361986725b6856def71b7a3d9e276c
+    hostname: tempo-staging
+    restart: unless-stopped
+    # Userspace networking needs no capabilities.
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      TS_HOSTNAME: tempo-staging
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_USERSPACE: 'true'
+      TS_EXTRA_ARGS: --accept-dns=false
+    volumes:
+      - tempo_staging_tailscale_state:/var/lib/tailscale
+      - ./tailscale-serve.json:/config/serve.json:ro
+    networks:
+      tailscale:
+        # Web's Nginx trusts X-Forwarded-For only from this address.
+        ipv4_address: 10.213.47.2
+    # Fails until the node is logged in and running.
+    healthcheck:
+      test: ['CMD', 'tailscale', 'status', '--peers=false']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 2s
+
+networks:
+  tailscale:
+    name: tempo-staging-tailscale
+    external: true
+
+volumes:
+  tempo_staging_tailscale_state:

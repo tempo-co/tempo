@@ -29,6 +29,8 @@ case ${1:-} in
         ln -sfn "$HOME/.local/lib/tempo-deploy/deploy.sh" "$HOME/.local/bin/tempo-deploy"
         copy 644 "$REPO/ops/staging/docker-compose.yml" "$HOME/.config/tempo-staging/staging.compose.yml"
         copy 700 "$REPO/ops/staging/tempo-staging-refresh.sh" "$HOME/.config/tempo-staging/tempo-staging-refresh.sh"
+        copy 644 "$REPO/ops/staging/tailscale.compose.yml" "$HOME/.config/tempo-staging/tailscale.compose.yml"
+        copy 644 "$REPO/ops/staging/tailscale-serve.json" "$HOME/.config/tempo-staging/tailscale-serve.json"
         ;;
     claude-bridge)
         [[ $EUID != 0 ]] || { echo 'run the bridge install as the Claude subscription user, not root' >&2; exit 1; }
