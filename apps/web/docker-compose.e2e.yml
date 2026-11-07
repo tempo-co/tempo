@@ -63,8 +63,6 @@ services:
       SESSION_EXPIRATION: 7d
       SESSION_REDIS_KEY: sess
       REDIS_URL: redis://redis:6379
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
       BANKING_INTEGRATION_ENABLED: 'true'
       ENABLE_BANKING_API_URL: https://api.example.invalid
       ENABLE_BANKING_APPLICATION_ID: tempo-web-e2e-application
@@ -73,7 +71,6 @@ services:
       BANKING_SESSION_ENCRYPTION_KEY_B64: dGVtcG8td2ViLWUyZS1zeW50aGV0aWMta2V5LTAwMzI=
       EMAIL_HOST: mailpit
       EMAIL_PORT: 1025
-      EMAIL_UI_PORT: 8025
       EMAIL_UI_URL: http://localhost:8025
       EMAIL_VERIFICATION_EXPIRATION: 15m
       EMAIL_VERIFICATION_REDIS_KEY: email_ver
