@@ -17,7 +17,7 @@ import {
 	validSearchRequest,
 } from './validation.mjs';
 
-const setfacl = (args) => promisify(execFile)('setfacl', args, {timeout: 5000});
+const runSetfacl = (args) => promisify(execFile)('setfacl', args, {timeout: 5000});
 
 // Model and effort come from the validated request, so the CLI arguments start with them per call.
 const cliArgs = ({instructions, schema}, tools, extra = []) => [
@@ -123,8 +123,12 @@ export async function startBridge({
 	timeoutMs = 120_000,
 	maxOutputBytes = 256 * 1024,
 	clientUid,
+	setfacl = runSetfacl,
 } = {}) {
-	if (clientUid !== undefined && (!Number.isSafeInteger(clientUid) || clientUid <= 0 || clientUid === process.getuid()))
+	if (
+		clientUid !== undefined &&
+		(!Number.isSafeInteger(clientUid) || clientUid <= 0 || clientUid >= 2 ** 32 - 1 || clientUid === process.getuid())
+	)
 		throw new Error('Invalid Claude bridge client uid.');
 	socketPath ??= path.join(env.XDG_RUNTIME_DIR, 'tempo-claude', 'bridge.sock');
 	if (typeof socketPath !== 'string' || !path.isAbsolute(socketPath))
@@ -374,11 +378,13 @@ export async function startBridge({
 	await chmod(socketPath, 0o600);
 	if (clientUid !== undefined) {
 		// The API container runs as its own uid. It may open the socket by name, and nothing else in the directory.
+		// --set replaces the whole ACL, so entries left from an earlier uid or a default ACL never come back.
 		try {
-			await setfacl(['-m', `u:${clientUid}:x`, directory]);
-			await setfacl(['-m', `u:${clientUid}:rw`, socketPath]);
+			await setfacl(['-k', '--set', `u::rwx,u:${clientUid}:--x,g::---,m::--x,o::---`, directory]);
+			await setfacl(['--set', `u::rw-,u:${clientUid}:rw-,g::---,m::rw-,o::---`, socketPath]);
 		} catch (error) {
 			await close();
+			await runSetfacl(['-b', '-k', directory]).catch(() => {});
 			throw new Error('Could not grant the client access to the Claude socket.', {cause: error});
 		}
 	}

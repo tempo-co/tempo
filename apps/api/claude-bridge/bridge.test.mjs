@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync, spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {mkdtemp, readFile, readdir, rm, stat} from 'node:fs/promises';
+import {access, mkdir, mkdtemp, readFile, readdir, rm, stat} from 'node:fs/promises';
 import http from 'node:http';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -74,9 +74,10 @@ function request(socketPath, body = payload, options = {}) {
 	});
 }
 
-async function setup(t, {mode = 'success', ...options} = {}) {
+async function setup(t, {mode = 'success', prepare, ...options} = {}) {
 	const root = await mkdtemp(path.join(tmpdir(), 'tempo-bridge-test-'));
 	t.after(() => rm(root, {recursive: true, force: true}));
+	await prepare?.(path.join(root, 'private'));
 	const calls = [];
 	const {startBridge} = await import('./bridge.mjs');
 	const bridge = await startBridge({
@@ -256,13 +257,27 @@ test('isolates CLI environment, stdin and empty working directory', async (t) =>
 });
 
 test('grants a configured client uid the socket and only search access to its directory', async (t) => {
-	const {socketPath} = await setup(t, {clientUid: 65530});
-	const acl = (file) => execFileSync('getfacl', ['--numeric', '--omit-header', file], {encoding: 'utf8'});
-	assert.match(acl(path.dirname(socketPath)), /^user:65530:--x$/m);
-	assert.match(acl(socketPath), /^user:65530:rw-$/m);
-	assert.match(acl(socketPath), /^group::---$/m);
-	assert.match(acl(socketPath), /^other::---$/m);
+	// A directory left with another uid's entry, masked by the unit's chmod 700, and a default ACL.
+	const prepare = async (directory) => {
+		await mkdir(directory, {mode: 0o700});
+		execFileSync('setfacl', ['-m', 'u:65531:rwx', '-d', '-m', 'u:65532:rw', directory]);
+		execFileSync('chmod', ['700', directory]);
+	};
+	const {socketPath} = await setup(t, {clientUid: 65530, prepare});
+	const acl = (file) => execFileSync('getfacl', ['--numeric', '--omit-header', file], {encoding: 'utf8'}).trim();
+	assert.equal(acl(path.dirname(socketPath)), 'user::rwx\nuser:65530:--x\ngroup::---\nmask::--x\nother::---');
+	assert.equal(acl(socketPath), 'user::rw-\nuser:65530:rw-\ngroup::---\nmask::rw-\nother::---');
 	assert.deepEqual(await request(socketPath), {status: 200, body: expected});
+});
+
+test('fails to start, with no socket left behind, when the client cannot be granted access', async (t) => {
+	const setfacl = async () => {
+		throw new Error('setfacl unavailable');
+	};
+	let socketPath;
+	const prepare = async (directory) => (socketPath = path.join(directory, 'bridge.sock'));
+	await assert.rejects(setup(t, {clientUid: 65530, setfacl, prepare}), /Could not grant the client access/);
+	await assert.rejects(access(socketPath), {code: 'ENOENT'});
 });
 
 test('refuses to start with a client uid that is not another positive uid', async (t) => {
