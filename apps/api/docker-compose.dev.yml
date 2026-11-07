@@ -35,26 +35,6 @@ services:
         host_ip: "::1"
         protocol: tcp
 
-  redisinsight:
-    image: redislabs/redisinsight:3.8.0@sha256:b5e19ee240abef6edb435871b90ff8a210995422e8e018ab61c0339d318a1f84
-    container_name: redisinsight
-    ports:
-      - target: ${REDIS_INSIGHT_PORT}
-        published: "${REDIS_INSIGHT_PORT}"
-        host_ip: 127.0.0.1
-        protocol: tcp
-      - target: ${REDIS_INSIGHT_PORT}
-        published: "${REDIS_INSIGHT_PORT}"
-        host_ip: "::1"
-        protocol: tcp
-    environment:
-      RI_REDIS_HOST: ${REDIS_HOST}
-      RI_REDIS_PORT: ${REDIS_PORT}
-    volumes:
-      - redisinsight_data:/db
-    depends_on:
-      - redis
-
   postgres:
     image: postgres:17.11@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
     restart: always
@@ -75,52 +55,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  pgadmin:
-    image: dpage/pgadmin4:9.19.0@sha256:3591b3d02910dcd817dec6fcaa681c278ba6966945283dd0ea0042731c330c83
-    restart: always
-    container_name: pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-${DB_PASSWORD}}
-    # chmod 600 means only the owner of the file has read/write access
-    entrypoint: /bin/sh -c "chmod 600 /pgpass; /entrypoint.sh;"
-    configs:
-      - source: servers.json
-        target: /pgadmin4/servers.json
-      - source: pgpass
-        target: /pgpass
-    ports:
-      - target: 80
-        published: "${DB_PGADMIN_PORT}"
-        host_ip: 127.0.0.1
-        protocol: tcp
-      - target: 80
-        published: "${DB_PGADMIN_PORT}"
-        host_ip: "::1"
-        protocol: tcp
-    depends_on:
-      - postgres
-
-
 volumes:
   postgres_data:
     driver: local
-  redisinsight_data:
-    driver: local
-
-# automatically connects pgadmin to the database server on startup
-configs:
-  pgpass:
-    content: postgres:${DB_PORT}:*:${DB_USERNAME}:${DB_PASSWORD}
-  servers.json:
-    content: |
-      {"Servers": {"1": {
-        "Group": "Servers",
-        "Name": "${DB_NAME}",
-        "Host": "postgres",
-        "Port": ${DB_PORT},
-        "MaintenanceDB": "${DB_NAME}",
-        "Username": "${DB_USERNAME}",
-        "Password": "${DB_PASSWORD}",
-        "SSLMode": "prefer"
-      }}}

@@ -32,7 +32,6 @@ export const configSchema = z
 		DB_PASSWORD: z.string().min(1),
 		DB_NAME: z.string().min(1),
 		DB_SYNCHRONIZE: strictBooleanEnvSchema,
-		DB_PGADMIN_PORT: portSchema,
 
 		// --- Session ---
 		SESSION_SECRET: z.string().min(1),
@@ -48,7 +47,6 @@ export const configSchema = z
 		REDIS_URL: z.string().url(),
 		REDIS_PORT: portSchema,
 		REDIS_HOST: z.string().min(1),
-		REDIS_INSIGHT_PORT: portSchema,
 
 		// --- AI categorization ---
 		AI_CATEGORIZATION_ENABLED: strictBooleanEnvSchema.default(false),
