@@ -28,7 +28,7 @@ export function MerchantLogoTile({
 }: MerchantLogoTileProps) {
   const filterId = useId();
   const src = transaction.merchantLogoUrl
-    ? `${import.meta.env.VITE_API_URL}${transaction.merchantLogoUrl}/mask-v1`
+    ? `${import.meta.env.VITE_API_URL}${transaction.merchantLogoUrl}/mask-v2`
     : null;
   // A logo that fails to load falls back to the category icon until the URL changes.
   const [failedSrc, setFailedSrc] = useState<string | null>(null);

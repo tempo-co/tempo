@@ -90,6 +90,7 @@ jobs:
                   docker compose -f ops/production.compose.yml config -q
                   docker compose -f ops/tailscale.compose.yml config -q
                   docker compose -f ops/staging/docker-compose.yml --env-file ops/staging/staging.env.example config -q
+                  docker compose -f ops/staging/tailscale.compose.yml config -q
 
     api-lint-format:
         name: API lint & format

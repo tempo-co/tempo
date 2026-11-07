@@ -5,10 +5,8 @@ import {createHash} from 'node:crypto';
 import {REDIS} from '@core/redis/redis.constants';
 
 import {MERCHANT_LOGO_NOT_FOUND} from '../api/constants/banking-messages.constants';
-import {MERCHANT_LOGO_MASK_VERSION, createMerchantLogoMask} from './merchant-logo-mask';
+import {MERCHANT_LOGO_MASK_VERSION, MerchantLogoMaskVersion, createMerchantLogoMask} from './merchant-logo-mask';
 
-const PREFIX = `merchant-logo:${MERCHANT_LOGO_MASK_VERSION}:`;
-const INDEX = `${PREFIX}index`;
 const TTL_SECONDS = 7 * 24 * 60 * 60;
 const MAX_ENTRIES = 256;
 
@@ -37,11 +35,13 @@ export class MerchantLogoMaskService {
 
 	constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
-	async getImage(original: Buffer): Promise<Buffer> {
-		const key = PREFIX + createHash('sha256').update(original).digest('hex');
+	/** Each algorithm version has its own key prefix and bounded index. */
+	async getImage(original: Buffer, version: MerchantLogoMaskVersion = MERCHANT_LOGO_MASK_VERSION): Promise<Buffer> {
+		const prefix = `merchant-logo:${version}:`;
+		const key = prefix + createHash('sha256').update(original).digest('hex');
 		const existing = this.inFlight.get(key);
 		if (existing) return existing;
-		const conversion = this.loadOrCreate(key, original);
+		const conversion = this.loadOrCreate(key, `${prefix}index`, original, version);
 		this.inFlight.set(key, conversion);
 		try {
 			return await conversion;
@@ -50,12 +50,17 @@ export class MerchantLogoMaskService {
 		}
 	}
 
-	private async loadOrCreate(key: string, original: Buffer): Promise<Buffer> {
+	private async loadOrCreate(
+		key: string,
+		index: string,
+		original: Buffer,
+		version: MerchantLogoMaskVersion,
+	): Promise<Buffer> {
 		const cached = await this.redis.getBuffer(key);
 		if (cached) return cached;
-		const image = await createMerchantLogoMask(original);
+		const image = await createMerchantLogoMask(original, version);
 		if (!image) throw new NotFoundException(MERCHANT_LOGO_NOT_FOUND);
-		await this.redis.eval(STORE_MASK, 2, key, INDEX, image, TTL_SECONDS, MAX_ENTRIES);
+		await this.redis.eval(STORE_MASK, 2, key, index, image, TTL_SECONDS, MAX_ENTRIES);
 		return image;
 	}
 }
