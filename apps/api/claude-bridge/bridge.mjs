@@ -1,9 +1,10 @@
-import {spawn} from 'node:child_process';
+import {execFile, spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {chmod, lstat, mkdir, mkdtemp, realpath, rm, unlink, writeFile} from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {promisify} from 'node:util';
 
 import contract from './contract.json' with {type: 'json'};
 import merchantContract from './merchant-contract.json' with {type: 'json'};
@@ -15,6 +16,8 @@ import {
 	validResponse,
 	validSearchRequest,
 } from './validation.mjs';
+
+const runSetfacl = (args) => promisify(execFile)('setfacl', args, {timeout: 5000});
 
 // Model and effort come from the validated request, so the CLI arguments start with them per call.
 const cliArgs = ({instructions, schema}, tools, extra = []) => [
@@ -119,7 +122,14 @@ export async function startBridge({
 	tokenExpiresAt = storedTokenExpiresAt,
 	timeoutMs = 120_000,
 	maxOutputBytes = 256 * 1024,
+	clientUid,
+	setfacl = runSetfacl,
 } = {}) {
+	if (
+		clientUid !== undefined &&
+		(!Number.isSafeInteger(clientUid) || clientUid <= 0 || clientUid >= 2 ** 32 - 1 || clientUid === process.getuid())
+	)
+		throw new Error('Invalid Claude bridge client uid.');
 	socketPath ??= path.join(env.XDG_RUNTIME_DIR, 'tempo-claude', 'bridge.sock');
 	if (typeof socketPath !== 'string' || !path.isAbsolute(socketPath))
 		throw new Error('Absolute Claude socket path required.');
@@ -366,6 +376,18 @@ export async function startBridge({
 		server.listen(socketPath, resolve);
 	});
 	await chmod(socketPath, 0o600);
+	if (clientUid !== undefined) {
+		// The API container runs as its own uid. It may open the socket by name, and nothing else in the directory.
+		// --set replaces the whole ACL, so entries left from an earlier uid or a default ACL never come back.
+		try {
+			await setfacl(['-k', '--set', `u::rwx,u:${clientUid}:--x,g::---,m::--x,o::---`, directory]);
+			await setfacl(['--set', `u::rw-,u:${clientUid}:rw-,g::---,m::rw-,o::---`, socketPath]);
+		} catch (error) {
+			await close();
+			await setfacl(['-b', '-k', directory]).catch(() => {});
+			throw new Error('Could not grant the client access to the Claude socket.', {cause: error});
+		}
+	}
 	async function close() {
 		closing = true;
 		for (const kill of kills) kill();
