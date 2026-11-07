@@ -2,7 +2,10 @@ import sharp, {OutputInfo} from 'sharp';
 
 import {resizeMask} from './mask-resample';
 
-export const MERCHANT_LOGO_MASK_VERSION = 'mask-v1';
+/** `mask-v1` stays served unchanged for cached clients; `mask-v2` adds the ring-window rule below. */
+export const MERCHANT_LOGO_MASK_VERSIONS = ['mask-v1', 'mask-v2'] as const;
+export type MerchantLogoMaskVersion = (typeof MERCHANT_LOGO_MASK_VERSIONS)[number];
+export const MERCHANT_LOGO_MASK_VERSION: MerchantLogoMaskVersion = 'mask-v2';
 const SIZE = 128;
 const MARK_SIZE = 104;
 type Colour = [number, number, number];
@@ -79,7 +82,100 @@ function frameIndices(width: number, height: number): number[] {
 	return frame;
 }
 
-export function sourceForegroundMatte(rgb: Buffer, width: number, height: number) {
+function cornerFieldFor(rgb: Buffer, width: number, height: number, frame: number[]) {
+	const n = Math.max(2, roundEven(Math.min(width, height) * 0.06));
+	const corners: number[] = [];
+	for (let y = 0; y < n; y++)
+		for (let x = 0; x < n; x++)
+			corners.push(
+				y * width + x,
+				y * width + width - n + x,
+				(height - n + y) * width + x,
+				(height - n + y) * width + width - n + x,
+			);
+	const field = fieldMedian(rgb, corners);
+	return {
+		field,
+		cornerAgreement: corners.filter((i) => distance(rgb, i, field) < 0.04).length / corners.length,
+		frameAgreement: frame.filter((i) => distance(rgb, i, field) < 0.04).length / frame.length,
+	};
+}
+
+/**
+ * A ring mark: the edge field is one colour band around a plain, centred disc of the corner colour. Taking the band
+ * as background would turn that empty window into a solid disc of ink, so the corner colour is the background instead.
+ * Only a plain window qualifies; a badge with any mark inside (a glyph, a dot, an "O") keeps its field as background.
+ */
+function isRingWindow(
+	rgb: Buffer,
+	width: number,
+	height: number,
+	radius: Float64Array,
+	frame: number[],
+	background: Colour,
+	cornerField: Colour,
+): boolean {
+	const count = width * height;
+	const outer = new Uint8Array(count);
+	const queue: number[] = [];
+	const field = (i: number) => radius[i] <= 1 && distance(rgb, i, background) < 0.04;
+	for (let i = 0; i < count; i++)
+		if (radius[i] >= 0.84 && radius[i] <= 0.98 && field(i)) {
+			outer[i] = 1;
+			queue.push(i);
+		}
+	const spread = (mark: Uint8Array, open: (i: number) => boolean) => {
+		for (let head = 0; head < queue.length; head++) {
+			const i = queue[head];
+			for (const next of [i - width, i + width, i % width ? i - 1 : -1, i % width < width - 1 ? i + 1 : -1])
+				if (next >= 0 && next < count && !mark[next] && open(next)) {
+					mark[next] = 1;
+					queue.push(next);
+				}
+		}
+		queue.length = 0;
+	};
+	spread(outer, field);
+	const outside = new Uint8Array(count);
+	for (const i of frame)
+		if (!outer[i] && !outside[i]) {
+			outside[i] = 1;
+			queue.push(i);
+		}
+	spread(outside, (i) => !outer[i]);
+	let area = 0,
+		sumX = 0,
+		sumY = 0,
+		plain = 0;
+	for (let i = 0; i < count; i++) {
+		if (outer[i] || outside[i]) continue;
+		area++;
+		sumX += (i % width) + 0.5;
+		sumY += Math.floor(i / width) + 0.5;
+		if (distance(rgb, i, cornerField) < 0.1) plain++;
+	}
+	if (area < 0.05 * Math.PI * (width / 2) * (height / 2) || plain / area < 0.9) return false;
+	const cx = sumX / area,
+		cy = sumY / area;
+	if (Math.hypot(cx - width / 2, cy - height / 2) > 0.06 * Math.min(width, height)) return false;
+	const r = Math.sqrt(area / Math.PI);
+	let inter = 0,
+		disc = 0;
+	for (let i = 0; i < count; i++) {
+		const inside = Math.hypot((i % width) + 0.5 - cx, Math.floor(i / width) + 0.5 - cy) <= r;
+		disc += Number(inside);
+		if (inside && !outer[i] && !outside[i]) inter++;
+	}
+	// Rings have round windows (0.98+); padded badge glyphs like hexagons or rounded squares score 0.91-0.93.
+	return inter / (area + disc - inter) >= 0.96;
+}
+
+export function sourceForegroundMatte(
+	rgb: Buffer,
+	width: number,
+	height: number,
+	version: MerchantLogoMaskVersion = MERCHANT_LOGO_MASK_VERSION,
+) {
 	const count = width * height;
 	const radius = new Float64Array(count);
 	const bins = new Map<number, number[]>();
@@ -107,25 +203,14 @@ export function sourceForegroundMatte(rgb: Buffer, width: number, height: number
 	let background = fieldMedian(rgb, dominant);
 	const dominance = dominant.length / edgeCount;
 	const frame = frameIndices(width, height);
+	const corner = cornerFieldFor(rgb, width, height, frame);
+	const cornerField = corner.field;
+	const distinctCorners =
+		corner.cornerAgreement > 0.95 &&
+		corner.frameAgreement > 0.8 &&
+		Math.max(...cornerField.map((v, c) => Math.abs(v - background[c]))) > 0.1;
 	if (dominance < 0.5) {
-		const n = Math.max(2, roundEven(Math.min(width, height) * 0.06));
-		const corners: number[] = [];
-		for (let y = 0; y < n; y++)
-			for (let x = 0; x < n; x++)
-				corners.push(
-					y * width + x,
-					y * width + width - n + x,
-					(height - n + y) * width + x,
-					(height - n + y) * width + width - n + x,
-				);
-		const cornerField = fieldMedian(rgb, corners);
-		const cornerAgreement = corners.filter((i) => distance(rgb, i, cornerField) < 0.04).length / corners.length;
-		const frameAgreement = frame.filter((i) => distance(rgb, i, cornerField) < 0.04).length / frame.length;
-		if (
-			cornerAgreement > 0.95 &&
-			frameAgreement > 0.8 &&
-			Math.max(...cornerField.map((v, c) => Math.abs(v - background[c]))) > 0.1
-		) {
+		if (distinctCorners) {
 			const candidate = matteFor(rgb, cornerField);
 			// Only the selected field is a barrier. Preserve substantial white detail enclosed by that field.
 			const open = Uint8Array.from({length: count}, (_, i) => Number(distance(rgb, i, background) >= 0.04));
@@ -157,6 +242,13 @@ export function sourceForegroundMatte(rgb: Buffer, width: number, height: number
 			if (filled / inner < 0.75 && enclosed / count <= 0.01) background = cornerField;
 		}
 	}
+	if (
+		version !== 'mask-v1' &&
+		background !== cornerField &&
+		distinctCorners &&
+		isRingWindow(rgb, width, height, radius, frame, background, cornerField)
+	)
+		background = cornerField;
 	const matte = matteFor(rgb, background);
 	for (let i = 0; i < count; i++) if (radius[i] > 1) matte[i] = 0;
 	return {matte, background, dominance, frame};
@@ -225,7 +317,10 @@ function liftReadableInk(
 }
 
 /** Pure cached-bitmap conversion. No source writes, identities, providers or runtime Python. */
-export async function createMerchantLogoMask(image: Buffer): Promise<Buffer | null> {
+export async function createMerchantLogoMask(
+	image: Buffer,
+	version: MerchantLogoMaskVersion = MERCHANT_LOGO_MASK_VERSION,
+): Promise<Buffer | null> {
 	let decoded: {data: Buffer; info: OutputInfo};
 	try {
 		decoded = await sharp(image, {limitInputPixels: SIZE * SIZE})
@@ -240,7 +335,7 @@ export async function createMerchantLogoMask(image: Buffer): Promise<Buffer | nu
 		data: rgb,
 		info: {width, height},
 	} = decoded;
-	const field = sourceForegroundMatte(rgb, width, height);
+	const field = sourceForegroundMatte(rgb, width, height, version);
 	if (!field) return null;
 	const {matte, background, dominance, frame} = field;
 	const alpha = aospAlpha(rgb);

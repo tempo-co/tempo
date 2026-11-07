@@ -348,7 +348,7 @@ inspector keeps its `40px` tile. All leading tiles share these theme tokens:
 | `transaction-tile-ink` | `#8F4032` | `#E59A7B` |
 | `transaction-tile-edge` | `#D0B8A9` | `#59413A` |
 
-The API's `mask-v1` derivative supplies a centred mark of at most `104px` on a `128px` canvas.
+The API's `mask-v2` derivative supplies a centred mark of at most `104px` on a `128px` canvas.
 The shared `MerchantLogoTile` tints its continuous alpha with the ink token; theme changes reuse
 the loaded image. Missing or failed derivatives fall back to the matching Clay glyph, including
 when an older API does not expose the derivative. A changed source version retries the image.

@@ -1,11 +1,12 @@
-import {Controller, Get, Param, ParseUUIDPipe, Res, StreamableFile} from '@nestjs/common';
+import {Controller, Get, NotFoundException, Param, ParseUUIDPipe, Res, StreamableFile} from '@nestjs/common';
 import {Throttle, minutes} from '@nestjs/throttler';
 import {Response} from 'express';
 
 import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 
-import {MERCHANT_LOGO_MASK_VERSION} from './merchant-logo-mask';
+import {MERCHANT_LOGO_NOT_FOUND} from '../api/constants/banking-messages.constants';
+import {MERCHANT_LOGO_MASK_VERSIONS, MerchantLogoMaskVersion} from './merchant-logo-mask';
 import {MerchantLogoMaskService} from './merchant-logo-mask.service';
 import {MerchantLogoService} from './merchant-logo.service';
 
@@ -16,17 +17,21 @@ export class MerchantLogoController {
 		private readonly masks: MerchantLogoMaskService,
 	) {}
 
-	@Get(`:logoId/:version/${MERCHANT_LOGO_MASK_VERSION}`)
+	/** Every mask algorithm version stays served, so clients holding an older URL keep their logo. */
+	@Get(':logoId/:version/:algorithm')
 	@Throttle({default: {limit: 1200, ttl: minutes(1)}})
 	async getMask(
 		@CurrentAccount() account: Account,
 		@Param('logoId', ParseUUIDPipe) logoId: string,
 		@Param('version') version: string,
+		@Param('algorithm') algorithm: string,
 		@Res({passthrough: true}) response: Response,
 	): Promise<StreamableFile> {
+		if (!MERCHANT_LOGO_MASK_VERSIONS.some((known) => known === algorithm))
+			throw new NotFoundException(MERCHANT_LOGO_NOT_FOUND);
 		// Recheck ownership, READY status, version and feature flag before any shared derivative lookup.
 		const original = await this.merchantLogoService.getLogoImage(account.id, logoId, version);
-		const image = await this.masks.getImage(original);
+		const image = await this.masks.getImage(original, algorithm as MerchantLogoMaskVersion);
 		return this.png(response, image);
 	}
 
