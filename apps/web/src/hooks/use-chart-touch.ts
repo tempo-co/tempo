@@ -1,4 +1,4 @@
-import {createContext, useCallback, useContext, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import type {MouseEvent, PointerEvent, TouchEvent} from 'react';
 
 const HOLD_MS = 250;
@@ -12,21 +12,11 @@ type Gesture = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-type ChartTouchState = {touch: boolean; inspecting: boolean};
-
-/** Set by a chart's touch area; null outside one. */
-export const ChartTouchContext = createContext<ChartTouchState | null>(null);
-
-/** Whether a touch is inspecting the surrounding chart, for marks drawn beside it. */
-export function useChartTouchState(): ChartTouchState {
-  return useContext(ChartTouchContext) ?? {touch: false, inspecting: false};
-}
-
 /**
  * Shows the readout of the chart inside `area` at `x`, through Recharts' normal mouse path. Only x picks the month,
- * so marks beside the chart that share its x slots can inspect it too: the event lands at the chart's middle height.
+ * so a finger on the axis labels inspects it too: the event lands at the chart's middle height.
  */
-export function inspectChartAt(area: Element | null, x: number) {
+function inspectChartAt(area: Element | null, x: number) {
   const chart = area?.querySelector('.recharts-wrapper');
   if (!chart) return;
   const box = chart.getBoundingClientRect();
@@ -40,7 +30,7 @@ export function inspectChartAt(area: Element | null, x: number) {
 }
 
 /** Hides the readout of the chart inside `area`. */
-export function endChartInspection(area: Element | null) {
+function endChartInspection(area: Element | null) {
   area
     ?.querySelector('.recharts-wrapper')
     ?.dispatchEvent(new window.MouseEvent('mouseout', {bubbles: true}));
@@ -57,7 +47,7 @@ export function useChartTouch() {
 
   // Recharts handles mouse/touch-move, but not pointer events or stationary touch-down.
   // Bridge inspection coordinates through its normal mouse event path, including a hold; a finger on the axis
-  // labels or on marks beside the chart inspects the month above it.
+  // labels inspects the month above it.
   const point = (x: number) => inspectChartAt(ref.current, x);
   const leave = () => endChartInspection(ref.current);
 

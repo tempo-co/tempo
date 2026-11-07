@@ -9,14 +9,14 @@ import {parseCalendarDate, periodDrill} from '../utils/drill-links';
 import {pct, signed, signedPct, wholeCents} from '../utils/format';
 import {formatMonth} from '../utils/month';
 import {type MonthPoint, type Overview, SPANS, type Span, spanMonths} from '../utils/overview';
-import {HistoryCharts, HistoryChartsSkeleton} from './history-charts';
+import {BalanceChart, BalanceChartSkeleton} from './balance-chart';
 import {LoadingLabel, TextBone} from './loading';
 import {RepeatsBlock} from './repeats-block';
 import {TextAction} from './text-action';
 
 /**
- * Where the owner stands over a span: the total balance and its change, the balance line, what was kept each
- * month on the same axis, the span's figures and what repeats. Any month opens over Home.
+ * Where the owner stands over a span: the total balance and its change, the balance line, the span's figures and
+ * what repeats. Any month opens over Home.
  *
  * Until the history arrives, every part holds its place at its loaded size, so nothing moves when it fills in;
  * what repeats loads on its own.
@@ -51,9 +51,9 @@ export function WhereYouStand({
           <SpanSwitch value={span} onChange={setSpan} />
         </div>
         {overview && spanned ? (
-          <HistoryCharts months={spanned.shown} currency={overview.currency} onPick={onOpenMonth} />
+          <BalanceChart months={spanned.shown} currency={overview.currency} onPick={onOpenMonth} />
         ) : (
-          <HistoryChartsSkeleton />
+          <BalanceChartSkeleton />
         )}
       </div>
       <div className='grid min-w-0 content-start gap-6 border-t pt-5 @[60rem]:border-t-0 @[60rem]:border-l @[60rem]:pt-0 @[60rem]:pl-6'>

@@ -63,10 +63,12 @@ test('Home refreshes its history and the review badge every 30 seconds while vis
 }) => {
   const state = await mockDerivedData(page);
   await page.goto('/');
-  const october = homePage.whereYouStand
-    .getByRole('list', {name: 'Kept each month'})
-    .getByRole('button', {name: /^October 2026/});
-  await expect(october).toHaveAccessibleName('October 2026: kept +€1,000');
+  // The span's kept figure includes October's.
+  const kept = homePage.whereYouStand
+    .getByRole('region', {name: 'This span'})
+    .getByText('Kept', {exact: true})
+    .locator('..');
+  await expect(kept).toHaveText('Kept+€9,300');
   await expect(page.getByRole('link', {name: 'Transactions, 4 to review'}).first()).toBeVisible();
   await expect.poll(() => state.reads).toEqual({flow: 1, categories: 1, review: 1});
 
@@ -74,7 +76,7 @@ test('Home refreshes its history and the review badge every 30 seconds while vis
   await page.clock.runFor(29_000);
   expect(state.reads).toEqual({flow: 1, categories: 1, review: 1});
   await page.clock.runFor(1_500);
-  await expect(october).toHaveAccessibleName('October 2026: kept +€600');
+  await expect(kept).toHaveText('Kept+€8,900');
   await expect(page.getByRole('link', {name: 'Transactions', exact: true}).first()).toBeVisible();
   await expect.poll(() => state.reads).toEqual({flow: 2, categories: 2, review: 2});
   // A background refresh keeps the rendered history instead of flashing skeletons.

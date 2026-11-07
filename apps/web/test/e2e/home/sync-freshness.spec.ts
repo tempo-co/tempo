@@ -68,10 +68,12 @@ test('Home refreshes its history and the review badge when a polled sync complet
     return fulfillJson(route, {...HOME_REVIEW_COUNTS, needsReview: completed ? 3 : 2});
   });
   await page.goto('/');
-  const october = homePage.whereYouStand
-    .getByRole('list', {name: 'Kept each month'})
-    .getByRole('button', {name: /^October 2026/});
-  await expect(october).toHaveAccessibleName('October 2026: kept +€1,000');
+  // The span's kept figure includes October's.
+  const kept = homePage.whereYouStand
+    .getByRole('region', {name: 'This span'})
+    .getByText('Kept', {exact: true})
+    .locator('..');
+  await expect(kept).toHaveText('Kept+€9,300');
   await expect(page.getByRole('link', {name: 'Transactions, 4 to review'}).first()).toBeVisible();
   expect(reads).toEqual({flow: 1, review: 1});
 
@@ -84,7 +86,7 @@ test('Home refreshes its history and the review badge when a polled sync complet
   completed = true;
   current = {...current, syncStatus: 'SUCCEEDED', lastSyncedAt: '2026-11-05T12:00:30.000Z'};
   await expect.poll(() => connectionReads, {timeout: 15_000}).toBe(3);
-  await expect(october).toHaveAccessibleName('October 2026: kept +€600');
+  await expect(kept).toHaveText('Kept+€8,900');
   await expect(page.getByRole('link', {name: 'Transactions, 5 to review'}).first()).toBeVisible();
   await expect(page).toHaveURL('/');
 });

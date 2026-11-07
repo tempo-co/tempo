@@ -90,16 +90,12 @@ const brokenAmounts = (page: Page) =>
       .map((element) => element.textContent),
   );
 
-/**
- * Visible links and buttons under 44px in either direction, inside `selector`. A kept bar is as wide as its month's
- * slot in the chart; the year table opens the same months.
- */
+/** Visible links and buttons under 44px in either direction, inside `selector`. */
 const smallTargets = (page: Page, selector: string) =>
   page.evaluate(
     (root) =>
       Array.from(document.querySelectorAll<HTMLElement>(`${root} a, ${root} button`))
         .filter((element) => element.offsetParent !== null)
-        .filter((element) => !element.closest('[aria-label="Kept each month"]'))
         .filter((element) => {
           const box = element.getBoundingClientRect();
           return box.height < 43.5 || box.width < 43.5;
@@ -176,18 +172,18 @@ for (const [name, history] of [
 /** How far the chart column and the details column end apart, in px. */
 async function columnGap(page: Page) {
   const card = page.getByRole('region', {name: 'Where you stand'});
-  const [kept, details, repeats] = await Promise.all([
-    boxOf(card.getByRole('list', {name: 'Kept each month'})),
+  const [chart, details, repeats] = await Promise.all([
+    boxOf(card.locator('[data-slot="chart"]')),
     boxOf(card.getByRole('region', {name: 'This span'})),
     card
       .getByRole('region', {name: 'Repeats'})
       .boundingBox()
       .catch(() => null),
   ]);
-  // Side by side, the details to the right of the bars.
-  expect(details.x).toBeGreaterThanOrEqual(kept.x + kept.width);
+  // Side by side, the details to the right of the chart.
+  expect(details.x).toBeGreaterThanOrEqual(chart.x + chart.width);
   const right = repeats ?? details;
-  return Math.abs(right.y + right.height - (kept.y + kept.height));
+  return Math.abs(right.y + right.height - (chart.y + chart.height));
 }
 
 for (const width of [1000, 1024, 1440]) {

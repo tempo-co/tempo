@@ -82,7 +82,16 @@ function framesOf(readout: Locator) {
   );
 }
 
-test('kept bars show the line’s readout on hover and focus, and open their month', async ({
+/** Where month `index` of `count` sits on the balance chart: its x slot inside the axes, at the plot's middle. */
+async function monthSlot(plot: Locator, index: number, count: number) {
+  const box = await boxOf(plot);
+  // The y axis takes 52px on the left, the plot's margin 12px on the right (Y_WIDTH and RIGHT in balance-chart.tsx).
+  const width = (box.width - 52 - 12) / count;
+  const x = box.x + 52 + width * index;
+  return {x, width, centre: {x: Math.round(x + width / 2), y: Math.round(box.y + box.height / 2)}};
+}
+
+test('the balance chart reads out the month under the pointer, and a click opens it', async ({
   page,
   homePage,
 }) => {
@@ -90,17 +99,13 @@ test('kept bars show the line’s readout on hover and focus, and open their mon
   await mockSyntheticHome(page);
   await page.goto('/');
 
-  const bars = homePage.whereYouStand.getByRole('list', {name: 'Kept each month'});
+  const plot = homePage.whereYouStand.locator('[data-slot="chart"]');
   const readout = homePage.whereYouStand.locator('.recharts-tooltip-wrapper');
-  await expect(bars.getByRole('button')).toHaveCount(14);
-  await expect(bars.getByRole('button').last()).toHaveAccessibleName(
-    'November 2026 so far: kept −€1,200',
-  );
-  // Hovering a bar shows the line's readout for its month, ending in what a click opens, and marks that bar and
-  // the month's whole slot on the line. Both charts show a pointer.
-  const march = bars.getByRole('button', {name: 'March 2026: kept −€500'});
-  const april = bars.getByRole('button', {name: /^April 2026/});
-  await march.hover();
+  // A year back from November 2026 shows fourteen months, from October 2025.
+  const march = await monthSlot(plot, 5, 14);
+  const april = await monthSlot(plot, 6, 14);
+  // Hovering a month shows its readout, ending in what a click opens, and marks the month's whole slot.
+  await page.mouse.move(march.centre.x, march.centre.y);
   await expect(readout).toBeVisible();
   await expect(readout.locator('p')).toHaveText([
     'March 2026',
@@ -108,11 +113,10 @@ test('kept bars show the line’s readout on hover and focus, and open their mon
     'Kept−€500',
     'Open March ›',
   ]);
-  await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^March 2026/);
   const band = homePage.whereYouStand.locator('[data-slot="month-band"]');
-  const [slot, bar] = [await boxOf(band), await boxOf(march)];
-  expect(Math.abs(slot.x - bar.x)).toBeLessThanOrEqual(1);
-  expect(Math.abs(slot.width - bar.width)).toBeLessThanOrEqual(1);
+  const slot = await boxOf(band);
+  expect(Math.abs(slot.x - march.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(slot.width - march.width)).toBeLessThanOrEqual(1);
   // The band sits behind the line, which stays in view across it.
   expect(
     await band.evaluate((rect) => {
@@ -120,39 +124,31 @@ test('kept bars show the line’s readout on hover and focus, and open their mon
       return !!(rect.compareDocumentPosition(curve) & Node.DOCUMENT_POSITION_FOLLOWING);
     }),
   ).toBe(true);
-  await expect(march).toHaveCSS('cursor', 'pointer');
   await expect(homePage.whereYouStand.locator('.recharts-surface')).toHaveCSS('cursor', 'pointer');
-  // Moving on to the next bar keeps the readout up and slides it from one month to the next, as on the line.
-  // Like the line's, it first slides in from the chart's edge; let that settle.
+  // Moving on to the next month keeps the readout up and slides it from one month to the next.
+  // It first slides in from the chart's edge; let that settle.
   await expect
     .poll(async () => new Set((await framesOf(readout)).map((frame) => frame.x)).size)
     .toBe(1);
-  const [from, to] = [await boxOf(march), await boxOf(april)];
   const frames = framesOf(readout);
-  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, {steps: 4});
-  const left = from.x + from.width / 2;
-  const right = to.x + to.width / 2;
+  await page.mouse.move(april.centre.x, april.centre.y, {steps: 4});
   for (const frame of await frames) {
     expect(frame.visibility).toBe('visible');
-    expect(frame.x).toBeGreaterThanOrEqual(left - frame.width);
-    expect(frame.x).toBeLessThanOrEqual(right + frame.width);
+    expect(frame.x).toBeGreaterThanOrEqual(march.centre.x - frame.width);
+    expect(frame.x).toBeLessThanOrEqual(april.centre.x + frame.width);
   }
   await expect(readout).toContainText('April 2026');
-  await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^April 2026/);
-  await page.mouse.move(0, 0);
-  await expect(readout).not.toBeVisible();
-  // So does focusing one, and the running month reads as so far. Tabbing on keeps the readout up.
-  await bars.getByRole('button').nth(-2).focus();
-  await expect(readout).toContainText('October 2026');
-  // October is in the span twice, so what opens names its year.
+  // October is in the span twice, so what opens names its year; the running month reads as so far.
+  const october = await monthSlot(plot, 12, 14);
+  await page.mouse.move(october.centre.x, october.centre.y);
   await expect(readout).toContainText('Open October 2026 ›');
-  const tabbed = framesOf(readout);
-  await page.keyboard.press('Tab');
-  for (const frame of await tabbed) expect(frame.visibility).toBe('visible');
+  const november = await monthSlot(plot, 13, 14);
+  await page.mouse.move(november.centre.x, november.centre.y);
   await expect(readout).toContainText('November 2026 · so far');
   await expect(readout).toContainText('Kept−€1,200');
-  await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^November 2026/);
-  await bars.getByRole('button', {name: 'March 2026: kept −€500'}).click();
+  await page.mouse.move(0, 0);
+  await expect(readout).not.toBeVisible();
+  await page.mouse.click(march.centre.x, march.centre.y);
   await expect(page).toHaveURL(/[?&]month=2026-03/);
   await expect(homePage.monthDialog('March 2026')).toBeVisible();
 });
@@ -234,11 +230,8 @@ test('a month without an exchange rate has no balance, and the change is left ou
   await expect(homePage.whereYouStand).not.toContainText('since');
   await expect(homePage.yearTable.getByRole('row').nth(1)).toContainText('—');
   // The month's readout still shows what was kept.
-  await homePage.whereYouStand
-    .getByRole('list', {name: 'Kept each month'})
-    .getByRole('button')
-    .last()
-    .hover();
+  const november = await monthSlot(homePage.whereYouStand.locator('[data-slot="chart"]'), 13, 14);
+  await page.mouse.move(november.centre.x, november.centre.y);
   const readout = homePage.whereYouStand.locator('.recharts-tooltip-wrapper');
   await expect(readout).toContainText('Balance—');
   await expect(readout).toContainText('Kept−€1,200');
@@ -291,29 +284,11 @@ test.describe('touch chart inspection', () => {
     await homePage.whereYouStand.getByRole('button', {name: 'All', exact: true}).click();
     const plot = homePage.whereYouStand.locator('[data-slot="chart"]');
     await plot.scrollIntoViewIfNeeded();
-    // The bars below share the line's month slots (WebKit misplaces SVG tick label boxes).
-    const slot = await boxOf(
-      homePage.whereYouStand
-        .getByRole('list', {name: 'Kept each month'})
-        .getByRole('button')
-        .first(),
-    );
-    const box = await boxOf(plot);
-    await page.touchscreen.tap(slot.x + slot.width / 2, box.y + box.height / 2);
+    // From the month slots, not the tick labels: WebKit misplaces SVG tick label boxes.
+    const june = await monthSlot(plot, 0, 6);
+    await page.touchscreen.tap(june.centre.x, june.centre.y);
     await expect(page).toHaveURL(/[?&]month=2026-06/);
     await expect(homePage.monthDialog('June 2026')).toBeVisible();
-  });
-
-  test('a short tap on a kept bar opens that month', async ({page, homePage}) => {
-    await mockSyntheticHome(page);
-    await page.goto('/');
-    const bars = homePage.whereYouStand.getByRole('list', {name: 'Kept each month'});
-    const bar = bars.getByRole('button', {name: 'March 2026: kept −€500'});
-    await bar.scrollIntoViewIfNeeded();
-    const box = await boxOf(bar);
-    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
-    await expect(page).toHaveURL(/[?&]month=2026-03(?:&|$)/);
-    await expect(homePage.monthDialog('March 2026')).toBeVisible();
   });
 });
 
@@ -366,34 +341,26 @@ test.describe('touch chart inspection by sliding', () => {
       });
       await expect(tooltip).toContainText('November 2026');
       await expect(page.locator('html')).toHaveAttribute('data-chart-pulses', String(pulses + 1));
-      // The line and the bars share their months: the bar under the readout is marked too.
-      const bars = homePage.whereYouStand.getByRole('list', {name: 'Kept each month'});
-      await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^November 2026/);
       const readout = await boxOf(tooltip);
       expect(readout.x).toBeGreaterThanOrEqual(0);
       expect(readout.x + readout.width).toBeLessThanOrEqual(390);
       await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
       await expect(tooltip).not.toBeVisible();
-      await expect(bars.locator('[data-active]')).toHaveCount(0);
       await expect(page).toHaveURL(url);
     });
   }
 
-  test('sliding along the kept bars reads the month under the finger and opens nothing', async ({
+  test('sliding along the line reads the month under the finger and opens nothing', async ({
     page,
     context,
     homePage,
   }) => {
     await mockSyntheticHome(page);
     await page.goto('/');
-    const bars = homePage.whereYouStand.getByRole('list', {name: 'Kept each month'});
-    await bars.scrollIntoViewIfNeeded();
-    const centre = async (name: string) => {
-      const box = await boxOf(bars.getByRole('button', {name}));
-      return {x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2)};
-    };
-    const start = await centre('March 2026: kept −€500');
-    const end = await centre('August 2026: kept +€1,000');
+    const chart = homePage.whereYouStand.locator('[data-slot="chart"]');
+    await chart.scrollIntoViewIfNeeded();
+    const start = (await monthSlot(chart, 5, 14)).centre;
+    const end = (await monthSlot(chart, 10, 14)).centre;
     const tooltip = homePage.whereYouStand.locator('.recharts-tooltip-wrapper');
     const url = page.url();
     const touch = await context.newCDPSession(page);
@@ -409,10 +376,13 @@ test.describe('touch chart inspection by sliding', () => {
     await expect(tooltip).toContainText('August 2026');
     await expect(tooltip).toContainText('Balance');
     await expect(tooltip).toContainText('Kept+€1,000');
-    await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^August 2026/);
     await expect(homePage.whereYouStand.locator('.recharts-active-dot')).toBeVisible();
-    // Along the line's month labels, between the plot and the bars, the readout still follows the finger.
-    const plot = await boxOf(homePage.whereYouStand.locator('[data-slot="chart"]'));
+    // The month under the finger is marked across its whole slot.
+    const august = await monthSlot(chart, 10, 14);
+    const band = await boxOf(homePage.whereYouStand.locator('[data-slot="month-band"]'));
+    expect(Math.abs(band.x - august.x)).toBeLessThanOrEqual(1);
+    // Along the line's month labels, below the plot, the readout still follows the finger.
+    const plot = await boxOf(chart);
     const labels = Math.round(plot.y + plot.height - 6);
     await touch.send('Input.dispatchTouchEvent', {
       type: 'touchMove',
@@ -424,14 +394,12 @@ test.describe('touch chart inspection by sliding', () => {
     });
     await expect(tooltip).toBeVisible();
     await expect(tooltip).toContainText('March 2026');
-    await expect(bars.locator('[data-active]')).toHaveAccessibleName(/^March 2026/);
     const readout = await boxOf(tooltip);
     expect(readout.x).toBeGreaterThanOrEqual(0);
     expect(readout.x + readout.width).toBeLessThanOrEqual(390);
 
     await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
     await expect(tooltip).not.toBeVisible();
-    await expect(bars.locator('[data-active]')).toHaveCount(0);
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page).toHaveURL(url);
   });
@@ -444,32 +412,27 @@ test.describe('touch chart inspection by sliding', () => {
     await mockSyntheticHome(page);
     await page.goto('/');
     const plot = homePage.whereYouStand.locator('[data-slot="chart"]');
-    const bars = homePage.whereYouStand.getByRole('list', {name: 'Kept each month'});
     const tooltip = plot.locator('.recharts-tooltip-wrapper');
     const touch = await context.newCDPSession(page);
-    // Upward swipes on the line and on the bars below it both scroll the page.
-    for (const surface of [plot, bars]) {
-      await page.evaluate(() => window.scrollTo(0, 0));
-      await surface.scrollIntoViewIfNeeded();
-      const box = await boxOf(surface);
-      const x = Math.round(box.x + box.width / 2);
-      const y = Math.round(box.y + box.height / 2);
-      const before = await page.evaluate(() => window.scrollY);
-      await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y}]});
-      for (const distance of [20, 50, 90]) {
-        await touch.send('Input.dispatchTouchEvent', {
-          type: 'touchMove',
-          touchPoints: [{x, y: y - distance}],
-        });
-      }
-      await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
-      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before);
-      await expect(tooltip).not.toBeVisible();
-      await expect(page.getByRole('dialog')).toHaveCount(0);
+    // An upward swipe on the line scrolls the page.
+    await plot.scrollIntoViewIfNeeded();
+    const box = await boxOf(plot);
+    const x = Math.round(box.x + box.width / 2);
+    const y = Math.round(box.y + box.height / 2);
+    const before = await page.evaluate(() => window.scrollY);
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y}]});
+    for (const distance of [20, 50, 90]) {
+      await touch.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{x, y: y - distance}],
+      });
     }
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before);
+    await expect(tooltip).not.toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     await plot.scrollIntoViewIfNeeded();
     const next = await boxOf(plot);
-    const x = Math.round(next.x + next.width / 2);
     await touch.send('Input.dispatchTouchEvent', {
       type: 'touchStart',
       touchPoints: [{x, y: Math.round(next.y + next.height / 2)}],
