@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
+import {execFileSync, spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {mkdtemp, readFile, readdir, rm, stat} from 'node:fs/promises';
 import http from 'node:http';
@@ -253,6 +253,21 @@ test('isolates CLI environment, stdin and empty working directory', async (t) =>
 		assert.equal(path.dirname(opts.cwd), path.dirname(socketPath));
 	}
 	assert.deepEqual(await readdir(path.dirname(socketPath)), ['bridge.sock']);
+});
+
+test('grants a configured client uid the socket and only search access to its directory', async (t) => {
+	const {socketPath} = await setup(t, {clientUid: 65530});
+	const acl = (file) => execFileSync('getfacl', ['--numeric', '--omit-header', file], {encoding: 'utf8'});
+	assert.match(acl(path.dirname(socketPath)), /^user:65530:--x$/m);
+	assert.match(acl(socketPath), /^user:65530:rw-$/m);
+	assert.match(acl(socketPath), /^group::---$/m);
+	assert.match(acl(socketPath), /^other::---$/m);
+	assert.deepEqual(await request(socketPath), {status: 200, body: expected});
+});
+
+test('refuses to start with a client uid that is not another positive uid', async (t) => {
+	for (const clientUid of [0, -1, Number.NaN, 1.5, process.getuid()])
+		await assert.rejects(setup(t, {clientUid}), /Invalid Claude bridge client uid/);
 });
 
 test('rejects unsafe CLI runtime initialization and overage before accepting a result', async (t) => {

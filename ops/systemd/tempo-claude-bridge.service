@@ -4,7 +4,10 @@ Description=Tempo Claude subscription categorization bridge
 [Service]
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=TEMPO_CLAUDE_BRIDGE_SOCKET=%h/.local/state/tempo-claude/bridge.sock
+# The production API's uid (ops/production.compose.yml); the bridge grants it the socket by ACL.
+Environment=TEMPO_CLAUDE_BRIDGE_CLIENT_UID=10001
 ExecStartPre=/usr/bin/mkdir -p %h/.local/state/tempo-claude
+# Also clears the previous run's ACL mask, so the bridge's 0700 check passes before it grants access again.
 ExecStartPre=/usr/bin/chmod 700 %h/.local/state/tempo-claude
 ExecStartPre=/usr/bin/rm -f %h/.local/state/tempo-claude/bridge.sock
 ExecStart=%h/.local/bin/node %h/.local/lib/tempo-claude-bridge/main.mjs

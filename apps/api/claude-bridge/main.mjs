@@ -1,6 +1,7 @@
 import {startBridge} from './bridge.mjs';
 
-const bridge = await startBridge({socketPath: process.env.TEMPO_CLAUDE_BRIDGE_SOCKET});
+const {TEMPO_CLAUDE_BRIDGE_SOCKET: socketPath, TEMPO_CLAUDE_BRIDGE_CLIENT_UID: clientUid} = process.env;
+const bridge = await startBridge({socketPath, clientUid: clientUid === undefined ? undefined : Number(clientUid)});
 console.log('Claude subscription bridge listening.');
 
 for (const signal of ['SIGTERM', 'SIGINT']) {
