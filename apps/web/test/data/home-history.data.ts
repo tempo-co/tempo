@@ -536,7 +536,7 @@ export async function mockHomeHistory(
 
 /** Answers {@link EMPLOYER_LOGO}'s image, for histories built with `sourceLogos`. */
 export async function mockSourceLogo(page: Page) {
-  await page.route(`**${EMPLOYER_LOGO}/mask-v1`, (route) =>
+  await page.route(`**${EMPLOYER_LOGO}/mask-v2`, (route) =>
     route.fulfill({status: 200, contentType: 'image/png', body: LOGO_PNG}),
   );
 }

@@ -75,7 +75,7 @@ const STAGGER: [string, number][] = [
   // A month's transactions and biggest merchants, when the month dialog is open.
   ['**/bank-transactions?**', 1200],
   ['**/merchants/ranking?**', 1300],
-  [`**${EMPLOYER_LOGO}/mask-v1`, 1700],
+  [`**${EMPLOYER_LOGO}/mask-v2`, 1700],
 ];
 
 /** Holds each answer of {@link STAGGER} for its delay, then lets the synthetic mock answer it. */
