@@ -384,7 +384,7 @@ export async function startBridge({
 			await setfacl(['--set', `u::rw-,u:${clientUid}:rw-,g::---,m::rw-,o::---`, socketPath]);
 		} catch (error) {
 			await close();
-			await runSetfacl(['-b', '-k', directory]).catch(() => {});
+			await setfacl(['-b', '-k', directory]).catch(() => {});
 			throw new Error('Could not grant the client access to the Claude socket.', {cause: error});
 		}
 	}
