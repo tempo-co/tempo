@@ -45,8 +45,6 @@ export const configSchema = z
 
 		// --- Redis ---
 		REDIS_URL: z.string().url(),
-		REDIS_PORT: portSchema,
-		REDIS_HOST: z.string().min(1),
 
 		// --- AI categorization ---
 		AI_CATEGORIZATION_ENABLED: strictBooleanEnvSchema.default(false),
@@ -86,7 +84,6 @@ export const configSchema = z
 		EMAIL_PASSWORD: z.string().min(1).optional(),
 		EMAIL_REQUIRE_TLS: strictBooleanEnvSchema.default(false),
 		EMAIL_FROM: z.string().trim().min(1).optional(),
-		EMAIL_UI_PORT: portSchema,
 		EMAIL_UI_URL: z.string().url(),
 		EMAIL_VERIFICATION_EXPIRATION: durationSchema,
 		EMAIL_VERIFICATION_REDIS_KEY: z.string().min(1),
