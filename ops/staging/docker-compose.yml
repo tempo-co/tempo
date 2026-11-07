@@ -95,11 +95,9 @@ services:
             DB_PASSWORD: ${STAGING_DB_PASSWORD:?STAGING_DB_PASSWORD must be set}
             DB_NAME: ${STAGING_DB_NAME:?STAGING_DB_NAME must be set}
             DB_SYNCHRONIZE: 'false'
-            DB_PGADMIN_PORT: '0'
             REDIS_URL: redis://redis:6379
             REDIS_PORT: '6379'
             REDIS_HOST: redis
-            REDIS_INSIGHT_PORT: '0'
             SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set}
             SESSION_EXPIRATION: 30d
             SESSION_REDIS_KEY: tempo-staging-session

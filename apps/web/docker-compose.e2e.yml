@@ -59,14 +59,12 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: tempo_test
       DB_SYNCHRONIZE: 'true'
-      DB_PGADMIN_PORT: 5050
       SESSION_SECRET: tempo-web-e2e-synthetic-session-secret
       SESSION_EXPIRATION: 7d
       SESSION_REDIS_KEY: sess
       REDIS_URL: redis://redis:6379
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_INSIGHT_PORT: 5540
       BANKING_INTEGRATION_ENABLED: 'true'
       ENABLE_BANKING_API_URL: https://api.example.invalid
       ENABLE_BANKING_APPLICATION_ID: tempo-web-e2e-application
