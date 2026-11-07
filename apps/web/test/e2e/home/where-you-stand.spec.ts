@@ -3,7 +3,7 @@ import type {Locator} from '@playwright/test';
 import {PHONE_KEY, homeHistory, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
-import {boxOf} from '../../utils/layout';
+import {boxOf, expectLoaded} from '../../utils/layout';
 
 // Every response is synthetic: these checks never read or mutate a shared API stack.
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
@@ -99,6 +99,7 @@ test('the balance chart reads out the month under the pointer, and a click opens
   await mockSyntheticHome(page);
   await page.goto('/');
 
+  await expectLoaded(homePage.whereYouStand);
   const plot = homePage.whereYouStand.locator('[data-slot="chart"]');
   const readout = homePage.whereYouStand.locator('.recharts-tooltip-wrapper');
   // A year back from November 2026 shows fourteen months, from October 2025.
@@ -138,11 +139,12 @@ test('the balance chart reads out the month under the pointer, and a click opens
     expect(frame.x).toBeLessThanOrEqual(april.centre.x + frame.width);
   }
   await expect(readout).toContainText('April 2026');
-  // October is in the span twice, so what opens names its year; the running month reads as so far.
+  // October is in the span twice, so what opens names its year.
   const october = await monthSlot(plot, 12, 14);
   await page.mouse.move(october.centre.x, october.centre.y);
   await expect(readout).toContainText('Open October 2026 ›');
   const november = await monthSlot(plot, 13, 14);
+  // The running month reads as so far.
   await page.mouse.move(november.centre.x, november.centre.y);
   await expect(readout).toContainText('November 2026 · so far');
   await expect(readout).toContainText('Kept−€1,200');
