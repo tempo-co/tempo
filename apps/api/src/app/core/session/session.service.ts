@@ -91,6 +91,18 @@ export class SessionService {
 		return sessions;
 	}
 
+	/** Which of these sessions are still signed in as the account; logged out, revoked and expired ones are not. */
+	async findActiveSessionIds(accountId: Account['id'], sessionIds: readonly string[]): Promise<Set<string>> {
+		if (sessionIds.length === 0) return new Set();
+		const values = await this.redisClient.mget(sessionIds.map((sessionId) => `${this.REDIS_KEY}:${sessionId}`));
+		return new Set(
+			sessionIds.filter((_sessionId, index) => {
+				const value = values[index];
+				return value !== null && (JSON.parse(value) as AuthenticatedSession)?.passport?.user === accountId;
+			}),
+		);
+	}
+
 	/** Revokes an account's active session. */
 	async revokeSession(accountId: Account['id'], currentSessionId: string, sessionIdToRevoke: string) {
 		if (sessionIdToRevoke === currentSessionId) {

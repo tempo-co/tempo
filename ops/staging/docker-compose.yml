@@ -121,6 +121,10 @@ services:
             PASSWORD_RESET_REDIS_KEY: tempo-staging-password-reset
             THROTTLE_TTL: 1m
             THROTTLE_LIMIT: '100'
+            # Optional: without a key pair Settings says this server sends no notifications.
+            WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:-}
+            WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:-}
+            WEB_PUSH_VAPID_SUBJECT: ${WEB_PUSH_VAPID_SUBJECT:-}
         expose:
             - '3000'
         networks:

@@ -7,6 +7,7 @@ import {PersonalAccessTokenModule} from '@core/personal-access-token/personal-ac
 import {RedisModule} from '@core/redis/redis.module';
 import {SessionModule} from '@core/session/session.module';
 import {AccountModule} from '@modules/account/account.module';
+import {NotificationsModule} from '@modules/notifications/notifications.module';
 
 import {AuthController} from './api/auth.controller';
 import {PersonalAccessTokenController} from './api/personal-access-token.controller';
@@ -25,6 +26,7 @@ import {LocalStrategy} from './strategies/local.strategy';
 		EmailModule,
 		SessionModule,
 		PersonalAccessTokenModule,
+		NotificationsModule,
 		PassportModule.register({session: true}),
 	],
 	providers: [

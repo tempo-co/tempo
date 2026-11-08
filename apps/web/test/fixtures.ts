@@ -1,5 +1,6 @@
 import {faker} from '@faker-js/faker';
 import {APIRequestContext, test as base, expect} from '@playwright/test';
+import type {NotificationSettings} from '@tempo/contracts';
 import {loadEnv} from 'vite';
 
 import {AccountSettingsPage} from './pages/account-settings.page';
@@ -11,7 +12,7 @@ import {SecuritySettingsPage} from './pages/security-settings.page';
 import {SignupPage} from './pages/signup.page';
 import {VerifyEmailChangePage} from './pages/verify-email-change.page';
 import {VerifyEmailPage} from './pages/verify-email.page';
-import {mockBankConnections, mockEmptyHome} from './utils/api-mocks';
+import {mockBankConnections, mockEmptyHome, mockJson} from './utils/api-mocks';
 import {EmailUtils} from './utils/email-utils';
 
 export const API_URL = loadEnv('development', process.cwd(), '').VITE_API_URL;
@@ -43,8 +44,8 @@ export async function createVerifiedAccount(request: APIRequestContext): Promise
 
 type Fixtures = {
   /**
-   * Fully mocked specs (empty `storageState`) start with no bank connections, so opening the app
-   * never reaches the real API for them. A spec's own bank-connection mock takes precedence.
+   * Fully mocked specs (empty `storageState`) start with no bank connections and no push, so
+   * opening the app never reaches the real API for them. A spec's own bank-connection mock takes precedence.
    */
   defaultBankConnections: void;
   /** A new verified account without bank data; the test's browser context is logged in as it. */
@@ -72,6 +73,11 @@ export const test = base.extend<Fixtures>({
       if (typeof storageState === 'object' && storageState.cookies.length === 0) {
         await mockBankConnections(page, []);
         await mockEmptyHome(page);
+        // Account settings read alert choices; this server sends no push.
+        await mockJson(page, `${API_URL}/notifications`, {
+          publicKey: null,
+          preferences: {bankConnections: true, recurringBills: true},
+        } satisfies NotificationSettings);
       }
       await provide();
     },

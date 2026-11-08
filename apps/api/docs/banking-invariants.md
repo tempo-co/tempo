@@ -78,6 +78,12 @@ Defined in `services/bank-transaction-filters.ts`; read `SQL_SPENDING` / `SQL_IN
 - The breakdown (`/bank-transactions/breakdown`) splits cash flow's spending by category and its income by source (`SQL_INCOME_SOURCE`: merchant key, else display name) on the same definitions, so each period's total equals cash flow's. Refund credits stay in their `REFUND` part, which can be negative. A source's part reconciles with the list filtered by `incomeSource` set to its key.
 - Merchant totals (`/merchants`) use the same definitions over `SQL_MERCHANT_GROUP` and reconcile with the list filtered by `merchantGroup`; own transfers and currency exchanges belong to no group.
 
+## Alerts
+
+- `alerts/` raises bank alerts (consent ending within 7 days, its last day, no successful sync for 24 hours) by email and push, and recurring bill alerts (LATE, HIGHER_THAN_USUAL on shown, active bills) by push only. Each alert is recorded once, per episode (the connection's marker columns) or per series, flag and period (`recurring_bill_alerts`), in the transaction that queues its jobs. Job ids derive from that identity, so a rolled-back marker, a retry or an overlapping scan never sends twice.
+- A push raised between 21:00 and 09:00 Europe/Amsterdam waits until 09:00 as a delayed job. Before sending, the worker checks that the alert still applies (a reauthorized bank or a paid bill sends nothing) and reads the badge count from review counts.
+- Push text stays vague: no bank, merchant, account or amount. Pushes reach only subscriptions whose session is still signed in as the owner (`modules/notifications`); logout removes that session's subscriptions, and push service 404/410 answers remove the subscription.
+
 ## Concurrency patterns used here
 
 - Owner answers that must not race (recurring-series decisions): lock the owner row (`SELECT id FROM accounts WHERE id = $1 FOR UPDATE`) inside the write transaction, re-read the decision state and return 409 when it changed. Test with two simultaneous requests (`Promise.all`) asserting exactly one success and one stored row.

@@ -38,6 +38,7 @@ export default defineConfig({
         'e2e/home/offline.spec.ts',
         'e2e/auth/network-resilience.spec.ts',
         'e2e/banking/offline-retention.spec.ts',
+        'e2e/settings/notification-alerts.spec.ts',
       ],
       use: {
         ...devices['Desktop Safari'],

@@ -16,6 +16,8 @@ export const BANK_CONNECTION_SYNC_SCHEDULER_ID = 'bank-connection-sync-dispatche
 export const BANK_CONNECTION_ALERT_QUEUE = 'bank-connection-alerts';
 export const SCAN_BANK_CONNECTION_ALERTS_JOB = 'scan-bank-connection-alerts';
 export const BANK_CONNECTION_ALERT_SCHEDULER_ID = 'bank-connection-alert-scanner';
+export const SCAN_RECURRING_BILL_ALERTS_JOB = 'scan-recurring-bill-alerts';
+export const RECURRING_BILL_ALERT_SCHEDULER_ID = 'recurring-bill-alert-scanner';
 
 export const BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE = 'bank-transaction-amount-conversion';
 export const BACKFILL_BANK_TRANSACTION_AMOUNTS_JOB = 'backfill-bank-transaction-amounts';
@@ -27,3 +29,6 @@ export const IDENTIFY_MERCHANTS_JOB = 'identify-merchants';
 export const FETCH_MERCHANT_LOGO_JOB = 'fetch-merchant-logo';
 export const RECONCILE_MERCHANT_LOGOS_JOB = 'reconcile-merchant-logos';
 export const MERCHANT_LOGO_RECONCILE_SCHEDULER_ID = 'merchant-logo-reconciler';
+
+export const PUSH_NOTIFICATION_QUEUE = 'push-notifications';
+export const DELIVER_PUSH_ALERT_JOB = 'deliver-push-alert';

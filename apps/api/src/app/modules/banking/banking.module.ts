@@ -7,13 +7,18 @@ import {
 	BANK_CONNECTION_ALERT_QUEUE,
 	BANK_CONNECTION_SYNC_QUEUE,
 	BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE,
+	PUSH_NOTIFICATION_QUEUE,
 } from '@core/queue/queue.constants';
 import {RedisModule} from '@core/redis/redis.module';
 import {Account} from '@modules/account/account.entity';
 import {AccountModule} from '@modules/account/account.module';
+import {NotificationsModule} from '@modules/notifications/notifications.module';
 
 import {BankConnectionAlertProcessor} from './alerts/bank-connection-alert.processor';
 import {BankConnectionAlertService} from './alerts/bank-connection-alert.service';
+import {PushAlertProcessor} from './alerts/push-alert.processor';
+import {RecurringBillAlert} from './alerts/recurring-bill-alert.entity';
+import {RecurringBillAlertService} from './alerts/recurring-bill-alert.service';
 import {BankConnectionController} from './api/bank-connection.controller';
 import {BankTransactionController} from './api/bank-transaction.controller';
 import {McpController} from './api/mcp.controller';
@@ -64,16 +69,19 @@ import {OwnTransferService} from './services/own-transfer.service';
 			RecurringSeriesHide,
 			RecurringContinuationUnlink,
 			RecurringSnapshot,
+			RecurringBillAlert,
 		]),
 		BullModule.registerQueue({name: BANK_CONNECTION_SYNC_QUEUE}),
 		BullModule.registerQueue({name: BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE}),
 		BullModule.registerQueue({name: BANK_CONNECTION_ALERT_QUEUE}),
+		BullModule.registerQueue({name: PUSH_NOTIFICATION_QUEUE}),
 		EmailModule,
 		AccountModule,
 		RedisModule,
 		BankingAuthorizationStateModule,
 		BankTransactionCategorizationModule,
 		MerchantLogoModule,
+		NotificationsModule,
 	],
 	providers: [
 		BankingService,
@@ -96,6 +104,8 @@ import {OwnTransferService} from './services/own-transfer.service';
 		CurrencyExchangeService,
 		BankConnectionAlertService,
 		BankConnectionAlertProcessor,
+		RecurringBillAlertService,
+		PushAlertProcessor,
 		RecurringSeriesService,
 	],
 	controllers: [

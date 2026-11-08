@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query';
 import type {Account} from '@tempo/contracts';
 
+import {setAppBadge} from '@/features/notifications/utils/push-device';
 import {
   CURRENT_ACCOUNT_KEY,
   PAGE_LOADED_AT,
@@ -45,6 +46,7 @@ export function signIn(account: Account) {
 /** Removes the account and its saved data from this tab and sends it to /login. */
 export function signOut() {
   changeAccount(null);
+  setAppBadge(0);
   void router.navigate({to: '/login'});
 }
 
