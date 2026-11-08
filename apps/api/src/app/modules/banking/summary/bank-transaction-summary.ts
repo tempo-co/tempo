@@ -124,6 +124,34 @@ export function periodStarts(interval: BalanceTrendInterval, from: string, to: s
 	return from > to || to > asOf || starts.length > MAX_RANGE_PERIODS[interval] ? null : starts;
 }
 
+/** A period of a cash-flow style response: its start, its end clamped to the requested range, and whether it is whole. */
+export type PeriodWindow = {start: string; end: string; complete: boolean};
+
+/**
+ * The periods from `starts` that end on or after the first booking; none without one. A period that ends on or after
+ * `asOf` is still running, and one cut by `to` or by where history starts is partial.
+ */
+export function periodWindows(
+	interval: BalanceTrendInterval,
+	starts: readonly string[],
+	to: string,
+	asOf: string,
+	firstBookingDate: string | null,
+): PeriodWindow[] {
+	if (!firstBookingDate) return [];
+	return starts.flatMap((start) => {
+		const periodEnd = addDays(nextPeriodStart(start, interval), -1);
+		if (periodEnd < firstBookingDate) return [];
+		return [
+			{
+				start,
+				end: periodEnd < to ? periodEnd : to,
+				complete: periodEnd < asOf && periodEnd <= to && start >= firstBookingDate,
+			},
+		];
+	});
+}
+
 /** Calendar dates as `YYYY-MM-DD`, computed in UTC so no local offset shifts a day. */
 function toDate(value: string): Date {
 	return new Date(`${value}T00:00:00Z`);

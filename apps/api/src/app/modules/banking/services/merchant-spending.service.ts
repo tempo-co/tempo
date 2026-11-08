@@ -37,6 +37,7 @@ import {
 	nextPeriodStart,
 	periodStart,
 	periodStarts,
+	periodWindows,
 } from '../summary/bank-transaction-summary';
 import {
 	SQL_BASE_AMOUNT,
@@ -144,20 +145,17 @@ export class MerchantSpendingService {
 			.getRawMany<{start: string; spent: string; received: string; count: number}>();
 		const totals = new Map(rows.map((row) => [row.start, row]));
 
-		const periods: MerchantGroupPeriod[] = [];
-		for (const start of starts) {
-			const periodEnd = addDays(nextPeriodStart(start, interval), -1);
-			if (!firstBookingDate || periodEnd < firstBookingDate) continue;
-			const row = totals.get(start);
-			periods.push({
-				start,
-				end: periodEnd < to ? periodEnd : to,
-				complete: periodEnd < asOf && periodEnd <= to && start >= firstBookingDate,
-				spent: formatCents(BigInt(row?.spent ?? '0')),
-				received: formatCents(BigInt(row?.received ?? '0')),
-				count: row?.count ?? 0,
-			});
-		}
+		const periods = periodWindows(interval, starts, to, asOf, firstBookingDate).map(
+			(window): MerchantGroupPeriod => {
+				const row = totals.get(window.start);
+				return {
+					...window,
+					spent: formatCents(BigInt(row?.spent ?? '0')),
+					received: formatCents(BigInt(row?.received ?? '0')),
+					count: row?.count ?? 0,
+				};
+			},
+		);
 		return {baseCurrency, interval, periods};
 	}
 

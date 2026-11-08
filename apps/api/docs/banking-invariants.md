@@ -77,6 +77,7 @@ Defined in `services/bank-transaction-filters.ts`; read `SQL_SPENDING` / `SQL_IN
 - Never add amounts across currencies.
 - The breakdown (`/bank-transactions/breakdown`) splits cash flow's spending by category and its income by source (`SQL_INCOME_SOURCE`: merchant key, else display name) on the same definitions, so each period's total equals cash flow's. Refund credits stay in their `REFUND` part, which can be negative. A source's part reconciles with the list filtered by `incomeSource` set to its key.
 - Merchant totals (`/merchants`) use the same definitions over `SQL_MERCHANT_GROUP` and reconcile with the list filtered by `merchantGroup`; own transfers and currency exchanges belong to no group.
+- Cash flow, the breakdown and merchant periods take their period list from `periodWindows`: which periods history covers, each end clamped to the range, and which are complete.
 
 ## Concurrency patterns used here
 
