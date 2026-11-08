@@ -1,4 +1,3 @@
-import type {Page} from '@playwright/test';
 import {type QueryClient, QueryObserver} from '@tanstack/react-query';
 import type {BankConnection} from '@tempo/contracts';
 
@@ -12,10 +11,12 @@ import {successfulBankRefresh} from '../../data/bank-sync-run.data';
 import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
+  EMPTY_REVIEW_COUNTS,
   fulfillJson,
   fulfillRedirect,
   mockBankConnections,
   mockBankRefresh,
+  mockEmptyRecurringLists,
   mockJson,
   mockMerchantRanking,
   routeBankConnectionsApi,
@@ -23,18 +24,6 @@ import {
 } from '../../utils/api-mocks';
 import {createHookHarness} from '../../utils/hook-harness';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
-
-/** Home's recurring lists, empty: the Repeats block reads them beside the recurring summary. */
-function mockEmptyRecurringLists(page: Page) {
-  const empty = {
-    series: [],
-    monthlyTotal: '0.00',
-    unconvertedCount: 0,
-    thisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
-    baseCurrency: 'EUR',
-  };
-  return mockJson(page, '**/recurring-series?**', {expenses: empty, income: empty});
-}
 
 const DETAIL_TRANSACTION_ID = '00000000-0000-4000-8000-000000000014';
 const MOCK_PROVIDER_ORIGIN = 'https://enablebanking.test';
@@ -843,13 +832,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       if (url.origin === API_URL && url.pathname === '/health') return fulfillJson(route, {});
       // The navigation's review badge reads these on every page.
       if (url.origin === API_URL && url.pathname === '/bank-transactions/review-counts')
-        return fulfillJson(route, {
-          needsReview: 0,
-          categorizationFailed: 0,
-          categorizing: 0,
-          unknownDirection: 0,
-          missingBaseAmount: 0,
-        });
+        return fulfillJson(route, EMPTY_REVIEW_COUNTS);
       if (url.origin === API_URL && url.pathname.endsWith('/refresh'))
         return fulfillJson(route, REFRESH_RESULT);
       await route.abort('blockedbyclient');
@@ -1384,13 +1367,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       incomeUnconvertedCount: 0,
       baseCurrency: 'EUR',
     });
-    await mockJson(page, '**/bank-transactions/review-counts', {
-      needsReview: 0,
-      categorizationFailed: 0,
-      categorizing: 0,
-      unknownDirection: 0,
-      missingBaseAmount: 0,
-    });
+    await mockJson(page, '**/bank-transactions/review-counts', EMPTY_REVIEW_COUNTS);
     await mockJson(page, '**/bank-transactions?**', {transactions: [], total: 0});
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
@@ -1469,13 +1446,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       let reviewCountReads = 0;
       await page.route('**/bank-transactions/review-counts', (route) => {
         reviewCountReads++;
-        return fulfillJson(route, {
-          needsReview: 0,
-          categorizationFailed: 0,
-          categorizing: 0,
-          unknownDirection: 0,
-          missingBaseAmount: 0,
-        });
+        return fulfillJson(route, EMPTY_REVIEW_COUNTS);
       });
       const requests: string[] = [];
       const releases = new Map<string, () => void>();

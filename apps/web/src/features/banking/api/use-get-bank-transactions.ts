@@ -22,10 +22,7 @@ const appendArrayFilter = (
   values?.forEach((value) => params.append(key, value));
 };
 
-export const useGetBankTransactions = (
-  searchParams: BankTransactionSearchParams,
-  {refetchInterval, staleTime}: {refetchInterval?: number; staleTime?: number} = {},
-) => {
+export const useGetBankTransactions = (searchParams: BankTransactionSearchParams) => {
   const navigate = useNavigate({from: '/bank-transactions/'});
   const pagination: PaginationParams = {
     pageIndex: searchParams.pageIndex,
@@ -42,6 +39,7 @@ export const useGetBankTransactions = (
       categoryStatuses: searchParams.categoryStatuses,
       recurringSeriesKey: searchParams.recurringSeriesKey,
       merchantGroup: searchParams.merchantGroup,
+      incomeSource: searchParams.incomeSource,
       search: searchParams.search,
     }),
     [
@@ -54,6 +52,7 @@ export const useGetBankTransactions = (
       searchParams.categoryStatuses,
       searchParams.recurringSeriesKey,
       searchParams.merchantGroup,
+      searchParams.incomeSource,
       searchParams.search,
     ],
   );
@@ -91,6 +90,9 @@ export const useGetBankTransactions = (
         if (filters.merchantGroup) {
           params.append('filter[merchantGroup]', filters.merchantGroup);
         }
+        if (filters.incomeSource) {
+          params.append('filter[incomeSource]', filters.incomeSource);
+        }
         if (filters.search?.trim()) {
           params.append('filter[search]', filters.search.trim());
         }
@@ -102,8 +104,6 @@ export const useGetBankTransactions = (
         return await api.get<BankTransactionsResponse>(`/bank-transactions?${params.toString()}`);
       },
       placeholderData: keepPreviousData,
-      refetchInterval,
-      staleTime,
       // Data restored or kept while offline may be outdated, however recently it was fetched.
       refetchOnReconnect: 'always',
     });

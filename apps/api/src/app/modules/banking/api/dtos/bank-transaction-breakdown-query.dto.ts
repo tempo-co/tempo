@@ -7,21 +7,12 @@ import {
 } from '@tempo/contracts';
 import {IsIn} from 'class-validator';
 
-import {IsCalendarDate} from '@core/validation/is-calendar-date';
+import {PeriodRangeQueryDto} from './bank-transaction-cash-flow-query.dto';
 
-export class BankTransactionBreakdownQueryDto implements BankTransactionBreakdownQuery {
+export class BankTransactionBreakdownQueryDto extends PeriodRangeQueryDto implements BankTransactionBreakdownQuery {
 	@IsIn(BREAKDOWN_INTERVALS)
 	interval: BreakdownInterval;
 
 	@IsIn(BREAKDOWN_DIMENSIONS)
 	by: BreakdownDimension;
-
-	@IsCalendarDate()
-	from: string;
-
-	@IsCalendarDate()
-	to: string;
-
-	@IsCalendarDate()
-	asOf: string;
 }

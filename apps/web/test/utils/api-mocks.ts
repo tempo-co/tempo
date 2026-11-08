@@ -24,49 +24,6 @@ export function fulfillRedirect(route: Route, location: string) {
   });
 }
 
-/** Synthetic monthly totals for specs that mock Home without a real session. */
-export const syntheticCashFlow = {
-  baseCurrency: 'EUR',
-  interval: 'month',
-  periods: ['2026-07', '2026-08', '2026-09'].map((month, index) => ({
-    start: `${month}-01`,
-    end: `${month}-${month === '2026-09' ? '30' : '31'}`,
-    complete: true,
-    spending: `${1100 + index * 50}.00`,
-    income: '2500.00',
-    net: `${1400 - index * 50}.00`,
-  })),
-};
-
-/** Serves {@link syntheticCashFlow} for every interval, so the card never reaches the real API. */
-export function mockCashFlow(page: Page) {
-  return page.route('**/bank-transactions/cash-flow**', (route) => {
-    const interval = new URL(route.request().url()).searchParams.get('interval');
-    return fulfillJson(route, {...syntheticCashFlow, interval});
-  });
-}
-
-/** Synthetic month-end balances for specs that mock Home without a real session. */
-const syntheticBalanceTrend = {
-  baseCurrency: 'EUR',
-  interval: 'month',
-  periods: ['2026-07', '2026-08', '2026-09'].map((month, index) => ({
-    start: `${month}-01`,
-    end: `${month}-${month === '2026-09' ? '30' : '31'}`,
-    complete: true,
-    total: `${4000 + index * 250}.00`,
-    accounts: [{id: '00000000-0000-4000-8000-000000000001', balance: `${4000 + index * 250}.00`}],
-  })),
-};
-
-/** Serves {@link syntheticBalanceTrend} for every interval, so the card never reaches the real API. */
-export function mockBalanceTrend(page: Page) {
-  return page.route('**/bank-transactions/balance-trend**', (route) => {
-    const interval = new URL(route.request().url()).searchParams.get('interval');
-    return fulfillJson(route, {...syntheticBalanceTrend, interval});
-  });
-}
-
 /**
  * Fails the API reads of `url` that `isLater` picks (a paged list's later pages) with a final error until
  * `failing` is turned off; every other read goes on to the mocks behind. `pages` records each later page asked
@@ -163,6 +120,16 @@ export function transformBankConnections(
   });
 }
 
+/** Review counts with nothing waiting for the owner, so the navigation carries no badge. */
+export const EMPTY_REVIEW_COUNTS: BankTransactionReviewCounts = {
+  needsReview: 0,
+  categorizationFailed: 0,
+  categorizing: 0,
+  unknownDirection: 0,
+  missingBaseAmount: 0,
+  needsAttention: 0,
+};
+
 /**
  * Answers Home's requests, and the navigation's review counts, with empty data. Home requests its
  * history while the connections load, so a fully mocked spec that opens Home without banks still
@@ -198,13 +165,7 @@ export async function mockEmptyHome(page: Page) {
       periods: [],
     } satisfies BankTransactionBreakdown);
   });
-  await mockJson(page, '**/bank-transactions/review-counts', {
-    needsReview: 0,
-    categorizationFailed: 0,
-    categorizing: 0,
-    unknownDirection: 0,
-    missingBaseAmount: 0,
-  } satisfies BankTransactionReviewCounts);
+  await mockJson(page, '**/bank-transactions/review-counts', EMPTY_REVIEW_COUNTS);
   await mockJson(page, '**/recurring-series/summary?**', {
     expenseMonthlyTotal: '0.00',
     incomeMonthlyTotal: '0.00',
@@ -215,23 +176,28 @@ export async function mockEmptyHome(page: Page) {
     expenseThisMonth: {month: '', paid: '0.00', remaining: '0.00'},
     incomeThisMonth: {month: '', paid: '0.00', remaining: '0.00'},
   } satisfies RecurringSummary);
-  const emptyRecurring = {
-    series: [],
-    monthlyTotal: '0.00',
-    unconvertedCount: 0,
-    thisMonth: {month: '', paid: '0.00', remaining: '0.00'},
-    baseCurrency: null,
-  };
-  await mockJson(page, '**/recurring-series?**', {
-    expenses: emptyRecurring,
-    income: emptyRecurring,
-  } satisfies RecurringSeriesLists);
+  await mockEmptyRecurringLists(page);
   await page.route('**/bank-transactions?**', (route) =>
     ['fetch', 'xhr'].includes(route.request().resourceType())
       ? fulfillJson(route, {transactions: [], total: 0})
       : route.continue(),
   );
   await mockMerchantRanking(page);
+}
+
+/** Answers the recurring lists (the Repeats block's flagged bills, the recurring dialog) with none. */
+export function mockEmptyRecurringLists(page: Page) {
+  const empty = {
+    series: [],
+    monthlyTotal: '0.00',
+    unconvertedCount: 0,
+    thisMonth: {month: '', paid: '0.00', remaining: '0.00'},
+    baseCurrency: null,
+  };
+  return mockJson(page, '**/recurring-series?**', {
+    expenses: empty,
+    income: empty,
+  } satisfies RecurringSeriesLists);
 }
 
 /** Answers the merchant ranking (the month's biggest merchants) with an empty ranking. */

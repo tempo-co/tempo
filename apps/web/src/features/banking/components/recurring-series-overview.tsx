@@ -8,9 +8,10 @@ import {ChevronRight, RefreshCw, Repeat} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
 import {EmptyState} from '@/components/shared/layout/app-empty-state';
-import {Button, buttonVariants} from '@/components/ui/button';
+import {Button} from '@/components/ui/button';
 import {Skeleton} from '@/components/ui/skeleton';
 import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
+import {TextAction} from '@/features/dashboard/components/text-action';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatWholeMoney, toCents} from '@/features/dashboard/utils/money';
 import {cn} from '@/utils/cn';
@@ -273,18 +274,18 @@ function FoldedSection({
   onOpen: (key: string) => void;
 }) {
   if (series.length === 0) return null;
-  // The summary reads like Home's "N more" text actions: the same type, padding and link colour.
+  // The summary is one of Home's text actions, like its "N more" rows.
   return (
     <details className='group min-w-0' aria-label={title}>
-      <summary
-        className={cn(
-          buttonVariants({variant: 'ghost', size: 'sm'}),
-          '-ml-2 w-fit cursor-pointer list-none px-2 font-normal text-primary hover:text-primary [&::-webkit-details-marker]:hidden',
-        )}
+      <TextAction
+        asChild
+        className='-ml-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden'
       >
-        <ChevronRight aria-hidden className='size-4 transition-transform group-open:rotate-90' />
-        {title} ({series.length})
-      </summary>
+        <summary>
+          <ChevronRight aria-hidden className='size-4 transition-transform group-open:rotate-90' />
+          {title} ({series.length})
+        </summary>
+      </TextAction>
       <div className='mt-2'>
         <SeriesList
           series={series}

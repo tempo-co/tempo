@@ -8,6 +8,7 @@ import type {
   BankTransactionBreakdownPeriod,
   BankTransactionCashFlow,
   BankTransactionReviewCounts,
+  BankTransactionSummary,
   BankTransactionTotals,
   BankTransactionsResponse,
   MerchantRanking,
@@ -317,11 +318,62 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
     };
   };
 
+  /**
+   * The month summary at `asOf`: each category's spending and its usual over the 3 months before, by this day of
+   * the month while it runs. Rent lands on the 1st and the rest of a month's spending on the 15th, as above.
+   */
+  const summaryOf = (month: string, asOf: string): BankTransactionSummary => {
+    const through = month === asOf.slice(0, 7) ? asOf : `${month}-${pad(daysIn(month))}`;
+    const throughDay = Number(through.slice(8));
+    const byDay = (of: string) =>
+      Object.fromEntries(
+        Object.entries(spendingOf(of)).filter(
+          ([key]) => throughDay >= (key === 'HOUSING_AND_UTILITIES' ? 1 : 15),
+        ),
+      );
+    const baselineMonths = monthsBetween(firstMonth, month).slice(-4, -1);
+    const spending = spendingOf(month);
+    return {
+      month,
+      through,
+      daysInMonth: daysIn(month),
+      baseCurrency: 'EUR',
+      totals: {
+        spending: money(sum(spending)),
+        income: money(sum(incomeOf(month))),
+        net: money(sum(incomeOf(month)) - sum(spending)),
+        ownTransfers: '0.00',
+      },
+      excluded: {unknownDirection: 0, missingBaseAmount: 0},
+      daily: [],
+      baseline: {
+        months: baselineMonths,
+        daily: [],
+        spendingByThrough: null,
+        spendingRangeByThrough: null,
+        incomeByThrough: null,
+      },
+      categories: Object.entries(spending).map(([category, amount]) => ({
+        category: category as BankTransactionSummary['categories'][number]['category'],
+        spending: money(amount),
+        count: 1,
+        baselineAverage:
+          baselineMonths.length === 0
+            ? null
+            : money(
+                baselineMonths.reduce((total, of) => total + (byDay(of)[category] ?? 0), 0) /
+                  baselineMonths.length,
+              ),
+      })),
+    };
+  };
+
   return {
     trend,
     flow,
     dayEnds,
     totalsBetween,
+    summaryOf,
     breakdown: {
       year: {
         category: yearly(spendingOf, category),
@@ -427,13 +479,17 @@ export function homeRecurring() {
   return {lists, summary};
 }
 
-/** Two to review, one failed and one without a direction: 4 on the Transactions badge. */
+/**
+ * Two to review, one failed and one without a direction, which is also one of the two to review: 3 rows need the
+ * owner, the Transactions badge.
+ */
 export const HOME_REVIEW_COUNTS: BankTransactionReviewCounts = {
   needsReview: 2,
   categorizationFailed: 1,
   categorizing: 5,
   unknownDirection: 1,
   missingBaseAmount: 3,
+  needsAttention: 3,
 };
 
 export const MARKET_ID = `k_${'d4'.repeat(16)}`;
@@ -562,6 +618,9 @@ export async function mockHistoryEndpoints(page: Page, history: HomeHistory = ho
   });
   await page.route('**/bank-transactions/cash-flow?**', (route) =>
     fulfillJson(route, history.flow),
+  );
+  await page.route('**/bank-transactions/summary?**', (route) =>
+    fulfillJson(route, history.summaryOf(params(route).get('month')!, params(route).get('asOf')!)),
   );
   await page.route('**/bank-transactions/breakdown?**', (route) => {
     const interval = params(route).get('interval') as 'year' | 'month';

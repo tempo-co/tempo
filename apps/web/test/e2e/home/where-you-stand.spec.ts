@@ -41,20 +41,20 @@ test('shows the total, its change over each span, and the span’s money in and 
     /bookingDate/,
   );
 
-  await card.getByRole('button', {name: '6M'}).click();
-  await expect(card.getByRole('button', {name: '6M'})).toHaveAttribute('aria-pressed', 'true');
+  await card.getByRole('radio', {name: '6M'}).click();
+  await expect(card.getByRole('radio', {name: '6M'})).toHaveAttribute('aria-checked', 'true');
   await expect(card).toContainText('+€4,800+25%since 30 Apr 2026');
 
   // Longer than the history: measured from zero, before the first month.
   for (const name of ['3Y', 'All']) {
-    await card.getByRole('button', {name, exact: true}).click();
+    await card.getByRole('radio', {name, exact: true}).click();
     await expect(card).toContainText('+€24,300since Dec 2024');
     await expect(span.getByRole('heading', {level: 2})).toHaveText('Dec 2024 – now');
   }
 
   // A month is measured from the day end 30 days back, and its money is that of the 30 days since, day by day.
   expect([...dayEnds, ...totals]).toEqual([]);
-  await card.getByRole('button', {name: '1M', exact: true}).click();
+  await card.getByRole('radio', {name: '1M', exact: true}).click();
   // On 6 October the October rent had gone out: €23,300.
   await expect(card).toContainText('+€1,000+4%since 6 Oct 2026');
   await expect(span.getByRole('heading', {level: 2})).toHaveText('7 Oct – now');
@@ -93,7 +93,7 @@ test('on the last day of a month, a span is measured from the month end a span b
 
   // A year back from 30 November is 30 November 2025 itself, when the balance was €16,000.
   await expect(homePage.whereYouStand).toContainText('+€8,300+52%since 30 Nov 2025');
-  await homePage.whereYouStand.getByRole('button', {name: '6M', exact: true}).click();
+  await homePage.whereYouStand.getByRole('radio', {name: '6M', exact: true}).click();
   await expect(homePage.whereYouStand).toContainText('since 30 Apr 2026');
 });
 
@@ -195,7 +195,7 @@ test('the balance chart reads out the month under the pointer, and a click opens
   await page.keyboard.press('Escape');
 
   // Over the last month, each point is a day end, from 6 October through today; a day opens its month.
-  await homePage.whereYouStand.getByRole('button', {name: '1M', exact: true}).click();
+  await homePage.whereYouStand.getByRole('radio', {name: '1M', exact: true}).click();
   await expect(plot).toHaveAttribute('aria-label', /each day end/);
   const fifteenth = await monthSlot(plot, 9, 31);
   await page.mouse.move(fifteenth.centre.x, fifteenth.centre.y);
@@ -289,7 +289,7 @@ test('offers a retry in the chart when the last month fails to load', async ({pa
   });
   await page.goto('/');
   const card = homePage.whereYouStand;
-  await card.getByRole('button', {name: '1M', exact: true}).click();
+  await card.getByRole('radio', {name: '1M', exact: true}).click();
   await expect(card.getByText('Could not load the last month.')).toBeVisible();
   // The total stays; the rest of the card waits in place.
   await expect(homePage.totalBalance).toHaveText('€24,300');
@@ -370,7 +370,7 @@ test.describe('touch chart inspection', () => {
   test('a short tap opens the month', async ({page, homePage}) => {
     await mockSyntheticHome(page, {history: shortHistory()});
     await page.goto('/');
-    await homePage.whereYouStand.getByRole('button', {name: 'All', exact: true}).click();
+    await homePage.whereYouStand.getByRole('radio', {name: 'All', exact: true}).click();
     const plot = homePage.whereYouStand.locator('[data-slot="chart"]');
     await plot.scrollIntoViewIfNeeded();
     // From the month slots, not the tick labels: WebKit misplaces SVG tick label boxes.
@@ -382,7 +382,7 @@ test.describe('touch chart inspection', () => {
     await expect(homePage.monthDialog('June 2026')).toBeHidden();
 
     // A day of the last month opens its month too.
-    await homePage.whereYouStand.getByRole('button', {name: '1M', exact: true}).click();
+    await homePage.whereYouStand.getByRole('radio', {name: '1M', exact: true}).click();
     await expect(plot).toHaveAttribute('aria-label', /each day end/);
     const october = await monthSlot(plot, 20, 31);
     await page.touchscreen.tap(october.centre.x, october.centre.y);
@@ -416,7 +416,7 @@ test.describe('touch chart inspection by sliding', () => {
       });
       await mockSyntheticHome(page, {history: shortHistory()});
       await page.goto('/');
-      await homePage.whereYouStand.getByRole('button', {name: 'All', exact: true}).click();
+      await homePage.whereYouStand.getByRole('radio', {name: 'All', exact: true}).click();
       const plot = homePage.whereYouStand.locator('[data-slot="chart"]');
       await plot.scrollIntoViewIfNeeded();
       const labels = plot.locator('.recharts-xAxis-tick-labels text');

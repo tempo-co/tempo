@@ -339,10 +339,13 @@ test('income by source names each source with its logo or icon and lines up with
   await expect(page.getByRole('tooltip')).toHaveText(long);
   expect(await cells(rows.nth(1))).toEqual([long, '−2%', '€2,951', '€3,000', '€3,000']);
   expect(await cells(rows.nth(2))).toEqual(['Example Bonus', '−100%', '–', '€333', '–']);
-  await expect(rows.nth(1).getByRole('link').first()).toHaveAttribute(
-    'href',
-    /search=Example(\+|%20)Employer/,
-  );
+  // A year opens the rows of that source, by the key the breakdown groups them by, whatever their names.
+  const drill = new URL(
+    (await rows.nth(1).getByRole('link').first().getAttribute('href'))!,
+    page.url(),
+  ).searchParams;
+  expect(drill.get('incomeSource')).toBe(EMPLOYER);
+  expect(JSON.parse(drill.get('cashFlows')!)).toEqual(['INCOME']);
   await expectSourceTile(rows.nth(1), long, 'logo');
   await expectSourceTile(rows.nth(2), 'Example Bonus', 'icon');
   // A cell's tip leads with the source's tile; a long name is cut short and every line stays one line.

@@ -4,20 +4,14 @@ import {type ReactNode, useState} from 'react';
 
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
+import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
 import {cn} from '@/utils/cn';
 
 import {useLastMonth} from '../api/use-overview';
 import {parseCalendarDate, periodDrill} from '../utils/drill-links';
 import {pct, signed, signedPct, wholeCents} from '../utils/format';
 import {formatMonth} from '../utils/month';
-import {
-  type BalancePoint,
-  type Overview,
-  SPANS,
-  type Span,
-  monthBalancePoints,
-  spanMonths,
-} from '../utils/overview';
+import {type BalancePoint, type Overview, SPANS, type Span, spanMonths} from '../utils/overview';
 import {BalanceChart, BalanceChartSkeleton} from './balance-chart';
 import {LoadingLabel, TextBone} from './loading';
 import {RepeatsBlock} from './repeats-block';
@@ -137,7 +131,7 @@ function monthSpanView(overview: Overview, span: Span): SpanView {
   const startIndex = overview.months.indexOf(months[0]) - 1;
   const from = `${months[0].month}-01`;
   return {
-    points: monthBalancePoints(shown),
+    points: shown,
     base,
     since: base
       ? format(parseCalendarDate(base.end), 'd MMM yyyy')
@@ -204,24 +198,27 @@ function Total({overview, view}: {overview: Overview | null; view: SpanView | nu
 
 function SpanSwitch({value, onChange}: {value: Span; onChange: (value: Span) => void}) {
   return (
-    <div role='group' aria-label='Span' className='flex border'>
+    <ToggleGroup
+      type='single'
+      value={value}
+      onValueChange={(next) => {
+        // Pressing the chosen span again leaves it chosen.
+        const option = SPANS.find((item) => item.value === next);
+        if (option) onChange(option.value);
+      }}
+      aria-label='Span'
+      className='gap-0 border'
+    >
       {SPANS.map((option) => (
-        <button
+        <ToggleGroupItem
           key={option.value}
-          type='button'
-          aria-pressed={value === option.value}
-          onClick={() => onChange(option.value)}
-          className={cn(
-            'min-h-11 min-w-11 px-3 text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:min-h-9',
-            value === option.value
-              ? 'bg-foreground font-medium text-background'
-              : 'text-muted-foreground hover:bg-accent',
-          )}
+          value={option.value}
+          className='h-auto min-h-11 min-w-11 rounded-none px-3 font-normal text-muted-foreground hover:bg-accent hover:text-muted-foreground focus-visible:-outline-offset-2 data-[state=on]:bg-foreground data-[state=on]:font-medium data-[state=on]:text-background data-[state=on]:hover:bg-foreground data-[state=on]:hover:text-background sm:min-h-9'
         >
           {option.label}
-        </button>
+        </ToggleGroupItem>
       ))}
-    </div>
+    </ToggleGroup>
   );
 }
 

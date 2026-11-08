@@ -1,5 +1,10 @@
+import type {Route} from '@playwright/test';
+
 import {
+  EMPLOYER,
+  FLIGHT,
   MARKET_ID,
+  USUAL_SPENDING,
   homeHistory,
   mockSourceLogo,
   mockSyntheticHome,
@@ -55,6 +60,11 @@ test('a month shows its money, where it went against the usual, where it came fr
   const came = dialog.getByRole('region', {name: 'Where it came from'});
   await expect(came.getByRole('link')).toHaveText(['Example Employer€3,000']);
   await expectSourceTile(came, 'Example Employer', 'logo');
+  // A source opens its rows by the key the breakdown groups them by, whatever their names.
+  const drill = new URL((await came.getByRole('link').getAttribute('href'))!, page.url())
+    .searchParams;
+  expect(drill.get('incomeSource')).toBe(EMPLOYER);
+  expect(JSON.parse(drill.get('cashFlows')!)).toEqual(['INCOME']);
 
   // A page of 20, then one more each press until the 45 are in; the button spans the list.
   const transactions = dialog.getByRole('region', {name: 'Transactions'});
@@ -97,6 +107,43 @@ test('a later page of the month’s transactions that fails keeps the loaded one
   await expect(transactions.getByRole('button', {name: 'Load more'})).toBeVisible();
 });
 
+test('a refresh that fails keeps the loaded month, its parts and its merchants', async ({
+  page,
+  homePage,
+}) => {
+  await mockSyntheticHome(page, {clock: 'installed'});
+  await page.goto('/?month=2026-03');
+  const dialog = homePage.monthDialog('March 2026');
+  const figures = dialog.getByRole('region', {name: 'The month'});
+  const went = dialog.getByRole('region', {name: 'Where it went'}).getByRole('link');
+  const came = dialog.getByRole('region', {name: 'Where it came from'}).getByRole('link');
+  const merchants = dialog.getByRole('region', {name: 'Biggest merchants'});
+  await expect(figures).toContainText('In€3,000');
+  await expect(went.first()).toHaveText('Travel€1,500none usually');
+  await expect(came).toHaveText(['Example Employer€3,000']);
+  await expect(merchants).toContainText('Example Landlord');
+
+  // The next refresh of the parts and the merchants is rate limited, which is final.
+  const failed = new Set<string>();
+  const limited = (route: Route) => {
+    const url = new URL(route.request().url());
+    failed.add(
+      url.pathname.endsWith('/breakdown') ? `by=${url.searchParams.get('by')}` : 'merchants',
+    );
+    return fulfillJson(route, {statusCode: 429, message: 'Too Many Requests'}, 429);
+  };
+  await page.route('**/bank-transactions/breakdown?**', limited);
+  await page.route('**/merchants/ranking?**', limited);
+  await page.clock.runFor(31_000);
+  await expect.poll(() => [...failed].sort()).toEqual(['by=category', 'by=source', 'merchants']);
+
+  await expect(figures).toContainText('In€3,000');
+  await expect(went.first()).toHaveText('Travel€1,500none usually');
+  await expect(came).toHaveText(['Example Employer€3,000']);
+  await expect(merchants).toContainText('Example Landlord');
+  await expect(dialog.getByText(/Could not load/)).toHaveCount(0);
+});
+
 test('a month without a full year of history before it has no usual', async ({page, homePage}) => {
   await mockSyntheticHome(page, {history: homeHistory({sourceLogos: true})});
   await mockSourceLogo(page);
@@ -117,14 +164,32 @@ test('a month without a full year of history before it has no usual', async ({pa
   await expectSourceTile(came, 'Example Employer', 'logo');
 });
 
-test('the running month reads as so far', async ({page, homePage}) => {
-  await mockSyntheticHome(page);
+test('the running month reads as so far, against the usual by this day of the month', async ({
+  page,
+  homePage,
+}) => {
+  // Five days in, the rent and €100 of food are paid; food usually lands mid-month.
+  const history = homeHistory({
+    spending: (month) =>
+      month === '2026-11'
+        ? {HOUSING_AND_UTILITIES: 1200, FOOD_AND_DRINK: 100}
+        : month === FLIGHT.month
+          ? {...USUAL_SPENDING, TRAVEL: FLIGHT.amount}
+          : {...USUAL_SPENDING},
+  });
+  await mockSyntheticHome(page, {history});
   await page.goto('/?month=2026-11');
 
   const dialog = homePage.monthDialog('November 2026');
   await expect(dialog.getByRole('region', {name: 'The month'})).toHaveText(
-    'In€0Out€1,200Kept so far−€1,200Balance now€24,300−€1,200 on Oct',
+    'In€0Out€1,300Kept so far−€1,300Balance now€24,200−€1,300 on Oct',
   );
+  const went = dialog.getByRole('region', {name: 'Where it went'});
+  await expect(went).toContainText('usual by this day, last 3 months');
+  await expect(went.getByRole('link')).toHaveText([
+    'Housing and utilities€1,2000% on usual',
+    'Food and drink€100none usually',
+  ]);
   await expect(dialog.getByRole('region', {name: 'Where it came from'})).toContainText(
     'No income.',
   );

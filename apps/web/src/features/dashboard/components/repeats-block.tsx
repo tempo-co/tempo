@@ -13,8 +13,10 @@ import {
 import {cn} from '@/utils/cn';
 
 import {parseCalendarDate} from '../utils/drill-links';
-import {formatWholeMoney, toCents} from '../utils/money';
+import {wholeCents} from '../utils/format';
+import {toCents} from '../utils/money';
 import {formatMonth} from '../utils/month';
+import {ChartCardError} from './chart-card';
 import {Bone, LoadingLabel, TextBone} from './loading';
 import {TextAction} from './text-action';
 
@@ -40,7 +42,8 @@ const ROW =
 export function RepeatsBlock({today, className}: {today: string; className?: string}) {
   const lists = useGetRecurringSeries(today);
   const series = lists.data;
-  const {summary, isError} = useGetRecurringSummary(today);
+  const totals = useGetRecurringSummary(today);
+  const summary = totals.summary;
   const navigate = useNavigate({from: '/'});
   const open = (key?: string) =>
     void navigate({search: (prev) => ({...prev, recurring: 'open', series: key})});
@@ -58,7 +61,21 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
   );
   // Nothing to show: beside the chart the room stays, so the chart keeps its height.
   const absent = <div aria-hidden='true' className={cn('@max-[60rem]:hidden', RESERVE)} />;
-  if ((!summary && isError) || (!series && lists.isError)) return absent;
+  // A failed refresh keeps what was loaded; only a read that never loaded says so, with a retry of just it.
+  const failed = [
+    {missing: !summary && totals.isError, refetch: totals.refetch},
+    {missing: !series && lists.isError, refetch: lists.refetch},
+  ].filter((query) => query.missing);
+  if (failed.length > 0)
+    return (
+      <section aria-label='Repeats' className={cn('grid content-start gap-4', RESERVE, className)}>
+        {header}
+        <ChartCardError
+          message='Could not load what repeats.'
+          onRetry={() => Promise.all(failed.map((query) => query.refetch()))}
+        />
+      </section>
+    );
   if (!summary || !series)
     return (
       <section
@@ -133,9 +150,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
       <dl className='grid grid-cols-2 gap-x-4'>
         <div className='min-w-0'>
           <dt className='text-label text-muted-foreground'>Bills a month</dt>
-          <dd className='numeric text-lg font-semibold'>
-            {formatWholeMoney(bills / 100, currency)}
-          </dd>
+          <dd className='numeric text-lg font-semibold'>{wholeCents(bills, currency)}</dd>
           {summary.expenseUnconvertedCount > 0 && (
             <dd className='text-xs text-muted-foreground'>
               {summary.expenseUnconvertedCount} not converted yet
@@ -145,7 +160,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
         <div className='min-w-0'>
           <dt className='text-label text-muted-foreground'>Income a month</dt>
           <dd className='numeric text-lg font-semibold text-success'>
-            {formatWholeMoney(income / 100, currency)}
+            {wholeCents(income, currency)}
           </dd>
         </div>
       </dl>
@@ -160,7 +175,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
           <p className='numeric text-xs text-muted-foreground'>
             {left === 0
               ? `All of ${monthName}'s bills paid`
-              : `${monthName}: ${formatWholeMoney(paid / 100, currency)} paid · ${formatWholeMoney(left / 100, currency)} to go`}
+              : `${monthName}: ${wholeCents(paid, currency)} paid · ${wholeCents(left, currency)} to go`}
           </p>
         </div>
       )}

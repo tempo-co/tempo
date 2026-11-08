@@ -75,6 +75,8 @@ const STAGGER: [string, number][] = [
   // A month's transactions and biggest merchants, when the month dialog is open.
   ['**/bank-transactions?**', 1200],
   ['**/merchants/ranking?**', 1300],
+  // The running month's usual by this day.
+  ['**/bank-transactions/summary?**', 1350],
   [`**${EMPLOYER_LOGO}/mask-v2`, 1700],
 ];
 
@@ -154,7 +156,7 @@ for (const width of [1440, 390]) {
         await route.fallback();
       });
     await page.evaluate(() => (window.__shifts = []));
-    await homePage.whereYouStand.getByRole('button', {name: '1M', exact: true}).click();
+    await homePage.whereYouStand.getByRole('radio', {name: '1M', exact: true}).click();
     // Until then, the plot holds a quiet placeholder in the line's place.
     await expect(
       homePage.whereYouStand.locator('[data-slot="plot-placeholder"] > [aria-hidden="true"]'),

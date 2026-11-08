@@ -167,6 +167,8 @@ export type BankTransactionReviewCounts = {
 	categorizing: number;
 	unknownDirection: number;
 	missingBaseAmount: number;
+	/** Rows to review, failed or without a direction, each counted once: the groups above can overlap. */
+	needsAttention: number;
 };
 
 /** `GET /bank-transactions/totals`: totals over all filtered rows, as decimal base-currency strings. */

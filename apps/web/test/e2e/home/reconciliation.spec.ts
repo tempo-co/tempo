@@ -1,3 +1,4 @@
+import type {Locator} from '@playwright/test';
 import type {BankTransactionBreakdown, BankTransactionReviewCounts} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
@@ -62,5 +63,79 @@ test('a real category total in a month reconciles with its transaction drill', a
   const countLabel = `${list.total} ${list.total === 1 ? 'transaction' : 'transactions'}`;
   await expect(page.getByRole('heading', {name: 'Bank transactions'}).locator('..')).toContainText(
     countLabel,
+  );
+});
+
+test('a real income source reconciles with its drill, from its month and from its year', async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(SEEDED_TRANSACTION_YEAR_NOW);
+  const sourceOf = async (interval: 'month' | 'year', from: string, to: string) => {
+    const response = await page.request.get(
+      `${API_URL}/bank-transactions/breakdown?${new URLSearchParams({interval, by: 'source', from, to, asOf: '2026-10-01'})}`,
+    );
+    expect(response.ok()).toBe(true);
+    const part = ((await response.json()) as BankTransactionBreakdown).periods[0]?.parts[0];
+    if (!part) throw new Error('Missing seeded income');
+    return part;
+  };
+  /** Follows a source's link and checks it lists exactly the rows behind `part` between the two dates. */
+  const expectDrill = async (
+    link: Locator,
+    part: BankTransactionBreakdown['periods'][number]['parts'][number],
+    from: string,
+    to: string,
+  ) => {
+    await link.click();
+    await expect(page).toHaveURL(/\/bank-transactions/);
+    const search = new URL(page.url()).searchParams;
+    expect(search.get('incomeSource')).toBe(part.key);
+    expect(JSON.parse(search.get('cashFlows')!)).toEqual(['INCOME']);
+    const params = new URLSearchParams({
+      'filter[bookingDate][from]': from,
+      'filter[bookingDate][to]': to,
+      'filter[cashFlows][]': 'INCOME',
+      'filter[baseAmount]': 'PRESENT',
+      'filter[incomeSource]': part.key,
+      'pagination[pageSize]': '100',
+    });
+    const list = (await (
+      await page.request.get(`${API_URL}/bank-transactions?${params}`)
+    ).json()) as {total: number; transactions: {amountInBaseCurrency: string | null}[]};
+    expect(
+      list.transactions.reduce(
+        (sum, item) => sum + Math.round(Number(item.amountInBaseCurrency) * 100),
+        0,
+      ),
+    ).toBe(Math.round(Number(part.amount) * 100));
+    await expect(
+      page.getByRole('heading', {name: 'Bank transactions'}).locator('..'),
+    ).toContainText(`${list.total} ${list.total === 1 ? 'transaction' : 'transactions'}`);
+  };
+
+  const august = await sourceOf('month', '2026-08-01', '2026-08-31');
+  await page.goto('/?month=2026-08');
+  await expectDrill(
+    page
+      .getByRole('dialog', {name: 'August 2026'})
+      .getByRole('region', {name: 'Where it came from'})
+      .getByRole('link', {name: new RegExp(august.label)}),
+    august,
+    '2026-08-01',
+    '2026-08-31',
+  );
+
+  const year = await sourceOf('year', '2026-01-01', '2026-10-01');
+  await page.goto('/');
+  await expectDrill(
+    page
+      .getByRole('region', {name: 'Income by source'})
+      .getByRole('row')
+      .filter({hasText: year.label})
+      .getByRole('link')
+      .first(),
+    year,
+    '2026-01-01',
+    '2026-10-01',
   );
 });

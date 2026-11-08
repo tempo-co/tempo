@@ -37,6 +37,16 @@ export function flowDrill(
   };
 }
 
+/** Exactly the rows behind one income source's total between two dates, by the key the breakdown gives it. */
+export function sourceDrill(
+  source: string,
+  from: string,
+  to: string,
+  hasMissingBaseAmounts: boolean,
+): BankTransactionDrillSearch {
+  return {...flowDrill('INCOME', from, to, hasMissingBaseAmounts), incomeSource: source};
+}
+
 /** Exactly the spending rows behind one or more category totals between two dates. */
 export function categoryDrill(
   categories: BankTransactionCategoryFilterValue | BankTransactionCategoryFilterValue[],

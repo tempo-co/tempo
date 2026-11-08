@@ -1,5 +1,6 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
+import type {BankTransactionReviewCounts} from '@tempo/contracts';
 import TestAgent from 'supertest/lib/agent';
 import {DataSource, Repository} from 'typeorm';
 
@@ -421,7 +422,8 @@ describe('BankTransactionSummary', () => {
 
 	it('counts transactions that need attention across all months', async () => {
 		const extra = await fixtures.createTransactions(ownerBankAccount, [
-			bookedRow('2026-07-15', '-5.00', {category: 'NEEDS_REVIEW'}),
+			// To review and without a direction: one row in two counts, and once in what needs the owner.
+			bookedRow('2026-07-15', '-5.00', {category: 'NEEDS_REVIEW', creditDebitIndicator: null}),
 			bookedRow(null, '-6.00', {category: null, categoryStatus: 'FAILED', amountInBaseCurrency: null}),
 			bookedRow('2026-08-03', '-7.00', {category: null, categoryStatus: 'PROCESSING'}),
 		]);
@@ -436,13 +438,15 @@ describe('BankTransactionSummary', () => {
 				needsReview: 1,
 				categorizationFailed: 1,
 				categorizing: 1,
-				unknownDirection: 1,
+				unknownDirection: 2,
 				missingBaseAmount: 2,
+				needsAttention: 3,
 			});
 
 			// Each count opens a list with exactly that many rows.
 			const listTotal = async (filter: Record<string, string | string[]>) =>
 				(await ownerAgent.get('/bank-transactions').query(filter).expect(200)).body.total;
+			const {needsAttention: _distinct, ...groups} = body as BankTransactionReviewCounts;
 			expect({
 				needsReview: await listTotal({'filter[categories][]': 'NEEDS_REVIEW'}),
 				categorizationFailed: await listTotal({'filter[categoryStatuses][]': 'FAILED'}),
@@ -452,7 +456,7 @@ describe('BankTransactionSummary', () => {
 					'filter[baseAmount]': 'MISSING',
 					'filter[cashFlows][]': ['SPENDING', 'INCOME', 'UNKNOWN'],
 				}),
-			}).toEqual(body);
+			}).toEqual(groups);
 		} finally {
 			await fixtures.transactions.delete([...extra.map(({id}) => id), otherExtra.id]);
 		}

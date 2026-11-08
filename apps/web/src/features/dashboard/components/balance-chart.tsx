@@ -164,7 +164,7 @@ export function BalanceChart({
             tickFormatter={(index: number) => {
               const point = data[index]?.point;
               if (!point) return '';
-              if (unit === 'day') return format(parseCalendarDate(point.key), 'd MMM');
+              if (unit === 'day') return format(parseCalendarDate(point.end), 'd MMM');
               return n > 40
                 ? point.month.slice(0, 4)
                 : formatMonth(point.month, n > 14 ? 'MMM yy' : 'MMM');
@@ -208,7 +208,7 @@ export function BalanceChart({
                 <Readout>
                   <ReadoutTitle note={point.complete ? undefined : 'so far'}>
                     {unit === 'day'
-                      ? format(parseCalendarDate(point.key), 'EEE d MMM')
+                      ? format(parseCalendarDate(point.end), 'EEE d MMM')
                       : formatMonth(point.month, 'MMMM yyyy')}
                   </ReadoutTitle>
                   <ReadoutRow label='Balance' value={wholeCents(point.balance, currency)} strong />

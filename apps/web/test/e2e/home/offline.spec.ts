@@ -63,7 +63,11 @@ async function mockHome(page: Page, padding = 0) {
   ]);
   await mockHomeHistory(page);
   await page.route('**/bank-transactions/review-counts', (route) =>
-    fulfillJson(route, {...HOME_REVIEW_COUNTS, needsReview: state.refreshed ? 3 : 2}),
+    fulfillJson(route, {
+      ...HOME_REVIEW_COUNTS,
+      needsReview: state.refreshed ? 3 : 2,
+      needsAttention: state.refreshed ? 4 : 3,
+    }),
   );
   await page.route(`${API_URL}/bank-transactions?**`, (route) => {
     const from = new URL(route.request().url()).searchParams.get('filter[bookingDate][from]');
@@ -80,7 +84,7 @@ async function openSavedHome(page: Page) {
   await page.goto('/?month=2026-09');
   await expect(monthRows(page, 'September 2026')).toHaveCount(3);
   await page.keyboard.press('Escape');
-  await expect(reviewBadge(page, 4)).toBeVisible();
+  await expect(reviewBadge(page, 3)).toBeVisible();
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
   await page.clock.runFor(1100);
   await expect.poll(() => readCache(page)).not.toBe(null);
@@ -124,7 +128,7 @@ test.describe('saved Home', () => {
     await page.reload();
     await expect(offlineStatus(page)).toBeVisible();
     await expect(totalBalance(page)).toHaveText('€24,300');
-    await expect(reviewBadge(page, 4)).toBeVisible();
+    await expect(reviewBadge(page, 3)).toBeVisible();
 
     // A saved month reopens; one whose transactions were never loaded must not show another month's.
     await page
@@ -157,7 +161,7 @@ test.describe('saved Home', () => {
     await context.setOffline(false);
     await page.clock.resume();
     await expect(offlineStatus(page)).not.toBeVisible({timeout: 15000});
-    await expect(reviewBadge(page, 5)).toBeVisible();
+    await expect(reviewBadge(page, 4)).toBeVisible();
   });
 
   test('shares the recent-data budget with transaction views on every page', async ({page}) => {

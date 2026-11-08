@@ -102,9 +102,10 @@ test.describe('Home navigation badges', () => {
     await page.goto('/');
 
     const primary = page.getByRole('navigation', {name: 'Primary'}).first();
-    // Two to review, one failed and one without a direction; the five still categorizing are not counted.
-    const transactions = primary.getByRole('link', {name: 'Transactions, 4 to review'});
-    await expect(transactions).toHaveText('Transactions4');
+    // Two to review, one failed and one without a direction that is also to review, each counted once; the five
+    // still categorizing are not counted.
+    const transactions = primary.getByRole('link', {name: 'Transactions, 3 to review'});
+    await expect(transactions).toHaveText('Transactions3');
     await expect(
       primary.getByRole('link', {name: 'Connections, a bank needs attention'}),
     ).toBeVisible();
@@ -216,6 +217,7 @@ test.describe('Home navigation badges', () => {
         categorizing: 4,
         unknownDirection: 0,
         missingBaseAmount: 2,
+        needsAttention: 0,
       },
     });
     await page.goto('/');
@@ -234,7 +236,7 @@ test.describe('Home navigation badges', () => {
     });
     await page.goto('/');
     const tabs = page.getByRole('navigation', {name: 'Primary'}).last();
-    await expect(tabs.getByRole('link', {name: 'Transactions, 4 to review'})).toBeVisible();
+    await expect(tabs.getByRole('link', {name: 'Transactions, 3 to review'})).toBeVisible();
     await expect(
       tabs.getByRole('link', {name: 'Connections, a bank needs attention'}),
     ).toBeVisible();

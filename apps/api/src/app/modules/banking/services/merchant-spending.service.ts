@@ -39,11 +39,13 @@ import {
 	periodStarts,
 } from '../summary/bank-transaction-summary';
 import {
+	SQL_BASE_AMOUNT,
 	SQL_INCOME,
 	SQL_INTERNAL,
 	SQL_MERCHANT_GROUP,
 	SQL_MERCHANT_KEY_NAME,
 	SQL_MISSING_BASE_AMOUNT,
+	SQL_PERIOD_START,
 	SQL_SPENDING,
 	SQL_UNKNOWN_DIRECTION,
 	applyBankTransactionFilters,
@@ -51,9 +53,8 @@ import {
 	findFirstBookingDate,
 } from './bank-transaction-filters';
 
-const BASE_AMOUNT = '"transaction"."amountInBaseCurrency"';
 /** Each amount rounded to minor units before summing; monetary SQL results are never converted to Number. */
-const CENTS = `ROUND(${BASE_AMOUNT} * 100)`;
+const CENTS = `ROUND(${SQL_BASE_AMOUNT} * 100)`;
 const DEBIT = `"transaction"."creditDebitIndicator" = 'DBIT'`;
 const CREDIT = `"transaction"."creditDebitIndicator" = 'CRDT'`;
 
@@ -134,7 +135,7 @@ export class MerchantSpendingService {
 		const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
 		applyBankTransactionFilters(query, {bookingDate: {from: starts[0], to}, merchantGroup: groupId});
 		const rows = await query
-			.select(`to_char(date_trunc(:interval, "transaction"."bookingDate"::timestamp), 'YYYY-MM-DD')`, 'start')
+			.select(SQL_PERIOD_START, 'start')
 			.addSelect(`COALESCE(SUM(-${CENTS}) FILTER (WHERE ${SQL_SPENDING}), 0)::text`, 'spent')
 			.addSelect(`COALESCE(SUM(${CENTS}) FILTER (WHERE ${SQL_INCOME}), 0)::text`, 'received')
 			.addSelect('COUNT(*)::int', 'count')
@@ -281,7 +282,7 @@ export class MerchantSpendingService {
 			.addSelect(`COALESCE(SUM(${CENTS}) FILTER (WHERE ${SQL_INCOME}), 0)::text`, 'received')
 			.addSelect('COUNT(*)::int', 'count')
 			.addSelect(
-				`COUNT(*) FILTER (WHERE ${SQL_SPENDING} AND ${DEBIT} AND ${BASE_AMOUNT} IS NOT NULL)::int`,
+				`COUNT(*) FILTER (WHERE ${SQL_SPENDING} AND ${DEBIT} AND ${SQL_BASE_AMOUNT} IS NOT NULL)::int`,
 				'paymentCount',
 			)
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_UNKNOWN_DIRECTION})::int`, 'unknownDirection')

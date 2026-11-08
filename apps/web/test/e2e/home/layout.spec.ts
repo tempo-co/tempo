@@ -7,7 +7,6 @@ import {
   RENT_KEY,
   USUAL_SPENDING,
   homeHistory,
-  homeRecurring,
   mockSyntheticHome,
   monthTransactions,
 } from '../../data/home-history.data';
@@ -146,7 +145,7 @@ for (const [name, history] of [
         expect.soft(await smallTargets(page, 'main')).toEqual([]);
       }
 
-      await homePage.whereYouStand.getByRole('button', {name: 'All', exact: true}).click();
+      await homePage.whereYouStand.getByRole('radio', {name: 'All', exact: true}).click();
       await capture('home-all');
       await expectNoHorizontalOverflow(page);
       expect.soft(await brokenAmounts(page)).toEqual([]);
@@ -200,7 +199,7 @@ for (const width of [1000, 1024, 1440]) {
       await page.goto('/');
       await expectLoaded(homePage.whereYouStand);
       for (const span of ['1M', '6M', '1Y', '3Y', 'All']) {
-        await homePage.whereYouStand.getByRole('button', {name: span, exact: true}).click();
+        await homePage.whereYouStand.getByRole('radio', {name: span, exact: true}).click();
         // 1M loads its day ends on selection.
         await expectLoaded(homePage.whereYouStand);
         await expect(homePage.whereYouStand.getByRole('region', {name: 'This span'})).toBeVisible();
@@ -338,17 +337,6 @@ test('Home’s text actions and Load more buttons share one style with the month
         .getByRole('heading', {name: 'All 45 payments'}),
     ),
   );
-  // The recurring list's folds open like Home's "N more" rows.
-  const {lists} = homeRecurring();
-  const [rent, energy] = lists.expenses.series;
-  lists.expenses.series.push(
-    {...rent, key: 'd4'.repeat(16), name: 'Example Old Plan', status: 'ENDED'},
-    {...energy, key: 'e5'.repeat(16), name: 'Example Hidden Plan', hidden: true, flags: []},
-  );
-  await page.route('**/recurring-series?**', (route) => fulfillJson(route, lists));
-  await page.goto('/?recurring=open');
-  styles.push(await style(recurring.getByText('Ended (1)', {exact: true})));
-  styles.push(await style(recurring.getByText('Hidden (1)', {exact: true})));
 
   expect(styles[0].height).toBe(36);
   for (const item of styles) expect(item).toEqual(styles[0]);

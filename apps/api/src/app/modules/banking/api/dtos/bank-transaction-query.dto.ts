@@ -133,6 +133,12 @@ export class BankTransactionFilterQueryDto implements BankTransactionFilter {
 	@IsOptional()
 	@Matches(new RegExp(MERCHANT_GROUP_ID_PATTERN))
 	merchantGroup?: string;
+
+	/** Only the rows of one income source, by the key the breakdown gives it. */
+	@IsOptional()
+	@IsString()
+	@MaxLength(BANK_TRANSACTION_SEARCH_MAX_LENGTH)
+	incomeSource?: string;
 }
 
 /** Totals use the list's filter contract, without sort or pagination inputs. */

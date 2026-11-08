@@ -52,12 +52,11 @@ type NavBadge = {count: number | null; label: string};
 function useNavBadges() {
   const {reviewCounts} = useGetBankTransactionReviewCounts();
   const {bankConnections} = useGetAllBankConnections();
-  const review = reviewCounts
-    ? reviewCounts.needsReview + reviewCounts.categorizationFailed + reviewCounts.unknownDirection
-    : 0;
+  // One row can be in several review groups, so the badge counts what needs the owner once per row.
+  const review = reviewCounts?.needsAttention ?? 0;
   const connections = bankConnections ?? [];
   const problems = connections.filter(getAutomaticSyncProblemForConnection).length;
-  const endingSoon = connections.filter((connection) => isConsentEndingSoon(connection)).length;
+  const endingSoon = connections.filter(isConsentEndingSoon).length;
   const banksLabel = [
     problems === 0
       ? null

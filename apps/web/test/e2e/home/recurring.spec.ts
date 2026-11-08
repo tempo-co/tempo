@@ -3,6 +3,7 @@ import type {RecurringSummary} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
+import {mockSyntheticHome} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
 import {expectLoaded, expectNoHorizontalOverflow} from '../../utils/layout';
@@ -144,4 +145,27 @@ test('says how many bills the total leaves out until they are converted', async 
   await page.reload();
   await expect(repeats(page)).toContainText('Bills a month€130');
   await expect(repeats(page)).not.toContainText('not converted');
+});
+
+test.describe('when what repeats cannot be read', () => {
+  // Every response is synthetic: this check never reads a shared API stack.
+  test.use({storageState: {cookies: [], origins: []}});
+
+  test('Repeats says so in its place and loads on Try again', async ({page}) => {
+    await mockSyntheticHome(page);
+    const state = {failing: true};
+    for (const url of ['**/recurring-series/summary?**', '**/recurring-series?**'])
+      await page.route(url, (route) =>
+        state.failing
+          ? fulfillJson(route, {statusCode: 429, message: 'Too Many Requests'}, 429)
+          : route.fallback(),
+      );
+    await page.goto('/');
+
+    await expect(repeats(page)).toContainText('Could not load what repeats.');
+    state.failing = false;
+    await repeats(page).getByRole('button', {name: 'Try again'}).click();
+    await expect(repeats(page)).toContainText('Bills a month€1,250');
+    await expect(repeats(page)).toContainText('Income a month€3,000');
+  });
 });

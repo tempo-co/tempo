@@ -144,8 +144,6 @@ export function spanMonths(overview: Overview, span: Span) {
 
 /** A point on the balance line: a month end, or a day end over the last month. */
 export type BalancePoint = {
-  /** `YYYY-MM` or `YYYY-MM-DD`. */
-  key: string;
   /** The month a click opens, `YYYY-MM`. */
   month: string;
   /** The day the balance is for. */
@@ -156,9 +154,6 @@ export type BalancePoint = {
   /** Cents kept in the month; months only. */
   kept?: number;
 };
-
-export const monthBalancePoints = (months: MonthPoint[]): BalancePoint[] =>
-  months.map((point) => ({key: point.month, ...point}));
 
 /** Days the 1M span covers, through today. */
 const LAST_MONTH_DAYS = 30;
@@ -179,7 +174,6 @@ export function lastMonthRange(today: string) {
 /** Day-end balances from the balance trend's `day` periods, oldest first. */
 export const dayBalancePoints = (trend: BankBalanceTrend): BalancePoint[] =>
   trend.periods.map((period) => ({
-    key: period.end,
     month: period.end.slice(0, 7),
     end: period.end,
     complete: period.complete,

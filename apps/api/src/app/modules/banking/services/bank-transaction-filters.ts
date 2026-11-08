@@ -18,6 +18,11 @@ const FAILED = 'FAILED' satisfies BankTransactionCategorizationStatus;
 const PENDING = 'PENDING' satisfies BankTransactionCategorizationStatus;
 const PROCESSING = 'PROCESSING' satisfies BankTransactionCategorizationStatus;
 
+/** The row's amount in the owner's base currency; null until it is converted. */
+export const SQL_BASE_AMOUNT = '"transaction"."amountInBaseCurrency"';
+/** The first day of the row's week, month or year (`YYYY-MM-DD`, as `periodStarts` gives it); binds `:interval`. */
+export const SQL_PERIOD_START = `to_char(date_trunc(:interval, "transaction"."bookingDate"::timestamp), 'YYYY-MM-DD')`;
+
 // Provider writes persist canonical currency and direction codes.
 const INDICATOR_SQL = '"transaction"."creditDebitIndicator"';
 /** Own transfers and currency exchanges move money between the owner's accounts. */
@@ -28,7 +33,7 @@ export const SQL_SPENDING = `(NOT ${SQL_INTERNAL} AND (${INDICATOR_SQL} = 'DBIT'
 export const SQL_INCOME = `(NOT ${SQL_INTERNAL} AND ${INDICATOR_SQL} = 'CRDT' AND "transaction"."category" IS DISTINCT FROM '${REFUND}')`;
 export const SQL_UNKNOWN_DIRECTION = `(NOT ${SQL_INTERNAL} AND COALESCE(${INDICATOR_SQL}, '') NOT IN ('CRDT', 'DBIT'))`;
 export const SQL_OWN_TRANSFER_DEBIT = `("transaction"."ownTransferEvidence" IS NOT NULL AND ${INDICATOR_SQL} = 'DBIT')`;
-export const SQL_MISSING_BASE_AMOUNT = `(NOT ${SQL_INTERNAL} AND "transaction"."amountInBaseCurrency" IS NULL)`;
+export const SQL_MISSING_BASE_AMOUNT = `(NOT ${SQL_INTERNAL} AND ${SQL_BASE_AMOUNT} IS NULL)`;
 
 /** The SQL form of getMerchantKeyName: the stored merchant key without its direction. */
 export const SQL_MERCHANT_KEY_NAME = `substring("transaction"."merchantKey" from position(':' in "transaction"."merchantKey") + 1)`;
@@ -57,6 +62,11 @@ const CATEGORY_STATUS_SQL: Record<BankTransactionCategoryStatusFilterValue, stri
 };
 
 const anyOf = (conditions: string[]) => `(${conditions.join(' OR ')})`;
+
+/** An income source as the breakdown groups it: the merchant key, else the display name. */
+export const SQL_INCOME_SOURCE = `COALESCE(NULLIF("transaction"."merchantKey", ''), "transaction"."displayDescription")`;
+/** Rows to review, failed or without a direction: what the owner still has to settle, each row once. */
+export const SQL_NEEDS_ATTENTION = `("transaction"."category" = 'NEEDS_REVIEW' OR ${SQL_CATEGORIZATION_FAILED} OR ${SQL_UNKNOWN_DIRECTION})`;
 
 /** Owner-scoped ledger query; transaction and bankAccount aliases are shared with the filters below. */
 export function createOwnerScopedQuery(repository: Repository<BankTransaction>, accountId: string) {
@@ -154,6 +164,9 @@ export function applyBankTransactionFilters(
 	}
 	if (filter?.merchantGroup) {
 		query.andWhere(`${SQL_MERCHANT_GROUP} = :merchantGroup`, {merchantGroup: filter.merchantGroup});
+	}
+	if (filter?.incomeSource) {
+		query.andWhere(`${SQL_INCOME_SOURCE} = :incomeSource`, {incomeSource: filter.incomeSource});
 	}
 
 	const search = filter?.search?.trim();

@@ -6,9 +6,11 @@ import type {AddressInfo} from 'node:net';
 import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
+  EMPTY_REVIEW_COUNTS,
   fulfillJson,
   mockBankConnections,
   mockBankRefresh,
+  mockEmptyRecurringLists,
   mockJson,
   mockMerchantRanking,
 } from '../../utils/api-mocks';
@@ -225,22 +227,9 @@ async function mockMerchantLogos(page: Page) {
     baseCurrency: 'EUR',
   });
   await mockHistoryEndpoints(page);
-  const noRecurring = {
-    series: [],
-    monthlyTotal: '0.00',
-    unconvertedCount: 0,
-    thisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
-    baseCurrency: 'EUR',
-  };
-  await mockJson(page, '**/recurring-series?**', {expenses: noRecurring, income: noRecurring});
+  await mockEmptyRecurringLists(page);
   await mockMerchantRanking(page);
-  await mockJson(page, '**/bank-transactions/review-counts', {
-    needsReview: 0,
-    categorizationFailed: 0,
-    categorizing: 0,
-    unknownDirection: 0,
-    missingBaseAmount: 0,
-  });
+  await mockJson(page, '**/bank-transactions/review-counts', EMPTY_REVIEW_COUNTS);
   await page.route('**/bank-transactions?**', (route) => {
     if (route.request().resourceType() === 'document') return route.continue();
     return fulfillJson(route, {transactions: state.rows, total: state.rows.length});

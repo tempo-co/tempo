@@ -17,11 +17,16 @@ import {BankTransaction} from '../bank-transaction.entity';
 import {addDays} from '../banking.utils';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {formatCents, nextPeriodStart, parseCents, periodStarts} from '../summary/bank-transaction-summary';
-import {applyBankTransactionFilters, createOwnerScopedQuery, findFirstBookingDate} from './bank-transaction-filters';
+import {
+	SQL_BASE_AMOUNT,
+	SQL_INCOME_SOURCE,
+	SQL_PERIOD_START,
+	applyBankTransactionFilters,
+	createOwnerScopedQuery,
+	findFirstBookingDate,
+} from './bank-transaction-filters';
 
-const BASE_AMOUNT = '"transaction"."amountInBaseCurrency"';
 const CATEGORY_KEY = `COALESCE("transaction"."category", '${BANK_TRANSACTION_UNCATEGORIZED}')`;
-const SOURCE_KEY = `COALESCE(NULLIF("transaction"."merchantKey", ''), "transaction"."displayDescription")`;
 
 type PartRow = {start: string; key: string; amount: string};
 type SourceRow = {key: string; label: string; latestId: string};
@@ -47,8 +52,7 @@ export class BankTransactionHistoryService {
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(BANKING_TRANSACTION_BREAKDOWN_RANGE);
 		const flow = by === 'category' ? 'SPENDING' : 'INCOME';
-		const key = by === 'category' ? CATEGORY_KEY : SOURCE_KEY;
-		const period = `to_char(date_trunc(:interval, "transaction"."bookingDate"::timestamp), 'YYYY-MM-DD')`;
+		const key = by === 'category' ? CATEGORY_KEY : SQL_INCOME_SOURCE;
 		const flowQuery = () => {
 			const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
 			applyBankTransactionFilters(query, {
@@ -59,17 +63,12 @@ export class BankTransactionHistoryService {
 			return query.setParameter('interval', interval);
 		};
 
-		const [firstBookingDate, totals, parts, sources] = await Promise.all([
+		const [firstBookingDate, parts, sources] = await Promise.all([
 			findFirstBookingDate(this.bankTransactionRepository, accountId),
 			flowQuery()
-				.select(period, 'start')
-				.addSelect(`ROUND(SUM(${BASE_AMOUNT}), 2)::text`, 'amount')
-				.groupBy('1')
-				.getRawMany<{start: string; amount: string}>(),
-			flowQuery()
-				.select(period, 'start')
+				.select(SQL_PERIOD_START, 'start')
 				.addSelect(key, 'key')
-				.addSelect(`ROUND(SUM(${BASE_AMOUNT}), 2)::text`, 'amount')
+				.addSelect(`ROUND(SUM(${SQL_BASE_AMOUNT}), 2)::text`, 'amount')
 				.groupBy('1')
 				.addGroupBy('2')
 				.getRawMany<PartRow>(),
@@ -88,9 +87,13 @@ export class BankTransactionHistoryService {
 		const looks = await this.sourceLooks(accountId, sources);
 		// Spending sums are negative in the ledger; the breakdown reports them as positive amounts.
 		const sign = by === 'category' ? -1n : 1n;
-		const totalByStart = new Map(totals.map((row) => [row.start, sign * parseCents(row.amount)]));
+		// Base amounts have two decimals, so a period's total is exactly the sum of its parts.
+		const totalByStart = new Map<string, bigint>();
 		const partsByStart = new Map<string, PartRow[]>();
-		for (const row of parts) partsByStart.set(row.start, [...(partsByStart.get(row.start) ?? []), row]);
+		for (const row of parts) {
+			partsByStart.set(row.start, [...(partsByStart.get(row.start) ?? []), row]);
+			totalByStart.set(row.start, (totalByStart.get(row.start) ?? 0n) + sign * parseCents(row.amount));
+		}
 		const labelByKey = new Map(sources.map((row) => [row.key, row.label]));
 
 		const periods: BankTransactionBreakdownPeriod[] = [];

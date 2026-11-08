@@ -25,19 +25,26 @@ import {countLabel, formatUsualComparison} from '@/features/merchants/utils/merc
 import {cn} from '@/utils/cn';
 
 import {useGetBankTransactionBreakdown} from '../api/use-get-bank-transaction-breakdown';
+import {useGetBankTransactionSummary} from '../api/use-get-bank-transaction-summary';
 import {useGetMonthTransactions} from '../api/use-get-month-transactions';
 import {useOverview} from '../api/use-overview';
-import {categoryDrill, flowDrill, periodDrill} from '../utils/drill-links';
+import {categoryDrill, periodDrill, sourceDrill} from '../utils/drill-links';
 import {pct, signed, signedPct, wholeCents} from '../utils/format';
 import {formatMoney, toCents} from '../utils/money';
 import {formatMonth, monthDates, shiftMonth} from '../utils/month';
-import {type MonthPoint, type Overview, historyFrom, partCents} from '../utils/overview';
+import {type MonthPoint, type Overview, partCents} from '../utils/overview';
 import {CategoryName, SourceTile} from './category-name';
+import {ChartCardError} from './chart-card';
 import {Bone, LoadingLabel, TextBone, TileRowsSkeleton} from './loading';
 import {TextAction} from './text-action';
 
-/** A category's usual is the mean of this many months before, every one inside the history. */
+/** A past month's usual is the mean of this many months before, every one inside the history. */
 const USUAL_MONTHS = 12;
+/**
+ * The running month's usual is the API's: the mean of this many months before by the same day of the month, so a
+ * month that has just begun is not set against whole months.
+ */
+const SAME_DAY_USUAL_MONTHS = 3;
 
 /** One month over Home, at `?month=YYYY-MM`: Back or Escape closes it, the arrows (or ← →) step months. */
 export function MonthDialog({
@@ -51,7 +58,8 @@ export function MonthDialog({
   onStep: (month: string) => void;
   onOpenChange: (open: boolean) => void;
 }) {
-  const history = useOverview(today);
+  // Nothing is requested while the month is closed; Home's own history reads keep the cache warm.
+  const history = useOverview(today, {enabled: month !== null});
   const {overview} = history;
   const index =
     overview && month ? overview.months.findIndex((point) => point.month === month) : -1;
@@ -122,15 +130,16 @@ function StepButton({
   onStep: (month: string) => void;
 }) {
   return (
-    <button
-      type='button'
+    <Button
+      variant='ghost'
+      size='icon'
       disabled={!month}
       onClick={() => month && onStep(month)}
       aria-label={label}
-      className='grid size-11 shrink-0 place-items-center hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-30 disabled:hover:bg-transparent'
+      className='size-11 shrink-0 rounded-none focus-visible:-outline-offset-2 disabled:opacity-30 [&_svg]:size-5'
     >
-      <Icon aria-hidden='true' className='size-5' />
-    </button>
+      <Icon aria-hidden='true' />
+    </Button>
   );
 }
 
@@ -147,32 +156,35 @@ function MonthView({
   today: string;
   history: ReturnType<typeof useOverview>;
 }) {
-  const from = historyFrom(today);
-  const categories = useGetBankTransactionBreakdown('month', 'category', from, today, today);
-  const sources = useGetBankTransactionBreakdown('month', 'source', from, today, today);
   const dates = monthDates(month);
   const point = overview?.months.find((item) => item.month === month);
   const running = month === today.slice(0, 7);
   // Where the history ends the month (today while it runs), known before the history loads.
   const end = running ? today : dates.to;
+  // Only the months shown: this one, and for a past month's usual the year before it.
+  const categoriesFrom = running ? dates.from : `${shiftMonth(month, -USUAL_MONTHS)}-01`;
+  const categories = useGetBankTransactionBreakdown(
+    'month',
+    'category',
+    categoriesFrom,
+    end,
+    today,
+  );
+  const sources = useGetBankTransactionBreakdown('month', 'source', dates.from, end, today);
+  const sameDay = useGetBankTransactionSummary(month, today, {enabled: running});
 
-  if (isError || categories.isError || sources.isError)
+  // A failed refresh keeps what is loaded; only a part that never loaded fails the month.
+  const missing = [
+    categories.isError && !categories.breakdown && categories.refetch,
+    sources.isError && !sources.breakdown && sources.refetch,
+    running && sameDay.isError && !sameDay.summary && sameDay.refetch,
+  ].filter((retry) => retry !== false);
+  if (isError || missing.length > 0)
     return (
-      <div className='grid justify-items-start gap-4'>
-        <p>Could not load this month.</p>
-        <Button
-          variant='outline'
-          onClick={() =>
-            void Promise.all([
-              refetch(),
-              categories.isError && categories.refetch(),
-              sources.isError && sources.refetch(),
-            ])
-          }
-        >
-          Try again
-        </Button>
-      </div>
+      <ChartCardError
+        message='Could not load this month.'
+        onRetry={() => Promise.all([isError && refetch(), ...missing.map((retry) => retry())])}
+      />
     );
   if (overview && !point)
     return <p className='text-sm text-muted-foreground'>No history for {formatMonth(month)}.</p>;
@@ -185,11 +197,23 @@ function MonthView({
     const start = period.start.slice(0, 7);
     return start < month && start >= shiftMonth(month, -USUAL_MONTHS);
   });
-  // No usual without a full year of history before the month.
-  const usualOf = (key: string) =>
-    earlier.length < USUAL_MONTHS
-      ? null
-      : earlier.reduce((sum, period) => sum + partCents(period, key), 0) / USUAL_MONTHS;
+  const sameDayUsual = new Map(
+    (sameDay.summary?.baseline.months.length === SAME_DAY_USUAL_MONTHS
+      ? sameDay.summary.categories
+      : []
+    ).map((category) => [
+      category.category as string,
+      category.baselineAverage === null ? null : toCents(category.baselineAverage),
+    ]),
+  );
+  // No usual without a full window of history before the month.
+  const usualOf = running
+    ? (key: string) => sameDayUsual.get(key) ?? null
+    : (key: string) =>
+        earlier.length < USUAL_MONTHS
+          ? null
+          : earlier.reduce((sum, period) => sum + partCents(period, key), 0) / USUAL_MONTHS;
+  const usualReady = !running || sameDay.summary !== undefined;
 
   return (
     <div className='grid gap-6'>
@@ -197,10 +221,15 @@ function MonthView({
 
       <div className='grid gap-6 @[1000px]:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]'>
         <div className='grid min-w-0 content-start gap-6'>
-          {overview && categories.breakdown ? (
+          {overview && categories.breakdown && usualReady ? (
             <WhereItWent
               period={periodOf(categories.breakdown.periods)}
               usualOf={usualOf}
+              usualLabel={
+                running
+                  ? `usual by this day, last ${SAME_DAY_USUAL_MONTHS} months`
+                  : `usual, last ${USUAL_MONTHS} months`
+              }
               currency={currency}
               from={dates.from}
               to={end}
@@ -364,12 +393,15 @@ function Figure({
 function WhereItWent({
   period,
   usualOf,
+  usualLabel,
   currency,
   from,
   to,
 }: {
   period: BankTransactionBreakdownPeriod | undefined;
   usualOf: (key: string) => number | null;
+  /** What the usual is, beside its legend line. */
+  usualLabel: string;
   currency: string | null;
   from: string;
   to: string;
@@ -388,7 +420,7 @@ function WhereItWent({
         {hasUsual && (
           // The bars and their ticks are hidden on a phone, where each row reads "on usual" instead.
           <span className='inline-flex items-center gap-1.5 text-xs text-muted-foreground max-sm:hidden'>
-            <i aria-hidden='true' className='h-5 w-0.5 bg-foreground' /> usual, last 12 months
+            <i aria-hidden='true' className='h-5 w-0.5 bg-foreground' /> {usualLabel}
           </span>
         )}
       </header>
@@ -467,11 +499,8 @@ function MonthTransactions({from, to}: {from: string; to: string}) {
           </ul>
         </div>
       ) : !data ? (
-        <div className='grid justify-items-start gap-3 px-5 pb-5'>
-          <p className='text-sm'>Could not load transactions.</p>
-          <Button variant='outline' onClick={() => void refetch()}>
-            Try again
-          </Button>
+        <div className='px-5 pb-5'>
+          <ChartCardError message='Could not load transactions.' onRetry={refetch} />
         </div>
       ) : transactions.length === 0 ? (
         <p className='px-5 pb-5 text-sm text-muted-foreground'>No transactions this month.</p>
@@ -523,7 +552,7 @@ function WhereItCameFrom({
           <li key={part.key}>
             <Link
               to='/bank-transactions'
-              search={{...flowDrill('INCOME', from, to, missingBaseAmounts), search: part.label}}
+              search={sourceDrill(part.key, from, to, missingBaseAmounts)}
               className='grid min-h-11 grid-cols-[minmax(0,1fr)_6rem] items-center gap-x-3 px-2 text-sm hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
             >
               {/* The tile sits beside the name, as a category's icon does; the bar runs under the name. */}
@@ -559,7 +588,7 @@ const MERCHANTS = 8;
 function BiggestMerchants({month, today}: {month: string; today: string}) {
   // A stable date after a past month ends ranks the whole month without changing its cache key each day.
   const asOf = month === today.slice(0, 7) ? today : `${shiftMonth(month, 1)}-01`;
-  const {ranking, isPending, isError, refetch} = useGetMerchantRanking(
+  const {ranking, isPending, refetch} = useGetMerchantRanking(
     'month',
     `${month}-01`,
     asOf,
@@ -578,13 +607,9 @@ function BiggestMerchants({month, today}: {month: string; today: string}) {
             <TileRowsSkeleton count={5} />
           </ul>
         </div>
-      ) : isError || !ranking ? (
-        <div className='grid justify-items-start gap-3'>
-          <p className='text-sm'>Could not load merchants.</p>
-          <Button variant='outline' onClick={() => void refetch()}>
-            Try again
-          </Button>
-        </div>
+      ) : !ranking ? (
+        // A failed refresh keeps the loaded ranking.
+        <ChartCardError message='Could not load merchants.' onRetry={refetch} />
       ) : ranking.merchants.length === 0 ? (
         <p className='text-sm text-muted-foreground'>No spending this month.</p>
       ) : (

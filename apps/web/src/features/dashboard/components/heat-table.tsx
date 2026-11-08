@@ -8,9 +8,9 @@ import {Card} from '@/components/ui/card';
 import {useHasMissingBaseAmounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
 import {cn} from '@/utils/cn';
 
-import {categoryDrill, flowDrill, parseCalendarDate} from '../utils/drill-links';
-import {categoryLabel, signedPct} from '../utils/format';
-import {formatWholeMoney, toCents} from '../utils/money';
+import {categoryDrill, parseCalendarDate, sourceDrill} from '../utils/drill-links';
+import {categoryLabel, signedPct, wholeCents} from '../utils/format';
+import {toCents} from '../utils/money';
 import {type MonthPoint, monthsCovered, partCents} from '../utils/overview';
 import {
   CategoryIconSpacer,
@@ -43,9 +43,8 @@ const MAX_ROWS = 8;
 /** One row of the table: a category or source, the folded rest, or the total. */
 type Row = {
   key: string;
-  /** The row's heading; `label` names it in tooltips and searches. */
+  /** The row's heading, which also names it in tooltips. */
   name: string;
-  label: string;
   /** The category a category row is, shown with its icon. */
   category?: string;
   /** The source a source row is, shown with its logo or icon. */
@@ -98,10 +97,9 @@ export function HeatTable({
   const keys = [...new Set(periods.flatMap((period) => period.parts.map((part) => part.key)))];
   if (keys.length === 0 || months.length === 0) return null;
   const thin = (period: Period) => (cover.get(period.start) ?? 0) < THIN_MONTHS;
-  const cell = partCents;
   const monthly = (period: Period, cents: number) => cents / (cover.get(period.start) ?? 1);
   const allTime = new Map(
-    keys.map((key) => [key, periods.reduce((sum, period) => sum + cell(period, key), 0)]),
+    keys.map((key) => [key, periods.reduce((sum, period) => sum + partCents(period, key), 0)]),
   );
   keys.sort((a, b) => allTime.get(b)! - allTime.get(a)!);
   const grand = keys.reduce((sum, key) => sum + allTime.get(key)!, 0);
@@ -142,26 +140,23 @@ export function HeatTable({
   const rows: Row[] = [
     ...(all ? keys : top).map((key) => ({
       key,
-      label: nameOf(key),
       name: nameOf(key),
       category: kind === 'category' ? key : undefined,
       source: kind === 'source' ? sources.get(key) : undefined,
-      values: (period: Period) => cell(period, key),
+      values: (period: Period) => partCents(period, key),
     })),
     ...(rest.length > 0 && !all
       ? [
           {
             key: 'more',
-            label: `${rest.length} more`,
             name: `${rest.length} more ${unit[rest.length === 1 ? 0 : 1]}`,
-            values: (period: Period) => rest.reduce((sum, key) => sum + cell(period, key), 0),
+            values: (period: Period) => rest.reduce((sum, key) => sum + partCents(period, key), 0),
             role: 'more' as const,
           },
         ]
       : []),
     {
       key: 'total',
-      label: 'Total',
       name: 'Total',
       values: (period: Period) => toCents(period.total),
       role: 'total' as const,
@@ -175,7 +170,7 @@ export function HeatTable({
     return then > 0 ? signedPct((now - then) / then) : now > 0 ? 'new' : '–';
   };
   const change = (row: Row) => (previous ? changeIn(row, latest, previous) : '');
-  const money = (cents: number) => formatWholeMoney(cents / 100, currency);
+  const money = (cents: number) => wholeCents(cents, currency);
   /** A cell's readout: the row and year, a month on average, the year's total, and the change on the year before. */
   const tipOf = (row: Row, period: Period, index: number): ReadoutTip => {
     const value = row.values(period);
@@ -187,13 +182,13 @@ export function HeatTable({
     const folded =
       row.role === 'more'
         ? rest
-            .map((key) => ({key, cents: cell(period, key)}))
+            .map((key) => ({key, cents: partCents(period, key)}))
             .filter((part) => part.cents > 0)
             .sort((a, b) => b.cents - a.cents)
             .slice(0, TIP_FOLDED)
         : [];
     return {
-      label: `${row.label}, ${yearOf(period)}: ${money(average)} a month · ${money(value)} in the year${soFar ? ' so far' : ''}`,
+      label: `${row.name}, ${yearOf(period)}: ${money(average)} a month · ${money(value)} in the year${soFar ? ' so far' : ''}`,
       readout: (
         <>
           <ReadoutTitle
@@ -246,7 +241,7 @@ export function HeatTable({
       return {
         period,
         value,
-        body: value !== 0 ? formatWholeMoney(average / 100, currency) : '–',
+        body: value !== 0 ? wholeCents(average, currency) : '–',
         tip: tipOf(row, period, index),
         alpha:
           !row.role && !thin(period) && value > 0
@@ -262,7 +257,7 @@ export function HeatTable({
                   period.end,
                   missingBaseAmounts,
                 )
-              : {...flowDrill('INCOME', from, period.end, missingBaseAmounts), search: row.label},
+              : sourceDrill(row.key, from, period.end, missingBaseAmounts),
       };
     });
   };
@@ -563,7 +558,7 @@ function PhoneRows({
               </button>
               {expanded && (
                 <ul
-                  aria-label={`${row.label} by year`}
+                  aria-label={`${row.name} by year`}
                   className='grid gap-1 bg-muted/20 px-4 py-2'
                   // As many columns as fit a year and its amount, so a large amount never runs into the next.
                   style={{

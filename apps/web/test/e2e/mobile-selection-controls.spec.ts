@@ -220,13 +220,13 @@ test('Home span choices are finger-sized and select quietly', async ({page}) => 
   await page.goto('/');
   const spans = page
     .getByRole('region', {name: 'Where you stand'})
-    .getByRole('group', {name: 'Span'});
-  const threeYears = spans.getByRole('button', {name: '3Y', exact: true});
+    .getByRole('radiogroup', {name: 'Span'});
+  const threeYears = spans.getByRole('radio', {name: '3Y', exact: true});
   await expect(threeYears).toBeVisible();
-  for (const button of await spans.getByRole('button').all())
+  for (const button of await spans.getByRole('radio').all())
     expect((await boxOf(button)).height).toBeGreaterThanOrEqual(44);
   await threeYears.tap();
-  await expect(threeYears).toHaveAttribute('aria-pressed', 'true');
+  await expect(threeYears).toHaveAttribute('aria-checked', 'true');
   expect(await page.evaluate(() => Reflect.get(window, 'selectionHaptics') as number[])).toEqual(
     [],
   );

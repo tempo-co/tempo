@@ -7,11 +7,14 @@ import {useGetBankTransactionBreakdown} from './use-get-bank-transaction-breakdo
 import {useGetBankTransactionCashFlow} from './use-get-bank-transaction-cash-flow';
 import {useGetBankTransactionTotals} from './use-get-bank-transaction-totals';
 
-/** Home's whole history as of the local date `today`: monthly balances and flows, by month and year. */
-export function useOverview(today: string) {
+/**
+ * Home's whole history as of the local date `today`: monthly balances and flows, by month and year. Requested
+ * only while `enabled`; a disabled caller still reads what is cached.
+ */
+export function useOverview(today: string, {enabled = true}: {enabled?: boolean} = {}) {
   const from = historyFrom(today);
-  const trend = useGetBankBalanceTrend('month', from, today, today);
-  const flow = useGetBankTransactionCashFlow('month', from, today, today);
+  const trend = useGetBankBalanceTrend('month', from, today, today, {enabled});
+  const flow = useGetBankTransactionCashFlow('month', from, today, today, {enabled});
 
   const overview = useMemo(
     () =>

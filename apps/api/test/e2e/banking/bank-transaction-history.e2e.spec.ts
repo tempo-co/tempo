@@ -1,6 +1,7 @@
 import {INestApplication} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
 import {getRepositoryToken} from '@nestjs/typeorm';
+import type {BankTransactionBreakdownPeriod, BankTransactionsResponse} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
 import TestAgent from 'supertest/lib/agent';
 import type {DeepPartial} from 'typeorm';
@@ -70,7 +71,8 @@ describe('Bank transaction history', () => {
 				named('2025-12-05', '-30.00', 'Corner Shop', {category: 'FOOD_AND_DRINK'}),
 				named('2025-12-10', '-200.00', 'Example Store', {category: 'SHOPPING'}),
 				named('2025-12-12', '40.00', 'Example Store', {category: 'REFUND'}),
-				named('2025-12-20', '1000.00', 'EXAMPLE EMPLOYER PAYROLL', {category: 'INCOME', ...employer}),
+				// The same source under another name.
+				named('2025-12-20', '1000.00', 'Salary December', {category: 'INCOME', ...employer}),
 				// No merchant key: the source falls back to the display name.
 				named('2025-12-22', '25.00', 'Market Stall', {category: null, merchantKey: null}),
 				named('2026-01-08', '-80.00', 'Unknown Place', {category: null}),
@@ -239,6 +241,26 @@ describe('Bank transaction history', () => {
 				expect(body.periods.map(({total}: {total: string}) => total)).toEqual(
 					flow.periods.map(({income}: {income: string}) => income),
 				);
+
+				// Each source's drill lists exactly the rows behind its amount, whatever their names.
+				for (const period of body.periods as BankTransactionBreakdownPeriod[])
+					for (const part of period.parts) {
+						const {body: list} = await agent
+							.get('/bank-transactions')
+							.query({
+								'filter[bookingDate][from]': period.start,
+								'filter[bookingDate][to]': period.end,
+								'filter[cashFlows][]': 'INCOME',
+								'filter[baseAmount]': 'PRESENT',
+								'filter[incomeSource]': part.key,
+							})
+							.expect(200);
+						const cents = (list as BankTransactionsResponse).transactions.reduce(
+							(sum, row) => sum + Math.round(Number(row.amountInBaseCurrency) * 100),
+							0,
+						);
+						expect([part.key, cents]).toEqual([part.key, Math.round(Number(part.amount) * 100)]);
+					}
 			} finally {
 				config.set('MERCHANT_LOGOS_ENABLED', false);
 			}

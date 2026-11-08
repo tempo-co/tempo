@@ -1,7 +1,8 @@
+import {CONSENT_ENDING_SOON_MS} from '@tempo/contracts';
+
 import {BankConnection} from '../bank-connection.entity';
 import {BANK_CONNECTION_STATUSES} from '../services/banking-sync.constants';
 
-export const CONSENT_EXPIRING_ALERT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 export const CONSENT_FINAL_ALERT_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const SYNC_BROKEN_ALERT_AFTER_MS = 24 * 60 * 60 * 1000;
 
@@ -41,7 +42,7 @@ function getDueConsentAlert(connection: BankConnectionAlertState, now: Date): Ba
 			? null
 			: BANK_CONNECTION_ALERTS.CONSENT_FINAL;
 	}
-	if (remainingMs <= CONSENT_EXPIRING_ALERT_WINDOW_MS) {
+	if (remainingMs <= CONSENT_ENDING_SOON_MS) {
 		return isSameTime(connection.consentExpiringAlertFor, consentValidUntil)
 			? null
 			: BANK_CONNECTION_ALERTS.CONSENT_EXPIRING;
