@@ -1,4 +1,5 @@
 import {Processor, WorkerHost} from '@nestjs/bullmq';
+import {Logger} from '@nestjs/common';
 import type {RecurringSeriesFlag} from '@tempo/contracts';
 import {Job} from 'bullmq';
 
@@ -33,6 +34,8 @@ const BODIES: Record<BankConnectionAlert | RecurringSeriesFlag, string> = {
  */
 @Processor(PUSH_NOTIFICATION_QUEUE)
 export class PushAlertProcessor extends WorkerHost {
+	private readonly logger = new Logger(PushAlertProcessor.name);
+
 	constructor(
 		private readonly pushNotificationService: PushNotificationService,
 		private readonly bankConnectionAlertService: BankConnectionAlertService,
@@ -66,8 +69,12 @@ export class PushAlertProcessor extends WorkerHost {
 			alert.kind === 'BANK_CONNECTION' ? 'bankConnections' : 'recurringBills',
 			payload,
 		);
-		if (sent > 0 && alert.kind === 'RECURRING_BILL')
-			await this.recurringBillAlertService.markPushed(accountId, alert, now);
+		if (sent > 0 && alert.kind === 'RECURRING_BILL') {
+			// The push is out; failing the job here would retry it and push again.
+			await this.recurringBillAlertService.markPushed(accountId, alert, now).catch(() => {
+				this.logger.warn('Recording a pushed bill alert failed.');
+			});
+		}
 		return sent;
 	}
 

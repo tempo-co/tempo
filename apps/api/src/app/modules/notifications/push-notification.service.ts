@@ -9,7 +9,7 @@ import type {
 	RecurringSeriesFlag,
 } from '@tempo/contracts';
 import {Queue} from 'bullmq';
-import {Repository} from 'typeorm';
+import {In, Repository} from 'typeorm';
 import {WebPushError} from 'web-push';
 
 import {DELIVER_PUSH_ALERT_JOB, PUSH_NOTIFICATION_QUEUE} from '@core/queue/queue.constants';
@@ -134,7 +134,8 @@ export class PushNotificationService {
 	/**
 	 * Pushes to every device of the owner whose session is still signed in, if the owner wants this alert kind.
 	 * Subscriptions of ended sessions, and ones the push service reports gone, are removed. Throws only when every
-	 * device failed for another reason, so a retry cannot push twice to a device that got it.
+	 * device failed for another reason, so a retry cannot push twice to a device that got it; cleanup that fails
+	 * after a send is logged instead.
 	 */
 	async deliver(
 		accountId: Account['id'],
@@ -148,7 +149,7 @@ export class PushNotificationService {
 			subscriptions.map(({sessionId}) => sessionId),
 		);
 		const ended = subscriptions.filter(({sessionId}) => !active.has(sessionId));
-		if (ended.length > 0) await this.subscriptions.delete(ended.map(({id}) => id));
+		if (ended.length > 0) await this.subscriptions.delete({accountId, id: In(ended.map(({id}) => id))});
 
 		const body = JSON.stringify(payload);
 		let sent = 0;
@@ -159,7 +160,9 @@ export class PushNotificationService {
 				sent++;
 			} catch (error) {
 				if (error instanceof WebPushError && GONE_STATUS_CODES.has(error.statusCode)) {
-					await this.subscriptions.delete({id: subscription.id});
+					await this.subscriptions.delete({accountId, id: subscription.id}).catch(() => {
+						this.logger.warn('Removing a device the push service no longer knows failed.');
+					});
 					continue;
 				}
 				failed++;

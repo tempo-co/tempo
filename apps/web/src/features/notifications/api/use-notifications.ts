@@ -57,7 +57,8 @@ export function useDeviceSubscription() {
   return useQuery({
     queryKey: DEVICE_KEY,
     queryFn: async () => (await getDeviceSubscription())?.endpoint ?? null,
-    // The browser holds the answer; nothing to save for offline use.
+    // The browser holds the answer, so it needs no connection and nothing is saved for offline use.
+    networkMode: 'always',
     gcTime: 0,
   });
 }
