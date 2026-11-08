@@ -5,6 +5,11 @@ export type CashFlowInterval = (typeof CASH_FLOW_INTERVALS)[number];
 /** The balance trend also reads day ends, over a short range. */
 export const BALANCE_TREND_INTERVALS = ['day', ...CASH_FLOW_INTERVALS] as const;
 export type BalanceTrendInterval = (typeof BALANCE_TREND_INTERVALS)[number];
+/** The most periods one cash-flow, balance-trend, breakdown or merchant-periods request may cover. */
+export const MAX_RANGE_PERIODS = {day: 92, week: 104, month: 240, year: 20} as const satisfies Record<
+	BalanceTrendInterval,
+	number
+>;
 
 /** `GET /bank-transactions/summary` query. */
 export type BankTransactionSummaryQuery = {
@@ -25,7 +30,7 @@ export type BankTransactionCashFlowQuery = {
 	asOf: string;
 };
 
-/** `GET /bank-transactions/balance-trend` query: the cash-flow query, plus day ends over at most 92 days. */
+/** `GET /bank-transactions/balance-trend` query: the cash-flow query, plus day ends over a short range. */
 export type BankBalanceTrendQuery = Omit<BankTransactionCashFlowQuery, 'interval'> & {
 	interval: BalanceTrendInterval;
 };
