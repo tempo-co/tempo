@@ -1,17 +1,20 @@
 import {Link} from '@tanstack/react-router';
-import type {BankTransactionBreakdownPart, BankTransactionBreakdownPeriod} from '@tempo/contracts';
-import {format} from 'date-fns';
+import type {BankTransactionBreakdownPeriod} from '@tempo/contracts';
 import {ChevronRight} from 'lucide-react';
-import {type ReactNode, useState} from 'react';
+import {type ReactNode, useMemo, useState} from 'react';
 
 import {Card} from '@/components/ui/card';
 import {useHasMissingBaseAmounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
 import {cn} from '@/utils/cn';
 
-import {categoryDrill, parseCalendarDate, sourceDrill} from '../utils/drill-links';
-import {categoryLabel, signedPct, wholeCents} from '../utils/format';
-import {toCents} from '../utils/money';
-import {type MonthPoint, monthsCovered, partCents} from '../utils/overview';
+import {
+  type HeatCell,
+  type HeatRow,
+  type HeatTableModel,
+  type HeatYear,
+  buildHeatTable,
+} from '../utils/heat-table';
+import type {MonthPoint} from '../utils/overview';
 import {
   CategoryIconSpacer,
   CategoryName,
@@ -30,43 +33,6 @@ import {
 import {Bone, LoadingLabel, TextBone} from './loading';
 import {TextAction} from './text-action';
 
-type Period = BankTransactionBreakdownPeriod;
-
-/** A year with fewer months of history than this is too thin for its monthly average to be shaded. */
-const THIN_MONTHS = 3;
-/** Rows under this share of all time fold into one "more" row... */
-const FOLD_SHARE = 0.03;
-/** ...keeping at least this many rows and at most this many. */
-const MIN_ROWS = 3;
-const MAX_ROWS = 8;
-
-/** One row of the table: a category or source, the folded rest, or the total. */
-type Row = {
-  key: string;
-  /** The row's heading, which also names it in tooltips. */
-  name: string;
-  /** The category a category row is, shown with its icon. */
-  category?: string;
-  /** The source a source row is, shown with its logo or icon. */
-  source?: BankTransactionBreakdownPart;
-  values: (period: Period) => number;
-  /** `more` opens the folded rows; `total` is plain. */
-  role?: 'more' | 'total';
-};
-
-/** How many of the folded rows a "more" cell's tip names. */
-const TIP_FOLDED = 3;
-
-/** A row's figures for one year: the monthly average, its shading, its tip, and where it links. */
-type Cell = {
-  period: Period;
-  value: number;
-  body: string;
-  tip: ReadoutTip;
-  alpha: number;
-  search?: ReturnType<typeof categoryDrill>;
-};
-
 /**
  * Rows are categories (or sources), columns years, newest first. A cell is a month on average in that year, so a
  * part year compares fairly with a whole one. Each row is shaded against its own highest year; the first numeric
@@ -75,14 +41,14 @@ type Cell = {
  */
 export function HeatTable({
   title,
-  periods: oldestFirst,
+  periods,
   months,
   currency,
   kind,
   columnWidth,
 }: {
   title: string;
-  periods: Period[];
+  periods: BankTransactionBreakdownPeriod[];
   months: MonthPoint[];
   currency: string | null;
   kind: 'category' | 'source';
@@ -91,177 +57,14 @@ export function HeatTable({
 }) {
   const [all, setAll] = useState(false);
   const missingBaseAmounts = useHasMissingBaseAmounts();
-  const cover = new Map(oldestFirst.map((period) => [period.start, monthsCovered(period, months)]));
-  // Newest year first, so the recent years are in view on a phone and older ones scroll in.
-  const periods = [...oldestFirst].reverse().filter((period) => (cover.get(period.start) ?? 0) > 0);
-  const keys = [...new Set(periods.flatMap((period) => period.parts.map((part) => part.key)))];
-  if (keys.length === 0 || months.length === 0) return null;
-  const thin = (period: Period) => (cover.get(period.start) ?? 0) < THIN_MONTHS;
-  const monthly = (period: Period, cents: number) => cents / (cover.get(period.start) ?? 1);
-  const allTime = new Map(
-    keys.map((key) => [key, periods.reduce((sum, period) => sum + partCents(period, key), 0)]),
+  const model = useMemo(
+    () => buildHeatTable({periods, months, currency, kind, missingBaseAmounts}),
+    [periods, months, currency, kind, missingBaseAmounts],
   );
-  keys.sort((a, b) => allTime.get(b)! - allTime.get(a)!);
-  const grand = keys.reduce((sum, key) => sum + allTime.get(key)!, 0);
-  const sources = new Map(
-    periods.flatMap((period) => period.parts.map((part) => [part.key, part] as const)),
-  );
-  const nameOf = (key: string) =>
-    kind === 'category' ? categoryLabel(key) : (sources.get(key)?.label ?? key);
-  const top = keys.filter(
-    (key, index) =>
-      index < MIN_ROWS || (index < MAX_ROWS && allTime.get(key)! >= grand * FOLD_SHARE),
-  );
-  const rest = keys.filter((key) => !top.includes(key));
-  const [latest, previous] = periods;
-  const yearOf = (period: Period) => period.start.slice(0, 4);
-  const historyStart = `${months[0].month}-01`;
-  const oldest = periods[periods.length - 1];
-  // A part year says so under its year, as the year table does: the first year from its first month, the latest so far.
-  const startNote =
-    historyStart > oldest.start && `from ${format(parseCalendarDate(historyStart), 'MMM')}`;
-  const last = months[months.length - 1];
-  const running = !last.complete && last.month.startsWith(yearOf(latest));
-  const partNote = (period: Period) =>
-    [period === oldest && startNote, period === latest && running && 'so far']
-      .filter(Boolean)
-      .join(' · ');
-  const yearLabel = (period: Period) => {
-    const note = partNote(period);
-    return (
-      <span className='numeric'>
-        {yearOf(period)}
-        {note && <span className='block text-xs font-normal text-muted-foreground'>{note}</span>}
-      </span>
-    );
-  };
-  const unit = kind === 'category' ? ['category', 'categories'] : ['source', 'sources'];
-
-  const rows: Row[] = [
-    ...(all ? keys : top).map((key) => ({
-      key,
-      name: nameOf(key),
-      category: kind === 'category' ? key : undefined,
-      source: kind === 'source' ? sources.get(key) : undefined,
-      values: (period: Period) => partCents(period, key),
-    })),
-    ...(rest.length > 0 && !all
-      ? [
-          {
-            key: 'more',
-            name: `${rest.length} more ${unit[rest.length === 1 ? 0 : 1]}`,
-            values: (period: Period) => rest.reduce((sum, key) => sum + partCents(period, key), 0),
-            role: 'more' as const,
-          },
-        ]
-      : []),
-    {
-      key: 'total',
-      name: 'Total',
-      values: (period: Period) => toCents(period.total),
-      role: 'total' as const,
-    },
-  ];
-
-  /** A row's monthly average in `period` against the year before's, as the change column shows it. */
-  const changeIn = (row: Row, period: Period, before: Period) => {
-    const now = monthly(period, row.values(period));
-    const then = monthly(before, row.values(before));
-    return then > 0 ? signedPct((now - then) / then) : now > 0 ? 'new' : '–';
-  };
-  const change = (row: Row) => (previous ? changeIn(row, latest, previous) : '');
-  const money = (cents: number) => wholeCents(cents, currency);
-  /** A cell's readout: the row and year, a month on average, the year's total, and the change on the year before. */
-  const tipOf = (row: Row, period: Period, index: number): ReadoutTip => {
-    const value = row.values(period);
-    const average = monthly(period, value);
-    const before = periods[index + 1];
-    const note = [yearOf(period), partNote(period)].filter(Boolean).join(' ');
-    // Only the running year is so far; a first year cut at the start of history is whole from there.
-    const soFar = period === latest && running;
-    const folded =
-      row.role === 'more'
-        ? rest
-            .map((key) => ({key, cents: partCents(period, key)}))
-            .filter((part) => part.cents > 0)
-            .sort((a, b) => b.cents - a.cents)
-            .slice(0, TIP_FOLDED)
-        : [];
-    return {
-      label: `${row.name}, ${yearOf(period)}: ${money(average)} a month · ${money(value)} in the year${soFar ? ' so far' : ''}`,
-      readout: (
-        <>
-          <ReadoutTitle
-            note={note}
-            icon={
-              row.category ? (
-                <ReadoutCategoryIcon category={row.category} />
-              ) : row.source ? (
-                <SourceTile source={row.source} small />
-              ) : undefined
-            }
-          >
-            {row.name}
-          </ReadoutTitle>
-          <ReadoutRow label='A month' value={money(average)} strong />
-          <ReadoutRow label={soFar ? 'So far this year' : 'In the year'} value={money(value)} />
-          {!row.role && before && (
-            <ReadoutRow
-              label={`vs ${yearOf(before)}`}
-              value={changeIn(row, period, before)}
-              muted
-            />
-          )}
-          {folded.length > 0 && (
-            <div className='mt-1 grid grid-cols-1 gap-1'>
-              {folded.map((part) => (
-                <ReadoutRow
-                  key={part.key}
-                  label={nameOf(part.key)}
-                  value={`${money(monthly(period, part.cents))} a month`}
-                />
-              ))}
-            </div>
-          )}
-        </>
-      ),
-    };
-  };
-  const cells = (row: Row): Cell[] => {
-    const rowMax = Math.max(
-      1,
-      ...periods
-        .filter((period) => !thin(period))
-        .map((period) => monthly(period, row.values(period))),
-    );
-    return periods.map((period, index) => {
-      const value = row.values(period);
-      const average = monthly(period, value);
-      const from = period.start < historyStart ? historyStart : period.start;
-      return {
-        period,
-        value,
-        body: value !== 0 ? wholeCents(average, currency) : '–',
-        tip: tipOf(row, period, index),
-        alpha:
-          !row.role && !thin(period) && value > 0
-            ? 0.05 + (Math.max(0, average) / rowMax) * 0.4
-            : 0,
-        search:
-          value === 0 || row.role
-            ? undefined
-            : kind === 'category'
-              ? categoryDrill(
-                  row.key as Parameters<typeof categoryDrill>[0],
-                  from,
-                  period.end,
-                  missingBaseAmounts,
-                )
-              : sourceDrill(row.key, from, period.end, missingBaseAmounts),
-      };
-    });
-  };
-  const fewer = rest.length > 0 && all && (
+  if (!model) return null;
+  const {years, latest, previous, top, folded, more, total} = model;
+  const rows = all ? [...top, ...folded, total] : [...top, ...(more ? [more] : []), total];
+  const fewer = more && all && (
     <TextAction onClick={() => setAll(false)} className='-ml-2'>
       Show fewer
     </TextAction>
@@ -269,43 +72,41 @@ export function HeatTable({
 
   return (
     <Card role='region' aria-label={title} className='min-w-0 overflow-hidden'>
-      <header className='px-5 pt-5 pb-3'>
-        <h2 className='text-card-title'>{title}</h2>
-        <p className='text-sm text-muted-foreground'>A month, on average, in each year</p>
-      </header>
+      <HeatTableHeader title={title} />
       <div className='overflow-x-auto pb-2 max-sm:hidden'>
         {/* Fixed columns, so the two tables' years line up one above the other. */}
         <table
           className='w-full table-fixed text-sm'
-          style={{minWidth: `calc(16.5rem + ${periods.length} * ${columnWidth})`}}
+          style={{minWidth: `calc(16.5rem + ${years.length} * ${columnWidth})`}}
         >
           <colgroup>
             <col className='w-[12rem]' />
             <col className='w-[4.5rem]' />
-            {periods.map((period) => (
-              <col key={period.start} style={{width: columnWidth}} />
+            {years.map((column) => (
+              <col key={column.period.start} style={{width: columnWidth}} />
             ))}
           </colgroup>
           <thead>
             {/* Each header has its column's padding, so headings and figures share one edge. */}
             <tr className='text-label text-muted-foreground'>
               <th className='sticky left-0 z-[1] bg-card pr-2 pb-2 pl-5 text-left align-top font-medium'>
-                {kind === 'category' ? 'Category' : 'Source'}
+                {nameHeading(kind)}
               </th>
               <th className='pr-3 pb-2 pl-2 text-right align-top font-normal'>
                 {previous && (
-                  <DataTip
-                    tip={`${yearOf(latest)} against ${yearOf(previous)}, a month on average`}
-                  >
+                  <DataTip tip={`${latest.year} against ${previous.year}, a month on average`}>
                     <span tabIndex={0} className={TIP_FOCUS}>
-                      vs {yearOf(previous)}
+                      vs {previous.year}
                     </span>
                   </DataTip>
                 )}
               </th>
-              {periods.map((period) => (
-                <th key={period.start} className='px-2.5 pb-2 text-right align-top font-medium'>
-                  {yearLabel(period)}
+              {years.map((column) => (
+                <th
+                  key={column.period.start}
+                  className='px-2.5 pb-2 text-right align-top font-medium'
+                >
+                  <YearLabel column={column} />
                 </th>
               ))}
             </tr>
@@ -333,12 +134,10 @@ export function HeatTable({
                     </span>
                   )}
                 </th>
-                <td className='pr-3 pl-2 text-right numeric text-muted-foreground'>
-                  {change(row)}
-                </td>
-                {cells(row).map((item) => (
+                <td className='pr-3 pl-2 text-right numeric text-muted-foreground'>{row.change}</td>
+                {row.cells.map((item) => (
                   <td key={item.period.start} className='p-0.5'>
-                    <YearValue item={item} className='flex min-h-10 justify-end px-2' />
+                    <YearValue row={row} item={item} className='flex min-h-10 justify-end px-2' />
                   </td>
                 ))}
               </tr>
@@ -354,18 +153,26 @@ export function HeatTable({
         </table>
       </div>
       <PhoneRows
-        kind={kind}
+        model={model}
         rows={rows}
-        latest={latest}
-        previous={previous}
-        yearLabel={yearLabel}
-        change={change}
-        cells={cells}
         onMore={() => setAll(true)}
         fewer={fewer}
         columnWidth={columnWidth}
       />
     </Card>
+  );
+}
+
+/** The heading over the row names. */
+const nameHeading = (kind: 'category' | 'source') => (kind === 'category' ? 'Category' : 'Source');
+
+/** A table's title and what its figures are, loaded or loading. */
+function HeatTableHeader({title}: {title: string}) {
+  return (
+    <header className='px-5 pt-5 pb-3'>
+      <h2 className='text-card-title'>{title}</h2>
+      <p className='text-sm text-muted-foreground'>A month, on average, in each year</p>
+    </header>
   );
 }
 
@@ -377,13 +184,10 @@ export function HeatTableSkeleton({title, kind}: {title: string; kind: 'category
   return (
     <Card role='region' aria-label={title} aria-busy='true' className='min-w-0 overflow-hidden'>
       <LoadingLabel>{`Loading ${title.toLowerCase()}`}</LoadingLabel>
-      <header className='px-5 pt-5 pb-3'>
-        <h2 className='text-card-title'>{title}</h2>
-        <p className='text-sm text-muted-foreground'>A month, on average, in each year</p>
-      </header>
+      <HeatTableHeader title={title} />
       <div aria-hidden='true' className='pb-2'>
         <p className='border-b pr-4 pb-2 pl-5 text-label font-medium text-muted-foreground'>
-          {kind === 'category' ? 'Category' : 'Source'}
+          {nameHeading(kind)}
         </p>
         {Array.from({length: SKELETON_ROWS}, (_, index) => (
           <div
@@ -400,8 +204,64 @@ export function HeatTableSkeleton({title, kind}: {title: string; kind: 'category
   );
 }
 
+/** A year, with what a part year says under it. */
+function YearLabel({column}: {column: HeatYear}) {
+  return (
+    <span className='numeric'>
+      {column.year}
+      {column.note && (
+        <span className='block text-xs font-normal text-muted-foreground'>{column.note}</span>
+      )}
+    </span>
+  );
+}
+
+/** A cell's readout: the row and year, a month on average, the year's total, and the change on the year before. */
+function readoutTip(row: HeatRow, {tip}: HeatCell): ReadoutTip {
+  return {
+    label: tip.label,
+    readout: (
+      <>
+        <ReadoutTitle
+          note={tip.note}
+          icon={
+            row.category ? (
+              <ReadoutCategoryIcon category={row.category} />
+            ) : row.source ? (
+              <SourceTile source={row.source} small />
+            ) : undefined
+          }
+        >
+          {row.name}
+        </ReadoutTitle>
+        <ReadoutRow label='A month' value={tip.month} strong />
+        <ReadoutRow label={tip.soFar ? 'So far this year' : 'In the year'} value={tip.year} />
+        {tip.versus && <ReadoutRow label={tip.versus.label} value={tip.versus.value} muted />}
+        {tip.folded.length > 0 && (
+          <div className='mt-1 grid grid-cols-1 gap-1'>
+            {tip.folded.map((part) => (
+              <ReadoutRow key={part.key} label={part.name} value={part.month} />
+            ))}
+          </div>
+        )}
+      </>
+    ),
+  };
+}
+
 /** A year's monthly average, shaded against the row's other years, opening its transactions; its tip names both. */
-function YearValue({item, lead, className}: {item: Cell; lead?: ReactNode; className?: string}) {
+function YearValue({
+  row,
+  item,
+  lead,
+  className,
+}: {
+  row: HeatRow;
+  item: HeatCell;
+  lead?: ReactNode;
+  className?: string;
+}) {
+  const tip = readoutTip(row, item);
   const classes = cn(
     'numeric items-center text-right',
     item.value === 0 && 'text-muted-foreground',
@@ -411,7 +271,7 @@ function YearValue({item, lead, className}: {item: Cell; lead?: ReactNode; class
   const amount = lead ? <span className='numeric whitespace-nowrap'>{item.body}</span> : item.body;
   if (!item.search)
     return (
-      <DataTip tip={item.value !== 0 && item.tip}>
+      <DataTip tip={item.value !== 0 && tip}>
         <span tabIndex={item.value !== 0 ? 0 : undefined} className={cn(classes, TIP_FOCUS)}>
           {lead}
           {amount}
@@ -419,11 +279,11 @@ function YearValue({item, lead, className}: {item: Cell; lead?: ReactNode; class
       </DataTip>
     );
   return (
-    <DataTip tip={item.tip}>
+    <DataTip tip={tip}>
       <Link
         to='/bank-transactions'
         search={item.search}
-        aria-label={item.tip.label}
+        aria-label={tip.label}
         className={cn(
           classes,
           'hover:outline-1 hover:outline-foreground focus-visible:outline-2 focus-visible:outline-ring',
@@ -442,28 +302,20 @@ function YearValue({item, lead, className}: {item: Cell; lead?: ReactNode; class
  * in place into every year, newest first. The fold row opens the folded rows, as in the table.
  */
 function PhoneRows({
-  kind,
+  model,
   rows,
-  latest,
-  previous,
-  yearLabel,
-  change,
-  cells,
   onMore,
   fewer,
   columnWidth,
 }: {
-  kind: 'category' | 'source';
-  columnWidth: string;
-  rows: Row[];
-  latest: Period;
-  previous: Period | undefined;
-  yearLabel: (period: Period) => ReactNode;
-  change: (row: Row) => string;
-  cells: (row: Row) => Cell[];
+  model: HeatTableModel;
+  /** The rows the table shows, folded or not. */
+  rows: HeatRow[];
   onMore: () => void;
   fewer: ReactNode;
+  columnWidth: string;
 }) {
+  const {kind, years, latest, previous} = model;
   const [open, setOpen] = useState<string | null>(null);
   const line = 'grid items-center gap-x-2';
   // The latest year's column is as wide as the table's year columns, less their padding.
@@ -475,21 +327,21 @@ function PhoneRows({
         style={columns}
         aria-hidden='true'
       >
-        <span>{kind === 'category' ? 'Category' : 'Source'}</span>
-        <span className='text-right font-normal'>
-          {previous ? `vs ${previous.start.slice(0, 4)}` : ''}
+        <span>{nameHeading(kind)}</span>
+        <span className='text-right font-normal'>{previous ? `vs ${previous.year}` : ''}</span>
+        <span className='text-right'>
+          <YearLabel column={latest} />
         </span>
-        <span className='text-right'>{yearLabel(latest)}</span>
       </p>
       <ul>
         {rows.map((row) => {
           const expanded = open === row.key;
-          const latestCell = cells(row)[0];
+          const latestCell = row.cells[0];
           const name = 'line-clamp-2 leading-tight [overflow-wrap:anywhere]';
           const figures = (
             <>
               <span className='text-right numeric whitespace-nowrap text-muted-foreground'>
-                {change(row)}
+                {row.change}
               </span>
               <span
                 className={cn(
@@ -565,13 +417,14 @@ function PhoneRows({
                     gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, calc(${columnWidth} + 3rem)), 1fr))`,
                   }}
                 >
-                  {cells(row).map((item) => (
+                  {row.cells.map((item, index) => (
                     <li key={item.period.start}>
                       <YearValue
+                        row={row}
                         item={item}
                         lead={
                           <span className='text-left font-normal text-muted-foreground'>
-                            {yearLabel(item.period)}
+                            <YearLabel column={years[index]} />
                           </span>
                         }
                         className='flex min-h-11 justify-between gap-2 px-2 text-sm'
