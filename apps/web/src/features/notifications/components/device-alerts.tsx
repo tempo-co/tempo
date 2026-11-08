@@ -7,7 +7,8 @@ import {registerExistingSubscription} from '../api/use-notifications';
 import {setAppBadge} from '../utils/push-device';
 
 /**
- * While Tempo is open, its app icon counts the transactions that need review, the Transactions tab's count. A
+ * While Tempo is open and signed in, its app icon counts the transactions that need review, the Transactions tab's
+ * count; signing out clears it, also when a review count read during sign-out arrives late. A
  * browser already subscribed to alerts is registered with this session once Tempo has confirmed the session, so
  * opening a saved Tempo offline tries no write.
  */
@@ -19,6 +20,8 @@ export function DeviceAlerts() {
   useEffect(() => {
     if (needsAttention !== undefined) setAppBadge(needsAttention);
   }, [needsAttention]);
+  // Mounted only in the signed-in layout.
+  useEffect(() => () => setAppBadge(0), []);
 
   useEffect(() => {
     if (!confirmedAccountId) return;

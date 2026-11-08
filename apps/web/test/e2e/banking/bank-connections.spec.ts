@@ -835,6 +835,12 @@ test.describe('mocked Enable Banking bank connection', () => {
         return fulfillJson(route, EMPTY_REVIEW_COUNTS);
       if (url.origin === API_URL && url.pathname.endsWith('/refresh'))
         return fulfillJson(route, REFRESH_RESULT);
+      // Settings reads whether this server sends notifications.
+      if (url.origin === API_URL && url.pathname === '/notifications')
+        return fulfillJson(route, {
+          publicKey: null,
+          preferences: {bankConnections: true, recurringBills: true},
+        });
       await route.abort('blockedbyclient');
       throw new Error(`Unmocked request: ${route.request().method()} ${url}`);
     });
