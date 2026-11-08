@@ -91,6 +91,9 @@ test('a real income source reconciles with its drill, from its month and from it
     const search = new URL(page.url()).searchParams;
     expect(search.get('incomeSource')).toBe(part.key);
     expect(JSON.parse(search.get('cashFlows')!)).toEqual(['INCOME']);
+    await expect(
+      page.getByRole('button', {name: 'Remove filter: One income source'}),
+    ).toBeVisible();
     const params = new URLSearchParams({
       'filter[bookingDate][from]': from,
       'filter[bookingDate][to]': to,

@@ -5,6 +5,7 @@ import type {
   BankTransactionBreakdown,
   BankTransactionCashFlow,
   BankTransactionReviewCounts,
+  BankTransactionSummary,
   MerchantRanking,
   RecurringSeriesLists,
   RecurringSummary,
@@ -166,6 +167,27 @@ export async function mockEmptyHome(page: Page) {
     } satisfies BankTransactionBreakdown);
   });
   await mockJson(page, '**/bank-transactions/review-counts', EMPTY_REVIEW_COUNTS);
+  await page.route('**/bank-transactions/summary?**', (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const month = params.get('month') ?? '';
+    return fulfillJson(route, {
+      month,
+      through: params.get('asOf') ?? '',
+      daysInMonth: 30,
+      baseCurrency: null,
+      totals: {spending: '0.00', income: '0.00', net: '0.00', ownTransfers: '0.00'},
+      excluded: {unknownDirection: 0, missingBaseAmount: 0},
+      daily: [],
+      baseline: {
+        months: [],
+        daily: [],
+        spendingByThrough: null,
+        spendingRangeByThrough: null,
+        incomeByThrough: null,
+      },
+      categories: [],
+    } satisfies BankTransactionSummary);
+  });
   await mockJson(page, '**/recurring-series/summary?**', {
     expenseMonthlyTotal: '0.00',
     incomeMonthlyTotal: '0.00',
