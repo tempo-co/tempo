@@ -2,7 +2,7 @@
  * Pure monthly spending math for the Home summary. Money is integer cents (`bigint`) throughout; amounts enter as
  * Postgres decimal strings with at most two decimals and leave through {@link formatCents}. No floats.
  */
-import type {BaselineDay, BaselineTotal, CashFlowInterval, SpendingPaceDay} from '@tempo/contracts';
+import type {BalanceTrendInterval, BaselineDay, BaselineTotal, SpendingPaceDay} from '@tempo/contracts';
 
 import {addDays} from '../banking.utils';
 
@@ -108,11 +108,11 @@ function days(count: number): number[] {
 	return Array.from({length: count}, (_, index) => index + 1);
 }
 
-/** The most periods one cash-flow style request may cover. */
-const CASH_FLOW_MAX_PERIODS: Record<CashFlowInterval, number> = {week: 104, month: 60, year: 10};
+/** The most periods one cash-flow style request may cover; days are for the balance trend's last month. */
+const CASH_FLOW_MAX_PERIODS: Record<BalanceTrendInterval, number> = {day: 92, week: 104, month: 240, year: 20};
 
 /** Period starts from `from` through `to`, or null when the range is backwards, ends after `asOf` or is too long. */
-export function periodStarts(interval: CashFlowInterval, from: string, to: string, asOf: string): string[] | null {
+export function periodStarts(interval: BalanceTrendInterval, from: string, to: string, asOf: string): string[] | null {
 	const starts: string[] = [];
 	for (let start = periodStart(from, interval); start <= to; start = nextPeriodStart(start, interval)) {
 		starts.push(start);
@@ -126,14 +126,16 @@ function toDate(value: string): Date {
 	return new Date(`${value}T00:00:00Z`);
 }
 
-/** The Monday, 1st or 1 January on or before `value`, like Postgres `date_trunc`. */
-export function periodStart(value: string, interval: CashFlowInterval): string {
+/** The day itself, or the Monday, 1st or 1 January on or before `value`, like Postgres `date_trunc`. */
+export function periodStart(value: string, interval: BalanceTrendInterval): string {
+	if (interval === 'day') return value;
 	if (interval === 'year') return `${value.slice(0, 4)}-01-01`;
 	if (interval === 'month') return `${value.slice(0, 7)}-01`;
 	return addDays(value, -((toDate(value).getUTCDay() + 6) % 7));
 }
 
-export function nextPeriodStart(start: string, interval: CashFlowInterval): string {
+export function nextPeriodStart(start: string, interval: BalanceTrendInterval): string {
+	if (interval === 'day') return addDays(start, 1);
 	if (interval === 'week') return addDays(start, 7);
 	const date = toDate(start);
 	if (interval === 'year') date.setUTCFullYear(date.getUTCFullYear() + 1);

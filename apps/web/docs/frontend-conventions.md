@@ -44,6 +44,8 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 - Use the shared shadcn `ScrollArea` for scrollable content, not native browser scrollbars. Keep content position and width stable when overflow appears; the overlay scrollbar must not create a native gutter.
 - A content-sized flex dialog with a maximum height can constrain its ScrollArea with a local `min-h-0` grid and `grid-rows-[minmax(0,1fr)]`. Verify actual Radix viewport wheel/touch scrolling and reachability of the final action, not only programmatic scrolling.
 - Secondary folds reuse the existing ghost Button with a leading chevron and consistent hover/focus/touch targets. Transaction category provenance sits at the right edge of its label row.
+- A paged list ends in `LoadMore` (`src/components/shared/load-more.tsx`): one full-width ghost Button, "Load more", that adds one page per press and disappears after the last one. A later page that fails keeps the loaded rows and puts "Couldn't load more." with a Retry in the button's place; a failed first page shows the list's own error state. Other text actions use `TextAction`.
+- Hoverable list rows keep their text on the section's edge: each row pads its sides and the list takes the same negative margin (`px-2` and `-mx-2` on Home's own rows), so the hover wash extends past the text on both sides.
 
 ## Interaction feedback and motion
 
@@ -56,7 +58,8 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 Use `ChartContainer` and `ChartTooltip` for the shared pointer behavior. Mouse hover follows
 Recharts; touch inspection begins with a brief hold or a horizontal drag and ends on release
 or cancellation. Vertical gestures scroll the page and pinch zoom remains available. A short
-tap keeps the chart's click action; releasing an inspection must not navigate.
+tap keeps the chart's click action; releasing an inspection must not navigate. Only x picks the
+period, so a finger on the axis labels inspects the period above them.
 
 Touch readouts sit at the top of the plot without movement animation. Supported browsers can
 request a brief vibration when the inspected period changes; Safari has no Vibration API.

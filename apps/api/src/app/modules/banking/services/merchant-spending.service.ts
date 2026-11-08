@@ -39,20 +39,22 @@ import {
 	periodStarts,
 } from '../summary/bank-transaction-summary';
 import {
+	SQL_BASE_AMOUNT,
 	SQL_INCOME,
 	SQL_INTERNAL,
 	SQL_MERCHANT_GROUP,
 	SQL_MERCHANT_KEY_NAME,
 	SQL_MISSING_BASE_AMOUNT,
+	SQL_PERIOD_START,
 	SQL_SPENDING,
 	SQL_UNKNOWN_DIRECTION,
 	applyBankTransactionFilters,
 	createOwnerScopedQuery,
+	findFirstBookingDate,
 } from './bank-transaction-filters';
 
-const BASE_AMOUNT = '"transaction"."amountInBaseCurrency"';
 /** Each amount rounded to minor units before summing; monetary SQL results are never converted to Number. */
-const CENTS = `ROUND(${BASE_AMOUNT} * 100)`;
+const CENTS = `ROUND(${SQL_BASE_AMOUNT} * 100)`;
 const DEBIT = `"transaction"."creditDebitIndicator" = 'DBIT'`;
 const CREDIT = `"transaction"."creditDebitIndicator" = 'CRDT'`;
 
@@ -126,14 +128,14 @@ export class MerchantSpendingService {
 		if (!starts) throw new BadRequestException(MERCHANT_PERIODS_RANGE);
 		const [exists, firstBookingDate] = await Promise.all([
 			this.groupExists(accountId, groupId),
-			this.findFirstBookingDate(accountId),
+			findFirstBookingDate(this.bankTransactionRepository, accountId),
 		]);
 		if (!exists) throw new NotFoundException(MERCHANT_NOT_FOUND);
 
 		const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
 		applyBankTransactionFilters(query, {bookingDate: {from: starts[0], to}, merchantGroup: groupId});
 		const rows = await query
-			.select(`to_char(date_trunc(:interval, "transaction"."bookingDate"::timestamp), 'YYYY-MM-DD')`, 'start')
+			.select(SQL_PERIOD_START, 'start')
 			.addSelect(`COALESCE(SUM(-${CENTS}) FILTER (WHERE ${SQL_SPENDING}), 0)::text`, 'spent')
 			.addSelect(`COALESCE(SUM(${CENTS}) FILTER (WHERE ${SQL_INCOME}), 0)::text`, 'received')
 			.addSelect('COUNT(*)::int', 'count')
@@ -175,7 +177,7 @@ export class MerchantSpendingService {
 		const through = running ? asOf : end;
 		const elapsedDays = daysBetween(start, through);
 
-		const firstBookingDate = await this.findFirstBookingDate(accountId);
+		const firstBookingDate = await findFirstBookingDate(this.bankTransactionRepository, accountId);
 		const baseline: Array<{start: string; through: string}> = [];
 		for (let earlier = start, index = 0; index < MERCHANT_RANKING_BASELINE_PERIODS; index++) {
 			earlier = periodStart(addDays(earlier, -1), interval);
@@ -280,7 +282,7 @@ export class MerchantSpendingService {
 			.addSelect(`COALESCE(SUM(${CENTS}) FILTER (WHERE ${SQL_INCOME}), 0)::text`, 'received')
 			.addSelect('COUNT(*)::int', 'count')
 			.addSelect(
-				`COUNT(*) FILTER (WHERE ${SQL_SPENDING} AND ${DEBIT} AND ${BASE_AMOUNT} IS NOT NULL)::int`,
+				`COUNT(*) FILTER (WHERE ${SQL_SPENDING} AND ${DEBIT} AND ${SQL_BASE_AMOUNT} IS NOT NULL)::int`,
 				'paymentCount',
 			)
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_UNKNOWN_DIRECTION})::int`, 'unknownDirection')
@@ -347,13 +349,6 @@ export class MerchantSpendingService {
 			.limit(1)
 			.getRawOne();
 		return Boolean(row);
-	}
-
-	private async findFirstBookingDate(accountId: string): Promise<string | null> {
-		const row = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
-			.select(`to_char(MIN("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'first')
-			.getRawOne<{first: string | null}>();
-		return row?.first ?? null;
 	}
 }
 

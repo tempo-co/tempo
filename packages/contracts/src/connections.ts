@@ -17,6 +17,9 @@ export const BANK_CONNECTION_STATUSES = [
 ] as const;
 export type BankConnectionStatus = (typeof BANK_CONNECTION_STATUSES)[number];
 
+/** How long before consent ends the owner is told to re-authorize: an email, and a dot on Connections. */
+export const CONSENT_ENDING_SOON_MS = 7 * 24 * 60 * 60 * 1000;
+
 export const BANK_SYNC_STATUSES = [
 	'IDLE',
 	'QUEUED',

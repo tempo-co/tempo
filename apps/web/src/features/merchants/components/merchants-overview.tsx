@@ -8,6 +8,7 @@ import {format} from 'date-fns';
 import {Search} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
+import {LoadMore} from '@/components/shared/load-more';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {Skeleton} from '@/components/ui/skeleton';
@@ -172,8 +173,8 @@ function AllMerchants({
   search: string;
   onSelect: (merchantId: string) => void;
 }) {
-  const {data, isPending, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage} =
-    useGetMerchants(search);
+  const query = useGetMerchants(search);
+  const {data, isPending, refetch} = query;
   const merchants = data?.pages.flatMap((page) => page.merchants) ?? [];
   const last = data?.pages[data.pages.length - 1];
   const currency = last?.baseCurrency ?? null;
@@ -194,7 +195,7 @@ function AllMerchants({
       </header>
       {isPending ? (
         <Skeleton className='h-72' role='img' aria-label='Loading merchants' />
-      ) : isError || !last ? (
+      ) : !last ? (
         <div className='grid justify-items-start gap-3'>
           <p className='text-sm'>Could not load merchants.</p>
           <Button variant='outline' onClick={() => void refetch()}>
@@ -219,17 +220,7 @@ function AllMerchants({
               </li>
             ))}
           </ul>
-          {hasNextPage && (
-            <Button
-              variant='ghost'
-              className='w-full text-muted-foreground max-sm:h-11'
-              disabled={isFetchingNextPage}
-              aria-busy={isFetchingNextPage || undefined}
-              onClick={() => void fetchNextPage()}
-            >
-              Load more
-            </Button>
-          )}
+          <LoadMore query={query} />
         </>
       )}
     </section>

@@ -4,7 +4,7 @@ How `src/app/modules/banking/merchant-logos/` finds, trusts, stores and serves a
 
 ## Boundaries
 
-- Display and merchant spending only. Categories, `merchantKey`, category history and recurring detection never read `merchants` or `merchant_logos`, and nothing here writes to `bank_transactions`. Recurring responses show the logo of a series' latest payment through `getLogoUrls`, like any listed transaction.
+- Display and merchant spending only. Categories, `merchantKey`, category history and recurring detection never read `merchants` or `merchant_logos`, and nothing here writes to `bank_transactions`. Recurring responses show the logo of a series' latest payment, and the breakdown's income sources that of their latest income, through `getLogoUrls`, like any listed transaction.
 - Merchant spending (`services/merchant-spending.service.ts`, `/merchants`) groups an owner's merchant keys by `IDENTIFIED` merchants' lowercased, trimmed `brand` through `SQL_MERCHANT_GROUP`; keys without a brand, including people, stay one group each. A changed brand regroups history at read time; nothing is stored per group.
 - No per-merchant rules (aliases, domain overrides, exception lists). Fix a miss with a general rule and a synthetic test, or leave the category icon.
 - Own transfers and currency exchanges never show a logo, even when they share a key with a purchase: rows with `ownTransferEvidence` or `financialEventType` are skipped in `addMerchants`, the identification input and `getLogoUrls`. Keep an E2E row of that shape.

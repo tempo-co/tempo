@@ -1,15 +1,18 @@
 import {Link} from '@tanstack/react-router';
 import type {BankTransaction, RecurringSeries} from '@tempo/contracts';
-import {format} from 'date-fns';
-import {ArrowLeft, ArrowUpRight, Eye, EyeOff, Link2, Link2Off} from 'lucide-react';
+import {differenceInCalendarMonths, format} from 'date-fns';
+import {ArrowLeft, Eye, EyeOff, Link2, Link2Off} from 'lucide-react';
 import {Bar, BarChart, Cell, XAxis} from 'recharts';
 
+import {LoadMore} from '@/components/shared/load-more';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {Skeleton} from '@/components/ui/skeleton';
+import {TextAction} from '@/features/dashboard/components/text-action';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatMoney, formatWholeMoney} from '@/features/dashboard/utils/money';
+import {useIsMobile} from '@/hooks/use-is-mobile';
 import {cn} from '@/utils/cn';
 
 import {useGetRecurringPayments} from '../api/use-get-recurring-payments';
@@ -22,6 +25,7 @@ import {
   formatPriceChange,
   formatRelativeDays,
   isPast,
+  paidMonth,
 } from '../utils/recurring-format';
 import {SeriesTile} from './recurring-series-tile';
 import {TransactionListRow} from './transaction-list-row';
@@ -110,7 +114,11 @@ export function RecurringSeriesDetail({
         {/* A yearly total is an estimate, so whole amounts; they also keep large totals on one line. */}
         <Fact
           label='A year'
-          value={yearly !== null ? formatWholeMoney(yearly, baseCurrency) : '—'}
+          value={
+            yearly === null
+              ? '—'
+              : `${series.amountKind === 'VARIABLE' ? '≈ ' : ''}${formatWholeMoney(yearly, baseCurrency)}`
+          }
           numeric
         />
         <Fact
@@ -138,12 +146,6 @@ export function RecurringSeriesDetail({
       )}
 
       <div className='grid gap-2 border-t pt-4 sm:flex sm:flex-wrap'>
-        <Button variant='outline' asChild className='max-sm:h-11'>
-          <Link to='/bank-transactions' search={{recurringSeriesKey: series.key}}>
-            <ArrowUpRight aria-hidden />
-            Open in Transactions
-          </Link>
-        </Button>
         {continuation && (
           <Button
             variant='outline'
@@ -227,53 +229,53 @@ const CHART_SIZE = 12;
  * a page at a time.
  */
 function PaymentHistory({series}: {series: RecurringSeries}) {
-  const {data, isPending, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage} =
-    useGetRecurringPayments(series.key);
+  const query = useGetRecurringPayments(series.key);
+  const {data, isPending, refetch} = query;
 
-  if (isPending) return <Skeleton className='h-40' aria-label='Loading payments' />;
-  if (isError || !data) {
-    return (
-      <div className='grid justify-items-start gap-2'>
-        <p className='text-sm'>Could not load payments.</p>
-        <Button variant='outline' className='max-sm:h-11' onClick={() => void refetch()}>
-          Try again
-        </Button>
-      </div>
-    );
-  }
-
-  const transactions = data.pages.flatMap((page) => page.transactions);
-  const {total} = data.pages[data.pages.length - 1];
+  const transactions = data?.pages.flatMap((page) => page.transactions) ?? [];
+  const total = data?.pages[data.pages.length - 1].total ?? series.transactionCount;
   return (
     <>
-      <PaymentChart series={series} transactions={transactions.slice(0, CHART_SIZE)} />
-      <section aria-label='Payments' className='grid grid-cols-1 gap-2'>
-        <h4 className='text-xs font-medium text-muted-foreground'>
-          {total === 1 ? '1 payment' : `All ${total} payments`}
-        </h4>
-        <ul aria-label={`Payments to ${series.name}`} className='-mx-3 divide-y divide-border/60'>
-          {transactions.map((transaction) => (
-            <li key={transaction.id}>
-              <TransactionListRow
-                transaction={transaction}
-                link={{
-                  to: '/bank-transactions',
-                  search: {recurringSeriesKey: series.key, transactionId: transaction.id},
-                }}
-              />
-            </li>
-          ))}
-        </ul>
-        {hasNextPage && (
-          <Button
-            variant='ghost'
-            className='w-full text-muted-foreground max-sm:h-11'
-            disabled={isFetchingNextPage}
-            aria-busy={isFetchingNextPage || undefined}
-            onClick={() => void fetchNextPage()}
-          >
-            Load more
-          </Button>
+      {data && <PaymentChart series={series} transactions={transactions.slice(0, CHART_SIZE)} />}
+      <section aria-label='Payments' className='grid grid-cols-1 gap-3'>
+        {/* Placed and styled as a merchant's and a month's transactions. */}
+        <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-2'>
+          <h4 className='text-card-title'>{total === 1 ? '1 payment' : `All ${total} payments`}</h4>
+          <TextAction asChild className='-mr-2'>
+            <Link to='/bank-transactions' search={{recurringSeriesKey: series.key}}>
+              Open in Transactions
+            </Link>
+          </TextAction>
+        </header>
+        {isPending ? (
+          <Skeleton className='h-40' aria-label='Loading payments' />
+        ) : !data ? (
+          <div className='grid justify-items-start gap-2'>
+            <p className='text-sm'>Could not load payments.</p>
+            <Button variant='outline' className='max-sm:h-11' onClick={() => void refetch()}>
+              Try again
+            </Button>
+          </div>
+        ) : (
+          <>
+            <ul
+              aria-label={`Payments to ${series.name}`}
+              className='-mx-3 divide-y divide-border/60'
+            >
+              {transactions.map((transaction) => (
+                <li key={transaction.id}>
+                  <TransactionListRow
+                    transaction={transaction}
+                    link={{
+                      to: '/bank-transactions',
+                      search: {recurringSeriesKey: series.key, transactionId: transaction.id},
+                    }}
+                  />
+                </li>
+              ))}
+            </ul>
+            <LoadMore query={query} />
+          </>
         )}
       </section>
     </>
@@ -288,17 +290,35 @@ function PaymentChart({
   series: RecurringSeries;
   transactions: BankTransaction[];
 }) {
+  const isMobile = useIsMobile();
   const points = [...transactions]
     .reverse()
-    .map((tx) => ({
-      date: tx.bookingDate ?? tx.transactionDate ?? '',
-      amount: Math.abs(Number(tx.amount)),
-    }))
-    .filter((point) => point.date);
+    .flatMap((tx) => {
+      const date = tx.bookingDate ?? tx.transactionDate;
+      return date
+        ? [{date, month: paidMonth(date, series), amount: Math.abs(Number(tx.amount))}]
+        : [];
+    })
+    .map((point, index) => ({...point, index}));
   if (points.length < 2) return null;
   const unusualIndex = series.flags.includes('HIGHER_THAN_USUAL') ? points.length - 1 : -1;
   const first = points[0];
   const last = points[points.length - 1];
+  // Each labelled bar names the month it pays, once: a second payment in a month leaves its bar unlabelled.
+  // Phones label every other bar, counted back from the latest.
+  const every = isMobile ? 2 : 1;
+  const labelled = points.filter(({index}) => (points.length - 1 - index) % every === 0);
+  const ticks = labelled
+    .filter((point, at) => at === 0 || labelled[at - 1].month !== point.month)
+    .map(({index}) => index);
+  // Over more than a year a month name comes round again, so it carries its year.
+  const monthFormat =
+    differenceInCalendarMonths(
+      parseCalendarDate(`${last.month}-01`),
+      parseCalendarDate(`${first.month}-01`),
+    ) >= 12
+      ? 'MMM yy'
+      : 'MMM';
 
   return (
     <section aria-label='Payment history' className='grid grid-cols-1 gap-2'>
@@ -315,12 +335,14 @@ function PaymentChart({
           barCategoryGap='22%'
         >
           <XAxis
-            dataKey='date'
+            dataKey='index'
+            ticks={ticks}
+            interval={0}
             tickLine={false}
             axisLine={false}
-            interval='preserveStartEnd'
-            minTickGap={24}
-            tickFormatter={(value: string) => format(parseCalendarDate(value), 'MMM')}
+            tickFormatter={(index: number) =>
+              format(parseCalendarDate(`${points[index].month}-01`), monthFormat)
+            }
           />
           <ChartTooltip
             cursor={{fill: 'hsl(var(--foreground))', fillOpacity: 0.05}}

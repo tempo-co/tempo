@@ -1,7 +1,4 @@
-import type {
-  BankTransactionCategoryFilterValue,
-  BankTransactionReviewCounts,
-} from '@tempo/contracts';
+import type {BankTransactionCategoryFilterValue} from '@tempo/contracts';
 import {parse} from 'date-fns';
 
 import type {BankTransactionSearchParams} from '@/features/banking/types/bank-transaction';
@@ -23,11 +20,6 @@ export function periodDrill(from: string, to: string): BankTransactionDrillSearc
   return {bookingDate: bookingRange(from, to)};
 }
 
-/** Exactly the rows behind a cash flow bar: spending and income with a base-currency amount. */
-export function cashFlowDrill(from: string, to: string): BankTransactionDrillSearch {
-  return {...periodDrill(from, to), cashFlows: ['SPENDING', 'INCOME'], baseAmount: 'PRESENT'};
-}
-
 /**
  * Exactly the rows behind a spending or income total between two dates: that cash flow, and, when the period
  * has rows still waiting for a base-currency amount, only rows that have one, since totals leave the rest out.
@@ -45,6 +37,16 @@ export function flowDrill(
   };
 }
 
+/** Exactly the rows behind one income source's total between two dates, by the key the breakdown gives it. */
+export function sourceDrill(
+  source: string,
+  from: string,
+  to: string,
+  hasMissingBaseAmounts: boolean,
+): BankTransactionDrillSearch {
+  return {...flowDrill('INCOME', from, to, hasMissingBaseAmounts), incomeSource: source};
+}
+
 /** Exactly the spending rows behind one or more category totals between two dates. */
 export function categoryDrill(
   categories: BankTransactionCategoryFilterValue | BankTransactionCategoryFilterValue[],
@@ -57,13 +59,3 @@ export function categoryDrill(
     categories: Array.isArray(categories) ? categories : [categories],
   };
 }
-
-/** All-time rows behind each review count. */
-export const reviewDrills = {
-  needsReview: {categories: ['NEEDS_REVIEW']},
-  categorizationFailed: {categoryStatuses: ['FAILED']},
-  categorizing: {categoryStatuses: ['CATEGORIZING']},
-  unknownDirection: {cashFlows: ['UNKNOWN']},
-  // Internal rows are left out of the count, so they are left out of the list too.
-  missingBaseAmount: {cashFlows: ['SPENDING', 'INCOME', 'UNKNOWN'], baseAmount: 'MISSING'},
-} as const satisfies Record<keyof BankTransactionReviewCounts, BankTransactionDrillSearch>;

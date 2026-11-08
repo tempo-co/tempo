@@ -12,8 +12,10 @@ export const useGetBankTransactionCashFlow = (
   from: string,
   to: string,
   asOf: string,
+  {enabled = true}: {enabled?: boolean} = {},
 ) => {
   const {data, isPending, isError, refetch} = useQuery<BankTransactionCashFlow>({
+    enabled,
     queryKey: dashboardQueryKeys.cashFlow(interval, from, to, asOf),
     queryFn: () => {
       const params = new URLSearchParams({interval, from, to, asOf});

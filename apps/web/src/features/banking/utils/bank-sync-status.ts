@@ -1,4 +1,4 @@
-import type {BankConnection} from '@tempo/contracts';
+import {type BankConnection, CONSENT_ENDING_SOON_MS} from '@tempo/contracts';
 
 /** True when the ISO timestamp parses to a real moment that is not in the future. */
 function isPastTimestamp(value: string | null | undefined, now = Date.now()): boolean {
@@ -22,6 +22,13 @@ export function isReauthorizationRequired(connection: BankConnection) {
   if (connection.status !== 'AUTHORIZED') return false;
 
   return isPastTimestamp(connection.consentValidUntil);
+}
+
+/** An authorized bank whose consent is still valid but ends within the window the owner is emailed in. */
+export function isConsentEndingSoon(connection: BankConnection) {
+  if (connection.status !== 'AUTHORIZED' || isReauthorizationRequired(connection)) return false;
+  const timestamp = Date.parse(connection.consentValidUntil ?? '');
+  return timestamp - Date.now() <= CONSENT_ENDING_SOON_MS;
 }
 
 export type AutomaticSyncProblem = {

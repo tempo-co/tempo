@@ -341,6 +341,7 @@ describe('Hosted MCP', () => {
 					categorizing: 0,
 					unknownDirection: 0,
 					missingBaseAmount: 1,
+					needsAttention: 1,
 				});
 				expect(await call('list_categories')).toEqual(
 					expect.arrayContaining([

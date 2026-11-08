@@ -1,11 +1,13 @@
-import {Page, Route} from '@playwright/test';
+import {Locator, Page, Route, expect} from '@playwright/test';
 import type {
   BankBalanceTrend,
   BankConnection,
+  BankTransactionBreakdown,
   BankTransactionCashFlow,
   BankTransactionReviewCounts,
   BankTransactionSummary,
   MerchantRanking,
+  RecurringSeriesLists,
   RecurringSummary,
 } from '@tempo/contracts';
 
@@ -23,47 +25,54 @@ export function fulfillRedirect(route: Route, location: string) {
   });
 }
 
-/** Synthetic monthly totals for specs that mock Home without a real session. */
-export const syntheticCashFlow = {
-  baseCurrency: 'EUR',
-  interval: 'month',
-  periods: ['2026-07', '2026-08', '2026-09'].map((month, index) => ({
-    start: `${month}-01`,
-    end: `${month}-${month === '2026-09' ? '30' : '31'}`,
-    complete: true,
-    spending: `${1100 + index * 50}.00`,
-    income: '2500.00',
-    net: `${1400 - index * 50}.00`,
-  })),
-};
-
-/** Serves {@link syntheticCashFlow} for every interval, so the card never reaches the real API. */
-export function mockCashFlow(page: Page) {
-  return page.route('**/bank-transactions/cash-flow**', (route) => {
-    const interval = new URL(route.request().url()).searchParams.get('interval');
-    return fulfillJson(route, {...syntheticCashFlow, interval});
+/**
+ * Fails the API reads of `url` that `isLater` picks (a paged list's later pages) with a final error until
+ * `failing` is turned off; every other read goes on to the mocks behind. `pages` records each later page asked
+ * for, failed or not, by what `isLater` returns for it.
+ */
+export async function failLaterPages(
+  page: Page,
+  url: string,
+  isLater: (params: URLSearchParams) => string | null,
+) {
+  const state = {failing: true, pages: [] as string[]};
+  await page.route(url, (route) => {
+    const request = route.request();
+    const later = ['fetch', 'xhr'].includes(request.resourceType())
+      ? isLater(new URL(request.url()).searchParams)
+      : null;
+    if (later === null) return route.fallback();
+    state.pages.push(later);
+    // 429 is final, so the query does not retry it on its own.
+    if (state.failing) return fulfillJson(route, {message: 'Too Many Requests'}, 429);
+    return route.fallback();
   });
+  return state;
 }
 
-/** Synthetic month-end balances for specs that mock Home without a real session. */
-const syntheticBalanceTrend = {
-  baseCurrency: 'EUR',
-  interval: 'month',
-  periods: ['2026-07', '2026-08', '2026-09'].map((month, index) => ({
-    start: `${month}-01`,
-    end: `${month}-${month === '2026-09' ? '30' : '31'}`,
-    complete: true,
-    total: `${4000 + index * 250}.00`,
-    accounts: [{id: '00000000-0000-4000-8000-000000000001', balance: `${4000 + index * 250}.00`}],
-  })),
-};
+/**
+ * Presses `scope`'s Load more while {@link failLaterPages} fails the next page: the `loaded` rows stay with a note
+ * under them, and Retry asks for the same page again and adds its rows, `after` in all.
+ */
+export async function expectFailedPageRetried(
+  scope: Locator,
+  rows: Locator,
+  later: Awaited<ReturnType<typeof failLaterPages>>,
+  {loaded, after}: {loaded: number; after: number},
+) {
+  await expect(rows).toHaveCount(loaded);
+  await scope.getByRole('button', {name: 'Load more'}).click();
+  const note = scope.getByRole('status').filter({hasText: "Couldn't load more."});
+  await expect(note).toBeVisible();
+  await expect(rows).toHaveCount(loaded);
+  await expect(scope.getByRole('button', {name: 'Load more'})).toHaveCount(0);
+  expect(later.pages).toHaveLength(1);
 
-/** Serves {@link syntheticBalanceTrend} for every interval, so the card never reaches the real API. */
-export function mockBalanceTrend(page: Page) {
-  return page.route('**/bank-transactions/balance-trend**', (route) => {
-    const interval = new URL(route.request().url()).searchParams.get('interval');
-    return fulfillJson(route, {...syntheticBalanceTrend, interval});
-  });
+  later.failing = false;
+  await scope.getByRole('button', {name: 'Retry'}).click();
+  await expect(rows).toHaveCount(after);
+  await expect(note).toHaveCount(0);
+  expect(later.pages).toEqual([later.pages[0], later.pages[0]]);
 }
 
 /** Answers every request to `url` with the same JSON response. */
@@ -112,9 +121,20 @@ export function transformBankConnections(
   });
 }
 
+/** Review counts with nothing waiting for the owner, so the navigation carries no badge. */
+export const EMPTY_REVIEW_COUNTS: BankTransactionReviewCounts = {
+  needsReview: 0,
+  categorizationFailed: 0,
+  categorizing: 0,
+  unknownDirection: 0,
+  missingBaseAmount: 0,
+  needsAttention: 0,
+};
+
 /**
- * Answers Home's card requests with empty data. Home requests its cards while the connections load,
- * so a fully mocked spec that opens Home without banks still sends them.
+ * Answers Home's requests, and the navigation's review counts, with empty data. Home requests its
+ * history while the connections load, so a fully mocked spec that opens Home without banks still
+ * sends them.
  */
 export async function mockEmptyHome(page: Page) {
   // Registered by the fully mocked fixture before each spec's more specific routes.
@@ -123,10 +143,35 @@ export async function mockEmptyHome(page: Page) {
     new URL(route.request().url()).searchParams.get(
       'interval',
     ) as BankTransactionCashFlow['interval'];
-  await page.route('**/bank-transactions/summary?**', (route) => {
+  await page.route('**/bank-transactions/cash-flow?**', (route) =>
+    fulfillJson(route, {
+      baseCurrency: null,
+      interval: interval(route),
+      periods: [],
+    } satisfies BankTransactionCashFlow),
+  );
+  await page.route('**/bank-transactions/balance-trend?**', (route) =>
+    fulfillJson(route, {
+      baseCurrency: null,
+      interval: interval(route),
+      periods: [],
+    } satisfies BankBalanceTrend),
+  );
+  await page.route('**/bank-transactions/breakdown?**', (route) => {
     const params = new URL(route.request().url()).searchParams;
     return fulfillJson(route, {
-      month: params.get('month') ?? '',
+      baseCurrency: null,
+      interval: params.get('interval') as BankTransactionBreakdown['interval'],
+      by: params.get('by') as BankTransactionBreakdown['by'],
+      periods: [],
+    } satisfies BankTransactionBreakdown);
+  });
+  await mockJson(page, '**/bank-transactions/review-counts', EMPTY_REVIEW_COUNTS);
+  await page.route('**/bank-transactions/summary?**', (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const month = params.get('month') ?? '';
+    return fulfillJson(route, {
+      month,
       through: params.get('asOf') ?? '',
       daysInMonth: 30,
       baseCurrency: null,
@@ -143,27 +188,6 @@ export async function mockEmptyHome(page: Page) {
       categories: [],
     } satisfies BankTransactionSummary);
   });
-  await page.route('**/bank-transactions/cash-flow?**', (route) =>
-    fulfillJson(route, {
-      baseCurrency: null,
-      interval: interval(route),
-      periods: [],
-    } satisfies BankTransactionCashFlow),
-  );
-  await page.route('**/bank-transactions/balance-trend?**', (route) =>
-    fulfillJson(route, {
-      baseCurrency: null,
-      interval: interval(route),
-      periods: [],
-    } satisfies BankBalanceTrend),
-  );
-  await mockJson(page, '**/bank-transactions/review-counts', {
-    needsReview: 0,
-    categorizationFailed: 0,
-    categorizing: 0,
-    unknownDirection: 0,
-    missingBaseAmount: 0,
-  } satisfies BankTransactionReviewCounts);
   await mockJson(page, '**/recurring-series/summary?**', {
     expenseMonthlyTotal: '0.00',
     incomeMonthlyTotal: '0.00',
@@ -174,6 +198,7 @@ export async function mockEmptyHome(page: Page) {
     expenseThisMonth: {month: '', paid: '0.00', remaining: '0.00'},
     incomeThisMonth: {month: '', paid: '0.00', remaining: '0.00'},
   } satisfies RecurringSummary);
+  await mockEmptyRecurringLists(page);
   await page.route('**/bank-transactions?**', (route) =>
     ['fetch', 'xhr'].includes(route.request().resourceType())
       ? fulfillJson(route, {transactions: [], total: 0})
@@ -182,7 +207,22 @@ export async function mockEmptyHome(page: Page) {
   await mockMerchantRanking(page);
 }
 
-/** Answers Home's Top merchants card with an empty ranking, for specs that mock Home's other cards. */
+/** Answers the recurring lists (the Repeats block's flagged bills, the recurring dialog) with none. */
+export function mockEmptyRecurringLists(page: Page) {
+  const empty = {
+    series: [],
+    monthlyTotal: '0.00',
+    unconvertedCount: 0,
+    thisMonth: {month: '', paid: '0.00', remaining: '0.00'},
+    baseCurrency: null,
+  };
+  return mockJson(page, '**/recurring-series?**', {
+    expenses: empty,
+    income: empty,
+  } satisfies RecurringSeriesLists);
+}
+
+/** Answers the merchant ranking (the month's biggest merchants) with an empty ranking. */
 export function mockMerchantRanking(page: Page) {
   return page.route('**/merchants/ranking?**', (route) => {
     const params = new URL(route.request().url()).searchParams;

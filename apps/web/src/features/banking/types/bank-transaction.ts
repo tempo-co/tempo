@@ -100,6 +100,8 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
   recurringSeriesKey: recurringSeriesKeySchema.optional(),
   /** Only one merchant group's rows, from a merchant page. */
   merchantGroup: z.string().regex(new RegExp(MERCHANT_GROUP_ID_PATTERN)).optional(),
+  /** Only one income source's rows, by its breakdown key, from Home. */
+  incomeSource: z.string().max(BANK_TRANSACTION_SEARCH_MAX_LENGTH).optional(),
   transactionId: z.string().optional(),
   sort: z
     .object({
@@ -135,6 +137,7 @@ export const BANK_TRANSACTION_FILTER_KEYS = [
   'categoryStatuses',
   'recurringSeriesKey',
   'merchantGroup',
+  'incomeSource',
   'search',
 ] as const satisfies readonly (keyof BankTransactionSearchParams)[];
 
