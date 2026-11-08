@@ -692,6 +692,39 @@ describe('BankTransactionSummary', () => {
 			]);
 		});
 
+		it('rebuilds each day-end balance across a month end the way it rebuilds month ends', async () => {
+			const {body} = await ownerAgent
+				.get(TREND)
+				.query({interval: 'day', from: '2019-01-30', to: '2019-02-06', asOf: '2026-10-18'})
+				.expect(200);
+			expect(body.interval).toBe('day');
+			// The month-end balance of 31 January is 900.00; the 200.00 debit lands on 5 February.
+			expect(
+				body.periods.map(({start, end, complete, total}: Record<string, unknown>) => ({
+					start,
+					end,
+					complete,
+					total,
+				})),
+			).toEqual([
+				...['01-30', '01-31', '02-01', '02-02', '02-03', '02-04'].map((day) => ({
+					start: `2019-${day}`,
+					end: `2019-${day}`,
+					complete: true,
+					total: '900.00',
+				})),
+				{start: '2019-02-05', end: '2019-02-05', complete: true, total: '700.00'},
+				{start: '2019-02-06', end: '2019-02-06', complete: true, total: '700.00'},
+			]);
+		});
+
+		it('accepts exactly 92 days', async () => {
+			await ownerAgent
+				.get(TREND)
+				.query({interval: 'day', from: '2019-01-01', to: '2019-04-02', asOf: '2026-10-18'})
+				.expect(200);
+		});
+
 		it('has no total where an account with history has no exchange rate yet', async () => {
 			const {body} = await ownerAgent
 				.get(TREND)
@@ -716,6 +749,7 @@ describe('BankTransactionSummary', () => {
 				{interval: 'month', from: '2019-01-01', to: '2019-03-31', asOf: '2019-03-30'},
 			],
 			['more than 20 years', {interval: 'year', from: '1999-01-01', to: '2019-12-31', asOf: '2026-10-18'}],
+			['more than 92 days', {interval: 'day', from: '2019-01-01', to: '2019-04-03', asOf: '2026-10-18'}],
 		])('rejects %s', async (_, query) => {
 			const response = await ownerAgent.get(TREND).query(query).expect(400);
 			expect(response.body.message).toBe(BANKING_BALANCE_TREND_RANGE);

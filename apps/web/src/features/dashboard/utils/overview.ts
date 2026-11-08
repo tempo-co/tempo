@@ -3,7 +3,7 @@ import type {
   BankTransactionBreakdownPeriod,
   BankTransactionCashFlow,
 } from '@tempo/contracts';
-import {format, getDaysInMonth, subMonths} from 'date-fns';
+import {addDays, format, getDaysInMonth, subDays, subMonths} from 'date-fns';
 
 import {parseCalendarDate} from './drill-links';
 import {formatWholeMoney, toCents} from './money';
@@ -110,6 +110,8 @@ export function buildOverview({
 }
 
 export const SPANS = [
+  // A month of month ends is one point, so this span reads day ends instead: see lastMonthRange.
+  {value: '1m', label: '1M', months: 1},
   {value: '6m', label: '6M', months: 6},
   {value: '1y', label: '1Y', months: 12},
   {value: '3y', label: '3Y', months: 36},
@@ -139,6 +141,50 @@ export function spanMonths(overview: Overview, span: Span) {
     overview.total === null || base.balance === null ? null : overview.total - base.balance;
   return {shown: all.slice(index), base, change};
 }
+
+/** A point on the balance line: a month end, or a day end over the last month. */
+export type BalancePoint = {
+  /** `YYYY-MM` or `YYYY-MM-DD`. */
+  key: string;
+  /** The month a click opens, `YYYY-MM`. */
+  month: string;
+  /** The day the balance is for. */
+  end: string;
+  complete: boolean;
+  /** Cents; null when an account had no exchange rate that day. */
+  balance: number | null;
+  /** Cents kept in the month; months only. */
+  kept?: number;
+};
+
+export const monthBalancePoints = (months: MonthPoint[]): BalancePoint[] =>
+  months.map((point) => ({key: point.month, ...point}));
+
+/** Days the 1M span covers, through today. */
+const LAST_MONTH_DAYS = 30;
+
+/**
+ * The 1M span: the day end its change is measured from, 30 days before today, where the line starts, and the
+ * first and last day its money counts.
+ */
+export function lastMonthRange(today: string) {
+  const base = subDays(parseCalendarDate(today), LAST_MONTH_DAYS);
+  return {
+    base: format(base, 'yyyy-MM-dd'),
+    from: format(addDays(base, 1), 'yyyy-MM-dd'),
+    to: today,
+  };
+}
+
+/** Day-end balances from the balance trend's `day` periods, oldest first. */
+export const dayBalancePoints = (trend: BankBalanceTrend): BalancePoint[] =>
+  trend.periods.map((period) => ({
+    key: period.end,
+    month: period.end.slice(0, 7),
+    end: period.end,
+    complete: period.complete,
+    balance: period.total === null ? null : toCents(period.total),
+  }));
 
 /** A breakdown part's amount in cents, zero when the period has no such part. */
 export function partCents(period: BankTransactionBreakdownPeriod, key: string) {

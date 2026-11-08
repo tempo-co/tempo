@@ -8,7 +8,7 @@ import {cn} from '@/utils/cn';
 import {pct, signed, wholeCents} from '../utils/format';
 import {formatMonth} from '../utils/month';
 import type {MonthPoint, Overview, YearRow} from '../utils/overview';
-import {LoadingLabel, TextBone} from './loading';
+import {Bone, LoadingLabel, TextBone} from './loading';
 
 /**
  * Years newest first; a click anywhere on a year opens it into its months. Columns drop away on narrow screens, and
@@ -51,8 +51,9 @@ export function YearTable({overview}: {overview: Overview}) {
       {/* Scrolls rather than clips when amounts are too long for a phone. */}
       <div className='overflow-x-auto'>
         {/*
-          The header's widths set every column, open year or not: each figure column is a fifth of the table, or as
-          wide as its longest figure (months included), and the year takes the rest. Narrower than that, it scrolls.
+          The header's widths set every column, open year or not. On a phone, each figure column is as wide as its
+          longest figure (months included) and the year takes the rest; wider, each is a fixed share of a table at least
+          as wide as all the figures together. Narrower than that, it scrolls.
         */}
         <table
           className='w-full min-w-(--narrow) table-fixed text-sm min-[34rem]:min-w-(--wide)'
@@ -67,24 +68,17 @@ export function YearTable({overview}: {overview: Overview}) {
             {/* Each header has its column's padding, so headings and figures share one edge. */}
             <tr className='border-b text-left text-label text-muted-foreground [&>th]:py-2.5 [&>th]:font-medium'>
               <th className='pr-1 pl-2 sm:pr-3 sm:pl-3'>Year</th>
+              <th className={cn('px-3 text-right max-[34rem]:hidden', FIGURE_WIDTH)}>In</th>
+              <th className={cn('px-3 text-right max-[34rem]:hidden', FIGURE_WIDTH)}>Out</th>
               <th
-                className='px-3 text-right max-[34rem]:hidden'
-                style={{width: share(widths.income)}}
+                className={cn('px-2 text-right sm:px-3', FIGURE_WIDTH)}
+                style={{'--fit': widths.kept} as CSSProperties}
               >
-                In
-              </th>
-              <th
-                className='px-3 text-right max-[34rem]:hidden'
-                style={{width: share(widths.spending)}}
-              >
-                Out
-              </th>
-              <th className='px-2 text-right sm:px-3' style={{width: share(widths.kept)}}>
                 Kept
               </th>
               <th
-                className='pr-4 pl-2 text-right sm:pr-5 sm:pl-3'
-                style={{width: share(widths.balance)}}
+                className={cn('pr-4 pl-2 text-right sm:pr-5 sm:pl-3', FIGURE_WIDTH)}
+                style={{'--fit': widths.balance} as CSSProperties}
               >
                 Balance
               </th>
@@ -128,9 +122,12 @@ export function YearTableSkeleton() {
   const year = (
     <tr className='border-b'>
       <td className='py-2 pr-1 pl-1 sm:pr-3 sm:pl-2'>
-        <span className='flex min-h-11 items-center gap-1.5 px-1'>
-          <ChevronRight aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' />
-          <TextBone className='w-[3em]' />
+        <span className={YEAR_CELL}>
+          <span className='flex min-h-11 shrink-0 items-center gap-1.5 px-1'>
+            <ChevronRight aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' />
+            <TextBone className='w-[3em]' />
+          </span>
+          <Bone className={cn(SPARKLINE, 'opacity-60')} />
         </span>
       </td>
       {['max-[34rem]:hidden', 'max-[34rem]:hidden', '', ''].map((hidden, index) => (
@@ -181,16 +178,74 @@ export function YearTableSkeleton() {
   );
 }
 
-/** The year column's least width: a month's name under the year's chevron. */
-const YEAR_MIN = '7.5rem';
+/** The year column's least width: the year's chevron and label with a phone-sized line beside it. */
+const YEAR_MIN = '8.5rem';
+/** A year's label, then its line, which takes the room up to the figures. */
+const YEAR_CELL = 'flex items-center gap-2';
+/**
+ * A year's balance line. Every year row has the same label width in the same column, so every line is as wide as
+ * the others; it never grows a row or moves a column.
+ */
+const SPARKLINE = 'h-5 min-w-0 flex-1 max-w-16 sm:h-6 sm:max-w-24';
 
-/** A figure column's width: a fifth of the table, or what its longest figure needs. */
-const share = (fitted: string) => `max(20%, ${fitted})`;
+/**
+ * The year's month-end balances, the main chart's line for its months alone, on the year's own scale: its shape,
+ * while the Balance column gives the level. Months sit at their place in the year, so a part year fills only its
+ * part. Decoration; the row's figures say it.
+ */
+function YearSparkline({months}: {months: MonthPoint[]}) {
+  const known = months.flatMap((point) => (point.balance === null ? [] : [point.balance]));
+  const low = Math.min(...known);
+  const high = Math.max(...known);
+  let path = '';
+  let drawing = false;
+  for (const point of months) {
+    // A month without a balance breaks the line rather than bridging it.
+    if (point.balance === null) {
+      drawing = false;
+      continue;
+    }
+    const x = Number(point.month.slice(5)) - 1;
+    const y = high === low ? 0.5 : (high - point.balance) / (high - low);
+    path += `${drawing ? 'L' : 'M'}${x} ${y}`;
+    drawing = true;
+  }
+  return (
+    <svg
+      aria-hidden='true'
+      data-slot='year-sparkline'
+      viewBox='0 0 11 1'
+      preserveAspectRatio='none'
+      className={cn(SPARKLINE, 'overflow-visible')}
+    >
+      {known.length > 1 && (
+        <path
+          d={path}
+          fill='none'
+          className='stroke-chart-primary'
+          strokeWidth={1.5}
+          strokeLinejoin='round'
+          vectorEffect='non-scaling-stroke'
+        />
+      )}
+    </svg>
+  );
+}
 
-/** A column width that fits the longest of `texts` in the table's figures, plus `padding` rem. */
+/**
+ * A figure column's width: what its longest figure needs (`--fit`) on a phone; wider up, 18% of the table, which
+ * leaves the year room for its line, and a fifth from a laptop's width. A fixed table takes a length or a
+ * percentage, but treats a mix such as `max(20%, 6rem)` as no width at all.
+ */
+const FIGURE_WIDTH = 'w-(--fit) min-[34rem]:w-[18%] lg:w-1/5';
+
+/**
+ * A column width that fits the longest of `texts` in the table's figures, plus `padding` rem. A figure takes about
+ * 0.46rem a character; half a rem leaves some to spare.
+ */
 function fit(texts: string[], padding: number) {
   const longest = Math.max(0, ...texts.map((text) => text.length));
-  return `${Math.ceil((longest * 0.6 + padding) * 4) / 4}rem`;
+  return `${Math.ceil((longest * 0.5 + padding) * 4) / 4}rem`;
 }
 
 function FlowCell({
@@ -246,25 +301,28 @@ function YearLine({
       )}
     >
       <td className='py-2 pr-1 pl-1 sm:pr-3 sm:pl-2'>
-        <button
-          type='button'
-          aria-expanded={open}
-          className='flex min-h-11 items-center gap-1.5 px-1 text-left font-semibold outline-none'
-        >
-          <ChevronRight
-            aria-hidden='true'
-            className={cn(
-              'size-4 shrink-0 text-muted-foreground transition-transform',
-              open && 'rotate-90',
-            )}
-          />
-          <span className='numeric'>
-            {row.year}
-            {!row.complete && (
-              <span className='block text-xs font-normal text-muted-foreground'>so far</span>
-            )}
-          </span>
-        </button>
+        <span className={YEAR_CELL}>
+          <button
+            type='button'
+            aria-expanded={open}
+            className='flex min-h-11 shrink-0 items-center gap-1.5 px-1 text-left font-semibold outline-none'
+          >
+            <ChevronRight
+              aria-hidden='true'
+              className={cn(
+                'size-4 shrink-0 text-muted-foreground transition-transform',
+                open && 'rotate-90',
+              )}
+            />
+            <span className='numeric'>
+              {row.year}
+              {!row.complete && (
+                <span className='block text-xs font-normal text-muted-foreground'>so far</span>
+              )}
+            </span>
+          </button>
+          <YearSparkline months={row.months} />
+        </span>
       </td>
       <FlowCell value={row.income} max={maxFlow} tone='bg-success' currency={currency} />
       <FlowCell value={row.spending} max={maxFlow} tone='bg-chart-primary' currency={currency} />

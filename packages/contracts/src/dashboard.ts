@@ -2,6 +2,9 @@ import type {BankTransactionCategory, BankTransactionCategoryFilterValue} from '
 
 export const CASH_FLOW_INTERVALS = ['week', 'month', 'year'] as const;
 export type CashFlowInterval = (typeof CASH_FLOW_INTERVALS)[number];
+/** The balance trend also reads day ends, over a short range. */
+export const BALANCE_TREND_INTERVALS = ['day', ...CASH_FLOW_INTERVALS] as const;
+export type BalanceTrendInterval = (typeof BALANCE_TREND_INTERVALS)[number];
 
 /** `GET /bank-transactions/summary` query. */
 export type BankTransactionSummaryQuery = {
@@ -11,7 +14,7 @@ export type BankTransactionSummaryQuery = {
 	asOf: string;
 };
 
-/** `GET /bank-transactions/cash-flow` and `GET /bank-transactions/balance-trend` query. */
+/** `GET /bank-transactions/cash-flow` query. */
 export type BankTransactionCashFlowQuery = {
 	interval: CashFlowInterval;
 	/** Any day in the first period; the period starts on its Monday, 1st or 1 January. */
@@ -20,6 +23,11 @@ export type BankTransactionCashFlowQuery = {
 	to: string;
 	/** The client's local date. A period is complete only once it has ended before this day. */
 	asOf: string;
+};
+
+/** `GET /bank-transactions/balance-trend` query: the cash-flow query, plus day ends over at most 92 days. */
+export type BankBalanceTrendQuery = Omit<BankTransactionCashFlowQuery, 'interval'> & {
+	interval: BalanceTrendInterval;
 };
 
 export type SpendingPaceDay = {day: number; spending: string; cumulative: string};
@@ -79,7 +87,7 @@ export type BankTransactionCashFlow = {
 };
 
 export type BankBalanceTrendPeriod = {
-	/** First day of the period: a Monday, the 1st, or 1 January. */
+	/** First day of the period: the day itself, a Monday, the 1st, or 1 January. */
 	start: string;
 	/** The day the balances are for: the period's last day, or `to` while it is still running. */
 	end: string;
@@ -94,7 +102,7 @@ export type BankBalanceTrendPeriod = {
 /** `GET /bank-transactions/balance-trend`: combined balance at the end of each period, oldest first. */
 export type BankBalanceTrend = {
 	baseCurrency: string | null;
-	interval: CashFlowInterval;
+	interval: BalanceTrendInterval;
 	/** Every period from the first one any connected account covers through `to`. */
 	periods: BankBalanceTrendPeriod[];
 };

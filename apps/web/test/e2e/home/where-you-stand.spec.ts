@@ -13,6 +13,12 @@ test('shows the total, its change over each span, and the span’s money in and 
   homePage,
 }) => {
   await mockSyntheticHome(page);
+  const dayEnds: string[] = [];
+  const totals: string[] = [];
+  page.on('request', (request) => {
+    if (/balance-trend\?.*interval=day/.test(request.url())) dayEnds.push(request.url());
+    if (request.url().includes('/bank-transactions/totals?')) totals.push(request.url());
+  });
   await page.goto('/');
 
   const card = homePage.whereYouStand;
@@ -45,6 +51,33 @@ test('shows the total, its change over each span, and the span’s money in and 
     await expect(card).toContainText('+€24,300since Dec 2024');
     await expect(span.getByRole('heading', {level: 2})).toHaveText('Dec 2024 – now');
   }
+
+  // A month is measured from the day end 30 days back, and its money is that of the 30 days since, day by day.
+  expect([...dayEnds, ...totals]).toEqual([]);
+  await card.getByRole('button', {name: '1M', exact: true}).click();
+  // On 6 October the October rent had gone out: €23,300.
+  await expect(card).toContainText('+€1,000+4%since 6 Oct 2026');
+  await expect(span.getByRole('heading', {level: 2})).toHaveText('7 Oct – now');
+  for (const [label, value] of [
+    ['In', '€3,000'],
+    ['Out', '€2,000'],
+    ['Kept', '+€1,000'],
+    ['Kept of income', '33%'],
+    ['Balance', '€23,300 → €24,300'],
+  ]) {
+    await expect(span.getByText(label, {exact: true}).locator('..')).toHaveText(`${label}${value}`);
+  }
+  // From 7 October through today, as local midnights in Amsterdam.
+  const href = await span
+    .getByRole('link', {name: 'Transactions in this span'})
+    .getAttribute('href');
+  expect(JSON.parse(new URL(href!, 'http://app.test').searchParams.get('bookingDate')!)).toEqual({
+    from: '2026-10-06T22:00:00.000Z',
+    to: '2026-11-04T23:00:00.000Z',
+  });
+  expect(new URL(dayEnds[0]).searchParams.toString()).toBe(
+    'interval=day&from=2026-10-06&to=2026-11-05&asOf=2026-11-05',
+  );
 });
 
 test('on the last day of a month, a span is measured from the month end a span back', async ({
@@ -82,13 +115,19 @@ function framesOf(readout: Locator) {
   );
 }
 
-/** Where month `index` of `count` sits on the balance chart: its x slot inside the axes, at the plot's middle. */
-async function monthSlot(plot: Locator, index: number, count: number) {
-  const box = await boxOf(plot);
-  // The y axis takes 52px on the left, the plot's margin 12px on the right (Y_WIDTH and RIGHT in balance-chart.tsx).
-  const width = (box.width - 52 - 12) / count;
-  const x = box.x + 52 + width * index;
-  return {x, width, centre: {x: Math.round(x + width / 2), y: Math.round(box.y + box.height / 2)}};
+/**
+ * Where point `index` of `count` sits on the balance chart: the stretch of the plot closer to it than to its
+ * neighbours, and its centre at the chart's middle. The plot is where the gridlines run; its first and last points
+ * sit 6px in from its ends (X_PAD in balance-chart.tsx).
+ */
+async function monthSlot(chart: Locator, index: number, count: number) {
+  const box = await boxOf(chart);
+  const plot = await boxOf(chart.locator('.recharts-cartesian-grid-horizontal line').first());
+  const step = (plot.width - 12) / (count - 1);
+  const centre = plot.x + 6 + step * index;
+  const x = Math.max(plot.x, centre - step / 2);
+  const width = Math.min(plot.x + plot.width, centre + step / 2) - x;
+  return {x, width, centre: {x: Math.round(centre), y: Math.round(box.y + box.height / 2)}};
 }
 
 test('the balance chart reads out the month under the pointer, and a click opens it', async ({
@@ -114,7 +153,7 @@ test('the balance chart reads out the month under the pointer, and a click opens
     'Kept−€500',
     'Open March ›',
   ]);
-  const band = homePage.whereYouStand.locator('[data-slot="month-band"]');
+  const band = homePage.whereYouStand.locator('[data-slot="point-band"]');
   const slot = await boxOf(band);
   expect(Math.abs(slot.x - march.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(slot.width - march.width)).toBeLessThanOrEqual(1);
@@ -153,6 +192,26 @@ test('the balance chart reads out the month under the pointer, and a click opens
   await page.mouse.click(march.centre.x, march.centre.y);
   await expect(page).toHaveURL(/[?&]month=2026-03/);
   await expect(homePage.monthDialog('March 2026')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  // Over the last month, each point is a day end, from 6 October through today; a day opens its month.
+  await homePage.whereYouStand.getByRole('button', {name: '1M', exact: true}).click();
+  await expect(plot).toHaveAttribute('aria-label', /each day end/);
+  const fifteenth = await monthSlot(plot, 9, 31);
+  await page.mouse.move(fifteenth.centre.x, fifteenth.centre.y);
+  await expect(readout.locator('p')).toHaveText([
+    'Thu 15 Oct',
+    'Balance€22,500',
+    'Change−€800',
+    'Open October ›',
+  ]);
+  const today = await monthSlot(plot, 30, 31);
+  await page.mouse.move(today.centre.x, today.centre.y);
+  await expect(readout).toContainText('Thu 5 Nov · so far');
+  await expect(readout).toContainText('Open November ›');
+  await page.mouse.click(fifteenth.centre.x, fifteenth.centre.y);
+  await expect(page).toHaveURL(/[?&]month=2026-10/);
+  await expect(homePage.monthDialog('October 2026')).toBeVisible();
 });
 
 test('repeats show bills and income a month, late bills first, and open their series', async ({
@@ -220,6 +279,29 @@ test('offers a retry when the history fails to load', async ({page, homePage}) =
   await expect(homePage.totalBalance).toHaveText('€24,300');
 });
 
+test('offers a retry in the chart when the last month fails to load', async ({page, homePage}) => {
+  await mockSyntheticHome(page);
+  let fail = true;
+  const asked: string[] = [];
+  await page.route('**/bank-transactions/totals?**', (route) => {
+    asked.push('totals');
+    return fail ? fulfillJson(route, {message: 'Too many requests'}, 429) : route.fallback();
+  });
+  await page.goto('/');
+  const card = homePage.whereYouStand;
+  await card.getByRole('button', {name: '1M', exact: true}).click();
+  await expect(card.getByText('Could not load the last month.')).toBeVisible();
+  // The total stays; the rest of the card waits in place.
+  await expect(homePage.totalBalance).toHaveText('€24,300');
+
+  fail = false;
+  const before = asked.length;
+  await card.getByRole('button', {name: 'Try again'}).click();
+  await expect(card).toContainText('since 6 Oct 2026');
+  await expect(card.locator('[data-slot="chart"]')).toHaveAttribute('aria-label', /each day end/);
+  expect(asked.length).toBe(before + 1);
+});
+
 test('a month without an exchange rate has no balance, and the change is left out', async ({
   page,
   homePage,
@@ -247,6 +329,11 @@ test('a click on the balance chart opens its month and leaves no focus outline',
   await page.goto('/');
   const chart = homePage.whereYouStand.locator('[data-slot="chart"]');
   const box = await boxOf(chart);
+  // The axis labels, left of the plot, open nothing.
+  await page.mouse.click(box.x + 4, box.y + box.height / 2);
+  // Give a navigation the time it would take.
+  await page.waitForTimeout(300);
+  expect(page.url()).not.toMatch(/[?&]month=/);
   // The last month sits at the right edge of the plot.
   await page.mouse.click(box.x + box.width - 16, box.y + box.height / 2);
   await expect(page).toHaveURL(/[?&]month=2026-11/);
@@ -291,6 +378,16 @@ test.describe('touch chart inspection', () => {
     await page.touchscreen.tap(june.centre.x, june.centre.y);
     await expect(page).toHaveURL(/[?&]month=2026-06/);
     await expect(homePage.monthDialog('June 2026')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(homePage.monthDialog('June 2026')).toBeHidden();
+
+    // A day of the last month opens its month too.
+    await homePage.whereYouStand.getByRole('button', {name: '1M', exact: true}).click();
+    await expect(plot).toHaveAttribute('aria-label', /each day end/);
+    const october = await monthSlot(plot, 20, 31);
+    await page.touchscreen.tap(october.centre.x, october.centre.y);
+    await expect(page).toHaveURL(/[?&]month=2026-10/);
+    await expect(homePage.monthDialog('October 2026')).toBeVisible();
   });
 });
 
@@ -381,7 +478,7 @@ test.describe('touch chart inspection by sliding', () => {
     await expect(homePage.whereYouStand.locator('.recharts-active-dot')).toBeVisible();
     // The month under the finger is marked across its whole slot.
     const august = await monthSlot(chart, 10, 14);
-    const band = await boxOf(homePage.whereYouStand.locator('[data-slot="month-band"]'));
+    const band = await boxOf(homePage.whereYouStand.locator('[data-slot="point-band"]'));
     expect(Math.abs(band.x - august.x)).toBeLessThanOrEqual(1);
     // Along the line's month labels, below the plot, the readout still follows the finger.
     const plot = await boxOf(chart);

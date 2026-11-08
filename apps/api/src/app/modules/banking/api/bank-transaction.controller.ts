@@ -23,7 +23,7 @@ import {BankTransactionSummaryService} from '../services/bank-transaction-summar
 import {BankTransactionService} from '../services/bank-transaction.service';
 import {BROWSING_THROTTLE} from './constants/throttle.constants';
 import {BankTransactionBreakdownQueryDto} from './dtos/bank-transaction-breakdown-query.dto';
-import {BankTransactionCashFlowQueryDto} from './dtos/bank-transaction-cash-flow-query.dto';
+import {BankBalanceTrendQueryDto, BankTransactionCashFlowQueryDto} from './dtos/bank-transaction-cash-flow-query.dto';
 import {BankTransactionCategoryImpactQueryDto} from './dtos/bank-transaction-category-impact.dto';
 import {BankTransactionCategoryUpdateDto} from './dtos/bank-transaction-category-update.dto';
 import {BankTransactionOwnTransferUpdateDto} from './dtos/bank-transaction-own-transfer-update.dto';
@@ -85,7 +85,7 @@ export class BankTransactionController {
 	@Throttle(BROWSING_THROTTLE)
 	getBalanceTrend(
 		@CurrentAccount() account: Account,
-		@Query() query: BankTransactionCashFlowQueryDto,
+		@Query() query: BankBalanceTrendQueryDto,
 	): Promise<BankBalanceTrend> {
 		return this.bankTransactionSummaryService.getBalanceTrend(account, query);
 	}

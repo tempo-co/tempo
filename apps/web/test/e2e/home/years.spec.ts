@@ -88,6 +88,16 @@ test('year by year shows each year, newest first and open; a click anywhere on a
     .or(table.getByRole('button', {expanded: false}));
   await expect(years).toHaveText(['2026so far', '2025', '2024']);
   await expect(years.nth(0)).toHaveAttribute('aria-expanded', 'true');
+  // Each year has a line of its month ends beside its label, for its own months only: a single month draws none.
+  // Month rows have none.
+  const lines = table.locator('[data-slot="year-sparkline"]');
+  await expect(lines).toHaveCount(3);
+  await expect(lines.first()).toHaveAttribute('aria-hidden', 'true');
+  expect(
+    await lines.evaluateAll((svgs) =>
+      svgs.map((svg) => svg.querySelector('path')?.getAttribute('d')?.match(/[ML]/g)?.length ?? 0),
+    ),
+  ).toEqual([11, 12, 0]);
   expect(await cells(table.getByRole('row').nth(1))).toEqual([
     '2026 so far',
     '€30,000',
@@ -441,14 +451,26 @@ for (const width of [1440, 390]) {
             return {x: box.x, width: box.width};
           }),
       );
+    // Every year's line has one fixed size, open or not.
+    const lines = () =>
+      table.locator('[data-slot="year-sparkline"]').evaluateAll((svgs) =>
+        svgs.map((svg) => {
+          const box = svg.getBoundingClientRect();
+          return `${box.width}x${box.height}`;
+        }),
+      );
+    const size = width < 640 ? '64x20' : '96x24';
     const year = table.getByRole('button', {name: /^2026/});
     await expect(year).toHaveAttribute('aria-expanded', 'true');
     const open = await columns();
     expect(open.length).toBe(width < 640 ? 3 : 5);
+    expect(await lines()).toEqual([size, size, size]);
     await year.click();
     await expect(year).toHaveAttribute('aria-expanded', 'false');
     expect(await columns()).toEqual(open);
+    expect(await lines()).toEqual([size, size, size]);
     await table.getByRole('button', {name: /^2024/}).click();
     expect(await columns()).toEqual(open);
+    expect(await lines()).toEqual([size, size, size]);
   });
 }

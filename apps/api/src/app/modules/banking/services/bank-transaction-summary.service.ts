@@ -22,7 +22,10 @@ import {
 	BANKING_TRANSACTION_CASH_FLOW_RANGE,
 	BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH,
 } from '../api/constants/banking-messages.constants';
-import type {BankTransactionCashFlowQueryDto} from '../api/dtos/bank-transaction-cash-flow-query.dto';
+import type {
+	BankBalanceTrendQueryDto,
+	BankTransactionCashFlowQueryDto,
+} from '../api/dtos/bank-transaction-cash-flow-query.dto';
 import type {BankTransactionTotalsQueryDto} from '../api/dtos/bank-transaction-query.dto';
 import type {BankTransactionSummaryQueryDto} from '../api/dtos/bank-transaction-summary-query.dto';
 import {BankTransaction} from '../bank-transaction.entity';
@@ -239,7 +242,7 @@ export class BankTransactionSummaryService {
 	 */
 	async getBalanceTrend(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
-		{interval, from, to, asOf}: BankTransactionCashFlowQueryDto,
+		{interval, from, to, asOf}: BankBalanceTrendQueryDto,
 	): Promise<BankBalanceTrend> {
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(BANKING_BALANCE_TREND_RANGE);

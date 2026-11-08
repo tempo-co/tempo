@@ -8,6 +8,7 @@ import type {
   BankTransactionBreakdownPeriod,
   BankTransactionCashFlow,
   BankTransactionReviewCounts,
+  BankTransactionTotals,
   BankTransactionsResponse,
   MerchantRanking,
   RecurringSeries,
@@ -263,9 +264,64 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
     category: key === EMPLOYER || key === BONUS_SOURCE ? 'INCOME' : null,
   });
 
+  // Day by day, each month's rent lands on the 1st, the rest of its spending on the 15th and its income on the
+  // 25th, so day ends meet the month ends above.
+  const bookings = allMonths.flatMap((month) => {
+    const spending = spendingOf(month);
+    const rent = spending.HOUSING_AND_UTILITIES ?? 0;
+    return [
+      {date: `${month}-01`, amount: -rent},
+      {date: `${month}-15`, amount: rent - sum(spending)},
+      {date: `${month}-25`, amount: sum(incomeOf(month))},
+    ];
+  });
+  const days = (from: string, to: string) => {
+    const all: string[] = [];
+    for (let date = new Date(`${from}T00:00:00Z`); date.toISOString().slice(0, 10) <= to;) {
+      all.push(date.toISOString().slice(0, 10));
+      date.setUTCDate(date.getUTCDate() + 1);
+    }
+    return all.filter((day) => day >= `${firstMonth}-01`);
+  };
+  /** The balance trend's `day` answer between two days. */
+  const dayEnds = (from: string, to: string, asOf: string): BankBalanceTrend => ({
+    baseCurrency: 'EUR',
+    interval: 'day',
+    periods: days(from, to).map((day) => {
+      const total = money(
+        bookings.filter((booking) => booking.date <= day).reduce((a, b) => a + b.amount, 0),
+      );
+      return {
+        start: day,
+        end: day,
+        complete: day < asOf,
+        total,
+        accounts: [{id: '00000000-0000-4000-8000-0000000000a1', balance: total}],
+      };
+    }),
+  });
+  /** The totals of everything booked between two days. */
+  const totalsBetween = (from: string, to: string): BankTransactionTotals => {
+    const inRange = bookings.filter(
+      (booking) => booking.date >= from && booking.date <= to && booking.amount !== 0,
+    );
+    const income = inRange.filter((b) => b.amount > 0).reduce((a, b) => a + b.amount, 0);
+    const spending = -inRange.filter((b) => b.amount < 0).reduce((a, b) => a + b.amount, 0);
+    return {
+      baseCurrency: 'EUR',
+      income: money(income),
+      spending: money(spending),
+      net: money(income - spending),
+      count: inRange.length,
+      excluded: {unknownDirection: 0, missingBaseAmount: 0},
+    };
+  };
+
   return {
     trend,
     flow,
+    dayEnds,
+    totalsBetween,
     breakdown: {
       year: {
         category: yearly(spendingOf, category),
@@ -485,9 +541,25 @@ const params = (route: Route) => new URL(route.request().url()).searchParams;
 
 /** Answers Home's history requests (balances, flows and breakdowns) from {@link homeHistory}. */
 export async function mockHistoryEndpoints(page: Page, history: HomeHistory = homeHistory()) {
-  await page.route('**/bank-transactions/balance-trend?**', (route) =>
-    fulfillJson(route, history.trend),
-  );
+  await page.route('**/bank-transactions/balance-trend?**', (route) => {
+    const query = params(route);
+    return fulfillJson(
+      route,
+      query.get('interval') === 'day'
+        ? history.dayEnds(query.get('from')!, query.get('to')!, query.get('asOf')!)
+        : history.trend,
+    );
+  });
+  await page.route('**/bank-transactions/totals?**', (route) => {
+    const query = params(route);
+    return fulfillJson(
+      route,
+      history.totalsBetween(
+        query.get('filter[bookingDate][from]')!,
+        query.get('filter[bookingDate][to]')!,
+      ),
+    );
+  });
   await page.route('**/bank-transactions/cash-flow?**', (route) =>
     fulfillJson(route, history.flow),
   );

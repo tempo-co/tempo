@@ -199,8 +199,10 @@ for (const width of [1000, 1024, 1440]) {
       await mockSyntheticHome(page, {history: history()});
       await page.goto('/');
       await expectLoaded(homePage.whereYouStand);
-      for (const span of ['6M', '1Y', '3Y', 'All']) {
+      for (const span of ['1M', '6M', '1Y', '3Y', 'All']) {
         await homePage.whereYouStand.getByRole('button', {name: span, exact: true}).click();
+        // 1M loads its day ends on selection.
+        await expectLoaded(homePage.whereYouStand);
         await expect(homePage.whereYouStand.getByRole('region', {name: 'This span'})).toBeVisible();
         expect.soft(await columnGap(page), `${name}, ${span}`).toBeLessThanOrEqual(8);
       }

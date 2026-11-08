@@ -142,6 +142,26 @@ for (const width of [1440, 390]) {
     );
     for (const shift of topCard)
       expect(shift.value, JSON.stringify(shift)).toBeLessThanOrEqual(0.005);
+
+    // The last month loads its day ends and its money on first selecting it, each in place, after the click's
+    // own half second.
+    for (const [url, delay] of [
+      ['**/bank-transactions/balance-trend?**', 700],
+      ['**/bank-transactions/totals?**', 900],
+    ] as const)
+      await page.route(url, async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        await route.fallback();
+      });
+    await page.evaluate(() => (window.__shifts = []));
+    await homePage.whereYouStand.getByRole('button', {name: '1M', exact: true}).click();
+    // Until then, the plot holds a quiet placeholder in the line's place.
+    await expect(
+      homePage.whereYouStand.locator('[data-slot="plot-placeholder"] > [aria-hidden="true"]'),
+    ).toBeVisible();
+    await expect(homePage.whereYouStand).toContainText('since 6 Oct 2026');
+    const lastMonth = await settledShifts(page);
+    expect(lastMonth.total, JSON.stringify(lastMonth.shifts)).toBeLessThanOrEqual(0.005);
   });
 
   test(`at ${width}px, a month opened from a link loads in place`, async ({
