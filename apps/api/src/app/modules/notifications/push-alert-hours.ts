@@ -1,5 +1,5 @@
 /** Alerts are timed in the owner's time zone: none arrive between 21:00 and 09:00. */
-export const PUSH_ALERT_TIME_ZONE = 'Europe/Amsterdam';
+const PUSH_ALERT_TIME_ZONE = 'Europe/Amsterdam';
 const QUIET_FROM_HOUR = 21;
 const QUIET_UNTIL_HOUR = 9;
 

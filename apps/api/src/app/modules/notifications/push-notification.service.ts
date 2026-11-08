@@ -37,14 +37,14 @@ export type PushAlertJob = {accountId: string; alert: PushAlert};
 /** What the service worker shows. Kept vague: no bank, merchant, account or amount. */
 export type PushPayload = {title: string; body: string; url: string; tag: string; badge: number};
 
-export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {bankConnections: true, recurringBills: true};
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {bankConnections: true, recurringBills: true};
 /** Delivered push jobs stay a week, so a retried scan cannot queue the same alert again. */
 const IDEMPOTENT_JOB_RETENTION = {age: 7 * 24 * 60 * 60};
 /** Status codes with which a push service says the subscription is gone for good. */
 const GONE_STATUS_CODES = new Set([404, 410]);
 
 /** Every device failed for a reason other than being gone; the job is retried. */
-export class PushDeliveryError extends Error {
+class PushDeliveryError extends Error {
 	constructor() {
 		super('No device accepted the push.');
 		this.name = 'PushDeliveryError';
@@ -71,8 +71,11 @@ export class PushNotificationService {
 		accountId: Account['id'],
 		update: NotificationPreferencesUpdate,
 	): Promise<NotificationSettings> {
-		const current = await this.getPreferences(accountId);
-		await this.preferences.upsert({accountId, ...current, ...update}, ['accountId']);
+		// Write only the choices sent, so two quick toggles of different alerts cannot undo each other.
+		const changed = Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined));
+		if (Object.keys(changed).length > 0) {
+			await this.preferences.upsert({accountId, ...changed}, ['accountId']);
+		}
 		return this.getSettings(accountId);
 	}
 
@@ -92,8 +95,13 @@ export class PushNotificationService {
 	}
 
 	/** Logging out removes the subscriptions that session registered. */
-	async removeForSession(sessionId: string): Promise<void> {
-		await this.subscriptions.delete({sessionId});
+	async removeForSession(accountId: Account['id'], sessionId: string): Promise<void> {
+		await this.subscriptions.delete({accountId, sessionId});
+	}
+
+	/** Whether this server has VAPID keys, without which nothing is pushed. */
+	isConfigured(): boolean {
+		return this.sender.publicKey !== null;
 	}
 
 	/** Owners with at least one device and this alert kind on. */
@@ -113,7 +121,7 @@ export class PushNotificationService {
 	 * so queueing it again while it waits or within a week of delivery adds nothing.
 	 */
 	async queueAlert(job: PushAlertJob, jobId: string, now = new Date()): Promise<void> {
-		if (!this.sender.publicKey) return;
+		if (!this.isConfigured()) return;
 		const delay = pushAlertDeliveryTime(now).getTime() - now.getTime();
 		await this.queue.add(DELIVER_PUSH_ALERT_JOB, job, {
 			jobId,
@@ -133,7 +141,7 @@ export class PushNotificationService {
 		kind: keyof NotificationPreferences,
 		payload: PushPayload,
 	): Promise<number> {
-		if (!this.sender.publicKey || !(await this.getPreferences(accountId))[kind]) return 0;
+		if (!this.isConfigured() || !(await this.getPreferences(accountId))[kind]) return 0;
 		const subscriptions = await this.subscriptions.find({where: {accountId}, order: {createdAt: 'ASC'}});
 		const active = await this.sessionService.findActiveSessionIds(
 			accountId,

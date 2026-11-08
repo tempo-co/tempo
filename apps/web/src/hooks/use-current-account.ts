@@ -36,6 +36,8 @@ export const useCurrentAccount = ({skipFetch = false} = {}) => {
   const isUnavailable = !data && !!error && error.status !== 401;
   const isEmailVerified = isAuthenticated && data?.isEmailVerified;
   const isSavedSessionUnconfirmed = !!data && dataUpdatedAt < PAGE_LOADED_AT && !error;
+  /** Tempo answered for this account since the page loaded, so it is reachable and the session live. */
+  const isConfirmed = !!data && dataUpdatedAt >= PAGE_LOADED_AT && !error;
 
   return {
     currentAccount: data,
@@ -44,6 +46,7 @@ export const useCurrentAccount = ({skipFetch = false} = {}) => {
     isEmailVerified,
     isUnavailable,
     isSavedSessionUnconfirmed,
+    isConfirmed,
     refetch,
   };
 };

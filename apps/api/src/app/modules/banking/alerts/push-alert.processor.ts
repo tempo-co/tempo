@@ -1,4 +1,5 @@
 import {Processor, WorkerHost} from '@nestjs/bullmq';
+import type {RecurringSeriesFlag} from '@tempo/contracts';
 import {Job} from 'bullmq';
 
 import {ConfigurationService} from '@core/config/config.service';
@@ -13,14 +14,12 @@ import {
 
 import {BankTransactionSummaryService} from '../services/bank-transaction-summary.service';
 import {BankConnectionAlertService} from './bank-connection-alert.service';
+import type {BankConnectionAlert} from './bank-connection-alerts';
 import {RecurringBillAlertService} from './recurring-bill-alert.service';
 
 const TITLE = 'Tempo';
-/** What each alert says. Vague on purpose: the text passes through the browser's push service. */
-const BODIES: Record<
-	Extract<PushAlert, {kind: 'BANK_CONNECTION'}>['alert'] | Extract<PushAlert, {kind: 'RECURRING_BILL'}>['flag'],
-	string
-> = {
+/** What each alert says. Vague on purpose: a notification can be read on a locked screen without opening Tempo. */
+const BODIES: Record<BankConnectionAlert | RecurringSeriesFlag, string> = {
 	CONSENT_EXPIRING: 'A bank needs re-authorizing soon',
 	CONSENT_FINAL: 'Last day to re-authorize a bank',
 	SYNC_BROKEN: 'A bank has stopped syncing',
@@ -53,22 +52,15 @@ export class PushAlertProcessor extends WorkerHost {
 	async deliver({accountId, alert}: PushAlertJob, now = new Date()): Promise<number> {
 		if (!(await this.isStillDue(accountId, alert, now))) return 0;
 		const {needsAttention} = await this.summaryService.getReviewCounts(accountId);
-		const payload: PushPayload =
+		const target =
 			alert.kind === 'BANK_CONNECTION'
-				? {
-						title: TITLE,
-						body: BODIES[alert.alert],
-						url: this.webUrl('/bank-connections'),
-						tag: 'bank-connections',
-						badge: needsAttention,
-					}
+				? {body: BODIES[alert.alert], url: this.webUrl('/bank-connections'), tag: 'bank-connections'}
 				: {
-						title: TITLE,
 						body: BODIES[alert.flag],
 						url: this.webUrl('/', {recurring: 'open', series: alert.seriesKey}),
 						tag: `recurring-${alert.seriesKey}`,
-						badge: needsAttention,
 					};
+		const payload: PushPayload = {title: TITLE, ...target, badge: needsAttention};
 		return this.pushNotificationService.deliver(
 			accountId,
 			alert.kind === 'BANK_CONNECTION' ? 'bankConnections' : 'recurringBills',

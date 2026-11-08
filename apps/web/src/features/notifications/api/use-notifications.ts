@@ -34,7 +34,7 @@ export function useUpdateNotificationPreferences() {
     mutationFn: (update: NotificationPreferencesUpdate) =>
       api.patch<NotificationSettings>('/notifications/preferences', update),
     onMutate: async (update) => {
-      await queryClient.cancelQueries({queryKey: SETTINGS_KEY});
+      await queryClient.cancelQueries({queryKey: SETTINGS_KEY, exact: true});
       const previous = queryClient.getQueryData<NotificationSettings>(SETTINGS_KEY);
       if (previous) {
         queryClient.setQueryData<NotificationSettings>(SETTINGS_KEY, {

@@ -36,7 +36,7 @@ export class AuthService {
 	async logOut(request: Request) {
 		try {
 			// This device stops getting alerts. Delivery also skips devices whose session ended, so a failure here is safe.
-			await this.pushNotificationService.removeForSession(request.session.id);
+			await this.pushNotificationService.removeForSession((request.user as Account).id, request.session.id);
 		} catch {
 			this.logger.warn('Failed to remove push subscriptions during logout.');
 		}

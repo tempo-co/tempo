@@ -39,12 +39,12 @@ export function getPushSupport(): PushSupport {
   return capable ? 'supported' : 'unsupported';
 }
 
-/** Whether the installed app can show a count on its icon (desktop Chrome and Edge, iPhone home-screen apps). */
-export const canBadgeAppIcon = () => 'setAppBadge' in navigator;
-
-/** The app icon shows `count`; nothing at zero. Browsers without the Badging API are left alone. */
+/**
+ * The app icon shows `count`; nothing at zero. Only installed desktop Chrome and Edge and iPhone Home Screen apps
+ * have the Badging API; other browsers are left alone.
+ */
 export function setAppBadge(count: number) {
-  if (!canBadgeAppIcon()) return;
+  if (!('setAppBadge' in navigator)) return;
   const request = count > 0 ? navigator.setAppBadge(count) : navigator.clearAppBadge();
   void request.catch(() => {
     /* The badge is a hint; a refused badge changes nothing else. */

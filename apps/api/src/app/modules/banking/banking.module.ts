@@ -7,7 +7,6 @@ import {
 	BANK_CONNECTION_ALERT_QUEUE,
 	BANK_CONNECTION_SYNC_QUEUE,
 	BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE,
-	PUSH_NOTIFICATION_QUEUE,
 } from '@core/queue/queue.constants';
 import {RedisModule} from '@core/redis/redis.module';
 import {Account} from '@modules/account/account.entity';
@@ -74,7 +73,6 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BullModule.registerQueue({name: BANK_CONNECTION_SYNC_QUEUE}),
 		BullModule.registerQueue({name: BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE}),
 		BullModule.registerQueue({name: BANK_CONNECTION_ALERT_QUEUE}),
-		BullModule.registerQueue({name: PUSH_NOTIFICATION_QUEUE}),
 		EmailModule,
 		AccountModule,
 		RedisModule,

@@ -23,7 +23,13 @@ import {RecurringBillAlert} from './recurring-bill-alert.entity';
 const SCAN_INTERVAL_MS = 60 * 60 * 1000;
 
 /** A shown, active bill with a flag, and the period the flag is about. */
-type DueBillAlert = {seriesKey: string; flag: RecurringSeriesFlag; period: string};
+type DueBillAlert = {
+	seriesKey: string;
+	flag: RecurringSeriesFlag;
+	period: string;
+	/** For HIGHER_THAN_USUAL, the payment before the higher one: the due date it paid falls after it. */
+	previousPayment?: string;
+};
 
 /**
  * Pushes once per series and period when a recurring bill is late (its due date passed without a payment) or its
@@ -42,8 +48,12 @@ export class RecurringBillAlertService implements OnModuleInit {
 		private readonly pushNotificationService: PushNotificationService,
 	) {}
 
+	/** Bills alert by push only, so the scan runs only when this server can push. */
 	isEnabled(): boolean {
-		return this.configurationService.get('BANKING_INTEGRATION_ENABLED') !== false;
+		return (
+			this.configurationService.get('BANKING_INTEGRATION_ENABLED') !== false &&
+			this.pushNotificationService.isConfigured()
+		);
 	}
 
 	async onModuleInit(): Promise<void> {
@@ -88,8 +98,15 @@ export class RecurringBillAlertService implements OnModuleInit {
 		return raised;
 	}
 
-	/** Records the alert and queues its push in one transaction; an alert already recorded is not queued again. */
-	private raise(accountId: Account['id'], {seriesKey, flag, period}: DueBillAlert, now: Date): Promise<boolean> {
+	/**
+	 * Records the alert and queues its push in one transaction; an alert already recorded is not queued again. A higher
+	 * payment for a due date that already alerted as late is recorded without a push: one alert per due date.
+	 */
+	private raise(
+		accountId: Account['id'],
+		{seriesKey, flag, period, previousPayment}: DueBillAlert,
+		now: Date,
+	): Promise<boolean> {
 		return this.dataSource.transaction(async (manager) => {
 			const inserted = await manager
 				.createQueryBuilder()
@@ -100,6 +117,17 @@ export class RecurringBillAlertService implements OnModuleInit {
 				.returning(['id'])
 				.execute();
 			if ((inserted.raw as unknown[]).length === 0) return false;
+			if (previousPayment !== undefined) {
+				const lateForThisPayment = await manager
+					.getRepository(RecurringBillAlert)
+					.createQueryBuilder('alert')
+					.where('alert.accountId = :accountId', {accountId})
+					.andWhere('alert.seriesKey = :seriesKey', {seriesKey})
+					.andWhere("alert.flag = 'LATE'")
+					.andWhere('alert.period > :previousPayment AND alert.period <= :period', {previousPayment, period})
+					.getExists();
+				if (lateForThisPayment) return false;
+			}
 			await this.pushNotificationService.queueAlert(
 				{accountId, alert: {kind: 'RECURRING_BILL', flag, seriesKey, period}},
 				`push-bill-alert-${accountId}-${seriesKey}-${flag}-${period}`,
@@ -115,16 +143,16 @@ export class RecurringBillAlertService implements OnModuleInit {
 		const {expenses} = await this.recurringSeriesService.list(account, alertDate(now));
 		return expenses.series
 			.filter(({hidden, status}) => !hidden && status === 'ACTIVE')
-			.flatMap((series) =>
-				series.flags.map((flag) => ({seriesKey: series.key, flag, period: alertPeriod(series, flag)})),
-			);
+			.flatMap((series) => series.flags.map((flag) => toAlert(series, flag)));
 	}
 }
 
-/** The missed due date for LATE; the higher payment's date for HIGHER_THAN_USUAL. */
-function alertPeriod(
-	series: Pick<RecurringSeries, 'nextExpectedDate' | 'lastDate'>,
+/** LATE is about the missed due date; HIGHER_THAN_USUAL about the higher payment, dated by when it was paid. */
+function toAlert(
+	series: Pick<RecurringSeries, 'key' | 'nextExpectedDate' | 'lastDate' | 'firstDate' | 'recentPayments'>,
 	flag: RecurringSeriesFlag,
-): string {
-	return flag === 'LATE' ? series.nextExpectedDate : series.lastDate;
+): DueBillAlert {
+	if (flag === 'LATE') return {seriesKey: series.key, flag, period: series.nextExpectedDate};
+	const previousPayment = series.recentPayments.at(-2)?.date ?? series.firstDate;
+	return {seriesKey: series.key, flag, period: series.lastDate, previousPayment};
 }

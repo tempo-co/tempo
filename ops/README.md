@@ -54,7 +54,7 @@ Then set `AI_CATEGORIZATION_PROVIDER=claude`, `ANTHROPIC_API_KEY` and `TEMPO_CLA
 
 ### Push notifications
 
-`WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY` and `WEB_PUSH_VAPID_SUBJECT` (a `mailto:` contact) in `/etc/tempo/production.env` turn push alerts on; generate the pair once with `npx web-push generate-vapid-keys`. Without them, Settings says the server sends no notifications. Changing the pair ends every device's subscription: each device has to allow notifications again. Pushes go out to Apple's, Google's, Mozilla's and Microsoft's push services.
+`WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY` and `WEB_PUSH_VAPID_SUBJECT` (a `mailto:` contact) in `/etc/tempo/production.env` turn push alerts on; generate the pair once with `npx web-push generate-vapid-keys`. Without them, Settings says the server sends no notifications. Changing the pair ends every device's subscription: on each device, turn notifications off and allow them again in Settings → Account. Pushes go out to Apple's, Google's, Mozilla's and Microsoft's push services.
 
 ### Contract compatibility
 

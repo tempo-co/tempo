@@ -15,13 +15,13 @@ import {BankConnectionAlertService} from '@modules/banking/alerts/bank-connectio
 import {RecurringBillAlertService} from '@modules/banking/alerts/recurring-bill-alert.service';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {alertDate, pushAlertDeliveryTime} from '@modules/notifications/push-alert-hours';
-import {PushNotificationService} from '@modules/notifications/push-notification.service';
 import {PushSubscription} from '@modules/notifications/push-subscription.entity';
 import {WebPushSender} from '@modules/notifications/web-push.sender';
 
 import {BankingFixtures, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {enableWebPushE2e, getApp, loginAgent} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
+import {waitFor} from '../../utils/wait-utils';
 
 enableWebPushE2e();
 
@@ -43,6 +43,12 @@ function registration(name: string) {
 /** `days` days before `date` (`YYYY-MM-DD`). */
 function daysBefore(date: string, days: number): string {
 	return new Date(Date.parse(`${date}T00:00:00Z`) - days * DAY).toISOString().slice(0, 10);
+}
+
+/** `date`'s day of the month, `months` months earlier; the day must exist in every month. */
+function sameDayMonthsBefore(date: string, months: number): string {
+	const [year, month, day] = date.split('-').map(Number);
+	return new Date(Date.UTC(year, month - 1 - months, day)).toISOString().slice(0, 10);
 }
 
 /** The 5th of the month `months` months before `date`'s month. */
@@ -108,12 +114,10 @@ describe('Push notifications', () => {
 
 	/** Waits until the push worker has handled every job that is due now. */
 	async function deliverDuePushes() {
-		for (let attempt = 0; attempt < 50; attempt++) {
-			const counts = await pushQueue.getJobCounts('waiting', 'active', 'prioritized');
-			if (Object.values(counts).every((count) => count === 0)) return;
-			await new Promise((resolve) => setTimeout(resolve, 100));
-		}
-		throw new Error('Queued pushes were not delivered.');
+		await waitFor(
+			() => pushQueue.getJobCounts('waiting', 'active', 'prioritized'),
+			(counts) => Object.values(counts).every((count) => count === 0),
+		);
 	}
 
 	/** A time during the day, at or just after now, so alerts are not held until morning. */
@@ -316,7 +320,7 @@ describe('Push notifications', () => {
 			expect(held).toHaveLength(1);
 			expect(held[0].name).toBe(DELIVER_PUSH_ALERT_JOB);
 			const morning = pushAlertDeliveryTime(night);
-			expect(alertDateTime(morning)).toBe('09:00');
+			expect(alertTime(morning)).toBe('09:00');
 			expect(held[0].opts.delay).toBe(morning.getTime() - night.getTime());
 			expect(send).not.toHaveBeenCalled();
 
@@ -437,21 +441,61 @@ describe('Push notifications', () => {
 			expect(JSON.stringify(sentPushes())).not.toMatch(/Example|160|9\.99/);
 		});
 
-		it('reads no bills for owners who turned bill alerts off', async () => {
+		it('alerts once for a due date that is late and then paid higher than usual', async () => {
+			const owner = await subscribedOwner('late-then-higher');
+			await accounts.update({id: owner.id}, {baseCurrency: 'EUR'});
+			const bank = await fixtures.createBankAccount(await fixtures.createConnection({id: owner.id}));
+			const today = alertDate(daytime());
+			// Due two to five days ago, on a day every month has.
+			const due = [2, 3, 4, 5].map((days) => daysBefore(today, days)).find((date) => date.slice(8) <= '28')!;
+			const energy = {counterpartyName: 'Example Energy', description: 'Example Energy', category: 'UTILITIES'};
+			await fixtures.createTransactions(
+				bank,
+				['61.00', '95.00', '48.00', '80.00', '77.00'].map((amount, index) =>
+					bookedRow(sameDayMonthsBefore(due, 5 - index), `-${amount}`, energy),
+				),
+			);
+			await billAlerts.scan(daytime());
+			await deliverDuePushes();
+			expect(sentPushes().map(({payload}) => payload.body)).toEqual(['A bill is late']);
+
+			// The late bill arrives, well above the usual range.
+			await fixtures.createTransaction(bank, bookedRow(daysBefore(today, 1), '-160.00', energy));
+			const {body} = await owner.agent.get('/recurring-series').query({asOf: today}).expect(200);
+			expect(body.expenses.series).toEqual([expect.objectContaining({flags: ['HIGHER_THAN_USUAL']})]);
+			await billAlerts.scan(daytime());
+			await deliverDuePushes();
+
+			expect(sentPushes().map(({payload}) => payload.body)).toEqual(['A bill is late']);
+		});
+
+		it('pushes no bill alerts to owners who turned them off', async () => {
 			const owner = await subscribedOwner('bills-off');
 			await owner.agent.patch('/notifications/preferences').set('Origin', ORIGIN).send({recurringBills: false});
-			const list = jest.spyOn(app.get(PushNotificationService), 'findAccountIdsReceiving');
+			await accounts.update({id: owner.id}, {baseCurrency: 'EUR'});
+			const bank = await fixtures.createBankAccount(await fixtures.createConnection({id: owner.id}));
+			const today = alertDate(daytime());
+			await fixtures.createTransactions(
+				bank,
+				[37, 30, 23, 16, 9].map((days) =>
+					bookedRow(daysBefore(today, days), '-9.99', {
+						counterpartyName: 'Example Streaming',
+						description: 'Example Streaming',
+						category: 'SUBSCRIPTIONS',
+					}),
+				),
+			);
 
 			await billAlerts.scan(daytime());
+			await deliverDuePushes();
 
-			expect(await list.mock.results[0].value).not.toContain(owner.id);
-			list.mockRestore();
+			expect(send).not.toHaveBeenCalled();
 		});
 	});
 });
 
 /** `HH:MM` in Amsterdam. */
-function alertDateTime(instant: Date): string {
+function alertTime(instant: Date): string {
 	return new Intl.DateTimeFormat('en-GB', {
 		timeZone: 'Europe/Amsterdam',
 		hour: '2-digit',

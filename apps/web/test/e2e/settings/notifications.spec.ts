@@ -110,7 +110,7 @@ async function recordSubscriptionRequests(page: Page) {
 }
 
 const deviceRow = (page: Page) =>
-  page.getByRole('region', {name: 'Notifications'}).getByRole('status');
+  page.getByRole('region', {name: 'Notifications', exact: true}).getByRole('status');
 
 test.use({storageState: {cookies: [], origins: []}});
 
@@ -275,5 +275,45 @@ test.describe('Notification settings', () => {
     await expect(page).toHaveURL(/\/login/);
     await expect.poll(async () => (await pushState(page)).badges.slice(-1)[0]).toBe(0);
     expect((await pushState(page)).subscribed).toBe(false);
+  });
+  test('a subscribed device opened while Tempo is unreachable registers nothing and shows no error', async ({
+    page,
+  }) => {
+    await stubPush(page, {permission: 'granted', subscribed: true});
+    await mockJson(page, `${API_URL}/notifications`, settings());
+    const requests = await recordSubscriptionRequests(page);
+    await page.goto('/settings/account');
+    await expect(deviceRow(page)).toHaveText('On. Alerts you have turned on arrive here.');
+    await expect.poll(() => requests.length).toBe(1);
+    // The saved account lets Tempo open without a connection.
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem('tempo-offline-cache')))
+      .not.toBeNull();
+
+    await page.route(`${API_URL}/**`, (route) => route.abort('internetdisconnected'));
+    const attempts: string[] = [];
+    page.on('request', (request) => {
+      if (request.url().endsWith('/notifications/subscriptions')) attempts.push(request.method());
+    });
+    // Toasts disappear on their own, so record every one shown.
+    await page.addInitScript(() => {
+      const toasts: string[] = [];
+      Object.assign(window, {__toasts: toasts});
+      new MutationObserver(() => {
+        for (const toast of document.querySelectorAll('[data-sonner-toast]')) {
+          if (!toasts.includes(toast.textContent ?? '')) toasts.push(toast.textContent ?? '');
+        }
+      }).observe(document, {childList: true, subtree: true});
+    });
+    await page.reload();
+
+    await expect(page.getByRole('status').filter({hasText: /^Offline/})).toBeVisible();
+    // The subscription check that would register this device has had time to run.
+    await expect.poll(async () => (await pushState(page)).permission).toBe('granted');
+    await page.waitForTimeout(1000);
+    expect(await page.evaluate(() => (window as unknown as {__toasts: string[]}).__toasts)).toEqual(
+      [],
+    );
+    expect(attempts).toEqual([]);
   });
 });
