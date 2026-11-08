@@ -3,6 +3,8 @@ import {z} from 'zod';
 import {
 	BANK_TRANSACTION_CATEGORY_DEFINITIONS,
 	BANK_TRANSACTION_UNCATEGORIZED,
+	CASH_FLOW_INTERVALS,
+	MAX_RANGE_PERIODS,
 	type BankBalanceTrend,
 	type BankConnection,
 	type BankTransaction,
@@ -110,8 +112,7 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 		server.registerTool(
 			name,
 			{
-				description:
-					'Read period analytics. asOf defaults to today in Europe/Amsterdam. API enforces range limits: week 104, month 240, year 20 periods; to must be on or before asOf.',
+				description: `Read period analytics. asOf defaults to today in Europe/Amsterdam. API enforces range limits: ${CASH_FLOW_INTERVALS.map((interval) => `${interval} ${MAX_RANGE_PERIODS[interval]}`).join(', ')} periods; to must be on or before asOf.`,
 				inputSchema: z.strictObject({
 					interval: z.enum(['week', 'month', 'year']),
 					from: z.iso.date(),

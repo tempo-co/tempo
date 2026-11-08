@@ -2,7 +2,13 @@
  * Pure monthly spending math for the Home summary. Money is integer cents (`bigint`) throughout; amounts enter as
  * Postgres decimal strings with at most two decimals and leave through {@link formatCents}. No floats.
  */
-import type {BalanceTrendInterval, BaselineDay, BaselineTotal, SpendingPaceDay} from '@tempo/contracts';
+import {
+	type BalanceTrendInterval,
+	type BaselineDay,
+	type BaselineTotal,
+	MAX_RANGE_PERIODS,
+	type SpendingPaceDay,
+} from '@tempo/contracts';
 
 import {addDays} from '../banking.utils';
 
@@ -108,17 +114,14 @@ function days(count: number): number[] {
 	return Array.from({length: count}, (_, index) => index + 1);
 }
 
-/** The most periods one cash-flow style request may cover; days are for the balance trend's last month. */
-const CASH_FLOW_MAX_PERIODS: Record<BalanceTrendInterval, number> = {day: 92, week: 104, month: 240, year: 20};
-
 /** Period starts from `from` through `to`, or null when the range is backwards, ends after `asOf` or is too long. */
 export function periodStarts(interval: BalanceTrendInterval, from: string, to: string, asOf: string): string[] | null {
 	const starts: string[] = [];
 	for (let start = periodStart(from, interval); start <= to; start = nextPeriodStart(start, interval)) {
 		starts.push(start);
-		if (starts.length > CASH_FLOW_MAX_PERIODS[interval]) break;
+		if (starts.length > MAX_RANGE_PERIODS[interval]) break;
 	}
-	return from > to || to > asOf || starts.length > CASH_FLOW_MAX_PERIODS[interval] ? null : starts;
+	return from > to || to > asOf || starts.length > MAX_RANGE_PERIODS[interval] ? null : starts;
 }
 
 /** Calendar dates as `YYYY-MM-DD`, computed in UTC so no local offset shifts a day. */

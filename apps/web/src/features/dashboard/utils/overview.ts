@@ -1,16 +1,20 @@
-import type {
-  BankBalanceTrend,
-  BankTransactionBreakdownPeriod,
-  BankTransactionCashFlow,
+import {
+  type BankBalanceTrend,
+  type BankTransactionBreakdownPeriod,
+  type BankTransactionCashFlow,
+  MAX_RANGE_PERIODS,
 } from '@tempo/contracts';
 import {addDays, format, getDaysInMonth, subDays, subMonths} from 'date-fns';
 
 import {parseCalendarDate} from './drill-links';
 import {formatWholeMoney, toCents} from './money';
 
-/** The API's longest range is 20 years, so the whole history fits in one request from this day. */
+/** Whole years Home asks for by month and by year: as many as both of the API's range limits allow. */
+const HISTORY_YEARS = Math.min(MAX_RANGE_PERIODS.year, Math.floor(MAX_RANGE_PERIODS.month / 12));
+
+/** The first day of Home's history, so the whole of it fits in one request by month or by year. */
 export function historyFrom(today: string) {
-  return `${Number(today.slice(0, 4)) - 19}-01-01`;
+  return `${Number(today.slice(0, 4)) - HISTORY_YEARS + 1}-01-01`;
 }
 
 export type MonthPoint = {
