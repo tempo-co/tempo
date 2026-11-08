@@ -64,26 +64,7 @@ export function YearTable({overview}: {overview: Overview}) {
             } as CSSProperties
           }
         >
-          <thead>
-            {/* Each header has its column's padding, so headings and figures share one edge. */}
-            <tr className='border-b text-left text-label text-muted-foreground [&>th]:py-2.5 [&>th]:font-medium'>
-              <th className='pr-1 pl-2 sm:pr-3 sm:pl-3'>Year</th>
-              <th className={cn('px-3 text-right max-[34rem]:hidden', FIGURE_WIDTH)}>In</th>
-              <th className={cn('px-3 text-right max-[34rem]:hidden', FIGURE_WIDTH)}>Out</th>
-              <th
-                className={cn('px-2 text-right sm:px-3', FIGURE_WIDTH)}
-                style={{'--fit': widths.kept} as CSSProperties}
-              >
-                Kept
-              </th>
-              <th
-                className={cn('pr-4 pl-2 text-right sm:pr-5 sm:pl-3', FIGURE_WIDTH)}
-                style={{'--fit': widths.balance} as CSSProperties}
-              >
-                Balance
-              </th>
-            </tr>
-          </thead>
+          <YearTableHead widths={widths} />
           <tbody>
             {years.map((row) => (
               <Fragment key={row.year}>
@@ -146,15 +127,7 @@ export function YearTableSkeleton() {
     >
       <LoadingLabel>Loading year by year</LoadingLabel>
       <table className='w-full table-fixed text-sm'>
-        <thead>
-          <tr className='border-b text-left text-label text-muted-foreground [&>th]:py-2.5 [&>th]:font-medium'>
-            <th className='pr-1 pl-2 sm:pr-3 sm:pl-3'>Year</th>
-            <th className='w-1/5 px-3 text-right max-[34rem]:hidden'>In</th>
-            <th className='w-1/5 px-3 text-right max-[34rem]:hidden'>Out</th>
-            <th className='w-1/5 px-2 text-right sm:px-3'>Kept</th>
-            <th className='w-1/5 pr-4 pl-2 text-right sm:pr-5 sm:pl-3'>Balance</th>
-          </tr>
-        </thead>
+        <YearTableHead />
         <tbody aria-hidden='true'>
           {year}
           {Array.from({length: SKELETON_MONTHS}, (_, index) => (
@@ -175,6 +148,34 @@ export function YearTableSkeleton() {
         </tbody>
       </table>
     </Card>
+  );
+}
+
+/**
+ * The column headings. Given the figures' widths, each figure column fits its longest figure on a phone (see
+ * {@link FIGURE_WIDTH}); without them, as while loading, each is a fifth of the table.
+ */
+function YearTableHead({widths}: {widths?: {kept: string; balance: string}}) {
+  const figure = widths ? FIGURE_WIDTH : 'w-1/5';
+  const fitStyle = (width?: string) => (width ? ({'--fit': width} as CSSProperties) : undefined);
+  return (
+    <thead>
+      {/* Each header has its column's padding, so headings and figures share one edge. */}
+      <tr className='border-b text-left text-label text-muted-foreground [&>th]:py-2.5 [&>th]:font-medium'>
+        <th className='pr-1 pl-2 sm:pr-3 sm:pl-3'>Year</th>
+        <th className={cn('px-3 text-right max-[34rem]:hidden', figure)}>In</th>
+        <th className={cn('px-3 text-right max-[34rem]:hidden', figure)}>Out</th>
+        <th className={cn('px-2 text-right sm:px-3', figure)} style={fitStyle(widths?.kept)}>
+          Kept
+        </th>
+        <th
+          className={cn('pr-4 pl-2 text-right sm:pr-5 sm:pl-3', figure)}
+          style={fitStyle(widths?.balance)}
+        >
+          Balance
+        </th>
+      </tr>
+    </thead>
   );
 }
 
