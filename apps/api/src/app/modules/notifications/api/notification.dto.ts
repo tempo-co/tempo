@@ -4,7 +4,7 @@ import type {
 	PushSubscriptionRemoval,
 } from '@tempo/contracts';
 import {Type} from 'class-transformer';
-import {IsBoolean, IsObject, IsOptional, Matches, MaxLength, ValidateNested} from 'class-validator';
+import {IsBoolean, IsObject, Matches, MaxLength, ValidateIf, ValidateNested} from 'class-validator';
 
 /**
  * Hosts of the browsers' push services: Apple, Google (Chrome, Edge on Android), Mozilla and Microsoft. The API posts
@@ -14,12 +14,13 @@ const PUSH_SERVICE_ENDPOINT =
 	/^https:\/\/(?:[a-z0-9-]+\.)*(?:push\.apple\.com|fcm\.googleapis\.com|push\.services\.mozilla\.com|notify\.windows\.com)\/\S+$/;
 const BASE64URL = /^[A-Za-z0-9_-]+={0,2}$/;
 
+/** Either choice may be left out; one that is sent must be true or false. */
 export class NotificationPreferencesUpdateDto implements NotificationPreferencesUpdate {
-	@IsOptional()
+	@ValidateIf((_dto, value) => value !== undefined)
 	@IsBoolean()
 	bankConnections?: boolean;
 
-	@IsOptional()
+	@ValidateIf((_dto, value) => value !== undefined)
 	@IsBoolean()
 	recurringBills?: boolean;
 }

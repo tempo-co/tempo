@@ -40,6 +40,7 @@ export class AddPushNotifications20261108120000 implements MigrationInterface {
 			"seriesKey" varchar(32) NOT NULL,
 			"flag" varchar(32) NOT NULL,
 			"period" date NOT NULL,
+			"pushedAt" timestamptz,
 			"createdAt" timestamptz NOT NULL DEFAULT now(),
 			CONSTRAINT "pk_recurring_bill_alerts" PRIMARY KEY ("id"),
 			CONSTRAINT "uq_recurring_bill_alerts_period" UNIQUE ("accountId", "seriesKey", "flag", "period"),

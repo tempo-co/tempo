@@ -61,11 +61,14 @@ export class PushAlertProcessor extends WorkerHost {
 						tag: `recurring-${alert.seriesKey}`,
 					};
 		const payload: PushPayload = {title: TITLE, ...target, badge: needsAttention};
-		return this.pushNotificationService.deliver(
+		const sent = await this.pushNotificationService.deliver(
 			accountId,
 			alert.kind === 'BANK_CONNECTION' ? 'bankConnections' : 'recurringBills',
 			payload,
 		);
+		if (sent > 0 && alert.kind === 'RECURRING_BILL')
+			await this.recurringBillAlertService.markPushed(accountId, alert, now);
+		return sent;
 	}
 
 	private isStillDue(accountId: string, alert: PushAlert, now: Date): Promise<boolean> {

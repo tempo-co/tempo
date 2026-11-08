@@ -7,6 +7,8 @@ import type {PushSubscription} from './push-subscription.entity';
 
 /** A day: an alert older than that is stale, so the push service may drop it. */
 const PUSH_TTL_SECONDS = 24 * 60 * 60;
+/** A push service that does not answer must not hold up the alerts queued behind it. */
+const PUSH_TIMEOUT_MS = 10_000;
 
 /**
  * The only code that talks to browser push services (Apple, Google, Mozilla, Microsoft). Payloads are encrypted for
@@ -33,7 +35,7 @@ export class WebPushSender {
 		await webPush.sendNotification(
 			{endpoint: subscription.endpoint, keys: {p256dh: subscription.p256dh, auth: subscription.auth}},
 			payload,
-			{vapidDetails: this.vapid, TTL: PUSH_TTL_SECONDS, urgency: 'normal'},
+			{vapidDetails: this.vapid, TTL: PUSH_TTL_SECONDS, urgency: 'normal', timeout: PUSH_TIMEOUT_MS},
 		);
 	}
 }

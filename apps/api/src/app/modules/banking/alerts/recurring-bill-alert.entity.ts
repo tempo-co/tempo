@@ -28,6 +28,10 @@ export class RecurringBillAlert {
 	@Column({type: 'date'})
 	period: string;
 
+	/** When its push went to the owner's devices; null while it waits, or when it no longer applied. */
+	@Column({type: 'timestamptz', nullable: true})
+	pushedAt: Date | null;
+
 	@CreateDateColumn({type: 'timestamptz'})
 	createdAt: Date;
 }

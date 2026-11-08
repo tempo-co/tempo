@@ -90,6 +90,17 @@ export class RecurringBillAlertService implements OnModuleInit {
 		);
 	}
 
+	/** Records that a raised alert reached the owner's devices. */
+	async markPushed(
+		accountId: Account['id'],
+		{seriesKey, flag, period}: DueBillAlert,
+		now = new Date(),
+	): Promise<void> {
+		await this.dataSource
+			.getRepository(RecurringBillAlert)
+			.update({accountId, seriesKey, flag, period}, {pushedAt: now});
+	}
+
 	private async alertAccount(accountId: Account['id'], now: Date): Promise<number> {
 		let raised = 0;
 		for (const alert of await this.dueAlerts(accountId, now)) {
@@ -100,7 +111,8 @@ export class RecurringBillAlertService implements OnModuleInit {
 
 	/**
 	 * Records the alert and queues its push in one transaction; an alert already recorded is not queued again. A higher
-	 * payment for a due date that already alerted as late is recorded without a push: one alert per due date.
+	 * payment for a due date whose late alert was already pushed is recorded without a push: one alert per due date. A
+	 * late alert still held for the morning drops itself once the bill is paid, so the higher one goes out instead.
 	 */
 	private raise(
 		accountId: Account['id'],
@@ -118,15 +130,16 @@ export class RecurringBillAlertService implements OnModuleInit {
 				.execute();
 			if ((inserted.raw as unknown[]).length === 0) return false;
 			if (previousPayment !== undefined) {
-				const lateForThisPayment = await manager
+				const latePushedForThisPayment = await manager
 					.getRepository(RecurringBillAlert)
 					.createQueryBuilder('alert')
 					.where('alert.accountId = :accountId', {accountId})
 					.andWhere('alert.seriesKey = :seriesKey', {seriesKey})
 					.andWhere("alert.flag = 'LATE'")
+					.andWhere('alert.pushedAt IS NOT NULL')
 					.andWhere('alert.period > :previousPayment AND alert.period <= :period', {previousPayment, period})
 					.getExists();
-				if (lateForThisPayment) return false;
+				if (latePushedForThisPayment) return false;
 			}
 			await this.pushNotificationService.queueAlert(
 				{accountId, alert: {kind: 'RECURRING_BILL', flag, seriesKey, period}},

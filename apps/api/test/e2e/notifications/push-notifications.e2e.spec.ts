@@ -196,6 +196,18 @@ describe('Push notifications', () => {
 			expect(await subscriptions.countBy({accountId: owner.id})).toBe(0);
 		});
 
+		it.each([
+			['null', {recurringBills: null}],
+			['a string', {bankConnections: 'yes'}],
+		])('refuses an alert choice that is %s', async (_case, body) => {
+			const owner = await createVerifiedAccount(httpServer, mailpitUrl);
+			await owner.agent.patch('/notifications/preferences').set('Origin', ORIGIN).send(body).expect(400);
+			expect((await owner.agent.get('/notifications').expect(200)).body.preferences).toEqual({
+				bankConnections: true,
+				recurringBills: true,
+			});
+		});
+
 		it('refuses changes from another origin', async () => {
 			const owner = await createVerifiedAccount(httpServer, mailpitUrl);
 			await owner.agent
@@ -441,32 +453,60 @@ describe('Push notifications', () => {
 			expect(JSON.stringify(sentPushes())).not.toMatch(/Example|160|9\.99/);
 		});
 
-		it('alerts once for a due date that is late and then paid higher than usual', async () => {
-			const owner = await subscribedOwner('late-then-higher');
-			await accounts.update({id: owner.id}, {baseCurrency: 'EUR'});
-			const bank = await fixtures.createBankAccount(await fixtures.createConnection({id: owner.id}));
-			const today = alertDate(daytime());
-			// Due two to five days ago, on a day every month has.
+		const energy = {counterpartyName: 'Example Energy', description: 'Example Energy', category: 'UTILITIES'};
+
+		/** A variable monthly bill due two to five days before `scanTime`'s date, on a day every month has. */
+		async function lateVariableBill(ownerId: string, scanTime: Date) {
+			await accounts.update({id: ownerId}, {baseCurrency: 'EUR'});
+			const bank = await fixtures.createBankAccount(await fixtures.createConnection({id: ownerId}));
+			const today = alertDate(scanTime);
 			const due = [2, 3, 4, 5].map((days) => daysBefore(today, days)).find((date) => date.slice(8) <= '28')!;
-			const energy = {counterpartyName: 'Example Energy', description: 'Example Energy', category: 'UTILITIES'};
 			await fixtures.createTransactions(
 				bank,
 				['61.00', '95.00', '48.00', '80.00', '77.00'].map((amount, index) =>
 					bookedRow(sameDayMonthsBefore(due, 5 - index), `-${amount}`, energy),
 				),
 			);
+			/** The late payment arrives, well above the usual range. */
+			const payHigher = () =>
+				fixtures.createTransaction(bank, bookedRow(daysBefore(today, 1), '-160.00', energy));
+			return {today, payHigher};
+		}
+
+		it('alerts once for a due date that is late and then paid higher than usual', async () => {
+			const owner = await subscribedOwner('late-then-higher');
+			const {today, payHigher} = await lateVariableBill(owner.id, daytime());
 			await billAlerts.scan(daytime());
 			await deliverDuePushes();
 			expect(sentPushes().map(({payload}) => payload.body)).toEqual(['A bill is late']);
 
-			// The late bill arrives, well above the usual range.
-			await fixtures.createTransaction(bank, bookedRow(daysBefore(today, 1), '-160.00', energy));
+			await payHigher();
 			const {body} = await owner.agent.get('/recurring-series').query({asOf: today}).expect(200);
 			expect(body.expenses.series).toEqual([expect.objectContaining({flags: ['HIGHER_THAN_USUAL']})]);
 			await billAlerts.scan(daytime());
 			await deliverDuePushes();
 
 			expect(sentPushes().map(({payload}) => payload.body)).toEqual(['A bill is late']);
+		});
+
+		it('sends the higher-than-usual alert when a late bill is paid before its held alert goes out', async () => {
+			const owner = await subscribedOwner('paid-overnight');
+			const night = nextNight();
+			const {payHigher} = await lateVariableBill(owner.id, night);
+			await billAlerts.scan(night);
+			await payHigher();
+			await billAlerts.scan(new Date(night.getTime() + HOUR));
+
+			// Both alerts wait for the morning; by then only the higher payment still applies.
+			const held = (await pushQueue.getJobs(['delayed'])).filter((job) => job.data.accountId === owner.id);
+			expect(held.map((job) => (job.data.alert as {flag: string}).flag).sort()).toEqual([
+				'HIGHER_THAN_USUAL',
+				'LATE',
+			]);
+			for (const job of held) await job.promote();
+			await deliverDuePushes();
+
+			expect(sentPushes().map(({payload}) => payload.body)).toEqual(['A bill is higher than usual']);
 		});
 
 		it('pushes no bill alerts to owners who turned them off', async () => {
