@@ -104,7 +104,7 @@ export function NotificationSettings() {
   const {data: settings, isPending, isError, refetch} = useNotificationSettings();
   const update = useUpdateNotificationPreferences();
 
-  if (isPending) return <Skeleton className='h-72 w-full rounded-lg bg-card' />;
+  if (isPending) return <Skeleton className='h-72 w-full rounded-card bg-card' />;
   if (isError) {
     return (
       <EmptyState

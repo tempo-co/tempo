@@ -1,8 +1,14 @@
-import {expect, test} from '@playwright/test';
+import type {BankTransaction} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
-import {mockSyntheticHome} from '../../data/home-history.data';
-import {fulfillJson} from '../../utils/api-mocks';
+import {
+  HOME_CONNECTION,
+  HOME_REVIEW_COUNTS,
+  mockSyntheticHome,
+  monthTransactions,
+} from '../../data/home-history.data';
+import {expect, test} from '../../fixtures';
+import {fulfillJson, mockJson} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE});
@@ -85,6 +91,62 @@ test('navigates from the header and account menu on wider screens', async ({page
 
   await page.getByRole('link', {name: 'Tempo home'}).click();
   await expect(page).toHaveURL(/^https?:\/\/[^/]+\/(?:\?|$)/);
+});
+
+test.describe('the Transactions badge away from Home', () => {
+  test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
+
+  test('refreshes every five minutes, and right after a review on that page', async ({page}) => {
+    await mockSyntheticHome(page, {clock: 'installed'});
+    const [transaction] = monthTransactions('2026-10', 1).transactions;
+    let saved: BankTransaction = {...transaction, category: null, categoryStatus: 'FAILED'};
+    let reviewed = false;
+    let reads = 0;
+    await page.route('**/bank-transactions/review-counts', (route) => {
+      reads++;
+      return fulfillJson(
+        route,
+        reviewed
+          ? {...HOME_REVIEW_COUNTS, categorizationFailed: 0, needsAttention: 2}
+          : HOME_REVIEW_COUNTS,
+      );
+    });
+    await page.route(`**/bank-transactions/${transaction.id}`, (route) =>
+      fulfillJson(route, saved),
+    );
+    await page.route(`**/bank-transactions/${transaction.id}/category-impact?**`, (route) =>
+      fulfillJson(route, {action: 'APPLY', category: 'TRAVEL', total: 0, transactions: []}),
+    );
+    await page.route(`**/bank-transactions/${transaction.id}/category`, (route) => {
+      reviewed = true;
+      saved = {...saved, category: 'TRAVEL', categoryStatus: 'COMPLETED', categorySource: 'MANUAL'};
+      return fulfillJson(route, saved);
+    });
+
+    await mockJson(page, '**/bank-connections/aspsps', []);
+    await page.route('**/bank-connections/*/transactions?**', (route) =>
+      fulfillJson(route, {transactions: [saved], total: 1}),
+    );
+
+    await page.goto('/bank-connections');
+    const nav = page.getByRole('navigation', {name: 'Primary'}).first();
+    await expect(nav.getByRole('link', {name: 'Transactions, 3 to review'})).toBeVisible();
+    await expect.poll(() => reads).toBe(1);
+    await page.clock.runFor(4 * 60_000);
+    expect(reads).toBe(1);
+    await page.clock.runFor(61_000);
+    await expect.poll(() => reads).toBe(2);
+
+    await page.getByTestId(`connection-card-toggle-${HOME_CONNECTION.id}`).click();
+    await page
+      .getByRole('button', {name: `View transaction details for ${transaction.displayDescription}`})
+      .click();
+    await page.getByRole('combobox', {name: 'Transaction category'}).click();
+    await page.getByRole('option', {name: 'Travel', exact: true}).click();
+    await expect(page.getByRole('combobox', {name: 'Transaction category'})).toHaveText('Travel');
+    await page.keyboard.press('Escape');
+    await expect(nav.getByRole('link', {name: 'Transactions, 2 to review'})).toBeVisible();
+  });
 });
 
 test.describe('the Tempo mark', () => {

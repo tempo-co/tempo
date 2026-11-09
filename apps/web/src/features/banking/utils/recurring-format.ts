@@ -69,13 +69,6 @@ export function formatRelativeDays(date: string, asOf: string) {
   return `in ${days} days`;
 }
 
-/** A calendar rhythm repeats on a day of the month; the others count days. */
-const CALENDAR_CADENCES: ReadonlySet<RecurringSeries['cadence']> = new Set([
-  'MONTHLY',
-  'QUARTERLY',
-  'YEARLY',
-]);
-
 /** The `day` of the month `monthIndex` months after January `year`, or its last day when shorter. */
 function dayInMonth(year: number, monthIndex: number, day: number) {
   const first = new Date(year, monthIndex, 1);
@@ -88,15 +81,11 @@ function dayInMonth(year: number, monthIndex: number, day: number) {
  * payment, so one taken a few days early or late across a month boundary still pays the month it was due in,
  * as the API counts it; a weekly or four-weekly payment pays the month it was made in.
  */
-export function paidMonth(
-  date: string,
-  series: Pick<RecurringSeries, 'cadence' | 'nextExpectedDate'>,
-): string {
-  if (!CALENDAR_CADENCES.has(series.cadence)) return date.slice(0, 7);
-  const day = Number(series.nextExpectedDate.slice(8, 10));
+export function paidMonth(date: string, {anchorDay}: Pick<RecurringSeries, 'anchorDay'>): string {
+  if (anchorDay === null) return date.slice(0, 7);
   const paid = parseCalendarDate(date);
   const nearest = [-1, 0, 1]
-    .map((offset) => dayInMonth(paid.getFullYear(), paid.getMonth() + offset, day))
+    .map((offset) => dayInMonth(paid.getFullYear(), paid.getMonth() + offset, anchorDay))
     .reduce((best, candidate) =>
       Math.abs(differenceInCalendarDays(candidate, paid)) <
       Math.abs(differenceInCalendarDays(best, paid))

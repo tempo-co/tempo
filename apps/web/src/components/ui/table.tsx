@@ -9,7 +9,7 @@ type TableProps = React.HTMLAttributes<HTMLTableElement> & {
 
 const Table = React.forwardRef<HTMLTableElement, TableProps>(
   ({className, wrapperClassName, ...props}, ref) => (
-    <ScrollArea className={cn('relative w-full rounded-md border', wrapperClassName)}>
+    <ScrollArea className={cn('relative w-full rounded-card border', wrapperClassName)}>
       <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
       <ScrollBar orientation='horizontal' />
     </ScrollArea>

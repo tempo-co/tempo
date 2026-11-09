@@ -70,7 +70,6 @@ const STAGGER: [string, number][] = [
   ['**/bank-transactions/cash-flow?**', 500],
   ['**/bank-transactions/breakdown?**', 800],
   ['**/recurring-series/summary?**', 1100],
-  ['**/recurring-series?**', 1150],
   ['**/bank-transactions/review-counts', 1400],
   // A month's transactions and biggest merchants, when the month dialog is open.
   ['**/bank-transactions?**', 1200],

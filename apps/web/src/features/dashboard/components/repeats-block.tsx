@@ -3,14 +3,9 @@ import {format} from 'date-fns';
 import {AlertTriangle, ChevronRight, Clock} from 'lucide-react';
 
 import {TextAction} from '@/components/shared/text-action';
-import {useGetRecurringSeries} from '@/features/banking/api/use-get-recurring-series';
 import {useGetRecurringSummary} from '@/features/banking/api/use-get-recurring-summary';
 import {SeriesTile} from '@/features/banking/components/recurring-series-tile';
-import {
-  formatAmount,
-  formatRelativeDays,
-  isCounted,
-} from '@/features/banking/utils/recurring-format';
+import {formatAmount, formatRelativeDays} from '@/features/banking/utils/recurring-format';
 import {cn} from '@/utils/cn';
 
 import {parseCalendarDate} from '../utils/drill-links';
@@ -40,8 +35,6 @@ const ROW =
  * higher-than-usual bills, then the next payments. Each row opens its series in the recurring dialog.
  */
 export function RepeatsBlock({today, className}: {today: string; className?: string}) {
-  const lists = useGetRecurringSeries(today);
-  const series = lists.data;
   const totals = useGetRecurringSummary(today);
   const summary = totals.summary;
   const navigate = useNavigate({from: '/'});
@@ -61,22 +54,15 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
   );
   // Nothing to show: beside the chart the room stays, so the chart keeps its height.
   const absent = <div aria-hidden='true' className={cn('@max-[60rem]:hidden', RESERVE)} />;
-  // A failed refresh keeps what was loaded; only a read that never loaded says so, with a retry of just it.
-  const failed = [
-    {missing: !summary && totals.isError, refetch: totals.refetch},
-    {missing: !series && lists.isError, refetch: lists.refetch},
-  ].filter((query) => query.missing);
-  if (failed.length > 0)
+  // A failed refresh keeps what was loaded; only a read that never loaded says so.
+  if (!summary && totals.isError)
     return (
       <section aria-label='Repeats' className={cn('grid content-start gap-4', RESERVE, className)}>
         {header}
-        <ChartCardError
-          message='Could not load what repeats.'
-          onRetry={() => Promise.all(failed.map((query) => query.refetch()))}
-        />
+        <ChartCardError message='Could not load what repeats.' onRetry={() => totals.refetch()} />
       </section>
     );
-  if (!summary || !series)
+  if (!summary)
     return (
       <section
         aria-label='Repeats'
@@ -129,13 +115,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
   const paid = toCents(summary.expenseThisMonth.paid);
   const left = toCents(summary.expenseThisMonth.remaining);
   const monthName = formatMonth(summary.expenseThisMonth.month, 'MMMM');
-  const flagged = series.expenses.series
-    .filter(
-      (item) =>
-        isCounted(item) &&
-        (item.flags.includes('LATE') || item.flags.includes('HIGHER_THAN_USUAL')),
-    )
-    .slice(0, ROWS);
+  const flagged = summary.flagged.slice(0, ROWS);
   const upcoming = summary.upcoming
     .filter((payment) => !flagged.some((item) => item.key === payment.key))
     .slice(0, Math.max(0, ROWS - flagged.length));

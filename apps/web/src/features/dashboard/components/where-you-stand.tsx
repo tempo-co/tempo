@@ -207,7 +207,7 @@ function SpanSwitch({value, onChange}: {value: Span; onChange: (value: Span) => 
         if (option) onChange(option.value);
       }}
       aria-label='Span'
-      className='gap-0 border'
+      className='gap-0 overflow-hidden rounded-md border'
     >
       {SPANS.map((option) => (
         <ToggleGroupItem

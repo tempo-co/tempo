@@ -82,6 +82,11 @@ export type RecurringSeries = {
 	firstDate: string;
 	lastDate: string;
 	nextExpectedDate: string;
+	/**
+	 * A monthly, quarterly or yearly rhythm's day of the month, which `nextExpectedDate` clamps in shorter months. A
+	 * payment pays the month of the nearest such day. Null for a weekly or four-weekly rhythm.
+	 */
+	anchorDay: number | null;
 	status: RecurringSeriesStatus;
 	flags: RecurringSeriesFlag[];
 	/** Set until the new price has been paid three times. */
@@ -125,8 +130,8 @@ export type RecurringSeriesLists = {
 	income: RecurringSeriesList;
 };
 
-/** A counted series' next payment. */
-export type RecurringUpcomingPayment = Pick<
+/** What a summary shows of a counted series: its next payment and flags. */
+export type RecurringSeriesBrief = Pick<
 	RecurringSeries,
 	| 'key'
 	| 'name'
@@ -149,7 +154,9 @@ export type RecurringSummary = {
 	expenseThisMonth: RecurringThisMonth;
 	incomeThisMonth: RecurringThisMonth;
 	/** The three soonest next payments of shown active series, bills and income together. */
-	upcoming: RecurringUpcomingPayment[];
+	upcoming: RecurringSeriesBrief[];
+	/** Shown active bills that are late or higher than usual, in the bills list's order. */
+	flagged: RecurringSeriesBrief[];
 	/** Each list's shown active series left out of its total because a payment is not converted yet. */
 	expenseUnconvertedCount: number;
 	incomeUnconvertedCount: number;

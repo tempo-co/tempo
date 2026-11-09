@@ -80,7 +80,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
             </div>
           )}
         </dl>
-        <dl className='grid grid-cols-2 gap-px border bg-border sm:grid-cols-4'>
+        <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-card border bg-border sm:grid-cols-4'>
           <Fact label='Payments' value={merchant.paymentCount.toLocaleString()} numeric />
           <Fact
             label='Average payment'
@@ -285,7 +285,7 @@ function PeriodsChart({
               const period = shown.find((item) => item.start === label);
               if (!active || !period) return null;
               return (
-                <div className='grid min-w-40 gap-1 border bg-card p-2.5 text-xs shadow-sm'>
+                <div className='grid min-w-40 gap-1 rounded-md border bg-card p-2.5 text-xs shadow-sm'>
                   <p className='font-semibold'>
                     {periodLabel(period, interval)}
                     {!period.complete && (

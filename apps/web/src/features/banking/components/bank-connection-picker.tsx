@@ -168,7 +168,7 @@ export function BankConnectionPicker({
 
             {isError && (
               <div
-                className='flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed p-4'
+                className='flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed p-4'
                 role='alert'
               >
                 <p className='text-sm text-muted-foreground'>Supported banks are unavailable.</p>

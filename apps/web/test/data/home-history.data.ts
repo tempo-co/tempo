@@ -428,15 +428,17 @@ export function homeRecurring() {
     latestAmount: amount,
     monthlyEquivalent: amount,
     nextExpectedDate: '2026-12-01',
+    anchorDay: 1,
     ...extra,
   });
   const expenses = [
     series(RENT_KEY, 'Example Landlord', '1200.00', {nextExpectedDate: '2026-12-01'}),
     series(ENERGY_KEY, 'Example Energy', '35.00', {
       nextExpectedDate: '2026-11-03',
+      anchorDay: 3,
       flags: ['LATE'],
     }),
-    series(PHONE_KEY, 'Example Mobile', '15.00', {nextExpectedDate: '2026-11-14'}),
+    series(PHONE_KEY, 'Example Mobile', '15.00', {nextExpectedDate: '2026-11-14', anchorDay: 14}),
   ];
   const lists: RecurringSeriesLists = {
     expenses: {
@@ -454,7 +456,7 @@ export function homeRecurring() {
       baseCurrency: 'EUR',
     },
   };
-  const upcoming = (item: RecurringSeries) => ({
+  const brief = (item: RecurringSeries) => ({
     key: item.key,
     name: item.name,
     direction: item.direction,
@@ -471,7 +473,8 @@ export function homeRecurring() {
     incomeMonthlyTotal: '3000.00',
     expenseThisMonth: lists.expenses.thisMonth,
     incomeThisMonth: lists.income.thisMonth,
-    upcoming: [expenses[1], expenses[2], expenses[0]].map(upcoming),
+    upcoming: [expenses[1], expenses[2], expenses[0]].map(brief),
+    flagged: [expenses[1]].map(brief),
     expenseUnconvertedCount: 0,
     incomeUnconvertedCount: 0,
     baseCurrency: 'EUR',

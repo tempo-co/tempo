@@ -230,6 +230,7 @@ describe('RecurringSeries', () => {
 					transactionCount: 6,
 					monthlyEquivalent: '80.00',
 					nextExpectedDate: '2026-11-05',
+					anchorDay: 5,
 					status: 'ACTIVE',
 					hidden: false,
 				}),
@@ -239,11 +240,13 @@ describe('RecurringSeries', () => {
 					transactionCount: 6,
 					monthlyEquivalent: '30.00',
 					nextExpectedDate: '2026-11-20',
+					anchorDay: 20,
 				}),
 				expect.objectContaining({
 					transactionCount: 6,
 					monthlyEquivalent: '12.00',
 					nextExpectedDate: '2026-11-08',
+					anchorDay: 8,
 				}),
 			]);
 			const streamDrills = await Promise.all(
@@ -1174,12 +1177,16 @@ describe('RecurringSeries', () => {
 			const late = await read('2026-11-08');
 			expect(late.series).toEqual([expect.objectContaining({flags: expect.arrayContaining(['LATE'])})]);
 			expect(late.thisMonth).toEqual({month: '2026-11', paid: '0.00', remaining: '78.50'});
-			expect(
-				(await fresh.agent.get('/recurring-series/summary').query({asOf: AS_OF}).expect(200)).body,
-			).toMatchObject({
+			const summary = async () =>
+				(await fresh.agent.get('/recurring-series/summary').query({asOf: AS_OF}).expect(200)).body;
+			expect(await summary()).toMatchObject({
 				expenseMonthlyTotal: '160.00',
 				upcoming: [expect.objectContaining({typicalAmount: '78.50', amountKind: 'VARIABLE'})],
+				flagged: [expect.objectContaining({name: 'Example Energy', flags: ['HIGHER_THAN_USUAL']})],
 			});
+			// A hidden bill is not flagged.
+			await hide(fresh.agent, paid.series[0].key).expect(204);
+			expect(await summary()).toMatchObject({upcoming: [], flagged: []});
 		} finally {
 			await fixtures.connections.delete(connection.id);
 		}
@@ -2517,6 +2524,7 @@ describe('RecurringSeries', () => {
 					nextExpectedDate: string;
 					typicalAmount: string;
 				}[];
+				flagged: {key: string}[];
 				expenseUnconvertedCount: number;
 				incomeUnconvertedCount: number;
 				baseCurrency: string | null;
@@ -2550,6 +2558,12 @@ describe('RecurringSeries', () => {
 			merchantLogoUrl: due[0].merchantLogoUrl,
 			flags: due[0].flags,
 		});
+		// Shown active bills that are late or higher than usual, in the bills list's order.
+		expect(result.flagged.map(({key}) => key)).toEqual(
+			expenses.series
+				.filter(({hidden, status, flags}) => !hidden && status === 'ACTIVE' && flags.length > 0)
+				.map(({key}) => key),
+		);
 
 		// A hidden series leaves both the total and the upcoming payments.
 		await hide(ownerAgent, due[0].key).expect(204);

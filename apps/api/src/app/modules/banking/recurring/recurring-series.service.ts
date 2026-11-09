@@ -5,6 +5,7 @@ import type {
 	BankTransactionRecurring,
 	RecurringContinuation,
 	RecurringSeries,
+	RecurringSeriesBrief,
 	RecurringSeriesDirection,
 	RecurringSeriesList,
 	RecurringSeriesLists,
@@ -43,7 +44,7 @@ const REFUND = 'REFUND' satisfies BankTransactionCategory;
  * `recurring-series-detection`, `recurring-payee-identity`, `recurring-continuation` or `recurring-series-eligibility`,
  * or the payload shape in `toPayload`. Stored detections from other rules are not reused.
  */
-export const RECURRING_DETECTION_RULES_VERSION = '10';
+export const RECURRING_DETECTION_RULES_VERSION = '11';
 const UPCOMING_COUNT = 3;
 /** Every payment field detection reads; the stored detection's version is a hash over all of them. */
 const CANDIDATE_COLUMNS: readonly [sql: string, alias: keyof CandidateRow][] = [
@@ -201,41 +202,20 @@ export class RecurringSeriesService {
 		asOf: string,
 	): Promise<RecurringSummary> {
 		const {expenses, income} = await this.list({id: accountId, baseCurrency}, asOf);
+		const counted = ({hidden, status}: RecurringSeries) => !hidden && status === 'ACTIVE';
 		const upcoming = [...expenses.series, ...income.series]
-			.filter(({hidden, status}) => !hidden && status === 'ACTIVE')
+			.filter(counted)
 			.sort((a, b) => a.nextExpectedDate.localeCompare(b.nextExpectedDate) || a.key.localeCompare(b.key))
 			.slice(0, UPCOMING_COUNT)
-			.map(
-				({
-					key,
-					name,
-					direction,
-					nextExpectedDate,
-					typicalAmount,
-					amountKind,
-					currency,
-					category,
-					merchantLogoUrl,
-					flags,
-				}) => ({
-					key,
-					name,
-					direction,
-					nextExpectedDate,
-					typicalAmount,
-					amountKind,
-					currency,
-					category,
-					merchantLogoUrl,
-					flags,
-				}),
-			);
+			.map(toBrief);
+		const flagged = expenses.series.filter((entry) => counted(entry) && entry.flags.length > 0).map(toBrief);
 		return {
 			expenseMonthlyTotal: expenses.monthlyTotal,
 			incomeMonthlyTotal: income.monthlyTotal,
 			expenseThisMonth: expenses.thisMonth,
 			incomeThisMonth: income.thisMonth,
 			upcoming,
+			flagged,
 			expenseUnconvertedCount: expenses.unconvertedCount,
 			incomeUnconvertedCount: income.unconvertedCount,
 			baseCurrency,
@@ -614,6 +594,7 @@ function toResponse(
 		firstDate: entry.firstDate,
 		lastDate: entry.lastDate,
 		nextExpectedDate: entry.nextExpectedDate,
+		anchorDay: entry.anchorDay,
 		status: entry.status,
 		flags: entry.flags,
 		priceChange: entry.priceChange,
@@ -621,6 +602,32 @@ function toResponse(
 		continuation,
 		category: entry.category,
 		merchantLogoUrl,
+	};
+}
+
+function toBrief({
+	key,
+	name,
+	direction,
+	nextExpectedDate,
+	typicalAmount,
+	amountKind,
+	currency,
+	category,
+	merchantLogoUrl,
+	flags,
+}: RecurringSeries): RecurringSeriesBrief {
+	return {
+		key,
+		name,
+		direction,
+		nextExpectedDate,
+		typicalAmount,
+		amountKind,
+		currency,
+		category,
+		merchantLogoUrl,
+		flags,
 	};
 }
 

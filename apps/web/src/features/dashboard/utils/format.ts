@@ -29,6 +29,25 @@ export function pct(ratio: number) {
   return `${value < 0 ? '−' : ''}${Math.abs(value)}%`;
 }
 
+/**
+ * The rem a character of a `text-sm` figure takes, rounded up from about 0.46rem so there is some to spare. A table
+ * whose figures can be semibold uses {@link BOLD_FIGURE_CHAR}.
+ */
+export const FIGURE_CHAR = 0.5;
+export const BOLD_FIGURE_CHAR = 0.55;
+
+/**
+ * A column width, in rem, that fits the longest of `texts` at `perChar` rem a character, plus `padding` rem, rounded up
+ * to a quarter rem and at least `min` rem.
+ */
+export function figureColumnWidth(
+  texts: string[],
+  {perChar, padding, min = 0}: {perChar: number; padding: number; min?: number},
+) {
+  const longest = Math.max(0, ...texts.map((text) => text.length));
+  return `${Math.max(min, Math.ceil((longest * perChar + padding) * 4) / 4)}rem`;
+}
+
 /** Whole money from cents, or a dash when the amount is unknown. */
 export function wholeCents(cents: number | null, currency: string | null) {
   return cents === null ? '—' : formatWholeMoney(cents / 100, currency);
