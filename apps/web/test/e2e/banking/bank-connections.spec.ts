@@ -23,18 +23,15 @@ import {
   routeBankConnectionsApi,
   transformBankConnections,
 } from '../../utils/api-mocks';
+import {connectThroughPicker} from '../../utils/bank-picker';
 import {createHookHarness} from '../../utils/hook-harness';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const MOCK_PROVIDER_ORIGIN = 'https://enablebanking.test';
 const TARGET_ASPSP = {name: 'Mock ASPSP', country: 'NL'};
-const MONOCHROME_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40"><text x="8" y="28" font-family="Arial" font-size="24" font-weight="700" fill="#000">MONO</text></svg>',
-)}`;
-const COLORED_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40"><rect width="80" height="40" fill="#ef4444"/><rect x="80" width="80" height="40" fill="#2563eb"/></svg>',
-)}`;
 const PROVIDER_LOGO_URL = 'https://enablebanking.com/brands/NL/ABN-AMRO/';
+const MONOCHROME_LOGO_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40"><rect x="8" y="8" width="144" height="24" fill="#000"/></svg>';
 // A 1x1 PNG served in place of the provider logo, so the test does not depend on the live CDN.
 const PROVIDER_LOGO_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
@@ -142,8 +139,14 @@ test.describe('bank connections', () => {
     await mockJson(page, '**/bank-connections/aspsps', [
       {name: 'ABN AMRO', country: 'NL', logoUrl: PROVIDER_LOGO_URL},
     ]);
+    // A single-colour logo, readable by the logo analysis (CORS), so the dark theme inverts it.
     await page.route(PROVIDER_LOGO_URL, (route) =>
-      route.fulfill({status: 200, contentType: 'image/png', body: PROVIDER_LOGO_PNG}),
+      route.fulfill({
+        status: 200,
+        contentType: 'image/svg+xml',
+        headers: {'Access-Control-Allow-Origin': '*'},
+        body: MONOCHROME_LOGO_SVG,
+      }),
     );
 
     let accountId = '';
@@ -174,6 +177,11 @@ test.describe('bank connections', () => {
     await expect(bankLogo.locator('img')).toHaveAttribute('src', PROVIDER_LOGO_URL);
     await expect(bankLogo).toHaveCSS('width', '36px');
     await expect(bankLogo).toHaveCSS('height', '36px');
+    await expect(bankLogo).toHaveAttribute('data-logo-analysis', 'monochrome');
+    await page.evaluate(() => document.documentElement.classList.remove('dark'));
+    await expect(bankLogo.locator('img')).toHaveCSS('filter', 'none');
+    await page.evaluate(() => document.documentElement.classList.add('dark'));
+    await expect(bankLogo.locator('img')).toHaveCSS('filter', 'brightness(0) invert(1)');
 
     const accountRow = connectionCard.getByRole('link', {name: 'Daily spending transactions'});
     await expect(accountRow).toContainText('Daily spending');
@@ -465,126 +473,8 @@ test.describe('bank connections', () => {
     await expect(connectedCard).toHaveCount(0);
   });
 
-  test('keeps selectors visible while loading and lets the user choose a supported bank', async ({
-    page,
-  }) => {
-    await page.setViewportSize({width: 393, height: 852});
-    let releaseResponse!: () => void;
-    const responseHeld = new Promise<void>((resolve) => {
-      releaseResponse = resolve;
-    });
-    let authorizationRequest: {aspspName: string; aspspCountry: string} | undefined;
-
-    await page.route('**/bank-connections/aspsps', async (route) => {
-      await responseHeld;
-      await fulfillJson(route, [
-        {name: 'Colorful Bank', country: 'NL', logoUrl: COLORED_LOGO_URL},
-        {name: 'Monochrome Bank', country: 'NL', logoUrl: MONOCHROME_LOGO_URL},
-        {name: 'Other Bank', country: 'FI', logoUrl: COLORED_LOGO_URL},
-      ]);
-    });
-    await page.route('**/bank-connections/authorize', async (route) => {
-      authorizationRequest = JSON.parse(route.request().postData() || '{}') as {
-        aspspName: string;
-        aspspCountry: string;
-      };
-      await fulfillJson(
-        route,
-        {authorizationUrl: 'https://auth.example.test/monochrome-bank'},
-        201,
-      );
-    });
-    await page.route('https://auth.example.test/monochrome-bank', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'text/html',
-        body: '<p>Enable Banking authorization</p>',
-      });
-    });
-
-    await page.goto('/bank-connections');
-    await page.getByRole('button', {name: 'Connect a bank'}).click();
-
-    const picker = page.getByTestId('bank-connection-picker');
-    const countrySelector = picker.getByTestId('bank-connection-country-selector');
-    const bankSelector = picker.getByTestId('bank-connection-bank-selector');
-    await expect(picker).toBeVisible();
-    await expect(countrySelector).toBeVisible();
-    await expect(countrySelector).toBeDisabled();
-    await expect(bankSelector).toBeVisible();
-    await expect(bankSelector).toBeDisabled();
-    const [pickerBox, countrySelectorBox] = await Promise.all([
-      boxOf(picker),
-      boxOf(countrySelector),
-    ]);
-    expect(countrySelectorBox.x).toBeGreaterThanOrEqual(pickerBox.x + 16);
-    expect(countrySelectorBox.x + countrySelectorBox.width).toBeLessThanOrEqual(
-      pickerBox.x + pickerBox.width - 16,
-    );
-    await expect(picker.getByRole('status')).toHaveCount(0);
-
-    releaseResponse();
-    await expect(countrySelector).toBeEnabled();
-    await expect(bankSelector).toBeDisabled();
-    await countrySelector.click();
-    await page.getByPlaceholder('Search countries...').fill('NL');
-    await expect(page.getByRole('option', {name: /Netherlands.*2 banks/})).toBeVisible();
-    await page.getByPlaceholder('Search countries...').fill('');
-    await expect(page.getByRole('option', {name: /Netherlands.*2 banks/})).toBeVisible();
-    await page.getByRole('option', {name: /Netherlands.*2 banks/}).click();
-
-    await expect(bankSelector).toBeEnabled();
-    await bankSelector.click();
-    const monochromeOption = page.getByRole('option', {name: /Monochrome Bank.*NL/});
-    await expect(monochromeOption).toBeVisible();
-    const monochromeLogo = monochromeOption.getByTestId('bank-logo');
-    await expect(monochromeLogo).toBeVisible();
-    await expect(monochromeLogo).toHaveAttribute('data-logo-analysis', 'monochrome');
-    await expect(monochromeLogo).toHaveClass(/border-border/);
-    await expect(monochromeLogo).toHaveClass(/bg-background/);
-    await expect(monochromeLogo).toHaveCSS('width', '48px');
-    await expect(monochromeLogo).toHaveCSS('height', '48px');
-    await page.evaluate(() => document.documentElement.classList.remove('dark'));
-    await expect(monochromeLogo.locator('img')).toHaveCSS('filter', 'none');
-    await page.evaluate(() => document.documentElement.classList.add('dark'));
-    await expect(monochromeLogo.locator('img')).toHaveCSS('filter', 'brightness(0) invert(1)');
-
-    const coloredOption = page.getByRole('option', {name: /Colorful Bank.*NL/});
-    const coloredLogo = coloredOption.getByTestId('bank-logo');
-    await expect(coloredLogo).toHaveAttribute('data-logo-analysis', 'color');
-    await expect(coloredLogo.locator('img')).toHaveCSS('filter', 'none');
-    await monochromeOption.click();
-
-    const confirmButton = picker.getByTestId('bank-connection-confirm');
-    await expect(confirmButton).toBeEnabled();
-    await expect(confirmButton).toContainText('Continue with Monochrome Bank');
-    const redirectHint = picker.getByText(
-      'You will be redirected to Monochrome Bank to approve access.',
-      {exact: true},
-    );
-    await expect(redirectHint).toBeVisible();
-    expect(
-      await redirectHint.evaluate(
-        (element) => getComputedStyle(element.parentElement!).paddingBottom,
-      ),
-    ).toBe('16px');
-    const confirmButtonBox = await boxOf(confirmButton);
-    expect(confirmButtonBox.x).toBeGreaterThanOrEqual(pickerBox.x + 16);
-    expect(confirmButtonBox.x + confirmButtonBox.width).toBeLessThanOrEqual(
-      pickerBox.x + pickerBox.width - 16,
-    );
-    await confirmButton.click();
-
-    await expect
-      .poll(() => authorizationRequest)
-      .toEqual({aspspName: 'Monochrome Bank', aspspCountry: 'NL'});
-    await expect(page).toHaveURL('https://auth.example.test/monochrome-bank');
-  });
-
   test('returns to the installed app after bank authorization', async ({page, context}) => {
-    await page.goto('/bank-connections');
-    const authorizationUrl = 'https://bank.example.test/mock-bank-authorization';
-    const callbackUrl = new URL('./bank-connections?result=connected', page.url()).toString();
+    // Before opening the page: the list loads the supported banks for its logos, and the picker reuses that answer.
     await mockJson(page, '**/bank-connections/aspsps', [
       {
         name: 'Mock ASPSP',
@@ -592,6 +482,9 @@ test.describe('bank connections', () => {
         logoUrl: 'https://enablebanking.com/brands/NL/Mock-ASPSP/',
       },
     ]);
+    await page.goto('/bank-connections');
+    const authorizationUrl = 'https://bank.example.test/mock-bank-authorization';
+    const callbackUrl = new URL('./bank-connections?result=connected', page.url()).toString();
     await mockJson(page, '**/bank-connections/authorize', {authorizationUrl}, 201);
     await context.route('**/mock-bank-authorization', async (route) => {
       await fulfillRedirect(route, callbackUrl);
@@ -602,13 +495,7 @@ test.describe('bank connections', () => {
       popupOpened = true;
     });
 
-    await page.getByRole('button', {name: 'Connect a bank'}).click();
-    const picker = page.getByTestId('bank-connection-picker');
-    await picker.getByTestId('bank-connection-country-selector').click();
-    await page.getByRole('option', {name: /Netherlands.*1 bank/}).click();
-    await picker.getByTestId('bank-connection-bank-selector').click();
-    await page.getByRole('option', {name: /Mock ASPSP.*NL/}).click();
-    await picker.getByTestId('bank-connection-confirm').click();
+    await connectThroughPicker(page, {name: 'Mock ASPSP', countryLabel: 'Netherlands'});
 
     await expect(page.getByText('Bank connection added')).toBeVisible();
     await expect(page).toHaveURL(/\/bank-connections$/);
@@ -1753,16 +1640,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       providerCallbackUrl = providerCallback.toString();
       await expect(page.getByRole('heading', {name: 'No bank connections'})).toBeVisible();
 
-      await page.getByRole('button', {name: 'Connect a bank'}).click();
-      const picker = page.getByTestId('bank-connection-picker');
-
-      await picker.getByTestId('bank-connection-country-selector').click();
-      await page.getByPlaceholder('Search countries...').fill(TARGET_ASPSP.country);
-      await page.getByRole('option', {name: /Netherlands.*1 bank/}).click();
-
-      await picker.getByTestId('bank-connection-bank-selector').click();
-      await page.getByRole('option', {name: /Mock ASPSP.*NL/}).click();
-      await picker.getByTestId('bank-connection-confirm').click();
+      await connectThroughPicker(page, {name: TARGET_ASPSP.name, countryLabel: 'Netherlands'});
 
       await expect
         .poll(() => authorizationRequest)

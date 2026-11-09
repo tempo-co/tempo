@@ -35,16 +35,11 @@ for (const viewport of [
     const bounds = await picker.boundingBox();
     expect(bounds!.y).toBeGreaterThanOrEqual(0);
     expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
-    await picker.getByRole('combobox', {name: 'Country', exact: true}).click();
-    await page.getByRole('option', {name: /Netherlands/}).click();
-    await picker.getByRole('combobox', {name: 'Bank', exact: true}).click();
-    await page.getByRole('option', {name: /Example Bank/}).click();
-    await picker.hover();
-    await page.mouse.wheel(0, 1000);
+    await picker.getByRole('button', {name: 'Example Bank', exact: true}).click();
     const confirm = picker.getByTestId('bank-connection-confirm');
     await expect(confirm).toBeInViewport({ratio: 1});
     await expect(confirm).toBeEnabled();
-    await expect(confirm).toHaveText('Continue with Example Bank');
+    await expect(confirm).toHaveText('Continue to Example Bank');
     // Cancelling the local picker must not begin provider authorization.
     await page.keyboard.press('Escape');
     await expect(picker).toBeHidden();
