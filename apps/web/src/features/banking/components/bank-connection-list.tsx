@@ -128,9 +128,8 @@ export function BankConnectionList({
     >
       <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-3'>
         <h1 className='text-page-title'>Bank connections</h1>
-        {!isPending && !isError && (
-          <BankConnectionPicker onBankSelect={connectBank} isStarting={isStarting} />
-        )}
+        {/* Always there: loading, retrying or failing to load the list never closes an open sheet. */}
+        <BankConnectionPicker onBankSelect={connectBank} isStarting={isStarting} />
       </header>
       {isPending ? (
         <div

@@ -3,7 +3,12 @@ import type {BankConnection, BankConnectionAspsp} from '@tempo/contracts';
 
 import {HOME_CONNECTION} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
-import {fulfillJson, mockBankConnections, mockJson} from '../../utils/api-mocks';
+import {
+  fulfillJson,
+  mockBankConnections,
+  mockJson,
+  routeBankConnectionsApi,
+} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.use({storageState: {cookies: [], origins: []}});
@@ -222,24 +227,27 @@ test.describe('Connect a bank', () => {
     expect(authorizations).toEqual([{aspspName: 'Esimerkki Pankki', aspspCountry: 'FI'}]);
   });
 
-  for (const {name, locale, connections, expected} of [
+  for (const {name, locale, connections, expected, placeholder} of [
     {
       name: 'the country of most connected banks',
       locale: 'en-NL',
       connections: [connectionIn('DE', 1), connectionIn('DE', 2), connectionIn('NL', 3)],
       expected: 'Germany',
+      placeholder: 'Search 1 bank',
     },
     {
       name: "the browser's region without connected banks",
       locale: 'en-FI',
       connections: [],
       expected: 'Finland',
+      placeholder: 'Search 2 banks',
     },
     {
       name: 'the first country when the browser region has no banks',
       locale: 'en-US',
       connections: [],
       expected: 'Austria',
+      placeholder: 'Search 1 bank',
     },
   ]) {
     test.describe(`in ${locale}`, () => {
@@ -249,12 +257,45 @@ test.describe('Connect a bank', () => {
         await mockPickerPage(page, {connections});
         await page.goto('/bank-connections');
         await page.getByTestId('connect-bank-button').click();
-        await expect(
-          page.getByTestId('bank-connection-picker').getByTestId('bank-connection-country'),
-        ).toHaveText(`${expected}Change`);
+        const picker = page.getByTestId('bank-connection-picker');
+        await expect(picker.getByTestId('bank-connection-country')).toHaveText(`${expected}Change`);
+        await expect(picker.getByRole('searchbox')).toHaveAttribute('placeholder', placeholder);
       });
     });
   }
+
+  test.describe('in en-NL', () => {
+    test.use({locale: 'en-NL'});
+
+    test('keeps the country the user started in when connected banks load later', async ({
+      page,
+    }) => {
+      await mockPickerPage(page, {connections: [connectionIn('DE', 1), connectionIn('DE', 2)]});
+      let releaseConnections!: () => void;
+      const connectionsHeld = new Promise<void>((resolve) => (releaseConnections = resolve));
+      await routeBankConnectionsApi(page, async (route) => {
+        await connectionsHeld;
+        await route.fallback();
+      });
+      await page.goto('/bank-connections');
+      await page.getByTestId('connect-bank-button').click();
+      const picker = page.getByTestId('bank-connection-picker');
+      const country = picker.getByTestId('bank-connection-country');
+      // Without connected banks yet, the browser's region is the guess.
+      await expect(country).toHaveText('NetherlandsChange');
+      const search = picker.getByRole('searchbox', {name: 'Search banks in Netherlands'});
+      await search.fill('savings');
+
+      const loaded = page.waitForResponse((response) =>
+        response.url().endsWith('/bank-connections'),
+      );
+      releaseConnections();
+      await loaded;
+      await expect(page.getByTestId('bank-connections-loading')).toHaveCount(0);
+      await expect(country).toHaveText('NetherlandsChange');
+      await expect(search).toHaveValue('savings');
+    });
+  });
 
   test('closing the sheet starts nothing, and reopening starts at the bank list in the chosen country', async ({
     page,
@@ -267,6 +308,17 @@ test.describe('Connect a bank', () => {
     await picker.getByTestId('bank-connection-country').click();
     await picker.getByRole('button', {name: /^Finland/}).click();
     await picker.getByRole('button', {name: 'Demo Pankki', exact: true}).click();
+    await expect(picker.getByRole('heading', {name: 'Connect Demo Pankki'})).toBeVisible();
+
+    // The page's connection list fails to refresh behind the sheet; the sheet stays where it was.
+    await mockJson(page, '**/bank-connections', {message: 'Unavailable'}, 500);
+    const refreshed = page.waitForResponse(
+      (response) => response.url().endsWith('/bank-connections') && response.status() === 500,
+    );
+    await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+    await refreshed;
+    // By text: the open sheet hides the page from the accessibility tree.
+    await expect(page.getByText('Could not load bank connections')).toBeVisible();
     await expect(picker.getByRole('heading', {name: 'Connect Demo Pankki'})).toBeVisible();
 
     await page.keyboard.press('Escape');
@@ -298,6 +350,18 @@ test.describe('Connect a bank', () => {
     await picker.getByRole('button', {name: 'Try again'}).click();
     await expect(picker.getByTestId('bank-connection-country')).toHaveText('NetherlandsChange');
     expect(await sheetHeight(picker)).toBe(height);
+  });
+
+  test('counts one country in the singular', async ({page}) => {
+    await mockPickerPage(page, {banks: [{name: 'Beispielbank', country: 'DE'}]});
+    await page.goto('/bank-connections');
+    await page.getByTestId('connect-bank-button').click();
+    const picker = page.getByTestId('bank-connection-picker');
+    await picker.getByTestId('bank-connection-country').click();
+    await expect(picker.getByRole('searchbox', {name: 'Search countries'})).toHaveAttribute(
+      'placeholder',
+      'Search 1 country',
+    );
   });
 
   test('says so when the provider offers no banks', async ({page}) => {
