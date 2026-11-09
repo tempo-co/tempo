@@ -16,7 +16,7 @@ import {
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 
-type Method = 'get' | 'post' | 'patch' | 'delete' | 'head';
+type Method = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'head';
 type GuardedRoute = [method: Method, path: string];
 
 const SESSION_ID = 'a'.repeat(32);
@@ -85,6 +85,10 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['get', `/bank-connections/${RESOURCE_ID}/transactions`],
 	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}`],
 	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}/mask-v2`],
+	['get', '/notifications'],
+	['patch', '/notifications/preferences'],
+	['put', '/notifications/subscriptions'],
+	['delete', '/notifications/subscriptions'],
 ];
 
 const VERIFIED_ROUTES: GuardedRoute[] = [

@@ -1,6 +1,7 @@
 import {createFileRoute} from '@tanstack/react-router';
 
 import {Skeleton} from '@/components/ui/skeleton';
+import {NotificationSettings} from '@/features/notifications/components/notification-settings';
 import {AccountDelete} from '@/features/settings/components/account-delete/account-delete';
 import {EmailChangeDialog} from '@/features/settings/components/email-change/email-change-dialog';
 import {NameChangeDialog} from '@/features/settings/components/name-change-dialog';
@@ -38,6 +39,8 @@ function SettingsAccountIndex() {
           />
         </SettingsList>
       </SettingsGroup>
+
+      <NotificationSettings />
 
       <AccountDelete />
     </div>

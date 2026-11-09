@@ -141,7 +141,7 @@ type RequestOptions = RequestInit & {
    */
   expectUnauthorized?: boolean | string;
 };
-/** Options for post/patch/delete, which take the JSON body as a value and serialize it. */
+/** Options for post/put/patch/delete, which take the JSON body as a value and serialize it. */
 type WriteOptions = Omit<RequestOptions, 'body'>;
 
 /** API request with parseJson disabled; returns a Response. */
@@ -279,6 +279,10 @@ function post<T = unknown>(resource: string, body?: unknown, init?: WriteOptions
   return request<T>(resource, {...init, method: 'POST', body: json(body)});
 }
 
+function put<T = unknown>(resource: string, body?: unknown, init?: WriteOptions): Promise<T> {
+  return request<T>(resource, {...init, method: 'PUT', body: json(body)});
+}
+
 function patch<T = unknown>(resource: string, body?: unknown, init?: WriteOptions): Promise<T> {
   return request<T>(resource, {...init, method: 'PATCH', body: json(body)});
 }
@@ -287,4 +291,4 @@ function _delete<T = unknown>(resource: string, body?: unknown, init?: WriteOpti
   return request<T>(resource, {...init, method: 'DELETE', body: json(body)});
 }
 
-export const api = {head, get, post, patch, delete: _delete};
+export const api = {head, get, post, put, patch, delete: _delete};

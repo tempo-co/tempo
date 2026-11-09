@@ -80,6 +80,7 @@
 		"typeorm": "^1.1.2",
 		"ua-parser-js": "^2.0.10",
 		"validator": "13.15.35",
+		"web-push": "^3.6.7",
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {
@@ -97,6 +98,7 @@
 		"@types/parseurl": "^1.3.3",
 		"@types/passport-local": "^1.0.38",
 		"@types/supertest": "^7.2.1",
+		"@types/web-push": "^3.6.4",
 		"@typescript-eslint/eslint-plugin": "^8.72.0",
 		"@typescript-eslint/parser": "^8.71.1",
 		"eslint": "^10.13.0",

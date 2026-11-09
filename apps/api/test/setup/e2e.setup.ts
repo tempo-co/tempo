@@ -4,6 +4,7 @@ import {Test} from '@nestjs/testing';
 import {Server} from 'node:net';
 import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
+import webPush from 'web-push';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {mcpOriginMiddleware} from '@core/personal-access-token/mcp-origin.middleware';
@@ -12,6 +13,7 @@ let app: INestApplication<Server>;
 let aiCategorizationEnabled = false;
 let aiCategorizationWebSearchEnabled = false;
 let merchantLogosEnabled = false;
+let webPushEnabled = false;
 
 export function enableAiCategorizationE2e(): void {
 	aiCategorizationEnabled = true;
@@ -25,12 +27,28 @@ export function enableMerchantLogosE2e(): void {
 	merchantLogosEnabled = true;
 }
 
+/** Gives the app throwaway VAPID keys; specs replace `WebPushSender.send`, so no push service is contacted. */
+export function enableWebPushE2e(): void {
+	webPushEnabled = true;
+}
+
 beforeAll(async () => {
 	process.env.NODE_ENV = 'test';
 	process.env.AI_CATEGORIZATION_ENABLED = String(aiCategorizationEnabled);
 	process.env.AI_CATEGORIZATION_WEB_SEARCH_ENABLED = String(aiCategorizationWebSearchEnabled);
 	process.env.MERCHANT_LOGOS_ENABLED = String(merchantLogosEnabled);
 	delete process.env.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET;
+
+	if (webPushEnabled) {
+		const {publicKey, privateKey} = webPush.generateVAPIDKeys();
+		process.env.WEB_PUSH_VAPID_PUBLIC_KEY = publicKey;
+		process.env.WEB_PUSH_VAPID_PRIVATE_KEY = privateKey;
+		process.env.WEB_PUSH_VAPID_SUBJECT = 'mailto:push@example.test';
+	} else {
+		delete process.env.WEB_PUSH_VAPID_PUBLIC_KEY;
+		delete process.env.WEB_PUSH_VAPID_PRIVATE_KEY;
+		delete process.env.WEB_PUSH_VAPID_SUBJECT;
+	}
 
 	// Merchant logos call the same model routes, so they need a key too; their specs replace the provider call.
 	if (aiCategorizationEnabled || merchantLogosEnabled) {

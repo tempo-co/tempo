@@ -52,6 +52,10 @@ Then set `AI_CATEGORIZATION_PROVIDER=claude`, `ANTHROPIC_API_KEY` and `TEMPO_CLA
 
 `MERCHANT_LOGOS_ENABLED=true` in `/etc/tempo/production.env` turns merchant logos on. The first start identifies every existing merchant key in batches of 50 and then fetches each confirmed site's icon, so expect a few minutes of model calls and outbound HTTPS requests to merchant sites, `icons.duckduckgo.com` and, with `LOGO_DEV_SECRET_KEY` set, `api.logo.dev`. logo.dev's free plan has a monthly credit allowance; when it runs out, logos come from the merchants' sites and logo.dev is asked again the next day. Identification uses the subscription bridge's `/identify-merchants` route as its fallback, which needs the bridge reinstalled and restarted after the API release that adds it (see below).
 
+### Push notifications
+
+`WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY` and `WEB_PUSH_VAPID_SUBJECT` (a `mailto:` contact) in `/etc/tempo/production.env` turn push alerts on; generate the pair once with `npx web-push generate-vapid-keys`. Without them, Settings says the server sends no notifications. Changing the pair ends every device's subscription: on each device, turn notifications off and allow them again in Settings → Account. Pushes go out to Apple's, Google's, Mozilla's and Microsoft's push services.
+
 ### Contract compatibility
 
 The API fingerprints `contract.json` (categorization) and `merchant-contract.json` (merchant identification) and sends the matching fingerprint as `X-Tempo-Contract` on each subscription route. The bridge refuses a missing or different fingerprint with `409 contract_mismatch` before starting Claude; the API logs an actionable warning. Reinstall **and restart** the bridge when either contract changes. The initial rollout needs the new API deployed before restarting the stricter bridge, since older APIs do not send the header.
