@@ -6,13 +6,13 @@ import {useState} from 'react';
 import {Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis} from 'recharts';
 
 import {LoadMore} from '@/components/shared/load-more';
+import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {Skeleton} from '@/components/ui/skeleton';
 import {TransactionListRow} from '@/features/banking/components/transaction-list-row';
 import {formatBankTransactionCompactDate} from '@/features/banking/utils/formatters';
 import {ChartCardError, ChartCardHeader} from '@/features/dashboard/components/chart-card';
-import {TextAction} from '@/features/dashboard/components/text-action';
 import {axisFormatter, axisTicks} from '@/features/dashboard/utils/chart-axis';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatMoney, formatWholeMoney, toCents} from '@/features/dashboard/utils/money';

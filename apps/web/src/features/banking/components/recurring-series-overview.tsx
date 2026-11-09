@@ -8,10 +8,10 @@ import {ChevronRight, RefreshCw, Repeat} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
 import {EmptyState} from '@/components/shared/layout/app-empty-state';
+import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
 import {Skeleton} from '@/components/ui/skeleton';
 import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
-import {TextAction} from '@/features/dashboard/components/text-action';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatWholeMoney, toCents} from '@/features/dashboard/utils/money';
 import {cn} from '@/utils/cn';

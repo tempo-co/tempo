@@ -3,6 +3,7 @@ import type {BankTransactionBreakdownPeriod} from '@tempo/contracts';
 import {ChevronRight} from 'lucide-react';
 import {type ReactNode, useMemo, useState} from 'react';
 
+import {TextAction} from '@/components/shared/text-action';
 import {Card} from '@/components/ui/card';
 import {useHasMissingBaseAmounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
 import {cn} from '@/utils/cn';
@@ -31,7 +32,6 @@ import {
   TruncatedText,
 } from './data-tip';
 import {Bone, LoadingLabel, TextBone} from './loading';
-import {TextAction} from './text-action';
 
 /**
  * Rows are categories (or sources), columns years, newest first. A cell is a month on average in that year, so a

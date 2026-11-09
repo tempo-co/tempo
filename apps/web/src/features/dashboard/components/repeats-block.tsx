@@ -2,6 +2,7 @@ import {useNavigate} from '@tanstack/react-router';
 import {format} from 'date-fns';
 import {AlertTriangle, ChevronRight, Clock} from 'lucide-react';
 
+import {TextAction} from '@/components/shared/text-action';
 import {useGetRecurringSeries} from '@/features/banking/api/use-get-recurring-series';
 import {useGetRecurringSummary} from '@/features/banking/api/use-get-recurring-summary';
 import {SeriesTile} from '@/features/banking/components/recurring-series-tile';
@@ -18,7 +19,6 @@ import {toCents} from '../utils/money';
 import {formatMonth} from '../utils/month';
 import {ChartCardError} from './chart-card';
 import {Bone, LoadingLabel, TextBone} from './loading';
-import {TextAction} from './text-action';
 
 /** Four rows at most, so the block stays about as tall as the chart beside it. */
 const ROWS = 4;
