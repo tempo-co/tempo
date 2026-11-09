@@ -367,6 +367,29 @@ describe('Hosted MCP', () => {
 					unconvertedCount: 0,
 					baseCurrency: 'EUR',
 				});
+				const brief = ({
+					key,
+					name,
+					direction,
+					nextExpectedDate,
+					typicalAmount,
+					amountKind,
+					currency,
+					category,
+					merchantLogoUrl,
+					flags,
+				}: Record<string, unknown>) => ({
+					key,
+					name,
+					direction,
+					nextExpectedDate,
+					typicalAmount,
+					amountKind,
+					currency,
+					category,
+					merchantLogoUrl,
+					flags,
+				});
 				const recurringSummary = await call('recurring_summary', {asOf: '2025-12-31'});
 				expect(recurringSummary).toEqual(await rest('/recurring-series/summary?asOf=2025-12-31'));
 				expect(recurringSummary).toEqual({
@@ -381,31 +404,10 @@ describe('Hosted MCP', () => {
 						.toSorted((a: {nextExpectedDate: string}, b: {nextExpectedDate: string}) =>
 							a.nextExpectedDate.localeCompare(b.nextExpectedDate),
 						)
-						.map(
-							({
-								key,
-								name,
-								direction,
-								nextExpectedDate,
-								typicalAmount,
-								amountKind,
-								currency,
-								category,
-								merchantLogoUrl,
-								flags,
-							}: Record<string, unknown>) => ({
-								key,
-								name,
-								direction,
-								nextExpectedDate,
-								typicalAmount,
-								amountKind,
-								currency,
-								category,
-								merchantLogoUrl,
-								flags,
-							}),
-						),
+						.map(brief),
+					flagged: recurring.expenses.series
+						.filter(({flags}: {flags: string[]}) => flags.length > 0)
+						.map(brief),
 				});
 				expect([...recurring.expenses.series, ...recurring.income.series]).toHaveLength(4);
 				expect(recurringSummary.upcoming).toHaveLength(3);

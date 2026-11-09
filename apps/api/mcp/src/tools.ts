@@ -86,7 +86,7 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 		'recurring_summary',
 		{
 			description:
-				'Read recurring monthly totals, unconverted counts and the next three upcoming payments. asOf defaults to today in Europe/Amsterdam.',
+				'Read recurring monthly totals, unconverted counts, the next three upcoming payments and late or higher-than-usual bills. asOf defaults to today in Europe/Amsterdam.',
 			inputSchema: z.strictObject({asOf: z.iso.date().optional()}),
 			annotations,
 		},

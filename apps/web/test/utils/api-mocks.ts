@@ -192,6 +192,7 @@ export async function mockEmptyHome(page: Page) {
     expenseMonthlyTotal: '0.00',
     incomeMonthlyTotal: '0.00',
     upcoming: [],
+    flagged: [],
     expenseUnconvertedCount: 0,
     incomeUnconvertedCount: 0,
     baseCurrency: null,
@@ -207,7 +208,7 @@ export async function mockEmptyHome(page: Page) {
   await mockMerchantRanking(page);
 }
 
-/** Answers the recurring lists (the Repeats block's flagged bills, the recurring dialog) with none. */
+/** Answers the recurring lists (the recurring dialog) with none. */
 export function mockEmptyRecurringLists(page: Page) {
   const empty = {
     series: [],

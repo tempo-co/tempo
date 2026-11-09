@@ -125,8 +125,8 @@ export type RecurringSeriesLists = {
 	income: RecurringSeriesList;
 };
 
-/** A counted series' next payment. */
-export type RecurringUpcomingPayment = Pick<
+/** What a summary shows of a counted series: its next payment and flags. */
+export type RecurringSeriesBrief = Pick<
 	RecurringSeries,
 	| 'key'
 	| 'name'
@@ -149,7 +149,9 @@ export type RecurringSummary = {
 	expenseThisMonth: RecurringThisMonth;
 	incomeThisMonth: RecurringThisMonth;
 	/** The three soonest next payments of shown active series, bills and income together. */
-	upcoming: RecurringUpcomingPayment[];
+	upcoming: RecurringSeriesBrief[];
+	/** Shown active bills that are late or higher than usual, in the bills list's order. */
+	flagged: RecurringSeriesBrief[];
 	/** Each list's shown active series left out of its total because a payment is not converted yet. */
 	expenseUnconvertedCount: number;
 	incomeUnconvertedCount: number;

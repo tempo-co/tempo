@@ -222,6 +222,7 @@ async function mockMerchantLogos(page: Page) {
         flags: [],
       },
     ],
+    flagged: [],
     expenseUnconvertedCount: 0,
     incomeUnconvertedCount: 0,
     baseCurrency: 'EUR',

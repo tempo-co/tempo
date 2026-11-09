@@ -54,6 +54,7 @@ const summary: RecurringSummary = {
       flags: [],
     },
   ],
+  flagged: [],
   expenseThisMonth: {month: '2026-10', paid: '21.49', remaining: '108.50'},
   incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '2500.00'},
   expenseUnconvertedCount: 0,
@@ -154,12 +155,11 @@ test.describe('when what repeats cannot be read', () => {
   test('Repeats says so in its place and loads on Try again', async ({page}) => {
     await mockSyntheticHome(page);
     const state = {failing: true};
-    for (const url of ['**/recurring-series/summary?**', '**/recurring-series?**'])
-      await page.route(url, (route) =>
-        state.failing
-          ? fulfillJson(route, {statusCode: 429, message: 'Too Many Requests'}, 429)
-          : route.fallback(),
-      );
+    await page.route('**/recurring-series/summary?**', (route) =>
+      state.failing
+        ? fulfillJson(route, {statusCode: 429, message: 'Too Many Requests'}, 429)
+        : route.fallback(),
+    );
     await page.goto('/');
 
     await expect(repeats(page)).toContainText('Could not load what repeats.');

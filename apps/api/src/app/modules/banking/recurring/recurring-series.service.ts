@@ -5,6 +5,7 @@ import type {
 	BankTransactionRecurring,
 	RecurringContinuation,
 	RecurringSeries,
+	RecurringSeriesBrief,
 	RecurringSeriesDirection,
 	RecurringSeriesList,
 	RecurringSeriesLists,
@@ -201,41 +202,20 @@ export class RecurringSeriesService {
 		asOf: string,
 	): Promise<RecurringSummary> {
 		const {expenses, income} = await this.list({id: accountId, baseCurrency}, asOf);
+		const counted = ({hidden, status}: RecurringSeries) => !hidden && status === 'ACTIVE';
 		const upcoming = [...expenses.series, ...income.series]
-			.filter(({hidden, status}) => !hidden && status === 'ACTIVE')
+			.filter(counted)
 			.sort((a, b) => a.nextExpectedDate.localeCompare(b.nextExpectedDate) || a.key.localeCompare(b.key))
 			.slice(0, UPCOMING_COUNT)
-			.map(
-				({
-					key,
-					name,
-					direction,
-					nextExpectedDate,
-					typicalAmount,
-					amountKind,
-					currency,
-					category,
-					merchantLogoUrl,
-					flags,
-				}) => ({
-					key,
-					name,
-					direction,
-					nextExpectedDate,
-					typicalAmount,
-					amountKind,
-					currency,
-					category,
-					merchantLogoUrl,
-					flags,
-				}),
-			);
+			.map(toBrief);
+		const flagged = expenses.series.filter((entry) => counted(entry) && entry.flags.length > 0).map(toBrief);
 		return {
 			expenseMonthlyTotal: expenses.monthlyTotal,
 			incomeMonthlyTotal: income.monthlyTotal,
 			expenseThisMonth: expenses.thisMonth,
 			incomeThisMonth: income.thisMonth,
 			upcoming,
+			flagged,
 			expenseUnconvertedCount: expenses.unconvertedCount,
 			incomeUnconvertedCount: income.unconvertedCount,
 			baseCurrency,
@@ -621,6 +601,32 @@ function toResponse(
 		continuation,
 		category: entry.category,
 		merchantLogoUrl,
+	};
+}
+
+function toBrief({
+	key,
+	name,
+	direction,
+	nextExpectedDate,
+	typicalAmount,
+	amountKind,
+	currency,
+	category,
+	merchantLogoUrl,
+	flags,
+}: RecurringSeries): RecurringSeriesBrief {
+	return {
+		key,
+		name,
+		direction,
+		nextExpectedDate,
+		typicalAmount,
+		amountKind,
+		currency,
+		category,
+		merchantLogoUrl,
+		flags,
 	};
 }
 
