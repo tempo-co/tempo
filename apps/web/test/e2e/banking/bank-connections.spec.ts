@@ -31,7 +31,7 @@ const MOCK_PROVIDER_ORIGIN = 'https://enablebanking.test';
 const TARGET_ASPSP = {name: 'Mock ASPSP', country: 'NL'};
 const PROVIDER_LOGO_URL = 'https://enablebanking.com/brands/NL/ABN-AMRO/';
 const MONOCHROME_LOGO_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40"><text x="8" y="28" font-family="Arial" font-size="24" font-weight="700" fill="#000">MONO</text></svg>';
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40"><rect x="8" y="8" width="144" height="24" fill="#000"/></svg>';
 // A 1x1 PNG served in place of the provider logo, so the test does not depend on the live CDN.
 const PROVIDER_LOGO_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
@@ -474,9 +474,7 @@ test.describe('bank connections', () => {
   });
 
   test('returns to the installed app after bank authorization', async ({page, context}) => {
-    await page.goto('/bank-connections');
-    const authorizationUrl = 'https://bank.example.test/mock-bank-authorization';
-    const callbackUrl = new URL('./bank-connections?result=connected', page.url()).toString();
+    // Before opening the page: the list loads the supported banks for its logos, and the picker reuses that answer.
     await mockJson(page, '**/bank-connections/aspsps', [
       {
         name: 'Mock ASPSP',
@@ -484,6 +482,9 @@ test.describe('bank connections', () => {
         logoUrl: 'https://enablebanking.com/brands/NL/Mock-ASPSP/',
       },
     ]);
+    await page.goto('/bank-connections');
+    const authorizationUrl = 'https://bank.example.test/mock-bank-authorization';
+    const callbackUrl = new URL('./bank-connections?result=connected', page.url()).toString();
     await mockJson(page, '**/bank-connections/authorize', {authorizationUrl}, 201);
     await context.route('**/mock-bank-authorization', async (route) => {
       await fulfillRedirect(route, callbackUrl);
