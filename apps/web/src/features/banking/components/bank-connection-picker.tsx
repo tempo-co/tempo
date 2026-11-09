@@ -347,24 +347,33 @@ function List({children, empty}: {children: React.ReactNode; empty: string | nul
   );
 }
 
-// Flat 4:3 flags (flag-icons, MIT), one SVG per country, bundled so no flag depends on the OS's emoji font.
-const FLAGS = import.meta.glob<string>('/src/assets/flags/*.svg', {
+// Every flat 4:3 flag in flag-icons (MIT), by lowercase country code, so any country the provider adds gets its
+// flag and none depends on the OS's emoji font. Only the URLs are bundled: a flag downloads when a tile shows it,
+// never inlined (`no-inline`), and the offline shell leaves these files out.
+const FLAGS = import.meta.glob<string>('./*.svg', {
+  base: '/node_modules/flag-icons/flags/4x3/',
   eager: true,
-  query: '?url',
+  query: '?url&no-inline',
   import: 'default',
 });
 
+const TILE = 'inline-flex h-[21px] w-7 shrink-0 rounded-sm';
+
 /**
  * A country's flag: flat, 28×21, the small corner radius, and a hairline edge so white and pale flags keep their
- * outline on either theme. Unknown codes fall back to the code in the same box.
+ * outline on either theme. A code without a flag, or a flag that fails to load, shows the code in the same box.
  */
 function CountryTile({code}: {code: string}) {
-  const src = FLAGS[`/src/assets/flags/${code.toLowerCase()}.svg`];
-  if (!src)
+  const src = FLAGS[`./${code.toLowerCase()}.svg`];
+  const [failedSrc, setFailedSrc] = useState<string>();
+  if (!src || failedSrc === src)
     return (
       <span
         aria-hidden='true'
-        className='inline-flex h-[21px] w-7 shrink-0 items-center justify-center rounded-sm border border-border text-[10px] font-medium text-muted-foreground'
+        className={cn(
+          TILE,
+          'items-center justify-center border border-border text-[10px] font-medium text-muted-foreground',
+        )}
       >
         {code.toUpperCase()}
       </span>
@@ -372,9 +381,12 @@ function CountryTile({code}: {code: string}) {
   return (
     <span
       aria-hidden='true'
-      className='relative inline-flex h-[21px] w-7 shrink-0 overflow-hidden rounded-sm after:absolute after:inset-0 after:rounded-sm after:ring-1 after:ring-foreground/15 after:ring-inset'
+      className={cn(
+        TILE,
+        'relative overflow-hidden after:absolute after:inset-0 after:rounded-sm after:ring-1 after:ring-foreground/15 after:ring-inset',
+      )}
     >
-      <img src={src} alt='' className='size-full object-cover' />
+      <img src={src} alt='' className='size-full object-cover' onError={() => setFailedSrc(src)} />
     </span>
   );
 }

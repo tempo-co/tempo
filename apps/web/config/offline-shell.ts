@@ -1,9 +1,21 @@
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
-import type {Plugin} from 'vite';
+import type {Plugin, Rolldown} from 'vite';
 
 import {PAGE_ICONS, PWA_ICONS} from './app-icons';
+
+/**
+ * The bank picker's country flags (flag-icons) stay out of the cache: the browser downloads only the ones the picker
+ * shows, and connecting a bank needs the network anyway.
+ */
+function isCountryFlag(output: Rolldown.OutputBundle[string]) {
+  return (
+    output.type === 'asset' &&
+    output.originalFileNames.length > 0 &&
+    output.originalFileNames.every((name) => /(?:^|\/)node_modules\/flag-icons\/flags\//.test(name))
+  );
+}
 
 export function offlineShellPlugin(base: string): Plugin {
   if (!/^\/(?:[a-zA-Z0-9_-]+\/)*$/.test(base)) {
@@ -21,7 +33,7 @@ export function offlineShellPlugin(base: string): Plugin {
           (name) =>
             name === 'index.html' ||
             name === 'manifest.webmanifest' ||
-            /^assets\/.+\.(?:js|css|woff2?|png|svg)$/.test(name),
+            (/^assets\/.+\.(?:js|css|woff2?|png|svg)$/.test(name) && !isCountryFlag(bundle[name])),
         )
         .sort();
       for (const name of files) {

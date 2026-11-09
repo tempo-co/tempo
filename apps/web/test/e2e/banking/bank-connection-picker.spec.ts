@@ -46,6 +46,8 @@ const WORST_CASE_BANKS: BankConnectionAspsp[] = [
     country: 'DE',
   })),
   {name: 'Shembull Bank', country: 'XK'},
+  {name: 'Beispiel Kantonalbank', country: 'CH'},
+  {name: 'Example Pacific Bank', country: 'QO'},
   {name: 'Example Bank', country: 'NL', logoUrl: wordmark('EXAMPLE')},
 ];
 
@@ -355,6 +357,7 @@ test.describe('Connect a bank', () => {
       await page.addInitScript((value) => localStorage.setItem('vite-ui-theme', value), theme);
       await mockPickerPage(page, {banks: WORST_CASE_BANKS, connections: []});
       await page.route(BROKEN_LOGO_URL, (route) => route.fulfill({status: 404, body: ''}));
+      await page.route('**/assets/nl-*.svg', (route) => route.fulfill({status: 404, body: ''}));
       await page.goto('/bank-connections');
       await page.getByTestId('connect-bank-button').click();
       const picker = page.getByTestId('bank-connection-picker');
@@ -389,13 +392,17 @@ test.describe('Connect a bank', () => {
       expect(await sheetHeight(picker)).toBe(height);
 
       await country.click();
-      const kosovo = picker.getByRole('list').getByRole('button', {name: /^Kosovo/});
-      // A country without a bundled flag shows its code in the flag's box.
-      expect(await boxOf(kosovo.getByText('XK', {exact: true}))).toMatchObject({
-        width: 28,
-        height: 21,
-      });
-      await expectFlag(picker.getByRole('list').getByRole('button', {name: /^Germany/}));
+      const countries = picker.getByRole('list');
+      for (const name of [/^Germany/, /^Kosovo/, /^Switzerland/])
+        await expectFlag(countries.getByRole('button', {name}));
+      // A country without a flag, and a flag that fails to load, show the code in the flag's box.
+      for (const [name, code] of [
+        [/^Outlying Oceania/, 'QO'],
+        [/^Netherlands/, 'NL'],
+      ] as const)
+        expect(
+          await boxOf(countries.getByRole('button', {name}).getByText(code, {exact: true})),
+        ).toMatchObject({width: 28, height: 21});
       await expectNoHorizontalOverflow(page);
       expect(await sheetHeight(picker)).toBe(height);
       await picker.getByRole('button', {name: /^Germany/}).click();
