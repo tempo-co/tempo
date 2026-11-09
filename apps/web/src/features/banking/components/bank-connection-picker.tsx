@@ -1,22 +1,14 @@
 import type {BankConnectionAspsp} from '@tempo/contracts';
-import {Check, ChevronsUpDown, Loader, Plus} from 'lucide-react';
-import {type ReactNode, type WheelEvent as ReactWheelEvent, useMemo, useState} from 'react';
+import {ArrowLeft, ChevronRight, Loader, Plus, Search} from 'lucide-react';
+import {useMemo, useState} from 'react';
 
 import {PendingLabel} from '@/components/shared/pending-label';
 import {Button} from '@/components/ui/button';
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command';
-import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
+import {Input} from '@/components/ui/input';
 import {
   ResponsiveDialog,
-  ResponsiveDialogBody,
   ResponsiveDialogContent,
+  ResponsiveDialogDescription,
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
   ResponsiveDialogTrigger,
@@ -24,8 +16,9 @@ import {
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {cn} from '@/utils/cn';
 
+import {useGetAllBankConnections} from '../api/use-get-all-bank-connections';
 import {useGetSupportedBanks} from '../api/use-get-supported-banks';
-import {BankLogo} from './bank-logo';
+import {BankWordmark} from './bank-wordmark';
 
 type BankConnectionPickerProps = {
   onBankSelect: (bank: BankConnectionAspsp) => void | Promise<void>;
@@ -33,309 +26,383 @@ type BankConnectionPickerProps = {
   className?: string;
 };
 
-type CountryOption = {
-  code: string;
-  label: string;
-  bankCount: number;
-};
+type CountryOption = {code: string; label: string; bankCount: number};
 
-type SearchableSelectorProps<T> = {
-  label: string;
-  placeholder: string;
-  searchPlaceholder: string;
-  emptyMessage: string;
-  options: T[];
-  selectedOption?: T;
-  getKey: (option: T) => string;
-  getSearchValue: (option: T) => string;
-  renderOption: (option: T, context: 'option' | 'trigger') => ReactNode;
-  onSelect: (option: T) => void;
-  disabled?: boolean;
-  testId: string;
-};
+type Step = 'bank' | 'country' | 'confirm';
 
+/** Shared row: 56px, full width, the whole row is the target. */
+const ROW =
+  'grid min-h-14 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
+
+/**
+ * Connecting a bank, one step at a time in one sheet: pick a bank in the likely country (changing it is a step of
+ * its own), confirm, then leave for the bank. The sheet keeps one height across steps, so nothing jumps.
+ */
 export function BankConnectionPicker({
   onBankSelect,
   isStarting,
   className,
 }: BankConnectionPickerProps) {
   const [open, setOpen] = useState(false);
-  const [selectedCountryCode, setSelectedCountryCode] = useState<string>();
-  const [selectedBank, setSelectedBank] = useState<BankConnectionAspsp>();
+  const [step, setStep] = useState<Step>('bank');
+  const [countryCode, setCountryCode] = useState<string>();
+  const [bank, setBank] = useState<BankConnectionAspsp>();
   const {supportedBanks, isPending, isError, refetch} = useGetSupportedBanks(open);
+  const {bankConnections} = useGetAllBankConnections();
 
-  const countryOptions = useMemo(() => getCountryOptions(supportedBanks ?? []), [supportedBanks]);
-  const selectedCountry = countryOptions.find((country) => country.code === selectedCountryCode);
-  const countryBanks = useMemo(
+  const countries = useMemo(() => getCountryOptions(supportedBanks ?? []), [supportedBanks]);
+  const country =
+    countries.find((option) => option.code === countryCode) ??
+    likelyCountry(countries, bankConnections?.map((connection) => connection.aspspCountry) ?? []);
+  const banks = useMemo(
     () =>
       (supportedBanks ?? [])
-        .filter((bank) => bank.country === selectedCountryCode)
+        .filter((option) => option.country === country?.code)
         .sort((left, right) => left.name.localeCompare(right.name)),
-    [selectedCountryCode, supportedBanks],
+    [country?.code, supportedBanks],
   );
 
+  // Each opening starts at the bank list; the chosen country stays.
   const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (!nextOpen && !isStarting) {
-      setSelectedCountryCode(undefined);
-      setSelectedBank(undefined);
+    if (nextOpen) {
+      setStep('bank');
+      setBank(undefined);
     }
+    setOpen(nextOpen);
   };
 
-  const selectCountry = (country: CountryOption) => {
-    setSelectedCountryCode(country.code);
-    setSelectedBank(undefined);
-  };
-
-  const confirmBank = () => {
-    if (!selectedBank) return;
-    void onBankSelect(selectedBank);
-  };
-
-  const isConfirmDisabled = !selectedBank || isStarting;
+  const title =
+    step === 'country'
+      ? 'Choose a country'
+      : step === 'confirm' && bank
+        ? `Connect ${bank.name}`
+        : 'Connect a bank';
 
   return (
     <ResponsiveDialog open={open} onOpenChange={handleOpenChange}>
       <ResponsiveDialogTrigger asChild>
-        <Button
-          className={cn(
-            'max-md:h-auto max-md:min-h-11 max-md:max-w-full max-md:whitespace-normal',
-            className,
-          )}
-          disabled={isStarting}
-          data-testid='connect-bank-button'
-        >
+        <Button className={className} disabled={isStarting} data-testid='connect-bank-button'>
           {isStarting ? <Loader className='animate-slow-spin' /> : <Plus />}
-          {isStarting ? 'Connecting...' : 'Connect a bank'}
+          {isStarting ? 'Connecting…' : 'Connect a bank'}
         </Button>
       </ResponsiveDialogTrigger>
+      {/* grid-cols-1 here and on the header: their grid track stays the sheet's width under a truncated title. */}
       <ResponsiveDialogContent
-        className='max-h-[85dvh] sm:max-w-xl'
+        className='grid-cols-1 sm:max-w-lg'
         data-testid='bank-connection-picker'
       >
-        <ResponsiveDialogHeader className='text-start'>
-          <ResponsiveDialogTitle>Choose a bank</ResponsiveDialogTitle>
-        </ResponsiveDialogHeader>
-        <ResponsiveDialogBody className='min-h-0'>
-          <div className='grid gap-4'>
-            <SearchableSelector
-              label='Country'
-              placeholder='Select a country'
-              searchPlaceholder='Search countries...'
-              emptyMessage='No supported countries found.'
-              options={countryOptions}
-              selectedOption={selectedCountry}
-              getKey={(country) => country.code}
-              getSearchValue={(country) => `${country.label} ${country.code}`}
-              renderOption={(country, context) => (
-                <>
-                  <CountryFlag country={country.code} />
-                  <span className='min-w-0 truncate'>{country.label}</span>
-                  {context === 'option' && (
-                    <span className='ml-auto shrink-0 text-xs text-muted-foreground'>
-                      {country.bankCount} {country.bankCount === 1 ? 'bank' : 'banks'}
-                    </span>
-                  )}
-                </>
-              )}
-              onSelect={selectCountry}
-              disabled={isStarting || isPending || countryOptions.length === 0}
-              testId='bank-connection-country-selector'
-            />
-
-            <SearchableSelector
-              label='Bank'
-              placeholder={selectedCountry ? 'Select a bank' : 'Select a country first'}
-              searchPlaceholder={`Search banks in ${selectedCountry?.label ?? 'this country'}...`}
-              emptyMessage='No supported banks found for this country.'
-              options={countryBanks}
-              selectedOption={selectedBank}
-              getKey={(bank) => `${bank.country}:${bank.name}`}
-              getSearchValue={(bank) => bank.name}
-              renderOption={(bank) => (
-                <>
-                  <BankLogo bank={bank} />
-                  <span className='min-w-0 truncate'>{bank.name}</span>
-                  <span className='ml-auto shrink-0 text-xs text-muted-foreground'>
-                    {bank.country}
-                  </span>
-                </>
-              )}
-              onSelect={setSelectedBank}
-              disabled={isStarting || isPending || !selectedCountry}
-              testId='bank-connection-bank-selector'
-            />
-
-            {isError && (
-              <div
-                className='flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed p-4'
-                role='alert'
-              >
-                <p className='text-sm text-muted-foreground'>Supported banks are unavailable.</p>
-                <Button
-                  variant='outline'
-                  onClick={() => void refetch()}
-                  data-testid='supported-banks-retry'
-                >
-                  Try again
-                </Button>
-              </div>
-            )}
-
-            <div className='flex flex-col gap-2 pb-4 md:pb-0'>
+        <ResponsiveDialogHeader className='relative grid-cols-1 px-4 text-start md:px-0'>
+          {/* Desktop keeps the title clear of the dialog's close button. */}
+          <div className='flex min-h-11 items-center gap-1 md:pr-8'>
+            {step !== 'bank' && (
               <Button
-                onClick={confirmBank}
-                disabled={isConfirmDisabled}
-                data-testid='bank-connection-confirm'
-                className='min-h-11 w-full'
+                variant='ghost'
+                size='icon'
+                aria-label='Back'
+                className='-ml-2 size-11'
+                onClick={() => setStep('bank')}
+                disabled={isStarting}
               >
-                {isStarting ? (
-                  <PendingLabel>Taking you to {selectedBank?.name ?? 'your bank'}...</PendingLabel>
-                ) : selectedBank ? (
-                  `Continue with ${selectedBank.name}`
-                ) : (
-                  'Continue'
-                )}
+                <ArrowLeft />
               </Button>
-              <p className='text-center text-xs text-muted-foreground'>
-                You will be redirected to {selectedBank?.name ?? 'your bank'} to approve access.
-              </p>
-            </div>
+            )}
+            {/* One line, so a long bank name never makes the sheet taller; the name is in full below. */}
+            <ResponsiveDialogTitle className='min-w-0 truncate'>{title}</ResponsiveDialogTitle>
           </div>
-        </ResponsiveDialogBody>
+          <ResponsiveDialogDescription className='sr-only'>
+            Pick your bank, then approve access at the bank.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+        {/* One height for every step and for loading, so the sheet never resizes under a thumb. */}
+        <div className='flex h-[min(68dvh,32rem)] min-h-0 flex-col px-4 pb-4 md:px-0 md:pb-0'>
+          {isError ? (
+            <div
+              role='alert'
+              className='m-auto grid justify-items-center gap-3 text-center text-sm text-muted-foreground'
+            >
+              <p>Supported banks are unavailable.</p>
+              <Button variant='outline' onClick={() => void refetch()}>
+                Try again
+              </Button>
+            </div>
+          ) : isPending ? (
+            <div role='status' className='m-auto text-sm text-muted-foreground'>
+              <PendingLabel>Loading banks…</PendingLabel>
+            </div>
+          ) : !country ? (
+            <p className='m-auto text-center text-sm text-muted-foreground'>
+              No banks are available to connect right now.
+            </p>
+          ) : step === 'country' ? (
+            <CountryStep
+              countries={countries}
+              selected={country.code}
+              onSelect={(code) => {
+                setCountryCode(code);
+                setStep('bank');
+              }}
+            />
+          ) : step === 'confirm' && bank ? (
+            <ConfirmStep
+              bank={bank}
+              country={country}
+              isStarting={isStarting}
+              onContinue={() => void onBankSelect(bank)}
+            />
+          ) : (
+            <BankStep
+              key={country.code}
+              country={country}
+              banks={banks}
+              onChangeCountry={() => setStep('country')}
+              onSelect={(option) => {
+                setBank(option);
+                setStep('confirm');
+              }}
+            />
+          )}
+        </div>
       </ResponsiveDialogContent>
     </ResponsiveDialog>
   );
 }
 
-function SearchableSelector<T>({
-  label,
-  placeholder,
-  searchPlaceholder,
-  emptyMessage,
-  options,
-  selectedOption,
-  getKey,
-  getSearchValue,
-  renderOption,
+function BankStep({
+  country,
+  banks,
+  onChangeCountry,
   onSelect,
-  disabled = false,
-  testId,
-}: SearchableSelectorProps<T>) {
-  const [open, setOpen] = useState(false);
-  const selectedKey = selectedOption ? getKey(selectedOption) : undefined;
-  const triggerId = `${testId}-trigger`;
-
+}: {
+  country: CountryOption;
+  banks: BankConnectionAspsp[];
+  onChangeCountry: () => void;
+  onSelect: (bank: BankConnectionAspsp) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const shown = banks.filter((bank) => matches(bank.name, query));
   return (
-    <div className='grid gap-2'>
-      <label htmlFor={triggerId} className='text-sm font-medium'>
-        {label}
-      </label>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            id={triggerId}
-            type='button'
-            variant='outline'
-            role='combobox'
-            aria-expanded={open}
-            aria-label={label}
-            disabled={disabled}
-            data-testid={testId}
-            className='h-auto min-h-11 w-full justify-between gap-3 px-3 text-start'
-          >
-            {selectedOption ? (
-              <span className='flex min-w-0 items-center gap-3'>
-                {renderOption(selectedOption, 'trigger')}
+    <>
+      <button
+        type='button'
+        onClick={onChangeCountry}
+        data-testid='bank-connection-country'
+        className='mb-3 flex min-h-11 w-full items-center gap-3 rounded-md border px-3 text-left text-sm hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+      >
+        <CountryTile code={country.code} />
+        <span className='min-w-0 flex-1 truncate'>{country.label}</span>
+        <span className='text-primary'>Change</span>
+      </button>
+      <SearchField
+        value={query}
+        onChange={setQuery}
+        label={`Search banks in ${country.label}`}
+        placeholder={`Search ${banks.length} banks`}
+      />
+      <List empty={shown.length === 0 ? `No bank called “${query}” in ${country.label}` : null}>
+        {shown.map((bank) => (
+          <li key={`${bank.country}:${bank.name}`}>
+            <button type='button' className={ROW} onClick={() => onSelect(bank)}>
+              <BankWordmark bank={bank} />
+              <span className='min-w-0 truncate text-sm'>{bank.name}</span>
+              <ChevronRight aria-hidden='true' className='size-4 text-muted-foreground' />
+            </button>
+          </li>
+        ))}
+      </List>
+    </>
+  );
+}
+
+function CountryStep({
+  countries,
+  selected,
+  onSelect,
+}: {
+  countries: CountryOption[];
+  selected: string;
+  onSelect: (code: string) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const shown = countries.filter((country) => matches(`${country.label} ${country.code}`, query));
+  return (
+    <>
+      <SearchField
+        value={query}
+        onChange={setQuery}
+        label='Search countries'
+        placeholder={`Search ${countries.length} countries`}
+      />
+      <List empty={shown.length === 0 ? `No country called “${query}”` : null}>
+        {shown.map((country) => (
+          <li key={country.code}>
+            <button
+              type='button'
+              className={cn(ROW, country.code === selected && 'bg-accent/60')}
+              aria-current={country.code === selected || undefined}
+              onClick={() => onSelect(country.code)}
+            >
+              <CountryTile code={country.code} />
+              <span className='min-w-0 truncate text-sm'>{country.label}</span>
+              <span className='numeric text-xs text-muted-foreground'>
+                {country.bankCount} {country.bankCount === 1 ? 'bank' : 'banks'}
               </span>
-            ) : (
-              <span className='truncate text-muted-foreground'>{placeholder}</span>
-            )}
-            <ChevronsUpDown className='h-4 w-4 shrink-0 opacity-50' aria-hidden='true' />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          align='start'
-          className='w-[min(32rem,calc(100vw-2rem))] overflow-hidden p-0'
+            </button>
+          </li>
+        ))}
+      </List>
+    </>
+  );
+}
+
+function ConfirmStep({
+  bank,
+  country,
+  isStarting,
+  onContinue,
+}: {
+  bank: BankConnectionAspsp;
+  country: CountryOption;
+  isStarting: boolean;
+  onContinue: () => void;
+}) {
+  return (
+    <div className='flex flex-1 flex-col'>
+      <div className='grid flex-1 content-center justify-items-center gap-3 text-center'>
+        <BankWordmark bank={bank} size='lg' />
+        <p className='text-sm text-muted-foreground'>{country.label}</p>
+      </div>
+      <div className='grid gap-2'>
+        <Button
+          onClick={onContinue}
+          disabled={isStarting}
+          className='h-auto min-h-11 w-full py-2 wrap-anywhere whitespace-normal'
+          data-testid='bank-connection-confirm'
         >
-          <Command>
-            <CommandInput placeholder={searchPlaceholder} />
-            <ScrollArea className='h-64 max-h-[50vh]'>
-              <CommandList
-                className='max-h-none overflow-visible p-1'
-                onWheel={handleCommandListWheel}
-              >
-                <CommandEmpty>{emptyMessage}</CommandEmpty>
-                <CommandGroup>
-                  {options.map((option) => {
-                    const key = getKey(option);
-                    const isSelected = key === selectedKey;
-                    return (
-                      <CommandItem
-                        key={key}
-                        value={getSearchValue(option)}
-                        onSelect={() => {
-                          onSelect(option);
-                          setOpen(false);
-                        }}
-                        className='min-h-11'
-                      >
-                        {renderOption(option, 'option')}
-                        <Check
-                          className={cn(
-                            'ml-2 h-4 w-4 shrink-0',
-                            isSelected ? 'opacity-100' : 'opacity-0',
-                          )}
-                          aria-hidden='true'
-                        />
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              </CommandList>
-            </ScrollArea>
-          </Command>
-        </PopoverContent>
-      </Popover>
+          {isStarting ? (
+            <PendingLabel>Taking you to {bank.name}…</PendingLabel>
+          ) : (
+            `Continue to ${bank.name}`
+          )}
+        </Button>
+        <p className='text-center text-xs wrap-anywhere text-muted-foreground'>
+          You approve access at {bank.name}, then come back here.
+        </p>
+      </div>
     </div>
   );
 }
 
-function handleCommandListWheel(event: ReactWheelEvent<HTMLDivElement>) {
-  const viewport = event.currentTarget.closest<HTMLElement>('[data-radix-scroll-area-viewport]');
-  if (!viewport || viewport.scrollHeight <= viewport.clientHeight) return;
-
-  const maxScrollTop = viewport.scrollHeight - viewport.clientHeight;
-  viewport.scrollTop = Math.max(0, Math.min(viewport.scrollTop + event.deltaY, maxScrollTop));
-  event.preventDefault();
+function SearchField({
+  value,
+  onChange,
+  label,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  placeholder: string;
+}) {
+  // Never focused for the user: opening the sheet or changing step leaves the field alone, so no ring shows and
+  // phones keep the keyboard closed until it is tapped. Typing starts with a tap, or Tab from the header.
+  return (
+    <label className='relative mb-2 block'>
+      <span className='sr-only'>{label}</span>
+      <Search
+        aria-hidden='true'
+        className='pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground'
+      />
+      <Input
+        type='search'
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        autoComplete='off'
+        enterKeyHint='search'
+        className='h-11 pl-9'
+      />
+    </label>
+  );
 }
 
-function CountryFlag({country}: {country: string}) {
+function List({children, empty}: {children: React.ReactNode; empty: string | null}) {
   return (
-    <span className='text-base leading-none' aria-hidden='true'>
-      {countryFlag(country)}
+    <ScrollArea type='auto' className='-mx-2 min-h-0 flex-1'>
+      {empty ? (
+        <p className='px-4 py-8 text-center text-sm text-muted-foreground'>{empty}</p>
+      ) : (
+        // Clear of the scrollbar on the right, so it never touches a row.
+        <ul className='grid pr-5 pl-2'>{children}</ul>
+      )}
+    </ScrollArea>
+  );
+}
+
+// Flat 4:3 flags (flag-icons, MIT), one SVG per country, bundled so no flag depends on the OS's emoji font.
+const FLAGS = import.meta.glob<string>('/src/assets/flags/*.svg', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
+
+/**
+ * A country's flag: flat, 28×21, the small corner radius, and a hairline edge so white and pale flags keep their
+ * outline on either theme. Unknown codes fall back to the code in the same box.
+ */
+function CountryTile({code}: {code: string}) {
+  const src = FLAGS[`/src/assets/flags/${code.toLowerCase()}.svg`];
+  if (!src)
+    return (
+      <span
+        aria-hidden='true'
+        className='inline-flex h-[21px] w-7 shrink-0 items-center justify-center rounded-sm border border-border text-[10px] font-medium text-muted-foreground'
+      >
+        {code.toUpperCase()}
+      </span>
+    );
+  return (
+    <span
+      aria-hidden='true'
+      className='relative inline-flex h-[21px] w-7 shrink-0 overflow-hidden rounded-sm after:absolute after:inset-0 after:rounded-sm after:ring-1 after:ring-foreground/15 after:ring-inset'
+    >
+      <img src={src} alt='' className='size-full object-cover' />
     </span>
   );
 }
 
-function getCountryOptions(banks: BankConnectionAspsp[]): CountryOption[] {
-  const countryCounts = new Map<string, number>();
-  for (const bank of banks) {
-    countryCounts.set(bank.country, (countryCounts.get(bank.country) ?? 0) + 1);
-  }
-
-  return [...countryCounts.entries()]
-    .map(([code, bankCount]) => ({code, label: formatCountry(code), bankCount}))
-    .sort((left, right) => left.label.localeCompare(right.label));
+/** Where the owner most likely banks: the country of most existing connections, else the browser's region. */
+function likelyCountry(countries: CountryOption[], connected: string[]) {
+  const counts = new Map<string, number>();
+  for (const code of connected) counts.set(code, (counts.get(code) ?? 0) + 1);
+  const fromConnections = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const fromBrowser = navigator.languages
+    .map((tag) => {
+      try {
+        return new Intl.Locale(tag).maximize().region;
+      } catch {
+        return undefined;
+      }
+    })
+    .find((region) => region && countries.some((country) => country.code === region));
+  const code = fromConnections ?? fromBrowser;
+  return countries.find((country) => country.code === code) ?? countries[0];
 }
 
-function countryFlag(country: string) {
-  const normalized = country.trim().toUpperCase();
-  if (!/^[A-Z]{2}$/.test(normalized)) return '🌐';
+function matches(text: string, query: string) {
+  const fold = (value: string) =>
+    value
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase();
+  return fold(text).includes(fold(query.trim()));
+}
 
-  return [...normalized]
-    .map((letter) => String.fromCodePoint(letter.charCodeAt(0) + 127397))
-    .join('');
+function getCountryOptions(banks: BankConnectionAspsp[]): CountryOption[] {
+  const counts = new Map<string, number>();
+  for (const bank of banks) counts.set(bank.country, (counts.get(bank.country) ?? 0) + 1);
+  return [...counts]
+    .map(([code, bankCount]) => ({code, label: formatCountry(code), bankCount}))
+    .sort((left, right) => left.label.localeCompare(right.label));
 }
 
 let regionNames: Intl.DisplayNames | undefined;

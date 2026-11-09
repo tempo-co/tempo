@@ -86,7 +86,7 @@ function Badge({badge, className}: {badge: NavBadge; className?: string}) {
     <span
       aria-hidden='true'
       className={cn(
-        'grid h-[1.125rem] min-w-[1.125rem] place-items-center bg-primary px-1 numeric text-[0.6875rem] leading-none font-semibold text-primary-foreground',
+        'grid h-[1.125rem] min-w-[1.125rem] place-items-center rounded-full bg-primary px-1 numeric text-[0.6875rem] leading-none font-semibold text-primary-foreground',
         className,
       )}
     >

@@ -96,6 +96,30 @@ test('navigates from the header and account menu on wider screens', async ({page
 test.describe('the Transactions badge away from Home', () => {
   test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
 
+  for (const {needsAttention, text} of [
+    {needsAttention: 3, text: '3'},
+    {needsAttention: 120, text: '99+'},
+  ]) {
+    test(`shows ${text} to review in a round badge`, async ({page}) => {
+      await mockSyntheticHome(page, {reviewCounts: {...HOME_REVIEW_COUNTS, needsAttention}});
+      await page.goto('/bank-connections');
+      const badge = page
+        .getByRole('navigation', {name: 'Primary'})
+        .first()
+        .getByRole('link', {name: `Transactions, ${needsAttention} to review`})
+        .getByText(text, {exact: true});
+      const box = await boxOf(badge);
+      // Fully rounded ends: a circle for one digit, a pill for more.
+      expect(
+        parseFloat(
+          await badge.evaluate((element) => getComputedStyle(element).borderTopLeftRadius),
+        ),
+      ).toBeGreaterThanOrEqual(box.height / 2);
+      if (text.length === 1) expect(box.width).toBe(box.height);
+      else expect(box.width).toBeGreaterThan(box.height);
+    });
+  }
+
   test('refreshes every five minutes, and right after a review on that page', async ({page}) => {
     await mockSyntheticHome(page, {clock: 'installed'});
     const [transaction] = monthTransactions('2026-10', 1).transactions;
