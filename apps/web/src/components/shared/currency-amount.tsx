@@ -1,5 +1,5 @@
 import {cn} from '@/utils/cn';
-import {getCurrencyFormatter} from '@/utils/format-currency';
+import {amountRoundsToZero, getCurrencyFormatter} from '@/utils/format-currency';
 
 type CurrencyAmountProps = {
   amount: number;
@@ -8,9 +8,8 @@ type CurrencyAmountProps = {
 
 export function CurrencyAmount({amount, currency}: CurrencyAmountProps) {
   const formatter = getCurrencyFormatter(currency);
-  // Amounts that round to zero (-0, -0.004) would otherwise render as "-€0.00".
-  const roundsToZero =
-    Number(amount.toFixed(formatter.resolvedOptions().maximumFractionDigits ?? 2)) === 0;
+  // Amounts that round to zero would otherwise render as "-€0.00".
+  const roundsToZero = amountRoundsToZero(amount, currency);
   const formattedAmount = formatter.format(roundsToZero ? 0 : amount);
 
   return (

@@ -1243,6 +1243,8 @@ test.describe('bank transactions', () => {
   });
 
   test('keeps worst-case transaction values readable at every width', async ({page}) => {
+    // Four viewports of inspector checks run close to the default limit in WebKit.
+    test.setTimeout(20_000);
     const sepaReference =
       '/TRTP/SEPA-TRANSFER/IBAN/NL91ABNA0417164300/BIC/ABNANL2A/NAME/EXAMPLE-SHOP-BV/REMI/INV-2026-000123456789';
     let transactions: Array<Record<string, unknown>> = [];
@@ -1347,6 +1349,7 @@ test.describe('bank transactions', () => {
         const inspector = page.getByTestId('bank-transaction-inspector');
         const amount = inspector.getByTestId('bank-transaction-detail-amount');
         await expect(amount).toBeVisible();
+        await expect(inspector.getByTestId('bank-transaction-detail-direction')).toBeVisible();
         await inspector.evaluate((el) =>
           Promise.all(el.getAnimations({subtree: true}).map((animation) => animation.finished)),
         );
@@ -1373,6 +1376,15 @@ test.describe('bank transactions', () => {
         await inspector.getByRole('button', {name: 'Close transaction details'}).click();
       }
     }
+
+    await rows
+      .nth(3)
+      .getByRole('button', {name: /^View .* transaction details$/})
+      .click();
+    const zeroInspector = page.getByTestId('bank-transaction-inspector');
+    await expect(zeroInspector.getByTestId('bank-transaction-detail-amount')).toHaveText('€0.00');
+    // A zero amount moved no money, so it has no direction arrow.
+    await expect(zeroInspector.getByTestId('bank-transaction-detail-direction')).toHaveCount(0);
 
     await page.setViewportSize({width: 393, height: 852});
     await page.goto('/bank-transactions');

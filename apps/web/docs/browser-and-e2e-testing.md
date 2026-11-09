@@ -76,13 +76,13 @@ A mocked spec is a UI integration test, not full-stack coverage. Report it separ
 
 ## Merchant logo rendering
 
-`test/e2e/banking/merchant-logos.spec.ts` drives transactions, the inspector, connection rows,
+`test/e2e/banking/merchant-logos.spec.ts` drives transactions, the inspector,
 a month's transaction rows and Home's next recurring payments at `1440px` and `390px` in both themes. Its synthetic
 `128px` white RGBA fixture contains transparent, quarter-, half-, three-quarter- and full-alpha
 bands. The pixel assertions decode actual browser screenshots of the tinted tile, not a canvas
 drawing of the unfiltered image. They compare the composited sRGB colors with the Clay field
 and ink, allowing one channel value of rounding error. Attachments record the tile pixels and
-synthetic transaction, inspector, connection and Home screens in the Playwright report.
+synthetic transaction, inspector and Home screens in the Playwright report.
 
 The same journey checks fallback colors, source-version recovery, theme switching with the
 same loaded mask, ordinary category metadata colors and row geometry. JSON responses are
