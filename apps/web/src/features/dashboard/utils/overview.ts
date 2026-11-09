@@ -7,6 +7,7 @@ import {
 import {addDays, format, getDaysInMonth, subDays, subMonths} from 'date-fns';
 
 import {parseCalendarDate} from './drill-links';
+import {BOLD_FIGURE_CHAR, figureColumnWidth} from './format';
 import {formatWholeMoney, toCents} from './money';
 
 /** Whole years Home asks for by month and by year: as many as both of the API's range limits allow. */
@@ -211,16 +212,13 @@ export function yearColumnWidth(
   months: MonthPoint[],
   currency: string | null,
 ) {
-  const longest = Math.max(
-    0,
-    ...periods.flatMap((period) => {
-      const cover = monthsCovered(period, months);
-      if (cover === 0) return [];
-      // A part can outgrow the total when refunds make another part negative.
-      return [period.total, ...period.parts.map((part) => part.amount)].map(
-        (amount) => formatWholeMoney(toCents(amount) / 100 / cover, currency).length,
-      );
-    }),
-  );
-  return `${Math.max(5, Math.ceil((longest * 0.55 + 1.5) * 4) / 4)}rem`;
+  const texts = periods.flatMap((period) => {
+    const cover = monthsCovered(period, months);
+    if (cover === 0) return [];
+    // A part can outgrow the total when refunds make another part negative.
+    return [period.total, ...period.parts.map((part) => part.amount)].map((amount) =>
+      formatWholeMoney(toCents(amount) / 100 / cover, currency),
+    );
+  });
+  return figureColumnWidth(texts, {perChar: BOLD_FIGURE_CHAR, padding: 1.5, min: 5});
 }
