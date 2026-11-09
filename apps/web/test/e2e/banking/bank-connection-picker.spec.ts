@@ -1,6 +1,7 @@
 import type {Locator, Page} from '@playwright/test';
 import type {BankConnection, BankConnectionAspsp} from '@tempo/contracts';
 
+import {createAccount} from '../../data/account.data';
 import {HOME_CONNECTION} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {
@@ -70,12 +71,15 @@ async function mockPickerPage(
   }: {banks?: BankConnectionAspsp[]; connections?: BankConnection[]} = {},
 ) {
   await page.emulateMedia({reducedMotion: 'reduce'});
-  await mockJson(page, '**/accounts/me', {
-    id: '00000000-0000-4000-8000-000000000001',
-    name: 'Alex Example',
-    email: 'user@example.com',
-    isEmailVerified: true,
-  });
+  await mockJson(
+    page,
+    '**/accounts/me',
+    createAccount({
+      id: '00000000-0000-4000-8000-000000000001',
+      name: 'Alex Example',
+      email: 'user@example.com',
+    }),
+  );
   await mockBankConnections(page, connections);
   await mockJson(page, '**/bank-connections/*/refresh', {});
   await mockJson(page, '**/bank-connections/aspsps', banks);

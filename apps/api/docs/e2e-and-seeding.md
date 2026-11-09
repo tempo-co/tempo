@@ -35,10 +35,29 @@ Consequences:
 
 ## Seeded data
 
-- `scripts/seed-data/seed.constants.ts` holds the synthetic accounts. Tests that change account data use the account dedicated to that flow, not the shared `VERIFIED` one.
-- `seedBankingData` builds the full dev dataset and backs `npm run db:seed`; do not assert its exact contents. Build rows a spec depends on with `BankingFixtures`.
-- Data a test counts as a whole goes under its own seeded owner (see `seed-own-transfer-data.ts`), so default pagination fixtures keep their counts.
+- API E2E setup boots the application and runs `seedAccounts` for each spec file. It does not load the full banking dataset: create the rows a spec depends on with `BankingFixtures`.
+- `scripts/seed-data/seed.constants.ts` holds the synthetic accounts. Tests that change account data use the account dedicated to that flow, not the shared `VERIFIED` one; scenarios that need their own banking totals use an isolated owner.
+- `npm run db:seed` and API-backed web E2E run the full seed: accounts, banking and own transfers. `test/auth.setup.ts` in the web app only logs those accounts in and saves their sessions; it does not seed.
+- `seedBankingData` is a full synthetic dataset with fixed row IDs, not a repeatable per-owner fixture factory. Do not make feature assertions depend on its exact contents. Account-deletion E2E uses it to exercise cascades through populated relationships.
+- Data a test counts as a whole goes under its own owner (see `seed-own-transfer-data.ts`), so default pagination fixtures keep their counts.
 - Fixture text must be synthetic and must not be derived from real merchants, names or places.
+
+## Reusing test setup
+
+- Use `BankingFixtures` for persisted connections, accounts and transactions. Use `test/fixtures/bank-transaction.fixture.ts` for an in-memory entity in unit tests; it does not set up database relationships or replace persisted fixtures.
+- Use `test/utils/banking-utils.ts` to create an isolated owner with real signup, verification and login, plus one connection and an empty bank account. Pass the base currency explicitly and keep scenario rows local:
+
+```ts
+import {createBankingOwner} from '../../utils/banking-utils';
+
+const {agent, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+await fixtures.createTransactions(bankAccount, [bookedRow('2026-09-10', '-12.00')]);
+const response = await agent.get('/bank-transactions').expect(200);
+```
+
+- Share repeated setup mechanics and required record fields, not the inputs and assertions that explain a scenario. Keep dates, amounts, category states and ownership explicit when the behavior depends on them.
+- Keep a helper in its spec when only that spec uses it. Move it into `test/utils` or `test/fixtures` when multiple specs need the same contract; do not build generic repository or provider mocks around unrelated tests.
+- Split a spec along feature boundaries only when the resulting setup is clearer. Each API E2E file boots its own application and schema, so splitting is not a test-speed optimization.
 
 ## Web E2E against this API
 

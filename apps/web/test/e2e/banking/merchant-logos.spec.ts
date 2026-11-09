@@ -3,6 +3,8 @@ import {type BankConnection, BankTransaction} from '@tempo/contracts';
 import {type Server, createServer} from 'node:http';
 import type {AddressInfo} from 'node:net';
 
+import {createAccount} from '../../data/account.data';
+import {createBankTransaction} from '../../data/bank-transaction.data';
 import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
@@ -42,7 +44,7 @@ function transaction(
   displayDescription: string,
   overrides: Partial<BankTransaction>,
 ): BankTransaction {
-  return {
+  return createBankTransaction({
     id: `00000000-0000-4000-8000-00000000070${index}`,
     displayDescription,
     merchantLogoUrl: null,
@@ -58,38 +60,16 @@ function transaction(
     direction: 'EXPENSE',
     transactionType: 'CARD_PAYMENT',
     transactionStatus: 'BOOK',
-    providerTransactionDescription: null,
-    merchantCategoryCode: null,
-    remittanceInformation: null,
-    balanceAfterAmount: null,
-    balanceAfterCurrency: null,
-    instructedAmount: null,
-    instructedCurrency: null,
-    exchangeRate: null,
-    exchangeRateUnitCurrency: null,
-    exchangeRateType: null,
-    referenceNumber: null,
-    referenceNumberScheme: null,
     bankName: 'Example Bank',
     bankCountry: 'NL',
     bankAccountName: 'Example account',
-    bankAccountAlias: null,
     category: 'FOOD_AND_DRINK',
     categoryStatus: 'COMPLETED',
     categorySource: 'AI',
     categoryConfidence: '0.99',
-    financialEventType: null,
-    financialEventSource: null,
-    financialEventRuleVersion: null,
     cashFlowTreatment: 'EXPENSE',
-    ownTransfer: null,
-    ownTransferOverride: null,
-    currencyExchangeCounterpart: null,
-    amountInBaseCurrency: null,
-    baseAmountMethod: null,
-    baseAmountRateDate: null,
     ...overrides,
-  };
+  });
 }
 
 const withLogo = transaction(1, 'Example Market', {merchantLogoUrl: LOGO});
@@ -193,12 +173,15 @@ async function mockMerchantLogos(page: Page) {
       return fulfillJson(route, {}, 500);
     },
   );
-  await mockJson(page, '**/accounts/me', {
-    id: '00000000-0000-4000-8000-000000000700',
-    name: 'Example Owner',
-    email: 'merchant-logos@example.com',
-    isEmailVerified: true,
-  });
+  await mockJson(
+    page,
+    '**/accounts/me',
+    createAccount({
+      id: '00000000-0000-4000-8000-000000000700',
+      name: 'Example Owner',
+      email: 'merchant-logos@example.com',
+    }),
+  );
   await mockJson(page, '**/health', {});
   await mockBankConnections(page, [connection]);
   await mockBankRefresh(page);

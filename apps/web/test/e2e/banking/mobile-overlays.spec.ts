@@ -1,3 +1,4 @@
+import {createAccount} from '../../data/account.data';
 import {expect, test} from '../../fixtures';
 import {mockJson} from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
@@ -5,12 +6,15 @@ import {expectNoHorizontalOverflow} from '../../utils/layout';
 test.use({storageState: {cookies: [], origins: []}});
 
 test.beforeEach(async ({page}) => {
-  await mockJson(page, '**/accounts/me', {
-    id: '00000000-0000-4000-8000-000000000001',
-    name: 'Alex Example',
-    email: 'user@example.com',
-    isEmailVerified: true,
-  });
+  await mockJson(
+    page,
+    '**/accounts/me',
+    createAccount({
+      id: '00000000-0000-4000-8000-000000000001',
+      name: 'Alex Example',
+      email: 'user@example.com',
+    }),
+  );
   await mockJson(page, '**/bank-connections/aspsps', [
     {name: 'Example Bank', country: 'NL', logoUrl: null},
   ]);

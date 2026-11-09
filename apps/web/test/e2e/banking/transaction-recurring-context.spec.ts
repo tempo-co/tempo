@@ -1,13 +1,15 @@
 import type {Page} from '@playwright/test';
 import {BankTransaction, BankTransactionRecurring} from '@tempo/contracts';
 
+import {createAccount} from '../../data/account.data';
+import {createBankTransaction} from '../../data/bank-transaction.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson, mockJson} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const ID = '00000000-0000-4000-8000-000000000851';
 const OLDER_ID = '00000000-0000-4000-8000-000000000852';
-const transaction: BankTransaction = {
+const transaction: BankTransaction = createBankTransaction({
   id: ID,
   displayDescription: 'Example Subscription',
   description: 'EXAMPLE SUBSCRIPTION PAYMENT REFERENCE 0042',
@@ -21,39 +23,16 @@ const transaction: BankTransaction = {
   direction: 'EXPENSE',
   transactionType: 'CARD_PAYMENT',
   transactionStatus: 'BOOK',
-  providerTransactionDescription: null,
-  merchantCategoryCode: null,
-  remittanceInformation: null,
-  balanceAfterAmount: null,
-  balanceAfterCurrency: null,
-  instructedAmount: null,
-  instructedCurrency: null,
-  exchangeRate: null,
-  exchangeRateUnitCurrency: null,
-  exchangeRateType: null,
   referenceNumber: 'EXAMPLE-0042',
-  referenceNumberScheme: null,
   bankName: 'Example Bank',
   bankCountry: 'NL',
   bankAccountName: 'Everyday',
-  bankAccountAlias: null,
   category: 'SUBSCRIPTIONS',
   categoryStatus: 'COMPLETED',
   categorySource: 'AI',
   categoryConfidence: null,
-  financialEventType: null,
-  financialEventSource: null,
-  financialEventRuleVersion: null,
   cashFlowTreatment: 'EXPENSE',
-  merchantLogoUrl: null,
-  merchantGroupId: null,
-  ownTransfer: null,
-  ownTransferOverride: null,
-  currencyExchangeCounterpart: null,
-  amountInBaseCurrency: null,
-  baseAmountMethod: null,
-  baseAmountRateDate: null,
-};
+});
 const series: BankTransactionRecurring = {
   key: 'a'.repeat(32),
   cadence: 'MONTHLY',
@@ -85,12 +64,15 @@ const series: BankTransactionRecurring = {
 };
 
 async function mockDetails(page: Page) {
-  await mockJson(page, '**/accounts/me', {
-    id: '00000000-0000-4000-8000-000000000850',
-    name: 'Example Owner',
-    email: 'user@example.com',
-    isEmailVerified: true,
-  });
+  await mockJson(
+    page,
+    '**/accounts/me',
+    createAccount({
+      id: '00000000-0000-4000-8000-000000000850',
+      name: 'Example Owner',
+      email: 'user@example.com',
+    }),
+  );
   await page.route('**/bank-transactions?**', (route) =>
     route.request().isNavigationRequest()
       ? route.continue()

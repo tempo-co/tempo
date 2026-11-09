@@ -1,11 +1,11 @@
+import {createAccount} from '../../data/account.data';
 import {expect, test} from '../../fixtures';
 
-const account = {
+const account = createAccount({
   id: '00000000-0000-4000-8000-000000000001',
   name: 'Alex Example',
   email: 'alex@example.com',
-  isEmailVerified: true,
-};
+});
 
 const session = (id: string, isCurrent: boolean) => ({
   id,

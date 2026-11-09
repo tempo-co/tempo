@@ -1,6 +1,8 @@
 import type {BankTransaction, BankTransactionCounterpart} from '@tempo/contracts';
 
 import {formatBankTransactionExchangeRate} from '../../../src/features/banking/utils/formatters';
+import {createAccount} from '../../data/account.data';
+import {createBankTransaction} from '../../data/bank-transaction.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {mockBankConnections, mockBankRefresh, mockJson} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
@@ -13,7 +15,7 @@ const logo = (color: string) =>
     `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="${color}"/></svg>`,
   );
 const logos = {Alpha: logo('#808080'), Beta: logo('#4080c0')};
-const outgoing: BankTransaction = {
+const outgoing: BankTransaction = createBankTransaction({
   id: OUT,
   transactionDate: '2026-10-14',
   bookingDate: '2026-10-14',
@@ -21,8 +23,6 @@ const outgoing: BankTransaction = {
   description: 'Example account movement',
   displayDescription: 'Example account movement',
   counterpartyName: null,
-  merchantLogoUrl: null,
-  merchantGroupId: null,
   amount: '-80.00',
   currency: 'EUR',
   creditDebitIndicator: 'DBIT',
@@ -34,32 +34,15 @@ const outgoing: BankTransaction = {
   categorySource: null,
   categoryConfidence: null,
   financialEventType: null,
-  financialEventSource: null,
-  financialEventRuleVersion: null,
   cashFlowTreatment: 'INTERNAL',
   ownTransfer: null,
   ownTransferOverride: null,
   currencyExchangeCounterpart: null,
-  providerTransactionDescription: null,
-  merchantCategoryCode: null,
-  remittanceInformation: null,
-  balanceAfterAmount: null,
-  balanceAfterCurrency: null,
-  instructedAmount: null,
-  instructedCurrency: null,
-  exchangeRate: null,
-  exchangeRateUnitCurrency: null,
-  exchangeRateType: null,
-  referenceNumber: null,
-  referenceNumberScheme: null,
-  amountInBaseCurrency: null,
-  baseAmountMethod: null,
-  baseAmountRateDate: null,
   bankName: 'Example Alpha Bank',
   bankCountry: 'NL',
   bankAccountName: 'Example Owner',
   bankAccountAlias: 'Example international household spending account',
-};
+});
 
 function counterpart(transaction: BankTransaction): BankTransactionCounterpart {
   const {id, bankName, bankAccountName, bankAccountAlias, amount, currency, bookingDate} =
@@ -72,12 +55,15 @@ for (const width of [1440, 390, 320]) {
     test.describe(`${exchange ? 'exchange' : 'own transfer'} account context at ${width}px`, () => {
       test.use({storageState: {cookies: [], origins: []}, viewport: {width, height: 900}});
       test('aligns account facts and follows the linked leg', async ({page}) => {
-        await mockJson(page, '**/accounts/me', {
-          id: '00000000-0000-4000-8000-000000000900',
-          name: 'Example Owner',
-          email: 'movement@example.com',
-          isEmailVerified: true,
-        });
+        await mockJson(
+          page,
+          '**/accounts/me',
+          createAccount({
+            id: '00000000-0000-4000-8000-000000000900',
+            name: 'Example Owner',
+            email: 'movement@example.com',
+          }),
+        );
         await mockBankRefresh(page);
         await mockBankConnections(
           page,

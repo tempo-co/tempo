@@ -10,7 +10,8 @@ import {BankTransactionCategorizationService} from '@modules/banking/categorizat
 
 import {BankingFixtures, CURRENCY_EXCHANGE_EVENT, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {getApp} from '../../setup/e2e.setup';
-import {createVerifiedAccount, expectValidationMessage} from '../../utils/auth-utils';
+import {expectValidationMessage} from '../../utils/auth-utils';
+import {createBankingOwner} from '../../utils/banking-utils';
 
 const EXAMPLE_PAYEE = {description: 'Transfer to ALEX-SAM EXAMPLE', counterpartyName: null};
 const EXAMPLE_CAFE = {description: 'Example Cafe', counterpartyName: 'Example Cafe'};
@@ -34,19 +35,18 @@ describe('Bank transaction category impact', () => {
 
 	beforeAll(async () => {
 		app = getApp();
-		const httpServer = app.getHttpServer();
 		const config = app.get(ConfigurationService);
 		expect(config.get('AI_CATEGORIZATION_ENABLED')).toBe(false);
 		fixtures = new BankingFixtures(app);
 
-		const owner = await createVerifiedAccount(httpServer, config.get('EMAIL_UI_URL'));
-		const other = await createVerifiedAccount(httpServer, config.get('EMAIL_UI_URL'));
+		const owner = await createBankingOwner(app, {baseCurrency: null});
+		const other = await createBankingOwner(app, {baseCurrency: null});
 		ownerAgent = owner.agent;
-		ownerId = owner.id;
+		ownerId = owner.owner.id;
 		otherAgent = other.agent;
 
-		const ownerAccount = await fixtures.createBankAccount(await fixtures.createConnection({id: owner.id}));
-		const otherAccount = await fixtures.createBankAccount(await fixtures.createConnection({id: other.id}));
+		const ownerAccount = owner.bankAccount;
+		const otherAccount = other.bankAccount;
 
 		const create = fixtures.createTransaction.bind(fixtures);
 		rows = {

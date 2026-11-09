@@ -1,33 +1,29 @@
-import {PW_CHANGE_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
-import {PW_CHANGE_ACCOUNT_EMAIL, PW_CHANGE_ACCOUNT_PASSWORD} from '../../constants/seed.constants';
 import {expect, test} from '../../fixtures';
 
-test.use({storageState: PW_CHANGE_USER_AUTH_FILE});
-
 test.describe('Account Settings: Password change', () => {
-  test.beforeEach(async ({securitySettingsPage}) => {
+  test.beforeEach(async ({freshAccount, securitySettingsPage, homePage}) => {
     await securitySettingsPage.navigate();
+    await expect(homePage.accountEmail).toHaveText(freshAccount.email);
   });
 
   test('should change password successfully', async ({
+    freshAccount,
     securitySettingsPage,
     homePage,
     loginPage,
   }) => {
     const newPassword = 'newSecurePassword123';
-    await securitySettingsPage.changePassword(PW_CHANGE_ACCOUNT_PASSWORD, newPassword);
+    await securitySettingsPage.changePassword(freshAccount.password, newPassword);
     await expect(securitySettingsPage.passwordChangedSuccessToast).toBeVisible();
 
     await homePage.logOut();
     await loginPage.expectToBeOnPage();
 
-    await loginPage.login(PW_CHANGE_ACCOUNT_EMAIL, newPassword);
+    await loginPage.login(freshAccount.email, newPassword);
     await homePage.expectToBeOnPage();
   });
 
   test.describe('Validation errors', () => {
-    test.use({storageState: VERIFIED_USER_AUTH_FILE});
-
     for (const {name, current, next, error} of [
       {
         name: 'incorrect current password',
@@ -43,19 +39,19 @@ test.describe('Account Settings: Password change', () => {
       },
       {
         name: 'empty new password',
-        current: PW_CHANGE_ACCOUNT_PASSWORD,
+        current: null,
         next: '',
         error: 'requiredError',
       },
       {
         name: 'new password being too short',
-        current: PW_CHANGE_ACCOUNT_PASSWORD,
+        current: null,
         next: '123',
         error: 'passwordTooShortError',
       },
     ] as const) {
-      test(`should show error for ${name}`, async ({securitySettingsPage}) => {
-        await securitySettingsPage.changePassword(current, next);
+      test(`should show error for ${name}`, async ({freshAccount, securitySettingsPage}) => {
+        await securitySettingsPage.changePassword(current ?? freshAccount.password, next);
         await expect(securitySettingsPage[error]).toBeVisible();
       });
     }

@@ -1,13 +1,13 @@
+import {createAccount} from '../../data/account.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {createHookHarness} from '../../utils/hook-harness';
 import {boxOf, expectEvenRowActionSpacing, expectNoHorizontalOverflow} from '../../utils/layout';
 
-const account = {
+const account = createAccount({
   id: '00000000-0000-4000-8000-000000000001',
   name: 'Alex Example',
   email: 'alex@example.com',
-  isEmailVerified: true,
-};
+});
 const tokenMetadata = {
   id: '00000000-0000-4000-8000-000000000002',
   name: 'Example integration',
@@ -234,10 +234,12 @@ for (const width of [1440, 320]) {
     await expect(details).toBeVisible();
     if (width < 768) {
       await expect(details).toHaveAttribute('data-vaul-drawer', '');
-      await expect.poll(async () => {
-        const box = await details.boundingBox();
-        return box !== null && Math.abs(box.y + box.height - 900) <= 1;
-      }).toBe(true);
+      await expect
+        .poll(async () => {
+          const box = await details.boundingBox();
+          return box !== null && Math.abs(box.y + box.height - 900) <= 1;
+        })
+        .toBe(true);
     }
     await expect(details.locator('dt')).toHaveText([
       'Token prefix',
@@ -448,7 +450,9 @@ test('retries a failed list load and retains a token until revocation succeeds',
     .poll(() => expiredDetails.evaluate((element) => element.scrollTop))
     .toBeGreaterThan(0);
   await expect(expiredDetails.getByRole('button', {name: /^Revoke /})).toBeInViewport({ratio: 1});
-  await expect(expiredDetails.getByRole('button', {name: 'Close', exact: true})).toBeInViewport({ratio: 1});
+  await expect(expiredDetails.getByRole('button', {name: 'Close', exact: true})).toBeInViewport({
+    ratio: 1,
+  });
   await page.keyboard.press('Escape');
   await expect(expiredDetails).toBeHidden();
   await page.setViewportSize({width: 320, height: 900});

@@ -7,6 +7,8 @@ import type {
   MerchantRanking,
 } from '@tempo/contracts';
 
+import {createAccount} from '../../data/account.data';
+import {createBankTransaction} from '../../data/bank-transaction.data';
 import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
@@ -210,14 +212,13 @@ const burgerPeriods = (interval: MerchantGroupPeriods['interval']): MerchantGrou
 });
 
 function burgerTransaction(index: number, fields: Partial<BankTransaction> = {}): BankTransaction {
-  return {
+  return createBankTransaction({
     id: `00000000-0000-4000-8000-${String(900 + index).padStart(12, '0')}`,
     transactionDate: `2026-10-1${index}`,
     bookingDate: `2026-10-1${index}`,
     valueDate: `2026-10-1${index}`,
     description: `Example Burger NL ${index}`,
     displayDescription: 'Example Burger NL',
-    merchantLogoUrl: null,
     merchantGroupId: BRAND,
     counterpartyName: null,
     amount: '-8.00',
@@ -229,45 +230,29 @@ function burgerTransaction(index: number, fields: Partial<BankTransaction> = {})
     category: 'FOOD_AND_DRINK',
     categoryStatus: 'COMPLETED',
     categorySource: 'AI',
-    financialEventType: null,
-    financialEventSource: null,
-    financialEventRuleVersion: null,
     cashFlowTreatment: 'EXPENSE',
-    ownTransfer: null,
-    ownTransferOverride: null,
-    currencyExchangeCounterpart: null,
     categoryConfidence: null,
-    providerTransactionDescription: null,
-    merchantCategoryCode: null,
-    remittanceInformation: null,
-    balanceAfterAmount: null,
-    balanceAfterCurrency: null,
-    instructedAmount: null,
-    instructedCurrency: null,
-    exchangeRate: null,
-    exchangeRateUnitCurrency: null,
-    exchangeRateType: null,
     amountInBaseCurrency: '-8.00',
     baseAmountMethod: 'SAME',
-    baseAmountRateDate: null,
-    referenceNumber: null,
-    referenceNumberScheme: null,
     bankName: 'Example Bank',
     bankCountry: 'NL',
     bankAccountName: 'Example Account Holder',
     bankAccountAlias: 'Example spending account',
     ...fields,
-  };
+  });
 }
 
 async function mockSignedIn(page: Page) {
   await page.clock.setFixedTime(new Date('2026-10-18T12:00:00+02:00'));
-  await mockJson(page, '**/accounts/me', {
-    id: '00000000-0000-4000-8000-000000000001',
-    name: 'Example Owner',
-    email: 'merchants@example.com',
-    isEmailVerified: true,
-  });
+  await mockJson(
+    page,
+    '**/accounts/me',
+    createAccount({
+      id: '00000000-0000-4000-8000-000000000001',
+      name: 'Example Owner',
+      email: 'merchants@example.com',
+    }),
+  );
   await mockBankRefresh(page);
   await mockJson(page, '**/bank-connections/aspsps', []);
   await mockBankConnections(page, [

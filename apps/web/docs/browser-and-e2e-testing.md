@@ -31,6 +31,27 @@ A mocked spec is a UI integration test, not full-stack coverage. Report it separ
 - Parallel Playwright runs in one checkout overwrite `test-results/` and `playwright-report/`. Give each run its own `--output` directory and `PLAYWRIGHT_HTML_OUTPUT_DIR`.
 - Stop a background preview by PID or port. `pkill -f "<command line>"` also matches the shell running it.
 
+## Reusing fixtures
+
+- Use `freshAccount` from `test/fixtures.ts` when a test changes account data or sessions. Read-only banking journeys can use seeded storage state; password changes and session revocation must not invalidate an identity another test or browser project reuses. Request `freshAccount` in the setup hook before navigating.
+- Mocked HTTP response builders live in `test/data`: `createAccount` in `account.data.ts` and `createBankTransaction` in `bank-transaction.data.ts`. Each returns a fresh object typed against `@tempo/contracts`. They supply required fields; the spec supplies the values that explain its scenario.
+
+```ts
+import {createBankTransaction} from '../../data/bank-transaction.data';
+
+const transaction = createBankTransaction({
+  id: '00000000-0000-4000-8000-000000000201',
+  displayDescription: 'Example subscription',
+  transactionDate: '2026-09-10',
+  amount: '-12.00',
+  category: 'SUBSCRIPTIONS',
+});
+```
+
+- Keep meaningful dates, amounts, category states, conversion evidence and linked identities explicit. A small local `payment` or logo-row wrapper can express a scenario on top of the shared shape.
+- Reuse existing helpers before adding another. Keep one-spec mechanics local; share them when real callers need the same contract. Keep actions and expected outcomes in the spec rather than hiding a whole journey in a helper.
+- Do not cast incomplete responses to a contract type or share a mutable fixture between tests. Do not use API entity factories or full database seeds to construct HTTP mocks: they represent different boundaries.
+
 ## Fixtures and RED runs
 
 - A spec fixture that uses a field the client type lacks (`satisfies <Type>`) is a compile error, so the RED run fails on the build instead of on behaviour. Add the type field first, then run RED.
