@@ -190,6 +190,8 @@ for (const width of [1000, 1024, 1440]) {
     page,
     homePage,
   }) => {
+    // Ten span switches over two histories: WebKit on CI already took over 9s of the default 10s.
+    test.setTimeout(30_000);
     await page.setViewportSize({width, height: 1000});
     for (const [name, history] of [
       ['demo', homeHistory],
