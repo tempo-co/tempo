@@ -428,15 +428,17 @@ export function homeRecurring() {
     latestAmount: amount,
     monthlyEquivalent: amount,
     nextExpectedDate: '2026-12-01',
+    anchorDay: 1,
     ...extra,
   });
   const expenses = [
     series(RENT_KEY, 'Example Landlord', '1200.00', {nextExpectedDate: '2026-12-01'}),
     series(ENERGY_KEY, 'Example Energy', '35.00', {
       nextExpectedDate: '2026-11-03',
+      anchorDay: 3,
       flags: ['LATE'],
     }),
-    series(PHONE_KEY, 'Example Mobile', '15.00', {nextExpectedDate: '2026-11-14'}),
+    series(PHONE_KEY, 'Example Mobile', '15.00', {nextExpectedDate: '2026-11-14', anchorDay: 14}),
   ];
   const lists: RecurringSeriesLists = {
     expenses: {
