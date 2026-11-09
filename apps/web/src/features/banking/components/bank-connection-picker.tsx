@@ -205,7 +205,7 @@ function BankStep({
         value={query}
         onChange={setQuery}
         label={`Search banks in ${country.label}`}
-        placeholder={`Search ${banks.length} banks`}
+        placeholder={`Search ${countOf(banks.length, 'bank', 'banks')}`}
       />
       <List empty={shown.length === 0 ? `No bank called “${query}” in ${country.label}` : null}>
         {shown.map((bank) => (
@@ -239,7 +239,7 @@ function CountryStep({
         value={query}
         onChange={setQuery}
         label='Search countries'
-        placeholder={`Search ${countries.length} countries`}
+        placeholder={`Search ${countOf(countries.length, 'country', 'countries')}`}
       />
       <List empty={shown.length === 0 ? `No country called “${query}”` : null}>
         {shown.map((country) => (
@@ -253,7 +253,7 @@ function CountryStep({
               <CountryTile code={country.code} />
               <span className='min-w-0 truncate text-sm'>{country.label}</span>
               <span className='numeric text-xs text-muted-foreground'>
-                {country.bankCount} {country.bankCount === 1 ? 'bank' : 'banks'}
+                {countOf(country.bankCount, 'bank', 'banks')}
               </span>
             </button>
           </li>
@@ -300,6 +300,9 @@ function ConfirmStep({
     </div>
   );
 }
+
+const countOf = (count: number, one: string, many: string) =>
+  `${count} ${count === 1 ? one : many}`;
 
 function SearchField({
   value,
