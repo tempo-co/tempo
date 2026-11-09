@@ -2,7 +2,7 @@ import {InjectQueue} from '@nestjs/bullmq';
 import {Injectable, Logger, OnModuleInit} from '@nestjs/common';
 import {InjectDataSource} from '@nestjs/typeorm';
 import {Queue} from 'bullmq';
-import {DataSource, QueryDeepPartialEntity} from 'typeorm';
+import {DataSource, EntityManager, QueryDeepPartialEntity} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {createWebUrl} from '@core/config/web-url';
@@ -14,6 +14,7 @@ import {
 	SCAN_BANK_CONNECTION_ALERTS_JOB,
 } from '@core/queue/queue.constants';
 import {Account} from '@modules/account/account.entity';
+import {PushNotificationService} from '@modules/notifications/push-notification.service';
 
 import {BankConnection} from '../bank-connection.entity';
 import {BankSyncRun} from '../bank-sync-run.entity';
@@ -51,6 +52,7 @@ export class BankConnectionAlertService implements OnModuleInit {
 		@InjectQueue(BANK_CONNECTION_ALERT_QUEUE) private readonly queue: Queue,
 		private readonly emailService: EmailService,
 		private readonly configurationService: ConfigurationService,
+		private readonly pushNotificationService: PushNotificationService,
 	) {}
 
 	isEnabled(): boolean {
@@ -72,7 +74,7 @@ export class BankConnectionAlertService implements OnModuleInit {
 		);
 	}
 
-	/** Emails each verified owner about connections whose consent is ending or that stopped syncing. */
+	/** Emails and pushes each verified owner about connections whose consent is ending or that stopped syncing. */
 	async scan(now = new Date()): Promise<number> {
 		if (!this.isEnabled()) return 0;
 
@@ -106,34 +108,21 @@ export class BankConnectionAlertService implements OnModuleInit {
 	}
 
 	/**
-	 * Re-reads the connection under a row lock, records one alert as sent and queues its email in one transaction:
-	 * concurrent scans and syncs wait for the marker, and a failed enqueue rolls back only this alert's marker.
+	 * Re-reads the connection under a row lock, records one alert as sent and queues its email and push in one
+	 * transaction: concurrent scans and syncs wait for the marker, and a failed enqueue rolls back only this alert's
+	 * marker. Both jobs are keyed by the episode, so the retry queues neither twice.
 	 */
 	private sendAlert(connectionId: string, alert: BankConnectionAlert, now: Date): Promise<boolean> {
 		return this.dataSource.transaction(async (manager) => {
-			const storedConnection = await manager.getRepository(BankConnection).findOne({
-				where: {id: connectionId},
-				lock: {mode: 'pessimistic_write'},
-			});
-			if (!storedConnection) return false;
-			// lastSyncedAt also advances for PARTIAL runs that may not have fetched any bank data.
-			const lastSuccess = await manager
-				.getRepository(BankSyncRun)
-				.createQueryBuilder('run')
-				.select('MAX(run.finishedAt)', 'lastSuccessfulSyncAt')
-				.where('run.bankConnectionId = :connectionId', {connectionId})
-				.andWhere('run.status = :status', {status: BANK_SYNC_STATUSES.SUCCEEDED})
-				.getRawOne<{lastSuccessfulSyncAt: Date | null}>();
-			const connection = {...storedConnection, lastSuccessfulSyncAt: lastSuccess?.lastSuccessfulSyncAt ?? null};
+			const connection = await this.readAlertState(manager, {id: connectionId}, true);
+			if (!connection) return false;
 			if (!getDueBankConnectionAlerts(connection, now).includes(alert)) return false;
 
 			const account = await manager.getRepository(Account).findOneBy({id: connection.accountId});
 			if (!account?.isEmailVerified) return false;
 
 			const isSyncAlert = alert === BANK_CONNECTION_ALERTS.SYNC_BROKEN;
-			const episode = isSyncAlert
-				? (connection.lastSuccessfulSyncAt ?? connection.createdAt)
-				: (connection.consentValidUntil as Date);
+			const episode = alertEpisode(connection, alert);
 			await manager
 				.createQueryBuilder()
 				.update(BankConnection)
@@ -142,8 +131,54 @@ export class BankConnectionAlertService implements OnModuleInit {
 				.execute();
 			const jobId = `bank-alert-${connection.id}-${alert}-${episode.getTime()}`;
 			await this.emailService.send(this.buildEmail(alert, connection, account), account.id, jobId);
+			await this.pushNotificationService.queueAlert(
+				{
+					accountId: account.id,
+					alert: {alert, connectionId: connection.id, episode: episode.toISOString()},
+				},
+				`push-${jobId}`,
+				now,
+			);
 			return true;
 		});
+	}
+
+	/**
+	 * Whether an alert raised earlier still applies at `now`: the owner's connection is in the same episode and the
+	 * alert would be due if it had not been sent. A reauthorization or successful sync since then ends it.
+	 */
+	async isStillDue(
+		accountId: Account['id'],
+		connectionId: BankConnection['id'],
+		alert: BankConnectionAlert,
+		episode: Date,
+		now = new Date(),
+	): Promise<boolean> {
+		const connection = await this.readAlertState(this.dataSource.manager, {id: connectionId, accountId}, false);
+		if (!connection || alertEpisode(connection, alert).getTime() !== episode.getTime()) return false;
+		const unsent = {...connection, consentExpiringAlertFor: null, consentFinalAlertFor: null, syncAlertFor: null};
+		return getDueBankConnectionAlerts(unsent, now).includes(alert);
+	}
+
+	private async readAlertState(
+		manager: EntityManager,
+		where: Pick<BankConnection, 'id'> & Partial<Pick<BankConnection, 'accountId'>>,
+		lock: boolean,
+	): Promise<(BankConnection & Pick<BankConnectionAlertState, 'lastSuccessfulSyncAt'>) | null> {
+		const storedConnection = await manager.getRepository(BankConnection).findOne({
+			where,
+			...(lock ? {lock: {mode: 'pessimistic_write' as const}} : {}),
+		});
+		if (!storedConnection) return null;
+		// lastSyncedAt also advances for PARTIAL runs that may not have fetched any bank data.
+		const lastSuccess = await manager
+			.getRepository(BankSyncRun)
+			.createQueryBuilder('run')
+			.select('MAX(run.finishedAt)', 'lastSuccessfulSyncAt')
+			.where('run.bankConnectionId = :connectionId', {connectionId: storedConnection.id})
+			.andWhere('run.status = :status', {status: BANK_SYNC_STATUSES.SUCCEEDED})
+			.getRawOne<{lastSuccessfulSyncAt: Date | null}>();
+		return {...storedConnection, lastSuccessfulSyncAt: lastSuccess?.lastSuccessfulSyncAt ?? null};
 	}
 
 	private buildEmail(
@@ -198,6 +233,16 @@ export class BankConnectionAlertService implements OnModuleInit {
 		}
 		return 'Recent sync attempts did not succeed.';
 	}
+}
+
+/** The marker value an alert is raised for: the consent end date, or the last success (creation if none). */
+function alertEpisode(
+	connection: Pick<BankConnectionAlertState, 'consentValidUntil' | 'createdAt' | 'lastSuccessfulSyncAt'>,
+	alert: BankConnectionAlert,
+): Date {
+	return alert === BANK_CONNECTION_ALERTS.SYNC_BROKEN
+		? (connection.lastSuccessfulSyncAt ?? connection.createdAt)
+		: (connection.consentValidUntil as Date);
 }
 
 function formatDateTime(value: Date): string {

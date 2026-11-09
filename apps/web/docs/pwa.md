@@ -14,6 +14,15 @@ The build emits `manifest.webmanifest` from `pwaManifestPlugin` in `vite.config.
 
 A new file in `public/` that the app needs offline must be added to `config/app-icons.ts` or matched by the asset filter in `config/offline-shell.ts`.
 
+## Push alerts and the app badge
+
+`sw.js` also handles `push` and `notificationclick`. A push carries `{title, body, url, tag, badge}`: the worker shows the notification, sets or clears the app badge from `badge`, and a click navigates an open Tempo window to `url` (or opens one). Only URLs on this origin under the base path open; anything else opens the start page.
+
+- Settings → Account → Notifications asks for permission only from its Allow notifications button; browsers refuse a prompt that no click started. `src/features/notifications/utils/push-device.ts` decides what the device supports: iPhone and iPad need a Home Screen app on iOS 16.4 or later, and Android asks for the installed app.
+- While Tempo is open, the badge is the review-counts `needsAttention` (the Transactions tab's count) and clears at sign-out. The Badging API exists in installed desktop Chrome and Edge and in iOS Home Screen apps with notification permission; Android Chrome has none.
+- Logging out unsubscribes the browser; the API also removes that session's subscriptions. A browser that is still subscribed registers itself with the session again when Tempo opens, so a session that expired does not end its alerts.
+- `test/e2e/settings/notification-alerts.spec.ts` drives the worker through Chromium DevTools in full Chromium (the headless shell denies notifications); WebKit skips it.
+
 ## Verifying a served build
 
 Check the served URLs, not the source:
@@ -30,4 +39,5 @@ An installed shortcut keeps the old manifest's identity; remove it and install a
 CI runs Chromium only (`playwright.config.ts` has one `chromium` project), so iOS behaviour is untested. Known gaps:
 
 - `env(safe-area-inset-*)` is 0 unless the viewport meta has `viewport-fit=cover`; `index.html` does not set it.
+- Push and the app badge need the Home Screen app, notification permission and iOS 16.4 or later; check them on a device.
 - Installed web apps on iOS do not capture links. A bank login that hands off to another app usually returns to Safari, which has its own cookie jar. The API's bank callback is public and state-based, so the connection is saved, but Safari then shows the login page; reopen the home-screen app.

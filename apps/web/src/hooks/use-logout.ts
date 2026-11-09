@@ -1,6 +1,7 @@
 import {useMutation} from '@tanstack/react-query';
 import {toast} from 'sonner';
 
+import {unsubscribeDevice} from '@/features/notifications/utils/push-device';
 import {signOut} from '@/query-client';
 import {beginLogout, completePendingLogout} from '@/utils/api';
 
@@ -15,8 +16,11 @@ export const useLogOut = () => {
       } catch {
         return false;
       } finally {
-        // Private data leaves this device even when the server cannot confirm the logout.
+        // Private data leaves this device even when the server cannot confirm the logout, and its alerts stop.
         signOut();
+        void unsubscribeDevice().catch(() => {
+          /* Tempo stops pushing to a logged-out session anyway. */
+        });
       }
     },
     onSuccess: (confirmed) => {

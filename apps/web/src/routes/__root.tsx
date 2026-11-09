@@ -3,6 +3,7 @@ import {TanStackRouterDevtools} from '@tanstack/router-devtools';
 
 import {AppHeader} from '@/components/shared/layout/app-header';
 import {AppTabBar} from '@/components/shared/layout/app-nav';
+import {DeviceAlerts} from '@/features/notifications/components/device-alerts';
 
 export const Route = createRootRouteWithContext<{
   isAuthenticated: boolean;
@@ -33,6 +34,7 @@ function Root() {
         <Outlet />
       </main>
       <AppTabBar />
+      <DeviceAlerts />
       {import.meta.env.DEV && <TanStackRouterDevtools position='bottom-right' />}
     </>
   );

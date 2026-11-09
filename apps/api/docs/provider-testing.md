@@ -1,6 +1,6 @@
 # Testing external providers
 
-Enable Banking and Claude are paid, credentialed or privacy-sensitive. Automated tests never reach them.
+Enable Banking, Claude and the browsers' push services are paid, credentialed or privacy-sensitive. Automated tests never reach them; push specs opt in with `enableWebPushE2e()` (throwaway VAPID keys) and replace `WebPushSender.send`.
 
 ## Rules
 

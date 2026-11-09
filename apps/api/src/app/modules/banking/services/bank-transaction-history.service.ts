@@ -14,9 +14,8 @@ import {Account} from '@modules/account/account.entity';
 import {BANKING_TRANSACTION_BREAKDOWN_RANGE} from '../api/constants/banking-messages.constants';
 import type {BankTransactionBreakdownQueryDto} from '../api/dtos/bank-transaction-breakdown-query.dto';
 import {BankTransaction} from '../bank-transaction.entity';
-import {addDays} from '../banking.utils';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
-import {formatCents, nextPeriodStart, parseCents, periodStarts} from '../summary/bank-transaction-summary';
+import {formatCents, parseCents, periodStarts, periodWindows} from '../summary/bank-transaction-summary';
 import {
 	SQL_BASE_AMOUNT,
 	SQL_INCOME_SOURCE,
@@ -96,30 +95,32 @@ export class BankTransactionHistoryService {
 		}
 		const labelByKey = new Map(sources.map((row) => [row.key, row.label]));
 
-		const periods: BankTransactionBreakdownPeriod[] = [];
-		for (const start of starts) {
-			const periodEnd = addDays(nextPeriodStart(start, interval), -1);
-			if (!firstBookingDate || periodEnd < firstBookingDate) continue;
-			const periodParts = (partsByStart.get(start) ?? [])
-				.map((row) => ({key: row.key, cents: sign * parseCents(row.amount)}))
-				.filter((part) => part.cents !== 0n)
-				.sort((left, right) =>
-					left.cents !== right.cents ? (left.cents > right.cents ? -1 : 1) : left.key < right.key ? -1 : 1,
-				);
-			periods.push({
-				start,
-				end: periodEnd < to ? periodEnd : to,
-				// As in cash flow: a period that ends today is still running; one cut by where history starts is partial.
-				complete: periodEnd < asOf && periodEnd <= to && start >= firstBookingDate,
-				total: formatCents(totalByStart.get(start) ?? 0n),
-				parts: periodParts.map((part) => ({
-					key: part.key,
-					label: labelByKey.get(part.key) ?? part.key,
-					amount: formatCents(part.cents),
-					...looks.get(part.key),
-				})),
-			});
-		}
+		const periods = periodWindows(interval, starts, to, asOf, firstBookingDate).map(
+			(window): BankTransactionBreakdownPeriod => {
+				const periodParts = (partsByStart.get(window.start) ?? [])
+					.map((row) => ({key: row.key, cents: sign * parseCents(row.amount)}))
+					.filter((part) => part.cents !== 0n)
+					.sort((left, right) =>
+						left.cents !== right.cents
+							? left.cents > right.cents
+								? -1
+								: 1
+							: left.key < right.key
+								? -1
+								: 1,
+					);
+				return {
+					...window,
+					total: formatCents(totalByStart.get(window.start) ?? 0n),
+					parts: periodParts.map((part) => ({
+						key: part.key,
+						label: labelByKey.get(part.key) ?? part.key,
+						amount: formatCents(part.cents),
+						...looks.get(part.key),
+					})),
+				};
+			},
+		);
 		return {baseCurrency, interval, by, periods};
 	}
 

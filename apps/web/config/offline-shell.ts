@@ -54,6 +54,50 @@ self.addEventListener('activate', (event) => {
     await self.clients.claim();
   })());
 });
+// The app icon shows how many transactions need review; browsers without the Badging API ignore it.
+async function setBadge(count) {
+  try {
+    if (count > 0) await self.navigator.setAppBadge?.(count);
+    else await self.navigator.clearAppBadge?.();
+  } catch { /* Badging is best effort. */ }
+}
+// Only Tempo's own pages open from a notification.
+function appUrl(url) {
+  try {
+    const target = new URL(url, self.location.origin);
+    if (target.origin === self.location.origin && target.pathname.startsWith(BASE)) return target.href;
+  } catch { /* Fall back to the app's start page. */ }
+  return new URL(BASE, self.location.origin).href;
+}
+self.addEventListener('push', (event) => {
+  let alert = {};
+  try { alert = event.data ? event.data.json() : {}; } catch { /* Show the plain alert. */ }
+  event.waitUntil(Promise.all([
+    typeof alert.badge === 'number' ? setBadge(alert.badge) : undefined,
+    self.registration.showNotification(alert.title || 'Tempo', {
+      body: alert.body || '',
+      tag: alert.tag,
+      icon: BASE + 'pwa-icon-192.png',
+      data: {url: appUrl(alert.url || BASE)},
+    }),
+  ]));
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = appUrl(event.notification.data?.url || BASE);
+  const open = (async () => {
+    const windows = await self.clients.matchAll({type: 'window'});
+    const client = windows.find((window) => new URL(window.url).pathname.startsWith(BASE));
+    if (client) {
+      // Navigate first: focusing needs the click's user activation, navigating does not.
+      const navigated = await client.navigate(url).catch(() => null);
+      await (navigated || client).focus().catch(() => undefined);
+      if (navigated) return;
+    }
+    await self.clients.openWindow(url);
+  })();
+  event.waitUntil(open);
+});
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);

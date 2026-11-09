@@ -27,3 +27,6 @@ export const IDENTIFY_MERCHANTS_JOB = 'identify-merchants';
 export const FETCH_MERCHANT_LOGO_JOB = 'fetch-merchant-logo';
 export const RECONCILE_MERCHANT_LOGOS_JOB = 'reconcile-merchant-logos';
 export const MERCHANT_LOGO_RECONCILE_SCHEDULER_ID = 'merchant-logo-reconciler';
+
+export const PUSH_NOTIFICATION_QUEUE = 'push-notifications';
+export const DELIVER_PUSH_ALERT_JOB = 'deliver-push-alert';

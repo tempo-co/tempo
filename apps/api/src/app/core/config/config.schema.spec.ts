@@ -292,3 +292,29 @@ describe('banking integration configuration', () => {
 		).toThrow('Configure exactly one');
 	});
 });
+
+describe('web push configuration', () => {
+	const vapid = {
+		WEB_PUSH_VAPID_PUBLIC_KEY: 'test-public-key',
+		WEB_PUSH_VAPID_PRIVATE_KEY: 'test-private-key',
+		WEB_PUSH_VAPID_SUBJECT: 'mailto:push@example.test',
+	};
+
+	it('accepts no keys, which turns push off, or all three', () => {
+		expect(configSchema.parse(baseConfig).WEB_PUSH_VAPID_PUBLIC_KEY).toBeUndefined();
+		const empty = {WEB_PUSH_VAPID_PUBLIC_KEY: '', WEB_PUSH_VAPID_PRIVATE_KEY: '', WEB_PUSH_VAPID_SUBJECT: ''};
+		expect(configSchema.parse({...baseConfig, ...empty}).WEB_PUSH_VAPID_PUBLIC_KEY).toBeUndefined();
+		expect(configSchema.parse({...baseConfig, ...vapid})).toMatchObject(vapid);
+	});
+
+	it.each(Object.keys(vapid))('rejects the keys without %s', (missing) => {
+		const {[missing as keyof typeof vapid]: _omitted, ...partial} = vapid;
+		expect(configSchema.safeParse({...baseConfig, ...partial}).success).toBe(false);
+	});
+
+	it('rejects a contact that is not mailto: or https:', () => {
+		expect(
+			configSchema.safeParse({...baseConfig, ...vapid, WEB_PUSH_VAPID_SUBJECT: 'push@example.test'}).success,
+		).toBe(false);
+	});
+});

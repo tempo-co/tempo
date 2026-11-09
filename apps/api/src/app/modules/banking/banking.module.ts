@@ -11,9 +11,11 @@ import {
 import {RedisModule} from '@core/redis/redis.module';
 import {Account} from '@modules/account/account.entity';
 import {AccountModule} from '@modules/account/account.module';
+import {NotificationsModule} from '@modules/notifications/notifications.module';
 
 import {BankConnectionAlertProcessor} from './alerts/bank-connection-alert.processor';
 import {BankConnectionAlertService} from './alerts/bank-connection-alert.service';
+import {PushAlertProcessor} from './alerts/push-alert.processor';
 import {BankConnectionController} from './api/bank-connection.controller';
 import {BankTransactionController} from './api/bank-transaction.controller';
 import {McpController} from './api/mcp.controller';
@@ -74,6 +76,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankingAuthorizationStateModule,
 		BankTransactionCategorizationModule,
 		MerchantLogoModule,
+		NotificationsModule,
 	],
 	providers: [
 		BankingService,
@@ -96,6 +99,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		CurrencyExchangeService,
 		BankConnectionAlertService,
 		BankConnectionAlertProcessor,
+		PushAlertProcessor,
 		RecurringSeriesService,
 	],
 	controllers: [
