@@ -189,12 +189,12 @@ product per theme.
 | Token | Hex | Role |
 |---|---|---|
 | Ink | `#28252B` | High-emphasis text and logo tile (light theme foreground) |
-| Clay | `#BD654B` | Logo crossbar, large accent areas |
-| Clay strong | `#8F4032` | Small accent text, controls, focus ring on light (`--primary` in light) |
-| Paper | `#F6F1E8` | Light canvas, logo stem |
+| Clay | `#BD654B` | Logo shadowed facets, large accent areas |
+| Clay strong | `#8F4032` | Small accent text, controls, focus ring on light (`--primary` in light), logo deep facets |
+| Paper | `#F6F1E8` | Light canvas, logo gem highlight |
 | Fold shadow | `#D9D2C6` | Quiet supporting planes and borders only — never a drop shadow |
 | Night | `#17161B` | Dark canvas |
-| Clay on dark | `#E59A7B` | Accent plane, links, controls on dark (`--primary` in dark) |
+| Clay on dark | `#E59A7B` | Accent plane, links, controls on dark (`--primary` in dark), logo lit facets |
 
 Clay (mid tone) is for planes and large accents, never the default small-text color on light;
 use Clay strong there. Clay strong on Paper and Clay on dark on Night both clear WCAG AA for
@@ -291,13 +291,15 @@ consistent within a component family.
 
 ## Logo
 
-The logo is the icon-only Tempo mark in `src/assets/logo.tsx`: an italic T whose clay crossbar
-sweeps up from a tapered left tip over a paper stem that leans about 16° and flares into a flat
-foot, on an Ink tile. On a 24-unit grid the tile is 19×19 with radius 4.16, and the two pieces are
-separate flat shapes with an Ink gap between them. It is flat: no gradients, shadows or outlines,
+The logo is the icon-only Tempo mark in `src/assets/logo.tsx`: a faceted crown with three points
+over a band, a small cut gem set in an Ink diamond at its centre, on an Ink tile. The crown is
+straight-edged flat planes lit from the upper left: Clay on dark (`#E59A7B`) on lit faces, Clay on
+shadowed faces, Clay strong (`#8F4032`) on the deepest faces and the band's underside, and one
+Paper facet on the gem. On a 24-unit grid the tile is 19×19 with radius 4.16. The layers paint over
+a Clay strong underlay so facet joins never show the tile. It is flat: no gradients, shadows or outlines,
 and the tile is the same in light and dark themes. Do not add text to the mark, recolor it per
 theme, or decorate it. Every icon uses the same drawing: the PWA icons on the inset tile;
-`favicon.svg` and the 16–48 px favicons on a larger 23-unit tab tile so both pieces survive at
+`favicon.svg` and the 16–48 px favicons on a larger 23-unit tab tile so the crown still reads at
 16 px; `apple-touch-icon` and the maskable icons full-bleed, with the maskable glyph kept inside
 the 40% safe circle. All icons live under `public/` with
 `manifest.webmanifest`; see `index.html` for the wiring.
