@@ -190,11 +190,11 @@ product per theme.
 |---|---|---|
 | Ink | `#28252B` | High-emphasis text and logo tile (light theme foreground) |
 | Clay | `#BD654B` | Logo shadowed facets, large accent areas |
-| Clay strong | `#8F4032` | Small accent text, controls, focus ring on light (`--primary` in light) |
+| Clay strong | `#8F4032` | Small accent text, controls, focus ring on light (`--primary` in light), logo deep facets |
 | Paper | `#F6F1E8` | Light canvas, logo gem highlight |
 | Fold shadow | `#D9D2C6` | Quiet supporting planes and borders only — never a drop shadow |
 | Night | `#17161B` | Dark canvas |
-| Clay on dark | `#E59A7B` | Accent plane, links, controls on dark (`--primary` in dark) |
+| Clay on dark | `#E59A7B` | Accent plane, links, controls on dark (`--primary` in dark), logo lit facets |
 
 Clay (mid tone) is for planes and large accents, never the default small-text color on light;
 use Clay strong there. Clay strong on Paper and Clay on dark on Night both clear WCAG AA for
