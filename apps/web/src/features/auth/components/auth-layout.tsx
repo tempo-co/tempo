@@ -42,7 +42,7 @@ export function AuthLayout({title, children, disabledLogoLink = false}: AuthLayo
           aria-labelledby='auth-title'
           data-testid='auth-content'
           transition={{layout: {duration: 0.3, type: 'spring', bounce: 0.2}}}
-          className='auth-card w-full border bg-card p-4 text-card-foreground shadow-xs sm:p-6'
+          className='auth-card w-full rounded-card border bg-card p-4 text-card-foreground shadow-xs sm:p-6'
         >
           {children}
         </motion.section>

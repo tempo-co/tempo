@@ -144,7 +144,7 @@ export function BankTransactionTable({
   };
 
   if (isPending) {
-    return <Skeleton className='h-88 w-full rounded-lg bg-card' />;
+    return <Skeleton className='h-88 w-full rounded-card bg-card' />;
   }
 
   if (isError) {

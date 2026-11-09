@@ -50,7 +50,7 @@ export function SelectedFilterSummary({items}: SelectedFilterSummaryProps) {
           </Badge>
         ) : (
           items.map(({key, label}) => (
-            <span className='rounded bg-accent px-1.5 py-0.5 text-xs' key={key}>
+            <span className='rounded-sm bg-accent px-1.5 py-0.5 text-xs' key={key}>
               {label}
             </span>
           ))

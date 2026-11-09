@@ -36,7 +36,7 @@ export function CopyField({id, label, value, copyLabel, errorMessage}: CopyField
   return (
     <div className='space-y-2'>
       <Label htmlFor={id}>{label}</Label>
-      <div className='flex h-11 border bg-background max-sm:h-12'>
+      <div className='flex h-11 rounded-md border bg-background max-sm:h-12'>
         <input
           id={id}
           readOnly
@@ -49,7 +49,7 @@ export function CopyField({id, label, value, copyLabel, errorMessage}: CopyField
         <Button
           variant='ghost'
           onClick={() => void copy()}
-          className='h-full shrink-0 border-l px-3'
+          className='h-full shrink-0 rounded-l-none border-l px-3'
         >
           {copied ? (
             <Check className='size-4 text-success' aria-hidden='true' />

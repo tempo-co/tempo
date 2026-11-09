@@ -7,9 +7,9 @@ import {cn} from '@/utils/cn';
 const TIP_WIDTH = 'max-w-[min(20rem,calc(100vw-2rem))]';
 const TIP = cn(TIP_WIDTH, 'text-xs');
 
-/** A readout's own box: square, on the card colour, its one column no wider than the box. */
+/** A readout's own box: on the card colour, its one column no wider than the box. */
 const READOUT =
-  'grid min-w-48 grid-cols-1 gap-1 rounded-none border bg-card p-2.5 text-xs text-card-foreground shadow-sm';
+  'grid min-w-48 grid-cols-1 gap-1 rounded-md border bg-card p-2.5 text-xs text-card-foreground shadow-sm';
 
 /** Whether an element's text is cut off, by truncation or a line clamp. */
 const isCut = (element: HTMLElement | null) =>
