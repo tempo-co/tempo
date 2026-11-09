@@ -1343,7 +1343,7 @@ test.describe('bank transactions', () => {
       await expect(rows.nth(3)).not.toContainText('-€0.00');
       expect(await readClippedAmounts()).toEqual([]);
       await expectNoHorizontalOverflow(page);
-      for (const index of [0, 1, 3]) {
+      for (const index of [0, 1]) {
         await rows
           .nth(index)
           .getByRole('button', {name: /^View .* transaction details$/})
@@ -1351,16 +1351,7 @@ test.describe('bank transactions', () => {
         const inspector = page.getByTestId('bank-transaction-inspector');
         const amount = inspector.getByTestId('bank-transaction-detail-amount');
         await expect(amount).toBeVisible();
-        // A zero amount moved no money, so it has no direction arrow.
-        await expect(inspector.getByTestId('bank-transaction-detail-direction')).toHaveCount(
-          index === 3 ? 0 : 1,
-        );
-        if (index === 3) {
-          // A rate without a second currency names no quote, so Bank details omits it.
-          await inspector.getByRole('button', {name: 'Bank details', exact: true}).click();
-          await expect(inspector.getByText('Instructed amount', {exact: true})).toBeVisible();
-          await expect(inspector.getByText('Exchange rate', {exact: true})).toHaveCount(0);
-        }
+        await expect(inspector.getByTestId('bank-transaction-detail-direction')).toBeVisible();
         await inspector.evaluate((el) =>
           Promise.all(el.getAnimations({subtree: true}).map((animation) => animation.finished)),
         );
@@ -1387,6 +1378,22 @@ test.describe('bank transactions', () => {
         await inspector.getByRole('button', {name: 'Close transaction details'}).click();
       }
     }
+
+    await page.setViewportSize({width: 1440, height: 900});
+    await page.goto('/bank-transactions');
+    await rows
+      .nth(3)
+      .getByRole('button', {name: /^View .* transaction details$/})
+      .click();
+    const zeroInspector = page.getByTestId('bank-transaction-inspector');
+    await expect(zeroInspector.getByTestId('bank-transaction-detail-amount')).toHaveText('€0.00');
+    // A zero amount moved no money, so it has no direction arrow.
+    await expect(zeroInspector.getByTestId('bank-transaction-detail-direction')).toHaveCount(0);
+    // A rate without a second currency names no quote, so Bank details omits it.
+    await zeroInspector.getByRole('button', {name: 'Bank details', exact: true}).click();
+    await expect(zeroInspector.getByText('Instructed amount', {exact: true})).toBeVisible();
+    await expect(zeroInspector.getByText('Exchange rate', {exact: true})).toHaveCount(0);
+    await zeroInspector.getByRole('button', {name: 'Close transaction details'}).click();
 
     await page.setViewportSize({width: 393, height: 852});
     await page.goto('/bank-transactions');
