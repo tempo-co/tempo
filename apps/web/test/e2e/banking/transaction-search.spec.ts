@@ -1,3 +1,4 @@
+import {createAccount} from '../../data/account.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections, mockJson} from '../../utils/api-mocks';
 
@@ -6,12 +7,15 @@ test.use({storageState: {cookies: [], origins: []}});
 test('searches with a long description and restores it from the URL', async ({page}) => {
   const description = '€'.repeat(1000);
   const searches: Array<string | null> = [];
-  await mockJson(page, '**/accounts/me', {
-    id: '00000000-0000-4000-8000-000000000200',
-    name: 'Alex Example',
-    email: 'user@example.com',
-    isEmailVerified: true,
-  });
+  await mockJson(
+    page,
+    '**/accounts/me',
+    createAccount({
+      id: '00000000-0000-4000-8000-000000000200',
+      name: 'Alex Example',
+      email: 'user@example.com',
+    }),
+  );
   await mockBankConnections(page, []);
   await page.route('**/bank-transactions?**', (route) => {
     if (!['fetch', 'xhr'].includes(route.request().resourceType())) return route.continue();

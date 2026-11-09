@@ -1,6 +1,8 @@
 import type {Page} from '@playwright/test';
 import {BankTransaction, BankTransactionCategoryImpact} from '@tempo/contracts';
 
+import {createAccount} from '../../data/account.data';
+import {createBankTransaction} from '../../data/bank-transaction.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections, mockJson} from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
@@ -8,7 +10,7 @@ import {expectNoHorizontalOverflow} from '../../utils/layout';
 const ID = '00000000-0000-4000-8000-000000000201';
 const FIRST_ID = '00000000-0000-4000-8000-000000000202';
 const SECOND_ID = '00000000-0000-4000-8000-000000000203';
-const transaction: BankTransaction = {
+const transaction: BankTransaction = createBankTransaction({
   id: ID,
   displayDescription: 'Example Shop',
   description: 'Example Shop',
@@ -22,39 +24,15 @@ const transaction: BankTransaction = {
   direction: 'EXPENSE',
   transactionType: 'CARD_PAYMENT',
   transactionStatus: 'BOOK',
-  providerTransactionDescription: null,
-  merchantCategoryCode: null,
-  remittanceInformation: null,
-  balanceAfterAmount: null,
-  balanceAfterCurrency: null,
-  instructedAmount: null,
-  instructedCurrency: null,
-  exchangeRate: null,
-  exchangeRateUnitCurrency: null,
-  exchangeRateType: null,
-  referenceNumber: null,
-  referenceNumberScheme: null,
   bankName: 'Example Bank',
   bankCountry: 'NL',
   bankAccountName: 'Example account',
-  bankAccountAlias: null,
   category: null,
   categoryStatus: 'PENDING',
   categorySource: null,
   categoryConfidence: null,
-  financialEventType: null,
-  financialEventSource: null,
-  financialEventRuleVersion: null,
   cashFlowTreatment: 'EXPENSE',
-  merchantLogoUrl: null,
-  merchantGroupId: null,
-  ownTransfer: null,
-  ownTransferOverride: null,
-  currencyExchangeCounterpart: null,
-  amountInBaseCurrency: null,
-  baseAmountMethod: null,
-  baseAmountRateDate: null,
-};
+});
 
 const impact: BankTransactionCategoryImpact = {
   action: 'APPLY',
@@ -83,12 +61,15 @@ async function mockCorrection(page: Page, preview: BankTransactionCategoryImpact
     previewStatus: 200,
     saveStatus: 200,
   };
-  await mockJson(page, '**/accounts/me', {
-    id: '00000000-0000-4000-8000-000000000200',
-    name: 'Alex Example',
-    email: 'user@example.com',
-    isEmailVerified: true,
-  });
+  await mockJson(
+    page,
+    '**/accounts/me',
+    createAccount({
+      id: '00000000-0000-4000-8000-000000000200',
+      name: 'Alex Example',
+      email: 'user@example.com',
+    }),
+  );
   await mockBankConnections(page, () => []);
   await page.route('**/bank-transactions?**', (route) => {
     if (!['fetch', 'xhr'].includes(route.request().resourceType())) return route.continue();

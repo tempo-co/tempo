@@ -7,8 +7,6 @@ import TestAgent from 'supertest/lib/agent';
 import type {DeepPartial} from 'typeorm';
 import {Repository} from 'typeorm';
 
-import {ConfigurationService} from '@core/config/config.service';
-import {Account} from '@modules/account/account.entity';
 import {BANKING_TRANSACTION_BREAKDOWN_RANGE} from '@modules/banking/api/constants/banking-messages.constants';
 import type {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {MerchantLogo} from '@modules/banking/merchant-logos/merchant-logo.entity';
@@ -16,7 +14,7 @@ import {Merchant} from '@modules/banking/merchant-logos/merchant.entity';
 
 import {BankingFixtures, CURRENCY_EXCHANGE_EVENT, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {getApp} from '../../setup/e2e.setup';
-import {createVerifiedAccount} from '../../utils/auth-utils';
+import {createBankingOwner} from '../../utils/banking-utils';
 
 const BREAKDOWN = '/bank-transactions/breakdown';
 const CASH_FLOW = '/bank-transactions/cash-flow';
@@ -33,22 +31,10 @@ const named = (date: string, amount: string, name: string, overrides: DeepPartia
 describe('Bank transaction history', () => {
 	let app: INestApplication;
 	let fixtures: BankingFixtures;
-	let accounts: Repository<Account>;
-
-	async function verifiedOwner() {
-		const fresh = await createVerifiedAccount(
-			app.getHttpServer(),
-			app.get(ConfigurationService).get('EMAIL_UI_URL'),
-		);
-		await accounts.update({id: fresh.id}, {baseCurrency: 'EUR'});
-		const bankAccount = await fixtures.createBankAccount(await fixtures.createConnection({id: fresh.id}));
-		return {...fresh, bankAccount};
-	}
 
 	beforeAll(() => {
 		app = getApp();
 		fixtures = new BankingFixtures(app);
-		accounts = app.get(getRepositoryToken(Account));
 	});
 
 	describe('breakdown', () => {
@@ -58,10 +44,10 @@ describe('Bank transaction history', () => {
 		const ASOF = '2026-03-10';
 
 		beforeAll(async () => {
-			const owner = await verifiedOwner();
-			const other = await verifiedOwner();
+			const owner = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			const other = await createBankingOwner(app, {baseCurrency: 'EUR'});
 			agent = owner.agent;
-			ownerId = owner.id;
+			ownerId = owner.owner.id;
 			otherAgent = other.agent;
 			const employer = {merchantKey: 'INCOME:example employer'};
 			await fixtures.createTransactions(owner.bankAccount, [

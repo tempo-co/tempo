@@ -1,5 +1,6 @@
 import type {Locator, Page} from '@playwright/test';
 
+import {createAccount} from '../../data/account.data';
 import {expect, test} from '../../fixtures';
 import {mockBankConnections, mockBankRefresh, mockEmptyHome} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
@@ -10,12 +11,11 @@ test.use({storageState: {cookies: [], origins: []}, serviceWorkers: 'block'});
 test.beforeEach(async ({page}) => {
   await page.route('**/accounts/me', (route) =>
     route.fulfill({
-      json: {
+      json: createAccount({
         id: '00000000-0000-4000-8000-000000000001',
         name: 'Alex Example',
         email: 'alex@example.com',
-        isEmailVerified: true,
-      },
+      }),
     }),
   );
   await page.route('**/auth/sessions', (route) => route.fulfill({json: []}));

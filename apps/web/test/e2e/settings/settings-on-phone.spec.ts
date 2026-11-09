@@ -1,13 +1,12 @@
+import {createAccount} from '../../data/account.data';
 import {expect, test} from '../../fixtures';
-
 import {expectEvenRowActionSpacing} from '../../utils/layout';
 
-const account = {
+const account = createAccount({
   id: '00000000-0000-4000-8000-000000000001',
   name: 'Alex Example',
   email: 'alex@example.com',
-  isEmailVerified: true,
-};
+});
 
 test.use({
   viewport: {width: 320, height: 850},
@@ -62,10 +61,12 @@ test('session details wrap long IPv6 and location values on a phone', async ({pa
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAttribute('data-vaul-drawer', '');
-  await expect.poll(async () => {
-    const box = await dialog.boundingBox();
-    return box !== null && Math.abs(box.y + box.height - 850) <= 1;
-  }).toBe(true);
+  await expect
+    .poll(async () => {
+      const box = await dialog.boundingBox();
+      return box !== null && Math.abs(box.y + box.height - 850) <= 1;
+    })
+    .toBe(true);
   await expect(dialog).toContainText('2001:db8:1234:5678:1234:5678:1234:5678');
   const widths = await dialog.evaluate((element) => ({
     content: element.clientWidth,

@@ -1,3 +1,4 @@
+import {createAccount} from '../../data/account.data';
 import {expect, test} from '../../fixtures';
 
 // Push delivery is driven through Chromium DevTools, and the headless shell denies notifications:
@@ -7,12 +8,11 @@ test.use({channel: 'chromium', storageState: {cookies: [], origins: []}});
 test.beforeEach(async ({page}) => {
   await page.route('**/accounts/me', (route) =>
     route.fulfill({
-      json: {
+      json: createAccount({
         id: '00000000-0000-4000-8000-000000000001',
         name: 'Alex Example',
         email: 'alex@example.com',
-        isEmailVerified: true,
-      },
+      }),
     }),
   );
 });

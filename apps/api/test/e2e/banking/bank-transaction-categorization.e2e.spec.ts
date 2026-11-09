@@ -106,6 +106,23 @@ describe('Bank transaction categorization integration', () => {
 	let verifiedAgent: TestAgent;
 	let bankTransactionRepository: Repository<BankTransaction>;
 
+	function resetFailureFixture(overrides: Pick<Partial<BankTransaction>, 'categorySearchTrace'> = {}) {
+		return bankTransactionRepository.update(CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID, {
+			category: null,
+			categoryStatus: 'PENDING',
+			categorySource: null,
+			categoryConfidence: null,
+			categoryInputHash: null,
+			categoryAppliedInputHash: null,
+			categoryProvider: null,
+			categoryModel: null,
+			categoryPromptVersion: null,
+			categoryUpdatedAt: null,
+			categoryLastError: null,
+			...overrides,
+		});
+	}
+
 	beforeAll(async () => {
 		app = getApp();
 		await seedBankTransactionCategorizationData(app);
@@ -480,20 +497,7 @@ describe('Bank transaction categorization integration', () => {
 		routesUnavailable = true;
 		const categorizationService = app.get(BankTransactionCategorizationService);
 		const queue = app.get<Queue>(getQueueToken(BANK_TRANSACTION_CATEGORIZATION_QUEUE));
-		await bankTransactionRepository.update(CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID, {
-			category: null,
-			categoryStatus: 'PENDING',
-			categorySource: null,
-			categoryConfidence: null,
-			categoryInputHash: null,
-			categoryAppliedInputHash: null,
-			categoryProvider: null,
-			categoryModel: null,
-			categoryPromptVersion: null,
-			categorySearchTrace: null,
-			categoryUpdatedAt: null,
-			categoryLastError: null,
-		});
+		await resetFailureFixture({categorySearchTrace: null});
 		const rowJobs = async (states: JobType[]) =>
 			(await queue.getJobs(states)).filter(
 				(job) =>
@@ -571,19 +575,7 @@ describe('Bank transaction categorization integration', () => {
 		retryableFailure = true;
 		const queue = app.get<Queue>(getQueueToken(BANK_TRANSACTION_CATEGORIZATION_QUEUE));
 		try {
-			await bankTransactionRepository.update(CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID, {
-				category: null,
-				categoryStatus: 'PENDING',
-				categorySource: null,
-				categoryConfidence: null,
-				categoryInputHash: null,
-				categoryAppliedInputHash: null,
-				categoryProvider: null,
-				categoryModel: null,
-				categoryPromptVersion: null,
-				categoryUpdatedAt: null,
-				categoryLastError: null,
-			});
+			await resetFailureFixture();
 			await app
 				.get(BankTransactionCategorizationService)
 				.enqueueForTransactions([CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID]);
@@ -613,19 +605,7 @@ describe('Bank transaction categorization integration', () => {
 	it('persists a provider failure through the real worker path without calling an external provider', async () => {
 		shouldFail = true;
 		try {
-			await bankTransactionRepository.update(CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID, {
-				category: null,
-				categoryStatus: 'PENDING',
-				categorySource: null,
-				categoryConfidence: null,
-				categoryInputHash: null,
-				categoryAppliedInputHash: null,
-				categoryProvider: null,
-				categoryModel: null,
-				categoryPromptVersion: null,
-				categoryUpdatedAt: null,
-				categoryLastError: null,
-			});
+			await resetFailureFixture();
 			const categorizationService = app.get(BankTransactionCategorizationService);
 			await categorizationService.enqueueForTransactions([CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID]);
 

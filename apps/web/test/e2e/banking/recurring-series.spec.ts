@@ -7,6 +7,8 @@ import {
 } from '@tempo/contracts';
 
 import {formatBankTransactionCompactDate} from '../../../src/features/banking/utils/formatters';
+import {createAccount} from '../../data/account.data';
+import {createBankTransaction} from '../../data/bank-transaction.data';
 import {expect, test} from '../../fixtures';
 import {
   expectFailedPageRetried,
@@ -147,12 +149,15 @@ async function mockRecurring(page: Page) {
     writes: [] as Array<{key: string; hidden?: boolean; linked?: boolean}>,
     listReads: [] as string[],
   };
-  await mockJson(page, '**/accounts/me', {
-    id: '00000000-0000-4000-8000-000000000300',
-    name: 'Alex Example',
-    email: 'user@example.com',
-    isEmailVerified: true,
-  });
+  await mockJson(
+    page,
+    '**/accounts/me',
+    createAccount({
+      id: '00000000-0000-4000-8000-000000000300',
+      name: 'Alex Example',
+      email: 'user@example.com',
+    }),
+  );
   await mockBankConnections(page, () => []);
   // A series' detail reads its payments; specs that check them register their own answer.
   await page.route('**/bank-transactions?**', (route) =>
@@ -185,7 +190,7 @@ function payment(
     'bookingDate' | 'displayDescription' | 'amount' | 'bankAccountAlias'
   >,
 ): BankTransaction {
-  return {
+  return createBankTransaction({
     id: `00000000-0000-4000-8000-${String(400 + index).padStart(12, '0')}`,
     transactionDate: fields.bookingDate,
     valueDate: fields.bookingDate,
@@ -196,18 +201,6 @@ function payment(
     direction: 'EXPENSE',
     transactionType: 'DIRECT_DEBIT',
     transactionStatus: 'BOOK',
-    providerTransactionDescription: null,
-    merchantCategoryCode: null,
-    remittanceInformation: null,
-    balanceAfterAmount: null,
-    balanceAfterCurrency: null,
-    instructedAmount: null,
-    instructedCurrency: null,
-    exchangeRate: null,
-    exchangeRateUnitCurrency: null,
-    exchangeRateType: null,
-    referenceNumber: null,
-    referenceNumberScheme: null,
     bankName: 'Example Bank',
     bankCountry: 'NL',
     bankAccountName: 'Example Account',
@@ -215,20 +208,9 @@ function payment(
     categoryStatus: 'COMPLETED',
     categorySource: 'MANUAL',
     categoryConfidence: null,
-    financialEventType: null,
-    financialEventSource: null,
-    financialEventRuleVersion: null,
     cashFlowTreatment: 'EXPENSE',
-    merchantLogoUrl: null,
-    merchantGroupId: null,
-    ownTransfer: null,
-    ownTransferOverride: null,
-    currencyExchangeCounterpart: null,
-    amountInBaseCurrency: null,
-    baseAmountMethod: null,
-    baseAmountRateDate: null,
     ...fields,
-  };
+  });
 }
 
 const row = (page: Page, key: string) => page.getByTestId(`recurring-series-${key}`);
@@ -861,12 +843,15 @@ test('lets a drill be cleared when its series is no longer found', async ({page}
 
 test('says so when nothing recurring is found and when loading fails', async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
-  await mockJson(page, '**/accounts/me', {
-    id: '00000000-0000-4000-8000-000000000301',
-    name: 'Alex Example',
-    email: 'user@example.com',
-    isEmailVerified: true,
-  });
+  await mockJson(
+    page,
+    '**/accounts/me',
+    createAccount({
+      id: '00000000-0000-4000-8000-000000000301',
+      name: 'Alex Example',
+      email: 'user@example.com',
+    }),
+  );
   await mockBankConnections(page, () => []);
   let fail = false;
   // A rate limit is final, so the page shows the error without waiting out the retries.

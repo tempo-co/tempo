@@ -35,6 +35,7 @@ import {
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
+import {createBankingOwner} from '../../utils/banking-utils';
 
 const AS_OF = '2026-10-17';
 const MONTHS = ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'];
@@ -1128,15 +1129,9 @@ describe('RecurringSeries', () => {
 	});
 
 	it('shows a varying bill at its usual amount with its range and recent payments, flagging a high latest one', async () => {
-		const fresh = await createVerifiedAccount(
-			app.getHttpServer(),
-			app.get(ConfigurationService).get('EMAIL_UI_URL'),
-		);
-		const freshOwner = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
-		await app.get(getRepositoryToken(Account)).update({id: freshOwner.id}, {baseCurrency: 'EUR'});
-		const connection = await fixtures.createConnection(freshOwner);
+		const fresh = await createBankingOwner(app, {baseCurrency: 'EUR'});
+		const {connection, bankAccount: bank} = fresh;
 		try {
-			const bank = await fixtures.createBankAccount(connection);
 			const amounts = ['61.00', '95.00', '48.00', '80.00', '77.00', '160.00'];
 			const rows = await fixtures.createTransactions(
 				bank,
@@ -1193,15 +1188,9 @@ describe('RecurringSeries', () => {
 	});
 
 	it('counts this month’s paid and still-due bills, including one late from last month', async () => {
-		const fresh = await createVerifiedAccount(
-			app.getHttpServer(),
-			app.get(ConfigurationService).get('EMAIL_UI_URL'),
-		);
-		const freshOwner = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
-		await app.get(getRepositoryToken(Account)).update({id: freshOwner.id}, {baseCurrency: 'EUR'});
-		const connection = await fixtures.createConnection(freshOwner);
+		const fresh = await createBankingOwner(app, {baseCurrency: 'EUR'});
+		const {connection, bankAccount: bank} = fresh;
 		try {
-			const bank = await fixtures.createBankAccount(connection);
 			await fixtures.createTransactions(bank, [
 				// October's payment is late; November's is due too.
 				...MONTHS.slice(0, 5).map((month) =>

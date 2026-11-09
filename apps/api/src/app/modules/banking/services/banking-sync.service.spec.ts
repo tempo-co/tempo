@@ -62,6 +62,19 @@ function createBankingSyncService(
 	);
 }
 
+function createInsertQueryBuilder(raw: Array<{id: string; inserted: boolean}>) {
+	return {
+		insert: jest.fn().mockReturnThis(),
+		into: jest.fn().mockReturnThis(),
+		values: jest.fn().mockReturnThis(),
+		orIgnore: jest.fn().mockReturnThis(),
+		orUpdate: jest.fn().mockReturnThis(),
+		returning: jest.fn().mockReturnThis(),
+		updateEntity: jest.fn().mockReturnThis(),
+		execute: jest.fn().mockResolvedValue({raw}),
+	};
+}
+
 describe('BankingSyncService disabled integration', () => {
 	it('skips automatic sync without touching persistence', async () => {
 		const bankConnectionRepository = {findOne: jest.fn()};
@@ -348,21 +361,10 @@ describe('BankingSyncService synchronization lock', () => {
 			},
 			{providerTransactionId: 'new-transaction', amount: '20.00', currency: 'EUR'},
 		];
-		const insertQueryBuilder = {
-			insert: jest.fn().mockReturnThis(),
-			into: jest.fn().mockReturnThis(),
-			values: jest.fn().mockReturnThis(),
-			orIgnore: jest.fn().mockReturnThis(),
-			orUpdate: jest.fn().mockReturnThis(),
-			returning: jest.fn().mockReturnThis(),
-			updateEntity: jest.fn().mockReturnThis(),
-			execute: jest.fn().mockResolvedValue({
-				raw: [
-					{id: 'existing-transaction-id', inserted: false},
-					{id: 'new-transaction-id', inserted: true},
-				],
-			}),
-		};
+		const insertQueryBuilder = createInsertQueryBuilder([
+			{id: 'existing-transaction-id', inserted: false},
+			{id: 'new-transaction-id', inserted: true},
+		]);
 		transactionRepository.createQueryBuilder.mockReturnValue(insertQueryBuilder);
 		enableBankingClient.getAccountTransactions.mockResolvedValue(transactions);
 		bankSyncRunRepository.findOneBy.mockResolvedValue({
@@ -937,16 +939,7 @@ describe('BankingSyncService transaction event persistence', () => {
 
 	it('preserves multiple identical no-reference transactions returned in one sync', async () => {
 		const service = createServiceForTransactionValues();
-		const insertQueryBuilder = {
-			insert: jest.fn().mockReturnThis(),
-			into: jest.fn().mockReturnThis(),
-			values: jest.fn().mockReturnThis(),
-			orIgnore: jest.fn().mockReturnThis(),
-			orUpdate: jest.fn().mockReturnThis(),
-			returning: jest.fn().mockReturnThis(),
-			updateEntity: jest.fn().mockReturnThis(),
-			execute: jest.fn().mockResolvedValue({raw: []}),
-		};
+		const insertQueryBuilder = createInsertQueryBuilder([]);
 		const repository = {
 			query: jest.fn().mockResolvedValue([]),
 			find: jest.fn().mockResolvedValue([]),
@@ -981,16 +974,7 @@ describe('BankingSyncService transaction event persistence', () => {
 
 	it('reuses a no-reference row when mutable provider details change', async () => {
 		const service = createServiceForTransactionValues();
-		const insertQueryBuilder = {
-			insert: jest.fn().mockReturnThis(),
-			into: jest.fn().mockReturnThis(),
-			values: jest.fn().mockReturnThis(),
-			orIgnore: jest.fn().mockReturnThis(),
-			orUpdate: jest.fn().mockReturnThis(),
-			returning: jest.fn().mockReturnThis(),
-			updateEntity: jest.fn().mockReturnThis(),
-			execute: jest.fn().mockResolvedValue({raw: []}),
-		};
+		const insertQueryBuilder = createInsertQueryBuilder([]);
 		const bankAccount = {id: 'bank-account-id', currency: 'EUR'} as BankAccount;
 		const originalTransaction = {
 			amount: '12.00',
@@ -1088,16 +1072,7 @@ describe('BankingSyncService transaction event persistence', () => {
 
 	it('keeps an existing non-manual exchange row out of categorization after reclassification', async () => {
 		const service = createServiceForTransactionValues();
-		const insertQueryBuilder = {
-			insert: jest.fn().mockReturnThis(),
-			into: jest.fn().mockReturnThis(),
-			values: jest.fn().mockReturnThis(),
-			orIgnore: jest.fn().mockReturnThis(),
-			orUpdate: jest.fn().mockReturnThis(),
-			returning: jest.fn().mockReturnThis(),
-			updateEntity: jest.fn().mockReturnThis(),
-			execute: jest.fn().mockResolvedValue({raw: []}),
-		};
+		const insertQueryBuilder = createInsertQueryBuilder([]);
 		const eventUpdateQueryBuilder = {
 			update: jest.fn().mockReturnThis(),
 			set: jest.fn().mockReturnThis(),
@@ -1242,16 +1217,7 @@ describe('BankingSyncService transaction event persistence', () => {
 
 	it('preserves existing occurrence identities when mutable details reorder repeated-reference rows', async () => {
 		const service = createServiceForTransactionValues();
-		const insertQueryBuilder = {
-			insert: jest.fn().mockReturnThis(),
-			into: jest.fn().mockReturnThis(),
-			values: jest.fn().mockReturnThis(),
-			orIgnore: jest.fn().mockReturnThis(),
-			orUpdate: jest.fn().mockReturnThis(),
-			returning: jest.fn().mockReturnThis(),
-			updateEntity: jest.fn().mockReturnThis(),
-			execute: jest.fn().mockResolvedValue({raw: []}),
-		};
+		const insertQueryBuilder = createInsertQueryBuilder([]);
 		const bankAccount = {id: 'bank-account-id', currency: 'EUR'} as BankAccount;
 		const firstTransaction = {
 			providerTransactionId: 'synthetic-row-a',

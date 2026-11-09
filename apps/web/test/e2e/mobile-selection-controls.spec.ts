@@ -1,5 +1,6 @@
 import type {Page} from '@playwright/test';
 
+import {createAccount} from '../data/account.data';
 import {mockSyntheticHome} from '../data/home-history.data';
 import {expect, test} from '../fixtures';
 import {boxOf, expectNoHorizontalOverflow} from '../utils/layout';
@@ -28,12 +29,11 @@ test.beforeEach(async ({page}) => {
   await page.route('**/health', (route) => route.fulfill({status: 200, json: {status: 'ok'}}));
   await page.route('**/accounts/me', (route) =>
     route.fulfill({
-      json: {
+      json: createAccount({
         id: '00000000-0000-4000-8000-000000000001',
         name: 'Example Owner',
         email: 'owner@example.com',
-        isEmailVerified: true,
-      },
+      }),
     }),
   );
   await page.route('**/bank-transactions?**', (route) =>
@@ -189,12 +189,12 @@ test('touch verification-code entry uses readable digits across the phone field'
 }) => {
   await page.route('**/accounts/me', (route) =>
     route.fulfill({
-      json: {
+      json: createAccount({
         id: '00000000-0000-4000-8000-000000000001',
         name: 'Example Owner',
         email: 'owner@example.com',
         isEmailVerified: false,
-      },
+      }),
     }),
   );
   await page.goto('/verify-email');

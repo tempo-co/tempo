@@ -1,6 +1,7 @@
 import type {Page, Request} from '@playwright/test';
 import type {NotificationSettings} from '@tempo/contracts';
 
+import {createAccount} from '../../data/account.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {EMPTY_REVIEW_COUNTS, mockJson} from '../../utils/api-mocks';
 
@@ -9,12 +10,11 @@ const PUBLIC_KEY =
   'BE9REd2wuwnXNoYqo5snAjISJAwtTxv9Y3vH7d8WU9xUcmm7iivjJ6eypA8yRl59qfLWC9mWQIg-cgrpoaiq2zA';
 const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/example-device';
 const KEYS = {p256dh: 'BExampleP256dhKey', auth: 'ExampleAuthKey'};
-const account = {
+const account = createAccount({
   id: '00000000-0000-4000-8000-000000000001',
   name: 'Alex Example',
   email: 'alex@example.com',
-  isEmailVerified: true,
-};
+});
 const settings = (overrides: Partial<NotificationSettings> = {}): NotificationSettings => ({
   publicKey: PUBLIC_KEY,
   preferences: {bankConnections: true},
