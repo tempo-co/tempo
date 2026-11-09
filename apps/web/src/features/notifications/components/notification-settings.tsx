@@ -51,7 +51,7 @@ function ThisDevice({publicKey}: {publicKey: string | null}) {
     status =
       'Notifications are blocked for Tempo. Allow them in this browser’s site settings, then come back here.';
   } else if (device.isPending) {
-    return <Skeleton className='h-16 w-full rounded-card border bg-card' />;
+    return <Skeleton className='h-16 w-full rounded-none' />;
   } else if (device.data) {
     status = 'On. Alerts you have turned on arrive here.';
     action = (
@@ -90,13 +90,7 @@ function ThisDevice({publicKey}: {publicKey: string | null}) {
   }
 
   return (
-    <SettingsList>
-      <SettingsRow
-        label='This device'
-        value={<span role='status'>{status}</span>}
-        action={action}
-      />
-    </SettingsList>
+    <SettingsRow label='This device' value={<span role='status'>{status}</span>} action={action} />
   );
 }
 
@@ -120,22 +114,18 @@ export function NotificationSettings() {
     );
   }
 
+  const {publicKey, preferences} = settings;
   return (
-    <div className='space-y-10'>
-      <SettingsGroup
-        id='notifications-device-heading'
-        title='Notifications'
-        description='Tempo only interrupts you when something needs you and can’t wait until you next open it.'
-      >
-        <ThisDevice publicKey={settings.publicKey} />
-      </SettingsGroup>
-
-      <SettingsGroup
-        id='notifications-alerts-heading'
-        title='Alerts'
-        description='These apply to every device where notifications are on.'
-      >
-        <SettingsList>
+    <SettingsGroup
+      id='notifications-heading'
+      title='Notifications'
+      description='Tempo only interrupts you when something needs you and can’t wait until you next open it.'
+    >
+      <SettingsList>
+        <ThisDevice publicKey={publicKey} />
+        {/* The alert choice is the account's, so it shows even while this device is off; it means nothing on a
+            server that sends no push. */}
+        {publicKey && (
           <label className='flex min-h-16 cursor-pointer items-center gap-4 px-4 py-3'>
             <span className='min-w-0 flex-1'>
               <span className='block text-sm font-medium'>Bank alerts</span>
@@ -145,12 +135,12 @@ export function NotificationSettings() {
             </span>
             <Checkbox
               className='size-5 max-sm:size-6'
-              checked={settings.preferences.bankConnections}
+              checked={preferences.bankConnections}
               onCheckedChange={(checked) => update.mutate({bankConnections: checked === true})}
             />
           </label>
-        </SettingsList>
-      </SettingsGroup>
-    </div>
+        )}
+      </SettingsList>
+    </SettingsGroup>
   );
 }
