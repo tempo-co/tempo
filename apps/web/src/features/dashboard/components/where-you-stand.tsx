@@ -2,6 +2,7 @@ import {Link} from '@tanstack/react-router';
 import {format} from 'date-fns';
 import {type ReactNode, useState} from 'react';
 
+import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
@@ -15,7 +16,6 @@ import {type BalancePoint, type Overview, SPANS, type Span, spanMonths} from '..
 import {BalanceChart, BalanceChartSkeleton} from './balance-chart';
 import {LoadingLabel, TextBone} from './loading';
 import {RepeatsBlock} from './repeats-block';
-import {TextAction} from './text-action';
 
 /**
  * Where the owner stands over a span: the total balance and its change, the balance line, the span's figures and

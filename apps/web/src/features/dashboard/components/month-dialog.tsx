@@ -7,6 +7,7 @@ import {ChevronLeft, ChevronRight} from 'lucide-react';
 import {type KeyboardEvent, type ReactNode} from 'react';
 
 import {LoadMore} from '@/components/shared/load-more';
+import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
 import {
   ResponsiveDialog,
@@ -36,7 +37,6 @@ import {type MonthPoint, type Overview, partCents} from '../utils/overview';
 import {CategoryName, SourceTile} from './category-name';
 import {ChartCardError} from './chart-card';
 import {Bone, LoadingLabel, TextBone, TileRowsSkeleton} from './loading';
-import {TextAction} from './text-action';
 
 /** A past month's usual is the mean of this many months before, every one inside the history. */
 const USUAL_MONTHS = 12;

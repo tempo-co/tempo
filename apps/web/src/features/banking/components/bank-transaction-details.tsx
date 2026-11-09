@@ -4,8 +4,8 @@ import {ArrowDown, ArrowRight, Check, ChevronRight, Landmark} from 'lucide-react
 import {useState} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
+import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
-import {TextAction} from '@/features/dashboard/components/text-action';
 import {useLocalDate} from '@/hooks/use-local-date';
 
 import {bankLogoKey, useBankLogos} from '../api/use-bank-logos';

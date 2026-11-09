@@ -5,11 +5,11 @@ import {ArrowLeft, Eye, EyeOff, Link2, Link2Off} from 'lucide-react';
 import {Bar, BarChart, Cell, XAxis} from 'recharts';
 
 import {LoadMore} from '@/components/shared/load-more';
+import {TextAction} from '@/components/shared/text-action';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {Skeleton} from '@/components/ui/skeleton';
-import {TextAction} from '@/features/dashboard/components/text-action';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatMoney, formatWholeMoney} from '@/features/dashboard/utils/money';
 import {useIsMobile} from '@/hooks/use-is-mobile';
