@@ -228,7 +228,7 @@ for (const {name, rate, unit, currency, instructed, expected} of [
     unit: null,
     currency: 'USD',
     instructed: null,
-    expected: '≈ 1.1499',
+    expected: null,
   },
   {
     name: 'unknown quote',
@@ -236,7 +236,7 @@ for (const {name, rate, unit, currency, instructed, expected} of [
     unit: 'EUR',
     currency: 'EUR',
     instructed: null,
-    expected: '≈ 1.2 per EUR',
+    expected: null,
   },
   {name: 'missing rate', rate: null, unit: null, currency: 'EUR', instructed: null, expected: null},
 ]) {

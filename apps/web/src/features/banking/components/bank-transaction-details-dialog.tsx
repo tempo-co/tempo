@@ -19,6 +19,7 @@ import {Skeleton} from '@/components/ui/skeleton';
 import {useIsOnline} from '@/hooks/use-connection';
 import {HttpError} from '@/utils/api';
 import {cn} from '@/utils/cn';
+import {amountRoundsToZero} from '@/utils/format-currency';
 
 import {useGetBankTransaction} from '../api/use-get-bank-transaction';
 import {
@@ -53,7 +54,13 @@ export function BankTransactionDetailsDialog({
     : 'Transaction details';
   const internal = transaction?.cashFlowTreatment === 'INTERNAL';
   const incoming = transaction?.direction === 'INCOME';
-  const DirectionIcon = incoming ? ArrowDownLeft : ArrowUpRight;
+  // Zero moved no money, so it shows no direction.
+  const DirectionIcon =
+    transaction && amountRoundsToZero(Number(transaction.amount), transaction.currency)
+      ? null
+      : incoming
+        ? ArrowDownLeft
+        : ArrowUpRight;
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
@@ -78,13 +85,16 @@ export function BankTransactionDetailsDialog({
             <div className='mt-6 flex flex-wrap items-start justify-between gap-x-6 gap-y-2'>
               <div className='min-w-0 flex-1 basis-64'>
                 <div className='flex min-w-0 items-center gap-2'>
-                  <DirectionIcon
-                    aria-hidden='true'
-                    className={cn(
-                      'size-5 shrink-0 text-muted-foreground',
-                      incoming && !internal && 'text-success',
-                    )}
-                  />
+                  {DirectionIcon && (
+                    <DirectionIcon
+                      aria-hidden='true'
+                      data-testid='bank-transaction-detail-direction'
+                      className={cn(
+                        'size-5 shrink-0 text-muted-foreground',
+                        incoming && !internal && 'text-success',
+                      )}
+                    />
+                  )}
                   <p
                     data-testid='bank-transaction-detail-amount'
                     className={cn(
