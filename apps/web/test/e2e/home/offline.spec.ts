@@ -195,7 +195,9 @@ test.describe('saved Home', () => {
     await page.clock.runFor(1100);
     await expect.poll(savedMonths).toEqual(['2026-08', '2026-09']);
     await page.getByRole('link', {name: 'Connections', exact: true}).first().click();
-    await expect(page.locator('[data-testid^="connection-card-toggle-"]').first()).toBeVisible();
+    await expect(
+      page.getByTestId('bank-connections-list').getByRole('region').first(),
+    ).toBeVisible();
     await page.clock.runFor(1100);
     // Inactive transactions share one budget rather than each view getting its own.
     await expect.poll(savedMonths).toEqual(['2026-09']);

@@ -9,7 +9,6 @@ import {SecuritySettingsPage} from '../../pages/security-settings.page';
 import {SignupPage} from '../../pages/signup.page';
 import {
   fulfillJson,
-  mockJson,
   routeBankConnectionsApi,
   transformBankConnections,
 } from '../../utils/api-mocks';
@@ -145,7 +144,7 @@ test.describe('saved app', () => {
       await route.fulfill({json: connections.map((c) => ({...c, syncStatus: 'QUEUED'}))});
     });
     await page.goto('/bank-connections');
-    const cards = page.locator('[data-testid^="connection-card-toggle-"]');
+    const cards = page.getByRole('region', {name: 'ABN AMRO'});
     await expect(cards.first()).toBeVisible();
     await expect.poll(() => requests, {timeout: 12_000}).toBeGreaterThan(1);
     await expect(savedStatus(page)).toBeVisible();
@@ -161,7 +160,7 @@ test.describe('saved app', () => {
       await route.fulfill({json: connections.map((c) => ({...c, syncStatus: 'QUEUED'}))});
     });
     await page.goto('/bank-connections');
-    await expect(page.locator('[data-testid^="connection-card-toggle-"]').first()).toBeVisible();
+    await expect(page.getByRole('region', {name: 'ABN AMRO'})).toBeVisible();
     await expect.poll(() => requests, {timeout: 12_000}).toBeGreaterThan(1);
     await expect(
       page.getByRole('heading', {name: 'Could not load bank connections'}),
@@ -183,79 +182,6 @@ test.describe('saved app', () => {
       await refocus(page);
     };
     const restoreConnection = (page: Page) => page.unroute(apiRequests, failRequest);
-
-    const abnAmroCard = (page: Page) =>
-      page
-        .locator('[data-testid^="bank-connection-"]')
-        .filter({has: page.getByRole('heading', {name: 'ABN AMRO'})});
-    const unavailableTransactions = (page: Page) =>
-      page.getByText(/Recent transactions are unavailable/);
-    const failedTransactionRequests = () =>
-      failedRequests.filter((path) => path.endsWith('/transactions')).length;
-
-    test('keeps the recent transactions of an expanded card and refreshes them on reconnect', async ({
-      page,
-    }) => {
-      test.setTimeout(25000);
-      await page.goto('/bank-connections');
-      const card = abnAmroCard(page);
-      await card.getByTestId(/^connection-card-toggle-/).click();
-      await expect(card.getByText('Provider purchase')).toBeVisible();
-      let refreshed = false;
-      await page.route('**/bank-connections/*/transactions**', async (route) => {
-        refreshed = true;
-        await route.continue();
-      });
-
-      await loseConnection(page);
-      await expect.poll(failedTransactionRequests).toBeGreaterThan(0);
-      await expect(savedStatus(page)).toBeVisible();
-      await expect(card.getByText('Provider purchase')).toBeVisible();
-      await expect(unavailableTransactions(page)).not.toBeVisible();
-
-      await restoreConnection(page);
-      await expect(savedStatus(page)).not.toBeVisible({timeout: 15000});
-      await expect.poll(() => refreshed).toBe(true);
-      await expect(card.getByText('Provider purchase')).toBeVisible();
-      await expect(unavailableTransactions(page)).not.toBeVisible();
-    });
-
-    test('reports transactions that were never loaded as unavailable until Tempo answers', async ({
-      page,
-    }) => {
-      test.setTimeout(25000);
-      await page.goto('/bank-connections');
-      const card = abnAmroCard(page);
-      await expect(card).toBeVisible();
-
-      await loseConnection(page);
-      await expect(savedStatus(page)).toBeVisible();
-      await card.getByTestId(/^connection-card-toggle-/).click();
-      await expect(unavailableTransactions(page)).toBeVisible();
-      await expect(card.getByRole('status', {name: 'Loading recent transactions'})).toHaveCount(0);
-      await expect(card.getByText('Provider purchase')).not.toBeVisible();
-
-      await restoreConnection(page);
-      await expect(savedStatus(page)).not.toBeVisible({timeout: 15000});
-      await expect(card.getByText('Provider purchase')).toBeVisible();
-      await expect(unavailableTransactions(page)).not.toBeVisible();
-    });
-
-    test('reports a failed transaction refresh when Tempo answers with an error', async ({
-      page,
-    }) => {
-      await page.goto('/bank-connections');
-      const card = abnAmroCard(page);
-      await card.getByTestId(/^connection-card-toggle-/).click();
-      await expect(card.getByText('Provider purchase')).toBeVisible();
-      await mockJson(page, '**/bank-connections/*/transactions**', {message: 'Unavailable'}, 503);
-
-      await refocus(page);
-      await expect(unavailableTransactions(page)).toBeVisible();
-      await expect(card.getByRole('button', {name: 'Try again'})).toBeVisible();
-      await expect(card.getByText('Provider purchase')).not.toBeVisible();
-      await expect(savedStatus(page)).not.toBeVisible();
-    });
 
     test('keeps the loaded bank account filter usable and refreshes it on reconnect', async ({
       page,

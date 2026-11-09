@@ -8,8 +8,6 @@ import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {LoadingBar} from '@/components/shared/loading-bar';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
 import {BankConnectionList} from '@/features/banking/components/bank-connection-list';
-import {BankTransactionDetailsDialog} from '@/features/banking/components/bank-transaction-details-dialog';
-import {useBankTransactionInspector} from '@/hooks/use-bank-transaction-inspector';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 import {savedDataStatus} from '@/utils/query-status';
 
@@ -17,7 +15,6 @@ const bankConnectionResultSchema = z.enum(['connected', 'cancelled', 'error']);
 
 const searchSchema = z.object({
   result: bankConnectionResultSchema.optional(),
-  transactionId: z.string().optional(),
 });
 
 type BankConnectionResult = z.infer<typeof bankConnectionResultSchema>;
@@ -45,8 +42,7 @@ function showBankConnectionResult(result: BankConnectionResult) {
 
 function BankConnectionsIndex() {
   const navigate = useNavigate();
-  const {result, transactionId} = Route.useSearch();
-  const {openTransaction, closeTransaction} = useBankTransactionInspector('/bank-connections/');
+  const {result} = Route.useSearch();
   const {bankConnections, ...query} = useGetAllBankConnections();
   const {isPending, isError} = savedDataStatus({...query, data: bankConnections});
 
@@ -66,14 +62,8 @@ function BankConnectionsIndex() {
           isPending={isPending}
           isError={isError}
           onRetry={() => void query.refetch()}
-          onTransactionSelect={openTransaction}
         />
       </AppBodyLayout>
-      <BankTransactionDetailsDialog
-        transactionId={transactionId ?? ''}
-        open={Boolean(transactionId)}
-        onOpenChange={closeTransaction}
-      />
     </>
   );
 }

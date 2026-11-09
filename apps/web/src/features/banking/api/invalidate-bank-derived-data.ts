@@ -21,7 +21,6 @@ export function invalidateBankDerivedData(
       queryKey: bankQueryKeys.transactionRoot,
       predicate: ({queryKey}) => queryKey[1] !== exceptTransactionId,
     }),
-    queryClient.invalidateQueries({queryKey: bankQueryKeys.connectionTransactionsRoot}),
     // Own-transfer and category changes move payments in or out of recurring series.
     queryClient.invalidateQueries({queryKey: recurringQueryKeys.root}),
     // Refund categories and own transfers change merchant totals too.

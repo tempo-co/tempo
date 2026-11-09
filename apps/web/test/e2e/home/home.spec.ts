@@ -145,15 +145,15 @@ test.describe('Home navigation badges', () => {
 
     await connections.click();
     await expect(page).toHaveURL(/\/bank-connections$/);
-    const notice = page.getByTestId('bank-connection-sync-status');
-    await expect(notice).toContainText('Consent ends soon');
-    await expect(notice).toContainText(
-      'Re-authorize this bank connection to keep automatic sync running.',
-    );
-    await expect(page.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
+    const notice = page.getByTestId('bank-connection-problem');
+    await expect(notice).toContainText('Consent ends in 3 days');
+    await expect(notice).toContainText('Re-authorize to keep syncing');
+    await expect(notice.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
   });
 
-  test('a bank with a sync problem also says its consent ends soon', async ({page}) => {
+  test('a bank with a sync problem whose consent ends soon leads with re-authorizing', async ({
+    page,
+  }) => {
     await mockSyntheticHome(page, {
       connections: [
         {...consentEndingIn('00000000-0000-4000-8000-0000000000ca', 3), syncStatus: 'RATE_LIMITED'},
@@ -161,10 +161,10 @@ test.describe('Home navigation badges', () => {
     });
     await mockJson(page, '**/bank-connections/aspsps', []);
     await page.goto('/bank-connections');
-    const notice = page.getByTestId('bank-connection-sync-status');
-    await expect(notice).toContainText('Automatic sync is rate-limited');
-    await expect(notice).toContainText('Consent ends soon');
-    await expect(page.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
+    const notice = page.getByTestId('bank-connection-problem');
+    await expect(notice).toHaveCount(1);
+    await expect(notice).toContainText('Consent ends in 3 days');
+    await expect(notice.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
   });
 
   for (const {name, connections, label} of [

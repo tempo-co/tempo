@@ -96,7 +96,9 @@ test.describe('offline retention', () => {
     await expect.poll(() => savedSearches(page)).toEqual(['Coffee', 'Extra', 'Provider']);
     // A page without transaction views saves within the same budget, not every view still loaded.
     await page.getByRole('link', {name: 'Connections'}).click();
-    await expect(page.locator('[data-testid^="connection-card-toggle-"]').first()).toBeVisible();
+    await expect(
+      page.getByTestId('bank-connections-list').getByRole('region').first(),
+    ).toBeVisible();
     await expect.poll(() => savedSearches(page)).toEqual(['Coffee', 'Extra']);
   });
 
