@@ -170,6 +170,7 @@ test.describe('Notification settings', () => {
       'This Tempo server isn’t set up to send notifications.',
     );
     await expect(page.getByRole('button', {name: 'Allow notifications'})).toHaveCount(0);
+    await expect(page.getByRole('checkbox', {name: /Bank alerts/})).toHaveCount(0);
   });
 
   for (const {device, userAgent, status} of [
@@ -221,7 +222,7 @@ test.describe('Notification settings', () => {
     });
 
     await page.goto('/settings/account');
-    const alerts = page.getByRole('region', {name: 'Alerts'});
+    const alerts = page.getByRole('region', {name: 'Notifications', exact: true});
     await expect(alerts.getByRole('checkbox')).toHaveCount(1);
     const banks = alerts.getByRole('checkbox', {name: /Bank alerts/});
     await expect(banks).toBeChecked();
