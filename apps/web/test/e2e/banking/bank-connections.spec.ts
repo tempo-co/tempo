@@ -192,8 +192,26 @@ test.describe('bank connections', () => {
       );
     }
     await expect(details.getByRole('button', {name: 'Remove connection'})).toBeVisible();
+    // The dialog keeps showing the bank on every frame of its closing animation.
+    await details.evaluate((dialog) => {
+      const titles: string[] = [];
+      (window as unknown as {closingTitles: string[]}).closingTitles = titles;
+      const sample = () => {
+        if (!dialog.isConnected) return;
+        if (dialog.getAttribute('data-state') === 'closed') {
+          const title = document.getElementById(dialog.getAttribute('aria-labelledby') ?? '');
+          titles.push(title?.textContent ?? '');
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
     await page.keyboard.press('Escape');
     await expect(details).toBeHidden();
+    const closingTitles = await page.evaluate(
+      () => (window as unknown as {closingTitles: string[]}).closingTitles,
+    );
+    expect(new Set(closingTitles)).toEqual(new Set(['ABN AMRO']));
     await expect(connectionCard.getByRole('button', {name: 'ABN AMRO details'})).toBeFocused();
 
     await accountRow.click();
@@ -624,57 +642,6 @@ test.describe('bank connections', () => {
     await expectNoHorizontalOverflow(page);
   });
 
-  test('totals known balances in the base currency without phone overflow', async ({page}) => {
-    const multiCurrencyConnection: BankConnection = {
-      ...MOCK_CONNECTION,
-      bankAccounts: [
-        ...MOCK_CONNECTION.bankAccounts,
-        {
-          ...MOCK_CONNECTION.bankAccounts[0],
-          id: '00000000-0000-4000-8000-000000000099',
-          details: 'Mock USD account',
-          currency: 'USD',
-          currentBalanceAmount: '50.00',
-          currentBalanceInBaseCurrency: '46.00',
-          maskedIdentifier: '****9012',
-        },
-      ],
-    };
-    const balances = (amount: string | null): BankConnection => ({
-      ...MOCK_CONNECTION,
-      bankAccounts: MOCK_CONNECTION.bankAccounts.map((account) => ({
-        ...account,
-        currentBalanceAmount: amount,
-        latestBalances: [],
-      })),
-    });
-    let connection = multiCurrencyConnection;
-    await page.setViewportSize({width: 320, height: 852});
-    await mockBankConnections(page, () => [connection]);
-    const connectionCard = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    const totalBalance = connectionCard.getByTestId('bank-connection-total');
-
-    // Known zero balances add up to zero; a bank with no balances yet has no total to show.
-    connection = balances('0.00');
-    await page.goto('/bank-connections');
-    await expect(totalBalance).toHaveText('Total€0.00');
-    connection = balances(null);
-    await page.reload();
-    await expect(connectionCard.getByText('2 accounts', {exact: true})).toBeVisible();
-    await expect(totalBalance).toHaveCount(0);
-
-    connection = multiCurrencyConnection;
-    await page.reload();
-    await expect(connectionCard.getByText('3 accounts', {exact: true})).toBeVisible();
-    const usdRow = connectionCard.getByRole('link', {name: 'Mock USD account transactions'});
-    await expect(usdRow).toContainText('$50.00');
-    await expect(usdRow).toContainText('≈ €46.00');
-    await expect(totalBalance).toHaveText('Total€1,381.00');
-    const [cardBox, totalBox] = await Promise.all([boxOf(connectionCard), boxOf(totalBalance)]);
-    expect(totalBox.x + totalBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
-    await expectNoHorizontalOverflow(page);
-  });
-
   test('keeps the connection overview within a narrow phone viewport', async ({page}) => {
     await page.setViewportSize({width: 320, height: 852});
     await page.goto('/bank-connections');
@@ -747,6 +714,82 @@ test.describe('mocked Enable Banking bank connection', () => {
       await route.abort('blockedbyclient');
       throw new Error(`Unmocked request: ${route.request().method()} ${url}`);
     });
+  });
+
+  test('totals known balances in their one currency, or else the base currency, without phone overflow', async ({
+    page,
+  }) => {
+    const multiCurrencyConnection: BankConnection = {
+      ...MOCK_CONNECTION,
+      bankAccounts: [
+        ...MOCK_CONNECTION.bankAccounts,
+        {
+          ...MOCK_CONNECTION.bankAccounts[0],
+          id: '00000000-0000-4000-8000-000000000099',
+          details: 'Mock USD account',
+          currency: 'USD',
+          currentBalanceAmount: '50.00',
+          currentBalanceInBaseCurrency: '46.00',
+          maskedIdentifier: '****9012',
+        },
+      ],
+    };
+    const balances = (amount: string | null): BankConnection => ({
+      ...MOCK_CONNECTION,
+      bankAccounts: MOCK_CONNECTION.bankAccounts.map((account) => ({
+        ...account,
+        currentBalanceAmount: amount,
+        latestBalances: [],
+      })),
+    });
+    const currencies = (
+      baseCurrency: string | null,
+      [first, second]: [string, string],
+    ): BankConnection => ({
+      ...MOCK_CONNECTION,
+      baseCurrency,
+      bankAccounts: [
+        {...MOCK_CONNECTION.bankAccounts[0], currency: first},
+        {...MOCK_CONNECTION.bankAccounts[1], currency: second},
+      ],
+    });
+    let connection = currencies(null, ['EUR', 'EUR']);
+    await page.setViewportSize({width: 320, height: 852});
+    await mockBankConnections(page, () => [connection]);
+    const connectionCard = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
+    const totalBalance = connectionCard.getByTestId('bank-connection-total');
+
+    // Balances in one currency add up in that currency, before the owner has a base currency.
+    await page.goto('/bank-connections');
+    await expect(totalBalance).toHaveText('Total€1,335.00');
+    connection = currencies('EUR', ['USD', 'USD']);
+    await page.reload();
+    await expect(totalBalance).toHaveText('Total$1,335.00');
+    // Mixed currencies add up only in the base currency.
+    connection = currencies(null, ['EUR', 'USD']);
+    await page.reload();
+    await expect(connectionCard.getByRole('link', {name: / transactions$/})).toHaveCount(2);
+    await expect(totalBalance).toHaveCount(0);
+
+    // Known zero balances add up to zero; a bank with no balances yet has no total to show.
+    connection = balances('0.00');
+    await page.reload();
+    await expect(totalBalance).toHaveText('Total€0.00');
+    connection = balances(null);
+    await page.reload();
+    await expect(connectionCard.getByText('2 accounts', {exact: true})).toBeVisible();
+    await expect(totalBalance).toHaveCount(0);
+
+    connection = multiCurrencyConnection;
+    await page.reload();
+    await expect(connectionCard.getByText('3 accounts', {exact: true})).toBeVisible();
+    const usdRow = connectionCard.getByRole('link', {name: 'Mock USD account transactions'});
+    await expect(usdRow).toContainText('$50.00');
+    await expect(usdRow).toContainText('≈ €46.00');
+    await expect(totalBalance).toHaveText('Total€1,381.00');
+    const [cardBox, totalBox] = await Promise.all([boxOf(connectionCard), boxOf(totalBalance)]);
+    expect(totalBox.x + totalBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+    await expectNoHorizontalOverflow(page);
   });
 
   test('explains a synchronization conflict that arrives while the removal dialog is open', async ({

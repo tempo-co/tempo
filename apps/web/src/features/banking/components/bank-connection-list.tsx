@@ -35,7 +35,7 @@ import {wasToasted} from '@/utils/api';
 import {cn} from '@/utils/cn';
 import {formatCurrency} from '@/utils/format-currency';
 
-import {bankLogoKey, useBankLogos} from '../api/use-bank-logos';
+import {type BankLogos, bankLogoKey, useBankLogos} from '../api/use-bank-logos';
 import {
   DELETE_BANK_CONNECTION_KEY,
   useDeleteBankConnection,
@@ -79,19 +79,28 @@ export function BankConnectionList({
 }: BankConnectionListProps) {
   const {startBankConnection, isPending: isStarting} = useStartBankConnection();
   const bankLogos = useBankLogos(!isPending && !isError);
-  const [detailsId, setDetailsId] = useState<string | null>(null);
-  const details = bankConnections.find((connection) => connection.id === detailsId) ?? null;
+  // Which bank the Details dialog shows, and whether it is open; closing keeps the bank so it fades out whole.
+  const [details, setDetails] = useState<{id: string; open: boolean} | null>(null);
+  const detailsConnection =
+    bankConnections.find((connection) => connection.id === details?.id) ?? null;
+  const detailsOpen = Boolean(details?.open && detailsConnection);
   const detailsOpener = useRef<HTMLButtonElement | null>(null);
+  const closeDetails = (connectionId?: string) =>
+    setDetails((current) =>
+      current && (!connectionId || current.id === connectionId)
+        ? {...current, open: false}
+        : current,
+    );
 
   // The dialog has no trigger of its own: once it has closed, focus returns to the Details button.
   useEffect(() => {
-    if (detailsId) return;
+    if (detailsOpen) return;
     const timer = window.setTimeout(() => {
       if (detailsOpener.current?.isConnected) detailsOpener.current.focus();
       detailsOpener.current = null;
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [detailsId]);
+  }, [detailsOpen]);
 
   const connectBank = async (bank: BankConnectionAspsp) => {
     try {
@@ -169,21 +178,20 @@ export function BankConnectionList({
               onReauthorize={reauthorize}
               onDetails={(trigger) => {
                 detailsOpener.current = trigger;
-                setDetailsId(connection.id);
+                setDetails({id: connection.id, open: true});
               }}
             />
           ))}
         </div>
       )}
       <BankDetailsDialog
-        connection={details}
-        logoUrl={
-          details ? bankLogos[bankLogoKey(details.aspspName, details.aspspCountry)] : undefined
-        }
+        open={detailsOpen}
+        connection={detailsConnection}
+        bankLogos={bankLogos}
         isStarting={isStarting}
         onReauthorize={reauthorize}
-        onClose={() => setDetailsId(null)}
-        onRemoved={(id) => setDetailsId((current) => (current === id ? null : current))}
+        onClose={() => closeDetails()}
+        onRemoved={closeDetails}
       />
     </div>
   );
@@ -392,48 +400,57 @@ function AccountRow({account, baseCurrency}: {account: Account; baseCurrency: st
 }
 
 function BankDetailsDialog({
-  connection,
-  logoUrl,
+  open,
+  connection: current,
+  bankLogos,
   isStarting,
   onReauthorize,
   onClose,
   onRemoved,
 }: {
+  open: boolean;
   connection: BankConnection | null;
-  logoUrl?: string;
+  bankLogos: BankLogos;
   isStarting: boolean;
   onReauthorize: (connection: BankConnection) => void | Promise<void>;
   onClose: () => void;
   onRemoved: (connectionId: string) => void;
 }) {
+  // The last bank shown stays rendered while the dialog closes, even once it has been removed.
+  const [shown, setShown] = useState(current);
+  if (current && current !== shown) setShown(current);
+  const connection = current ?? shown;
   // The connection whose removal step is showing; every opening starts on the details.
   const [removing, setRemoving] = useState<string | null>(null);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setRemoving(null);
+  }
   const step = connection && removing === connection.id ? 'remove' : 'details';
-  const close = (open: boolean) => {
-    if (open) return;
-    setRemoving(null);
-    onClose();
-  };
 
   return (
-    <ResponsiveDialog open={Boolean(connection)} onOpenChange={close}>
+    <ResponsiveDialog open={open} onOpenChange={(next) => next || onClose()}>
       <ResponsiveDialogContent className='md:w-120'>
-        {connection &&
-          (step === 'details' ? (
-            <DetailsStep
-              connection={connection}
-              logoUrl={logoUrl}
-              isStarting={isStarting}
-              onReauthorize={onReauthorize}
-              onRemove={() => setRemoving(connection.id)}
-            />
-          ) : (
-            <RemoveStep
-              connection={connection}
-              onBack={() => setRemoving(null)}
-              onRemoved={() => onRemoved(connection.id)}
-            />
-          ))}
+        {/* While it fades out, the dialog shows its bank but takes no more input. */}
+        <div inert={!open} className='contents'>
+          {connection &&
+            (step === 'details' ? (
+              <DetailsStep
+                connection={connection}
+                logoUrl={bankLogos[bankLogoKey(connection.aspspName, connection.aspspCountry)]}
+                isStarting={isStarting}
+                onReauthorize={onReauthorize}
+                onRemove={() => setRemoving(connection.id)}
+              />
+            ) : (
+              <RemoveStep
+                connection={connection}
+                onBack={() => setRemoving(null)}
+                onRemoved={() => onRemoved(connection.id)}
+              />
+            ))}
+        </div>
       </ResponsiveDialogContent>
     </ResponsiveDialog>
   );
@@ -642,22 +659,28 @@ function accountBalance(account: Account) {
   return {amount: Number(primary.amount), currency: primary.currency};
 }
 
-/** The bank's known balances in the owner's base currency; null when there are none or one can't be converted. */
+/**
+ * The sum of the bank's known balances: in their currency when they share one, otherwise in the
+ * owner's base currency. Null when there are none, or mixed currencies can't all be converted.
+ */
 function bankTotal(connection: BankConnection) {
-  const currency = connection.baseCurrency;
-  if (!currency) return null;
-  let amount = 0;
-  let known = false;
-  for (const account of connection.bankAccounts) {
+  const known = connection.bankAccounts.flatMap((account) => {
     const balance = accountBalance(account);
-    if (!balance) continue;
-    known = true;
-    if (balance.currency === currency) amount += balance.amount;
-    else if (account.currentBalanceInBaseCurrency)
-      amount += Number(account.currentBalanceInBaseCurrency);
+    return balance ? [{...balance, inBase: account.currentBalanceInBaseCurrency}] : [];
+  });
+  if (known.length === 0) return null;
+  const [{currency: first}] = known;
+  if (known.every((balance) => balance.currency === first))
+    return {amount: known.reduce((sum, balance) => sum + balance.amount, 0), currency: first};
+  const base = connection.baseCurrency;
+  if (!base) return null;
+  let amount = 0;
+  for (const balance of known) {
+    if (balance.currency === base) amount += balance.amount;
+    else if (balance.inBase) amount += Number(balance.inBase);
     else return null;
   }
-  return known ? {amount, currency} : null;
+  return {amount, currency: base};
 }
 
 /** The account's own name when it has one; provider names are often just the holder's name. */
