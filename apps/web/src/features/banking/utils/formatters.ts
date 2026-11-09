@@ -42,7 +42,8 @@ export function formatBankTransactionExchangeRate(
     transaction.instructedCurrency,
     transaction.currencyExchangeCounterpart?.currency,
   ].find((currency) => currency && currency !== unit);
-  return unit && quote ? `1 ${unit} ≈ ${rate} ${quote}` : `≈ ${rate}${unit ? ` per ${unit}` : ''}`;
+  // A rate is only meaningful between two named currencies.
+  return unit && quote ? `1 ${unit} ≈ ${rate} ${quote}` : null;
 }
 
 /** Day and month, with the year only when it is not the current one. */

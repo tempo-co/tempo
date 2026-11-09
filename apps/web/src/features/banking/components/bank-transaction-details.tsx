@@ -26,6 +26,7 @@ import {MerchantLogoTile} from './merchant-logo-tile';
 
 export function BankTransactionDetails({transaction}: {transaction: BankTransaction}) {
   const [bankDetailsOpen, setBankDetailsOpen] = useState(false);
+  const exchangeRate = formatBankTransactionExchangeRate(transaction);
   const bankDetailsId = `bank-details-${transaction.id}`;
   const isExchange = transaction.financialEventType === 'CURRENCY_EXCHANGE';
   const isMovement = isExchange || Boolean(transaction.ownTransfer);
@@ -137,8 +138,8 @@ export function BankTransactionDetails({transaction}: {transaction: BankTransact
               <Detail
                 label='Exchange rate'
                 value={
-                  transaction.exchangeRate
-                    ? `${formatBankTransactionExchangeRate(transaction)}${transaction.exchangeRateType ? ` (${transaction.exchangeRateType})` : ''}`
+                  exchangeRate
+                    ? `${exchangeRate}${transaction.exchangeRateType ? ` (${transaction.exchangeRateType})` : ''}`
                     : null
                 }
               />
@@ -244,9 +245,7 @@ function Movement({
       </div>
       {isExchange && (
         <p className='mt-2 text-sm text-muted-foreground'>
-          {transaction.exchangeRate
-            ? formatBankTransactionExchangeRate(transaction)
-            : 'Exchange rate unavailable'}
+          {formatBankTransactionExchangeRate(transaction) ?? 'Exchange rate unavailable'}
         </p>
       )}
       <p className='mt-4 flex items-start gap-2 text-sm text-muted-foreground'>

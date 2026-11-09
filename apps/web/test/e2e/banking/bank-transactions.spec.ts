@@ -1288,6 +1288,10 @@ test.describe('bank transactions', () => {
           displayDescription: 'Synthetic rounding remainder',
           amount: '-0.00400000',
           currency: 'EUR',
+          instructedAmount: '0.00000000',
+          instructedCurrency: 'EUR',
+          exchangeRate: '1.200000',
+          exchangeRateUnitCurrency: 'EUR',
         }),
       ];
       await route.fulfill({response, json: {transactions, total: 1284}});
@@ -1339,7 +1343,7 @@ test.describe('bank transactions', () => {
       await expect(rows.nth(3)).not.toContainText('-€0.00');
       expect(await readClippedAmounts()).toEqual([]);
       await expectNoHorizontalOverflow(page);
-      for (const index of [0, 1]) {
+      for (const index of [0, 1, 3]) {
         await rows
           .nth(index)
           .getByRole('button', {name: /^View .* transaction details$/})
@@ -1347,6 +1351,16 @@ test.describe('bank transactions', () => {
         const inspector = page.getByTestId('bank-transaction-inspector');
         const amount = inspector.getByTestId('bank-transaction-detail-amount');
         await expect(amount).toBeVisible();
+        // A zero amount moved no money, so it has no direction arrow.
+        await expect(inspector.getByTestId('bank-transaction-detail-direction')).toHaveCount(
+          index === 3 ? 0 : 1,
+        );
+        if (index === 3) {
+          // A rate without a second currency names no quote, so Bank details omits it.
+          await inspector.getByRole('button', {name: 'Bank details', exact: true}).click();
+          await expect(inspector.getByText('Instructed amount', {exact: true})).toBeVisible();
+          await expect(inspector.getByText('Exchange rate', {exact: true})).toHaveCount(0);
+        }
         await inspector.evaluate((el) =>
           Promise.all(el.getAnimations({subtree: true}).map((animation) => animation.finished)),
         );
