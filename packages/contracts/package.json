@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "HTTP request and response shapes shared by the Tempo API, web app and MCP package.",
+	"description": "HTTP request and response shapes shared by the Tempo API and web app.",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts"
 }
