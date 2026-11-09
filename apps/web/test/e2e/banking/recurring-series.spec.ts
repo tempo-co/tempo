@@ -40,6 +40,7 @@ function series(overrides: Partial<RecurringSeries> & Pick<RecurringSeries, 'key
     firstDate: '2026-04-03',
     lastDate: '2026-09-03',
     nextExpectedDate: '2026-10-03',
+    anchorDay: 3,
     status: 'ACTIVE',
     flags: [],
     priceChange: null,
@@ -87,6 +88,7 @@ async function mockRecurring(page: Page) {
         key: GYM_KEY,
         name: 'Example Gym',
         cadence: 'FOUR_WEEKLY',
+        anchorDay: null,
         typicalAmount: '24.00',
         latestAmount: '24.00',
         monthlyEquivalent: '26.00',
@@ -139,6 +141,7 @@ async function mockRecurring(page: Page) {
         latestAmount: '2500.00',
         monthlyEquivalent: '2500.00',
         nextExpectedDate: '2026-10-25',
+        anchorDay: 25,
       }),
     ] as RecurringSeries[],
     writes: [] as Array<{key: string; hidden?: boolean; linked?: boolean}>,
@@ -505,22 +508,31 @@ test('drills recurring series through to exactly their payments', async ({page})
   // Each history's chart names the month every payment pays, once, oldest first.
   const histories = [
     {
-      // Due at the end of each month; May's payment was taken on 1 June.
+      // Due on the 31st, or the last day of a shorter month: September's payment was taken on
+      // 1 October and December's two weeks late, on 14 January.
       entry: series({
         key: cloudKey,
         name: 'Example Cloud',
         typicalAmount: '24.00',
         latestAmount: '24.00',
         monthlyEquivalent: '24.00',
-        firstDate: '2026-04-30',
-        lastDate: '2026-09-30',
-        nextExpectedDate: '2026-10-30',
+        firstDate: '2025-08-31',
+        lastDate: '2026-01-31',
+        nextExpectedDate: '2026-02-28',
+        anchorDay: 31,
       }),
       year: '€288',
-      months: ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'],
-      payments: ['04-30', '06-01', '06-30', '07-30', '08-31', '09-30'].map((day, index) =>
+      months: ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan'],
+      payments: [
+        '2025-08-31',
+        '2025-10-01',
+        '2025-10-31',
+        '2025-11-30',
+        '2026-01-14',
+        '2026-01-31',
+      ].map((bookingDate, index) =>
         payment(index, {
-          bookingDate: `2026-${day}`,
+          bookingDate,
           displayDescription: index < 3 ? 'Example Cloud' : 'Example Cloud Billing',
           amount: '-24.00',
           bankAccountAlias: index < 3 ? 'Example Original Account' : 'Example Current Account',
@@ -532,6 +544,7 @@ test('drills recurring series through to exactly their payments', async ({page})
         key: weeklyKey,
         name: 'Example Weekly Bill',
         cadence: 'WEEKLY',
+        anchorDay: null,
         typicalAmount: '12.00',
         latestAmount: '12.00',
         monthlyEquivalent: '52.00',
@@ -606,6 +619,7 @@ test('drills recurring series through to exactly their payments', async ({page})
       firstDate: '2024-03-10',
       lastDate: '2026-03-10',
       nextExpectedDate: '2027-03-10',
+      anchorDay: 10,
     }),
     year: '€12',
     months: ['Mar 24', 'Mar 25', 'Mar 26'],

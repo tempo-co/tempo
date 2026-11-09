@@ -230,6 +230,7 @@ describe('RecurringSeries', () => {
 					transactionCount: 6,
 					monthlyEquivalent: '80.00',
 					nextExpectedDate: '2026-11-05',
+					anchorDay: 5,
 					status: 'ACTIVE',
 					hidden: false,
 				}),
@@ -239,11 +240,13 @@ describe('RecurringSeries', () => {
 					transactionCount: 6,
 					monthlyEquivalent: '30.00',
 					nextExpectedDate: '2026-11-20',
+					anchorDay: 20,
 				}),
 				expect.objectContaining({
 					transactionCount: 6,
 					monthlyEquivalent: '12.00',
 					nextExpectedDate: '2026-11-08',
+					anchorDay: 8,
 				}),
 			]);
 			const streamDrills = await Promise.all(

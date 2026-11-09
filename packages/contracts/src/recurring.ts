@@ -82,6 +82,11 @@ export type RecurringSeries = {
 	firstDate: string;
 	lastDate: string;
 	nextExpectedDate: string;
+	/**
+	 * A monthly, quarterly or yearly rhythm's day of the month, which `nextExpectedDate` clamps in shorter months. A
+	 * payment pays the month of the nearest such day. Null for a weekly or four-weekly rhythm.
+	 */
+	anchorDay: number | null;
 	status: RecurringSeriesStatus;
 	flags: RecurringSeriesFlag[];
 	/** Set until the new price has been paid three times. */
