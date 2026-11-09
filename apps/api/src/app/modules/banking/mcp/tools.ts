@@ -1,16 +1,10 @@
 import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
-import {z} from 'zod';
+import type {CallToolResult} from '@modelcontextprotocol/sdk/types.js';
 import {
 	BANK_TRANSACTION_CATEGORY_DEFINITIONS,
 	BANK_TRANSACTION_UNCATEGORIZED,
 	BREAKDOWN_DIMENSIONS,
 	BREAKDOWN_INTERVALS,
-	CASH_FLOW_INTERVALS,
-	MAX_RANGE_PERIODS,
-	MERCHANT_GROUP_ID_PATTERN,
-	MERCHANT_LIST_MAX_LIMIT,
-	MERCHANT_RANKING_MAX_LIMIT,
-	MERCHANT_SEARCH_MAX_LENGTH,
 	type BankBalanceTrend,
 	type BankConnection,
 	type BankTransaction,
@@ -23,6 +17,12 @@ import {
 	type BankTransactionSummaryQuery,
 	type BankTransactionTotals,
 	type BankTransactionsResponse,
+	CASH_FLOW_INTERVALS,
+	MAX_RANGE_PERIODS,
+	MERCHANT_GROUP_ID_PATTERN,
+	MERCHANT_LIST_MAX_LIMIT,
+	MERCHANT_RANKING_MAX_LIMIT,
+	MERCHANT_SEARCH_MAX_LENGTH,
 	type MerchantGroup,
 	type MerchantGroupPeriods,
 	type MerchantGroupsQuery,
@@ -34,9 +34,10 @@ import {
 	type RecurringSummary,
 } from '@tempo/contracts';
 import validator from 'validator';
-import {filtersSchema, sortSchema} from './inputs.js';
-import {ToolReadError} from './errors.js';
-import type {CallToolResult} from '@modelcontextprotocol/sdk/types.js';
+import {z} from 'zod';
+
+import {ToolReadError} from './errors';
+import {filtersSchema, sortSchema} from './inputs';
 
 export type PeriodInput = BankTransactionCashFlowQuery;
 
@@ -71,7 +72,7 @@ const rangeLimits = (intervals: readonly (keyof typeof MAX_RANGE_PERIODS)[]) =>
 	`API enforces range limits: ${intervals.map((interval) => `${interval} ${MAX_RANGE_PERIODS[interval]}`).join(', ')} periods; to must be on or before asOf.`;
 
 export function createToolServer(reader: ToolReader, now: () => Date = () => new Date()): McpServer {
-	const server = new McpServer({name: 'tempo-local', version: '0.1.0'});
+	const server = new McpServer({name: 'tempo', version: '0.1.0'});
 	const annotations = {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true};
 	const read = async (operation: () => Promise<unknown>): Promise<CallToolResult> => {
 		try {

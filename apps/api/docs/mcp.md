@@ -2,7 +2,7 @@
 
 Connect an MCP client to Tempo's hosted **Streamable HTTP** endpoint using the server URL shown in Settings → Integrations, normally `https://example.ts.net/api/mcp`. Configure an account-owned personal access token as a Bearer credential through the client's secret store. The client can run on another device; it does not need a local checkout or Node.js.
 
-The endpoint serves sixteen read-only tools through the official `@modelcontextprotocol/sdk`. It reads stored data directly through the same owner-scoped services, validation and public response boundaries as REST. It does not sync banks or provide write tools. The standalone stdio entrypoint remains available for clients that launch a local process; both transports share one tool registration.
+The endpoint serves sixteen read-only tools through the official `@modelcontextprotocol/sdk`. It reads stored data directly through the same owner-scoped services, validation and public response boundaries as REST. It does not sync banks or provide write tools. The tool registration lives in `src/app/modules/banking/mcp/`; `McpReaderService` binds it to the token's account.
 
 ## Hosted endpoint
 
@@ -12,68 +12,23 @@ Every routed request requires a valid personal token for a verified account. Mis
 
 Non-browser requests may omit Origin. A present Origin must exactly equal the origin of `WEB_BASE_URL`; null, malformed and other origins return 403, including preflight and unsupported methods. These boundaries match Express's pathname for both ordinary and absolute-form HTTP targets. Requests use the existing Nest throttler (300 requests per minute for browsing in production) and a 100 KiB body cap in both the JSON parser and SDK fallback reader. Parser and service errors use static safe text; raw exception messages, request bodies and credentials are not copied to MCP errors or logs.
 
-## Build and verify
+## Tests
 
-From `apps/api`, with Node.js 26 or later:
-
-```bash
-NODE_ENV=development npm --prefix mcp ci --include=dev
-npm --prefix mcp run lint:check
-npm --prefix mcp run format:check
-npm --prefix mcp test
-```
-
-`test` builds the standalone package and runs synthetic integration tests against disposable loopback HTTP servers, plus real SDK stdio process tests. These package tests need no database, Docker or live credentials. Existing CI checks `Lint & Format`, `Build` and `Unit Tests` include this package without changing their names.
-
-Both builds import the input value lists and category definitions from `@tempo/contracts` (`packages/contracts`); the standalone `build` compiles that package first. `dist/` is ignored. The API's CommonJS build compiles only the imported Nest-free registration and its dependencies; the standalone package builds as ESM and preserves `mcp/dist/stdio.js`. The Docker builder copies `mcp/src/` and the contracts package, and runtime smoke loads the compiled API with production dependencies.
-
-Hosted E2E coverage lives in `test/e2e/mcp/mcp.e2e.spec.ts`. It binds a disposable API on loopback and uses the real `StreamableHTTPClientTransport` to initialize, list and call all sixteen tools against synthetic PostgreSQL fixtures. It verifies ownership, REST output parity, decimal strings, safe errors, auth, Origin, body cap, throttling and Redis session isolation, including observed Redis commands. Use the normal disposable E2E stack or an isolated override as described in `docs/e2e-and-seeding.md`; run `npm run contracts:build` before invoking Jest directly. The auth-guard and personal-token E2E suites cover the related REST contracts.
+`src/app/modules/banking/mcp/tools.spec.ts` covers the tool registration through an in-memory SDK client: strict input validation, Amsterdam-dated defaults, the reader call each tool makes and safe errors. `test/e2e/mcp/mcp.e2e.spec.ts` binds a disposable API on loopback and uses the real `StreamableHTTPClientTransport` to initialize, list and call all sixteen tools against synthetic PostgreSQL fixtures. It verifies ownership, REST output parity, decimal strings, safe errors, auth, Origin, body cap, throttling and Redis session isolation, including observed Redis commands. Use the disposable E2E stack or an isolated override as described in `e2e-and-seeding.md`. The auth-guard and personal-token E2E suites cover the related REST contracts.
 
 ## Tokens
 
 Use a verified Tempo browser session to manage tokens:
 
-- `POST /api/personal-access-tokens` with `{"name":"Local MCP","expiresInDays":90}` creates a read-scoped token and returns metadata plus the token once. `expiresInDays` is 30, 90 or 365, or `null` for a token that never expires; it defaults to 90.
+- `POST /api/personal-access-tokens` with `{"name":"MCP client","expiresInDays":90}` creates a read-scoped token and returns metadata plus the token once. `expiresInDays` is 30, 90 or 365, or `null` for a token that never expires; it defaults to 90.
 - `GET /api/personal-access-tokens` returns metadata without secrets.
 - `DELETE /api/personal-access-tokens/:id` revokes a token and returns 204.
 
 Token management requires a session, not a bearer token. Creation and revocation also require the configured web Origin. Expired tokens are refused with 401 and stay listed until revoked. Password changes and resets revoke every personal token; deleting an account deletes its tokens. Logout and session revocation, including logging out all other sessions, leave tokens unchanged. Keep the returned token in the client's secret store or protected process environment, never in Git, a prompt, a command argument or a shared client configuration. Revoke unused tokens and restart clients after replacing a token.
 
-The following environment variables apply to the optional stdio server and disposable smoke script:
-
-| Environment       | Contract                                                                                                                                                                                  |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TEMPO_API_TOKEN` | Required bearer token. No whitespace or control characters.                                                                                                                               |
-| `TEMPO_API_URL`   | API base URL, default `http://127.0.0.1:8080/api`. HTTPS, or HTTP only for `127.0.0.1`, `localhost` or `[::1]`. No embedded credentials, query or fragment. Trailing slashes are removed. |
-
-Choose the final API base URL: redirects, including same-origin redirects, are refused. Requests time out after 15 seconds. HTTP 401, 403, 404, 429 and 5xx errors become actionable MCP errors without copying response bodies or bearer credentials. Valid numeric or HTTP-date `Retry-After` headers are included for 429 responses. There are no automatic retries.
-
-## Client isolation and optional stdio setup
-
-**Do not enable this server globally until client isolation is proven.** Enable it only for the intended interactive session or project. Confirm that background, cron and delegated-agent sessions cannot discover or call it before using real financial data. This package does not configure or guarantee that isolation, and read-only access is still sensitive access.
-
-For a client that requires a local process, build the package and use an entry like this. Replace the path and inject the token through that client's secret mechanism; the placeholder is not a usable token:
-
-```json
-{
-	"mcpServers": {
-		"tempo": {
-			"command": "node",
-			"args": ["/absolute/path/to/tempo/apps/api/mcp/dist/stdio.js"],
-			"env": {
-				"TEMPO_API_URL": "http://127.0.0.1:8080/api",
-				"TEMPO_API_TOKEN": "<client-managed-secret>"
-			}
-		}
-	}
-}
-```
-
-Run `node .../mcp/dist/stdio.js` directly, not an npm command that prints a banner to stdout. The server uses stdout only for MCP protocol messages; startup diagnostics use stderr. The client must explicitly forward both environment variables to the child process if it does not inherit them.
-
 ## Tools
 
-All inputs are strict: unknown fields are rejected, including caller-supplied owner/account IDs, bearer tokens and origins. `bankAccountIds` is an owner-scoped bank-account filter, not an owner selector. Every data tool uses only the token's account. Successful results are one compact JSON text block. API money strings, precision, nulls and metadata are preserved rather than converted to floating-point values. The table shows the equivalent REST reads; hosted calls use the owning services directly.
+All inputs are strict: unknown fields are rejected, including caller-supplied owner/account IDs, bearer tokens and origins. `bankAccountIds` is an owner-scoped bank-account filter, not an owner selector. Every data tool uses only the token's account. Successful results are one compact JSON text block. API money strings, precision, nulls and metadata are preserved rather than converted to floating-point values. The table shows the equivalent REST reads; tools call the owning services directly.
 
 | Tool                  | Input                                 | API mapping                                                                                                                                                  |
 | --------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -94,7 +49,7 @@ All inputs are strict: unknown fields are rejected, including caller-supplied ow
 | `get_merchant`        | `{id}`                                | `GET /merchants/:id`; all-time paid, refunded, average payment, first date, exclusions and merchant variants.                                                |
 | `merchant_periods`    | `{id, interval, from, to, asOf?}`     | `GET /merchants/:id/periods`; spent, received and count per period.                                                                                          |
 
-Routes above are relative to `TEMPO_API_URL`, including its `/api` prefix. Every tool declares `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true` and `openWorldHint: true`; server and API authorization, not annotations, enforce read-only access.
+Every tool declares `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true` and `openWorldHint: true`; server and API authorization, not annotations, enforce read-only access.
 
 `month` is `YYYY-MM` in 1900–2099. Dates are real `YYYY-MM-DD` calendar dates, not timestamps. `asOf` defaults to the date in **Europe/Amsterdam at each call**, including recurring lists/summary, cash flow and balance trend, whose API DTOs require it. `interval` is `week`, `month` or `year`. The API enforces `from <= to <= asOf`, maximum ranges of 104 weeks, 240 months or 20 years (`MAX_RANGE_PERIODS` in `@tempo/contracts`; keep these numbers in step with it), and summary months on or before `asOf`. API range errors are returned as safe HTTP 400 tool errors.
 
@@ -106,7 +61,7 @@ Both search and totals accept these optional `filters`, matching the banking DTO
 
 - `bookingDate: {from?, to?}` with calendar dates.
 - `bankAccountIds: UUIDv4[]`.
-- `search: string`, maximum 1000 characters using the API validator (surrogate pairs and presentation sequences count as one). Proxy/request-line limits can also reject heavily encoded queries.
+- `search: string`, maximum 1000 characters using the API validator (surrogate pairs and presentation sequences count as one).
 - `categories: string[]` from `list_categories`, including `UNCATEGORIZED`.
 - `categorySources: (AI | HISTORY | MANUAL)[]`.
 - `financialEventTypes: (CURRENCY_EXCHANGE | OWN_TRANSFER)[]`.
@@ -118,13 +73,3 @@ Both search and totals accept these optional `filters`, matching the banking DTO
 `transaction_totals` returns `{baseCurrency, spending, income, net, count, excluded: {unknownDirection, missingBaseAmount}}`. Monetary totals are decimal strings using Tempo's spending/income semantics. Counts and exclusions describe the whole filtered set, not one search page. `list_accounts` preserves the API connection array and does not invent a grand balance total across currencies or missing conversions.
 
 Breakdown `interval` is `month` or `year` and `by` is `category` (spending net of refunds) or `source` (income by merchant); each period's total equals cash flow's. Merchant ids match `^[bk]_[0-9a-f]{32}$` (`MERCHANT_GROUP_ID_PATTERN`) and come from `list_merchants`, `merchant_ranking` or a transaction's `merchantGroupId`; an unknown or another owner's id returns the same safe 404 error. `list_merchants` takes `search` up to 200 characters, a nonnegative `offset` and `limit` 1–100 (default 50); `merchant_ranking` takes `limit` 1–200 (default 50) and refuses a period that starts after `asOf`. Merchant amounts are decimal strings in the base currency with Tempo's spending semantics: own transfers and currency exchanges never count, and `spent` is payments minus refunds. These limits come from `@tempo/contracts`.
-
-## Disposable API smoke
-
-After starting an isolated API with synthetic banking fixtures, create a test token using its session-only management endpoint. Supply that token, an explicit loopback `TEMPO_API_URL` and a fixture UUIDv4 in `TEMPO_SMOKE_TRANSACTION_ID` through protected environment injection, then run:
-
-```bash
-npm --prefix mcp run smoke:api
-```
-
-The command uses the SDK's actual stdio client to list and call all sixteen tools, including recurring reads, totals, a real transaction detail and the first merchant group `list_merchants` returns, so the fixtures need at least one merchant. It prints only tool pass/fail labels, not financial payloads or credentials. It refuses non-loopback hosts and requires an explicit URL and fixture ID. It neither creates nor revokes tokens; the fixture owner must revoke the disposable token and stop the isolated API afterwards. This smoke is a separate gate from the HTTP-stub suite.

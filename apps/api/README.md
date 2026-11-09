@@ -33,9 +33,9 @@ $ npm run start:dev
 
 This script starts the necessary Docker services, cleans any previous build output and starts the server in watch mode.
 
-## Local MCP client
+## MCP
 
-The optional [read-only stdio MCP package](mcp/README.md) exposes sixteen banking tools to a local MCP client. It uses a Tempo personal access token, not a browser session, and runs separately from the API. Build and configure it only for an explicitly selected client session or project; do not enable it globally until interactive/background isolation is proven.
+The API serves sixteen read-only banking tools over a hosted [Streamable HTTP MCP endpoint](docs/mcp.md) at `/api/mcp`. Clients authenticate with a Tempo personal access token, not a browser session.
 
 ## Test
 

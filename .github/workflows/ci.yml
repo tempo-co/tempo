@@ -127,12 +127,6 @@ jobs:
             - name: Run format check
               run: npm run format:check
 
-            - name: Install MCP dependencies
-              run: NODE_ENV=development npm --prefix mcp ci --include=dev
-
-            - name: Check MCP lint and format
-              run: npm --prefix mcp run lint:check && npm --prefix mcp run format:check
-
     api-build:
         name: API build
         runs-on: ubuntu-latest
@@ -159,9 +153,6 @@ jobs:
 
             - name: Build application
               run: npm run build
-
-            - name: Build local MCP package
-              run: NODE_ENV=development npm --prefix mcp ci --include=dev && npm --prefix mcp run build
 
     api-unit-test:
         name: API unit tests
@@ -192,9 +183,6 @@ jobs:
 
             - name: Run Claude bridge tests
               run: node --test claude-bridge/*.test.mjs
-
-            - name: Test local MCP package and stdio transport
-              run: NODE_ENV=development npm --prefix mcp ci --include=dev && npm --prefix mcp test
 
     api-e2e-test:
         name: API E2E tests

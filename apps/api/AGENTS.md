@@ -11,14 +11,14 @@ NestJS backend for Tempo, a personal-finance app that syncs real bank data throu
 - E2E setup, seeds, Compose stacks, `NODE_ENV`, image consumers: `docs/e2e-and-seeding.md`.
 - `Dockerfile`, migrations: `docs/migrations-and-image.md`. CI workflows and release tags: root `docs/ci-and-images.md`.
 - Deploy scripts, host units and staging: root `ops/README.md`.
-- Local MCP package: `mcp/README.md`.
+- `src/app/modules/banking/mcp/` and the hosted MCP endpoint: `docs/mcp.md`.
 
 ## Commands
 
 - Setup: Node.js 26.x, Docker Engine 28+, `npm ci`. Development: `npm run start:dev` (starts `docker-compose.dev.yml`, then Nest in watch mode).
 - `src/app/core/config/config.schema.ts` is the source of truth for environment variables. Local secrets go in `.env.<env>.local`, never in Git.
 - Checks: `npm run lint:check`, `npm run format:check`, `npm run build`. `lint` and `format` rewrite files. Run Prettier only on files you changed; edit Markdown by hand.
-- Unit: `npm run test`. E2E: `npm run test:e2e` (serial, recreates the test containers). Bridge: `node --test claude-bridge/*.test.mjs`. MCP: `npm --prefix mcp test`.
+- Unit: `npm run test`. E2E: `npm run test:e2e` (serial, recreates the test containers). Bridge: `node --test claude-bridge/*.test.mjs`.
 - CI publishes `ghcr.io/tempo-co/api:pr-<n>` for every same-repo PR that changes `apps/api` and, after tests pass on `main`, tags that commit's image `:main`, which production deploys. The same run's web E2E uses that image, so an API contract change needs web E2E coverage in the same PR.
 - Jest unit tests match `src/**/*.spec.ts`; E2E tests match `test/**/*.e2e.spec.ts`. A spec named any other way (for example `*.spec.ts.ts`, or a `test/` file without `.e2e.`) silently never runs.
 

@@ -5,7 +5,6 @@ import {Logger} from '@nestjs/common';
 import {Throttle, seconds} from '@nestjs/throttler';
 import type {BankConnection as BankConnectionResponse, BankTransactionsResponse} from '@tempo/contracts';
 import Redis from 'ioredis';
-import {execFileSync} from 'node:child_process';
 import {createHash, randomUUID} from 'node:crypto';
 import {AddressInfo, createConnection} from 'node:net';
 import request from 'supertest';
@@ -130,19 +129,6 @@ describe('Hosted MCP', () => {
 			});
 		});
 	}
-
-	it('loads shared tools through the root CommonJS TypeScript runtime', () => {
-		execFileSync(
-			process.execPath,
-			[
-				'-r',
-				'ts-node/register',
-				'-e',
-				"if (typeof require('./mcp/src/tools.ts').createToolServer !== 'function') process.exit(1)",
-			],
-			{cwd: process.cwd(), stdio: 'pipe'},
-		);
-	}, 15_000);
 
 	/** Observe actual Redis commands: unchanged contents alone cannot prove that sessions weren't read. */
 	async function isolated(operation: () => Promise<void>) {
