@@ -481,7 +481,7 @@ test.describe('bank transactions', () => {
     await expect(inspector.getByText(googlePayDescription, {exact: true})).toBeVisible();
   });
 
-  test('reopens a transaction inspector from its shareable URL', async ({page}) => {
+  test('reopens a transaction inspector from the list and its shareable URL', async ({page}) => {
     await page.goto('/bank-transactions');
 
     const transactionTrigger = page
@@ -493,10 +493,33 @@ test.describe('bank transactions', () => {
     const sharedUrl = page.url();
     expect(new URL(sharedUrl).searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
 
-    await page.goto(sharedUrl);
+    // Wait until the opened transaction is saved for offline use, then change it on the server: after
+    // a reload the inspector shows the transaction as Tempo has it now, not the saved copy.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (id) =>
+            localStorage.getItem('tempo-offline-cache')?.includes(`["bank-transaction","${id}"]`),
+          DETAIL_TRANSACTION_ID,
+        ),
+      )
+      .toBe(true);
+    let serverTitle = 'Corner bakery';
+    await page.route(`**/bank-transactions/${DETAIL_TRANSACTION_ID}`, async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as object;
+      await route.fulfill({response, json: {...body, displayDescription: serverTitle}});
+    });
+
+    await page.goto('/bank-transactions');
+    await transactionTrigger.click();
     const inspector = page.getByTestId('bank-transaction-inspector');
+    await expect(inspector.getByRole('heading', {name: 'Corner bakery'})).toBeVisible();
+
+    serverTitle = 'Harbour kiosk';
+    await page.goto(sharedUrl);
     await expect(inspector).toBeVisible();
-    await expect(inspector.getByRole('heading', {name: 'Coffee shop'})).toBeVisible();
+    await expect(inspector.getByRole('heading', {name: 'Harbour kiosk'})).toBeVisible();
     expect(new URL(page.url()).searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
   });
 

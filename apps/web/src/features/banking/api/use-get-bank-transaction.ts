@@ -35,7 +35,9 @@ export const useGetBankTransaction = (id: BankTransaction['id'], enabled = true)
     enabled: enabled && Boolean(id),
     // Show the row the list already loaded while the detail request re-validates it.
     placeholderData: () => findListedBankTransaction(queryClient, id),
-    staleTime: 30_000,
+    // A copy restored from offline storage can predate a change saved just before the reload, so
+    // only details fetched since this page loaded count as fresh.
+    staleTime: (query) => (query.state.dataUpdatedAt < performance.timeOrigin ? 0 : 30_000),
     retry: false,
   });
 
