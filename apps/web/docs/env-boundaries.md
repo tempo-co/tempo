@@ -46,7 +46,7 @@ Rules:
 - The API runs with `NODE_ENV=test`, which drops and recreates the schema on boot. Seed only after the API is healthy: `docker:test:up` waits (`--wait`), then `db:seed:e2e` runs the seed inside the `api` container. A seed run before the API started is wiped, and logins then fail with "Invalid email or password".
 - The API's only CORS origin is `WEB_BASE_URL=http://localhost:5173`, and the bank callback redirect is fixed to the same origin. Serving the app on another port or as `127.0.0.1` needs those changed too, so keep the preview on `localhost:5173`.
 - Banking provider calls point at `https://api.example.invalid` and AI categorization is off. Specs that need provider responses mock them with `page.route`.
-- The seed and the specs share accounts. `test/auth.setup.ts` logs seeded users in and writes `playwright/.auth/*.json`. A full run changes seeded accounts (password change/reset, sessions), so reseed before running again, and keep the `setup` project so storage states are refreshed after a reseed. Stale storage states show up as 401s.
+- The seed and read-only specs share accounts. `test/auth.setup.ts` logs seeded users in and writes `playwright/.auth/*.json`; it does not seed. Tests that change passwords or revoke sessions use fresh accounts instead of those saved identities. Reseed before repeating a full run, since other seeded lifecycle flows can change account state, and keep the `setup` project so storage states are refreshed after a reseed. Stale storage states show up as 401s.
 - Repeated setup runs consume the API's login throttle and leave sessions in Redis. Recreate the stack (`npm run test:e2e:local`) instead of reusing empty or stale storage-state files.
 
 ## API image

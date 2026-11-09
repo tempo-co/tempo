@@ -1,46 +1,34 @@
-import {BrowserContext, Page, expect, test} from '@playwright/test';
+import {BrowserContext, Page} from '@playwright/test';
 
-import {SESSION_TEST_USER_AUTH_FILE} from '../../constants/auth.constants';
-import {
-  SESSION_TEST_ACCOUNT_EMAIL,
-  SESSION_TEST_ACCOUNT_PASSWORD,
-} from '../../constants/seed.constants';
+import {expect, test} from '../../fixtures';
 import {HomePage} from '../../pages/home.page';
 import {LoginPage} from '../../pages/login.page';
-import {SecuritySettingsPage} from '../../pages/security-settings.page';
 
-test.describe.serial('Account Settings: Sessions', () => {
-  let page1: Page;
-  let loginPage1: LoginPage;
+test.describe('Account Settings: Sessions', () => {
   let page2: Page;
   let loginPage2: LoginPage;
-  let homePage2: HomePage;
+  let context2: BrowserContext | undefined;
 
-  let securitySettingsPage: SecuritySettingsPage;
-  let contexts: BrowserContext[] = [];
-
-  test.beforeEach(async ({browser}) => {
-    const context1 = await browser.newContext({storageState: SESSION_TEST_USER_AUTH_FILE});
-    page1 = await context1.newPage();
-    loginPage1 = new LoginPage(page1);
-
-    const context2 = await browser.newContext();
-    contexts = [context1, context2];
+  test.beforeEach(async ({browser, freshAccount, securitySettingsPage, homePage}) => {
+    context2 = await browser.newContext({storageState: {cookies: [], origins: []}});
     page2 = await context2.newPage();
     loginPage2 = new LoginPage(page2);
-    homePage2 = new HomePage(page2);
-    await loginPage2.login(SESSION_TEST_ACCOUNT_EMAIL, SESSION_TEST_ACCOUNT_PASSWORD);
+    const homePage2 = new HomePage(page2);
+    await loginPage2.login(freshAccount.email, freshAccount.password);
     await homePage2.expectToBeOnPage();
+    await expect(homePage2.accountEmail).toHaveText(freshAccount.email);
 
-    securitySettingsPage = new SecuritySettingsPage(page1);
     await securitySettingsPage.navigate();
+    await expect(homePage.accountEmail).toHaveText(freshAccount.email);
+    await expect(securitySettingsPage.sessionCards).toHaveCount(2);
   });
 
   test.afterEach(async () => {
-    await Promise.all(contexts.map((context) => context.close()));
+    await context2?.close();
+    context2 = undefined;
   });
 
-  test('should revoke another session successfully', async () => {
+  test('should revoke another session successfully', async ({securitySettingsPage}) => {
     const otherSessionCard = securitySettingsPage.otherSessionCards.first();
     await securitySettingsPage.getRevokeButton(otherSessionCard).click();
     await securitySettingsPage.revokeButtonConfirm.click();
@@ -53,7 +41,7 @@ test.describe.serial('Account Settings: Sessions', () => {
     await loginPage2.expectToBeOnPage();
   });
 
-  test('should revoke all other sessions', async () => {
+  test('should revoke all other sessions', async ({securitySettingsPage, page: page1}) => {
     await expect(securitySettingsPage.otherSessionCards.first()).toBeVisible();
     const otherSessionCount = await securitySettingsPage.otherSessionCards.count();
     await expect(securitySettingsPage.otherSessionsHeading).toHaveText(
@@ -75,7 +63,10 @@ test.describe.serial('Account Settings: Sessions', () => {
     await expect(securitySettingsPage.otherSessionsHeading).not.toBeVisible();
   });
 
-  test('should log out of the current session', async () => {
+  test('should log out of the current session', async ({
+    securitySettingsPage,
+    loginPage: loginPage1,
+  }) => {
     await securitySettingsPage.logOutButton.click();
     await securitySettingsPage.logOutButtonConfirm.click();
 
