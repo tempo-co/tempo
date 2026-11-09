@@ -39,6 +39,7 @@ import {
 	nextPeriodStart,
 	parseCents,
 	periodStarts,
+	periodWindows,
 	previousMonths,
 	summarizeBaseline,
 } from '../summary/bank-transaction-summary';
@@ -215,22 +216,18 @@ export class BankTransactionSummaryService {
 			this.findPeriodFlows(accountId, interval, starts[0], to),
 		]);
 		const totals = new Map(rows.map((row) => [row.start, row]));
-		const periods: BankTransactionCashFlowPeriod[] = [];
-		for (const start of starts) {
-			const periodEnd = addDays(nextPeriodStart(start, interval), -1);
-			if (!firstBookingDate || periodEnd < firstBookingDate) continue;
-			const spending = -parseCents(totals.get(start)?.spending ?? '0');
-			const income = parseCents(totals.get(start)?.income ?? '0');
-			periods.push({
-				start,
-				end: periodEnd < to ? periodEnd : to,
-				// A period that ends today is still running; one cut by where history starts is partial.
-				complete: periodEnd < asOf && periodEnd <= to && start >= firstBookingDate,
-				spending: formatCents(spending),
-				income: formatCents(income),
-				net: formatCents(income - spending),
-			});
-		}
+		const periods = periodWindows(interval, starts, to, asOf, firstBookingDate).map(
+			(window): BankTransactionCashFlowPeriod => {
+				const spending = -parseCents(totals.get(window.start)?.spending ?? '0');
+				const income = parseCents(totals.get(window.start)?.income ?? '0');
+				return {
+					...window,
+					spending: formatCents(spending),
+					income: formatCents(income),
+					net: formatCents(income - spending),
+				};
+			},
+		);
 		return {baseCurrency, interval, periods};
 	}
 

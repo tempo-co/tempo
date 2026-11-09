@@ -6,6 +6,7 @@ import {
 	formatCents,
 	medianCents,
 	parseCents,
+	periodWindows,
 	previousMonths,
 } from './bank-transaction-summary';
 
@@ -130,5 +131,16 @@ describe('bank transaction summary', () => {
 
 		expect(pace.baseline[0]).toEqual({day: 1, average: '5.00', low: null, high: null});
 		expect(pace.baseline).toHaveLength(30);
+	});
+
+	it('walks the periods history covers, clamping the last to the range and marking cut or running ones partial', () => {
+		const starts = ['2026-01-01', '2026-02-01', '2026-03-01', '2026-04-01'];
+
+		expect(periodWindows('month', starts, '2026-04-10', '2026-04-10', '2026-02-15')).toEqual([
+			{start: '2026-02-01', end: '2026-02-28', complete: false},
+			{start: '2026-03-01', end: '2026-03-31', complete: true},
+			{start: '2026-04-01', end: '2026-04-10', complete: false},
+		]);
+		expect(periodWindows('month', starts, '2026-04-10', '2026-04-10', null)).toEqual([]);
 	});
 });
