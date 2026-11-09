@@ -146,7 +146,7 @@ export function BankConnectionList({
     >
       {isPending ? (
         <Skeleton
-          className='h-88 w-full rounded-lg bg-card'
+          className='h-88 w-full rounded-card bg-card'
           role='status'
           aria-label='Loading bank connections'
           data-testid='bank-connections-loading'

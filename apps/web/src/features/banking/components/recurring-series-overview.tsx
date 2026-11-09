@@ -313,7 +313,7 @@ function SeriesList({
   muted?: boolean;
 }) {
   return (
-    <ul className='divide-y divide-border/60 border bg-card'>
+    <ul className='divide-y divide-border/60 overflow-hidden rounded-card border bg-card'>
       {series.map((entry) => (
         <li key={entry.key} data-testid={`recurring-series-${entry.key}`}>
           <SeriesRow
@@ -387,10 +387,10 @@ function RecurringSkeleton() {
       <Skeleton className='h-9 w-40' />
       <Skeleton className='h-10 w-48' />
       <Skeleton className='h-1.5' />
-      <div className='grid gap-px border'>
-        <Skeleton className='h-16' />
-        <Skeleton className='h-16' />
-        <Skeleton className='h-16' />
+      <div className='grid gap-px overflow-hidden rounded-card border'>
+        <Skeleton className='h-16 rounded-none' />
+        <Skeleton className='h-16 rounded-none' />
+        <Skeleton className='h-16 rounded-none' />
       </div>
     </div>
   );

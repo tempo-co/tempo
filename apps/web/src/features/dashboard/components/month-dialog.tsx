@@ -136,7 +136,7 @@ function StepButton({
       disabled={!month}
       onClick={() => month && onStep(month)}
       aria-label={label}
-      className='size-11 shrink-0 rounded-none focus-visible:-outline-offset-2 disabled:opacity-30 [&_svg]:size-5'
+      className='size-11 shrink-0 focus-visible:-outline-offset-2 disabled:opacity-30 [&_svg]:size-5'
     >
       <Icon aria-hidden='true' />
     </Button>
@@ -319,7 +319,7 @@ function FigureCells({loading, children}: {loading?: boolean; children: ReactNod
     <section
       aria-label='The month'
       aria-busy={loading || undefined}
-      className='grid grid-cols-2 gap-px border bg-border @[760px]:grid-cols-4'
+      className='grid grid-cols-2 gap-px overflow-hidden rounded-card border bg-border @[760px]:grid-cols-4'
     >
       {children}
       {loading && <LoadingLabel>Loading the month</LoadingLabel>}
@@ -341,7 +341,7 @@ function PartsSkeleton({
     <section
       aria-label={title}
       aria-busy='true'
-      className={cn('grid gap-3 border bg-card p-5', className)}
+      className={cn('grid gap-3 rounded-card border bg-card p-5', className)}
     >
       <LoadingLabel>{`Loading ${title.toLowerCase()}`}</LoadingLabel>
       <h2 className='text-card-title'>{title}</h2>
@@ -414,7 +414,10 @@ function WhereItWent({
   );
   const hasUsual = parts.some((part) => usualOf(part.key) !== null);
   return (
-    <section aria-label='Where it went' className='grid gap-3 border bg-card p-5 sm:p-6'>
+    <section
+      aria-label='Where it went'
+      className='grid gap-3 rounded-card border bg-card p-5 sm:p-6'
+    >
       <header className='flex flex-wrap items-baseline justify-between gap-x-3'>
         <h2 className='text-card-title'>Where it went</h2>
         {hasUsual && (
@@ -482,7 +485,7 @@ function MonthTransactions({from, to}: {from: string; to: string}) {
   const {data, isPending, refetch} = query;
   const transactions = data?.pages.flatMap((page) => page.transactions) ?? [];
   return (
-    <section aria-label='Transactions' className='min-w-0 border bg-card'>
+    <section aria-label='Transactions' className='min-w-0 rounded-card border bg-card'>
       <header className='flex items-center justify-between gap-3 px-5 pt-3 pb-1'>
         <h2 className='text-card-title'>Transactions</h2>
         <TextAction asChild className='-mr-2'>
@@ -544,7 +547,7 @@ function WhereItCameFrom({
   const rest = parts.slice(limit).reduce((sum, part) => sum + toCents(part.amount), 0);
   const max = Math.max(1, ...top.map((part) => toCents(part.amount)));
   return (
-    <section aria-label='Where it came from' className='grid gap-3 border bg-card p-5'>
+    <section aria-label='Where it came from' className='grid gap-3 rounded-card border bg-card p-5'>
       <h2 className='text-card-title'>Where it came from</h2>
       {parts.length === 0 && <p className='text-sm text-muted-foreground'>No income.</p>}
       <ul className='-mx-2 grid gap-1'>
@@ -598,7 +601,7 @@ function BiggestMerchants({month, today}: {month: string; today: string}) {
   const open = (merchant: string) =>
     void navigate({search: (prev) => ({...prev, merchants: 'open', merchant})});
   return (
-    <section aria-label='Biggest merchants' className='grid gap-3 border bg-card p-5'>
+    <section aria-label='Biggest merchants' className='grid gap-3 rounded-card border bg-card p-5'>
       <h2 className='text-card-title'>Biggest merchants</h2>
       {isPending ? (
         <div aria-busy='true'>

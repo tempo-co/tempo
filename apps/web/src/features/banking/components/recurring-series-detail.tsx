@@ -87,7 +87,7 @@ export function RecurringSeriesDetail({
 
       <Badges series={series} />
 
-      <dl className='grid grid-cols-2 gap-px border bg-border sm:grid-cols-4'>
+      <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-card border bg-border sm:grid-cols-4'>
         <Fact
           label={
             isPast(series)
@@ -350,7 +350,7 @@ function PaymentChart({
               const point = payload?.[0]?.payload as (typeof points)[number] | undefined;
               if (!active || !point) return null;
               return (
-                <div className='grid gap-0.5 border bg-card p-2 text-xs shadow-sm'>
+                <div className='grid gap-0.5 rounded-md border bg-card p-2 text-xs shadow-sm'>
                   <span className='text-muted-foreground'>
                     {formatBankTransactionCompactDate(point.date)}
                   </span>

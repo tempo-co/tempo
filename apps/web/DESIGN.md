@@ -107,8 +107,8 @@ typography:
     fontWeight: 400
     lineHeight: 1.5
 rounded:
-  control: "0px"
-  surface: "0px"
+  control: "6px"
+  surface: "12px"
   pill: "9999px"
 spacing:
   xs: "4px"
@@ -285,9 +285,12 @@ glass, backdrop blur, or nested shadows. Resting content stays quiet.
 
 ## Shapes
 
-Controls and surfaces use the theme's square `0px` radius. Pills remain reserved for badges,
-compact statuses, and avatars. Use 1px borders where a boundary improves scanning. Keep corners
-consistent within a component family.
+Corners are soft: `--radius` is `8px` and `--card-radius` is `12px`. Controls (buttons, inputs,
+selects, toggles, menus, tooltips) use `rounded-md` (6px), items inside a menu or popover
+`rounded-sm` (4px), and surfaces (cards, dialogs, the top of phone drawers) `rounded-card` (12px).
+A joined segmented control rounds its outer group and clips square segments inside it. Pills
+remain reserved for badges, compact statuses, and avatars. Use 1px borders where a boundary
+improves scanning. Keep corners consistent within a component family.
 
 ## Logo
 

@@ -29,7 +29,7 @@ export function SettingsGroup({id, title, description, action, children}: Settin
 
 /** Rows of one group share a single bordered surface, the same pattern as bank account lists. */
 export function SettingsList({children}: {children: ReactNode}) {
-  return <div className='divide-y rounded-card border bg-card'>{children}</div>;
+  return <div className='divide-y overflow-hidden rounded-card border bg-card'>{children}</div>;
 }
 
 type SettingsRowProps = {
