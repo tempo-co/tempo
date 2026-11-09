@@ -128,11 +128,6 @@ export function NotificationSettings() {
         description='Tempo only interrupts you when something needs you and can’t wait until you next open it.'
       >
         <ThisDevice publicKey={settings.publicKey} />
-        <p className='mt-3 text-sm text-muted-foreground'>
-          The app icon shows how many transactions need review when Tempo is installed on a computer
-          with Chrome or Edge, or added to an iPhone or iPad Home Screen. Android shows a dot with
-          each notification instead.
-        </p>
       </SettingsGroup>
 
       <SettingsGroup
