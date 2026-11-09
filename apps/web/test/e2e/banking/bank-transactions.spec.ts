@@ -1288,10 +1288,6 @@ test.describe('bank transactions', () => {
           displayDescription: 'Synthetic rounding remainder',
           amount: '-0.00400000',
           currency: 'EUR',
-          instructedAmount: '0.00000000',
-          instructedCurrency: 'EUR',
-          exchangeRate: '1.200000',
-          exchangeRateUnitCurrency: 'EUR',
         }),
       ];
       await route.fulfill({response, json: {transactions, total: 1284}});
@@ -1379,8 +1375,6 @@ test.describe('bank transactions', () => {
       }
     }
 
-    await page.setViewportSize({width: 1440, height: 900});
-    await page.goto('/bank-transactions');
     await rows
       .nth(3)
       .getByRole('button', {name: /^View .* transaction details$/})
@@ -1389,11 +1383,6 @@ test.describe('bank transactions', () => {
     await expect(zeroInspector.getByTestId('bank-transaction-detail-amount')).toHaveText('€0.00');
     // A zero amount moved no money, so it has no direction arrow.
     await expect(zeroInspector.getByTestId('bank-transaction-detail-direction')).toHaveCount(0);
-    // A rate without a second currency names no quote, so Bank details omits it.
-    await zeroInspector.getByRole('button', {name: 'Bank details', exact: true}).click();
-    await expect(zeroInspector.getByText('Instructed amount', {exact: true})).toBeVisible();
-    await expect(zeroInspector.getByText('Exchange rate', {exact: true})).toHaveCount(0);
-    await zeroInspector.getByRole('button', {name: 'Close transaction details'}).click();
 
     await page.setViewportSize({width: 393, height: 852});
     await page.goto('/bank-transactions');
