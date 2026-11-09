@@ -24,7 +24,7 @@ export const Route = createFileRoute('/bank-transactions/')({
 function BankTransactionsIndex() {
   const searchParams = Route.useSearch();
   const transactionId = searchParams.transactionId;
-  const {openTransaction, closeTransaction} = useBankTransactionInspector('/bank-transactions/');
+  const {openTransaction, closeTransaction} = useBankTransactionInspector();
   const {data, isPlaceholderData, refetch, pagination, filters, sort, ...query} =
     useGetBankTransactions(searchParams);
   const {isPending, isError: showError} = savedDataStatus({...query, data});

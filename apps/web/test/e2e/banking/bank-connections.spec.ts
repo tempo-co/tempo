@@ -1,3 +1,4 @@
+import type {Locator, Page} from '@playwright/test';
 import {type QueryClient, QueryObserver} from '@tanstack/react-query';
 import type {BankConnection} from '@tempo/contracts';
 
@@ -25,7 +26,6 @@ import {
 import {createHookHarness} from '../../utils/hook-harness';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
-const DETAIL_TRANSACTION_ID = '00000000-0000-4000-8000-000000000014';
 const MOCK_PROVIDER_ORIGIN = 'https://enablebanking.test';
 const TARGET_ASPSP = {name: 'Mock ASPSP', country: 'NL'};
 const MONOCHROME_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(
@@ -51,7 +51,7 @@ const MOCK_CONNECTION: BankConnection = {
   lastSyncError: null,
   nextSyncAt: '2030-01-01T00:00:00.000Z',
   syncStatus: 'SUCCEEDED',
-  baseCurrency: null,
+  baseCurrency: 'EUR',
   bankAccounts: [
     {
       id: '00000000-0000-4000-8000-000000000097',
@@ -91,6 +91,24 @@ const MOCK_CONNECTION: BankConnection = {
 };
 
 const REFRESH_RESULT = {...successfulBankRefresh, transactionsAdded: 3} satisfies BankSyncRun;
+const SYNC_IN_PROGRESS_REMOVAL =
+  'Bank sync is in progress. Wait for it to finish before removing this connection.';
+
+/** Opens a bank's details dialog from its card. */
+async function openDetails(page: Page, card: Locator) {
+  await card.getByRole('button', {name: / details$/}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+/** Opens a bank's details and switches the dialog to its removal step. */
+async function openRemoval(page: Page, card: Locator) {
+  const dialog = await openDetails(page, card);
+  await dialog.getByRole('button', {name: 'Remove connection'}).click();
+  await expect(dialog.getByTestId(/^remove-bank-confirm-/)).toBeVisible();
+  return dialog;
+}
 
 test.describe('bank connections', () => {
   test.use({storageState: VERIFIED_USER_AUTH_FILE});
@@ -112,42 +130,14 @@ test.describe('bank connections', () => {
 
     await page.goto('/bank-connections');
     await expect(page.getByTestId('bank-connection-total')).toContainText('1,335.00');
-    await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
+    await expect(page.getByTestId('bank-connection-problem')).toHaveCount(0);
     await expect.poll(() => requestCount, {timeout: 12_000}).toBeGreaterThan(1);
-    await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
+    await expect(page.getByTestId('bank-connection-problem')).toHaveCount(0);
   });
 
-  test('refreshes transactions after a later automatic synchronization', async ({page}) => {
-    let connectionRequestCount = 0;
-    let transactionRequestCount = 0;
-    await mockBankConnections(page, () => {
-      connectionRequestCount += 1;
-      const connection = {
-        ...MOCK_CONNECTION,
-        syncStatus: connectionRequestCount === 1 ? ('QUEUED' as const) : ('SUCCEEDED' as const),
-        lastSyncedAt:
-          connectionRequestCount === 1 ? '2026-09-01T00:00:00.000Z' : '2026-09-02T00:00:00.000Z',
-      };
-      return [connection];
-    });
-    await page.route('**/bank-connections/*/transactions*', async (route) => {
-      transactionRequestCount += 1;
-      await fulfillJson(route, {transactions: [], total: transactionRequestCount});
-    });
-
-    await page.goto('/bank-connections');
-    await expect(page.getByTestId('bank-connection-total')).toContainText('1,335.00');
-    await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
-    // Recent transactions are only loaded once the card is expanded.
-    expect(transactionRequestCount).toBe(0);
-
-    await page.getByTestId(`connection-card-toggle-${MOCK_CONNECTION.id}`).click();
-    await expect.poll(() => transactionRequestCount).toBe(1);
-    await expect.poll(() => connectionRequestCount, {timeout: 12_000}).toBeGreaterThan(1);
-    await expect.poll(() => transactionRequestCount, {timeout: 12_000}).toBeGreaterThan(1);
-  });
-
-  test('shows seeded connection data, callback feedback, and provider logo', async ({page}) => {
+  test('shows seeded connection data, callback feedback and provider logo, and opens an account in Transactions', async ({
+    page,
+  }) => {
     await page.clock.setFixedTime(SEEDED_TRANSACTION_YEAR_NOW);
     await mockJson(page, '**/bank-connections/aspsps', [
       {name: 'ABN AMRO', country: 'NL', logoUrl: PROVIDER_LOGO_URL},
@@ -156,147 +146,122 @@ test.describe('bank connections', () => {
       route.fulfill({status: 200, contentType: 'image/png', body: PROVIDER_LOGO_PNG}),
     );
 
+    let accountId = '';
     await transformBankConnections(page, (connections) => {
       const seededConnection = connections.find(
         (connection) => connection.aspspName === 'ABN AMRO',
       );
       if (!seededConnection) throw new Error('Expected a seeded ABN AMRO connection');
+      accountId = seededConnection.bankAccounts[0].id;
       return [seededConnection];
-    });
-
-    await page.route('**/bank-connections/*/transactions**', async (route) => {
-      const response = await route.fetch();
-      const payload = (await response.json()) as {
-        transactions: Array<Record<string, unknown>>;
-        total: number;
-      };
-      const recentTransaction = payload.transactions.find(
-        (transaction) => transaction.id === DETAIL_TRANSACTION_ID,
-      );
-      if (!recentTransaction) throw new Error('Expected the seeded detail bank transaction');
-
-      await route.fulfill({
-        response,
-        json: {
-          ...payload,
-          transactions: [
-            {
-              ...recentTransaction,
-              category: null,
-              categoryStatus: 'NOT_APPLICABLE',
-              categorySource: null,
-              financialEventType: 'CURRENCY_EXCHANGE',
-              financialEventSource: 'RULE',
-              financialEventRuleVersion: 'provider-currency-exchange-v1',
-              cashFlowTreatment: 'INTERNAL',
-            },
-            ...payload.transactions.filter(
-              (transaction) => transaction.id !== DETAIL_TRANSACTION_ID,
-            ),
-          ],
-        },
-      });
     });
 
     await page.goto('/bank-connections?result=connected');
 
     await expect(page.getByRole('heading', {name: 'Bank connections'})).toBeVisible();
-    // The toast times out, so check it on landing rather than after the inspector steps.
+    // The toast times out, so check it on landing rather than after the later steps.
     await expect(page.getByText('Bank connection added')).toBeVisible();
     await expect(page).toHaveURL(new RegExp('/bank-connections$'));
-    await expect(page.getByText('1 connection', {exact: true})).toBeVisible();
-    const connectionCard = page
-      .locator('[data-testid^="bank-connection-"]')
-      .filter({has: page.getByRole('heading', {name: 'ABN AMRO'})});
+    const connectionCard = page.getByRole('region', {name: 'ABN AMRO'});
     await expect(connectionCard).toBeVisible();
-    await connectionCard.getByTestId(/^connection-card-toggle-/).click();
-    await expect(connectionCard.getByRole('heading', {name: 'Accounts'})).toBeVisible();
-    await expect(connectionCard.getByRole('heading', {name: 'Recent transactions'})).toBeVisible();
-    await expect(connectionCard.getByText('Connected', {exact: true})).toBeVisible();
-    await expect(connectionCard.getByTestId('bank-connection-freshness')).toContainText('Updated');
+    // The seeded bank last updated more than a day before the fixed clock.
+    const updated = connectionCard.getByText(/^Updated \d+ days ago$/);
+    await expect(updated).toBeVisible();
+    await expect(updated).toHaveClass(/text-warning/);
+    await expect(connectionCard.getByTestId('bank-connection-problem')).toHaveCount(0);
 
     const bankLogo = connectionCard.getByTestId('bank-connection-logo');
-    await expect(bankLogo).toBeVisible();
     await expect(bankLogo.locator('img')).toHaveAttribute('src', PROVIDER_LOGO_URL);
-    await expect(bankLogo).toHaveClass(/border-border/);
-    await expect(bankLogo).toHaveClass(/bg-background/);
-    await expect(bankLogo).toHaveCSS('width', '72px');
-    await expect(bankLogo).toHaveCSS('height', '72px');
-    await expect(bankLogo.locator('img')).toHaveCSS('padding', '6px');
+    await expect(bankLogo).toHaveCSS('width', '36px');
+    await expect(bankLogo).toHaveCSS('height', '36px');
 
-    const status = connectionCard.getByTestId('bank-connection-status');
-    const freshness = connectionCard.getByTestId('bank-connection-freshness');
-    await expect(status).toBeVisible();
-    await expect(freshness).toBeVisible();
-    await expect(connectionCard.getByTestId('bank-connection-sync-status')).toHaveCount(0);
-    await expect(connectionCard.getByText('Daily spending', {exact: true})).toBeVisible();
-    await expect(connectionCard.getByText('Provider purchase')).toBeVisible();
-    const transactionTrigger = connectionCard.getByRole('button', {
-      name: 'View transaction details for Provider purchase',
+    const accountRow = connectionCard.getByRole('link', {name: 'Daily spending transactions'});
+    await expect(accountRow).toContainText('Daily spending');
+    await expect(accountRow).toContainText('Current account');
+    await expect(accountRow).toContainText('€123.45');
+
+    const details = await openDetails(page, connectionCard);
+    await expect(details.getByRole('heading', {name: 'ABN AMRO'})).toBeVisible();
+    for (const [label, value] of [
+      ['Country', 'Netherlands'],
+      ['Accounts', '1'],
+      ['Consent until', '1 Jan 2030'],
+    ]) {
+      await expect(details.getByText(label, {exact: true}).locator('xpath=..')).toContainText(
+        value,
+      );
+    }
+    await expect(details.getByRole('button', {name: 'Remove connection'})).toBeVisible();
+    // The dialog keeps showing the bank on every frame of its closing animation.
+    await details.evaluate((dialog) => {
+      const titles: string[] = [];
+      (window as unknown as {closingTitles: string[]}).closingTitles = titles;
+      const sample = () => {
+        if (!dialog.isConnected) return;
+        if (dialog.getAttribute('data-state') === 'closed') {
+          const title = document.getElementById(dialog.getAttribute('aria-labelledby') ?? '');
+          titles.push(title?.textContent ?? '');
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
     });
-    await expect(transactionTrigger).toBeVisible();
-    await expect(transactionTrigger).toHaveText('Provider purchase18 Aug-€12.50');
-    const descriptionBox = await boxOf(
-      transactionTrigger.getByText('Provider purchase', {exact: true}),
+    await page.keyboard.press('Escape');
+    await expect(details).toBeHidden();
+    const closingTitles = await page.evaluate(
+      () => (window as unknown as {closingTitles: string[]}).closingTitles,
     );
-    const dateBox = await boxOf(transactionTrigger.getByText('18 Aug', {exact: true}));
-    const amountBox = await boxOf(transactionTrigger.getByText('-€12.50', {exact: true}));
-    expect(dateBox.y).toBeGreaterThanOrEqual(descriptionBox.y + descriptionBox.height);
-    expect(amountBox.x).toBeGreaterThan(descriptionBox.x + descriptionBox.width);
-    await transactionTrigger.click();
-    const inspector = page.getByTestId('bank-transaction-inspector');
-    await expect(inspector).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
-    await expect(inspector.getByRole('heading', {name: 'Provider purchase'})).toBeVisible();
-    await expect(inspector.getByTestId('bank-transaction-detail-amount')).toHaveText('-€12.50');
+    expect(new Set(closingTitles)).toEqual(new Set(['ABN AMRO']));
+    await expect(connectionCard.getByRole('button', {name: 'ABN AMRO details'})).toBeFocused();
+
+    await accountRow.click();
+    await expect(page).toHaveURL(/\/bank-transactions\?/);
+    expect(new URL(page.url()).searchParams.get('bankAccountIds')).toBe(
+      JSON.stringify([accountId]),
+    );
     await expect(
-      inspector.getByRole('button', {name: 'Bank details', exact: true}),
-    ).toHaveAttribute('aria-expanded', 'false');
-    await inspector.getByRole('button', {name: 'Close transaction details'}).click();
-    await expect(inspector).toBeHidden();
-    await expect(transactionTrigger).toBeFocused();
-    expect(new URL(page.url()).searchParams.has('transactionId')).toBe(false);
+      page
+        .getByTestId(/^bank-transaction-row-/)
+        .filter({hasText: 'Provider purchase'})
+        .first(),
+    ).toBeVisible();
   });
 
-  for (const {syncStatus, title, description} of [
+  for (const {syncStatus, title, detail} of [
     {
       syncStatus: 'FAILED',
-      title: 'Automatic sync needs attention',
-      description: 'Synthetic bank refresh failed.',
+      title: 'Sync failed',
+      detail: 'No updates since 1 Jan · retries on its own',
     },
     {
       syncStatus: 'PARTIAL',
       title: 'Automatic sync is partial',
-      description: 'Synthetic account refresh was incomplete.',
+      detail: 'No updates since 1 Jan · retries on its own',
     },
     {
       syncStatus: 'RATE_LIMITED',
       title: 'Automatic sync is rate-limited',
-      description: 'The bank is temporarily limiting background access.',
+      detail: 'No updates since 1 Jan · retries on its own',
     },
-    {
-      syncStatus: 'EXPIRED',
-      title: 'Re-authorization required',
-      description: 'Consent expired.',
-    },
+    {syncStatus: 'EXPIRED', title: 'Consent expired', detail: 'No updates since 1 Jan'},
   ] as const) {
-    test(`shows the ${syncStatus} sync warning when the next sync is overdue`, async ({page}) => {
+    test(`shows the ${syncStatus} sync problem with the bank's last update`, async ({page}) => {
       await mockBankConnections(page, [
         {
           ...MOCK_CONNECTION,
           syncStatus,
-          lastSyncedAt: '2020-01-01T00:00:00.000Z',
+          lastSyncedAt: '2020-01-01T12:00:00.000Z',
           nextSyncAt: '2020-01-02T00:00:00.000Z',
-          lastSyncError: description,
+          lastSyncError: 'Synthetic bank refresh failed.',
         },
       ]);
 
       await page.goto('/bank-connections');
-      const warning = page.getByTestId('bank-connection-sync-status');
-      await expect(warning).toBeVisible();
-      await expect(warning).toHaveAttribute('role', 'alert');
-      await expect(warning).toContainText(title);
-      await expect(warning).toContainText(description);
+      const problem = page.getByTestId('bank-connection-problem');
+      await expect(problem).toBeVisible();
+      await expect(problem).toHaveAttribute('role', 'alert');
+      await expect(problem).toContainText(title);
+      await expect(problem).toContainText(detail);
       await expect(page.getByRole('button', {name: 'Re-authorize'})).toHaveCount(
         syncStatus === 'EXPIRED' ? 1 : 0,
       );
@@ -320,9 +285,9 @@ test.describe('bank connections', () => {
 
       await page.goto('/bank-connections');
       await expect(page.getByTestId('bank-connection-total')).toContainText('1,335.00');
-      await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
+      await expect(page.getByTestId('bank-connection-problem')).toHaveCount(0);
       await expect.poll(() => requestCount, {timeout: 12_000}).toBeGreaterThan(1);
-      await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
+      await expect(page.getByTestId('bank-connection-problem')).toHaveCount(0);
     });
   }
 
@@ -331,9 +296,7 @@ test.describe('bank connections', () => {
 
     await page.goto('/bank-connections');
     await expect(page.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
-    await expect(page.getByTestId('bank-connection-sync-status')).toContainText(
-      'Re-authorization required',
-    );
+    await expect(page.getByTestId('bank-connection-problem')).toContainText('Consent expired');
   });
 
   test('requires re-authorization when persisted consent has expired', async ({page}) => {
@@ -349,12 +312,14 @@ test.describe('bank connections', () => {
 
     await page.goto('/bank-connections');
 
-    const syncStatus = page.getByTestId('bank-connection-sync-status').first();
-    await expect(syncStatus).toContainText('Re-authorization required');
+    const problem = page.getByTestId('bank-connection-problem').first();
+    await expect(problem).toContainText('Consent expired');
     await expect(page.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
   });
 
-  test('does not present background sync for an incomplete authorization', async ({page}) => {
+  test('shows an incomplete authorization as not connected and offers re-authorizing', async ({
+    page,
+  }) => {
     await transformBankConnections(page, (connections) =>
       connections.map((connection) => ({
         ...connection,
@@ -368,8 +333,12 @@ test.describe('bank connections', () => {
 
     await page.goto('/bank-connections');
 
-    await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
+    const problem = page.getByTestId('bank-connection-problem').first();
+    await expect(problem).toContainText('Not connected');
+    await expect(problem).toContainText('The bank did not finish authorizing');
+    await expect(problem.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
   });
+
   test('removes an incomplete bank connection after a rate-limited attempt', async ({page}) => {
     const pendingConnectionId = '00000000-0000-4000-8000-000000000098';
     let pendingConnectionVisible = true;
@@ -410,16 +379,20 @@ test.describe('bank connections', () => {
 
     const pendingCard = page.getByTestId(`bank-connection-${pendingConnectionId}`);
     await expect(pendingCard).toBeVisible();
-    await expect(pendingCard.getByRole('button', {name: 'Remove'})).toBeVisible();
-    await pendingCard.getByRole('button', {name: 'Remove'}).click();
+    const dialog = await openRemoval(page, pendingCard);
+    // An incomplete connection holds no accounts, so removing it needs no typed confirmation.
+    await expect(dialog.getByLabel('Type DELETE to confirm')).toHaveCount(0);
+    const confirm = dialog.getByRole('button', {name: 'Remove permanently'});
+    await confirm.click();
 
-    // The rate limit has its own toast and the removal adds none; the card stays for a retry.
+    // The rate limit has its own toast and the removal adds none; the dialog stays for a retry.
     await expect(page.getByText('Rate limit exceeded', {exact: true})).toBeVisible();
     await expect(page.getByText('Unable to remove bank connection', {exact: true})).toHaveCount(0);
     await expect(pendingCard).toBeVisible();
 
-    await pendingCard.getByRole('button', {name: 'Remove'}).click();
+    await confirm.click();
     await expect(page.getByText('Bank connection removed', {exact: true})).toBeVisible();
+    await expect(dialog).toBeHidden();
     await expect(pendingCard).toHaveCount(0);
   });
 
@@ -456,17 +429,29 @@ test.describe('bank connections', () => {
 
     const connectedCard = page.getByTestId(`bank-connection-${connectedConnectionId}`);
     await expect(connectedCard).toBeVisible();
-    await connectedCard.getByTestId(/^connection-card-toggle-/).click();
-    await connectedCard.getByRole('button', {name: 'Remove'}).click();
-    await expect(page.getByRole('heading', {name: 'Remove connected bank?'})).toBeVisible();
-    const removeCancelButton = page.getByRole('button', {name: 'Cancel'});
-    await expect(removeCancelButton).toBeVisible();
+    // Dismissed from its removal step, the dialog reopens on the bank's details.
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    await openRemoval(page, connectedCard);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    const reopened = await openDetails(page, connectedCard);
+    expect(await reopened.getByTestId(/^remove-bank-confirm-/).count()).toBe(0);
+    await expect(reopened.getByRole('button', {name: 'Remove connection'})).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    const dialog = await openRemoval(page, connectedCard);
+    await expect(dialog.getByRole('heading', {name: 'Remove ABN AMRO?'})).toBeVisible();
+    await expect(dialog.getByText(/its 1 account and all their transactions/)).toBeVisible();
+    // Back returns to the bank's details in the same dialog.
+    await dialog.getByRole('button', {name: 'Back'}).click();
+    await expect(dialog.getByRole('heading', {name: 'ABN AMRO'})).toBeVisible();
+    await dialog.getByRole('button', {name: 'Remove connection'}).click();
+    const backButton = dialog.getByRole('button', {name: 'Back'});
     expect(
-      await removeCancelButton.evaluate(
+      await backButton.evaluate(
         (element) => getComputedStyle(element.parentElement!).paddingBottom,
       ),
     ).toBe('16px');
-    await expect(page.getByText(/all linked bank accounts, and all transactions/)).toBeVisible();
     expect(deleteCalled).toBe(false);
 
     const confirmButton = page.getByTestId(`remove-bank-confirm-${connectedConnectionId}`);
@@ -596,31 +581,6 @@ test.describe('bank connections', () => {
     await expect(page).toHaveURL('https://auth.example.test/monochrome-bank');
   });
 
-  test('reopens a connection transaction inspector from its shareable URL', async ({page}) => {
-    await page.goto('/bank-connections');
-
-    const card = page
-      .locator('[data-testid^="bank-connection-"][aria-labelledby]')
-      .filter({has: page.getByRole('heading', {name: /ABN AMRO|Mock ASPSP/})})
-      .first();
-    await expect(card).toBeVisible();
-    await card.getByTestId(/^connection-card-toggle-/).click();
-
-    const transactionTrigger = page.getByRole('button', {
-      name: 'View transaction details for Provider purchase',
-    });
-    await transactionTrigger.click();
-
-    const sharedUrl = page.url();
-    expect(new URL(sharedUrl).searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
-
-    await page.goto(sharedUrl);
-    const inspector = page.getByTestId('bank-transaction-inspector');
-    await expect(inspector).toBeVisible();
-    await expect(inspector.getByRole('heading', {name: 'Provider purchase'})).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
-  });
-
   test('returns to the installed app after bank authorization', async ({page, context}) => {
     await page.goto('/bank-connections');
     const authorizationUrl = 'https://bank.example.test/mock-bank-authorization';
@@ -661,115 +621,26 @@ test.describe('bank connections', () => {
     await page.goto('/bank-connections');
 
     const heading = page.getByRole('heading', {name: 'Bank connections'});
-    const headingGroup = page.getByTestId('bank-connections-heading');
     const connectButton = page.getByRole('button', {name: 'Connect a bank'}).first();
-    const connectionCard = page
-      .locator('[data-testid^="bank-connection-"][aria-labelledby]')
-      .first();
-    const status = page.getByTestId('bank-connection-status');
-    const freshness = page.getByTestId('bank-connection-freshness');
-    const totalBalance = page.getByTestId('bank-connection-total');
-    const connectionTitle = connectionCard.getByRole('heading', {name: 'ABN AMRO'});
+    const connectionCard = page.getByRole('region', {name: 'ABN AMRO'});
+    const accountRow = connectionCard.getByRole('link', {name: 'Daily spending transactions'});
 
     await expect(heading).toBeVisible();
     await expect(connectButton).toBeVisible();
-    await expect(connectionCard).toBeVisible();
-    await expect(totalBalance).toBeVisible();
-    await expect(totalBalance).toHaveAttribute('role', 'group');
-    await expect(totalBalance).toHaveAttribute('aria-label', /^Connection balances:/);
-    const [closedCardBox, titleBox, totalBox] = await Promise.all([
-      boxOf(connectionCard),
-      boxOf(connectionTitle),
-      boxOf(totalBalance),
-    ]);
-    expect(closedCardBox.height).toBeLessThan(130);
-    expect(totalBox.y).toBeGreaterThanOrEqual(titleBox.y + titleBox.height);
-    expect(totalBox.x).toBeCloseTo(titleBox.x, 0);
-    await connectionCard.getByTestId(/^connection-card-toggle-/).click();
-    await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
-    await expect(page.getByText('Daily spending', {exact: true})).toBeVisible();
-    await expect(freshness).toBeVisible();
-    await expect(connectionCard.locator('footer')).not.toContainText('·', {useInnerText: true});
-
-    const [headingBox, headingGroupBox, connectButtonBox] = await Promise.all([
+    await expect(accountRow).toBeVisible();
+    const [headingBox, connectButtonBox, cardBox, rowBox] = await Promise.all([
       boxOf(heading),
-      boxOf(headingGroup),
       boxOf(connectButton),
-      boxOf(status),
-      boxOf(freshness),
+      boxOf(connectionCard),
+      boxOf(accountRow),
     ]);
     expect(headingBox.height).toBe(32);
-    expect(headingGroupBox.height).toBeLessThan(120);
-    expect(connectButtonBox.x).toBe(16);
+    expect(connectButtonBox.x + connectButtonBox.width).toBeLessThanOrEqual(393 - 16);
+    expect(cardBox.x).toBe(16);
+    expect(cardBox.x + cardBox.width).toBe(393 - 16);
+    expect(rowBox.height).toBe(60);
     await expectNoHorizontalOverflow(page);
   });
-
-  test('wraps multiple currency totals without phone overflow', async ({page}) => {
-    const multiCurrencyConnection: BankConnection = {
-      ...MOCK_CONNECTION,
-      bankAccounts: [
-        ...MOCK_CONNECTION.bankAccounts,
-        {
-          ...MOCK_CONNECTION.bankAccounts[0],
-          id: '00000000-0000-4000-8000-000000000099',
-          name: 'Mock USD account',
-          currency: 'USD',
-          currentBalanceAmount: '50.00',
-          maskedIdentifier: '****9012',
-        },
-      ],
-    };
-    await page.setViewportSize({width: 320, height: 852});
-    await mockBankConnections(page, [multiCurrencyConnection]);
-    await page.goto('/bank-connections');
-
-    const connectionCard = page
-      .locator('[data-testid^="bank-connection-"][aria-labelledby]')
-      .first();
-    const totalBalance = connectionCard.getByTestId('bank-connection-total');
-    await expect(totalBalance).toHaveAttribute('aria-label', /EUR.*USD/);
-    const [cardBox, totalBox] = await Promise.all([boxOf(connectionCard), boxOf(totalBalance)]);
-    expect(totalBox.x + totalBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
-    await expectNoHorizontalOverflow(page);
-  });
-
-  const zeroBalanceCases = [
-    {
-      name: 'hides zero currency totals next to a non-zero total',
-      balances: [
-        {currency: 'EUR', amount: '25.00'},
-        {currency: 'GBP', amount: '0.00'},
-        {currency: 'USD', amount: '0'},
-      ],
-      expectedLabel: 'Connection balances: 25 EUR',
-    },
-    {
-      name: 'keeps a single zero currency total',
-      balances: [{currency: 'EUR', amount: '0.00'}],
-      expectedLabel: 'Connection balances: 0 EUR',
-    },
-  ];
-
-  for (const {name, balances, expectedLabel} of zeroBalanceCases) {
-    test(name, async ({page}) => {
-      await mockBankConnections(page, [
-        {
-          ...MOCK_CONNECTION,
-          bankAccounts: balances.map(({currency, amount}, index) => ({
-            ...MOCK_CONNECTION.bankAccounts[0],
-            id: `00000000-0000-4000-8000-00000000010${index}`,
-            currency,
-            currentBalanceAmount: amount,
-          })),
-        },
-      ]);
-      await page.goto('/bank-connections');
-
-      const totalBalance = page.getByTestId('bank-connection-total');
-      await expect(totalBalance).toHaveAttribute('aria-label', expectedLabel);
-      await expect(totalBalance.locator(':scope > span')).toHaveCount(1);
-    });
-  }
 
   test('keeps the connection overview within a narrow phone viewport', async ({page}) => {
     await page.setViewportSize({width: 320, height: 852});
@@ -781,10 +652,9 @@ test.describe('bank connections', () => {
     const activeTab = page.getByTestId('app-tab-bar').getByRole('link', {name: 'Connections'});
 
     await expect(connectionCard).toBeVisible();
-    await connectionCard.getByTestId(/^connection-card-toggle-/).click();
-    await expect(page.getByRole('heading', {name: 'Accounts'})).toBeVisible();
-    await expect(page.getByRole('heading', {name: 'Transactions'})).toBeVisible();
-    await expect(page.getByTestId('bank-connection-sync-status')).toHaveCount(0);
+    await expect(
+      connectionCard.getByRole('link', {name: 'Daily spending transactions'}),
+    ).toBeVisible();
     await expect(activeTab).toHaveAttribute('aria-current', 'page');
 
     const [connectionCardBox, activeTabBox] = await Promise.all([
@@ -846,6 +716,82 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
   });
 
+  test('totals known balances in their one currency, or else the base currency, without phone overflow', async ({
+    page,
+  }) => {
+    const multiCurrencyConnection: BankConnection = {
+      ...MOCK_CONNECTION,
+      bankAccounts: [
+        ...MOCK_CONNECTION.bankAccounts,
+        {
+          ...MOCK_CONNECTION.bankAccounts[0],
+          id: '00000000-0000-4000-8000-000000000099',
+          details: 'Mock USD account',
+          currency: 'USD',
+          currentBalanceAmount: '50.00',
+          currentBalanceInBaseCurrency: '46.00',
+          maskedIdentifier: '****9012',
+        },
+      ],
+    };
+    const balances = (amount: string | null): BankConnection => ({
+      ...MOCK_CONNECTION,
+      bankAccounts: MOCK_CONNECTION.bankAccounts.map((account) => ({
+        ...account,
+        currentBalanceAmount: amount,
+        latestBalances: [],
+      })),
+    });
+    const currencies = (
+      baseCurrency: string | null,
+      [first, second]: [string, string],
+    ): BankConnection => ({
+      ...MOCK_CONNECTION,
+      baseCurrency,
+      bankAccounts: [
+        {...MOCK_CONNECTION.bankAccounts[0], currency: first},
+        {...MOCK_CONNECTION.bankAccounts[1], currency: second},
+      ],
+    });
+    let connection = currencies(null, ['EUR', 'EUR']);
+    await page.setViewportSize({width: 320, height: 852});
+    await mockBankConnections(page, () => [connection]);
+    const connectionCard = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
+    const totalBalance = connectionCard.getByTestId('bank-connection-total');
+
+    // Balances in one currency add up in that currency, before the owner has a base currency.
+    await page.goto('/bank-connections');
+    await expect(totalBalance).toHaveText('Total€1,335.00');
+    connection = currencies('EUR', ['USD', 'USD']);
+    await page.reload();
+    await expect(totalBalance).toHaveText('Total$1,335.00');
+    // Mixed currencies add up only in the base currency.
+    connection = currencies(null, ['EUR', 'USD']);
+    await page.reload();
+    await expect(connectionCard.getByRole('link', {name: / transactions$/})).toHaveCount(2);
+    await expect(totalBalance).toHaveCount(0);
+
+    // Known zero balances add up to zero; a bank with no balances yet has no total to show.
+    connection = balances('0.00');
+    await page.reload();
+    await expect(totalBalance).toHaveText('Total€0.00');
+    connection = balances(null);
+    await page.reload();
+    await expect(connectionCard.getByText('2 accounts', {exact: true})).toBeVisible();
+    await expect(totalBalance).toHaveCount(0);
+
+    connection = multiCurrencyConnection;
+    await page.reload();
+    await expect(connectionCard.getByText('3 accounts', {exact: true})).toBeVisible();
+    const usdRow = connectionCard.getByRole('link', {name: 'Mock USD account transactions'});
+    await expect(usdRow).toContainText('$50.00');
+    await expect(usdRow).toContainText('≈ €46.00');
+    await expect(totalBalance).toHaveText('Total€1,381.00');
+    const [cardBox, totalBox] = await Promise.all([boxOf(connectionCard), boxOf(totalBalance)]);
+    expect(totalBox.x + totalBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+    await expectNoHorizontalOverflow(page);
+  });
+
   test('explains a synchronization conflict that arrives while the removal dialog is open', async ({
     page,
   }) => {
@@ -855,8 +801,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     ]);
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    await card.getByTestId(/^connection-card-toggle-/).click();
-    await card.getByRole('button', {name: 'Remove connection'}).click();
+    await openRemoval(page, card);
     await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
     const confirm = page.getByRole('button', {name: 'Remove permanently', exact: true});
     await expect(confirm).toBeEnabled();
@@ -951,6 +896,9 @@ test.describe('mocked Enable Banking bank connection', () => {
     const held = new Promise<void>((resolve) => (releaseRemoval = resolve));
     let releaseRefresh!: () => void;
     const refreshHeld = new Promise<void>((resolve) => (releaseRefresh = resolve));
+    let releaseSecondRemoval!: () => void;
+    const secondRemovalHeld = new Promise<void>((resolve) => (releaseSecondRemoval = resolve));
+    await page.emulateMedia({reducedMotion: 'reduce'});
     await mockBankConnections(page, () => {
       reads++;
       return [...(includeFirst ? [first] : []), ...(removed ? [] : [MOCK_CONNECTION])];
@@ -965,12 +913,6 @@ test.describe('mocked Enable Banking bank connection', () => {
         removed && id === MOCK_CONNECTION.id ? 404 : 200,
       );
     });
-    await page.route(`**/bank-connections/${first.id}/transactions*`, (route) =>
-      fulfillJson(route, {transactions: [], total: 0}),
-    );
-    await page.route(`**/bank-connections/${MOCK_CONNECTION.id}/transactions*`, (route) =>
-      fulfillJson(route, {transactions: [], total: 0}),
-    );
     await page.route(`**/bank-connections/${MOCK_CONNECTION.id}`, async (route) => {
       expect(route.request().method()).toBe('DELETE');
       removalAttempts++;
@@ -978,6 +920,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         await held;
         await fulfillJson(route, {message: 'Unavailable'}, 503);
       } else {
+        await secondRemovalHeld;
         removed = true;
         await route.fulfill({status: 204, body: ''});
       }
@@ -985,14 +928,13 @@ test.describe('mocked Enable Banking bank connection', () => {
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
     await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id]);
-    await card.getByTestId(/^connection-card-toggle-/).click();
-    await expect(card.getByRole('button', {name: 'Remove connection'})).toBeEnabled();
-    await card.getByRole('button', {name: 'Remove connection'}).click();
+    let dialog = await openRemoval(page, card);
     await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
-    await page.getByRole('button', {name: 'Remove permanently', exact: true}).click();
+    await dialog.getByRole('button', {name: 'Remove permanently', exact: true}).click();
     try {
-      await expect(page.getByRole('button', {name: 'Removing...'})).toBeDisabled();
-      await page.getByRole('button', {name: 'Cancel', exact: true}).click();
+      await expect(dialog.getByRole('button', {name: 'Removing...'})).toBeDisabled();
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
       const before = reads;
       await page.evaluate(() => {
         for (const value of ['hidden', 'visible']) {
@@ -1001,12 +943,15 @@ test.describe('mocked Enable Banking bank connection', () => {
         }
       });
       await expect.poll(() => reads).toBeGreaterThan(before);
-      await expect(card.getByRole('button', {name: 'Remove connection'})).toBeDisabled();
+      // Reopened while the removal is still running, the dialog shows it rather than a second one.
+      dialog = await openRemoval(page, card);
+      await expect(dialog.getByRole('button', {name: 'Removing...'})).toBeDisabled();
       expect(requests).toEqual([MOCK_CONNECTION.id]);
+      await page.keyboard.press('Escape');
     } finally {
       releaseRemoval();
     }
-    await expect(card.getByRole('button', {name: 'Remove connection'})).toBeEnabled();
+    expect(removalAttempts).toBe(1);
 
     includeFirst = true;
     await page.evaluate(() => {
@@ -1019,14 +964,29 @@ test.describe('mocked Enable Banking bank connection', () => {
     let readsBeforeSettle = Number.POSITIVE_INFINITY;
     try {
       await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id, first.id]);
-      await card.getByRole('button', {name: 'Remove connection'}).click();
+      dialog = await openRemoval(page, card);
       await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
-      await page.getByRole('button', {name: 'Remove permanently', exact: true}).click();
+      await dialog.getByRole('button', {name: 'Remove permanently', exact: true}).click();
+      await expect(dialog.getByRole('button', {name: 'Removing...'})).toBeDisabled();
+      // Another bank opened meanwhile stays open when this removal completes.
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
+      const firstDetails = await openDetails(page, firstCard);
+      releaseSecondRemoval();
       await expect(page.getByText('Bank connection removed', {exact: true})).toBeVisible();
       await expect(card).toHaveCount(0);
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      await expect(firstDetails).toHaveAttribute('data-state', 'open');
+      await page.keyboard.press('Escape');
       // A settled refresh re-reads the saved connections.
       readsBeforeSettle = reads;
     } finally {
+      releaseSecondRemoval();
       releaseRefresh();
     }
     await expect.poll(() => reads).toBeGreaterThan(readsBeforeSettle);
@@ -1182,47 +1142,41 @@ test.describe('mocked Enable Banking bank connection', () => {
 
   for (const syncStatus of ['QUEUED', 'RUNNING'] as const) {
     test(`blocks removal and explains why while bank sync is ${syncStatus}`, async ({page}) => {
+      let removals = 0;
       await mockBankConnections(page, [{...MOCK_CONNECTION, syncStatus}]);
+      await page.route(`**/bank-connections/${MOCK_CONNECTION.id}`, (route) => {
+        removals++;
+        return route.fulfill({status: 204, body: ''});
+      });
       await page.goto('/bank-connections');
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await card.getByTestId(/^connection-card-toggle-/).click();
-      const remove = card.getByRole('button', {name: 'Remove connection'});
-      const reason =
-        'Bank sync is in progress. Wait for it to finish before removing this connection.';
-      await expect(remove).toHaveAttribute('aria-disabled', 'true');
-      await expect(remove).toHaveAccessibleDescription(reason);
-      await remove.hover();
-      await expect(page.getByRole('tooltip')).toHaveText(reason);
-      await page.keyboard.press('Escape');
-      await expect(page.getByRole('tooltip')).toHaveCount(0);
-      await remove.focus();
-      await expect(page.getByRole('tooltip')).toHaveText(reason);
-      // Playwright skips aria-disabled targets unless forced; browsers still deliver the click.
-      await remove.click({force: true});
-      await expect(page.getByRole('tooltip')).toHaveText(reason);
-      await expect(page.getByRole('dialog')).toHaveCount(0);
+      const dialog = await openRemoval(page, card);
+      await expect(dialog.getByRole('status')).toHaveText(SYNC_IN_PROGRESS_REMOVAL);
+      await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
+      const confirm = dialog.getByRole('button', {name: 'Remove permanently'});
+      await expect(confirm).toBeDisabled();
+      await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).press('Enter');
+      await expect(dialog).toBeVisible();
+      expect(removals).toBe(0);
     });
   }
 
   test.describe('on a touch phone', () => {
     test.use({hasTouch: true, isMobile: true, viewport: {width: 390, height: 844}});
 
-    test('explains blocked removal on tap', async ({page}) => {
+    test('explains blocked removal in the drawer', async ({page}) => {
       await mockBankConnections(page, [{...MOCK_CONNECTION, syncStatus: 'RUNNING'}]);
       await page.goto('/bank-connections');
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await card.getByTestId(/^connection-card-toggle-/).tap();
-      await card.getByRole('button', {name: 'Remove connection'}).tap({force: true});
-      const tooltip = page.getByRole('tooltip');
-      await expect(tooltip).toHaveText(
-        'Bank sync is in progress. Wait for it to finish before removing this connection.',
-      );
-      // Radix renders a visually hidden copy with role=tooltip; measure the visible bubble.
-      const box = await page.locator('[data-radix-popper-content-wrapper]').boundingBox();
-      expect(box).not.toBeNull();
-      expect(box!.x).toBeGreaterThanOrEqual(0);
-      expect(box!.x + box!.width).toBeLessThanOrEqual(390);
-      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await card.getByRole('button', {name: / details$/}).tap();
+      const drawer = page.getByRole('dialog');
+      await drawer.getByRole('button', {name: 'Remove connection'}).tap();
+      const reason = drawer.getByRole('status');
+      await expect(reason).toHaveText(SYNC_IN_PROGRESS_REMOVAL);
+      const box = await boxOf(reason);
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(390);
+      await expect(drawer.getByRole('button', {name: 'Remove permanently'})).toBeDisabled();
     });
   });
 
@@ -1318,7 +1272,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         'Bank consent has expired. Please reconnect.',
       );
       await expect(card.getByRole('button', {name: 'Re-authorize', exact: true})).toBeVisible();
-      await expect(card.getByTestId('bank-connection-status')).toContainText('Expired');
+      await expect(card.getByTestId('bank-connection-problem')).toContainText('Consent expired');
     });
   }
 
@@ -1627,8 +1581,6 @@ test.describe('mocked Enable Banking bank connection', () => {
     // The settled refresh re-reads the saved connections; by then any toast would have shown.
     await expect.poll(() => reads).toBeGreaterThan(readsAtSkip);
     await expect(card.getByTestId('bank-connection-total')).toBeVisible();
-    await card.getByTestId(/^connection-card-toggle-/).click();
-    await expect(card.getByRole('button', {name: 'Remove connection'})).toBeEnabled();
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
   });
 
@@ -1686,9 +1638,6 @@ test.describe('mocked Enable Banking bank connection', () => {
 
       await page.route('https://enablebanking.com/brands/NL/Mock-ASPSP/', (route) =>
         route.fulfill({status: 200, contentType: 'image/png', body: PROVIDER_LOGO_PNG}),
-      );
-      await page.route(`**/bank-connections/${MOCK_CONNECTION.id}/transactions*`, (route) =>
-        fulfillJson(route, {transactions: [], total: 0}),
       );
       await page.route(`**/bank-connections/${MOCK_CONNECTION.id}/refresh`, async (route) => {
         expect(route.request().method()).toBe('POST');
@@ -1802,7 +1751,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       providerCallback.searchParams.set('state', 'mock-authorization-state');
       providerCallback.searchParams.set('code', 'mock-provider-code');
       providerCallbackUrl = providerCallback.toString();
-      await expect(page.getByText('0 connections', {exact: true})).toBeVisible();
+      await expect(page.getByRole('heading', {name: 'No bank connections'})).toBeVisible();
 
       await page.getByRole('button', {name: 'Connect a bank'}).click();
       const picker = page.getByTestId('bank-connection-picker');
@@ -1836,47 +1785,206 @@ test.describe('mocked Enable Banking bank connection', () => {
       expect(connectionPersisted).toBe(true);
 
       const connectionCard = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await expect(page.getByText('1 connection', {exact: true})).toBeVisible();
       await expect(connectionCard).toBeVisible();
       await expect(connectionCard.getByRole('heading', {name: TARGET_ASPSP.name})).toBeVisible();
-      await expect(connectionCard.getByText('Connected', {exact: true})).toBeVisible();
-      await expect(connectionCard.getByText('Consent valid until', {exact: false})).toBeHidden();
+      await expect(connectionCard.getByText('2 accounts', {exact: true})).toBeVisible();
+      await expect(
+        connectionCard.getByRole('link', {name: 'Mock ASPSP checking account transactions'}),
+      ).toContainText('Current account · ••1234');
       await expectNoHorizontalOverflow(page);
+      const dialog = await openDetails(page, connectionCard);
+      await expect(
+        dialog.getByText('Consent until', {exact: true}).locator('xpath=..'),
+      ).toContainText('1 Jan 2030');
+      await dialog.getByRole('button', {name: 'Remove connection'}).click();
+      await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
+      const confirm = page.getByTestId(`remove-bank-confirm-${MOCK_CONNECTION.id}`);
       try {
         await expect.poll(() => refreshRequests).toBe(1);
         await page.screenshot({
           path: testInfo.outputPath(`refresh-pending-${width}-${theme}.png`),
           fullPage: true,
         });
-        await connectionCard.getByTestId(/^connection-card-toggle-/).click();
-        await expect(
-          connectionCard.getByRole('button', {name: 'Remove connection'}),
-        ).toBeDisabled();
+        // The opening refresh holds removal back until it settles.
+        await expect(dialog.getByRole('status')).toHaveText(SYNC_IN_PROGRESS_REMOVAL);
+        await expect(confirm).toBeDisabled();
         expect(refreshRequests).toBe(1);
       } finally {
         releaseRefresh();
       }
       await expect(connectionCard.getByTestId('bank-connection-total')).toContainText('2,000.00');
-      await expect(connectionCard.getByRole('button', {name: 'Remove connection'})).toBeEnabled();
+      await expect(confirm).toBeEnabled();
       await page.screenshot({
         path: testInfo.outputPath(`refresh-complete-${width}-${theme}.png`),
         fullPage: true,
       });
-      await expect(connectionCard.getByRole('heading', {name: 'Accounts'})).toBeVisible();
-      await expect(connectionCard.getByText('Mock current account', {exact: true})).toBeVisible();
-      await expect(connectionCard.getByText('Consent valid until', {exact: false})).toBeVisible();
-      await expect(connectionCard.getByRole('button', {name: 'Remove'})).toBeVisible();
-      await connectionCard.getByRole('button', {name: 'Remove'}).click();
-      await expect(page.getByRole('heading', {name: 'Remove connected bank?'})).toBeVisible();
-      await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
-      await page.getByTestId(`remove-bank-confirm-${MOCK_CONNECTION.id}`).click();
+      await confirm.click();
 
       await expect(page.getByText('Bank connection removed', {exact: true})).toBeVisible();
       await expect.poll(() => connectionDeleted).toBe(true);
       await expect(connectionCard).toHaveCount(0);
-      await expect(page.getByText('0 connections', {exact: true})).toBeVisible();
+      await expect(page.getByRole('heading', {name: 'No bank connections'})).toBeVisible();
     });
   }
+
+  test.describe('card layout', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const account = MOCK_CONNECTION.bankAccounts[0];
+    /** Realistic worst cases: long and short names, every problem, huge and foreign amounts. */
+    const worstCase = (): BankConnection[] => [
+      {
+        ...MOCK_CONNECTION,
+        id: '00000000-0000-4000-8000-0000000000a4',
+        aspspName: 'Example Bank 🏦',
+        lastSyncedAt: new Date(Date.now() - 3 * DAY).toISOString(),
+        bankAccounts: [
+          {
+            ...account,
+            id: '00000000-0000-4000-8000-0000000000b6',
+            currency: 'JPY',
+            currentBalanceAmount: '123456789012',
+            currentBalanceInBaseCurrency: null,
+          },
+        ],
+      },
+      {
+        ...MOCK_CONNECTION,
+        id: '00000000-0000-4000-8000-0000000000a1',
+        aspspName: 'Coöperatieve Voorbeeldbank Noord-Holland Zuid en Omstreken Particulieren',
+        consentValidUntil: new Date(Date.now() + 3 * DAY).toISOString(),
+        lastSyncedAt: new Date(Date.now() - 60 * 60_000).toISOString(),
+        bankAccounts: [
+          {
+            ...account,
+            id: '00000000-0000-4000-8000-0000000000b1',
+            alias: 'Gezamenlijke huishoudrekening voor vaste lasten, boodschappen en vakanties',
+            currentBalanceAmount: '-1234567890.12',
+          },
+          {
+            ...account,
+            id: '00000000-0000-4000-8000-0000000000b2',
+            details: 'Spaarrekening',
+            cashAccountType: 'SVGS',
+            currency: 'CHF',
+            currentBalanceAmount: '98765432.10',
+            currentBalanceInBaseCurrency: '105432109.87',
+            maskedIdentifier: 'NL91ABNA0417164300',
+          },
+          {
+            ...account,
+            id: '00000000-0000-4000-8000-0000000000b3',
+            details: null,
+            name: 'NL91ABNA0417164300NL91ABNA0417164300GB82WEST12345698765432',
+            cashAccountType: 'CARD',
+            maskedIdentifier: null,
+            currentBalanceAmount: '0',
+          },
+          {
+            ...account,
+            id: '00000000-0000-4000-8000-0000000000b4',
+            details: null,
+            name: null,
+            cashAccountType: 'TRAS',
+            currentBalanceAmount: null,
+            latestBalances: [],
+          },
+        ],
+      },
+      {
+        ...MOCK_CONNECTION,
+        id: '00000000-0000-4000-8000-0000000000a2',
+        aspspName: 'Jo',
+        syncStatus: 'FAILED',
+        lastSyncedAt: '2020-01-01T12:00:00.000Z',
+        nextSyncAt: '2020-01-02T00:00:00.000Z',
+        lastSyncError: 'Synthetic bank refresh failed.',
+        bankAccounts: [{...account, id: '00000000-0000-4000-8000-0000000000b5', alias: 'J'}],
+      },
+      {
+        ...MOCK_CONNECTION,
+        id: '00000000-0000-4000-8000-0000000000a3',
+        aspspName: 'Банк Пример',
+        status: 'PENDING_AUTHORIZATION',
+        consentValidUntil: null,
+        lastSyncedAt: null,
+        nextSyncAt: null,
+        syncStatus: 'IDLE',
+        bankAccounts: [],
+      },
+    ];
+
+    for (const width of [1440, 390, 320]) {
+      test(`keeps 60px account rows and every amount whole at ${width}px, with demo and worst-case data`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({width, height: 900});
+        await mockBankRefresh(page);
+        let connections: BankConnection[] = [MOCK_CONNECTION];
+        await mockBankConnections(page, () => connections);
+
+        for (const data of ['demo', 'worst case'] as const) {
+          connections = data === 'demo' ? [MOCK_CONNECTION] : worstCase();
+          await page.goto('/bank-connections');
+          const cards = page.locator('[data-testid^="bank-connection-"][role="region"]');
+          await expect(cards).toHaveCount(connections.length);
+          const rows = page.getByRole('link', {name: / transactions$/});
+          await expect(rows).toHaveCount(
+            connections.reduce((count, connection) => count + connection.bankAccounts.length, 0),
+          );
+
+          for (const row of await rows.all()) {
+            const [rowBox, tileBox] = await Promise.all([
+              boxOf(row),
+              boxOf(row.locator(':scope > span').first()),
+            ]);
+            expect(rowBox.height, data).toBe(60);
+            expect(tileBox, data).toMatchObject({width: 36, height: 36});
+            // Amounts are never cut short: each fits its own box.
+            for (const amount of await row.locator('.numeric').all())
+              expect(await amount.evaluate((el) => el.scrollWidth <= el.clientWidth), data).toBe(
+                true,
+              );
+          }
+
+          const cardBoxes = await Promise.all((await cards.all()).map((card) => boxOf(card)));
+          for (const box of cardBoxes) expect(box.x + box.width, data).toBeLessThanOrEqual(width);
+          for (const card of await cards.all()) {
+            const [cardBox, detailsBox] = await Promise.all([
+              boxOf(card),
+              boxOf(card.getByRole('button', {name: / details$/})),
+            ]);
+            expect(detailsBox.x + detailsBox.width, data).toBeLessThanOrEqual(
+              cardBox.x + cardBox.width,
+            );
+            const heading = card.getByRole('heading', {level: 2});
+            expect(await heading.evaluate((el) => el.scrollWidth <= el.clientWidth), data).toBe(
+              true,
+            );
+          }
+          // Wide screens flow cards into two columns; phones keep one.
+          const columns = new Set(cardBoxes.map((box) => Math.round(box.x))).size;
+          expect(columns, data).toBe(width === 1440 && cardBoxes.length > 1 ? 2 : 1);
+          await expectNoHorizontalOverflow(page);
+        }
+
+        // Banks that need something come first, in the API's order, each with one problem row.
+        const order = await page
+          .locator('[data-testid^="bank-connection-"][role="region"]')
+          .evaluateAll((cards) => cards.map((card) => card.getAttribute('data-testid')!.slice(-2)));
+        expect(order).toEqual(['a1', 'a2', 'a3', 'a4']);
+        const problems = page.getByTestId('bank-connection-problem');
+        await expect(problems).toHaveCount(3);
+        await expect(problems.nth(0)).toContainText('Consent ends in 3 days');
+        await expect(problems.nth(1)).toContainText('Sync failed');
+        await expect(problems.nth(2)).toContainText('Not connected');
+        await expect(page.getByText(/^Updated 3 days ago$/)).toBeVisible();
+        const worstTotal = page
+          .getByTestId('bank-connection-00000000-0000-4000-8000-0000000000a1')
+          .getByTestId('bank-connection-total');
+        await expect(worstTotal).toContainText('-€1,129,135,780.25');
+      });
+    }
+  });
 });
 
 test.describe('bank-derived caches', () => {
@@ -1891,7 +1999,6 @@ test.describe('bank-derived caches', () => {
         undefined,
       ),
       bankQueryKeys.transaction('example-transaction'),
-      bankQueryKeys.connectionTransactions(MOCK_CONNECTION.id, null),
       dashboardQueryKeys.breakdown('year', 'category', '2007-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.balanceTrend('month', '2026-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.cashFlow('month', '2026-01-01', '2026-10-01', '2026-10-01'),
@@ -1936,58 +2043,6 @@ test.describe('bank-derived caches', () => {
       client.clear();
     }
   });
-});
-
-test.describe('bank connection card layout', () => {
-  test.use({storageState: VERIFIED_USER_AUTH_FILE});
-
-  for (const width of [1280, 390, 320]) {
-    test(`shows footer actions only while a connection card is expanded at ${width}px`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({width, height: 900});
-      await page.goto('/bank-connections');
-
-      const card = page.locator('[data-testid^="bank-connection-"][aria-labelledby]').first();
-      const toggle = card.getByTestId(/^connection-card-toggle-/);
-      const accounts = card.getByTestId(/^bank-accounts-/);
-      const transactions = card.getByTestId(/^bank-transactions-/);
-      const removeButton = card.getByTestId(/^remove-bank-/);
-      const consentText = card.getByText(/Consent valid until/);
-
-      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-      await expect(accounts).toBeHidden();
-      await expect(transactions).toBeHidden();
-      await expect(removeButton).toBeHidden();
-      await expect(consentText).toBeHidden();
-
-      await toggle.click();
-      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-      await expect(accounts).toBeVisible();
-      await expect(transactions).toBeVisible();
-      await expect(removeButton).toBeVisible();
-      await expect(consentText).toBeVisible();
-
-      const [cardBox, , expandedRemoveBox] = await Promise.all([
-        boxOf(card),
-        boxOf(consentText),
-        boxOf(removeButton),
-      ]);
-      expect(expandedRemoveBox.width).toBe(44);
-      expect(expandedRemoveBox.height).toBe(44);
-      expect(
-        cardBox.x + cardBox.width - (expandedRemoveBox.x + expandedRemoveBox.width),
-      ).toBeGreaterThanOrEqual(16);
-      await expectNoHorizontalOverflow(page);
-
-      await toggle.click();
-      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-      await expect(accounts).toBeHidden();
-      await expect(transactions).toBeHidden();
-      await expect(removeButton).toBeHidden();
-      await expect(consentText).toBeHidden();
-    });
-  }
 });
 
 test.describe('bank connection loading errors', () => {

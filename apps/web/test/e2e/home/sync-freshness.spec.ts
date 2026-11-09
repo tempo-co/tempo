@@ -131,7 +131,6 @@ const cachedKeys = [
   dashboardQueryKeys.reviewCounts,
   bankQueryKeys.transactions({pageIndex: 0, pageSize: 10}, {cashFlows: ['SPENDING']}, undefined),
   bankQueryKeys.transaction('example-transaction'),
-  bankQueryKeys.connectionTransactions(connection.id, connection.lastSyncedAt),
 ];
 
 for (const [name, before, after] of [

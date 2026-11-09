@@ -235,9 +235,6 @@ async function mockMerchantLogos(page: Page) {
     if (route.request().resourceType() === 'document') return route.continue();
     return fulfillJson(route, {transactions: state.rows, total: state.rows.length});
   });
-  await page.route(`**/bank-connections/${CONNECTION_ID}/transactions**`, (route) =>
-    fulfillJson(route, {transactions: state.rows, total: state.rows.length}),
-  );
   await page.route(/\/bank-transactions\/[\da-f-]{36}$/, (route) =>
     fulfillJson(
       route,
@@ -516,38 +513,6 @@ for (const width of [1440, 390]) {
         await page.goForward();
         await expect(page).toHaveURL(listUrl);
 
-        await page.getByRole('link', {name: 'Connections', exact: true}).click();
-        await page.getByTestId(`connection-card-toggle-${CONNECTION_ID}`).click();
-        const connectionRow = (row: BankTransaction) =>
-          page.getByTestId(`bank-transaction-row-${row.id}`);
-        await expectRowTiles((row) => connectionRow(row).getByTestId('merchant-logo-tile'), theme);
-        await expectTileBeforeTitle(
-          connectionRow(withLogo).getByTestId('merchant-logo-tile'),
-          connectionRow(withLogo).getByText('Example Market', {exact: true}),
-        );
-        await expectTransactionRowSize(
-          connectionRow(withLogo),
-          connectionRow(withLogo).getByTestId('merchant-logo-tile'),
-        );
-        await expectNoHorizontalOverflow(page);
-        await test.info().attach(`connections-${width}-${theme}`, {
-          body: await page.screenshot({fullPage: true}),
-          contentType: 'image/png',
-        });
-        const connectionsUrl = page.url();
-        const connectionTrigger = page.getByRole('button', {
-          name: 'View transaction details for Example Market',
-          exact: true,
-        });
-        await connectionTrigger.click();
-        await expect(inspector).toBeVisible();
-        await page.keyboard.press('Escape');
-        await expect(inspector).toBeHidden();
-        await expect(page).toHaveURL(connectionsUrl);
-        await expect(connectionTrigger).toBeFocused();
-        await page.goBack();
-        await expect(page).toHaveURL(listUrl);
-
         await page.goto('/?month=2026-09');
         const recent = page
           .getByRole('dialog', {name: 'September 2026'})
@@ -593,19 +558,17 @@ for (const width of [1440, 390]) {
         ).toBe(true);
         expect(state.servedImages.length).toBeGreaterThan(0);
         expect(state.servedImages.every(({authenticated}) => authenticated)).toBe(true);
-        for (const path of ['/bank-transactions', '/bank-connections']) {
-          const deepLink = new URL(path === '/bank-transactions' ? listUrl : connectionsUrl);
-          deepLink.searchParams.set('transactionId', withLogo.id);
-          await page.goto(deepLink.href);
-          await expect(inspector).toBeVisible();
-          await expect(
-            inspector.getByRole('heading', {name: 'Example Market', exact: true}),
-          ).toBeVisible();
-          await page.getByRole('button', {name: 'Close transaction details', exact: true}).click();
-          await expect(inspector).toBeHidden();
-          deepLink.searchParams.delete('transactionId');
-          await expect(page).toHaveURL(deepLink.href);
-        }
+        const deepLink = new URL(listUrl);
+        deepLink.searchParams.set('transactionId', withLogo.id);
+        await page.goto(deepLink.href);
+        await expect(inspector).toBeVisible();
+        await expect(
+          inspector.getByRole('heading', {name: 'Example Market', exact: true}),
+        ).toBeVisible();
+        await page.getByRole('button', {name: 'Close transaction details', exact: true}).click();
+        await expect(inspector).toBeHidden();
+        deepLink.searchParams.delete('transactionId');
+        await expect(page).toHaveURL(deepLink.href);
         // The next recurring payment beside the history shows its latest payment's logo.
         await page.goto('/');
         const upcoming = page

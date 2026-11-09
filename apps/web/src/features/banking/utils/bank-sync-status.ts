@@ -31,7 +31,7 @@ export function isConsentEndingSoon(connection: BankConnection) {
   return timestamp - Date.now() <= CONSENT_ENDING_SOON_MS;
 }
 
-export type AutomaticSyncProblem = {
+type AutomaticSyncProblem = {
   title: string;
   description: string;
 };

@@ -2,7 +2,6 @@ import type {BankTransaction} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {
-  HOME_CONNECTION,
   HOME_REVIEW_COUNTS,
   mockSyntheticHome,
   monthTransactions,
@@ -124,9 +123,6 @@ test.describe('the Transactions badge away from Home', () => {
     });
 
     await mockJson(page, '**/bank-connections/aspsps', []);
-    await page.route('**/bank-connections/*/transactions?**', (route) =>
-      fulfillJson(route, {transactions: [saved], total: 1}),
-    );
 
     await page.goto('/bank-connections');
     const nav = page.getByRole('navigation', {name: 'Primary'}).first();
@@ -137,10 +133,7 @@ test.describe('the Transactions badge away from Home', () => {
     await page.clock.runFor(61_000);
     await expect.poll(() => reads).toBe(2);
 
-    await page.getByTestId(`connection-card-toggle-${HOME_CONNECTION.id}`).click();
-    await page
-      .getByRole('button', {name: `View transaction details for ${transaction.displayDescription}`})
-      .click();
+    await page.goto(`/bank-transactions?transactionId=${transaction.id}`);
     await page.getByRole('combobox', {name: 'Transaction category'}).click();
     await page.getByRole('option', {name: 'Travel', exact: true}).click();
     await expect(page.getByRole('combobox', {name: 'Transaction category'})).toHaveText('Travel');
