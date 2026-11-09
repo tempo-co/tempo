@@ -1,4 +1,3 @@
-import type {NotificationPreferences} from '@tempo/contracts';
 import {BellRing} from 'lucide-react';
 import {useState} from 'react';
 
@@ -30,19 +29,6 @@ const UNSUPPORTED: Record<Exclude<PushSupport, 'supported'>, string> = {
     'On Android, install Tempo first: open the browser menu, choose Install app, and open Tempo from your home screen.',
   unsupported: 'This browser can’t show notifications from Tempo.',
 };
-
-const ALERTS: {key: keyof NotificationPreferences; label: string; description: string}[] = [
-  {
-    key: 'bankConnections',
-    label: 'Bank connections',
-    description: 'When a bank needs re-authorizing or has stopped syncing',
-  },
-  {
-    key: 'recurringBills',
-    label: 'Bills',
-    description: 'When a recurring bill is late or higher than usual',
-  },
-];
 
 function currentPermission(): NotificationPermission | null {
   return 'Notification' in window ? Notification.permission : null;
@@ -155,19 +141,19 @@ export function NotificationSettings() {
         description='These apply to every device where notifications are on.'
       >
         <SettingsList>
-          {ALERTS.map(({key, label, description}) => (
-            <label key={key} className='flex min-h-16 cursor-pointer items-center gap-4 px-4 py-3'>
-              <span className='min-w-0 flex-1'>
-                <span className='block text-sm font-medium'>{label}</span>
-                <span className='mt-0.5 block text-sm text-muted-foreground'>{description}</span>
+          <label className='flex min-h-16 cursor-pointer items-center gap-4 px-4 py-3'>
+            <span className='min-w-0 flex-1'>
+              <span className='block text-sm font-medium'>Bank alerts</span>
+              <span className='mt-0.5 block text-sm text-muted-foreground'>
+                When a bank needs re-authorizing or has stopped syncing
               </span>
-              <Checkbox
-                className='size-5 max-sm:size-6'
-                checked={settings.preferences[key]}
-                onCheckedChange={(checked) => update.mutate({[key]: checked === true})}
-              />
-            </label>
-          ))}
+            </span>
+            <Checkbox
+              className='size-5 max-sm:size-6'
+              checked={settings.preferences.bankConnections}
+              onCheckedChange={(checked) => update.mutate({bankConnections: checked === true})}
+            />
+          </label>
         </SettingsList>
       </SettingsGroup>
     </div>

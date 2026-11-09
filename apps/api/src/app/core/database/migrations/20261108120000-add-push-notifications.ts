@@ -30,26 +30,12 @@ export class AddPushNotifications20261108120000 implements MigrationInterface {
 		await queryRunner.query(`CREATE TABLE IF NOT EXISTS "push_preferences" (
 			"accountId" uuid NOT NULL,
 			"bankConnections" boolean NOT NULL DEFAULT true,
-			"recurringBills" boolean NOT NULL DEFAULT true,
 			CONSTRAINT "pk_push_preferences" PRIMARY KEY ("accountId"),
 			CONSTRAINT "fk_push_preferences_account" FOREIGN KEY ("accountId") REFERENCES "accounts"("id") ON DELETE CASCADE
-		)`);
-		await queryRunner.query(`CREATE TABLE IF NOT EXISTS "recurring_bill_alerts" (
-			"id" uuid NOT NULL DEFAULT uuid_generate_v4(),
-			"accountId" uuid NOT NULL,
-			"seriesKey" varchar(32) NOT NULL,
-			"flag" varchar(32) NOT NULL,
-			"period" date NOT NULL,
-			"pushedAt" timestamptz,
-			"createdAt" timestamptz NOT NULL DEFAULT now(),
-			CONSTRAINT "pk_recurring_bill_alerts" PRIMARY KEY ("id"),
-			CONSTRAINT "uq_recurring_bill_alerts_period" UNIQUE ("accountId", "seriesKey", "flag", "period"),
-			CONSTRAINT "fk_recurring_bill_alerts_account" FOREIGN KEY ("accountId") REFERENCES "accounts"("id") ON DELETE CASCADE
 		)`);
 	}
 
 	async down(queryRunner: QueryRunner): Promise<void> {
-		await queryRunner.query('DROP TABLE IF EXISTS "recurring_bill_alerts"');
 		await queryRunner.query('DROP TABLE IF EXISTS "push_preferences"');
 		await queryRunner.query('DROP TABLE IF EXISTS "push_subscriptions"');
 	}

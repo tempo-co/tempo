@@ -6,7 +6,6 @@ import type {
 	NotificationPreferencesUpdate,
 	NotificationSettings,
 	PushSubscriptionRegistration,
-	RecurringSeriesFlag,
 } from '@tempo/contracts';
 import {Queue} from 'bullmq';
 import {In, Repository} from 'typeorm';
@@ -21,23 +20,20 @@ import {PushPreferences} from './push-preferences.entity';
 import {PushSubscription} from './push-subscription.entity';
 import {WebPushSender} from './web-push.sender';
 
-/** An alert to push, by ids only; the worker reads everything else when it delivers. */
-export type PushAlert =
-	| {
-			kind: 'BANK_CONNECTION';
-			alert: 'CONSENT_EXPIRING' | 'CONSENT_FINAL' | 'SYNC_BROKEN';
-			connectionId: string;
-			/** The episode's marker value (ISO timestamp) the alert was raised for. */
-			episode: string;
-	  }
-	| {kind: 'RECURRING_BILL'; flag: RecurringSeriesFlag; seriesKey: string; period: string};
+/** A bank alert to push, by ids only; the worker reads everything else when it delivers. */
+export type PushAlert = {
+	alert: 'CONSENT_EXPIRING' | 'CONSENT_FINAL' | 'SYNC_BROKEN';
+	connectionId: string;
+	/** The episode's marker value (ISO timestamp) the alert was raised for. */
+	episode: string;
+};
 
 export type PushAlertJob = {accountId: string; alert: PushAlert};
 
-/** What the service worker shows. Kept vague: no bank, merchant, account or amount. */
+/** What the service worker shows. Kept vague: no bank, account or amount. */
 export type PushPayload = {title: string; body: string; url: string; tag: string; badge: number};
 
-const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {bankConnections: true, recurringBills: true};
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {bankConnections: true};
 /** Delivered push jobs stay a week, so a retried scan cannot queue the same alert again. */
 const IDEMPOTENT_JOB_RETENTION = {age: 7 * 24 * 60 * 60};
 /** Status codes with which a push service says the subscription is gone for good. */
@@ -69,13 +65,9 @@ export class PushNotificationService {
 
 	async updatePreferences(
 		accountId: Account['id'],
-		update: NotificationPreferencesUpdate,
+		{bankConnections}: NotificationPreferencesUpdate,
 	): Promise<NotificationSettings> {
-		// Write only the choices sent, so two quick toggles of different alerts cannot undo each other.
-		const changed = Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined));
-		if (Object.keys(changed).length > 0) {
-			await this.preferences.upsert({accountId, ...changed}, ['accountId']);
-		}
+		if (bankConnections !== undefined) await this.preferences.upsert({accountId, bankConnections}, ['accountId']);
 		return this.getSettings(accountId);
 	}
 
@@ -104,18 +96,6 @@ export class PushNotificationService {
 		return this.sender.publicKey !== null;
 	}
 
-	/** Owners with at least one device and this alert kind on. */
-	async findAccountIdsReceiving(kind: keyof NotificationPreferences): Promise<string[]> {
-		const rows = await this.subscriptions
-			.createQueryBuilder('subscription')
-			.select('DISTINCT subscription.accountId', 'accountId')
-			.leftJoin(PushPreferences, 'preferences', 'preferences.accountId = subscription.accountId')
-			.where(`COALESCE(preferences.${kind}, true)`)
-			.orderBy('subscription.accountId')
-			.getRawMany<{accountId: string}>();
-		return rows.map(({accountId}) => accountId);
-	}
-
 	/**
 	 * Queues one alert for delivery, when this server sends push; between 21:00 and 09:00 it waits until 09:00. The job id is the alert's identity,
 	 * so queueing it again while it waits or within a week of delivery adds nothing.
@@ -132,17 +112,13 @@ export class PushNotificationService {
 	}
 
 	/**
-	 * Pushes to every device of the owner whose session is still signed in, if the owner wants this alert kind.
+	 * Pushes to every device of the owner whose session is still signed in, if the owner wants bank alerts.
 	 * Subscriptions of ended sessions, and ones the push service reports gone, are removed. Throws only when every
 	 * device failed for another reason, so a retry cannot push twice to a device that got it; cleanup that fails
 	 * after a send is logged instead.
 	 */
-	async deliver(
-		accountId: Account['id'],
-		kind: keyof NotificationPreferences,
-		payload: PushPayload,
-	): Promise<number> {
-		if (!this.isConfigured() || !(await this.getPreferences(accountId))[kind]) return 0;
+	async deliver(accountId: Account['id'], payload: PushPayload): Promise<number> {
+		if (!this.isConfigured() || !(await this.getPreferences(accountId)).bankConnections) return 0;
 		const subscriptions = await this.subscriptions.find({where: {accountId}, order: {createdAt: 'ASC'}});
 		const active = await this.sessionService.findActiveSessionIds(
 			accountId,
@@ -176,8 +152,6 @@ export class PushNotificationService {
 
 	private async getPreferences(accountId: Account['id']): Promise<NotificationPreferences> {
 		const stored = await this.preferences.findOneBy({accountId});
-		return stored
-			? {bankConnections: stored.bankConnections, recurringBills: stored.recurringBills}
-			: DEFAULT_NOTIFICATION_PREFERENCES;
+		return stored ? {bankConnections: stored.bankConnections} : DEFAULT_NOTIFICATION_PREFERENCES;
 	}
 }

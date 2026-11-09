@@ -27,7 +27,7 @@ export function useNotificationSettings() {
   });
 }
 
-/** Saves one alert choice, showing it at once and putting it back if the save fails. */
+/** Saves the alert choice, showing it at once and putting it back if the save fails. */
 export function useUpdateNotificationPreferences() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1,9 +1,7 @@
-/** Which alerts the owner's devices receive. Both are on until the owner turns one off. */
+/** Which alerts the owner's devices receive. Bank alerts are on until the owner turns them off. */
 export type NotificationPreferences = {
 	/** A bank needs re-authorizing soon, or has stopped syncing. */
 	bankConnections: boolean;
-	/** A recurring bill is late, or higher than usual. */
-	recurringBills: boolean;
 };
 
 /** `GET /notifications` */

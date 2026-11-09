@@ -839,7 +839,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       if (url.origin === API_URL && url.pathname === '/notifications')
         return fulfillJson(route, {
           publicKey: null,
-          preferences: {bankConnections: true, recurringBills: true},
+          preferences: {bankConnections: true},
         });
       await route.abort('blockedbyclient');
       throw new Error(`Unmocked request: ${route.request().method()} ${url}`);

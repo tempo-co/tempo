@@ -134,12 +134,7 @@ export class BankConnectionAlertService implements OnModuleInit {
 			await this.pushNotificationService.queueAlert(
 				{
 					accountId: account.id,
-					alert: {
-						kind: 'BANK_CONNECTION',
-						alert,
-						connectionId: connection.id,
-						episode: episode.toISOString(),
-					},
+					alert: {alert, connectionId: connection.id, episode: episode.toISOString()},
 				},
 				`push-${jobId}`,
 				now,

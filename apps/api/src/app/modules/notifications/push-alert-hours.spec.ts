@@ -1,4 +1,4 @@
-import {alertDate, pushAlertDeliveryTime} from './push-alert-hours';
+import {pushAlertDeliveryTime} from './push-alert-hours';
 
 describe('pushAlertDeliveryTime', () => {
 	it.each([
@@ -12,12 +12,5 @@ describe('pushAlertDeliveryTime', () => {
 		['on the night summer time ends, at 09:00 winter time', '2026-10-24T20:00:00Z', '2026-10-25T08:00:00.000Z'],
 	])('delivers an alert raised %s', (_case, raised, delivered) => {
 		expect(pushAlertDeliveryTime(new Date(raised)).toISOString()).toBe(delivered);
-	});
-});
-
-describe('alertDate', () => {
-	it('is the Amsterdam calendar date', () => {
-		expect(alertDate(new Date('2026-06-10T22:30:00Z'))).toBe('2026-06-11');
-		expect(alertDate(new Date('2026-01-10T22:30:00Z'))).toBe('2026-01-10');
 	});
 });

@@ -14,15 +14,11 @@ const PUSH_SERVICE_ENDPOINT =
 	/^https:\/\/(?:[a-z0-9-]+\.)*(?:push\.apple\.com|fcm\.googleapis\.com|push\.services\.mozilla\.com|notify\.windows\.com)\/\S+$/;
 const BASE64URL = /^[A-Za-z0-9_-]+={0,2}$/;
 
-/** Either choice may be left out; one that is sent must be true or false. */
+/** The choice may be left out; when sent it must be true or false. */
 export class NotificationPreferencesUpdateDto implements NotificationPreferencesUpdate {
 	@ValidateIf((_dto, value) => value !== undefined)
 	@IsBoolean()
 	bankConnections?: boolean;
-
-	@ValidateIf((_dto, value) => value !== undefined)
-	@IsBoolean()
-	recurringBills?: boolean;
 }
 
 export class PushSubscriptionKeysDto {

@@ -17,7 +17,7 @@ const account = {
 };
 const settings = (overrides: Partial<NotificationSettings> = {}): NotificationSettings => ({
   publicKey: PUBLIC_KEY,
-  preferences: {bankConnections: true, recurringBills: true},
+  preferences: {bankConnections: true},
   ...overrides,
 });
 
@@ -209,7 +209,7 @@ test.describe('Notification settings', () => {
     });
   }
 
-  test('saves each alert choice and puts it back when the save fails', async ({page}) => {
+  test('saves the bank alert choice and puts it back when the save fails', async ({page}) => {
     await stubPush(page);
     await mockJson(page, `${API_URL}/notifications`, settings());
     const saves: unknown[] = [];
@@ -217,27 +217,24 @@ test.describe('Notification settings', () => {
     await page.route(`${API_URL}/notifications/preferences`, async (route) => {
       saves.push(route.request().postDataJSON());
       if (fail) return route.fulfill({status: 500, json: {message: 'Internal server error'}});
-      return route.fulfill({
-        json: settings({preferences: {bankConnections: true, recurringBills: false}}),
-      });
+      return route.fulfill({json: settings({preferences: {bankConnections: false}})});
     });
 
     await page.goto('/settings/account');
     const alerts = page.getByRole('region', {name: 'Alerts'});
-    const bills = alerts.getByRole('checkbox', {name: /Bills/});
-    const banks = alerts.getByRole('checkbox', {name: /Bank connections/});
-    await expect(bills).toBeChecked();
+    await expect(alerts.getByRole('checkbox')).toHaveCount(1);
+    const banks = alerts.getByRole('checkbox', {name: /Bank alerts/});
     await expect(banks).toBeChecked();
 
-    await bills.click();
-    await expect(bills).not.toBeChecked();
-    expect(saves).toEqual([{recurringBills: false}]);
+    await banks.click();
+    await expect(banks).not.toBeChecked();
+    expect(saves).toEqual([{bankConnections: false}]);
 
     fail = true;
     await banks.click();
     await expect(page.getByText('The alert setting could not be saved.')).toBeVisible();
-    await expect(banks).toBeChecked();
-    expect(saves[saves.length - 1]).toEqual({bankConnections: false});
+    await expect(banks).not.toBeChecked();
+    expect(saves).toEqual([{bankConnections: false}, {bankConnections: true}]);
   });
 
   test('the app icon counts transactions to review, and logging out clears it and this device', async ({

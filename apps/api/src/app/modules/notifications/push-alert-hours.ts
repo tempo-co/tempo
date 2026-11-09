@@ -29,12 +29,6 @@ function offsetAt(instant: Date): number {
 	return Date.UTC(year, month - 1, day, hour, minute, second) - Math.floor(instant.getTime() / 1000) * 1000;
 }
 
-/** The time-zone calendar date (`YYYY-MM-DD`) at `instant`. */
-export function alertDate(instant: Date): string {
-	const {year, month, day} = wallTime(instant);
-	return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
-
 /** When an alert raised at `now` may arrive: `now`, or 09:00 when it is raised between 21:00 and 09:00. */
 export function pushAlertDeliveryTime(now: Date): Date {
 	const {year, month, day, hour} = wallTime(now);

@@ -80,9 +80,9 @@ Defined in `services/bank-transaction-filters.ts`; read `SQL_SPENDING` / `SQL_IN
 
 ## Alerts
 
-- `alerts/` raises bank alerts (consent ending within 7 days, its last day, no successful sync for 24 hours) by email and push, and recurring bill alerts (LATE, HIGHER_THAN_USUAL on shown, active bills) by push only. Each alert is recorded once, per episode (the connection's marker columns) or per series, flag and period (`recurring_bill_alerts`), in the transaction that queues its jobs. Job ids derive from that identity, so a rolled-back marker, a retry or an overlapping scan never sends twice. A bill pushes once per due date: a higher-than-usual payment for a due date whose late alert was pushed (`pushedAt`) sends nothing, and a late alert still held when the bill is paid drops itself at delivery.
-- A push raised between 21:00 and 09:00 Europe/Amsterdam waits until 09:00 as a delayed job. Before sending, the worker checks that the alert still applies (a reauthorized bank or a paid bill sends nothing) and reads the badge count from review counts.
-- Push text stays vague: no bank, merchant, account or amount. Pushes reach only subscriptions whose session is still signed in as the owner (`modules/notifications`); logout removes that session's subscriptions, and push service 404/410 answers remove the subscription.
+- `alerts/` raises bank alerts (consent ending within 7 days, its last day, no successful sync for 24 hours) by email and push. Each alert is recorded once per episode (the connection's marker columns), in the transaction that queues its jobs. Job ids derive from that identity, so a rolled-back marker, a retry or an overlapping scan never sends twice.
+- A push raised between 21:00 and 09:00 Europe/Amsterdam waits until 09:00 as a delayed job. Before sending, the worker checks that the alert still applies (a reauthorized or synced bank sends nothing) and reads the badge count from review counts.
+- Push text stays vague: no bank, account or amount. Pushes reach only subscriptions whose session is still signed in as the owner (`modules/notifications`); logout removes that session's subscriptions, and push service 404/410 answers remove the subscription.
 
 ## Concurrency patterns used here
 

@@ -76,7 +76,7 @@ export const test = base.extend<Fixtures>({
         // Account settings read alert choices; this server sends no push.
         await mockJson(page, `${API_URL}/notifications`, {
           publicKey: null,
-          preferences: {bankConnections: true, recurringBills: true},
+          preferences: {bankConnections: true},
         } satisfies NotificationSettings);
       }
       await provide();

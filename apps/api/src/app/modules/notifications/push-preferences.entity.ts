@@ -2,7 +2,7 @@ import {Column, Entity, JoinColumn, OneToOne, PrimaryColumn} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 
-/** The owner's alert choices for every device; an owner without a row gets both alerts. */
+/** The owner's alert choices for every device; an owner without a row gets bank alerts. */
 @Entity('push_preferences')
 export class PushPreferences {
 	@PrimaryColumn({type: 'uuid', primaryKeyConstraintName: 'pk_push_preferences'})
@@ -14,7 +14,4 @@ export class PushPreferences {
 
 	@Column({type: 'boolean', default: true})
 	bankConnections: boolean;
-
-	@Column({type: 'boolean', default: true})
-	recurringBills: boolean;
 }

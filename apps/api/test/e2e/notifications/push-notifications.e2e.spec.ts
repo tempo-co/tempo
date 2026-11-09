@@ -12,13 +12,12 @@ import {ConfigurationService} from '@core/config/config.service';
 import {DELIVER_PUSH_ALERT_JOB, PUSH_NOTIFICATION_QUEUE} from '@core/queue/queue.constants';
 import {Account} from '@modules/account/account.entity';
 import {BankConnectionAlertService} from '@modules/banking/alerts/bank-connection-alert.service';
-import {RecurringBillAlertService} from '@modules/banking/alerts/recurring-bill-alert.service';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
-import {alertDate, pushAlertDeliveryTime} from '@modules/notifications/push-alert-hours';
+import {pushAlertDeliveryTime} from '@modules/notifications/push-alert-hours';
 import {PushSubscription} from '@modules/notifications/push-subscription.entity';
 import {WebPushSender} from '@modules/notifications/web-push.sender';
 
-import {BankingFixtures, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
+import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {enableWebPushE2e, getApp, loginAgent} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
 import {waitFor} from '../../utils/wait-utils';
@@ -40,23 +39,6 @@ function registration(name: string) {
 	return {endpoint: endpoint(name), keys: {p256dh: P256DH, auth: AUTH}};
 }
 
-/** `days` days before `date` (`YYYY-MM-DD`). */
-function daysBefore(date: string, days: number): string {
-	return new Date(Date.parse(`${date}T00:00:00Z`) - days * DAY).toISOString().slice(0, 10);
-}
-
-/** `date`'s day of the month, `months` months earlier; the day must exist in every month. */
-function sameDayMonthsBefore(date: string, months: number): string {
-	const [year, month, day] = date.split('-').map(Number);
-	return new Date(Date.UTC(year, month - 1 - months, day)).toISOString().slice(0, 10);
-}
-
-/** The 5th of the month `months` months before `date`'s month. */
-function fifthMonthsBefore(date: string, months: number): string {
-	const [year, month] = date.split('-').map(Number);
-	return new Date(Date.UTC(year, month - 1 - months, 5)).toISOString().slice(0, 10);
-}
-
 describe('Push notifications', () => {
 	jest.setTimeout(30_000);
 
@@ -67,7 +49,6 @@ describe('Push notifications', () => {
 	let subscriptions: Repository<PushSubscription>;
 	let pushQueue: Queue;
 	let bankAlerts: BankConnectionAlertService;
-	let billAlerts: RecurringBillAlertService;
 	let send: jest.SpiedFunction<WebPushSender['send']>;
 	let mailpitUrl: string;
 	let webBaseUrl: string;
@@ -80,7 +61,6 @@ describe('Push notifications', () => {
 		subscriptions = app.get(getRepositoryToken(PushSubscription));
 		pushQueue = app.get(getQueueToken(PUSH_NOTIFICATION_QUEUE));
 		bankAlerts = app.get(BankConnectionAlertService);
-		billAlerts = app.get(RecurringBillAlertService);
 		const config = app.get(ConfigurationService);
 		mailpitUrl = config.get('EMAIL_UI_URL');
 		webBaseUrl = config.get('WEB_BASE_URL');
@@ -147,13 +127,13 @@ describe('Push notifications', () => {
 	}
 
 	describe('subscriptions and preferences', () => {
-		it('registers this browser, saves alert choices and removes the subscription again', async () => {
+		it('registers this browser, saves the bank alert choice and removes the subscription again', async () => {
 			const owner = await createVerifiedAccount(httpServer, mailpitUrl);
 
 			const {body: initial} = await owner.agent.get('/notifications').expect(200);
 			expect(initial).toEqual({
 				publicKey: expect.stringMatching(/^[A-Za-z0-9_-]{87}$/),
-				preferences: {bankConnections: true, recurringBills: true},
+				preferences: {bankConnections: true},
 			});
 
 			await subscribe(owner.agent, 'register');
@@ -166,12 +146,11 @@ describe('Push notifications', () => {
 			const {body: updated} = await owner.agent
 				.patch('/notifications/preferences')
 				.set('Origin', ORIGIN)
-				.send({recurringBills: false})
+				.send({bankConnections: false})
 				.expect(200);
-			expect(updated.preferences).toEqual({bankConnections: true, recurringBills: false});
+			expect(updated.preferences).toEqual({bankConnections: false});
 			expect((await owner.agent.get('/notifications').expect(200)).body.preferences).toEqual({
-				bankConnections: true,
-				recurringBills: false,
+				bankConnections: false,
 			});
 
 			await owner.agent
@@ -197,14 +176,13 @@ describe('Push notifications', () => {
 		});
 
 		it.each([
-			['null', {recurringBills: null}],
+			['null', {bankConnections: null}],
 			['a string', {bankConnections: 'yes'}],
 		])('refuses an alert choice that is %s', async (_case, body) => {
 			const owner = await createVerifiedAccount(httpServer, mailpitUrl);
 			await owner.agent.patch('/notifications/preferences').set('Origin', ORIGIN).send(body).expect(400);
 			expect((await owner.agent.get('/notifications').expect(200)).body.preferences).toEqual({
 				bankConnections: true,
-				recurringBills: true,
 			});
 		});
 
@@ -395,141 +373,6 @@ describe('Push notifications', () => {
 			expect((await subscriptions.findBy({accountId: owner.id})).map((row) => row.endpoint)).toEqual([
 				endpoint('kept'),
 			]);
-		});
-	});
-
-	describe('recurring bill alerts', () => {
-		it('pushes once per series and period when a bill is late or higher than usual', async () => {
-			const owner = await subscribedOwner('bills');
-			await accounts.update({id: owner.id}, {baseCurrency: 'EUR'});
-			const bank = await fixtures.createBankAccount(await fixtures.createConnection({id: owner.id}));
-			const today = alertDate(daytime());
-			// Weekly, last paid nine days ago: due two days ago.
-			const late = [37, 30, 23, 16, 9].map((days) =>
-				bookedRow(daysBefore(today, days), '-9.99', {
-					counterpartyName: 'Example Streaming',
-					description: 'Example Streaming',
-					category: 'SUBSCRIPTIONS',
-				}),
-			);
-			// Monthly on the 5th, the latest well above the rest.
-			const latestFifth = today.slice(8) > '05' ? 0 : 1;
-			const higher = ['61.00', '95.00', '48.00', '80.00', '77.00', '160.00'].map((amount, index) =>
-				bookedRow(fifthMonthsBefore(today, latestFifth + 5 - index), `-${amount}`, {
-					counterpartyName: 'Example Energy',
-					description: 'Example Energy',
-					category: 'UTILITIES',
-				}),
-			);
-			await fixtures.createTransactions(bank, [...late, ...higher]);
-			const {body} = await owner.agent.get('/recurring-series').query({asOf: today}).expect(200);
-			const keyOf = (name: string) =>
-				(body.expenses.series as {key: string; name: string}[]).find((series) => series.name === name)!.key;
-
-			await billAlerts.scan(daytime());
-			await billAlerts.scan(daytime());
-			await deliverDuePushes();
-
-			expect(
-				sentPushes()
-					.map(({payload}) => payload)
-					.sort((a, b) => String(a.body).localeCompare(String(b.body))),
-			).toEqual([
-				{
-					title: 'Tempo',
-					body: 'A bill is higher than usual',
-					url: `${webBaseUrl}/?recurring=open&series=${keyOf('Example Energy')}`,
-					tag: `recurring-${keyOf('Example Energy')}`,
-					badge: 0,
-				},
-				{
-					title: 'Tempo',
-					body: 'A bill is late',
-					url: `${webBaseUrl}/?recurring=open&series=${keyOf('Example Streaming')}`,
-					tag: `recurring-${keyOf('Example Streaming')}`,
-					badge: 0,
-				},
-			]);
-			expect(JSON.stringify(sentPushes())).not.toMatch(/Example|160|9\.99/);
-		});
-
-		const energy = {counterpartyName: 'Example Energy', description: 'Example Energy', category: 'UTILITIES'};
-
-		/** A variable monthly bill due two to five days before `scanTime`'s date, on a day every month has. */
-		async function lateVariableBill(ownerId: string, scanTime: Date) {
-			await accounts.update({id: ownerId}, {baseCurrency: 'EUR'});
-			const bank = await fixtures.createBankAccount(await fixtures.createConnection({id: ownerId}));
-			const today = alertDate(scanTime);
-			const due = [2, 3, 4, 5].map((days) => daysBefore(today, days)).find((date) => date.slice(8) <= '28')!;
-			await fixtures.createTransactions(
-				bank,
-				['61.00', '95.00', '48.00', '80.00', '77.00'].map((amount, index) =>
-					bookedRow(sameDayMonthsBefore(due, 5 - index), `-${amount}`, energy),
-				),
-			);
-			/** The late payment arrives, well above the usual range. */
-			const payHigher = () =>
-				fixtures.createTransaction(bank, bookedRow(daysBefore(today, 1), '-160.00', energy));
-			return {today, payHigher};
-		}
-
-		it('alerts once for a due date that is late and then paid higher than usual', async () => {
-			const owner = await subscribedOwner('late-then-higher');
-			const {today, payHigher} = await lateVariableBill(owner.id, daytime());
-			await billAlerts.scan(daytime());
-			await deliverDuePushes();
-			expect(sentPushes().map(({payload}) => payload.body)).toEqual(['A bill is late']);
-
-			await payHigher();
-			const {body} = await owner.agent.get('/recurring-series').query({asOf: today}).expect(200);
-			expect(body.expenses.series).toEqual([expect.objectContaining({flags: ['HIGHER_THAN_USUAL']})]);
-			await billAlerts.scan(daytime());
-			await deliverDuePushes();
-
-			expect(sentPushes().map(({payload}) => payload.body)).toEqual(['A bill is late']);
-		});
-
-		it('sends the higher-than-usual alert when a late bill is paid before its held alert goes out', async () => {
-			const owner = await subscribedOwner('paid-overnight');
-			const night = nextNight();
-			const {payHigher} = await lateVariableBill(owner.id, night);
-			await billAlerts.scan(night);
-			await payHigher();
-			await billAlerts.scan(new Date(night.getTime() + HOUR));
-
-			// Both alerts wait for the morning; by then only the higher payment still applies.
-			const held = (await pushQueue.getJobs(['delayed'])).filter((job) => job.data.accountId === owner.id);
-			expect(held.map((job) => (job.data.alert as {flag: string}).flag).sort()).toEqual([
-				'HIGHER_THAN_USUAL',
-				'LATE',
-			]);
-			for (const job of held) await job.promote();
-			await deliverDuePushes();
-
-			expect(sentPushes().map(({payload}) => payload.body)).toEqual(['A bill is higher than usual']);
-		});
-
-		it('pushes no bill alerts to owners who turned them off', async () => {
-			const owner = await subscribedOwner('bills-off');
-			await owner.agent.patch('/notifications/preferences').set('Origin', ORIGIN).send({recurringBills: false});
-			await accounts.update({id: owner.id}, {baseCurrency: 'EUR'});
-			const bank = await fixtures.createBankAccount(await fixtures.createConnection({id: owner.id}));
-			const today = alertDate(daytime());
-			await fixtures.createTransactions(
-				bank,
-				[37, 30, 23, 16, 9].map((days) =>
-					bookedRow(daysBefore(today, days), '-9.99', {
-						counterpartyName: 'Example Streaming',
-						description: 'Example Streaming',
-						category: 'SUBSCRIPTIONS',
-					}),
-				),
-			);
-
-			await billAlerts.scan(daytime());
-			await deliverDuePushes();
-
-			expect(send).not.toHaveBeenCalled();
 		});
 	});
 });

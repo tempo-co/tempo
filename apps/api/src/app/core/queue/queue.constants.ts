@@ -16,8 +16,6 @@ export const BANK_CONNECTION_SYNC_SCHEDULER_ID = 'bank-connection-sync-dispatche
 export const BANK_CONNECTION_ALERT_QUEUE = 'bank-connection-alerts';
 export const SCAN_BANK_CONNECTION_ALERTS_JOB = 'scan-bank-connection-alerts';
 export const BANK_CONNECTION_ALERT_SCHEDULER_ID = 'bank-connection-alert-scanner';
-export const SCAN_RECURRING_BILL_ALERTS_JOB = 'scan-recurring-bill-alerts';
-export const RECURRING_BILL_ALERT_SCHEDULER_ID = 'recurring-bill-alert-scanner';
 
 export const BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE = 'bank-transaction-amount-conversion';
 export const BACKFILL_BANK_TRANSACTION_AMOUNTS_JOB = 'backfill-bank-transaction-amounts';
