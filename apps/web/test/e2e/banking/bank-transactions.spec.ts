@@ -1243,6 +1243,8 @@ test.describe('bank transactions', () => {
   });
 
   test('keeps worst-case transaction values readable at every width', async ({page}) => {
+    // Four viewports of inspector checks run close to the default limit in WebKit.
+    test.setTimeout(20_000);
     const sepaReference =
       '/TRTP/SEPA-TRANSFER/IBAN/NL91ABNA0417164300/BIC/ABNANL2A/NAME/EXAMPLE-SHOP-BV/REMI/INV-2026-000123456789';
     let transactions: Array<Record<string, unknown>> = [];
