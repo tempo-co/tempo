@@ -9,19 +9,24 @@ import {fixture, json, TOKEN} from './helpers.mjs';
 export const TOOL_NAMES = [
 	'balance_trend',
 	'cash_flow',
+	'get_merchant',
 	'get_transaction',
 	'list_accounts',
 	'list_categories',
+	'list_merchants',
 	'list_recurring',
+	'merchant_periods',
+	'merchant_ranking',
 	'month_summary',
 	'recurring_summary',
 	'review_counts',
 	'search_transactions',
+	'spending_breakdown',
 	'transaction_totals',
 ];
 const entry = fileURLToPath(new URL('../dist/stdio.js', import.meta.url));
 
-test('SDK stdio initializes, advertises exactly eleven read-only tools and calls HTTP with the configured token', async (t) => {
+test('SDK stdio initializes, advertises exactly sixteen read-only tools and calls HTTP with the configured token', async (t) => {
 	const f = await fixture(t);
 	const transport = new StdioClientTransport({
 		command: process.execPath,

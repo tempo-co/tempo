@@ -33,12 +33,25 @@ try {
 		['get_transaction', {id}],
 		['review_counts', {}],
 		['list_categories', {}],
+		[
+			'spending_breakdown',
+			{interval: 'month', by: 'category', from: '2000-01-01', to: '2000-01-31', asOf: '2000-02-01'},
+		],
+		['list_merchants', {limit: 1}],
+		['merchant_ranking', {interval: 'month', period: '2000-01-01', asOf: '2000-02-01'}],
+		['get_merchant', {}],
+		['merchant_periods', {interval: 'month', from: '2000-01-01', to: '2000-01-31', asOf: '2000-02-01'}],
 	];
+	// The merchant reads take the first group list_merchants returns, so the fixture needs at least one merchant.
+	let merchantId;
 	if (JSON.stringify(tools.map((tool) => tool.name).sort()) !== JSON.stringify(calls.map(([name]) => name).sort()))
 		throw new Error();
 	for (const [name, args] of calls) {
 		currentTool = name;
-		const result = await client.callTool({name, arguments: args});
+		const result = await client.callTool({
+			name,
+			arguments: name === 'get_merchant' || name === 'merchant_periods' ? {...args, id: merchantId} : args,
+		});
 		if (result.isError || result.content?.[0]?.type !== 'text') throw new Error();
 		const value = JSON.parse(result.content[0].text);
 		if (name === 'transaction_totals') {
@@ -52,6 +65,8 @@ try {
 			}).parse(value);
 		}
 		if (name === 'get_transaction' && value.id !== id) throw new Error();
+		if (name === 'list_merchants') merchantId = z.string().parse(value.merchants[0]?.id);
+		if (name === 'get_merchant' && value.id !== merchantId) throw new Error();
 		console.log(`PASS ${name}`);
 	}
 	console.log(`PASS ${calls.length} tools through SDK stdio and the disposable API`);

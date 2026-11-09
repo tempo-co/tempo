@@ -5,24 +5,32 @@ import {Account} from '@modules/account/account.entity';
 
 import {ToolReadError} from '../../../../../mcp/src/errors';
 import type {ToolReader} from '../../../../../mcp/src/tools';
+import {BankTransactionBreakdownQueryDto} from '../api/dtos/bank-transaction-breakdown-query.dto';
 import {BankTransactionCashFlowQueryDto} from '../api/dtos/bank-transaction-cash-flow-query.dto';
 import {BankTransactionQueryDto, BankTransactionTotalsQueryDto} from '../api/dtos/bank-transaction-query.dto';
 import {BankTransactionSummaryQueryDto} from '../api/dtos/bank-transaction-summary-query.dto';
+import {MerchantGroupsQueryDto, MerchantRankingQueryDto} from '../api/dtos/merchant-query.dto';
 import {RecurringSeriesQueryDto} from '../api/dtos/recurring-series.dto';
+import {MerchantGroupIdPipe} from '../api/pipes/merchant-group-id.pipe';
 import {BankingService} from '../banking.service';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
+import {BankTransactionHistoryService} from './bank-transaction-history.service';
 import {BankTransactionSummaryService} from './bank-transaction-summary.service';
 import {BankTransactionService} from './bank-transaction.service';
+import {MerchantSpendingService} from './merchant-spending.service';
 
 @Injectable()
 export class McpReaderService {
 	private readonly validation = new ValidationPipe({whitelist: true, transform: true});
+	private readonly merchantId = new MerchantGroupIdPipe();
 
 	constructor(
 		private readonly banking: BankingService,
 		private readonly transactions: BankTransactionService,
 		private readonly summaries: BankTransactionSummaryService,
 		private readonly recurring: RecurringSeriesService,
+		private readonly history: BankTransactionHistoryService,
+		private readonly merchants: MerchantSpendingService,
 	) {}
 
 	/** Capture the authenticated owner once; caller input can only filter that owner's data. */
@@ -72,6 +80,23 @@ export class McpReaderService {
 				),
 			getTransaction: (id) => read(() => this.transactions.findById(account.id, id)),
 			reviewCounts: () => read(() => this.summaries.getReviewCounts(account.id)),
+			spendingBreakdown: (input) =>
+				read(async () =>
+					this.history.getBreakdown(account, await query(input, BankTransactionBreakdownQueryDto)),
+				),
+			listMerchants: (input) =>
+				read(async () => this.merchants.list(account, await query(input, MerchantGroupsQueryDto))),
+			merchantRanking: (input) =>
+				read(async () => this.merchants.getRanking(account, await query(input, MerchantRankingQueryDto))),
+			getMerchant: (id) => read(() => this.merchants.get(account, this.merchantId.transform(id))),
+			merchantPeriods: (id, input) =>
+				read(async () =>
+					this.merchants.getPeriods(
+						account,
+						this.merchantId.transform(id),
+						await query(input, BankTransactionCashFlowQueryDto),
+					),
+				),
 		};
 	}
 }

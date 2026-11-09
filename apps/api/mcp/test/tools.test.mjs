@@ -215,6 +215,102 @@ test('month_summary passes a month and Amsterdam calendar date to the summary ro
 	assert.equal(f.requests[1].url, '/api/bank-transactions/summary?month=2040-02&asOf=2040-02-29');
 });
 
+const MERCHANT = `k_${'0123456789abcdef'.repeat(2)}`;
+
+test('spending_breakdown reads spending by category or income by source per period at the Amsterdam call date', async (t) => {
+	const f = await fixture(t);
+	const body = {
+		baseCurrency: 'EUR',
+		interval: 'year',
+		by: 'category',
+		periods: [{start: '2040-01-01', end: '2040-02-03', complete: false, total: '9007199254740993.01', parts: []}],
+	};
+	f.respond(body);
+	assert.deepEqual(
+		json(
+			await f.client.callTool({
+				name: 'spending_breakdown',
+				arguments: {interval: 'year', by: 'category', from: '2039-01-01', to: '2040-02-03'},
+			}),
+		),
+		body,
+	);
+	assert.equal(
+		f.requests[0].url,
+		'/api/bank-transactions/breakdown?interval=year&by=category&from=2039-01-01&to=2040-02-03&asOf=2040-02-03',
+	);
+	await f.client.callTool({
+		name: 'spending_breakdown',
+		arguments: {interval: 'month', by: 'source', from: '2040-01-01', to: '2040-01-31', asOf: '2040-02-01'},
+	});
+	assert.equal(
+		f.requests[1].url,
+		'/api/bank-transactions/breakdown?interval=month&by=source&from=2040-01-01&to=2040-01-31&asOf=2040-02-01',
+	);
+});
+
+test('list_merchants passes only the search and paging the caller set', async (t) => {
+	const f = await fixture(t);
+	const body = {
+		baseCurrency: 'EUR',
+		merchants: [{id: MERCHANT, name: 'Example Shop', spent: '9007199254740993.01', received: '0.00', count: 3}],
+		total: 1,
+	};
+	f.respond(body);
+	assert.deepEqual(json(await f.client.callTool({name: 'list_merchants', arguments: {}})), body);
+	assert.equal(f.requests[0].url, '/api/merchants');
+	await f.client.callTool({name: 'list_merchants', arguments: {search: 'Example € & Shop', offset: 0, limit: 100}});
+	const url = new URL(f.requests[1].url, 'http://example.test');
+	assert.equal(url.pathname, '/api/merchants');
+	assert.deepEqual(Object.fromEntries(url.searchParams), {search: 'Example € & Shop', offset: '0', limit: '100'});
+	const tool = (await f.client.listTools()).tools.find((tool) => tool.name === 'merchant_periods');
+	assert.match(tool.description, /list_merchants/);
+});
+
+test('merchant_ranking ranks the period containing a date at the Amsterdam call date or explicit asOf', async (t) => {
+	const f = await fixture(t);
+	const body = {baseCurrency: 'EUR', interval: 'month', merchants: [{id: MERCHANT, spent: '1.25', usual: null}]};
+	f.respond(body);
+	assert.deepEqual(
+		json(await f.client.callTool({name: 'merchant_ranking', arguments: {interval: 'month', period: '2040-02-01'}})),
+		body,
+	);
+	assert.equal(f.requests[0].url, '/api/merchants/ranking?interval=month&period=2040-02-01&asOf=2040-02-03');
+	await f.client.callTool({
+		name: 'merchant_ranking',
+		arguments: {interval: 'year', period: '2039-06-15', asOf: '2040-01-01', limit: 200},
+	});
+	assert.equal(f.requests[1].url, '/api/merchants/ranking?interval=year&period=2039-06-15&asOf=2040-01-01&limit=200');
+});
+
+test('get_merchant and merchant_periods read one merchant group by id', async (t) => {
+	const f = await fixture(t);
+	const group = {id: MERCHANT, paid: '9007199254740993.01', refunded: '0.00', variants: []};
+	f.respond(group);
+	assert.deepEqual(json(await f.client.callTool({name: 'get_merchant', arguments: {id: MERCHANT}})), group);
+	assert.equal(f.requests[0].url, `/api/merchants/${MERCHANT}`);
+	const periods = {baseCurrency: 'EUR', interval: 'month', periods: [{spent: '-1.25', complete: false}]};
+	f.respond(periods);
+	assert.deepEqual(
+		json(
+			await f.client.callTool({
+				name: 'merchant_periods',
+				arguments: {id: MERCHANT, interval: 'month', from: '2040-01-01', to: '2040-02-01'},
+			}),
+		),
+		periods,
+	);
+	assert.equal(
+		f.requests[1].url,
+		`/api/merchants/${MERCHANT}/periods?interval=month&from=2040-01-01&to=2040-02-01&asOf=2040-02-03`,
+	);
+	f.respond({message: 'example-private-detail'}, 404);
+	assert.deepEqual(await f.client.callTool({name: 'get_merchant', arguments: {id: MERCHANT}}), {
+		isError: true,
+		content: [{type: 'text', text: 'Tempo API HTTP 404: Resource not found or not accessible to this token.'}],
+	});
+});
+
 test('list_accounts reads connections with decimal balances and sync freshness', async (t) => {
 	const f = await fixture(t);
 	const body = [
