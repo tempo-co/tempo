@@ -5,7 +5,7 @@ import {type CSSProperties, Fragment, useState} from 'react';
 import {Card} from '@/components/ui/card';
 import {cn} from '@/utils/cn';
 
-import {pct, signed, wholeCents} from '../utils/format';
+import {FIGURE_CHAR, figureColumnWidth, pct, signed, wholeCents} from '../utils/format';
 import {formatMonth} from '../utils/month';
 import type {MonthPoint, Overview, YearRow} from '../utils/overview';
 import {Bone, LoadingLabel, TextBone} from './loading';
@@ -240,13 +240,9 @@ function YearSparkline({months}: {months: MonthPoint[]}) {
  */
 const FIGURE_WIDTH = 'w-(--fit) min-[34rem]:w-[18%] lg:w-1/5';
 
-/**
- * A column width that fits the longest of `texts` in the table's figures, plus `padding` rem. A figure takes about
- * 0.46rem a character; half a rem leaves some to spare.
- */
+/** A column width that fits the longest of `texts` in the table's figures, plus `padding` rem. */
 function fit(texts: string[], padding: number) {
-  const longest = Math.max(0, ...texts.map((text) => text.length));
-  return `${Math.ceil((longest * 0.5 + padding) * 4) / 4}rem`;
+  return figureColumnWidth(texts, {perChar: FIGURE_CHAR, padding});
 }
 
 function FlowCell({
