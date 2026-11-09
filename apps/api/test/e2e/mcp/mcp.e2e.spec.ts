@@ -6,7 +6,7 @@ import {Throttle, seconds} from '@nestjs/throttler';
 import type {BankConnection as BankConnectionResponse, BankTransactionsResponse} from '@tempo/contracts';
 import Redis from 'ioredis';
 import {execFileSync} from 'node:child_process';
-import {randomUUID} from 'node:crypto';
+import {createHash, randomUUID} from 'node:crypto';
 import {AddressInfo, createConnection} from 'node:net';
 import request from 'supertest';
 import {DataSource} from 'typeorm';
@@ -35,16 +35,22 @@ const METHODS = ['post', 'get', 'delete', 'head'] as const;
 const TOOL_NAMES = [
 	'balance_trend',
 	'cash_flow',
+	'get_merchant',
 	'get_transaction',
 	'list_accounts',
 	'list_categories',
+	'list_merchants',
 	'list_recurring',
+	'merchant_periods',
+	'merchant_ranking',
 	'month_summary',
 	'recurring_summary',
 	'review_counts',
 	'search_transactions',
+	'spending_breakdown',
 	'transaction_totals',
 ];
+const merchantGroupId = (key: string) => `k_${createHash('md5').update(key).digest('hex')}`;
 
 describe('Hosted MCP', () => {
 	let url: URL;
@@ -190,6 +196,7 @@ describe('Hosted MCP', () => {
 			Array.from({length: 6}, (_, index) =>
 				bookedRow(`2026-01-0${index + 1}`, '-1.25', {
 					description: 'Example Shop',
+					merchantKey: 'EXPENSE:example shop',
 					providerTransactionId: 'example-private-transaction',
 					counterpartyIban: 'NL91ABNA0417164300',
 				}),
@@ -209,7 +216,11 @@ describe('Hosted MCP', () => {
 		const otherBankAccount = await fixtures.createBankAccount(otherConnection, {currentBalanceAmount: '999999.00'});
 		const otherRow = await fixtures.createTransaction(
 			otherBankAccount,
-			bookedRow('2026-01-04', '-9999.00', {category: 'NEEDS_REVIEW'}),
+			bookedRow('2026-01-04', '-9999.00', {
+				category: 'NEEDS_REVIEW',
+				description: 'Example Other Shop',
+				merchantKey: 'EXPENSE:example other shop',
+			}),
 		);
 		const recurringFixtures = [
 			{name: 'Example Subscription Alpha', day: '03', amount: '-9.99', category: 'SUBSCRIPTIONS'},
@@ -247,6 +258,8 @@ describe('Hosted MCP', () => {
 		const foreignKey = otherRecurring.expenses.series.find(
 			({name}: {name: string}) => name === 'Example Other Subscription',
 		).key;
+		const foreignMerchant = merchantGroupId('example other shop');
+		await request(getApp().getHttpServer()).get(`/merchants/${foreignMerchant}`).set('Cookie', cookie).expect(200);
 		const statuses: number[] = [];
 		const client = new Client({name: 'example-hosted-client', version: '1'});
 		const call = async (name: string, args: Record<string, unknown> = {}) => {
@@ -349,6 +362,59 @@ describe('Hosted MCP', () => {
 						expect.objectContaining({value: 'UNCATEGORIZED'}),
 					]),
 				);
+				const breakdown = await call('spending_breakdown', {...period, by: 'category'});
+				expect(breakdown).toEqual(
+					await rest(`/bank-transactions/breakdown?${new URLSearchParams({...period, by: 'category'})}`),
+				);
+				expect(breakdown.periods[0]).toMatchObject({total: '7.50', parts: [{key: 'SHOPPING', amount: '7.50'}]});
+				const sources = await call('spending_breakdown', {...period, by: 'source'});
+				expect(sources).toEqual(
+					await rest(`/bank-transactions/breakdown?${new URLSearchParams({...period, by: 'source'})}`),
+				);
+				expect(sources.periods[0]).toMatchObject({
+					total: '20.00',
+					parts: [{amount: '20.00', category: 'SALARY'}],
+				});
+				const shop = merchantGroupId('example shop');
+				const merchants = await call('list_merchants', {search: 'example shop', limit: 10});
+				expect(merchants).toEqual(await rest('/merchants?search=example%20shop&limit=10'));
+				expect(merchants).toMatchObject({
+					merchants: [{id: shop, name: 'Example Shop', spent: '7.50', count: 6}],
+					total: 1,
+				});
+				const merchant = await call('get_merchant', {id: shop});
+				expect(merchant).toEqual(await rest(`/merchants/${shop}`));
+				expect(merchant).toMatchObject({paid: '7.50', paymentCount: 6, variants: [{key: 'example shop'}]});
+				const merchantPeriods = await call('merchant_periods', {...period, id: shop});
+				expect(merchantPeriods).toEqual(
+					await rest(`/merchants/${shop}/periods?${new URLSearchParams(period)}`),
+				);
+				expect(merchantPeriods.periods.at(-1)).toMatchObject({start: '2026-01-01', spent: '7.50', count: 6});
+				const rankingQuery = {interval: 'month', period: '2026-01-15', asOf: '2026-02-01'};
+				const ranking = await call('merchant_ranking', rankingQuery);
+				expect(ranking).toEqual(await rest(`/merchants/ranking?${new URLSearchParams(rankingQuery)}`));
+				expect(ranking).toMatchObject({start: '2026-01-01', merchants: [{id: shop, spent: '7.50'}], total: 1});
+				await request(getApp().getHttpServer())
+					.get(`/merchants/${foreignMerchant}`)
+					.auth(token, {type: 'bearer'})
+					.expect(404);
+				for (const [name, args] of [
+					['get_merchant', {}],
+					['merchant_periods', period],
+				] as const) {
+					const foreign = await client.callTool({name, arguments: {...args, id: foreignMerchant}});
+					const missing = await client.callTool({name, arguments: {...args, id: `k_${'f'.repeat(32)}`}});
+					expect(foreign).toEqual(missing);
+					expect(foreign).toMatchObject({
+						isError: true,
+						content: [
+							{
+								type: 'text',
+								text: 'Tempo API HTTP 404: Resource not found or not accessible to this token.',
+							},
+						],
+					});
+				}
 				const recurring = await call('list_recurring', {asOf: '2025-12-31'});
 				expect(recurring).toEqual(await rest('/recurring-series?asOf=2025-12-31'));
 				expect(recurring.expenses.series.map(({name}: {name: string}) => name).sort()).toEqual([
@@ -507,6 +573,12 @@ describe('Hosted MCP', () => {
 					trend,
 					recurring,
 					recurringSummary,
+					breakdown,
+					sources,
+					merchants,
+					merchant,
+					merchantPeriods,
+					ranking,
 				});
 				for (const privateValue of [
 					'providerSessionId',
@@ -522,6 +594,8 @@ describe('Hosted MCP', () => {
 					otherRow.id,
 					otherBankAccount.id,
 					'Example Other Subscription',
+					'Example Other Shop',
+					foreignMerchant,
 				])
 					expect(publicOutput).not.toContain(privateValue);
 				const forbidden = await client.callTool({name: 'get_transaction', arguments: {id: otherRow.id}});
