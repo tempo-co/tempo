@@ -25,8 +25,6 @@ Optional AI categorization uses Claude with model `claude-sonnet-5-5` at `high` 
 
 `MERCHANT_LOGOS_ENABLED=false` keeps merchant logos off. When enabled, the API identifies each new merchant once per owner through the same Claude routes as categorization, takes the logo from logo.dev when `LOGO_DEV_SECRET_KEY` is set, or from the merchant's official site when that one is larger, after the site's homepage confirms the brand, and serves it from `GET /merchant-logos/:id/:version` to the owner only. When a site serves no usable icon or refuses the server, the API asks DuckDuckGo's icon service for it. logo.dev and DuckDuckGo receive only the hostname; such a logo shows only when the model was sure of the site. Logos are stored in PostgreSQL, so backups include them.
 
-pgAdmin requires a login; its password defaults to `DB_PASSWORD` and can be overridden by setting `PGADMIN_DEFAULT_PASSWORD` in the environment.
-
 ## Development
 
 ```bash
@@ -37,7 +35,7 @@ This script starts the necessary Docker services, cleans any previous build outp
 
 ## Local MCP client
 
-The optional [read-only stdio MCP package](mcp/README.md) exposes eleven banking tools to a local MCP client. It uses a Tempo personal access token, not a browser session, and runs separately from the API. Build and configure it only for an explicitly selected client session or project; do not enable it globally until interactive/background isolation is proven.
+The optional [read-only stdio MCP package](mcp/README.md) exposes sixteen banking tools to a local MCP client. It uses a Tempo personal access token, not a browser session, and runs separately from the API. Build and configure it only for an explicitly selected client session or project; do not enable it globally until interactive/background isolation is proven.
 
 ## Test
 

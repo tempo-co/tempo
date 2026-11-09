@@ -3,9 +3,10 @@ import type {RecurringSummary} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
+import {mockSyntheticHome} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
-import {expectNoHorizontalOverflow} from '../../utils/layout';
+import {expectLoaded, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE, timezoneId: 'Europe/Amsterdam'});
 test.beforeEach(async ({page}) => {
@@ -53,6 +54,7 @@ const summary: RecurringSummary = {
       flags: [],
     },
   ],
+  flagged: [],
   expenseThisMonth: {month: '2026-10', paid: '21.49', remaining: '108.50'},
   incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '2500.00'},
   expenseUnconvertedCount: 0,
@@ -60,15 +62,13 @@ const summary: RecurringSummary = {
   baseCurrency: 'EUR',
 };
 
-const card = (page: Page) => page.getByRole('region', {name: 'Recurring payments'});
+const repeats = (page: Page) => page.getByRole('region', {name: 'Repeats'});
 
 for (const viewport of [
   {width: 1280, height: 800},
   {width: 390, height: 844},
 ]) {
-  test(`shows recurring bills, income and what is due next at ${viewport.width}px`, async ({
-    page,
-  }) => {
+  test(`repeats show bills, income and what is due next at ${viewport.width}px`, async ({page}) => {
     await page.setViewportSize(viewport);
     const dates: string[] = [];
     await page.route('**/recurring-series/summary?**', (route) => {
@@ -77,37 +77,32 @@ for (const viewport of [
     });
     await page.goto('/');
 
-    await expect(card(page)).toContainText('Monthly bills€129.99');
-    await expect(card(page)).toContainText('€108.50 due this month');
-    await expect(card(page)).toContainText('Monthly income+€2,500.00');
-    const upcoming = card(page).getByRole('listitem');
-    await expect(upcoming).toHaveCount(3);
-    await expect(upcoming.nth(0)).toContainText('Example Gym');
-    await expect(upcoming.nth(0)).toContainText('In 2 days');
-    await expect(upcoming.nth(0)).toContainText('€30.00');
-    await expect(upcoming.nth(0)).not.toContainText('≈');
-    // A long name stays inside the card.
-    await expect(upcoming.nth(1)).toContainText(
-      'Example Energy Supplier With A Long Contract Name',
+    await expect(repeats(page)).toContainText('Bills a month€130');
+    await expect(repeats(page)).toContainText('Income a month€2,500');
+    await expect(repeats(page)).toContainText('October: €21 paid · €109 to go');
+    const upcoming = repeats(page).getByRole('listitem');
+    await expect(upcoming.filter({hasText: 'Example Gym'})).toContainText(
+      '3 Oct · in 2 days€30.00',
     );
-    // A varying bill's next payment is an estimate.
-    await expect(upcoming.nth(1)).toContainText('8 Oct');
-    await expect(upcoming.nth(1)).toContainText('≈ €78.50');
-    await expect(upcoming.nth(2)).toContainText('+€2,500.00');
-    expect(dates).toEqual(['2026-10-01']);
+    // A long name stays inside the block, and a varying bill's next payment is an estimate.
+    await expect(
+      upcoming.filter({hasText: 'Example Energy Supplier With A Long Contract Name'}),
+    ).toContainText('≈ €78.50');
+    await expect(upcoming.filter({hasText: 'Example Employer'})).toContainText('+€2,500.00');
+    expect(new Set(dates)).toEqual(new Set(['2026-10-01']));
     await expectNoHorizontalOverflow(page);
 
     // The full list opens over Home, and Back closes it.
-    await card(page).getByRole('button', {name: 'See all recurring payments'}).click();
+    await repeats(page).getByRole('button', {name: 'All recurring payments'}).click();
     const dialog = page.getByRole('dialog', {name: 'Recurring payments'});
     await expect(dialog).toBeVisible();
     await expect(page).toHaveURL(/[?&]recurring=open/);
     await page.goBack();
     await expect(dialog).toBeHidden();
-    await expect(card(page)).toBeVisible();
+    await expect(repeats(page)).toBeVisible();
 
     // Closing it in the dialog leaves no extra Home entry behind: Back then leaves Home.
-    await card(page).getByRole('button', {name: 'See all recurring payments'}).click();
+    await repeats(page).getByRole('button', {name: 'All recurring payments'}).click();
     await expect(dialog).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
@@ -119,29 +114,20 @@ for (const viewport of [
   });
 }
 
-test('shows what the real summary endpoint returns for the seeded owner', async ({page}) => {
+test('repeats show what the real summary endpoint returns for the seeded owner', async ({page}) => {
   const response = await page.request.get(`${API_URL}/recurring-series/summary?asOf=2026-10-01`);
   expect(response.status()).toBe(200);
   const real = (await response.json()) as RecurringSummary;
   await page.goto('/');
-  if (real.upcoming.length === 0 && Number(real.expenseMonthlyTotal) === 0) {
-    await expect(card(page)).toContainText('No recurring payments found yet');
+  await expect(page.getByRole('region', {name: 'Where you stand'})).toBeVisible();
+  await expectLoaded(page.getByRole('region', {name: 'Where you stand'}));
+  if (Number(real.expenseMonthlyTotal) === 0 && Number(real.incomeMonthlyTotal) === 0) {
+    await expect(repeats(page)).toHaveCount(0);
+  } else if (real.upcoming.length > 0) {
+    await expect(repeats(page)).toContainText(real.upcoming[0].name);
   } else {
-    await expect(card(page)).toContainText(real.upcoming[0].name);
+    await expect(repeats(page)).toContainText('Bills a month');
   }
-});
-
-test('says when nothing recurring is found yet', async ({page}) => {
-  await page.route('**/recurring-series/summary?**', (route) =>
-    fulfillJson(route, {
-      ...summary,
-      expenseMonthlyTotal: '0.00',
-      incomeMonthlyTotal: '0.00',
-      upcoming: [],
-    }),
-  );
-  await page.goto('/');
-  await expect(card(page)).toContainText('No recurring payments found yet');
 });
 
 test('says how many bills the total leaves out until they are converted', async ({page}) => {
@@ -149,8 +135,8 @@ test('says how many bills the total leaves out until they are converted', async 
     fulfillJson(route, {...summary, expenseUnconvertedCount: 2, incomeUnconvertedCount: 1}),
   );
   await page.goto('/');
-  await expect(card(page)).toContainText('€129.99');
-  await expect(card(page)).toContainText('2 not converted yet');
+  await expect(repeats(page)).toContainText('Bills a month€130');
+  await expect(repeats(page)).toContainText('2 not converted yet');
 
   // Unconverted income is not counted against the bills.
   await page.unrouteAll();
@@ -158,6 +144,28 @@ test('says how many bills the total leaves out until they are converted', async 
     fulfillJson(route, {...summary, incomeUnconvertedCount: 1}),
   );
   await page.reload();
-  await expect(card(page)).toContainText('Monthly bills€129.99');
-  await expect(card(page)).not.toContainText('not converted');
+  await expect(repeats(page)).toContainText('Bills a month€130');
+  await expect(repeats(page)).not.toContainText('not converted');
+});
+
+test.describe('when what repeats cannot be read', () => {
+  // Every response is synthetic: this check never reads a shared API stack.
+  test.use({storageState: {cookies: [], origins: []}});
+
+  test('Repeats says so in its place and loads on Try again', async ({page}) => {
+    await mockSyntheticHome(page);
+    const state = {failing: true};
+    await page.route('**/recurring-series/summary?**', (route) =>
+      state.failing
+        ? fulfillJson(route, {statusCode: 429, message: 'Too Many Requests'}, 429)
+        : route.fallback(),
+    );
+    await page.goto('/');
+
+    await expect(repeats(page)).toContainText('Could not load what repeats.');
+    state.failing = false;
+    await repeats(page).getByRole('button', {name: 'Try again'}).click();
+    await expect(repeats(page)).toContainText('Bills a month€1,250');
+    await expect(repeats(page)).toContainText('Income a month€3,000');
+  });
 });

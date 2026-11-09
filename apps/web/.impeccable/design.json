@@ -984,7 +984,7 @@
       "refersTo": "button-primary",
       "description": "The single most important local action. Clay-on-dark fill on the dark canvas; Clay strong on light.",
       "html": "<button class=\"ds-btn-primary\">Connect a bank</button>",
-      "css": ".ds-btn-primary { background: hsl(var(--primary, 17.5 67.1% 69%)); color: hsl(var(--primary-foreground, 252 10.2% 9.6%)); padding: 8px 16px; min-height: 40px; border: 0; border-radius: 0; font: 500 14px/20px Inter Variable, Inter, sans-serif; transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1); } .ds-btn-primary:hover { background: color-mix(in srgb, hsl(var(--primary, 17.5 67.1% 69%)) 90%, transparent); } .ds-btn-primary:focus-visible { outline: 2px solid hsl(var(--ring, 17.5 67.1% 69%)); outline-offset: 2px; } @media (max-width: 639px), (pointer: coarse) { .ds-btn-primary { min-height: 44px; min-width: 44px; } } @media (prefers-reduced-motion: no-preference) and (pointer: coarse) { .ds-btn-primary:active:not(:disabled) { transform: scale(0.97); } } @media (prefers-reduced-motion: reduce) { .ds-btn-primary { transition: none; } }"
+      "css": ".ds-btn-primary { background: hsl(var(--primary, 17.5 67.1% 69%)); color: hsl(var(--primary-foreground, 252 10.2% 9.6%)); padding: 8px 16px; min-height: 40px; border: 0; border-radius: 6px; font: 500 14px/20px Inter Variable, Inter, sans-serif; transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1); } .ds-btn-primary:hover { background: color-mix(in srgb, hsl(var(--primary, 17.5 67.1% 69%)) 90%, transparent); } .ds-btn-primary:focus-visible { outline: 2px solid hsl(var(--ring, 17.5 67.1% 69%)); outline-offset: 2px; } @media (max-width: 639px), (pointer: coarse) { .ds-btn-primary { min-height: 44px; min-width: 44px; } } @media (prefers-reduced-motion: no-preference) and (pointer: coarse) { .ds-btn-primary:active:not(:disabled) { transform: scale(0.97); } } @media (prefers-reduced-motion: reduce) { .ds-btn-primary { transition: none; } }"
     },
     {
       "name": "Search Input",
@@ -992,7 +992,7 @@
       "refersTo": "input",
       "description": "A quiet field for search and filters.",
       "html": "<input class=\"ds-input-search\" placeholder=\"Search transactions...\" aria-label=\"Search transactions\" />",
-      "css": ".ds-input-search { width: 100%; height: 40px; padding: 8px 12px; border: 1px solid hsl(var(--input, 270 6.9% 22.7%)); border-radius: 0; background: hsl(var(--background, 252 10.2% 9.6%)); color: hsl(var(--foreground, 38.6 31.8% 91.4%)); font: 400 16px/24px Inter Variable, Inter, sans-serif; } .ds-input-search::placeholder { color: hsl(var(--muted-foreground, 36 9.2% 68%)); } .ds-input-search:focus-visible { outline: 2px solid hsl(var(--ring, 17.5 67.1% 69%)); outline-offset: 2px; } @media (min-width: 768px) { .ds-input-search { font-size: 14px; line-height: 20px; } }"
+      "css": ".ds-input-search { width: 100%; height: 40px; padding: 8px 12px; border: 1px solid hsl(var(--input, 270 6.9% 22.7%)); border-radius: 6px; background: hsl(var(--background, 252 10.2% 9.6%)); color: hsl(var(--foreground, 38.6 31.8% 91.4%)); font: 400 16px/24px Inter Variable, Inter, sans-serif; } .ds-input-search::placeholder { color: hsl(var(--muted-foreground, 36 9.2% 68%)); } .ds-input-search:focus-visible { outline: 2px solid hsl(var(--ring, 17.5 67.1% 69%)); outline-offset: 2px; } @media (min-width: 768px) { .ds-input-search { font-size: 14px; line-height: 20px; } }"
     },
     {
       "name": "Grouped Surface",
@@ -1000,7 +1000,7 @@
       "refersTo": "card",
       "description": "A bordered, quiet surface for information that belongs together.",
       "html": "<section class=\"ds-card\"><h2>Connected bank</h2><p>Last synchronized recently</p></section>",
-      "css": ".ds-card { padding: 24px; border: 1px solid hsl(var(--border, 270 6.9% 22.7%)); border-radius: 0; background: hsl(var(--card, 260 9.1% 12.9%)); color: hsl(var(--foreground, 38.6 31.8% 91.4%)); box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); font-family: Inter Variable, Inter, sans-serif; } .ds-card h2 { font-size: 16px; font-weight: 600; margin: 0 0 4px; } .ds-card p { font-size: 14px; color: hsl(var(--muted-foreground, 36 9.2% 68%)); margin: 0; }"
+      "css": ".ds-card { padding: 24px; border: 1px solid hsl(var(--border, 270 6.9% 22.7%)); border-radius: 12px; background: hsl(var(--card, 260 9.1% 12.9%)); color: hsl(var(--foreground, 38.6 31.8% 91.4%)); box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); font-family: Inter Variable, Inter, sans-serif; } .ds-card h2 { font-size: 16px; font-weight: 600; margin: 0 0 4px; } .ds-card p { font-size: 14px; color: hsl(var(--muted-foreground, 36 9.2% 68%)); margin: 0; }"
     },
     {
       "name": "Status Badge",

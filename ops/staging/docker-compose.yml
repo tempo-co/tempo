@@ -56,7 +56,7 @@ services:
         logging: *default-logging
 
     mailpit:
-        image: axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
+        image: axllent/mailpit:v1.33.0@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
         restart: unless-stopped
         # The web UI is published on loopback so staging emails can be read. The API reaches
         # SMTP over edge; Mailpit stays off backend so it has no route to postgres or redis.
@@ -84,7 +84,9 @@ services:
         restart: unless-stopped
         environment:
             NODE_ENV: production
-            WEB_BASE_URL: http://127.0.0.1:8119
+            # The tailnet origin in staging.env when the Tailscale sidecar is set up; the only origin
+            # CORS, CSRF checks and emailed links accept.
+            WEB_BASE_URL: ${STAGING_WEB_BASE_URL:-http://127.0.0.1:8119}
             API_URL: http://api:3000
             PORT: '3000'
             DB_HOST: postgres
@@ -93,11 +95,7 @@ services:
             DB_PASSWORD: ${STAGING_DB_PASSWORD:?STAGING_DB_PASSWORD must be set}
             DB_NAME: ${STAGING_DB_NAME:?STAGING_DB_NAME must be set}
             DB_SYNCHRONIZE: 'false'
-            DB_PGADMIN_PORT: '0'
             REDIS_URL: redis://redis:6379
-            REDIS_PORT: '6379'
-            REDIS_HOST: redis
-            REDIS_INSIGHT_PORT: '0'
             SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set}
             SESSION_EXPIRATION: 30d
             SESSION_REDIS_KEY: tempo-staging-session
@@ -108,7 +106,7 @@ services:
             BANKING_INTEGRATION_ENABLED: 'false'
             ENABLE_BANKING_API_URL: https://disabled.invalid
             ENABLE_BANKING_APPLICATION_ID: tempo-staging-disabled
-            ENABLE_BANKING_REDIRECT_URL: http://127.0.0.1:8119/bank-connections/callback
+            ENABLE_BANKING_REDIRECT_URL: ${STAGING_WEB_BASE_URL:-http://127.0.0.1:8119}/bank-connections/callback
             BANKING_SESSION_ENCRYPTION_KEY_B64: ${BANKING_SESSION_ENCRYPTION_KEY_B64:?BANKING_SESSION_ENCRYPTION_KEY_B64 must be set}
             BANKING_SYNC_INTERVAL: 6h
             BANKING_SYNC_DISPATCH_INTERVAL: 10m
@@ -116,7 +114,6 @@ services:
             EMAIL_HOST: mailpit
             EMAIL_PORT: '1025'
             EMAIL_SECURE: 'false'
-            EMAIL_UI_PORT: '8025'
             EMAIL_UI_URL: http://127.0.0.1:8125/
             EMAIL_VERIFICATION_EXPIRATION: 24h
             EMAIL_VERIFICATION_REDIS_KEY: tempo-staging-email-verification
@@ -124,6 +121,10 @@ services:
             PASSWORD_RESET_REDIS_KEY: tempo-staging-password-reset
             THROTTLE_TTL: 1m
             THROTTLE_LIMIT: '100'
+            # Optional: without a key pair Settings says this server sends no notifications.
+            WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:-}
+            WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:-}
+            WEB_PUSH_VAPID_SUBJECT: ${WEB_PUSH_VAPID_SUBJECT:-}
         expose:
             - '3000'
         networks:
@@ -157,6 +158,7 @@ services:
         networks:
             - edge
             - ingress
+            - tailscale
         depends_on:
             api:
                 condition: service_healthy
@@ -186,3 +188,12 @@ networks:
         internal: true
     ingress:
         name: tempo-staging-ingress
+    # Joins web and the Tailscale sidecar (tailscale.compose.yml). The fixed subnet gives the sidecar a
+    # static address outside the dynamic range, the only address web's Nginx trusts for X-Forwarded-For.
+    tailscale:
+        name: tempo-staging-tailscale
+        ipam:
+            config:
+                - subnet: 10.213.47.0/28
+                  gateway: 10.213.47.1
+                  ip_range: 10.213.47.8/29

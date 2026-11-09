@@ -197,6 +197,8 @@ export type BankTransactionFilter = {
 	recurringSeriesKey?: string;
 	/** Only the rows of one merchant group (see `MERCHANT_GROUP_ID_PATTERN`). */
 	merchantGroup?: string;
+	/** Only the rows of one income source, by its breakdown part's `key`. */
+	incomeSource?: string;
 };
 
 /** `GET /bank-transactions/totals` query: the list's filters without sort or pagination. */

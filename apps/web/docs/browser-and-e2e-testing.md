@@ -21,7 +21,7 @@ A mocked spec is a UI integration test, not full-stack coverage. Report it separ
 ## Choosing what to run locally
 
 - Find the specs for a change with `git grep` over `test/e2e` for the route, component, label or test id. `--only-changed` finds nothing: specs drive the browser and do not import `src`.
-- Home layout specs measure geometry. `test/e2e/home/dashboard-density.spec.ts` mocks every Home request and measures row insets from row titles. When Home gains a query, add its mock there and to `mockEmptyHome` in `test/utils/api-mocks.ts`; when a row layout changes, grep `test/e2e` for `boxOf(` on the surface you changed and run those specs too.
+- Home specs build on the synthetic history in `test/data/home-history.data.ts`: `mockSyntheticHome` answers every Home and month-dialog request, and `test/e2e/home/layout.spec.ts` renders it and a worst-case variant at every width, checking for overflow and amounts cut short or broken across lines. `test/e2e/home/loading.spec.ts` answers the same requests in a staggered order and records Chromium's layout-shift entries, so a section that moves the page as it fills in fails there. When Home gains a query, add its mock there, its delay to that spec's `STAGGER` and its empty answer to `mockEmptyHome` in `test/utils/api-mocks.ts`; when a row layout changes, grep `test/e2e` for `boxOf(` on the surface you changed and run those specs too.
 - Run the full suite locally only for cross-cutting changes (`src/utils/api.ts`, `src/query-client.ts`, routing, auth, providers, shared layout or `src/components/ui`) or to reproduce a CI failure the logs do not explain.
 
 ## Local runs and shared servers
@@ -77,7 +77,7 @@ A mocked spec is a UI integration test, not full-stack coverage. Report it separ
 ## Merchant logo rendering
 
 `test/e2e/banking/merchant-logos.spec.ts` drives transactions, the inspector, connection rows,
-Home recent rows and Home recurring rows at `1440px` and `390px` in both themes. Its synthetic
+a month's transaction rows and Home's next recurring payments at `1440px` and `390px` in both themes. Its synthetic
 `128px` white RGBA fixture contains transparent, quarter-, half-, three-quarter- and full-alpha
 bands. The pixel assertions decode actual browser screenshots of the tinted tile, not a canvas
 drawing of the unfiltered image. They compare the composited sRGB colors with the Clay field

@@ -2272,6 +2272,7 @@ describe('detectRecurringSeries', () => {
 
 		expect(detectRecurringSeries(rows, dates[dates.length - 1])[0]).toMatchObject({
 			nextExpectedDate,
+			anchorDay: 31,
 			restartTransactionIds: [],
 		});
 	});

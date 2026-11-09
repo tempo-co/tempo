@@ -29,9 +29,13 @@ case ${1:-} in
         ln -sfn "$HOME/.local/lib/tempo-deploy/deploy.sh" "$HOME/.local/bin/tempo-deploy"
         copy 644 "$REPO/ops/staging/docker-compose.yml" "$HOME/.config/tempo-staging/staging.compose.yml"
         copy 700 "$REPO/ops/staging/tempo-staging-refresh.sh" "$HOME/.config/tempo-staging/tempo-staging-refresh.sh"
+        copy 644 "$REPO/ops/staging/tailscale.compose.yml" "$HOME/.config/tempo-staging/tailscale.compose.yml"
+        copy 644 "$REPO/ops/staging/tailscale-serve.json" "$HOME/.config/tempo-staging/tailscale-serve.json"
         ;;
     claude-bridge)
         [[ $EUID != 0 ]] || { echo 'run the bridge install as the Claude subscription user, not root' >&2; exit 1; }
+        # The bridge grants the API's uid its socket with setfacl.
+        command -v setfacl >/dev/null || { echo 'install the acl package first (the bridge needs setfacl)' >&2; exit 1; }
         for file in bridge.mjs check-contract.mjs contract.json main.mjs merchant-contract.json search-hook.mjs subscription.mjs validation.mjs; do
             copy 600 "$REPO/apps/api/claude-bridge/$file" "$HOME/.local/lib/tempo-claude-bridge/$file"
         done

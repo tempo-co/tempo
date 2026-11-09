@@ -1,7 +1,15 @@
-import type {BankTransactionCategoryFilterValue} from './categories.js';
+import type {BankTransactionCategory, BankTransactionCategoryFilterValue} from './categories.js';
 
 export const CASH_FLOW_INTERVALS = ['week', 'month', 'year'] as const;
 export type CashFlowInterval = (typeof CASH_FLOW_INTERVALS)[number];
+/** The balance trend also reads day ends, over a short range. */
+export const BALANCE_TREND_INTERVALS = ['day', ...CASH_FLOW_INTERVALS] as const;
+export type BalanceTrendInterval = (typeof BALANCE_TREND_INTERVALS)[number];
+/** The most periods one cash-flow, balance-trend, breakdown or merchant-periods request may cover. */
+export const MAX_RANGE_PERIODS = {day: 92, week: 104, month: 240, year: 20} as const satisfies Record<
+	BalanceTrendInterval,
+	number
+>;
 
 /** `GET /bank-transactions/summary` query. */
 export type BankTransactionSummaryQuery = {
@@ -11,7 +19,7 @@ export type BankTransactionSummaryQuery = {
 	asOf: string;
 };
 
-/** `GET /bank-transactions/cash-flow` and `GET /bank-transactions/balance-trend` query. */
+/** `GET /bank-transactions/cash-flow` query. */
 export type BankTransactionCashFlowQuery = {
 	interval: CashFlowInterval;
 	/** Any day in the first period; the period starts on its Monday, 1st or 1 January. */
@@ -20,6 +28,11 @@ export type BankTransactionCashFlowQuery = {
 	to: string;
 	/** The client's local date. A period is complete only once it has ended before this day. */
 	asOf: string;
+};
+
+/** `GET /bank-transactions/balance-trend` query: the cash-flow query, plus day ends over a short range. */
+export type BankBalanceTrendQuery = Omit<BankTransactionCashFlowQuery, 'interval'> & {
+	interval: BalanceTrendInterval;
 };
 
 export type SpendingPaceDay = {day: number; spending: string; cumulative: string};
@@ -79,7 +92,7 @@ export type BankTransactionCashFlow = {
 };
 
 export type BankBalanceTrendPeriod = {
-	/** First day of the period: a Monday, the 1st, or 1 January. */
+	/** First day of the period: the day itself, a Monday, the 1st, or 1 January. */
 	start: string;
 	/** The day the balances are for: the period's last day, or `to` while it is still running. */
 	end: string;
@@ -94,9 +107,62 @@ export type BankBalanceTrendPeriod = {
 /** `GET /bank-transactions/balance-trend`: combined balance at the end of each period, oldest first. */
 export type BankBalanceTrend = {
 	baseCurrency: string | null;
-	interval: CashFlowInterval;
+	interval: BalanceTrendInterval;
 	/** Every period from the first one any connected account covers through `to`. */
 	periods: BankBalanceTrendPeriod[];
+};
+
+export const BREAKDOWN_INTERVALS = ['month', 'year'] as const;
+export type BreakdownInterval = (typeof BREAKDOWN_INTERVALS)[number];
+/** `category`: spending (net of refunds) by category; `source`: income by merchant. */
+export const BREAKDOWN_DIMENSIONS = ['category', 'source'] as const;
+export type BreakdownDimension = (typeof BREAKDOWN_DIMENSIONS)[number];
+
+/** `GET /bank-transactions/breakdown` query. */
+export type BankTransactionBreakdownQuery = {
+	interval: BreakdownInterval;
+	by: BreakdownDimension;
+	/** Any day in the first period; the period starts on its 1st or 1 January. */
+	from: string;
+	/** The last day to count, on or before `asOf`. */
+	to: string;
+	/** The client's local date. A period is complete only once it has ended before this day. */
+	asOf: string;
+};
+
+export type BankTransactionBreakdownPart = {
+	/** The category (or `UNCATEGORIZED`), or for income the merchant key, falling back to the display name. */
+	key: string;
+	/** The category again, or the source's most common display name. */
+	label: string;
+	/** Spending is positive; a part that only holds refunds is negative. */
+	amount: string;
+	/** Sources only: the logo of the merchant of the source's latest income, null without a trusted one. */
+	merchantLogoUrl?: string | null;
+	/** Sources only: the latest income's category, the icon shown without a logo. */
+	category?: BankTransactionCategory | null;
+};
+
+export type BankTransactionBreakdownPeriod = {
+	/** First day of the period: the 1st or 1 January. */
+	start: string;
+	/** Last day counted: the period's last day, or `to` when the period is still running. */
+	end: string;
+	/** False when the period is cut at `to` or starts before the first booked transaction. */
+	complete: boolean;
+	/** The period's spending or income, equal to cash flow's for the same period. */
+	total: string;
+	/** Largest first; parts that net to zero are left out. */
+	parts: BankTransactionBreakdownPart[];
+};
+
+/** `GET /bank-transactions/breakdown`: spending by category or income by source per month or year, oldest first. */
+export type BankTransactionBreakdown = {
+	baseCurrency: string | null;
+	interval: BreakdownInterval;
+	by: BreakdownDimension;
+	/** Every period from the first booked transaction (or `from`) through `to`, including empty ones. */
+	periods: BankTransactionBreakdownPeriod[];
 };
 
 /** `GET /bank-transactions/review-counts`. */
@@ -106,6 +172,8 @@ export type BankTransactionReviewCounts = {
 	categorizing: number;
 	unknownDirection: number;
 	missingBaseAmount: number;
+	/** Rows to review, failed or without a direction, each counted once: the groups above can overlap. */
+	needsAttention: number;
 };
 
 /** `GET /bank-transactions/totals`: totals over all filtered rows, as decimal base-currency strings. */

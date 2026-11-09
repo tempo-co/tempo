@@ -11,14 +11,10 @@ const baseConfig = {
 	DB_PASSWORD: 'test-password',
 	DB_NAME: 'tempo',
 	DB_SYNCHRONIZE: 'false',
-	DB_PGADMIN_PORT: '5050',
 	SESSION_SECRET: 'test-session-secret',
 	SESSION_EXPIRATION: '30d',
 	SESSION_REDIS_KEY: 'sess',
 	REDIS_URL: 'redis://redis:6379',
-	REDIS_PORT: '6379',
-	REDIS_HOST: 'redis',
-	REDIS_INSIGHT_PORT: '5540',
 	ENABLE_BANKING_API_URL: 'https://api.enablebanking.com',
 	ENABLE_BANKING_APPLICATION_ID: 'test-application',
 	ENABLE_BANKING_PRIVATE_KEY_B64: 'test-private-key',
@@ -26,7 +22,6 @@ const baseConfig = {
 	BANKING_SESSION_ENCRYPTION_KEY_B64: 'test-encryption-key',
 	EMAIL_HOST: 'mailpit',
 	EMAIL_PORT: '1025',
-	EMAIL_UI_PORT: '8025',
 	EMAIL_UI_URL: 'http://mailpit:8025',
 	EMAIL_VERIFICATION_EXPIRATION: '1d',
 	EMAIL_VERIFICATION_REDIS_KEY: 'email-verification',
@@ -295,5 +290,31 @@ describe('banking integration configuration', () => {
 				ENABLE_BANKING_PRIVATE_KEY_PATH: undefined,
 			}),
 		).toThrow('Configure exactly one');
+	});
+});
+
+describe('web push configuration', () => {
+	const vapid = {
+		WEB_PUSH_VAPID_PUBLIC_KEY: 'test-public-key',
+		WEB_PUSH_VAPID_PRIVATE_KEY: 'test-private-key',
+		WEB_PUSH_VAPID_SUBJECT: 'mailto:push@example.test',
+	};
+
+	it('accepts no keys, which turns push off, or all three', () => {
+		expect(configSchema.parse(baseConfig).WEB_PUSH_VAPID_PUBLIC_KEY).toBeUndefined();
+		const empty = {WEB_PUSH_VAPID_PUBLIC_KEY: '', WEB_PUSH_VAPID_PRIVATE_KEY: '', WEB_PUSH_VAPID_SUBJECT: ''};
+		expect(configSchema.parse({...baseConfig, ...empty}).WEB_PUSH_VAPID_PUBLIC_KEY).toBeUndefined();
+		expect(configSchema.parse({...baseConfig, ...vapid})).toMatchObject(vapid);
+	});
+
+	it.each(Object.keys(vapid))('rejects the keys without %s', (missing) => {
+		const {[missing as keyof typeof vapid]: _omitted, ...partial} = vapid;
+		expect(configSchema.safeParse({...baseConfig, ...partial}).success).toBe(false);
+	});
+
+	it('rejects a contact that is not mailto: or https:', () => {
+		expect(
+			configSchema.safeParse({...baseConfig, ...vapid, WEB_PUSH_VAPID_SUBJECT: 'push@example.test'}).success,
+		).toBe(false);
 	});
 });

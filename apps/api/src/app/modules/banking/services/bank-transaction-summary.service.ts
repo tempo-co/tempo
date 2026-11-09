@@ -22,7 +22,10 @@ import {
 	BANKING_TRANSACTION_CASH_FLOW_RANGE,
 	BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH,
 } from '../api/constants/banking-messages.constants';
-import type {BankTransactionCashFlowQueryDto} from '../api/dtos/bank-transaction-cash-flow-query.dto';
+import type {
+	BankBalanceTrendQueryDto,
+	BankTransactionCashFlowQueryDto,
+} from '../api/dtos/bank-transaction-cash-flow-query.dto';
 import type {BankTransactionTotalsQueryDto} from '../api/dtos/bank-transaction-query.dto';
 import type {BankTransactionSummaryQueryDto} from '../api/dtos/bank-transaction-summary-query.dto';
 import {BankTransaction} from '../bank-transaction.entity';
@@ -36,25 +39,29 @@ import {
 	nextPeriodStart,
 	parseCents,
 	periodStarts,
+	periodWindows,
 	previousMonths,
 	summarizeBaseline,
 } from '../summary/bank-transaction-summary';
 import {convertEcbAmountSql, newestEcbRatePairSql} from './bank-transaction-amount-conversion.utils';
 import {
+	SQL_BASE_AMOUNT,
 	SQL_CATEGORIZATION_FAILED,
 	SQL_CATEGORIZING,
 	SQL_INCOME,
 	SQL_MISSING_BASE_AMOUNT,
+	SQL_NEEDS_ATTENTION,
 	SQL_OWN_TRANSFER_DEBIT,
+	SQL_PERIOD_START,
 	SQL_SPENDING,
 	SQL_UNKNOWN_DIRECTION,
 	applyBankTransactionFilters,
 	createOwnerScopedQuery,
+	findFirstBookingDate,
 } from './bank-transaction-filters';
 import {BANK_CONNECTION_STATUSES} from './banking-sync.constants';
 
 const BASELINE_MONTHS = 3;
-const BASE_AMOUNT = '"transaction"."amountInBaseCurrency"';
 /** Keys whose month-to-month average says nothing useful. */
 const NO_BASELINE_CATEGORIES = new Set<BankTransactionCategoryFilterValue>([
 	'REFUND',
@@ -95,7 +102,7 @@ export class BankTransactionSummaryService {
 		const candidateMonths = previousMonths(month, BASELINE_MONTHS);
 		// Flows cover every candidate month; months before the first booking simply have no rows.
 		const [firstBookingDate, flows, period] = await Promise.all([
-			this.findFirstBookingDate(accountId),
+			findFirstBookingDate(this.bankTransactionRepository, accountId),
 			this.findFlows(accountId, `${candidateMonths[0]}-01`, through),
 			this.findPeriodCounts(accountId, monthStart, through),
 		]);
@@ -205,26 +212,22 @@ export class BankTransactionSummaryService {
 		if (!starts) throw new BadRequestException(BANKING_TRANSACTION_CASH_FLOW_RANGE);
 
 		const [firstBookingDate, rows] = await Promise.all([
-			this.findFirstBookingDate(accountId),
+			findFirstBookingDate(this.bankTransactionRepository, accountId),
 			this.findPeriodFlows(accountId, interval, starts[0], to),
 		]);
 		const totals = new Map(rows.map((row) => [row.start, row]));
-		const periods: BankTransactionCashFlowPeriod[] = [];
-		for (const start of starts) {
-			const periodEnd = addDays(nextPeriodStart(start, interval), -1);
-			if (!firstBookingDate || periodEnd < firstBookingDate) continue;
-			const spending = -parseCents(totals.get(start)?.spending ?? '0');
-			const income = parseCents(totals.get(start)?.income ?? '0');
-			periods.push({
-				start,
-				end: periodEnd < to ? periodEnd : to,
-				// A period that ends today is still running; one cut by where history starts is partial.
-				complete: periodEnd < asOf && periodEnd <= to && start >= firstBookingDate,
-				spending: formatCents(spending),
-				income: formatCents(income),
-				net: formatCents(income - spending),
-			});
-		}
+		const periods = periodWindows(interval, starts, to, asOf, firstBookingDate).map(
+			(window): BankTransactionCashFlowPeriod => {
+				const spending = -parseCents(totals.get(window.start)?.spending ?? '0');
+				const income = parseCents(totals.get(window.start)?.income ?? '0');
+				return {
+					...window,
+					spending: formatCents(spending),
+					income: formatCents(income),
+					net: formatCents(income - spending),
+				};
+			},
+		);
 		return {baseCurrency, interval, periods};
 	}
 
@@ -238,7 +241,7 @@ export class BankTransactionSummaryService {
 	 */
 	async getBalanceTrend(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
-		{interval, from, to, asOf}: BankTransactionCashFlowQueryDto,
+		{interval, from, to, asOf}: BankBalanceTrendQueryDto,
 	): Promise<BankBalanceTrend> {
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(BANKING_BALANCE_TREND_RANGE);
@@ -265,11 +268,12 @@ export class BankTransactionSummaryService {
 					AND a."currentBalanceAmount" IS NOT NULL
 			), native AS (
 				SELECT a."id", a."currency", ends."end", ends."end" >= a."first" AS "included",
-					a."current" - COALESCE((
+					-- Only an end the account has history by needs its later bookings summed.
+					CASE WHEN ends."end" >= a."first" THEN a."current" - COALESCE((
 						SELECT SUM(t."amount") FROM "bank_transactions" t
 						WHERE t."bankAccountId" = a."id" AND t."bookingDate" > ends."end"
 							AND (a."reported" IS NULL OR t."bookingDate" <= a."reported")
-					), 0) AS "amount"
+					), 0) END AS "amount"
 				FROM accounts a CROSS JOIN unnest($3::date[]) AS ends("end")
 			)
 			SELECT n."id", to_char(n."end", 'YYYY-MM-DD') AS "end", n."included",
@@ -322,7 +326,7 @@ export class BankTransactionSummaryService {
 			: undefined;
 		applyBankTransactionFilters(query, filter, recurringIds);
 		// Round each amount to minor units before summing; never convert monetary SQL results to Number.
-		const cents = `ROUND(${BASE_AMOUNT} * 100)`;
+		const cents = `ROUND(${SQL_BASE_AMOUNT} * 100)`;
 		const row = await query
 			.select('COUNT(*)::int', 'count')
 			.addSelect(`COALESCE(SUM(${cents}) FILTER (WHERE ${SQL_SPENDING}), 0)::text`, 'spending')
@@ -355,6 +359,7 @@ export class BankTransactionSummaryService {
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_CATEGORIZING})::int`, 'categorizing')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_UNKNOWN_DIRECTION})::int`, 'unknownDirection')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_MISSING_BASE_AMOUNT})::int`, 'missingBaseAmount')
+			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_NEEDS_ATTENTION})::int`, 'needsAttention')
 			.getRawOne<BankTransactionReviewCounts>();
 		return counts!;
 	}
@@ -377,7 +382,7 @@ export class BankTransactionSummaryService {
 			.addSelect('EXTRACT(DAY FROM "transaction"."bookingDate")::int', 'day')
 			.addSelect(`CASE WHEN ${SQL_SPENDING} THEN 'SPENDING' ELSE 'INCOME' END`, 'flow')
 			.addSelect(`COALESCE("transaction"."category", '${BANK_TRANSACTION_UNCATEGORIZED}')`, 'category')
-			.addSelect(`ROUND(SUM(${BASE_AMOUNT}), 2)::text`, 'amount')
+			.addSelect(`ROUND(SUM(${SQL_BASE_AMOUNT}), 2)::text`, 'amount')
 			.addSelect('COUNT(*)::int', 'count')
 			.groupBy('1')
 			.addGroupBy('2')
@@ -389,9 +394,12 @@ export class BankTransactionSummaryService {
 	/** Raw signed spending and income sums per period, on the same filters as {@link findFlows}. */
 	private findPeriodFlows(accountId: string, interval: CashFlowInterval, from: string, to: string) {
 		return this.createFlowQuery(accountId, from, to)
-			.select(`to_char(date_trunc(:interval, "transaction"."bookingDate"::timestamp), 'YYYY-MM-DD')`, 'start')
-			.addSelect(`ROUND(COALESCE(SUM(${BASE_AMOUNT}) FILTER (WHERE ${SQL_SPENDING}), 0), 2)::text`, 'spending')
-			.addSelect(`ROUND(COALESCE(SUM(${BASE_AMOUNT}) FILTER (WHERE ${SQL_INCOME}), 0), 2)::text`, 'income')
+			.select(SQL_PERIOD_START, 'start')
+			.addSelect(
+				`ROUND(COALESCE(SUM(${SQL_BASE_AMOUNT}) FILTER (WHERE ${SQL_SPENDING}), 0), 2)::text`,
+				'spending',
+			)
+			.addSelect(`ROUND(COALESCE(SUM(${SQL_BASE_AMOUNT}) FILTER (WHERE ${SQL_INCOME}), 0), 2)::text`, 'income')
 			.setParameter('interval', interval)
 			.groupBy('1')
 			.getRawMany<{start: string; spending: string; income: string}>();
@@ -402,20 +410,13 @@ export class BankTransactionSummaryService {
 		applyBankTransactionFilters(query, {bookingDate: {from, to}});
 		const counts = await query
 			.select(
-				`ROUND(COALESCE(SUM(ABS(${BASE_AMOUNT})) FILTER (WHERE ${SQL_OWN_TRANSFER_DEBIT}), 0), 2)::text`,
+				`ROUND(COALESCE(SUM(ABS(${SQL_BASE_AMOUNT})) FILTER (WHERE ${SQL_OWN_TRANSFER_DEBIT}), 0), 2)::text`,
 				'ownTransfers',
 			)
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_UNKNOWN_DIRECTION})::int`, 'unknownDirection')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_MISSING_BASE_AMOUNT})::int`, 'missingBaseAmount')
 			.getRawOne<{ownTransfers: string; unknownDirection: number; missingBaseAmount: number}>();
 		return counts!;
-	}
-
-	private async findFirstBookingDate(accountId: string): Promise<string | null> {
-		const row = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
-			.select(`to_char(MIN("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'first')
-			.getRawOne<{first: string | null}>();
-		return row?.first ?? null;
 	}
 }
 

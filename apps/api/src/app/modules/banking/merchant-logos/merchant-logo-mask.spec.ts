@@ -34,6 +34,13 @@ function artwork(name: string): Buffer {
 					[64, 130, 240],
 				][Number(x >= 64) + 2 * Number(y >= 64)];
 			if (name === 'badge' && radius <= 59) c = radius > 32 ? [0, 100, 60] : [255, 255, 255];
+			if (name === 'ringwindow' && radius >= 44 && radius <= 63) c = [0, 174, 239];
+			if (name === 'ringdot' && (Math.abs(radius - 53.5) <= 9.5 || radius <= 9)) c = [0, 174, 239];
+			if (name === 'glyphbadge' && radius <= 63) {
+				c = [0, 100, 60];
+				if ((x >= 40 && x < 88 && y >= 36 && y < 48) || (x >= 58 && x < 70 && y >= 36 && y < 92))
+					c = [255, 255, 255];
+			}
 			if (name === 'closedbadge' && radius > 32) {
 				const a = Math.max(0, Math.min(1, (61 - radius) / 4));
 				c = [0, 100, 60].map((v) => Math.floor(255 + (v - 255) * a + 0.5));
@@ -58,8 +65,8 @@ function artwork(name: string): Buffer {
 	return data;
 }
 
-// Decoded RGBA digests from the approved mathematical reference on these synthetic inputs.
-const EXPECTED: Record<string, string> = {
+// Decoded RGBA digests from the approved mathematical reference on these synthetic inputs (mask-v1).
+const EXPECTED_V1: Record<string, string> = {
 	closedbadge: '1b8e59c474f7b1a17e2843be69bc03dcc7de8411b13c16314a544b46872d0d4f',
 	shading: '971a0d3dcc5d0cedd9c4c3cf25d689c184393ea87a37c115933197b3b34517f2',
 	antialias: 'af0240e33e5b73554fab96ef0dbb0addb2b62879b73d182e45d7ca790e4a49a4',
@@ -71,7 +78,20 @@ const EXPECTED: Record<string, string> = {
 	details: '8c28ad9a68c0dbbb61036b3f6c8b00b0d08e634492dc7553bee208b0c0917110',
 	separated: 'a9e7fb7b46af921ff45b64d62e70156c4822ee9bcd70b40abad86f0ccbac0ba2',
 	opposite: 'b97c69d97acf03e9b1dcac486ebf908f5ce1125ef3538f5c7844a646d8cbb708',
+	ringwindow: '6a11e6ae0dd053b6bbef7a899ca78838ebc9ca2abf9199bd76d933e08c865383',
+	ringdot: '3c9e0d4a93969185f01c4d4c7a2b5111215cbd33cc135fe63ca2be658273db9b',
+	glyphbadge: '782dfc94c241ee06017b1754b5943458246c448f1d025fc6368fec4a4107d831',
 };
+// mask-v2 keeps every mask-v1 output except rings around a plain window, where the ring is the mark.
+// `badge` and `closedbadge` are such rings (a green annulus around a white centre on white corners).
+const EXPECTED_V2: Record<string, string> = {
+	...EXPECTED_V1,
+	badge: 'b0105b7683a310f5d71bd1804b1358dcc3eaa709b0065a4c1157e41a98c502a7',
+	closedbadge: '18b04395d9da4d5506cc3c659c98c63666121708c9b46d5547a57289d13fb1a7',
+	ringwindow: '8afa433f5d3684e578edc2c7b2041a9a3af9cb69c6ecb416bba5e27b4eb263cb',
+	ringdot: 'e52e8a84e72ec7791cfa7e36d19357455c657f0b0613734c731b1e3843cdfb8e',
+};
+const EXPECTED = {'mask-v1': EXPECTED_V1, 'mask-v2': EXPECTED_V2} as const;
 
 describe('merchant logo mask', () => {
 	it.each([
@@ -110,10 +130,19 @@ describe('merchant logo mask', () => {
 		expect(result.matte[64 * 128 + 24]).toBeLessThan(0.02);
 		expect(result.matte[64 * 128 + 64]).toBeGreaterThan(0.99);
 	});
-	it('preserves the enclosing field of a detailed badge with a weak annulus estimate', () => {
-		const result = sourceForegroundMatte(artwork('closedbadge'), 128, 128)!;
+	it('preserves the enclosing field of a detailed badge with a weak annulus estimate in mask-v1', () => {
+		const result = sourceForegroundMatte(artwork('closedbadge'), 128, 128, 'mask-v1')!;
 		expect(result.dominance).toBeLessThan(0.5);
 		expect(result.background).toEqual([0, 100 / 255, 60 / 255]);
+	});
+	it.each([
+		['ringwindow', [1, 1, 1]],
+		['ringdot', [1, 1, 1]],
+		['badge', [1, 1, 1]],
+		['closedbadge', [1, 1, 1]],
+		['glyphbadge', [0, 100 / 255, 60 / 255]],
+	])('takes the corner colour as background only around a plain ring window in mask-v2 (%s)', (name, background) => {
+		expect(sourceForegroundMatte(artwork(name), 128, 128, 'mask-v2')!.background).toEqual(background);
 	});
 	it.each(['uniform', 'invalid', 'oversized'])('refuses an unconvertible %s input', async (kind) => {
 		const source =
@@ -132,31 +161,32 @@ describe('merchant logo mask', () => {
 		expect(await createMerchantLogoMask(source)).toBeNull();
 	});
 
-	it.each(Object.entries(EXPECTED))(
-		'preserves the approved decoded pixels for synthetic %s artwork',
-		async (name, digest) => {
-			const source = await sharp(artwork(name), {raw: {width: 128, height: 128, channels: 3}})
-				.png()
-				.toBuffer();
-			const original = Buffer.from(source);
-			const png = await createMerchantLogoMask(source);
-			expect(png).not.toBeNull();
-			const {data, info} = await sharp(png!).ensureAlpha().raw().toBuffer({resolveWithObject: true});
-			expect(info).toMatchObject({width: 128, height: 128, channels: 4});
-			const opacity = Array.from({length: 128 * 128}, (_, i) => data[i * 4 + 3]);
-			if (name === 'shading') {
-				expect(new Set(opacity).size).toBeGreaterThan(30);
-				const visible = opacity.flatMap((a, i) => (a ? [i] : []));
-				expect([
-					Math.min(...visible.map((i) => i % 128)),
-					Math.min(...visible.map((i) => Math.floor(i / 128))),
-					Math.max(...visible.map((i) => i % 128)) + 1,
-					Math.max(...visible.map((i) => Math.floor(i / 128))) + 1,
-				]).toEqual([12, 12, 116, 116]);
-			}
-			if (name === 'antialias') expect(new Set(opacity.filter((a) => a > 0 && a < 255)).size).toBeGreaterThan(10);
-			expect(createHash('sha256').update(data).digest('hex')).toBe(digest);
-			expect(source).toEqual(original);
-		},
-	);
+	it.each(
+		Object.entries(EXPECTED).flatMap(([version, digests]) =>
+			Object.entries(digests).map(([name, digest]) => [version as keyof typeof EXPECTED, name, digest] as const),
+		),
+	)('%s preserves the approved decoded pixels for synthetic %s artwork', async (version, name, digest) => {
+		const source = await sharp(artwork(name), {raw: {width: 128, height: 128, channels: 3}})
+			.png()
+			.toBuffer();
+		const original = Buffer.from(source);
+		const png = await createMerchantLogoMask(source, version);
+		expect(png).not.toBeNull();
+		const {data, info} = await sharp(png!).ensureAlpha().raw().toBuffer({resolveWithObject: true});
+		expect(info).toMatchObject({width: 128, height: 128, channels: 4});
+		const opacity = Array.from({length: 128 * 128}, (_, i) => data[i * 4 + 3]);
+		if (name === 'shading') {
+			expect(new Set(opacity).size).toBeGreaterThan(30);
+			const visible = opacity.flatMap((a, i) => (a ? [i] : []));
+			expect([
+				Math.min(...visible.map((i) => i % 128)),
+				Math.min(...visible.map((i) => Math.floor(i / 128))),
+				Math.max(...visible.map((i) => i % 128)) + 1,
+				Math.max(...visible.map((i) => Math.floor(i / 128))) + 1,
+			]).toEqual([12, 12, 116, 116]);
+		}
+		if (name === 'antialias') expect(new Set(opacity.filter((a) => a > 0 && a < 255)).size).toBeGreaterThan(10);
+		expect(createHash('sha256').update(data).digest('hex')).toBe(digest);
+		expect(source).toEqual(original);
+	});
 });

@@ -14,6 +14,9 @@ const strictBooleanEnvSchema = z.preprocess((value) => {
 	return value;
 }, z.boolean());
 
+const emptyAsUnset = <T extends z.ZodType>(schema: T) =>
+	z.preprocess((value) => (value === '' ? undefined : value), schema);
+
 export const ENV_VALUES = ['development', 'production', 'test'] as const;
 export type NodeEnv = (typeof ENV_VALUES)[number];
 
@@ -32,7 +35,6 @@ export const configSchema = z
 		DB_PASSWORD: z.string().min(1),
 		DB_NAME: z.string().min(1),
 		DB_SYNCHRONIZE: strictBooleanEnvSchema,
-		DB_PGADMIN_PORT: portSchema,
 
 		// --- Session ---
 		SESSION_SECRET: z.string().min(1),
@@ -46,9 +48,6 @@ export const configSchema = z
 
 		// --- Redis ---
 		REDIS_URL: z.string().url(),
-		REDIS_PORT: portSchema,
-		REDIS_HOST: z.string().min(1),
-		REDIS_INSIGHT_PORT: portSchema,
 
 		// --- AI categorization ---
 		AI_CATEGORIZATION_ENABLED: strictBooleanEnvSchema.default(false),
@@ -80,6 +79,20 @@ export const configSchema = z
 		BANKING_SYNC_RUNNING_TIMEOUT: durationSchema.default('30m'),
 		BANK_CONNECTION_ALERTS_ENABLED: strictBooleanEnvSchema.default(true),
 
+		// --- Web Push ---
+		/**
+		 * VAPID key pair (base64url) and contact (`mailto:` or `https:`); without them no push is sent. Empty counts as
+		 * unset, so a Compose file can pass them through when they are not configured.
+		 */
+		WEB_PUSH_VAPID_PUBLIC_KEY: emptyAsUnset(z.string().min(1).optional()),
+		WEB_PUSH_VAPID_PRIVATE_KEY: emptyAsUnset(z.string().min(1).optional()),
+		WEB_PUSH_VAPID_SUBJECT: emptyAsUnset(
+			z
+				.string()
+				.regex(/^(mailto:|https:\/\/)\S+$/)
+				.optional(),
+		),
+
 		// --- Email ---
 		EMAIL_HOST: z.string().min(1),
 		EMAIL_PORT: portSchema,
@@ -88,7 +101,6 @@ export const configSchema = z
 		EMAIL_PASSWORD: z.string().min(1).optional(),
 		EMAIL_REQUIRE_TLS: strictBooleanEnvSchema.default(false),
 		EMAIL_FROM: z.string().trim().min(1).optional(),
-		EMAIL_UI_PORT: portSchema,
 		EMAIL_UI_URL: z.string().url(),
 		EMAIL_VERIFICATION_EXPIRATION: durationSchema,
 		EMAIL_VERIFICATION_REDIS_KEY: z.string().min(1),
@@ -137,6 +149,20 @@ export const configSchema = z
 					message: 'Gmail SMTP requires a configured sender address.',
 				});
 			}
+		}
+
+		const webPushKeys = [
+			config.WEB_PUSH_VAPID_PUBLIC_KEY,
+			config.WEB_PUSH_VAPID_PRIVATE_KEY,
+			config.WEB_PUSH_VAPID_SUBJECT,
+		].filter((value) => value !== undefined);
+		if (webPushKeys.length !== 0 && webPushKeys.length !== 3) {
+			context.addIssue({
+				code: 'custom',
+				path: ['WEB_PUSH_VAPID_PUBLIC_KEY'],
+				message:
+					'Configure all of WEB_PUSH_VAPID_PUBLIC_KEY, WEB_PUSH_VAPID_PRIVATE_KEY and WEB_PUSH_VAPID_SUBJECT, or none.',
+			});
 		}
 
 		const hasPrivateKeyB64 = config.ENABLE_BANKING_PRIVATE_KEY_B64 !== undefined;

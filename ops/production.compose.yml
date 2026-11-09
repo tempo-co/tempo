@@ -39,8 +39,9 @@ services:
   api:
     image: ${TEMPO_API_IMAGE:?TEMPO_API_IMAGE must be set}
     restart: unless-stopped
-    # The image's node user, set here by number so an image cannot choose to run as root.
-    user: '1000:1000'
+    # A uid of its own, set here by number so an image cannot choose root or the host user's uid (1000).
+    # The banking key and the Claude bridge socket grant it access; see "Container privileges" in ops/README.md.
+    user: '10001:10001'
     <<: *no-new-privileges
     cap_drop: [ALL]
     env_file:
@@ -48,8 +49,6 @@ services:
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
       REDIS_URL: redis://redis:6379
       EMAIL_HOST: smtp.gmail.com
       EMAIL_PORT: '587'

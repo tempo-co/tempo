@@ -1,10 +1,12 @@
 import {Link} from '@tanstack/react-router';
 import type {CashFlowInterval, MerchantGroup, MerchantGroupPeriod} from '@tempo/contracts';
 import {format} from 'date-fns';
-import {ArrowLeft, ArrowUpRight} from 'lucide-react';
+import {ArrowLeft} from 'lucide-react';
 import {useState} from 'react';
 import {Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis} from 'recharts';
 
+import {LoadMore} from '@/components/shared/load-more';
+import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {Skeleton} from '@/components/ui/skeleton';
@@ -78,8 +80,8 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
             </div>
           )}
         </dl>
-        <dl className='grid grid-cols-2 gap-px border bg-border sm:grid-cols-4'>
-          <Fact label='Payments' value={merchant.paymentCount.toLocaleString()} />
+        <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-card border bg-border sm:grid-cols-4'>
+          <Fact label='Payments' value={merchant.paymentCount.toLocaleString()} numeric />
           <Fact
             label='Average payment'
             value={
@@ -283,7 +285,7 @@ function PeriodsChart({
               const period = shown.find((item) => item.start === label);
               if (!active || !period) return null;
               return (
-                <div className='grid min-w-40 gap-1 border bg-card p-2.5 text-xs shadow-sm'>
+                <div className='grid min-w-40 gap-1 rounded-md border bg-card p-2.5 text-xs shadow-sm'>
                   <p className='font-semibold'>
                     {periodLabel(period, interval)}
                     {!period.complete && (
@@ -354,8 +356,8 @@ function PeriodsChart({
 }
 
 function Transactions({merchant}: {merchant: MerchantGroup}) {
-  const {data, isPending, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage} =
-    useGetMerchantTransactions(merchant.id);
+  const query = useGetMerchantTransactions(merchant.id);
+  const {data, isPending, refetch} = query;
   const transactions = data?.pages.flatMap((page) => page.transactions) ?? [];
   const total = data?.pages[data.pages.length - 1].total ?? merchant.count;
 
@@ -363,16 +365,15 @@ function Transactions({merchant}: {merchant: MerchantGroup}) {
     <section className='grid grid-cols-1 gap-3' aria-label='Transactions'>
       <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-2'>
         <h2 className='text-card-title'>{countLabel(total, 'transaction')}</h2>
-        <Button variant='outline' size='sm' asChild className='max-sm:h-11'>
+        <TextAction asChild className='-mr-2'>
           <Link to='/bank-transactions' search={{merchantGroup: merchant.id}}>
-            <ArrowUpRight aria-hidden />
             Open in Transactions
           </Link>
-        </Button>
+        </TextAction>
       </header>
       {isPending ? (
         <Skeleton className='h-40' aria-label='Loading transactions' />
-      ) : isError || !data ? (
+      ) : !data ? (
         <div className='grid justify-items-start gap-2'>
           <p className='text-sm'>Could not load transactions.</p>
           <Button variant='outline' className='max-sm:h-11' onClick={() => void refetch()}>
@@ -397,17 +398,7 @@ function Transactions({merchant}: {merchant: MerchantGroup}) {
               </li>
             ))}
           </ul>
-          {hasNextPage && (
-            <Button
-              variant='ghost'
-              className='w-full text-muted-foreground max-sm:h-11'
-              disabled={isFetchingNextPage}
-              aria-busy={isFetchingNextPage || undefined}
-              onClick={() => void fetchNextPage()}
-            >
-              Load more
-            </Button>
-          )}
+          <LoadMore query={query} />
         </>
       )}
     </section>

@@ -3,14 +3,14 @@ import {type BankConnection, BankTransaction} from '@tempo/contracts';
 import {type Server, createServer} from 'node:http';
 import type {AddressInfo} from 'node:net';
 
-import {septemberSummary} from '../../data/home-summary.data';
+import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
+  EMPTY_REVIEW_COUNTS,
   fulfillJson,
-  mockBalanceTrend,
   mockBankConnections,
   mockBankRefresh,
-  mockCashFlow,
+  mockEmptyRecurringLists,
   mockJson,
   mockMerchantRanking,
 } from '../../utils/api-mocks';
@@ -157,7 +157,7 @@ async function mockMerchantLogos(page: Page) {
     state.servedImages.push({path, authenticated});
     if (!authenticated) {
       response.writeHead(401).end();
-    } else if ([LOGO, RECOVERED_LOGO].some((src) => path.endsWith(`${src}/mask-v1`))) {
+    } else if ([LOGO, RECOVERED_LOGO].some((src) => path.endsWith(`${src}/mask-v2`))) {
       response
         .writeHead(200, {
           'Content-Type': 'image/png',
@@ -203,13 +203,11 @@ async function mockMerchantLogos(page: Page) {
   await mockBankConnections(page, [connection]);
   await mockBankRefresh(page);
   await mockJson(page, '**/bank-connections/aspsps', []);
-  await mockJson(page, '**/bank-transactions/summary**', septemberSummary);
   await mockJson(page, '**/recurring-series/summary?**', {
     expenseMonthlyTotal: '24.50',
     incomeMonthlyTotal: '0.00',
     expenseThisMonth: {month: '2026-10', paid: '0.00', remaining: '24.50'},
     incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
-    // A recurring payment shows its latest payment's logo, like that payment's transaction row.
     upcoming: [
       {
         key: 'a'.repeat(32),
@@ -224,20 +222,15 @@ async function mockMerchantLogos(page: Page) {
         flags: [],
       },
     ],
+    flagged: [],
     expenseUnconvertedCount: 0,
     incomeUnconvertedCount: 0,
     baseCurrency: 'EUR',
   });
-  await mockCashFlow(page);
-  await mockBalanceTrend(page);
+  await mockHistoryEndpoints(page);
+  await mockEmptyRecurringLists(page);
   await mockMerchantRanking(page);
-  await mockJson(page, '**/bank-transactions/review-counts', {
-    needsReview: 0,
-    categorizationFailed: 0,
-    categorizing: 0,
-    unknownDirection: 0,
-    missingBaseAmount: 0,
-  });
+  await mockJson(page, '**/bank-transactions/review-counts', EMPTY_REVIEW_COUNTS);
   await page.route('**/bank-transactions?**', (route) => {
     if (route.request().resourceType() === 'document') return route.continue();
     return fulfillJson(route, {transactions: state.rows, total: state.rows.length});
@@ -268,7 +261,7 @@ async function expectPalette(tile: Locator, theme: Theme) {
 
 async function expectLogo(tile: Locator, theme: Theme, src = LOGO) {
   const image = tile.locator('img');
-  await expect(image).toHaveAttribute('src', `${API_URL}${src}/mask-v1`);
+  await expect(image).toHaveAttribute('src', `${API_URL}${src}/mask-v2`);
   await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(128);
   // Ordinary image requests include the cross-origin API session; anonymous CORS masks do not.
   expect(await image.evaluate((el: HTMLImageElement) => el.crossOrigin)).toBeNull();
@@ -367,8 +360,9 @@ for (const width of [1440, 390]) {
         await page.goto('/?month=2026-09');
         const homeUrl = page.url();
         await page
-          .getByRole('region', {name: 'Latest in September 2026'})
-          .getByRole('link', {name: 'View all', exact: true})
+          .getByRole('dialog', {name: 'September 2026'})
+          .getByRole('region', {name: 'Transactions'})
+          .getByRole('link', {name: 'Open in Transactions', exact: true})
           .click();
         await expect(page).toHaveURL(/\/bank-transactions\?.*bookingDate=/);
         const listUrl = page.url();
@@ -555,7 +549,9 @@ for (const width of [1440, 390]) {
         await expect(page).toHaveURL(listUrl);
 
         await page.goto('/?month=2026-09');
-        const recent = page.getByRole('region', {name: 'Latest in September 2026'});
+        const recent = page
+          .getByRole('dialog', {name: 'September 2026'})
+          .getByRole('region', {name: 'Transactions'});
         const recentRow = (row: BankTransaction) =>
           recent.locator('li').filter({hasText: row.displayDescription});
         await expectRowTiles((row) => recentRow(row).getByTestId('merchant-logo-tile'), theme);
@@ -567,16 +563,6 @@ for (const width of [1440, 390]) {
           recentRow(withLogo).getByRole('link'),
           recentRow(withLogo).getByTestId('merchant-logo-tile'),
         );
-        const upcoming = page
-          .getByRole('region', {name: 'Recurring payments'})
-          .getByRole('listitem')
-          .filter({hasText: 'Example Market'});
-        await expectLogo(upcoming.getByTestId('merchant-logo-tile'), theme);
-        await expectTintedPixels(upcoming.getByTestId('merchant-logo-tile'), theme);
-        await expectTransactionRowSize(
-          upcoming.getByRole('button'),
-          upcoming.getByTestId('merchant-logo-tile'),
-        );
         await expectNoHorizontalOverflow(page);
 
         await recentRow(withLogo).getByRole('link').click();
@@ -584,8 +570,8 @@ for (const width of [1440, 390]) {
         await expect(
           inspector.getByRole('heading', {name: 'Example Market', exact: true}),
         ).toBeVisible();
-        await page.getByRole('button', {name: 'Close transaction details', exact: true}).click();
-        await expect(inspector).toBeHidden();
+        // A month's row opens the transaction in Transactions; Back returns to the month.
+        await page.goBack();
         await expect(page).toHaveURL(homeUrl);
         await expect(recent).toBeVisible();
 
@@ -602,7 +588,7 @@ for (const width of [1440, 390]) {
         });
         expect(
           state.logoRequests.every((path) =>
-            [LOGO, BROKEN_LOGO, RECOVERED_LOGO].some((src) => path.endsWith(`${src}/mask-v1`)),
+            [LOGO, BROKEN_LOGO, RECOVERED_LOGO].some((src) => path.endsWith(`${src}/mask-v2`)),
           ),
         ).toBe(true);
         expect(state.servedImages.length).toBeGreaterThan(0);
@@ -620,6 +606,13 @@ for (const width of [1440, 390]) {
           deepLink.searchParams.delete('transactionId');
           await expect(page).toHaveURL(deepLink.href);
         }
+        // The next recurring payment beside the history shows its latest payment's logo.
+        await page.goto('/');
+        const upcoming = page
+          .getByRole('region', {name: 'Repeats'})
+          .getByRole('listitem')
+          .filter({hasText: 'Example Market'});
+        await expectLogo(upcoming.getByTestId('merchant-logo-tile'), theme);
         expect(state.unexpected).toEqual([]);
       });
     });

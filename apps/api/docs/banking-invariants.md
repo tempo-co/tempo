@@ -75,7 +75,15 @@ Defined in `services/bank-transaction-filters.ts`; read `SQL_SPENDING` / `SQL_IN
 - Apply the event before the categorization hash, then guard the reset with `categorySource IS DISTINCT FROM 'MANUAL'`. Block event rows at every AI boundary (enqueue, reconciliation, worker claim, before web search): stale jobs bypass a single guard.
 - Own transfers: evidence is a counterparty IBAN of another owned account in the same currency, the holder's own name (never for card payments), or an owner override (`MARKED`/`UNMARKED`). `TRANSFER` transaction type, names, or matching amount/date alone are leads, not evidence. Never delete, merge or rewrite either leg.
 - Never add amounts across currencies.
+- The breakdown (`/bank-transactions/breakdown`) splits cash flow's spending by category and its income by source (`SQL_INCOME_SOURCE`: merchant key, else display name) on the same definitions, so each period's total equals cash flow's. Refund credits stay in their `REFUND` part, which can be negative. A source's part reconciles with the list filtered by `incomeSource` set to its key.
 - Merchant totals (`/merchants`) use the same definitions over `SQL_MERCHANT_GROUP` and reconcile with the list filtered by `merchantGroup`; own transfers and currency exchanges belong to no group.
+- Cash flow, the breakdown and merchant periods take their period list from `periodWindows`: which periods history covers, each end clamped to the range, and which are complete.
+
+## Alerts
+
+- `alerts/` raises bank alerts (consent ending within 7 days, its last day, no successful sync for 24 hours) by email and push. Each alert is recorded once per episode (the connection's marker columns), in the transaction that queues its jobs. Job ids derive from that identity, so a rolled-back marker, a retry or an overlapping scan never sends twice.
+- A push raised between 21:00 and 09:00 Europe/Amsterdam waits until 09:00 as a delayed job. Before sending, the worker checks that the alert still applies (a reauthorized or synced bank sends nothing) and reads the badge count from review counts.
+- Push text stays vague: no bank, account or amount. Pushes reach only subscriptions whose session is still signed in as the owner (`modules/notifications`); logout removes that session's subscriptions, and push service 404/410 answers remove the subscription.
 
 ## Concurrency patterns used here
 

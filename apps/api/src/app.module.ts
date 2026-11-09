@@ -14,6 +14,7 @@ import {AccountModule} from '@modules/account/account.module';
 import {AuthModule} from '@modules/auth/auth.module';
 import {McpExceptionFilter} from '@modules/banking/api/mcp-exception.filter';
 import {BankingModule} from '@modules/banking/banking.module';
+import {NotificationsModule} from '@modules/notifications/notifications.module';
 
 @Module({
 	imports: [
@@ -28,6 +29,7 @@ import {BankingModule} from '@modules/banking/banking.module';
 		AuthModule,
 		AccountModule,
 		BankingModule,
+		NotificationsModule,
 	],
 	providers: [
 		{provide: APP_FILTER, useClass: McpExceptionFilter},

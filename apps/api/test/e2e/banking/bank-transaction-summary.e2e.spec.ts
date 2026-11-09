@@ -1,5 +1,6 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
+import type {BankTransactionReviewCounts} from '@tempo/contracts';
 import TestAgent from 'supertest/lib/agent';
 import {DataSource, Repository} from 'typeorm';
 
@@ -421,7 +422,8 @@ describe('BankTransactionSummary', () => {
 
 	it('counts transactions that need attention across all months', async () => {
 		const extra = await fixtures.createTransactions(ownerBankAccount, [
-			bookedRow('2026-07-15', '-5.00', {category: 'NEEDS_REVIEW'}),
+			// To review and without a direction: one row in two counts, and once in what needs the owner.
+			bookedRow('2026-07-15', '-5.00', {category: 'NEEDS_REVIEW', creditDebitIndicator: null}),
 			bookedRow(null, '-6.00', {category: null, categoryStatus: 'FAILED', amountInBaseCurrency: null}),
 			bookedRow('2026-08-03', '-7.00', {category: null, categoryStatus: 'PROCESSING'}),
 		]);
@@ -436,13 +438,15 @@ describe('BankTransactionSummary', () => {
 				needsReview: 1,
 				categorizationFailed: 1,
 				categorizing: 1,
-				unknownDirection: 1,
+				unknownDirection: 2,
 				missingBaseAmount: 2,
+				needsAttention: 3,
 			});
 
 			// Each count opens a list with exactly that many rows.
 			const listTotal = async (filter: Record<string, string | string[]>) =>
 				(await ownerAgent.get('/bank-transactions').query(filter).expect(200)).body.total;
+			const {needsAttention: _distinct, ...groups} = body as BankTransactionReviewCounts;
 			expect({
 				needsReview: await listTotal({'filter[categories][]': 'NEEDS_REVIEW'}),
 				categorizationFailed: await listTotal({'filter[categoryStatuses][]': 'FAILED'}),
@@ -452,7 +456,7 @@ describe('BankTransactionSummary', () => {
 					'filter[baseAmount]': 'MISSING',
 					'filter[cashFlows][]': ['SPENDING', 'INCOME', 'UNKNOWN'],
 				}),
-			}).toEqual(body);
+			}).toEqual(groups);
 		} finally {
 			await fixtures.transactions.delete([...extra.map(({id}) => id), otherExtra.id]);
 		}
@@ -567,8 +571,8 @@ describe('BankTransactionSummary', () => {
 
 		it.each([
 			['104 weeks', {interval: 'week', from: '2024-10-21', to: '2026-10-18', asOf: '2026-10-18'}],
-			['60 months', {interval: 'month', from: '2021-11-01', to: '2026-10-18', asOf: '2026-10-18'}],
-			['10 years', {interval: 'year', from: '2017-01-01', to: '2026-10-18', asOf: '2026-10-18'}],
+			['240 months', {interval: 'month', from: '2006-11-01', to: '2026-10-18', asOf: '2026-10-18'}],
+			['20 years', {interval: 'year', from: '2007-01-01', to: '2026-10-18', asOf: '2026-10-18'}],
 		])('accepts exactly %s', async (_case, query) => {
 			await ownerAgent.get(CASH_FLOW).query(query).expect(200);
 		});
@@ -579,8 +583,8 @@ describe('BankTransactionSummary', () => {
 				{interval: 'month', from: '2026-10-02', to: '2026-10-01', asOf: '2026-10-01'},
 			],
 			['more than 104 weeks', {interval: 'week', from: '2024-10-01', to: '2026-10-18', asOf: '2026-10-18'}],
-			['more than 60 months', {interval: 'month', from: '2021-10-01', to: '2026-10-18', asOf: '2026-10-18'}],
-			['more than 10 years', {interval: 'year', from: '2016-12-31', to: '2026-10-18', asOf: '2026-10-18'}],
+			['more than 240 months', {interval: 'month', from: '2006-10-01', to: '2026-10-18', asOf: '2026-10-18'}],
+			['more than 20 years', {interval: 'year', from: '2006-12-31', to: '2026-10-18', asOf: '2026-10-18'}],
 			[
 				'an end after the given date',
 				{interval: 'month', from: '2026-10-01', to: '2026-10-19', asOf: '2026-10-18'},
@@ -692,6 +696,39 @@ describe('BankTransactionSummary', () => {
 			]);
 		});
 
+		it('rebuilds each day-end balance across a month end the way it rebuilds month ends', async () => {
+			const {body} = await ownerAgent
+				.get(TREND)
+				.query({interval: 'day', from: '2019-01-30', to: '2019-02-06', asOf: '2026-10-18'})
+				.expect(200);
+			expect(body.interval).toBe('day');
+			// The month-end balance of 31 January is 900.00; the 200.00 debit lands on 5 February.
+			expect(
+				body.periods.map(({start, end, complete, total}: Record<string, unknown>) => ({
+					start,
+					end,
+					complete,
+					total,
+				})),
+			).toEqual([
+				...['01-30', '01-31', '02-01', '02-02', '02-03', '02-04'].map((day) => ({
+					start: `2019-${day}`,
+					end: `2019-${day}`,
+					complete: true,
+					total: '900.00',
+				})),
+				{start: '2019-02-05', end: '2019-02-05', complete: true, total: '700.00'},
+				{start: '2019-02-06', end: '2019-02-06', complete: true, total: '700.00'},
+			]);
+		});
+
+		it('accepts exactly 92 days', async () => {
+			await ownerAgent
+				.get(TREND)
+				.query({interval: 'day', from: '2019-01-01', to: '2019-04-02', asOf: '2026-10-18'})
+				.expect(200);
+		});
+
 		it('has no total where an account with history has no exchange rate yet', async () => {
 			const {body} = await ownerAgent
 				.get(TREND)
@@ -715,7 +752,8 @@ describe('BankTransactionSummary', () => {
 				'a range past the given day',
 				{interval: 'month', from: '2019-01-01', to: '2019-03-31', asOf: '2019-03-30'},
 			],
-			['more than 10 years', {interval: 'year', from: '2009-01-01', to: '2019-12-31', asOf: '2026-10-18'}],
+			['more than 20 years', {interval: 'year', from: '1999-01-01', to: '2019-12-31', asOf: '2026-10-18'}],
+			['more than 92 days', {interval: 'day', from: '2019-01-01', to: '2019-04-03', asOf: '2026-10-18'}],
 		])('rejects %s', async (_, query) => {
 			const response = await ownerAgent.get(TREND).query(query).expect(400);
 			expect(response.body.message).toBe(BANKING_BALANCE_TREND_RANGE);

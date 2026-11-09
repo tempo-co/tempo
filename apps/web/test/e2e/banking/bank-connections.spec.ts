@@ -8,15 +8,15 @@ import type {BankSyncRun} from '../../../src/features/banking/types/bank-sync-ru
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {successfulBankRefresh} from '../../data/bank-sync-run.data';
-import {septemberSpending} from '../../data/home-summary.data';
+import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
+  EMPTY_REVIEW_COUNTS,
   fulfillJson,
   fulfillRedirect,
-  mockBalanceTrend,
   mockBankConnections,
   mockBankRefresh,
-  mockCashFlow,
+  mockEmptyRecurringLists,
   mockJson,
   mockMerchantRanking,
   routeBankConnectionsApi,
@@ -249,10 +249,9 @@ test.describe('bank connections', () => {
     expect(new URL(page.url()).searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
     await expect(inspector.getByRole('heading', {name: 'Provider purchase'})).toBeVisible();
     await expect(inspector.getByTestId('bank-transaction-detail-amount')).toHaveText('-€12.50');
-    await expect(inspector.getByRole('button', {name: 'Bank details', exact: true})).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
+    await expect(
+      inspector.getByRole('button', {name: 'Bank details', exact: true}),
+    ).toHaveAttribute('aria-expanded', 'false');
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
     await expect(inspector).toBeHidden();
     await expect(transactionTrigger).toBeFocused();
@@ -831,8 +830,17 @@ test.describe('mocked Enable Banking bank connection', () => {
       if (url.origin === API_URL && url.pathname === '/bank-connections/aspsps')
         return fulfillJson(route, []);
       if (url.origin === API_URL && url.pathname === '/health') return fulfillJson(route, {});
+      // The navigation's review badge reads these on every page.
+      if (url.origin === API_URL && url.pathname === '/bank-transactions/review-counts')
+        return fulfillJson(route, EMPTY_REVIEW_COUNTS);
       if (url.origin === API_URL && url.pathname.endsWith('/refresh'))
         return fulfillJson(route, REFRESH_RESULT);
+      // Settings reads whether this server sends notifications.
+      if (url.origin === API_URL && url.pathname === '/notifications')
+        return fulfillJson(route, {
+          publicKey: null,
+          preferences: {bankConnections: true},
+        });
       await route.abort('blockedbyclient');
       throw new Error(`Unmocked request: ${route.request().method()} ${url}`);
     });
@@ -1352,27 +1360,21 @@ test.describe('mocked Enable Banking bank connection', () => {
     let nextSession = false;
     const requests: string[] = [];
     await mockBankConnections(page, () => (nextSession ? [next] : [MOCK_CONNECTION, tail]));
-    await mockBalanceTrend(page);
-    await mockCashFlow(page);
+    await mockHistoryEndpoints(page);
+    await mockEmptyRecurringLists(page);
     await mockMerchantRanking(page);
-    await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
     await mockJson(page, '**/recurring-series/summary?**', {
       expenseMonthlyTotal: '0.00',
       incomeMonthlyTotal: '0.00',
       expenseThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
       incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
       upcoming: [],
+      flagged: [],
       expenseUnconvertedCount: 0,
       incomeUnconvertedCount: 0,
       baseCurrency: 'EUR',
     });
-    await mockJson(page, '**/bank-transactions/review-counts', {
-      needsReview: 0,
-      categorizationFailed: 0,
-      categorizing: 0,
-      unknownDirection: 0,
-      missingBaseAmount: 0,
-    });
+    await mockJson(page, '**/bank-transactions/review-counts', EMPTY_REVIEW_COUNTS);
     await mockJson(page, '**/bank-transactions?**', {transactions: [], total: 0});
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
@@ -1434,16 +1436,16 @@ test.describe('mocked Enable Banking bank connection', () => {
             : '2026-10-01T00:00:00.000Z',
         }));
       });
-      await mockBalanceTrend(page);
-      await mockCashFlow(page);
+      await mockHistoryEndpoints(page);
+      await mockEmptyRecurringLists(page);
       await mockMerchantRanking(page);
-      await mockJson(page, '**/bank-transactions/summary**', septemberSpending('1200.00'));
       await mockJson(page, '**/recurring-series/summary?**', {
         expenseMonthlyTotal: '0.00',
         incomeMonthlyTotal: '0.00',
         expenseThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
         incomeThisMonth: {month: '2026-10', paid: '0.00', remaining: '0.00'},
         upcoming: [],
+        flagged: [],
         expenseUnconvertedCount: 0,
         incomeUnconvertedCount: 0,
         baseCurrency: 'EUR',
@@ -1452,13 +1454,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       let reviewCountReads = 0;
       await page.route('**/bank-transactions/review-counts', (route) => {
         reviewCountReads++;
-        return fulfillJson(route, {
-          needsReview: 0,
-          categorizationFailed: 0,
-          categorizing: 0,
-          unknownDirection: 0,
-          missingBaseAmount: 0,
-        });
+        return fulfillJson(route, EMPTY_REVIEW_COUNTS);
       });
       const requests: string[] = [];
       const releases = new Map<string, () => void>();
@@ -1896,8 +1892,7 @@ test.describe('bank-derived caches', () => {
       ),
       bankQueryKeys.transaction('example-transaction'),
       bankQueryKeys.connectionTransactions(MOCK_CONNECTION.id, null),
-      dashboardQueryKeys.summary('2026-09', '2026-10-01'),
-      dashboardQueryKeys.summary('2026-08', '2026-10-01'),
+      dashboardQueryKeys.breakdown('year', 'category', '2007-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.balanceTrend('month', '2026-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.cashFlow('month', '2026-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.reviewCounts,

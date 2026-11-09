@@ -8,7 +8,13 @@ import {
 
 import {formatBankTransactionCompactDate} from '../../../src/features/banking/utils/formatters';
 import {expect, test} from '../../fixtures';
-import {fulfillJson, mockBankConnections, mockJson} from '../../utils/api-mocks';
+import {
+  expectFailedPageRetried,
+  failLaterPages,
+  fulfillJson,
+  mockBankConnections,
+  mockJson,
+} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 // Every API call is mocked, so no seeded session is needed.
@@ -34,6 +40,7 @@ function series(overrides: Partial<RecurringSeries> & Pick<RecurringSeries, 'key
     firstDate: '2026-04-03',
     lastDate: '2026-09-03',
     nextExpectedDate: '2026-10-03',
+    anchorDay: 3,
     status: 'ACTIVE',
     flags: [],
     priceChange: null,
@@ -81,6 +88,7 @@ async function mockRecurring(page: Page) {
         key: GYM_KEY,
         name: 'Example Gym',
         cadence: 'FOUR_WEEKLY',
+        anchorDay: null,
         typicalAmount: '24.00',
         latestAmount: '24.00',
         monthlyEquivalent: '26.00',
@@ -133,6 +141,7 @@ async function mockRecurring(page: Page) {
         latestAmount: '2500.00',
         monthlyEquivalent: '2500.00',
         nextExpectedDate: '2026-10-25',
+        anchorDay: 25,
       }),
     ] as RecurringSeries[],
     writes: [] as Array<{key: string; hidden?: boolean; linked?: boolean}>,
@@ -225,6 +234,8 @@ function payment(
 const row = (page: Page, key: string) => page.getByTestId(`recurring-series-${key}`);
 const summaryOf = (page: Page) => page.getByTestId('recurring-summary');
 const detail = (page: Page) => page.getByRole('region', {name: 'Recurring payment details'});
+/** The month labels under a series' payment chart, oldest first. */
+const monthLabels = (page: Page) => detail(page).locator('.recharts-xAxis-tick-labels text');
 
 /** Opens a series' details from its row. */
 async function openSeries(page: Page, key: string) {
@@ -274,8 +285,12 @@ for (const viewport of [
     await page.goto('/?recurring=open');
 
     await expect(page.getByRole('dialog', {name: 'Recurring payments'})).toBeVisible();
-    // Rows are grouped by when they are next due; today is 1 Oct.
+    // Rows are grouped by when they are next due under sentence-case headings; today is 1 Oct.
     await expect(page.getByRole('region', {name: 'Late'})).toContainText('Example Energy');
+    await expect(page.getByRole('heading', {name: 'Late', exact: true})).toHaveCSS(
+      'text-transform',
+      'none',
+    );
     await expect(page.getByRole('region', {name: 'Next 7 days'})).toContainText('Example Gym');
     await expect(page.getByRole('region', {name: 'Next 7 days'})).toContainText(
       'Example Streaming',
@@ -287,10 +302,11 @@ for (const viewport of [
     // Bills and income come from one request.
     expect(state.listReads).toHaveLength(1);
     expect(new URLSearchParams(state.listReads[0]).has('direction')).toBe(false);
-    // Gym, streaming at its new price, energy and phone; the ended plan does not count.
-    await expect(summaryOf(page)).toContainText('€131.49a month · 4 bills');
-    await expect(summaryOf(page)).toContainText('€43.83paid in October');
-    await expect(summaryOf(page)).toContainText('€87.66still due');
+    // Gym, streaming at its new price, energy and phone; the ended plan does not count. The totals are
+    // whole amounts, as on Home; the rows keep cents.
+    await expect(summaryOf(page)).toContainText('€131a month · 4 bills');
+    await expect(summaryOf(page)).toContainText('€44paid in October');
+    await expect(summaryOf(page)).toContainText('€88still due');
     await expect(row(page, STREAMING_KEY)).toContainText('€14.99');
     await expect(row(page, STREAMING_KEY)).toContainText('+€2.00 since Aug');
     await expect(row(page, PHONE_KEY)).toContainText('−€3.50 since Jan');
@@ -314,12 +330,11 @@ for (const viewport of [
         tile: [36, 36],
       });
     }
-    // Ended series stay folded away until asked for.
+    // Ended series stay folded away until asked for, from the keyboard too.
     await expect(row(page, OLD_KEY)).toBeHidden();
-    const ended = page.getByText('Ended (1)', {exact: true});
-    const [endedBox, foldBox] = await Promise.all([boxOf(ended), boxOf(ended.locator('..'))]);
-    expect({x: endedBox.x, width: endedBox.width}).toEqual({x: foldBox.x, width: foldBox.width});
-    await ended.click({position: {x: endedBox.width - 8, y: endedBox.height / 2}});
+    await page.getByText('Ended (1)', {exact: true}).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('group', {name: 'Ended'})).toHaveAttribute('open', '');
     await expect(row(page, OLD_KEY)).toContainText('Last 3 Mar');
     await expectNoHorizontalOverflow(page);
 
@@ -327,6 +342,8 @@ for (const viewport of [
     await openSeries(page, ENERGY_KEY);
     await expect(detail(page)).toContainText('Example Energy');
     await expect(detail(page)).toContainText('Usually≈ €79');
+    // A year of its monthly cost, an estimate like the usual amount.
+    await expect(detail(page)).toContainText('A year≈ €1,020');
     await expect(detail(page)).toContainText('Last 6 €48.00–€160.00');
     await expectFactsOnTwoLines(page);
     await expect(detail(page)).toContainText('Last payment €160.00, higher than usual');
@@ -339,20 +356,22 @@ for (const viewport of [
       detail(page).getByRole('button', {name: 'Count as recurring again'}),
     ).toBeVisible();
     await backToList(page);
-    await expect(summaryOf(page)).toContainText('€46.49a month · 3 bills');
+    await expect(summaryOf(page)).toContainText('€46a month · 3 bills');
     await expect(page.getByRole('region', {name: 'Late'})).toBeHidden();
     await page.getByRole('button', {name: 'Undo'}).click();
     await expect(page.getByRole('region', {name: 'Late'})).toContainText('Example Energy');
-    await expect(summaryOf(page)).toContainText('€131.49a month · 4 bills');
+    await expect(summaryOf(page)).toContainText('€131a month · 4 bills');
 
-    // Hiding the four-weekly bill removes its monthly contribution, not its payment amount.
+    // A four-weekly bill costs thirteen payments a year: twelve of its monthly contribution. Hiding it removes
+    // that contribution, not its payment amount.
     await openSeries(page, GYM_KEY);
+    await expect(detail(page)).toContainText('A year€312');
     await detail(page).getByRole('button', {name: 'Not recurring'}).click();
     await backToList(page);
-    await expect(summaryOf(page)).toContainText('€105.49a month · 3 bills');
+    await expect(summaryOf(page)).toContainText('€105a month · 3 bills');
     await page.getByRole('button', {name: 'Undo'}).last().click();
     await expect(row(page, GYM_KEY)).toContainText('Every 4 weeks');
-    await expect(summaryOf(page)).toContainText('€131.49a month · 4 bills');
+    await expect(summaryOf(page)).toContainText('€131a month · 4 bills');
 
     // The open details survive a reload; a hidden series can also be restored from its fold.
     await openSeries(page, GYM_KEY);
@@ -369,7 +388,7 @@ for (const viewport of [
     await detail(page).getByRole('button', {name: 'Count as recurring again'}).click();
     await expect(detail(page).getByRole('button', {name: 'Not recurring'})).toBeVisible();
     await backToList(page);
-    await expect(summaryOf(page)).toContainText('€131.49a month · 4 bills');
+    await expect(summaryOf(page)).toContainText('€131a month · 4 bills');
     await expectNoHorizontalOverflow(page);
 
     expect(state.writes).toEqual([
@@ -479,16 +498,41 @@ test('says so when hiding could not be saved', async ({page}) => {
 
 // The API owns consolidation and eligibility; this only verifies consumption of its DTOs.
 test('drills recurring series through to exactly their payments', async ({page}) => {
+  // Four histories opened and drilled one after another, then one again on a phone.
+  test.slow();
   const state = await mockRecurring(page);
   const cloudKey = 'a1'.repeat(16);
   const weeklyKey = 'd4'.repeat(16);
+  const yearlyKey = 'b8'.repeat(16);
   const longKey = 'e5'.repeat(16);
+  // Each history's chart names the month every payment pays, once, oldest first.
   const histories = [
     {
-      entry: series({key: cloudKey, name: 'Example Cloud', typicalAmount: '24.00'}),
-      payments: ['04', '05', '06', '07', '08', '09'].map((month, index) =>
+      // Due on the 31st, or the last day of a shorter month: September's payment was taken on
+      // 1 October and December's two weeks late, on 14 January.
+      entry: series({
+        key: cloudKey,
+        name: 'Example Cloud',
+        typicalAmount: '24.00',
+        latestAmount: '24.00',
+        monthlyEquivalent: '24.00',
+        firstDate: '2025-08-31',
+        lastDate: '2026-01-31',
+        nextExpectedDate: '2026-02-28',
+        anchorDay: 31,
+      }),
+      year: '€288',
+      months: ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan'],
+      payments: [
+        '2025-08-31',
+        '2025-10-01',
+        '2025-10-31',
+        '2025-11-30',
+        '2026-01-14',
+        '2026-01-31',
+      ].map((bookingDate, index) =>
         payment(index, {
-          bookingDate: `2026-${month}-03`,
+          bookingDate,
           displayDescription: index < 3 ? 'Example Cloud' : 'Example Cloud Billing',
           amount: '-24.00',
           bankAccountAlias: index < 3 ? 'Example Original Account' : 'Example Current Account',
@@ -500,11 +544,15 @@ test('drills recurring series through to exactly their payments', async ({page})
         key: weeklyKey,
         name: 'Example Weekly Bill',
         cadence: 'WEEKLY',
+        anchorDay: null,
         typicalAmount: '12.00',
         latestAmount: '12.00',
         monthlyEquivalent: '52.00',
         transactionCount: 3,
       }),
+      year: '€624',
+      // Three payments in one month: one label.
+      months: ['Sep'],
       payments: ['01', '08', '15'].map((day, index) =>
         payment(30 + index, {
           bookingDate: `2026-09-${day}`,
@@ -516,6 +564,8 @@ test('drills recurring series through to exactly their payments', async ({page})
     },
     {
       entry: state.expenses.find(({key}) => key === GYM_KEY)!,
+      year: '€312',
+      months: ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'],
       payments: [
         '2026-04-17',
         '2026-05-15',
@@ -538,9 +588,13 @@ test('drills recurring series through to exactly their payments', async ({page})
         key: longKey,
         name: 'Example Insurance',
         typicalAmount: '9.00',
+        monthlyEquivalent: '9.00',
         transactionCount: 25,
         firstDate: '2024-10-03',
       }),
+      year: '€108',
+      // The latest twelve run from November 2025 to October 2026.
+      months: ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'],
       payments: Array.from({length: 25}, (_, index) => {
         const month = new Date(Date.UTC(2024, 9 + index, 3)).toISOString().slice(0, 10);
         return payment(50 + index, {
@@ -552,6 +606,32 @@ test('drills recurring series through to exactly their payments', async ({page})
       }),
     },
   ];
+  histories.push({
+    // Over more than a year, each month carries its year.
+    entry: series({
+      key: yearlyKey,
+      name: 'Example Domain',
+      cadence: 'YEARLY',
+      typicalAmount: '12.00',
+      latestAmount: '12.00',
+      monthlyEquivalent: '1.00',
+      transactionCount: 3,
+      firstDate: '2024-03-10',
+      lastDate: '2026-03-10',
+      nextExpectedDate: '2027-03-10',
+      anchorDay: 10,
+    }),
+    year: '€12',
+    months: ['Mar 24', 'Mar 25', 'Mar 26'],
+    payments: ['2024-03-10', '2025-03-10', '2026-03-10'].map((bookingDate, index) =>
+      payment(80 + index, {
+        bookingDate,
+        displayDescription: 'Example Domain',
+        amount: '-12.00',
+        bankAccountAlias: 'Example Current Account',
+      }),
+    ),
+  });
   state.expenses = histories.map(({entry}) => entry);
   const drillKeys: Array<string | null> = [];
   await page.route('**/bank-transactions?**', (route) => {
@@ -580,8 +660,9 @@ test('drills recurring series through to exactly their payments', async ({page})
   await expect(row(page, weeklyKey)).toContainText('Weekly');
   await expect(row(page, weeklyKey)).toContainText('€52.00 a month');
 
-  for (const {entry, payments} of histories) {
+  for (const {entry, payments, year, months} of histories) {
     await openSeries(page, entry.key);
+    await expect(detail(page)).toContainText(`A year${year}`);
     // The details chart the payments the drill lists.
     await expect(
       // The chart shows the latest twelve.
@@ -589,6 +670,7 @@ test('drills recurring series through to exactly their payments', async ({page})
         name: new RegExp(`^${Math.min(payments.length, 12)} payments from`),
       }),
     ).toBeVisible();
+    await expect(monthLabels(page)).toHaveText(months);
     // Every payment is listed in the details, newest first, twenty at a time.
     const list = detail(page).getByRole('list', {name: `Payments to ${entry.name}`});
     const newest = payments[payments.length - 1];
@@ -628,8 +710,13 @@ test('drills recurring series through to exactly their payments', async ({page})
     await page.goBack();
     await expect(detail(page)).toContainText(entry.name);
     await backToList(page);
-    await expect(summaryOf(page)).toContainText('4 bills');
+    await expect(summaryOf(page)).toContainText(`${histories.length} bills`);
   }
+
+  // A phone labels every other bar, counted back from the latest.
+  await page.setViewportSize({width: 390, height: 844});
+  await openSeries(page, longKey);
+  await expect(monthLabels(page)).toHaveText(['Dec', 'Feb', 'Apr', 'Jun', 'Aug', 'Oct']);
 });
 
 for (const wakeAfterMidnight of [false, true]) {
@@ -659,7 +746,7 @@ for (const wakeAfterMidnight of [false, true]) {
     });
     await page.goto('/?recurring=open');
     await expect(row(page, GYM_KEY)).toBeVisible();
-    await expect(summaryOf(page)).toContainText('€30.00');
+    await expect(summaryOf(page)).toContainText('€30a month');
 
     if (wakeAfterMidnight) {
       await page.clock.setSystemTime(new Date('2026-06-18T22:00:05Z'));
@@ -674,6 +761,44 @@ for (const wakeAfterMidnight of [false, true]) {
   });
 }
 
+test('a later page of a series’ payments that fails keeps the loaded ones and tries that page again', async ({
+  page,
+}) => {
+  await mockRecurring(page);
+  const payments = Array.from({length: 25}, (_, index) =>
+    payment(index, {
+      bookingDate: new Date(Date.UTC(2026, 8, 25 - index)).toISOString().slice(0, 10),
+      displayDescription: 'Example Gym',
+      amount: '-24.00',
+      bankAccountAlias: 'Example Current Account',
+    }),
+  );
+  await page.route('**/bank-transactions?**', (route) => {
+    if (!['fetch', 'xhr'].includes(route.request().resourceType())) return route.continue();
+    const params = new URL(route.request().url()).searchParams;
+    if (!params.has('filter[recurringSeriesKey]'))
+      return fulfillJson(route, {transactions: [], total: 0});
+    const size = Number(params.get('pagination[pageSize]'));
+    const start = Number(params.get('pagination[pageIndex]')) * size;
+    return fulfillJson(route, {transactions: payments.slice(start, start + size), total: 25});
+  });
+  const later = await failLaterPages(page, '**/bank-transactions?**', (params) => {
+    const index = params.get('pagination[pageIndex]');
+    return params.has('filter[recurringSeriesKey]') && index && index !== '0' ? index : null;
+  });
+  await page.goto('/?recurring=open');
+  await openSeries(page, GYM_KEY);
+
+  const list = detail(page).getByRole('list', {name: 'Payments to Example Gym'});
+  await expectFailedPageRetried(detail(page), list.getByRole('listitem'), later, {
+    loaded: 20,
+    after: 25,
+  });
+  await expect(list.getByRole('listitem').last()).toContainText(
+    formatBankTransactionCompactDate(payments[24].bookingDate),
+  );
+});
+
 test('lists recurring income on its own tab', async ({page}) => {
   await mockRecurring(page);
   await page.goto('/?recurring=open');
@@ -681,7 +806,7 @@ test('lists recurring income on its own tab', async ({page}) => {
   await expect(income).toHaveText('Income1');
   await income.click();
   await expect(row(page, SALARY_KEY)).toContainText('+€2,500.00');
-  await expect(summaryOf(page)).toContainText('+€2,500.00a month · 1 source');
+  await expect(summaryOf(page)).toContainText('+€2,500a month · 1 source');
   await expect(row(page, GYM_KEY)).toBeHidden();
   await openSeries(page, SALARY_KEY);
   await backToList(page, 'income');

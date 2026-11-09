@@ -73,6 +73,11 @@ export type UndatedRecurringSeries = {
 	firstDate: string;
 	lastDate: string;
 	nextExpectedDate: string;
+	/**
+	 * A calendar rhythm's day of the month, before it is clamped to a shorter month: what a payment's month is counted
+	 * from. Null for a weekly or four-weekly rhythm.
+	 */
+	anchorDay: number | null;
 	/** A fixed price's recent change against the price before it, until the new price has been paid three times. */
 	priceChange: RecurringPriceChange | null;
 	/** The latest payment's category. */
@@ -1026,10 +1031,7 @@ function cadenceDistances(rows: readonly RecurringCandidate[], days: readonly nu
 		const phase = medianNumber(offsets);
 		return offsets.map((offset) => Math.abs(offset - phase));
 	}
-	const anchorDay = calendarAnchorDay(
-		rows.map(({date}) => Number(date.slice(8, 10))),
-		Number(rows.at(-1)!.date.slice(8, 10)),
-	);
+	const anchorDay = rowsAnchorDay(rows);
 	return rows.map((row, index) => Math.abs(days[index] - toDayNumber(calendarPaymentDate(row.date, anchorDay))));
 }
 
@@ -1127,6 +1129,7 @@ function buildSeries(
 		firstDate: first.date,
 		lastDate: latest.date,
 		nextExpectedDate: expectedDate(rows),
+		anchorDay: rule.months > 0 ? rowsAnchorDay(calendarRows?.(rows) ?? rows) : null,
 		category: latest.category,
 	};
 }
@@ -1251,10 +1254,15 @@ function addCycles(rows: readonly RecurringCandidate[], rule: CadenceRule, cycle
 	const lastDate = rows[rows.length - 1].date;
 	if (rule.months === 0) return addDays(lastDate, rule.nominalDays * cycles);
 	// Month-based series keep their usual day of the month, clamped to shorter months.
-	const days = rows.map((row) => Number(row.date.slice(8, 10)));
-	const anchorDay = calendarAnchorDay(days, days[days.length - 1]);
+	const anchorDay = rowsAnchorDay(rows);
 	const [year, month] = calendarPaymentDate(lastDate, anchorDay).split('-').map(Number);
 	return anchorDate(year, month - 1 + rule.months * cycles, anchorDay);
+}
+
+/** The usual day of the month of a calendar history, following the latest payment when the day moved. */
+function rowsAnchorDay(rows: readonly RecurringCandidate[]): number {
+	const days = rows.map((row) => Number(row.date.slice(8, 10)));
+	return calendarAnchorDay(days, days[days.length - 1]);
 }
 
 /** The calendar slot paid by a date, allowing early/late bank dates across a month boundary. */

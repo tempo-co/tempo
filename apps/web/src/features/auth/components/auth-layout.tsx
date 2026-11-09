@@ -19,7 +19,7 @@ export function AuthLayout({title, children, disabledLogoLink = false}: AuthLayo
       <div className='relative z-10 flex w-full max-w-104 flex-col items-center'>
         <div className='auth-header mb-3 flex flex-col items-center gap-2 text-center sm:mb-6 sm:gap-4'>
           <LogoLink
-            className='flex h-11 w-11 items-center justify-center text-foreground [&_svg]:size-10'
+            className='flex size-12 items-center justify-center text-foreground'
             disabled={disabledLogoLink}
           />
           <motion.h1
@@ -42,7 +42,7 @@ export function AuthLayout({title, children, disabledLogoLink = false}: AuthLayo
           aria-labelledby='auth-title'
           data-testid='auth-content'
           transition={{layout: {duration: 0.3, type: 'spring', bounce: 0.2}}}
-          className='auth-card w-full border bg-card p-4 text-card-foreground shadow-xs sm:p-6'
+          className='auth-card w-full rounded-card border bg-card p-4 text-card-foreground shadow-xs sm:p-6'
         >
           {children}
         </motion.section>

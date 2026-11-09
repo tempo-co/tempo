@@ -1,5 +1,3 @@
-import type {CashFlowInterval} from '@tempo/contracts';
-
 import {getFormatter} from './money';
 
 /** Round steps from zero that cover every value, so gridlines read as a ruler. Takes cents. */
@@ -24,18 +22,4 @@ export function axisFormatter(currency: string | null) {
     maximumFractionDigits: 1,
     ...(currency ? {style: 'currency', currency, currencyDisplay: 'narrowSymbol'} : {}),
   });
-}
-
-/** Label every month (every other on phones), every fourth week and every year. */
-export function labelEvery(interval: CashFlowInterval, isMobile: boolean) {
-  return interval === 'year' ? 1 : interval === 'week' ? 4 : isMobile ? 2 : 1;
-}
-
-/** The labelled period starts that open a new year, which carry the year under their month. */
-export function firstOfYear(starts: string[]) {
-  return new Set(
-    starts.filter(
-      (start, index) => index === 0 || starts[index - 1].slice(0, 4) !== start.slice(0, 4),
-    ),
-  );
 }

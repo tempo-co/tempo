@@ -2,7 +2,13 @@
  * Pure monthly spending math for the Home summary. Money is integer cents (`bigint`) throughout; amounts enter as
  * Postgres decimal strings with at most two decimals and leave through {@link formatCents}. No floats.
  */
-import type {BaselineDay, BaselineTotal, CashFlowInterval, SpendingPaceDay} from '@tempo/contracts';
+import {
+	type BalanceTrendInterval,
+	type BaselineDay,
+	type BaselineTotal,
+	MAX_RANGE_PERIODS,
+	type SpendingPaceDay,
+} from '@tempo/contracts';
 
 import {addDays} from '../banking.utils';
 
@@ -108,17 +114,42 @@ function days(count: number): number[] {
 	return Array.from({length: count}, (_, index) => index + 1);
 }
 
-/** The most periods one cash-flow style request may cover. */
-const CASH_FLOW_MAX_PERIODS: Record<CashFlowInterval, number> = {week: 104, month: 60, year: 10};
-
 /** Period starts from `from` through `to`, or null when the range is backwards, ends after `asOf` or is too long. */
-export function periodStarts(interval: CashFlowInterval, from: string, to: string, asOf: string): string[] | null {
+export function periodStarts(interval: BalanceTrendInterval, from: string, to: string, asOf: string): string[] | null {
 	const starts: string[] = [];
 	for (let start = periodStart(from, interval); start <= to; start = nextPeriodStart(start, interval)) {
 		starts.push(start);
-		if (starts.length > CASH_FLOW_MAX_PERIODS[interval]) break;
+		if (starts.length > MAX_RANGE_PERIODS[interval]) break;
 	}
-	return from > to || to > asOf || starts.length > CASH_FLOW_MAX_PERIODS[interval] ? null : starts;
+	return from > to || to > asOf || starts.length > MAX_RANGE_PERIODS[interval] ? null : starts;
+}
+
+/** A period of a cash-flow style response: its start, its end clamped to the requested range, and whether it is whole. */
+export type PeriodWindow = {start: string; end: string; complete: boolean};
+
+/**
+ * The periods from `starts` that end on or after the first booking; none without one. A period that ends on or after
+ * `asOf` is still running, and one cut by `to` or by where history starts is partial.
+ */
+export function periodWindows(
+	interval: BalanceTrendInterval,
+	starts: readonly string[],
+	to: string,
+	asOf: string,
+	firstBookingDate: string | null,
+): PeriodWindow[] {
+	if (!firstBookingDate) return [];
+	return starts.flatMap((start) => {
+		const periodEnd = addDays(nextPeriodStart(start, interval), -1);
+		if (periodEnd < firstBookingDate) return [];
+		return [
+			{
+				start,
+				end: periodEnd < to ? periodEnd : to,
+				complete: periodEnd < asOf && periodEnd <= to && start >= firstBookingDate,
+			},
+		];
+	});
 }
 
 /** Calendar dates as `YYYY-MM-DD`, computed in UTC so no local offset shifts a day. */
@@ -126,14 +157,16 @@ function toDate(value: string): Date {
 	return new Date(`${value}T00:00:00Z`);
 }
 
-/** The Monday, 1st or 1 January on or before `value`, like Postgres `date_trunc`. */
-export function periodStart(value: string, interval: CashFlowInterval): string {
+/** The day itself, or the Monday, 1st or 1 January on or before `value`, like Postgres `date_trunc`. */
+export function periodStart(value: string, interval: BalanceTrendInterval): string {
+	if (interval === 'day') return value;
 	if (interval === 'year') return `${value.slice(0, 4)}-01-01`;
 	if (interval === 'month') return `${value.slice(0, 7)}-01`;
 	return addDays(value, -((toDate(value).getUTCDay() + 6) % 7));
 }
 
-export function nextPeriodStart(start: string, interval: CashFlowInterval): string {
+export function nextPeriodStart(start: string, interval: BalanceTrendInterval): string {
+	if (interval === 'day') return addDays(start, 1);
 	if (interval === 'week') return addDays(start, 7);
 	const date = toDate(start);
 	if (interval === 'year') date.setUTCFullYear(date.getUTCFullYear() + 1);

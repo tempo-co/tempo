@@ -2,6 +2,12 @@ import type {ToolReader} from './tools.js';
 import {filterQuery} from './inputs.js';
 import {ToolReadError} from './errors.js';
 
+/** Query parameters for the inputs the caller set; optional ones left out keep the API defaults. */
+const defined = (input: Record<string, string | number | undefined>) =>
+	Object.fromEntries(
+		Object.entries(input).flatMap(([key, value]) => (value === undefined ? [] : [[key, String(value)]])),
+	);
+
 export function createApiReader({apiUrl, apiToken}: {apiUrl: string; apiToken: string}): ToolReader {
 	const get = async (path: string, query?: Record<string, string> | URLSearchParams) => {
 		const url = new URL(`${apiUrl}${path}`);
@@ -49,5 +55,10 @@ export function createApiReader({apiUrl, apiToken}: {apiUrl: string; apiToken: s
 		transactionTotals: ({filters}) => get('/bank-transactions/totals', filterQuery(filters)),
 		getTransaction: (id) => get(`/bank-transactions/${id}`),
 		reviewCounts: () => get('/bank-transactions/review-counts'),
+		spendingBreakdown: (input) => get('/bank-transactions/breakdown', {...input}),
+		listMerchants: (input) => get('/merchants', defined(input)),
+		merchantRanking: (input) => get('/merchants/ranking', defined(input)),
+		getMerchant: (id) => get(`/merchants/${id}`),
+		merchantPeriods: (id, input) => get(`/merchants/${id}/periods`, {...input}),
 	};
 }

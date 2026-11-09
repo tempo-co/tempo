@@ -241,8 +241,8 @@
     --input: 39.1 19.7% 77.1%;
     --ring: 9 48.2% 37.8%;
 
-    --radius: 0;
-    --card-radius: 0;
+    --radius: 0.5rem;
+    --card-radius: 0.75rem;
   }
 
   .dark {

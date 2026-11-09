@@ -107,8 +107,8 @@ typography:
     fontWeight: 400
     lineHeight: 1.5
 rounded:
-  control: "0px"
-  surface: "0px"
+  control: "6px"
+  surface: "12px"
   pill: "9999px"
 spacing:
   xs: "4px"
@@ -189,12 +189,12 @@ product per theme.
 | Token | Hex | Role |
 |---|---|---|
 | Ink | `#28252B` | High-emphasis text and logo tile (light theme foreground) |
-| Clay | `#BD654B` | Logo crossbar, large accent areas |
-| Clay strong | `#8F4032` | Small accent text, controls, focus ring on light (`--primary` in light) |
-| Paper | `#F6F1E8` | Light canvas, logo stem |
+| Clay | `#BD654B` | Logo shadowed facets, large accent areas |
+| Clay strong | `#8F4032` | Small accent text, controls, focus ring on light (`--primary` in light), logo deep facets |
+| Paper | `#F6F1E8` | Light canvas, logo gem highlight |
 | Fold shadow | `#D9D2C6` | Quiet supporting planes and borders only — never a drop shadow |
 | Night | `#17161B` | Dark canvas |
-| Clay on dark | `#E59A7B` | Accent plane, links, controls on dark (`--primary` in dark) |
+| Clay on dark | `#E59A7B` | Accent plane, links, controls on dark (`--primary` in dark), logo lit facets |
 
 Clay (mid tone) is for planes and large accents, never the default small-text color on light;
 use Clay strong there. Clay strong on Paper and Clay on dark on Night both clear WCAG AA for
@@ -265,7 +265,8 @@ The authenticated shell is a sticky `48px` header aligned to the ~`80rem` conten
 below `md`, navigation moves to a fixed bottom tab bar. Settings uses a ~`40rem` reading
 column. Spacing follows a 4px rhythm: `8px` compact controls, `12px` control padding, `16px`
 related content, `24px` between groups, `32–48px` section breaks. Responsive behavior is
-structural, not scaled: navigation becomes a tab bar, tables scroll horizontally, rows stay
+structural, not scaled: navigation becomes a tab bar, tables scroll horizontally (or, when a
+phone needs only their latest column, become rows that open in place into the rest), rows stay
 understandable without hover.
 
 Empty, loading, error, syncing, and filtered-empty states belong to the layout with a clear
@@ -284,19 +285,24 @@ glass, backdrop blur, or nested shadows. Resting content stays quiet.
 
 ## Shapes
 
-Controls and surfaces use the theme's square `0px` radius. Pills remain reserved for badges,
-compact statuses, and avatars. Use 1px borders where a boundary improves scanning. Keep corners
-consistent within a component family.
+Corners are soft: `--radius` is `8px` and `--card-radius` is `12px`. Controls (buttons, inputs,
+selects, toggles, menus, tooltips) use `rounded-md` (6px), items inside a menu or popover
+`rounded-sm` (4px), and surfaces (cards, dialogs, the top of phone drawers) `rounded-card` (12px).
+A joined segmented control rounds its outer group and clips square segments inside it. Pills
+remain reserved for badges, compact statuses, and avatars. Use 1px borders where a boundary
+improves scanning. Keep corners consistent within a component family.
 
 ## Logo
 
-The logo is the icon-only Tempo mark in `src/assets/logo.tsx`: an italic T whose clay crossbar
-sweeps up from a tapered left tip over a paper stem that leans about 16° and flares into a flat
-foot, on an Ink tile. On a 24-unit grid the tile is 19×19 with radius 4.16, and the two pieces are
-separate flat shapes with an Ink gap between them. It is flat: no gradients, shadows or outlines,
+The logo is the icon-only Tempo mark in `src/assets/logo.tsx`: a faceted crown with three points
+over a band, a small cut gem set in an Ink diamond at its centre, on an Ink tile. The crown is
+straight-edged flat planes lit from the upper left: Clay on dark (`#E59A7B`) on lit faces, Clay on
+shadowed faces, Clay strong (`#8F4032`) on the deepest faces and the band's underside, and one
+Paper facet on the gem. On a 24-unit grid the tile is 19×19 with radius 4.16. The layers paint over
+a Clay strong underlay so facet joins never show the tile. It is flat: no gradients, shadows or outlines,
 and the tile is the same in light and dark themes. Do not add text to the mark, recolor it per
 theme, or decorate it. Every icon uses the same drawing: the PWA icons on the inset tile;
-`favicon.svg` and the 16–48 px favicons on a larger 23-unit tab tile so both pieces survive at
+`favicon.svg` and the 16–48 px favicons on a larger 23-unit tab tile so the crown still reads at
 16 px; `apple-touch-icon` and the maskable icons full-bleed, with the maskable glyph kept inside
 the 40% safe circle. All icons live under `public/` with
 `manifest.webmanifest`; see `index.html` for the wiring.
@@ -348,7 +354,7 @@ inspector keeps its `40px` tile. All leading tiles share these theme tokens:
 | `transaction-tile-ink` | `#8F4032` | `#E59A7B` |
 | `transaction-tile-edge` | `#D0B8A9` | `#59413A` |
 
-The API's `mask-v1` derivative supplies a centred mark of at most `104px` on a `128px` canvas.
+The API's `mask-v2` derivative supplies a centred mark of at most `104px` on a `128px` canvas.
 The shared `MerchantLogoTile` tints its continuous alpha with the ink token; theme changes reuse
 the loaded image. Missing or failed derivatives fall back to the matching Clay glyph, including
 when an older API does not expose the derivative. A changed source version retries the image.
@@ -360,10 +366,11 @@ colors keep their semantics.
 ### Status, loading, and feedback
 
 Top loading bar for route/data progress, skeletons for known shapes, toasts for background
-outcomes. An inline control whose result shows where it was edited confirms in place (its own
-pending state and status line); toasts carry failures, saves finished after a dialog closed,
-and outcomes the screen does not show. They stack collapsed and use the library's default
-lifetime. Empty and failed loads use the one `EmptyState` component: a framed card with a 48px
+outcomes. A skeleton keeps its section's loaded size and static labels, and each section fills in
+when its own data arrives, so nothing on screen moves as a page loads. An inline control whose
+result shows where it was edited confirms in place (its own pending state and status line);
+toasts carry failures, saves finished after a dialog closed, and outcomes the screen does not show.
+They stack collapsed and use the library's default lifetime. Empty and failed loads use the one `EmptyState` component: a framed card with a 48px
 icon, a `text-section-title` heading, a muted description and the next action. `tone='error'`
 marks a failed load with a destructive icon; inside a dialog it drops its frame. Distinct states get distinct copy; never imply data changed before the server
 confirms it. Motion is brief (0.2–0.3s), subtle, reduced-motion aware; never animate

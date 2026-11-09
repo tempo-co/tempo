@@ -1,3 +1,20 @@
+import {
+	BALANCE_TREND_INTERVALS,
+	BREAKDOWN_INTERVALS,
+	type BalanceTrendInterval,
+	CASH_FLOW_INTERVALS,
+	MAX_RANGE_PERIODS,
+} from '@tempo/contracts';
+
+const RANGE_UNITS: Record<BalanceTrendInterval, string> = {day: 'days', week: 'weeks', month: 'months', year: 'years'};
+
+/** The range error for a request taking these intervals, naming each one's limit from `MAX_RANGE_PERIODS`. */
+function rangeMessage(subject: string, intervals: readonly BalanceTrendInterval[]): string {
+	const limits = intervals.map((interval) => `${MAX_RANGE_PERIODS[interval]} ${RANGE_UNITS[interval]}`);
+	const last = limits.pop();
+	return `The ${subject} range must run forward, end by the given date and cover at most ${limits.join(', ')} or ${last}.`;
+}
+
 export const BANKING_SERVICE_UNAVAILABLE = 'Banking service is temporarily unavailable. Please try again.';
 export const BANKING_INTERNAL_ERROR = 'Unable to process the bank connection.';
 export const BANKING_SUPPORTED_BANKS_UNAVAILABLE = 'Unable to load supported banks.';
@@ -27,12 +44,10 @@ export const BANKING_RECURRING_CONTINUATION_CHANGED = 'This recurring payment ch
 export const BANKING_RECURRING_SERIES_KEY_INVALID = 'Recurring payment key must be 32 lowercase hex characters.';
 export const MERCHANT_LOGO_NOT_FOUND = 'Merchant logo not found.';
 export const BANKING_TRANSACTION_SUMMARY_FUTURE_MONTH = 'The summary month cannot start after the given date.';
-export const BANKING_BALANCE_TREND_RANGE =
-	'The balance trend range must run forward, end by the given date and cover at most 104 weeks, 60 months or 10 years.';
-export const BANKING_TRANSACTION_CASH_FLOW_RANGE =
-	'The cash flow range must run forward, end by the given date and cover at most 104 weeks, 60 months or 10 years.';
+export const BANKING_BALANCE_TREND_RANGE = rangeMessage('balance trend', BALANCE_TREND_INTERVALS);
+export const BANKING_TRANSACTION_CASH_FLOW_RANGE = rangeMessage('cash flow', CASH_FLOW_INTERVALS);
+export const BANKING_TRANSACTION_BREAKDOWN_RANGE = rangeMessage('breakdown', BREAKDOWN_INTERVALS);
 export const MERCHANT_NOT_FOUND = 'Merchant not found.';
 export const MERCHANT_GROUP_ID_INVALID = 'Merchant id must be b_ or k_ followed by 32 lowercase hex characters.';
-export const MERCHANT_PERIODS_RANGE =
-	'The merchant period range must run forward, end by the given date and cover at most 104 weeks, 60 months or 10 years.';
+export const MERCHANT_PERIODS_RANGE = rangeMessage('merchant period', CASH_FLOW_INTERVALS);
 export const MERCHANT_RANKING_FUTURE_PERIOD = 'The ranked period cannot start after the given date.';

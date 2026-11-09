@@ -47,6 +47,26 @@ const cases = [
 	['get_transaction', {id: '../summary'}, 'path injection'],
 	['get_transaction', {id: '00000000-0000-1000-8000-000000000001'}, 'UUID version'],
 	['get_transaction', {id: ID.replaceAll('-', '')}, 'UUID format'],
+	['spending_breakdown', {interval: 'week', by: 'category', from: '2040-01-01', to: '2040-01-02'}, 'interval'],
+	['spending_breakdown', {interval: 'month', by: 'merchant', from: '2040-01-01', to: '2040-01-02'}, 'dimension'],
+	['spending_breakdown', {interval: 'month', from: '2040-01-01', to: '2040-01-02'}, 'required dimension'],
+	['spending_breakdown', {interval: 'year', by: 'source', from: '2040-02-30', to: '2040-03-01'}, 'calendar date'],
+	['list_merchants', {search: '€'.repeat(201)}, 'merchant search length'],
+	['list_merchants', {offset: -1}, 'nonnegative offset'],
+	['list_merchants', {limit: 0}, 'merchant limit minimum'],
+	['list_merchants', {limit: 101}, 'merchant limit maximum'],
+	['list_merchants', {limit: '10'}, 'numeric limit'],
+	['merchant_ranking', {interval: 'month'}, 'required period'],
+	['merchant_ranking', {interval: 'day', period: '2040-01-01'}, 'ranking interval'],
+	['merchant_ranking', {interval: 'month', period: '2040-01-01', limit: 201}, 'ranking limit maximum'],
+	['merchant_ranking', {interval: 'month', period: '2040-01-01', limit: 1.5}, 'integer ranking limit'],
+	...['../summary', `x_${'0'.repeat(32)}`, `k_${'0'.repeat(31)}`, `k_${'A'.repeat(32)}`, ID].map((id) => [
+		'get_merchant',
+		{id},
+		'merchant group id',
+	]),
+	['merchant_periods', {id: `../${'0'.repeat(32)}`, interval: 'month', from: '2040-01-01', to: '2040-01-02'}, 'id'],
+	['merchant_periods', {id: `b_${'0'.repeat(32)}`, interval: 'month', from: '2040-01-01'}, 'required range'],
 	['search_transactions', {page: -1}, 'nonnegative page'],
 	['search_transactions', {page: 1.5}, 'integer page'],
 	['search_transactions', {page: '1'}, 'numeric page'],
@@ -89,6 +109,10 @@ test('all tools reject caller-supplied owner, token and origin overrides', async
 		cash_flow: {interval: 'month', from: '2040-01-01', to: '2040-01-02'},
 		balance_trend: {interval: 'month', from: '2040-01-01', to: '2040-01-02'},
 		get_transaction: {id: ID},
+		spending_breakdown: {interval: 'month', by: 'category', from: '2040-01-01', to: '2040-01-02'},
+		merchant_ranking: {interval: 'month', period: '2040-01-01'},
+		get_merchant: {id: `k_${'0'.repeat(32)}`},
+		merchant_periods: {id: `k_${'0'.repeat(32)}`, interval: 'month', from: '2040-01-01', to: '2040-01-02'},
 	};
 	for (const {name} of (await f.client.listTools()).tools) {
 		for (const [key, value] of [
@@ -134,4 +158,13 @@ test('DTO boundary values are accepted and forwarded unchanged', async (t) => {
 	assert.equal(f.requests.length, beforeRejected);
 	for (const month of ['1900-01', '2099-12'])
 		json(await f.client.callTool({name: 'month_summary', arguments: {month, asOf: '2099-12-31'}}));
+	for (const args of [{search: '❤️'.repeat(200), offset: 0, limit: 1}, {limit: 100}])
+		json(await f.client.callTool({name: 'list_merchants', arguments: args}));
+	for (const limit of [1, 200])
+		json(
+			await f.client.callTool({
+				name: 'merchant_ranking',
+				arguments: {interval: 'week', period: '2040-01-01', asOf: '2040-01-01', limit},
+			}),
+		);
 });

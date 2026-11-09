@@ -2,7 +2,7 @@
 
 Connect an MCP client to Tempo's hosted **Streamable HTTP** endpoint using the server URL shown in Settings → Integrations, normally `https://example.ts.net/api/mcp`. Configure an account-owned personal access token as a Bearer credential through the client's secret store. The client can run on another device; it does not need a local checkout or Node.js.
 
-The endpoint serves eleven read-only tools through the official `@modelcontextprotocol/sdk`. It reads stored data directly through the same owner-scoped services, validation and public response boundaries as REST. It does not sync banks or provide write tools. The standalone stdio entrypoint remains available for clients that launch a local process; both transports share one tool registration.
+The endpoint serves sixteen read-only tools through the official `@modelcontextprotocol/sdk`. It reads stored data directly through the same owner-scoped services, validation and public response boundaries as REST. It does not sync banks or provide write tools. The standalone stdio entrypoint remains available for clients that launch a local process; both transports share one tool registration.
 
 ## Hosted endpoint
 
@@ -27,7 +27,7 @@ npm --prefix mcp test
 
 Both builds import the input value lists and category definitions from `@tempo/contracts` (`packages/contracts`); the standalone `build` compiles that package first. `dist/` is ignored. The API's CommonJS build compiles only the imported Nest-free registration and its dependencies; the standalone package builds as ESM and preserves `mcp/dist/stdio.js`. The Docker builder copies `mcp/src/` and the contracts package, and runtime smoke loads the compiled API with production dependencies.
 
-Hosted E2E coverage lives in `test/e2e/mcp/mcp.e2e.spec.ts`. It binds a disposable API on loopback and uses the real `StreamableHTTPClientTransport` to initialize, list and call all eleven tools against synthetic PostgreSQL fixtures. It verifies ownership, REST output parity, decimal strings, safe errors, auth, Origin, body cap, throttling and Redis session isolation, including observed Redis commands. Use the normal disposable E2E stack or an isolated override as described in `docs/e2e-and-seeding.md`; run `npm run contracts:build` before invoking Jest directly. The auth-guard and personal-token E2E suites cover the related REST contracts.
+Hosted E2E coverage lives in `test/e2e/mcp/mcp.e2e.spec.ts`. It binds a disposable API on loopback and uses the real `StreamableHTTPClientTransport` to initialize, list and call all sixteen tools against synthetic PostgreSQL fixtures. It verifies ownership, REST output parity, decimal strings, safe errors, auth, Origin, body cap, throttling and Redis session isolation, including observed Redis commands. Use the normal disposable E2E stack or an isolated override as described in `docs/e2e-and-seeding.md`; run `npm run contracts:build` before invoking Jest directly. The auth-guard and personal-token E2E suites cover the related REST contracts.
 
 ## Tokens
 
@@ -79,7 +79,7 @@ All inputs are strict: unknown fields are rejected, including caller-supplied ow
 | --------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `list_accounts`       | `{}`                                  | `GET /bank-connections`; connection array with bank accounts, current/latest balances, base-currency balance values and sync freshness.                      |
 | `list_recurring`      | `{asOf?}`                             | `GET /recurring-series`; expense and income lists with per-series details, monthly totals and unconverted counts.                                            |
-| `recurring_summary`   | `{asOf?}`                             | `GET /recurring-series/summary`; monthly totals and the next three payments across shown active bills and income.                                            |
+| `recurring_summary`   | `{asOf?}`                             | `GET /recurring-series/summary`; monthly totals, the next three payments across shown active bills and income, and late or higher-than-usual bills.          |
 | `month_summary`       | `{month, asOf?}`                      | `GET /bank-transactions/summary?month=...&asOf=...`.                                                                                                         |
 | `cash_flow`           | `{interval, from, to, asOf?}`         | `GET /bank-transactions/cash-flow`.                                                                                                                          |
 | `balance_trend`       | `{interval, from, to, asOf?}`         | `GET /bank-transactions/balance-trend`.                                                                                                                      |
@@ -88,10 +88,15 @@ All inputs are strict: unknown fields are rejected, including caller-supplied ow
 | `get_transaction`     | `{id}`                                | `GET /bank-transactions/:id`, UUIDv4 only.                                                                                                                   |
 | `review_counts`       | `{}`                                  | `GET /bank-transactions/review-counts`.                                                                                                                      |
 | `list_categories`     | `{}`                                  | Values, labels and descriptions from `@tempo/contracts`, including filter-only `UNCATEGORIZED`.                                                              |
+| `spending_breakdown`  | `{interval, by, from, to, asOf?}`     | `GET /bank-transactions/breakdown`; spending by category or income by source per month or year.                                                              |
+| `list_merchants`      | `{search?, offset?, limit?}`          | `GET /merchants`; merchant groups with all-time totals, most spent first; finds a merchant id by name.                                                       |
+| `merchant_ranking`    | `{interval, period, asOf?, limit?}`   | `GET /merchants/ranking`; merchants by net spending in the period containing `period`, against their usual amount.                                           |
+| `get_merchant`        | `{id}`                                | `GET /merchants/:id`; all-time paid, refunded, average payment, first date, exclusions and merchant variants.                                                |
+| `merchant_periods`    | `{id, interval, from, to, asOf?}`     | `GET /merchants/:id/periods`; spent, received and count per period.                                                                                          |
 
 Routes above are relative to `TEMPO_API_URL`, including its `/api` prefix. Every tool declares `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true` and `openWorldHint: true`; server and API authorization, not annotations, enforce read-only access.
 
-`month` is `YYYY-MM` in 1900–2099. Dates are real `YYYY-MM-DD` calendar dates, not timestamps. `asOf` defaults to the date in **Europe/Amsterdam at each call**, including recurring lists/summary, cash flow and balance trend, whose API DTOs require it. `interval` is `week`, `month` or `year`. The API enforces `from <= to <= asOf`, maximum ranges of 104 weeks, 60 months or 10 years, and summary months on or before `asOf`. API range errors are returned as safe HTTP 400 tool errors.
+`month` is `YYYY-MM` in 1900–2099. Dates are real `YYYY-MM-DD` calendar dates, not timestamps. `asOf` defaults to the date in **Europe/Amsterdam at each call**, including recurring lists/summary, cash flow and balance trend, whose API DTOs require it. `interval` is `week`, `month` or `year`. The API enforces `from <= to <= asOf`, maximum ranges of 104 weeks, 240 months or 20 years (`MAX_RANGE_PERIODS` in `@tempo/contracts`; keep these numbers in step with it), and summary months on or before `asOf`. API range errors are returned as safe HTTP 400 tool errors.
 
 Search `page` is a zero-based nonnegative integer, default 0. `pageSize` defaults to 10 and must be one of the actual API DTO options: **5, 10, 20, 30, 40, 50, 100**. No unbounded fetch-all loop is provided. Use `transaction_totals` with the same filters for sums across all matches; summing a search page does not produce a full total.
 
@@ -112,6 +117,8 @@ Both search and totals accept these optional `filters`, matching the banking DTO
 
 `transaction_totals` returns `{baseCurrency, spending, income, net, count, excluded: {unknownDirection, missingBaseAmount}}`. Monetary totals are decimal strings using Tempo's spending/income semantics. Counts and exclusions describe the whole filtered set, not one search page. `list_accounts` preserves the API connection array and does not invent a grand balance total across currencies or missing conversions.
 
+Breakdown `interval` is `month` or `year` and `by` is `category` (spending net of refunds) or `source` (income by merchant); each period's total equals cash flow's. Merchant ids match `^[bk]_[0-9a-f]{32}$` (`MERCHANT_GROUP_ID_PATTERN`) and come from `list_merchants`, `merchant_ranking` or a transaction's `merchantGroupId`; an unknown or another owner's id returns the same safe 404 error. `list_merchants` takes `search` up to 200 characters, a nonnegative `offset` and `limit` 1–100 (default 50); `merchant_ranking` takes `limit` 1–200 (default 50) and refuses a period that starts after `asOf`. Merchant amounts are decimal strings in the base currency with Tempo's spending semantics: own transfers and currency exchanges never count, and `spent` is payments minus refunds. These limits come from `@tempo/contracts`.
+
 ## Disposable API smoke
 
 After starting an isolated API with synthetic banking fixtures, create a test token using its session-only management endpoint. Supply that token, an explicit loopback `TEMPO_API_URL` and a fixture UUIDv4 in `TEMPO_SMOKE_TRANSACTION_ID` through protected environment injection, then run:
@@ -120,4 +127,4 @@ After starting an isolated API with synthetic banking fixtures, create a test to
 npm --prefix mcp run smoke:api
 ```
 
-The command uses the SDK's actual stdio client to list and call all eleven tools, including recurring reads, totals and a real transaction detail. It prints only tool pass/fail labels, not financial payloads or credentials. It refuses non-loopback hosts and requires an explicit URL and fixture ID. It neither creates nor revokes tokens; the fixture owner must revoke the disposable token and stop the isolated API afterwards. This smoke is a separate gate from the HTTP-stub suite.
+The command uses the SDK's actual stdio client to list and call all sixteen tools, including recurring reads, totals, a real transaction detail and the first merchant group `list_merchants` returns, so the fixtures need at least one merchant. It prints only tool pass/fail labels, not financial payloads or credentials. It refuses non-loopback hosts and requires an explicit URL and fixture ID. It neither creates nor revokes tokens; the fixture owner must revoke the disposable token and stop the isolated API afterwards. This smoke is a separate gate from the HTTP-stub suite.

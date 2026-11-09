@@ -11,9 +11,11 @@ import {
 import {RedisModule} from '@core/redis/redis.module';
 import {Account} from '@modules/account/account.entity';
 import {AccountModule} from '@modules/account/account.module';
+import {NotificationsModule} from '@modules/notifications/notifications.module';
 
 import {BankConnectionAlertProcessor} from './alerts/bank-connection-alert.processor';
 import {BankConnectionAlertService} from './alerts/bank-connection-alert.service';
+import {PushAlertProcessor} from './alerts/push-alert.processor';
 import {BankConnectionController} from './api/bank-connection.controller';
 import {BankTransactionController} from './api/bank-transaction.controller';
 import {McpController} from './api/mcp.controller';
@@ -35,6 +37,7 @@ import {RecurringSnapshot} from './recurring/recurring-snapshot.entity';
 import {BankTransactionAmountConversionProcessor} from './services/bank-transaction-amount-conversion.processor';
 import {BankTransactionAmountConversionQueueService} from './services/bank-transaction-amount-conversion.queue.service';
 import {BankTransactionAmountConversionService} from './services/bank-transaction-amount-conversion.service';
+import {BankTransactionHistoryService} from './services/bank-transaction-history.service';
 import {BankTransactionSummaryService} from './services/bank-transaction-summary.service';
 import {BankTransactionService} from './services/bank-transaction.service';
 import {BankingAuthorizationStateModule} from './services/banking-authorization-state.module';
@@ -73,6 +76,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankingAuthorizationStateModule,
 		BankTransactionCategorizationModule,
 		MerchantLogoModule,
+		NotificationsModule,
 	],
 	providers: [
 		BankingService,
@@ -83,6 +87,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankingSyncProcessor,
 		BankTransactionService,
 		BankTransactionSummaryService,
+		BankTransactionHistoryService,
 		MerchantSpendingService,
 		BankTransactionAmountConversionService,
 		BankTransactionAmountConversionQueueService,
@@ -94,6 +99,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		CurrencyExchangeService,
 		BankConnectionAlertService,
 		BankConnectionAlertProcessor,
+		PushAlertProcessor,
 		RecurringSeriesService,
 	],
 	controllers: [

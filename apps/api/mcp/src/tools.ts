@@ -3,9 +3,19 @@ import {z} from 'zod';
 import {
 	BANK_TRANSACTION_CATEGORY_DEFINITIONS,
 	BANK_TRANSACTION_UNCATEGORIZED,
+	BREAKDOWN_DIMENSIONS,
+	BREAKDOWN_INTERVALS,
+	CASH_FLOW_INTERVALS,
+	MAX_RANGE_PERIODS,
+	MERCHANT_GROUP_ID_PATTERN,
+	MERCHANT_LIST_MAX_LIMIT,
+	MERCHANT_RANKING_MAX_LIMIT,
+	MERCHANT_SEARCH_MAX_LENGTH,
 	type BankBalanceTrend,
 	type BankConnection,
 	type BankTransaction,
+	type BankTransactionBreakdown,
+	type BankTransactionBreakdownQuery,
 	type BankTransactionCashFlow,
 	type BankTransactionCashFlowQuery,
 	type BankTransactionReviewCounts,
@@ -13,10 +23,17 @@ import {
 	type BankTransactionSummaryQuery,
 	type BankTransactionTotals,
 	type BankTransactionsResponse,
+	type MerchantGroup,
+	type MerchantGroupPeriods,
+	type MerchantGroupsQuery,
+	type MerchantGroupsResponse,
+	type MerchantRanking,
+	type MerchantRankingQuery,
 	type RecurringSeriesLists,
 	type RecurringSeriesQuery,
 	type RecurringSummary,
 } from '@tempo/contracts';
+import validator from 'validator';
 import {filtersSchema, sortSchema} from './inputs.js';
 import {ToolReadError} from './errors.js';
 import type {CallToolResult} from '@modelcontextprotocol/sdk/types.js';
@@ -43,7 +60,15 @@ export interface ToolReader {
 	transactionTotals(input: {filters?: TransactionFilters}): Promise<BankTransactionTotals>;
 	getTransaction(id: string): Promise<BankTransaction>;
 	reviewCounts(): Promise<BankTransactionReviewCounts>;
+	spendingBreakdown(input: BankTransactionBreakdownQuery): Promise<BankTransactionBreakdown>;
+	listMerchants(input: MerchantGroupsQuery): Promise<MerchantGroupsResponse>;
+	merchantRanking(input: MerchantRankingQuery): Promise<MerchantRanking>;
+	getMerchant(id: string): Promise<MerchantGroup>;
+	merchantPeriods(id: string, input: PeriodInput): Promise<MerchantGroupPeriods>;
 }
+
+const rangeLimits = (intervals: readonly (keyof typeof MAX_RANGE_PERIODS)[]) =>
+	`API enforces range limits: ${intervals.map((interval) => `${interval} ${MAX_RANGE_PERIODS[interval]}`).join(', ')} periods; to must be on or before asOf.`;
 
 export function createToolServer(reader: ToolReader, now: () => Date = () => new Date()): McpServer {
 	const server = new McpServer({name: 'tempo-local', version: '0.1.0'});
@@ -84,7 +109,7 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 		'recurring_summary',
 		{
 			description:
-				'Read recurring monthly totals, unconverted counts and the next three upcoming payments. asOf defaults to today in Europe/Amsterdam.',
+				'Read recurring monthly totals, unconverted counts, the next three upcoming payments and late or higher-than-usual bills. asOf defaults to today in Europe/Amsterdam.',
 			inputSchema: z.strictObject({asOf: z.iso.date().optional()}),
 			annotations,
 		},
@@ -110,8 +135,7 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 		server.registerTool(
 			name,
 			{
-				description:
-					'Read period analytics. asOf defaults to today in Europe/Amsterdam. API enforces range limits: week 104, month 60, year 10 periods; to must be on or before asOf.',
+				description: `Read period analytics. asOf defaults to today in Europe/Amsterdam. ${rangeLimits(CASH_FLOW_INTERVALS)}`,
 				inputSchema: z.strictObject({
 					interval: z.enum(['week', 'month', 'year']),
 					from: z.iso.date(),
@@ -200,6 +224,85 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 			annotations,
 		},
 		async () => read(() => reader.reviewCounts()),
+	);
+	server.registerTool(
+		'spending_breakdown',
+		{
+			description: `Spending by category (by: category, net of refunds) or income by source (by: source) per month or year, each period's total equal to cash_flow's. asOf defaults to today in Europe/Amsterdam. ${rangeLimits(BREAKDOWN_INTERVALS)}`,
+			inputSchema: z.strictObject({
+				interval: z.enum(BREAKDOWN_INTERVALS),
+				by: z.enum(BREAKDOWN_DIMENSIONS),
+				from: z.iso.date(),
+				to: z.iso.date(),
+				asOf: z.iso.date().optional(),
+			}),
+			annotations,
+		},
+		async ({interval, by, from, to, asOf}) =>
+			read(() => reader.spendingBreakdown({interval, by, from, to, asOf: asOf ?? today()})),
+	);
+	server.registerTool(
+		'list_merchants',
+		{
+			description:
+				'List merchant groups (brands, or single merchants such as people) with all-time spent, received and count, most spent first; use it to find merchant ids by name.',
+			inputSchema: z.strictObject({
+				search: z
+					.string()
+					.refine(
+						(value) => validator.isLength(value, {max: MERCHANT_SEARCH_MAX_LENGTH}),
+						`Search must contain at most ${MERCHANT_SEARCH_MAX_LENGTH} characters.`,
+					)
+					.optional(),
+				offset: z.int().min(0).optional(),
+				limit: z.int().min(1).max(MERCHANT_LIST_MAX_LIMIT).optional(),
+			}),
+			annotations,
+		},
+		async ({search, offset, limit}) => read(() => reader.listMerchants({search, offset, limit})),
+	);
+	server.registerTool(
+		'merchant_ranking',
+		{
+			description:
+				"Top merchants by net spending in the week, month or year containing period, each against its usual amount in earlier periods, using Tempo's spending semantics. asOf defaults to today in Europe/Amsterdam.",
+			inputSchema: z.strictObject({
+				interval: z.enum(CASH_FLOW_INTERVALS),
+				period: z.iso.date(),
+				asOf: z.iso.date().optional(),
+				limit: z.int().min(1).max(MERCHANT_RANKING_MAX_LIMIT).optional(),
+			}),
+			annotations,
+		},
+		async ({interval, period, asOf, limit}) =>
+			read(() => reader.merchantRanking({interval, period, asOf: asOf ?? today(), limit})),
+	);
+	const merchantId = z.string().regex(new RegExp(MERCHANT_GROUP_ID_PATTERN));
+	server.registerTool(
+		'get_merchant',
+		{
+			description:
+				"All-time totals of one merchant group (paid, refunded, average payment, first and last date, merchant variants) by an id from list_merchants, merchant_ranking or a transaction's merchantGroupId.",
+			inputSchema: z.strictObject({id: merchantId}),
+			annotations,
+		},
+		async ({id}) => read(() => reader.getMerchant(id)),
+	);
+	server.registerTool(
+		'merchant_periods',
+		{
+			description: `How much was spent at and received from one merchant group per week, month or year, using Tempo's spending semantics; id comes from list_merchants, merchant_ranking or a transaction's merchantGroupId. asOf defaults to today in Europe/Amsterdam. ${rangeLimits(CASH_FLOW_INTERVALS)}`,
+			inputSchema: z.strictObject({
+				id: merchantId,
+				interval: z.enum(CASH_FLOW_INTERVALS),
+				from: z.iso.date(),
+				to: z.iso.date(),
+				asOf: z.iso.date().optional(),
+			}),
+			annotations,
+		},
+		async ({id, interval, from, to, asOf}) =>
+			read(() => reader.merchantPeriods(id, {interval, from, to, asOf: asOf ?? today()})),
 	);
 	server.registerTool(
 		'list_accounts',

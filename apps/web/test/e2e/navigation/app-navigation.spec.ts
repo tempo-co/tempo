@@ -1,6 +1,14 @@
-import {expect, test} from '@playwright/test';
+import type {BankTransaction} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
+import {
+  HOME_CONNECTION,
+  HOME_REVIEW_COUNTS,
+  mockSyntheticHome,
+  monthTransactions,
+} from '../../data/home-history.data';
+import {expect, test} from '../../fixtures';
+import {fulfillJson, mockJson} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE});
@@ -83,4 +91,99 @@ test('navigates from the header and account menu on wider screens', async ({page
 
   await page.getByRole('link', {name: 'Tempo home'}).click();
   await expect(page).toHaveURL(/^https?:\/\/[^/]+\/(?:\?|$)/);
+});
+
+test.describe('the Transactions badge away from Home', () => {
+  test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
+
+  test('refreshes every five minutes, and right after a review on that page', async ({page}) => {
+    await mockSyntheticHome(page, {clock: 'installed'});
+    const [transaction] = monthTransactions('2026-10', 1).transactions;
+    let saved: BankTransaction = {...transaction, category: null, categoryStatus: 'FAILED'};
+    let reviewed = false;
+    let reads = 0;
+    await page.route('**/bank-transactions/review-counts', (route) => {
+      reads++;
+      return fulfillJson(
+        route,
+        reviewed
+          ? {...HOME_REVIEW_COUNTS, categorizationFailed: 0, needsAttention: 2}
+          : HOME_REVIEW_COUNTS,
+      );
+    });
+    await page.route(`**/bank-transactions/${transaction.id}`, (route) =>
+      fulfillJson(route, saved),
+    );
+    await page.route(`**/bank-transactions/${transaction.id}/category-impact?**`, (route) =>
+      fulfillJson(route, {action: 'APPLY', category: 'TRAVEL', total: 0, transactions: []}),
+    );
+    await page.route(`**/bank-transactions/${transaction.id}/category`, (route) => {
+      reviewed = true;
+      saved = {...saved, category: 'TRAVEL', categoryStatus: 'COMPLETED', categorySource: 'MANUAL'};
+      return fulfillJson(route, saved);
+    });
+
+    await mockJson(page, '**/bank-connections/aspsps', []);
+    await page.route('**/bank-connections/*/transactions?**', (route) =>
+      fulfillJson(route, {transactions: [saved], total: 1}),
+    );
+
+    await page.goto('/bank-connections');
+    const nav = page.getByRole('navigation', {name: 'Primary'}).first();
+    await expect(nav.getByRole('link', {name: 'Transactions, 3 to review'})).toBeVisible();
+    await expect.poll(() => reads).toBe(1);
+    await page.clock.runFor(4 * 60_000);
+    expect(reads).toBe(1);
+    await page.clock.runFor(61_000);
+    await expect.poll(() => reads).toBe(2);
+
+    await page.getByTestId(`connection-card-toggle-${HOME_CONNECTION.id}`).click();
+    await page
+      .getByRole('button', {name: `View transaction details for ${transaction.displayDescription}`})
+      .click();
+    await page.getByRole('combobox', {name: 'Transaction category'}).click();
+    await page.getByRole('option', {name: 'Travel', exact: true}).click();
+    await expect(page.getByRole('combobox', {name: 'Transaction category'})).toHaveText('Travel');
+    await page.keyboard.press('Escape');
+    await expect(nav.getByRole('link', {name: 'Transactions, 2 to review'})).toBeVisible();
+  });
+});
+
+test.describe('the Tempo mark', () => {
+  test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
+
+  for (const width of [390, 1440]) {
+    test(`the header mark is 36px inside a 44px home link at ${width}px`, async ({page}) => {
+      await page.setViewportSize({width, height: 844});
+      await mockSyntheticHome(page);
+      await page.goto('/');
+      const header = await boxOf(page.getByRole('banner'));
+      const link = page.getByRole('banner').getByRole('link', {name: 'Tempo home'});
+      const target = await boxOf(link);
+      const mark = await boxOf(link.locator('svg'));
+      expect(target.width).toBeGreaterThanOrEqual(44);
+      expect(target.height).toBeGreaterThanOrEqual(44);
+      expect(mark.width).toBe(36);
+      expect(mark.height).toBe(36);
+      // The header keeps its 48px row and bottom border, and the mark sits in the row's middle and at its inset.
+      expect(header.height).toBe(49);
+      expect(Math.abs(mark.y + mark.height / 2 - (header.y + 24))).toBeLessThanOrEqual(1);
+      expect(target.y).toBeGreaterThanOrEqual(header.y);
+      expect(mark.x).toBe(width >= 1280 ? (width - 1280) / 2 + 16 : 16);
+
+      await link.click();
+      await expect(page).toHaveURL(/^https?:\/\/[^/]+\/(?:\?|$)/);
+    });
+  }
+
+  test('auth pages show the mark at 48px', async ({page}) => {
+    await page.setViewportSize({width: 390, height: 844});
+    await page.route('**/accounts/me', (route) =>
+      fulfillJson(route, {message: 'Unauthorized'}, 401),
+    );
+    await page.goto('/login');
+    const mark = await boxOf(page.getByRole('link', {name: 'Tempo home'}).locator('svg'));
+    expect(mark.width).toBe(48);
+    expect(mark.height).toBe(48);
+  });
 });

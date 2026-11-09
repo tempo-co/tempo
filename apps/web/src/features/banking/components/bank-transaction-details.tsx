@@ -4,6 +4,7 @@ import {ArrowDown, ArrowRight, Check, ChevronRight, Landmark} from 'lucide-react
 import {useState} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
+import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
 import {useLocalDate} from '@/hooks/use-local-date';
 
@@ -338,7 +339,7 @@ function Recurring({transaction}: {transaction: BankTransaction}) {
         aria-expanded={expanded}
         aria-controls={historyId}
         onClick={() => setExpanded(!expanded)}
-        className='-ml-3 justify-start text-muted-foreground max-sm:h-11'
+        className='w-full justify-start px-0 text-muted-foreground max-sm:h-11'
       >
         <ChevronRight
           className={`transition-transform motion-reduce:transition-none ${expanded ? 'rotate-90' : ''}`}
@@ -346,33 +347,66 @@ function Recurring({transaction}: {transaction: BankTransaction}) {
         />
         Recurring payment
       </Button>
-      <p className='mb-2 pl-6 text-sm text-muted-foreground'>
+      <p data-testid='recurring-summary' className='mb-2 text-sm text-muted-foreground'>
         {RECURRING_CADENCE_LABELS[recurring.cadence]} ·{' '}
         {recurring.status === 'ENDED'
           ? 'Ended'
           : `Next expected ${formatBankTransactionDate(recurring.nextExpectedDate)}`}
       </p>
       {expanded && (
-        <div id={historyId} className='pb-4 pl-6'>
+        <div id={historyId} className='pb-4'>
           <p className='mb-3 text-label text-muted-foreground'>Recent payments</p>
-          {recurring.payments.map((payment) => (
-            <div key={payment.id} className='flex h-[60px] items-center gap-3 border-t'>
-              <MerchantLogoTile transaction={transaction} className='size-9' />
-              <span className='min-w-0 flex-1 text-sm'>
-                <span className='block'>
-                  {formatBankTransactionDate(payment.transactionDate || payment.bookingDate)}
-                </span>
-                {payment.id === transaction.id && (
-                  <span className='mt-0.5 block text-label text-muted-foreground'>
-                    This payment
+          <ul aria-label='Recent payments'>
+            {recurring.payments.map((payment) => {
+              const current = payment.id === transaction.id;
+              const content = (
+                <>
+                  <MerchantLogoTile transaction={transaction} className='size-9' />
+                  <span className='min-w-0 flex-1 text-sm'>
+                    <span className='block'>
+                      {formatBankTransactionDate(payment.transactionDate || payment.bookingDate)}
+                    </span>
+                    {current && (
+                      <span className='mt-0.5 block text-label text-muted-foreground'>
+                        This payment
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-              <span className='numeric text-sm'>
-                <CurrencyAmount amount={Number(payment.amount)} currency={payment.currency} />
-              </span>
-            </div>
-          ))}
+                  <span className='numeric text-sm'>
+                    <CurrencyAmount amount={Number(payment.amount)} currency={payment.currency} />
+                  </span>
+                </>
+              );
+              // Dividers stay at the content edge; a link's hover fill reaches past it like the Recurring dialog's payments.
+              const rowClassName = 'flex h-[60px] items-center gap-3';
+              return (
+                <li key={payment.id} className='border-t'>
+                  {current ? (
+                    <div data-testid='recurring-payment' className={rowClassName}>
+                      {content}
+                    </div>
+                  ) : (
+                    <Link
+                      to='.'
+                      search={(prev) => ({...prev, transactionId: payment.id})}
+                      state={(prev) => ({
+                        transactionOpenedAt: prev.transactionOpenedAt ?? prev.__TSR_index,
+                      })}
+                      data-testid='recurring-payment'
+                      className={`${rowClassName} -mx-3 px-3 hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring`}
+                    >
+                      {content}
+                    </Link>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <TextAction asChild className='mt-2 -ml-2'>
+            <Link to='/' search={{recurring: 'open', series: recurring.key}}>
+              All payments
+            </Link>
+          </TextAction>
         </div>
       )}
     </section>

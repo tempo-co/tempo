@@ -16,7 +16,7 @@ import {
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 
-type Method = 'get' | 'post' | 'patch' | 'delete' | 'head';
+type Method = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'head';
 type GuardedRoute = [method: Method, path: string];
 
 const SESSION_ID = 'a'.repeat(32);
@@ -45,6 +45,7 @@ const TOKEN_READABLE_PATHS = [
 	'/bank-transactions/summary?month=2026-10&asOf=2026-10-18',
 	'/bank-transactions/cash-flow?interval=month&from=2026-01-01&to=2026-10-18&asOf=2026-10-18',
 	'/bank-transactions/balance-trend?interval=month&from=2026-01-01&to=2026-10-18&asOf=2026-10-18',
+	'/bank-transactions/breakdown?interval=year&by=category&from=2026-01-01&to=2026-10-18&asOf=2026-10-18',
 	'/bank-transactions/review-counts',
 	'/recurring-series?asOf=2026-10-18',
 	'/recurring-series/summary?asOf=2026-10-18',
@@ -83,7 +84,11 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['delete', `/bank-connections/${RESOURCE_ID}`],
 	['get', `/bank-connections/${RESOURCE_ID}/transactions`],
 	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}`],
-	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}/mask-v1`],
+	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}/mask-v2`],
+	['get', '/notifications'],
+	['patch', '/notifications/preferences'],
+	['put', '/notifications/subscriptions'],
+	['delete', '/notifications/subscriptions'],
 ];
 
 const VERIFIED_ROUTES: GuardedRoute[] = [
