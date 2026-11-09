@@ -102,6 +102,7 @@ test.describe('the Transactions badge away from Home', () => {
   ]) {
     test(`shows ${text} to review in a round badge`, async ({page}) => {
       await mockSyntheticHome(page, {reviewCounts: {...HOME_REVIEW_COUNTS, needsAttention}});
+      await mockJson(page, '**/bank-connections/aspsps', []);
       await page.goto('/bank-connections');
       const badge = page
         .getByRole('navigation', {name: 'Primary'})

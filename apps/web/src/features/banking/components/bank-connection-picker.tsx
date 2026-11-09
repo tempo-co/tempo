@@ -1,3 +1,4 @@
+import {useQuery} from '@tanstack/react-query';
 import type {BankConnectionAspsp} from '@tempo/contracts';
 import {ArrowLeft, ChevronRight, Loader, Plus, Search} from 'lucide-react';
 import {useMemo, useState} from 'react';
@@ -16,7 +17,7 @@ import {
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {cn} from '@/utils/cn';
 
-import {useGetAllBankConnections} from '../api/use-get-all-bank-connections';
+import {bankConnectionsQueryOptions} from '../api/use-get-all-bank-connections';
 import {useGetSupportedBanks} from '../api/use-get-supported-banks';
 import {BankWordmark} from './bank-wordmark';
 
@@ -48,7 +49,8 @@ export function BankConnectionPicker({
   const [countryCode, setCountryCode] = useState<string>();
   const [bank, setBank] = useState<BankConnectionAspsp>();
   const {supportedBanks, isPending, isError, refetch} = useGetSupportedBanks(open);
-  const {bankConnections} = useGetAllBankConnections();
+  // The page already loads the connections; read them without fetching again.
+  const {data: bankConnections} = useQuery({...bankConnectionsQueryOptions, enabled: false});
 
   const countries = useMemo(() => getCountryOptions(supportedBanks ?? []), [supportedBanks]);
   const country =
@@ -81,7 +83,14 @@ export function BankConnectionPicker({
   return (
     <ResponsiveDialog open={open} onOpenChange={handleOpenChange}>
       <ResponsiveDialogTrigger asChild>
-        <Button className={className} disabled={isStarting} data-testid='connect-bank-button'>
+        <Button
+          className={cn(
+            'max-md:h-auto max-md:min-h-11 max-md:max-w-full max-md:whitespace-normal',
+            className,
+          )}
+          disabled={isStarting}
+          data-testid='connect-bank-button'
+        >
           {isStarting ? <Loader className='animate-slow-spin' /> : <Plus />}
           {isStarting ? 'Connecting…' : 'Connect a bank'}
         </Button>
