@@ -3,7 +3,12 @@ import type {BankConnection, BankConnectionAspsp} from '@tempo/contracts';
 
 import {HOME_CONNECTION} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
-import {fulfillJson, mockBankConnections, mockJson} from '../../utils/api-mocks';
+import {
+  fulfillJson,
+  mockBankConnections,
+  mockJson,
+  routeBankConnectionsApi,
+} from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.use({storageState: {cookies: [], origins: []}});
@@ -258,6 +263,39 @@ test.describe('Connect a bank', () => {
       });
     });
   }
+
+  test.describe('in en-NL', () => {
+    test.use({locale: 'en-NL'});
+
+    test('keeps the country the user started in when connected banks load later', async ({
+      page,
+    }) => {
+      await mockPickerPage(page, {connections: [connectionIn('DE', 1), connectionIn('DE', 2)]});
+      let releaseConnections!: () => void;
+      const connectionsHeld = new Promise<void>((resolve) => (releaseConnections = resolve));
+      await routeBankConnectionsApi(page, async (route) => {
+        await connectionsHeld;
+        await route.fallback();
+      });
+      await page.goto('/bank-connections');
+      await page.getByTestId('connect-bank-button').click();
+      const picker = page.getByTestId('bank-connection-picker');
+      const country = picker.getByTestId('bank-connection-country');
+      // Without connected banks yet, the browser's region is the guess.
+      await expect(country).toHaveText('NetherlandsChange');
+      const search = picker.getByRole('searchbox', {name: 'Search banks in Netherlands'});
+      await search.fill('savings');
+
+      const loaded = page.waitForResponse((response) =>
+        response.url().endsWith('/bank-connections'),
+      );
+      releaseConnections();
+      await loaded;
+      await expect(page.getByTestId('bank-connections-loading')).toHaveCount(0);
+      await expect(country).toHaveText('NetherlandsChange');
+      await expect(search).toHaveValue('savings');
+    });
+  });
 
   test('closing the sheet starts nothing, and reopening starts at the bank list in the chosen country', async ({
     page,

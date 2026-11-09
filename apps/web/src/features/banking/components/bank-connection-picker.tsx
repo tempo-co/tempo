@@ -163,8 +163,11 @@ export function BankConnectionPicker({
               key={country.code}
               country={country}
               banks={banks}
+              // Once the user searches or picks, a late guess from connected banks no longer moves the country.
+              onInteract={() => setCountryCode(country.code)}
               onChangeCountry={() => setStep('country')}
               onSelect={(option) => {
+                setCountryCode(country.code);
                 setBank(option);
                 setStep('confirm');
               }}
@@ -179,11 +182,13 @@ export function BankConnectionPicker({
 function BankStep({
   country,
   banks,
+  onInteract,
   onChangeCountry,
   onSelect,
 }: {
   country: CountryOption;
   banks: BankConnectionAspsp[];
+  onInteract: () => void;
   onChangeCountry: () => void;
   onSelect: (bank: BankConnectionAspsp) => void;
 }) {
@@ -203,7 +208,10 @@ function BankStep({
       </button>
       <SearchField
         value={query}
-        onChange={setQuery}
+        onChange={(value) => {
+          onInteract();
+          setQuery(value);
+        }}
         label={`Search banks in ${country.label}`}
         placeholder={`Search ${countOf(banks.length, 'bank', 'banks')}`}
       />
