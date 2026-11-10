@@ -2,8 +2,6 @@
 /dist
 /node_modules
 /build
-/mcp/node_modules
-/mcp/dist
 
 # Logs
 logs

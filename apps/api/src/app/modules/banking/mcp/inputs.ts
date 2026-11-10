@@ -1,5 +1,3 @@
-import {z} from 'zod';
-import validator from 'validator';
 import {
 	BANK_TRANSACTION_BASE_AMOUNT_FILTER_VALUES,
 	BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES,
@@ -9,9 +7,11 @@ import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_FILTER_VALUES,
 	BANK_TRANSACTION_SEARCH_MAX_LENGTH,
 	BANK_TRANSACTION_SORT_FIELDS,
-	SORT_ORDERS,
 	type BankTransactionFilter,
+	SORT_ORDERS,
 } from '@tempo/contracts';
+import validator from 'validator';
+import {z} from 'zod';
 
 export const filtersSchema = z.strictObject({
 	bookingDate: z.strictObject({from: z.iso.date().optional(), to: z.iso.date().optional()}).optional(),
@@ -42,17 +42,3 @@ export const sortSchema = z.strictObject({
 	by: z.enum(BANK_TRANSACTION_SORT_FIELDS),
 	order: z.enum(SORT_ORDERS),
 });
-
-export function filterQuery(filters: z.infer<typeof filtersSchema> = {}): URLSearchParams {
-	const query = new URLSearchParams();
-	for (const [key, value] of Object.entries(filters)) {
-		if (value === undefined) continue;
-		if (Array.isArray(value)) for (const item of value) query.append(`filter[${key}][]`, item);
-		else if (typeof value === 'object')
-			for (const [field, date] of Object.entries(value)) {
-				if (date !== undefined) query.set(`filter[${key}][${field}]`, date);
-			}
-		else query.set(`filter[${key}]`, value);
-	}
-	return query;
-}

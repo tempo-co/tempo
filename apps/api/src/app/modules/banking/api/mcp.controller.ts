@@ -7,7 +7,7 @@ import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 import {McpTokenOnly} from '@modules/auth/decorators/mcp-token-only.decorator';
 
-import {createToolServer} from '../../../../../mcp/src/tools';
+import {createToolServer} from '../mcp/tools';
 import {McpReaderService} from '../services/mcp-reader.service';
 
 @Controller('mcp')

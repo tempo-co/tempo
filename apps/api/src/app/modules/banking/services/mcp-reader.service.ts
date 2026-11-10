@@ -3,8 +3,6 @@ import {instanceToPlain} from 'class-transformer';
 
 import {Account} from '@modules/account/account.entity';
 
-import {ToolReadError} from '../../../../../mcp/src/errors';
-import type {ToolReader} from '../../../../../mcp/src/tools';
 import {BankTransactionBreakdownQueryDto} from '../api/dtos/bank-transaction-breakdown-query.dto';
 import {BankTransactionCashFlowQueryDto} from '../api/dtos/bank-transaction-cash-flow-query.dto';
 import {BankTransactionQueryDto, BankTransactionTotalsQueryDto} from '../api/dtos/bank-transaction-query.dto';
@@ -13,6 +11,8 @@ import {MerchantGroupsQueryDto, MerchantRankingQueryDto} from '../api/dtos/merch
 import {RecurringSeriesQueryDto} from '../api/dtos/recurring-series.dto';
 import {MerchantGroupIdPipe} from '../api/pipes/merchant-group-id.pipe';
 import {BankingService} from '../banking.service';
+import {ToolReadError} from '../mcp/errors';
+import type {ToolReader} from '../mcp/tools';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {BankTransactionHistoryService} from './bank-transaction-history.service';
 import {BankTransactionSummaryService} from './bank-transaction-summary.service';
