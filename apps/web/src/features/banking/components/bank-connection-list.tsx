@@ -359,7 +359,10 @@ function BankCard({
 function AccountRow({account, baseCurrency}: {account: Account; baseCurrency: string | null}) {
   const balance = accountBalance(account);
   const converted =
-    baseCurrency && account.currency !== baseCurrency && account.currentBalanceInBaseCurrency
+    balance?.amount !== 0 &&
+    baseCurrency &&
+    account.currency !== baseCurrency &&
+    account.currentBalanceInBaseCurrency
       ? formatCurrency(Number(account.currentBalanceInBaseCurrency), baseCurrency)
       : null;
   const name = accountName(account);
@@ -659,15 +662,17 @@ function accountBalance(account: Account) {
 }
 
 /**
- * The sum of the bank's known balances: in their currency when they share one, otherwise in the
- * owner's base currency. Null when there are none, or mixed currencies can't all be converted.
+ * The sum of the bank's non-zero balances: in their currency when they share one, otherwise in
+ * the owner's base currency. Null with fewer than two, or when mixed currencies lack a conversion.
  */
 function bankTotal(connection: BankConnection) {
   const known = connection.bankAccounts.flatMap((account) => {
     const balance = accountBalance(account);
-    return balance ? [{...balance, inBase: account.currentBalanceInBaseCurrency}] : [];
+    return balance && balance.amount !== 0
+      ? [{...balance, inBase: account.currentBalanceInBaseCurrency}]
+      : [];
   });
-  if (known.length === 0) return null;
+  if (known.length < 2) return null;
   const [{currency: first}] = known;
   if (known.every((balance) => balance.currency === first))
     return {amount: known.reduce((sum, balance) => sum + balance.amount, 0), currency: first};

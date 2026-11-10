@@ -551,8 +551,20 @@ test.describe('mocked Enable Banking bank connection', () => {
     await expect(connectionCard.getByRole('link', {name: / transactions$/})).toHaveCount(2);
     await expect(totalBalance).toHaveCount(0);
 
-    // Known zero balances add up to zero; a bank with no balances yet has no total to show.
+    // A total is useful only when at least two non-zero balances contribute.
     connection = balances('0.00');
+    await page.reload();
+    await expect(connectionCard.getByText('€0.00', {exact: true})).toHaveCount(2);
+    await expect(totalBalance).toHaveCount(0);
+    for (const amount of ['25.00', '-25.00']) {
+      connection.bankAccounts[0].currentBalanceAmount = amount;
+      await page.reload();
+      await expect(connectionCard.getByRole('link').first()).toContainText(
+        amount.startsWith('-') ? '-€25.00' : '€25.00',
+      );
+      await expect(totalBalance).toHaveCount(0);
+    }
+    connection.bankAccounts[1].currentBalanceAmount = '25.00';
     await page.reload();
     await expect(totalBalance).toHaveText('Total€0.00');
     connection = balances(null);
@@ -567,6 +579,27 @@ test.describe('mocked Enable Banking bank connection', () => {
     await expect(usdRow).toContainText('$50.00');
     await expect(usdRow).toContainText('≈ €46.00');
     await expect(totalBalance).toHaveText('Total€1,381.00');
+    for (const amount of ['0', '0.00', '-0.00']) {
+      connection.bankAccounts[2].currentBalanceAmount = amount;
+      connection.bankAccounts[2].currentBalanceInBaseCurrency = '0.00';
+      await page.reload();
+      await expect(usdRow).toContainText('$0.00');
+      await expect(usdRow.getByText(/≈/)).toHaveCount(0);
+      await expect(totalBalance).toHaveText('Total€1,335.00');
+    }
+    // Zero balances need no exchange rate and do not change the total's currency.
+    connection.bankAccounts[2].currentBalanceInBaseCurrency = null;
+    await page.reload();
+    await expect(totalBalance).toHaveText('Total€1,335.00');
+    connection.bankAccounts[2].currentBalanceAmount = '-50.00';
+    connection.bankAccounts[2].currentBalanceInBaseCurrency = '-46.00';
+    await page.reload();
+    await expect(usdRow).toContainText('≈ -€46.00');
+    await expect(totalBalance).toHaveText('Total€1,289.00');
+    connection.bankAccounts[2].currentBalanceAmount = '0.01';
+    connection.bankAccounts[2].currentBalanceInBaseCurrency = '0.00';
+    await page.reload();
+    await expect(usdRow).toContainText('≈ €0.00');
     const [cardBox, totalBox] = await Promise.all([boxOf(connectionCard), boxOf(totalBalance)]);
     expect(totalBox.x + totalBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
     await expectNoHorizontalOverflow(page);
