@@ -306,6 +306,7 @@ export class BankingSyncService {
 				let fetchResult: SyncFetchResult;
 				try {
 					fetchResult = await this.fetchAccounts(
+						connection.id,
 						bankAccounts,
 						providerSessionId,
 						transactionOptions,
@@ -464,6 +465,7 @@ export class BankingSyncService {
 	}
 
 	private async fetchAccounts(
+		connectionId: BankConnection['id'],
 		bankAccounts: BankAccount[],
 		providerSessionId: string,
 		transactionOptions: EnableBankingTransactionFetchOptions,
@@ -476,9 +478,16 @@ export class BankingSyncService {
 		let hasSuccessfulEndpoint = false;
 		let connectionExpired = false;
 		let rateLimit: SyncRateLimit | undefined;
-		const recordFailure = (error: unknown) => {
+		const recordFailure = (error: unknown, step: 'accounts' | 'balances' | 'transactions') => {
 			lockLease.assertHealthy();
 			hasFailure = true;
+			// The provider's error code and HTTP status are the only details logged; responses can hold bank data.
+			// The code comes from the provider's response, so only plain code characters reach the log.
+			const detail =
+				error instanceof EnableBankingClientError
+					? `${error.code.replace(/[^\w.-]/g, '_')}${error.providerStatus ? ` (HTTP ${error.providerStatus})` : ''}`
+					: safeErrorName(error);
+			this.logger.warn(`Bank synchronization ${step} request failed for connection ${connectionId}: ${detail}`);
 			connectionExpired ||= this.isExpiredSessionError(error);
 			rateLimit = this.mergeRateLimit(rateLimit, this.toRateLimit(error));
 		};
@@ -498,7 +507,7 @@ export class BankingSyncService {
 			authoritativeAccountIds = new Set(sessionAccounts.accountIds);
 			hasSuccessfulEndpoint = true;
 		} catch (error) {
-			recordFailure(error);
+			recordFailure(error, 'accounts');
 		}
 
 		for (const bankAccount of bankAccounts) {
@@ -522,7 +531,7 @@ export class BankingSyncService {
 				balancesSucceeded = true;
 				hasSuccessfulEndpoint = true;
 			} catch (error) {
-				recordFailure(error);
+				recordFailure(error, 'balances');
 			}
 
 			if (connectionExpired || rateLimit) break;
@@ -538,7 +547,7 @@ export class BankingSyncService {
 				transactionsSucceeded = true;
 				hasSuccessfulEndpoint = true;
 			} catch (error) {
-				recordFailure(error);
+				recordFailure(error, 'transactions');
 			}
 
 			accounts.push({

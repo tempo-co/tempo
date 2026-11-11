@@ -71,6 +71,8 @@ test.describe('Home', () => {
         status: 'PENDING_AUTHORIZATION',
         consentValidUntil: null,
         lastSyncedAt: null,
+        lastSuccessfulSyncAt: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
         lastSyncError: null,
         nextSyncAt: null,
         syncStatus: 'IDLE',
@@ -187,6 +189,7 @@ test.describe('Home navigation badges', () => {
         {
           ...consentEndingIn('00000000-0000-4000-8000-0000000000c8', 3),
           syncStatus: 'RATE_LIMITED' as const,
+          lastSuccessfulSyncAt: '2026-11-03T11:00:00.000Z',
         },
       ],
       label: 'Connections, a bank needs attention and a bank needs re-authorizing soon',
