@@ -14,6 +14,7 @@ import {AccountModule} from '@modules/account/account.module';
 import {AuthModule} from '@modules/auth/auth.module';
 import {McpExceptionFilter} from '@modules/banking/api/mcp-exception.filter';
 import {BankingModule} from '@modules/banking/banking.module';
+import {FileImportModule} from '@modules/file-import/file-import.module';
 import {NotificationsModule} from '@modules/notifications/notifications.module';
 
 @Module({
@@ -29,6 +30,7 @@ import {NotificationsModule} from '@modules/notifications/notifications.module';
 		AuthModule,
 		AccountModule,
 		BankingModule,
+		FileImportModule,
 		NotificationsModule,
 	],
 	providers: [

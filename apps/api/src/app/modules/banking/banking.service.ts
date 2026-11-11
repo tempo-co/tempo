@@ -45,17 +45,23 @@ import {getBalancePreference, normalizeBankCode, truncate} from './banking.utils
 import {EnableBankingAccount, EnableBankingSession} from './enable-banking.types';
 import {BankingAuthorizationStateError} from './errors/banking-authorization-state.error';
 import {BankingEncryptionError} from './errors/banking-encryption.error';
+import {FileConnectionNotSyncableException} from './errors/file-connection-not-syncable.exception';
 import {convertEcbAmountSql, newestEcbRatePairSql} from './services/bank-transaction-amount-conversion.utils';
 import {BankingAuthorizationStateService} from './services/banking-authorization-state.service';
 import {type BankingConnectionLock, BankingConnectionLockService} from './services/banking-connection-lock.service';
 import {BankingEncryptionService} from './services/banking-encryption.service';
 import {BankingSyncQueueService} from './services/banking-sync-queue.service';
-import {BANK_CONNECTION_STATUSES, BANK_SYNC_STATUSES} from './services/banking-sync.constants';
+import {
+	BANK_CONNECTION_PROVIDERS,
+	BANK_CONNECTION_STATUSES,
+	BANK_SYNC_STATUSES,
+	FILE_CONNECTION_ASPSP,
+} from './services/banking-sync.constants';
 import {EnableBankingClient, EnableBankingClientError} from './services/enable-banking.client';
 import {findOwnedConnection} from './services/find-owned-connection';
 import {OwnTransferService} from './services/own-transfer.service';
 
-const PROVIDER = 'enable-banking';
+const PROVIDER = BANK_CONNECTION_PROVIDERS.ENABLE_BANKING;
 
 type ConvertedBalance = {amount: string; rateDate: string | null};
 const AUTHORIZATION_LOCK_WAIT_MS = 10_000;
@@ -99,6 +105,8 @@ export class BankingService {
 		this.ensureIntegrationEnabled();
 		const aspspName = dto.aspspName.trim();
 		const aspspCountry = dto.aspspCountry.toUpperCase();
+		// Re-authorizing names the connection's bank; the imported-files connection has none.
+		if (aspspCountry === FILE_CONNECTION_ASPSP.country) throw new FileConnectionNotSyncableException();
 		const aspsps = await this.getAspsps(aspspCountry);
 		const aspsp = aspsps.find((candidate) => candidate.name === aspspName && candidate.country === aspspCountry);
 
@@ -237,7 +245,9 @@ export class BankingService {
 			provider: connection.provider,
 			aspspName: connection.aspspName,
 			aspspCountry: connection.aspspCountry,
-			logo: bankLogoReference(connection.aspspName, connection.aspspCountry),
+			...(connection.provider === BANK_CONNECTION_PROVIDERS.ENABLE_BANKING
+				? {logo: bankLogoReference(connection.aspspName, connection.aspspCountry)}
+				: {}),
 			// Written only from BANK_CONNECTION_STATUSES.
 			status: connection.status as BankConnectionStatus,
 			consentValidUntil: connection.consentValidUntil?.toISOString() ?? null,

@@ -10,6 +10,8 @@ import {
 	UpdateDateColumn,
 } from 'typeorm';
 
+import type {BankImport} from '@modules/file-import/bank-import.entity';
+
 import {BankAccount} from './bank-account.entity';
 import type {
 	BankTransactionFinancialEventSource,
@@ -31,6 +33,7 @@ export type {BankTransactionBaseAmountMethod};
 @Index('idx_bank_transactions_account_identity_group', ['bankAccountId', 'stableIdentityGroupKey'])
 @Index('idx_bank_transactions_account_booking_date', ['bankAccountId', 'bookingDate'])
 @Index('idx_bank_transactions_account_merchant_key', ['bankAccountId', 'merchantKey'])
+@Index('idx_bank_transactions_import', ['importId'])
 export class BankTransaction {
 	@PrimaryGeneratedColumn('uuid')
 	id: string;
@@ -220,6 +223,15 @@ export class BankTransaction {
 
 	@Column({type: 'varchar', length: 32, nullable: true})
 	referenceNumberScheme: string | null;
+
+	/** The file import that inserted this row; null for synced rows. Undoing the import deletes the row. */
+	@Column({type: 'uuid', nullable: true})
+	importId: string | null;
+
+	// Named by string: the import record belongs to the file-import module, which depends on banking.
+	@ManyToOne('BankImport', {onDelete: 'SET NULL', nullable: true})
+	@JoinColumn({name: 'importId', foreignKeyConstraintName: 'fk_bank_transactions_import'})
+	bankImport?: BankImport | null;
 
 	@CreateDateColumn({type: 'timestamptz'})
 	createdAt: Date;

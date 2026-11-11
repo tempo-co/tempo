@@ -38,6 +38,9 @@ export const BANK_SYNC_STATUSES = [
 ] as const;
 export type BankSyncStatus = (typeof BANK_SYNC_STATUSES)[number];
 
+/** The `code` of a refused bank-connection request: imported files cannot be refreshed or re-authorized. */
+export type BankConnectionErrorCode = 'file_connection_not_syncable';
+
 /** Lazy metadata keeps catalogue reads independent of downloading every bank's artwork. */
 export type BankLogoReference = {metadataUrl: string};
 /** `GET /bank-connections/aspsps/logos/:country/:name`. Image URLs include source hash and converter version. */

@@ -14,6 +14,7 @@ let aiCategorizationEnabled = false;
 let aiCategorizationWebSearchEnabled = false;
 let merchantLogosEnabled = false;
 let webPushEnabled = false;
+let fileImportEnabled = false;
 
 export function enableAiCategorizationE2e(): void {
 	aiCategorizationEnabled = true;
@@ -27,6 +28,10 @@ export function enableMerchantLogosE2e(): void {
 	merchantLogosEnabled = true;
 }
 
+export function enableFileImportE2e(): void {
+	fileImportEnabled = true;
+}
+
 /** Gives the app throwaway VAPID keys; specs replace `WebPushSender.send`, so no push service is contacted. */
 export function enableWebPushE2e(): void {
 	webPushEnabled = true;
@@ -37,6 +42,7 @@ beforeAll(async () => {
 	process.env.AI_CATEGORIZATION_ENABLED = String(aiCategorizationEnabled);
 	process.env.AI_CATEGORIZATION_WEB_SEARCH_ENABLED = String(aiCategorizationWebSearchEnabled);
 	process.env.MERCHANT_LOGOS_ENABLED = String(merchantLogosEnabled);
+	process.env.FILE_IMPORT_ENABLED = String(fileImportEnabled);
 	delete process.env.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET;
 
 	if (webPushEnabled) {

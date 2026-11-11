@@ -14,7 +14,7 @@ import {
 	createBankTransactionStableIdentityKey,
 	isLegacyBankTransactionDedupeKey,
 } from '../bank-transaction-identity';
-import {normalizeBankTransactionLocation} from '../bank-transaction-location';
+import {BankTransactionLocation, normalizeBankTransactionLocation} from '../bank-transaction-location';
 import {deriveBankTransactionTextColumns} from '../bank-transaction-text-columns';
 import {normalizeBankTransactionType} from '../bank-transaction-type';
 import {BankTransaction} from '../bank-transaction.entity';
@@ -35,7 +35,6 @@ import {
 	isManualCategorySource,
 	notManualCategorySourceSql,
 } from '../categorization/bank-transaction-categorization.types';
-import {EnableBankingTransaction} from '../enable-banking.types';
 import {BASE_AMOUNT_INPUT_COLUMNS, baseAmountInputsSql} from './bank-transaction-amount-conversion.utils';
 
 const BANK_TRANSACTION_IDENTITY_SELECT = {
@@ -70,7 +69,40 @@ const BANK_TRANSACTION_IDENTITY_SELECT = {
 
 export type PersistTransactionsResult = {
 	transactionsAdded: number;
+	/** The rows this call inserted; the others already existed and were updated. */
+	insertedTransactionIds: string[];
 	persistedTransactionIds: string[];
+};
+
+/** One transaction to write, from bank sync or a parsed statement file; `EnableBankingTransaction` satisfies it. */
+export type BankTransactionInput = {
+	providerTransactionId?: string;
+	entryReference?: string;
+	merchantCategoryCode?: string;
+	amount: string;
+	currency: string;
+	creditDebitIndicator?: string;
+	status?: string;
+	transactionDate?: string;
+	bookingDate?: string;
+	valueDate?: string;
+	description?: string;
+	counterpartyName?: string;
+	counterpartyIban?: string;
+	counterpartyLocation?: BankTransactionLocation;
+	remittanceInformation?: string;
+	bankTransactionCode?: string;
+	bankTransactionSubCode?: string;
+	bankTransactionDescription?: string;
+	balanceAfterAmount?: string;
+	balanceAfterCurrency?: string;
+	instructedAmount?: string;
+	instructedCurrency?: string;
+	exchangeRate?: string;
+	exchangeRateUnitCurrency?: string;
+	exchangeRateType?: string;
+	referenceNumber?: string;
+	referenceNumberScheme?: string;
 };
 
 type LegacyDedupeKeyValues = {
@@ -156,7 +188,7 @@ export class BankTransactionPersistenceService {
 	async persistTransactions(
 		repository: Repository<BankTransaction>,
 		bankAccount: BankAccount,
-		transactions: EnableBankingTransaction[],
+		transactions: readonly BankTransactionInput[],
 		aspspName: string,
 		provider: string,
 	): Promise<PersistTransactionsResult> {
@@ -319,7 +351,7 @@ export class BankTransactionPersistenceService {
 		const persistedTransactionIds =
 			persistedRows.length > 0 ? persistedRows.map(({id}) => id) : insertedTransactionIds;
 
-		return {transactionsAdded, persistedTransactionIds};
+		return {transactionsAdded, insertedTransactionIds, persistedTransactionIds};
 	}
 
 	/**
@@ -376,7 +408,7 @@ export class BankTransactionPersistenceService {
 
 	private toBankTransactionValues(
 		bankAccount: BankAccount,
-		transaction: EnableBankingTransaction,
+		transaction: BankTransactionInput,
 		aspspName: string,
 		provider: string,
 	) {
