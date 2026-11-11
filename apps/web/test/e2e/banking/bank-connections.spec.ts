@@ -180,12 +180,17 @@ test.describe('bank connections', () => {
     },
     {syncStatus: 'EXPIRED', title: 'Consent expired', detail: 'No updates since 1 Jan'},
   ] as const) {
-    test(`shows the ${syncStatus} sync problem with the bank's last update`, async ({page}) => {
+    test(`shows the ${syncStatus} sync problem with the bank's last successful sync`, async ({
+      page,
+    }) => {
       await mockBankConnections(page, [
         {
           ...MOCK_CONNECTION,
           syncStatus,
-          lastSyncedAt: '2020-01-01T12:00:00.000Z',
+          // A partial run moves the last sync on without making the bank up to date.
+          lastSyncedAt: new Date(Date.now() - 60_000).toISOString(),
+          lastSuccessfulSyncAt: '2020-01-01T12:00:00.000Z',
+          createdAt: '2026-01-01T00:00:00.000Z',
           nextSyncAt: '2020-01-02T00:00:00.000Z',
           lastSyncError: 'Synthetic bank refresh failed.',
         },
@@ -200,6 +205,46 @@ test.describe('bank connections', () => {
       await expect(page.getByRole('button', {name: 'Re-authorize'})).toHaveCount(
         syncStatus === 'EXPIRED' ? 1 : 0,
       );
+    });
+  }
+
+  for (const {syncStatus, since, lastSuccessfulSyncAt, createdAt} of (
+    ['FAILED', 'PARTIAL', 'RATE_LIMITED'] as const
+  ).flatMap((syncStatus) => [
+    {
+      syncStatus,
+      since: 'the last successful sync',
+      lastSuccessfulSyncAt: new Date(Date.now() - 23 * 60 * 60_000).toISOString(),
+      createdAt: '2020-01-01T12:00:00.000Z',
+    },
+    {
+      syncStatus,
+      since: 'connecting a bank that never fully synced',
+      lastSuccessfulSyncAt: null,
+      createdAt: new Date(Date.now() - 60 * 60_000).toISOString(),
+    },
+  ])) {
+    test(`keeps a ${syncStatus} sync quiet within a day of ${since}`, async ({page}) => {
+      await mockBankConnections(page, [
+        {
+          ...MOCK_CONNECTION,
+          syncStatus,
+          lastSyncedAt: new Date(Date.now() - 60_000).toISOString(),
+          lastSuccessfulSyncAt,
+          createdAt,
+          nextSyncAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+          lastSyncError: 'Synthetic bank refresh failed.',
+        },
+      ]);
+
+      await page.goto('/bank-connections');
+      await expect(page.getByTestId('bank-connection-total')).toContainText('1,335.00');
+      await expect(page.getByTestId('bank-connection-problem')).toHaveCount(0);
+      await expect(
+        page
+          .getByRole('navigation', {name: 'Primary'})
+          .getByRole('link', {name: 'Connections', exact: true}),
+      ).toBeVisible();
     });
   }
 
@@ -286,6 +331,8 @@ test.describe('bank connections', () => {
       status: 'PENDING_AUTHORIZATION',
       consentValidUntil: null,
       lastSyncedAt: null,
+      lastSuccessfulSyncAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
       lastSyncError: null,
       nextSyncAt: null,
       syncStatus: 'IDLE',
@@ -969,6 +1016,8 @@ test.describe('mocked Enable Banking bank connection', () => {
         aspspName: 'Jo',
         syncStatus: 'FAILED',
         lastSyncedAt: '2020-01-01T12:00:00.000Z',
+        lastSuccessfulSyncAt: '2020-01-01T12:00:00.000Z',
+        createdAt: '2026-01-01T00:00:00.000Z',
         nextSyncAt: '2020-01-02T00:00:00.000Z',
         lastSyncError: 'Synthetic bank refresh failed.',
         bankAccounts: [{...account, id: '00000000-0000-4000-8000-0000000000b5', alias: 'J'}],

@@ -264,6 +264,8 @@ async function mockSignedIn(page: Page) {
       status: 'AUTHORIZED',
       consentValidUntil: '2027-01-01T00:00:00Z',
       lastSyncedAt: '2026-10-18T09:00:00Z',
+      lastSuccessfulSyncAt: '2026-10-18T09:00:00Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
       lastSyncError: null,
       nextSyncAt: '2026-10-19T09:00:00Z',
       syncStatus: 'SUCCEEDED',

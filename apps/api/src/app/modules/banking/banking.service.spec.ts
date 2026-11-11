@@ -433,6 +433,21 @@ describe('BankingService findAll', () => {
 		return queryBuilder;
 	}
 
+	/** Data source double whose sync-run query builder resolves `getRawMany` with the given rows. */
+	function createRunHistoryMock(rows: unknown[]) {
+		const queryBuilder = {
+			select: jest.fn().mockReturnThis(),
+			addSelect: jest.fn().mockReturnThis(),
+			where: jest.fn().mockReturnThis(),
+			andWhere: jest.fn().mockReturnThis(),
+			groupBy: jest.fn().mockReturnThis(),
+			getRawMany: jest.fn().mockResolvedValue(rows),
+		};
+		return {queryBuilder, dataSource: {getRepository: jest.fn(() => ({createQueryBuilder: () => queryBuilder}))}};
+	}
+
+	const CREATED_AT = new Date('2026-01-01T00:00:00.000Z');
+
 	function createBalance(id: string, bankAccountId: string, balanceType: string, amount: string) {
 		return {
 			id,
@@ -449,9 +464,27 @@ describe('BankingService findAll', () => {
 
 	it('loads accounts and latest balances for every connection in one query each', async () => {
 		const connections = [
-			{id: 'connection-new', provider: 'enable-banking', aspspName: 'New Bank', aspspCountry: 'NL'},
-			{id: 'connection-old', provider: 'enable-banking', aspspName: 'Old Bank', aspspCountry: 'DE'},
-			{id: 'connection-empty', provider: 'enable-banking', aspspName: 'Empty Bank', aspspCountry: 'FR'},
+			{
+				id: 'connection-new',
+				provider: 'enable-banking',
+				aspspName: 'New Bank',
+				aspspCountry: 'NL',
+				createdAt: CREATED_AT,
+			},
+			{
+				id: 'connection-old',
+				provider: 'enable-banking',
+				aspspName: 'Old Bank',
+				aspspCountry: 'DE',
+				createdAt: CREATED_AT,
+			},
+			{
+				id: 'connection-empty',
+				provider: 'enable-banking',
+				aspspName: 'Empty Bank',
+				aspspCountry: 'FR',
+				createdAt: CREATED_AT,
+			},
 		];
 		const bankAccounts = [
 			{id: 'account-old-1', name: 'Old 1', bankConnection: {id: 'connection-old'}},
@@ -469,10 +502,14 @@ describe('BankingService findAll', () => {
 		const bankConnectionRepository = {createQueryBuilder: jest.fn(() => connectionQueryBuilder)};
 		const bankAccountRepository = {createQueryBuilder: jest.fn(() => accountQueryBuilder)};
 		const bankAccountBalanceRepository = {createQueryBuilder: jest.fn(() => balanceQueryBuilder)};
+		const runHistory = createRunHistoryMock([
+			{connectionId: 'connection-old', lastSuccessfulSyncAt: new Date('2026-01-03T00:00:00.000Z')},
+		]);
 		const service = createBankingService({
 			bankConnectionRepository,
 			bankAccountRepository,
 			bankAccountBalanceRepository,
+			dataSource: runHistory.dataSource,
 		});
 
 		const result = await service.findAll(OWNER);
@@ -494,7 +531,18 @@ describe('BankingService findAll', () => {
 			['balance.id', 'DESC'],
 		]);
 
+		expect(runHistory.dataSource.getRepository).toHaveBeenCalledTimes(1);
+		expect(runHistory.queryBuilder.where).toHaveBeenCalledWith('run.bankConnectionId IN (:...connectionIds)', {
+			connectionIds: ['connection-new', 'connection-old', 'connection-empty'],
+		});
+
 		expect(result.map(({id}) => id)).toEqual(['connection-new', 'connection-old', 'connection-empty']);
+		expect(result.map(({lastSuccessfulSyncAt}) => lastSuccessfulSyncAt)).toEqual([
+			null,
+			'2026-01-03T00:00:00.000Z',
+			null,
+		]);
+		expect(result[0].createdAt).toBe('2026-01-01T00:00:00.000Z');
 		expect(result.map(({bankAccounts: accounts}) => accounts.map(({id}) => id))).toEqual([
 			['account-new-1'],
 			['account-old-1', 'account-old-2'],
@@ -530,11 +578,14 @@ describe('BankingService findAll', () => {
 		const service = createBankingService({
 			bankConnectionRepository: {
 				createQueryBuilder: jest.fn(() =>
-					createQueryBuilderMock([{id: 'connection-id', aspspName: 'Example Bank', aspspCountry: 'XX'}]),
+					createQueryBuilderMock([
+						{id: 'connection-id', aspspName: 'Example Bank', aspspCountry: 'XX', createdAt: CREATED_AT},
+					]),
 				),
 			},
 			bankAccountRepository: {createQueryBuilder: jest.fn(() => createQueryBuilderMock([]))},
 			bankAccountBalanceRepository,
+			dataSource: createRunHistoryMock([]).dataSource,
 		});
 
 		const result = await service.findAll(OWNER);

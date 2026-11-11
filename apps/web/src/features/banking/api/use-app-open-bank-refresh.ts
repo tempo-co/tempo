@@ -6,7 +6,11 @@ import {CURRENT_ACCOUNT_KEY, PAGE_LOADED_AT} from '@/hooks/use-current-account';
 import {getSessionSignal} from '@/utils/api';
 import {isAccountQuery} from '@/utils/offline-storage';
 
-import {isReauthorizationRequired, isSyncInProgress} from '../utils/bank-sync-status';
+import {
+  isInRateLimitCooldown,
+  isReauthorizationRequired,
+  isSyncInProgress,
+} from '../utils/bank-sync-status';
 import {invalidateBankDerivedData} from './invalidate-bank-derived-data';
 import {DELETE_BANK_CONNECTION_KEY} from './use-delete-bank-connection';
 import {bankConnectionsQueryOptions, hasSyncAdvanced} from './use-get-all-bank-connections';
@@ -79,7 +83,8 @@ export function useAppOpenBankRefresh() {
             !connection ||
             connection.status !== 'AUTHORIZED' ||
             isReauthorizationRequired(connection) ||
-            isSyncInProgress(connection)
+            isSyncInProgress(connection) ||
+            isInRateLimitCooldown(connection)
           )
             continue;
           if (

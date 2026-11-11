@@ -42,16 +42,24 @@ test.describe('mocked Enable Banking bank connection', () => {
       message: 'Tempo is temporarily unavailable. Please try again.',
     },
   ]) {
-    test(`shows ${name} without automatically retrying the refresh`, async ({page}) => {
+    test(`keeps ${name} quiet without automatically retrying the refresh`, async ({page}) => {
       let requests = 0;
+      let reads = 0;
+      let readsAtRefresh = Number.POSITIVE_INFINITY;
       await page.clock.install();
-      await mockBankConnections(page, [MOCK_CONNECTION]);
+      await mockBankConnections(page, () => {
+        reads++;
+        return [MOCK_CONNECTION];
+      });
       await page.route(`**/bank-connections/${MOCK_CONNECTION.id}/refresh`, (route) => {
         requests++;
+        readsAtRefresh = reads;
         return fulfillJson(route, {message}, status);
       });
       await page.goto('/bank-connections');
-      await expect(page.getByText('Bank refresh failed', {exact: true})).toBeVisible();
+      // The settled refresh re-reads the saved connections; by then any toast would have shown.
+      await expect.poll(() => reads > readsAtRefresh).toBe(true);
+      await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
       await page.clock.runFor(60_000);
       expect(requests).toBe(1);
     });
@@ -425,28 +433,27 @@ test.describe('mocked Enable Banking bank connection', () => {
       });
       await page.goto('/bank-connections');
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await expect(
-        page.getByText(outcome === 'PARTIAL' ? 'Bank refresh incomplete' : 'Bank refresh failed', {
-          exact: true,
-        }),
-      ).toBeVisible();
-      await expect(page.locator('[data-sonner-toast]')).toContainText(
-        'Bank consent has expired. Please reconnect.',
-      );
       await expect(card.getByRole('button', {name: 'Re-authorize', exact: true})).toBeVisible();
       await expect(card.getByTestId('bank-connection-problem')).toContainText('Consent expired');
+      await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
     });
   }
 
   for (const status of ['FAILED', 'PARTIAL'] as const) {
-    test(`shows the bank rate limit for a ${status} refresh without scheduling a retry`, async ({
+    test(`keeps the bank rate limit of a ${status} refresh quiet without scheduling a retry`, async ({
       page,
     }) => {
       let requests = 0;
+      let reads = 0;
+      let readsAtRefresh = Number.POSITIVE_INFINITY;
       await page.clock.install();
-      await mockBankConnections(page, [MOCK_CONNECTION]);
+      await mockBankConnections(page, () => {
+        reads++;
+        return [MOCK_CONNECTION];
+      });
       await page.route(`**/bank-connections/${MOCK_CONNECTION.id}/refresh`, (route) => {
         requests++;
+        readsAtRefresh = reads;
         return fulfillJson(route, {
           ...REFRESH_RESULT,
           status,
@@ -457,10 +464,8 @@ test.describe('mocked Enable Banking bank connection', () => {
         });
       });
       await page.goto('/bank-connections');
-      await expect(page.getByText('Bank refresh rate-limited', {exact: true})).toBeVisible();
-      await expect(page.locator('[data-sonner-toast]')).toContainText(
-        'Example bank request limit reached. Please try again in about 2 minutes.',
-      );
+      await expect.poll(() => reads > readsAtRefresh).toBe(true);
+      await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
       await page.clock.runFor(180_000);
       expect(requests).toBe(1);
     });
@@ -635,13 +640,25 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     const second = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000095'};
     const third = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000094'};
+    // Waiting out a provider rate limit until its next sync, so a refresh would only be refused.
+    const coolingDown = {
+      ...MOCK_CONNECTION,
+      id: '00000000-0000-4000-8000-000000000090',
+      syncStatus: 'RATE_LIMITED' as const,
+      nextSyncAt: '2999-01-01T00:00:00.000Z',
+    };
     let reopened = false;
     let listReads = 0;
     const requests: string[] = [];
     await mockBankConnections(page, () => {
       listReads++;
       return reopened
-        ? [{...MOCK_CONNECTION, syncStatus: 'RUNNING'}, {...second, status: 'EXPIRED'}, third]
+        ? [
+            {...MOCK_CONNECTION, syncStatus: 'RUNNING'},
+            {...second, status: 'EXPIRED'},
+            coolingDown,
+            third,
+          ]
         : [MOCK_CONNECTION, second];
     });
     let release!: () => void;
@@ -686,9 +703,15 @@ test.describe('mocked Enable Banking bank connection', () => {
     page,
   }) => {
     let requests = 0;
-    await mockBankConnections(page, [MOCK_CONNECTION]);
+    let reads = 0;
+    let readsAtRefresh = Number.POSITIVE_INFINITY;
+    await mockBankConnections(page, () => {
+      reads++;
+      return [MOCK_CONNECTION];
+    });
     await page.route(`**/bank-connections/${MOCK_CONNECTION.id}/refresh`, (route) => {
       requests++;
+      readsAtRefresh = reads;
       return fulfillJson(
         route,
         requests === 1
@@ -703,7 +726,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    await expect(page.getByText('Bank refresh failed', {exact: true})).toBeVisible();
+    await expect.poll(() => reads > readsAtRefresh).toBe(true);
     expect(requests).toBe(1);
     await page.evaluate(() => {
       window.dispatchEvent(new Event('focus'));
@@ -746,7 +769,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
   });
 
-  test('shows a partial refresh with saved balances and the bank error', async ({page}) => {
+  test('shows the balances a partial refresh saved without a toast', async ({page}) => {
     let completed = false;
     await mockBankConnections(page, () => [
       {
@@ -769,10 +792,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
     await expect(card.getByTestId('bank-connection-total')).toContainText('2,000.00');
-    await expect(page.locator('[data-sonner-toast]')).toContainText(
-      'Example account is unavailable.',
-    );
-    await expect(page.getByText('Bank refresh incomplete', {exact: true})).toBeVisible();
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
   });
 });
 

@@ -12,6 +12,8 @@ export const MOCK_CONNECTION: BankConnection = {
   status: 'AUTHORIZED',
   consentValidUntil: '2030-01-01T00:00:00.000Z',
   lastSyncedAt: null,
+  lastSuccessfulSyncAt: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
   lastSyncError: null,
   nextSyncAt: '2030-01-01T00:00:00.000Z',
   syncStatus: 'SUCCEEDED',

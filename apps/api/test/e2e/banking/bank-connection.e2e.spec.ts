@@ -1566,6 +1566,12 @@ describe('BankConnectionController', () => {
 
 		const safeConnectionsResponse = await verifiedAgent.get('/bank-connections').expect(200);
 		const safeConnection = safeConnectionsResponse.body.find(({id}: {id: string}) => id === connection.id);
+		expect(safeConnection).toMatchObject({
+			syncStatus: 'SUCCEEDED',
+			lastSyncedAt: firstResponse.finishedAt,
+			lastSuccessfulSyncAt: firstResponse.finishedAt,
+			createdAt: connection.createdAt.toISOString(),
+		});
 		expect(safeConnection.bankAccounts[0].latestBalances).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({balanceType: 'AVAILABLE', amount: '123.45000000', isPrimary: true}),
@@ -2171,6 +2177,13 @@ describe('BankConnectionController', () => {
 		if (!successfulBankAccount) throw new Error('Expected successful bank account.');
 		expect(await bankTransactionRepository.count({where: {bankAccountId: successfulBankAccount.id}})).toBe(5);
 		expect(JSON.stringify(response)).not.toContain('provider_unreachable');
+		// A partial run counts as a sync but not as a successful one.
+		const connectionsResponse = await verifiedAgent.get('/bank-connections').expect(200);
+		expect(connectionsResponse.body.find(({id}: {id: string}) => id === connection.id)).toMatchObject({
+			syncStatus: 'PARTIAL',
+			lastSyncedAt: response?.finishedAt,
+			lastSuccessfulSyncAt: null,
+		});
 	});
 
 	it('rolls back balance and transaction persistence when a transaction cannot be stored', async () => {

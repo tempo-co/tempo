@@ -20,6 +20,12 @@ export type BankConnectionStatus = (typeof BANK_CONNECTION_STATUSES)[number];
 /** How long before consent ends the owner is told to re-authorize: an email, and a dot on Connections. */
 export const CONSENT_ENDING_SOON_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * How long a bank may go without a fully successful sync before the owner is told: an email and push, and a
+ * warning on Connections. Shorter failures retry on their own and stay quiet.
+ */
+export const SYNC_BROKEN_AFTER_MS = 24 * 60 * 60 * 1000;
+
 export const BANK_SYNC_STATUSES = [
 	'IDLE',
 	'QUEUED',
@@ -99,7 +105,11 @@ export type BankConnection = {
 	logo?: BankLogoReference;
 	status: BankConnectionStatus;
 	consentValidUntil: string | null;
+	/** The last run that fetched anything, including partial runs. */
 	lastSyncedAt: string | null;
+	/** The last run that fetched everything; null when none has. */
+	lastSuccessfulSyncAt: string | null;
+	createdAt: string;
 	lastSyncError: string | null;
 	nextSyncAt: string | null;
 	syncStatus: BankSyncStatus;
