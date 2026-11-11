@@ -772,19 +772,19 @@ describe('BankConnectionController', () => {
 				name: 'Nordea',
 				country: 'FI',
 				logoUrl: 'https://enablebanking.com/brands/FI/Nordea/',
-				logo: {metadataUrl: '/bank-connections/aspsps/logos/FI/Nordea'},
+				logo: {metadataUrl: '/bank-connections/aspsps/logos/FI/Tm9yZGVh'},
 			},
 			{
 				name: 'ABN AMRO',
 				country: 'NL',
 				logoUrl: 'https://enablebanking.com/brands/NL/ABN-AMRO/',
-				logo: {metadataUrl: '/bank-connections/aspsps/logos/NL/ABN%20AMRO'},
+				logo: {metadataUrl: '/bank-connections/aspsps/logos/NL/QUJOIEFNUk8'},
 			},
 			{
 				name: 'Revolut',
 				country: 'NL',
 				logoUrl: 'https://enablebanking.com/brands/NL/Revolut/',
-				logo: {metadataUrl: '/bank-connections/aspsps/logos/NL/Revolut'},
+				logo: {metadataUrl: '/bank-connections/aspsps/logos/NL/UmV2b2x1dA'},
 			},
 		]);
 		expect(JSON.stringify(response.body)).not.toContain('maximumConsentValiditySeconds');

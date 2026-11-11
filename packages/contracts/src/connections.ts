@@ -34,9 +34,8 @@ export type BankSyncStatus = (typeof BANK_SYNC_STATUSES)[number];
 
 /** Lazy metadata keeps catalogue reads independent of downloading every bank's artwork. */
 export type BankLogoReference = {metadataUrl: string};
-export type BankLogoVariant = {url: string; plate: boolean};
 /** `GET /bank-connections/aspsps/logos/:country/:name`. Image URLs include source hash and converter version. */
-export type BankLogo = {light: BankLogoVariant; dark: BankLogoVariant};
+export type BankLogo = {url: string};
 
 /** `GET /bank-connections/aspsps`: a bank that can be connected. */
 export type BankConnectionAspsp = {

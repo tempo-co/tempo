@@ -61,9 +61,8 @@ test.describe('bank connections', () => {
     await mockJson(page, '**/bank-connections/aspsps', [
       {name: 'ABN AMRO', country: 'NL', logoUrl: PROVIDER_LOGO_URL},
     ]);
-    await mockJson(page, '**/bank-connections/aspsps/logos/NL/ABN%20AMRO', {
-      light: {url: PROVIDER_LOGO_URL, plate: false},
-      dark: {url: `${PROVIDER_LOGO_URL}?theme=dark`, plate: false},
+    await mockJson(page, '**/bank-connections/aspsps/logos/NL/QUJOIEFNUk8', {
+      url: PROVIDER_LOGO_URL,
     });
     await page.route(`${PROVIDER_LOGO_URL}*`, (route) =>
       route.fulfill({
@@ -103,9 +102,13 @@ test.describe('bank connections', () => {
     await expect(bankLogo.locator('img:visible')).toHaveAttribute('src', PROVIDER_LOGO_URL);
     await expect(bankLogo).toHaveCSS('width', '36px');
     await expect(bankLogo).toHaveCSS('height', '36px');
-    await expect(bankLogo.locator('[data-logo-theme=light]')).toHaveAttribute('data-logo-plate', 'false');
-    await page.evaluate(() => document.documentElement.classList.add('dark'));
-    await expect(bankLogo.locator('img:visible')).toHaveAttribute('src', `${PROVIDER_LOGO_URL}?theme=dark`);
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => document.documentElement.classList.toggle('dark', value === 'dark'), theme);
+      await expect(bankLogo.locator('img')).toHaveAttribute('src', PROVIDER_LOGO_URL);
+      await expect(bankLogo).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)');
+      await expect(bankLogo).toHaveCSS('border-top-width', '1px');
+      await expect(bankLogo).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
+    }
 
     const accountRow = connectionCard.getByRole('link', {name: 'Daily spending transactions'});
     await expect(accountRow).toContainText('Daily spending');
@@ -692,10 +695,9 @@ test.describe('mocked Enable Banking bank connection', () => {
       await page.addInitScript((value) => localStorage.setItem('vite-ui-theme', value), theme);
       const logo = {metadataUrl: '/bank-connections/aspsps/logos/NL/mock'};
       await mockJson(page, '**/bank-connections/aspsps/logos/NL/mock', {
-        light: {url: '/example-neutral-light.svg', plate: false},
-        dark: {url: '/example-neutral-dark.svg', plate: false},
+        url: '/example-neutral.svg',
       });
-      await page.route('**/example-neutral-*.svg', (route) => route.fulfill({status: 200, contentType: 'image/svg+xml', body: `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="40"><rect width="160" height="40" fill="${route.request().url().includes('dark') ? '#f6f6f6' : '#000000'}"/></svg>`}));
+      await page.route('**/example-neutral.svg', (route) => route.fulfill({status: 200, contentType: 'image/svg+xml', body: `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="40"><rect width="160" height="40" fill="#000000"/></svg>`}));
       let connectionPersisted = false;
       let connectionDeleted = false;
       let refreshed = false;
@@ -851,8 +853,12 @@ test.describe('mocked Enable Banking bank connection', () => {
       const connectionCard = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
       await expect(connectionCard).toBeVisible();
       await expect(connectionCard.getByRole('heading', {name: TARGET_ASPSP.name})).toBeVisible();
-      const themedImage = connectionCard.getByTestId('bank-connection-logo').locator('img:visible');
-      await expect(themedImage).toHaveAttribute('src', new RegExp(`example-neutral-${theme}\\.svg$`));
+      const bankPlate = connectionCard.getByTestId('bank-connection-logo');
+      await expect(bankPlate).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)');
+      await expect(bankPlate).toHaveCSS('border-top-width', '1px');
+      await expect(bankPlate).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
+      const themedImage = bankPlate.locator('img:visible');
+      await expect(themedImage).toHaveAttribute('src', /example-neutral\.svg$/);
       await expect(themedImage).toHaveJSProperty('naturalWidth', 160);
       await expect(connectionCard.getByText('2 accounts', {exact: true})).toBeVisible();
       await expect(
@@ -997,8 +1003,8 @@ test.describe('mocked Enable Banking bank connection', () => {
         await page.setViewportSize({width, height: 900});
         await page.addInitScript((value) => localStorage.setItem('vite-ui-theme', value), theme);
         const metadataUrl = '/bank-connections/aspsps/logos/XX/layout';
-        await mockJson(page, '**/bank-connections/aspsps/logos/XX/layout', {light: {url: '/layout-bank.svg', plate: false}, dark: {url: '/layout-bank.svg', plate: true}});
-        await mockJson(page, '**/bank-connections/aspsps/logos/XX/failing', {light: {url: '/failing-bank.svg', plate: false}, dark: {url: '/failing-bank.svg', plate: true}});
+        await mockJson(page, '**/bank-connections/aspsps/logos/XX/layout', {url: '/layout-bank.svg'});
+        await mockJson(page, '**/bank-connections/aspsps/logos/XX/failing', {url: '/failing-bank.svg'});
         await page.route('**/layout-bank.svg', (route) => route.fulfill({status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="40"><rect width="160" height="40" fill="#00145a"/></svg>'}));
         await page.route('**/failing-bank.svg', (route) => route.fulfill({status: 404, body: ''}));
         await mockBankRefresh(page);
@@ -1074,6 +1080,11 @@ test.describe('mocked Enable Banking bank connection', () => {
         const image = page.getByTestId('bank-connection-logo').first().locator('img:visible');
         await expect(image).toHaveJSProperty('naturalWidth', 160);
         await expect(page.getByTestId('bank-connection-logo').nth(1)).toContainText('J');
+        for (const slot of await page.getByTestId('bank-connection-logo').all()) {
+          await expect(slot).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)');
+          await expect(slot).toHaveCSS('border-top-width', '1px');
+          await expect(slot).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
+        }
         await page.screenshot({path: testInfo.outputPath(`bank-logo-layout-${width}-${theme}.png`), fullPage: true});
       });
     }

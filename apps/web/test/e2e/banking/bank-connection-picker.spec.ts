@@ -107,18 +107,9 @@ async function mockPickerPage(
   await mockBankConnections(page, connections);
   await mockJson(page, '**/bank-connections/*/refresh', {});
   await mockJson(page, '**/bank-connections/aspsps', banks);
-  await mockJson(page, '**/bank-connections/aspsps/logos/*/region-*', {
-    light: {url: '/example-bank-light.svg', plate: false},
-    dark: {url: '/example-bank-light.svg', plate: true},
-  });
-  await mockJson(page, '**/bank-connections/aspsps/logos/DE/broken', {
-    light: {url: BROKEN_LOGO_URL, plate: false},
-    dark: {url: BROKEN_LOGO_URL, plate: true},
-  });
-  await mockJson(page, '**/bank-connections/aspsps/logos/NL/example', {
-    light: {url: '/example-bank-light.svg', plate: false},
-    dark: {url: '/example-bank-light.svg', plate: true},
-  });
+  await mockJson(page, '**/bank-connections/aspsps/logos/*/region-*', {url: '/example-bank-light.svg'});
+  await mockJson(page, '**/bank-connections/aspsps/logos/DE/broken', {url: BROKEN_LOGO_URL});
+  await mockJson(page, '**/bank-connections/aspsps/logos/NL/example', {url: '/example-bank-light.svg'});
   await page.route('**/example-bank-light.svg', (route) =>
     route.fulfill({status: 200, contentType: 'image/svg+xml', body: NARROW_LOGO}),
   );
@@ -185,7 +176,7 @@ async function expectCenteredLogo(slot: Locator) {
 }
 
 test.describe('Connect a bank', () => {
-  for (const width of [1440, 390]) {
+  for (const width of [1440, 390, 320]) {
     test(`connects a bank: the likely country, search, another country, confirmation, then the bank at ${width}px`, async ({
       page,
     }) => {
@@ -221,7 +212,10 @@ test.describe('Connect a bank', () => {
       expect(spinner.x).toBeGreaterThan(loadingText.x + loadingText.width);
       expect(
         Math.abs(spinner.y + spinner.height / 2 - (loadingText.y + loadingText.height / 2)),
-      ).toBeLessThan(2);
+      ).toBeLessThanOrEqual(1);
+      const loadingBox = await boxOf(loading);
+      const pickerBox = await boxOf(picker);
+      expect(Math.abs(loadingBox.x + loadingBox.width / 2 - (pickerBox.x + pickerBox.width / 2))).toBeLessThanOrEqual(1);
       const height = await sheetHeight(picker);
 
       releaseBanks();
@@ -247,17 +241,15 @@ test.describe('Connect a bank', () => {
         'src',
         /example-bank-light.svg$/,
       );
-      await expect(exampleLogo.locator('[data-logo-theme="light"]')).toHaveAttribute(
-        'data-logo-plate',
-        'false',
-      );
-      await page.evaluate(() => document.documentElement.classList.add('dark'));
-      await expect(exampleLogo.locator('[data-logo-theme="dark"]')).toBeVisible();
-      await expect(exampleLogo.locator('[data-logo-theme="dark"]')).toHaveAttribute(
-        'data-logo-plate',
-        'true',
-      );
-      await expectCenteredLogo(exampleLogo);
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate((value) => document.documentElement.classList.toggle('dark', value === 'dark'), theme);
+        for (const slot of await picker.getByTestId('bank-wordmark').all()) {
+          await expect(slot).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)');
+          await expect(slot).toHaveCSS('border-top-width', '1px');
+          await expect(slot).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
+        }
+        await expectCenteredLogo(exampleLogo);
+      }
       await page.evaluate(() => document.documentElement.classList.remove('dark'));
 
       // Only visible rows acquire artwork; scrolling reveals and loads more.
@@ -311,7 +303,15 @@ test.describe('Connect a bank', () => {
         width: 192,
         height: 56,
       });
-      await expectCenteredLogo(picker.getByTestId('bank-wordmark'));
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate((value) => document.documentElement.classList.toggle('dark', value === 'dark'), theme);
+        const slot = picker.getByTestId('bank-wordmark');
+        await expect(slot).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)');
+        await expect(slot).toHaveCSS('border-top-width', '1px');
+        await expect(slot).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
+        await expectCenteredLogo(slot);
+      }
+      await page.evaluate(() => document.documentElement.classList.remove('dark'));
       await expect(picker.getByText('Finland', {exact: true})).toBeVisible();
       await expect(
         picker.getByText('You approve access at Esimerkki Pankki, then come back here.'),

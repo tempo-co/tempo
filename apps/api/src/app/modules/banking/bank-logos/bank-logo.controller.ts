@@ -16,22 +16,26 @@ export class BankLogoController {
 		@Param('name') name: string,
 		@Res({passthrough: true}) response: Response,
 	): Promise<BankLogo> {
-		const logo = await this.logos.getMetadata(country, name);
+		const logo = await this.logos.getMetadata(country, Buffer.from(name, 'base64url').toString('utf8'));
 		response.set('Cache-Control', 'private, max-age=86400');
 		return logo;
 	}
 
-	@Get(':country/:name/:algorithm/:hash/:theme')
+	@Get(':country/:name/:algorithm/:hash')
 	@Throttle({default: {limit: 1200, ttl: minutes(1)}})
 	async image(
 		@Param('country') country: string,
 		@Param('name') name: string,
 		@Param('algorithm') algorithm: string,
 		@Param('hash') hash: string,
-		@Param('theme') theme: string,
 		@Res({passthrough: true}) response: Response,
 	): Promise<StreamableFile> {
-		const image = await this.logos.getImage(country, name, algorithm, hash, theme);
+		const image = await this.logos.getImage(
+			country,
+			Buffer.from(name, 'base64url').toString('utf8'),
+			algorithm,
+			hash,
+		);
 		response.set({
 			'Cache-Control': 'private, max-age=31536000, immutable',
 			'Cross-Origin-Resource-Policy': 'same-site',

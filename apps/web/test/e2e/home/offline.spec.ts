@@ -63,8 +63,7 @@ async function mockHome(page: Page, padding = 0) {
     {name: 'Other Bank', country: 'FI', logoUrl: LOGO_URL},
   ]);
   await mockJson(page, '**/bank-connections/aspsps/logos/NL/Example%20Bank', {
-    light: {url: LOGO_URL, plate: false},
-    dark: {url: LOGO_URL, plate: true},
+    url: LOGO_URL,
   });
   await mockHomeHistory(page);
   await page.route('**/bank-transactions/review-counts', (route) =>

@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import type {BankConnectionAspsp, BankLogoVariant, BankLogo as ThemedLogo} from '@tempo/contracts';
+import type {BankConnectionAspsp, BankLogo as LogoMetadata} from '@tempo/contracts';
 import {Building2} from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 
@@ -14,7 +14,7 @@ type BankLogoProps = {
   testId?: string;
 };
 
-/** BankLogo and the picker's wide wordmark share the API's original-colour variants and plate decisions. */
+/** Original-colour artwork on one uniform bordered plate, shared with the picker's wide wordmark. */
 export function BankLogo({bank, className, imageClassName, testId = 'bank-logo'}: BankLogoProps) {
   const metadataUrl = bank.logo?.metadataUrl;
   const slot = useRef<HTMLSpanElement>(null);
@@ -32,81 +32,27 @@ export function BankLogo({bank, className, imageClassName, testId = 'bank-logo'}
   }, [metadataUrl, visible]);
   const {data: logo} = useQuery({
     queryKey: ['bank-logo', metadataUrl],
-    queryFn: () => api.get<ThemedLogo>(metadataUrl!),
+    queryFn: () => api.get<LogoMetadata>(metadataUrl!),
     enabled: !!metadataUrl && visible,
     staleTime: 24 * 60 * 60_000,
     retry: false,
   });
 
+  const [failed, setFailed] = useState<string>();
+  const src = logo?.url ?? (!metadataUrl ? bank.logoUrl : undefined);
+  // Current API URLs are relative to its base, including the production /api proxy path.
+  const url = src && (src.startsWith('/') ? `${import.meta.env.VITE_API_URL}${src}` : src);
   return (
     <span
       ref={slot}
       className={cn(
-        'flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md text-sm font-semibold',
+        'flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-bank-logo-edge bg-bank-logo-plate text-sm font-semibold text-bank-logo-ink',
         className,
       )}
       aria-hidden='true'
       data-testid={testId}
     >
-      {logo ? (
-        <>
-          <Artwork
-            name={bank.name}
-            variant={logo.light}
-            theme='light'
-            className='flex dark:hidden'
-            imageClassName={imageClassName}
-          />
-          <Artwork
-            name={bank.name}
-            variant={logo.dark}
-            theme='dark'
-            className='hidden dark:flex'
-            imageClassName={imageClassName}
-          />
-        </>
-      ) : (
-        <Artwork
-          name={bank.name}
-          variant={!metadataUrl && bank.logoUrl ? {url: bank.logoUrl, plate: false} : undefined}
-          className='flex'
-          imageClassName={imageClassName}
-        />
-      )}
-    </span>
-  );
-}
-
-function Artwork({
-  name,
-  variant,
-  theme,
-  className,
-  imageClassName,
-}: {
-  name: string;
-  variant?: BankLogoVariant;
-  theme?: 'light' | 'dark';
-  className: string;
-  imageClassName?: string;
-}) {
-  const [failed, setFailed] = useState<string>();
-  const src = variant?.url && variant.url !== failed ? variant.url : undefined;
-  // Current API URLs are relative to its base, including the production /api proxy path.
-  const url = src && (src.startsWith('/') ? `${import.meta.env.VITE_API_URL}${src}` : src);
-  return (
-    <span
-      className={cn(
-        'h-full w-full items-center justify-center overflow-hidden rounded-[inherit]',
-        className,
-        !src &&
-          'border border-transaction-tile-edge bg-transaction-tile-field text-transaction-tile-ink',
-        src && variant?.plate && 'border border-transaction-tile-edge bg-bank-logo-plate',
-      )}
-      data-logo-theme={theme}
-      data-logo-plate={!!src && !!variant?.plate}
-    >
-      {url ? (
+      {url && src !== failed ? (
         <img
           key={url}
           src={url}
@@ -116,8 +62,8 @@ function Artwork({
           referrerPolicy='no-referrer'
           onError={() => setFailed(src)}
         />
-      ) : name ? (
-        <span>{initials(name)}</span>
+      ) : bank.name ? (
+        <span>{initials(bank.name)}</span>
       ) : (
         <Building2 className='h-4 w-4' />
       )}

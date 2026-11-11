@@ -9,24 +9,18 @@ import {REDIS} from '@core/redis/redis.constants';
 import {LogoCache} from '../logo-cache';
 import {MerchantSiteFetcher} from '../merchant-logos/merchant-site-fetcher';
 import {EnableBankingClient} from '../services/enable-banking.client';
-import {BANK_LOGO_VERSION, LogoTheme, convertBankLogo} from './bank-logo';
+import {BANK_LOGO_VERSION, convertBankLogo} from './bank-logo';
 import {bankLogoReference} from './bank-logo-reference';
 
 const DAY = 86400;
 const PREFIX = `bank-logo:${BANK_LOGO_VERSION}:`;
-type StoredLogo = {
-	light: string;
-	dark: string;
-	plates: Record<LogoTheme, boolean>;
-	displayVariants: Record<LogoTheme, LogoTheme>;
-};
 const missing = () => new NotFoundException('Bank logo not found.');
 
 @Injectable()
 export class BankLogoService {
 	private readonly cache: LogoCache;
 	private readonly fetcher = new MerchantSiteFetcher();
-	private readonly inFlight = new Map<string, Promise<{hash: string; logo: StoredLogo}>>();
+	private readonly inFlight = new Map<string, Promise<string>>();
 	private readonly catalogues = new Map<string, Promise<void>>();
 	private active = 0;
 	private readonly waiting: (() => void)[] = [];
@@ -74,29 +68,23 @@ export class BankLogoService {
 			const entries = JSON.parse(catalogue ?? '[]') as [string, string][];
 			const source = entries.find(([bank]) => bank === name)?.[1];
 			if (!source) throw missing();
-			const {hash, logo} = await this.getSource(source);
-			const variant = (theme: LogoTheme) => ({
-				url: `${bankLogoReference(name, country).metadataUrl}/${BANK_LOGO_VERSION}/${hash}/${logo.displayVariants[theme]}`,
-				plate: logo.plates[theme],
-			});
-			return {light: variant('light'), dark: variant('dark')};
+			const hash = await this.getSource(source);
+			return {url: `${bankLogoReference(name, country).metadataUrl}/${BANK_LOGO_VERSION}/${hash}`};
 		} catch {
 			throw missing();
 		}
 	}
 
-	async getImage(country: string, name: string, algorithm: string, hash: string, theme: string): Promise<Buffer> {
-		if (algorithm !== BANK_LOGO_VERSION || !/^[0-9a-f]{64}$/.test(hash) || (theme !== 'light' && theme !== 'dark'))
-			throw missing();
-		let bytes = await this.redis.get(PREFIX + hash);
+	async getImage(country: string, name: string, algorithm: string, hash: string): Promise<Buffer> {
+		if (algorithm !== BANK_LOGO_VERSION || !/^[0-9a-f]{64}$/.test(hash)) throw missing();
+		let bytes = await this.redis.getBuffer(PREFIX + hash);
 		if (!bytes) {
 			const metadata = await this.getMetadata(country, name);
-			if (!metadata.light.url.includes(`/${hash}/`)) throw missing();
-			bytes = await this.redis.get(PREFIX + hash);
+			if (!metadata.url.endsWith(`/${hash}`)) throw missing();
+			bytes = await this.redis.getBuffer(PREFIX + hash);
 		}
 		if (!bytes) throw missing();
-		const logo = JSON.parse(bytes) as StoredLogo;
-		return Buffer.from(logo[theme], 'base64');
+		return bytes;
 	}
 
 	private async getSource(source: string) {
@@ -111,29 +99,20 @@ export class BankLogoService {
 		}
 	}
 
-	private async loadSource(source: string): Promise<{hash: string; logo: StoredLogo}> {
+	private async loadSource(source: string): Promise<string> {
 		const sourceKey = `bank-logo:source:${createHash('sha256').update(source).digest('hex')}`;
 		const previous = await this.redis.get(sourceKey);
-		const cached = previous && (await this.redis.get(PREFIX + previous));
-		if (cached) return {hash: previous, logo: JSON.parse(cached) as StoredLogo};
+		const cached = previous && (await this.redis.getBuffer(PREFIX + previous));
+		if (cached) return previous;
 		// Bound fetches and image decoding when a picker mounts many banks at once.
 		if (this.active >= 4) await new Promise<void>((resolve) => this.waiting.push(resolve));
 		this.active++;
 		try {
 			const {bytes} = await this.fetcher.fetch(source, {accept: 'image/*', maxBytes: 1024 * 1024});
 			const hash = createHash('sha256').update(bytes).digest('hex');
-			const stored = await this.cache.getOrCreate(PREFIX, hash, async () => {
-				const converted = await convertBankLogo(bytes);
-				return Buffer.from(
-					JSON.stringify({
-						...converted,
-						light: converted.light.toString('base64'),
-						dark: converted.dark.toString('base64'),
-					}),
-				);
-			});
+			await this.cache.getOrCreate(PREFIX, hash, () => convertBankLogo(bytes));
 			await this.redis.set(sourceKey, hash, 'EX', DAY);
-			return {hash, logo: JSON.parse(stored.toString()) as StoredLogo};
+			return hash;
 		} finally {
 			this.active--;
 			this.waiting.shift()?.();

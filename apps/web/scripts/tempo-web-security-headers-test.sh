@@ -137,8 +137,12 @@ done
 docker run --detach --name "$mcp_upstream" \
     --network "container:$container" \
     --volume "$repo_root/scripts/mcp-proxy-server.mjs:/server.mjs:ro" \
+    --volume "$repo_root/../api/src/app/modules/banking/bank-logos/bank-logo-reference.ts:/bank-logo-reference.ts:ro" \
     node:26-alpine node /server.mjs >/dev/null
 python3 - "$port" <<'PY'
+import json
+import re
+from urllib.parse import quote
 import time
 import urllib.error
 import urllib.request
@@ -178,6 +182,18 @@ except urllib.error.HTTPError as error:
 else:
     raise AssertionError('MCP requests larger than 100 KiB must be refused')
 print('tempo MCP proxy streaming and request limit: PASS')
+
+# Use the API's real URL builder, then verify Nginx preserves each name as one segment.
+base = url.removesuffix('/mcp')
+for name in ('Example Bank', 'Example Bank A/S', 'Example Bank & Épargne', 'Example Bank / ?#%'):
+    with urllib.request.urlopen(base + '/bank-logo-reference?name=' + quote(name, safe=''), timeout=5) as response:
+        metadata = json.load(response)['metadataUrl']
+    for path in (metadata, metadata + '/colour-v2/' + 'a' * 64):
+        with urllib.request.urlopen(base + path, timeout=5) as response:
+            forwarded = json.load(response)['path']
+        assert forwarded == path, f'proxy changed logo path for {name!r}: {forwarded!r}'
+        assert re.fullmatch(r'/bank-connections/aspsps/logos/XX/[^/]+(?:/colour-v2/[a-f0-9]{64})?', forwarded), forwarded
+print('tempo bank logo proxy paths: PASS')
 PY
 
 # Waits for Nginx to log the request whose query is $1 and checks the client address it logged.
