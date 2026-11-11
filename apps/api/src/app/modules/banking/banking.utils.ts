@@ -90,6 +90,17 @@ export function addDays(date: string, days: number): string {
 	return value.toISOString().slice(0, 10);
 }
 
+export function toDateOnly(value: Date | string | undefined): string | null {
+	if (!value) return null;
+	if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+		const date = new Date(`${value}T00:00:00.000Z`);
+		return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : null;
+	}
+
+	const date = value instanceof Date ? value : new Date(value);
+	return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+}
+
 const HOSTNAME_PATTERN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
 /** A lowercase DNS hostname ending in a letters-only label: no IP literal, port or trailing dot. */

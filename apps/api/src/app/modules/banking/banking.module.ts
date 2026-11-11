@@ -40,6 +40,7 @@ import {BankTransactionAmountConversionProcessor} from './services/bank-transact
 import {BankTransactionAmountConversionQueueService} from './services/bank-transaction-amount-conversion.queue.service';
 import {BankTransactionAmountConversionService} from './services/bank-transaction-amount-conversion.service';
 import {BankTransactionHistoryService} from './services/bank-transaction-history.service';
+import {BankTransactionPersistenceService} from './services/bank-transaction-persistence.service';
 import {BankTransactionSummaryService} from './services/bank-transaction-summary.service';
 import {BankTransactionService} from './services/bank-transaction.service';
 import {BankingAuthorizationStateModule} from './services/banking-authorization-state.module';
@@ -85,6 +86,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankLogoService,
 		McpReaderService,
 		BankingConnectionLockService,
+		BankTransactionPersistenceService,
 		BankingSyncService,
 		BankingSyncQueueService,
 		BankingSyncProcessor,
