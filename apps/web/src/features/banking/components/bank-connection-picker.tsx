@@ -135,7 +135,7 @@ export function BankConnectionPicker({
               </Button>
             </div>
           ) : isPending ? (
-            <div role='status' className='m-auto text-sm text-muted-foreground'>
+            <div role='status' className='m-auto flex items-center text-sm text-muted-foreground'>
               <PendingLabel>Loading banks…</PendingLabel>
             </div>
           ) : !country ? (

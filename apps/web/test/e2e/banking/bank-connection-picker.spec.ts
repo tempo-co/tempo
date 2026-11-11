@@ -154,7 +154,15 @@ test.describe('Connect a bank', () => {
     await page.getByTestId('connect-bank-button').click();
     const picker = page.getByTestId('bank-connection-picker');
     await expect(picker.getByRole('heading', {name: 'Connect a bank'})).toBeVisible();
-    await expect(picker.getByRole('status')).toHaveText('Loading banks…');
+    const loading = picker.getByRole('status');
+    await expect(loading).toHaveText('Loading banks…');
+    // The spinner sits on the same line as its text.
+    const loadingText = await boxOf(loading.getByText('Loading banks…'));
+    const spinner = await boxOf(loading.locator('svg'));
+    expect(spinner.x).toBeGreaterThan(loadingText.x + loadingText.width);
+    expect(
+      Math.abs(spinner.y + spinner.height / 2 - (loadingText.y + loadingText.height / 2)),
+    ).toBeLessThan(2);
     const height = await sheetHeight(picker);
 
     releaseBanks();
