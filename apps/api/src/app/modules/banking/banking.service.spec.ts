@@ -578,7 +578,9 @@ describe('BankingService findAll', () => {
 		const service = createBankingService({
 			bankConnectionRepository: {
 				createQueryBuilder: jest.fn(() =>
-					createQueryBuilderMock([{id: 'connection-id', createdAt: CREATED_AT}]),
+					createQueryBuilderMock([
+						{id: 'connection-id', aspspName: 'Example Bank', aspspCountry: 'XX', createdAt: CREATED_AT},
+					]),
 				),
 			},
 			bankAccountRepository: {createQueryBuilder: jest.fn(() => createQueryBuilderMock([]))},

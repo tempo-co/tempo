@@ -22,15 +22,28 @@ const wordmark = (text: string) =>
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 100"><text x="0" y="76" font-family="Arial" font-size="80" font-weight="700" fill="#1d3b8f">${text}</text></svg>`,
   )}`;
 
+const NARROW_LOGO =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="100"><rect width="40" height="100" fill="#00145a"/></svg>';
+
 const BANKS: BankConnectionAspsp[] = [
-  {name: 'Example Bank', country: 'NL', logoUrl: wordmark('EXAMPLE')},
+  {
+    name: 'Example Bank',
+    country: 'NL',
+    logoUrl: wordmark('EXAMPLE'),
+    logo: {metadataUrl: '/bank-connections/aspsps/logos/NL/example'},
+  },
   {name: 'Example Savings Bank', country: 'NL', logoUrl: wordmark('SAVINGS')},
   {name: 'Örnsköld Example Bank', country: 'NL'},
   ...Array.from({length: 12}, (_, index) => ({
     name: `Example Regional Bank ${index + 1}`,
     country: 'NL',
+    logo: {metadataUrl: `/bank-connections/aspsps/logos/NL/region-${index}`},
   })),
-  {name: 'Esimerkki Pankki', country: 'FI', logoUrl: wordmark('ESIMERKKI')},
+  {
+    name: 'Esimerkki Pankki',
+    country: 'FI',
+    logoUrl: `data:image/svg+xml,${encodeURIComponent(NARROW_LOGO)}`,
+  },
   {name: 'Demo Pankki', country: 'FI'},
   {name: 'Beispielbank', country: 'DE'},
   {name: 'Musterbank', country: 'AT'},
@@ -46,15 +59,26 @@ const WORST_CASE_BANKS: BankConnectionAspsp[] = [
   {name: LONG_NAME, country: 'DE'},
   {name: UNBROKEN_NAME, country: 'DE', logoUrl: wordmark('VOLKSBANKBEISPIEL')},
   {name: 'Q', country: 'DE'},
-  {name: 'Broken Logo Example Bank', country: 'DE', logoUrl: BROKEN_LOGO_URL},
+  {
+    name: 'Broken Logo Example Bank',
+    country: 'DE',
+    logoUrl: BROKEN_LOGO_URL,
+    logo: {metadataUrl: '/bank-connections/aspsps/logos/DE/broken'},
+  },
   ...Array.from({length: 246}, (_, index) => ({
     name: `Example Regional Bank ${String(index + 1).padStart(3, '0')}`,
     country: 'DE',
+    logo: {metadataUrl: `/bank-connections/aspsps/logos/DE/region-${index}`},
   })),
   {name: 'Shembull Bank', country: 'XK'},
   {name: 'Beispiel Kantonalbank', country: 'CH'},
   {name: 'Example Pacific Bank', country: 'QO'},
-  {name: 'Example Bank', country: 'NL', logoUrl: wordmark('EXAMPLE')},
+  {
+    name: 'Example Bank',
+    country: 'NL',
+    logoUrl: wordmark('EXAMPLE'),
+    logo: {metadataUrl: '/bank-connections/aspsps/logos/NL/example'},
+  },
 ];
 
 const connectionIn = (country: string, index: number): BankConnection => ({
@@ -83,6 +107,12 @@ async function mockPickerPage(
   await mockBankConnections(page, connections);
   await mockJson(page, '**/bank-connections/*/refresh', {});
   await mockJson(page, '**/bank-connections/aspsps', banks);
+  await mockJson(page, '**/bank-connections/aspsps/logos/*/region-*', {url: '/example-bank-light.svg'});
+  await mockJson(page, '**/bank-connections/aspsps/logos/DE/broken', {url: BROKEN_LOGO_URL});
+  await mockJson(page, '**/bank-connections/aspsps/logos/NL/example', {url: '/example-bank-light.svg'});
+  await page.route('**/example-bank-light.svg', (route) =>
+    route.fulfill({status: 200, contentType: 'image/svg+xml', body: NARROW_LOGO}),
+  );
   const authorizations: unknown[] = [];
   await page.route('**/bank-connections/authorize', async (route) => {
     authorizations.push(route.request().postDataJSON());
@@ -131,113 +161,175 @@ async function expectFlag(scope: Locator) {
 
 const sheetHeight = async (picker: Locator) => Math.round((await boxOf(picker)).height);
 
+async function expectCenteredLogo(slot: Locator) {
+  const image = slot.locator('img:visible');
+  await expect(image).toHaveJSProperty('complete', true);
+  await expect(image).toHaveJSProperty('naturalWidth', 40);
+  const [frame, ink] = await Promise.all([boxOf(slot), boxOf(image)]);
+  expect(ink.width).toBeLessThan(frame.width / 2);
+  expect(
+    Math.abs(ink.x - frame.x - (frame.x + frame.width - ink.x - ink.width)),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(ink.y - frame.y - (frame.y + frame.height - ink.y - ink.height)),
+  ).toBeLessThanOrEqual(1);
+}
+
 test.describe('Connect a bank', () => {
-  test('connects a bank: the likely country, search, another country, confirmation, then the bank', async ({
-    page,
-  }) => {
-    await page.setViewportSize({width: 1440, height: 900});
-    const authorizations = await mockPickerPage(page);
-    let releaseBanks!: () => void;
-    const banksHeld = new Promise<void>((resolve) => (releaseBanks = resolve));
-    await page.route('**/bank-connections/aspsps', async (route) => {
-      await banksHeld;
-      await route.fallback();
+  for (const width of [1440, 390, 320]) {
+    test(`connects a bank: the likely country, search, another country, confirmation, then the bank at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({width, height: 900});
+      const authorizations = await mockPickerPage(page);
+      const metadataRequests: string[] = [];
+      await page.route('**/bank-connections/aspsps/logos/NL/region-*', async (route) => {
+        metadataRequests.push(route.request().url());
+        await route.fallback();
+      });
+      let releaseBanks!: () => void;
+      const banksHeld = new Promise<void>((resolve) => (releaseBanks = resolve));
+      await page.route('**/bank-connections/aspsps', async (route) => {
+        await banksHeld;
+        await route.fallback();
+      });
+      let releaseAuthorization!: () => void;
+      const authorizationHeld = new Promise<void>((resolve) => (releaseAuthorization = resolve));
+      await page.route('**/bank-connections/authorize', async (route) => {
+        await authorizationHeld;
+        await route.fallback();
+      });
+
+      await page.goto('/bank-connections');
+      await page.getByTestId('connect-bank-button').click();
+      const picker = page.getByTestId('bank-connection-picker');
+      await expect(picker.getByRole('heading', {name: 'Connect a bank'})).toBeVisible();
+      const loading = picker.getByRole('status');
+      await expect(loading).toHaveText('Loading banks…');
+      // The spinner sits on the same line as its text.
+      const loadingText = await boxOf(loading.getByText('Loading banks…'));
+      const spinner = await boxOf(loading.locator('svg'));
+      expect(spinner.x).toBeGreaterThan(loadingText.x + loadingText.width);
+      expect(
+        Math.abs(spinner.y + spinner.height / 2 - (loadingText.y + loadingText.height / 2)),
+      ).toBeLessThanOrEqual(1);
+      const loadingBox = await boxOf(loading);
+      const pickerBox = await boxOf(picker);
+      expect(Math.abs(loadingBox.x + loadingBox.width / 2 - (pickerBox.x + pickerBox.width / 2))).toBeLessThanOrEqual(1);
+      const height = await sheetHeight(picker);
+
+      releaseBanks();
+      // The country of the connected bank comes first.
+      const country = picker.getByTestId('bank-connection-country');
+      await expect(country).toHaveText('NetherlandsChange');
+      await expectFlag(country);
+      expect(await sheetHeight(picker)).toBe(height);
+      await expectNothingFocused(picker);
+      const search = picker.getByRole('searchbox', {name: 'Search banks in Netherlands'});
+      await expect(search).toHaveAttribute('placeholder', 'Search 15 banks');
+      await expectListRows(picker);
+      await expect(picker.getByTestId('bank-wordmark').first()).toBeVisible();
+      expect(await boxOf(picker.getByTestId('bank-wordmark').first())).toMatchObject({
+        width: 112,
+        height: 36,
+      });
+
+      const exampleLogo = picker
+        .getByRole('button', {name: 'Example Bank', exact: true})
+        .getByTestId('bank-wordmark');
+      await expect(exampleLogo.locator('img:visible')).toHaveAttribute(
+        'src',
+        /example-bank-light.svg$/,
+      );
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate((value) => document.documentElement.classList.toggle('dark', value === 'dark'), theme);
+        for (const slot of await picker.getByTestId('bank-wordmark').all()) {
+          await expect(slot).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)');
+          await expect(slot).toHaveCSS('border-top-width', '1px');
+          await expect(slot).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
+        }
+        await expectCenteredLogo(exampleLogo);
+      }
+      await page.evaluate(() => document.documentElement.classList.remove('dark'));
+
+      // Only visible rows acquire artwork; scrolling reveals and loads more.
+      expect(metadataRequests.length).toBeLessThan(12);
+      await picker
+        .getByRole('button', {name: 'Example Regional Bank 12', exact: true})
+        .scrollIntoViewIfNeeded();
+      await expect
+        .poll(() => metadataRequests.some((url) => url.endsWith('/region-11')))
+        .toBe(true);
+
+      await search.fill('ornskold');
+      const found = picker.getByRole('list').getByRole('button');
+      await expect(found).toHaveCount(1);
+      await expect(found).toHaveAccessibleName('Örnsköld Example Bank');
+      await search.fill('Example Credit');
+      await expect(
+        picker.getByText('No bank called “Example Credit” in Netherlands'),
+      ).toBeVisible();
+      await search.fill('');
+
+      await country.click();
+      await expect(picker.getByRole('heading', {name: 'Choose a country'})).toBeVisible();
+      expect(await sheetHeight(picker)).toBe(height);
+      await expectNothingFocused(picker);
+      const countries = picker.getByRole('list').getByRole('button');
+      await expect(countries).toHaveText([
+        'Austria1 bank',
+        'Finland2 banks',
+        'Germany1 bank',
+        'Netherlands15 banks',
+      ]);
+      await expect(countries.filter({hasText: 'Netherlands'})).toHaveAttribute(
+        'aria-current',
+        'true',
+      );
+      for (const row of await countries.all()) await expectFlag(row);
+      await picker.getByRole('searchbox', {name: 'Search countries'}).fill('fin');
+      await expect(countries).toHaveText(['Finland2 banks']);
+      await countries.first().click();
+
+      await expect(country).toHaveText('FinlandChange');
+      expect(await sheetHeight(picker)).toBe(height);
+      await expectNothingFocused(picker);
+      await picker.getByRole('button', {name: 'Esimerkki Pankki', exact: true}).click();
+
+      await expect(picker.getByRole('heading', {name: 'Connect Esimerkki Pankki'})).toBeVisible();
+      expect(await sheetHeight(picker)).toBe(height);
+      await expectNothingFocused(picker);
+      expect(await boxOf(picker.getByTestId('bank-wordmark'))).toMatchObject({
+        width: 192,
+        height: 56,
+      });
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate((value) => document.documentElement.classList.toggle('dark', value === 'dark'), theme);
+        const slot = picker.getByTestId('bank-wordmark');
+        await expect(slot).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)');
+        await expect(slot).toHaveCSS('border-top-width', '1px');
+        await expect(slot).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
+        await expectCenteredLogo(slot);
+      }
+      await page.evaluate(() => document.documentElement.classList.remove('dark'));
+      await expect(picker.getByText('Finland', {exact: true})).toBeVisible();
+      await expect(
+        picker.getByText('You approve access at Esimerkki Pankki, then come back here.'),
+      ).toBeVisible();
+      await picker.getByRole('button', {name: 'Back'}).click();
+      await expect(country).toHaveText('FinlandChange');
+      await picker.getByRole('button', {name: 'Esimerkki Pankki', exact: true}).click();
+
+      const confirm = picker.getByTestId('bank-connection-confirm');
+      await expect(confirm).toHaveText('Continue to Esimerkki Pankki');
+      await confirm.click();
+      await expect(confirm).toBeDisabled();
+      await expect(confirm).toHaveText('Taking you to Esimerkki Pankki…');
+      releaseAuthorization();
+      await expect(page).toHaveURL(AUTHORIZATION_URL);
+      expect(authorizations).toEqual([{aspspName: 'Esimerkki Pankki', aspspCountry: 'FI'}]);
     });
-    let releaseAuthorization!: () => void;
-    const authorizationHeld = new Promise<void>((resolve) => (releaseAuthorization = resolve));
-    await page.route('**/bank-connections/authorize', async (route) => {
-      await authorizationHeld;
-      await route.fallback();
-    });
-
-    await page.goto('/bank-connections');
-    await page.getByTestId('connect-bank-button').click();
-    const picker = page.getByTestId('bank-connection-picker');
-    await expect(picker.getByRole('heading', {name: 'Connect a bank'})).toBeVisible();
-    const loading = picker.getByRole('status');
-    await expect(loading).toHaveText('Loading banks…');
-    // The spinner sits on the same line as its text.
-    const loadingText = await boxOf(loading.getByText('Loading banks…'));
-    const spinner = await boxOf(loading.locator('svg'));
-    expect(spinner.x).toBeGreaterThan(loadingText.x + loadingText.width);
-    expect(
-      Math.abs(spinner.y + spinner.height / 2 - (loadingText.y + loadingText.height / 2)),
-    ).toBeLessThan(2);
-    const height = await sheetHeight(picker);
-
-    releaseBanks();
-    // The country of the connected bank comes first.
-    const country = picker.getByTestId('bank-connection-country');
-    await expect(country).toHaveText('NetherlandsChange');
-    await expectFlag(country);
-    expect(await sheetHeight(picker)).toBe(height);
-    await expectNothingFocused(picker);
-    const search = picker.getByRole('searchbox', {name: 'Search banks in Netherlands'});
-    await expect(search).toHaveAttribute('placeholder', 'Search 15 banks');
-    await expectListRows(picker);
-    await expect(picker.getByTestId('bank-wordmark').first()).toBeVisible();
-    expect(await boxOf(picker.getByTestId('bank-wordmark').first())).toMatchObject({
-      width: 112,
-      height: 36,
-    });
-
-    await search.fill('ornskold');
-    const found = picker.getByRole('list').getByRole('button');
-    await expect(found).toHaveCount(1);
-    await expect(found).toHaveAccessibleName('Örnsköld Example Bank');
-    await search.fill('Example Credit');
-    await expect(picker.getByText('No bank called “Example Credit” in Netherlands')).toBeVisible();
-    await search.fill('');
-
-    await country.click();
-    await expect(picker.getByRole('heading', {name: 'Choose a country'})).toBeVisible();
-    expect(await sheetHeight(picker)).toBe(height);
-    await expectNothingFocused(picker);
-    const countries = picker.getByRole('list').getByRole('button');
-    await expect(countries).toHaveText([
-      'Austria1 bank',
-      'Finland2 banks',
-      'Germany1 bank',
-      'Netherlands15 banks',
-    ]);
-    await expect(countries.filter({hasText: 'Netherlands'})).toHaveAttribute(
-      'aria-current',
-      'true',
-    );
-    for (const row of await countries.all()) await expectFlag(row);
-    await picker.getByRole('searchbox', {name: 'Search countries'}).fill('fin');
-    await expect(countries).toHaveText(['Finland2 banks']);
-    await countries.first().click();
-
-    await expect(country).toHaveText('FinlandChange');
-    expect(await sheetHeight(picker)).toBe(height);
-    await expectNothingFocused(picker);
-    await picker.getByRole('button', {name: 'Esimerkki Pankki', exact: true}).click();
-
-    await expect(picker.getByRole('heading', {name: 'Connect Esimerkki Pankki'})).toBeVisible();
-    expect(await sheetHeight(picker)).toBe(height);
-    await expectNothingFocused(picker);
-    expect(await boxOf(picker.getByTestId('bank-wordmark'))).toMatchObject({
-      width: 192,
-      height: 56,
-    });
-    await expect(picker.getByText('Finland', {exact: true})).toBeVisible();
-    await expect(
-      picker.getByText('You approve access at Esimerkki Pankki, then come back here.'),
-    ).toBeVisible();
-    await picker.getByRole('button', {name: 'Back'}).click();
-    await expect(country).toHaveText('FinlandChange');
-    await picker.getByRole('button', {name: 'Esimerkki Pankki', exact: true}).click();
-
-    const confirm = picker.getByTestId('bank-connection-confirm');
-    await expect(confirm).toHaveText('Continue to Esimerkki Pankki');
-    await confirm.click();
-    await expect(confirm).toBeDisabled();
-    await expect(confirm).toHaveText('Taking you to Esimerkki Pankki…');
-    releaseAuthorization();
-    await expect(page).toHaveURL(AUTHORIZATION_URL);
-    expect(authorizations).toEqual([{aspspName: 'Esimerkki Pankki', aspspCountry: 'FI'}]);
-  });
+  }
 
   for (const {name, locale, connections, expected, placeholder} of [
     {
@@ -425,6 +517,10 @@ test.describe('Connect a bank', () => {
     {width: 1440, theme: 'light'},
     {width: 390, theme: 'dark'},
     {width: 320, theme: 'light'},
+    {width: 320, theme: 'dark'},
+    {width: 768, theme: 'light'},
+    {width: 1024, theme: 'dark'},
+    {width: 1280, theme: 'light'},
   ]) {
     test(`keeps worst-case banks and countries inside the sheet at ${width}px in ${theme}`, async ({
       page,

@@ -1,7 +1,19 @@
 import {createServer} from 'node:http';
+import {bankLogoReference} from '/bank-logo-reference.ts';
 
 const streams = new Set();
 const server = createServer((request, response) => {
+  const url = new URL(request.url, 'http://example.test');
+  if (request.method === 'GET' && url.pathname === '/bank-logo-reference') {
+    response.writeHead(200, {'Content-Type': 'application/json'});
+    response.end(JSON.stringify(bankLogoReference(url.searchParams.get('name'), 'XX')));
+    return;
+  }
+  if (request.method === 'GET' && url.pathname.startsWith('/bank-connections/aspsps/logos/')) {
+    response.writeHead(200, {'Content-Type': 'application/json'});
+    response.end(JSON.stringify({path: request.url}));
+    return;
+  }
   if (request.method === 'GET' && request.url === '/mcp?release=1') {
     for (const stream of streams) stream.end('data: second\n\n');
     streams.clear();

@@ -79,6 +79,10 @@
   --color-transaction-tile-field: var(--transaction-tile-field);
   --color-transaction-tile-ink: var(--transaction-tile-ink);
   --color-transaction-tile-edge: var(--transaction-tile-edge);
+  /* Original-colour bank artwork uses one quiet, bordered plate in either theme. */
+  --color-bank-logo-plate: var(--bank-logo-plate);
+  --color-bank-logo-edge: #D9D2C6; /* Fold shadow */
+  --color-bank-logo-ink: #28252B; /* Ink for initials on either light plate */
 
   --color-chart-primary: hsl(var(--chart-primary));
   --color-chart-secondary: hsl(var(--chart-secondary));
@@ -197,6 +201,7 @@
     --clay: 13.7 46.3% 51.8%; /* Clay #BD654B — large accents */
 
     /* Leading transaction tiles only; ordinary category/status colours keep their semantics. */
+    --bank-logo-plate: #FFFFFF;
     --transaction-tile-field: #F1E3D8;
     --transaction-tile-ink: #8F4032;
     --transaction-tile-edge: #D0B8A9;
@@ -272,6 +277,7 @@
 
     --clay: 17.5 67.1% 69%;         /* Clay on dark — large accents */
 
+    --bank-logo-plate: #F6F1E8; /* Paper, muted against Night */
     --transaction-tile-field: #352A28;
     --transaction-tile-ink: #E59A7B;
     --transaction-tile-edge: #59413A;

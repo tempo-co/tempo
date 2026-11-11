@@ -39,6 +39,7 @@ import {BankAccountBalance} from './bank-account-balance.entity';
 import {BankAccount} from './bank-account.entity';
 import {BankConnectionCallbackResult} from './bank-connection-callback-result';
 import {BankConnection} from './bank-connection.entity';
+import {bankLogoReference} from './bank-logos/bank-logo-reference';
 import {BankSyncRun} from './bank-sync-run.entity';
 import {getBalancePreference, normalizeBankCode, truncate} from './banking.utils';
 import {EnableBankingAccount, EnableBankingSession} from './enable-banking.types';
@@ -185,7 +186,12 @@ export class BankingService {
 				continue;
 			}
 
-			uniqueAspsps.set(key, {name, country, ...(logoUrl ? {logoUrl} : {})});
+			uniqueAspsps.set(key, {
+				name,
+				country,
+				...(logoUrl ? {logoUrl} : {}),
+				logo: bankLogoReference(name, country),
+			});
 		}
 
 		return [...uniqueAspsps.values()].sort(
@@ -231,6 +237,7 @@ export class BankingService {
 			provider: connection.provider,
 			aspspName: connection.aspspName,
 			aspspCountry: connection.aspspCountry,
+			logo: bankLogoReference(connection.aspspName, connection.aspspCountry),
 			// Written only from BANK_CONNECTION_STATUSES.
 			status: connection.status as BankConnectionStatus,
 			consentValidUntil: connection.consentValidUntil?.toISOString() ?? null,

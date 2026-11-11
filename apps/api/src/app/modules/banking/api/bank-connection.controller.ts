@@ -30,6 +30,7 @@ import {Public} from '@modules/auth/decorators/public.decorator';
 import {TokenReadable} from '@modules/auth/decorators/token-readable.decorator';
 import {CsrfOriginGuard} from '@modules/auth/guards/csrf-origin.guard';
 
+import {BankLogoService} from '../bank-logos/bank-logo.service';
 import {BankingService} from '../banking.service';
 import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {BankTransactionService} from '../services/bank-transaction.service';
@@ -46,6 +47,7 @@ export class BankConnectionController {
 		private readonly bankTransactionService: BankTransactionService,
 		private readonly bankingSyncService: BankingSyncService,
 		private readonly configurationService: ConfigurationService,
+		private readonly bankLogos: BankLogoService,
 	) {}
 
 	@Post('authorize')
@@ -60,7 +62,9 @@ export class BankConnectionController {
 
 	@Get('aspsps')
 	async getSupportedAspsps(): Promise<BankConnectionAspsp[]> {
-		return this.bankingService.findSupportedAspsps();
+		const banks = await this.bankingService.findSupportedAspsps();
+		await this.bankLogos.registerSources(banks);
+		return banks;
 	}
 
 	@Get()
