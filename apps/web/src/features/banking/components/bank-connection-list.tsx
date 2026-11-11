@@ -51,7 +51,7 @@ import {
 } from '../utils/bank-sync-status';
 import {formatBankingWords} from '../utils/formatters';
 import {BankConnectionPicker} from './bank-connection-picker';
-import {BankLogo} from './bank-logo';
+import {type BankArtwork, BankLogo} from './bank-logo';
 
 type BankConnectionListProps = {
   bankConnections: BankConnection[];
@@ -172,7 +172,7 @@ export function BankConnectionList({
             <BankCard
               key={connection.id}
               connection={connection}
-              logoUrl={bankLogos[bankLogoKey(connection.aspspName, connection.aspspCountry)]}
+              artwork={bankLogos[bankLogoKey(connection.aspspName, connection.aspspCountry)]}
               isStarting={isStarting}
               onReauthorize={reauthorize}
               onDetails={(trigger) => {
@@ -255,13 +255,13 @@ function problemOf(connection: BankConnection): Problem | null {
 
 function BankCard({
   connection,
-  logoUrl,
+  artwork,
   isStarting,
   onReauthorize,
   onDetails,
 }: {
   connection: BankConnection;
-  logoUrl?: string;
+  artwork?: BankArtwork;
   isStarting: boolean;
   onReauthorize: (connection: BankConnection) => void | Promise<void>;
   onDetails: (trigger: HTMLButtonElement) => void;
@@ -281,7 +281,7 @@ function BankCard({
     >
       <header className='flex items-center gap-3'>
         <BankLogo
-          bank={{name: connection.aspspName, logoUrl}}
+          bank={{name: connection.aspspName, ...artwork}}
           className='size-9 rounded-md text-xs shadow-none'
           imageClassName='p-1'
           testId='bank-connection-logo'
@@ -440,7 +440,7 @@ function BankDetailsDialog({
             (step === 'details' ? (
               <DetailsStep
                 connection={connection}
-                logoUrl={bankLogos[bankLogoKey(connection.aspspName, connection.aspspCountry)]}
+                artwork={bankLogos[bankLogoKey(connection.aspspName, connection.aspspCountry)]}
                 isStarting={isStarting}
                 onReauthorize={onReauthorize}
                 onRemove={() => setRemoving(connection.id)}
@@ -460,13 +460,13 @@ function BankDetailsDialog({
 
 function DetailsStep({
   connection,
-  logoUrl,
+  artwork,
   isStarting,
   onReauthorize,
   onRemove,
 }: {
   connection: BankConnection;
-  logoUrl?: string;
+  artwork?: BankArtwork;
   isStarting: boolean;
   onReauthorize: (connection: BankConnection) => void | Promise<void>;
   onRemove: () => void;
@@ -499,7 +499,7 @@ function DetailsStep({
       <ResponsiveDialogHeader className='text-start'>
         <div className='flex items-center gap-3'>
           <BankLogo
-            bank={{name: connection.aspspName, logoUrl}}
+            bank={{name: connection.aspspName, ...artwork}}
             className='size-9 rounded-md text-xs shadow-none'
             imageClassName='p-1'
           />

@@ -768,9 +768,24 @@ describe('BankConnectionController', () => {
 		const response = await verifiedAgent.get('/bank-connections/aspsps').expect(200);
 
 		expect(response.body).toEqual([
-			{name: 'Nordea', country: 'FI', logoUrl: 'https://enablebanking.com/brands/FI/Nordea/'},
-			{name: 'ABN AMRO', country: 'NL', logoUrl: 'https://enablebanking.com/brands/NL/ABN-AMRO/'},
-			{name: 'Revolut', country: 'NL', logoUrl: 'https://enablebanking.com/brands/NL/Revolut/'},
+			{
+				name: 'Nordea',
+				country: 'FI',
+				logoUrl: 'https://enablebanking.com/brands/FI/Nordea/',
+				logo: {metadataUrl: '/bank-connections/aspsps/logos/FI/Nordea'},
+			},
+			{
+				name: 'ABN AMRO',
+				country: 'NL',
+				logoUrl: 'https://enablebanking.com/brands/NL/ABN-AMRO/',
+				logo: {metadataUrl: '/bank-connections/aspsps/logos/NL/ABN%20AMRO'},
+			},
+			{
+				name: 'Revolut',
+				country: 'NL',
+				logoUrl: 'https://enablebanking.com/brands/NL/Revolut/',
+				logo: {metadataUrl: '/bank-connections/aspsps/logos/NL/Revolut'},
+			},
 		]);
 		expect(JSON.stringify(response.body)).not.toContain('maximumConsentValiditySeconds');
 	});

@@ -32,11 +32,19 @@ export const BANK_SYNC_STATUSES = [
 ] as const;
 export type BankSyncStatus = (typeof BANK_SYNC_STATUSES)[number];
 
+/** Lazy metadata keeps catalogue reads independent of downloading every bank's artwork. */
+export type BankLogoReference = {metadataUrl: string};
+export type BankLogoVariant = {url: string; plate: boolean};
+/** `GET /bank-connections/aspsps/logos/:country/:name`. Image URLs include source hash and converter version. */
+export type BankLogo = {light: BankLogoVariant; dark: BankLogoVariant};
+
 /** `GET /bank-connections/aspsps`: a bank that can be connected. */
 export type BankConnectionAspsp = {
 	name: string;
 	country: string;
+	/** Original provider URL for older clients. New clients use `logo`. */
 	logoUrl?: string;
+	logo?: BankLogoReference;
 };
 
 /** `POST /bank-connections/authorize` body. */
@@ -89,6 +97,7 @@ export type BankConnection = {
 	provider: string;
 	aspspName: string;
 	aspspCountry: string;
+	logo?: BankLogoReference;
 	status: BankConnectionStatus;
 	consentValidUntil: string | null;
 	lastSyncedAt: string | null;

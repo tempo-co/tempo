@@ -79,6 +79,8 @@
   --color-transaction-tile-field: var(--transaction-tile-field);
   --color-transaction-tile-ink: var(--transaction-tile-ink);
   --color-transaction-tile-edge: var(--transaction-tile-edge);
+  /* A deliberate warm plate only for bank artwork below the contrast threshold. */
+  --color-bank-logo-plate: #FAF8F3;
 
   --color-chart-primary: hsl(var(--chart-primary));
   --color-chart-secondary: hsl(var(--chart-secondary));

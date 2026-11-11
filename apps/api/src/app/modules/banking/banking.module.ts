@@ -24,6 +24,8 @@ import {RecurringSeriesController} from './api/recurring-series.controller';
 import {BankAccountBalance} from './bank-account-balance.entity';
 import {BankAccount} from './bank-account.entity';
 import {BankConnection} from './bank-connection.entity';
+import {BankLogoController} from './bank-logos/bank-logo.controller';
+import {BankLogoService} from './bank-logos/bank-logo.service';
 import {BankSyncRun} from './bank-sync-run.entity';
 import {BankTransactionFxRate} from './bank-transaction-fx-rate.entity';
 import {BankTransaction} from './bank-transaction.entity';
@@ -80,6 +82,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 	],
 	providers: [
 		BankingService,
+		BankLogoService,
 		McpReaderService,
 		BankingConnectionLockService,
 		BankingSyncService,
@@ -104,6 +107,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 	],
 	controllers: [
 		BankConnectionController,
+		BankLogoController,
 		BankTransactionController,
 		MerchantController,
 		RecurringSeriesController,

@@ -24,6 +24,7 @@ const savedQueryRoots = new Map<unknown, 'kept' | 'recent'>([
   [CURRENT_ACCOUNT_KEY[0], 'kept'],
   [bankQueryKeys.connections[0], 'kept'],
   [bankQueryKeys.connectedBankLogos[0], 'kept'],
+  ['bank-logo', 'recent'],
   [bankQueryKeys.transactionsRoot[0], 'recent'],
   [bankQueryKeys.transactionRoot[0], 'recent'],
   [dashboardQueryKeys.root[0], 'recent'],
@@ -207,7 +208,7 @@ export function createOfflinePersistence(
   return {
     persister,
     maxAge: OFFLINE_MAX_AGE,
-    buster: 'tempo-offline-v1',
+    buster: 'tempo-offline-v2',
     dehydrateOptions: {
       shouldDehydrateMutation: () => false,
       shouldDehydrateQuery: (query) =>

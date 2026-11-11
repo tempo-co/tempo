@@ -1,78 +1,123 @@
-import type {BankConnectionAspsp} from '@tempo/contracts';
+import {useQuery} from '@tanstack/react-query';
+import type {BankConnectionAspsp, BankLogoVariant, BankLogo as ThemedLogo} from '@tempo/contracts';
 import {Building2} from 'lucide-react';
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 
+import {api} from '@/utils/api';
 import {cn} from '@/utils/cn';
 
+export type BankArtwork = Pick<BankConnectionAspsp, 'logoUrl' | 'logo'>;
 type BankLogoProps = {
-  bank: Pick<BankConnectionAspsp, 'name' | 'logoUrl'>;
+  bank: BankArtwork & {name: string};
   className?: string;
   imageClassName?: string;
   testId?: string;
 };
 
-type LogoAnalysis = 'pending' | 'monochrome' | 'color' | 'unavailable';
-type LogoAnalysisResult = Exclude<LogoAnalysis, 'pending'>;
-type LogoAnalysisState = {url: string | null; value: LogoAnalysis};
-type ImageState = {url: string | null; failed: boolean};
-
+/** BankLogo and the picker's wide wordmark share the API's original-colour variants and plate decisions. */
 export function BankLogo({bank, className, imageClassName, testId = 'bank-logo'}: BankLogoProps) {
-  const logoUrl = bank.logoUrl ?? null;
-  const [imageState, setImageState] = useState<ImageState>(() => ({
-    url: logoUrl,
-    failed: false,
-  }));
-  const [analysisState, setAnalysisState] = useState<LogoAnalysisState>(() => ({
-    url: logoUrl,
-    value: logoUrl ? 'pending' : 'unavailable',
-  }));
-  const hasError = imageState.url === logoUrl && imageState.failed;
-  const logoAnalysis =
-    analysisState.url === logoUrl ? analysisState.value : logoUrl ? 'pending' : 'unavailable';
-
-  const handleImageLoad = () => {
-    if (!bank.logoUrl) return;
-
-    const url = bank.logoUrl;
-    setAnalysisState({url, value: 'pending'});
-    void getLogoAnalysis(url).then((analysis) => {
-      setAnalysisState((previous) => (previous.url === url ? {url, value: analysis} : previous));
+  const metadataUrl = bank.logo?.metadataUrl;
+  const slot = useRef<HTMLSpanElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!metadataUrl || visible || !slot.current) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setVisible(true);
+        observer.disconnect();
+      }
     });
-  };
-
-  const handleImageError = () => {
-    const url = bank.logoUrl ?? null;
-    setImageState({url, failed: true});
-    setAnalysisState({url, value: 'unavailable'});
-  };
+    observer.observe(slot.current);
+    return () => observer.disconnect();
+  }, [metadataUrl, visible]);
+  const {data: logo} = useQuery({
+    queryKey: ['bank-logo', metadataUrl],
+    queryFn: () => api.get<ThemedLogo>(metadataUrl!),
+    enabled: !!metadataUrl && visible,
+    staleTime: 24 * 60 * 60_000,
+    retry: false,
+  });
 
   return (
     <span
+      ref={slot}
       className={cn(
-        'flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background text-sm font-semibold text-foreground shadow-xs',
+        'flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md text-sm font-semibold',
         className,
       )}
       aria-hidden='true'
-      data-logo-analysis={logoAnalysis}
       data-testid={testId}
     >
-      {bank.logoUrl && !hasError ? (
+      {logo ? (
+        <>
+          <Artwork
+            name={bank.name}
+            variant={logo.light}
+            theme='light'
+            className='flex dark:hidden'
+            imageClassName={imageClassName}
+          />
+          <Artwork
+            name={bank.name}
+            variant={logo.dark}
+            theme='dark'
+            className='hidden dark:flex'
+            imageClassName={imageClassName}
+          />
+        </>
+      ) : (
+        <Artwork
+          name={bank.name}
+          variant={!metadataUrl && bank.logoUrl ? {url: bank.logoUrl, plate: false} : undefined}
+          className='flex'
+          imageClassName={imageClassName}
+        />
+      )}
+    </span>
+  );
+}
+
+function Artwork({
+  name,
+  variant,
+  theme,
+  className,
+  imageClassName,
+}: {
+  name: string;
+  variant?: BankLogoVariant;
+  theme?: 'light' | 'dark';
+  className: string;
+  imageClassName?: string;
+}) {
+  const [failed, setFailed] = useState<string>();
+  const src = variant?.url && variant.url !== failed ? variant.url : undefined;
+  // Current API URLs are relative to its base, including the production /api proxy path.
+  const url = src && (src.startsWith('/') ? `${import.meta.env.VITE_API_URL}${src}` : src);
+  return (
+    <span
+      className={cn(
+        'h-full w-full items-center justify-center overflow-hidden rounded-[inherit]',
+        className,
+        !src &&
+          'border border-transaction-tile-edge bg-transaction-tile-field text-transaction-tile-ink',
+        src && variant?.plate && 'border border-transaction-tile-edge bg-bank-logo-plate',
+      )}
+      data-logo-theme={theme}
+      data-logo-plate={!!src && !!variant?.plate}
+    >
+      {url ? (
         <img
-          key={bank.logoUrl}
-          src={bank.logoUrl}
+          key={url}
+          src={url}
           alt=''
-          className={cn(
-            'h-full w-full object-contain p-1',
-            logoAnalysis === 'monochrome' && 'dark:brightness-0 dark:invert',
-            imageClassName,
-          )}
+          className={cn('h-full w-full object-contain p-1', imageClassName)}
           loading='lazy'
           referrerPolicy='no-referrer'
-          onLoad={handleImageLoad}
-          onError={handleImageError}
+          onError={() => setFailed(src)}
         />
-      ) : bank.name ? (
-        <span>{bankInitials(bank.name)}</span>
+      ) : name ? (
+        <span>{initials(name)}</span>
       ) : (
         <Building2 className='h-4 w-4' />
       )}
@@ -80,87 +125,12 @@ export function BankLogo({bank, className, imageClassName, testId = 'bank-logo'}
   );
 }
 
-const ANALYSIS_SIZE = 64;
-const MAX_CHANNEL_DELTA = 0;
-const MIN_VISIBLE_ALPHA = 16;
-const ANIMATED_LOGO_URL_PATTERN = /\.(?:apng|gif|webp)(?:[?#]|$)/i;
-// A logo's classification never changes, so a completed analysis is reused for every later mount.
-// A failed load is forgotten so the next mount retries it.
-const logoAnalyses = new Map<string, Promise<LogoAnalysisResult>>();
-
-function getLogoAnalysis(url: string) {
-  if (ANIMATED_LOGO_URL_PATTERN.test(url)) return Promise.resolve('unavailable' as const);
-
-  const knownAnalysis = logoAnalyses.get(url);
-  if (knownAnalysis) return knownAnalysis;
-
-  const analysis = new Promise<LogoAnalysisResult>((resolve) => {
-    const image = new Image();
-    image.crossOrigin = 'anonymous';
-    image.referrerPolicy = 'no-referrer';
-    image.onload = () => {
-      image.onload = null;
-      image.onerror = null;
-      resolve(classifyLogoImage(image));
-    };
-    image.onerror = () => {
-      image.onload = null;
-      image.onerror = null;
-      logoAnalyses.delete(url);
-      resolve('unavailable');
-    };
-    image.src = url;
-  });
-
-  logoAnalyses.set(url, analysis);
-  return analysis;
-}
-
-function classifyLogoImage(image: HTMLImageElement): LogoAnalysisResult {
-  const scale = Math.min(
-    ANALYSIS_SIZE / image.naturalWidth,
-    ANALYSIS_SIZE / image.naturalHeight,
-    1,
-  );
-  const width = Math.max(1, Math.round(image.naturalWidth * scale));
-  const height = Math.max(1, Math.round(image.naturalHeight * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-
-  try {
-    const context = canvas.getContext('2d');
-    if (!context) return 'unavailable';
-
-    context.drawImage(image, 0, 0, width, height);
-    const {data} = context.getImageData(0, 0, width, height);
-    let visiblePixels = 0;
-    let chromaticPixels = 0;
-
-    for (let index = 0; index < data.length; index += 4) {
-      if (data[index + 3] < MIN_VISIBLE_ALPHA) continue;
-
-      visiblePixels += 1;
-      const minimum = Math.min(data[index], data[index + 1], data[index + 2]);
-      const maximum = Math.max(data[index], data[index + 1], data[index + 2]);
-      if (maximum - minimum > MAX_CHANNEL_DELTA) chromaticPixels += 1;
-    }
-
-    if (visiblePixels === 0) return 'unavailable';
-    return chromaticPixels === 0 ? 'monochrome' : 'color';
-  } catch {
-    return 'unavailable';
-  } finally {
-    canvas.width = 0;
-    canvas.height = 0;
-  }
-}
-
-function bankInitials(name: string) {
+function initials(name: string) {
   const words = name.trim().split(/\s+/).filter(Boolean);
-  const initials = words
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join('');
-  return (initials || name.slice(0, 2)).toUpperCase();
+  return (
+    words
+      .slice(0, 2)
+      .map((word) => word[0])
+      .join('') || name.slice(0, 2)
+  ).toUpperCase();
 }

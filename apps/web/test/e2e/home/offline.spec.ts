@@ -40,6 +40,7 @@ const connection: BankConnection = {
   provider: 'ENABLE_BANKING',
   aspspName: 'Example Bank',
   aspspCountry: 'NL',
+  logo: {metadataUrl: '/bank-connections/aspsps/logos/NL/Example%20Bank'},
   status: 'AUTHORIZED',
   consentValidUntil: '2027-01-01T00:00:00Z',
   lastSyncedAt: '2026-09-30T00:00:00Z',
@@ -61,6 +62,10 @@ async function mockHome(page: Page, padding = 0) {
     {name: 'Example Bank', country: 'NL', logoUrl: LOGO_URL},
     {name: 'Other Bank', country: 'FI', logoUrl: LOGO_URL},
   ]);
+  await mockJson(page, '**/bank-connections/aspsps/logos/NL/Example%20Bank', {
+    light: {url: LOGO_URL, plate: false},
+    dark: {url: LOGO_URL, plate: true},
+  });
   await mockHomeHistory(page);
   await page.route('**/bank-transactions/review-counts', (route) =>
     fulfillJson(route, {
@@ -106,7 +111,7 @@ test.describe('saved Home', () => {
       .getByRole('navigation', {name: 'Primary'})
       .getByRole('link', {name: 'Connections', exact: true})
       .click();
-    await expect(page.getByTestId('bank-connection-logo').locator('img')).toHaveAttribute(
+    await expect(page.getByTestId('bank-connection-logo').locator('img:visible')).toHaveAttribute(
       'src',
       LOGO_URL,
     );
@@ -122,7 +127,10 @@ test.describe('saved Home', () => {
           (await savedQueries()).find((query) => query.queryKey[0] === 'connected-bank-logos')
             ?.state.data,
       )
-      .toEqual({'NL:example bank': LOGO_URL});
+      .toEqual({'NL:example bank': {logo: connection.logo}});
+    await expect
+      .poll(async () => (await savedQueries()).some((query) => query.queryKey[0] === 'bank-logo'))
+      .toBe(true);
     expect(JSON.stringify(await savedQueries())).not.toContain('Other Bank');
     await context.setOffline(true);
     await page.reload();
@@ -150,7 +158,7 @@ test.describe('saved Home', () => {
       .getByRole('navigation', {name: 'Primary'})
       .getByRole('link', {name: 'Connections', exact: true})
       .click();
-    await expect(page.getByTestId('bank-connection-logo').locator('img')).toHaveAttribute(
+    await expect(page.getByTestId('bank-connection-logo').locator('img:visible')).toHaveAttribute(
       'src',
       LOGO_URL,
     );

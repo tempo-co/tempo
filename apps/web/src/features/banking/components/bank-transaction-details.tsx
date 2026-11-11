@@ -20,7 +20,7 @@ import {
   formatOwnTransferEvidence,
   resolveBankTransactionAccountLabel,
 } from '../utils/formatters';
-import {BankLogo} from './bank-logo';
+import {type BankArtwork, BankLogo} from './bank-logo';
 import {BankTransactionCategorySelect} from './bank-transaction-category-select';
 import {MerchantLogoTile} from './merchant-logo-tile';
 
@@ -201,7 +201,7 @@ function Movement({
         label={incoming ? 'To' : 'From'}
         account={transaction}
         name={resolveBankTransactionAccountLabel(transaction)}
-        logoUrl={bankLogos[bankLogoKey(transaction.bankName, transaction.bankCountry)]}
+        artwork={bankLogos[bankLogoKey(transaction.bankName, transaction.bankCountry)]}
       />
     </div>
   );
@@ -217,7 +217,7 @@ function Movement({
         label={incoming ? 'From' : 'To'}
         account={counterpart}
         name={formatCounterpartAccount(counterpart)}
-        logoUrl={otherLogos.size === 1 ? otherLogos.values().next().value : undefined}
+        artwork={otherLogos.size === 1 ? otherLogos.values().next().value : undefined}
       />
       <ChevronRight
         className='col-start-3 row-start-2 size-4 self-center text-muted-foreground'
@@ -271,12 +271,12 @@ function MovementAccount({
   label,
   account,
   name,
-  logoUrl,
+  artwork,
 }: {
   label: 'From' | 'To';
   account: Pick<BankTransactionCounterpart, 'bankName' | 'currency' | 'amount'>;
   name: string;
-  logoUrl?: string;
+  artwork?: BankArtwork;
 }) {
   const bank = `${account.bankName} · ${account.currency}`;
   return (
@@ -288,7 +288,7 @@ function MovementAccount({
         {label}
       </p>
       <BankLogo
-        bank={{name: account.bankName, logoUrl}}
+        bank={{name: account.bankName, ...artwork}}
         className='col-start-1 row-span-2 row-start-2 size-10 self-start'
       />
       <p
