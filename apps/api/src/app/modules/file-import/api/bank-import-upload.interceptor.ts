@@ -20,7 +20,8 @@ type CountedRequest = Request & {[FILES_SEEN]?: number};
 
 // Without a storage or destination, multer keeps each file in memory as a buffer.
 const Upload = FilesInterceptor(BANK_IMPORT_FILES_FIELD, MAX_FILES_PER_DROP + 1, {
-	limits: {fileSize: MAX_FILE_BYTES, files: MAX_FILES_PER_DROP + 1},
+	// The route reads files only, so text fields are refused instead of collected in memory.
+	limits: {fileSize: MAX_FILE_BYTES, files: MAX_FILES_PER_DROP + 1, fields: 0},
 	// Counts files as they arrive, so a size refusal can name the file by its position.
 	fileFilter: (request, file, accept) => {
 		const counted = request as CountedRequest;

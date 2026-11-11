@@ -452,6 +452,14 @@ describe('Bank imports', () => {
 		await agent.post('/bank-imports').set('Origin', ORIGIN).send({}).expect(400);
 	});
 
+	it('refuses text fields next to the files', async () => {
+		const {owner, agent} = await createOwner();
+
+		await drop(agent, [ARCHIVE]).field('note', 'example').expect(400);
+
+		expect(await imports.countBy({accountId: owner.id})).toBe(0);
+	});
+
 	it('refuses an upload from another site', async () => {
 		const {owner, agent} = await createOwner();
 
