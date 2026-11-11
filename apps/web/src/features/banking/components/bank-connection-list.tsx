@@ -223,8 +223,8 @@ function problemOf(connection: BankConnection): Problem | null {
   if (isReauthorizationRequired(connection)) {
     return {
       title: 'Consent expired',
-      detail: connection.lastSyncedAt
-        ? `No updates since ${shortDate(connection.lastSyncedAt)}`
+      detail: connection.lastSuccessfulSyncAt
+        ? `No updates since ${shortDate(connection.lastSuccessfulSyncAt)}`
         : 'Automatic sync has stopped',
       action: 'reauthorize',
     };
@@ -242,7 +242,8 @@ function problemOf(connection: BankConnection): Problem | null {
     return {
       title: sync.title.replace('Automatic sync needs attention', 'Sync failed'),
       detail: [
-        connection.lastSyncedAt && `No updates since ${shortDate(connection.lastSyncedAt)}`,
+        connection.lastSuccessfulSyncAt &&
+          `No updates since ${shortDate(connection.lastSuccessfulSyncAt)}`,
         'retries on its own',
       ]
         .filter(Boolean)

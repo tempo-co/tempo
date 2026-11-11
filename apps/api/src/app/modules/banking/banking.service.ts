@@ -39,6 +39,7 @@ import {BankAccountBalance} from './bank-account-balance.entity';
 import {BankAccount} from './bank-account.entity';
 import {BankConnectionCallbackResult} from './bank-connection-callback-result';
 import {BankConnection} from './bank-connection.entity';
+import {BankSyncRun} from './bank-sync-run.entity';
 import {getBalancePreference, normalizeBankCode, truncate} from './banking.utils';
 import {EnableBankingAccount, EnableBankingSession} from './enable-banking.types';
 import {BankingAuthorizationStateError} from './errors/banking-authorization-state.error';
@@ -213,9 +214,10 @@ export class BankingService {
 			.where('bankConnection.id IN (:...connectionIds)', {connectionIds: connections.map(({id}) => id)})
 			.orderBy('bankAccount.createdAt', 'ASC')
 			.getMany();
-		const [latestBalancesByAccountId, convertedBalances] = await Promise.all([
+		const [latestBalancesByAccountId, convertedBalances, lastSuccessfulSyncAtByConnectionId] = await Promise.all([
 			this.findLatestBalancesByAccountId(bankAccounts.map(({id}) => id)),
 			this.convertBalances(bankAccounts, baseCurrency),
+			this.findLastSuccessfulSyncAt(connections.map(({id}) => id)),
 		]);
 		const bankAccountsByConnectionId = new Map<string, BankAccount[]>();
 		for (const bankAccount of bankAccounts) {
@@ -233,6 +235,8 @@ export class BankingService {
 			status: connection.status as BankConnectionStatus,
 			consentValidUntil: connection.consentValidUntil?.toISOString() ?? null,
 			lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null,
+			lastSuccessfulSyncAt: lastSuccessfulSyncAtByConnectionId.get(connection.id)?.toISOString() ?? null,
+			createdAt: connection.createdAt.toISOString(),
 			lastSyncError: connection.lastSyncError,
 			nextSyncAt: connection.nextSyncAt?.toISOString() ?? null,
 			// Written only from BANK_SYNC_STATUSES.
@@ -624,6 +628,24 @@ export class BankingService {
 			cashAccountType: truncate(account.cashAccountType, 32),
 			usage: truncate(account.usage, 16),
 		};
+	}
+
+	/** `lastSyncedAt` also advances for partial runs, so the last fully successful run is read from the run history. */
+	private async findLastSuccessfulSyncAt(connectionIds: string[]): Promise<Map<string, Date>> {
+		const rows = await this.dataSource
+			.getRepository(BankSyncRun)
+			.createQueryBuilder('run')
+			.select('run.bankConnectionId', 'connectionId')
+			.addSelect('MAX(run.finishedAt)', 'lastSuccessfulSyncAt')
+			.where('run.bankConnectionId IN (:...connectionIds)', {connectionIds})
+			.andWhere('run.status = :status', {status: BANK_SYNC_STATUSES.SUCCEEDED})
+			.groupBy('run.bankConnectionId')
+			.getRawMany<{connectionId: string; lastSuccessfulSyncAt: Date | null}>();
+		return new Map(
+			rows.flatMap(({connectionId, lastSuccessfulSyncAt}) =>
+				lastSuccessfulSyncAt ? [[connectionId, lastSuccessfulSyncAt] as const] : [],
+			),
+		);
 	}
 
 	private async findLatestBalancesByAccountId(bankAccountIds: string[]): Promise<Map<string, BankAccountBalance[]>> {

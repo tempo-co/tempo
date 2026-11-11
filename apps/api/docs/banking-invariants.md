@@ -81,7 +81,7 @@ Defined in `services/bank-transaction-filters.ts`; read `SQL_SPENDING` / `SQL_IN
 
 ## Alerts
 
-- `alerts/` raises bank alerts (consent ending within 7 days, its last day, no successful sync for 24 hours) by email and push. Each alert is recorded once per episode (the connection's marker columns), in the transaction that queues its jobs. Job ids derive from that identity, so a rolled-back marker, a retry or an overlapping scan never sends twice.
+- `alerts/` raises bank alerts (consent ending within 7 days, its last day, no successful sync for `SYNC_BROKEN_AFTER_MS`) by email and push. "Successful" means a SUCCEEDED run: `lastSyncedAt` also advances for PARTIAL runs. `GET /bank-connections` returns that time as `lastSuccessfulSyncAt`, and the web app warns about a failing sync on the same threshold. Each alert is recorded once per episode (the connection's marker columns), in the transaction that queues its jobs. Job ids derive from that identity, so a rolled-back marker, a retry or an overlapping scan never sends twice.
 - A push raised between 21:00 and 09:00 Europe/Amsterdam waits until 09:00 as a delayed job. Before sending, the worker checks that the alert still applies (a reauthorized or synced bank sends nothing) and reads the badge count from review counts.
 - Push text stays vague: no bank, account or amount. Pushes reach only subscriptions whose session is still signed in as the owner (`modules/notifications`); logout removes that session's subscriptions, and push service 404/410 answers remove the subscription.
 

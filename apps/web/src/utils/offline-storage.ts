@@ -207,7 +207,7 @@ export function createOfflinePersistence(
   return {
     persister,
     maxAge: OFFLINE_MAX_AGE,
-    buster: 'tempo-offline-v1',
+    buster: 'tempo-offline-v2',
     dehydrateOptions: {
       shouldDehydrateMutation: () => false,
       shouldDehydrateQuery: (query) =>

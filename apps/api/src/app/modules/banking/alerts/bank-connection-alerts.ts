@@ -1,10 +1,9 @@
-import {CONSENT_ENDING_SOON_MS} from '@tempo/contracts';
+import {CONSENT_ENDING_SOON_MS, SYNC_BROKEN_AFTER_MS} from '@tempo/contracts';
 
 import {BankConnection} from '../bank-connection.entity';
 import {BANK_CONNECTION_STATUSES} from '../services/banking-sync.constants';
 
 export const CONSENT_FINAL_ALERT_WINDOW_MS = 24 * 60 * 60 * 1000;
-export const SYNC_BROKEN_ALERT_AFTER_MS = 24 * 60 * 60 * 1000;
 
 export const BANK_CONNECTION_ALERTS = {
 	CONSENT_EXPIRING: 'CONSENT_EXPIRING',
@@ -58,7 +57,7 @@ function isSyncAlertDue(connection: BankConnectionAlertState, now: Date): boolea
 		return false;
 	}
 	const lastSuccess = connection.lastSuccessfulSyncAt ?? connection.createdAt;
-	if (now.getTime() - lastSuccess.getTime() < SYNC_BROKEN_ALERT_AFTER_MS) return false;
+	if (now.getTime() - lastSuccess.getTime() < SYNC_BROKEN_AFTER_MS) return false;
 	return !isSameTime(connection.syncAlertFor, lastSuccess);
 }
 

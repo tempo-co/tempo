@@ -1,10 +1,8 @@
 import {useMutation, useMutationState} from '@tanstack/react-query';
-import {toast} from 'sonner';
 
-import {SessionChangedError, api, wasToasted} from '@/utils/api';
+import {api} from '@/utils/api';
 
 import type {BankSyncRun} from '../types/bank-sync-run';
-import {getBankRefreshToast} from '../utils/bank-refresh-feedback';
 
 const BANK_REFRESH_KEY = ['bank-refresh'];
 type RefreshRequest = {connectionId: string; signal?: AbortSignal};
@@ -26,8 +24,11 @@ export function useBankConnectionRefreshState(connectionId: string) {
 }
 
 /**
- * Refreshes one connection and reports its outcome. Re-reading the saved connections and
- * bank-derived data is left to the caller, so a run over several banks reloads them once.
+ * Refreshes one connection. Opening the app starts it, not the owner, so its outcome stays quiet:
+ * a failed or partial run retries on its own, and one that keeps failing shows on its bank card.
+ * Only the `api` wrapper's shared toasts (offline, session, rate limit) can appear. Re-reading the
+ * saved connections and bank-derived data is left to the caller, so a run over several banks
+ * reloads them once.
  */
 export function useRefreshBankConnection() {
   const {mutateAsync, ...state} = useMutation({
@@ -37,16 +38,6 @@ export function useRefreshBankConnection() {
       api.post<BankSyncRun | null>(`/bank-connections/${connectionId}/refresh`, undefined, {
         signal,
       }),
-    onSuccess: (result, {signal}) => {
-      if (signal?.aborted || !result) return;
-      const feedback = getBankRefreshToast(result);
-      if (feedback) toast.error(feedback.title, {description: feedback.description});
-    },
-    onError: (error, {signal}) => {
-      if (signal?.aborted) return;
-      if (wasToasted(error) || error instanceof SessionChangedError) return;
-      toast.error('Bank refresh failed', {description: error.message});
-    },
   });
 
   return {refreshBankConnection: mutateAsync, ...state};

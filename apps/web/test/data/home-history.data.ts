@@ -27,6 +27,8 @@ export const HOME_CONNECTION: BankConnection = {
   status: 'AUTHORIZED',
   consentValidUntil: '2027-06-01T00:00:00.000Z',
   lastSyncedAt: '2026-11-05T11:00:00.000Z',
+  lastSuccessfulSyncAt: '2026-11-05T11:00:00.000Z',
+  createdAt: '2026-01-01T00:00:00.000Z',
   lastSyncError: null,
   nextSyncAt: '2026-11-05T17:00:00.000Z',
   syncStatus: 'SUCCEEDED',

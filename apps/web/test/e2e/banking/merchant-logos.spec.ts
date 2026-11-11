@@ -103,6 +103,8 @@ const connection: BankConnection = {
   status: 'AUTHORIZED',
   consentValidUntil: '2027-01-01T00:00:00Z',
   lastSyncedAt: '2026-10-01T11:00:00Z',
+  lastSuccessfulSyncAt: '2026-10-01T11:00:00Z',
+  createdAt: '2026-01-01T00:00:00.000Z',
   lastSyncError: null,
   nextSyncAt: '2026-10-02T11:00:00Z',
   syncStatus: 'SUCCEEDED',
