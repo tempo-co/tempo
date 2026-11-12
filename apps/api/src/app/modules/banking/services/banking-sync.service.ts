@@ -62,8 +62,8 @@ import {
 } from '../enable-banking.types';
 import {BankingEncryptionError} from '../errors/banking-encryption.error';
 import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
-import {FileConnectionNotSyncableException} from '../errors/file-connection-not-syncable.exception';
 import {BankingSyncOwnershipLostError} from '../errors/banking-sync-ownership-lost.error';
+import {FileConnectionNotSyncableException} from '../errors/file-connection-not-syncable.exception';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {BankTransactionPersistenceService, PersistTransactionsResult} from './bank-transaction-persistence.service';
 import {BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';

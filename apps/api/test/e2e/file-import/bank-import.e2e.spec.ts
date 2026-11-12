@@ -1078,7 +1078,10 @@ describe('Bank imports', () => {
 			jest.spyOn(client, 'getAccountBalances').mockResolvedValue([]),
 			jest
 				.spyOn(client, 'getAccountTransactions')
-				.mockImplementation(async (providerAccountId) => delivered[providerAccountId] ?? []),
+				.mockImplementation(async (providerAccountId) => ({
+					transactions: delivered[providerAccountId] ?? [],
+					unparseableCount: 0,
+				})),
 		];
 		const synchronize = async () => {
 			await connections.update(connection.id, {nextSyncAt: new Date(Date.now() - 1), syncStatus: 'QUEUED'});
