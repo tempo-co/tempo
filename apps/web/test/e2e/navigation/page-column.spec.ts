@@ -2,6 +2,7 @@ import type {Page} from '@playwright/test';
 
 import {mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
+import {mockJson} from '../../utils/api-mocks';
 import {boxOf} from '../../utils/layout';
 
 // Headless Chromium hides scrollbars; desktop Chrome on Linux and Windows takes room for them.
@@ -29,6 +30,12 @@ for (const width of [1440, 1280]) {
   }) => {
     await page.setViewportSize({width, height: 800});
     await mockSyntheticHome(page);
+    // Connections and Settings ask for more than Home; in CI an unmocked request reaches the API and signs out.
+    await mockJson(page, '**/bank-connections/aspsps', []);
+    await mockJson(page, '**/notifications', {
+      publicKey: null,
+      preferences: {bankConnections: true},
+    });
 
     // Home is longer than the window; Connections, with one bank, is not.
     await page.goto('/');
