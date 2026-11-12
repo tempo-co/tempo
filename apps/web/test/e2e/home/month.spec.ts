@@ -89,6 +89,8 @@ test('a later page of the month’s transactions that fails keeps the loaded one
   page,
   homePage,
 }) => {
+  // The failed page is retried by the query client before Load more reports it.
+  test.slow();
   await mockSyntheticHome(page, {transactionsPerMonth: 45});
   const later = await failLaterPages(page, '**/bank-transactions?**', (params) => {
     const index = params.get('pagination[pageIndex]');

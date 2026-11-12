@@ -131,7 +131,7 @@ function syncHarness() {
 const cachedKeys = [
   dashboardQueryKeys.breakdown('year', 'category', '2007-01-01', '2026-10-01', '2026-10-01'),
   dashboardQueryKeys.reviewCounts,
-  bankQueryKeys.transactions({pageIndex: 0, pageSize: 10}, {cashFlows: ['SPENDING']}, undefined),
+  bankQueryKeys.transactions({cashFlows: ['SPENDING']}, undefined),
   bankQueryKeys.transaction('example-transaction'),
 ];
 

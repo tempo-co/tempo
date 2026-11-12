@@ -4,6 +4,7 @@ import {createAccount} from '../data/account.data';
 import {mockSyntheticHome} from '../data/home-history.data';
 import {expect, test} from '../fixtures';
 import {boxOf, expectNoHorizontalOverflow} from '../utils/layout';
+import {openTransactionFilter} from '../utils/transaction-filters';
 
 test.use({
   viewport: {width: 320, height: 850},
@@ -59,15 +60,24 @@ test.beforeEach(async ({page}) => {
   );
 });
 
+/** The token dialog's Expiration select, a Select every pointer type reaches; it starts on 90 days. */
+async function openExpirationSelect(page: Page) {
+  await page.route('**/personal-access-tokens', (route) => route.fulfill({json: []}));
+  await page.goto('/settings/integrations');
+  await page.getByRole('button', {name: 'Create token', exact: true}).click();
+  const select = page.getByRole('dialog').getByRole('combobox', {name: 'Expiration'});
+  await expect(select).toHaveText('90 days');
+  return select;
+}
+
 test('touch date selection fills the available seven-column calendar on a narrow phone', async ({
   page,
 }) => {
   await page.goto('/bank-transactions');
-  await page.getByTestId('bank-transaction-mobile-filters-trigger').tap();
-  const drawer = page.getByTestId('bank-transaction-mobile-filters');
+  const drawer = await openTransactionFilter(page, 'Booking date');
   const calendar = drawer.getByTestId('bank-transaction-mobile-calendar');
   await expect(calendar).toBeVisible();
-  // Only the filter list scrolls; the sheet keeps its title and actions in place.
+  // Only the filter's options scroll; the sheet keeps its title and actions in place.
   await expect(drawer).toHaveCSS('overflow-y', 'hidden');
   await drawer.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
   const sheet = await boxOf(drawer);
@@ -106,21 +116,19 @@ test('touch date selection fills the available seven-column calendar on a narrow
 });
 
 for (const width of [320, 820]) {
-  test(`touch page-size selection presents finger-sized options at ${width}px`, async ({page}) => {
+  test(`touch selection presents finger-sized options at ${width}px`, async ({page}) => {
     await page.setViewportSize({width, height: 850});
-    await page.goto('/bank-transactions');
-    const trigger = page.getByRole('combobox', {name: 'Rows per page'});
-    await expect(trigger).toBeVisible();
-    expect((await boxOf(trigger)).height).toBeGreaterThanOrEqual(44);
+    const trigger = await openExpirationSelect(page);
+    // The token dialog sizes its trigger for phones; the options are finger-sized everywhere.
+    if (width < 640) expect((await boxOf(trigger)).height).toBeGreaterThanOrEqual(44);
     await trigger.tap();
-    const option = page.getByRole('option', {name: '50', exact: true});
+    const option = page.getByRole('option', {name: '1 year', exact: true});
     await expect(option).toBeVisible();
     await expect.poll(async () => (await boxOf(option)).height).toBeGreaterThanOrEqual(44);
     await option.tap();
-    await expect(trigger).toHaveText('50');
-    await expect(page).toHaveURL(/pageSize=50/);
+    await expect(trigger).toHaveText('1 year');
     await trigger.tap();
-    await page.getByRole('option', {name: '50', exact: true}).tap();
+    await page.getByRole('option', {name: '1 year', exact: true}).tap();
     await expect(page.getByRole('listbox')).toBeHidden();
     expect(await page.evaluate(() => Reflect.get(window, 'selectionHaptics') as number[])).toEqual([
       8,
@@ -134,12 +142,12 @@ async function swipeFilterUp(page: Page) {
     'Touches are sent through Chromium CDP.',
   );
   const viewport = page
-    .getByTestId('bank-transaction-mobile-filters-scroll-area')
+    .getByTestId('bank-transaction-filters-scroll-area')
     .locator(':scope > [data-radix-scroll-area-viewport]');
   await expect
     .poll(() =>
       page
-        .getByTestId('bank-transaction-mobile-filters')
+        .getByTestId('bank-transaction-filters')
         .evaluate((element) => element.getBoundingClientRect().bottom),
     )
     .toBeLessThanOrEqual(850);
@@ -164,8 +172,7 @@ test('touch category filtering uses readable search text and finger-sized choice
   page,
 }) => {
   await page.goto('/bank-transactions');
-  await page.getByTestId('bank-transaction-mobile-filters-trigger').tap();
-  const drawer = page.getByTestId('bank-transaction-mobile-filters');
+  const drawer = await openTransactionFilter(page, 'Categories');
   const search = drawer.getByPlaceholder('Search categories...');
   await swipeFilterUp(page);
   expect(await page.evaluate(() => Reflect.get(window, 'selectionHaptics') as number[])).toEqual(
@@ -235,15 +242,14 @@ test('Home span choices are finger-sized and select quietly', async ({page}) => 
 
 test('reduced-motion touch selections commit quietly', async ({page}) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
-  await page.goto('/bank-transactions');
-  const size = page.getByRole('combobox', {name: 'Rows per page'});
+  const size = await openExpirationSelect(page);
   await size.tap();
   await expect(page.getByRole('listbox')).toHaveCSS('animation-name', 'none');
-  await page.getByRole('option', {name: '50', exact: true}).tap();
-  await expect(size).toHaveText('50');
-  await page.getByTestId('bank-transaction-mobile-filters-trigger').tap();
+  await page.getByRole('option', {name: '1 year', exact: true}).tap();
+  await expect(size).toHaveText('1 year');
+  await page.goto('/bank-transactions');
+  const drawer = await openTransactionFilter(page, 'Categories');
   await swipeFilterUp(page);
-  const drawer = page.getByTestId('bank-transaction-mobile-filters');
   await drawer.getByPlaceholder('Search categories...').fill('Food');
   await drawer.getByRole('option', {name: 'Food and drink', exact: true}).tap();
   await expect(page).toHaveURL(/FOOD_AND_DRINK/);
@@ -254,7 +260,7 @@ test('reduced-motion touch selections commit quietly', async ({page}) => {
 
 for (const support of ['unavailable', 'restricted']) {
   test(`touch selections work when haptics are ${support}`, async ({page}) => {
-    await page.goto('/bank-transactions');
+    const size = await openExpirationSelect(page);
     await page.evaluate((mode) => {
       Object.defineProperty(navigator, 'vibrate', {
         configurable: true,
@@ -266,13 +272,13 @@ for (const support of ['unavailable', 'restricted']) {
               },
       });
     }, support);
-    const size = page.getByRole('combobox', {name: 'Rows per page'});
     await size.tap();
-    await page.getByRole('option', {name: '50', exact: true}).tap();
-    await expect(size).toHaveText('50');
-    await page.getByTestId('bank-transaction-mobile-filters-trigger').tap();
+    await page.getByRole('option', {name: '1 year', exact: true}).tap();
+    await expect(size).toHaveText('1 year');
+    await page.getByRole('dialog').getByRole('button', {name: 'Cancel', exact: true}).tap();
+    await page.getByRole('link', {name: 'Transactions'}).tap();
+    const drawer = await openTransactionFilter(page, 'Categories');
     await swipeFilterUp(page);
-    const drawer = page.getByTestId('bank-transaction-mobile-filters');
     await drawer.getByPlaceholder('Search categories...').fill('Food');
     await drawer.getByRole('option', {name: 'Food and drink', exact: true}).tap();
     await expect(page).toHaveURL(/FOOD_AND_DRINK/);
@@ -284,10 +290,9 @@ test('cancelled touch selection leaves the value unchanged and keyboard selectio
   browserName,
 }) => {
   test.skip(browserName !== 'chromium', 'Touches are sent through Chromium CDP.');
-  await page.goto('/bank-transactions');
-  const size = page.getByRole('combobox', {name: 'Rows per page'});
+  const size = await openExpirationSelect(page);
   await size.tap();
-  const option = page.getByRole('option', {name: '50', exact: true});
+  const option = page.getByRole('option', {name: '1 year', exact: true});
   await expect.poll(async () => (await boxOf(option)).height).toBeGreaterThanOrEqual(44);
   const box = await boxOf(option);
   const touch = await page.context().newCDPSession(page);
@@ -298,7 +303,7 @@ test('cancelled touch selection leaves the value unchanged and keyboard selectio
   await touch.send('Input.dispatchTouchEvent', {type: 'touchCancel', touchPoints: []});
   await touch.detach();
   await expect(option).toHaveAttribute('data-state', 'unchecked');
-  await expect(page.getByRole('option', {name: '10', exact: true})).toHaveAttribute(
+  await expect(page.getByRole('option', {name: '90 days', exact: true})).toHaveAttribute(
     'data-state',
     'checked',
   );
@@ -307,7 +312,7 @@ test('cancelled touch selection leaves the value unchanged and keyboard selectio
   );
   await option.focus();
   await option.press('Enter');
-  await expect(size).toHaveText('50');
+  await expect(size).toHaveText('1 year');
   expect(await page.evaluate(() => Reflect.get(window, 'selectionHaptics') as number[])).toEqual(
     [],
   );
@@ -316,17 +321,17 @@ test('cancelled touch selection leaves the value unchanged and keyboard selectio
 test.describe('precise-pointer controls', () => {
   test.use({isMobile: false, hasTouch: false, viewport: {width: 1440, height: 900}});
   test('mouse and keyboard selections commit without haptics', async ({page}) => {
-    await page.goto('/bank-transactions');
-    const size = page.getByRole('combobox', {name: 'Rows per page'});
+    const size = await openExpirationSelect(page);
     await size.click();
-    await page.getByRole('option', {name: '50', exact: true}).click();
-    await expect(size).toHaveText('50');
+    await page.getByRole('option', {name: '30 days', exact: true}).click();
+    await expect(size).toHaveText('30 days');
     await size.focus();
     await size.press('ArrowDown');
-    await page.getByRole('option', {name: '100', exact: true}).focus();
+    await page.getByRole('option', {name: '1 year', exact: true}).focus();
     await page.keyboard.press('Enter');
-    await expect(size).toHaveText('100');
-    await page.getByRole('button', {name: 'Categories', exact: true}).click();
+    await expect(size).toHaveText('1 year');
+    await page.goto('/bank-transactions');
+    await openTransactionFilter(page, 'Categories');
     const search = page.getByPlaceholder('Search categories...');
     await expect(search).toHaveCSS('font-size', '14px');
     await search.fill('Food');

@@ -1,17 +1,20 @@
 import {QueryClient, useQuery, useQueryClient} from '@tanstack/react-query';
-import {BankTransaction, BankTransactionsResponse} from '@tempo/contracts';
+import {BankTransaction} from '@tempo/contracts';
 
 import {api} from '@/utils/api';
 
+import {type CachedTransactionList, listedPages} from './listed-transactions';
 import {bankQueryKeys} from './query-keys';
 
 /** The same transaction from an already-loaded transactions page, if any. */
 const findListedBankTransaction = (queryClient: QueryClient, id: BankTransaction['id']) => {
-  for (const [, page] of queryClient.getQueriesData<BankTransactionsResponse>({
+  for (const [, list] of queryClient.getQueriesData<CachedTransactionList>({
     queryKey: bankQueryKeys.transactionsRoot,
   })) {
-    const transaction = page?.transactions.find((listed) => listed.id === id);
-    if (transaction) return transaction;
+    for (const page of listedPages(list)) {
+      const transaction = page.transactions.find((listed) => listed.id === id);
+      if (transaction) return transaction;
+    }
   }
   return undefined;
 };

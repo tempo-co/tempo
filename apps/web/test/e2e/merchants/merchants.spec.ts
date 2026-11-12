@@ -445,6 +445,8 @@ test('the merchants dialog ranks by week, month or year and searches every merch
 test('a later page of merchants or of a merchant’s transactions that fails keeps the loaded ones and tries that page again', async ({
   page,
 }) => {
+  // The failed page is retried by the query client before Load more reports it.
+  test.slow();
   await mockSignedIn(page);
   await mockMerchants(page);
   const merchantsLater = await failLaterPages(page, `${API_URL}/merchants?**`, (params) => {

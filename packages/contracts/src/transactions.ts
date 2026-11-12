@@ -199,6 +199,8 @@ export type BankTransactionFilter = {
 	merchantGroup?: string;
 	/** Only the rows of one income source, by its breakdown part's `key`. */
 	incomeSource?: string;
+	/** Only the rows review counts count as `needsAttention`: to review, failed to categorize or without a direction. */
+	needsAttention?: true;
 };
 
 /** `GET /bank-transactions/totals` query: the list's filters without sort or pagination. */
