@@ -1,9 +1,8 @@
 import {Link} from '@tanstack/react-router';
-import {History, Landmark, RefreshCw} from 'lucide-react';
+import {History, Landmark} from 'lucide-react';
 
-import {EmptyState} from '@/components/shared/layout/app-empty-state';
+import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
-import {Card} from '@/components/ui/card';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
 import {isConnectedBank} from '@/features/banking/utils/bank-sync-status';
 
@@ -21,21 +20,10 @@ type HomeDashboardProps = {
 
 /** Where the owner stands over the years: the balance and what was kept, year by year, and where money went. */
 export function HomeDashboard({today, onOpenMonth}: HomeDashboardProps) {
-  const {bankConnections, isError, refetch} = useGetAllBankConnections();
+  const {bankConnections, isError, error, refetch} = useGetAllBankConnections();
 
   if (isError) {
-    return (
-      <EmptyState
-        tone='error'
-        icon={RefreshCw}
-        title='Could not load your banks'
-        description='The connection service did not respond. Try again in a moment.'
-      >
-        <Button variant='outline' onClick={() => void refetch()}>
-          Try again
-        </Button>
-      </EmptyState>
-    );
+    return <LoadErrorState title="Couldn't load your banks" error={error} onRetry={refetch} />;
   }
 
   // The history requests run while the connections load, instead of after.
@@ -51,11 +39,12 @@ export function HomeDashboard({today, onOpenMonth}: HomeDashboardProps) {
 
 /** Each section shows as soon as its own data arrives, in a placeholder of its loaded size until then. */
 function HomeHistory({today, onOpenMonth}: HomeDashboardProps) {
-  const {overview, isError, refetch} = useOverview(today);
-  if (isError) return <LoadError what='your history' onRetry={refetch} />;
+  const {overview, isError, error, refetch} = useOverview(today);
+  if (isError)
+    return <LoadErrorState title="Couldn't load your history" error={error} onRetry={refetch} />;
   if (overview?.months.length === 0)
     return (
-      <EmptyState
+      <StateMessage
         icon={History}
         title='No history yet'
         description='Balances and spending appear here once the first transactions have synced.'
@@ -72,8 +61,15 @@ function HomeHistory({today, onOpenMonth}: HomeDashboardProps) {
 
 /** Spending by category and income by source, year by year; their year columns line up. */
 function YearBreakdowns({today, overview}: {today: string; overview: Overview | null}) {
-  const {breakdowns, isError, refetch} = useYearBreakdowns(today);
-  if (isError) return <LoadError what='spending and income by year' onRetry={refetch} />;
+  const {breakdowns, isError, error, refetch} = useYearBreakdowns(today);
+  if (isError)
+    return (
+      <LoadErrorState
+        title="Couldn't load spending and income by year"
+        error={error}
+        onRetry={refetch}
+      />
+    );
   if (!overview || !breakdowns)
     return (
       <>
@@ -108,27 +104,16 @@ function YearBreakdowns({today, overview}: {today: string; overview: Overview | 
   );
 }
 
-function LoadError({what, onRetry}: {what: string; onRetry: () => unknown}) {
-  return (
-    <Card className='grid justify-items-start gap-4 p-5 sm:p-6'>
-      <p>Could not load {what}.</p>
-      <Button variant='outline' onClick={() => void onRetry()}>
-        Try again
-      </Button>
-    </Card>
-  );
-}
-
 function ConnectBankPrompt() {
   return (
-    <EmptyState
+    <StateMessage
       icon={Landmark}
       title='Connect a bank to see where you stand'
-      description='Home shows your balance over the years, what you kept and where your money went once at least one account has synced.'
+      description='Your balance over the years, what you kept and where the money went, once one account has synced.'
     >
       <Button asChild>
-        <Link to='/bank-connections'>Connect bank</Link>
+        <Link to='/bank-connections'>Connect a bank</Link>
       </Button>
-    </EmptyState>
+    </StateMessage>
   );
 }

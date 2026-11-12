@@ -200,7 +200,7 @@ test.describe('saved Home', () => {
       .getByRole('link', {name: /^Transactions/})
       .first()
       .click();
-    await expect(page.getByRole('heading', {name: 'No bank transactions found'})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'No transactions yet'})).toBeVisible();
     await page.clock.runFor(1100);
     await expect.poll(savedMonths).toEqual(['2026-08', '2026-09']);
     await page.getByRole('link', {name: 'Connections', exact: true}).first().click();
@@ -244,7 +244,7 @@ test('logout removes saved Home data and prevents an offline reload from reopeni
   expect(await readCache(page)).toBe(null);
   await context.setOffline(true);
   await page.goto('/?month=2026-09');
-  await expect(page.getByRole('heading', {name: 'Cannot reach Tempo'})).toBeVisible();
+  await expect(page.getByRole('heading', {name: "Can't reach Tempo"})).toBeVisible();
   await expect(page.getByRole('region', {name: 'Where you stand'})).toHaveCount(0);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });

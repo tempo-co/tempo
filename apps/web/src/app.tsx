@@ -1,7 +1,9 @@
 import {RouterProvider} from '@tanstack/react-router';
 import {motion} from 'framer-motion';
+import {CloudOff, RotateCw, WifiOff} from 'lucide-react';
 import React, {useEffect} from 'react';
 
+import {StateMessage} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {Toaster} from '@/components/ui/sonner';
 import {useAppOpenBankRefresh} from '@/features/banking/api/use-app-open-bank-refresh';
@@ -40,13 +42,21 @@ export function App() {
   return (
     <ThemeProvider storageKey='vite-ui-theme'>
       {isUnavailable || (!isOnline && !isAuthenticated) ? (
-        <div className='flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center'>
-          <Logo className='h-16 w-16 text-primary' />
-          <h1 className='text-page-title'>Cannot reach Tempo</h1>
-          <p className='max-w-sm text-sm text-muted-foreground'>
-            Your session has not been checked yet. Reconnect to continue.
-          </p>
-          <Button onClick={() => void refetch()}>Try again</Button>
+        <div className='flex min-h-screen flex-col items-center justify-center gap-6 p-4 sm:p-6'>
+          <Logo className='h-12 w-12 text-primary' />
+          <StateMessage
+            className='w-full max-w-md'
+            tone='error'
+            titleAs='h1'
+            icon={navigator.onLine ? CloudOff : WifiOff}
+            title="Can't reach Tempo"
+            description="Your session hasn't been checked yet. Reconnect to continue."
+          >
+            <Button variant='outline' onClick={() => void refetch()}>
+              <RotateCw aria-hidden='true' />
+              Try again
+            </Button>
+          </StateMessage>
         </div>
       ) : isPending || (isSavedSessionUnconfirmed && isOnline && !wasSavedSessionShown()) ? (
         <LoadingScreen />

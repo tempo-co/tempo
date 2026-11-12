@@ -125,7 +125,7 @@ test('Home does not retry a rate-limited request before the next refresh', async
     });
   });
   await page.goto('/');
-  await expect(page.getByText('Could not load your history.')).toBeVisible();
+  await expect(page.getByText("Couldn't load your history")).toBeVisible();
 
   // Past every retry delay (1, 2 and 4 seconds) but well before the next 30-second refresh.
   await page.clock.runFor(10_000);

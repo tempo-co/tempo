@@ -162,7 +162,7 @@ test.describe('when what repeats cannot be read', () => {
     );
     await page.goto('/');
 
-    await expect(repeats(page)).toContainText('Could not load what repeats.');
+    await expect(repeats(page)).toContainText("Couldn't load what repeats");
     state.failing = false;
     await repeats(page).getByRole('button', {name: 'Try again'}).click();
     await expect(repeats(page)).toContainText('Bills a month€1,250');

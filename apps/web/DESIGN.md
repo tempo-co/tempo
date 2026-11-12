@@ -155,11 +155,11 @@ components:
     textColor: "{colors.foreground}"
     rounded: "{rounded.pill}"
     padding: "1px 10px"
-  empty-state:
+  state-message:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.foreground}"
     rounded: "{rounded.surface}"
-    padding: "64px 24px"
+    padding: "20px; 24px from sm"
 ---
 
 # Design System: Tempo
@@ -246,8 +246,9 @@ and don't introduce sizes outside this scale.
 - **Page title** (`text-page-title`: `600`, `1.5rem`, `2rem`, `-0.025em`): one per page,
   including error and auth pages.
 - **Section title** (`text-section-title`: `600`, `1.125rem`, `1.35`): dialog and drawer
-  titles, detail views, empty states.
-- **Card title** (`text-card-title`: `600`, `1rem`, `1.5`): card and settings-group headings.
+  titles, detail views.
+- **Card title** (`text-card-title`: `600`, `1rem`, `1.5`): card and settings-group headings,
+  empty and error states.
 - **Body** (`400`, `1rem`, `1.5`): primary copy.
 - **Body small** (`text-sm`: `400`, `0.875rem`, `1.5`): supporting descriptions, table content,
   status rows.
@@ -370,11 +371,41 @@ outcomes. A skeleton keeps its section's loaded size and static labels, and each
 when its own data arrives, so nothing on screen moves as a page loads. An inline control whose
 result shows where it was edited confirms in place (its own pending state and status line);
 toasts carry failures, saves finished after a dialog closed, and outcomes the screen does not show.
-They stack collapsed and use the library's default lifetime. Empty and failed loads use the one `EmptyState` component: a framed card with a 48px
-icon, a `text-section-title` heading, a muted description and the next action. `tone='error'`
-marks a failed load with a destructive icon; inside a dialog it drops its frame. Distinct states get distinct copy; never imply data changed before the server
-confirms it. Motion is brief (0.2–0.3s), subtle, reduced-motion aware; never animate
-financial values continuously.
+They stack collapsed and use the library's default lifetime. Distinct states get distinct copy;
+never imply data changed before the server confirms it. Motion is brief (0.2–0.3s), subtle,
+reduced-motion aware; never animate financial values continuously.
+
+### Empty and error states
+
+Empty, not-found and failed loads use `StateMessage` (`src/components/shared/state-message.tsx`),
+left-aligned like the record it stands in for: a round tile, a title, a muted description, an
+optional detail line and the next action. Never centre the state or float a large icon on its own.
+
+- **Tile.** Round, 40px on a page and 36px in a section, with a 20/18px glyph at stroke 2. Empty and
+  not-found states use the transaction tile tokens, the same Clay tile as the ledger rows. A failed
+  load uses `destructive` at 10% for the field, 30% for the edge and full strength for the glyph.
+  The glyph names the state (`CloudOff` for a server failure, `WifiOff` offline, `SearchX` no match,
+  `FileQuestion` not found, the feature's own glyph for nothing yet), never the action; the rotate
+  glyph belongs on Try again.
+- **Sizes.** `page` replaces a list or page and is its own card, with a `text-card-title` heading.
+  `section` sits inside a card or dialog without a second frame, with a `text-sm` medium title and
+  small buttons, and keeps the section's loaded height. A one-line gap inside a list ("No recurring
+  bills found yet.") stays plain muted text with no tile.
+- **Copy.** The title says what is missing or failed, in sentence case with no final period:
+  "Couldn't load transactions". The description gives the cause in plain words, or what fills the
+  space ("They appear here once your banks finish their first sync."); never reassure about what
+  obviously did not change. A filtered-empty state quotes the search and points at the filter chips above it.
+- **Detail.** A failed load adds one monospace `text-label` line with the status code (or "No
+  response") and the time it failed: `503 · 14:02`. The 404 page shows `404 · <path>`.
+- **Failed loads.** `LoadErrorState` derives the glyph, description and detail from the query's
+  error, says "You're offline" when the device is, and gives Try again its pending state ("Trying
+  again…" with a spinner). Extra ways out, such as Clear filters, follow it as ghost buttons.
+- **Actions.** Outline buttons by default; a ghost button for a second, wider way out (Search all
+  dates). The primary Clay button appears only when the state carries the page's only action
+  (Connect a bank, Create token).
+- **First run.** A list's nothing-yet state may show three static rows in the 60px row shape under
+  the message (`previewRows`), fading out. They never pulse, so they cannot read as loading, and
+  they are hidden from assistive technology. Only lists get them.
 
 ### Navigation
 

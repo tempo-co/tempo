@@ -1,8 +1,8 @@
 import type {CashFlowInterval} from '@tempo/contracts';
-import {FileQuestion, RefreshCw} from 'lucide-react';
+import {FileQuestion} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
-import {EmptyState} from '@/components/shared/layout/app-empty-state';
+import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {
   ResponsiveDialog,
@@ -90,30 +90,25 @@ function SelectedMerchant({id, onBack}: {id: string; onBack: () => void}) {
   if (isPending) return <Skeleton className='h-96' role='img' aria-label='Loading merchant' />;
   if (error instanceof HttpError && error.status === 404)
     return (
-      <EmptyState
-        framed={false}
+      <StateMessage
+        size='section'
         icon={FileQuestion}
         title='Merchant not found'
         description='There are no transactions with this merchant, or its name changed.'
       >
-        <Button variant='outline' onClick={onBack}>
+        <Button variant='outline' size='sm' onClick={onBack}>
           All merchants
         </Button>
-      </EmptyState>
+      </StateMessage>
     );
   if (isError || !merchant)
     return (
-      <EmptyState
-        framed={false}
-        tone='error'
-        icon={RefreshCw}
-        title='Could not load this merchant'
-        description='The service did not respond. Try again in a moment.'
-      >
-        <Button variant='outline' onClick={() => void refetch()}>
-          Try again
-        </Button>
-      </EmptyState>
+      <LoadErrorState
+        size='section'
+        title="Couldn't load this merchant"
+        error={error}
+        onRetry={refetch}
+      />
     );
   return <MerchantDetail key={merchant.id} merchant={merchant} onBack={onBack} />;
 }

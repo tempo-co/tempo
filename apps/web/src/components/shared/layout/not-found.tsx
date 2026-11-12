@@ -1,23 +1,25 @@
-import {Link} from '@tanstack/react-router';
+import {Link, useLocation} from '@tanstack/react-router';
+import {Compass} from 'lucide-react';
 
-import {Badge} from '@/components/ui/badge';
+import {StateMessage} from '@/components/shared/state-message';
+import {Button} from '@/components/ui/button';
 
 export function NotFound() {
+  const {pathname} = useLocation();
   return (
-    <div className='flex min-h-screen flex-col items-center justify-center space-y-6 bg-background text-center'>
-      <Badge className='font-mono text-base' variant='secondary'>
-        404
-      </Badge>
-      <h1 className='text-page-title'>Page Not Found</h1>
-      <p className='text-muted-foreground'>
-        Sorry, we can&apos;t find the page you&apos;re looking for.
-      </p>
-      <Link
-        to='/'
-        className='inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90'
+    <div className='flex justify-center px-4 py-16 sm:px-6 sm:py-24'>
+      <StateMessage
+        className='w-full max-w-md'
+        titleAs='h1'
+        icon={Compass}
+        title="This page doesn't exist"
+        description='The link may be old or mistyped.'
+        detail={`404 · ${pathname}`}
       >
-        Back to Home
-      </Link>
+        <Button asChild>
+          <Link to='/'>Back to Home</Link>
+        </Button>
+      </StateMessage>
     </div>
   );
 }

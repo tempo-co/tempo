@@ -1,9 +1,9 @@
 import {BankTransaction} from '@tempo/contracts';
 import {ArrowDownLeft, ArrowUpRight, CalendarDays, CreditCard} from 'lucide-react';
-import {FileQuestion, RefreshCw} from 'lucide-react';
+import {FileQuestion} from 'lucide-react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
-import {EmptyState} from '@/components/shared/layout/app-empty-state';
+import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {
   ResponsiveDialog,
@@ -145,32 +145,27 @@ export function BankTransactionDetailsDialog({
               <Skeleton className='h-72 w-full bg-card' />
             </div>
           ) : !transaction || (isError && isOnline) ? (
-            <div role='alert' className='p-5 sm:p-8'>
+            <div className='p-5 sm:p-8'>
               {isNotFound ? (
-                <EmptyState
-                  framed={false}
+                <StateMessage
+                  size='section'
                   icon={FileQuestion}
                   title='Transaction not found'
-                  description='This transaction may have been removed or the details may be out of date.'
+                  description='It may have been removed, or the link is out of date.'
                 >
                   <ResponsiveDialogClose asChild>
-                    <Button variant='outline' className='min-h-11'>
+                    <Button variant='outline' size='sm'>
                       Close
                     </Button>
                   </ResponsiveDialogClose>
-                </EmptyState>
+                </StateMessage>
               ) : (
-                <EmptyState
-                  tone='error'
-                  framed={false}
-                  icon={RefreshCw}
-                  title='Could not load bank transaction'
-                  description='The transaction service did not respond. Try again in a moment.'
-                >
-                  <Button variant='outline' onClick={() => void refetch()} className='min-h-11'>
-                    Try again
-                  </Button>
-                </EmptyState>
+                <LoadErrorState
+                  size='section'
+                  title="Couldn't load this transaction"
+                  error={error}
+                  onRetry={refetch}
+                />
               )}
             </div>
           ) : (

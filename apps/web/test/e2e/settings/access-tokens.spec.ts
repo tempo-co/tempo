@@ -131,7 +131,7 @@ for (const width of [1440, 320]) {
     }
     await expect(copyUrl).toBeVisible({timeout: 4000});
     await expectNoHorizontalOverflow(page);
-    await expect(page.getByText('No access tokens yet.', {exact: true})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'No access tokens yet'})).toBeVisible();
     // Empty: the empty state owns the only create action.
     await expect(page.getByRole('button', {name: 'Create token', exact: true})).toHaveCount(1);
     const primaryBackground = await page.evaluate(() => {
@@ -278,9 +278,9 @@ for (const width of [1440, 320]) {
     await confirmation.getByRole('button', {name: 'Revoke token', exact: true}).click();
     await expect(details).toBeHidden();
     await expect(row).toHaveCount(0);
-    await expect(page.getByText('No access tokens yet.', {exact: true})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'No access tokens yet'})).toBeVisible();
     await page.reload();
-    await expect(page.getByText('No access tokens yet.', {exact: true})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'No access tokens yet'})).toBeVisible();
     expect(creates).toBe(1);
     expect(revokes).toBe(1);
     await expectNoHorizontalOverflow(page);
@@ -412,7 +412,7 @@ test('retries a failed list load and retains a token until revocation succeeds',
   });
   await page.setViewportSize({width: 320, height: 900});
   await page.goto('/settings/integrations');
-  await expect(page.getByText('Access tokens could not be loaded.', {exact: true})).toBeVisible();
+  await expect(page.getByRole('heading', {name: "Couldn't load access tokens"})).toBeVisible();
   loadFails = false;
   await page.getByRole('button', {name: 'Try again', exact: true}).click();
   const rows = page.getByTestId('access-token-row');

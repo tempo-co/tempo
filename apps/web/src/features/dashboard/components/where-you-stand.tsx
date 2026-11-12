@@ -2,8 +2,8 @@ import {Link} from '@tanstack/react-router';
 import {format} from 'date-fns';
 import {type ReactNode, useState} from 'react';
 
+import {LoadErrorState} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
-import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
 import {cn} from '@/utils/cn';
@@ -63,12 +63,13 @@ export function WhereYouStand({
         ) : (
           <BalanceChartSkeleton>
             {view.isError ? (
-              <div className='m-auto grid justify-items-center gap-3 text-sm'>
-                <p>Could not load the last month.</p>
-                <Button variant='outline' onClick={() => void view.refetch()}>
-                  Try again
-                </Button>
-              </div>
+              <LoadErrorState
+                size='section'
+                className='m-auto'
+                title="Couldn't load the last month"
+                error={view.error}
+                onRetry={view.refetch}
+              />
             ) : undefined}
           </BalanceChartSkeleton>
         )}
@@ -104,7 +105,8 @@ function useSpanView(overview: Overview | null, today: string, span: Span) {
   if (span !== '1m')
     return {loaded: monthSpanView(overview, span), isError: false, refetch: daily.refetch};
   const month = daily.lastMonth;
-  if (!month) return {loaded: null, isError: daily.isError, refetch: daily.refetch};
+  if (!month)
+    return {loaded: null, isError: daily.isError, error: daily.error, refetch: daily.refetch};
   const base = month.days.find((point) => point.end === month.base) ?? null;
   const from = base ? month.from : (month.days[0]?.end ?? month.from);
   const loaded: SpanView = {

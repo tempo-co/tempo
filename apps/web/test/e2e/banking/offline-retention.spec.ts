@@ -84,7 +84,8 @@ test.describe('offline retention', () => {
     }
     expect(await savedSearches(page)).toEqual(['Extra', 'Provider', 'Salary']);
     await page.goto('/bank-transactions?search=Coffee');
-    await expect(page.getByText('Could not load bank transactions')).toBeVisible();
+    await expect(page.getByRole('heading', {name: "You're offline"})).toBeVisible();
+    await expect(page.getByText('This loads once the device is back online.')).toBeVisible();
     await expect(page.getByText('Coffee shop', {exact: true})).not.toBeVisible();
 
     await context.setOffline(false);

@@ -27,7 +27,7 @@ export class HomePage {
     this.emptyStateTitle = page.getByRole('heading', {
       name: 'Connect a bank to see where you stand',
     });
-    this.connectBankLink = page.getByRole('link', {name: 'Connect bank'});
+    this.connectBankLink = page.getByRole('link', {name: 'Connect a bank'});
     this.whereYouStand = page.getByRole('region', {name: 'Where you stand'});
     this.totalBalance = this.whereYouStand
       .getByRole('heading', {name: 'Total balance'})

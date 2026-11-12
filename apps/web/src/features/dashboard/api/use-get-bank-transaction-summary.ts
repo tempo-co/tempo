@@ -15,7 +15,7 @@ export const useGetBankTransactionSummary = (
   asOf: string,
   {enabled = true}: {enabled?: boolean} = {},
 ) => {
-  const {data, isPending, isError, refetch} = useQuery<BankTransactionSummary>({
+  const {data, isPending, isError, error, refetch} = useQuery<BankTransactionSummary>({
     enabled,
     queryKey: dashboardQueryKeys.summary(month, asOf),
     queryFn: () => {
@@ -27,5 +27,5 @@ export const useGetBankTransactionSummary = (
     refetchOnReconnect: 'always',
   });
 
-  return {summary: data, isPending, isError, refetch};
+  return {summary: data, isPending, isError, error, refetch};
 };

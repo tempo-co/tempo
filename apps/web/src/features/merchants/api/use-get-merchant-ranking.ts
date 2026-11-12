@@ -13,7 +13,7 @@ export const useGetMerchantRanking = (
   asOf: string,
   limit: number,
 ) => {
-  const {data, isPending, isError, refetch} = useQuery<MerchantRanking>({
+  const {data, isPending, isError, error, refetch} = useQuery<MerchantRanking>({
     queryKey: merchantQueryKeys.ranking(interval, period, asOf, limit),
     queryFn: () =>
       api.get<MerchantRanking>(
@@ -25,5 +25,5 @@ export const useGetMerchantRanking = (
     staleTime: HOME_REFRESH_INTERVAL_MS,
     refetchOnReconnect: 'always',
   });
-  return {ranking: data, isPending, isError, refetch};
+  return {ranking: data, isPending, isError, error, refetch};
 };

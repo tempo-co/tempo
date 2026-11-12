@@ -6,13 +6,14 @@ import {useState} from 'react';
 import {Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis} from 'recharts';
 
 import {LoadMore} from '@/components/shared/load-more';
+import {LoadErrorState} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
 import {ChartContainer, ChartTooltip} from '@/components/ui/chart';
 import {Skeleton} from '@/components/ui/skeleton';
 import {TransactionListRow} from '@/features/banking/components/transaction-list-row';
 import {formatBankTransactionCompactDate} from '@/features/banking/utils/formatters';
-import {ChartCardError, ChartCardHeader} from '@/features/dashboard/components/chart-card';
+import {ChartCardHeader} from '@/features/dashboard/components/chart-card';
 import {axisFormatter, axisTicks} from '@/features/dashboard/utils/chart-axis';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatMoney, formatWholeMoney, toCents} from '@/features/dashboard/utils/money';
@@ -166,7 +167,7 @@ function PeriodsCard({merchant, hasIncome}: {merchant: MerchantGroup; hasIncome:
   const {from} = range;
   // `useLocalDate` can lag the clock by a moment after midnight; the API refuses a range ending after `asOf`.
   const to = range.to > asOf ? asOf : range.to;
-  const {periods, isPending, isError, refetch} = useGetMerchantPeriods(
+  const {periods, isPending, isError, error, refetch} = useGetMerchantPeriods(
     merchant.id,
     interval,
     from,
@@ -186,7 +187,12 @@ function PeriodsCard({merchant, hasIncome}: {merchant: MerchantGroup; hasIncome:
         toggleLabel='Group spending by'
       />
       {isError && !loaded ? (
-        <ChartCardError message='Could not load spending over time.' onRetry={refetch} />
+        <LoadErrorState
+          size='section'
+          title="Couldn't load spending over time"
+          error={error}
+          onRetry={refetch}
+        />
       ) : isPending || !loaded ? (
         <Skeleton className='h-56' role='img' aria-label='Loading spending over time' />
       ) : !hasActivity ? (
@@ -357,7 +363,7 @@ function PeriodsChart({
 
 function Transactions({merchant}: {merchant: MerchantGroup}) {
   const query = useGetMerchantTransactions(merchant.id);
-  const {data, isPending, refetch} = query;
+  const {data, isPending, error, refetch} = query;
   const transactions = data?.pages.flatMap((page) => page.transactions) ?? [];
   const total = data?.pages[data.pages.length - 1].total ?? merchant.count;
 
@@ -374,12 +380,12 @@ function Transactions({merchant}: {merchant: MerchantGroup}) {
       {isPending ? (
         <Skeleton className='h-40' aria-label='Loading transactions' />
       ) : !data ? (
-        <div className='grid justify-items-start gap-2'>
-          <p className='text-sm'>Could not load transactions.</p>
-          <Button variant='outline' className='max-sm:h-11' onClick={() => void refetch()}>
-            Try again
-          </Button>
-        </div>
+        <LoadErrorState
+          size='section'
+          title="Couldn't load transactions"
+          error={error}
+          onRetry={refetch}
+        />
       ) : (
         <>
           <ul

@@ -103,9 +103,15 @@ test.describe('bank connections', () => {
     await expect(bankLogo).toHaveCSS('width', '36px');
     await expect(bankLogo).toHaveCSS('height', '36px');
     for (const theme of ['light', 'dark']) {
-      await page.evaluate((value) => document.documentElement.classList.toggle('dark', value === 'dark'), theme);
+      await page.evaluate(
+        (value) => document.documentElement.classList.toggle('dark', value === 'dark'),
+        theme,
+      );
       await expect(bankLogo.locator('img')).toHaveAttribute('src', PROVIDER_LOGO_URL);
-      await expect(bankLogo).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)');
+      await expect(bankLogo).toHaveCSS(
+        'background-color',
+        theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)',
+      );
       await expect(bankLogo).toHaveCSS('border-top-width', '1px');
       await expect(bankLogo).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
     }
@@ -744,7 +750,13 @@ test.describe('mocked Enable Banking bank connection', () => {
       await mockJson(page, '**/bank-connections/aspsps/logos/NL/mock', {
         url: '/example-neutral.svg',
       });
-      await page.route('**/example-neutral.svg', (route) => route.fulfill({status: 200, contentType: 'image/svg+xml', body: `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="40"><rect width="160" height="40" fill="#000000"/></svg>`}));
+      await page.route('**/example-neutral.svg', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'image/svg+xml',
+          body: `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="40"><rect width="160" height="40" fill="#000000"/></svg>`,
+        }),
+      );
       let connectionPersisted = false;
       let connectionDeleted = false;
       let refreshed = false;
@@ -901,7 +913,10 @@ test.describe('mocked Enable Banking bank connection', () => {
       await expect(connectionCard).toBeVisible();
       await expect(connectionCard.getByRole('heading', {name: TARGET_ASPSP.name})).toBeVisible();
       const bankPlate = connectionCard.getByTestId('bank-connection-logo');
-      await expect(bankPlate).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)');
+      await expect(bankPlate).toHaveCSS(
+        'background-color',
+        theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)',
+      );
       await expect(bankPlate).toHaveCSS('border-top-width', '1px');
       await expect(bankPlate).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
       const themedImage = bankPlate.locator('img:visible');
@@ -1052,9 +1067,19 @@ test.describe('mocked Enable Banking bank connection', () => {
         await page.setViewportSize({width, height: 900});
         await page.addInitScript((value) => localStorage.setItem('vite-ui-theme', value), theme);
         const metadataUrl = '/bank-connections/aspsps/logos/XX/layout';
-        await mockJson(page, '**/bank-connections/aspsps/logos/XX/layout', {url: '/layout-bank.svg'});
-        await mockJson(page, '**/bank-connections/aspsps/logos/XX/failing', {url: '/failing-bank.svg'});
-        await page.route('**/layout-bank.svg', (route) => route.fulfill({status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="40"><rect width="160" height="40" fill="#00145a"/></svg>'}));
+        await mockJson(page, '**/bank-connections/aspsps/logos/XX/layout', {
+          url: '/layout-bank.svg',
+        });
+        await mockJson(page, '**/bank-connections/aspsps/logos/XX/failing', {
+          url: '/failing-bank.svg',
+        });
+        await page.route('**/layout-bank.svg', (route) =>
+          route.fulfill({
+            status: 200,
+            contentType: 'image/svg+xml',
+            body: '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="40"><rect width="160" height="40" fill="#00145a"/></svg>',
+          }),
+        );
         await page.route('**/failing-bank.svg', (route) => route.fulfill({status: 404, body: ''}));
         await mockBankRefresh(page);
         let connections: BankConnection[] = [MOCK_CONNECTION];
@@ -1065,7 +1090,10 @@ test.describe('mocked Enable Banking bank connection', () => {
             if (data === 'demo' || connection.id.endsWith('a1'))
               return {...connection, logo: {metadataUrl}};
             if (connection.id.endsWith('a2'))
-              return {...connection, logo: {metadataUrl: '/bank-connections/aspsps/logos/XX/failing'}};
+              return {
+                ...connection,
+                logo: {metadataUrl: '/bank-connections/aspsps/logos/XX/failing'},
+              };
             return connection;
           });
           await page.goto('/bank-connections');
@@ -1130,11 +1158,17 @@ test.describe('mocked Enable Banking bank connection', () => {
         await expect(image).toHaveJSProperty('naturalWidth', 160);
         await expect(page.getByTestId('bank-connection-logo').nth(1)).toContainText('J');
         for (const slot of await page.getByTestId('bank-connection-logo').all()) {
-          await expect(slot).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)');
+          await expect(slot).toHaveCSS(
+            'background-color',
+            theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)',
+          );
           await expect(slot).toHaveCSS('border-top-width', '1px');
           await expect(slot).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
         }
-        await page.screenshot({path: testInfo.outputPath(`bank-logo-layout-${width}-${theme}.png`), fullPage: true});
+        await page.screenshot({
+          path: testInfo.outputPath(`bank-logo-layout-${width}-${theme}.png`),
+          fullPage: true,
+        });
       });
     }
   });
@@ -1145,23 +1179,32 @@ test.describe('bank connection loading errors', () => {
 
   test('shows a retryable error when connections cannot load', async ({page}) => {
     let connectionRequests = 0;
+    let answerRetry = () => {};
     await routeBankConnectionsApi(page, async (route) => {
       connectionRequests += 1;
+      if (connectionRequests > 1) await new Promise<void>((resolve) => (answerRetry = resolve));
       await fulfillJson(route, {message: 'Service unavailable'}, 503);
     });
 
     await page.goto('/bank-connections');
 
     await expect(page.getByRole('heading', {name: 'Bank connections', exact: true})).toBeVisible();
-    await expect(page.getByRole('alert')).toBeVisible();
+    const alert = page.getByRole('alert');
     await expect(
-      page.getByRole('heading', {name: 'Could not load bank connections'}),
+      alert.getByRole('heading', {name: "Couldn't load bank connections"}),
     ).toBeVisible();
-    const retryButton = page.getByTestId('bank-connections-retry');
-    await expect(retryButton).toBeVisible();
-    const retryButtonBox = await boxOf(retryButton);
-    expect(retryButtonBox.height).toBeGreaterThanOrEqual(44);
+    await expect(alert).toContainText('The server ran into a problem.');
+    await expect(alert).toContainText(/503 · \d{2}:\d{2}/);
     expect(connectionRequests).toBe(1);
+
+    // Try again says it is working until the server answers, then the error stays.
+    await alert.getByRole('button', {name: 'Try again'}).click();
+    const retrying = alert.getByRole('button', {name: 'Trying again…'});
+    await expect(retrying).toBeDisabled();
+    await expect.poll(() => connectionRequests).toBe(2);
+    answerRetry();
+    await expect(alert.getByRole('button', {name: 'Try again'})).toBeEnabled();
+    await expect(alert).toContainText(/503 · \d{2}:\d{2}/);
   });
 
   test('loads connections once when Tempo answers after an unanswered first session check', async ({
@@ -1178,13 +1221,11 @@ test.describe('bank connection loading errors', () => {
     );
 
     await page.goto('/bank-connections');
-    await expect(page.getByRole('heading', {name: 'Cannot reach Tempo'})).toBeVisible();
+    await expect(page.getByRole('heading', {name: "Can't reach Tempo"})).toBeVisible();
     // Focus makes Tempo check its connection now instead of on its next timer.
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
 
-    await expect(
-      page.getByRole('heading', {name: 'Could not load bank connections'}),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', {name: "Couldn't load bank connections"})).toBeVisible();
     expect(connectionRequests).toBe(1);
   });
 });
