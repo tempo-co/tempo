@@ -1,13 +1,16 @@
 import {Inject, Injectable, Logger} from '@nestjs/common';
+import {InjectRepository} from '@nestjs/typeorm';
 import Redis from 'ioredis';
-import {DataSource} from 'typeorm';
+import {DataSource, IsNull, Not, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {EmailService} from '@core/email/email.service';
 import {REDIS} from '@core/redis/redis.constants';
 import {SessionService} from '@core/session/session.service';
 import {Account} from '@modules/account/account.entity';
+import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {BankingAuthorizationStateService} from '@modules/banking/services/banking-authorization-state.service';
+import {BankingConsentRevocationService} from '@modules/banking/services/banking-consent-revocation.service';
 
 import {AccountService} from './account.service';
 import {emailChangeKey, revokePasswordResetToken, signupCodeKey} from './auth-secret-keys';
@@ -28,6 +31,9 @@ export class AccountDeletionService {
 		private readonly emailService: EmailService,
 		@Inject(REDIS) private readonly redis: Redis,
 		private readonly configService: ConfigurationService,
+		private readonly consentRevocationService: BankingConsentRevocationService,
+		@InjectRepository(BankConnection)
+		private readonly bankConnectionRepository: Repository<BankConnection>,
 	) {}
 
 	async deleteAccount(accountId: Account['id'], password: Account['password']) {
@@ -37,6 +43,15 @@ export class AccountDeletionService {
 		// null for the current session id: revoke ALL of the account's sessions,
 		// including the caller's own (same primitive the password-reset flow uses).
 		await this.sessionService.revokeAllCredentials(accountId, null);
+
+		// Close every bank consent at the provider first: once the rows are gone, Tempo can no longer name the sessions.
+		// This takes no sync lease. A sync still running finds its connection gone at its fenced write and rolls back.
+		await this.consentRevocationService.revokeSessions(
+			await this.bankConnectionRepository.find({
+				select: {id: true, providerSessionId: true},
+				where: {accountId, providerSessionId: Not(IsNull())},
+			}),
+		);
 
 		await this.dataSource.transaction(async (manager) => {
 			await manager.delete(Account, {id: accountId});

@@ -21,6 +21,7 @@ const BANKING_SERVICE_DEPENDENCIES = [
 	'connectionLockService',
 	'bankingSyncQueueService',
 	'ownTransferService',
+	'consentRevocationService',
 ] as const;
 
 /** An owner whose base currency is not chosen yet, so balances are not converted. */
@@ -28,6 +29,7 @@ const OWNER = {id: 'owner-account-id', baseCurrency: null};
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
 	ownTransferService: {recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
+	consentRevocationService: {revokeSessions: jest.fn().mockResolvedValue(undefined)},
 };
 
 /** Builds the service with named test doubles; unspecified dependencies are empty objects. */
@@ -251,7 +253,7 @@ describe('BankingService authorization state lifecycle', () => {
 		);
 	});
 
-	it('cleans all affected authorization states once after connection deletion commits', async () => {
+	it('revokes the bank consent before deletion and cleans all affected authorization states once after it commits', async () => {
 		const connection = {
 			id: 'authorized-connection',
 			account: {id: 'account-id'},
@@ -276,6 +278,11 @@ describe('BankingService authorization state lifecycle', () => {
 			removeForConnections: jest.fn().mockImplementation(async () => {
 				events.push('cleanup');
 				return 3;
+			}),
+		};
+		const consentRevocationService = {
+			revokeSessions: jest.fn().mockImplementation(async () => {
+				events.push('revoke');
 			}),
 		};
 		const dataSource = {
@@ -303,12 +310,14 @@ describe('BankingService authorization state lifecycle', () => {
 			dataSource,
 			authorizationStateService,
 			connectionLockService,
+			consentRevocationService,
 			bankingSyncQueueService: {enqueueInitialSync: jest.fn()},
 		});
 
 		await service.removeConnection('account-id', connection.id, 'DELETE');
 
-		expect(events).toEqual(['transaction-start', 'transaction-commit', 'cleanup']);
+		expect(events).toEqual(['revoke', 'transaction-start', 'transaction-commit', 'cleanup']);
+		expect(consentRevocationService.revokeSessions).toHaveBeenCalledWith([connection]);
 		expect(authorizationStateService.removeForConnections).toHaveBeenCalledTimes(1);
 		expect(authorizationStateService.removeForConnections).toHaveBeenCalledWith([
 			'authorized-connection',

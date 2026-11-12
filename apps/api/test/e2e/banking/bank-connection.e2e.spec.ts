@@ -69,6 +69,7 @@ describe('BankConnectionController', () => {
 	let getSessionAccounts: jest.SpiedFunction<EnableBankingClient['getSessionAccounts']>;
 	let getAccountBalances: jest.SpiedFunction<EnableBankingClient['getAccountBalances']>;
 	let getAccountTransactions: jest.SpiedFunction<EnableBankingClient['getAccountTransactions']>;
+	let deleteSession: jest.SpiedFunction<EnableBankingClient['deleteSession']>;
 	const sessionAccountIdsBySession = new Map<string, string[]>();
 
 	beforeAll(async () => {
@@ -96,6 +97,7 @@ describe('BankConnectionController', () => {
 		}));
 		getAccountBalances = jest.spyOn(enableBankingClient, 'getAccountBalances');
 		getAccountTransactions = jest.spyOn(enableBankingClient, 'getAccountTransactions');
+		deleteSession = jest.spyOn(enableBankingClient, 'deleteSession').mockResolvedValue(undefined);
 
 		getAspsps.mockResolvedValue([
 			{
@@ -681,9 +683,11 @@ describe('BankConnectionController', () => {
 		const lockKey = `banking:sync:${connection.id}`;
 
 		try {
+			deleteSession.mockClear();
 			await redis.set(lockKey, 'active-sync', 'EX', 60);
 			await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE'}).expect(409);
 			expect(await bankConnectionRepository.findOneBy({id: connection.id})).not.toBeNull();
+			expect(deleteSession).not.toHaveBeenCalled();
 		} finally {
 			await redis.del(lockKey);
 			await bankConnectionRepository.delete(connection.id);
@@ -774,18 +778,28 @@ describe('BankConnectionController', () => {
 		}
 	});
 
-	it('permanently removes an authorized connection and cascades its bank data', async () => {
+	it('revokes the bank consent, then permanently removes an authorized connection and cascades its bank data', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('delete-authorized-cascade');
 		await fixtures.createTransaction(bankAccount, {providerTransactionId: 'delete-authorized-transaction'});
 		const syncRun = await fixtures.createSyncRun(connection);
+		deleteSession.mockClear();
 
 		await otherVerifiedAgent.delete(`/bank-connections/${connection.id}`).expect(404);
 		await verifiedAgent.delete(`/bank-connections/${connection.id}`).expect(400);
 		await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE ME'}).expect(400);
 		expect(await bankConnectionRepository.findOneBy({id: connection.id})).not.toBeNull();
 		expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).not.toBeNull();
+		expect(deleteSession).not.toHaveBeenCalled();
 
+		let connectionExistedAtRevocation = false;
+		deleteSession.mockImplementationOnce(async () => {
+			connectionExistedAtRevocation = (await bankConnectionRepository.findOneBy({id: connection.id})) !== null;
+		});
 		await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE'}).expect(204);
+
+		expect(deleteSession).toHaveBeenCalledTimes(1);
+		expect(deleteSession).toHaveBeenCalledWith('delete-authorized-cascade', expect.any(AbortSignal));
+		expect(connectionExistedAtRevocation).toBe(true);
 
 		expect(await bankConnectionRepository.findOneBy({id: connection.id})).toBeNull();
 		expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).toBeNull();
@@ -793,6 +807,40 @@ describe('BankConnectionController', () => {
 			await bankTransactionRepository.findOneBy({providerTransactionId: 'delete-authorized-transaction'}),
 		).toBeNull();
 		expect(await bankSyncRunRepository.findOneBy({id: syncRun.id})).toBeNull();
+	});
+
+	it('removes the connection when the provider fails to revoke its consent', async () => {
+		const {connection, bankAccount} = await createAuthorizedConnection('delete-provider-failure');
+		const transport = jest.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+			const parsed = new URL(String(url));
+			if (parsed.origin !== 'https://provider.example.test' || init?.method !== 'DELETE')
+				throw new Error('Unexpected provider request');
+			return new Response(JSON.stringify({error: 'INTERNAL_ERROR', message: 'Example provider failure'}), {
+				status: 500,
+			});
+		});
+		deleteSession.mockImplementationOnce((...args) =>
+			EnableBankingClient.prototype.deleteSession.call(enableBankingClient, ...args),
+		);
+		const warn = jest.spyOn(Logger.prototype, 'warn');
+
+		try {
+			await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE'}).expect(204);
+
+			expect(transport).toHaveBeenCalledTimes(1);
+			expect(String(transport.mock.calls[0][0])).toBe(
+				'https://provider.example.test/sessions/delete-provider-failure',
+			);
+			expect(await bankConnectionRepository.findOneBy({id: connection.id})).toBeNull();
+			expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).toBeNull();
+			const logged = warn.mock.calls.map(([message]) => String(message));
+			expect(logged).toContain('Bank consent revocation failed: provider_INTERNAL_ERROR (HTTP 500)');
+			expect(logged.join('\n')).not.toMatch(/delete-provider-failure|Example provider failure/);
+		} finally {
+			transport.mockRestore();
+			warn.mockRestore();
+			await bankConnectionRepository.delete(connection.id);
+		}
 	});
 
 	it('removes the pending authorization state with an incomplete connection', async () => {
