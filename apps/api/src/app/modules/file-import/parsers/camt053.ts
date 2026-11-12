@@ -1,14 +1,15 @@
-import {DOMParser, type Element} from '@xmldom/xmldom';
+import {type Element} from '@xmldom/xmldom';
 
+import {checkedDate} from './dates';
+import {amountScale, formatUnits, parseDecimal} from './decimal';
 import {NormalizedRow, NormalizedStatement, ParseRefusal} from './parse-result';
+import {child, children, parseXml} from './xml';
 
 const CAMT053_NAMESPACE = /^urn:iso:std:iso:20022:tech:xsd:camt\.053\.001\.\d+$/;
 const CAMT053_NAMESPACE_PREFIX = 'urn:iso:std:iso:20022:tech:xsd:camt.053.001.';
 const SNIFF_BYTES = 4096;
 const DECIMAL = /^\d{1,15}(\.\d{1,8})?$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const CURRENCY = /^[A-Z]{3}$/;
-const AMOUNT_SCALE = 8;
 const ENCODING_DECLARATION = /^\s*<\?xml[^>]*\bencoding\s*=\s*["']([A-Za-z0-9._-]+)["']/;
 const OPENING_BALANCE_TYPES = ['PRCD', 'OPBD'];
 const CLOSING_BALANCE_TYPE = 'CLBD';
@@ -27,24 +28,10 @@ export function looksLikeCamt053(bytes: Uint8Array): boolean {
 
 /**
  * Reads a bank-to-customer statement (CAMT.053, any `camt.053.001.*` version) into one normalized statement per
- * `Stmt`. Documents declaring a DTD or entities are refused before parsing, and the parser never expands custom
- * entities or fetches anything.
+ * `Stmt`. Documents declaring a DTD or entities are refused (see `parseXml`).
  */
 export function parseCamt053(bytes: Uint8Array): NormalizedStatement[] {
-	const xml = decode(bytes);
-	if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new ParseRefusal('parse_failed');
-
-	let root: Element | null;
-	try {
-		const document = new DOMParser({
-			onError: (level) => {
-				if (level !== 'warning') throw new ParseRefusal('parse_failed');
-			},
-		}).parseFromString(xml, 'text/xml');
-		root = document.documentElement;
-	} catch {
-		throw new ParseRefusal('parse_failed');
-	}
+	const root = parseXml(decode(bytes));
 	if (!root || root.localName !== 'Document' || !CAMT053_NAMESPACE.test(root.namespaceURI ?? '')) {
 		throw new ParseRefusal('unsupported_format');
 	}
@@ -91,8 +78,10 @@ function parseStatement(statement: Element): NormalizedStatement {
 
 	const balanceAfter = reconcileBalances(balances, rows, entryOrder(servicerBic(account)));
 	return {
+		format: 'camt053',
 		accountIban: iban,
 		accountOtherId: otherId,
+		bank: null,
 		accountCurrency,
 		sequenceNumber: text(child(statement, 'ElctrncSeqNb')),
 		entriesSkipped,
@@ -207,7 +196,7 @@ function reconcileBalances(
 	const closingAmount = balanceAmount(closing);
 	if (!openingAmount || !closingAmount) return null;
 
-	const scale = Math.max(2, openingAmount.scale, closingAmount.scale, ...rows.map((row) => row.scale));
+	const scale = amountScale(openingAmount, closingAmount, ...rows);
 	const bookingOrder = rows.map((_row, index) => index);
 	if (order === 'newest_first') bookingOrder.reverse();
 	let running = openingAmount.units;
@@ -230,22 +219,14 @@ function balanceAmount(balance: Element): {units: bigint; scale: number} | null 
 	return {units: toUnits(amount, indicator), scale: fractionDigits(amount)};
 }
 
+/** An unsigned `DECIMAL` amount, signed by its credit/debit indicator. */
 function toUnits(amount: string, indicator: 'CRDT' | 'DBIT'): bigint {
-	const [whole, fraction = ''] = amount.split('.');
-	const units = BigInt(whole) * 10n ** BigInt(AMOUNT_SCALE) + BigInt(fraction.padEnd(AMOUNT_SCALE, '0'));
+	const {units} = parseDecimal(amount, '.')!;
 	return indicator === 'DBIT' ? -units : units;
 }
 
-function formatUnits(units: bigint, scale: number): string {
-	const negative = units < 0n;
-	const absolute = (negative ? -units : units).toString().padStart(AMOUNT_SCALE + 1, '0');
-	const whole = absolute.slice(0, -AMOUNT_SCALE);
-	const fraction = absolute.slice(-AMOUNT_SCALE, -AMOUNT_SCALE + scale || undefined);
-	return `${negative ? '-' : ''}${whole}${scale > 0 ? `.${fraction}` : ''}`;
-}
-
 function fractionDigits(amount: string): number {
-	return amount.split('.')[1]?.length ?? 0;
+	return parseDecimal(amount, '.')!.scale;
 }
 
 function trimAmount(amount: string): string {
@@ -255,29 +236,12 @@ function trimAmount(amount: string): string {
 /** `Dt` as written, or the date part of `DtTm` as written; no timezone conversion. */
 function dateOf(container: Element | null): string | null {
 	const value = text(child(container, 'Dt')) ?? text(child(container, 'DtTm'))?.slice(0, 10) ?? null;
-	if (value === null) return null;
-	if (!DATE.test(value) || new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) !== value) {
-		throw new ParseRefusal('parse_failed');
-	}
-	return value;
+	return value === null ? null : checkedDate(value);
 }
 
 function currency(value: string | null): string | null {
 	const normalized = value?.trim().toUpperCase() ?? null;
 	return normalized && CURRENCY.test(normalized) ? normalized : null;
-}
-
-function children(parent: Element | null, name: string): Element[] {
-	const found: Element[] = [];
-	if (!parent) return found;
-	for (let node = parent.firstChild; node; node = node.nextSibling) {
-		if (node.nodeType === node.ELEMENT_NODE && (node as Element).localName === name) found.push(node as Element);
-	}
-	return found;
-}
-
-function child(parent: Element | null, name: string): Element | null {
-	return children(parent, name)[0] ?? null;
 }
 
 function text(element: Element | null): string | null {

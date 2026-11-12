@@ -9,14 +9,17 @@ const IBAN_CURRENCY_HASH_HEADER = JSON.stringify([
 
 export function isValidIban(value: string): boolean {
 	if (!IBAN_SHAPE.test(value)) return false;
+	return ibanRemainder(value.slice(4) + value.slice(0, 4)) === 1;
+}
 
-	const rearranged = value.slice(4) + value.slice(0, 4);
+/** ISO 13616's check: letters as their base-36 values (A = 10), the resulting number modulo 97. */
+export function ibanRemainder(characters: string): number {
 	let remainder = 0;
-	for (const character of rearranged) {
+	for (const character of characters) {
 		const digits = Number.parseInt(character, 36).toString();
 		for (const digit of digits) remainder = (remainder * 10 + Number(digit)) % 97;
 	}
-	return remainder === 1;
+	return remainder;
 }
 
 export function normalizeIban(value: string | null | undefined): string | null {
