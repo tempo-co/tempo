@@ -43,6 +43,7 @@ NestJS backend for Tempo, a personal-finance app that syncs real bank data throu
 - Every account-owned query includes the owner's account id.
 - Bearer-token requests are told apart by `isBearerRequest` both in `session.module.ts` (session middleware skipped) and in `auth.guard.ts`. A new auth path needs the same discriminator at both, or token requests read and refresh sessions.
 - Personal access tokens are revoked by revoke-all-other-sessions, password change/reset and account deletion; ordinary logout and single-session revocation keep them. Extend those flow tests when changing either side.
+- Emailed secrets (signup codes, reset and email-change tokens) are stored in Redis only as SHA-256 hashes under the per-account keys in `modules/account/auth-secret-keys.ts`: one live secret of each kind per account, consumed atomically. Password change, password reset and a confirmed email change invalidate the reset link; account deletion removes all three. Verifying an email never creates a session, and changing the email requires the current password. Extend those flow tests when changing either side.
 - Queue changes touch the `core/queue` constants/module and the feature processor/service together. Jobs carry ids, never financial payloads.
 - Email templates live under `src/app/core/email/templates`; `nest-cli.json` copies them to `dist/`.
 

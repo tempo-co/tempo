@@ -34,10 +34,9 @@ export class SignupPage {
     await this.page.goto('/signup');
   }
 
-  async fillAndSubmitForm() {
+  async fillAndSubmitForm(password = faker.internet.password()) {
     const email = faker.internet.email();
     const name = faker.person.fullName();
-    const password = faker.internet.password();
 
     await this.emailInput.fill(email);
     await this.nameInput.fill(name);

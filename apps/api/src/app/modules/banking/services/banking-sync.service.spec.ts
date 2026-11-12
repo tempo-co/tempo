@@ -296,6 +296,7 @@ describe('BankingSyncService synchronization lock', () => {
 			transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) =>
 				callback({getRepository: jest.fn().mockReturnValue(transactionRepository)}),
 			),
+			getRepository: jest.fn().mockReturnValue(transactionRepository),
 		};
 		enableBankingClient = {
 			getSessionAccounts: jest
@@ -562,6 +563,7 @@ describe('BankingSyncService synchronization lock', () => {
 				transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) =>
 					callback({getRepository: jest.fn().mockReturnValue(transactionRepository)}),
 				),
+				getRepository: jest.fn().mockReturnValue(transactionRepository),
 			},
 			enableBankingClient,
 			encryptionService: {decrypt: jest.fn().mockReturnValue('provider-session')},

@@ -49,6 +49,7 @@ import {FileConnectionNotSyncableException} from './errors/file-connection-not-s
 import {convertEcbAmountSql, newestEcbRatePairSql} from './services/bank-transaction-amount-conversion.utils';
 import {BankingAuthorizationStateService} from './services/banking-authorization-state.service';
 import {type BankingConnectionLock, BankingConnectionLockService} from './services/banking-connection-lock.service';
+import {BankingConsentRevocationService} from './services/banking-consent-revocation.service';
 import {BankingEncryptionService} from './services/banking-encryption.service';
 import {BankingSyncQueueService} from './services/banking-sync-queue.service';
 import {
@@ -96,6 +97,7 @@ export class BankingService {
 		private readonly connectionLockService: BankingConnectionLockService,
 		private readonly bankingSyncQueueService: BankingSyncQueueService,
 		private readonly ownTransferService: OwnTransferService,
+		private readonly consentRevocationService: BankingConsentRevocationService,
 	) {}
 
 	async startAuthorization(
@@ -282,6 +284,17 @@ export class BankingService {
 
 		try {
 			connectionLock.assertHealthy();
+			// Close the bank consent before deleting the row that names its session. The lease keeps sync and
+			// reauthorization off the session meanwhile; the transaction below checks the same refusals again.
+			const connectionToRevoke = await findOwnedConnection(
+				this.bankConnectionRepository,
+				accountId,
+				connectionId,
+			);
+			await this.assertRemovable(connectionToRevoke, confirmation, this.bankAccountRepository);
+			await this.consentRevocationService.revokeSessions([connectionToRevoke]);
+			connectionLock.assertHealthy();
+
 			await this.dataSource.transaction(async (manager) => {
 				connectionLock.assertHealthy();
 				const connectionRepository = manager.getRepository(BankConnection);
@@ -307,25 +320,7 @@ export class BankingService {
 				});
 
 				if (!connection) throw new NotFoundException(BANKING_CONNECTION_NOT_FOUND);
-				const isDestructive = DESTRUCTIVE_CONNECTION_STATUSES.includes(
-					connection.status as (typeof DESTRUCTIVE_CONNECTION_STATUSES)[number],
-				);
-				if (
-					!REMOVABLE_CONNECTION_STATUSES.includes(
-						connection.status as (typeof REMOVABLE_CONNECTION_STATUSES)[number],
-					)
-				) {
-					throw new ConflictException(BANKING_CONNECTION_NOT_REMOVABLE);
-				}
-				if (isDestructive && confirmation !== 'DELETE') {
-					throw new BadRequestException(BANKING_CONNECTION_REMOVAL_CONFIRMATION_REQUIRED);
-				}
-				if (
-					!isDestructive &&
-					(await bankAccountRepository.count({where: {bankConnection: {id: connection.id}}})) > 0
-				) {
-					throw new ConflictException(BANKING_CONNECTION_NOT_REMOVABLE);
-				}
+				const isDestructive = await this.assertRemovable(connection, confirmation, bankAccountRepository);
 
 				if (isDestructive) {
 					const pendingConnectionIds = pendingConnections.map((pendingConnection) => pendingConnection.id);
@@ -356,6 +351,29 @@ export class BankingService {
 
 		// Remaining legs whose counterpart was deleted become one-sided or unlabelled.
 		await this.ownTransferService.recomputeForOwnerSafely(accountId);
+	}
+
+	/** Refuses a removal the connection's status or the confirmation does not allow; returns whether it is destructive. */
+	private async assertRemovable(
+		connection: BankConnection,
+		confirmation: string | undefined,
+		bankAccountRepository: Repository<BankAccount>,
+	): Promise<boolean> {
+		const isDestructive = DESTRUCTIVE_CONNECTION_STATUSES.includes(
+			connection.status as (typeof DESTRUCTIVE_CONNECTION_STATUSES)[number],
+		);
+		if (
+			!REMOVABLE_CONNECTION_STATUSES.includes(connection.status as (typeof REMOVABLE_CONNECTION_STATUSES)[number])
+		) {
+			throw new ConflictException(BANKING_CONNECTION_NOT_REMOVABLE);
+		}
+		if (isDestructive && confirmation !== 'DELETE') {
+			throw new BadRequestException(BANKING_CONNECTION_REMOVAL_CONFIRMATION_REQUIRED);
+		}
+		if (!isDestructive && (await bankAccountRepository.count({where: {bankConnection: {id: connection.id}}})) > 0) {
+			throw new ConflictException(BANKING_CONNECTION_NOT_REMOVABLE);
+		}
+		return isDestructive;
 	}
 
 	async handleCallback(query: BankConnectionCallbackDto): Promise<BankConnectionCallbackResult> {

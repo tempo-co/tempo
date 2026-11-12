@@ -1173,7 +1173,9 @@ test.describe('bank transactions', () => {
     await expect(rows.nth(1).getByTestId('ledger-row-amount')).toContainText('100.00');
   });
 
-  test('keeps worst-case transaction values readable at every width', async ({page}) => {
+  test('keeps worst-case transaction values readable and pending rows marked at every width', async ({
+    page,
+  }) => {
     // Four viewports of inspector checks run close to the default limit in WebKit.
     test.setTimeout(20_000);
     const sepaReference =
@@ -1215,6 +1217,7 @@ test.describe('bank transactions', () => {
           displayDescription: sepaReference,
           amount: '-250.00000000',
           currency: 'EUR',
+          transactionStatus: 'PDNG',
         }),
         synthetic(4, {
           description: 'Synthetic rounding remainder',
@@ -1279,6 +1282,14 @@ test.describe('bank transactions', () => {
       ).toEqual([]);
       await expect(rows.nth(3)).toContainText('€0.00');
       await expect(rows.nth(3)).not.toContainText('-€0.00');
+      // A payment the bank has not booked yet says so beside its details, on phones and wide screens alike.
+      await expect(
+        rows
+          .nth(2)
+          .getByText(/Pending/)
+          .filter({visible: true}),
+      ).toHaveCount(1);
+      await expect(rows.nth(0).getByText(/Pending/)).toHaveCount(0);
       expect(await readClippedAmounts()).toEqual([]);
       await expectNoHorizontalOverflow(page);
       for (const index of [0, 1]) {

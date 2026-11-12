@@ -45,6 +45,8 @@ const BANK_TRANSACTION_IDENTITY_SELECT = {
 	transactionDate: true,
 	bookingDate: true,
 	valueDate: true,
+	bookingDateFilled: true,
+	valueDateFilled: true,
 	amount: true,
 	currency: true,
 	creditDebitIndicator: true,
@@ -76,6 +78,10 @@ export type PersistTransactionsOptions = {
 	importId?: string;
 };
 
+const PENDING_ROW_SQL = `UPPER(BTRIM("transactionStatus")) = 'PDNG'`;
+/** A pending row's earliest date: a fetch window starting on or before it covers the row whichever date the bank filters on. */
+const PENDING_ROW_START_SQL = 'LEAST("transactionDate", "bookingDate", "valueDate")';
+
 export type PersistTransactionsResult = {
 	transactionsAdded: number;
 	/** The rows this call inserted; the others already existed and were updated. */
@@ -95,6 +101,10 @@ export type BankTransactionInput = {
 	transactionDate?: string;
 	bookingDate?: string;
 	valueDate?: string;
+	/** The source sent no booking date; `bookingDate` is the transaction date. Statement files never set it. */
+	bookingDateFilled?: boolean;
+	/** The source sent no value date; `valueDate` is the transaction date. Statement files never set it. */
+	valueDateFilled?: boolean;
 	description?: string;
 	counterpartyName?: string;
 	counterpartyIban?: string;
@@ -548,6 +558,42 @@ export class BankTransactionPersistenceService {
 			.execute();
 	}
 
+	/** The earliest date of each account's pending rows, so the account's next fetch still covers all of them. */
+	async findPendingTransactionStarts(
+		repository: Repository<BankTransaction>,
+		bankAccountIds: readonly string[],
+	): Promise<Map<string, string>> {
+		if (bankAccountIds.length === 0) return new Map();
+		const rows: Array<{bankAccountId: string; start: string | null}> = await repository.query(
+			`SELECT "bankAccountId", to_char(MIN(${PENDING_ROW_START_SQL}), 'YYYY-MM-DD') AS "start"
+			FROM "bank_transactions"
+			WHERE "bankAccountId" = ANY($1::uuid[]) AND ${PENDING_ROW_SQL}
+			GROUP BY "bankAccountId"`,
+			[bankAccountIds],
+		);
+		return new Map(rows.flatMap(({bankAccountId, start}) => (start ? [[bankAccountId, start] as const] : [])));
+	}
+
+	/**
+	 * Pending rows are temporary. After a complete fetch from `coveredFrom` (null: the account's whole history), a
+	 * pending row of that window the fetch did not return was released or booked as another row, so it is deleted.
+	 * Rows without any date count as covered.
+	 */
+	async removeUnreturnedPendingTransactions(
+		repository: Repository<BankTransaction>,
+		bankAccountId: BankAccount['id'],
+		returnedTransactionIds: readonly string[],
+		coveredFrom: string | null,
+	): Promise<void> {
+		await repository.query(
+			`DELETE FROM "bank_transactions"
+			WHERE "bankAccountId" = $1 AND ${PENDING_ROW_SQL}
+				AND NOT ("id" = ANY($2::uuid[]))
+				AND ($3::date IS NULL OR COALESCE(${PENDING_ROW_START_SQL}, $3::date) >= $3::date)`,
+			[bankAccountId, returnedTransactionIds, coveredFrom],
+		);
+	}
+
 	/**
 	 * Stores amounts already in the owner's base currency right away, so they never wait for the conversion job
 	 * and count in totals as soon as they are synced. Matches the job's `SAME` method; other currencies still wait
@@ -624,6 +670,8 @@ export class BankTransactionPersistenceService {
 		const transactionDate = toDateOnly(transaction.transactionDate);
 		const bookingDate = toDateOnly(transaction.bookingDate);
 		const valueDate = toDateOnly(transaction.valueDate);
+		const bookingDateFilled = transaction.bookingDateFilled === true;
+		const valueDateFilled = transaction.valueDateFilled === true;
 		const providerTransactionId = truncate(transaction.providerTransactionId, 255);
 		const entryReference = truncate(transaction.entryReference, 255);
 		const bankTransactionCode = truncate(transaction.bankTransactionCode, 64);
@@ -662,6 +710,8 @@ export class BankTransactionPersistenceService {
 			transactionDate,
 			bookingDate,
 			valueDate,
+			bookingDateFilled,
+			valueDateFilled,
 			amount,
 			currency,
 			creditDebitIndicator,
@@ -728,6 +778,8 @@ export class BankTransactionPersistenceService {
 			transactionDate,
 			bookingDate,
 			valueDate,
+			bookingDateFilled,
+			valueDateFilled,
 			amount,
 			currency,
 			creditDebitIndicator,

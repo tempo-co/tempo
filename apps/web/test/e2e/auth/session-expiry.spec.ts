@@ -76,6 +76,7 @@ test('redirects to login when the session expires before an email change is sent
 
   await accountSettingsPage.changeEmailButton.click();
   await accountSettingsPage.newEmailInput.fill('new-user@example.com');
+  await accountSettingsPage.emailChangePasswordInput.fill(freshAccount.password);
   await page.context().clearCookies();
   const requestResponse = page.waitForResponse(`${API_URL}/auth/change-email/request`);
   await accountSettingsPage.sendVerificationLinkButton.click();

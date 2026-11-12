@@ -33,32 +33,55 @@ describe('bank transaction stable identity assignment', () => {
 		expect(updated.stableIdentityKey).not.toBe(stored.stableIdentityKey);
 	});
 
-	it('reconciles a booked update when pending valueDate was derived from transactionDate', () => {
-		const pending = createBankTransaction({
-			entryReference: 'synthetic-value-date-fallback',
-			transactionStatus: 'PDNG',
-			transactionDate: '2026-09-01',
-			bookingDate: '2026-09-02',
-			valueDate: '2026-09-01',
-		});
-		const [stored] = assignBankTransactionStableIdentityKeys([pending]);
-		const booked = {...pending, transactionStatus: 'BOOK', valueDate: '2026-09-03'};
-		const [updated] = assignBankTransactionStableIdentityKeys([booked], [stored]);
+	it.each([
+		[
+			'the value date',
+			{bookingDate: '2026-09-02', valueDate: '2026-09-01', valueDateFilled: true},
+			{bookingDate: '2026-09-02', valueDate: '2026-09-03'},
+		],
+		[
+			'the booking and value dates',
+			{bookingDate: '2026-09-01', bookingDateFilled: true, valueDate: '2026-09-01', valueDateFilled: true},
+			{bookingDate: '2026-09-03', valueDate: '2026-09-03'},
+		],
+	])(
+		'reconciles a booked update when the client filled %s of the pending row',
+		(_label, pendingDates, bookedDates) => {
+			const pending = createBankTransaction({
+				entryReference: 'synthetic-filled-date',
+				transactionStatus: 'PDNG',
+				transactionDate: '2026-09-01',
+				...pendingDates,
+			});
+			const [stored] = assignBankTransactionStableIdentityKeys([pending]);
+			const booked = {
+				...pending,
+				transactionStatus: 'BOOK',
+				bookingDateFilled: false,
+				valueDateFilled: false,
+				...bookedDates,
+			};
+			const [updated] = assignBankTransactionStableIdentityKeys([booked], [stored]);
 
-		expect(updated.stableIdentityKey).toBe(stored.stableIdentityKey);
-		expect(updated.stableIdentityGroupKey).not.toBe(stored.stableIdentityGroupKey);
-	});
+			expect(updated.stableIdentityKey).toBe(stored.stableIdentityKey);
+			expect(updated.stableIdentityGroupKey).not.toBe(stored.stableIdentityGroupKey);
+		},
+	);
 
-	it('does not reconcile when pending valueDate is distinct from transactionDate', () => {
+	it.each([
+		['value date', {valueDate: '2026-09-01'}, {valueDate: '2026-09-04'}],
+		['booking date', {bookingDate: '2026-09-01'}, {bookingDate: '2026-09-04'}],
+	])('does not reconcile when booking changes a pending %s the bank sent', (_label, pendingDate, bookedDate) => {
 		const pending = createBankTransaction({
-			entryReference: 'synthetic-independent-value-date',
+			entryReference: 'synthetic-provider-date',
 			transactionStatus: 'PDNG',
 			transactionDate: '2026-09-01',
 			bookingDate: '2026-09-02',
 			valueDate: '2026-09-03',
+			...pendingDate,
 		});
 		const [stored] = assignBankTransactionStableIdentityKeys([pending]);
-		const booked = {...pending, transactionStatus: 'BOOK', valueDate: '2026-09-04'};
+		const booked = {...pending, transactionStatus: 'BOOK', ...bookedDate};
 		const [updated] = assignBankTransactionStableIdentityKeys([booked], [stored]);
 
 		expect(updated.stableIdentityKey).not.toBe(stored.stableIdentityKey);
@@ -307,7 +330,7 @@ describe('bank transaction stable identity assignment', () => {
 		expect(refreshed.stableIdentityKey).toBe(initial.stableIdentityKey);
 	});
 
-	it('does not recycle occurrence keys when multiple same-core rows change ambiguously', () => {
+	it('keeps each look-alike row on its key when the provider edits their details', () => {
 		const sharedFields: BankTransactionIdentityInput = {
 			bankAccountId: '10000000-0000-4000-8000-000000000001',
 			entryReference: null,
@@ -333,21 +356,70 @@ describe('bank transaction stable identity assignment', () => {
 			referenceNumber: null,
 			referenceNumberScheme: null,
 		};
+		const keysByRow = (rows: Array<{logicalRow: string; stableIdentityKey: string}>) =>
+			new Map(rows.map(({logicalRow, stableIdentityKey}) => [logicalRow, stableIdentityKey]));
 		const initial = assignBankTransactionStableIdentityKeys([
-			{...sharedFields, logicalRow: 'first'},
-			{...sharedFields, logicalRow: 'second', description: 'Synthetic payment B'},
+			{...sharedFields, logicalRow: 'first', counterpartyName: 'Example Cafe'},
+			{
+				...sharedFields,
+				logicalRow: 'second',
+				description: 'Synthetic payment B',
+				counterpartyName: 'Example Shop',
+			},
 		]);
-		const refreshed = assignBankTransactionStableIdentityKeys(
-			[
-				{...sharedFields, logicalRow: 'first', description: 'Synthetic payment C'},
-				{...sharedFields, logicalRow: 'second', description: 'Synthetic payment D'},
-			],
-			initial,
+		const edited = [
+			{
+				...sharedFields,
+				logicalRow: 'second',
+				description: 'Synthetic payment D',
+				counterpartyName: 'Example Shop',
+			},
+			{
+				...sharedFields,
+				logicalRow: 'first',
+				description: 'Synthetic payment C',
+				counterpartyName: 'Example Cafe',
+			},
+		];
+		expect(keysByRow(assignBankTransactionStableIdentityKeys(edited, initial))).toEqual(keysByRow(initial));
+		expect(keysByRow(assignBankTransactionStableIdentityKeys([...edited].reverse(), initial))).toEqual(
+			keysByRow(initial),
 		);
-		const previousKeys = new Set(initial.map(({stableIdentityKey}) => stableIdentityKey));
 
-		expect(refreshed.every(({stableIdentityKey}) => !previousKeys.has(stableIdentityKey))).toBe(true);
-		expect(new Set(refreshed.map(({stableIdentityKey}) => stableIdentityKey)).size).toBe(2);
+		// Case and whitespace are not edits, so each row keeps its own key without relying on the pairing order.
+		const reformatted = [
+			{
+				...sharedFields,
+				logicalRow: 'second',
+				description: '  SYNTHETIC   payment b',
+				counterpartyName: 'Example Shop',
+			},
+			{
+				...sharedFields,
+				logicalRow: 'first',
+				description: 'synthetic payment a ',
+				counterpartyName: 'example cafe',
+			},
+		];
+		expect(keysByRow(assignBankTransactionStableIdentityKeys(reformatted, initial))).toEqual(keysByRow(initial));
+	});
+
+	it('keeps a row on its key when its entry reference changes, unless the fetch still sends the old reference', () => {
+		const [stored] = assignBankTransactionStableIdentityKeys([
+			createBankTransaction({entryReference: 'synthetic-old-reference'}),
+		]);
+		const renamed = {...stored, entryReference: 'synthetic-new-reference'};
+		expect(assignBankTransactionStableIdentityKeys([renamed], [stored])[0].stableIdentityKey).toBe(
+			stored.stableIdentityKey,
+		);
+
+		const oldReferenceElsewhere = {...stored, bookingDate: '2026-09-20', valueDate: '2026-09-20'};
+		const [renamedRow, otherRow] = assignBankTransactionStableIdentityKeys(
+			[renamed, oldReferenceElsewhere],
+			[stored],
+		);
+		expect(renamedRow.stableIdentityKey).not.toBe(stored.stableIdentityKey);
+		expect(otherRow.stableIdentityKey).not.toBe(stored.stableIdentityKey);
 	});
 
 	it('allocates the next unused occurrence key within an identity group', () => {
