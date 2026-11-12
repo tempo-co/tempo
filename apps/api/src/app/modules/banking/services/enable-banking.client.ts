@@ -19,7 +19,6 @@ import {
 	StartEnableBankingAuthorizationResult,
 } from '../enable-banking.types';
 import {normalizeIban, parseSepaDescriptionIban} from '../own-transfer/iban';
-import {isValidRetryAfterSeconds} from './banking-sync.constants';
 
 const JWT_TTL_SECONDS = 60 * 60;
 const JWT_REFRESH_MARGIN_SECONDS = 60;
@@ -213,6 +212,8 @@ export class EnableBankingClient {
 		let response: Response;
 		const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 		const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+		// Signed outside the transport try, so a key problem stays provider_authentication_failed.
+		const jwt = this.createJwt();
 
 		try {
 			requestSignal.throwIfAborted();
@@ -223,7 +224,7 @@ export class EnableBankingClient {
 					...(psu ? {'Psu-Ip-Address': psu.ipAddress} : {}),
 					...(psu?.userAgent ? {'Psu-User-Agent': psu.userAgent} : {}),
 					...(body ? {'Content-Type': 'application/json'} : {}),
-					Authorization: `Bearer ${this.createJwt()}`,
+					Authorization: `Bearer ${jwt}`,
 				},
 				...(body ? {body: JSON.stringify(body)} : {}),
 				signal: requestSignal,
@@ -565,7 +566,7 @@ export class EnableBankingClient {
 
 		if (/^\d+$/.test(value)) {
 			const seconds = Number(value);
-			return isValidRetryAfterSeconds(seconds) ? seconds : undefined;
+			return Number.isSafeInteger(seconds) ? seconds : undefined;
 		}
 
 		const retryAt = Date.parse(value);

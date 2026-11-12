@@ -420,7 +420,7 @@ describe('BankConnectionController', () => {
 	it('returns provider cooldown metadata and refuses manual refresh during Retry-After', async () => {
 		const {connection} = await createAuthorizedConnection('manual-refresh-rate-limit');
 		getAccountBalances.mockResolvedValue(makeBalances());
-		getAccountBalances.mockRejectedValueOnce(new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 429, 17));
+		getAccountBalances.mockRejectedValueOnce(new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 429, 1_800));
 		getAccountTransactions.mockClear();
 		try {
 			const response = await verifiedAgent
@@ -434,12 +434,12 @@ describe('BankConnectionController', () => {
 				errorMessage:
 					'Bank access is temporarily rate-limited. The next automatic attempt will wait for the provider cooldown.',
 				rateLimitSource: 'enable-banking',
-				retryAfterSeconds: 17,
+				retryAfterSeconds: 1_800,
 			});
 			expect(getAccountTransactions).not.toHaveBeenCalled();
 			const saved = await bankConnectionRepository.findOneByOrFail({id: connection.id});
 			expect(saved.syncStatus).toBe('RATE_LIMITED');
-			expect(saved.nextSyncAt!.getTime() - new Date(response.body.finishedAt).getTime()).toBe(17_000);
+			expect(saved.nextSyncAt!.getTime() - new Date(response.body.finishedAt).getTime()).toBe(1_800_000);
 			getAspsps.mockClear();
 			getSessionAccounts.mockClear();
 			const cooldown = await verifiedAgent
@@ -448,7 +448,7 @@ describe('BankConnectionController', () => {
 				.set('User-Agent', 'ExampleBrowser/1.0')
 				.expect(429);
 			expect(Number(cooldown.headers['retry-after'])).toBeGreaterThan(0);
-			expect(Number(cooldown.headers['retry-after'])).toBeLessThanOrEqual(17);
+			expect(Number(cooldown.headers['retry-after'])).toBeLessThanOrEqual(1_800);
 			expect(cooldown.body).toMatchObject({
 				rateLimitSource: 'enable-banking',
 				retryAfterSeconds: Number(cooldown.headers['retry-after']),
@@ -523,6 +523,59 @@ describe('BankConnectionController', () => {
 			} finally {
 				releaseProvider?.();
 				await active;
+				await bankConnectionRepository.delete(connection.id);
+			}
+		},
+	);
+
+	it.each(['manual', 'automatic'] as const)(
+		'takes over a %s sync left RUNNING by a crashed process and finishes its run as interrupted',
+		async (entry) => {
+			const {connection} = await createAuthorizedConnection(`crashed-sync-${entry}`);
+			// The crashed process claimed the connection and started a run, then its lease expired.
+			const crashedRun = await fixtures.createSyncRun(connection, {status: 'RUNNING'});
+			await bankConnectionRepository.update(connection.id, {
+				syncStatus: 'RUNNING',
+				syncStartedAt: new Date(Date.now() - 60 * 1000),
+				nextSyncAt: new Date(Date.now() - 1),
+			});
+			getAccountBalances.mockResolvedValue(makeBalances());
+			getAccountTransactions.mockResolvedValue(fetchedTransactions([]));
+
+			try {
+				const run =
+					entry === 'manual'
+						? (
+								await verifiedAgent
+									.post(`/bank-connections/${connection.id}/refresh`)
+									.set('Origin', 'http://localhost:5173')
+									.set('User-Agent', 'ExampleBrowser/1.0')
+									.expect(200)
+							).body
+						: await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
+
+				expect(run).toMatchObject({status: 'SUCCEEDED'});
+				expect(run.id).not.toBe(crashedRun.id);
+				expect(await bankSyncRunRepository.findOneByOrFail({id: crashedRun.id})).toMatchObject({
+					status: 'FAILED',
+					finishedAt: expect.any(Date),
+					errorMessage: 'Bank synchronization failed.',
+					failures: [
+						{
+							kind: 'interrupted',
+							bankAccountId: null,
+							code: 'sync_interrupted',
+							httpStatus: null,
+							retryAfter: false,
+						},
+					],
+				});
+				expect(await bankConnectionRepository.findOneByOrFail({id: connection.id})).toMatchObject({
+					status: 'AUTHORIZED',
+					syncStatus: 'SUCCEEDED',
+					syncStartedAt: null,
+				});
+			} finally {
 				await bankConnectionRepository.delete(connection.id);
 			}
 		},
@@ -2143,9 +2196,16 @@ describe('BankConnectionController', () => {
 		}
 	});
 
-	it('returns provider rate-limit retry metadata for a partial sync', async () => {
-		const {connection} = await createAuthorizedConnection('rate-limit-session');
-		getAccountBalances.mockRejectedValueOnce(new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 429, 17));
+	it('stops the run on HTTP 429 with any code and waits at least the minimum cooldown', async () => {
+		const connection = await createAuthorizedConnectionWithAccounts('rate-limit-session', [
+			'rate-limit-first-account',
+			'rate-limit-second-account',
+		]);
+		getAccountBalances.mockClear();
+		getAccountTransactions.mockClear();
+		// A code Tempo does not know, with a Retry-After shorter than the minimum cooldown.
+		getAccountBalances.mockRejectedValueOnce(new EnableBankingClientError('TOO_MANY_REQUESTS_EXAMPLE', 429, 17));
+		getAccountBalances.mockResolvedValue(makeBalances());
 		getAccountTransactions.mockResolvedValue(fetchedTransactions([]));
 
 		try {
@@ -2153,22 +2213,109 @@ describe('BankConnectionController', () => {
 
 			expect(response).toMatchObject({
 				status: 'PARTIAL',
+				errorMessage:
+					'Bank access is temporarily rate-limited. The next automatic attempt will wait for the provider cooldown.',
 				rateLimitSource: 'enable-banking',
-				retryAfterSeconds: 17,
+				retryAfterSeconds: 15 * 60,
+			});
+			// No other account is asked once the provider has said to slow down.
+			expect(getAccountBalances).toHaveBeenCalledTimes(1);
+			expect(getAccountTransactions).not.toHaveBeenCalled();
+			const saved = await bankConnectionRepository.findOneByOrFail({id: connection.id});
+			expect(saved).toMatchObject({status: 'AUTHORIZED', syncStatus: 'RATE_LIMITED'});
+			expect(saved.nextSyncAt!.getTime() - new Date(response!.finishedAt!).getTime()).toBe(15 * 60 * 1000);
+		} finally {
+			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
+	it.each([
+		['EXPIRED_SESSION', 401],
+		['REVOKED_SESSION', 401],
+		['CLOSED_SESSION', 401],
+		['SESSION_DOES_NOT_EXIST', 404],
+	])('expires the connection when an account request reports the session ended with %s', async (code, httpStatus) => {
+		const connection = await createAuthorizedConnectionWithAccounts(`session-ended-${code}`, [
+			`session-ended-first-${code}`,
+			`session-ended-second-${code}`,
+		]);
+		getAccountBalances.mockClear();
+		getAccountTransactions.mockClear();
+		getAccountBalances.mockRejectedValueOnce(new EnableBankingClientError(code, httpStatus));
+		getAccountBalances.mockResolvedValue(makeBalances());
+		getAccountTransactions.mockResolvedValue(fetchedTransactions([]));
+
+		try {
+			const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
+
+			expect(response).toMatchObject({errorMessage: 'Bank consent has expired. Please reconnect.'});
+			expect(getAccountBalances).toHaveBeenCalledTimes(1);
+			expect(getAccountTransactions).not.toHaveBeenCalled();
+			expect(await bankConnectionRepository.findOneByOrFail({id: connection.id})).toMatchObject({
+				status: 'EXPIRED',
+				syncStatus: 'EXPIRED',
+				nextSyncAt: null,
+				lastSyncError: 'Bank consent has expired. Please reconnect.',
 			});
 		} finally {
 			await bankConnectionRepository.delete(connection.id);
 		}
 	});
 
-	it('marks a run partial when one account fails and preserves successful account data', async () => {
+	it('expires the connection when the provider reports its session no longer authorized', async () => {
+		const {connection} = await createAuthorizedConnection('session-revoked-status');
+		getSessionAccounts.mockResolvedValueOnce({status: 'REVOKED', accountIds: []});
+		getAccountBalances.mockClear();
+
+		try {
+			const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
+
+			expect(response).toMatchObject({status: 'FAILED'});
+			expect(getAccountBalances).not.toHaveBeenCalled();
+			expect(await bankConnectionRepository.findOneByOrFail({id: connection.id})).toMatchObject({
+				status: 'EXPIRED',
+				syncStatus: 'EXPIRED',
+				nextSyncAt: null,
+			});
+		} finally {
+			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
+	it('keeps the connection authorized for a retry and logs an error when the provider refuses Tempo itself', async () => {
+		const {connection} = await createAuthorizedConnection('application-refused-session');
+		// HTTP 401 without a session code: Tempo's own JWT, key or clock, not the user's consent.
+		getSessionAccounts.mockRejectedValueOnce(new EnableBankingClientError('UNAUTHORIZED_ACCESS', 401));
+		getAccountBalances.mockClear();
+		getAccountTransactions.mockClear();
+		const error = jest.spyOn(Logger.prototype, 'error');
+
+		try {
+			const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
+
+			expect(response).toMatchObject({status: 'FAILED', errorMessage: 'Bank synchronization failed.'});
+			expect(getAccountBalances).not.toHaveBeenCalled();
+			expect(getAccountTransactions).not.toHaveBeenCalled();
+			const saved = await bankConnectionRepository.findOneByOrFail({id: connection.id});
+			expect(saved).toMatchObject({status: 'AUTHORIZED', syncStatus: 'FAILED', syncFailureCount: 1});
+			expect(saved.nextSyncAt!.getTime()).toBeGreaterThan(Date.now());
+			expect(error.mock.calls.map(([message]) => String(message))).toContain(
+				`Enable Banking refused Tempo's application credentials during the session request for connection ${connection.id}: session UNAUTHORIZED_ACCESS HTTP 401`,
+			);
+		} finally {
+			error.mockRestore();
+			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
+	it('marks a run partial when one account fails, even with HTTP 403, keeping the connection and successful account data', async () => {
 		const connection = await createAuthorizedConnectionWithAccounts('partial-session', [
 			'partial-success-account',
 			'partial-failed-account',
 		]);
 		getAccountBalances.mockImplementation(async (accountId) => {
 			if (accountId === 'partial-failed-account') {
-				throw new EnableBankingClientError('provider_unreachable');
+				throw new EnableBankingClientError('ASPSP_ACCOUNT_NOT_ACCESSIBLE', 403);
 			}
 			return makeBalances();
 		});
@@ -2195,7 +2342,7 @@ describe('BankConnectionController', () => {
 			});
 			if (!successfulBankAccount || !failedBankAccount) throw new Error('Expected both bank accounts.');
 			expect(await bankTransactionRepository.count({where: {bankAccountId: successfulBankAccount.id}})).toBe(5);
-			expect(JSON.stringify(response)).not.toContain('provider_unreachable');
+			expect(JSON.stringify(response)).not.toContain('ASPSP_ACCOUNT_NOT_ACCESSIBLE');
 			// The run keeps why it was partial, by Tempo account id, without provider ids or messages.
 			const failures = [
 				{
@@ -2209,8 +2356,8 @@ describe('BankConnectionController', () => {
 				{
 					kind: 'balances',
 					bankAccountId: failedBankAccount.id,
-					code: 'provider_unreachable',
-					httpStatus: null,
+					code: 'ASPSP_ACCOUNT_NOT_ACCESSIBLE',
+					httpStatus: 403,
 					retryAfter: false,
 				},
 				{
@@ -2231,13 +2378,14 @@ describe('BankConnectionController', () => {
 			expect(summary).toContain(`for connection ${connection.id} finished PARTIAL: `);
 			for (const part of [
 				`transactions[${successfulBankAccount.id}] unparseable_transactions dropped 2`,
-				`balances[${failedBankAccount.id}] provider_unreachable`,
+				`balances[${failedBankAccount.id}] ASPSP_ACCOUNT_NOT_ACCESSIBLE HTTP 403`,
 				`transactions[${failedBankAccount.id}] ASPSP_ERROR HTTP 503 Retry-After`,
 			])
 				expect(summary).toContain(part);
 			// A partial run counts as a sync but not as a successful one.
 			const connectionsResponse = await verifiedAgent.get('/bank-connections').expect(200);
 			expect(connectionsResponse.body.find(({id}: {id: string}) => id === connection.id)).toMatchObject({
+				status: 'AUTHORIZED',
 				syncStatus: 'PARTIAL',
 				lastSyncedAt: response?.finishedAt,
 				lastSuccessfulSyncAt: null,

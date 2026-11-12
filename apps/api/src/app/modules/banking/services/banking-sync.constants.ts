@@ -21,8 +21,12 @@ export const BANK_SYNC_STATUSES = {
 	EXPIRED: 'EXPIRED',
 } as const satisfies {[S in BankSyncStatus]: S};
 
+/** The rate-limit cooldown when the provider sent no usable Retry-After. */
 export const BANKING_DEFAULT_RETRY_AFTER_SECONDS = 6 * 60 * 60;
-export const BANKING_MAX_RETRY_AFTER_SECONDS = 8_000_000_000_000;
+/** A rate-limit cooldown never ends sooner than this, so a zero or past Retry-After cannot cause a tight loop. */
+export const BANKING_MIN_RETRY_AFTER_SECONDS = 15 * 60;
+/** A rate-limit cooldown never lasts longer than this, so one odd Retry-After cannot stop syncing for weeks. */
+export const BANKING_MAX_RETRY_AFTER_SECONDS = 24 * 60 * 60;
 export const BANKING_TRANSIENT_RETRY_BASE_MS = 15 * 60 * 1000;
 /** A foreground refresh is skipped when the connection synchronized more recently than this. */
 export const BANKING_FOREGROUND_REFRESH_MIN_INTERVAL_MS = 5 * 60 * 1000;
@@ -35,16 +39,10 @@ export function resolveDurationMs(value: string, key: string): number {
 	return parsed;
 }
 
-export function isValidRetryAfterSeconds(seconds: number | null | undefined): seconds is number {
-	return (
-		seconds !== undefined &&
-		seconds !== null &&
-		Number.isFinite(seconds) &&
-		seconds >= 0 &&
-		seconds <= BANKING_MAX_RETRY_AFTER_SECONDS
-	);
-}
-
-export function sanitizeRetryAfterSeconds(seconds: number | null | undefined): number {
-	return isValidRetryAfterSeconds(seconds) ? seconds : BANKING_DEFAULT_RETRY_AFTER_SECONDS;
+/** The cooldown to wait after a rate limit: the provider's Retry-After clamped to the allowed window. */
+export function rateLimitCooldownSeconds(retryAfterSeconds: number | null | undefined): number {
+	if (retryAfterSeconds === undefined || retryAfterSeconds === null || !Number.isFinite(retryAfterSeconds)) {
+		return BANKING_DEFAULT_RETRY_AFTER_SECONDS;
+	}
+	return Math.min(BANKING_MAX_RETRY_AFTER_SECONDS, Math.max(BANKING_MIN_RETRY_AFTER_SECONDS, retryAfterSeconds));
 }
