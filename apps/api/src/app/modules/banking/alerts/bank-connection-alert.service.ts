@@ -19,7 +19,11 @@ import {PushNotificationService} from '@modules/notifications/push-notification.
 import {BankConnection} from '../bank-connection.entity';
 import {BankSyncRun} from '../bank-sync-run.entity';
 import {safeErrorName} from '../banking.utils';
-import {BANK_CONNECTION_STATUSES, BANK_SYNC_STATUSES} from '../services/banking-sync.constants';
+import {
+	BANK_CONNECTION_PROVIDERS,
+	BANK_CONNECTION_STATUSES,
+	BANK_SYNC_STATUSES,
+} from '../services/banking-sync.constants';
 import {
 	BANK_CONNECTION_ALERTS,
 	BankConnectionAlert,
@@ -84,6 +88,8 @@ export class BankConnectionAlertService implements OnModuleInit {
 			.innerJoin('connection.account', 'account')
 			.select('connection.id', 'id')
 			.where('connection.status IN (:...statuses)', {statuses: ALERTABLE_STATUSES})
+			// Imported files never sync, so they can neither expire nor stop syncing.
+			.andWhere('connection.provider = :provider', {provider: BANK_CONNECTION_PROVIDERS.ENABLE_BANKING})
 			.andWhere('account.isEmailVerified = true')
 			.orderBy('connection.id', 'ASC')
 			.getRawMany<{id: string}>();

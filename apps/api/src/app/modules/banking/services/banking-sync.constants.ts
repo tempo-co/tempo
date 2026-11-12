@@ -21,6 +21,15 @@ export const BANK_SYNC_STATUSES = {
 	EXPIRED: 'EXPIRED',
 } as const satisfies {[S in BankSyncStatus]: S};
 
+/** Who supplies a connection's data. Only Enable Banking connections sync; `file` holds the owner's imported files. */
+export const BANK_CONNECTION_PROVIDERS = {
+	ENABLE_BANKING: 'enable-banking',
+	FILE: 'file',
+} as const;
+
+/** The owner's single connection for imported statement files. */
+export const FILE_CONNECTION_ASPSP = {name: 'Imported files', country: 'ZZ'} as const;
+
 export const BANKING_DEFAULT_RETRY_AFTER_SECONDS = 6 * 60 * 60;
 export const BANKING_MAX_RETRY_AFTER_SECONDS = 8_000_000_000_000;
 export const BANKING_TRANSIENT_RETRY_BASE_MS = 15 * 60 * 1000;

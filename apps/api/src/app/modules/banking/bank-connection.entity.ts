@@ -15,6 +15,8 @@ import {Account} from '@modules/account/account.entity';
 @Entity('bank_connections')
 @Index('idx_bank_connections_account_id', ['account'])
 @Index('idx_bank_connections_sync_due', ['status', 'nextSyncAt'])
+// One imported-files connection per owner, so two first imports cannot each create one.
+@Index('idx_bank_connections_file_owner', ['accountId'], {unique: true, where: `"provider" = 'file'`})
 export class BankConnection {
 	@PrimaryGeneratedColumn('uuid')
 	id: string;

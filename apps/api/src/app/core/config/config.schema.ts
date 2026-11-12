@@ -66,6 +66,8 @@ export const configSchema = z
 
 		// --- APIs ---
 		BANKING_INTEGRATION_ENABLED: strictBooleanEnvSchema.default(true),
+		// Statement file upload (`/bank-imports`); every import route answers 404 while it is off.
+		FILE_IMPORT_ENABLED: strictBooleanEnvSchema.default(false),
 		ENABLE_BANKING_API_URL: z.string().url(),
 		ENABLE_BANKING_APPLICATION_ID: z.string().min(1),
 		ENABLE_BANKING_PRIVATE_KEY_B64: z.string().min(1).optional(),

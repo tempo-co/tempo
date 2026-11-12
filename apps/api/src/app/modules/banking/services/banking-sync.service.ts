@@ -53,6 +53,7 @@ import {
 } from '../enable-banking.types';
 import {BankingEncryptionError} from '../errors/banking-encryption.error';
 import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
+import {FileConnectionNotSyncableException} from '../errors/file-connection-not-syncable.exception';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {BankTransactionPersistenceService, PersistTransactionsResult} from './bank-transaction-persistence.service';
 import {BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';
@@ -60,6 +61,7 @@ import {BankingEncryptionService} from './banking-encryption.service';
 import {
 	BANKING_FOREGROUND_REFRESH_MIN_INTERVAL_MS,
 	BANKING_TRANSIENT_RETRY_BASE_MS,
+	BANK_CONNECTION_PROVIDERS,
 	BANK_CONNECTION_STATUSES,
 	BANK_SYNC_STATUSES,
 	resolveDurationMs,
@@ -133,7 +135,13 @@ export class BankingSyncService {
 			where: {id: connectionId},
 			relations: {account: true},
 		});
-		if (!connection || connection.status !== BANK_CONNECTION_STATUSES.AUTHORIZED) return null;
+		if (
+			!connection ||
+			connection.provider === BANK_CONNECTION_PROVIDERS.FILE ||
+			connection.status !== BANK_CONNECTION_STATUSES.AUTHORIZED
+		) {
+			return null;
+		}
 
 		return this.runSynchronization(connection.account.id, connectionId);
 	}
@@ -146,7 +154,8 @@ export class BankingSyncService {
 		signal: AbortSignal,
 	): Promise<BankSyncRunResponse | null> {
 		if (!this.bankingIntegrationEnabled) throw new ServiceUnavailableException(BANKING_SERVICE_UNAVAILABLE);
-		await findOwnedConnection(this.bankConnectionRepository, accountId, connectionId);
+		const connection = await findOwnedConnection(this.bankConnectionRepository, accountId, connectionId);
+		if (connection.provider === BANK_CONNECTION_PROVIDERS.FILE) throw new FileConnectionNotSyncableException();
 		return this.runSynchronization(accountId, connectionId, psu, signal);
 	}
 
@@ -513,7 +522,7 @@ export class BankingSyncService {
 		status: string,
 		finishedAt: Date,
 		syncStartedAt: Date,
-	): Promise<PersistTransactionsResult> {
+	): Promise<Pick<PersistTransactionsResult, 'transactionsAdded' | 'persistedTransactionIds'>> {
 		let errorMessage: string | null = null;
 		let transactionsAdded = 0;
 		const persistedTransactionIds: string[] = [];

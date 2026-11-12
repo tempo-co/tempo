@@ -107,6 +107,13 @@ import {OwnTransferService} from './services/own-transfer.service';
 		PushAlertProcessor,
 		RecurringSeriesService,
 	],
+	exports: [
+		BankTransactionPersistenceService,
+		OwnTransferService,
+		CurrencyExchangeService,
+		BankTransactionCategorizationModule,
+		MerchantLogoModule,
+	],
 	controllers: [
 		BankConnectionController,
 		BankLogoController,
