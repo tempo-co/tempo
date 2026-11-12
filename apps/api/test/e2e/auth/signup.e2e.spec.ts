@@ -20,7 +20,7 @@ import {
 	VERIFIED_ACCOUNT_EMAIL,
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
-import {getApp, getSessionCookie, loginAgent} from '../../setup/e2e.setup';
+import {getApp, getSessionCookie, loginAgent, webOrigin} from '../../setup/e2e.setup';
 import {createAccountCredentials, expectValidationMessage} from '../../utils/auth-utils';
 import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
 
@@ -60,7 +60,11 @@ describe('AuthController - Signup', () => {
 		it('should create a new account and send welcome email', async () => {
 			const signUpDto = createAccountCredentials();
 
-			const response = await request(httpServer).post('/auth/signup').send(signUpDto).expect(201);
+			const response = await request(httpServer)
+				.post('/auth/signup')
+				.set('Origin', webOrigin())
+				.send(signUpDto)
+				.expect(201);
 
 			expect(response.body?.email).toEqual(signUpDto.email);
 			expect(response.body?.name).toEqual(signUpDto.name);
@@ -77,6 +81,7 @@ describe('AuthController - Signup', () => {
 			const signUpDto = createAccountCredentials();
 			const response = await request(httpServer)
 				.post('/auth/signup')
+				.set('Origin', webOrigin())
 				.send({...signUpDto, email: `  ${signUpDto.email.toUpperCase()} `})
 				.expect(201);
 
@@ -85,20 +90,30 @@ describe('AuthController - Signup', () => {
 
 		it('should fail with 409 Conflict if the email is already in use with different casing', async () => {
 			const existingAccountDto = createAccountCredentials();
-			await request(httpServer).post('/auth/signup').send(existingAccountDto).expect(201);
+			await request(httpServer)
+				.post('/auth/signup')
+				.set('Origin', webOrigin())
+				.send(existingAccountDto)
+				.expect(201);
 
 			await request(httpServer)
 				.post('/auth/signup')
+				.set('Origin', webOrigin())
 				.send({...createAccountCredentials(), email: existingAccountDto.email.toUpperCase()})
 				.expect(409);
 		});
 
 		it('should fail with 409 Conflict if email is already in use', async () => {
 			const existingAccountDto = createAccountCredentials();
-			await request(httpServer).post('/auth/signup').send(existingAccountDto).expect(201);
+			await request(httpServer)
+				.post('/auth/signup')
+				.set('Origin', webOrigin())
+				.send(existingAccountDto)
+				.expect(201);
 
 			const response = await request(httpServer)
 				.post('/auth/signup')
+				.set('Origin', webOrigin())
 				.send({...createAccountCredentials(), email: existingAccountDto.email})
 				.expect(409);
 			expect(response.body.message).toBe(EMAIL_ALREADY_IN_USE);
@@ -114,6 +129,7 @@ describe('AuthController - Signup', () => {
 		])('should fail with 400 Bad Request if %s', async (_case, overrides, message) => {
 			const response = await request(httpServer)
 				.post('/auth/signup')
+				.set('Origin', webOrigin())
 				.send({...createAccountCredentials(), ...overrides})
 				.expect(400);
 			expectValidationMessage(response, message);
@@ -147,7 +163,11 @@ describe('AuthController - Signup', () => {
 
 		beforeEach(async () => {
 			accountCredentials = createAccountCredentials();
-			await request(httpServer).post('/auth/signup').send(accountCredentials).expect(201);
+			await request(httpServer)
+				.post('/auth/signup')
+				.set('Origin', webOrigin())
+				.send(accountCredentials)
+				.expect(201);
 			verificationCode = await EmailUtils.getVerificationCode(accountCredentials.email, mailpitApiUrl);
 
 			agent = await loginAgent(httpServer, accountCredentials.email, accountCredentials.password);
@@ -158,6 +178,7 @@ describe('AuthController - Signup', () => {
 		async function verify(verifier: TestAgent | ReturnType<typeof request>, code: string) {
 			const response = await verifier
 				.post('/auth/signup/verify')
+				.set('Origin', webOrigin())
 				.send({code, email: accountCredentials.email})
 				.expect(200);
 			expect(response.body.message).toBe(EMAIL_VERIFICATION_SUCCESS);
@@ -187,6 +208,7 @@ describe('AuthController - Signup', () => {
 			expect(resendCode).not.toEqual(verificationCode);
 			const oldCodeResponse = await agent
 				.post('/auth/signup/verify')
+				.set('Origin', webOrigin())
 				.send({code: verificationCode, email: accountCredentials.email})
 				.expect(400);
 			expect(oldCodeResponse.body.message).toBe(EMAIL_INVALID_TOKEN);
@@ -200,6 +222,7 @@ describe('AuthController - Signup', () => {
 		it('should fail with 400 Bad Request for invalid code', async () => {
 			const response = await request(httpServer)
 				.post('/auth/signup/verify')
+				.set('Origin', webOrigin())
 				.send({code: '000000', email: accountCredentials.email})
 				.expect(400);
 			expect(response.body.message).toBe(EMAIL_INVALID_TOKEN);
@@ -210,12 +233,14 @@ describe('AuthController - Signup', () => {
 			for (let attempt = 0; attempt < SIGNUP_CODE_MAX_ATTEMPTS; attempt++) {
 				await request(httpServer)
 					.post('/auth/signup/verify')
+					.set('Origin', webOrigin())
 					.send({code: wrongCode, email: accountCredentials.email})
 					.expect(400);
 			}
 
 			const lockedResponse = await request(httpServer)
 				.post('/auth/signup/verify')
+				.set('Origin', webOrigin())
 				.send({code: verificationCode, email: accountCredentials.email})
 				.expect(400);
 			expect(lockedResponse.body.message).toBe(EMAIL_INVALID_TOKEN);
@@ -227,9 +252,13 @@ describe('AuthController - Signup', () => {
 
 		it('should fail with 400 Bad Request if email is already verified', async () => {
 			const payload = {code: verificationCode, email: accountCredentials.email};
-			await request(httpServer).post('/auth/signup/verify').send(payload).expect(200);
+			await request(httpServer).post('/auth/signup/verify').set('Origin', webOrigin()).send(payload).expect(200);
 
-			const response = await request(httpServer).post('/auth/signup/verify').send(payload).expect(400);
+			const response = await request(httpServer)
+				.post('/auth/signup/verify')
+				.set('Origin', webOrigin())
+				.send(payload)
+				.expect(400);
 			expect(response.body.message).toBe(EMAIL_INVALID_TOKEN);
 		});
 	});
@@ -242,7 +271,11 @@ describe('AuthController - Signup', () => {
 			['missing email', {code: '123456'}, /email should not be empty/i],
 			['invalid email format', {code: '123456', email: 'not-an-email'}, /email must be an email/i],
 		])('should fail with 400 Bad Request for %s', async (_case, body, message) => {
-			const response = await request(httpServer).post('/auth/signup/verify').send(body).expect(400);
+			const response = await request(httpServer)
+				.post('/auth/signup/verify')
+				.set('Origin', webOrigin())
+				.send(body)
+				.expect(400);
 			expectValidationMessage(response, message);
 		});
 	});

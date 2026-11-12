@@ -9,7 +9,12 @@ import {mcpOriginMiddleware} from '@core/personal-access-token/mcp-origin.middle
 import {AppModule} from './app.module';
 
 async function bootstrap() {
-	const app = await NestFactory.create<NestExpressApplication>(AppModule, {forceCloseConnections: true});
+	// JSON only: the API takes no form posts, so an HTML form on another site cannot fill a request body.
+	const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+		forceCloseConnections: true,
+		bodyParser: false,
+	});
+	app.useBodyParser('json');
 	const config = app.get(ConfigurationService);
 
 	app.enableShutdownHooks();

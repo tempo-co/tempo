@@ -64,7 +64,8 @@ beforeAll(async () => {
 		import('../../src/app.module'),
 	]);
 	const moduleFixture = await Test.createTestingModule({imports: [AppModule]}).compile();
-	app = moduleFixture.createNestApplication({forceCloseConnections: true});
+	app = moduleFixture.createNestApplication({forceCloseConnections: true, bodyParser: false});
+	(app as NestExpressApplication).useBodyParser('json');
 	(app as NestExpressApplication).set('query parser', 'extended');
 	const webOrigin = new URL(app.get(ConfigurationService).get('WEB_BASE_URL')).origin;
 	app.use(mcpOriginMiddleware(webOrigin));

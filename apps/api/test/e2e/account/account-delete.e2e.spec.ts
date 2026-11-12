@@ -20,7 +20,7 @@ import {EnableBankingClient, EnableBankingClientError} from '@modules/banking/se
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {seedBankingData} from '../../../scripts/seed-data/seed-banking-data';
 import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from '../../../scripts/seed-data/seed.constants';
-import {getApp, loginAgent} from '../../setup/e2e.setup';
+import {getApp, loginAgent, webOrigin} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
 import {fetchedTransactions} from '../../utils/banking-utils';
 import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
@@ -141,7 +141,11 @@ describe('AccountController - DELETE /accounts/me', () => {
 			.expect(200);
 		const emailChangeKey = `${app.get(ConfigurationService).get('EMAIL_VERIFICATION_REDIS_KEY')}:change:${accountId}`;
 		expect(await redis.get(emailChangeKey)).not.toBeNull();
-		await request(httpServer).post('/auth/reset-password/request').send({email}).expect(200);
+		await request(httpServer)
+			.post('/auth/reset-password/request')
+			.set('Origin', webOrigin())
+			.send({email})
+			.expect(200);
 		const resetEmail = await EmailUtils.findEmailByRecipient(email, mailpitApiUrl, 'Reset your Tempo password');
 		const resetToken = EmailUtils.extractToken(resetEmail?.Text);
 
@@ -182,6 +186,7 @@ describe('AccountController - DELETE /accounts/me', () => {
 		expect(await redis.get(emailChangeKey)).toBeNull();
 		const resetResponse = await request(httpServer)
 			.post('/auth/reset-password/verify')
+			.set('Origin', webOrigin())
 			.send({token: resetToken, newPassword: `${password}-new`})
 			.expect(400);
 		expect(resetResponse.body.message).toBe(PASSWORD_RESET_INVALID_TOKEN);
@@ -191,7 +196,7 @@ describe('AccountController - DELETE /accounts/me', () => {
 		await secondSessionAgent.get('/accounts/me').expect(401);
 
 		// The account can no longer log in.
-		await request(httpServer).post('/auth/login').send({email, password}).expect(401);
+		await request(httpServer).post('/auth/login').set('Origin', webOrigin()).send({email, password}).expect(401);
 
 		// A farewell email is delivered to the deleted address.
 		const farewellEmail = await EmailUtils.findEmailByRecipient(

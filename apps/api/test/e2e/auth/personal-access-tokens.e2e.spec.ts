@@ -15,7 +15,7 @@ import {
 	VERIFIED_ACCOUNT_EMAIL,
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
-import {getApp, loginAgent} from '../../setup/e2e.setup';
+import {getApp, loginAgent, webOrigin} from '../../setup/e2e.setup';
 
 const PATH = '/personal-access-tokens';
 const ORIGIN = 'http://localhost:5173';
@@ -136,6 +136,7 @@ describe('Personal access tokens', () => {
 		expect(JSON.stringify(trend.body)).not.toContain(otherBankAccount.id);
 		await otherAgent
 			.post('/auth/login')
+			.set('Origin', webOrigin())
 			.auth(created.token, {type: 'bearer'})
 			.send({email: VERIFIED_ACCOUNT_EMAIL, password: VERIFIED_ACCOUNT_PASSWORD})
 			.expect(403);

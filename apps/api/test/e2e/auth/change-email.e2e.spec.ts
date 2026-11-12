@@ -75,7 +75,7 @@ describe('AuthController - Change email', () => {
 		httpServer = app.getHttpServer();
 
 		const conflictAccount = createAccountCredentials();
-		await request(httpServer).post('/auth/signup').send(conflictAccount).expect(201);
+		await request(httpServer).post('/auth/signup').set('Origin', webOrigin).send(conflictAccount).expect(201);
 		existingEmail = conflictAccount.email;
 
 		verifiedAgent = await loginAgent(httpServer, VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
@@ -234,7 +234,11 @@ describe('AuthController - Change email', () => {
 
 		it('should change the email with a valid token and end the reset link sent to the old address', async () => {
 			const previousEmail = accountEmail;
-			await request(httpServer).post('/auth/reset-password/request').send({email: previousEmail}).expect(200);
+			await request(httpServer)
+				.post('/auth/reset-password/request')
+				.set('Origin', webOrigin)
+				.send({email: previousEmail})
+				.expect(200);
 			const resetToken = await EmailUtils.getToken(previousEmail, mailpitApiUrl);
 			await EmailUtils.clearEmails(mailpitApiUrl);
 
@@ -245,6 +249,7 @@ describe('AuthController - Change email', () => {
 			accountEmail = newEmailAddress;
 			const resetResponse = await request(httpServer)
 				.post('/auth/reset-password/verify')
+				.set('Origin', webOrigin)
 				.send({token: resetToken, newPassword: uniquePassword()})
 				.expect(400);
 			expect(resetResponse.body.message).toBe(PASSWORD_RESET_INVALID_TOKEN);

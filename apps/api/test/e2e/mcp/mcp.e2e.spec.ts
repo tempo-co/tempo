@@ -20,7 +20,7 @@ import {McpController} from '@modules/banking/api/mcp.controller';
 
 import {BankingFixtures, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from '../../../scripts/seed-data/seed.constants';
-import {getApp, getSessionCookie} from '../../setup/e2e.setup';
+import {getApp, getSessionCookie, webOrigin} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
 import {MAILPIT_API_URL} from '../../utils/email-utils';
 
@@ -78,6 +78,7 @@ describe('Hosted MCP', () => {
 		const login = () =>
 			request(app.getHttpServer())
 				.post('/auth/login')
+				.set('Origin', webOrigin())
 				.send({email: VERIFIED_ACCOUNT_EMAIL, password: VERIFIED_ACCOUNT_PASSWORD})
 				.expect(200);
 		cookie = getSessionCookie(await login())!.split(';')[0];
