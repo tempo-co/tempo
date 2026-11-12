@@ -49,8 +49,13 @@ export function matchDay(row: Pick<MatchIncomingRow, 'bookingDate' | 'valueDate'
  * 2. Balance: exactly one unclaimed existing row with the same amount, currency, value date and balance after.
  * 3. Same day: rows with the same amount, currency and day pair off in order (incoming order; existing rows by
  *    `createdAt`, then `id`), unless `uniqueCandidatesOnly` is set and the group holds more than one either side.
+ *    An incoming row skips existing rows whose reference conflicts with its own.
  * 4. Nearby: the only unclaimed existing row with the same amount and currency at most `MATCH_WINDOW_DAYS` away,
- *    when no other remaining incoming row has it as a candidate. No candidate is new; anything else is doubtful.
+ *    when no other remaining incoming row has it as a candidate and its reference does not conflict. No candidate
+ *    is new; anything else is doubtful.
+ *
+ * Two references conflict when both are non-empty after trimming and differ: the rows are different payments, so
+ * steps 3 and 4 never pair them on their own. A row without a reference conflicts with nothing.
  */
 export function matchTransactions(
 	incoming: readonly MatchIncomingRow[],
@@ -101,9 +106,9 @@ export function matchTransactions(
 		const existingGroup = existingByDay.get(key) ?? [];
 		// Pairing look-alikes is only safe when the caller treats them as interchangeable.
 		if (options.uniqueCandidatesOnly && (group.length > 1 || existingGroup.length > 1)) continue;
-		for (const {index} of group) {
-			const next = existingGroup.shift();
-			if (next) claim(index, next, 'sameDay');
+		for (const {row, index} of group) {
+			const position = existingGroup.findIndex((other) => !referencesConflict(row, other));
+			if (position >= 0) claim(index, existingGroup.splice(position, 1)[0], 'sameDay');
 		}
 	}
 
@@ -117,21 +122,27 @@ export function matchTransactions(
 						return otherDay !== null && daysBetween(day, otherDay) <= MATCH_WINDOW_DAYS;
 					})
 				: [];
-			return [index, candidates.map(({id}) => id)];
+			return [index, candidates] as const;
 		}),
 	);
 	const claimants = new Map<string, number>();
-	for (const ids of candidatesByIndex.values()) {
-		for (const id of ids) claimants.set(id, (claimants.get(id) ?? 0) + 1);
+	for (const candidates of candidatesByIndex.values()) {
+		for (const {id} of candidates) claimants.set(id, (claimants.get(id) ?? 0) + 1);
 	}
-	for (const [index, ids] of candidatesByIndex) {
-		if (ids.length === 0) outcomes[index] = {kind: 'new'};
-		else if (ids.length === 1 && claimants.get(ids[0]) === 1)
-			outcomes[index] = {kind: 'matched', existingId: ids[0], step: 'nearby'};
-		else outcomes[index] = {kind: 'doubtful', candidateIds: ids};
+	for (const [index, candidates] of candidatesByIndex) {
+		const [only] = candidates;
+		if (!only) outcomes[index] = {kind: 'new'};
+		else if (candidates.length === 1 && claimants.get(only.id) === 1 && !referencesConflict(incoming[index], only))
+			outcomes[index] = {kind: 'matched', existingId: only.id, step: 'nearby'};
+		else outcomes[index] = {kind: 'doubtful', candidateIds: candidates.map(({id}) => id)};
 	}
 
 	return outcomes as MatchOutcome[];
+}
+
+function referencesConflict(left: MatchIncomingRow, right: MatchIncomingRow): boolean {
+	const [one, other] = [left.reference?.trim(), right.reference?.trim()];
+	return !!one && !!other && one !== other;
 }
 
 function amountKey(row: Pick<MatchIncomingRow, 'amount' | 'currency'>): string {
