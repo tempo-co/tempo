@@ -8,9 +8,23 @@ import {BankingAuthorizationStateError} from '../errors/banking-authorization-st
 
 const STATE_TTL_SECONDS = 10 * 60;
 const CONSUMED_STATE_TTL_SECONDS = 24 * 60 * 60;
-const SCAN_BATCH_SIZE = '250';
 const STATE_KEY_PREFIX = 'banking:authorization:';
 const CONSUMED_STATE_KEY_SUFFIX = ':consumed';
+const ACCOUNT_INDEX_KEY_PREFIX = 'banking:authorization-index:account:';
+const CONNECTION_INDEX_KEY_PREFIX = 'banking:authorization-index:connection:';
+
+/**
+ * Writes the state only if it is new and records its key in the account and connection index sets. Each index
+ * expires with the newest state it names, so the indexes never outlive their states for long.
+ */
+const CREATE_STATE_SCRIPT = [
+	"if not redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2], 'NX') then return 0 end",
+	'for index = 2, #KEYS do',
+	"  redis.call('SADD', KEYS[index], KEYS[1])",
+	"  redis.call('EXPIRE', KEYS[index], ARGV[2])",
+	'end',
+	'return 1',
+].join('\n');
 const CONSUME_STATE_SCRIPT = [
 	"local value = redis.call('GET', KEYS[1])",
 	'if not value then',
@@ -22,6 +36,17 @@ const CONSUME_STATE_SCRIPT = [
 	"redis.call('DEL', KEYS[1])",
 	'return {1, value}',
 ].join('\n');
+/** Replaces the state only while it still holds the value read before, keeping its TTL. */
+const REPLACE_STATE_SCRIPT = [
+	"local value = redis.call('GET', KEYS[1])",
+	'if not value then',
+	"  if redis.call('EXISTS', KEYS[2]) == 1 then return 2 end",
+	'  return 0',
+	'end',
+	'if value ~= ARGV[1] then return 3 end',
+	"redis.call('SET', KEYS[1], ARGV[2], 'KEEPTTL')",
+	'return 1',
+].join('\n');
 
 export type BankingAuthorizationState = {
 	accountId: string;
@@ -30,58 +55,58 @@ export type BankingAuthorizationState = {
 	aspspCountry: string;
 	replacesConnectionId?: string | null;
 	authorizationId?: string;
-	expiresAt: number;
 };
 
 export type BankingAuthorizationStateConsumption =
-	| {status: 'consumed'; state: BankingAuthorizationState}
-	| {status: 'expired'; state: BankingAuthorizationState}
-	| {status: 'already_consumed'}
-	| {status: 'invalid'};
+	{status: 'consumed'; state: BankingAuthorizationState} | {status: 'already_consumed'} | {status: 'invalid'};
 
+/** One-time authorization states in Redis. The key's TTL is the state's only expiry. */
 @Injectable()
 export class BankingAuthorizationStateService {
 	constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
-	async create(input: Omit<BankingAuthorizationState, 'expiresAt'>): Promise<string> {
+	async create(input: BankingAuthorizationState): Promise<string> {
 		const state = randomBytes(32).toString('base64url');
-		const value: BankingAuthorizationState = {
-			...input,
-			expiresAt: Date.now() + STATE_TTL_SECONDS * 1000,
-		};
 
 		const result = await this.runRedisOperation(() =>
-			this.redis.set(this.getKey(state), JSON.stringify(value), 'EX', STATE_TTL_SECONDS, 'NX'),
+			this.redis.eval(
+				CREATE_STATE_SCRIPT,
+				3,
+				this.getKey(state),
+				this.getAccountIndexKey(input.accountId),
+				this.getConnectionIndexKey(input.connectionId),
+				JSON.stringify(input),
+				STATE_TTL_SECONDS,
+			),
 		);
-		if (result !== 'OK') throw new BankingAuthorizationStateError('write_failed');
+		if (Number(result) !== 1) throw new BankingAuthorizationStateError('write_failed');
 
 		return state;
 	}
 
 	async setAuthorizationId(state: string, authorizationId: string): Promise<void> {
 		const key = this.getKey(state);
-		const [currentValue, ttl] = await this.runRedisOperation(() =>
-			Promise.all([this.redis.get(key), this.redis.ttl(key)]),
-		);
-
-		if (!currentValue || ttl <= 0) {
-			throw new BankingAuthorizationStateError('state_expired');
-		}
-
-		const parsedValue = this.parse(currentValue);
-		if (!parsedValue) {
+		const currentValue = await this.runRedisOperation(() => this.redis.get(key));
+		const parsedValue = currentValue ? this.parse(currentValue) : null;
+		if (currentValue && !parsedValue) {
 			throw new BankingAuthorizationStateError('state_invalid');
 		}
 
 		const result = await this.runRedisOperation(() =>
-			this.redis.set(key, JSON.stringify({...parsedValue, authorizationId}), 'EX', Math.max(ttl, 1), 'XX'),
+			this.redis.eval(
+				REPLACE_STATE_SCRIPT,
+				2,
+				key,
+				this.getConsumedKey(state),
+				currentValue ?? '',
+				parsedValue ? JSON.stringify({...parsedValue, authorizationId}) : '',
+			),
 		);
-		if (result !== 'OK') throw new BankingAuthorizationStateError('state_expired');
-	}
-
-	async consume(state: string | undefined): Promise<BankingAuthorizationState | null> {
-		const result = await this.consumeWithStatus(state);
-		return result?.status === 'consumed' ? result.state : null;
+		const outcome = Number(result);
+		if (outcome === 1) return;
+		if (outcome === 2) throw new BankingAuthorizationStateError('state_consumed');
+		if (outcome === 3) throw new BankingAuthorizationStateError('state_superseded');
+		throw new BankingAuthorizationStateError('state_expired');
 	}
 
 	async consumeWithStatus(state: string | undefined): Promise<BankingAuthorizationStateConsumption | null> {
@@ -105,7 +130,6 @@ export class BankingAuthorizationStateService {
 
 		const parsedValue = this.parse(result[1]);
 		if (!parsedValue) return {status: 'invalid'};
-		if (parsedValue.expiresAt <= Date.now()) return {status: 'expired', state: parsedValue};
 
 		return {status: 'consumed', state: parsedValue};
 	}
@@ -117,49 +141,27 @@ export class BankingAuthorizationStateService {
 
 	/** Removes every pending authorization state owned by the given account. Returns the number of removed states. */
 	async removeForAccount(accountId: string): Promise<number> {
-		return this.removeMatchingStates((state) => state.accountId === accountId);
-	}
-
-	/** Removes the pending authorization state for the given connection. Returns the number of removed states. */
-	async removeForConnection(connectionId: string): Promise<number> {
-		return this.removeForConnections([connectionId]);
+		return this.removeIndexedStates([this.getAccountIndexKey(accountId)]);
 	}
 
 	/** Removes pending authorization states for the given connections. Returns the number of removed states. */
 	async removeForConnections(connectionIds: string[]): Promise<number> {
-		const connectionIdSet = new Set(connectionIds);
-		if (connectionIdSet.size === 0) return 0;
+		const indexKeys = [...new Set(connectionIds)].map((connectionId) => this.getConnectionIndexKey(connectionId));
+		if (indexKeys.length === 0) return 0;
 
-		return this.removeMatchingStates((state) => connectionIdSet.has(state.connectionId));
+		return this.removeIndexedStates(indexKeys);
 	}
 
-	private async removeMatchingStates(matches: (state: BankingAuthorizationState) => boolean): Promise<number> {
-		const matchingKeys: string[] = [];
-		const matchPattern = `${STATE_KEY_PREFIX}*`;
-		let cursor = '0';
+	/** Deletes the states the index sets name and the sets themselves. Consumed markers stay. */
+	private async removeIndexedStates(indexKeys: string[]): Promise<number> {
+		const members = await this.runRedisOperation(() =>
+			Promise.all(indexKeys.map((indexKey) => this.redis.smembers(indexKey))),
+		);
+		const stateKeys = [...new Set(members.flat())];
 
-		while (true) {
-			const reply = await this.runRedisOperation(() =>
-				this.redis.scan(cursor, 'MATCH', matchPattern, 'COUNT', SCAN_BATCH_SIZE),
-			);
-			cursor = reply[0];
-			const keys = reply[1];
-
-			if (keys.length > 0) {
-				const values = await this.runRedisOperation(() => this.redis.mget(keys));
-				for (let i = 0; i < keys.length; i++) {
-					const parsed = this.parse(values[i] ?? '');
-					if (parsed && matches(parsed)) matchingKeys.push(keys[i]);
-				}
-			}
-
-			if (cursor === '0') break;
-		}
-
-		if (matchingKeys.length > 0) {
-			await this.runRedisOperation(() => this.redis.del(matchingKeys));
-		}
-		return matchingKeys.length;
+		const removed = stateKeys.length > 0 ? await this.runRedisOperation(() => this.redis.del(stateKeys)) : 0;
+		await this.runRedisOperation(() => this.redis.del(indexKeys));
+		return removed;
 	}
 
 	private async runRedisOperation<T>(operation: () => Promise<T>): Promise<T> {
@@ -179,7 +181,6 @@ export class BankingAuthorizationStateService {
 				typeof parsed.connectionId !== 'string' ||
 				typeof parsed.aspspName !== 'string' ||
 				typeof parsed.aspspCountry !== 'string' ||
-				typeof parsed.expiresAt !== 'number' ||
 				(parsed.replacesConnectionId !== undefined &&
 					parsed.replacesConnectionId !== null &&
 					typeof parsed.replacesConnectionId !== 'string') ||
@@ -200,5 +201,13 @@ export class BankingAuthorizationStateService {
 
 	private getKey(state: string): string {
 		return `${STATE_KEY_PREFIX}${state}`;
+	}
+
+	private getAccountIndexKey(accountId: string): string {
+		return `${ACCOUNT_INDEX_KEY_PREFIX}${accountId}`;
+	}
+
+	private getConnectionIndexKey(connectionId: string): string {
+		return `${CONNECTION_INDEX_KEY_PREFIX}${connectionId}`;
 	}
 }

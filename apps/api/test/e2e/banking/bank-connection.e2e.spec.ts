@@ -27,6 +27,7 @@ import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {addDays} from '@modules/banking/banking.utils';
 import {EnableBankingBalance, EnableBankingTransaction} from '@modules/banking/enable-banking.types';
 import {BankTransactionPersistenceService} from '@modules/banking/services/bank-transaction-persistence.service';
+import {BankingAuthorizationStateService} from '@modules/banking/services/banking-authorization-state.service';
 import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
 import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
 import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
@@ -1064,6 +1065,51 @@ describe('BankConnectionController', () => {
 			order: {createdAt: 'DESC'},
 		});
 		expect(expiredConnection?.status).toBe('FAILED');
+	});
+
+	it('reports a state the callback consumed before the authorization id was stored as consumed', async () => {
+		const authorizationStates = app.get(BankingAuthorizationStateService);
+		const state = await authorizationStates.create({
+			accountId: account.id,
+			connectionId: randomUUID(),
+			aspspName: 'ABN AMRO',
+			aspspCountry: 'NL',
+		});
+		const stateKey = `banking:authorization:${state}`;
+
+		try {
+			await expect(authorizationStates.consumeWithStatus(state)).resolves.toMatchObject({status: 'consumed'});
+			await expect(authorizationStates.setAuthorizationId(state, 'late-authorization-id')).rejects.toMatchObject({
+				code: 'state_consumed',
+			});
+		} finally {
+			await redis.del(stateKey, `${stateKey}:consumed`);
+		}
+	});
+
+	it('stores the authorization id without extending the state expiry', async () => {
+		const authorizationStates = app.get(BankingAuthorizationStateService);
+		const state = await authorizationStates.create({
+			accountId: account.id,
+			connectionId: randomUUID(),
+			aspspName: 'ABN AMRO',
+			aspspCountry: 'NL',
+		});
+		const stateKey = `banking:authorization:${state}`;
+
+		try {
+			await redis.expire(stateKey, 120);
+			await authorizationStates.setAuthorizationId(state, 'stored-authorization-id');
+
+			expect(JSON.parse((await redis.get(stateKey)) ?? '{}')).toMatchObject({
+				authorizationId: 'stored-authorization-id',
+			});
+			const ttl = await redis.ttl(stateKey);
+			expect(ttl).toBeGreaterThan(0);
+			expect(ttl).toBeLessThanOrEqual(120);
+		} finally {
+			await redis.del(stateKey);
+		}
 	});
 
 	it('marks provider failures as failed without leaking provider details', async () => {
