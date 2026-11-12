@@ -14,9 +14,10 @@ import {LogInDto, logInDtoSchema} from '../types/login.dto';
 
 type LogInFormProps = {
   redirectTo?: string;
+  defaultEmail?: string;
 };
 
-export function LogInForm({redirectTo}: LogInFormProps) {
+export function LogInForm({redirectTo, defaultEmail}: LogInFormProps) {
   const [hasUnauthorizedError, setHasUnauthorizedError] = useState<boolean>(false);
 
   const {logIn, isPending} = useLogIn(redirectTo);
@@ -24,6 +25,7 @@ export function LogInForm({redirectTo}: LogInFormProps) {
   const form = useForm<LogInDto>({
     resolver: zodResolver(logInDtoSchema),
     mode: 'onSubmit',
+    defaultValues: {email: defaultEmail},
   });
 
   useEffect(() => {

@@ -78,11 +78,9 @@ export class AuthController {
 	@Post('signup/verify')
 	@HttpCode(200)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
-	async verifyEmail(@Body() dto: EmailVerifyDto, @Req() request: Request): Promise<MessageResponse> {
-		const user = await this.emailVerifierService.verifySignup(dto.code, dto.email);
-		if (!request.isAuthenticated()) {
-			await this.authService.logIn(user, request);
-		}
+	async verifyEmail(@Body() dto: EmailVerifyDto): Promise<MessageResponse> {
+		// Verifying never signs in: the browser that signed up already has a session, any other logs in.
+		await this.emailVerifierService.verifySignup(dto.code, dto.email);
 		return {message: EMAIL_VERIFICATION_SUCCESS};
 	}
 
@@ -101,7 +99,7 @@ export class AuthController {
 		@CurrentAccount() account: Account,
 		@Body() dto: EmailChangeRequestDto,
 	): Promise<MessageResponse> {
-		return await this.emailVerifierService.requestEmailChange(account, dto.newEmail);
+		return await this.emailVerifierService.requestEmailChange(account, dto.newEmail, dto.currentPassword);
 	}
 
 	@Post('change-email/verify')

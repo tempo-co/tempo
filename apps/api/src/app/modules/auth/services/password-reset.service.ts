@@ -1,5 +1,4 @@
 import {BadRequestException, Inject, Injectable} from '@nestjs/common';
-import argon2 from 'argon2';
 import Redis from 'ioredis';
 import ms from 'ms';
 import crypto from 'node:crypto';
@@ -11,6 +10,12 @@ import {REDIS} from '@core/redis/redis.constants';
 import {SessionService} from '@core/session/session.service';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
+import {
+	hashSecret,
+	passwordResetAccountKey,
+	passwordResetTokenKey,
+	revokePasswordResetToken,
+} from '@modules/account/auth-secret-keys';
 
 import {
 	PASSWORD_RESET_CONFIRMATION,
@@ -19,6 +24,10 @@ import {
 	PASSWORD_SAME_AS_OLD,
 } from '../api/constants/api-messages.constants';
 
+/**
+ * An account has at most one live reset link: a new request replaces it, and a reset, password
+ * change or email change ends it. Redis holds only the token's hash.
+ */
 @Injectable()
 export class PasswordResetService {
 	private readonly REDIS_KEY;
@@ -60,25 +69,52 @@ export class PasswordResetService {
 	}
 
 	async resetPassword(password: Account['password'], token: string) {
-		const {accountId, key} = await this._getTokenData(token);
+		const tokenKey = passwordResetTokenKey(this.REDIS_KEY, hashSecret(token));
+		const accountId = await this.redisClient.get(tokenKey);
+		if (!accountId) {
+			throw new BadRequestException(PASSWORD_RESET_INVALID_TOKEN);
+		}
 
-		await this._assertPasswordIsNew(accountId, password, key);
-
+		// Checked before the token is consumed, so the link still works with a different password.
+		await this._assertPasswordIsNew(accountId, password);
 		const hash = await this.accountService.hashPassword(password);
-		await this.accountService.updateFields(accountId, {password: hash});
 
-		await this.redisClient.del(key);
+		// GETDEL lets exactly one of concurrent submissions of the same link through.
+		if ((await this.redisClient.getdel(tokenKey)) !== accountId) {
+			throw new BadRequestException(PASSWORD_RESET_INVALID_TOKEN);
+		}
+		await this.accountService.updateFields(accountId, {password: hash});
+		await this.revokeForAccount(accountId);
 		await this.sessionService.revokeAllCredentials(accountId, null);
 
 		return {message: PASSWORD_RESET_SUCCESS};
 	}
 
+	/** Ends the account's live reset link, if it has one. */
+	revokeForAccount(accountId: Account['id']) {
+		return revokePasswordResetToken(this.redisClient, this.REDIS_KEY, accountId);
+	}
+
 	private async _createToken(accountId: Account['id']) {
 		const token: string = crypto.randomUUID();
-		const key = `${this.REDIS_KEY}:${token}`;
-
+		const tokenHash = hashSecret(token);
 		const expirationSeconds = Math.floor(this.EXPIRATION_MS / 1000);
-		await this.redisClient.set(key, accountId, 'EX', expirationSeconds);
+
+		await this.redisClient.set(
+			passwordResetTokenKey(this.REDIS_KEY, tokenHash),
+			accountId,
+			'EX',
+			expirationSeconds,
+		);
+		// SET ... GET swaps atomically, so every replaced token is deleted by the request that replaced it.
+		const previousHash = await this.redisClient.set(
+			passwordResetAccountKey(this.REDIS_KEY, accountId),
+			tokenHash,
+			'EX',
+			expirationSeconds,
+			'GET',
+		);
+		if (previousHash) await this.redisClient.del(passwordResetTokenKey(this.REDIS_KEY, previousHash));
 		return token;
 	}
 
@@ -86,22 +122,9 @@ export class PasswordResetService {
 		return createWebUrl('/reset-password', this.WEB_BASE_URL, {email, token});
 	}
 
-	private async _getTokenData(token: string) {
-		const key = `${this.REDIS_KEY}:${token}`;
-
-		const accountId = await this.redisClient.get(key);
-		if (!accountId) {
-			throw new BadRequestException(PASSWORD_RESET_INVALID_TOKEN);
-		}
-		return {accountId, key};
-	}
-
-	private async _assertPasswordIsNew(accountId: Account['id'], newPassword: string, key: string) {
+	private async _assertPasswordIsNew(accountId: Account['id'], newPassword: string) {
 		const account = await this.accountService.findById(accountId);
-
-		const isSamePassword = await argon2.verify(account.password, newPassword);
-		if (isSamePassword) {
-			await this.redisClient.del(key);
+		if (await this.accountService.isPasswordValid(account.password, newPassword)) {
 			throw new BadRequestException(PASSWORD_SAME_AS_OLD);
 		}
 	}

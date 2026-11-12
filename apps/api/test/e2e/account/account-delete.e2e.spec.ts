@@ -7,7 +7,7 @@ import {DataSource} from 'typeorm';
 import {ConfigurationService} from '@core/config/config.service';
 import {REDIS} from '@core/redis/redis.constants';
 import {ACCOUNT_DELETED_EMAIL_SUBJECT, ACCOUNT_DELETED_MESSAGE} from '@modules/account/account-deletion.service';
-import {INVALID_PASSWORD} from '@modules/auth/api/constants/api-messages.constants';
+import {INVALID_PASSWORD, PASSWORD_RESET_INVALID_TOKEN} from '@modules/auth/api/constants/api-messages.constants';
 import {BankAccountBalance} from '@modules/banking/bank-account-balance.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
@@ -98,14 +98,17 @@ describe('AccountController - DELETE /accounts/me', () => {
 			600,
 		);
 
-		// A pending email change is cancelled with the account.
+		// A pending email change and a password reset link are cancelled with the account.
 		await agent
 			.post('/auth/change-email/request')
 			.set('Origin', new URL(app.get(ConfigurationService).get('WEB_BASE_URL')).origin)
-			.send({newEmail: `pending-${accountId}@example.test`})
+			.send({newEmail: `pending-${accountId}@example.test`, currentPassword: password})
 			.expect(200);
 		const emailChangeKey = `${app.get(ConfigurationService).get('EMAIL_VERIFICATION_REDIS_KEY')}:change:${accountId}`;
 		expect(await redis.get(emailChangeKey)).not.toBeNull();
+		await request(httpServer).post('/auth/reset-password/request').send({email}).expect(200);
+		const resetEmail = await EmailUtils.findEmailByRecipient(email, mailpitApiUrl, 'Reset your Tempo password');
+		const resetToken = EmailUtils.extractToken(resetEmail?.Text);
 
 		// Wrong password is rejected and the account survives.
 		const wrongPasswordResponse = await agent.delete('/accounts/me').send({password: 'wrong-password'}).expect(401);
@@ -135,6 +138,11 @@ describe('AccountController - DELETE /accounts/me', () => {
 		expect(await redis.get(otherStateKey)).not.toBeNull();
 		await redis.del(otherStateKey);
 		expect(await redis.get(emailChangeKey)).toBeNull();
+		const resetResponse = await request(httpServer)
+			.post('/auth/reset-password/verify')
+			.send({token: resetToken, newPassword: `${password}-new`})
+			.expect(400);
+		expect(resetResponse.body.message).toBe(PASSWORD_RESET_INVALID_TOKEN);
 
 		// All sessions (including the caller's and the second session's) were revoked.
 		await agent.get('/accounts/me').expect(401);
