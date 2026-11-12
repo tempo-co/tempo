@@ -405,109 +405,62 @@ describe('BankingSyncService synchronization lock', () => {
 		expect(merchantLogoService.enqueueForOwnerSafely).toHaveBeenCalledWith('account-id');
 	});
 
-	it('persists the provider Retry-After as the next automatic synchronization gate', async () => {
-		transactionGate.resolve(NO_TRANSACTIONS);
-		enableBankingClient.getAccountBalances.mockRejectedValueOnce(
-			new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 429, 120),
-		);
-		enableBankingClient.getAccountTransactions.mockResolvedValueOnce(NO_TRANSACTIONS);
+	it.each([
+		['a Retry-After inside the window', 'ASPSP_RATE_LIMIT_EXCEEDED', 429, 7_200, 7_200],
+		['no Retry-After, whatever the background interval', 'ASPSP_RATE_LIMIT_EXCEEDED', 400, undefined, 21_600],
+		['a zero Retry-After', 'ASPSP_RATE_LIMIT_EXCEEDED', 400, 0, 900],
+		['a Retry-After beyond a day', 'ASPSP_RATE_LIMIT_EXCEEDED', 429, 8_000_000_000_000, 86_400],
+		['HTTP 429 with another code', 'provider_temporarily_unavailable', 429, 120, 900],
+	])(
+		'waits out a rate limit with %s for the clamped cooldown before the next automatic synchronization',
+		async (_case, code, status, retryAfterSeconds, cooldownSeconds) => {
+			configurationService.get.mockReturnValue('1h');
+			transactionGate.resolve(NO_TRANSACTIONS);
+			enableBankingClient.getAccountBalances.mockRejectedValueOnce(
+				new EnableBankingClientError(code, status, retryAfterSeconds),
+			);
 
-		await expect(service.synchronizeAutomatically('connection-id')).resolves.toMatchObject({
-			status: 'SUCCEEDED',
-		});
+			await expect(service.synchronizeAutomatically('connection-id')).resolves.toMatchObject({
+				rateLimitSource: 'enable-banking',
+				retryAfterSeconds: cooldownSeconds,
+			});
 
-		const connectionUpdate = transactionRepository.update.mock.calls
-			.map(([, values]) => values)
-			.find((values) => values?.syncStatus === 'RATE_LIMITED');
-		expect(connectionUpdate).toEqual(
-			expect.objectContaining({
-				syncStatus: 'RATE_LIMITED',
-				nextSyncAt: expect.any(Date),
-			}),
-		);
-		expect(connectionUpdate.nextSyncAt.getTime() - Date.now()).toBeGreaterThanOrEqual(119_000);
-	});
-
-	it('uses the six-hour fallback even when the ordinary background interval is shorter', async () => {
-		configurationService.get.mockReturnValue('1h');
-		transactionGate.resolve(NO_TRANSACTIONS);
-		enableBankingClient.getAccountBalances.mockRejectedValueOnce(
-			new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 400),
-		);
-		enableBankingClient.getAccountTransactions.mockResolvedValueOnce(NO_TRANSACTIONS);
-
-		await service.synchronizeAutomatically('connection-id');
-
-		const connectionUpdate = transactionRepository.update.mock.calls
-			.map(([, values]) => values)
-			.find((values) => values?.syncStatus === 'RATE_LIMITED');
-		expect(connectionUpdate.nextSyncAt.getTime() - Date.now()).toBeGreaterThanOrEqual(21_599_000);
-	});
-
-	it('honors an explicit zero-second provider retry delay', async () => {
-		transactionGate.resolve(NO_TRANSACTIONS);
-		enableBankingClient.getAccountBalances.mockRejectedValueOnce(
-			new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 400, 0),
-		);
-		enableBankingClient.getAccountTransactions.mockResolvedValueOnce(NO_TRANSACTIONS);
-
-		await service.synchronizeAutomatically('connection-id');
-
-		const connectionUpdate = transactionRepository.update.mock.calls
-			.map(([, values]) => values)
-			.find((values) => values?.syncStatus === 'RATE_LIMITED');
-		expect(connectionUpdate.nextSyncAt.getTime() - Date.now()).toBeLessThan(1_000);
-	});
-	it('does not classify an unrelated HTTP 429 as an ASPSP rate limit', async () => {
-		transactionGate.resolve(NO_TRANSACTIONS);
-		enableBankingClient.getAccountBalances.mockRejectedValueOnce(
-			new EnableBankingClientError('provider_temporarily_unavailable', 429, 120),
-		);
-		enableBankingClient.getAccountTransactions.mockResolvedValueOnce(NO_TRANSACTIONS);
-
-		await service.synchronizeAutomatically('connection-id');
-
-		const connectionUpdate = transactionRepository.update.mock.calls
-			.map(([, values]) => values)
-			.find((values) => values?.syncStatus);
-		expect(connectionUpdate.syncStatus).not.toBe('RATE_LIMITED');
-	});
-
-	it('keeps a very large usable Retry-After inside the JavaScript Date range', async () => {
-		transactionGate.resolve(NO_TRANSACTIONS);
-		enableBankingClient.getAccountBalances.mockRejectedValueOnce(
-			new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 429, 8_000_000_000_000),
-		);
-		enableBankingClient.getAccountTransactions.mockResolvedValueOnce(NO_TRANSACTIONS);
-
-		await service.synchronizeAutomatically('connection-id');
-
-		const connectionUpdate = transactionRepository.update.mock.calls
-			.map(([, values]) => values)
-			.find((values) => values?.syncStatus === 'RATE_LIMITED');
-		expect(Number.isNaN(connectionUpdate.nextSyncAt.getTime())).toBe(false);
-	});
+			// The rate limit stops the run before the account's transactions are requested.
+			expect(enableBankingClient.getAccountTransactions).not.toHaveBeenCalled();
+			const connectionUpdate = transactionRepository.update.mock.calls
+				.map(([, values]) => values)
+				.find((values) => values?.syncStatus === 'RATE_LIMITED');
+			const delayMs = connectionUpdate.nextSyncAt.getTime() - Date.now();
+			expect(delayMs).toBeGreaterThan(cooldownSeconds * 1000 - 1000);
+			expect(delayMs).toBeLessThanOrEqual(cooldownSeconds * 1000);
+		},
+	);
 
 	it('backs off when session validation is rate-limited', async () => {
 		enableBankingClient.getSessionAccounts.mockRejectedValueOnce(
-			new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 400, 23),
+			new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 400, 1_800),
 		);
 
 		await expect(service.synchronizeAutomatically('connection-id')).resolves.toMatchObject({
-			status: 'SUCCEEDED',
-			retryAfterSeconds: 23,
+			retryAfterSeconds: 1_800,
 		});
 
+		expect(enableBankingClient.getAccountBalances).not.toHaveBeenCalled();
 		const connectionUpdate = transactionRepository.update.mock.calls
 			.map(([, values]) => values)
 			.find((values) => values?.syncStatus === 'RATE_LIMITED');
-		expect(connectionUpdate).toEqual(
-			expect.objectContaining({
-				syncStatus: 'RATE_LIMITED',
-				nextSyncAt: expect.any(Date),
-			}),
-		);
-		expect(connectionUpdate.nextSyncAt.getTime() - Date.now()).toBeGreaterThanOrEqual(22_000);
+		expect(connectionUpdate.nextSyncAt.getTime() - Date.now()).toBeGreaterThan(1_799_000);
+	});
+
+	it('answers 409 without starting a run when the connection changed before the claim', async () => {
+		bankConnectionRepository.update.mockResolvedValueOnce({affected: 0});
+
+		await expect(service.synchronizeAutomatically('connection-id')).rejects.toMatchObject({
+			status: 409,
+			message: 'The bank connection changed during synchronization. Please try again.',
+		});
+		expect(bankSyncRunRepository.save).not.toHaveBeenCalled();
+		expect(enableBankingClient.getSessionAccounts).not.toHaveBeenCalled();
 	});
 
 	it('records a retryable failure when loading accounts throws after RUNNING is persisted', async () => {
