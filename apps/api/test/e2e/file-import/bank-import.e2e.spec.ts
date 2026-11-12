@@ -680,19 +680,24 @@ describe('Bank imports', () => {
 			.expect(400);
 		await expectNothingWritten();
 
+		const syncedRowsBefore = await transactions.find({where: {bankAccountId: synced.id}, order: {id: 'ASC'}});
+
 		const chosen = await drop(agent, [statement])
-			.field('accountChoices', JSON.stringify({'Revolut:EUR': synced.id}))
+			.field('accountChoices', JSON.stringify({'Revolut:EUR': fileAccount.id}))
 			.expect(201);
 
 		expect(chosen.body).toMatchObject({
 			rowsParsed: 7,
 			rowsAdded: 7,
 			accounts: [
-				{id: synced.id, name: 'Main account', currency: 'EUR', created: false},
+				{id: fileAccount.id, name: 'NL91 ABNA 0417 1643 00', currency: 'EUR', created: false},
 				{name: 'Revolut GBP', currency: 'GBP', created: true},
 			],
 		});
-		expect(await transactions.countBy({bankAccountId: synced.id, importId: chosen.body.id})).toBe(6);
+		expect(await transactions.countBy({bankAccountId: fileAccount.id, importId: chosen.body.id})).toBe(6);
+		expect(await transactions.find({where: {bankAccountId: synced.id}, order: {id: 'ASC'}})).toEqual(
+			syncedRowsBefore,
+		);
 		expect(await transactions.countBy({bankAccountId: othersAccount.id})).toBe(0);
 	});
 

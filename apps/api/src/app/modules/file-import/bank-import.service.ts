@@ -717,6 +717,16 @@ export class BankImportService {
 				: null;
 		const accounts: ImportedAccount[] = [];
 		for (const [index, target] of targets.entries()) {
+			if (target.kind === 'file' && target.account) {
+				// The imported-files account the request names, read again under the locked connection.
+				const account = await manager.getRepository(BankAccount).findOne({
+					where: {id: target.account.id, bankConnection: {id: fileConnection!.id, accountId: ownerId}},
+				});
+				// Only an undo or removal committing before the lock was taken gets here.
+				if (!account) throw new ConflictException(BANK_IMPORT_NOT_SAVED);
+				accounts.push({account, connection: fileConnection!, created: false});
+				continue;
+			}
 			if (target.kind === 'file') {
 				accounts.push(await this.findOrCreateFileAccount(manager, fileConnection!, accountRows[index]));
 				continue;

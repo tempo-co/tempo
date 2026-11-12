@@ -56,8 +56,8 @@ export type BankImportError = {
 	file: number | null;
 	/**
 	 * On `ambiguous_target_account` and `target_account_unconfirmed`: every statement of the drop that names no
-	 * account and needs an answer, one per bank and currency. A statement that names its account by IBAN is not
-	 * listed; the owner names its account in `bankAccountId` instead.
+	 * account and needs an answer, one per bank and currency. A statement that names its account (by IBAN or another
+	 * id) is not listed; the owner names its account in `bankAccountId` instead.
 	 */
 	accountQuestions?: BankImportAccountQuestion[];
 };
