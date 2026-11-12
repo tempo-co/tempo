@@ -1,8 +1,10 @@
+import Redis from 'ioredis';
 import {randomUUID} from 'node:crypto';
 import {Server} from 'node:net';
 import request from 'supertest';
 
 import {ConfigurationService} from '@core/config/config.service';
+import {REDIS} from '@core/redis/redis.constants';
 import {
 	PASSWORD_RESET_CONFIRMATION,
 	PASSWORD_RESET_INVALID_TOKEN,
@@ -93,11 +95,15 @@ describe('AuthController - Reset Password', () => {
 			resetToken = await EmailUtils.getToken(PW_RESET_ACCOUNT_EMAIL, mailpitApiUrl);
 		});
 
-		it('should fail with 400 Bad Request if new password is the same as the old password', async () => {
+		it('refuses the current password and keeps the link usable for a new one', async () => {
 			const response = await verifyReset({token: resetToken, newPassword: currentPassword}).expect(400);
 			expect(response.body.message).toBe(PASSWORD_SAME_AS_OLD);
-
 			await login(currentPassword).expect(200);
+
+			const newPassword = uniquePassword();
+			await verifyReset({token: resetToken, newPassword}).expect(200);
+			currentPassword = newPassword;
+			await login(newPassword).expect(200);
 		});
 
 		it('resets the password and revokes personal access tokens with a valid reset token', async () => {
@@ -124,6 +130,43 @@ describe('AuthController - Reset Password', () => {
 				newPassword: uniquePassword(),
 			}).expect(400);
 			expect(response.body.message).toBe(PASSWORD_RESET_INVALID_TOKEN);
+		});
+
+		it('accepts one of two concurrent submissions of the same link', async () => {
+			const passwords = [uniquePassword(), uniquePassword()];
+
+			const responses = await Promise.all(
+				passwords.map((newPassword) => verifyReset({token: resetToken, newPassword})),
+			);
+
+			expect(responses.map((response) => response.status).sort()).toEqual([200, 400]);
+			const winner = passwords[responses.findIndex((response) => response.status === 200)];
+			currentPassword = winner;
+			await login(winner).expect(200);
+		});
+
+		it('ends the earlier link when a newer one is requested', async () => {
+			await EmailUtils.clearEmails(mailpitApiUrl);
+			await requestReset(PW_RESET_ACCOUNT_EMAIL).expect(200);
+			const newerToken = await EmailUtils.getToken(PW_RESET_ACCOUNT_EMAIL, mailpitApiUrl);
+			expect(newerToken).not.toBe(resetToken);
+
+			const response = await verifyReset({token: resetToken, newPassword: uniquePassword()}).expect(400);
+			expect(response.body.message).toBe(PASSWORD_RESET_INVALID_TOKEN);
+
+			const newPassword = uniquePassword();
+			await verifyReset({token: newerToken, newPassword}).expect(200);
+			currentPassword = newPassword;
+		});
+
+		it('stores only a hash of the emailed token', async () => {
+			const redis = getApp().get<Redis>(REDIS);
+			const resetKeys = await redis.keys(
+				`${getApp().get(ConfigurationService).get('PASSWORD_RESET_REDIS_KEY')}:*`,
+			);
+			expect(resetKeys.length).toBeGreaterThan(0);
+			expect(resetKeys.join(' ')).not.toContain(resetToken);
+			expect(await redis.mget(resetKeys)).not.toContain(resetToken);
 		});
 
 		it('should fail with 400 Bad Request if the token has already been used', async () => {

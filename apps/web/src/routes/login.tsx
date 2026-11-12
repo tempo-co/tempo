@@ -10,6 +10,8 @@ import {handleUnauthenticatedRedirect} from '@/utils/handle-redirect';
 
 const searchParamsSchema = z.object({
   showVerifyMessage: z.boolean().optional(),
+  // Prefills the email field, e.g. after confirming an email in a browser without a session.
+  email: z.string().email().optional().catch(undefined),
   // Same-origin path to resume after login; protocol-relative and backslash tricks are dropped.
   redirect: z
     .string()
@@ -27,7 +29,7 @@ export const Route = createFileRoute('/login')({
 });
 
 function LogIn() {
-  const {redirect} = Route.useSearch();
+  const {redirect, email} = Route.useSearch();
 
   return (
     <AuthLayout title='Log in to Tempo'>
@@ -37,7 +39,7 @@ function LogIn() {
         layout
         className='flex w-full flex-col'
       >
-        <LogInForm redirectTo={redirect} />
+        <LogInForm redirectTo={redirect} defaultEmail={email} />
         <p className='pt-3 text-center text-sm text-muted-foreground'>
           Don&apos;t have an account?{' '}
           <Button variant='link' asChild className='h-fit px-1 py-0'>

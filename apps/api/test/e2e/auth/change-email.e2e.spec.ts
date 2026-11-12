@@ -12,6 +12,8 @@ import {
 	EMAIL_CHANGE_SUCCESS,
 	EMAIL_INVALID_TOKEN,
 	EMAIL_VERIFICATION_SENT,
+	INVALID_PASSWORD,
+	PASSWORD_RESET_INVALID_TOKEN,
 } from '@modules/auth/api/constants/api-messages.constants';
 import {
 	EMAIL_CHANGED_SUBJECT,
@@ -33,6 +35,7 @@ import {
 	createVerifiedAccount,
 	expectValidationMessage,
 	uniqueEmail,
+	uniquePassword,
 } from '../../utils/auth-utils';
 import {EmailUtils} from '../../utils/email-utils';
 
@@ -92,6 +95,11 @@ describe('AuthController - Change email', () => {
 		return agent.post('/auth/change-email/request').set('Origin', webOrigin).send(body);
 	}
 
+	/** The verified seeded account's change request, confirmed with its password. */
+	function requestVerifiedChange(body: object) {
+		return requestChange(verifiedAgent, {currentPassword: VERIFIED_ACCOUNT_PASSWORD, ...body});
+	}
+
 	function verifyChange(agent: TestAgent, body: object) {
 		return agent.post('/auth/change-email/verify').set('Origin', webOrigin).send(body);
 	}
@@ -127,7 +135,7 @@ describe('AuthController - Change email', () => {
 		it('should send a verification email to the new email address for a verified account', async () => {
 			const newEmail = uniqueEmail();
 
-			const response = await requestChange(verifiedAgent, {newEmail}).expect(200);
+			const response = await requestVerifiedChange({newEmail}).expect(200);
 			expect(response.body.message).toBe(EMAIL_VERIFICATION_SENT);
 
 			const verificationEmail = await EmailUtils.findEmailByRecipient(newEmail, mailpitApiUrl);
@@ -147,6 +155,7 @@ describe('AuthController - Change email', () => {
 
 				await sendWithOrigin(verifiedAgent.post('/auth/change-email/request'), origin, {
 					newEmail: attackerEmail,
+					currentPassword: VERIFIED_ACCOUNT_PASSWORD,
 				}).expect(403);
 
 				expect(await EmailUtils.findEmailByRecipient(attackerEmail, mailpitApiUrl)).toBeUndefined();
@@ -156,20 +165,41 @@ describe('AuthController - Change email', () => {
 		it('should send the verification link to the normalized new email', async () => {
 			const newEmail = uniqueEmail();
 
-			await requestChange(verifiedAgent, {newEmail: ` ${newEmail.toUpperCase()} `}).expect(200);
+			await requestVerifiedChange({newEmail: ` ${newEmail.toUpperCase()} `}).expect(200);
 
 			const verificationEmail = await EmailUtils.findEmailByRecipient(newEmail, mailpitApiUrl);
 			expect(verificationEmail?.To[0].Address).toBe(newEmail);
 		});
 
 		it('should fail with 409 Conflict if the new email is already in use', async () => {
-			const response = await requestChange(verifiedAgent, {newEmail: existingEmail}).expect(409);
+			const response = await requestVerifiedChange({newEmail: existingEmail}).expect(409);
 			expect(response.body.message).toBe(EMAIL_ALREADY_IN_USE);
 		});
 
+		it('should refuse a wrong password with 401 before sending email', async () => {
+			const newEmail = `takeover-${randomUUID()}@attacker.example.test`;
+
+			const response = await requestChange(verifiedAgent, {newEmail, currentPassword: 'wrong-password'}).expect(
+				401,
+			);
+			expect(response.body.message).toBe(INVALID_PASSWORD);
+
+			expect(await EmailUtils.findEmailByRecipient(newEmail, mailpitApiUrl)).toBeUndefined();
+			await verifiedAgent.get('/accounts/me').expect(200);
+		});
+
 		it.each([
-			['newEmail is not a valid email format', {newEmail: 'not-an-email'}, /newEmail must be an email/i],
-			['newEmail is missing', {}, /newEmail should not be empty/i],
+			[
+				'newEmail is not a valid email format',
+				{newEmail: 'not-an-email', currentPassword: VERIFIED_ACCOUNT_PASSWORD},
+				/newEmail must be an email/i,
+			],
+			['newEmail is missing', {currentPassword: VERIFIED_ACCOUNT_PASSWORD}, /newEmail should not be empty/i],
+			[
+				'currentPassword is missing',
+				{newEmail: 'missing-password@example.test'},
+				/currentPassword should not be empty/i,
+			],
 		])('should fail with 400 Bad Request if %s', async (_case, body, message) => {
 			const response = await requestChange(verifiedAgent, body).expect(400);
 			expectValidationMessage(response, message);
@@ -187,7 +217,10 @@ describe('AuthController - Change email', () => {
 			agent = await loginAgent(httpServer, accountEmail, EMAIL_CHANGE_ACCOUNT_PASSWORD);
 
 			newEmailAddress = uniqueEmail();
-			await requestChange(agent, {newEmail: newEmailAddress}).expect(200);
+			await requestChange(agent, {
+				newEmail: newEmailAddress,
+				currentPassword: EMAIL_CHANGE_ACCOUNT_PASSWORD,
+			}).expect(200);
 			token = await EmailUtils.getToken(newEmailAddress, mailpitApiUrl);
 
 			await EmailUtils.clearEmails(mailpitApiUrl);
@@ -198,13 +231,22 @@ describe('AuthController - Change email', () => {
 			expect(meResponse.body.email).toBe(email);
 		}
 
-		it('should change the email with a valid token for an authenticated, verified account', async () => {
+		it('should change the email with a valid token and end the reset link sent to the old address', async () => {
 			const previousEmail = accountEmail;
+			await request(httpServer).post('/auth/reset-password/request').send({email: previousEmail}).expect(200);
+			const resetToken = await EmailUtils.getToken(previousEmail, mailpitApiUrl);
+			await EmailUtils.clearEmails(mailpitApiUrl);
+
 			const response = await verifyChange(agent, {token, email: newEmailAddress}).expect(200);
 			expect(response.body.message).toBe(EMAIL_CHANGE_SUCCESS);
 
 			await expectAccountEmail(newEmailAddress);
 			accountEmail = newEmailAddress;
+			const resetResponse = await request(httpServer)
+				.post('/auth/reset-password/verify')
+				.send({token: resetToken, newPassword: uniquePassword()})
+				.expect(400);
+			expect(resetResponse.body.message).toBe(PASSWORD_RESET_INVALID_TOKEN);
 
 			const notice = await EmailUtils.findEmailByRecipient(previousEmail, mailpitApiUrl, EMAIL_CHANGED_SUBJECT);
 			expect(EmailUtils.normalizeEmailText(notice?.Text)).toBe(
@@ -237,9 +279,11 @@ describe('AuthController - Change email', () => {
 				const confirming = verifier.verifyEmailChange(account!, token, newEmailAddress);
 				await enteredValidation;
 				let requestCompleted = false;
-				const requesting = verifier.requestEmailChange(account!, newerEmail).then(() => {
-					requestCompleted = true;
-				});
+				const requesting = verifier
+					.requestEmailChange(account!, newerEmail, EMAIL_CHANGE_ACCOUNT_PASSWORD)
+					.then(() => {
+						requestCompleted = true;
+					});
 
 				// Wait until the request either completes without waiting or waits on the account row lock.
 				let waitingOnLock = false;
@@ -337,7 +381,9 @@ describe('AuthController - Change email', () => {
 
 		it('should reject an older link once a newer change has been requested', async () => {
 			const newerEmail = uniqueEmail();
-			await requestChange(agent, {newEmail: newerEmail}).expect(200);
+			await requestChange(agent, {newEmail: newerEmail, currentPassword: EMAIL_CHANGE_ACCOUNT_PASSWORD}).expect(
+				200,
+			);
 			const newerToken = await EmailUtils.getToken(newerEmail, mailpitApiUrl);
 
 			const response = await verifyChange(agent, {token, email: newEmailAddress}).expect(400);
@@ -374,7 +420,10 @@ describe('AuthController - Change email', () => {
 		it('should fail with 409 Conflict if the email associated with the token is now taken (race condition)', async () => {
 			// Another verified account requests the same target email and verifies it first.
 			const otherAccount = await createVerifiedAccount(httpServer, mailpitApiUrl);
-			await requestChange(otherAccount.agent, {newEmail: newEmailAddress}).expect(200);
+			await requestChange(otherAccount.agent, {
+				newEmail: newEmailAddress,
+				currentPassword: otherAccount.credentials.password,
+			}).expect(200);
 			const otherToken = await EmailUtils.getToken(newEmailAddress, mailpitApiUrl);
 			expect(otherToken).not.toEqual(token);
 			await verifyChange(otherAccount.agent, {token: otherToken, email: newEmailAddress}).expect(200);

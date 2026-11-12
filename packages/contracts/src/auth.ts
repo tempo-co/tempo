@@ -26,6 +26,8 @@ export type EmailCheckQuery = {
 /** `POST /auth/change-email/request` */
 export type EmailChangeRequest = {
 	newEmail: string;
+	/** Confirms the change, so a session alone cannot move the account to another inbox. */
+	currentPassword: string;
 };
 
 /** `POST /auth/change-email/verify` */

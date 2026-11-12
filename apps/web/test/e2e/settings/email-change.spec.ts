@@ -1,7 +1,11 @@
 import {faker} from '@faker-js/faker';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
-import {UNVERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_EMAIL} from '../../constants/seed.constants';
+import {
+  UNVERIFIED_ACCOUNT_EMAIL,
+  VERIFIED_ACCOUNT_EMAIL,
+  VERIFIED_ACCOUNT_PASSWORD,
+} from '../../constants/seed.constants';
 import {expect, test} from '../../fixtures';
 import {EmailUtils} from '../../utils/email-utils';
 import {boxOf} from '../../utils/layout';
@@ -16,7 +20,7 @@ test.describe('Account Settings: Email change', () => {
   }) => {
     const newEmail = faker.internet.email().toLowerCase();
 
-    await accountSettingsPage.requestEmailChange(newEmail);
+    await accountSettingsPage.requestEmailChange(newEmail, freshAccount.password);
     await expect(accountSettingsPage.emailChangeSentTo).toHaveText(newEmail);
     await accountSettingsPage.emailChangeDoneButton.click();
     await expect(accountSettingsPage.emailChangeSentTo).toBeHidden();
@@ -39,7 +43,7 @@ test.describe('Account Settings: Email change', () => {
     verifyEmailChangePage,
   }) => {
     const newEmail = faker.internet.email().toLowerCase();
-    await accountSettingsPage.requestEmailChange(newEmail);
+    await accountSettingsPage.requestEmailChange(newEmail, freshAccount.password);
     await expect(accountSettingsPage.emailChangeSentTo).toHaveText(newEmail);
 
     const message = await EmailUtils.findEmailByRecipient(newEmail);
@@ -66,6 +70,7 @@ test.describe('Account Settings: Email change', () => {
     await accountSettingsPage.changeEmailButton.click();
     await expect(accountSettingsPage.page.getByRole('dialog')).toContainText(freshAccount.email);
     await accountSettingsPage.newEmailInput.fill(newEmail);
+    await accountSettingsPage.emailChangePasswordInput.fill(freshAccount.password);
     await accountSettingsPage.sendVerificationLinkButton.click();
     await expect(accountSettingsPage.emailChangeSentTo).toHaveText(newEmail);
 
@@ -73,6 +78,7 @@ test.describe('Account Settings: Email change', () => {
 
     await expect(accountSettingsPage.newEmailInput).toBeVisible();
     await expect(accountSettingsPage.newEmailInput).toBeEmpty();
+    await expect(accountSettingsPage.emailChangePasswordInput).toBeEmpty();
   });
 
   test('should keep the dialog open while sending, then reset it after closing', async ({
@@ -97,6 +103,7 @@ test.describe('Account Settings: Email change', () => {
     await accountSettingsPage.navigate();
     await accountSettingsPage.changeEmailButton.click();
     await accountSettingsPage.newEmailInput.fill(`pending-${freshAccount.email}`);
+    await accountSettingsPage.emailChangePasswordInput.fill(freshAccount.password);
     await accountSettingsPage.sendVerificationLinkButton.click();
     await sending;
     try {
@@ -153,6 +160,7 @@ test.describe('Account Settings: Email change', () => {
         const input = await boxOf(accountSettingsPage.newEmailInput);
 
         await accountSettingsPage.newEmailInput.fill(`new-${freshAccount.email}`);
+        await accountSettingsPage.emailChangePasswordInput.fill(freshAccount.password);
         await accountSettingsPage.sendVerificationLinkButton.click();
         await expect(accountSettingsPage.emailChangeSentTo).toBeVisible();
         await expect
@@ -171,7 +179,7 @@ test.describe('Account Settings: Email change', () => {
   test.describe('Validation errors', () => {
     test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
-    for (const {name, email, error} of [
+    for (const {name, email, password = VERIFIED_ACCOUNT_PASSWORD, error} of [
       {
         name: 'email already in use',
         email: UNVERIFIED_ACCOUNT_EMAIL,
@@ -193,9 +201,21 @@ test.describe('Account Settings: Email change', () => {
         error: 'sameEmailError',
       },
       {name: 'invalid email format', email: 'not-an-email', error: 'invalidEmailError'},
+      {
+        name: 'the current password is wrong',
+        email: 'wrong-password@example.com',
+        password: 'not-the-password',
+        error: 'emailChangeInvalidPasswordError',
+      },
+      {
+        name: 'the current password is missing',
+        email: 'missing-password@example.com',
+        password: '',
+        error: 'emailChangeMissingPasswordError',
+      },
     ] as const) {
       test(`should show an inline error when ${name}`, async ({accountSettingsPage}) => {
-        await accountSettingsPage.requestEmailChange(email);
+        await accountSettingsPage.requestEmailChange(email, password);
 
         await expect(accountSettingsPage[error]).toBeVisible();
         await expect(accountSettingsPage.newEmailInput).toHaveValue(email);

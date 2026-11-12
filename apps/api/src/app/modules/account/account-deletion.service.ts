@@ -10,12 +10,11 @@ import {Account} from '@modules/account/account.entity';
 import {BankingAuthorizationStateService} from '@modules/banking/services/banking-authorization-state.service';
 
 import {AccountService} from './account.service';
-import {emailChangeKey} from './email-change-key';
+import {emailChangeKey, revokePasswordResetToken, signupCodeKey} from './auth-secret-keys';
 
 const ACCOUNT_DELETED_EMAIL_SUBJECT = 'Your Tempo account has been deleted';
 export {ACCOUNT_DELETED_EMAIL_SUBJECT};
 export const ACCOUNT_DELETED_MESSAGE = 'Account has been deleted.';
-const SCAN_BATCH_SIZE = '250';
 
 @Injectable()
 export class AccountDeletionService {
@@ -39,17 +38,11 @@ export class AccountDeletionService {
 		// including the caller's own (same primitive the password-reset flow uses).
 		await this.sessionService.revokeAllCredentials(accountId, null);
 
-		const email = account.email;
 		await this.dataSource.transaction(async (manager) => {
 			await manager.delete(Account, {id: accountId});
 		});
 
-		await this.removeOutstandingTokens(accountId, email);
-		try {
-			await this.redis.del(emailChangeKey(this.configService.get('EMAIL_VERIFICATION_REDIS_KEY'), accountId));
-		} catch {
-			this.logger.warn('Failed to remove the pending email change during account deletion.');
-		}
+		await this.removeOutstandingTokens(accountId);
 		try {
 			await this.authorizationStateService.removeForAccount(accountId);
 		} catch {
@@ -65,58 +58,15 @@ export class AccountDeletionService {
 		return {message: ACCOUNT_DELETED_MESSAGE};
 	}
 
-	private async removeOutstandingTokens(accountId: Account['id'], email: Account['email']): Promise<void> {
-		await Promise.all(
-			this.ownershipMatchers(accountId, email).map(({prefix, owns}) => this.deleteOwnedKeys(`${prefix}:*`, owns)),
-		);
-	}
-
-	private ownershipMatchers(accountId: Account['id'], email: Account['email']) {
-		return [
-			{
-				prefix: this.configService.get('EMAIL_VERIFICATION_REDIS_KEY'),
-				owns: (value: string) => value === email,
-			},
-			{
-				prefix: this.configService.get('PASSWORD_RESET_REDIS_KEY'),
-				owns: (value: string) => value === accountId,
-			},
-		];
-	}
-
-	private async deleteOwnedKeys(
-		matchPattern: string,
-		owns: (value: string) => Promise<boolean> | boolean,
-	): Promise<void> {
+	/** Ends the account's signup code, pending email change and password reset link. */
+	private async removeOutstandingTokens(accountId: Account['id']): Promise<void> {
+		const emailPrefix = this.configService.get('EMAIL_VERIFICATION_REDIS_KEY');
 		try {
-			const ownedKeys = await this.scanOwnedKeys(matchPattern, owns);
-			if (ownedKeys.length > 0) await this.redis.del(ownedKeys);
+			await this.redis.del(signupCodeKey(emailPrefix, accountId), emailChangeKey(emailPrefix, accountId));
+			await revokePasswordResetToken(this.redis, this.configService.get('PASSWORD_RESET_REDIS_KEY'), accountId);
 		} catch {
-			this.logger.warn(`Failed to clean up keys matching "${matchPattern}" during account deletion.`);
+			this.logger.warn('Failed to remove outstanding codes and links during account deletion.');
 		}
-	}
-
-	private async scanOwnedKeys(
-		matchPattern: string,
-		owns: (value: string) => Promise<boolean> | boolean,
-	): Promise<string[]> {
-		const ownedKeys: string[] = [];
-		let cursor = '0';
-
-		while (true) {
-			const reply = await this.redis.scan(cursor, 'MATCH', matchPattern, 'COUNT', SCAN_BATCH_SIZE);
-			cursor = reply[0];
-			const keys = reply[1];
-			if (keys.length > 0) {
-				const values = await this.redis.mget(keys);
-				for (let i = 0; i < keys.length; i++) {
-					const value = values[i];
-					if (value && (await owns(value))) ownedKeys.push(keys[i]);
-				}
-			}
-			if (cursor === '0') break;
-		}
-		return ownedKeys;
 	}
 
 	private async sendFarewellEmail(account: Account): Promise<void> {

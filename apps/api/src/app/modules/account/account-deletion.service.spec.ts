@@ -42,9 +42,8 @@ function buildService() {
 		cancelPendingForAccount: jest.fn().mockResolvedValue(undefined),
 	};
 	const redis = {
-		scan: jest.fn().mockResolvedValue(['0', []]),
-		mget: jest.fn().mockResolvedValue([]),
 		del: jest.fn().mockResolvedValue(1),
+		getdel: jest.fn().mockResolvedValue(null),
 	};
 	const configService = {
 		get: jest.fn().mockReturnValue('test-key-prefix'),
@@ -92,7 +91,7 @@ describe('AccountDeletionService', () => {
 
 	it('succeeds even when post-deletion cleanup fails', async () => {
 		const {service, account, redis, authorizationStateService, emailService} = buildService();
-		redis.scan.mockRejectedValue(new Error('redis down'));
+		redis.del.mockRejectedValue(new Error('redis down'));
 		authorizationStateService.removeForAccount.mockRejectedValue(new Error('redis down'));
 		emailService.send.mockRejectedValue(new Error('queue down'));
 

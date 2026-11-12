@@ -10,6 +10,7 @@ import {LOGIN_SUCCESS, LOGOUT_SUCCESS, PASSWORD_CHANGE_SUCCESS} from '../api/con
 import {PasswordChangeDto} from '../api/dtos/password-change.dto';
 import {SignUpDto} from '../api/dtos/signup.dto';
 import {EmailVerifierService} from './email-verifier.service';
+import {PasswordResetService} from './password-reset.service';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +21,7 @@ export class AuthService {
 		private readonly accountService: AccountService,
 		private readonly sessionService: SessionService,
 		private readonly pushNotificationService: PushNotificationService,
+		private readonly passwordResetService: PasswordResetService,
 	) {}
 
 	async signUp({name, email, password}: SignUpDto, request: Request) {
@@ -66,6 +68,7 @@ export class AuthService {
 
 		const hash = await this.accountService.hashPassword(dto.newPassword);
 		await this.accountService.updateFields(account.id, {password: hash});
+		await this.passwordResetService.revokeForAccount(account.id);
 		await this.sessionService.revokeAllCredentials(account.id, currentSessionId);
 		return {message: PASSWORD_CHANGE_SUCCESS};
 	}

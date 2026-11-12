@@ -1,5 +1,5 @@
 import type {EmailChangeRequest} from '@tempo/contracts';
-import {IsEmail, IsNotEmpty, Length} from 'class-validator';
+import {IsEmail, IsNotEmpty, IsString, Length} from 'class-validator';
 
 import {Account} from '@modules/account/account.entity';
 
@@ -11,4 +11,9 @@ export class EmailChangeRequestDto implements EmailChangeRequest {
 	@IsEmail()
 	@Length(1, 255)
 	newEmail: Account['email'];
+
+	@IsNotEmpty()
+	@IsString()
+	@Length(8, 255)
+	currentPassword: Account['password'];
 }
