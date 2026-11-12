@@ -88,6 +88,8 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['post', '/bank-imports'],
 	['get', '/bank-imports'],
 	['delete', `/bank-imports/${RESOURCE_ID}`],
+	['get', `/bank-imports/${RESOURCE_ID}/doubtful-rows`],
+	['post', `/bank-imports/${RESOURCE_ID}/doubtful-rows/${RESOURCE_ID}/resolve`],
 	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}`],
 	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}/mask-v2`],
 	['get', '/notifications'],

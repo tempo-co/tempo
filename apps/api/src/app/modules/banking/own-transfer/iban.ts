@@ -29,6 +29,18 @@ export function parseSepaDescriptionIban(description: string | null | undefined)
 	return normalizeIban(match?.[1]);
 }
 
+/** Whether an identification hash has the IBAN-and-currency shape `verifyIbanAgainstIdentificationHash` checks. */
+export function isIbanIdentificationHash(identificationHash: string): boolean {
+	const [headerSegment, digestSegment, ...rest] = identificationHash.split('.');
+	if (!headerSegment || !digestSegment || rest.length > 0) return false;
+	try {
+		const header = JSON.stringify(JSON.parse(Buffer.from(headerSegment, 'base64url').toString('utf8')));
+		return header === IBAN_CURRENCY_HASH_HEADER;
+	} catch {
+		return false;
+	}
+}
+
 /**
  * Checks a candidate IBAN against Enable Banking's account identification hash. The hash format is
  * observed rather than documented, so any unexpected shape fails closed.
@@ -38,17 +50,8 @@ export function verifyIbanAgainstIdentificationHash(
 	iban: string,
 	currency: string,
 ): boolean {
-	const [headerSegment, digestSegment, ...rest] = identificationHash.split('.');
-	if (!headerSegment || !digestSegment || rest.length > 0) return false;
-
-	try {
-		const header = JSON.stringify(JSON.parse(Buffer.from(headerSegment, 'base64url').toString('utf8')));
-		if (header !== IBAN_CURRENCY_HASH_HEADER) return false;
-	} catch {
-		return false;
-	}
-
-	const expectedDigest = Buffer.from(digestSegment, 'base64url');
+	if (!isIbanIdentificationHash(identificationHash)) return false;
+	const expectedDigest = Buffer.from(identificationHash.split('.')[1], 'base64url');
 	const candidateDigest = createHash('sha256').update(`[\n"${iban}",\n"${currency}"\n]`).digest();
 	return expectedDigest.length === candidateDigest.length && timingSafeEqual(expectedDigest, candidateDigest);
 }

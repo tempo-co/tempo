@@ -1,20 +1,35 @@
-import {ConflictException, Injectable, Logger, NotFoundException} from '@nestjs/common';
-import type {BankImportSummary} from '@tempo/contracts';
+import {BadRequestException, ConflictException, Injectable, Logger, NotFoundException} from '@nestjs/common';
+import type {
+	BankImportDoubtfulRow as BankImportDoubtfulRowResponse,
+	BankImportSummary,
+	ResolveBankImportDoubtfulRowRequest,
+} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
-import {DataSource, EntityManager, In, IsNull, Not} from 'typeorm';
+import {DataSource, EntityManager, In, IsNull, Not, Raw} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
+import {
+	MATCH_WINDOW_DAYS,
+	MatchExistingRow,
+	MatchOutcome,
+	matchDay,
+	matchTransactions,
+} from '@modules/banking/bank-transaction-matcher';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {BATCH_WRITE_CHUNK_SIZE, chunkArray, safeErrorName} from '@modules/banking/banking.utils';
 import {BankTransactionCategorizationService} from '@modules/banking/categorization/bank-transaction-categorization.service';
 import {MerchantLogoService} from '@modules/banking/merchant-logos/merchant-logo.service';
-import {verifyIbanAgainstIdentificationHash} from '@modules/banking/own-transfer/iban';
+import {isIbanIdentificationHash, verifyIbanAgainstIdentificationHash} from '@modules/banking/own-transfer/iban';
 import {
 	BankTransactionInput,
 	BankTransactionPersistenceService,
 } from '@modules/banking/services/bank-transaction-persistence.service';
+import {
+	BankingConnectionLock,
+	BankingConnectionLockService,
+} from '@modules/banking/services/banking-connection-lock.service';
 import {
 	BANK_CONNECTION_PROVIDERS,
 	BANK_CONNECTION_STATUSES,
@@ -24,6 +39,7 @@ import {
 import {CurrencyExchangeService} from '@modules/banking/services/currency-exchange.service';
 import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
 
+import {BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {BankImport} from './bank-import.entity';
 import {MAX_ROWS_PER_DROP} from './parsers/parse-limits';
@@ -31,7 +47,12 @@ import {NormalizedRow, NormalizedStatement} from './parsers/parse-result';
 import {ParseRunnerService} from './runner/parse-runner.service';
 
 export const BANK_IMPORT_NOT_FOUND = 'Import not found.';
+export const BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND = 'Row not found.';
 const BANK_IMPORT_NOT_SAVED = 'The import could not be saved. Please try again.';
+const BANK_IMPORT_DOUBTFUL_ROW_RESOLVED = 'This row has already been decided.';
+const BANK_IMPORT_NOT_A_CANDIDATE = 'Choose one of the transactions this row may be.';
+/** How long an import waits for a running sync of the same connection before refusing with `account_busy`. */
+const SYNC_LOCK_WAIT_MS = 10_000;
 
 /** The statements of one account in one drop, in booking order. */
 type AccountRows = {
@@ -41,7 +62,15 @@ type AccountRows = {
 	rows: NormalizedRow[];
 };
 
-type ImportedAccount = {account: BankAccount; created: boolean};
+/** Where an account's rows go: an account bank sync writes to, or an imported-files account found or created. */
+type Target = {kind: 'synced'; account: BankAccount} | {kind: 'file'; account?: BankAccount};
+
+type ImportedAccount = {account: BankAccount; connection: BankConnection; created: boolean};
+
+type LadderCounts = Pick<
+	BankImport,
+	'rowsAdded' | 'rowsMatchedByReference' | 'rowsMatchedByBalance' | 'rowsMatchedByDate' | 'rowsDoubtful'
+>;
 
 @Injectable()
 export class BankImportService {
@@ -51,6 +80,7 @@ export class BankImportService {
 		private readonly dataSource: DataSource,
 		private readonly parseRunner: ParseRunnerService,
 		private readonly persistence: BankTransactionPersistenceService,
+		private readonly connectionLockService: BankingConnectionLockService,
 		private readonly ownTransferService: OwnTransferService,
 		private readonly currencyExchangeService: CurrencyExchangeService,
 		private readonly categorizationService: BankTransactionCategorizationService,
@@ -58,74 +88,127 @@ export class BankImportService {
 	) {}
 
 	/**
-	 * Imports one drop into file-only accounts under the owner's "Imported files" connection, all or nothing.
-	 * Rows keep the identity the transaction write path gives them, so dropping the same file again adds nothing.
+	 * Imports one drop, all or nothing. A statement goes to the owner's synced account with its IBAN and currency,
+	 * to the account the request names, or else to an imported-files account. Each row runs the duplicate ladder
+	 * against the account's stored rows: matched rows are skipped, doubtful rows are held for the owner, and only
+	 * new rows are inserted.
 	 */
-	async importFiles(ownerId: Account['id'], files: readonly Buffer[]): Promise<BankImportSummary> {
+	async importFiles(
+		ownerId: Account['id'],
+		files: readonly Buffer[],
+		bankAccountId: BankAccount['id'] | null = null,
+	): Promise<BankImportSummary> {
 		const statements = await this.parseDrop(files);
 		const accountRows = groupByAccount(statements);
 		const bookingDates = accountRows
 			.flatMap(({rows}) => rows.flatMap(({bookingDate}) => (bookingDate ? [bookingDate] : [])))
 			.sort();
 		const rowsParsed = accountRows.reduce((count, {rows}) => count + rows.length, 0);
+		const targets = bankAccountId
+			? [await this.findNamedTarget(ownerId, bankAccountId, accountRows)]
+			: await this.findSyncedTargets(ownerId, accountRows);
 
-		const {record, accounts, persistedTransactionIds} = await this.dataSource.transaction(async (manager) => {
-			await this.refuseSyncedAccounts(manager, ownerId, accountRows);
-			const connection = await this.lockFileConnection(manager, ownerId);
-			const accounts = await this.findOrCreateAccounts(manager, connection, accountRows);
-			const imports = manager.getRepository(BankImport);
-			const record = await imports.save(
-				imports.create({
-					accountId: ownerId,
-					bankConnectionId: connection.id,
-					fileHash: hashDrop(files),
-					format: 'camt053',
-					layout: null,
-					filesCount: files.length,
-					rowsParsed,
+		const syncedConnectionIds = [
+			...new Set(
+				targets.flatMap((target) => (target.kind === 'synced' ? [target.account.bankConnection.id] : [])),
+			),
+		];
+		// The record hangs on one connection and goes with it, so a drop may write to one synced connection at most.
+		if (syncedConnectionIds.length > 1) throw new BankImportRefusalException('multiple_bank_connections');
+
+		const locks = await this.lockSyncedConnections(syncedConnectionIds);
+		let result: {record: BankImport; accounts: ImportedAccount[]; persistedTransactionIds: string[]};
+		try {
+			result = await this.dataSource.transaction(async (manager) => {
+				const {accounts, fileConnection} = await this.resolveTargets(manager, ownerId, accountRows, targets);
+				const syncedAccount = accounts.find(
+					({connection}) => connection.provider !== BANK_CONNECTION_PROVIDERS.FILE,
+				);
+				const imports = manager.getRepository(BankImport);
+				const record = await imports.save(
+					imports.create({
+						accountId: ownerId,
+						// Removing the synced connection takes the record along with the rows it tracks; removing the
+						// imported-files connection takes only its own accounts, and the record still undoes the rest.
+						bankConnectionId: (syncedAccount?.connection ?? fileConnection!).id,
+						fileHash: hashDrop(files),
+						format: 'camt053',
+						layout: null,
+						filesCount: files.length,
+						rowsParsed,
+						rowsAdded: 0,
+						rowsAlreadyPresent: 0,
+						rowsMatchedByReference: 0,
+						rowsMatchedByBalance: 0,
+						rowsMatchedByDate: 0,
+						rowsDoubtful: 0,
+						dateFrom: bookingDates[0] ?? null,
+						dateTo: bookingDates.at(-1) ?? null,
+						bankAccountIds: accounts.map(({account}) => account.id),
+						createdBankAccountIds: accounts.filter(({created}) => created).map(({account}) => account.id),
+					}),
+				);
+
+				const counts: LadderCounts = {
 					rowsAdded: 0,
-					rowsAlreadyPresent: rowsParsed,
+					rowsMatchedByReference: 0,
+					rowsMatchedByBalance: 0,
+					rowsMatchedByDate: 0,
 					rowsDoubtful: 0,
-					dateFrom: bookingDates[0] ?? null,
-					dateTo: bookingDates.at(-1) ?? null,
-					bankAccountIds: accounts.map(({account}) => account.id),
-					createdBankAccountIds: accounts.filter(({created}) => created).map(({account}) => account.id),
-				}),
-			);
-
-			const transactions = manager.getRepository(BankTransaction);
-			const insertedIds: string[] = [];
-			const persistedIds: string[] = [];
-			for (const [index, {rows, currency}] of accountRows.entries()) {
-				const {account} = accounts[index];
-				for (const chunk of chunkByIdentityGroup(rows)) {
-					const result = await this.persistence.persistTransactions(
-						transactions,
-						account,
-						chunk.map((row) => toTransactionInput(row, currency)),
-						connection.aspspName,
-						connection.provider,
+				};
+				const persistedTransactionIds: string[] = [];
+				for (const [index, {rows}] of accountRows.entries()) {
+					const {account, connection} = accounts[index];
+					const outcomes = matchTransactions(
+						rows.map(toMatchRow),
+						await this.findMatchCandidates(manager, account.id, rows),
 					);
-					insertedIds.push(...result.insertedTransactionIds);
-					persistedIds.push(...result.persistedTransactionIds);
+					const newRows = rows.filter((_, rowIndex) => outcomes[rowIndex].kind === 'new');
+					if (newRows.length > 0) {
+						const persisted = await this.persistence.persistTransactions(
+							manager.getRepository(BankTransaction),
+							account,
+							newRows.map((row) => toTransactionInput(row, account.currency)),
+							connection.aspspName,
+							connection.provider,
+							{importId: record.id},
+						);
+						persistedTransactionIds.push(...persisted.insertedTransactionIds);
+					}
+					const doubtful = rows.flatMap((row, rowIndex) => {
+						const outcome = outcomes[rowIndex];
+						return outcome.kind === 'doubtful'
+							? [
+									{
+										importId: record.id,
+										bankAccountId: account.id,
+										row,
+										candidateTransactionIds: outcome.candidateIds,
+									},
+								]
+							: [];
+					});
+					for (const chunk of chunkArray(doubtful, BATCH_WRITE_CHUNK_SIZE)) {
+						await manager.getRepository(BankImportDoubtfulRow).insert(chunk);
+					}
+					addLadderCounts(counts, outcomes);
 				}
-			}
-			for (const ids of chunkArray(insertedIds, BATCH_WRITE_CHUNK_SIZE)) {
-				await transactions.update({id: In(ids)}, {importId: record.id});
-			}
-			record.rowsAdded = insertedIds.length;
-			record.rowsAlreadyPresent = rowsParsed - insertedIds.length;
-			await imports.update(
-				{id: record.id},
-				{rowsAdded: record.rowsAdded, rowsAlreadyPresent: record.rowsAlreadyPresent},
-			);
-			return {record, accounts, persistedTransactionIds: [...new Set(persistedIds)]};
-		});
+				Object.assign(record, counts, {
+					rowsAlreadyPresent:
+						counts.rowsMatchedByReference + counts.rowsMatchedByBalance + counts.rowsMatchedByDate,
+				});
+				await imports.update({id: record.id}, {...counts, rowsAlreadyPresent: record.rowsAlreadyPresent});
+				for (const lock of locks) lock.assertHealthy();
+				return {record, accounts, persistedTransactionIds};
+			});
+		} finally {
+			await this.releaseLocks(locks);
+		}
 
-		await this.afterRowsChanged(ownerId, persistedTransactionIds);
+		await this.afterRowsChanged(ownerId, result.persistedTransactionIds);
 		return toSummary(
-			record,
-			accounts.map(({account}) => account),
+			result.record,
+			result.accounts.map(({account}) => account),
 		);
 	}
 
@@ -134,60 +217,219 @@ export class BankImportService {
 			where: {accountId: ownerId},
 			order: {createdAt: 'DESC', id: 'DESC'},
 		});
-		const accountIds = [...new Set(records.flatMap(({bankAccountIds}) => bankAccountIds))];
-		const accounts = accountIds.length
-			? await this.dataSource.getRepository(BankAccount).find({
-					where: {id: In(accountIds), bankConnection: {accountId: ownerId}},
-				})
-			: [];
+		const accounts = await this.findOwnedAccounts(
+			ownerId,
+			records.flatMap(({bankAccountIds}) => bankAccountIds),
+		);
 		return records.map((record) => toSummary(record, accounts));
 	}
 
 	/**
-	 * Deletes exactly the rows the import inserted, then any imported-files account left without rows. Pointers to
-	 * deleted rows (own-transfer and exchange counterparts) are cleared by their foreign keys and recomputed after.
+	 * Deletes exactly the rows the import still owns (rows a sync took over are no longer its own) and its open
+	 * doubtful rows, then any imported-files account left without rows. Pointers to deleted rows (own-transfer and
+	 * exchange counterparts) are cleared by their foreign keys and recomputed after.
 	 */
 	async undo(ownerId: Account['id'], importId: BankImport['id']): Promise<void> {
-		const imports = this.dataSource.getRepository(BankImport);
-		const owned = await imports.findOne({where: {id: importId, accountId: ownerId, undoneAt: IsNull()}});
-		if (!owned) throw new NotFoundException(BANK_IMPORT_NOT_FOUND);
-
-		await this.dataSource.transaction(async (manager) => {
-			// Same lock order as an import and connection removal: the connection, then its children.
-			const connection = await manager.getRepository(BankConnection).findOne({
-				where: {id: owned.bankConnectionId, accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
-				lock: {mode: 'pessimistic_write'},
+		const owned = await this.findOwnedImport(ownerId, importId);
+		const ownedAccounts = await this.findOwnedAccounts(ownerId, owned.bankAccountIds);
+		const fileConnectionId = ownedAccounts.find(
+			({bankConnection}) => bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE,
+		)?.bankConnection.id;
+		const locks = await this.lockSyncedConnections(
+			ownedAccounts.flatMap((account) =>
+				account.bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE ? [] : [account.bankConnection.id],
+			),
+		);
+		try {
+			await this.dataSource.transaction(async (manager) => {
+				const {record} = await this.lockImport(manager, ownerId, owned);
+				// The imported-files connection after the record's own, the order an import takes them in.
+				const fileConnection =
+					fileConnectionId &&
+					(await manager.getRepository(BankConnection).findOne({
+						where: {id: fileConnectionId, accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
+						lock: {mode: 'pessimistic_write'},
+					}));
+				await manager.query(
+					`DELETE FROM "bank_transactions" bank_transaction
+					USING "bank_accounts" bank_account, "bank_connections" connection
+					WHERE bank_transaction."importId" = $1
+						AND bank_account."id" = bank_transaction."bankAccountId"
+						AND connection."id" = bank_account."bankConnectionId"
+						AND connection."accountId" = $2`,
+					[record.id, ownerId],
+				);
+				await manager.getRepository(BankImportDoubtfulRow).delete({importId: record.id, resolution: IsNull()});
+				await manager
+					.getRepository(BankImport)
+					.update({id: record.id}, {undoneAt: new Date(), rowsDoubtful: 0});
+				if (fileConnection) {
+					await manager.query(
+						`DELETE FROM "bank_accounts" bank_account
+						USING "bank_connections" connection
+						WHERE bank_account."bankConnectionId" = $1
+							AND connection."id" = bank_account."bankConnectionId"
+							AND connection."accountId" = $2
+							AND NOT EXISTS (
+								SELECT 1 FROM "bank_transactions" bank_transaction WHERE bank_transaction."bankAccountId" = bank_account."id"
+							)
+							AND NOT EXISTS (
+								SELECT 1 FROM "bank_import_doubtful_rows" doubtful
+								WHERE doubtful."bankAccountId" = bank_account."id" AND doubtful."resolution" IS NULL
+							)`,
+						[fileConnection.id, ownerId],
+					);
+				}
+				for (const lock of locks) lock.assertHealthy();
 			});
-			const record = await manager.getRepository(BankImport).findOne({
-				where: {id: importId, accountId: ownerId, undoneAt: IsNull()},
-				lock: {mode: 'pessimistic_write'},
-			});
-			if (!connection || !record) throw new NotFoundException(BANK_IMPORT_NOT_FOUND);
-
-			await manager.query(
-				`DELETE FROM "bank_transactions" bank_transaction
-				USING "bank_accounts" bank_account, "bank_connections" connection
-				WHERE bank_transaction."importId" = $1
-					AND bank_account."id" = bank_transaction."bankAccountId"
-					AND connection."id" = bank_account."bankConnectionId"
-					AND connection."accountId" = $2`,
-				[record.id, ownerId],
-			);
-			await manager.getRepository(BankImport).update({id: record.id}, {undoneAt: new Date()});
-			await manager.query(
-				`DELETE FROM "bank_accounts" bank_account
-				USING "bank_connections" connection
-				WHERE bank_account."bankConnectionId" = $1
-					AND connection."id" = bank_account."bankConnectionId"
-					AND connection."accountId" = $2
-					AND NOT EXISTS (
-						SELECT 1 FROM "bank_transactions" bank_transaction WHERE bank_transaction."bankAccountId" = bank_account."id"
-					)`,
-				[connection.id, ownerId],
-			);
-		});
+		} finally {
+			await this.releaseLocks(locks);
+		}
 
 		await this.afterRowsChanged(ownerId, []);
+	}
+
+	/** The import's open doubtful rows in booking order, each with the candidates that still exist. */
+	async findDoubtfulRows(
+		ownerId: Account['id'],
+		importId: BankImport['id'],
+	): Promise<BankImportDoubtfulRowResponse[]> {
+		const record = await this.dataSource
+			.getRepository(BankImport)
+			.findOne({where: {id: importId, accountId: ownerId}});
+		if (!record) throw new NotFoundException(BANK_IMPORT_NOT_FOUND);
+		const rows = await this.dataSource.getRepository(BankImportDoubtfulRow).find({
+			where: {importId: record.id, resolution: IsNull()},
+			order: {id: 'ASC'},
+		});
+		const candidateIds = [...new Set(rows.flatMap(({candidateTransactionIds}) => candidateTransactionIds))];
+		const candidates = candidateIds.length
+			? await this.dataSource.getRepository(BankTransaction).find({
+					select: {
+						id: true,
+						bankAccountId: true,
+						transactionDate: true,
+						bookingDate: true,
+						valueDate: true,
+						amount: true,
+						currency: true,
+						displayDescription: true,
+						counterpartyName: true,
+					},
+					where: {id: In(candidateIds), bankAccount: {bankConnection: {accountId: ownerId}}},
+				})
+			: [];
+		const candidatesById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+		return rows
+			.map((doubtful) => ({
+				id: doubtful.id,
+				bankAccountId: doubtful.bankAccountId,
+				row: {
+					bookingDate: doubtful.row.bookingDate,
+					valueDate: doubtful.row.valueDate,
+					amount: doubtful.row.amount,
+					currency: doubtful.row.currency,
+					balanceAfter: doubtful.row.balanceAfter,
+					bankReference: doubtful.row.bankReference,
+					counterpartyName: doubtful.row.counterpartyName,
+					description: doubtful.row.description,
+					remittanceInformation: doubtful.row.remittanceInformation,
+				},
+				candidates: doubtful.candidateTransactionIds.flatMap((id) => {
+					const candidate = candidatesById.get(id);
+					if (!candidate || candidate.bankAccountId !== doubtful.bankAccountId) return [];
+					return [
+						{
+							id,
+							transactionDate: candidate.transactionDate,
+							bookingDate: candidate.bookingDate,
+							valueDate: candidate.valueDate,
+							amount: candidate.amount,
+							currency: candidate.currency,
+							displayDescription: candidate.displayDescription,
+							counterpartyName: candidate.counterpartyName,
+						},
+					];
+				}),
+			}))
+			.sort((left, right) => (matchDay(left.row) ?? '').localeCompare(matchDay(right.row) ?? ''));
+	}
+
+	/**
+	 * Decides one doubtful row: `new` inserts it as a row of the import, `duplicate` records which candidate it is
+	 * and inserts nothing. A row is decided once.
+	 */
+	async resolveDoubtfulRow(
+		ownerId: Account['id'],
+		importId: BankImport['id'],
+		rowId: BankImportDoubtfulRow['id'],
+		request: ResolveBankImportDoubtfulRowRequest,
+	): Promise<BankImportSummary> {
+		const owned = await this.findOwnedImport(ownerId, importId);
+		const doubtful = await this.dataSource
+			.getRepository(BankImportDoubtfulRow)
+			.findOne({where: {id: rowId, importId: owned.id}});
+		const [account] = doubtful ? await this.findOwnedAccounts(ownerId, [doubtful.bankAccountId]) : [];
+		if (!doubtful || !account?.bankConnection) throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
+		const connection = account.bankConnection;
+		const locks = await this.lockSyncedConnections(
+			connection.provider === BANK_CONNECTION_PROVIDERS.FILE ? [] : [connection.id],
+		);
+		let resolved: {record: BankImport; insertedTransactionIds: string[]};
+		try {
+			resolved = await this.dataSource.transaction(async (manager) => {
+				const {record} = await this.lockImport(manager, ownerId, owned);
+				const rows = manager.getRepository(BankImportDoubtfulRow);
+				const current = await rows.findOne({where: {id: doubtful.id}, lock: {mode: 'pessimistic_write'}});
+				if (!current) throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
+				if (current.resolution) throw new ConflictException(BANK_IMPORT_DOUBTFUL_ROW_RESOLVED);
+
+				let resolvedTransactionId: string;
+				const insertedTransactionIds: string[] = [];
+				if (request.decision === 'duplicate') {
+					const transactionId = request.transactionId;
+					const candidate =
+						transactionId && current.candidateTransactionIds.includes(transactionId)
+							? await manager.getRepository(BankTransaction).findOne({
+									select: {id: true},
+									where: {id: transactionId, bankAccountId: current.bankAccountId},
+								})
+							: null;
+					if (!candidate) throw new BadRequestException(BANK_IMPORT_NOT_A_CANDIDATE);
+					resolvedTransactionId = candidate.id;
+					record.rowsAlreadyPresent += 1;
+				} else {
+					const persisted = await this.persistence.persistTransactions(
+						manager.getRepository(BankTransaction),
+						account,
+						[toTransactionInput(current.row, account.currency)],
+						connection.aspspName,
+						connection.provider,
+						{importId: record.id},
+					);
+					insertedTransactionIds.push(...persisted.insertedTransactionIds);
+					resolvedTransactionId = persisted.insertedTransactionIds[0];
+					record.rowsAdded += 1;
+				}
+				record.rowsDoubtful -= 1;
+				await rows.update({id: current.id}, {resolution: request.decision, resolvedTransactionId});
+				await manager.getRepository(BankImport).update(
+					{id: record.id},
+					{
+						rowsAdded: record.rowsAdded,
+						rowsAlreadyPresent: record.rowsAlreadyPresent,
+						rowsDoubtful: record.rowsDoubtful,
+					},
+				);
+				for (const lock of locks) lock.assertHealthy();
+				return {record, insertedTransactionIds};
+			});
+		} finally {
+			await this.releaseLocks(locks);
+		}
+
+		await this.afterRowsChanged(ownerId, resolved.insertedTransactionIds);
+		return toSummary(resolved.record, await this.findOwnedAccounts(ownerId, resolved.record.bankAccountIds));
 	}
 
 	/** Parses every file in request order; the first refusal names its file and nothing is written. */
@@ -211,26 +453,122 @@ export class BankImportService {
 		return statements;
 	}
 
-	/** Importing into an account bank sync already writes to comes with the duplicate matcher, not before. */
-	private async refuseSyncedAccounts(
+	/**
+	 * The synced account each statement belongs to by IBAN and currency (stored IBAN, or the identification hash),
+	 * else an imported-files account. Two matching synced accounts need the owner to name one.
+	 */
+	private async findSyncedTargets(ownerId: Account['id'], accountRows: readonly AccountRows[]): Promise<Target[]> {
+		const syncedAccounts = accountRows.some(({iban}) => iban)
+			? await this.dataSource.getRepository(BankAccount).find({
+					where: {bankConnection: {accountId: ownerId, provider: Not(BANK_CONNECTION_PROVIDERS.FILE)}},
+					relations: {bankConnection: true},
+					order: {id: 'ASC'},
+				})
+			: [];
+		return accountRows.map(({iban, currency}) => {
+			const matches = iban
+				? syncedAccounts.filter(
+						(account) =>
+							account.currency === currency &&
+							(normalizeStoredIban(account.iban) === iban ||
+								verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency)),
+					)
+				: [];
+			if (matches.length > 1) throw new BankImportRefusalException('ambiguous_target_account');
+			return matches.length === 1 ? {kind: 'synced', account: matches[0]} : {kind: 'file'};
+		});
+	}
+
+	/** The account the request names; the drop must be one account in its currency that does not contradict it. */
+	private async findNamedTarget(
+		ownerId: Account['id'],
+		bankAccountId: BankAccount['id'],
+		accountRows: readonly AccountRows[],
+	): Promise<Target> {
+		const [account] = await this.findOwnedAccounts(ownerId, [bankAccountId]);
+		if (!account?.bankConnection || accountRows.length !== 1 || accountRows[0].currency !== account.currency) {
+			throw new BankImportRefusalException('target_account_mismatch');
+		}
+		const {identifier, iban, currency} = accountRows[0];
+		if (account.bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE) {
+			if (account.providerAccountId !== fileProviderAccountId(identifier, currency)) {
+				throw new BankImportRefusalException('target_account_mismatch');
+			}
+			return {kind: 'file', account};
+		}
+		const storedIban = normalizeStoredIban(account.iban);
+		const contradicts = iban
+			? storedIban
+				? storedIban !== iban
+				: isIbanIdentificationHash(account.identificationHash) &&
+					!verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency)
+			: false;
+		if (contradicts) throw new BankImportRefusalException('target_account_mismatch');
+		return {kind: 'synced', account};
+	}
+
+	/**
+	 * Takes the sync lock of every synced connection the import writes to, in id order, so it never interleaves
+	 * with a sync, a removal or another import of those connections.
+	 */
+	private async lockSyncedConnections(connectionIds: readonly string[]): Promise<BankingConnectionLock[]> {
+		const locks: BankingConnectionLock[] = [];
+		try {
+			for (const connectionId of [...new Set(connectionIds)].sort()) {
+				locks.push(await this.connectionLockService.acquire(connectionId, {waitForMs: SYNC_LOCK_WAIT_MS}));
+			}
+		} catch (error) {
+			await this.releaseLocks(locks);
+			if (error instanceof ConflictException) throw new BankImportRefusalException('account_busy');
+			throw error;
+		}
+		return locks;
+	}
+
+	private async releaseLocks(locks: readonly BankingConnectionLock[]): Promise<void> {
+		for (const lock of locks) {
+			lock.stop();
+			try {
+				await lock.release();
+			} catch (error) {
+				this.logger.warn(`Bank import lock release failed: ${safeErrorName(error)}`);
+			}
+		}
+	}
+
+	/**
+	 * The account and connection for each statement inside the import transaction. Synced accounts are read again
+	 * under their sync lock; imported-files accounts are found or created under the locked imported-files connection.
+	 */
+	private async resolveTargets(
 		manager: EntityManager,
 		ownerId: Account['id'],
 		accountRows: readonly AccountRows[],
-	): Promise<void> {
-		const ibans = accountRows.flatMap(({iban}) => (iban ? [iban] : []));
-		if (ibans.length === 0) return;
-		const syncedAccounts = await manager.getRepository(BankAccount).find({
-			select: {id: true, iban: true, identificationHash: true, currency: true},
-			where: {bankConnection: {accountId: ownerId, provider: Not(BANK_CONNECTION_PROVIDERS.FILE)}},
-		});
-		const synced = ibans.some((iban) =>
-			syncedAccounts.some(
-				(account) =>
-					account.iban?.replace(/\s+/g, '').toUpperCase() === iban ||
-					verifyIbanAgainstIdentificationHash(account.identificationHash, iban, account.currency),
-			),
-		);
-		if (synced) throw new BankImportRefusalException('synced_account_not_supported_yet');
+		targets: readonly Target[],
+	): Promise<{accounts: ImportedAccount[]; fileConnection: BankConnection | null}> {
+		// A drop without a synced target (even one without accounts) is recorded under the imported-files connection.
+		const fileConnection =
+			targets.length === 0 || targets.some(({kind}) => kind === 'file')
+				? await this.lockFileConnection(manager, ownerId)
+				: null;
+		const accounts: ImportedAccount[] = [];
+		for (const [index, target] of targets.entries()) {
+			if (target.kind === 'file') {
+				accounts.push(await this.findOrCreateFileAccount(manager, fileConnection!, accountRows[index]));
+				continue;
+			}
+			const account = await manager.getRepository(BankAccount).findOne({
+				where: {
+					id: target.account.id,
+					bankConnection: {id: target.account.bankConnection.id, accountId: ownerId},
+				},
+				relations: {bankConnection: true},
+			});
+			// Only a removal committing before the lock was taken gets here.
+			if (!account?.bankConnection) throw new ConflictException(BANK_IMPORT_NOT_SAVED);
+			accounts.push({account, connection: account.bankConnection, created: false});
+		}
+		return {accounts, fileConnection};
 	}
 
 	/**
@@ -267,36 +605,106 @@ export class BankImportService {
 		return connection;
 	}
 
-	private async findOrCreateAccounts(
+	private async findOrCreateFileAccount(
 		manager: EntityManager,
 		connection: BankConnection,
-		accountRows: readonly AccountRows[],
-	): Promise<ImportedAccount[]> {
+		{identifier, iban, currency}: AccountRows,
+	): Promise<ImportedAccount> {
 		const bankAccounts = manager.getRepository(BankAccount);
-		const accounts: ImportedAccount[] = [];
-		for (const {identifier, iban, currency} of accountRows) {
-			const providerAccountId = `file:${identifier}:${currency}`;
-			const existing = await bankAccounts.findOne({
-				where: {bankConnection: {id: connection.id}, providerAccountId},
-			});
-			if (existing) {
-				accounts.push({account: existing, created: false});
-				continue;
-			}
-			const account = await bankAccounts.save(
-				bankAccounts.create({
-					bankConnection: {id: connection.id},
-					providerAccountId,
-					identificationHash: `file:${createHash('sha256').update(`${identifier}:${currency}`).digest('hex')}`,
-					iban,
-					name: iban ? iban.replace(/(.{4})(?=.)/g, '$1 ') : identifier,
-					currency,
-					isActive: true,
-				}),
-			);
-			accounts.push({account, created: true});
-		}
-		return accounts;
+		const providerAccountId = fileProviderAccountId(identifier, currency);
+		const existing = await bankAccounts.findOne({where: {bankConnection: {id: connection.id}, providerAccountId}});
+		if (existing) return {account: existing, connection, created: false};
+		const account = await bankAccounts.save(
+			bankAccounts.create({
+				bankConnection: {id: connection.id},
+				providerAccountId,
+				identificationHash: `file:${createHash('sha256').update(`${identifier}:${currency}`).digest('hex')}`,
+				iban,
+				name: iban ? iban.replace(/(.{4})(?=.)/g, '$1 ') : identifier,
+				currency,
+				isActive: true,
+			}),
+		);
+		return {account, connection, created: true};
+	}
+
+	/** The account's stored rows, any status, whose date lies within the ladder's window around the file's days. */
+	private async findMatchCandidates(
+		manager: EntityManager,
+		bankAccountId: BankAccount['id'],
+		rows: readonly NormalizedRow[],
+	): Promise<MatchExistingRow[]> {
+		const days = rows.flatMap((row) => {
+			const day = matchDay(row);
+			return day ? [day] : [];
+		});
+		if (days.length === 0) return [];
+		days.sort();
+		const existing = await manager.getRepository(BankTransaction).find({
+			select: {
+				id: true,
+				amount: true,
+				currency: true,
+				bookingDate: true,
+				valueDate: true,
+				balanceAfterAmount: true,
+				entryReference: true,
+				createdAt: true,
+			},
+			where: {
+				bankAccountId,
+				bookingDate: Raw(
+					(column) =>
+						`COALESCE(${column}, "valueDate", "transactionDate") BETWEEN (:from)::date - ${MATCH_WINDOW_DAYS} AND (:to)::date + ${MATCH_WINDOW_DAYS}`,
+					{from: days[0], to: days.at(-1)},
+				),
+			},
+		});
+		return existing.map((row) => ({
+			id: row.id,
+			createdAt: row.createdAt,
+			amount: row.amount,
+			currency: row.currency,
+			bookingDate: row.bookingDate,
+			valueDate: row.valueDate,
+			balanceAfter: row.balanceAfterAmount,
+			reference: row.entryReference,
+		}));
+	}
+
+	private async findOwnedImport(ownerId: Account['id'], importId: BankImport['id']): Promise<BankImport> {
+		const record = await this.dataSource
+			.getRepository(BankImport)
+			.findOne({where: {id: importId, accountId: ownerId, undoneAt: IsNull()}});
+		if (!record) throw new NotFoundException(BANK_IMPORT_NOT_FOUND);
+		return record;
+	}
+
+	/** Locks the import's connection, then the import record: the same order as an import and connection removal. */
+	private async lockImport(
+		manager: EntityManager,
+		ownerId: Account['id'],
+		owned: BankImport,
+	): Promise<{connection: BankConnection; record: BankImport}> {
+		const connection = await manager.getRepository(BankConnection).findOne({
+			where: {id: owned.bankConnectionId, accountId: ownerId},
+			lock: {mode: 'pessimistic_write'},
+		});
+		const record = await manager.getRepository(BankImport).findOne({
+			where: {id: owned.id, accountId: ownerId, undoneAt: IsNull()},
+			lock: {mode: 'pessimistic_write'},
+		});
+		if (!connection || !record) throw new NotFoundException(BANK_IMPORT_NOT_FOUND);
+		return {connection, record};
+	}
+
+	private async findOwnedAccounts(ownerId: Account['id'], ids: readonly string[]): Promise<BankAccount[]> {
+		const unique = [...new Set(ids)];
+		if (unique.length === 0) return [];
+		return this.dataSource.getRepository(BankAccount).find({
+			where: {id: In(unique), bankConnection: {accountId: ownerId}},
+			relations: {bankConnection: true},
+		});
 	}
 
 	/** The steps sync runs after it persists rows, in the same order. */
@@ -355,38 +763,6 @@ function firstBookingDate(statement: NormalizedStatement): string {
 	return statement.rows.find(({bookingDate}) => bookingDate)?.bookingDate ?? '9999-12-31';
 }
 
-/**
- * Splits an account's rows into write batches without separating rows that share an identity group (dates, amount,
- * currency and direction), so repeated payments are always numbered within one call.
- */
-function chunkByIdentityGroup(rows: readonly NormalizedRow[]): NormalizedRow[][] {
-	const groups = new Map<string, NormalizedRow[]>();
-	for (const row of rows) {
-		const key = JSON.stringify([
-			row.transactionDate,
-			row.bookingDate,
-			row.valueDate,
-			row.amount,
-			row.currency,
-			row.creditDebitIndicator,
-		]);
-		const group = groups.get(key) ?? [];
-		group.push(row);
-		groups.set(key, group);
-	}
-	const chunks: NormalizedRow[][] = [];
-	let chunk: NormalizedRow[] = [];
-	for (const group of groups.values()) {
-		if (chunk.length > 0 && chunk.length + group.length > BATCH_WRITE_CHUNK_SIZE) {
-			chunks.push(chunk);
-			chunk = [];
-		}
-		chunk.push(...group);
-	}
-	if (chunk.length > 0) chunks.push(chunk);
-	return chunks;
-}
-
 function toTransactionInput(row: NormalizedRow, accountCurrency: string): BankTransactionInput {
 	return {
 		entryReference: row.bankReference ?? undefined,
@@ -425,6 +801,9 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 		rowsParsed: record.rowsParsed,
 		rowsAdded: record.rowsAdded,
 		rowsAlreadyPresent: record.rowsAlreadyPresent,
+		rowsMatchedByReference: record.rowsMatchedByReference,
+		rowsMatchedByBalance: record.rowsMatchedByBalance,
+		rowsMatchedByDate: record.rowsMatchedByDate,
 		rowsDoubtful: record.rowsDoubtful,
 		dateFrom: record.dateFrom,
 		dateTo: record.dateTo,
@@ -443,4 +822,33 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 		undoneAt: record.undoneAt?.toISOString() ?? null,
 		createdAt: record.createdAt.toISOString(),
 	};
+}
+
+function fileProviderAccountId(identifier: string, currency: string): string {
+	return `file:${identifier}:${currency}`;
+}
+
+function normalizeStoredIban(iban: string | null): string | null {
+	return iban ? iban.replace(/\s+/g, '').toUpperCase() : null;
+}
+
+function toMatchRow(row: NormalizedRow) {
+	return {
+		amount: row.amount,
+		currency: row.currency,
+		bookingDate: row.bookingDate,
+		valueDate: row.valueDate,
+		balanceAfter: row.balanceAfter,
+		reference: row.bankReference,
+	};
+}
+
+function addLadderCounts(counts: LadderCounts, outcomes: readonly MatchOutcome[]): void {
+	for (const outcome of outcomes) {
+		if (outcome.kind === 'new') counts.rowsAdded += 1;
+		else if (outcome.kind === 'doubtful') counts.rowsDoubtful += 1;
+		else if (outcome.step === 'reference') counts.rowsMatchedByReference += 1;
+		else if (outcome.step === 'balance') counts.rowsMatchedByBalance += 1;
+		else counts.rowsMatchedByDate += 1;
+	}
 }

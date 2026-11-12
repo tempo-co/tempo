@@ -19,7 +19,10 @@ export class BankImport {
 	@JoinColumn({name: 'accountId', foreignKeyConstraintName: 'fk_bank_imports_account'})
 	account?: Account;
 
-	/** The owner's imported-files connection; removing it removes its import history too. */
+	/**
+	 * The synced connection the drop wrote to (a drop writes to one at most), otherwise the owner's imported-files
+	 * connection. Removing that connection removes this import record too.
+	 */
 	@Column({type: 'uuid'})
 	bankConnectionId: string;
 
@@ -50,6 +53,17 @@ export class BankImport {
 	@Column({type: 'integer'})
 	rowsAlreadyPresent: number;
 
+	@Column({type: 'integer', default: 0})
+	rowsMatchedByReference: number;
+
+	@Column({type: 'integer', default: 0})
+	rowsMatchedByBalance: number;
+
+	/** Steps 3 and 4 of the ladder: same day, or the only candidate within three days. */
+	@Column({type: 'integer', default: 0})
+	rowsMatchedByDate: number;
+
+	/** Doubtful rows still open. */
 	@Column({type: 'integer', default: 0})
 	rowsDoubtful: number;
 

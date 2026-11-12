@@ -1,6 +1,6 @@
-import {Injectable} from '@nestjs/common';
+import {Injectable, Logger} from '@nestjs/common';
 import {createHash, randomUUID} from 'node:crypto';
-import {FindOptionsSelect, In, IsNull, Not, Repository} from 'typeorm';
+import {FindOptionsSelect, In, IsNull, Not, Raw, Repository} from 'typeorm';
 
 import {BankAccount} from '../bank-account.entity';
 import {
@@ -15,6 +15,7 @@ import {
 	isLegacyBankTransactionDedupeKey,
 } from '../bank-transaction-identity';
 import {BankTransactionLocation, normalizeBankTransactionLocation} from '../bank-transaction-location';
+import {MATCH_WINDOW_DAYS, MatchIncomingRow, matchDay, matchTransactions} from '../bank-transaction-matcher';
 import {deriveBankTransactionTextColumns} from '../bank-transaction-text-columns';
 import {normalizeBankTransactionType} from '../bank-transaction-type';
 import {BankTransaction} from '../bank-transaction.entity';
@@ -67,6 +68,14 @@ const BANK_TRANSACTION_IDENTITY_SELECT = {
 	transactionStatus: true,
 } satisfies FindOptionsSelect<BankTransaction>;
 
+export type PersistTransactionsOptions = {
+	/**
+	 * Writes the rows as new rows of this file import: each gets the next free occurrence of its identity group and
+	 * is inserted, never matched to or updating a stored row. The caller has already left out the duplicates.
+	 */
+	importId?: string;
+};
+
 export type PersistTransactionsResult = {
 	transactionsAdded: number;
 	/** The rows this call inserted; the others already existed and were updated. */
@@ -105,6 +114,8 @@ export type BankTransactionInput = {
 	referenceNumberScheme?: string;
 };
 
+type BankTransactionValues = ReturnType<BankTransactionPersistenceService['toBankTransactionValues']>;
+
 type LegacyDedupeKeyValues = {
 	providerTransactionId: string | null;
 	entryReference: string | null;
@@ -120,6 +131,8 @@ type LegacyDedupeKeyValues = {
 
 @Injectable()
 export class BankTransactionPersistenceService {
+	private readonly logger = new Logger(BankTransactionPersistenceService.name);
+
 	async repairIncompleteTransactionIdentities(
 		repository: Repository<BankTransaction>,
 		bankAccount: BankAccount,
@@ -176,13 +189,24 @@ export class BankTransactionPersistenceService {
 		repository: Repository<BankTransaction>,
 		bankAccountId: string,
 	): Promise<Set<string>> {
+		return (await this.getOccupiedTransactionIdentities(repository, bankAccountId)).keys;
+	}
+
+	/** Every identity key the account uses, and whether any of its rows still belongs to a file import. */
+	private async getOccupiedTransactionIdentities(
+		repository: Repository<BankTransaction>,
+		bankAccountId: string,
+	): Promise<{keys: Set<string>; hasImportedRows: boolean}> {
 		const occupiedIdentities = await repository.find({
-			select: {stableIdentityKey: true},
+			select: {stableIdentityKey: true, importId: true},
 			where: {bankAccountId, stableIdentityKey: Not(IsNull())},
 		});
-		return new Set(
-			occupiedIdentities.flatMap(({stableIdentityKey}) => (stableIdentityKey ? [stableIdentityKey] : [])),
-		);
+		return {
+			keys: new Set(
+				occupiedIdentities.flatMap(({stableIdentityKey}) => (stableIdentityKey ? [stableIdentityKey] : [])),
+			),
+			hasImportedRows: occupiedIdentities.some(({importId}) => Boolean(importId)),
+		};
 	}
 
 	async persistTransactions(
@@ -191,10 +215,19 @@ export class BankTransactionPersistenceService {
 		transactions: readonly BankTransactionInput[],
 		aspspName: string,
 		provider: string,
+		options: PersistTransactionsOptions = {},
 	): Promise<PersistTransactionsResult> {
 		const unassignedTransactionValues = transactions.map((transaction) =>
 			this.toBankTransactionValues(bankAccount, transaction, aspspName, provider),
 		);
+		if (options.importId) {
+			return this.insertImportedTransactions(
+				repository,
+				bankAccount,
+				unassignedTransactionValues,
+				options.importId,
+			);
+		}
 		const stableIdentityGroupKeys = [
 			...new Set(unassignedTransactionValues.map(({stableIdentityGroupKey}) => stableIdentityGroupKey)),
 		];
@@ -212,6 +245,7 @@ export class BankTransactionPersistenceService {
 				categoryInputHash: true,
 				categorySource: true,
 				categoryStatus: true,
+				importId: true,
 			},
 			// Include every same-reference candidate, not just pending rows: repeated references
 			// and already-booked copies must make a cross-group transition ambiguous.
@@ -224,7 +258,10 @@ export class BankTransactionPersistenceService {
 		});
 		// A booked row can retain a key from its former pending group while no longer
 		// matching the incoming group or reference. Reserve keys independently of matching.
-		const occupiedIdentityKeys = await this.getOccupiedTransactionIdentityKeys(repository, bankAccount.id);
+		const {keys: occupiedIdentityKeys, hasImportedRows} = await this.getOccupiedTransactionIdentities(
+			repository,
+			bankAccount.id,
+		);
 		const transactionValues = assignBankTransactionStableIdentityKeys(
 			unassignedTransactionValues,
 			existingTransactions,
@@ -236,6 +273,11 @@ export class BankTransactionPersistenceService {
 				.filter(({stableIdentityKey}) => stableIdentityKey)
 				.map((transaction) => [transaction.stableIdentityKey as string, transaction]),
 		);
+		// Rows the write takes over from a file import: imported rows it updates by identity, and imported twins the
+		// ladder finds for rows it would otherwise insert. Accounts without imported rows skip this entirely.
+		const takenOverIds = hasImportedRows
+			? await this.adoptImportedTwins(repository, bankAccount, transactionValues, existingTransactions)
+			: [];
 		for (const transactionValue of transactionValues) {
 			const existingTransaction = existingTransactionsByIdentity.get(transactionValue.stableIdentityKey);
 			if (!existingTransaction) {
@@ -276,6 +318,13 @@ export class BankTransactionPersistenceService {
 			.execute();
 		const insertedTransactionIds = this.getInsertedTransactionIds(upsertResult.raw);
 		const transactionsAdded = insertedTransactionIds.length;
+		// A row the upsert skipped (held by the categorization worker) keeps its import until a later sync writes it.
+		const writtenIds = new Set((upsertResult.raw as Array<{id: string}>).map(({id}) => id));
+		const adoptedIds = takenOverIds.filter((id) => writtenIds.has(id));
+		for (const ids of chunkArray(adoptedIds, BATCH_WRITE_CHUNK_SIZE)) {
+			// The row now belongs to the bank's history, so undoing its import leaves it.
+			await repository.update({id: In(ids)}, {importId: null});
+		}
 
 		const eventTransactionValues = transactionValues.filter(
 			({financialEventType}) => financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
@@ -283,27 +332,7 @@ export class BankTransactionPersistenceService {
 		await this.clearStaleBaseAmounts(repository, existingTransactions);
 		await this.copySameCurrencyBaseAmounts(repository, bankAccount.id);
 
-		const eventStableIdentityKeys = [
-			...new Set(eventTransactionValues.map(({stableIdentityKey}) => stableIdentityKey)),
-		];
-		if (eventStableIdentityKeys.length > 0) {
-			await repository
-				.createQueryBuilder()
-				.update(BankTransaction)
-				.set({
-					...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-					categoryInputHash: null,
-					categoryStatus: 'NOT_APPLICABLE',
-					categoryUpdatedAt: null,
-				})
-				.where('"bankAccountId" = :bankAccountId', {bankAccountId: bankAccount.id})
-				.andWhere('"stableIdentityKey" IN (:...eventStableIdentityKeys)', {eventStableIdentityKeys})
-				.andWhere('"financialEventType" = :financialEventType', {
-					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-				})
-				.andWhere('"categorySource" IS DISTINCT FROM \'MANUAL\'')
-				.execute();
-		}
+		await this.markCurrencyExchangesNotCategorized(repository, bankAccount.id, eventTransactionValues);
 
 		const transactionByStableIdentityKey = new Map(
 			transactionValues.map((value) => [value.stableIdentityKey, value]),
@@ -355,6 +384,171 @@ export class BankTransactionPersistenceService {
 	}
 
 	/**
+	 * Inserts a file import's new rows, each at the next free occurrence of its identity group, tagged with the
+	 * import. Plain inserts: a key collision fails the import instead of overwriting a stored row.
+	 */
+	private async insertImportedTransactions(
+		repository: Repository<BankTransaction>,
+		bankAccount: BankAccount,
+		unassignedTransactionValues: BankTransactionValues[],
+		importId: string,
+	): Promise<PersistTransactionsResult> {
+		const {keys: usedKeys} = await this.getOccupiedTransactionIdentities(repository, bankAccount.id);
+		const transactionValues = unassignedTransactionValues.map((value) => {
+			const {stableIdentityKey} = allocateNextBankTransactionStableIdentityKey(
+				value.stableIdentityGroupKey,
+				usedKeys,
+			);
+			usedKeys.add(stableIdentityKey);
+			return {...value, stableIdentityKey, dedupeKey: randomUUID(), importId};
+		});
+		const insertedTransactionIds: string[] = [];
+		for (const chunk of chunkArray(transactionValues, BATCH_WRITE_CHUNK_SIZE)) {
+			const result = await repository
+				.createQueryBuilder()
+				.insert()
+				.into(BankTransaction)
+				.values(chunk)
+				.returning('"id"')
+				.updateEntity(false)
+				.execute();
+			insertedTransactionIds.push(...(result.raw as Array<{id: string}>).map(({id}) => id));
+		}
+		await this.markCurrencyExchangesNotCategorized(
+			repository,
+			bankAccount.id,
+			transactionValues.filter(
+				({financialEventType}) =>
+					financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+			),
+		);
+		await this.copySameCurrencyBaseAmounts(repository, bankAccount.id, insertedTransactionIds);
+		return {
+			transactionsAdded: insertedTransactionIds.length,
+			insertedTransactionIds,
+			persistedTransactionIds: insertedTransactionIds,
+		};
+	}
+
+	/**
+	 * Finds the imported rows this write takes over. An incoming row that lands on an imported row by identity
+	 * updates it; an incoming row that would be inserted adopts the imported twin the duplicate ladder finds when it
+	 * is the only candidate, by moving that row to the incoming identity before the upsert. The adopted row joins
+	 * `existingTransactions`, so the usual re-categorization and base-amount rules see it.
+	 */
+	private async adoptImportedTwins(
+		repository: Repository<BankTransaction>,
+		bankAccount: BankAccount,
+		transactionValues: ReadonlyArray<
+			BankTransactionValues & {
+				stableIdentityKey: string;
+				stableIdentityGroupKey: string;
+			}
+		>,
+		existingTransactions: BankTransaction[],
+	): Promise<string[]> {
+		const existingByIdentity = new Map(
+			existingTransactions.flatMap((transaction) =>
+				transaction.stableIdentityKey ? [[transaction.stableIdentityKey, transaction] as const] : [],
+			),
+		);
+		const takenOverIds = new Set<string>();
+		const toInsert: Array<(typeof transactionValues)[number]> = [];
+		for (const value of transactionValues) {
+			const existing = existingByIdentity.get(value.stableIdentityKey);
+			if (!existing) toInsert.push(value);
+			else if (existing.importId) takenOverIds.add(existing.id);
+		}
+		const days = toInsert.flatMap((value) => {
+			const day = matchDay(value);
+			return day ? [day] : [];
+		});
+		if (days.length === 0) return [...takenOverIds];
+		days.sort();
+
+		const imported = await repository.find({
+			select: {
+				...BANK_TRANSACTION_IDENTITY_SELECT,
+				dedupeKey: true,
+				categoryInputHash: true,
+				categorySource: true,
+				categoryStatus: true,
+				importId: true,
+				balanceAfterAmount: true,
+				createdAt: true,
+			},
+			where: {
+				bankAccountId: bankAccount.id,
+				importId: Not(IsNull()),
+				bookingDate: Raw(
+					(column) =>
+						`COALESCE(${column}, "valueDate") BETWEEN (:from)::date - ${MATCH_WINDOW_DAYS} AND (:to)::date + ${MATCH_WINDOW_DAYS}`,
+					{from: days[0], to: days.at(-1)},
+				),
+			},
+		});
+		const candidates = imported.filter(({id}) => !takenOverIds.has(id));
+		const outcomes = matchTransactions(
+			toInsert.map(toMatchRow),
+			candidates.map((transaction) => ({
+				...toMatchRow(transaction),
+				id: transaction.id,
+				createdAt: transaction.createdAt,
+			})),
+			{uniqueCandidatesOnly: true},
+		);
+		const candidatesById = new Map(candidates.map((transaction) => [transaction.id, transaction]));
+		let doubtful = 0;
+		for (const [index, outcome] of outcomes.entries()) {
+			if (outcome.kind === 'doubtful') doubtful += 1;
+			if (outcome.kind !== 'matched') continue;
+			const value = toInsert[index];
+			const twin = candidatesById.get(outcome.existingId)!;
+			await repository.update(
+				{id: twin.id},
+				{stableIdentityKey: value.stableIdentityKey, stableIdentityGroupKey: value.stableIdentityGroupKey},
+			);
+			existingTransactions.push({
+				...twin,
+				stableIdentityKey: value.stableIdentityKey,
+				stableIdentityGroupKey: value.stableIdentityGroupKey,
+			} as BankTransaction);
+			takenOverIds.add(twin.id);
+		}
+		if (doubtful > 0) {
+			this.logger.log(`Sync inserted ${doubtful} transaction(s) with more than one imported look-alike.`);
+		}
+		return [...takenOverIds];
+	}
+
+	private async markCurrencyExchangesNotCategorized(
+		repository: Repository<BankTransaction>,
+		bankAccountId: BankAccount['id'],
+		eventTransactionValues: ReadonlyArray<{stableIdentityKey: string}>,
+	): Promise<void> {
+		const eventStableIdentityKeys = [
+			...new Set(eventTransactionValues.map(({stableIdentityKey}) => stableIdentityKey)),
+		];
+		if (eventStableIdentityKeys.length === 0) return;
+		await repository
+			.createQueryBuilder()
+			.update(BankTransaction)
+			.set({
+				...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
+				categoryInputHash: null,
+				categoryStatus: 'NOT_APPLICABLE',
+				categoryUpdatedAt: null,
+			})
+			.where('"bankAccountId" = :bankAccountId', {bankAccountId})
+			.andWhere('"stableIdentityKey" IN (:...eventStableIdentityKeys)', {eventStableIdentityKeys})
+			.andWhere('"financialEventType" = :financialEventType', {
+				financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+			})
+			.andWhere('"categorySource" IS DISTINCT FROM \'MANUAL\'')
+			.execute();
+	}
+
+	/**
 	 * Stores amounts already in the owner's base currency right away, so they never wait for the conversion job
 	 * and count in totals as soon as they are synced. Matches the job's `SAME` method; other currencies still wait
 	 * for rates. Owners without a base currency yet (before their first conversion run) are left to the job.
@@ -362,7 +556,10 @@ export class BankTransactionPersistenceService {
 	private async copySameCurrencyBaseAmounts(
 		repository: Repository<BankTransaction>,
 		bankAccountId: BankAccount['id'],
+		/** Limits the update to these rows; every row of the account when omitted. */
+		transactionIds?: readonly string[],
 	): Promise<void> {
+		if (transactionIds?.length === 0) return;
 		await repository.query(
 			`UPDATE "bank_transactions" AS t
 			SET "amountInBaseCurrency" = ROUND(t."amount", 2), "baseAmountMethod" = 'SAME',
@@ -373,8 +570,8 @@ export class BankTransactionPersistenceService {
 			WHERE bank_account."id" = $1
 				AND t."bankAccountId" = bank_account."id"
 				AND t."baseAmountMethod" IS NULL
-				AND t."currency" = account."baseCurrency"`,
-			[bankAccountId],
+				AND t."currency" = account."baseCurrency"${transactionIds ? ' AND t."id" = ANY($2::uuid[])' : ''}`,
+			transactionIds ? [bankAccountId, transactionIds] : [bankAccountId],
 		);
 	}
 
@@ -605,4 +802,22 @@ export class BankTransactionPersistenceService {
 		if (creditDebitIndicator === 'CRDT' && isNegative) return unsignedAmount;
 		return normalizedAmount;
 	}
+}
+
+function toMatchRow(row: {
+	amount: string;
+	currency: string;
+	bookingDate: string | null;
+	valueDate: string | null;
+	balanceAfterAmount?: string | null;
+	entryReference: string | null;
+}): MatchIncomingRow {
+	return {
+		amount: row.amount,
+		currency: row.currency,
+		bookingDate: row.bookingDate,
+		valueDate: row.valueDate,
+		balanceAfter: row.balanceAfterAmount ?? null,
+		reference: row.entryReference,
+	};
 }
