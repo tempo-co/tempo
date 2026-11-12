@@ -2,14 +2,11 @@ import {ChevronDown} from 'lucide-react';
 import * as React from 'react';
 
 import {Button} from '@/components/ui/button';
-import {CommandGroup, CommandItem, CommandSeparator} from '@/components/ui/command';
 import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
 import {cn} from '@/utils/cn';
 
-import {BankTransactionFilterSection} from './bank-transaction-filter-section';
-
 type FacetedFilterProps = {
-  variant: 'popover' | 'mobile';
+  variant: 'popover' | 'pane';
   label: string;
   icon: React.ReactNode;
   /** A filter with a value gets a solid border; an empty one a dashed border. */
@@ -21,14 +18,14 @@ type FacetedFilterProps = {
   contentClassName: string;
   className?: string;
   onOpenChange?: (open: boolean) => void;
-  /** Shown in the phone filter sheet instead of `children`, which then only fill the popover. */
-  mobileContent?: React.ReactNode;
+  /** Shown in the Filters panel instead of `children`, which then only fill the popover. */
+  paneContent?: React.ReactNode;
   children: React.ReactNode;
 };
 
 /**
- * The frame every transaction filter shares: a labelled section in the phone filter sheet, or an
- * outline trigger with a popover on larger screens.
+ * A filter's own toolbar control: an outline trigger with a popover, or (`pane`) just the options, for the Filters
+ * panel, which shows one filter at a time and scrolls it itself. The Booking date filter is the one that needs both.
  */
 export function FacetedFilter({
   variant,
@@ -41,18 +38,10 @@ export function FacetedFilter({
   contentClassName,
   className,
   onOpenChange,
-  mobileContent,
+  paneContent,
   children,
 }: FacetedFilterProps) {
-  if (variant === 'mobile') {
-    return (
-      <BankTransactionFilterSection label={label}>
-        {mobileContent ?? (
-          <div className='overflow-hidden rounded-md border bg-background'>{children}</div>
-        )}
-      </BankTransactionFilterSection>
-    );
-  }
+  if (variant === 'pane') return <>{paneContent ?? children}</>;
 
   return (
     <Popover onOpenChange={onOpenChange}>
@@ -79,21 +68,5 @@ export function FacetedFilter({
         {children}
       </PopoverContent>
     </Popover>
-  );
-}
-
-/** The Reset row at the end of a filter's command list, shown while the filter has a value. */
-export function FilterResetGroup({show, onReset}: {show: boolean; onReset: () => void}) {
-  if (!show) return null;
-
-  return (
-    <>
-      <CommandSeparator />
-      <CommandGroup>
-        <CommandItem onSelect={onReset} className='justify-center text-center'>
-          Reset
-        </CommandItem>
-      </CommandGroup>
-    </>
   );
 }

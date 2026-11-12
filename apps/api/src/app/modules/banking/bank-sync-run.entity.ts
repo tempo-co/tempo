@@ -1,6 +1,7 @@
 import {Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn} from 'typeorm';
 
 import {BankConnection} from './bank-connection.entity';
+import type {BankSyncFailure} from './bank-sync-failure';
 
 @Entity('bank_sync_runs')
 @Index('idx_bank_sync_runs_connection_started_at', ['bankConnection', 'startedAt'])
@@ -38,4 +39,8 @@ export class BankSyncRun {
 
 	@Column({type: 'text', nullable: true})
 	errorMessage: string | null;
+
+	/** Why the run failed or was partial; null when nothing failed. */
+	@Column({type: 'jsonb', nullable: true})
+	failures: BankSyncFailure[] | null;
 }

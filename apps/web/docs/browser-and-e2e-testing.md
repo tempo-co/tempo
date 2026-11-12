@@ -93,7 +93,7 @@ const transaction = createBankTransaction({
 - On phone viewports, the fixed tab bar and stacked toasts cover controls near the bottom. Use `focus()` plus `keyboard.press('Enter')`, or scroll the control to the centre first.
 - Wait out open animations (about 300 ms) before screenshots; a mid-fade dialog looks transparent. Check the computed `backgroundColor`/`opacity` at rest before changing styles.
 - Theme: the storage key is `vite-ui-theme`. Set it with `page.addInitScript` and assert the rendered theme; a different key leaves both captures in the default theme.
-- Mobile filter drawers scroll inside the Radix scroll-area viewport (`[data-radix-scroll-area-viewport]`), not the nested command list.
+- The Transactions Filters control scrolls only inside its Radix scroll-area viewport (`[data-radix-scroll-area-viewport]`): the desktop panel's options pane and the phone sheet's body. Filter components rendered with `variant='pane'` have no scroll box of their own. `openTransactionFilter` in `test/utils/transaction-filters.ts` opens one filter on either layout.
 
 ## Merchant logo rendering
 
@@ -137,7 +137,7 @@ The transaction search cap is one constant, `BANK_TRANSACTION_SEARCH_MAX_LENGTH`
 
 1. Trace input → debounced `navigate` → route schema → request → API DTO. Raising one boundary alone leaves the router error or turns it into an API rejection; change the API validator in `apps/api` in the same PR.
 2. Percent-encoded three-byte characters cost nine request-line bytes each. `nginx/tempo.conf` sizes `large_client_header_buffers` for the current cap, and `scripts/tempo-web-security-headers-test.sh` sends 1000 `€` through both the SPA route and the API proxy. Update both with the cap.
-3. In the existing search journey, type exactly the maximum, check the full value in the request and URL plus the pagination reset, reload and check the restored input, then try one extra character and confirm the input stays bounded.
+3. In the existing search journey, type exactly the maximum, check the full value in the request and URL, reload and check the restored input, then try one extra character and confirm the input stays bounded.
 
 ## Cash flow filters
 

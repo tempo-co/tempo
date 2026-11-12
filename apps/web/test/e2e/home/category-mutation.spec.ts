@@ -1,4 +1,4 @@
-import {QueryObserver} from '@tanstack/react-query';
+import {InfiniteQueryObserver} from '@tanstack/react-query';
 
 import {dashboardQueryKeys} from '../../../src/features/banking/api/aggregate-query-keys';
 import {bankQueryKeys} from '../../../src/features/banking/api/query-keys';
@@ -23,6 +23,28 @@ function mutationHarness(response: Record<string, unknown>, reject = false) {
   return {client, hook};
 }
 
+/** A Transactions list as its cache holds it: every page loaded so far. */
+const pagesOf = (...pages: {transactions: unknown[]; total: number}[]) => ({
+  pages,
+  pageParams: pages.map((_, index) => index),
+});
+
+/** Keeps a list's query active, as the Transactions page does, answering every page fetch with `page()`. */
+function observeList(
+  client: ReturnType<typeof mutationHarness>['client'],
+  key: readonly unknown[],
+  page: () => {transactions: unknown[]; total: number},
+) {
+  // The key represents the server filter; the observer only answers fetches at the HTTP boundary.
+  const observer = new InfiniteQueryObserver(client, {
+    queryKey: key,
+    queryFn: () => Promise.resolve(page()),
+    initialPageParam: 0,
+    getNextPageParam: () => undefined,
+  });
+  return observer.subscribe(() => {});
+}
+
 for (const filters of [
   {cashFlows: ['UNKNOWN']},
   {categoryStatuses: ['FAILED']},
@@ -34,28 +56,24 @@ for (const filters of [
       category: 'REFUND',
       categoryStatus: 'COMPLETED',
     });
-    const key = bankQueryKeys.transactions({pageIndex: 0, pageSize: 10}, filters, undefined);
+    const key = bankQueryKeys.transactions(filters, undefined);
     let reads = 0;
-    client.setQueryData(key, {
-      transactions: [{id: 'example-transaction', category: null}],
-      total: 1,
+    client.setQueryData(
+      key,
+      pagesOf({transactions: [{id: 'example-transaction', category: null}], total: 1}),
+    );
+    const unsubscribe = observeList(client, key, () => {
+      reads++;
+      return {transactions: [], total: 0};
     });
-    // The key represents the server filter; reads only counts fetches at the HTTP boundary.
-    // eslint-disable-next-line @tanstack/query/exhaustive-deps
-    const observer = new QueryObserver(client, {
-      queryKey: key,
-      queryFn: () => {
-        reads++;
-        return Promise.resolve({transactions: [], total: 0});
-      },
-    });
-    const unsubscribe = observer.subscribe(() => {});
     try {
       const mutation = hook<{
         updateBankTransactionCategory: (input: {id: string; category: string}) => Promise<unknown>;
       }>('use-update-bank-transaction-category.ts', 'useUpdateBankTransactionCategory');
       await mutation.updateBankTransactionCategory({id: 'example-transaction', category: 'REFUND'});
-      await expect.poll(() => client.getQueryData(key)).toEqual({transactions: [], total: 0});
+      await expect
+        .poll(() => client.getQueryData(key))
+        .toEqual(pagesOf({transactions: [], total: 0}));
       expect(reads).toBe(1);
       expect(client.getQueryData(bankQueryKeys.transaction('example-transaction'))).toMatchObject({
         category: 'REFUND',
@@ -70,25 +88,16 @@ for (const filters of [
 test('category save refreshes a drill that did not previously contain the transaction', async () => {
   const updated = {id: 'example-transaction', category: 'OTHER', categoryStatus: 'COMPLETED'};
   const {client, hook} = mutationHarness(updated);
-  const key = bankQueryKeys.transactions(
-    {pageIndex: 0, pageSize: 10},
-    {cashFlows: ['UNKNOWN']},
-    undefined,
-  );
-  client.setQueryData(key, {transactions: [], total: 0});
+  const key = bankQueryKeys.transactions({cashFlows: ['UNKNOWN']}, undefined);
+  client.setQueryData(key, pagesOf({transactions: [], total: 0}));
   // The synthetic response changes without changing the server filter key.
-  // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const observer = new QueryObserver(client, {
-    queryKey: key,
-    queryFn: () => Promise.resolve({transactions: [updated], total: 1}),
-  });
-  const unsubscribe = observer.subscribe(() => {});
+  const unsubscribe = observeList(client, key, () => ({transactions: [updated], total: 1}));
   try {
     const mutation = hook<{
       updateBankTransactionCategory: (input: {id: string; category: string}) => Promise<unknown>;
     }>('use-update-bank-transaction-category.ts', 'useUpdateBankTransactionCategory');
     await mutation.updateBankTransactionCategory({id: updated.id, category: updated.category});
-    expect(client.getQueryData(key)).toEqual({transactions: [updated], total: 1});
+    expect(client.getQueryData(key)).toEqual(pagesOf({transactions: [updated], total: 1}));
   } finally {
     unsubscribe();
     client.clear();
@@ -100,27 +109,27 @@ test('category save refreshes a drill that did not previously contain the transa
 test('category-only and source-only lists update immediately and are refetched', async () => {
   const updated = {id: 'example-transaction', category: 'OTHER', categorySource: 'MANUAL'};
   const {client, hook} = mutationHarness(updated);
-  const pagination = {pageIndex: 0, pageSize: 10};
-  const removedKey = bankQueryKeys.transactions(
-    pagination,
-    {categories: ['FOOD_AND_DRINK']},
-    undefined,
-  );
-  const retainedKey = bankQueryKeys.transactions(
-    pagination,
-    {categorySources: ['MANUAL']},
-    undefined,
-  );
+  const removedKey = bankQueryKeys.transactions({categories: ['FOOD_AND_DRINK']}, undefined);
+  const retainedKey = bankQueryKeys.transactions({categorySources: ['MANUAL']}, undefined);
   const original = {id: updated.id, category: 'FOOD_AND_DRINK', categorySource: 'MANUAL'};
+  const other = {id: 'example-other-transaction', category: 'FOOD_AND_DRINK'};
+  // The corrected row sits on the second page "Load more" fetched; every page carries the list's total.
   for (const key of [removedKey, retainedKey])
-    client.setQueryData(key, {transactions: [original], total: 1});
+    client.setQueryData(
+      key,
+      pagesOf({transactions: [other], total: 2}, {transactions: [original], total: 2}),
+    );
   try {
     const mutation = hook<{
       updateBankTransactionCategory: (input: {id: string; category: string}) => Promise<unknown>;
     }>('use-update-bank-transaction-category.ts', 'useUpdateBankTransactionCategory');
     await mutation.updateBankTransactionCategory({id: updated.id, category: 'OTHER'});
-    expect(client.getQueryData(removedKey)).toEqual({transactions: [], total: 0});
-    expect(client.getQueryData(retainedKey)).toEqual({transactions: [updated], total: 1});
+    expect(client.getQueryData(removedKey)).toEqual(
+      pagesOf({transactions: [other], total: 1}, {transactions: [], total: 1}),
+    );
+    expect(client.getQueryData(retainedKey)).toEqual(
+      pagesOf({transactions: [other], total: 2}, {transactions: [updated], total: 2}),
+    );
     expect(client.getQueryState(removedKey)?.isInvalidated).toBe(true);
     expect(client.getQueryState(retainedKey)?.isInvalidated).toBe(true);
   } finally {

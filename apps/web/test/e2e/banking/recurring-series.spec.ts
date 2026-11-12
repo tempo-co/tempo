@@ -683,9 +683,9 @@ test('drills recurring series through to exactly their payments', async ({page})
     await expect(page).toHaveURL(new RegExp(`recurringSeriesKey=${entry.key}`));
     await expect.poll(() => drillKeys[drillKeys.length - 1]).toBe(entry.key);
     const transactionRows = page.getByTestId(/^bank-transaction-row-/);
-    // The Transactions page shows its own first page of ten.
-    await expect(transactionRows).toHaveCount(Math.min(payments.length, 10));
-    for (const source of payments.slice(-10)) {
+    // The Transactions page shows its own first page of fifty: every payment here.
+    await expect(transactionRows).toHaveCount(payments.length);
+    for (const source of payments) {
       await expect(page.getByTestId(`bank-transaction-row-${source.id}`)).toBeVisible();
     }
     // Back returns to the same details.
@@ -746,6 +746,8 @@ for (const wakeAfterMidnight of [false, true]) {
 test('a later page of a series’ payments that fails keeps the loaded ones and tries that page again', async ({
   page,
 }) => {
+  // The failed page is retried by the query client before Load more reports it.
+  test.slow();
   await mockRecurring(page);
   const payments = Array.from({length: 25}, (_, index) =>
     payment(index, {

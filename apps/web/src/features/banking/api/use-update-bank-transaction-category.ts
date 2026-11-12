@@ -11,6 +11,7 @@ import {HttpError, api, wasToasted} from '@/utils/api';
 
 import {BankTransactionFilterParams} from '../types/bank-transaction';
 import {invalidateBankDerivedData} from './invalidate-bank-derived-data';
+import {type CachedTransactionList, listedPages, mapListedPages} from './listed-transactions';
 import {bankQueryKeys} from './query-keys';
 
 type UpdateBankTransactionCategoryInput = {
@@ -35,35 +36,35 @@ export const useUpdateBankTransactionCategory = () => {
     },
     onSuccess: async (updatedTransaction, {id}) => {
       queryClient.setQueryData(bankQueryKeys.transaction(id), updatedTransaction);
-      for (const [queryKey, current] of queryClient.getQueriesData<BankTransactionsResponse>({
+      for (const [queryKey, current] of queryClient.getQueriesData<CachedTransactionList>({
         queryKey: bankQueryKeys.transactionsRoot,
       })) {
-        if (
-          !current ||
-          !current.transactions.some(
-            ({id: transactionId}) => transactionId === updatedTransaction.id,
-          )
-        ) {
-          continue;
-        }
+        const isListed = (page: BankTransactionsResponse) =>
+          page.transactions.some(({id: transactionId}) => transactionId === updatedTransaction.id);
+        if (!current || !listedPages(current).some(isListed)) continue;
 
         const filters = queryKey[2] as BankTransactionFilterParams | undefined;
-        if (matchesBankTransactionFilters(updatedTransaction, filters)) {
-          queryClient.setQueryData<BankTransactionsResponse>(queryKey, {
-            ...current,
-            transactions: current.transactions.map((transaction) =>
-              transaction.id === updatedTransaction.id ? updatedTransaction : transaction,
-            ),
-          });
-        } else {
-          queryClient.setQueryData<BankTransactionsResponse>(queryKey, {
-            ...current,
-            transactions: current.transactions.filter(
-              ({id: transactionId}) => transactionId !== updatedTransaction.id,
-            ),
-            total: Math.max(0, current.total - 1),
-          });
-        }
+        const stays = matchesBankTransactionFilters(updatedTransaction, filters);
+        queryClient.setQueryData<CachedTransactionList>(
+          queryKey,
+          mapListedPages(current, (page) =>
+            stays
+              ? {
+                  ...page,
+                  transactions: page.transactions.map((transaction) =>
+                    transaction.id === updatedTransaction.id ? updatedTransaction : transaction,
+                  ),
+                }
+              : {
+                  ...page,
+                  transactions: page.transactions.filter(
+                    ({id: transactionId}) => transactionId !== updatedTransaction.id,
+                  ),
+                  // Every page carries the list's total.
+                  total: Math.max(0, page.total - 1),
+                },
+          ),
+        );
       }
       // The API also changes the rows the owner selected from the same merchant, so refetch every
       // list and every other cached detail, not just the corrected row.

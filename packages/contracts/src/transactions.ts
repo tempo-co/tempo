@@ -169,6 +169,8 @@ export type BankTransaction = {
 	baseAmountRateDate: string | null;
 	referenceNumber: string | null;
 	referenceNumberScheme: string | null;
+	/** The owner's bank account the row was booked on, as `GET /bank-connections` lists it. */
+	bankAccountId: string;
 	bankName: string;
 	bankCountry: string;
 	bankAccountName: string | null;
@@ -199,6 +201,8 @@ export type BankTransactionFilter = {
 	merchantGroup?: string;
 	/** Only the rows of one income source, by its breakdown part's `key`. */
 	incomeSource?: string;
+	/** Only the rows review counts count as `needsAttention`: to review, failed to categorize or without a direction. */
+	needsAttention?: true;
 };
 
 /** `GET /bank-transactions/totals` query: the list's filters without sort or pagination. */

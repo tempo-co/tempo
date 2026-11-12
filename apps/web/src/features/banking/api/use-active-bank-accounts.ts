@@ -14,31 +14,52 @@ export type ActiveBankAccount = {
 };
 
 /**
- * Active accounts across all bank connections, plus whether a bank and currency pair is shared
- * by several accounts and therefore needs the account name to be told apart.
+ * Active accounts across all bank connections, plus whether an account shares its bank and currency with
+ * another active account and therefore needs its own name to be told apart.
  */
 export const useActiveBankAccounts = () => {
   const {bankConnections, ...query} = useGetAllBankConnections();
   const {isPending, isError} = savedDataStatus({...query, data: bankConnections});
 
-  const accounts = useMemo<ActiveBankAccount[]>(
+  // Inactive accounts keep their transactions, so rows look their account up among all of them.
+  const accountsById = useMemo(
     () =>
-      bankConnections?.flatMap((connection) =>
-        connection.bankAccounts
-          .filter((account) => account.isActive)
-          .map((account) => ({
-            id: account.id,
-            label: resolveBankAccountLabel(account),
-            bankName: connection.aspspName,
-            currency: account.currency,
-          })),
-      ) ?? [],
+      new Map(
+        bankConnections?.flatMap((connection) =>
+          connection.bankAccounts.map((account) => [
+            account.id,
+            {
+              id: account.id,
+              label: resolveBankAccountLabel(account),
+              bankName: connection.aspspName,
+              currency: account.currency,
+              isActive: account.isActive,
+            },
+          ]),
+        ),
+      ),
     [bankConnections],
   );
+  const accounts = useMemo<ActiveBankAccount[]>(
+    () =>
+      [...accountsById.values()]
+        .filter((account) => account.isActive)
+        .map(({id, label, bankName, currency}) => ({id, label, bankName, currency})),
+    [accountsById],
+  );
   const ambiguousKeys = useMemo(() => findAmbiguousBankAccountKeys(accounts), [accounts]);
+  const activeKeys = useMemo(() => new Set(accounts.map(bankAccountLabelKey)), [accounts]);
 
-  const needsAccountName = (account: {bankName: string; currency: string}) =>
-    ambiguousKeys.has(bankAccountLabelKey(account));
+  /** An inactive account needs its name when an active one shares its bank and currency; an unknown one never does. */
+  const needsAccountName = (accountId: string) => {
+    const account = accountsById.get(accountId);
+    if (!account) return false;
+    const key = bankAccountLabelKey(account);
+    return account.isActive ? ambiguousKeys.has(key) : activeKeys.has(key);
+  };
 
-  return {accounts, needsAccountName, isPending, isError};
+  // The Filters panel offers accounts unless the owner is known to have a single one.
+  const showsAccountFilter = isPending || isError || accounts.length > 1;
+
+  return {accounts, needsAccountName, showsAccountFilter, isPending, isError};
 };

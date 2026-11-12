@@ -168,6 +168,9 @@ export function applyBankTransactionFilters(
 	if (filter?.incomeSource) {
 		query.andWhere(`${SQL_INCOME_SOURCE} = :incomeSource`, {incomeSource: filter.incomeSource});
 	}
+	if (filter?.needsAttention) {
+		query.andWhere(SQL_NEEDS_ATTENTION);
+	}
 
 	const search = filter?.search?.trim();
 	if (search) {

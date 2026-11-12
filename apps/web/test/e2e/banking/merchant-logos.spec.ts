@@ -378,8 +378,8 @@ for (const width of [1440, 390]) {
         expect(state.logoRequests.length).toBe(maskRequests);
         const categoryIcon =
           width < 1024
-            ? tableRow(withLogo).getByTestId('bank-transaction-mobile-meta').locator('svg')
-            : tableRow(withLogo).getByRole('cell').nth(2).locator('svg');
+            ? tableRow(withLogo).getByTestId('ledger-row-meta').locator('svg')
+            : tableRow(withLogo).getByTestId('ledger-row-category').locator('svg');
         await expect(categoryIcon).toHaveCSS(
           'color',
           `rgb(${PALETTES[theme].category.join(', ')})`,
@@ -389,11 +389,16 @@ for (const width of [1440, 390]) {
           tableRow(withLogo).getByText('Example Market', {exact: true}),
         );
         await expectTransactionRowSize(tableRow(withLogo), tableTile(withLogo));
-        // A row whose category has a second line keeps the same height.
+        // An own transfer, labelled with its activity instead of a category, keeps the same height.
         await expectTransactionRowSize(tableRow(ownTransfer), tableTile(ownTransfer));
+        // Every row of the list is the same shared row.
+        const rowHeights = await page
+          .getByTestId(/^bank-transaction-row-/)
+          .evaluateAll((rows) => rows.map((row) => Math.round(row.getBoundingClientRect().height)));
+        expect([...new Set(rowHeights)]).toEqual([60]);
         if (width < 1024) {
           // Phones keep the small category icon in the meta line under the title.
-          const meta = tableRow(withLogo).getByTestId('bank-transaction-mobile-meta');
+          const meta = tableRow(withLogo).getByTestId('ledger-row-meta');
           await expect(meta).toContainText('Food and drink');
           await expect(meta.locator('svg')).toHaveCount(1);
           await expect(meta.locator('img')).toHaveCount(0);

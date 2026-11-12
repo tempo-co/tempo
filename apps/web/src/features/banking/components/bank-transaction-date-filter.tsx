@@ -19,7 +19,7 @@ import {FacetedFilter} from './bank-transaction-faceted-filter';
 
 type BankTransactionDateFilterProps = {
   filters: BankTransactionFilterParams;
-  variant?: 'popover' | 'mobile';
+  variant?: 'popover' | 'pane';
   className?: string;
 };
 
@@ -35,7 +35,7 @@ export function BankTransactionDateFilter({
   const handleSelect = async (range: DateRange | undefined) => {
     const bookingDate = range?.from ? {from: range.from, to: range.to} : undefined;
     await navigate({
-      search: (prev) => ({...prev, bookingDate, pageIndex: 0}),
+      search: (prev) => ({...prev, bookingDate}),
     });
   };
 
@@ -49,7 +49,7 @@ export function BankTransactionDateFilter({
   };
 
   const handleReset = async () => {
-    await navigate({search: (prev) => ({...prev, bookingDate: undefined, pageIndex: 0})});
+    await navigate({search: (prev) => ({...prev, bookingDate: undefined})});
   };
 
   const bookingDateFrom = filters.bookingDate?.from;
@@ -78,7 +78,7 @@ export function BankTransactionDateFilter({
       role='group'
       aria-label='Quick ranges'
       className={
-        variant === 'mobile'
+        variant === 'pane'
           ? 'grid grid-cols-2 gap-1 border-b p-2 min-[360px]:grid-cols-3'
           : 'flex w-36 flex-col gap-0.5 border-r p-2'
       }
@@ -98,7 +98,7 @@ export function BankTransactionDateFilter({
             aria-pressed={isActive}
             className={cn(
               'font-normal',
-              variant === 'mobile' ? 'h-10 px-2 text-xs' : 'h-8 justify-start px-2',
+              variant === 'pane' ? 'h-10 px-2 text-xs' : 'h-8 justify-start px-2',
             )}
             onClick={() => handlePresetSelect(range)}
           >
@@ -111,9 +111,9 @@ export function BankTransactionDateFilter({
 
   const calendar = (
     <Calendar
-      className={variant === 'mobile' ? 'w-full' : undefined}
+      className={variant === 'pane' ? 'w-full' : undefined}
       classNames={
-        variant === 'mobile'
+        variant === 'pane'
           ? {
               month: 'w-full space-y-4',
               head_row: 'flex w-full',
@@ -161,23 +161,13 @@ export function BankTransactionDateFilter({
       contentClassName='w-auto p-0'
       className={className}
       onOpenChange={handleOpenChange}
-      mobileContent={
+      paneContent={
         <div
           className='overflow-hidden rounded-md border bg-background'
           data-testid='bank-transaction-mobile-calendar'
         >
           {presets}
           {calendar}
-          {filters.bookingDate !== undefined && (
-            <>
-              <Separator className='w-full' />
-              <div className='p-1'>
-                <Button className='h-10 w-full rounded-sm' variant='ghost' onClick={handleReset}>
-                  Reset
-                </Button>
-              </div>
-            </>
-          )}
         </div>
       }
     >

@@ -13,6 +13,7 @@ import {
   transformBankConnections,
 } from '../../utils/api-mocks';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
+import {openTransactionFilter} from '../../utils/transaction-filters';
 
 const CACHE_KEY = 'tempo-offline-cache';
 type SavedCache = {
@@ -193,41 +194,48 @@ test.describe('saved app', () => {
         return withSecondAccount(connections);
       });
       await page.goto('/bank-transactions');
-      const filter = page.getByRole('button', {name: /^Bank accounts/});
-      await filter.click();
-      await page.getByRole('option', {name: /Daily spending/}).click();
+      const filters = await openTransactionFilter(page, 'Bank accounts');
+      const tab = filters.getByRole('tab', {name: /^Bank accounts/});
+      await filters.getByRole('option', {name: /Daily spending/}).click();
       await expect(page).toHaveURL(/bankAccountIds/);
+      await expect(tab).toContainText('Daily spending');
       await page.keyboard.press('Escape');
-      await expect(filter).toContainText('Daily spending');
+      await expect(filters).toBeHidden();
       const loadedRequests = connectionRequests;
 
       await loseConnection(page);
       await expect.poll(() => failedRequests).toContain('/bank-connections');
       await expect(savedStatus(page)).toBeVisible();
-      await expect(filter).toBeEnabled();
-      await expect(filter).toContainText('Daily spending');
-      await filter.click();
-      await expect(page.getByRole('option', {name: /Secondary spending/})).toBeVisible();
+      await openTransactionFilter(page, 'Bank accounts');
+      await expect(tab).toContainText('Daily spending');
+      await expect(filters.getByRole('option', {name: /Secondary spending/})).toBeVisible();
       await page.keyboard.press('Escape');
+      await expect(filters).toBeHidden();
 
       await restoreConnection(page);
       await expect(savedStatus(page)).not.toBeVisible({timeout: 15000});
       await expect.poll(() => connectionRequests).toBeGreaterThan(loadedRequests);
-      await expect(filter).toBeEnabled();
-      await expect(filter).toContainText('Daily spending');
+      await openTransactionFilter(page, 'Bank accounts');
+      await expect(tab).toContainText('Daily spending');
+      await expect(filters.getByRole('option', {name: /Secondary spending/})).toBeVisible();
     });
 
-    test('keeps the bank account filter unavailable when accounts never loaded', async ({page}) => {
+    test('shows no bank account options when accounts never loaded', async ({page}) => {
       await routeBankConnectionsApi(page, (route) => route.abort('failed'));
       // Keep the reconnect probe failing too, so the app does not come back online mid-test.
       await page.route('**/health', (route) => route.abort('failed'));
       await page.goto('/bank-transactions');
       await expect(page.getByText('Coffee shop')).toBeVisible();
       await expect(savedStatus(page)).toBeVisible();
-      await expect(page.getByRole('button', {name: /^Bank accounts/})).toBeDisabled();
+      const filters = await openTransactionFilter(page, 'Bank accounts');
+      const pane = filters.getByRole('tabpanel', {name: 'Bank accounts'});
+      await expect(pane).toHaveText(
+        /^(Loading bank accounts\.\.\.|Bank accounts are unavailable\.)$/,
+      );
+      await expect(pane.getByRole('option')).toHaveCount(0);
     });
 
-    test('disables the loaded bank account filter when Tempo answers with an error', async ({
+    test('says the loaded bank accounts are unavailable when Tempo answers with an error', async ({
       page,
     }) => {
       let failing = false;
@@ -240,12 +248,13 @@ test.describe('saved app', () => {
         });
       });
       await page.goto('/bank-transactions');
-      const filter = page.getByRole('button', {name: /^Bank accounts/});
-      await expect(filter).toBeEnabled();
+      const filters = await openTransactionFilter(page, 'Bank accounts');
+      const pane = filters.getByRole('tabpanel', {name: 'Bank accounts'});
+      await expect(pane.getByRole('option', {name: /Secondary spending/})).toBeVisible();
 
       failing = true;
       await refocus(page);
-      await expect(filter).toBeDisabled();
+      await expect(pane).toHaveText('Bank accounts are unavailable.');
       await expect(savedStatus(page)).not.toBeVisible();
     });
   });

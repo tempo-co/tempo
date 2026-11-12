@@ -1,5 +1,3 @@
-import type {PaginationParams} from '@/types/pagination';
-
 import type {
   BankTransactionFilterParams,
   BankTransactionSortParams,
@@ -11,10 +9,8 @@ export const bankQueryKeys = {
   connectedBankLogos: ['connected-bank-logos'] as const,
   transaction: (id: string) => ['bank-transaction', id] as const,
   transactionRoot: ['bank-transaction'] as const,
-  transactions: (
-    pagination: PaginationParams,
-    filters: BankTransactionFilterParams,
-    sort: BankTransactionSortParams,
-  ) => ['bank-transactions', pagination, filters, sort] as const,
+  /** The Transactions page's list: every page loaded so far. Filters sit at index 2 for cache updates. */
+  transactions: (filters: BankTransactionFilterParams, sort: BankTransactionSortParams) =>
+    ['bank-transactions', 'ledger', filters, sort] as const,
   transactionsRoot: ['bank-transactions'] as const,
 };

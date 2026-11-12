@@ -6,17 +6,15 @@ import {
   BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES,
   BANK_TRANSACTION_FINANCIAL_EVENT_FILTER_VALUES,
   BANK_TRANSACTION_SEARCH_MAX_LENGTH,
-  BANK_TRANSACTION_SORT_FIELDS,
   type BankTransaction,
   type BankTransactionCategory,
   type BankTransactionFinancialEventFilterValue,
   type BankTransactionFinancialEventType,
+  type BankTransactionSortField,
   MERCHANT_GROUP_ID_PATTERN,
   SORT_ORDERS,
 } from '@tempo/contracts';
 import {z} from 'zod';
-
-import {paginationSearchParamsSchema} from '@/types/pagination';
 
 /** The activity part of the cash-flow filter, in picker order. */
 export const BANK_TRANSACTION_ACTIVITY_FILTER_VALUES =
@@ -68,7 +66,7 @@ const toDate = (value: unknown) => (typeof value === 'string' ? new Date(value) 
 /** A recurring series' key: 32 lowercase hex characters. */
 export const recurringSeriesKeySchema = z.string().regex(/^[0-9a-f]{32}$/);
 
-export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.extend({
+export const bankTransactionSearchParamsSchema = z.object({
   bookingDate: z
     .object({
       from: z.preprocess(toDate, z.date()).optional(),
@@ -102,13 +100,17 @@ export const bankTransactionSearchParamsSchema = paginationSearchParamsSchema.ex
   merchantGroup: z.string().regex(new RegExp(MERCHANT_GROUP_ID_PATTERN)).optional(),
   /** Only one income source's rows, by its breakdown key, from Home. */
   incomeSource: z.string().max(BANK_TRANSACTION_SEARCH_MAX_LENGTH).optional(),
+  /** Only the rows the nav badge counts: to review, failed to categorize or without a direction. */
+  needsAttention: z.literal(true).optional(),
   transactionId: z.string().optional(),
+  /** The orders the page offers; an older link's category or source order falls back to newest first. */
   sort: z
     .object({
-      by: z.enum(BANK_TRANSACTION_SORT_FIELDS),
+      by: z.enum(['bookingDate', 'amount'] as const satisfies readonly BankTransactionSortField[]),
       order: z.enum(SORT_ORDERS),
     })
-    .optional(),
+    .optional()
+    .catch(undefined),
 });
 
 export type BankTransactionSearchParams = z.infer<typeof bankTransactionSearchParamsSchema>;
@@ -138,6 +140,7 @@ export const BANK_TRANSACTION_FILTER_KEYS = [
   'recurringSeriesKey',
   'merchantGroup',
   'incomeSource',
+  'needsAttention',
   'search',
 ] as const satisfies readonly (keyof BankTransactionSearchParams)[];
 

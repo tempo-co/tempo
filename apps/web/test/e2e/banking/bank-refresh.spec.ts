@@ -802,11 +802,7 @@ test.describe('bank-derived caches', () => {
   test('bank-derived invalidation updates every bank-derived cache and reuses fresh supported banks', async () => {
     const {client, load} = createHookHarness({});
     const keys = [
-      bankQueryKeys.transactions(
-        {pageIndex: 0, pageSize: 10},
-        {cashFlows: ['SPENDING']},
-        undefined,
-      ),
+      bankQueryKeys.transactions({cashFlows: ['SPENDING']}, undefined),
       bankQueryKeys.transaction('example-transaction'),
       dashboardQueryKeys.breakdown('year', 'category', '2007-01-01', '2026-10-01', '2026-10-01'),
       dashboardQueryKeys.balanceTrend('month', '2026-01-01', '2026-10-01', '2026-10-01'),

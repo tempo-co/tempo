@@ -3,6 +3,7 @@ import type {Page} from '@playwright/test';
 import {OWN_TRANSFER_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {expect, test} from '../../fixtures';
 import {boxOf} from '../../utils/layout';
+import {openTransactionFilter} from '../../utils/transaction-filters';
 
 // Synthetic transactions seeded by the API's own-transfer seed (scripts/seed-data/seed-own-transfer-data.ts).
 const IBAN_PAIR_OUTGOING_ID = '00000000-0000-4000-8000-000000000101';
@@ -45,18 +46,15 @@ test.describe('own transfers', () => {
     await page.goto('/bank-transactions');
 
     const ibanRow = page.getByTestId(`bank-transaction-row-${IBAN_PAIR_OUTGOING_ID}`);
-    await expect(ibanRow.getByRole('cell').nth(2)).toContainText('Own transfer');
-    await expect(ibanRow.getByRole('cell').nth(2)).toContainText('Internal movement');
-    // The activity icon uses the same boxed tile as category icons, so labels line up; 20px keeps a
-    // two-line category within the row height every transaction list shares.
-    const activityTile = ibanRow
-      .getByRole('cell')
-      .nth(2)
-      .locator('svg.lucide-refresh-cw')
-      .locator('..');
+    const ibanCategory = ibanRow.getByTestId('ledger-row-category');
+    await expect(ibanCategory).toHaveText('Own transfer');
+    // The activity icon uses the same boxed tile as category icons, so labels line up.
+    const activityTile = ibanCategory.locator('svg.lucide-refresh-cw').locator('..');
     expect(await boxOf(activityTile)).toMatchObject({width: 20, height: 20});
     const coincidenceRow = page.getByTestId(`bank-transaction-row-${COINCIDENCE_OUTGOING_ID}`);
-    await expect(coincidenceRow.getByRole('cell').nth(2)).not.toContainText('Own transfer');
+    await expect(coincidenceRow.getByTestId('ledger-row-category')).not.toContainText(
+      'Own transfer',
+    );
 
     await page.goto(`/bank-transactions?transactionId=${IBAN_PAIR_OUTGOING_ID}`);
     const inspector = page.getByTestId('bank-transaction-inspector');
@@ -82,7 +80,7 @@ test.describe('own transfers', () => {
     await expect(movement).toContainText('Other side not in your connected accounts');
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
 
-    await page.getByRole('button', {name: 'Cash flow', exact: true}).click();
+    await openTransactionFilter(page, 'Cash flow');
     await page.getByRole('option', {name: 'Own transfer', exact: true}).click();
     await expect(page.getByTestId(/^bank-transaction-row-/)).toHaveCount(5);
     await expect(page).toHaveURL(/OWN_TRANSFER/);
@@ -148,7 +146,7 @@ test.describe('own transfers', () => {
     await expect(
       page
         .getByTestId(`bank-transaction-row-${IBAN_PAIR_OUTGOING_ID}`)
-        .getByTestId('bank-transaction-mobile-meta'),
+        .getByTestId('ledger-row-meta'),
     ).toContainText('Own transfer');
   });
 });

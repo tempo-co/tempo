@@ -214,6 +214,7 @@ describe('BankTransactionSummary', () => {
 			{'filter[bankAccountIds][]': otherBankAccount.id},
 			{'filter[cashFlows][]': 'INTERNAL'},
 			{'filter[baseAmount]': 'MISSING'},
+			{'filter[needsAttention]': 'true'},
 		]) {
 			const {body: totals} = await ownerAgent.get('/bank-transactions/totals').query(filter).expect(200);
 			const rows: Array<{
@@ -443,11 +444,11 @@ describe('BankTransactionSummary', () => {
 				needsAttention: 3,
 			});
 
-			// Each count opens a list with exactly that many rows.
-			const listTotal = async (filter: Record<string, string | string[]>) =>
-				(await ownerAgent.get('/bank-transactions').query(filter).expect(200)).body.total;
-			const {needsAttention: _distinct, ...groups} = body as BankTransactionReviewCounts;
+			// Each count opens a list with exactly that many rows, the overlapping row once in what needs the owner.
+			const listTotal = async (filter: Record<string, string | string[]>, agent = ownerAgent) =>
+				(await agent.get('/bank-transactions').query(filter).expect(200)).body.total;
 			expect({
+				needsAttention: await listTotal({'filter[needsAttention]': 'true'}),
 				needsReview: await listTotal({'filter[categories][]': 'NEEDS_REVIEW'}),
 				categorizationFailed: await listTotal({'filter[categoryStatuses][]': 'FAILED'}),
 				categorizing: await listTotal({'filter[categoryStatuses][]': 'CATEGORIZING'}),
@@ -456,7 +457,17 @@ describe('BankTransactionSummary', () => {
 					'filter[baseAmount]': 'MISSING',
 					'filter[cashFlows][]': ['SPENDING', 'INCOME', 'UNKNOWN'],
 				}),
-			}).toEqual(groups);
+			} satisfies BankTransactionReviewCounts).toEqual(body);
+			const {body: totals} = await ownerAgent
+				.get('/bank-transactions/totals')
+				.query({'filter[needsAttention]': 'true'})
+				.expect(200);
+			expect(totals.count).toBe(body.needsAttention);
+			// Another owner's list holds only their own row.
+			const {body: otherCounts} = await otherAgent.get('/bank-transactions/review-counts').expect(200);
+			expect(otherCounts.needsAttention).toBe(1);
+			expect(await listTotal({'filter[needsAttention]': 'true'}, otherAgent)).toBe(1);
+			await ownerAgent.get('/bank-transactions').query({'filter[needsAttention]': 'false'}).expect(400);
 		} finally {
 			await fixtures.transactions.delete([...extra.map(({id}) => id), otherExtra.id]);
 		}
