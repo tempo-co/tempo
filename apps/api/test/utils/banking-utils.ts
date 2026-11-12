@@ -4,6 +4,7 @@ import {Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
+import {EnableBankingTransaction, EnableBankingTransactionsResult} from '@modules/banking/enable-banking.types';
 
 import {BankingFixtures} from '../../scripts/seed-data/banking-fixtures';
 import {createVerifiedAccount} from './auth-utils';
@@ -21,4 +22,12 @@ export async function createBankingOwner(
 	const connection = await fixtures.createConnection(owner);
 	const bankAccount = await fixtures.createBankAccount(connection);
 	return {owner, agent: fresh.agent, connection, bankAccount};
+}
+
+/** What a mocked transaction fetch resolves to: these rows, plus how many unreadable rows the provider sent. */
+export function fetchedTransactions(
+	transactions: EnableBankingTransaction[],
+	unparseableCount = 0,
+): EnableBankingTransactionsResult {
+	return {transactions, unparseableCount};
 }

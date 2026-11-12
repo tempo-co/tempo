@@ -1,5 +1,5 @@
 import {jest} from '@jest/globals';
-import {INestApplication} from '@nestjs/common';
+import {INestApplication, Logger} from '@nestjs/common';
 import Redis from 'ioredis';
 import {generateKeyPairSync, randomUUID} from 'node:crypto';
 import {Server} from 'node:net';
@@ -34,6 +34,7 @@ import {
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
+import {fetchedTransactions} from '../../utils/banking-utils';
 
 // The concrete adapter is exercised below against a mocked transport, never a live provider.
 process.env.ENABLE_BANKING_API_URL = 'https://provider.example.test';
@@ -361,7 +362,7 @@ describe('BankConnectionController', () => {
 			(_accountId, _options, signal) =>
 				new Promise((resolve, reject) => {
 					providerSignal = signal;
-					releaseProvider = () => resolve(makeTransactions('cancelled-refresh'));
+					releaseProvider = () => resolve(fetchedTransactions(makeTransactions('cancelled-refresh')));
 					signal?.addEventListener(
 						'abort',
 						() => reject(new EnableBankingClientError('provider_unreachable')),
@@ -397,6 +398,15 @@ describe('BankConnectionController', () => {
 			expect(await bankSyncRunRepository.findOneByOrFail({bankConnection: {id: connection.id}})).toMatchObject({
 				status: 'FAILED',
 				finishedAt: expect.any(Date),
+				failures: [
+					{
+						kind: 'cancelled',
+						bankAccountId: null,
+						code: 'request_aborted',
+						httpStatus: null,
+						retryAfter: false,
+					},
+				],
 			});
 		} finally {
 			releaseProvider?.();
@@ -451,7 +461,7 @@ describe('BankConnectionController', () => {
 				nextSyncAt: new Date(Date.now() - 1),
 				lastSyncedAt: new Date(Date.now() - 5 * 60 * 1000 - 1000),
 			});
-			getAccountTransactions.mockResolvedValue([]);
+			getAccountTransactions.mockResolvedValue(fetchedTransactions([]));
 			const retry = await verifiedAgent
 				.post(`/bank-connections/${connection.id}/refresh`)
 				.set('Origin', 'http://localhost:5173')
@@ -478,7 +488,7 @@ describe('BankConnectionController', () => {
 			getAccountTransactions.mockImplementationOnce(
 				() =>
 					new Promise((resolve) => {
-						releaseProvider = () => resolve([]);
+						releaseProvider = () => resolve(fetchedTransactions([]));
 						enterProvider();
 					}),
 			);
@@ -553,7 +563,8 @@ describe('BankConnectionController', () => {
 			if (status === 'FAILED')
 				getSessionAccounts.mockRejectedValueOnce(new EnableBankingClientError('provider_unreachable', 502));
 			getAccountBalances.mockRejectedValueOnce(new EnableBankingClientError('provider_unreachable', 502));
-			if (status === 'PARTIAL') getAccountTransactions.mockResolvedValueOnce(makeTransactions('manual-partial'));
+			if (status === 'PARTIAL')
+				getAccountTransactions.mockResolvedValueOnce(fetchedTransactions(makeTransactions('manual-partial')));
 			else
 				getAccountTransactions.mockRejectedValueOnce(new EnableBankingClientError('provider_unreachable', 502));
 			try {
@@ -1401,14 +1412,16 @@ describe('BankConnectionController', () => {
 			status: 'PDNG',
 		};
 		getAccountBalances.mockResolvedValueOnce(makeBalances());
-		getAccountTransactions.mockResolvedValueOnce([pending, pending]);
+		getAccountTransactions.mockResolvedValueOnce(fetchedTransactions([pending, pending]));
 		expect(await app.get(BankingSyncService).synchronizeAutomatically(connection.id)).toMatchObject({
 			status: 'SUCCEEDED',
 			transactionsAdded: 2,
 		});
 		const stored = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
 		getAccountBalances.mockResolvedValueOnce(makeBalances());
-		getAccountTransactions.mockResolvedValueOnce([{...pending, status: 'BOOK', valueDate: '2026-08-27'}]);
+		getAccountTransactions.mockResolvedValueOnce(
+			fetchedTransactions([{...pending, status: 'BOOK', valueDate: '2026-08-27'}]),
+		);
 		expect(await synchronizeDue(connection.id)).toMatchObject({
 			status: 'SUCCEEDED',
 			transactionsAdded: 1,
@@ -1426,17 +1439,19 @@ describe('BankConnectionController', () => {
 	it('normalizes incoming currency and direction codes before persisting a sync', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('canonical-codes-session');
 		getAccountBalances.mockResolvedValueOnce(makeBalances().map((balance) => ({...balance, currency: ' eUr '})));
-		getAccountTransactions.mockResolvedValueOnce([
-			{
-				...makeTransactions('canonical-codes')[0],
-				amount: '12.50',
-				currency: ' eUr ',
-				creditDebitIndicator: ' dbit ',
-				balanceAfterCurrency: ' eUr ',
-				instructedCurrency: ' uSd ',
-				exchangeRateUnitCurrency: ' uSd ',
-			},
-		]);
+		getAccountTransactions.mockResolvedValueOnce(
+			fetchedTransactions([
+				{
+					...makeTransactions('canonical-codes')[0],
+					amount: '12.50',
+					currency: ' eUr ',
+					creditDebitIndicator: ' dbit ',
+					balanceAfterCurrency: ' eUr ',
+					instructedCurrency: ' uSd ',
+					exchangeRateUnitCurrency: ' uSd ',
+				},
+			]),
+		);
 
 		try {
 			expect(await app.get(BankingSyncService).synchronizeAutomatically(connection.id)).toMatchObject({
@@ -1488,7 +1503,7 @@ describe('BankConnectionController', () => {
 		};
 		transactions[1] = {...transactions[1], ...duplicateEntryReferenceDetails};
 		getAccountBalances.mockResolvedValueOnce(balances);
-		getAccountTransactions.mockResolvedValueOnce(transactions);
+		getAccountTransactions.mockResolvedValueOnce(fetchedTransactions(transactions));
 
 		const firstResponse = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
 		if (!firstResponse) throw new Error('Expected automatic synchronization to run.');
@@ -1608,11 +1623,9 @@ describe('BankConnectionController', () => {
 			balanceAfterAmount: '111.95',
 			referenceNumber: 'reference-sync-0-updated',
 		};
-		getAccountTransactions.mockResolvedValueOnce([
-			updatedTransactions[1],
-			updatedTransactions[0],
-			...updatedTransactions.slice(2),
-		]);
+		getAccountTransactions.mockResolvedValueOnce(
+			fetchedTransactions([updatedTransactions[1], updatedTransactions[0], ...updatedTransactions.slice(2)]),
+		);
 		await bankConnectionRepository.update(
 			{id: connection.id},
 			{nextSyncAt: new Date(Date.now() - 1), syncStatus: 'QUEUED'},
@@ -1721,8 +1734,8 @@ describe('BankConnectionController', () => {
 		try {
 			getAccountBalances.mockResolvedValue([]);
 			getAccountTransactions
-				.mockResolvedValueOnce([sourceLeg, ordinaryPayment])
-				.mockResolvedValueOnce([targetLeg]);
+				.mockResolvedValueOnce(fetchedTransactions([sourceLeg, ordinaryPayment]))
+				.mockResolvedValueOnce(fetchedTransactions([targetLeg]));
 
 			const firstResponse = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
 			expect(firstResponse).toEqual(
@@ -1812,8 +1825,8 @@ describe('BankConnectionController', () => {
 
 			getAccountBalances.mockResolvedValue([]);
 			getAccountTransactions
-				.mockResolvedValueOnce([sourceLeg, ordinaryPayment])
-				.mockResolvedValueOnce([targetLeg]);
+				.mockResolvedValueOnce(fetchedTransactions([sourceLeg, ordinaryPayment]))
+				.mockResolvedValueOnce(fetchedTransactions([targetLeg]));
 			const secondResponse = await synchronizeDue(connection.id);
 			expect(secondResponse).toEqual(
 				expect.objectContaining({
@@ -1865,14 +1878,14 @@ describe('BankConnectionController', () => {
 
 		try {
 			getAccountBalances.mockResolvedValue([]);
-			getAccountTransactions.mockResolvedValueOnce([storedPayment]);
+			getAccountTransactions.mockResolvedValueOnce(fetchedTransactions([storedPayment]));
 			await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
 			const {id, createdAt} = await bankTransactionRepository.findOneByOrFail({
 				providerTransactionId: storedPayment.providerTransactionId,
 			});
 
 			// Providers list the newest booking first, so the new row precedes the stored one.
-			getAccountTransactions.mockResolvedValueOnce([newPayment, storedPayment]);
+			getAccountTransactions.mockResolvedValueOnce(fetchedTransactions([newPayment, storedPayment]));
 			await expect(synchronizeDue(connection.id)).resolves.toMatchObject({
 				status: 'SUCCEEDED',
 				transactionsAdded: 1,
@@ -1938,7 +1951,7 @@ describe('BankConnectionController', () => {
 		};
 
 		getAccountBalances.mockResolvedValue([]);
-		getAccountTransactions.mockResolvedValueOnce([abnLeg, unrelatedPayment]);
+		getAccountTransactions.mockResolvedValueOnce(fetchedTransactions([abnLeg, unrelatedPayment]));
 		await expect(app.get(BankingSyncService).synchronizeAutomatically(abnConnection.id)).resolves.toMatchObject({
 			status: 'SUCCEEDED',
 			transactionsAdded: 2,
@@ -1968,7 +1981,7 @@ describe('BankConnectionController', () => {
 				.patch(`/bank-transactions/${storedAbnLeg.id}/own-transfer`)
 				.send({override: 'UNMARKED'})
 				.expect(200);
-			getAccountTransactions.mockResolvedValueOnce([abnLeg, unrelatedPayment]);
+			getAccountTransactions.mockResolvedValueOnce(fetchedTransactions([abnLeg, unrelatedPayment]));
 			await expect(synchronizeDue(abnConnection.id)).resolves.toMatchObject({
 				status: 'SUCCEEDED',
 				transactionsAdded: 0,
@@ -2079,7 +2092,7 @@ describe('BankConnectionController', () => {
 		await bankAccountRepository.update({id: bankAccounts[2].id}, {isActive: false});
 		sessionAccountIdsBySession.set('account-reconciliation-session', ['account-keep', 'account-reappear']);
 		getAccountBalances.mockResolvedValue([]);
-		getAccountTransactions.mockResolvedValue([]);
+		getAccountTransactions.mockResolvedValue(fetchedTransactions([]));
 
 		try {
 			const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
@@ -2110,7 +2123,7 @@ describe('BankConnectionController', () => {
 		await bankAccountRepository.update({id: bankAccounts[1].id}, {isActive: false});
 		getSessionAccounts.mockRejectedValueOnce(new EnableBankingClientError('provider_unreachable'));
 		getAccountBalances.mockResolvedValue([]);
-		getAccountTransactions.mockResolvedValue([]);
+		getAccountTransactions.mockResolvedValue(fetchedTransactions([]));
 
 		try {
 			const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
@@ -2133,7 +2146,7 @@ describe('BankConnectionController', () => {
 	it('returns provider rate-limit retry metadata for a partial sync', async () => {
 		const {connection} = await createAuthorizedConnection('rate-limit-session');
 		getAccountBalances.mockRejectedValueOnce(new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 429, 17));
-		getAccountTransactions.mockResolvedValue([]);
+		getAccountTransactions.mockResolvedValue(fetchedTransactions([]));
 
 		try {
 			const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
@@ -2161,40 +2174,127 @@ describe('BankConnectionController', () => {
 		});
 		getAccountTransactions.mockImplementation(async (accountId) => {
 			if (accountId === 'partial-failed-account') {
-				throw new EnableBankingClientError('provider_unreachable');
+				throw new EnableBankingClientError('ASPSP_ERROR', 503, 60);
 			}
-			return makeTransactions('partial');
+			// Two more rows arrived without a usable amount or currency.
+			return fetchedTransactions(makeTransactions('partial'), 2);
 		});
+		const warn = jest.spyOn(Logger.prototype, 'warn');
 
-		const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
-		expect(response).toMatchObject({
-			status: 'PARTIAL',
-			errorMessage: 'Some bank data could not be synchronized.',
-		});
-		const successfulBankAccount = await bankAccountRepository.findOne({
-			where: {bankConnection: {id: connection.id}, providerAccountId: 'partial-success-account'},
-		});
-		if (!successfulBankAccount) throw new Error('Expected successful bank account.');
-		expect(await bankTransactionRepository.count({where: {bankAccountId: successfulBankAccount.id}})).toBe(5);
-		expect(JSON.stringify(response)).not.toContain('provider_unreachable');
-		// A partial run counts as a sync but not as a successful one.
-		const connectionsResponse = await verifiedAgent.get('/bank-connections').expect(200);
-		expect(connectionsResponse.body.find(({id}: {id: string}) => id === connection.id)).toMatchObject({
-			syncStatus: 'PARTIAL',
-			lastSyncedAt: response?.finishedAt,
-			lastSuccessfulSyncAt: null,
-		});
+		try {
+			const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
+			expect(response).toMatchObject({
+				status: 'PARTIAL',
+				errorMessage: 'Some bank data could not be synchronized.',
+			});
+			const successfulBankAccount = await bankAccountRepository.findOne({
+				where: {bankConnection: {id: connection.id}, providerAccountId: 'partial-success-account'},
+			});
+			const failedBankAccount = await bankAccountRepository.findOne({
+				where: {bankConnection: {id: connection.id}, providerAccountId: 'partial-failed-account'},
+			});
+			if (!successfulBankAccount || !failedBankAccount) throw new Error('Expected both bank accounts.');
+			expect(await bankTransactionRepository.count({where: {bankAccountId: successfulBankAccount.id}})).toBe(5);
+			expect(JSON.stringify(response)).not.toContain('provider_unreachable');
+			// The run keeps why it was partial, by Tempo account id, without provider ids or messages.
+			const failures = [
+				{
+					kind: 'transactions',
+					bankAccountId: successfulBankAccount.id,
+					code: 'unparseable_transactions',
+					httpStatus: null,
+					retryAfter: false,
+					droppedTransactions: 2,
+				},
+				{
+					kind: 'balances',
+					bankAccountId: failedBankAccount.id,
+					code: 'provider_unreachable',
+					httpStatus: null,
+					retryAfter: false,
+				},
+				{
+					kind: 'transactions',
+					bankAccountId: failedBankAccount.id,
+					code: 'ASPSP_ERROR',
+					httpStatus: 503,
+					retryAfter: true,
+				},
+			];
+			const storedFailures = (await bankSyncRunRepository.findOneByOrFail({id: response!.id})).failures;
+			expect(storedFailures).toHaveLength(failures.length);
+			expect(storedFailures).toEqual(expect.arrayContaining(failures));
+			// The log carries the same summary for the run.
+			const summary = warn.mock.calls
+				.map(([message]) => String(message))
+				.find((message) => message.startsWith(`Bank synchronization run ${response!.id} `));
+			expect(summary).toContain(`for connection ${connection.id} finished PARTIAL: `);
+			for (const part of [
+				`transactions[${successfulBankAccount.id}] unparseable_transactions dropped 2`,
+				`balances[${failedBankAccount.id}] provider_unreachable`,
+				`transactions[${failedBankAccount.id}] ASPSP_ERROR HTTP 503 Retry-After`,
+			])
+				expect(summary).toContain(part);
+			// A partial run counts as a sync but not as a successful one.
+			const connectionsResponse = await verifiedAgent.get('/bank-connections').expect(200);
+			expect(connectionsResponse.body.find(({id}: {id: string}) => id === connection.id)).toMatchObject({
+				syncStatus: 'PARTIAL',
+				lastSyncedAt: response?.finishedAt,
+				lastSuccessfulSyncAt: null,
+			});
+		} finally {
+			warn.mockRestore();
+		}
+	});
+
+	it('records an unexpected exception during the provider fetch as an internal failure', async () => {
+		const {connection} = await createAuthorizedConnection('internal-failure-session');
+		const syncService = app.get(BankingSyncService);
+		// Stands in for a code bug: the message carries data, even a frame-shaped line, that must not reach the log or the run.
+		const fetchAccounts = jest
+			.spyOn(syncService as unknown as {fetchAccounts: () => Promise<never>}, 'fetchAccounts')
+			.mockRejectedValueOnce(new TypeError('Cannot read 12.34\n    at Example Shop'));
+		const warn = jest.spyOn(Logger.prototype, 'warn');
+
+		try {
+			const response = await syncService.synchronizeAutomatically(connection.id);
+
+			expect(response).toMatchObject({status: 'FAILED', errorMessage: 'Bank synchronization failed.'});
+			expect((await bankSyncRunRepository.findOneByOrFail({id: response!.id})).failures).toEqual([
+				{kind: 'internal', bankAccountId: null, code: 'TypeError', httpStatus: null, retryAfter: false},
+			]);
+			const logged = warn.mock.calls.map(([message]) => String(message));
+			// The exception's name and stack frames, without its message.
+			const unexpected = logged.find((message) =>
+				message.startsWith(`Bank synchronization run ${response!.id} failed unexpectedly: TypeError\n`),
+			);
+			expect(unexpected).toMatch(/\n\s+at /);
+			expect(logged).toContain(
+				`Bank synchronization run ${response!.id} for connection ${connection.id} finished FAILED: internal TypeError`,
+			);
+			expect(logged.join('\n')).not.toContain('Example Shop');
+			expect(await bankConnectionRepository.findOneByOrFail({id: connection.id})).toMatchObject({
+				syncStatus: 'FAILED',
+				syncFailureCount: 1,
+			});
+		} finally {
+			fetchAccounts.mockRestore();
+			warn.mockRestore();
+			await bankConnectionRepository.delete(connection.id);
+		}
 	});
 
 	it('rolls back balance and transaction persistence when a transaction cannot be stored', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('rollback-sync-session');
 		getAccountBalances.mockResolvedValueOnce(makeBalances());
-		getAccountTransactions.mockResolvedValueOnce([
-			{
-				...makeTransactions('rollback')[0],
-				amount: 'not-a-number',
-			},
-		]);
+		getAccountTransactions.mockResolvedValueOnce(
+			fetchedTransactions([
+				{
+					...makeTransactions('rollback')[0],
+					amount: 'not-a-number',
+				},
+			]),
+		);
 
 		await expect(app.get(BankingSyncService).synchronizeAutomatically(connection.id)).rejects.toMatchObject({
 			status: 500,
@@ -2206,6 +2306,9 @@ describe('BankConnectionController', () => {
 		expect(await bankSyncRunRepository.findOne({where: {bankConnection: {id: connection.id}}})).toMatchObject({
 			status: 'FAILED',
 			errorMessage: 'Bank synchronization could not be saved.',
+			failures: [
+				{kind: 'internal', bankAccountId: null, code: 'QueryFailedError', httpStatus: null, retryAfter: false},
+			],
 		});
 	});
 
@@ -2244,7 +2347,7 @@ describe('BankConnectionController', () => {
 	/** Runs a queued automatic sync of the connection that returns these transactions. */
 	async function synchronizeQueued(connectionId: string, transactions: EnableBankingTransaction[]) {
 		getAccountBalances.mockResolvedValueOnce(makeBalances());
-		getAccountTransactions.mockResolvedValueOnce(transactions);
+		getAccountTransactions.mockResolvedValueOnce(fetchedTransactions(transactions));
 		return synchronizeDue(connectionId);
 	}
 

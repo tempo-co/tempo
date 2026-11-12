@@ -22,6 +22,7 @@ import {EnableBankingClient, EnableBankingClientError} from '@modules/banking/se
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 import {MailpitMessageSummaryResponse, MailpitResponse} from '../../types/mailpit';
+import {fetchedTransactions} from '../../utils/banking-utils';
 import {EmailUtils} from '../../utils/email-utils';
 
 const HOUR = 60 * 60 * 1000;
@@ -76,7 +77,7 @@ describe('Bank connection email alerts', () => {
 			accountIds: ['alert-provider-account'],
 		}));
 		jest.spyOn(enableBankingClient, 'getAccountBalances').mockResolvedValue([]);
-		jest.spyOn(enableBankingClient, 'getAccountTransactions').mockResolvedValue([]);
+		jest.spyOn(enableBankingClient, 'getAccountTransactions').mockResolvedValue(fetchedTransactions([]));
 		jest.spyOn(enableBankingClient, 'getAspsps').mockResolvedValue([
 			{name: 'Example Bank', country: 'NL', maximumConsentValiditySeconds: (90 * DAY) / 1000},
 		]);

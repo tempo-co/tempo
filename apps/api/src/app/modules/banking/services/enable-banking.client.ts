@@ -14,6 +14,7 @@ import {
 	EnableBankingSessionAccounts,
 	EnableBankingTransaction,
 	EnableBankingTransactionFetchOptions,
+	EnableBankingTransactionsResult,
 	StartEnableBankingAuthorizationInput,
 	StartEnableBankingAuthorizationResult,
 } from '../enable-banking.types';
@@ -30,6 +31,8 @@ export class EnableBankingClientError extends Error {
 		public readonly code: string,
 		public readonly providerStatus?: number,
 		public readonly retryAfterSeconds?: number,
+		/** Whether the response carried a Retry-After header, even one too far off or malformed to use. */
+		public readonly retryAfterPresent = retryAfterSeconds !== undefined,
 	) {
 		super(code);
 		this.name = 'EnableBankingClientError';
@@ -171,8 +174,9 @@ export class EnableBankingClient {
 		options: EnableBankingTransactionFetchOptions,
 		signal?: AbortSignal,
 		psu?: EnableBankingPsuContext,
-	): Promise<EnableBankingTransaction[]> {
+	): Promise<EnableBankingTransactionsResult> {
 		const transactions: EnableBankingTransaction[] = [];
+		let unparseableCount = 0;
 		let continuationKey: string | undefined;
 
 		for (let page = 0; page < MAX_TRANSACTION_PAGES; page += 1) {
@@ -189,8 +193,9 @@ export class EnableBankingClient {
 			);
 			const parsed = this.parseTransactionsPage(response);
 			transactions.push(...parsed.transactions);
+			unparseableCount += parsed.unparseableCount;
 
-			if (!parsed.continuationKey) return transactions;
+			if (!parsed.continuationKey) return {transactions, unparseableCount};
 			continuationKey = parsed.continuationKey;
 		}
 
@@ -227,8 +232,21 @@ export class EnableBankingClient {
 			throw new EnableBankingClientError('provider_unreachable');
 		}
 
-		const responseBytes = Buffer.from(await response.arrayBuffer());
-		const retryAfterSeconds = this.parseRetryAfter(response.headers.get('retry-after'));
+		const retryAfterHeader = response.headers.get('retry-after');
+		const retryAfterSeconds = this.parseRetryAfter(retryAfterHeader);
+		const retryAfterPresent = retryAfterHeader !== null;
+		let responseBytes: Buffer;
+		try {
+			responseBytes = Buffer.from(await response.arrayBuffer());
+		} catch {
+			// A timeout, abort or dropped connection while the body streams in.
+			throw new EnableBankingClientError(
+				'provider_response_unreadable',
+				response.status,
+				retryAfterSeconds,
+				retryAfterPresent,
+			);
+		}
 		const responseText = this.decodeBodyText(responseBytes, response.headers.get('content-type'));
 		let responseBody: unknown;
 
@@ -236,7 +254,12 @@ export class EnableBankingClient {
 			try {
 				responseBody = JSON.parse(responseText) as unknown;
 			} catch {
-				throw new EnableBankingClientError('invalid_provider_response', response.status, retryAfterSeconds);
+				throw new EnableBankingClientError(
+					'invalid_provider_response',
+					response.status,
+					retryAfterSeconds,
+					retryAfterPresent,
+				);
 			}
 		}
 
@@ -245,6 +268,7 @@ export class EnableBankingClient {
 				this.extractProviderErrorCode(responseBody),
 				response.status,
 				retryAfterSeconds,
+				retryAfterPresent,
 			);
 		}
 
@@ -388,10 +412,7 @@ export class EnableBankingClient {
 		return balances;
 	}
 
-	private parseTransactionsPage(response: unknown): {
-		transactions: EnableBankingTransaction[];
-		continuationKey?: string;
-	} {
+	private parseTransactionsPage(response: unknown): EnableBankingTransactionsResult & {continuationKey?: string} {
 		const record = this.asRecord(response);
 		const rawTransactions = record?.transactions;
 		if (!Array.isArray(rawTransactions)) {
@@ -410,6 +431,7 @@ export class EnableBankingClient {
 
 		return {
 			transactions,
+			unparseableCount: rawTransactions.length - transactions.length,
 			continuationKey: this.asOptionalString(rawContinuationKey),
 		};
 	}
