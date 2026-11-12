@@ -360,9 +360,6 @@ function BankCardSkeleton() {
             <TextBone className='w-[5em]' />
           </p>
         </div>
-        <TextAction disabled className='-mr-2 gap-0.5 self-center'>
-          Details <ChevronRight aria-hidden='true' />
-        </TextAction>
       </header>
       <ul className='-mx-3 grid grid-cols-1'>
         <TileRowsSkeleton count={2} />
