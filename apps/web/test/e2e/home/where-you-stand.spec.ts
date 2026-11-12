@@ -142,6 +142,23 @@ function framesOf(readout: Locator) {
 }
 
 /**
+ * Whether the readout has stopped sliding: no transition is left on it and it sits where its style places it.
+ * Standing still is not enough: under Playwright's clock, WebKit can keep reporting the last frame it read of a
+ * finished slide until its next rendering update, hundreds of milliseconds later.
+ */
+function settled(readout: Locator) {
+  return readout.evaluate((wrapper: HTMLElement) => {
+    const placed = new DOMMatrix(wrapper.style.transform);
+    const current = new DOMMatrix(getComputedStyle(wrapper).transform);
+    return (
+      wrapper.getAnimations().length === 0 &&
+      Math.abs(current.m41 - placed.m41) < 0.5 &&
+      Math.abs(current.m42 - placed.m42) < 0.5
+    );
+  });
+}
+
+/**
  * Where point `index` of `count` sits on the balance chart: the stretch of the plot closer to it than to its
  * neighbours, and its centre at the chart's middle. The plot is where the gridlines run; its first and last points
  * sit 6px in from its ends (X_PAD in balance-chart.tsx).
@@ -193,9 +210,7 @@ test('the balance chart reads out the month under the pointer, and a click opens
   await expect(homePage.whereYouStand.locator('.recharts-surface')).toHaveCSS('cursor', 'pointer');
   // Moving on to the next month keeps the readout up and slides it from one month to the next.
   // It first slides in from the chart's edge; let that settle.
-  await expect
-    .poll(async () => new Set((await framesOf(readout)).map((frame) => frame.x)).size)
-    .toBe(1);
+  await expect.poll(() => settled(readout)).toBe(true);
   const frames = framesOf(readout);
   await page.mouse.move(april.centre.x, april.centre.y, {steps: 4});
   for (const frame of await frames) {

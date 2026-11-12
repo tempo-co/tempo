@@ -120,6 +120,7 @@ Every iPhone browser is WebKit, so `playwright.config.ts` runs every spec a seco
 
 - WebKit sends requests from a controlling service worker past `page.route`, so mocks stop applying once the worker takes over and requests leak to the real API. The project blocks service workers and ignores the saved-app specs that need one (`testIgnore` in `playwright.config.ts`); a new spec that needs the worker goes on that list.
 - Touch gestures are sent with Chromium CDP (`Input.dispatchTouchEvent`), and hover-tooltip checks need a mouse; both skip outside Chromium. Real iPhone touch is not covered.
+- With Playwright's clock installed (`mockSyntheticHome` does), WebKit can keep reporting an element's position from the last frame it read of a finished CSS transition until its next rendering update, hundreds of milliseconds later, so an element that stands still may not have arrived. Wait until it has no animations left and its computed transform matches its style, as `settled` in `home/where-you-stand.spec.ts` does.
 - WebKit cannot fulfill a mocked 3xx, so mock a redirect with `fulfillRedirect` from `test/utils/api-mocks.ts`. Only Chromium lets a test read the clipboard back; the copy itself still runs in WebKit.
 - Put worst-case data (long names, large amounts, flags) in layout specs: kind seed data fits any screen in any engine, and that is how a page-widening Recurring card shipped.
 
