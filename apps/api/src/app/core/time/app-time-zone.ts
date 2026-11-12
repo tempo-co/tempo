@@ -1,4 +1,4 @@
-/** The owner's time zone: "today" for sync windows, MCP defaults and alert quiet hours. */
+/** Default time zone for "today" in sync windows and for alert quiet hours, until accounts carry their own. */
 export const APP_TIME_ZONE = 'Europe/Amsterdam';
 
 const appDate = new Intl.DateTimeFormat('en-CA', {

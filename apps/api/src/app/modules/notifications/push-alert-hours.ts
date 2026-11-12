@@ -1,6 +1,6 @@
 import {APP_TIME_ZONE} from '@core/time/app-time-zone';
 
-/** Alerts are timed in the owner's time zone: none arrive between 21:00 and 09:00. */
+/** Alerts are timed in the app's default time zone: none arrive between 21:00 and 09:00. */
 const PUSH_ALERT_TIME_ZONE = APP_TIME_ZONE;
 const QUIET_FROM_HOUR = 21;
 const QUIET_UNTIL_HOUR = 9;
