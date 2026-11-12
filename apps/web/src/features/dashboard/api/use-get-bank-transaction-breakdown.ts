@@ -19,7 +19,7 @@ export const useGetBankTransactionBreakdown = (
   to: string,
   asOf: string,
 ) => {
-  const {data, isPending, isError, refetch} = useQuery<BankTransactionBreakdown>({
+  const {data, isPending, isError, error, refetch} = useQuery<BankTransactionBreakdown>({
     queryKey: dashboardQueryKeys.breakdown(interval, by, from, to, asOf),
     queryFn: () => {
       const params = new URLSearchParams({
@@ -36,5 +36,5 @@ export const useGetBankTransactionBreakdown = (
     refetchOnReconnect: 'always',
   });
 
-  return {breakdown: data, isPending, isError, refetch};
+  return {breakdown: data, isPending, isError, error, refetch};
 };

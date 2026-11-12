@@ -40,7 +40,8 @@ test.describe('bank transactions', () => {
     await expect(firstTransactionRow.getByTestId('ledger-row-account')).toHaveCount(0);
 
     await page.getByTestId('bank-transactions-search').fill('does not exist');
-    await expect(page.getByText('No transactions match these filters.')).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'No matching transactions'})).toBeVisible();
+    await expect(page.getByText('Nothing matches “does not exist”.')).toBeVisible();
     await expect(page.getByTestId('bank-transactions-summary')).toHaveText('0 transactions');
 
     await page.getByRole('button', {name: 'Clear filters'}).click();
@@ -609,7 +610,7 @@ test.describe('bank transactions', () => {
       .click();
     const inspector = page.getByTestId('bank-transaction-inspector');
     await expect(
-      inspector.getByRole('heading', {name: 'Could not load bank transaction'}),
+      inspector.getByRole('heading', {name: "Couldn't load this transaction"}),
     ).toBeVisible();
     await expect(inspector.getByRole('button', {name: 'Try again'})).toBeVisible();
   });
@@ -1347,9 +1348,11 @@ test.describe('bank transactions without synced data', () => {
     await page.goto('/bank-transactions');
     await expect(page.getByTestId('current-account-email')).toHaveText(freshAccount.email);
 
-    await expect(page.getByRole('heading', {name: 'No bank transactions found'})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'No transactions yet'})).toBeVisible();
     await expect(
-      page.getByText('Synchronize a bank connection to make its transactions appear here.'),
+      page.getByText('Connect a bank and its transactions appear here after the first sync.'),
     ).toBeVisible();
+    await page.getByRole('link', {name: 'Connect a bank'}).click();
+    await expect(page).toHaveURL(/\/bank-connections$/);
   });
 });

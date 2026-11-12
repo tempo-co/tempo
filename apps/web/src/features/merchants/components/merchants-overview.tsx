@@ -9,11 +9,11 @@ import {Search} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
 import {LoadMore} from '@/components/shared/load-more';
-import {Button} from '@/components/ui/button';
+import {LoadErrorState} from '@/components/shared/state-message';
 import {Input} from '@/components/ui/input';
 import {Skeleton} from '@/components/ui/skeleton';
 import {formatBankTransactionCompactDate} from '@/features/banking/utils/formatters';
-import {ChartCardError, ChartCardHeader} from '@/features/dashboard/components/chart-card';
+import {ChartCardHeader} from '@/features/dashboard/components/chart-card';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatMoney, toCents} from '@/features/dashboard/utils/money';
 import {useLocalDate} from '@/hooks/use-local-date';
@@ -95,7 +95,7 @@ function Ranking({
   onSelect: (merchantId: string) => void;
 }) {
   const asOf = useLocalDate();
-  const {ranking, isPending, isError, refetch} = useGetMerchantRanking(
+  const {ranking, isPending, isError, error, refetch} = useGetMerchantRanking(
     interval,
     period && period <= asOf ? period : asOf,
     asOf,
@@ -121,7 +121,12 @@ function Ranking({
         )}
       </ChartCardHeader>
       {isError && !loaded ? (
-        <ChartCardError message='Could not load merchants.' onRetry={refetch} />
+        <LoadErrorState
+          size='section'
+          title="Couldn't load merchants"
+          error={error}
+          onRetry={refetch}
+        />
       ) : isPending || !loaded ? (
         <Skeleton className='h-72' role='img' aria-label='Loading top merchants' />
       ) : loaded.merchants.length === 0 ? (
@@ -174,7 +179,7 @@ function AllMerchants({
   onSelect: (merchantId: string) => void;
 }) {
   const query = useGetMerchants(search);
-  const {data, isPending, refetch} = query;
+  const {data, isPending, error, refetch} = query;
   const merchants = data?.pages.flatMap((page) => page.merchants) ?? [];
   const last = data?.pages[data.pages.length - 1];
   const currency = last?.baseCurrency ?? null;
@@ -196,12 +201,12 @@ function AllMerchants({
       {isPending ? (
         <Skeleton className='h-72' role='img' aria-label='Loading merchants' />
       ) : !last ? (
-        <div className='grid justify-items-start gap-3'>
-          <p className='text-sm'>Could not load merchants.</p>
-          <Button variant='outline' onClick={() => void refetch()}>
-            Try again
-          </Button>
-        </div>
+        <LoadErrorState
+          size='section'
+          title="Couldn't load merchants"
+          error={error}
+          onRetry={refetch}
+        />
       ) : merchants.length === 0 ? (
         <p className='text-sm text-muted-foreground'>
           {search ? 'No merchant or person matches that name.' : 'No merchants yet.'}

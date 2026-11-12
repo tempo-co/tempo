@@ -1,18 +1,22 @@
 import {createFileRoute, stripSearchParams, useNavigate} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
 import {BANK_TRANSACTION_SEARCH_MAX_LENGTH, type BankTransactionTotals} from '@tempo/contracts';
-import {RefreshCw, Search} from 'lucide-react';
+import {Search} from 'lucide-react';
 import {Fragment, useEffect, useState} from 'react';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
-import {EmptyState} from '@/components/shared/layout/app-empty-state';
 import {LoadMore} from '@/components/shared/load-more';
 import {LoadingBar} from '@/components/shared/loading-bar';
+import {LoadErrorState} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {useBankTransactionLedger} from '@/features/banking/api/use-bank-transaction-ledger';
 import {BankTransactionDateFilter} from '@/features/banking/components/bank-transaction-date-filter';
 import {BankTransactionDetailsDialog} from '@/features/banking/components/bank-transaction-details-dialog';
+import {
+  NoMatchingTransactions,
+  NoTransactionsYet,
+} from '@/features/banking/components/bank-transaction-empty-states';
 import {
   BankTransactionFilterChips,
   BankTransactionReviewToggle,
@@ -76,7 +80,7 @@ function BankTransactionsIndex() {
     <>
       {/* The first load shows skeleton rows; a refetch after a filter change uses the page's bar, never one on a card. */}
       <LoadingBar isPending={pages.isPlaceholderData} />
-      <AppBodyLayout className='max-md:my-6'>
+      <AppBodyLayout>
         <div className='space-y-5 max-md:space-y-4'>
           <div className='flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1'>
             <h1 className='text-page-title'>Bank transactions</h1>
@@ -96,27 +100,19 @@ function BankTransactionsIndex() {
           </div>
 
           {isError ? (
-            <EmptyState
-              tone='error'
-              icon={RefreshCw}
-              title='Could not load bank transactions'
-              description='The transaction service did not respond. Try again in a moment.'
+            <LoadErrorState
+              title="Couldn't load transactions"
+              error={pages.error}
+              onRetry={() => pages.refetch()}
             >
-              <Button variant='outline' onClick={() => void pages.refetch()}>
-                Try again
-              </Button>
               {isFiltered && (
-                <Button variant='secondary' onClick={clearFilters}>
+                <Button variant='ghost' onClick={clearFilters}>
                   Clear filters
                 </Button>
               )}
-            </EmptyState>
+            </LoadErrorState>
           ) : isEmpty ? (
-            <EmptyState
-              icon={Search}
-              title='No bank transactions found'
-              description='Synchronize a bank connection to make its transactions appear here.'
-            />
+            <NoTransactionsYet />
           ) : (
             <>
               <div className='grid gap-3'>
@@ -153,8 +149,13 @@ function BankTransactionsIndex() {
                     <BankTransactionLedger
                       transactions={transactions}
                       groupByDay={sort.by === 'bookingDate'}
-                      isFiltered={isFiltered}
-                      onClearFilters={clearFilters}
+                      empty={
+                        isFiltered ? (
+                          <NoMatchingTransactions filters={filters} onClearFilters={clearFilters} />
+                        ) : (
+                          <NoTransactionsYet />
+                        )
+                      }
                       onTransactionSelect={openTransaction}
                     />
                     {/* Rows kept from the previous filters can't be continued. */}

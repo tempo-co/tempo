@@ -26,7 +26,7 @@ const readCache = (page: Page) =>
     CACHE_KEY,
   );
 const savedStatus = (page: Page) => page.getByRole('status').filter({hasText: /^Offline/});
-const unreachableHeading = (page: Page) => page.getByRole('heading', {name: 'Cannot reach Tempo'});
+const unreachableHeading = (page: Page) => page.getByRole('heading', {name: "Can't reach Tempo"});
 const serverSessionStatus = async (page: Page) =>
   (await page.request.get(`${API_URL}/accounts/me`)).status();
 // Route components load as separate chunks; offline, only the service worker can serve them.
@@ -150,7 +150,7 @@ test.describe('saved app', () => {
     await expect.poll(() => requests, {timeout: 12_000}).toBeGreaterThan(1);
     await expect(savedStatus(page)).toBeVisible();
     await expect(cards.first()).toBeVisible();
-    await expect(page.getByText('Could not load bank connections')).not.toBeVisible();
+    await expect(page.getByText("Couldn't load bank connections")).not.toBeVisible();
   });
 
   test('reports a failed refresh when Tempo answers with an error', async ({page}) => {
@@ -163,9 +163,7 @@ test.describe('saved app', () => {
     await page.goto('/bank-connections');
     await expect(page.getByRole('region', {name: 'ABN AMRO'})).toBeVisible();
     await expect.poll(() => requests, {timeout: 12_000}).toBeGreaterThan(1);
-    await expect(
-      page.getByRole('heading', {name: 'Could not load bank connections'}),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', {name: "Couldn't load bank connections"})).toBeVisible();
     await expect(savedStatus(page)).not.toBeVisible();
   });
 

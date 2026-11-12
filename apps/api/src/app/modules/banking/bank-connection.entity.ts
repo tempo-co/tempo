@@ -12,6 +12,8 @@ import {
 
 import {Account} from '@modules/account/account.entity';
 
+import type {BankSyncRetryCall} from './bank-sync-failure';
+
 @Entity('bank_connections')
 @Index('idx_bank_connections_account_id', ['account'])
 @Index('idx_bank_connections_sync_due', ['status', 'nextSyncAt'])
@@ -73,6 +75,11 @@ export class BankConnection {
 
 	@Column({type: 'integer', default: 0})
 	syncFailureCount: number;
+
+	/** The provider calls the next automatic sync retries instead of a full sync; null means a full sync. */
+	@Exclude()
+	@Column({type: 'jsonb', nullable: true})
+	syncRetryCalls: BankSyncRetryCall[] | null;
 
 	/** The consent end date the 7-day expiry email warned about. */
 	@Exclude()

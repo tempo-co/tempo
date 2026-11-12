@@ -1,9 +1,8 @@
 import type {BankTransaction} from '@tempo/contracts';
 import {format, isThisYear, isToday, isYesterday, parseISO} from 'date-fns';
-import {SearchX} from 'lucide-react';
+import type {ReactNode} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
-import {Button} from '@/components/ui/button';
 import {cn} from '@/utils/cn';
 
 import {useActiveBankAccounts} from '../api/use-active-bank-accounts';
@@ -22,8 +21,8 @@ type LedgerProps = {
   transactions: BankTransaction[];
   /** Newest or oldest first: rows sit under their day. Amount order lists them flat with dates on the rows. */
   groupByDay: boolean;
-  isFiltered: boolean;
-  onClearFilters: () => void;
+  /** Shown in place of the rows when there are none. */
+  empty: ReactNode;
   onTransactionSelect: (id: BankTransaction['id'], trigger: HTMLButtonElement) => void;
 };
 
@@ -42,28 +41,13 @@ function formatLedgerDay(value: string) {
 export function BankTransactionLedger({
   transactions,
   groupByDay,
-  isFiltered,
-  onClearFilters,
+  empty,
   onTransactionSelect,
 }: LedgerProps) {
   const {accounts, needsAccountName} = useActiveBankAccounts();
   const showAccount = accounts.length > 1;
 
-  if (transactions.length === 0) {
-    return (
-      <div className='flex flex-col items-center gap-4 rounded-card border bg-card px-5 py-10 text-center'>
-        <SearchX aria-hidden='true' className='size-10 text-muted-foreground' />
-        <p className='text-sm text-muted-foreground'>
-          {isFiltered ? 'No transactions match these filters.' : 'No transactions yet.'}
-        </p>
-        {isFiltered && (
-          <Button variant='outline' onClick={onClearFilters}>
-            Clear filters
-          </Button>
-        )}
-      </div>
-    );
-  }
+  if (transactions.length === 0) return empty;
 
   // The bank names the account unless it holds several in one currency; then the account's own name does.
   const accountLabel = (transaction: BankTransaction) => {

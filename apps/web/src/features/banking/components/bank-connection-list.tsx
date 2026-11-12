@@ -4,20 +4,18 @@ import {BankConnection, BankConnectionAspsp} from '@tempo/contracts';
 import {format} from 'date-fns';
 import {
   AlertTriangle,
-  Building2,
   ChevronRight,
   Clock,
   CreditCard,
   Landmark,
   PiggyBank,
-  RefreshCw,
   Wallet,
 } from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
-import {EmptyState} from '@/components/shared/layout/app-empty-state';
 import {PendingLabel} from '@/components/shared/pending-label';
+import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
@@ -57,7 +55,8 @@ type BankConnectionListProps = {
   bankConnections: BankConnection[];
   isPending: boolean;
   isError: boolean;
-  onRetry: () => void;
+  error: unknown;
+  onRetry: () => unknown;
 };
 
 type Account = BankConnection['bankAccounts'][number];
@@ -75,6 +74,7 @@ export function BankConnectionList({
   bankConnections,
   isPending,
   isError,
+  error,
   onRetry,
 }: BankConnectionListProps) {
   const {startBankConnection, isPending: isStarting} = useStartBankConnection();
@@ -123,13 +123,18 @@ export function BankConnectionList({
 
   return (
     <div
-      className='@container grid grid-cols-1 gap-6 max-md:gap-4'
+      className='@container grid grid-cols-1 gap-5 max-md:gap-4'
       data-testid='bank-connections-list'
     >
       <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-3'>
         <h1 className='text-page-title'>Bank connections</h1>
-        {/* Always there: loading, retrying or failing to load the list never closes an open sheet. */}
-        <BankConnectionPicker onBankSelect={connectBank} isStarting={isStarting} />
+        {/* Always there: loading, retrying or failing to load the list never closes an open sheet.
+            Beside the title it overhangs the title's row, so the title and the cards start where other pages' do. */}
+        <BankConnectionPicker
+          onBankSelect={connectBank}
+          isStarting={isStarting}
+          className='md:-my-1'
+        />
       </header>
       {isPending ? (
         <div
@@ -142,28 +147,12 @@ export function BankConnectionList({
           <Skeleton className='h-48 rounded-card bg-card' />
         </div>
       ) : isError ? (
-        <div role='alert'>
-          <EmptyState
-            tone='error'
-            icon={RefreshCw}
-            title='Could not load bank connections'
-            description='The connection service did not respond. Try again in a moment.'
-          >
-            <Button
-              variant='outline'
-              onClick={onRetry}
-              className='min-h-11'
-              data-testid='bank-connections-retry'
-            >
-              Try again
-            </Button>
-          </EmptyState>
-        </div>
+        <LoadErrorState title="Couldn't load bank connections" error={error} onRetry={onRetry} />
       ) : bankConnections.length === 0 ? (
-        <EmptyState
-          icon={Building2}
+        <StateMessage
+          icon={Landmark}
           title='No bank connections'
-          description='Connect a bank to bring its accounts into Tempo.'
+          description='Connect a bank to bring its accounts in.'
         />
       ) : (
         // Two columns that each flow top to bottom, so a short card leaves neither a gap below it nor empty room inside it.

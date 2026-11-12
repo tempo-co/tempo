@@ -836,11 +836,11 @@ test('lets a drill be cleared when its series is no longer found', async ({page}
       : fulfillJson(route, {transactions: [], total: 0});
   });
   await page.goto(`/bank-transactions?recurringSeriesKey=${GYM_KEY}`);
-  await expect(page.getByText('Could not load bank transactions')).toBeVisible();
+  await expect(page.getByText("Couldn't load transactions")).toBeVisible();
 
   await page.getByRole('button', {name: 'Clear filters'}).click();
   await expect(page).not.toHaveURL(/recurringSeriesKey/);
-  await expect(page.getByText('Could not load bank transactions')).toBeHidden();
+  await expect(page.getByText("Couldn't load transactions")).toBeHidden();
 });
 
 test('says so when nothing recurring is found and when loading fails', async ({page}) => {
@@ -871,7 +871,7 @@ test('says so when nothing recurring is found and when loading fails', async ({p
 
   fail = true;
   await page.reload();
-  await expect(page.getByText('Recurring payments are unavailable right now')).toBeVisible();
+  await expect(page.getByText("Couldn't load recurring payments")).toBeVisible();
   fail = false;
   await page.getByRole('button', {name: 'Try again'}).click();
   await expect(page.getByText('No recurring payments found yet')).toBeVisible();

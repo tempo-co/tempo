@@ -373,6 +373,23 @@
   html {
     @apply bg-background;
   }
+  /* Short and long pages keep the same column: a desktop's classic scrollbar would otherwise narrow and shift it.
+     Phones overlay their scrollbars, so the gutter starts with the desktop layout. */
+  @media (width >= --theme(--breakpoint-md)) {
+    html {
+      scrollbar-gutter: stable;
+      /* The page's own scrollbar looks like ScrollArea's: a thin border-coloured thumb on the page.
+         The colour inherits, so any other native scroller matches too. Standard properties only:
+         ::-webkit-scrollbar would make macOS Safari's overlay bar permanent. */
+      scrollbar-color: var(--color-border) transparent;
+      scrollbar-width: thin;
+    }
+    /* The gutter already holds the scrollbar's room, so a dialog's scroll lock must not add it again.
+       Inside this layer, !important beats react-remove-scroll-bar's unlayered !important margin. */
+    html body[data-scroll-locked] {
+      margin-right: 0 !important;
+    }
+  }
   body {
     @apply bg-background font-sans text-foreground;
   }

@@ -279,7 +279,7 @@ test('offers a retry when the history fails to load', async ({page, homePage}) =
     fail ? fulfillJson(route, {message: 'Too many requests'}, 429) : route.fallback(),
   );
   await page.goto('/');
-  await expect(page.getByText('Could not load your history.')).toBeVisible();
+  await expect(page.getByText("Couldn't load your history")).toBeVisible();
   const retry = page.getByRole('button', {name: 'Try again'});
   await expect(retry).toBeVisible();
 
@@ -299,7 +299,7 @@ test('offers a retry in the chart when the last month fails to load', async ({pa
   await page.goto('/');
   const card = homePage.whereYouStand;
   await card.getByRole('radio', {name: '1M', exact: true}).click();
-  await expect(card.getByText('Could not load the last month.')).toBeVisible();
+  await expect(card.getByText("Couldn't load the last month")).toBeVisible();
   // The total stays; the rest of the card waits in place.
   await expect(homePage.totalBalance).toHaveText('€24,300');
 

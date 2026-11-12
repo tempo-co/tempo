@@ -518,6 +518,7 @@ export class BankingService {
 						syncStartedAt: null,
 						syncStatus: BANK_SYNC_STATUSES.QUEUED,
 						syncFailureCount: 0,
+						syncRetryCalls: null,
 					},
 				);
 

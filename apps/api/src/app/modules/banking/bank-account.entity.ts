@@ -64,6 +64,13 @@ export class BankAccount {
 	@Column({type: 'boolean', default: true})
 	isActive: boolean;
 
+	/**
+	 * The app-time-zone date through which this account's transactions were last fetched completely; null until
+	 * the first complete fetch, which then asks the provider for its longest history.
+	 */
+	@Column({type: 'date', nullable: true})
+	transactionsFetchedThrough: string | null;
+
 	@CreateDateColumn({type: 'timestamptz'})
 	createdAt: Date;
 

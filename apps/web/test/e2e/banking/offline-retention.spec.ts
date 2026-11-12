@@ -84,8 +84,12 @@ test.describe('offline retention', () => {
     }
     expect(await savedSearches(page)).toEqual(['Extra', 'Provider', 'Salary']);
     await page.goto('/bank-transactions?search=Coffee');
-    await expect(page.getByText('Could not load bank transactions')).toBeVisible();
+    await expect(page.getByRole('heading', {name: "You're offline"})).toBeVisible();
+    await expect(page.getByText('This loads once the device is back online.')).toBeVisible();
     await expect(page.getByText('Coffee shop', {exact: true})).not.toBeVisible();
+    // A retry waits for the connection and says so.
+    await page.getByRole('button', {name: 'Try again'}).click();
+    await expect(page.getByRole('button', {name: 'Trying again…'})).toBeDisabled();
 
     await context.setOffline(false);
     await expect(page.getByText('Coffee shop', {exact: true})).toBeVisible({timeout: 15000});

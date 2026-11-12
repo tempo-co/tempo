@@ -14,6 +14,7 @@ import {
 } from '@core/queue/queue.constants';
 
 import {BankConnection} from '../bank-connection.entity';
+import {safeErrorName} from '../banking.utils';
 import {BankingConnectionLockService} from './banking-connection-lock.service';
 import {
 	BANK_CONNECTION_PROVIDERS,
@@ -88,39 +89,50 @@ export class BankingSyncQueueService implements OnModuleInit {
 		let enqueued = 0;
 
 		for (const connection of connections) {
-			if (!this.isSynchronizationDue(connection, now)) continue;
-			if (
-				connection.syncStatus === BANK_SYNC_STATUSES.RUNNING &&
-				(await this.connectionLockService.isHeld(connection.id))
-			) {
-				continue;
+			// One connection's Redis or database error must not stop the others from being dispatched.
+			try {
+				if (await this.dispatchConnection(connection, now, staleBefore)) enqueued += 1;
+			} catch (error) {
+				this.logger.warn(
+					`Automatic bank synchronization for ${connection.id} could not be queued: ${safeErrorName(error)}`,
+				);
 			}
-
-			await this.enqueueConnectionSync(connection.id, false);
-
-			const updateWhere =
-				connection.syncStatus === BANK_SYNC_STATUSES.RUNNING
-					? {
-							id: connection.id,
-							status: BANK_CONNECTION_STATUSES.AUTHORIZED,
-							syncStatus: BANK_SYNC_STATUSES.RUNNING,
-							syncStartedAt: LessThanOrEqual(staleBefore),
-						}
-					: {
-							id: connection.id,
-							status: BANK_CONNECTION_STATUSES.AUTHORIZED,
-							nextSyncAt: LessThanOrEqual(now),
-							syncStatus: Not(BANK_SYNC_STATUSES.RUNNING),
-						};
-			const updateResult = await this.bankConnectionRepository.update(updateWhere, {
-				nextSyncAt: connection.syncStatus === BANK_SYNC_STATUSES.RUNNING ? now : connection.nextSyncAt,
-				syncStatus: BANK_SYNC_STATUSES.QUEUED,
-			});
-			if (updateResult.affected !== 1) continue;
-			enqueued += 1;
 		}
 
 		return enqueued;
+	}
+
+	private async dispatchConnection(connection: BankConnection, now: Date, staleBefore: Date): Promise<boolean> {
+		if (!this.isSynchronizationDue(connection, now)) return false;
+		const running = connection.syncStatus === BANK_SYNC_STATUSES.RUNNING;
+		if (running && (await this.connectionLockService.isHeld(connection.id))) return false;
+		// A job that is already waiting or running owns the connection; the row keeps the state that job sets.
+		if (await this.hasLiveJob(connection.id)) return false;
+
+		// QUEUED is written before the job exists, so a worker that picks the job up at once never sees the old row.
+		const updateResult = await this.bankConnectionRepository.update(
+			running
+				? {
+						id: connection.id,
+						status: BANK_CONNECTION_STATUSES.AUTHORIZED,
+						syncStatus: BANK_SYNC_STATUSES.RUNNING,
+						syncStartedAt: LessThanOrEqual(staleBefore),
+					}
+				: {
+						id: connection.id,
+						status: BANK_CONNECTION_STATUSES.AUTHORIZED,
+						nextSyncAt: LessThanOrEqual(now),
+						syncStatus: Not(BANK_SYNC_STATUSES.RUNNING),
+					},
+			{
+				nextSyncAt: running ? now : connection.nextSyncAt,
+				syncStatus: BANK_SYNC_STATUSES.QUEUED,
+			},
+		);
+		if (updateResult.affected !== 1) return false;
+		// If adding fails, the row stays QUEUED and due, so the next dispatch tries again.
+		await this.addSyncJob(connection.id, false);
+		return true;
 	}
 
 	public isSynchronizationDue(connection: BankConnection, now = new Date()): boolean {
@@ -134,19 +146,26 @@ export class BankingSyncQueueService implements OnModuleInit {
 
 	private async enqueueConnectionSync(connectionId: string, initial: boolean): Promise<void> {
 		if (!this.bankingIntegrationEnabled) return;
-		const jobId = this.getJobId(connectionId);
-		const existingJob = await this.queue.getJob(jobId);
-		if (existingJob) {
-			const state = await existingJob.getState();
-			if (ACTIVE_JOB_STATES.has(state)) return;
-			await existingJob.remove();
-		}
+		if (await this.hasLiveJob(connectionId)) return;
+		await this.addSyncJob(connectionId, initial);
+	}
 
+	/** Whether a waiting or running job exists for the connection; a finished or failed one is removed. */
+	private async hasLiveJob(connectionId: string): Promise<boolean> {
+		const existingJob = await this.queue.getJob(this.getJobId(connectionId));
+		if (!existingJob) return false;
+		const state = await existingJob.getState();
+		if (ACTIVE_JOB_STATES.has(state)) return true;
+		await existingJob.remove();
+		return false;
+	}
+
+	private async addSyncJob(connectionId: string, initial: boolean): Promise<void> {
 		await this.queue.add(
 			SYNC_BANK_CONNECTION_JOB,
 			{connectionId},
 			{
-				jobId,
+				jobId: this.getJobId(connectionId),
 				priority: initial ? 1 : 10,
 				attempts: 1,
 				removeOnComplete: true,

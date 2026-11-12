@@ -34,7 +34,7 @@ for (const [value, label] of [
       page.getByRole('button', {name: `Remove filter: ${label}`, exact: true}),
     ).toBeVisible();
     if (list.total === 0) {
-      await expect(page.getByText('No transactions match these filters.')).toBeVisible();
+      await expect(page.getByRole('heading', {name: 'No matching transactions'})).toBeVisible();
     } else {
       for (const row of list.transactions) {
         await expect(page.getByTestId(`bank-transaction-row-${row.id}`)).toBeVisible();

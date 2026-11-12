@@ -2,6 +2,7 @@ import {useNavigate} from '@tanstack/react-router';
 import {format} from 'date-fns';
 import {AlertTriangle, ChevronRight, Clock} from 'lucide-react';
 
+import {LoadErrorState} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
 import {useGetRecurringSummary} from '@/features/banking/api/use-get-recurring-summary';
 import {SeriesTile} from '@/features/banking/components/recurring-series-tile';
@@ -12,7 +13,6 @@ import {parseCalendarDate} from '../utils/drill-links';
 import {wholeCents} from '../utils/format';
 import {toCents} from '../utils/money';
 import {formatMonth} from '../utils/month';
-import {ChartCardError} from './chart-card';
 import {Bone, LoadingLabel, TextBone} from './loading';
 
 /** Four rows at most, so the block stays about as tall as the chart beside it. */
@@ -59,7 +59,12 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
     return (
       <section aria-label='Repeats' className={cn('grid content-start gap-4', RESERVE, className)}>
         {header}
-        <ChartCardError message='Could not load what repeats.' onRetry={() => totals.refetch()} />
+        <LoadErrorState
+          size='section'
+          title="Couldn't load what repeats"
+          error={totals.error}
+          onRetry={() => totals.refetch()}
+        />
       </section>
     );
   if (!summary)

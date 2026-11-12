@@ -4,12 +4,11 @@ import {
   type RecurringSeriesList,
 } from '@tempo/contracts';
 import {format} from 'date-fns';
-import {ChevronRight, RefreshCw, Repeat} from 'lucide-react';
+import {ChevronRight, Repeat} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
-import {EmptyState} from '@/components/shared/layout/app-empty-state';
+import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
-import {Button} from '@/components/ui/button';
 import {Skeleton} from '@/components/ui/skeleton';
 import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
@@ -63,16 +62,11 @@ export function RecurringSeriesOverview({
   if (isPending) return <RecurringSkeleton />;
   if (isError || !query.data) {
     return (
-      <EmptyState
-        icon={RefreshCw}
-        tone='error'
-        title='Recurring payments are unavailable right now'
-        description='Your transactions are unchanged. Try again in a moment.'
-      >
-        <Button variant='outline' onClick={() => void query.refetch()}>
-          Try again
-        </Button>
-      </EmptyState>
+      <LoadErrorState
+        title="Couldn't load recurring payments"
+        error={query.error}
+        onRetry={() => query.refetch()}
+      />
     );
   }
 
@@ -91,10 +85,10 @@ export function RecurringSeriesOverview({
 
   if (expenses.series.length === 0 && income.series.length === 0) {
     return (
-      <EmptyState
+      <StateMessage
         icon={Repeat}
         title='No recurring payments found yet'
-        description='Tempo looks for payments to the same place on a regular rhythm. Annual subscriptions count after two payments; other patterns need at least three.'
+        description='Payments to the same place on a regular rhythm show up here. Annual subscriptions count after two payments; other patterns need at least three.'
       />
     );
   }

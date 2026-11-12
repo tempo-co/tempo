@@ -14,7 +14,7 @@ export const useGetBankTransactionCashFlow = (
   asOf: string,
   {enabled = true}: {enabled?: boolean} = {},
 ) => {
-  const {data, isPending, isError, refetch} = useQuery<BankTransactionCashFlow>({
+  const {data, isPending, isError, error, refetch} = useQuery<BankTransactionCashFlow>({
     enabled,
     queryKey: dashboardQueryKeys.cashFlow(interval, from, to, asOf),
     queryFn: () => {
@@ -27,5 +27,5 @@ export const useGetBankTransactionCashFlow = (
     refetchOnReconnect: 'always',
   });
 
-  return {cashFlow: data, isPending, isError, refetch};
+  return {cashFlow: data, isPending, isError, error, refetch};
 };

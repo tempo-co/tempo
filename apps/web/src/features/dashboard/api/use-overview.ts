@@ -61,13 +61,14 @@ export function useYearBreakdowns(today: string) {
   return {breakdowns, ...settled([categories, sources], breakdowns)};
 }
 
-/** Failed while `result` is still missing, and a refetch of only the queries that failed. */
+/** Failed while `result` is still missing, the first failure's error, and a refetch of only the queries that failed. */
 function settled(
-  queries: {isError: boolean; refetch: () => Promise<unknown>}[],
+  queries: {isError: boolean; error: unknown; refetch: () => Promise<unknown>}[],
   result: object | null,
 ) {
   return {
     isError: !result && queries.some((query) => query.isError),
+    error: queries.find((query) => query.isError)?.error,
     refetch: () =>
       Promise.all(queries.filter((query) => query.isError).map((query) => query.refetch())),
   };

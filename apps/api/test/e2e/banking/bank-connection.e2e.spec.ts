@@ -1,5 +1,7 @@
 import {jest} from '@jest/globals';
+import {getQueueToken} from '@nestjs/bullmq';
 import {INestApplication, Logger} from '@nestjs/common';
+import {Queue} from 'bullmq';
 import Redis from 'ioredis';
 import {generateKeyPairSync, randomUUID} from 'node:crypto';
 import {Server} from 'node:net';
@@ -7,6 +9,7 @@ import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
 import {DataSource, In, Repository} from 'typeorm';
 
+import {BANK_CONNECTION_SYNC_QUEUE, SYNC_BANK_CONNECTION_JOB} from '@core/queue/queue.constants';
 import {REDIS} from '@core/redis/redis.constants';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
@@ -21,8 +24,10 @@ import {
 } from '@modules/banking/bank-transaction-financial-event';
 import {BankTransactionFxRate} from '@modules/banking/bank-transaction-fx-rate.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {addDays} from '@modules/banking/banking.utils';
 import {EnableBankingBalance, EnableBankingTransaction} from '@modules/banking/enable-banking.types';
 import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
+import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
 import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
 import {EnableBankingClient, EnableBankingClientError} from '@modules/banking/services/enable-banking.client';
 
@@ -35,6 +40,7 @@ import {
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 import {fetchedTransactions} from '../../utils/banking-utils';
+import {waitFor} from '../../utils/wait-utils';
 
 // The concrete adapter is exercised below against a mocked transport, never a live provider.
 process.env.ENABLE_BANKING_API_URL = 'https://provider.example.test';
@@ -111,6 +117,11 @@ describe('BankConnectionController', () => {
 			.delete()
 			.where('accountId = :accountId', {accountId: account.id})
 			.execute();
+	});
+
+	beforeEach(async () => {
+		// Foreground refreshes share the bank catalog through Redis; each test starts from its own mocked catalog.
+		await redis.del('banking:aspsp-catalog:NL');
 	});
 
 	afterAll(async () => {
@@ -228,6 +239,10 @@ describe('BankConnectionController', () => {
 				transactionsFetched: 5,
 			});
 			expect(await bankTransactionRepository.countBy({bankAccountId: bankAccount.id})).toBe(5);
+			// The account's own window now starts from the date this complete fetch covered.
+			expect(await bankAccountRepository.findOneByOrFail({id: bankAccount.id})).toMatchObject({
+				transactionsFetchedThrough: response.body.requestedTo,
+			});
 			const savedConnection = await bankConnectionRepository.findOneByOrFail({id: connection.id});
 			expect(savedConnection).toMatchObject({syncStatus: 'SUCCEEDED', lastSyncError: null});
 			expect(savedConnection.nextSyncAt!.getTime() - savedConnection.lastSyncedAt!.getTime()).toBe(
@@ -257,13 +272,21 @@ describe('BankConnectionController', () => {
 				.set('Origin', 'http://localhost:5173')
 				.set('User-Agent', 'ExampleBrowser/1.0')
 				.expect(200);
-			expect(second.body).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 0, transactionsFetched: 5});
+			const incrementalFrom = addDays(response.body.requestedTo, -7);
+			expect(second.body).toMatchObject({
+				status: 'SUCCEEDED',
+				requestedFrom: incrementalFrom,
+				transactionsAdded: 0,
+				transactionsFetched: 5,
+			});
 			expect(getAccountTransactions).toHaveBeenLastCalledWith(
 				bankAccount.providerAccountId,
-				{strategy: 'default', dateFrom: expect.any(String), dateTo: response.body.requestedTo},
+				{strategy: 'default', dateFrom: incrementalFrom},
 				expect.any(AbortSignal),
 				expectedPresence,
 			);
+			// The bank catalog fetched for the first refresh is reused.
+			expect(getAspsps).not.toHaveBeenCalled();
 			expect(await bankTransactionRepository.countBy({bankAccountId: bankAccount.id})).toBe(5);
 		} finally {
 			transport.mockRestore();
@@ -1039,12 +1062,24 @@ describe('BankConnectionController', () => {
 		expect(await bankAccountRepository.count({where: {bankConnection: {id: connection.id}}})).toBe(0);
 	});
 
-	it('merges re-authorization into the existing connection instead of duplicating it', async () => {
+	it('merges re-authorization into the existing connection and fetches each account from its own window', async () => {
 		await bankConnectionRepository
 			.createQueryBuilder()
 			.delete()
 			.where('accountId = :accountId', {accountId: account.id})
 			.execute();
+		sessionAccountIdsBySession.set('provider-session-reauth-original', [
+			'provider-account-original',
+			'provider-account-dormant',
+		]);
+		sessionAccountIdsBySession.set('provider-session-reauth-refreshed', [
+			'provider-account-rotated',
+			'provider-account-dormant',
+			'provider-account-added',
+		]);
+		getAccountBalances.mockResolvedValue([]);
+		getAccountTransactions.mockReset();
+		getAccountTransactions.mockResolvedValue(fetchedTransactions([]));
 
 		const firstState = await authorize();
 		createSession.mockResolvedValueOnce({
@@ -1058,6 +1093,7 @@ describe('BankConnectionController', () => {
 					iban: 'NL91ABNA0417164300',
 					currency: 'EUR',
 				},
+				{uid: 'provider-account-dormant', identificationHash: 'stable-account-dormant', currency: 'EUR'},
 			],
 		});
 		await request(httpServer)
@@ -1072,11 +1108,33 @@ describe('BankConnectionController', () => {
 			})
 		)[0];
 		if (!originalConnection) throw new Error('Authorized connection was not persisted.');
+		// The initial sync asks for each new account's longest history and records how far it got.
+		const firstRun = await waitFor(
+			() => bankSyncRunRepository.findOneBy({bankConnection: {id: originalConnection.id}, status: 'SUCCEEDED'}),
+			(run) => run !== null,
+		);
+		const fetchWindows = () =>
+			getAccountTransactions.mock.calls.map(([accountId, options]) => [accountId, options]);
+		expect(fetchWindows()).toHaveLength(2);
+		expect(fetchWindows()).toEqual(
+			expect.arrayContaining([
+				['provider-account-original', {strategy: 'longest'}],
+				['provider-account-dormant', {strategy: 'longest'}],
+			]),
+		);
 		const originalBankAccount = await bankAccountRepository.findOne({
-			where: {bankConnection: {id: originalConnection.id}},
+			where: {bankConnection: {id: originalConnection.id}, providerAccountId: 'provider-account-original'},
 		});
 		if (!originalBankAccount) throw new Error('Bank account was not persisted.');
 		expect(originalBankAccount.iban).toBe('NL91ABNA0417164300');
+		expect(originalBankAccount.transactionsFetchedThrough).toBe(firstRun!.requestedTo);
+		// The dormant account was last fetched longer ago than banks serve history without the user present.
+		const dormantFetchedThrough = addDays(firstRun!.requestedTo!, -200);
+		await bankAccountRepository.update(
+			{bankConnection: {id: originalConnection.id}, providerAccountId: 'provider-account-dormant'},
+			{transactionsFetchedThrough: dormantFetchedThrough},
+		);
+		getAccountTransactions.mockClear();
 
 		const secondState = await authorize();
 		createSession.mockResolvedValueOnce({
@@ -1090,9 +1148,24 @@ describe('BankConnectionController', () => {
 					identificationHash: 'stable-account-reauth',
 					currency: 'EUR',
 				},
+				{uid: 'provider-account-dormant', identificationHash: 'stable-account-dormant', currency: 'EUR'},
+				{uid: 'provider-account-added', identificationHash: 'stable-account-added', currency: 'EUR'},
 			],
 		});
 		await callback({state: secondState, code: 'reauth-refreshed-code'}, 'connected');
+		await waitFor(
+			() => bankSyncRunRepository.countBy({bankConnection: {id: originalConnection.id}, status: 'SUCCEEDED'}),
+			(count) => count === 2,
+		);
+		// The connection has a successful run, yet the account the bank added has never been fetched.
+		expect(fetchWindows()).toHaveLength(3);
+		expect(fetchWindows()).toEqual(
+			expect.arrayContaining([
+				['provider-account-rotated', {strategy: 'default', dateFrom: addDays(firstRun!.requestedTo!, -7)}],
+				['provider-account-dormant', {strategy: 'longest', dateFrom: addDays(dormantFetchedThrough, -7)}],
+				['provider-account-added', {strategy: 'longest'}],
+			]),
+		);
 
 		const authorizedConnections = await bankConnectionRepository.find({
 			where: {account: {id: account.id}, status: 'AUTHORIZED'},
@@ -1106,12 +1179,13 @@ describe('BankConnectionController', () => {
 		const refreshedBankAccounts = await bankAccountRepository.find({
 			where: {bankConnection: {id: originalConnection.id}},
 		});
-		expect(refreshedBankAccounts).toHaveLength(1);
-		expect(refreshedBankAccounts[0].id).toBe(originalBankAccount.id);
-		expect(refreshedBankAccounts[0].providerAccountId).toBe('provider-account-rotated');
-		expect(refreshedBankAccounts[0].identificationHash).toBe('stable-account-reauth');
+		expect(refreshedBankAccounts).toHaveLength(3);
+		const refreshedBankAccount = refreshedBankAccounts.find(({id}) => id === originalBankAccount.id);
+		expect(refreshedBankAccount?.providerAccountId).toBe('provider-account-rotated');
+		expect(refreshedBankAccount?.identificationHash).toBe('stable-account-reauth');
 		// The refreshed session reported no IBAN; the stored one is kept.
-		expect(refreshedBankAccounts[0].iban).toBe('NL91ABNA0417164300');
+		expect(refreshedBankAccount?.iban).toBe('NL91ABNA0417164300');
+		getAccountTransactions.mockReset();
 	});
 
 	it('keeps the live connection untouched when re-authorization is cancelled', async () => {
@@ -2308,7 +2382,7 @@ describe('BankConnectionController', () => {
 		}
 	});
 
-	it('marks a run partial when one account fails, even with HTTP 403, keeping the connection and successful account data', async () => {
+	it('marks a run partial when one account fails, even with HTTP 403, keeping the connection and successful account data, then retries only the failed calls once', async () => {
 		const connection = await createAuthorizedConnectionWithAccounts('partial-session', [
 			'partial-success-account',
 			'partial-failed-account',
@@ -2390,8 +2464,48 @@ describe('BankConnectionController', () => {
 				lastSyncedAt: response?.finishedAt,
 				lastSuccessfulSyncAt: null,
 			});
+
+			// The retry comes after the short backoff and repeats only the two calls that failed.
+			const afterPartial = await bankConnectionRepository.findOneByOrFail({id: connection.id});
+			expect(afterPartial.syncRetryCalls).toEqual(
+				expect.arrayContaining([
+					{kind: 'balances', bankAccountId: failedBankAccount.id},
+					{kind: 'transactions', bankAccountId: failedBankAccount.id},
+				]),
+			);
+			expect(afterPartial.syncRetryCalls).toHaveLength(2);
+			expect(afterPartial.nextSyncAt!.getTime() - new Date(response!.finishedAt!).getTime()).toBe(15 * 60 * 1000);
+			getSessionAccounts.mockClear();
+			getAccountBalances.mockClear();
+			getAccountTransactions.mockClear();
+			getAccountBalances.mockResolvedValue(makeBalances());
+			getAccountTransactions.mockImplementation(async (accountId) => {
+				if (accountId === 'partial-failed-account') {
+					throw new EnableBankingClientError('ASPSP_ERROR', 503);
+				}
+				return fetchedTransactions([]);
+			});
+			const retry = await synchronizeDue(connection.id);
+
+			expect(getSessionAccounts).not.toHaveBeenCalled();
+			expect(getAccountBalances.mock.calls.map(([accountId]) => accountId)).toEqual(['partial-failed-account']);
+			// Never fetched completely, so the account still asks for its longest history.
+			expect(getAccountTransactions.mock.calls.map(([accountId, options]) => [accountId, options])).toEqual([
+				['partial-failed-account', {strategy: 'longest'}],
+			]);
+			expect(retry).toMatchObject({status: 'PARTIAL', accountsFetched: 1, balancesFetched: 2});
+			// The transactions call failed again in its own retry, so it waits for the next ordinary sync.
+			const afterRetry = await bankConnectionRepository.findOneByOrFail({id: connection.id});
+			expect(afterRetry).toMatchObject({syncStatus: 'PARTIAL', syncRetryCalls: null, syncFailureCount: 2});
+			expect(afterRetry.nextSyncAt!.getTime() - new Date(retry!.finishedAt!).getTime()).toBe(6 * 60 * 60 * 1000);
+			expect(await bankAccountRepository.findOneByOrFail({id: failedBankAccount.id})).toMatchObject({
+				transactionsFetchedThrough: null,
+			});
 		} finally {
 			warn.mockRestore();
+			getAccountBalances.mockReset();
+			getAccountTransactions.mockReset();
+			await bankConnectionRepository.delete(connection.id);
 		}
 	});
 
@@ -2429,6 +2543,109 @@ describe('BankConnectionController', () => {
 			fetchAccounts.mockRestore();
 			warn.mockRestore();
 			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
+	it('imports the pages fetched before a repeated continuation key and keeps the account window for a retry', async () => {
+		const {connection, bankAccount} = await createAuthorizedConnection('pagination-loop-session');
+		getAccountBalances.mockResolvedValueOnce(makeBalances());
+		const rows = makeTransactions('pagination-loop').map((transaction) => ({
+			transaction_id: transaction.providerTransactionId,
+			transaction_amount: {amount: transaction.amount, currency: transaction.currency},
+			credit_debit_indicator: transaction.creditDebitIndicator,
+			booking_date: transaction.bookingDate,
+			remittance_information: [transaction.description],
+		}));
+		// The provider keeps answering with the key it already sent.
+		const transport = jest.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+			const parsed = new URL(String(url));
+			if (parsed.origin !== 'https://provider.example.test' || !parsed.pathname.endsWith('/transactions'))
+				throw new Error('Unexpected provider request');
+			const page = parsed.searchParams.has('continuation_key') ? rows.slice(2) : rows.slice(0, 2);
+			return new Response(JSON.stringify({transactions: page, continuation_key: 'same-page'}), {status: 200});
+		});
+		getAccountTransactions.mockImplementation((...args) =>
+			EnableBankingClient.prototype.getAccountTransactions.call(enableBankingClient, ...args),
+		);
+
+		try {
+			const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
+
+			expect(transport).toHaveBeenCalledTimes(2);
+			expect(response).toMatchObject({status: 'PARTIAL', transactionsFetched: 5, transactionsAdded: 5});
+			expect(await bankTransactionRepository.countBy({bankAccountId: bankAccount.id})).toBe(5);
+			expect((await bankSyncRunRepository.findOneByOrFail({id: response!.id})).failures).toEqual([
+				{
+					kind: 'transactions',
+					bankAccountId: bankAccount.id,
+					code: 'provider_pagination_loop',
+					httpStatus: null,
+					retryAfter: false,
+				},
+			]);
+			// Whether the pages covered the whole window is unknown, so the account keeps asking for its longest history.
+			expect(await bankAccountRepository.findOneByOrFail({id: bankAccount.id})).toMatchObject({
+				transactionsFetchedThrough: null,
+			});
+			expect(await bankConnectionRepository.findOneByOrFail({id: connection.id})).toMatchObject({
+				syncStatus: 'PARTIAL',
+				syncRetryCalls: [{kind: 'transactions', bankAccountId: bankAccount.id}],
+			});
+		} finally {
+			transport.mockRestore();
+			getAccountTransactions.mockReset();
+			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
+	it('dispatches every due connection past one that cannot be queued, writing QUEUED before its job', async () => {
+		const longAgo = new Date('2001-01-01T00:00:00.000Z');
+		const dispatchAt = new Date('2001-01-02T00:00:00.000Z');
+		const [failing, queued, owned] = await Promise.all(
+			['dispatch-failing', 'dispatch-queued', 'dispatch-owned'].map(async (session) => {
+				const {connection} = await createAuthorizedConnection(session);
+				await bankConnectionRepository.update(connection.id, {nextSyncAt: longAgo, syncStatus: 'SUCCEEDED'});
+				return connection;
+			}),
+		);
+		const queue = app.get<Queue>(getQueueToken(BANK_CONNECTION_SYNC_QUEUE));
+		// A job that is already waiting owns its connection.
+		const ownedJob = await queue.add(
+			SYNC_BANK_CONNECTION_JOB,
+			{connectionId: owned.id},
+			{jobId: `bank-connection-sync-${owned.id}`, delay: 60 * 60 * 1000},
+		);
+		const statusesWhenAdded = new Map<string, string>();
+		const add = jest.spyOn(queue, 'add').mockImplementation(async (_name, data) => {
+			const connectionId = (data as {connectionId: string}).connectionId;
+			statusesWhenAdded.set(
+				connectionId,
+				(await bankConnectionRepository.findOneByOrFail({id: connectionId})).syncStatus,
+			);
+			if (connectionId === failing.id) throw new Error('Redis unavailable');
+			return undefined as never;
+		});
+
+		try {
+			const enqueued = await app.get(BankingSyncQueueService).dispatchDueConnections(dispatchAt);
+
+			expect(enqueued).toBe(1);
+			expect(add.mock.calls.map(([, data]) => (data as {connectionId: string}).connectionId).sort()).toEqual(
+				[failing.id, queued.id].sort(),
+			);
+			expect(statusesWhenAdded.get(queued.id)).toBe('QUEUED');
+			// The connection whose job could not be added stays due, so the next dispatch tries again.
+			expect(await bankConnectionRepository.findOneByOrFail({id: failing.id})).toMatchObject({
+				syncStatus: 'QUEUED',
+				nextSyncAt: longAgo,
+			});
+			expect(await bankConnectionRepository.findOneByOrFail({id: owned.id})).toMatchObject({
+				syncStatus: 'SUCCEEDED',
+			});
+		} finally {
+			add.mockRestore();
+			await ownedJob.remove();
+			await bankConnectionRepository.delete([failing.id, queued.id, owned.id]);
 		}
 	});
 

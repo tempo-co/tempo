@@ -3,6 +3,7 @@ import {
 	BadRequestException,
 	ConflictException,
 	HttpException,
+	Inject,
 	Injectable,
 	InternalServerErrorException,
 	Logger,
@@ -11,10 +12,13 @@ import {
 } from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import type {BankSyncRun as BankSyncRunResponse, BankSyncStatus} from '@tempo/contracts';
+import Redis from 'ioredis';
 import {isIP} from 'node:net';
 import {DataSource, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
+import {REDIS} from '@core/redis/redis.constants';
+import {dateInAppTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
 
 import {
@@ -36,6 +40,7 @@ import {BankAccount} from '../bank-account.entity';
 import {BankConnection} from '../bank-connection.entity';
 import {
 	BankSyncFailure,
+	BankSyncRetryCall,
 	INTERRUPTED_SYNC_CODE,
 	UNPARSEABLE_TRANSACTIONS_CODE,
 	classifyProviderFailure,
@@ -55,6 +60,7 @@ import {
 } from '../banking.utils';
 import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
 import {
+	EnableBankingAspsp,
 	EnableBankingBalance,
 	EnableBankingPsuContext,
 	EnableBankingTransaction,
@@ -71,6 +77,7 @@ import {BankingEncryptionService} from './banking-encryption.service';
 import {
 	BANKING_FOREGROUND_REFRESH_MIN_INTERVAL_MS,
 	BANKING_TRANSIENT_RETRY_BASE_MS,
+	BANKING_UNATTENDED_HISTORY_DAYS,
 	BANK_CONNECTION_PROVIDERS,
 	BANK_CONNECTION_STATUSES,
 	BANK_SYNC_STATUSES,
@@ -87,12 +94,16 @@ const FAILED = BANK_SYNC_STATUSES.FAILED;
 const PARTIAL = BANK_SYNC_STATUSES.PARTIAL;
 
 const INCREMENTAL_OVERLAP_DAYS = 7;
+/** How long a country's bank catalog is reused for foreground refreshes. */
+const ASPSP_CATALOG_CACHE_SECONDS = 60 * 60;
 
 type AccountFetchResult = {
 	bankAccount: BankAccount;
 	balances: EnableBankingBalance[];
+	/** Every fetched row; after a failed later page, the rows of the pages before it. */
 	transactions: EnableBankingTransaction[];
 	balancesSucceeded: boolean;
+	/** Every transaction page was fetched, so the account's watermark may advance. */
 	transactionsSucceeded: boolean;
 };
 
@@ -105,6 +116,14 @@ type SyncFetchResult = {
 	connectionExpired: boolean;
 	rateLimit?: SyncRateLimit;
 	failures: BankSyncFailure[];
+	/** The date a complete transactions fetch covers, in the app's time zone. */
+	fetchedThrough: string;
+	/** The run repeated only the calls a previous run failed. */
+	targeted: boolean;
+	/** Provider calls that failed on their own and a targeted retry can repeat. */
+	retryCalls: BankSyncRetryCall[];
+	/** Something failed that only a full sync can retry, such as Tempo's credentials or an unexpected exception. */
+	fullRetry: boolean;
 };
 
 type SyncRateLimit = {
@@ -134,6 +153,7 @@ export class BankingSyncService {
 		private readonly currencyExchangeService: CurrencyExchangeService,
 		private readonly merchantLogoService: MerchantLogoService,
 		private readonly bankTransactionPersistenceService: BankTransactionPersistenceService,
+		@Inject(REDIS) private readonly redis: Redis,
 	) {
 		this.bankingIntegrationEnabled = configurationService.get('BANKING_INTEGRATION_ENABLED') !== false;
 	}
@@ -236,14 +256,10 @@ export class BankingSyncService {
 					where: {bankConnection: {id: connection.id}},
 					order: {createdAt: 'ASC'},
 				});
-				const previousSuccessfulRun = await this.findPreviousSuccessfulRun(connection.id);
-				const requestedTo = toDateOnly(new Date()) as string;
-				const requestedFrom = previousSuccessfulRun
-					? addDays(previousSuccessfulRun.requestedTo ?? requestedTo, -INCREMENTAL_OVERLAP_DAYS)
-					: null;
-				const transactionOptions: EnableBankingTransactionFetchOptions = previousSuccessfulRun
-					? {strategy: 'default', dateFrom: requestedFrom ?? undefined, dateTo: requestedTo}
-					: {strategy: 'longest'};
+				const requestedTo = dateInAppTimeZone(new Date());
+				// A foreground refresh is always full; an automatic one repeats only what the last run failed, if anything.
+				const retryCalls = psu ? null : connection.syncRetryCalls;
+				const requestedFrom = this.getRequestedFrom(bankAccounts, retryCalls, requestedTo);
 
 				run = await this.bankSyncRunRepository.save(
 					this.bankSyncRunRepository.create({
@@ -260,7 +276,8 @@ export class BankingSyncService {
 						connection.id,
 						bankAccounts,
 						providerSessionId,
-						transactionOptions,
+						requestedTo,
+						retryCalls,
 						lockLease,
 						failures,
 						psu,
@@ -279,6 +296,10 @@ export class BankingSyncService {
 						hasSuccessfulEndpoint: false,
 						connectionExpired: false,
 						failures,
+						fetchedThrough: requestedTo,
+						targeted: retryCalls !== null,
+						retryCalls: [],
+						fullRetry: true,
 					};
 				}
 				lockLease.assertHealthy();
@@ -362,12 +383,7 @@ export class BankingSyncService {
 		psu: EnableBankingPsuContext,
 		signal: AbortSignal,
 	): Promise<EnableBankingPsuContext> {
-		let aspsps;
-		try {
-			aspsps = await this.enableBankingClient.getAspsps(connection.aspspCountry, signal);
-		} catch {
-			throw new BadGatewayException(BANKING_SUPPORTED_BANKS_UNAVAILABLE);
-		}
+		const aspsps = await this.getAspspCatalog(connection.aspspCountry, signal);
 		const aspsp = aspsps.find(
 			({name, country}) => name === connection.aspspName && country === connection.aspspCountry,
 		);
@@ -384,6 +400,29 @@ export class BankingSyncService {
 			throw new BadRequestException(BANKING_REFRESH_CONTEXT_UNAVAILABLE);
 		}
 		return {ipAddress: psu.ipAddress, userAgent};
+	}
+
+	/** The country's bank catalog, shared through Redis for an hour so refreshes do not download it every time. */
+	private async getAspspCatalog(country: string, signal: AbortSignal): Promise<EnableBankingAspsp[]> {
+		const key = `banking:aspsp-catalog:${country}`;
+		try {
+			const cached = await this.redis.get(key);
+			if (cached) return JSON.parse(cached) as EnableBankingAspsp[];
+		} catch (error) {
+			this.logger.warn(`Bank catalog cache read failed: ${safeErrorName(error)}`);
+		}
+		let aspsps: EnableBankingAspsp[];
+		try {
+			aspsps = await this.enableBankingClient.getAspsps(country, signal);
+		} catch {
+			throw new BadGatewayException(BANKING_SUPPORTED_BANKS_UNAVAILABLE);
+		}
+		try {
+			await this.redis.set(key, JSON.stringify(aspsps), 'EX', ASPSP_CATALOG_CACHE_SECONDS);
+		} catch (error) {
+			this.logger.warn(`Bank catalog cache write failed: ${safeErrorName(error)}`);
+		}
+		return aspsps;
 	}
 
 	private isAutomaticSyncEligible(
@@ -438,18 +477,44 @@ export class BankingSyncService {
 		return providerSessionId;
 	}
 
-	private async findPreviousSuccessfulRun(connectionId: BankConnection['id']): Promise<BankSyncRun | null> {
-		return this.bankSyncRunRepository.findOne({
-			where: {bankConnection: {id: connectionId}, status: SUCCEEDED},
-			order: {finishedAt: 'DESC'},
-		});
+	/**
+	 * Each account's own window: its longest history until one fetch completed, then from that fetch's date minus
+	 * the overlap. A start older than banks serve without the user present asks for the longest history from that
+	 * start instead, which returns what the bank still has rather than failing the request.
+	 */
+	private getTransactionFetchOptions(bankAccount: BankAccount, today: string): EnableBankingTransactionFetchOptions {
+		if (!bankAccount.transactionsFetchedThrough) return {strategy: 'longest'};
+		const dateFrom = addDays(bankAccount.transactionsFetchedThrough, -INCREMENTAL_OVERLAP_DAYS);
+		if (dateFrom < addDays(today, -BANKING_UNATTENDED_HISTORY_DAYS)) return {strategy: 'longest', dateFrom};
+		return {strategy: 'default', dateFrom};
+	}
+
+	/** The run's earliest requested date, or null when an account asks for its whole history. */
+	private getRequestedFrom(
+		bankAccounts: BankAccount[],
+		retryCalls: BankSyncRetryCall[] | null,
+		today: string,
+	): string | null {
+		const starts = bankAccounts
+			.filter(
+				(bankAccount) =>
+					bankAccount.isActive &&
+					(!retryCalls ||
+						retryCalls.some(
+							(call) => call.kind === 'transactions' && call.bankAccountId === bankAccount.id,
+						)),
+			)
+			.map((bankAccount) => this.getTransactionFetchOptions(bankAccount, today).dateFrom);
+		if (!starts.length || starts.includes(undefined)) return null;
+		return (starts as string[]).sort()[0];
 	}
 
 	private async fetchAccounts(
 		connectionId: BankConnection['id'],
 		bankAccounts: BankAccount[],
 		providerSessionId: string,
-		transactionOptions: EnableBankingTransactionFetchOptions,
+		today: string,
+		retryCalls: BankSyncRetryCall[] | null,
 		lockLease: BankingConnectionLock,
 		failures: BankSyncFailure[],
 		psu?: EnableBankingPsuContext,
@@ -461,7 +526,12 @@ export class BankingSyncService {
 		let connectionExpired = false;
 		let rateLimit: SyncRateLimit | undefined;
 		let applicationRefused = false;
+		let fullRetry = false;
+		const failedCalls: BankSyncRetryCall[] = [];
 		const stopped = () => connectionExpired || rateLimit !== undefined || applicationRefused;
+		// A targeted retry repeats only the calls the previous run failed; the bank counts every unattended call.
+		const wanted = (kind: BankSyncRetryCall['kind'], bankAccountId: string | null) =>
+			!retryCalls || retryCalls.some((call) => call.kind === kind && call.bankAccountId === bankAccountId);
 		const recordFailure = (
 			error: unknown,
 			kind: 'session' | 'balances' | 'transactions',
@@ -473,6 +543,7 @@ export class BankingSyncService {
 			const failure = toBankSyncFailure(error, kind, bankAccount?.id ?? null);
 			failures.push(failure);
 			if (!(error instanceof EnableBankingClientError)) {
+				fullRetry = true;
 				this.logger.warn(
 					`Bank synchronization ${kind} request failed unexpectedly for connection ${connectionId}: ${safeErrorStack(error)}`,
 				);
@@ -490,32 +561,36 @@ export class BankingSyncService {
 					break;
 				case 'application_auth':
 					applicationRefused = true;
+					fullRetry = true;
 					// Every connection's sync fails the same way until Tempo's credentials, key or clock are fixed.
 					this.logger.error(
 						`Enable Banking refused Tempo's application credentials during the ${kind} request for connection ${connectionId}: ${describeBankSyncFailures([failure])}`,
 					);
 					break;
 				case 'failed':
+					failedCalls.push({kind, bankAccountId: bankAccount?.id ?? null});
 					break;
 			}
 		};
 
-		try {
-			const sessionAccounts = await this.enableBankingClient.getSessionAccounts(
-				providerSessionId,
-				lockLease.signal,
-				...(psu ? [psu] : []),
-			);
-			lockLease.assertHealthy();
+		if (wanted('session', null)) {
+			try {
+				const sessionAccounts = await this.enableBankingClient.getSessionAccounts(
+					providerSessionId,
+					lockLease.signal,
+					...(psu ? [psu] : []),
+				);
+				lockLease.assertHealthy();
 
-			if (sessionAccounts.status !== BANK_CONNECTION_STATUSES.AUTHORIZED) {
-				throw new EnableBankingClientError('provider_session_not_authorized');
+				if (sessionAccounts.status !== BANK_CONNECTION_STATUSES.AUTHORIZED) {
+					throw new EnableBankingClientError('provider_session_not_authorized');
+				}
+
+				authoritativeAccountIds = new Set(sessionAccounts.accountIds);
+				hasSuccessfulEndpoint = true;
+			} catch (error) {
+				recordFailure(error, 'session');
 			}
-
-			authoritativeAccountIds = new Set(sessionAccounts.accountIds);
-			hasSuccessfulEndpoint = true;
-		} catch (error) {
-			recordFailure(error, 'session');
 		}
 
 		for (const bankAccount of bankAccounts) {
@@ -523,52 +598,66 @@ export class BankingSyncService {
 			lockLease.assertHealthy();
 			if (authoritativeAccountIds && !authoritativeAccountIds.has(bankAccount.providerAccountId)) continue;
 			if (!authoritativeAccountIds && !bankAccount.isActive) continue;
+			const fetchBalances = wanted('balances', bankAccount.id);
+			const fetchTransactions = wanted('transactions', bankAccount.id);
+			if (!fetchBalances && !fetchTransactions) continue;
 
 			let balances: EnableBankingBalance[] = [];
 			let transactions: EnableBankingTransaction[] = [];
 			let balancesSucceeded = false;
 			let transactionsSucceeded = false;
+			const recordUnparseable = (count: number) => {
+				if (count <= 0) return;
+				// The readable rows are still imported; the account's history is incomplete, so the run is partial.
+				hasFailure = true;
+				failures.push({
+					kind: 'transactions',
+					bankAccountId: bankAccount.id,
+					code: UNPARSEABLE_TRANSACTIONS_CODE,
+					httpStatus: null,
+					retryAfter: false,
+					droppedTransactions: count,
+				});
+			};
 
-			try {
-				balances = await this.enableBankingClient.getAccountBalances(
-					bankAccount.providerAccountId,
-					lockLease.signal,
-					...(psu ? [psu] : []),
-				);
-				lockLease.assertHealthy();
-				balancesSucceeded = true;
-				hasSuccessfulEndpoint = true;
-			} catch (error) {
-				recordFailure(error, 'balances', bankAccount);
+			if (fetchBalances) {
+				try {
+					balances = await this.enableBankingClient.getAccountBalances(
+						bankAccount.providerAccountId,
+						lockLease.signal,
+						...(psu ? [psu] : []),
+					);
+					lockLease.assertHealthy();
+					balancesSucceeded = true;
+					hasSuccessfulEndpoint = true;
+				} catch (error) {
+					recordFailure(error, 'balances', bankAccount);
+				}
 			}
 
-			if (stopped()) break;
-
-			try {
-				const fetched = await this.enableBankingClient.getAccountTransactions(
-					bankAccount.providerAccountId,
-					transactionOptions,
-					lockLease.signal,
-					...(psu ? [psu] : []),
-				);
-				lockLease.assertHealthy();
-				transactions = fetched.transactions;
-				transactionsSucceeded = true;
-				hasSuccessfulEndpoint = true;
-				if (fetched.unparseableCount > 0) {
-					// The readable rows are still imported; the account's history is incomplete, so the run is partial.
-					hasFailure = true;
-					failures.push({
-						kind: 'transactions',
-						bankAccountId: bankAccount.id,
-						code: UNPARSEABLE_TRANSACTIONS_CODE,
-						httpStatus: null,
-						retryAfter: false,
-						droppedTransactions: fetched.unparseableCount,
-					});
+			if (fetchTransactions && !stopped()) {
+				try {
+					const fetched = await this.enableBankingClient.getAccountTransactions(
+						bankAccount.providerAccountId,
+						this.getTransactionFetchOptions(bankAccount, today),
+						lockLease.signal,
+						...(psu ? [psu] : []),
+					);
+					lockLease.assertHealthy();
+					transactions = fetched.transactions;
+					transactionsSucceeded = true;
+					hasSuccessfulEndpoint = true;
+					recordUnparseable(fetched.unparseableCount);
+				} catch (error) {
+					recordFailure(error, 'transactions', bankAccount);
+					// Pages fetched before the failure are imported; the watermark stays until a fetch completes.
+					const partial = error instanceof EnableBankingClientError ? error.partialTransactions : undefined;
+					if (partial) {
+						transactions = partial.transactions;
+						if (transactions.length) hasSuccessfulEndpoint = true;
+						recordUnparseable(partial.unparseableCount);
+					}
 				}
-			} catch (error) {
-				recordFailure(error, 'transactions', bankAccount);
 			}
 
 			accounts.push({
@@ -592,6 +681,10 @@ export class BankingSyncService {
 			connectionExpired,
 			rateLimit,
 			failures,
+			fetchedThrough: today,
+			targeted: retryCalls !== null,
+			retryCalls: failedCalls,
+			fullRetry,
 		};
 	}
 
@@ -655,14 +748,14 @@ export class BankingSyncService {
 					);
 				}
 
-				if (accountResult.transactionsSucceeded) {
+				if (accountResult.transactionsSucceeded || accountResult.transactions.length > 0) {
 					await this.bankTransactionPersistenceService.repairIncompleteTransactionIdentities(
 						bankTransactionRepository,
 						accountResult.bankAccount,
 					);
 				}
 
-				if (accountResult.transactionsSucceeded && accountResult.transactions.length > 0) {
+				if (accountResult.transactions.length > 0) {
 					const transactionPersistence = await this.bankTransactionPersistenceService.persistTransactions(
 						bankTransactionRepository,
 						accountResult.bankAccount,
@@ -672,6 +765,13 @@ export class BankingSyncService {
 					);
 					transactionsAdded += transactionPersistence.transactionsAdded;
 					persistedTransactionIds.push(...transactionPersistence.persistedTransactionIds);
+				}
+
+				if (accountResult.transactionsSucceeded) {
+					await bankAccountRepository.update(
+						{id: accountResult.bankAccount.id},
+						{transactionsFetchedThrough: fetchResult.fetchedThrough},
+					);
 				}
 
 				if (accountResult.balancesSucceeded && accountResult.balances.length > 0) {
@@ -695,14 +795,17 @@ export class BankingSyncService {
 					status,
 					finishedAt,
 					accountsFetched: fetchResult.accounts.filter(
-						(account) => account.balancesSucceeded || account.transactionsSucceeded,
+						(account) =>
+							account.balancesSucceeded ||
+							account.transactionsSucceeded ||
+							account.transactions.length > 0,
 					).length,
 					balancesFetched: fetchResult.accounts.reduce(
 						(count, account) => count + (account.balancesSucceeded ? account.balances.length : 0),
 						0,
 					),
 					transactionsFetched: fetchResult.accounts.reduce(
-						(count, account) => count + (account.transactionsSucceeded ? account.transactions.length : 0),
+						(count, account) => count + account.transactions.length,
 						0,
 					),
 					errorMessage,
@@ -735,13 +838,14 @@ export class BankingSyncService {
 		fetchResult: SyncFetchResult,
 		status: string,
 		finishedAt: Date,
-	): Pick<BankConnection, 'nextSyncAt' | 'syncStartedAt' | 'syncStatus' | 'syncFailureCount'> {
+	): Pick<BankConnection, 'nextSyncAt' | 'syncStartedAt' | 'syncStatus' | 'syncFailureCount' | 'syncRetryCalls'> {
 		const previousFailureCount = Number.isFinite(connection.syncFailureCount) ? connection.syncFailureCount : 0;
 
 		if (fetchResult.connectionExpired) {
 			return {
 				...this.expiredSchedulingUpdate(),
 				syncFailureCount: previousFailureCount,
+				syncRetryCalls: null,
 			};
 		}
 
@@ -751,6 +855,7 @@ export class BankingSyncService {
 				syncStartedAt: null,
 				syncStatus: BANK_SYNC_STATUSES.RATE_LIMITED,
 				syncFailureCount: previousFailureCount,
+				syncRetryCalls: null,
 			};
 		}
 
@@ -760,16 +865,30 @@ export class BankingSyncService {
 				syncStartedAt: null,
 				syncStatus: BANK_SYNC_STATUSES.SUCCEEDED,
 				syncFailureCount: 0,
+				syncRetryCalls: null,
 			};
 		}
 
 		const syncFailureCount = previousFailureCount + 1;
+		const syncStatus = status === PARTIAL ? BANK_SYNC_STATUSES.PARTIAL : BANK_SYNC_STATUSES.FAILED;
+		// A call that failed again in its own retry, or a failure no retry can fix (unreadable rows), waits for the
+		// next ordinary sync instead of spending more of the bank's daily allowance.
+		if (!fetchResult.fullRetry && (fetchResult.targeted || fetchResult.retryCalls.length === 0)) {
+			return {
+				nextSyncAt: new Date(finishedAt.getTime() + this.getBackgroundIntervalMs()),
+				syncStartedAt: null,
+				syncStatus,
+				syncFailureCount,
+				syncRetryCalls: null,
+			};
+		}
 
 		return {
 			nextSyncAt: new Date(finishedAt.getTime() + this.getRetryDelayMs(syncFailureCount)),
 			syncStartedAt: null,
-			syncStatus: status === PARTIAL ? BANK_SYNC_STATUSES.PARTIAL : BANK_SYNC_STATUSES.FAILED,
+			syncStatus,
 			syncFailureCount,
+			syncRetryCalls: fetchResult.fullRetry ? null : fetchResult.retryCalls,
 		};
 	}
 
@@ -886,6 +1005,7 @@ export class BankingSyncService {
 			syncStartedAt: null,
 			syncFailureCount,
 			nextSyncAt: new Date(Date.now() + this.getRetryDelayMs(syncFailureCount)),
+			syncRetryCalls: null,
 		});
 	}
 

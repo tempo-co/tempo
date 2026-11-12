@@ -1,10 +1,8 @@
-import {cn} from '@/utils/cn';
-
 type AppBodyLayoutProps = {
   children: React.ReactNode;
-  className?: string;
 };
 
-export function AppBodyLayout({children, className}: AppBodyLayoutProps) {
-  return <div className={cn('mx-auto my-8 max-w-7xl px-4', className)}>{children}</div>;
+/** Every signed-in page's column. Pages don't adjust it, so titles and content start in the same place. */
+export function AppBodyLayout({children}: AppBodyLayoutProps) {
+  return <div className='mx-auto my-8 max-w-7xl px-4 max-md:my-6'>{children}</div>;
 }

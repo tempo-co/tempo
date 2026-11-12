@@ -39,6 +39,7 @@ const BANKING_SYNC_SERVICE_DEPENDENCIES = [
 	'currencyExchangeService',
 	'merchantLogoService',
 	'bankTransactionPersistenceService',
+	'redis',
 ] as const;
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
@@ -46,6 +47,7 @@ const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
 	currencyExchangeService: {recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
 	merchantLogoService: {enqueueForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
 	bankTransactionPersistenceService: new BankTransactionPersistenceService(),
+	redis: {get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue('OK')},
 };
 
 /** Builds the service with named test doubles; unspecified dependencies are empty objects. */

@@ -56,12 +56,13 @@ function BankConnectionsIndex() {
   return (
     <>
       <LoadingBar isPending={isPending} />
-      <AppBodyLayout className='max-md:my-6'>
+      <AppBodyLayout>
         <BankConnectionList
           bankConnections={bankConnections || []}
           isPending={isPending}
           isError={isError}
-          onRetry={() => void query.refetch()}
+          error={query.error}
+          onRetry={() => query.refetch()}
         />
       </AppBodyLayout>
     </>

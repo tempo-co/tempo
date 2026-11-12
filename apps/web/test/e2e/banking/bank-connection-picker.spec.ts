@@ -107,9 +107,13 @@ async function mockPickerPage(
   await mockBankConnections(page, connections);
   await mockJson(page, '**/bank-connections/*/refresh', {});
   await mockJson(page, '**/bank-connections/aspsps', banks);
-  await mockJson(page, '**/bank-connections/aspsps/logos/*/region-*', {url: '/example-bank-light.svg'});
+  await mockJson(page, '**/bank-connections/aspsps/logos/*/region-*', {
+    url: '/example-bank-light.svg',
+  });
   await mockJson(page, '**/bank-connections/aspsps/logos/DE/broken', {url: BROKEN_LOGO_URL});
-  await mockJson(page, '**/bank-connections/aspsps/logos/NL/example', {url: '/example-bank-light.svg'});
+  await mockJson(page, '**/bank-connections/aspsps/logos/NL/example', {
+    url: '/example-bank-light.svg',
+  });
   await page.route('**/example-bank-light.svg', (route) =>
     route.fulfill({status: 200, contentType: 'image/svg+xml', body: NARROW_LOGO}),
   );
@@ -215,7 +219,9 @@ test.describe('Connect a bank', () => {
       ).toBeLessThanOrEqual(1);
       const loadingBox = await boxOf(loading);
       const pickerBox = await boxOf(picker);
-      expect(Math.abs(loadingBox.x + loadingBox.width / 2 - (pickerBox.x + pickerBox.width / 2))).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(loadingBox.x + loadingBox.width / 2 - (pickerBox.x + pickerBox.width / 2)),
+      ).toBeLessThanOrEqual(1);
       const height = await sheetHeight(picker);
 
       releaseBanks();
@@ -242,9 +248,15 @@ test.describe('Connect a bank', () => {
         /example-bank-light.svg$/,
       );
       for (const theme of ['light', 'dark']) {
-        await page.evaluate((value) => document.documentElement.classList.toggle('dark', value === 'dark'), theme);
+        await page.evaluate(
+          (value) => document.documentElement.classList.toggle('dark', value === 'dark'),
+          theme,
+        );
         for (const slot of await picker.getByTestId('bank-wordmark').all()) {
-          await expect(slot).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)');
+          await expect(slot).toHaveCSS(
+            'background-color',
+            theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)',
+          );
           await expect(slot).toHaveCSS('border-top-width', '1px');
           await expect(slot).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
         }
@@ -304,9 +316,15 @@ test.describe('Connect a bank', () => {
         height: 56,
       });
       for (const theme of ['light', 'dark']) {
-        await page.evaluate((value) => document.documentElement.classList.toggle('dark', value === 'dark'), theme);
+        await page.evaluate(
+          (value) => document.documentElement.classList.toggle('dark', value === 'dark'),
+          theme,
+        );
         const slot = picker.getByTestId('bank-wordmark');
-        await expect(slot).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)');
+        await expect(slot).toHaveCSS(
+          'background-color',
+          theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)',
+        );
         await expect(slot).toHaveCSS('border-top-width', '1px');
         await expect(slot).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
         await expectCenteredLogo(slot);
@@ -422,7 +440,7 @@ test.describe('Connect a bank', () => {
     await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
     await refreshed;
     // By text: the open sheet hides the page from the accessibility tree.
-    await expect(page.getByText('Could not load bank connections')).toBeVisible();
+    await expect(page.getByText("Couldn't load bank connections")).toBeVisible();
     await expect(picker.getByRole('heading', {name: 'Connect Demo Pankki'})).toBeVisible();
 
     await page.keyboard.press('Escape');

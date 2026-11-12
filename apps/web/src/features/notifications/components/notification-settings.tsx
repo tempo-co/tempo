@@ -1,7 +1,6 @@
-import {BellRing} from 'lucide-react';
 import {useState} from 'react';
 
-import {EmptyState} from '@/components/shared/layout/app-empty-state';
+import {LoadErrorState} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
 import {Skeleton} from '@/components/ui/skeleton';
@@ -95,22 +94,13 @@ function ThisDevice({publicKey}: {publicKey: string | null}) {
 }
 
 export function NotificationSettings() {
-  const {data: settings, isPending, isError, refetch} = useNotificationSettings();
+  const {data: settings, isPending, isError, error, refetch} = useNotificationSettings();
   const update = useUpdateNotificationPreferences();
 
   if (isPending) return <Skeleton className='h-72 w-full rounded-card bg-card' />;
   if (isError) {
     return (
-      <EmptyState
-        icon={BellRing}
-        tone='error'
-        title='Notification settings could not be loaded.'
-        description='Check your connection and try again.'
-      >
-        <Button variant='outline' onClick={() => void refetch()}>
-          Try again
-        </Button>
-      </EmptyState>
+      <LoadErrorState title="Couldn't load notification settings" error={error} onRetry={refetch} />
     );
   }
 
