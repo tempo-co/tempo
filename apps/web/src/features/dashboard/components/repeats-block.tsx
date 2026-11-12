@@ -1,6 +1,6 @@
 import {useNavigate} from '@tanstack/react-router';
 import {format} from 'date-fns';
-import {AlertTriangle, ChevronRight, Clock} from 'lucide-react';
+import {ChevronRight} from 'lucide-react';
 
 import {LoadErrorState} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
@@ -166,24 +166,21 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
       )}
       {flagged.length + upcoming.length > 0 && (
         <ul className='-mx-2 grid'>
-          {flagged.map((item) => {
-            const late = item.flags.includes('LATE');
-            const Icon = late ? Clock : AlertTriangle;
-            return (
-              <li key={item.key}>
-                <button type='button' onClick={() => open(item.key)} className={row}>
-                  <Icon aria-hidden='true' className='size-4 text-warning' />
-                  <span className='min-w-0'>
-                    <span className='block truncate'>{item.name}</span>
-                    <span className='block text-xs text-warning'>
-                      {late ? 'Not paid yet' : 'Higher than usual'}
-                    </span>
+          {/* The same tile as the payments below, so names line up; the warning line says what's wrong. */}
+          {flagged.map((item) => (
+            <li key={item.key}>
+              <button type='button' onClick={() => open(item.key)} className={row}>
+                <SeriesTile series={item} className='size-7' />
+                <span className='min-w-0'>
+                  <span className='block truncate'>{item.name}</span>
+                  <span className='block text-xs text-warning'>
+                    {item.flags.includes('LATE') ? 'Not paid yet' : 'Higher than usual'}
                   </span>
-                  <span className='numeric'>{formatAmount(item)}</span>
-                </button>
-              </li>
-            );
-          })}
+                </span>
+                <span className='numeric'>{formatAmount(item)}</span>
+              </button>
+            </li>
+          ))}
           {upcoming.map((payment) => (
             <li key={payment.key}>
               <button type='button' onClick={() => open(payment.key)} className={row}>
