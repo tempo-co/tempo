@@ -171,11 +171,11 @@ function DoubtfulRowBlock({
             </>
           )}
           <Button
-            variant='ghost'
+            variant='outline'
             size='sm'
             disabled={pending}
             onClick={() => onResolve({decision: 'new'})}
-            className='-ml-3 justify-self-start'
+            className='w-full md:w-auto md:justify-self-start'
           >
             {pending && answer?.decision === 'new' ? (
               <PendingLabel>Saving…</PendingLabel>
