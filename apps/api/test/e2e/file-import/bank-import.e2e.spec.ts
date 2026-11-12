@@ -475,7 +475,15 @@ describe('Bank imports', () => {
 			await synced({amount: '-13.00', bookingDate: '2026-03-09'}),
 			await synced({amount: '-13.00', bookingDate: '2026-03-11'}),
 		];
-		const storedIds = [byReference, byBalance, sameDay, nearby, ...doubtfulCandidates].map(({id}) => id);
+		// The only row near the file's -17.00, but its bank reference names another payment.
+		const otherReference = await synced({
+			amount: '-17.00',
+			bookingDate: '2026-03-12',
+			entryReference: 'BANK-REF-8',
+		});
+		const storedIds = [byReference, byBalance, sameDay, nearby, ...doubtfulCandidates, otherReference].map(
+			({id}) => id,
+		);
 		const stored = () => transactions.find({where: {id: In(storedIds)}, order: {id: 'ASC'}});
 		const storedBefore = await stored();
 		const storedById = new Map(storedBefore.map((row) => [row.id, row]));
@@ -499,6 +507,7 @@ describe('Bank imports', () => {
 						entry('9.00', '2026-03-10', 'FILE-REF-5'),
 						entry('11.00', '2026-03-10', 'FILE-REF-6'),
 						entry('13.00', '2026-03-10', 'FILE-REF-7'),
+						entry('17.00', '2026-03-10', 'FILE-REF-8'),
 					],
 				},
 				// One entry between an opening and a closing balance carries its balance after.
@@ -514,13 +523,13 @@ describe('Bank imports', () => {
 		const imported = await drop(agent, [statement]).expect(201);
 
 		expect(imported.body).toMatchObject({
-			rowsParsed: 8,
+			rowsParsed: 9,
 			rowsAdded: 2,
 			rowsAlreadyPresent: 4,
 			rowsMatchedByReference: 1,
 			rowsMatchedByBalance: 1,
 			rowsMatchedByDate: 2,
-			rowsDoubtful: 2,
+			rowsDoubtful: 3,
 			accounts: [{id: account.id, name: 'Main account', currency: 'EUR', created: false}],
 		} satisfies Partial<BankImportSummary>);
 		const added = await transactions.find({where: {importId: imported.body.id}, order: {entryReference: 'ASC'}});
@@ -544,7 +553,7 @@ describe('Bank imports', () => {
 			rowsMatchedByReference: 3,
 			rowsMatchedByBalance: 1,
 			rowsMatchedByDate: 2,
-			rowsDoubtful: 2,
+			rowsDoubtful: 3,
 		});
 		await agent.delete(`/bank-imports/${again.body.id}`).set('Origin', ORIGIN).expect(204);
 		expect(await doubtfulRows.countBy({importId: again.body.id})).toBe(0);
@@ -587,8 +596,18 @@ describe('Bank imports', () => {
 				}),
 				candidates: doubtfulCandidates.slice(2).map(candidate),
 			},
+			{
+				id: expect.any(String),
+				bankAccountId: account.id,
+				row: expect.objectContaining({
+					amount: '-17.00',
+					bookingDate: '2026-03-10',
+					bankReference: 'FILE-REF-8',
+				}),
+				candidates: [candidate(otherReference)],
+			},
 		]);
-		const [asNew, asDuplicate] = listedRows;
+		const [asNew, asDuplicate, asNewDespiteNearby] = listedRows;
 		const resolve = (rowId: string, body: object) =>
 			agent
 				.post(`/bank-imports/${imported.body.id}/doubtful-rows/${rowId}/resolve`)
@@ -598,19 +617,21 @@ describe('Bank imports', () => {
 		await resolve(asDuplicate.id, {decision: 'duplicate', transactionId: doubtfulCandidates[0].id}).expect(400);
 		await resolve(asDuplicate.id, {decision: 'duplicate'}).expect(400);
 		const afterNew = await resolve(asNew.id, {decision: 'new'}).expect(200);
-		expect(afterNew.body).toMatchObject({rowsAdded: 3, rowsAlreadyPresent: 4, rowsDoubtful: 1});
+		expect(afterNew.body).toMatchObject({rowsAdded: 3, rowsAlreadyPresent: 4, rowsDoubtful: 2});
 		const afterDuplicate = await resolve(asDuplicate.id, {
 			decision: 'duplicate',
 			transactionId: doubtfulCandidates[3].id,
 		}).expect(200);
-		expect(afterDuplicate.body).toMatchObject({rowsAdded: 3, rowsAlreadyPresent: 5, rowsDoubtful: 0});
+		expect(afterDuplicate.body).toMatchObject({rowsAdded: 3, rowsAlreadyPresent: 5, rowsDoubtful: 1});
+		const afterNewDespiteNearby = await resolve(asNewDespiteNearby.id, {decision: 'new'}).expect(200);
+		expect(afterNewDespiteNearby.body).toMatchObject({rowsAdded: 4, rowsAlreadyPresent: 5, rowsDoubtful: 0});
 		await resolve(asNew.id, {decision: 'new'}).expect(409);
 		await agent.get(`/bank-imports/${imported.body.id}/doubtful-rows`).expect(200, []);
 		expect(
 			(await transactions.find({where: {importId: imported.body.id}}))
 				.map(({entryReference}) => entryReference)
 				.sort(),
-		).toEqual(['FILE-REF-3B', 'FILE-REF-5', 'FILE-REF-6']);
+		).toEqual(['FILE-REF-3B', 'FILE-REF-5', 'FILE-REF-6', 'FILE-REF-8']);
 		expect(await stored()).toEqual(storedBefore);
 
 		await agent.delete(`/bank-imports/${imported.body.id}`).set('Origin', ORIGIN).expect(204);
@@ -796,6 +817,12 @@ describe('Bank imports', () => {
 								reference: 'FILE-ADOPT-5',
 								info: 'Example Garage',
 							},
+							{
+								amount: '70.00',
+								bookingDate: '2026-03-23',
+								reference: 'FILE-ADOPT-6',
+								info: 'Example Florist',
+							},
 						],
 					},
 				]),
@@ -807,6 +834,7 @@ describe('Bank imports', () => {
 		const kept = await importedRow('FILE-ADOPT-2');
 		const lookAlikes = [await importedRow('FILE-ADOPT-3'), await importedRow('FILE-ADOPT-4')];
 		const held = await importedRow('FILE-ADOPT-5');
+		const otherPayment = await importedRow('FILE-ADOPT-6');
 		await transactions.update(
 			{id: twin.id},
 			{category: 'GROCERIES', categorySource: 'MANUAL', categoryStatus: 'COMPLETED'},
@@ -820,9 +848,9 @@ describe('Bank imports', () => {
 		});
 		const delivered: Record<string, EnableBankingTransaction[]> = {
 			'adoption-account': [
+				// Without a bank reference of its own, the sync row matches the imported row on amount and day.
 				{
 					providerTransactionId: 'provider-adopt-1',
-					entryReference: 'PROVIDER-REF-1',
 					amount: '25.00',
 					currency: 'EUR',
 					creditDebitIndicator: 'DBIT',
@@ -865,6 +893,18 @@ describe('Bank imports', () => {
 					valueDate: '2026-03-22',
 					description: 'Example Garage',
 				},
+				{
+					providerTransactionId: 'provider-other-reference-1',
+					entryReference: 'PROVIDER-REF-6',
+					amount: '70.00',
+					currency: 'EUR',
+					creditDebitIndicator: 'DBIT',
+					status: 'BOOK',
+					transactionDate: '2026-03-23',
+					bookingDate: '2026-03-23',
+					valueDate: '2026-03-23',
+					description: 'Example Florist',
+				},
 			],
 			'adoption-plain-account': [
 				{
@@ -897,12 +937,11 @@ describe('Bank imports', () => {
 		};
 
 		try {
-			expect(await synchronize()).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 3});
+			expect(await synchronize()).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 4});
 			const adopted = await transactions.findOneByOrFail({id: twin.id});
 			expect(adopted).toMatchObject({
 				importId: null,
 				providerTransactionId: 'provider-adopt-1',
-				entryReference: 'PROVIDER-REF-1',
 				transactionDate: '2026-03-19',
 				bookingDate: '2026-03-20',
 				amount: '-25.00000000',
@@ -919,7 +958,13 @@ describe('Bank imports', () => {
 				importId: imported.body.id,
 				providerTransactionId: null,
 			});
-			expect(await transactions.countBy({bankAccountId: account.id})).toBe(7);
+			// The imported row of the same amount and day carries another bank reference: another payment, kept apart.
+			expect(await transactions.findOneByOrFail({id: otherPayment.id})).toMatchObject({
+				importId: imported.body.id,
+				providerTransactionId: null,
+				entryReference: 'FILE-ADOPT-6',
+			});
+			expect(await transactions.countBy({bankAccountId: account.id})).toBe(9);
 			expect(await transactions.countBy({bankAccountId: plainAccount.id})).toBe(2);
 			expect(await transactions.findOneByOrFail({id: plainRow.id})).toMatchObject({
 				providerTransactionId: null,
@@ -946,6 +991,7 @@ describe('Bank imports', () => {
 				({id, providerTransactionId}) => [id, providerTransactionId],
 			),
 		).toEqual([
+			[expect.any(String), 'provider-other-reference-1'],
 			[held.id, 'provider-held-1'],
 			[twin.id, 'provider-adopt-1'],
 			[expect.any(String), 'provider-look-alike-1'],

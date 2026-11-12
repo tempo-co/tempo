@@ -66,6 +66,46 @@ describe('matchTransactions', () => {
 		]);
 	});
 
+	it('pairs a same-day row with the next existing row whose reference does not conflict with its own', () => {
+		const outcomes = matchTransactions(
+			[incoming({reference: 'REF-A'}), incoming({reference: 'REF-B'})],
+			[existing('other-reference', {reference: 'REF-C'}), existing('no-reference')],
+		);
+
+		expect(outcomes).toEqual([
+			{kind: 'matched', existingId: 'no-reference', step: 'sameDay'},
+			{kind: 'doubtful', candidateIds: ['other-reference']},
+		]);
+	});
+
+	it('holds a row as doubtful when its only candidate one to three days away carries a different reference', () => {
+		const outcomes = matchTransactions(
+			[
+				incoming({amount: '-1.00', reference: 'FILE-1', bookingDate: '2026-03-03'}),
+				incoming({amount: '-2.00', reference: 'FILE-2', bookingDate: '2026-03-04'}),
+				incoming({amount: '-3.00', reference: ' FILE-3 ', bookingDate: '2026-03-05'}),
+				incoming({amount: '-4.00', reference: 'FILE-4', bookingDate: '2026-03-04'}),
+				incoming({amount: '-5.00', reference: null, bookingDate: '2026-03-04'}),
+			],
+			[
+				existing('one-day', {amount: '-1.00', reference: 'BANK-1'}),
+				existing('two-days', {amount: '-2.00', reference: 'BANK-2'}),
+				existing('three-days', {amount: '-3.00', reference: 'BANK-3'}),
+				existing('stored-without-reference', {amount: '-4.00', reference: '  '}),
+				existing('incoming-without-reference', {amount: '-5.00', reference: 'BANK-5'}),
+			],
+			{uniqueCandidatesOnly: true},
+		);
+
+		expect(outcomes).toEqual([
+			{kind: 'doubtful', candidateIds: ['one-day']},
+			{kind: 'doubtful', candidateIds: ['two-days']},
+			{kind: 'doubtful', candidateIds: ['three-days']},
+			{kind: 'matched', existingId: 'stored-without-reference', step: 'nearby'},
+			{kind: 'matched', existingId: 'incoming-without-reference', step: 'nearby'},
+		]);
+	});
+
 	it('pairs only one-to-one same-day groups when asked for unique candidates, and holds larger groups as doubtful', () => {
 		const outcomes = matchTransactions(
 			[incoming(), incoming({amount: '-3.00'})],
