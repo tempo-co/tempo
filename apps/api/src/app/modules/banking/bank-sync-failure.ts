@@ -20,6 +20,13 @@ export type BankSyncFailure = {
 	droppedTransactions?: number;
 };
 
+/** A provider call a targeted retry repeats: the session read, or one account's balances or transactions. */
+export type BankSyncRetryCall = {
+	kind: 'session' | 'balances' | 'transactions';
+	/** Tempo's bank account id; null for the session read. */
+	bankAccountId: string | null;
+};
+
 export const UNPARSEABLE_TRANSACTIONS_CODE = 'unparseable_transactions';
 export const INTERRUPTED_SYNC_CODE = 'sync_interrupted';
 

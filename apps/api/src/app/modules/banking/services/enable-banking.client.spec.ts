@@ -898,6 +898,31 @@ describe('EnableBankingClient', () => {
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
+	it('fails a later transaction page with the rows of the pages before it', async () => {
+		const row = {transaction_amount: {amount: '4.00', currency: 'EUR'}, credit_debit_indicator: 'DBIT'};
+		fetchMock
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({transactions: [row, {transaction_amount: {}}], continuation_key: 'page-2'}),
+					{
+						status: 200,
+					},
+				),
+			)
+			.mockResolvedValueOnce(new Response(JSON.stringify({error: 'ASPSP_ERROR'}), {status: 503}));
+
+		const failure = await client
+			.getAccountTransactions('account-id', {strategy: 'longest'})
+			.catch((error: unknown) => error);
+
+		expect(failure).toMatchObject({
+			code: 'ASPSP_ERROR',
+			providerStatus: 503,
+			partialTransactions: {transactions: [expect.objectContaining({amount: '4.00'})], unparseableCount: 1},
+		});
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
 	it('propagates a supplied cancellation signal to transaction requests', async () => {
 		const controller = new AbortController();
 		fetchMock.mockResolvedValueOnce(
