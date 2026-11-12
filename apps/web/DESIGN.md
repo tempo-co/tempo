@@ -263,11 +263,13 @@ and don't introduce sizes outside this scale.
 
 The authenticated shell is a sticky `48px` header aligned to the ~`80rem` content column;
 below `md`, navigation moves to a fixed bottom tab bar. Settings uses a ~`40rem` reading
-column. Spacing follows a 4px rhythm: `8px` compact controls, `12px` control padding, `16px`
-related content, `24px` between groups, `32–48px` section breaks. Responsive behavior is
-structural, not scaled: navigation becomes a tab bar, tables scroll horizontally (or, when a
-phone needs only their latest column, become rows that open in place into the rest), rows stay
-understandable without hover.
+column. From `md` up, the page reserves the scrollbar's gutter, so the column stays put
+between short and long pages and when a dialog locks scrolling. Spacing follows a 4px
+rhythm: `8px` compact controls, `12px` control padding, `16px` related content, `24px`
+between groups, `32–48px` section breaks. Responsive behavior is structural, not scaled:
+navigation becomes a tab bar, tables scroll horizontally (or, when a phone needs only their
+latest column, become rows that open in place into the rest), rows stay understandable
+without hover.
 
 Empty, loading, error, syncing, and filtered-empty states belong to the layout with a clear
 next step.

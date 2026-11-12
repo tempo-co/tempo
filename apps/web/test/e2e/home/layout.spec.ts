@@ -185,7 +185,8 @@ async function columnGap(page: Page) {
   return Math.abs(right.y + right.height - (chart.y + chart.height));
 }
 
-for (const width of [1000, 1024, 1440]) {
+// 1010px is just past the side-by-side breakpoint: a 60rem column plus the page padding and scrollbar gutter.
+for (const width of [1010, 1024, 1440]) {
   test(`the chart and the span details end level at ${width}px, at every span`, async ({
     page,
     homePage,
