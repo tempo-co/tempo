@@ -3,6 +3,8 @@ import {faker} from '@faker-js/faker';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {VERIFIED_ACCOUNT_EMAIL} from '../../constants/seed.constants';
 import {expect, test} from '../../fixtures';
+import {HomePage} from '../../pages/home.page';
+import {LoginPage} from '../../pages/login.page';
 import {EmailUtils} from '../../utils/email-utils';
 
 test.describe('Signup', () => {
@@ -51,28 +53,51 @@ test.describe('Signup', () => {
       await expect(homePage.alreadyVerifiedToastTitle).toBeVisible();
     });
 
-    test('should verify email via LINK in a signed-out browser, then ask to log in', async ({
+    test('should confirm email via LINK in another browser, move the signup tab on, and offer login there', async ({
+      browser,
       page,
       signupPage,
       verifyEmailPage,
-      loginPage,
       homePage,
     }) => {
+      // Two browsers each sign in, so this journey needs more than the default budget.
+      test.slow();
       const password = faker.internet.password({length: 12});
       const email = await signupPage.fillAndSubmitForm(password);
       await verifyEmailPage.expectToBeOnPage();
       const message = await EmailUtils.findEmailByRecipient(email);
-      await page.context().clearCookies();
 
-      await page.goto(EmailUtils.extractOnboardingVerifyEmailLink(message?.Text));
+      const otherContext = await browser.newContext({storageState: {cookies: [], origins: []}});
+      try {
+        const otherPage = await otherContext.newPage();
+        const otherLoginPage = new LoginPage(otherPage);
+        const otherHomePage = new HomePage(otherPage);
+        await otherPage.goto(EmailUtils.extractOnboardingVerifyEmailLink(message?.Text));
 
-      await loginPage.expectToBeOnPage();
-      await expect(page.getByText('Your email has been verified.')).toBeVisible();
-      await loginPage.emailInput.fill(email);
-      await loginPage.passwordInput.fill(password);
-      await loginPage.submitButton.click();
-      await homePage.expectToBeOnPage();
-      await homePage.expectUserLoggedIn();
+        await expect(otherPage.getByText('Email confirmed')).toBeVisible();
+        await expect(
+          otherPage.getByText('Go back to where you signed up, or log in here.'),
+        ).toBeVisible();
+
+        await page.bringToFront();
+        await page.evaluate(() =>
+          document.dispatchEvent(new Event('visibilitychange', {bubbles: true})),
+        );
+        await homePage.expectToBeOnPage();
+        await homePage.expectWelcomeMessage();
+        await homePage.expectUserLoggedIn();
+
+        await otherPage.bringToFront();
+        await otherPage.getByTestId('log-in-button').click();
+        await expect(otherPage).toHaveURL(/\/login\?email=/);
+        await expect(otherLoginPage.emailInput).toHaveValue(email.toLowerCase());
+        await otherLoginPage.passwordInput.fill(password);
+        await otherLoginPage.submitButton.click();
+        await otherHomePage.expectToBeOnPage();
+        await otherHomePage.expectUserLoggedIn();
+      } finally {
+        await otherContext.close();
+      }
     });
 
     test('should redirect to login on link click', async ({page, signupPage}) => {
