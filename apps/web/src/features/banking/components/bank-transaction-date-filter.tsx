@@ -168,16 +168,6 @@ export function BankTransactionDateFilter({
         >
           {presets}
           {calendar}
-          {filters.bookingDate !== undefined && (
-            <>
-              <Separator className='w-full' />
-              <div className='p-1'>
-                <Button className='h-10 w-full rounded-sm' variant='ghost' onClick={handleReset}>
-                  Reset
-                </Button>
-              </div>
-            </>
-          )}
         </div>
       }
     >

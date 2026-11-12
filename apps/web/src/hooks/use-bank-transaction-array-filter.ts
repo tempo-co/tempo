@@ -24,7 +24,5 @@ export function useBankTransactionArrayFilter<K extends ArrayFilterKey>(
         : [...selectedValues, value],
     );
 
-  const reset = () => setSelectedValues([]);
-
-  return {selectedValues, setSelectedValues, toggle, reset};
+  return {selectedValues, setSelectedValues, toggle};
 }

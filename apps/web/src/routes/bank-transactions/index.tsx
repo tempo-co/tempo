@@ -286,7 +286,7 @@ function LedgerSkeleton() {
       {[3, 5].map((count, index) => (
         <div key={index} className='grid gap-1.5' aria-hidden='true'>
           <Bone className='mx-1 h-3 w-24 rounded-sm' />
-          <ul className='divide-y divide-border/60 rounded-card border bg-card px-2 *:px-1'>
+          <ul className='divide-y divide-border/60 overflow-hidden rounded-card border bg-card'>
             <TileRowsSkeleton count={count} />
           </ul>
         </div>

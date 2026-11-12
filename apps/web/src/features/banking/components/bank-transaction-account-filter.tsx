@@ -11,7 +11,6 @@ import {useBankTransactionArrayFilter} from '@/hooks/use-bank-transaction-array-
 import {useActiveBankAccounts} from '../api/use-active-bank-accounts';
 import {BankTransactionFilterParams} from '../types/bank-transaction';
 import {BankAccountLabel} from './bank-account-label';
-import {FilterResetGroup} from './bank-transaction-faceted-filter';
 import {FilterCheckIndicator} from './bank-transaction-multi-select-filter';
 
 /**
@@ -20,11 +19,10 @@ import {FilterCheckIndicator} from './bank-transaction-multi-select-filter';
  */
 export function BankTransactionAccountFilter({filters}: {filters: BankTransactionFilterParams}) {
   const {accounts, needsAccountName, isPending, isError} = useActiveBankAccounts();
-  const {
-    selectedValues,
-    toggle: handleSelect,
-    reset: handleReset,
-  } = useBankTransactionArrayFilter(filters, 'bankAccountIds');
+  const {selectedValues, toggle: handleSelect} = useBankTransactionArrayFilter(
+    filters,
+    'bankAccountIds',
+  );
 
   if (isPending || isError || accounts.length === 0) {
     return (
@@ -55,7 +53,6 @@ export function BankTransactionAccountFilter({filters}: {filters: BankTransactio
             </CommandItem>
           ))}
         </CommandGroup>
-        <FilterResetGroup show={selectedValues.length > 0} onReset={handleReset} />
       </CommandList>
     </Command>
   );

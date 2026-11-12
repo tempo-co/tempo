@@ -16,16 +16,14 @@ import {
   BankTransactionFilterParams,
 } from '../types/bank-transaction';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
-import {FilterResetGroup} from './bank-transaction-faceted-filter';
 import {FilterCheckIndicator} from './bank-transaction-multi-select-filter';
 
 /** The category options for the Filters panel, which scrolls them itself. */
 export function BankTransactionCategoryFilter({filters}: {filters: BankTransactionFilterParams}) {
-  const {
-    selectedValues,
-    toggle: handleSelect,
-    reset: handleReset,
-  } = useBankTransactionArrayFilter(filters, 'categories');
+  const {selectedValues, toggle: handleSelect} = useBankTransactionArrayFilter(
+    filters,
+    'categories',
+  );
 
   return (
     <Command>
@@ -59,7 +57,6 @@ export function BankTransactionCategoryFilter({filters}: {filters: BankTransacti
             );
           })}
         </CommandGroup>
-        <FilterResetGroup show={selectedValues.length > 0} onReset={handleReset} />
       </CommandList>
     </Command>
   );

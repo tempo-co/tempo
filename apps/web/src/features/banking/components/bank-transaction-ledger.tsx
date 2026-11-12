@@ -88,7 +88,7 @@ export function BankTransactionLedger({
       <ul
         aria-label='Transactions'
         data-testid='bank-transaction-ledger'
-        className='divide-y divide-border/60 rounded-card border bg-card px-2'
+        className='divide-y divide-border/60 overflow-hidden rounded-card border bg-card'
       >
         {transactions.map(row)}
       </ul>
@@ -109,7 +109,7 @@ export function BankTransactionLedger({
         return (
           <section key={day} aria-label={label} className='grid gap-1.5'>
             <h2 className='px-1 text-xs font-medium text-muted-foreground'>{label}</h2>
-            <ul className='divide-y divide-border/60 rounded-card border bg-card px-2'>
+            <ul className='divide-y divide-border/60 overflow-hidden rounded-card border bg-card'>
               {rows.map(row)}
             </ul>
           </section>
@@ -164,8 +164,9 @@ function LedgerRow({
       aria-label={`View ${title} transaction details`}
       onClick={(event) => onSelect(transaction.id, event.currentTarget)}
       className={cn(
-        // One set of tracks for every list, so Category sits in the same place with or without accounts.
-        'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-sm px-1 py-3 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:grid-cols-[auto_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(8rem,max-content)]',
+        // The row fills its card edge to edge, so hover and the click target do too; the card clips the corners and
+        // the focus ring sits inside the row. One set of tracks for every list, so Category sits in the same place with or without accounts.
+        'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring lg:grid-cols-[auto_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(8rem,max-content)]',
       )}
     >
       <MerchantLogoTile transaction={transaction} />

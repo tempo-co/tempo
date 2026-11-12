@@ -13,7 +13,6 @@ import {
   BankTransactionFilterParams,
 } from '../types/bank-transaction';
 import {CASH_FLOW_LABELS} from '../utils/drill-filters';
-import {FilterResetGroup} from './bank-transaction-faceted-filter';
 import {FilterCheckIndicator} from './bank-transaction-multi-select-filter';
 
 type InternalKind = (typeof BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS)[number];
@@ -23,11 +22,7 @@ const isInternalKind = (value: BankTransactionCashFlowFilterValue): value is Int
 
 /** The cash flow options for the Filters panel. */
 export function BankTransactionCashFlowFilter({filters}: {filters: BankTransactionFilterParams}) {
-  const {
-    selectedValues,
-    setSelectedValues,
-    reset: handleReset,
-  } = useBankTransactionArrayFilter(filters, 'cashFlows');
+  const {selectedValues, setSelectedValues} = useBankTransactionArrayFilter(filters, 'cashFlows');
   const internalKinds = selectedValues.includes('INTERNAL')
     ? [...BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS]
     : BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS.filter((kind) => selectedValues.includes(kind));
@@ -99,7 +94,6 @@ export function BankTransactionCashFlowFilter({filters}: {filters: BankTransacti
                 : 'Not selected'}
           </span>
         ))}
-        <FilterResetGroup show={selectedValues.length > 0} onReset={() => void handleReset()} />
       </CommandList>
     </Command>
   );

@@ -8,7 +8,6 @@ import * as React from 'react';
 import {Command, CommandGroup, CommandItem, CommandList} from '@/components/ui/command';
 
 import {BankTransactionFilterParams} from '../types/bank-transaction';
-import {FilterResetGroup} from './bank-transaction-faceted-filter';
 import {FilterCheckIndicator} from './bank-transaction-multi-select-filter';
 
 const LABELS: Record<BankTransactionBaseAmountFilterValue, string> = {
@@ -44,7 +43,6 @@ export function BankTransactionBaseAmountFilter({filters}: {filters: BankTransac
             {filters.baseAmount === value ? 'Selected' : 'Not selected'}
           </span>
         ))}
-        <FilterResetGroup show={!!filters.baseAmount} onReset={() => select(undefined)} />
       </CommandList>
     </Command>
   );

@@ -1,3 +1,4 @@
+import {useNavigate} from '@tanstack/react-router';
 import {ChevronLeft, ChevronRight, SlidersHorizontal} from 'lucide-react';
 import * as React from 'react';
 
@@ -31,7 +32,21 @@ import {BankTransactionDateFilter} from './bank-transaction-date-filter';
 type FacetKey =
   'bookingDate' | 'categories' | 'cashFlows' | 'bankAccountIds' | 'categorySources' | 'baseAmount';
 
-type Facet = {key: FacetKey; label: string; summary: string | undefined; pane: React.ReactNode};
+type Facet = {
+  key: FacetKey;
+  label: string;
+  summary: string | undefined;
+  /** Whether the filter holds a value; its summary can be empty while it does (an account no longer active). */
+  isSet: boolean;
+  pane: React.ReactNode;
+};
+
+const hasValue = (value: unknown) =>
+  Array.isArray(value)
+    ? value.length > 0
+    : value && typeof value === 'object'
+      ? Object.values(value).some(Boolean)
+      : Boolean(value);
 
 /** The filters the panel holds, in order; the date joins them on phones, where it has no control of its own. */
 function useFacets(filters: BankTransactionFilterParams, isMobile: boolean): Facet[] {
@@ -41,7 +56,7 @@ function useFacets(filters: BankTransactionFilterParams, isMobile: boolean): Fac
   const currency = useGetAllBankConnections().bankConnections?.find(
     (connection) => connection.baseCurrency,
   )?.baseCurrency;
-  const facets: (Facet | false)[] = [
+  const facets: (Omit<Facet, 'isSet'> | false)[] = [
     isMobile && {
       key: 'bookingDate',
       label: 'Booking date',
@@ -79,7 +94,9 @@ function useFacets(filters: BankTransactionFilterParams, isMobile: boolean): Fac
       pane: <BankTransactionBaseAmountFilter filters={filters} />,
     },
   ];
-  return facets.filter((facet): facet is Facet => Boolean(facet));
+  return facets
+    .filter((facet): facet is Omit<Facet, 'isSet'> => Boolean(facet))
+    .map((facet) => ({...facet, isSet: hasValue(filters[facet.key])}));
 }
 
 type FiltersProps = {
@@ -101,12 +118,26 @@ export function BankTransactionFilters({
   const isMobile = useIsMobile();
   const [open, setOpen] = React.useState(false);
   const facets = useFacets(filters, isMobile);
-  const count = facets.filter((facet) => facet.summary).length;
+  const count = facets.filter((facet) => facet.isSet).length;
   const [active, setActive] = React.useState<FacetKey | null>(null);
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
     if (!next) setActive(null);
   };
+  const navigate = useNavigate({from: '/bank-transactions/'});
+  // Each filter's Reset sits in the fixed footer, so a long list never hides it at its end.
+  const resetButton = (facet: Facet | undefined, className?: string) =>
+    facet?.isSet && (
+      <Button
+        variant='ghost'
+        size={isMobile ? 'default' : 'sm'}
+        className={className}
+        aria-label={`Reset ${facet.label}`}
+        onClick={() => void navigate({search: (prev) => ({...prev, [facet.key]: undefined})})}
+      >
+        Reset
+      </Button>
+    );
 
   const trigger = (
     <Button
@@ -168,7 +199,8 @@ export function BankTransactionFilters({
               <div className='p-2'>{shown.pane}</div>
             </ScrollArea>
           </div>
-          <div className='flex justify-end border-t px-2 py-1.5'>
+          <div className='flex items-center justify-end gap-2 border-t px-2 py-1.5'>
+            {resetButton(shown, 'mr-auto')}
             <Button
               variant='ghost'
               size='sm'
@@ -233,6 +265,7 @@ export function BankTransactionFilters({
           )}
         </ScrollArea>
         <DrawerFooter className='mt-0 flex-row items-center justify-end gap-2 border-t px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
+          {resetButton(shown, 'mr-auto')}
           <Button variant='ghost' onClick={onClearFilters} disabled={!isFilteringApplied}>
             Clear all
           </Button>

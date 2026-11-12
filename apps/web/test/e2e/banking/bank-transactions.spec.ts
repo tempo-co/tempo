@@ -207,7 +207,7 @@ test.describe('bank transactions', () => {
 
     await page.goto('/bank-transactions?financialEventTypes=%5B%22CURRENCY_EXCHANGE%22%5D');
     await openTransactionFilter(page, 'Cash flow');
-    await page.getByRole('option', {name: 'Reset', exact: true}).click();
+    await page.getByRole('button', {name: 'Reset Cash flow', exact: true}).click();
     await expect(
       page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Coffee shop'}),
     ).toBeVisible();
@@ -816,6 +816,24 @@ test.describe('bank transactions', () => {
     await expect(
       filters.getByRole('tab', {name: 'Categories 4 categories', exact: true}),
     ).toBeVisible();
+    // Reset sits in the panel's fixed footer: in view with the options scrolled to the top, beside Clear all.
+    const resetCategories = filters.getByRole('button', {name: 'Reset Categories', exact: true});
+    await expect(resetCategories).toBeInViewport();
+    // Outside the scrolling options, so it never sits at the end of the list.
+    expect(
+      await resetCategories.evaluate((button) =>
+        Boolean(button.closest('[data-radix-scroll-area-viewport]')),
+      ),
+    ).toBe(false);
+    const [resetBox, clearBox] = await Promise.all([
+      boxOf(resetCategories),
+      boxOf(filters.getByRole('button', {name: 'Clear all', exact: true})),
+    ]);
+    expect(resetBox.y).toBeCloseTo(clearBox.y, 0);
+    await expect(filters.getByRole('option', {name: 'Reset'})).toHaveCount(0);
+    await resetCategories.click();
+    await expect(page).not.toHaveURL(/categories=/);
+    await expect(resetCategories).toHaveCount(0);
     await openTransactionFilter(page, 'Category source');
     await expect(filters.getByRole('option')).toHaveCount(3);
     await page.getByRole('option', {name: 'Manual', exact: true}).click();
@@ -886,14 +904,36 @@ test.describe('bank transactions', () => {
       'Not categorized, Needs review',
     );
 
+    // The list step has no Reset; a filter's own step has one in the fixed footer, beside Clear all.
+    await expect(sheet.getByRole('button', {name: /^Reset /})).toHaveCount(0);
     await openTransactionFilter(page, 'Category source');
+    const resetSource = sheet.getByRole('button', {name: 'Reset Category source', exact: true});
+    await expect(resetSource).toHaveCount(0);
     await sheet.getByRole('option', {name: 'Manual', exact: true}).click();
     expect(JSON.parse(new URL(page.url()).searchParams.get('categorySources')!)).toEqual([
       'MANUAL',
     ]);
+    await expect(resetSource).toBeInViewport();
+    expect(
+      await resetSource.evaluate((button) =>
+        Boolean(button.closest('[data-radix-scroll-area-viewport]')),
+      ),
+    ).toBe(false);
+    await resetSource.click();
+    await expect(page).not.toHaveURL(/categorySources=/);
+    await expect(resetSource).toHaveCount(0);
+    await sheet.getByRole('option', {name: 'Manual', exact: true}).click();
+    await expect(page).toHaveURL(/categorySources=/);
     await expect(
       page.getByTestId('bank-transaction-filters-trigger').getByText('2', {exact: true}),
     ).toBeVisible();
+
+    // The booking date lives in the sheet on phones; its Reset is the footer's too.
+    await openTransactionFilter(page, 'Booking date');
+    await sheet.getByRole('button', {name: 'This month', exact: true}).click();
+    await expect(page).toHaveURL(/bookingDate=/);
+    await sheet.getByRole('button', {name: 'Reset Booking date', exact: true}).click();
+    await expect(page).not.toHaveURL(/bookingDate=/);
 
     await sheet.getByRole('button', {name: 'Clear all', exact: true}).click();
     const clearedUrl = new URL(page.url());
@@ -1223,6 +1263,19 @@ test.describe('bank transactions', () => {
       await expect(page.getByTestId('bank-transactions-summary')).toHaveText('1,284 transactions');
       await expect(rows.nth(0)).toContainText('-€12,345,678.90');
       await expect(rows.nth(1)).toContainText('-CHF 12,345,678.90');
+      // Each row's button fills its day card edge to edge (inside the 1px border), so hover and clicks do too.
+      expect(
+        await rows.evaluateAll((elements) =>
+          elements.flatMap((row) => {
+            const button = row.querySelector('button')!.getBoundingClientRect();
+            const card = row.closest('ul')!.getBoundingClientRect();
+            return Math.abs(button.left - card.left - 1) > 0.5 ||
+              Math.abs(card.right - 1 - button.right) > 0.5
+              ? [row.textContent]
+              : [];
+          }),
+        ),
+      ).toEqual([]);
       await expect(rows.nth(3)).toContainText('€0.00');
       await expect(rows.nth(3)).not.toContainText('-€0.00');
       expect(await readClippedAmounts()).toEqual([]);

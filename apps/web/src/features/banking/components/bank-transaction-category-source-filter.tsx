@@ -8,7 +8,6 @@ import {useBankTransactionArrayFilter} from '@/hooks/use-bank-transaction-array-
 
 import {BankTransactionFilterParams} from '../types/bank-transaction';
 import {formatBankTransactionCategorySource} from '../utils/formatters';
-import {FilterResetGroup} from './bank-transaction-faceted-filter';
 import {FilterCheckIndicator} from './bank-transaction-multi-select-filter';
 
 function getSourceLabel(source: BankTransactionCategorizationSource) {
@@ -21,11 +20,10 @@ export function BankTransactionCategorySourceFilter({
 }: {
   filters: BankTransactionFilterParams;
 }) {
-  const {
-    selectedValues,
-    toggle: handleSelect,
-    reset: handleReset,
-  } = useBankTransactionArrayFilter(filters, 'categorySources');
+  const {selectedValues, toggle: handleSelect} = useBankTransactionArrayFilter(
+    filters,
+    'categorySources',
+  );
 
   return (
     <Command>
@@ -45,7 +43,6 @@ export function BankTransactionCategorySourceFilter({
             );
           })}
         </CommandGroup>
-        <FilterResetGroup show={selectedValues.length > 0} onReset={handleReset} />
       </CommandList>
     </Command>
   );

@@ -2,7 +2,6 @@ import {ChevronDown} from 'lucide-react';
 import * as React from 'react';
 
 import {Button} from '@/components/ui/button';
-import {CommandGroup, CommandItem, CommandSeparator} from '@/components/ui/command';
 import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
 import {cn} from '@/utils/cn';
 
@@ -69,21 +68,5 @@ export function FacetedFilter({
         {children}
       </PopoverContent>
     </Popover>
-  );
-}
-
-/** The Reset row at the end of a filter's command list, shown while the filter has a value. */
-export function FilterResetGroup({show, onReset}: {show: boolean; onReset: () => void}) {
-  if (!show) return null;
-
-  return (
-    <>
-      <CommandSeparator />
-      <CommandGroup>
-        <CommandItem onSelect={onReset} className='justify-center text-center'>
-          Reset
-        </CommandItem>
-      </CommandGroup>
-    </>
   );
 }

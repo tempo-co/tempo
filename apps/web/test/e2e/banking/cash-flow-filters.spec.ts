@@ -157,7 +157,7 @@ test('cash flow picker applies the real spending predicate from the first page',
     'data-filter-selected',
     'true',
   );
-  await page.getByRole('option', {name: 'Reset', exact: true}).click();
+  await page.getByRole('button', {name: 'Reset Cash flow', exact: true}).click();
   await expect(page).not.toHaveURL(/cashFlows/);
 });
 
