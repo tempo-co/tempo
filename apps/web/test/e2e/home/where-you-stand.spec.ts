@@ -233,9 +233,20 @@ test('the balance chart reads out the month under the pointer, and a click opens
   await page.mouse.click(march.centre.x, march.centre.y);
   await expect(page).toHaveURL(/[?&]month=2026-03/);
   await expect(homePage.monthDialog('March 2026')).toBeVisible();
-  await page.keyboard.press('Escape');
+});
 
-  // Over the last month, each point is a day end, from 6 October through today; a day opens its month.
+test('over the last month, the balance chart reads out the day under the pointer, and a click opens its month', async ({
+  page,
+  homePage,
+}) => {
+  await page.setViewportSize({width: 1440, height: 1000});
+  await mockSyntheticHome(page);
+  await page.goto('/');
+
+  await expectLoaded(homePage.whereYouStand);
+  const plot = homePage.whereYouStand.locator('[data-slot="chart"]');
+  const readout = homePage.whereYouStand.locator('.recharts-tooltip-wrapper');
+  // Each point is a day end, from 6 October through today.
   await homePage.whereYouStand.getByRole('radio', {name: '1M', exact: true}).click();
   await expect(plot).toHaveAttribute('aria-label', /each day end/);
   const fifteenth = await monthSlot(plot, 9, 31);
