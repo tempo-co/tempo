@@ -2,7 +2,11 @@ import {getQueueToken} from '@nestjs/bullmq';
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
 import {JobType, Queue} from 'bullmq';
+import {mkdtemp, rm} from 'node:fs/promises';
+import {createServer} from 'node:http';
 import {Server} from 'node:net';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import TestAgent from 'supertest/lib/agent';
 import {Repository} from 'typeorm';
 
@@ -12,6 +16,7 @@ import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
 	BANK_TRANSACTION_CATEGORIZATION_PROVIDER_NAME,
+	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION,
 	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
 } from '@modules/banking/categorization/bank-transaction-categorization.constants';
 import {
@@ -23,6 +28,7 @@ import type {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
 	BankTransactionCategorizationWebSearchInput,
+	BankTransactionCategorizationWebSearchOutcome,
 } from '@modules/banking/categorization/bank-transaction-categorization.types';
 import {ClaudeBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/claude-bank-transaction-categorization.provider';
 
@@ -51,52 +57,100 @@ const AI_CONFIDENCE = 0.875;
 const WEB_CATEGORY = 'SHOPPING' as const;
 const WEB_CONFIDENCE = 0.812;
 let shouldFail = false;
-let routesUnavailable = false;
 let searchUnavailable = false;
-let retryableFailure = false;
+/** Sends calls through the real provider, whose transport each test stubs with {@link useClaudeTransport}. */
+let realProvider = false;
+
+const realCategorize = ClaudeBankTransactionCategorizationProvider.prototype.categorize;
+const realCategorizeWithWebSearch = ClaudeBankTransactionCategorizationProvider.prototype.categorizeWithWebSearch;
 
 const categorizeSpy = jest
 	.spyOn(ClaudeBankTransactionCategorizationProvider.prototype, 'categorize')
-	.mockImplementation(
-		async (
-			transactions: readonly BankTransactionCategorizationInput[],
-		): Promise<readonly BankTransactionCategorizationResult[]> => {
-			if (routesUnavailable) throw new BankTransactionCategorizationUnavailableError();
-			if (shouldFail) {
-				throw new BankTransactionCategorizationProviderError('synthetic provider failure', false);
-			}
-			if (retryableFailure) {
-				throw new BankTransactionCategorizationProviderError(
-					'Claude categorization request failed (503).',
-					true,
-				);
-			}
-			return transactions.map(({correlationId}) => ({
-				correlationId,
-				category: correlationId === CATEGORIZATION_E2E_WEB_TRANSACTION_ID ? 'OTHER' : AI_CATEGORY,
-				confidence: correlationId === CATEGORIZATION_E2E_WEB_TRANSACTION_ID ? 0.25 : AI_CONFIDENCE,
-				provider: 'claude-api',
-				model: 'test-model',
-			}));
-		},
-	);
+	.mockImplementation(async function (
+		this: ClaudeBankTransactionCategorizationProvider,
+		transactions: readonly BankTransactionCategorizationInput[],
+		categories,
+	): Promise<readonly BankTransactionCategorizationResult[]> {
+		if (realProvider) return realCategorize.call(this, transactions, categories);
+		if (shouldFail) {
+			throw new BankTransactionCategorizationProviderError('synthetic provider failure', false);
+		}
+		return transactions.map(({correlationId}) => ({
+			correlationId,
+			category: correlationId === CATEGORIZATION_E2E_WEB_TRANSACTION_ID ? 'OTHER' : AI_CATEGORY,
+			confidence: correlationId === CATEGORIZATION_E2E_WEB_TRANSACTION_ID ? 0.25 : AI_CONFIDENCE,
+			provider: 'claude-api',
+			model: 'test-model',
+		}));
+	});
 
 const categorizeWithWebSearchSpy = jest
 	.spyOn(ClaudeBankTransactionCategorizationProvider.prototype, 'categorizeWithWebSearch')
-	.mockImplementation(
-		async (
-			transactions: readonly BankTransactionCategorizationWebSearchInput[],
-		): Promise<readonly BankTransactionCategorizationResult[]> => {
-			if (searchUnavailable) throw new BankTransactionCategorizationUnavailableError();
-			return transactions.map(({correlationId}) => ({
+	.mockImplementation(async function (
+		this: ClaudeBankTransactionCategorizationProvider,
+		transactions: readonly BankTransactionCategorizationWebSearchInput[],
+		categories,
+	): Promise<readonly BankTransactionCategorizationWebSearchOutcome[]> {
+		if (realProvider) return realCategorizeWithWebSearch.call(this, transactions, categories);
+		if (searchUnavailable) throw new BankTransactionCategorizationUnavailableError();
+		return transactions.map(({correlationId}) => ({
+			correlationId,
+			provider: 'claude-api',
+			result: {
 				correlationId,
 				category: WEB_CATEGORY,
 				confidence: WEB_CONFIDENCE,
 				provider: 'claude-api',
 				model: 'test-model',
-			}));
-		},
-	);
+			},
+		}));
+	});
+
+type ProviderTransport = {client?: unknown; subscriptionSocket?: string};
+
+/**
+ * Replaces the real provider's Anthropic client with `create` and, with `bridge`, points its subscription route at a
+ * loopback socket that answers every request with that status. Nothing leaves the process.
+ */
+async function useClaudeTransport(
+	app: INestApplication,
+	create: jest.Mock,
+	bridge?: {status: number; body: object},
+): Promise<{bridgeRequests: number; restore(): Promise<void>}> {
+	const provider = app.get(ClaudeBankTransactionCategorizationProvider) as unknown as ProviderTransport;
+	const previous = {client: provider.client, subscriptionSocket: provider.subscriptionSocket};
+	const state = {bridgeRequests: 0, restore: async () => undefined};
+	provider.client = {messages: {create}};
+	realProvider = true;
+	let close = async () => undefined;
+	if (bridge) {
+		const directory = await mkdtemp(join(tmpdir(), 'categorization-bridge-'));
+		const socket = join(directory, 'bridge.sock');
+		const server = createServer((request, response) => {
+			request.resume();
+			request.on('end', () => {
+				state.bridgeRequests += 1;
+				response.writeHead(bridge.status, {'content-type': 'application/json'});
+				response.end(JSON.stringify(bridge.body));
+			});
+		});
+		await new Promise<void>((resolve) => server.listen(socket, resolve));
+		provider.subscriptionSocket = socket;
+		close = async () => {
+			await new Promise<void>((resolve) => server.close(() => resolve()));
+			await rm(directory, {recursive: true, force: true});
+		};
+	}
+	state.restore = async () => {
+		realProvider = false;
+		provider.client = previous.client;
+		provider.subscriptionSocket = previous.subscriptionSocket;
+		const closeBridge = close;
+		close = async () => undefined;
+		await closeBridge();
+	};
+	return state;
+}
 
 describe('Bank transaction categorization integration', () => {
 	jest.setTimeout(30_000);
@@ -142,15 +196,15 @@ describe('Bank transaction categorization integration', () => {
 
 	beforeEach(() => {
 		shouldFail = false;
-		routesUnavailable = false;
 		searchUnavailable = false;
-		retryableFailure = false;
+		realProvider = false;
 		categorizeSpy.mockClear();
 		categorizeWithWebSearchSpy.mockClear();
 	});
 
 	afterAll(() => {
 		shouldFail = false;
+		realProvider = false;
 		categorizeWithWebSearchSpy.mockRestore();
 		categorizeSpy.mockRestore();
 	});
@@ -454,6 +508,53 @@ describe('Bank transaction categorization integration', () => {
 		});
 	});
 
+	it('sends a row to review, without searching again, when its search used another query', async () => {
+		const transport = await useClaudeTransport(
+			app,
+			jest.fn().mockResolvedValue({
+				stop_reason: 'end_turn',
+				usage: {server_tool_use: {web_search_requests: 1}},
+				content: [
+					{type: 'server_tool_use', name: 'web_search', input: {query: 'Synthetic other query'}},
+					{type: 'web_search_tool_result', content: []},
+					{
+						type: 'text',
+						text: '{"classifications":[{"correlationId":"0","category":"SHOPPING","confidence":0.9,"evidenceType":"PURCHASE_CONTEXT"}]}',
+					},
+				],
+			}),
+		);
+		try {
+			categorizeSpy.mockImplementationOnce(async (transactions) =>
+				transactions.map(({correlationId}) => ({correlationId, category: 'OTHER' as const, confidence: 0.25})),
+			);
+			await bankTransactionRepository.update(CATEGORIZATION_E2E_WEB_TRANSACTION_ID, {
+				categoryStatus: 'PENDING',
+				categoryAppliedInputHash: null,
+			});
+			await app
+				.get(BankTransactionCategorizationService)
+				.enqueueForTransactions([CATEGORIZATION_E2E_WEB_TRANSACTION_ID]);
+
+			const reviewed = await waitFor(
+				() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_WEB_TRANSACTION_ID}),
+				(row) => row.categoryStatus === 'COMPLETED',
+			);
+			expect(reviewed).toMatchObject({
+				category: 'NEEDS_REVIEW',
+				categoryConfidence: '0.000',
+				categorySource: 'AI',
+				categoryProvider: 'claude-api',
+				categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION,
+				categorySearchTrace: {queries: [], sourceDomains: [], evidenceType: 'INSUFFICIENT'},
+				categoryLastError: null,
+			});
+			expect(categorizeWithWebSearchSpy).toHaveBeenCalledTimes(1);
+		} finally {
+			await transport.restore();
+		}
+	});
+
 	it('keeps a row pending when its web search is unavailable on both routes, then completes it on retry', async () => {
 		searchUnavailable = true;
 		const categorizationService = app.get(BankTransactionCategorizationService);
@@ -493,8 +594,8 @@ describe('Bank transaction categorization integration', () => {
 		});
 	});
 
-	it('keeps a real worker outage pending and retries the job a minute later', async () => {
-		routesUnavailable = true;
+	it('keeps a row pending while the API rate-limits it, with no bridge, and retries the job a minute later', async () => {
+		const transport = await useClaudeTransport(app, jest.fn().mockRejectedValue({status: 429}));
 		const categorizationService = app.get(BankTransactionCategorizationService);
 		const queue = app.get<Queue>(getQueueToken(BANK_TRANSACTION_CATEGORIZATION_QUEUE));
 		await resetFailureFixture({categorySearchTrace: null});
@@ -541,7 +642,7 @@ describe('Bank transaction categorization integration', () => {
 				(jobs) => jobs.length === 0,
 			);
 
-			routesUnavailable = false;
+			await transport.restore();
 			categorizeSpy.mockClear();
 			// Stands in for the minute passing.
 			await Promise.all((await rowJobs(['delayed'])).map((job) => job.promote()));
@@ -562,7 +663,7 @@ describe('Bank transaction categorization integration', () => {
 			);
 			expect(modelCallsForRow()).toBe(1);
 		} finally {
-			routesUnavailable = false;
+			await transport.restore();
 			// The sweep's own batches for other pending rows would otherwise run during later tests.
 			const leftover = await queue.getJobs(['delayed']);
 			await Promise.all(
@@ -571,36 +672,76 @@ describe('Bank transaction categorization integration', () => {
 		}
 	});
 
-	it('retries an ordinary model failure within seconds, then leaves the row failed', async () => {
-		retryableFailure = true;
-		const queue = app.get<Queue>(getQueueToken(BANK_TRANSACTION_CATEGORIZATION_QUEUE));
-		try {
-			await resetFailureFixture();
-			await app
-				.get(BankTransactionCategorizationService)
-				.enqueueForTransactions([CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID]);
+	it.each([
+		[
+			'a reply cut off at the token limit',
+			() =>
+				jest.fn().mockResolvedValue({
+					stop_reason: 'max_tokens',
+					usage: {server_tool_use: {web_search_requests: 0}},
+					content: [{type: 'text', text: '{"classifications":[{"correlationId":"0","cate'}],
+				}),
+			undefined,
+			'Claude returned an invalid categorization response.',
+		],
+		[
+			'a request the bridge rejects',
+			() => jest.fn().mockRejectedValue({status: 400}),
+			{status: 400, body: {error: 'invalid_request'}},
+			'Claude categorization request failed.',
+		],
+	])(
+		'retries %s twice within seconds, then leaves the row failed for the hourly sweep to skip',
+		async (_case, create, bridge, lastError) => {
+			const queue = app.get<Queue>(getQueueToken(BANK_TRANSACTION_CATEGORIZATION_QUEUE));
+			const categorizationService = app.get(BankTransactionCategorizationService);
+			const transport = await useClaudeTransport(app, create(), bridge);
+			try {
+				await resetFailureFixture();
+				await categorizationService.enqueueForTransactions([CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID]);
 
-			await waitFor(
-				async () => categorizeSpy.mock.calls.length,
-				(calls) => calls === 3,
-			);
-			await waitFor(
-				async () => (await queue.getJobs(['delayed', 'waiting', 'active'])).length,
-				(count) => count === 0,
-			);
-			expect(categorizeSpy).toHaveBeenCalledTimes(3);
-			const persisted = await bankTransactionRepository.findOneByOrFail({
-				id: CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID,
-			});
-			expect(persisted).toMatchObject({
-				category: null,
-				categoryStatus: 'FAILED',
-				categoryLastError: 'Claude categorization request failed (503).',
-			});
-		} finally {
-			retryableFailure = false;
-		}
-	});
+				await waitFor(
+					async () => categorizeSpy.mock.calls.length,
+					(calls) => calls === 3,
+				);
+				await waitFor(
+					async () => (await queue.getJobs(['delayed', 'waiting', 'active'])).length,
+					(count) => count === 0,
+				);
+				const persisted = await bankTransactionRepository.findOneByOrFail({
+					id: CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID,
+				});
+				expect(persisted).toMatchObject({
+					category: null,
+					categoryStatus: 'FAILED',
+					categoryLastError: lastError,
+				});
+				expect(transport.bridgeRequests).toBe(bridge ? 3 : 0);
+
+				await transport.restore();
+				await categorizationService.reconcilePendingTransactions({includeFailed: false});
+				const queued = await queue.getJobs(['delayed', 'waiting', 'active', 'prioritized']);
+				expect(
+					queued.filter((job) =>
+						(job.data as {transactionIds?: string[]}).transactionIds?.includes(
+							CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID,
+						),
+					),
+				).toEqual([]);
+				expect(
+					categorizeSpy.mock.calls.filter(([inputs]) =>
+						inputs.some(({correlationId}) => correlationId === CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID),
+					),
+				).toHaveLength(3);
+			} finally {
+				await transport.restore();
+				const leftover = await queue.getJobs(['delayed', 'waiting']);
+				await Promise.all(
+					leftover.filter((job) => job.name === CATEGORIZE_BANK_TRANSACTIONS_JOB).map((job) => job.remove()),
+				);
+			}
+		},
+	);
 
 	it('persists a provider failure through the real worker path without calling an external provider', async () => {
 		shouldFail = true;

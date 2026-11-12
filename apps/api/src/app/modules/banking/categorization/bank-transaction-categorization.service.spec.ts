@@ -35,6 +35,17 @@ import {
 } from './bank-transaction-categorization.types';
 import {BANK_TRANSACTION_CATEGORY_RULE_PROVIDER} from './bank-transaction-category-rules';
 
+/** The provider's search outcome for each input: the given result, or none when the search failed. */
+function searchOutcomes(
+	inputs: readonly BankTransactionCategorizationWebSearchInput[],
+	result: (input: BankTransactionCategorizationWebSearchInput) => BankTransactionCategorizationResult | null,
+) {
+	return inputs.map((input) => ({correlationId: input.correlationId, provider: 'claude-api', result: result(input)}));
+}
+
+const shoppingSearch = async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) =>
+	searchOutcomes(inputs, ({correlationId}) => ({correlationId, category: 'SHOPPING' as const, confidence: 0.75}));
+
 function createUpdateQueryBuilder(
 	results: readonly {affected: number; raw?: readonly {id: string}[]}[] = [{affected: 1}] as const,
 	rawRows: readonly {id: string}[] = [],
@@ -104,15 +115,12 @@ function createService({
 			.fn()
 			.mockImplementation(async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) => {
 				if (webSearchError) throw webSearchError;
-				return webSearchResult && webSearchResult.length > 0
-					? webSearchResult.filter(({correlationId}) =>
-							inputs.some((input) => input.correlationId === correlationId),
-						)
-					: inputs.map((input) => ({
-							correlationId: input.correlationId,
-							category: 'SHOPPING' as const,
-							confidence: 0.75,
-						}));
+				if (!webSearchResult?.length) return shoppingSearch(inputs);
+				return searchOutcomes(
+					inputs,
+					({correlationId}) =>
+						webSearchResult.find((result) => result.correlationId === correlationId) ?? null,
+				);
 			}),
 	};
 	const config = {
@@ -138,6 +146,9 @@ function createService({
 	);
 	return {service, queue, provider, repository, config};
 }
+
+/** Attempts of a categorize job after an ordinary failure; the worker stops retrying after the last one. */
+const ORDINARY_ATTEMPTS = 3;
 
 describe('BankTransactionCategorizationService provider behavior versions', () => {
 	it('versions sanitized transaction text separately from prior provider inputs', () => {
@@ -700,7 +711,7 @@ describe('BankTransactionCategorizationService worker', () => {
 		).toBe(true);
 	});
 
-	it('keeps valid results and terminalizes only failed web-search chunks', async () => {
+	it('keeps valid search results and sends only the failed search to review', async () => {
 		const rows = Array.from({length: 5}, (_, index) =>
 			createBankTransaction({id: `other-transaction-${index}`, counterpartyName: `Merchant ${index}`}),
 		);
@@ -714,18 +725,10 @@ describe('BankTransactionCategorizationService worker', () => {
 			providerResult: rows.map(({id}) => ({correlationId: id, category: 'OTHER' as const, confidence: 0.5})),
 		});
 		provider.categorizeWithWebSearch
-			.mockImplementationOnce(async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) =>
-				inputs.map(({correlationId}) => ({correlationId, category: 'SHOPPING' as const, confidence: 0.75})),
-			)
-			.mockImplementationOnce(async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) =>
-				inputs.map(({correlationId}) => ({correlationId, category: 'SHOPPING' as const, confidence: 0.75})),
-			)
-			.mockImplementationOnce(async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) =>
-				inputs.map(({correlationId}) => ({correlationId, category: 'SHOPPING' as const, confidence: 0.75})),
-			)
-			.mockImplementationOnce(async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) =>
-				inputs.map(({correlationId}) => ({correlationId, category: 'SHOPPING' as const, confidence: 0.75})),
-			)
+			.mockImplementationOnce(shoppingSearch)
+			.mockImplementationOnce(shoppingSearch)
+			.mockImplementationOnce(shoppingSearch)
+			.mockImplementationOnce(shoppingSearch)
 			.mockRejectedValueOnce(failure);
 		const logger = (service as unknown as {logger: {warn(message: string): void}}).logger;
 		const warn = jest.spyOn(logger, 'warn').mockImplementation();
@@ -745,10 +748,12 @@ describe('BankTransactionCategorizationService worker', () => {
 							categoryPromptVersion === BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
 					),
 			).toBe(true);
-			expect(rows[4].category).toBe('OTHER');
-			expect(rows[4].categoryPromptVersion).toBe(
-				BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION,
-			);
+			expect(rows[4]).toMatchObject({
+				category: 'NEEDS_REVIEW',
+				categoryStatus: 'COMPLETED',
+				categoryConfidence: '0',
+				categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION,
+			});
 		} finally {
 			warn.mockRestore();
 		}
@@ -767,11 +772,9 @@ describe('BankTransactionCategorizationService worker', () => {
 				{correlationId: resolved.id, category: 'FOOD_AND_DRINK' as const, confidence: 0.9},
 			],
 		});
-		const shopping = async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) =>
-			inputs.map(({correlationId}) => ({correlationId, category: 'SHOPPING' as const, confidence: 0.75}));
 		provider.categorizeWithWebSearch
-			.mockImplementationOnce(shopping)
-			.mockImplementationOnce(shopping)
+			.mockImplementationOnce(shoppingSearch)
+			.mockImplementationOnce(shoppingSearch)
 			.mockRejectedValueOnce(new BankTransactionCategorizationUnavailableError());
 		const logger = (service as unknown as {logger: {warn(message: string): void}}).logger;
 		const warn = jest.spyOn(logger, 'warn').mockImplementation();
@@ -814,37 +817,77 @@ describe('BankTransactionCategorizationService worker', () => {
 		);
 	});
 
-	it('keeps the normal result when web-search fallback fails', async () => {
+	it.each([
+		[
+			'the provider reports a failed search',
+			async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) =>
+				searchOutcomes(inputs, () => null),
+		],
+		[
+			'the search call throws',
+			async () => {
+				throw new BankTransactionCategorizationProviderError(
+					'Claude categorization request failed (503).',
+					true,
+				);
+			},
+		],
+		[
+			'the search result does not validate',
+			async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) =>
+				searchOutcomes(inputs, ({correlationId}) => ({correlationId, category: 'SHOPPING', confidence: 2})),
+		],
+		[
+			'the outcome names another row',
+			async () => [{correlationId: 'another-row', provider: 'claude-api', result: null}],
+		],
+	])('sends an OTHER row to review, without retrying, when %s', async (_case, search) => {
 		const transaction = createBankTransaction({
 			id: 'web-failure-transaction',
 			counterpartyName: null,
 			merchantCategoryCode: null,
 		});
-		const failure = new BankTransactionCategorizationProviderError(
-			'Claude categorization request failed (503).',
-			true,
-		);
 		const {service, provider} = createService({
 			rows: [transaction],
 			webSearchEnabled: true,
-			webSearchError: failure,
 			providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.56}],
 		});
+		provider.categorizeWithWebSearch.mockImplementationOnce(search);
 		const logger = (service as unknown as {logger: {warn(message: string): void}}).logger;
 		const warn = jest.spyOn(logger, 'warn').mockImplementation();
 
 		try {
 			await expect(service.processTransactionJob([transaction.id])).resolves.toBeUndefined();
 			expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(1);
-			expect(transaction.category).toBe('OTHER');
-			expect(transaction.categoryStatus).toBe('COMPLETED');
-			expect(transaction.categoryConfidence).toBe('0.56');
-			expect(transaction.categoryPromptVersion).toBe(
-				BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION,
-			);
-			expect(warn).toHaveBeenCalledWith(
-				'Transaction web-search fallback failed: BankTransactionCategorizationProviderError',
-			);
+			expect(transaction).toMatchObject({
+				category: 'NEEDS_REVIEW',
+				categoryStatus: 'COMPLETED',
+				categoryConfidence: '0',
+				categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION,
+				categorySearchTrace: {queries: [], sourceDomains: [], evidenceType: 'INSUFFICIENT'},
+			});
+			expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^Transaction web-search fallback failed/));
+		} finally {
+			warn.mockRestore();
+		}
+	});
+
+	it('records the route that failed a search', async () => {
+		const transaction = createBankTransaction({id: 'web-route-failure', counterpartyName: 'Example Shop'});
+		const {service, provider} = createService({
+			rows: [transaction],
+			webSearchEnabled: true,
+			providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.56}],
+		});
+		provider.categorizeWithWebSearch.mockResolvedValueOnce([
+			{correlationId: transaction.id, provider: 'claude-subscription', result: null},
+		]);
+		const logger = (service as unknown as {logger: {warn(message: string): void}}).logger;
+		const warn = jest.spyOn(logger, 'warn').mockImplementation();
+
+		try {
+			await service.processTransactionJob([transaction.id]);
+			expect(transaction).toMatchObject({category: 'NEEDS_REVIEW', categoryProvider: 'claude-subscription'});
 		} finally {
 			warn.mockRestore();
 		}
@@ -1193,18 +1236,38 @@ describe('BankTransactionCategorizationService worker', () => {
 		});
 	});
 
-	it('marks retryable provider failures as failed and rethrows them', async () => {
-		const transaction = createBankTransaction();
-		const failure = new BankTransactionCategorizationProviderError(
+	it.each([
+		[
+			'a retryable provider failure',
+			async () => {
+				throw new BankTransactionCategorizationProviderError(
+					'Claude categorization request failed (503).',
+					true,
+				);
+			},
 			'Claude categorization request failed (503).',
-			true,
-		);
-		const {service, repository} = createService({rows: [transaction], providerError: failure});
+		],
+		[
+			'a result the service rejects',
+			async () => [{correlationId: 'unknown-row', category: 'SHOPPING' as const, confidence: 0.9}],
+			'Transaction categorization failed.',
+		],
+	])('marks the batch failed and rethrows for a bounded retry after %s', async (_case, categorize, lastError) => {
+		const transaction = createBankTransaction();
+		const {service, provider, repository} = createService({rows: [transaction]});
+		provider.categorize.mockImplementationOnce(categorize);
 
-		await expect(service.processTransactionJob([transaction.id])).rejects.toBe(failure);
+		const error = await service.processTransactionJob([transaction.id]).then(
+			() => undefined,
+			(reason: unknown) => reason,
+		);
+		expect(error).toBeInstanceOf(BankTransactionCategorizationProviderError);
+		expect(error).not.toBeInstanceOf(BankTransactionCategorizationUnavailableError);
+		expect(error).toMatchObject({retryable: true});
+		expect(categorizationRetryDelay(ORDINARY_ATTEMPTS, error)).toBe(-1);
 		const failedUpdate = repository.createQueryBuilder.mock.results.at(-1)?.value;
 		expect(failedUpdate.set).toHaveBeenCalledWith(
-			expect.objectContaining({categoryStatus: 'FAILED', categoryLastError: failure.message}),
+			expect.objectContaining({categoryStatus: 'FAILED', categoryLastError: lastError}),
 		);
 	});
 

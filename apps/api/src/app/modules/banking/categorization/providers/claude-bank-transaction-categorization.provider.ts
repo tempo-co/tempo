@@ -25,6 +25,7 @@ import {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
 	BankTransactionCategorizationWebSearchInput,
+	BankTransactionCategorizationWebSearchOutcome,
 	MERCHANT_KINDS,
 	MerchantIdentification,
 	MerchantIdentificationInput,
@@ -86,6 +87,9 @@ const MERCHANT_CONTRACT_HASH = createHash('sha256').update(JSON.stringify(mercha
 const API_TIMEOUT_MS = 90_000;
 const SUBSCRIPTION_TIMEOUT_MS = 125_000;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
+// Adaptive thinking at high effort shares this budget with the reply, about 30 tokens per row of a 50-row batch; a
+// reply cut off at the limit fails the batch rather than leaving it pending.
+const STANDARD_MAX_TOKENS = 16_384;
 
 @Injectable()
 export class ClaudeBankTransactionCategorizationProvider implements BankTransactionCategorizationProvider {
@@ -118,18 +122,23 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		const input = this.createInput(categories, requestTransactions);
 		try {
 			const response = await this.callApi(
-				this.createRequest(CATEGORIZATION_INSTRUCTIONS, input, categorizationResponseJsonSchema, 8192),
+				this.createRequest(
+					CATEGORIZATION_INSTRUCTIONS,
+					input,
+					categorizationResponseJsonSchema,
+					STANDARD_MAX_TOKENS,
+				),
 			);
 			return this.parseResults(this.parseJson(response.text), transactions, CLAUDE_API);
-		} catch {
+		} catch (error) {
 			// A billing/quota/transport failure must never turn into a category or a paid alternative.
-			if (!this.subscriptionSocket) throw new BankTransactionCategorizationUnavailableError();
-			try {
-				const response = await this.callSubscription(input);
-				return this.parseResults(this.parseJson(response), transactions, CLAUDE_SUBSCRIPTION);
-			} catch {
-				throw new BankTransactionCategorizationUnavailableError();
-			}
+			if (!this.subscriptionSocket) throw this.routesFailed(error, CLAUDE_API);
+		}
+		try {
+			const response = await this.callSubscription(input);
+			return this.parseResults(this.parseJson(response), transactions, CLAUDE_SUBSCRIPTION);
+		} catch (error) {
+			throw this.routesFailed(error, CLAUDE_SUBSCRIPTION);
 		}
 	}
 
@@ -178,9 +187,9 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	async categorizeWithWebSearch(
 		transactions: readonly BankTransactionCategorizationWebSearchInput[],
 		categories: readonly BankTransactionCategoryDefinition[],
-	): Promise<readonly BankTransactionCategorizationResult[]> {
+	): Promise<readonly BankTransactionCategorizationWebSearchOutcome[]> {
 		this.assertUniqueCorrelationIds(transactions);
-		const results: BankTransactionCategorizationResult[] = [];
+		const outcomes: BankTransactionCategorizationWebSearchOutcome[] = [];
 		for (const transaction of transactions) {
 			const input = this.createInput(categories, [
 				{
@@ -202,69 +211,83 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 				4096,
 			);
 			request.tools = [{type: 'web_search_20250305', name: 'web_search', max_uses: 1}];
-			const {provider, output, domains} = await this.searchOnce(request, input, transaction.searchQuery);
-			results.push(
-				...(output === undefined
-					? [this.failedSearch(transaction.correlationId, provider)]
-					: this.parseResults(output, [transaction], provider, {
-							queries: [transaction.searchQuery],
-							sourceDomains: domains,
-						})),
-			);
+			const {provider, result} = await this.searchOnce(request, input, transaction);
+			outcomes.push({correlationId: transaction.correlationId, provider, result});
 		}
-		return results;
+		return outcomes;
 	}
 
 	/**
 	 * Runs the row's one search: on the API, or on the subscription bridge when the API refused the request outright.
-	 * After a timeout or an incomplete reply the search may already have run, so there is no second attempt. When the
-	 * API refused and the subscription refused too, nothing searched, so the row stays pending for a retry.
+	 * After a timeout or an incomplete reply the search may already have run, so there is no second attempt. A reply
+	 * that does not validate is a failed search too. Throws the unavailable error only when nothing searched and a
+	 * retry can succeed (see {@link routesFailed}).
 	 */
 	private async searchOnce(
 		request: MessageCreateParamsNonStreaming,
 		input: object,
-		query: string,
-	): Promise<{provider: ClaudeRoute; output?: unknown; domains: string[]}> {
-		let response;
+		transaction: BankTransactionCategorizationWebSearchInput,
+	): Promise<{provider: ClaudeRoute; result: BankTransactionCategorizationResult | null}> {
+		let route: ClaudeRoute = CLAUDE_API;
 		try {
-			response = await this.callApi(request);
-		} catch (error) {
-			if (!this.refusedBeforeRunning(error)) return {provider: CLAUDE_API, domains: []};
-			if (!this.subscriptionSocket) {
-				// Without a fallback, wait only for refusals that clear on their own, not a request the API always rejects.
-				if (this.transientRefusal(error)) throw new BankTransactionCategorizationUnavailableError();
-				return {provider: CLAUDE_API, domains: []};
+			try {
+				const response = await this.callApi(request);
+				// The bridge's hook enforces the query before searching; on the API it can only be checked afterwards.
+				if (response.queries.length !== 1 || response.queries[0] !== transaction.searchQuery)
+					throw this.invalidResponseError();
+				return {
+					provider: route,
+					result: this.parseSearchResult(this.parseJson(response.text), transaction, route, response.domains),
+				};
+			} catch (error) {
+				if (!this.subscriptionSocket || !this.refusedBeforeRunning(error)) throw error;
 			}
-		}
-		if (response) {
-			// The bridge's hook enforces the query before searching; on the API it can only be checked afterwards.
-			if (response.queries.length !== 1 || response.queries[0] !== query) throw this.invalidResponseError();
-			return {provider: CLAUDE_API, output: this.parseJson(response.text), domains: response.domains};
-		}
-		let reply: string;
-		try {
-			reply = await this.callSubscription(input, '/categorize-with-search');
+			route = CLAUDE_SUBSCRIPTION;
+			const {sourceDomains, ...output} = this.parseJson(
+				await this.callSubscription(input, '/categorize-with-search'),
+			) as {sourceDomains?: unknown};
+			return {
+				provider: route,
+				result: this.parseSearchResult(output, transaction, route, this.toSourceDomains(sourceDomains)),
+			};
 		} catch (error) {
-			if (error instanceof BankTransactionCategorizationUnavailableError) throw error;
-			return {provider: CLAUDE_SUBSCRIPTION, domains: []};
-		}
-		try {
-			const {sourceDomains, ...output} = this.parseJson(reply) as {sourceDomains?: unknown};
-			return {provider: CLAUDE_SUBSCRIPTION, output, domains: this.toSourceDomains(sourceDomains)};
-		} catch {
-			return {provider: CLAUDE_SUBSCRIPTION, domains: []};
+			const failure = this.routesFailed(error, route);
+			if (failure instanceof BankTransactionCategorizationUnavailableError) throw failure;
+			return {provider: route, result: null};
 		}
 	}
 
-	private failedSearch(correlationId: string, provider: ClaudeRoute): BankTransactionCategorizationResult {
-		return {
-			correlationId,
-			category: 'NEEDS_REVIEW',
-			confidence: 0,
-			provider,
-			model: this.model,
-			searchTrace: {queries: [], sourceDomains: [], evidenceType: 'INSUFFICIENT'},
-		};
+	private parseSearchResult(
+		output: unknown,
+		transaction: BankTransactionCategorizationWebSearchInput,
+		provider: ClaudeRoute,
+		sourceDomains: string[],
+	): BankTransactionCategorizationResult {
+		const [result] = this.parseResults(output, [transaction], provider, {
+			queries: [transaction.searchQuery],
+			sourceDomains,
+		});
+		return result;
+	}
+
+	/**
+	 * The error for a call that got no usable answer. It is the unavailable error, which leaves rows pending for a
+	 * retry, only when nothing ran and a retry can succeed: the bridge refused before running, or, when the API is the
+	 * only route, a refusal that clears on its own. Anything else may have run or would fail the same way again, so it
+	 * is a retryable provider error with a bounded number of attempts.
+	 */
+	private routesFailed(error: unknown, route: ClaudeRoute): BankTransactionCategorizationProviderError {
+		const retryLater =
+			route === CLAUDE_SUBSCRIPTION
+				? error instanceof BankTransactionCategorizationUnavailableError
+				: this.transientRefusal(error);
+		if (retryLater) return new BankTransactionCategorizationUnavailableError();
+		if (
+			error instanceof BankTransactionCategorizationProviderError &&
+			!(error instanceof BankTransactionCategorizationUnavailableError)
+		)
+			return error;
+		return new BankTransactionCategorizationProviderError('Claude categorization request failed.', true);
 	}
 
 	private createRequest(

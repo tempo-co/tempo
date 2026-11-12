@@ -96,6 +96,18 @@ export type BankTransactionCategorizationResult = {
 	searchTrace?: BankTransactionCategorizationSearchTrace;
 };
 
+/**
+ * One row's web search. `result` is null when the search failed: it may have run, or it was refused in a way a retry
+ * would not change. A search that could run on neither route but may succeed later is thrown as the unavailable
+ * error instead.
+ */
+export type BankTransactionCategorizationWebSearchOutcome = {
+	correlationId: string;
+	/** The route that ran, or last refused, the search. */
+	provider: string;
+	result: BankTransactionCategorizationResult | null;
+};
+
 export const MERCHANT_KINDS = ['BUSINESS', 'PERSON', 'PAYMENT_SERVICE', 'UNCLEAR'] as const;
 export type MerchantKind = (typeof MERCHANT_KINDS)[number];
 
