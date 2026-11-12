@@ -18,7 +18,8 @@ const scrolls = (page: Page) =>
 // CSS locators: an open menu or dialog hides the page from the accessibility tree.
 const column = async (page: Page) => {
   const header = await boxOf(page.locator('header a[href="/"]').first());
-  const content = await boxOf(page.locator('main > div').first());
+  // The column holding the page's heading, not the loading bar that lingers beside it after a load.
+  const content = await boxOf(page.locator('main > div').filter({has: page.locator('h1, h2')}));
   return {headerX: header.x, contentX: content.x, contentWidth: content.width};
 };
 
