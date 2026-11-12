@@ -91,11 +91,13 @@ test('a pending name save can be closed without cancelling the save', async ({pa
   await expect(edit).toBeVisible();
   expect((await edit.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await edit.tap();
+  const dialog = page.getByRole('dialog');
+  // Measure once the drawer has slid in: mid-slide, its box carries rounding from the moving transform.
+  await dialog.evaluate((element) => Promise.all(element.getAnimations().map((a) => a.finished)));
   await page.getByTestId('name-input').fill('Another Example');
   const save = page.getByTestId('save-name-button');
   expect((await save.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await save.tap();
-  const dialog = page.getByRole('dialog');
   await expect(
     dialog.locator('form').getByRole('button', {name: 'Close', exact: true}),
   ).toBeEnabled();

@@ -497,7 +497,14 @@ jobs:
                   merge-multiple: true
 
             - name: Merge Playwright report
-              run: npx playwright merge-reports --reporter=html ./all-blob-reports
+              env:
+                  PLAYWRIGHT_JSON_OUTPUT_NAME: merged-report.json
+              run: npx playwright merge-reports --reporter=html,json ./all-blob-reports
+
+            # Retries keep the job green when a test fails and then passes, so list those tests where they are seen.
+            - name: List flaky tests
+              continue-on-error: true
+              run: node scripts/list-flaky-tests.mjs merged-report.json >> "$GITHUB_STEP_SUMMARY"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
               with:

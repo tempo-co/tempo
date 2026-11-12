@@ -119,6 +119,10 @@ for (const width of [320, 820]) {
   test(`touch selection presents finger-sized options at ${width}px`, async ({page}) => {
     await page.setViewportSize({width, height: 850});
     const trigger = await openExpirationSelect(page);
+    // Measure once the dialog has opened: mid-animation, its boxes carry rounding from the moving transform.
+    await page
+      .getByRole('dialog')
+      .evaluate((element) => Promise.all(element.getAnimations().map((a) => a.finished)));
     // The token dialog sizes its trigger for phones; the options are finger-sized everywhere.
     if (width < 640) expect((await boxOf(trigger)).height).toBeGreaterThanOrEqual(44);
     await trigger.tap();
