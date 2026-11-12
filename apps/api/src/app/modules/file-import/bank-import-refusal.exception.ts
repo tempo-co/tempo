@@ -1,5 +1,5 @@
 import {HttpException, HttpStatus} from '@nestjs/common';
-import type {BankImportError, BankImportErrorCode} from '@tempo/contracts';
+import type {BankImportAccountQuestion, BankImportError, BankImportErrorCode} from '@tempo/contracts';
 
 const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string}> = {
 	unsupported_format: {
@@ -23,7 +23,12 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 	parse_timeout: {status: HttpStatus.UNPROCESSABLE_ENTITY, message: 'Reading this file took too long.'},
 	ambiguous_target_account: {
 		status: HttpStatus.CONFLICT,
-		message: 'More than one of your accounts has this IBAN. Choose the account to import into.',
+		message: 'More than one of your accounts fits this statement. Choose the account to import into.',
+	},
+	target_account_unconfirmed: {
+		status: HttpStatus.CONFLICT,
+		message:
+			'None of these transactions were found in the account this statement would go to. Choose the account to import into.',
 	},
 	target_account_mismatch: {
 		status: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -40,13 +45,19 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 	},
 };
 
-/** A refused drop. Nothing was written; `file` names the refused file by its 1-based position, not its name. */
+/**
+ * A refused drop. Nothing was written; `file` names the refused file by its 1-based position, not its name.
+ * `accountQuestions` lists the statements the owner must choose an account for.
+ */
 export class BankImportRefusalException extends HttpException {
 	constructor(
 		readonly code: BankImportErrorCode,
 		file: number | null = null,
+		accountQuestions?: BankImportAccountQuestion[],
 	) {
 		const {status, message} = REFUSALS[code];
-		super({statusCode: status, message, code, file} satisfies BankImportError, status);
+		const body: BankImportError = {statusCode: status, message, code, file};
+		if (accountQuestions) body.accountQuestions = accountQuestions;
+		super(body, status);
 	}
 }

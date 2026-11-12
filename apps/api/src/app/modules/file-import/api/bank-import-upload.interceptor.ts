@@ -14,16 +14,19 @@ import {BankImportRefusalException} from '../bank-import-refusal.exception';
 import {MAX_FILES_PER_DROP, MAX_FILE_BYTES} from '../parsers/parse-limits';
 
 export const BANK_IMPORT_FILES_FIELD = 'files';
-/** The one text field the route reads: the account to import into. */
+/** The text fields the route reads: the account to import into, or the account per statement that names none. */
 export const BANK_IMPORT_ACCOUNT_FIELD = 'bankAccountId';
+export const BANK_IMPORT_ACCOUNT_CHOICES_FIELD = 'accountChoices';
+const TEXT_FIELDS: readonly string[] = [BANK_IMPORT_ACCOUNT_FIELD, BANK_IMPORT_ACCOUNT_CHOICES_FIELD];
 const FILES_SEEN = Symbol('bankImportFilesSeen');
 
 type CountedRequest = Request & {[FILES_SEEN]?: number};
 
 // Without a storage or destination, multer keeps each file in memory as a buffer.
 const Upload = FilesInterceptor(BANK_IMPORT_FILES_FIELD, MAX_FILES_PER_DROP + 1, {
-	// The route reads one short text field; more fields are refused instead of collected in memory.
-	limits: {fileSize: MAX_FILE_BYTES, files: MAX_FILES_PER_DROP + 1, fields: 1, fieldSize: 64},
+	// The route reads two short text fields; more fields are refused instead of collected in memory. 4 KB holds an
+	// account choice for every currency a bank offers.
+	limits: {fileSize: MAX_FILE_BYTES, files: MAX_FILES_PER_DROP + 1, fields: TEXT_FIELDS.length, fieldSize: 4096},
 	// Counts files as they arrive, so a size refusal can name the file by its position.
 	fileFilter: (request, file, accept) => {
 		const counted = request as CountedRequest;
@@ -37,8 +40,8 @@ const Upload = FilesInterceptor(BANK_IMPORT_FILES_FIELD, MAX_FILES_PER_DROP + 1,
 });
 
 /**
- * Reads the `files` field into memory with the drop's limits, refuses any text field but `bankAccountId`, and turns
- * multer's limit errors into typed refusals. Nothing reaches disk.
+ * Reads the `files` field into memory with the drop's limits, refuses any text field but `bankAccountId` and
+ * `accountChoices`, and turns multer's limit errors into typed refusals. Nothing reaches disk.
  */
 @Injectable()
 export class BankImportUploadInterceptor implements NestInterceptor {
@@ -48,7 +51,7 @@ export class BankImportUploadInterceptor implements NestInterceptor {
 		const checkedNext: CallHandler = {
 			handle: () => {
 				const body = context.switchToHttp().getRequest<Request>().body as Record<string, unknown> | undefined;
-				if (Object.keys(body ?? {}).some((field) => field !== BANK_IMPORT_ACCOUNT_FIELD)) {
+				if (Object.keys(body ?? {}).some((field) => !TEXT_FIELDS.includes(field))) {
 					throw new BadRequestException('Unexpected field.');
 				}
 				return next.handle();
