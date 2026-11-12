@@ -23,7 +23,7 @@ import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 import {MailpitMessageSummaryResponse, MailpitResponse} from '../../types/mailpit';
 import {fetchedTransactions} from '../../utils/banking-utils';
-import {EmailUtils} from '../../utils/email-utils';
+import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -63,7 +63,7 @@ describe('Bank connection email alerts', () => {
 		alerts = app.get(BankConnectionAlertService);
 		emailQueue = app.get(getQueueToken(EMAIL_QUEUE));
 		const config = app.get(ConfigurationService);
-		mailpitUrl = config.get('EMAIL_UI_URL');
+		mailpitUrl = MAILPIT_API_URL;
 		webBaseUrl = config.get('WEB_BASE_URL');
 
 		owner = await createAccount('Alert Owner', OWNER_EMAIL, true, OWNER_PASSWORD);

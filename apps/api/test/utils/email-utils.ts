@@ -5,6 +5,9 @@ import {Account} from '@modules/account/account.entity';
 import {MailpitMessageSummaryResponse, MailpitResponse} from '../types/mailpit';
 import {SIX_DIGIT_REGEX, UUID_REGEX} from '../types/regex.constants';
 
+/** Mailpit's HTTP API, which `docker-compose.test.yml` publishes on `EMAIL_UI_PORT` (`.env.test`). */
+export const MAILPIT_API_URL = `http://localhost:${process.env.EMAIL_UI_PORT ?? '8025'}`;
+
 const EMAIL_FOOTER = 'Sent by Tempo because of activity on your account. Need help? Reply to this email.';
 
 export class EmailUtils {

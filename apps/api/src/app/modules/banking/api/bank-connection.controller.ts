@@ -1,17 +1,4 @@
-import {
-	Body,
-	Controller,
-	Delete,
-	Get,
-	HttpCode,
-	Param,
-	ParseUUIDPipe,
-	Post,
-	Query,
-	Req,
-	Res,
-	UseGuards,
-} from '@nestjs/common';
+import {Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, Res} from '@nestjs/common';
 import {Throttle, minutes} from '@nestjs/throttler';
 import type {
 	BankConnection,
@@ -28,7 +15,6 @@ import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 import {Public} from '@modules/auth/decorators/public.decorator';
 import {TokenReadable} from '@modules/auth/decorators/token-readable.decorator';
-import {CsrfOriginGuard} from '@modules/auth/guards/csrf-origin.guard';
 
 import {BankLogoService} from '../bank-logos/bank-logo.service';
 import {BankingService} from '../banking.service';
@@ -75,7 +61,6 @@ export class BankConnectionController {
 
 	@Post(':connectionId/refresh')
 	@HttpCode(200)
-	@UseGuards(CsrfOriginGuard)
 	async refreshConnection(
 		@Param('connectionId', new ParseUUIDPipe({version: '4'})) connectionId: string,
 		@CurrentAccount() account: Account,

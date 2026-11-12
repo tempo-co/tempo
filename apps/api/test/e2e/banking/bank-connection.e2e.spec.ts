@@ -304,7 +304,8 @@ describe('BankConnectionController', () => {
 			getSessionAccounts.mockClear();
 			try {
 				const refresh = verifiedAgent.post(`/bank-connections/${connection.id}/refresh`);
-				if (origin !== undefined) refresh.set('Origin', origin);
+				if (origin === undefined) refresh.unset('Origin');
+				else refresh.set('Origin', origin);
 				await refresh.expect(403);
 				expect(getSessionAccounts).not.toHaveBeenCalled();
 				expect(await bankSyncRunRepository.countBy({bankConnection: {id: connection.id}})).toBe(0);

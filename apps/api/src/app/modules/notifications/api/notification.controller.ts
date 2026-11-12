@@ -1,10 +1,9 @@
-import {Body, Controller, Delete, Get, HttpCode, Patch, Put, Req, UseGuards} from '@nestjs/common';
+import {Body, Controller, Delete, Get, HttpCode, Patch, Put, Req} from '@nestjs/common';
 import type {NotificationSettings} from '@tempo/contracts';
 import {Request} from 'express';
 
 import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
-import {CsrfOriginGuard} from '@modules/auth/guards/csrf-origin.guard';
 
 import {PushNotificationService} from '../push-notification.service';
 import {
@@ -24,7 +23,6 @@ export class NotificationController {
 	}
 
 	@Patch('preferences')
-	@UseGuards(CsrfOriginGuard)
 	updatePreferences(
 		@CurrentAccount() account: Account,
 		@Body() dto: NotificationPreferencesUpdateDto,
@@ -34,7 +32,6 @@ export class NotificationController {
 
 	@Put('subscriptions')
 	@HttpCode(204)
-	@UseGuards(CsrfOriginGuard)
 	async register(
 		@CurrentAccount() account: Account,
 		@Req() request: Request,
@@ -45,7 +42,6 @@ export class NotificationController {
 
 	@Delete('subscriptions')
 	@HttpCode(204)
-	@UseGuards(CsrfOriginGuard)
 	async remove(@CurrentAccount() account: Account, @Body() dto: PushSubscriptionRemovalDto): Promise<void> {
 		await this.pushNotificationService.remove(account.id, dto.endpoint);
 	}

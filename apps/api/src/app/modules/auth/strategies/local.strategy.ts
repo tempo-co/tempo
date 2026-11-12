@@ -2,6 +2,7 @@ import {BadRequestException, Injectable, UnauthorizedException} from '@nestjs/co
 import {PassportStrategy} from '@nestjs/passport';
 import {plainToClass} from 'class-transformer';
 import {validate} from 'class-validator';
+import {randomBytes} from 'node:crypto';
 import {Strategy} from 'passport-local';
 
 import {Account} from '@modules/account/account.entity';
@@ -12,8 +13,12 @@ import {LogInDto} from '../api/dtos/login.dto';
 
 @Injectable()
 export class LocalStrategy extends PassportStrategy(Strategy) {
+	/** Hash of a random secret with the same cost as real passwords, verified when the email is unknown. */
+	private readonly dummyPasswordHash: Promise<string>;
+
 	constructor(private readonly accountService: AccountService) {
 		super({usernameField: 'email'});
+		this.dummyPasswordHash = accountService.hashPassword(randomBytes(32).toString('base64url'));
 	}
 
 	async validate(email: Account['email'], password: Account['password']) {
@@ -26,8 +31,11 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
 		}
 
 		const account = await this.accountService.findByEmail(credentials.email);
-		// The same answer for an unknown email and a wrong password, so the response body does not tell them apart.
-		if (!account || !(await this.accountService.isPasswordValid(account.password, credentials.password))) {
+		// An unknown email still costs one password check and gets the same answer as a wrong password,
+		// so neither the response nor its timing tells them apart.
+		const hash = account?.password ?? (await this.dummyPasswordHash);
+		const isPasswordValid = await this.accountService.isPasswordValid(hash, credentials.password);
+		if (!account || !isPasswordValid) {
 			throw new UnauthorizedException(INVALID_CREDENTIALS);
 		}
 		return account;

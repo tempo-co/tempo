@@ -45,16 +45,30 @@ describe('EmailModule SMTP options', () => {
 		expect(options.defaults.from).toBe('Tempo <mailer@example.test>');
 	});
 
-	it('does not configure SMTP authentication for Mailpit when Gmail credentials are staged', () => {
+	it('authenticates to any SMTP host that has credentials configured', () => {
 		const options = createMailerOptions(
 			makeConfig({
-				EMAIL_HOST: 'mailpit',
-				EMAIL_PORT: 1025,
-				EMAIL_SECURE: false,
+				EMAIL_HOST: 'smtp.example.test',
+				EMAIL_PORT: 465,
+				EMAIL_SECURE: true,
 				EMAIL_REQUIRE_TLS: false,
 				EMAIL_USERNAME: 'mailer@example.test',
 				EMAIL_PASSWORD: 'synthetic-app-password',
 			}),
+		);
+
+		expect(options.transport).toMatchObject({
+			host: 'smtp.example.test',
+			port: 465,
+			secure: true,
+			requireTLS: false,
+			auth: {user: 'mailer@example.test', pass: 'synthetic-app-password'},
+		});
+	});
+
+	it('connects to Mailpit without authentication when no credentials are configured', () => {
+		const options = createMailerOptions(
+			makeConfig({EMAIL_HOST: 'mailpit', EMAIL_PORT: 1025, EMAIL_SECURE: false, EMAIL_REQUIRE_TLS: false}),
 		);
 
 		expect(options.transport).toMatchObject({

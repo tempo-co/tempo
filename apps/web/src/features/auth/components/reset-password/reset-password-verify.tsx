@@ -1,6 +1,6 @@
 import {zodResolver} from '@hookform/resolvers/zod';
 import {Link} from '@tanstack/react-router';
-import type {Account} from '@tempo/contracts';
+import type {Account, PasswordResetErrorCode} from '@tempo/contracts';
 import {Loader} from 'lucide-react';
 import {useForm} from 'react-hook-form';
 
@@ -30,8 +30,7 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
   });
 
   const {verifyPasswordReset, isPending, isSuccess, error} = usePasswordResetVerify();
-  const isInvalidToken =
-    error?.status === 400 && error.message.includes('Invalid or expired password reset token');
+  const isInvalidToken = error?.code === ('invalid_token' satisfies PasswordResetErrorCode);
 
   async function onSubmit(formData: PasswordResetVerifyDto) {
     form.clearErrors('newPassword');
@@ -42,9 +41,10 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
       if (submitError instanceof HttpError && submitError.status === 400) {
         form.setError('newPassword', {
           type: 'server',
-          message: submitError.message.includes('same as the current password')
-            ? 'Choose a different password from your current one.'
-            : "We couldn't reset your password. Please try again.",
+          message:
+            submitError.code === ('password_unchanged' satisfies PasswordResetErrorCode)
+              ? 'Choose a different password from your current one.'
+              : "We couldn't reset your password. Please try again.",
         });
       }
     }

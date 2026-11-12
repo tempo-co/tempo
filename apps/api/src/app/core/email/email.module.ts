@@ -53,7 +53,8 @@ export const createMailerOptions = (config: ConfigurationService) => {
 	const host = config.get('EMAIL_HOST');
 	const username = config.get('EMAIL_USERNAME');
 	const password = config.get('EMAIL_PASSWORD');
-	const auth = host === 'smtp.gmail.com' && username && password ? {user: username, pass: password} : undefined;
+	// The schema accepts both or neither; Mailpit and other unauthenticated relays configure neither.
+	const auth = username && password ? {user: username, pass: password} : undefined;
 
 	return {
 		transport: {

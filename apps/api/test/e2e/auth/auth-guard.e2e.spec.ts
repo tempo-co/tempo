@@ -15,6 +15,8 @@ import {
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
+import {createVerifiedAccount} from '../../utils/auth-utils';
+import {MAILPIT_API_URL} from '../../utils/email-utils';
 
 type Method = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'head';
 type GuardedRoute = [method: Method, path: string];
@@ -110,6 +112,11 @@ const TOKEN_DENIED_ROUTES: GuardedRoute[] = [
 	['post', '/auth/reset-password/verify'],
 ];
 
+// Session-authenticated changes, which must carry the web app's Origin.
+const SESSION_CHANGE_ROUTES = [...SESSION_ROUTES, ...VERIFIED_SESSION_ONLY_ROUTES].filter(
+	([method]) => method !== 'get' && method !== 'head',
+);
+
 // HEAD requests cannot carry a body, and their responses omit it.
 function send(test: request.Test, method: Method) {
 	return method === 'head' ? test : test.send({});
@@ -118,12 +125,14 @@ function send(test: request.Test, method: Method) {
 describe('AuthGuard - protected routes', () => {
 	let httpServer: Server;
 	let unverifiedAgent: TestAgent;
+	let ownerAgent: TestAgent;
 	let token: string;
 	let unverifiedToken: string;
 
 	beforeAll(async () => {
 		httpServer = getApp().getHttpServer();
 		unverifiedAgent = await loginAgent(httpServer, UNVERIFIED_ACCOUNT_EMAIL, UNVERIFIED_ACCOUNT_PASSWORD);
+		ownerAgent = (await createVerifiedAccount(httpServer, MAILPIT_API_URL)).agent;
 		const agent = await loginAgent(httpServer, VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
 		token = (
 			await agent
@@ -184,6 +193,21 @@ describe('AuthGuard - protected routes', () => {
 			const response = await send(request(httpServer)[method](path), method).expect(401);
 			if (method !== 'head') expect(response.body.message).toBe('Unauthorized');
 			if (path === '/mcp') expect(response.headers['www-authenticate']).toBe('Bearer');
+		},
+	);
+
+	it.each(SESSION_CHANGE_ROUTES)(
+		'%s %s refuses a signed-in change from another origin, an opaque origin or none',
+		async (method, path) => {
+			// A sibling host on the same site still receives the SameSite=Strict session cookie.
+			for (const origin of ['https://other-device.example.ts.net', 'null', undefined]) {
+				const change = ownerAgent[method](path);
+				if (origin === undefined) change.unset('Origin');
+				else change.set('Origin', origin);
+				const response = await send(change, method).expect(403);
+				expect(response.body.message).toBe('Forbidden');
+			}
+			await ownerAgent.get('/accounts/me').expect(200);
 		},
 	);
 

@@ -114,7 +114,6 @@ services:
             EMAIL_HOST: mailpit
             EMAIL_PORT: '1025'
             EMAIL_SECURE: 'false'
-            EMAIL_UI_URL: http://127.0.0.1:8125/
             EMAIL_VERIFICATION_EXPIRATION: 24h
             EMAIL_VERIFICATION_REDIS_KEY: tempo-staging-email-verification
             PASSWORD_RESET_EXPIRATION: 24h

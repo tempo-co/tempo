@@ -1,7 +1,6 @@
 import {Server} from 'node:net';
 import request from 'supertest';
 
-import {ConfigurationService} from '@core/config/config.service';
 import {
 	INVALID_PASSWORD,
 	PASSWORD_CHANGE_SUCCESS,
@@ -17,7 +16,7 @@ import {
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 import {expectValidationMessage, uniquePassword} from '../../utils/auth-utils';
-import {EmailUtils} from '../../utils/email-utils';
+import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
 
 describe('AuthController - Change password', () => {
 	let httpServer: Server;
@@ -28,7 +27,7 @@ describe('AuthController - Change password', () => {
 
 	describe('POST /auth/change-password', () => {
 		it('should change password, revoke other sessions and reset links, and allow login with new password', async () => {
-			const mailpitApiUrl = getApp().get(ConfigurationService).get('EMAIL_UI_URL');
+			const mailpitApiUrl = MAILPIT_API_URL;
 			await EmailUtils.clearEmails(mailpitApiUrl);
 			await request(httpServer)
 				.post('/auth/reset-password/request')

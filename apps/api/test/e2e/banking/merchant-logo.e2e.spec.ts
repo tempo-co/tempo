@@ -32,6 +32,7 @@ import {Merchant} from '@modules/banking/merchant-logos/merchant.entity';
 import {BankingFixtures, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {enableMerchantLogosE2e, getApp} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
+import {MAILPIT_API_URL} from '../../utils/email-utils';
 import {waitFor} from '../../utils/wait-utils';
 
 enableMerchantLogosE2e();
@@ -108,8 +109,8 @@ describe('Merchant logos', () => {
 		merchants = app.get(getRepositoryToken(Merchant));
 		logos = app.get(getRepositoryToken(MerchantLogo));
 		queue = app.get(getQueueToken(MERCHANT_LOGO_QUEUE));
-		owner = await createVerifiedAccount(app.getHttpServer(), config.get('EMAIL_UI_URL'));
-		other = await createVerifiedAccount(app.getHttpServer(), config.get('EMAIL_UI_URL'));
+		owner = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
+		other = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
 		icon = await sharp({create: {width: 180, height: 180, channels: 4, background: '#cc3322'}})
 			.png()
 			.toBuffer();
@@ -466,10 +467,7 @@ describe('Merchant logos', () => {
 	it('serves cached logos with acquisition and identification disabled', async () => {
 		const config = app.get(ConfigService);
 		const service = app.get(MerchantLogoService);
-		const account = await createVerifiedAccount(
-			app.getHttpServer(),
-			app.get(ConfigurationService).get('EMAIL_UI_URL'),
-		);
+		const account = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
 		const connection = await fixtures.createConnection({id: account.id});
 		const bankAccount = await fixtures.createBankAccount(connection);
 		const [purchase] = await fixtures.createTransactions(bankAccount, [
@@ -658,10 +656,7 @@ describe('Merchant logos', () => {
 	});
 
 	it('keeps merchants pending while both model routes are unavailable and identifies them once one recovers', async () => {
-		const account = await createVerifiedAccount(
-			app.getHttpServer(),
-			app.get(ConfigurationService).get('EMAIL_UI_URL'),
-		);
+		const account = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
 		const connection = await fixtures.createConnection({id: account.id});
 		const bankAccount = await fixtures.createBankAccount(connection);
 		const transaction = await fixtures.createTransaction(

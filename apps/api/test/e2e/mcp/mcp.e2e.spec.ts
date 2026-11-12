@@ -22,6 +22,7 @@ import {BankingFixtures, bookedRow} from '../../../scripts/seed-data/banking-fix
 import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from '../../../scripts/seed-data/seed.constants';
 import {getApp, getSessionCookie} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
+import {MAILPIT_API_URL} from '../../utils/email-utils';
 
 const ORIGIN = 'http://localhost:5173';
 const INITIALIZE = {
@@ -66,10 +67,7 @@ describe('Hosted MCP', () => {
 		await app.listen(0, '127.0.0.1');
 		url = new URL(`http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}/mcp`);
 		const accounts = app.get(DataSource).getRepository(Account);
-		const created = await createVerifiedAccount(
-			app.getHttpServer(),
-			app.get(ConfigurationService).get('EMAIL_UI_URL'),
-		);
+		const created = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
 		await accounts.update(created.id, {baseCurrency: 'EUR'});
 		owner = await accounts.findOneByOrFail({id: created.id});
 		otherOwner = await accounts.findOneByOrFail({email: VERIFIED_ACCOUNT_EMAIL});
