@@ -50,7 +50,11 @@ export function App() {
             titleAs='h1'
             icon={navigator.onLine ? CloudOff : WifiOff}
             title="Can't reach Tempo"
-            description="Your session hasn't been checked yet. Reconnect to continue."
+            description={
+              navigator.onLine
+                ? "Tempo isn't answering right now. Try again in a moment."
+                : "You're offline. Connect to the internet, then try again."
+            }
           >
             <Button variant='outline' onClick={() => void refetch()}>
               <RotateCw aria-hidden='true' />
