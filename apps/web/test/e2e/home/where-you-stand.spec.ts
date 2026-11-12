@@ -236,6 +236,20 @@ test('repeats show bills and income a month, late bills first, and open their se
   await expect(rows.nth(0)).toContainText('Example EnergyNot paid yet€35.00');
   await expect(rows.nth(1)).toContainText('Example Mobile14 Nov · in 9 days€15.00');
   await expect(rows.nth(2)).toContainText('Example Landlord1 Dec · in 26 days€1,200.00');
+  // A late bill has the same tile as the payments after it, so the names line up.
+  const tiles = await Promise.all(
+    [0, 1, 2].map((n) => boxOf(rows.nth(n).getByTestId('merchant-logo-tile'))),
+  );
+  const names = await Promise.all(
+    ['Example Energy', 'Example Mobile', 'Example Landlord'].map((name, n) =>
+      boxOf(rows.nth(n).getByText(name, {exact: true})),
+    ),
+  );
+  for (const n of [1, 2]) {
+    expect(tiles[n].width).toBe(tiles[0].width);
+    expect(tiles[n].height).toBe(tiles[0].height);
+    expect(names[n].x).toBe(names[0].x);
+  }
   // Home reads all of it from the summary, once.
   expect(recurringReads).toEqual(['/recurring-series/summary']);
 
