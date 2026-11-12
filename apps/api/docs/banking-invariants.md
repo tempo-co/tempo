@@ -52,6 +52,9 @@ Regression matrix worth keeping green: missing/wrong/lowercase/padded confirmati
 - An ASPSP rate limit stops the remaining provider calls in that run and persists `Retry-After` as the next gate. Do not retry in a tight loop.
 - The first sync uses `strategy: 'longest'`; later syncs start from the previous successful run minus `INCREMENTAL_OVERLAP_DAYS` and rely on dedupe. Drain every continuation key, including pages with no rows.
 - Keep provider calls outside database transactions; enqueue categorization only after the rows commit.
+- Once the sync transaction commits, the run is reported as finished: lease loss or a disconnect after that point does not fail it. The fencing inside the transaction protects the write.
+- Every failed or partial run stores why in `bank_sync_runs.failures` (`bank-sync-failure.ts`) and logs the same summary at WARN with the run id: per failed provider call its kind (`session`, `balances`, `transactions`), Tempo's bank account id, the provider error code, HTTP status and whether `Retry-After` came back; `internal` for an unexpected exception (logged with its name and stack frames); `cancelled` for an aborted foreground refresh. Never store or log provider messages, response bodies, provider ids or exception messages. The user-facing `errorMessage` stays generic.
+- Transactions the provider sends without a usable amount or currency are not imported. The rest of the page is, the count is recorded as an `unparseable_transactions` failure for that account, and the run is PARTIAL. A page with no usable row fails that account's transactions call.
 
 ## Transaction identity
 

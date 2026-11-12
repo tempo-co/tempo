@@ -34,6 +34,13 @@ import {
 import {BankAccountBalance} from '../bank-account-balance.entity';
 import {BankAccount} from '../bank-account.entity';
 import {BankConnection} from '../bank-connection.entity';
+import {
+	BankSyncFailure,
+	UNPARSEABLE_TRANSACTIONS_CODE,
+	describeBankSyncFailures,
+	safeErrorStack,
+	toBankSyncFailure,
+} from '../bank-sync-failure';
 import {BankSyncRun} from '../bank-sync-run.entity';
 import {BankTransaction} from '../bank-transaction.entity';
 import {
@@ -93,6 +100,7 @@ type SyncFetchResult = {
 	hasSuccessfulEndpoint: boolean;
 	connectionExpired: boolean;
 	rateLimit?: SyncRateLimit;
+	failures: BankSyncFailure[];
 };
 
 type SyncRateLimit = {
@@ -192,6 +200,8 @@ export class BankingSyncService {
 			}
 			let run: BankSyncRun | undefined;
 			let syncStartedAt: Date | undefined;
+			const failures: BankSyncFailure[] = [];
+			let committed = false;
 
 			try {
 				lockLease.assertHealthy();
@@ -239,10 +249,15 @@ export class BankingSyncService {
 						providerSessionId,
 						transactionOptions,
 						lockLease,
+						failures,
 						psu,
 					);
-				} catch {
+				} catch (error) {
 					lockLease.assertHealthy();
+					this.logger.warn(
+						`Bank synchronization run ${run.id} failed unexpectedly: ${safeErrorStack(error)}`,
+					);
+					failures.push(toBankSyncFailure(error, 'internal'));
 					fetchResult = {
 						accounts: [],
 						knownAccounts: bankAccounts,
@@ -250,6 +265,7 @@ export class BankingSyncService {
 						hasFailure: true,
 						hasSuccessfulEndpoint: false,
 						connectionExpired: false,
+						failures,
 					};
 				}
 				lockLease.assertHealthy();
@@ -264,25 +280,49 @@ export class BankingSyncService {
 					finishedAt,
 					syncStartedAt,
 				);
+				committed = true;
+				this.logFailures(run.id, connection.id, status, failures);
 				// Recompute first so new own transfers and exchanges are marked before the worker can claim them.
 				await this.ownTransferService.recomputeForOwnerSafely(accountId);
 				await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
 				await this.enqueuePersistedTransactions(persistenceResult.persistedTransactionIds);
 				if (persistenceResult.persistedTransactionIds.length)
 					await this.merchantLogoService.enqueueForOwnerSafely(accountId);
-				lockLease.assertHealthy();
 
+				// The run is committed: a lease blip or a disconnect from here on must not report it as failed.
 				const completedRun = await this.bankSyncRunRepository.findOneBy({id: run.id});
 				if (!completedRun) throw new InternalServerErrorException(BANKING_PERSISTENCE_SYNC_ERROR);
-				lockLease.assertHealthy();
 
 				return this.toSyncRunResponse(completedRun, persistenceResult.transactionsAdded, fetchResult.rateLimit);
 			} catch (error) {
+				const cancelled = requestSignal?.aborted === true;
+				if (committed) {
+					// The finished run already holds its outcome; only the response failed.
+					this.logger.warn(
+						`Bank synchronization run ${run?.id} could not be reported: ${safeErrorStack(error)}`,
+					);
+				} else if (cancelled) {
+					failures.push({
+						kind: 'cancelled',
+						bankAccountId: null,
+						code: 'request_aborted',
+						httpStatus: null,
+						retryAfter: false,
+					});
+				} else {
+					if (!(error instanceof HttpException)) {
+						this.logger.warn(
+							`Bank synchronization${run ? ` run ${run.id}` : ''} for connection ${connection.id} could not finish: ${safeErrorStack(error)}`,
+						);
+					}
+					failures.push(toBankSyncFailure(error, 'internal'));
+				}
+				if (run && !committed) this.logFailures(run.id, connection.id, FAILED, failures);
 				try {
-					if (requestSignal?.aborted) {
-						await this.markCancelledRefresh(connection, run?.id, syncStartedAt);
+					if (cancelled) {
+						await this.markCancelledRefresh(connection, failures, run?.id, syncStartedAt);
 					} else {
-						await this.markPersistenceFailure(connection.id, run?.id, syncStartedAt);
+						await this.markPersistenceFailure(connection.id, failures, run?.id, syncStartedAt);
 					}
 				} catch (failureError) {
 					this.logger.warn(
@@ -398,6 +438,7 @@ export class BankingSyncService {
 		providerSessionId: string,
 		transactionOptions: EnableBankingTransactionFetchOptions,
 		lockLease: BankingConnectionLock,
+		failures: BankSyncFailure[],
 		psu?: EnableBankingPsuContext,
 	): Promise<SyncFetchResult> {
 		const accounts: AccountFetchResult[] = [];
@@ -406,16 +447,20 @@ export class BankingSyncService {
 		let hasSuccessfulEndpoint = false;
 		let connectionExpired = false;
 		let rateLimit: SyncRateLimit | undefined;
-		const recordFailure = (error: unknown, step: 'accounts' | 'balances' | 'transactions') => {
+		const recordFailure = (
+			error: unknown,
+			kind: 'session' | 'balances' | 'transactions',
+			bankAccount?: BankAccount,
+		) => {
 			lockLease.assertHealthy();
 			hasFailure = true;
-			// The provider's error code and HTTP status are the only details logged; responses can hold bank data.
-			// The code comes from the provider's response, so only plain code characters reach the log.
-			const detail =
-				error instanceof EnableBankingClientError
-					? `${error.code.replace(/[^\w.-]/g, '_')}${error.providerStatus ? ` (HTTP ${error.providerStatus})` : ''}`
-					: safeErrorName(error);
-			this.logger.warn(`Bank synchronization ${step} request failed for connection ${connectionId}: ${detail}`);
+			// Only the provider's error code and HTTP status are kept; responses can hold bank data.
+			failures.push(toBankSyncFailure(error, kind, bankAccount?.id ?? null));
+			if (!(error instanceof EnableBankingClientError)) {
+				this.logger.warn(
+					`Bank synchronization ${kind} request failed unexpectedly for connection ${connectionId}: ${safeErrorStack(error)}`,
+				);
+			}
 			connectionExpired ||= this.isExpiredSessionError(error);
 			rateLimit = this.mergeRateLimit(rateLimit, this.toRateLimit(error));
 		};
@@ -435,7 +480,7 @@ export class BankingSyncService {
 			authoritativeAccountIds = new Set(sessionAccounts.accountIds);
 			hasSuccessfulEndpoint = true;
 		} catch (error) {
-			recordFailure(error, 'accounts');
+			recordFailure(error, 'session');
 		}
 
 		for (const bankAccount of bankAccounts) {
@@ -459,23 +504,36 @@ export class BankingSyncService {
 				balancesSucceeded = true;
 				hasSuccessfulEndpoint = true;
 			} catch (error) {
-				recordFailure(error, 'balances');
+				recordFailure(error, 'balances', bankAccount);
 			}
 
 			if (connectionExpired || rateLimit) break;
 
 			try {
-				transactions = await this.enableBankingClient.getAccountTransactions(
+				const fetched = await this.enableBankingClient.getAccountTransactions(
 					bankAccount.providerAccountId,
 					transactionOptions,
 					lockLease.signal,
 					...(psu ? [psu] : []),
 				);
 				lockLease.assertHealthy();
+				transactions = fetched.transactions;
 				transactionsSucceeded = true;
 				hasSuccessfulEndpoint = true;
+				if (fetched.unparseableCount > 0) {
+					// The readable rows are still imported; the account's history is incomplete, so the run is partial.
+					hasFailure = true;
+					failures.push({
+						kind: 'transactions',
+						bankAccountId: bankAccount.id,
+						code: UNPARSEABLE_TRANSACTIONS_CODE,
+						httpStatus: null,
+						retryAfter: false,
+						droppedTransactions: fetched.unparseableCount,
+					});
+				}
 			} catch (error) {
-				recordFailure(error, 'transactions');
+				recordFailure(error, 'transactions', bankAccount);
 			}
 
 			accounts.push({
@@ -498,6 +556,7 @@ export class BankingSyncService {
 			hasSuccessfulEndpoint,
 			connectionExpired,
 			rateLimit,
+			failures,
 		};
 	}
 
@@ -612,6 +671,7 @@ export class BankingSyncService {
 						0,
 					),
 					errorMessage,
+					failures: fetchResult.failures.length ? fetchResult.failures : null,
 				},
 			);
 
@@ -698,8 +758,21 @@ export class BankingSyncService {
 		}
 	}
 
+	private logFailures(
+		runId: string,
+		connectionId: string,
+		status: string,
+		failures: readonly BankSyncFailure[],
+	): void {
+		if (!failures.length) return;
+		this.logger.warn(
+			`Bank synchronization run ${runId} for connection ${connectionId} finished ${status}: ${describeBankSyncFailures(failures)}`,
+		);
+	}
+
 	private async markCancelledRefresh(
 		connection: BankConnection,
+		failures: BankSyncFailure[],
 		runId?: string,
 		syncStartedAt?: Date,
 	): Promise<void> {
@@ -710,6 +783,7 @@ export class BankingSyncService {
 					status: FAILED,
 					finishedAt: new Date(),
 					errorMessage: BANKING_FAILED_SYNC_ERROR,
+					failures,
 				},
 			);
 		}
@@ -724,11 +798,16 @@ export class BankingSyncService {
 		);
 	}
 
-	private async markPersistenceFailure(connectionId: string, runId?: string, syncStartedAt?: Date): Promise<void> {
+	private async markPersistenceFailure(
+		connectionId: string,
+		failures: BankSyncFailure[],
+		runId?: string,
+		syncStartedAt?: Date,
+	): Promise<void> {
 		if (runId) {
 			await this.bankSyncRunRepository.update(
 				{id: runId, status: BANK_SYNC_STATUSES.RUNNING},
-				{status: FAILED, finishedAt: new Date(), errorMessage: BANKING_PERSISTENCE_SYNC_ERROR},
+				{status: FAILED, finishedAt: new Date(), errorMessage: BANKING_PERSISTENCE_SYNC_ERROR, failures},
 			);
 		}
 

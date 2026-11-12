@@ -4,10 +4,13 @@ import {BANKING_SERVICE_UNAVAILABLE} from '../api/constants/banking-messages.con
 import {BankAccount} from '../bank-account.entity';
 import {BankConnection} from '../bank-connection.entity';
 import {BankSyncRun} from '../bank-sync-run.entity';
+import {EnableBankingTransactionsResult} from '../enable-banking.types';
 import {BankTransactionPersistenceService} from './bank-transaction-persistence.service';
 import {BankingConnectionLockService} from './banking-connection-lock.service';
 import {BankingSyncService} from './banking-sync.service';
 import {EnableBankingClientError} from './enable-banking.client';
+
+const NO_TRANSACTIONS: EnableBankingTransactionsResult = {transactions: [], unparseableCount: 0};
 
 type Deferred<T> = {
 	promise: Promise<T>;
@@ -174,7 +177,7 @@ describe('BankingSyncService synchronization lock', () => {
 		set: jest.Mock;
 		eval: jest.Mock;
 	};
-	let transactionGate: Deferred<[]>;
+	let transactionGate: Deferred<EnableBankingTransactionsResult>;
 	let lockOwner: LockOwner | undefined;
 	let renewalShouldFail: boolean;
 	let enableBankingClient: {
@@ -208,7 +211,7 @@ describe('BankingSyncService synchronization lock', () => {
 
 	beforeEach(() => {
 		jest.useFakeTimers();
-		transactionGate = deferred<[]>();
+		transactionGate = deferred<EnableBankingTransactionsResult>();
 		lockOwner = undefined;
 		renewalShouldFail = false;
 		redis = {
@@ -334,7 +337,7 @@ describe('BankingSyncService synchronization lock', () => {
 				account: {id: 'account-id'},
 			} as BankConnection)
 			.mockResolvedValueOnce(null);
-		enableBankingClient.getAccountTransactions.mockResolvedValueOnce([]);
+		enableBankingClient.getAccountTransactions.mockResolvedValueOnce(NO_TRANSACTIONS);
 
 		await expect(service.synchronizeAutomatically('connection-id')).rejects.toMatchObject({status: 404});
 		expect(enableBankingClient.getSessionAccounts).not.toHaveBeenCalled();
@@ -360,7 +363,7 @@ describe('BankingSyncService synchronization lock', () => {
 			{id: 'new-transaction-id', inserted: true},
 		]);
 		transactionRepository.createQueryBuilder.mockReturnValue(insertQueryBuilder);
-		enableBankingClient.getAccountTransactions.mockResolvedValue(transactions);
+		enableBankingClient.getAccountTransactions.mockResolvedValue({transactions, unparseableCount: 0});
 		bankSyncRunRepository.findOneBy.mockResolvedValue({
 			id: 'run-id',
 			status: 'SUCCEEDED',
@@ -403,11 +406,11 @@ describe('BankingSyncService synchronization lock', () => {
 	});
 
 	it('persists the provider Retry-After as the next automatic synchronization gate', async () => {
-		transactionGate.resolve([]);
+		transactionGate.resolve(NO_TRANSACTIONS);
 		enableBankingClient.getAccountBalances.mockRejectedValueOnce(
 			new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 429, 120),
 		);
-		enableBankingClient.getAccountTransactions.mockResolvedValueOnce([]);
+		enableBankingClient.getAccountTransactions.mockResolvedValueOnce(NO_TRANSACTIONS);
 
 		await expect(service.synchronizeAutomatically('connection-id')).resolves.toMatchObject({
 			status: 'SUCCEEDED',
@@ -427,11 +430,11 @@ describe('BankingSyncService synchronization lock', () => {
 
 	it('uses the six-hour fallback even when the ordinary background interval is shorter', async () => {
 		configurationService.get.mockReturnValue('1h');
-		transactionGate.resolve([]);
+		transactionGate.resolve(NO_TRANSACTIONS);
 		enableBankingClient.getAccountBalances.mockRejectedValueOnce(
 			new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 400),
 		);
-		enableBankingClient.getAccountTransactions.mockResolvedValueOnce([]);
+		enableBankingClient.getAccountTransactions.mockResolvedValueOnce(NO_TRANSACTIONS);
 
 		await service.synchronizeAutomatically('connection-id');
 
@@ -442,11 +445,11 @@ describe('BankingSyncService synchronization lock', () => {
 	});
 
 	it('honors an explicit zero-second provider retry delay', async () => {
-		transactionGate.resolve([]);
+		transactionGate.resolve(NO_TRANSACTIONS);
 		enableBankingClient.getAccountBalances.mockRejectedValueOnce(
 			new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 400, 0),
 		);
-		enableBankingClient.getAccountTransactions.mockResolvedValueOnce([]);
+		enableBankingClient.getAccountTransactions.mockResolvedValueOnce(NO_TRANSACTIONS);
 
 		await service.synchronizeAutomatically('connection-id');
 
@@ -456,11 +459,11 @@ describe('BankingSyncService synchronization lock', () => {
 		expect(connectionUpdate.nextSyncAt.getTime() - Date.now()).toBeLessThan(1_000);
 	});
 	it('does not classify an unrelated HTTP 429 as an ASPSP rate limit', async () => {
-		transactionGate.resolve([]);
+		transactionGate.resolve(NO_TRANSACTIONS);
 		enableBankingClient.getAccountBalances.mockRejectedValueOnce(
 			new EnableBankingClientError('provider_temporarily_unavailable', 429, 120),
 		);
-		enableBankingClient.getAccountTransactions.mockResolvedValueOnce([]);
+		enableBankingClient.getAccountTransactions.mockResolvedValueOnce(NO_TRANSACTIONS);
 
 		await service.synchronizeAutomatically('connection-id');
 
@@ -471,11 +474,11 @@ describe('BankingSyncService synchronization lock', () => {
 	});
 
 	it('keeps a very large usable Retry-After inside the JavaScript Date range', async () => {
-		transactionGate.resolve([]);
+		transactionGate.resolve(NO_TRANSACTIONS);
 		enableBankingClient.getAccountBalances.mockRejectedValueOnce(
 			new EnableBankingClientError('ASPSP_RATE_LIMIT_EXCEEDED', 429, 8_000_000_000_000),
 		);
-		enableBankingClient.getAccountTransactions.mockResolvedValueOnce([]);
+		enableBankingClient.getAccountTransactions.mockResolvedValueOnce(NO_TRANSACTIONS);
 
 		await service.synchronizeAutomatically('connection-id');
 
@@ -542,7 +545,7 @@ describe('BankingSyncService synchronization lock', () => {
 		const secondSyncResult = expect(secondSync).rejects.toThrow('A bank synchronization is already in progress.');
 		await jest.advanceTimersByTimeAsync(0);
 
-		transactionGate.resolve([]);
+		transactionGate.resolve(NO_TRANSACTIONS);
 
 		await secondSyncResult;
 		await expect(firstSync).resolves.toEqual(
@@ -552,6 +555,77 @@ describe('BankingSyncService synchronization lock', () => {
 			}),
 		);
 		expect(redis.eval.mock.calls.some(([script]) => String(script).includes('expire'))).toBe(true);
+	});
+
+	it('imports the readable rows and marks the run partial when the provider sends unreadable transactions', async () => {
+		const insertQueryBuilder = createInsertQueryBuilder([{id: 'readable-transaction-id', inserted: true}]);
+		transactionRepository.createQueryBuilder.mockReturnValue(insertQueryBuilder);
+		enableBankingClient.getAccountTransactions.mockResolvedValue({
+			transactions: [{providerTransactionId: 'readable-transaction', amount: '20.00', currency: 'EUR'}],
+			unparseableCount: 3,
+		});
+
+		await service.synchronizeAutomatically('connection-id');
+
+		expect(insertQueryBuilder.values).toHaveBeenCalledWith([
+			expect.objectContaining({providerTransactionId: 'readable-transaction'}),
+		]);
+		expect(transactionRepository.update).toHaveBeenCalledWith(
+			{id: 'run-id'},
+			expect.objectContaining({
+				status: 'PARTIAL',
+				transactionsFetched: 1,
+				errorMessage: 'Some bank data could not be synchronized.',
+				failures: [
+					{
+						kind: 'transactions',
+						bankAccountId: 'bank-account-id',
+						code: 'unparseable_transactions',
+						httpStatus: null,
+						retryAfter: false,
+						droppedTransactions: 3,
+					},
+				],
+			}),
+		);
+	});
+
+	it('returns a committed run when lock renewal fails after the commit', async () => {
+		transactionGate.resolve(NO_TRANSACTIONS);
+		const ownTransferService = {
+			// Runs right after the sync transaction commits.
+			recomputeForOwnerSafely: jest.fn(async () => {
+				renewalShouldFail = true;
+				await jest.advanceTimersByTimeAsync((15 * 60 * 1000) / 3 + 1);
+			}),
+		};
+		service = createBankingSyncService({
+			bankConnectionRepository,
+			bankAccountRepository,
+			bankSyncRunRepository,
+			dataSource: {
+				transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) =>
+					callback({getRepository: jest.fn().mockReturnValue(transactionRepository)}),
+				),
+			},
+			enableBankingClient,
+			encryptionService: {decrypt: jest.fn().mockReturnValue('provider-session')},
+			connectionLockService: new BankingConnectionLockService(redis as unknown as Redis),
+			categorizationService: {enqueueForTransactions: jest.fn().mockResolvedValue(undefined)},
+			configurationService,
+			merchantLogoService,
+			ownTransferService,
+		});
+
+		await expect(service.synchronizeAutomatically('connection-id')).resolves.toMatchObject({
+			id: 'run-id',
+			status: 'SUCCEEDED',
+		});
+		expect(ownTransferService.recomputeForOwnerSafely).toHaveBeenCalledTimes(1);
+		expect(bankConnectionRepository.update).not.toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({syncStatus: 'FAILED'}),
+		);
 	});
 
 	it('cancels the synchronization when renewal loses lock ownership', async () => {
@@ -565,7 +639,7 @@ describe('BankingSyncService synchronization lock', () => {
 
 		expect(requestSignal.aborted).toBe(true);
 		lockOwner = {token: 'new-owner', expiresAt: Date.now() + 15 * 60 * 1000};
-		transactionGate.resolve([]);
+		transactionGate.resolve(NO_TRANSACTIONS);
 
 		await firstSyncResult;
 		expect(lockOwner.token).toBe('new-owner');

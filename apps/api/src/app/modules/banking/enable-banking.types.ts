@@ -100,3 +100,9 @@ export type EnableBankingTransactionFetchOptions = {
 	dateFrom?: string;
 	dateTo?: string;
 };
+
+export type EnableBankingTransactionsResult = {
+	transactions: EnableBankingTransaction[];
+	/** Rows the provider sent without a usable amount or currency; they are not returned. */
+	unparseableCount: number;
+};

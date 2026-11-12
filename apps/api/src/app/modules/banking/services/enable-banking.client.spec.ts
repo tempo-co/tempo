@@ -411,7 +411,7 @@ describe('EnableBankingClient', () => {
 		});
 	});
 
-	it('ignores an unsafe numeric Retry-After value', async () => {
+	it('ignores an unsafe numeric Retry-After value but records that one was sent', async () => {
 		fetchMock.mockResolvedValueOnce(
 			new Response(JSON.stringify({error: 'ASPSP_RATE_LIMIT_EXCEEDED'}), {
 				status: 400,
@@ -422,6 +422,7 @@ describe('EnableBankingClient', () => {
 		await expect(client.getAccountBalances('account-id')).rejects.toMatchObject({
 			code: 'ASPSP_RATE_LIMIT_EXCEEDED',
 			retryAfterSeconds: undefined,
+			retryAfterPresent: true,
 		});
 	});
 	it('propagates an error from the country-only fallback', async () => {
@@ -493,7 +494,7 @@ describe('EnableBankingClient', () => {
 			),
 		);
 
-		const transactions = await client.getAccountTransactions('account-id', {strategy: 'default'});
+		const {transactions} = await client.getAccountTransactions('account-id', {strategy: 'default'});
 
 		expect(transactions).toEqual([expect.objectContaining({description: merchant, counterpartyName: merchant})]);
 	});
@@ -514,7 +515,7 @@ describe('EnableBankingClient', () => {
 			new Response(bytes, {status: 200, headers: {'content-type': 'application/json; charset=latin-1'}}),
 		);
 
-		const transactions = await client.getAccountTransactions('account-id', {strategy: 'default'});
+		const {transactions} = await client.getAccountTransactions('account-id', {strategy: 'default'});
 
 		expect(transactions).toEqual([expect.objectContaining({description: 'Grote Café Exæmple'})]);
 	});
@@ -535,7 +536,7 @@ describe('EnableBankingClient', () => {
 			new Response(bytes, {status: 200, headers: {'content-type': 'application/json'}}),
 		);
 
-		const transactions = await client.getAccountTransactions('account-id', {strategy: 'default'});
+		const {transactions} = await client.getAccountTransactions('account-id', {strategy: 'default'});
 
 		expect(transactions).toEqual([expect.objectContaining({description: 'Grote Café Exæmple'})]);
 	});
@@ -618,7 +619,7 @@ describe('EnableBankingClient', () => {
 		}
 	});
 
-	it('follows continuation keys while mapping transaction pages', async () => {
+	it('follows continuation keys while mapping transaction pages and counting unreadable rows', async () => {
 		fetchMock
 			.mockResolvedValueOnce(
 				new Response(
@@ -666,6 +667,7 @@ describe('EnableBankingClient', () => {
 								reference_number_schema: 'RF',
 								remittance_information: ['Groceries'],
 							},
+							{transaction_id: 'transaction-without-amount', transaction_amount: {currency: 'EUR'}},
 						],
 						continuation_key: 'next-page',
 					}),
@@ -700,14 +702,19 @@ describe('EnableBankingClient', () => {
 									},
 								},
 							},
+							{transaction_id: 'transaction-without-currency', transaction_amount: {amount: '1.00'}},
 						],
 					}),
 					{status: 200, headers: {'content-type': 'application/json'}},
 				),
 			);
 
-		const transactions = await client.getAccountTransactions('account-id', {strategy: 'longest'});
+		const {transactions, unparseableCount} = await client.getAccountTransactions('account-id', {
+			strategy: 'longest',
+		});
 
+		// Rows without a usable amount or currency are counted, not returned.
+		expect(unparseableCount).toBe(2);
 		expect(transactions).toEqual([
 			expect.objectContaining({
 				providerTransactionId: 'transaction-1',
@@ -816,7 +823,9 @@ describe('EnableBankingClient', () => {
 			),
 		);
 
-		const [mappedTransaction] = await client.getAccountTransactions('account-id', {strategy: 'longest'});
+		const {
+			transactions: [mappedTransaction],
+		} = await client.getAccountTransactions('account-id', {strategy: 'longest'});
 
 		expect(mappedTransaction.counterpartyIban).toBe(expected);
 	});
@@ -867,7 +876,7 @@ describe('EnableBankingClient', () => {
 			),
 		);
 
-		const transactions = await client.getAccountTransactions('account-id', {strategy: 'default'});
+		const {transactions} = await client.getAccountTransactions('account-id', {strategy: 'default'});
 
 		expect(transactions).toHaveLength(3);
 		for (const transaction of transactions) expect(transaction).not.toHaveProperty('counterpartyLocation');
@@ -929,18 +938,42 @@ describe('EnableBankingClient', () => {
 			),
 		);
 
-		await expect(client.getAccountTransactions('account-id', {strategy: 'default'})).resolves.toEqual([
-			expect.objectContaining({
-				amount: '4.00',
-				transactionDate: undefined,
-				balanceAfterAmount: undefined,
-				balanceAfterCurrency: undefined,
-				instructedAmount: undefined,
-				instructedCurrency: undefined,
-				exchangeRate: undefined,
-				exchangeRateUnitCurrency: undefined,
-				referenceNumber: undefined,
-			}),
-		]);
+		await expect(client.getAccountTransactions('account-id', {strategy: 'default'})).resolves.toEqual({
+			transactions: [
+				expect.objectContaining({
+					amount: '4.00',
+					transactionDate: undefined,
+					balanceAfterAmount: undefined,
+					balanceAfterCurrency: undefined,
+					instructedAmount: undefined,
+					instructedCurrency: undefined,
+					exchangeRate: undefined,
+					exchangeRateUnitCurrency: undefined,
+					referenceNumber: undefined,
+				}),
+			],
+			unparseableCount: 0,
+		});
+	});
+
+	it('classifies a response body that breaks off while it is read', async () => {
+		fetchMock.mockResolvedValueOnce(
+			new Response(
+				new ReadableStream({
+					start(controller) {
+						controller.error(new Error('body stream interrupted'));
+					},
+				}),
+				{status: 503, headers: {'retry-after': '30'}},
+			),
+		);
+
+		await expect(client.getAccountTransactions('account-id', {strategy: 'default'})).rejects.toMatchObject({
+			name: 'EnableBankingClientError',
+			code: 'provider_response_unreadable',
+			providerStatus: 503,
+			retryAfterSeconds: 30,
+			retryAfterPresent: true,
+		});
 	});
 });
