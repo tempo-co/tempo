@@ -169,6 +169,8 @@ export type BankTransaction = {
 	baseAmountRateDate: string | null;
 	referenceNumber: string | null;
 	referenceNumberScheme: string | null;
+	/** The owner's bank account the row was booked on, as `GET /bank-connections` lists it. */
+	bankAccountId: string;
 	bankName: string;
 	bankCountry: string;
 	bankAccountName: string | null;

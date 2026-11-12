@@ -44,6 +44,7 @@ export function createBankTransaction(overrides: Partial<BankTransaction> = {}):
     baseAmountRateDate: null,
     referenceNumber: null,
     referenceNumberScheme: null,
+    bankAccountId: '00000000-0000-4000-8000-000000000097',
     bankName: 'Example Bank',
     bankCountry: 'NL',
     bankAccountName: 'Example account',

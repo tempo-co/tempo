@@ -22,6 +22,13 @@ test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterda
 
 const NOW = new Date('2026-11-10T12:00:00+01:00');
 const [CURRENT_ACCOUNT, SAVINGS_ACCOUNT] = MOCK_CONNECTION.bankAccounts;
+/** A closed account at the same bank and in the same currency: its rows stay in the list. */
+const CLOSED_ACCOUNT = {
+  ...SAVINGS_ACCOUNT,
+  id: '00000000-0000-4000-8000-000000000099',
+  name: 'Mock closed account',
+  isActive: false,
+};
 
 type Row = BankTransaction & {toReview?: boolean};
 
@@ -38,6 +45,7 @@ const row = (index: number, bookingDate: string, overrides: Partial<Row> = {}): 
     categoryStatus: 'COMPLETED',
     categorySource: 'AI',
     bankName: MOCK_CONNECTION.aspspName,
+    bankAccountId: CURRENT_ACCOUNT.id,
     bankAccountName: CURRENT_ACCOUNT.name,
   }),
   ...overrides,
@@ -80,7 +88,8 @@ const history = (): Row[] =>
 
 const connection = (accounts: 'one' | 'several'): BankConnection => ({
   ...MOCK_CONNECTION,
-  bankAccounts: accounts === 'one' ? [CURRENT_ACCOUNT] : [CURRENT_ACCOUNT, SAVINGS_ACCOUNT],
+  bankAccounts:
+    accounts === 'one' ? [CURRENT_ACCOUNT] : [CURRENT_ACCOUNT, SAVINGS_ACCOUNT, CLOSED_ACCOUNT],
 });
 
 /** Answers the list, its totals and the review counts from `rows`, the way the API filters and pages them. */
@@ -475,6 +484,7 @@ const worstCase = (): Row[] => [
     currency: 'EUR',
     category: null,
     categoryStatus: 'PROCESSING',
+    bankAccountId: SAVINGS_ACCOUNT.id,
     bankAccountName: SAVINGS_ACCOUNT.name!,
   }),
   row(2, '2026-11-09', {
@@ -488,6 +498,8 @@ const worstCase = (): Row[] => [
     amount: '-1234567.89',
     currency: 'SEK',
     category: 'PERSONAL_CARE',
+    bankAccountId: CLOSED_ACCOUNT.id,
+    bankAccountName: CLOSED_ACCOUNT.name,
   }),
 ];
 
@@ -505,10 +517,14 @@ test('keeps rows, tiles and the Category column in place with worst-case values 
       await mockLedger(page, worstCase(), {accounts});
       await page.goto('/bank-transactions');
       await expect(listRows(page)).toHaveCount(4);
-      const account = listRows(page).nth(1).getByTestId('ledger-row-account');
-      // Several accounts in one bank and currency: the row names the account itself.
-      if (accounts === 'several') await expect(account).toHaveText(SAVINGS_ACCOUNT.name!);
-      else await expect(account).toHaveCount(0);
+      const account = (index: number) => listRows(page).nth(index).getByTestId('ledger-row-account');
+      // Several accounts in one bank and currency: each row names its own account, whatever the payment's
+      // currency, and so does a closed account's row.
+      if (accounts === 'several') {
+        await expect(account(1)).toHaveText(SAVINGS_ACCOUNT.name!);
+        await expect(account(2)).toHaveText(CURRENT_ACCOUNT.name!);
+        await expect(account(3)).toHaveText(CLOSED_ACCOUNT.name);
+      } else await expect(account(1)).toHaveCount(0);
       lefts.push(await categoryLeft());
       await expectNoHorizontalOverflow(page);
     }

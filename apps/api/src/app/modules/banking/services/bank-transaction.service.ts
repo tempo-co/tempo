@@ -260,6 +260,7 @@ export class BankTransactionService {
 			baseAmountRateDate: transaction.baseAmountRateDate,
 			referenceNumber: transaction.referenceNumber,
 			referenceNumberScheme: transaction.referenceNumberScheme,
+			bankAccountId: transaction.bankAccount.id,
 			bankName: transaction.bankAccount.bankConnection.aspspName,
 			bankCountry: transaction.bankAccount.bankConnection.aspspCountry,
 			bankAccountName: transaction.bankAccount.name,

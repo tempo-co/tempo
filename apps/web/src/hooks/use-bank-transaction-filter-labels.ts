@@ -63,7 +63,7 @@ export function useBankTransactionFilterLabels(filters: BankTransactionFilterPar
       label: list(
         accounts
           .filter((account) => filters.bankAccountIds!.includes(account.id))
-          .map((account) => (needsAccountName(account) ? account.label : account.bankName)),
+          .map((account) => (needsAccountName(account.id) ? account.label : account.bankName)),
         'accounts',
       ),
     });

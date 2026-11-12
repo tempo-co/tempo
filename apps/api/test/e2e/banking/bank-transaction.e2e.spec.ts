@@ -1,4 +1,5 @@
 import {INestApplication} from '@nestjs/common';
+import type {BankTransaction as BankTransactionResponse} from '@tempo/contracts';
 import {randomUUID} from 'node:crypto';
 import {Server} from 'node:net';
 import TestAgent from 'supertest/lib/agent';
@@ -34,6 +35,7 @@ describe('BankTransactionController', () => {
 	let bankTransactionRepository: Repository<BankTransaction>;
 	let fixtureConnection: BankConnection;
 	let fixtureBankAccount: BankAccount;
+	let secondBankAccount: BankAccount;
 	let fixtureTransaction: BankTransaction;
 	let fixtureGroceriesTransaction: BankTransaction;
 	let fixtureReviewTransaction: BankTransaction;
@@ -76,7 +78,7 @@ describe('BankTransactionController', () => {
 			identificationHash: 'identification-hash-must-not-leak',
 			alias: 'Daily spending',
 		});
-		const secondBankAccount = await fixtures.createBankAccount(fixtureConnection, {name: 'Savings account'});
+		secondBankAccount = await fixtures.createBankAccount(fixtureConnection, {name: 'Savings account'});
 
 		const transactions = await fixtures.createTransactions(fixtureBankAccount, [
 			{
@@ -176,17 +178,20 @@ describe('BankTransactionController', () => {
 			exchangeRateType: 'SPOT',
 			referenceNumber: 'reference-coffee',
 			referenceNumberScheme: 'RF',
+			bankAccountId: fixtureBankAccount.id,
 			bankName: 'ABN AMRO',
 			bankCountry: 'NL',
 			bankAccountName: 'Main account',
 			bankAccountAlias: 'Daily spending',
 		});
+		expect(
+			response.body.transactions.find((row: BankTransactionResponse) => row.description === 'Transfer'),
+		).toMatchObject({bankAccountId: secondBankAccount.id, bankAccountName: 'Savings account'});
 		const serializedResponse = JSON.stringify(response.body);
 		expect(serializedResponse).not.toContain('provider-transaction-coffee');
 		expect(serializedResponse).not.toContain('provider-entry-coffee');
 		expect(serializedResponse).not.toContain('identification-hash-must-not-leak');
 		expect(serializedResponse).not.toContain('provider-account-must-not-leak');
-		expect(response.body.transactions[0]).not.toHaveProperty('bankAccountId');
 		expect(response.body.transactions[0]).not.toHaveProperty('dedupeKey');
 		expect(response.body.transactions[0]).not.toHaveProperty('bankTransactionCode');
 		expect(response.body.transactions[0]).not.toHaveProperty('bankTransactionSubCode');
@@ -923,6 +928,7 @@ describe('BankTransactionController', () => {
 			referenceNumber: 'reference-coffee',
 			referenceNumberScheme: 'RF',
 			remittanceInformation: 'Morning coffee',
+			bankAccountId: fixtureBankAccount.id,
 			bankName: 'ABN AMRO',
 			bankAccountAlias: 'Daily spending',
 		});
