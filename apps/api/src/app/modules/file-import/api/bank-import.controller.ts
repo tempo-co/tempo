@@ -18,7 +18,6 @@ import {isUUID} from 'class-validator';
 
 import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
-import {CsrfOriginGuard} from '@modules/auth/guards/csrf-origin.guard';
 
 import {BankImportRefusalException} from '../bank-import-refusal.exception';
 import {ACCOUNT_CHOICE_NEW, AccountChoices, BankImportService} from '../bank-import.service';
@@ -40,10 +39,8 @@ const UUID_PIPE = new ParseUUIDPipe({version: '4'});
 export class BankImportController {
 	constructor(private readonly bankImportService: BankImportService) {}
 
-	// A multipart form is a request any site can make, so the origin is checked like a refresh.
 	@Post()
 	@HttpCode(201)
-	@UseGuards(CsrfOriginGuard)
 	@Throttle({default: {limit: 10, ttl: minutes(1)}})
 	@UseInterceptors(BankImportUploadInterceptor)
 	async importFiles(
@@ -83,7 +80,6 @@ export class BankImportController {
 
 	@Post(':importId/doubtful-rows/:rowId/resolve')
 	@HttpCode(200)
-	@UseGuards(CsrfOriginGuard)
 	async resolveDoubtfulRow(
 		@Param('importId', UUID_PIPE) importId: string,
 		@Param('rowId', UUID_PIPE) rowId: string,
@@ -95,7 +91,6 @@ export class BankImportController {
 
 	@Delete(':importId')
 	@HttpCode(204)
-	@UseGuards(CsrfOriginGuard)
 	async undo(@Param('importId', UUID_PIPE) importId: string, @CurrentAccount() account: Account): Promise<void> {
 		await this.bankImportService.undo(account.id, importId);
 	}

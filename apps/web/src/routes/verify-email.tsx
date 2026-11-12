@@ -1,18 +1,27 @@
+import {useIsMutating, useQuery} from '@tanstack/react-query';
 import {Link, createFileRoute, redirect, useRouter} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
+import type {Account} from '@tempo/contracts';
 import {Loader} from 'lucide-react';
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
-import {useVerifyEmail} from '@/features/auth/api/use-verify-email';
+import {
+  VERIFY_EMAIL_MUTATION_KEY,
+  useContinueVerified,
+  useVerifyEmail,
+} from '@/features/auth/api/use-verify-email';
 import {AuthLayout} from '@/features/auth/components/auth-layout';
 import {FadeSwitch} from '@/features/auth/components/fade-switch';
 import {ResendCodeButton} from '@/features/auth/components/resend-code-button';
 import {VerifyEmailForm} from '@/features/auth/components/verify-email/verify-email-form';
 import {searchParamsSchema} from '@/features/auth/types/email-verify.dto';
-import {useCurrentAccount} from '@/hooks/use-current-account';
+import {currentAccountQuery, useCurrentAccount} from '@/hooks/use-current-account';
 import {useLogOut} from '@/hooks/use-logout';
+import type {HttpError} from '@/utils/api';
+
+const VERIFIED_CHECK_INTERVAL_MS = 5000;
 
 export const Route = createFileRoute('/verify-email')({
   component: VerifyEmailIndex,
@@ -38,6 +47,32 @@ export const Route = createFileRoute('/verify-email')({
   },
 });
 
+/**
+ * While a signed-in tab waits for its email to be verified, it re-checks the account when it
+ * becomes visible and every few seconds while visible, so a link opened in another browser moves
+ * it on as if the code had been entered here. A code being verified in this tab continues by itself.
+ */
+function useContinueWhenVerifiedElsewhere(isWaiting: boolean) {
+  const isVerifyingHere = useIsMutating({mutationKey: VERIFY_EMAIL_MUTATION_KEY}) > 0;
+  const enabled = isWaiting && !isVerifyingHere;
+  const continueVerified = useContinueVerified();
+  const hasContinued = useRef(false);
+  const {data} = useQuery<Account, HttpError>({
+    ...currentAccountQuery,
+    enabled,
+    refetchOnWindowFocus: 'always',
+    refetchInterval: (query) =>
+      query.state.data?.isEmailVerified ? false : VERIFIED_CHECK_INTERVAL_MS,
+  });
+  const isVerified = enabled && !!data?.isEmailVerified;
+
+  useEffect(() => {
+    if (!isVerified || hasContinued.current) return;
+    hasContinued.current = true;
+    void continueVerified();
+  }, [isVerified, continueVerified]);
+}
+
 function VerifyEmailIndex() {
   const router = useRouter();
   const searchParams = Route.useSearch();
@@ -47,9 +82,10 @@ function VerifyEmailIndex() {
   const {logOut, isPending: isLoggingOut} = useLogOut();
   const {currentAccount, isAuthenticated} = useCurrentAccount({skipFetch: true});
   const [showForm, setShowForm] = useState(false);
-  const {verifyEmail, isPending, error, reset} = useVerifyEmail();
+  const {verifyEmail, isPending, isSuccess, error, reset} = useVerifyEmail();
 
   const hasValidParams = !!(code && email);
+  useContinueWhenVerifiedElsewhere(isAuthenticated && !hasValidParams && !error);
   useEffect(() => {
     if (hasValidParams) {
       void verifyEmail({code, email});
@@ -160,6 +196,28 @@ function VerifyEmailIndex() {
               </Link>
             )}
           </p>
+        </FadeSwitch>
+      </AuthLayout>
+    );
+  }
+
+  if (isSuccess && !isAuthenticated) {
+    return (
+      <AuthLayout title='Email confirmed'>
+        <FadeSwitch
+          viewKey='confirmed-view-fade'
+          role='status'
+          aria-live='polite'
+          className='flex w-full flex-col gap-4 text-center text-sm'
+        >
+          <p className='leading-6 text-muted-foreground'>
+            Go back to where you signed up, or log in here.
+          </p>
+          <Button asChild className='w-full'>
+            <Link to='/login' search={{email}} data-testid='log-in-button'>
+              Log in
+            </Link>
+          </Button>
         </FadeSwitch>
       </AuthLayout>
     );

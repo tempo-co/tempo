@@ -8,6 +8,8 @@ export class HttpError extends Error {
     public status: number,
     message: string,
     public retryAfterSeconds?: number,
+    /** The `code` an error body names its cause with, when it has one. */
+    public code?: string,
   ) {
     super(message);
   }
@@ -255,7 +257,7 @@ async function request<T = unknown>(
     // A proxy in front of the API can answer with a page rather than JSON (an upload over its size limit).
     const error = ((await response.json().catch(() => null)) ?? {
       message: response.statusText,
-    }) as Error;
+    }) as {message: string; code?: unknown};
     if (response.status === 403 && error.message === EMAIL_NOT_VERIFIED_MESSAGE) {
       toast.error('Email not verified', {
         description: 'Please verify your email to continue using the app.',
@@ -263,7 +265,12 @@ async function request<T = unknown>(
       });
       throw toasted(new EmailNotVerifiedError(response.status, error.message));
     }
-    const httpError = new HttpError(response.status, error.message);
+    const httpError = new HttpError(
+      response.status,
+      error.message,
+      undefined,
+      typeof error.code === 'string' ? error.code : undefined,
+    );
     httpError.body = error;
     throw httpError;
   }

@@ -728,7 +728,10 @@ describe('EnableBankingClient', () => {
 				},
 				remittanceInformation: 'Groceries',
 				transactionDate: '2026-08-24',
+				bookingDate: '2026-08-26',
+				// The bank sent no value date, so the client fills in the transaction date and says so.
 				valueDate: '2026-08-24',
+				valueDateFilled: true,
 				bankTransactionCode: 'PMNT',
 				bankTransactionSubCode: 'CARD',
 				bankTransactionDescription: 'Card payment',
@@ -744,6 +747,7 @@ describe('EnableBankingClient', () => {
 			}),
 			expect.objectContaining({
 				providerTransactionId: 'transaction-2',
+				valueDate: '2026-08-25',
 				currency: 'EUR',
 				counterpartyName: 'Employer',
 				counterpartyLocation: {
@@ -753,6 +757,10 @@ describe('EnableBankingClient', () => {
 				},
 			}),
 		]);
+		expect(transactions[0]).not.toHaveProperty('bookingDateFilled');
+		// Without a transaction date there is nothing to fill in.
+		expect(transactions[1]).toMatchObject({bookingDate: undefined});
+		expect(transactions[1]).not.toHaveProperty('valueDateFilled');
 		expect(JSON.stringify(transactions)).not.toContain('Private Street');
 		expect(JSON.stringify(transactions)).not.toContain('9999 ZZ');
 		expect(JSON.stringify(transactions)).not.toContain('Another Private Street');

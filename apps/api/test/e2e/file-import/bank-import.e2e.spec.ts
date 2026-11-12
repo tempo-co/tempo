@@ -11,7 +11,6 @@ import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
 import {In, Repository} from 'typeorm';
 
-import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
 import {BankConnectionAlertService} from '@modules/banking/alerts/bank-connection-alert.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
@@ -36,6 +35,7 @@ import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {EXAMPLE_IBAN, OTHER_EXAMPLE_IBAN, camt053, createZip} from '../../fixtures/statement-file.fixture';
 import {enableFileImportE2e, getApp, getSessionCookie} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
+import {MAILPIT_API_URL} from '../../utils/email-utils';
 
 enableFileImportE2e();
 
@@ -147,7 +147,7 @@ describe('Bank imports', () => {
 	});
 
 	async function createOwner(): Promise<{owner: Account; agent: TestAgent; cookie: string}> {
-		const fresh = await createVerifiedAccount(httpServer, app.get(ConfigurationService).get('EMAIL_UI_URL'));
+		const fresh = await createVerifiedAccount(httpServer, MAILPIT_API_URL);
 		await accounts.update({id: fresh.id}, {baseCurrency: 'EUR'});
 		// A session of its own for requests sent byte by byte, outside the agent.
 		const login = await request(httpServer).post('/auth/login').send(fresh.credentials).expect(200);

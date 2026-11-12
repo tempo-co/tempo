@@ -45,12 +45,11 @@ import {BankTransactionSummaryService} from './services/bank-transaction-summary
 import {BankTransactionService} from './services/bank-transaction.service';
 import {BankingAuthorizationStateModule} from './services/banking-authorization-state.module';
 import {BankingConnectionLockService} from './services/banking-connection-lock.service';
-import {BankingEncryptionService} from './services/banking-encryption.service';
+import {BankingConsentRevocationModule} from './services/banking-consent-revocation.module';
 import {BankingSyncQueueService} from './services/banking-sync-queue.service';
 import {BankingSyncProcessor} from './services/banking-sync.processor';
 import {BankingSyncService} from './services/banking-sync.service';
 import {CurrencyExchangeService} from './services/currency-exchange.service';
-import {EnableBankingClient} from './services/enable-banking.client';
 import {FxRateService} from './services/fx-rate.service';
 import {McpReaderService} from './services/mcp-reader.service';
 import {MerchantSpendingService} from './services/merchant-spending.service';
@@ -77,6 +76,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		AccountModule,
 		RedisModule,
 		BankingAuthorizationStateModule,
+		BankingConsentRevocationModule,
 		BankTransactionCategorizationModule,
 		MerchantLogoModule,
 		NotificationsModule,
@@ -98,8 +98,6 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankTransactionAmountConversionQueueService,
 		BankTransactionAmountConversionProcessor,
 		FxRateService,
-		EnableBankingClient,
-		BankingEncryptionService,
 		OwnTransferService,
 		CurrencyExchangeService,
 		BankConnectionAlertService,

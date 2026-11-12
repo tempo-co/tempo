@@ -1,7 +1,11 @@
 import {Server} from 'node:net';
 import request from 'supertest';
 
-import {INVALID_PASSWORD, PASSWORD_CHANGE_SUCCESS} from '@modules/auth/api/constants/api-messages.constants';
+import {
+	INVALID_PASSWORD,
+	PASSWORD_CHANGE_SUCCESS,
+	PASSWORD_RESET_INVALID_TOKEN,
+} from '@modules/auth/api/constants/api-messages.constants';
 import {PasswordChangeDto} from '@modules/auth/api/dtos/password-change.dto';
 
 import {
@@ -12,6 +16,7 @@ import {
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 import {expectValidationMessage, uniquePassword} from '../../utils/auth-utils';
+import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
 
 describe('AuthController - Change password', () => {
 	let httpServer: Server;
@@ -21,7 +26,14 @@ describe('AuthController - Change password', () => {
 	});
 
 	describe('POST /auth/change-password', () => {
-		it('should change password, revoke other sessions, and allow login with new password', async () => {
+		it('should change password, revoke other sessions and reset links, and allow login with new password', async () => {
+			const mailpitApiUrl = MAILPIT_API_URL;
+			await EmailUtils.clearEmails(mailpitApiUrl);
+			await request(httpServer)
+				.post('/auth/reset-password/request')
+				.send({email: PW_CHANGE_ACCOUNT_EMAIL})
+				.expect(200);
+			const resetToken = await EmailUtils.getToken(PW_CHANGE_ACCOUNT_EMAIL, mailpitApiUrl);
 			const agent = await loginAgent(httpServer, PW_CHANGE_ACCOUNT_EMAIL, PW_CHANGE_ACCOUNT_PASSWORD);
 			const otherAgent = await loginAgent(httpServer, PW_CHANGE_ACCOUNT_EMAIL, PW_CHANGE_ACCOUNT_PASSWORD);
 			const {body: pat} = await agent
@@ -45,6 +57,11 @@ describe('AuthController - Change password', () => {
 				});
 
 			await request(httpServer).get('/bank-transactions').auth(pat.token, {type: 'bearer'}).expect(401);
+			const resetResponse = await request(httpServer)
+				.post('/auth/reset-password/verify')
+				.send({token: resetToken, newPassword: uniquePassword()})
+				.expect(400);
+			expect(resetResponse.body.message).toBe(PASSWORD_RESET_INVALID_TOKEN);
 			await agent.get('/accounts/me').expect(200);
 			await otherAgent.get('/accounts/me').expect(401);
 			await agent.post('/auth/logout').expect(200);

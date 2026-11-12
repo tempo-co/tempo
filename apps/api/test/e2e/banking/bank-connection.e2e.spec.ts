@@ -69,6 +69,7 @@ describe('BankConnectionController', () => {
 	let getSessionAccounts: jest.SpiedFunction<EnableBankingClient['getSessionAccounts']>;
 	let getAccountBalances: jest.SpiedFunction<EnableBankingClient['getAccountBalances']>;
 	let getAccountTransactions: jest.SpiedFunction<EnableBankingClient['getAccountTransactions']>;
+	let deleteSession: jest.SpiedFunction<EnableBankingClient['deleteSession']>;
 	const sessionAccountIdsBySession = new Map<string, string[]>();
 
 	beforeAll(async () => {
@@ -96,6 +97,7 @@ describe('BankConnectionController', () => {
 		}));
 		getAccountBalances = jest.spyOn(enableBankingClient, 'getAccountBalances');
 		getAccountTransactions = jest.spyOn(enableBankingClient, 'getAccountTransactions');
+		deleteSession = jest.spyOn(enableBankingClient, 'deleteSession').mockResolvedValue(undefined);
 
 		getAspsps.mockResolvedValue([
 			{
@@ -302,7 +304,8 @@ describe('BankConnectionController', () => {
 			getSessionAccounts.mockClear();
 			try {
 				const refresh = verifiedAgent.post(`/bank-connections/${connection.id}/refresh`);
-				if (origin !== undefined) refresh.set('Origin', origin);
+				if (origin === undefined) refresh.unset('Origin');
+				else refresh.set('Origin', origin);
 				await refresh.expect(403);
 				expect(getSessionAccounts).not.toHaveBeenCalled();
 				expect(await bankSyncRunRepository.countBy({bankConnection: {id: connection.id}})).toBe(0);
@@ -681,9 +684,11 @@ describe('BankConnectionController', () => {
 		const lockKey = `banking:sync:${connection.id}`;
 
 		try {
+			deleteSession.mockClear();
 			await redis.set(lockKey, 'active-sync', 'EX', 60);
 			await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE'}).expect(409);
 			expect(await bankConnectionRepository.findOneBy({id: connection.id})).not.toBeNull();
+			expect(deleteSession).not.toHaveBeenCalled();
 		} finally {
 			await redis.del(lockKey);
 			await bankConnectionRepository.delete(connection.id);
@@ -774,18 +779,28 @@ describe('BankConnectionController', () => {
 		}
 	});
 
-	it('permanently removes an authorized connection and cascades its bank data', async () => {
+	it('revokes the bank consent, then permanently removes an authorized connection and cascades its bank data', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('delete-authorized-cascade');
 		await fixtures.createTransaction(bankAccount, {providerTransactionId: 'delete-authorized-transaction'});
 		const syncRun = await fixtures.createSyncRun(connection);
+		deleteSession.mockClear();
 
 		await otherVerifiedAgent.delete(`/bank-connections/${connection.id}`).expect(404);
 		await verifiedAgent.delete(`/bank-connections/${connection.id}`).expect(400);
 		await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE ME'}).expect(400);
 		expect(await bankConnectionRepository.findOneBy({id: connection.id})).not.toBeNull();
 		expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).not.toBeNull();
+		expect(deleteSession).not.toHaveBeenCalled();
 
+		let connectionExistedAtRevocation = false;
+		deleteSession.mockImplementationOnce(async () => {
+			connectionExistedAtRevocation = (await bankConnectionRepository.findOneBy({id: connection.id})) !== null;
+		});
 		await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE'}).expect(204);
+
+		expect(deleteSession).toHaveBeenCalledTimes(1);
+		expect(deleteSession).toHaveBeenCalledWith('delete-authorized-cascade', expect.any(AbortSignal));
+		expect(connectionExistedAtRevocation).toBe(true);
 
 		expect(await bankConnectionRepository.findOneBy({id: connection.id})).toBeNull();
 		expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).toBeNull();
@@ -793,6 +808,40 @@ describe('BankConnectionController', () => {
 			await bankTransactionRepository.findOneBy({providerTransactionId: 'delete-authorized-transaction'}),
 		).toBeNull();
 		expect(await bankSyncRunRepository.findOneBy({id: syncRun.id})).toBeNull();
+	});
+
+	it('removes the connection when the provider fails to revoke its consent', async () => {
+		const {connection, bankAccount} = await createAuthorizedConnection('delete-provider-failure');
+		const transport = jest.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+			const parsed = new URL(String(url));
+			if (parsed.origin !== 'https://provider.example.test' || init?.method !== 'DELETE')
+				throw new Error('Unexpected provider request');
+			return new Response(JSON.stringify({error: 'INTERNAL_ERROR', message: 'Example provider failure'}), {
+				status: 500,
+			});
+		});
+		deleteSession.mockImplementationOnce((...args) =>
+			EnableBankingClient.prototype.deleteSession.call(enableBankingClient, ...args),
+		);
+		const warn = jest.spyOn(Logger.prototype, 'warn');
+
+		try {
+			await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE'}).expect(204);
+
+			expect(transport).toHaveBeenCalledTimes(1);
+			expect(String(transport.mock.calls[0][0])).toBe(
+				'https://provider.example.test/sessions/delete-provider-failure',
+			);
+			expect(await bankConnectionRepository.findOneBy({id: connection.id})).toBeNull();
+			expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).toBeNull();
+			const logged = warn.mock.calls.map(([message]) => String(message));
+			expect(logged).toContain('Bank consent revocation failed: provider_INTERNAL_ERROR (HTTP 500)');
+			expect(logged.join('\n')).not.toMatch(/delete-provider-failure|Example provider failure/);
+		} finally {
+			transport.mockRestore();
+			warn.mockRestore();
+			await bankConnectionRepository.delete(connection.id);
+		}
 	});
 
 	it('removes the pending authorization state with an incomplete connection', async () => {
@@ -1334,26 +1383,43 @@ describe('BankConnectionController', () => {
 		await verifiedAgent.get('/bank-connections/not-a-uuid/transactions').expect(400);
 	});
 
-	it('reconciles a pending payment when booking populates valueDate without losing manual category', async () => {
+	it('books a pending payment the bank sent without booking or value date into the same row, keeping its manual category', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('pending-booked-session');
-		const pendingProviderShape = makeTransactions('pending-booked')[0];
-		const pending: EnableBankingTransaction = {
-			...pendingProviderShape,
-			// EnableBankingClient fills a missing provider value_date from transaction_date.
-			valueDate: pendingProviderShape.transactionDate,
+		const pending = {
+			entry_reference: 'pending-booked-entry',
+			transaction_amount: {amount: '12.50', currency: 'EUR'},
+			credit_debit_indicator: 'DBIT',
 			status: 'PDNG',
+			transaction_date: '2026-08-24',
+			remittance_information: ['Example Shop card payment'],
 		};
-		const synchronize = (transaction: EnableBankingTransaction) => synchronizeQueued(connection.id, [transaction]);
-		expect(await synchronize(pending)).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 1});
+		expect(await synchronizeProviderRows(connection.id, [pending])).toMatchObject({
+			status: 'SUCCEEDED',
+			transactionsAdded: 1,
+		});
 		const stored = await bankTransactionRepository.findOneByOrFail({bankAccountId: bankAccount.id});
+		// The client fills both missing dates from the transaction date.
+		expect(stored).toMatchObject({
+			transactionStatus: 'PDNG',
+			bookingDate: '2026-08-24',
+			bookingDateFilled: true,
+			valueDate: '2026-08-24',
+			valueDateFilled: true,
+		});
 		await bankTransactionRepository.update(stored.id, {
 			category: 'GROCERIES',
 			categorySource: 'MANUAL',
 			categoryStatus: 'COMPLETED',
 		});
-		const booked = {...pending, status: 'BOOK', valueDate: '2026-08-27'};
-		expect(await synchronize(booked)).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 0});
-		expect(await synchronize(booked)).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 0});
+		const booked = {...pending, status: 'BOOK', booking_date: '2026-08-26', value_date: '2026-08-27'};
+		expect(await synchronizeProviderRows(connection.id, [booked])).toMatchObject({
+			status: 'SUCCEEDED',
+			transactionsAdded: 0,
+		});
+		expect(await synchronizeProviderRows(connection.id, [booked])).toMatchObject({
+			status: 'SUCCEEDED',
+			transactionsAdded: 0,
+		});
 		const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
 		expect(rows).toHaveLength(1);
 		expect(rows[0]).toMatchObject({
@@ -1361,8 +1427,10 @@ describe('BankConnectionController', () => {
 			stableIdentityKey: stored.stableIdentityKey,
 			transactionDate: '2026-08-24',
 			bookingDate: '2026-08-26',
+			bookingDateFilled: false,
 			transactionStatus: 'BOOK',
 			valueDate: '2026-08-27',
+			valueDateFilled: false,
 			category: 'GROCERIES',
 			categorySource: 'MANUAL',
 			categoryStatus: 'COMPLETED',
@@ -1529,7 +1597,7 @@ describe('BankConnectionController', () => {
 		expect(await bankTransactionRepository.findOneByOrFail({id: stored.id})).toEqual(booked);
 	});
 
-	it('preserves ambiguous repeated pending payments when one booked occurrence arrives', async () => {
+	it('keeps the repeated pending payment the bank still sends when its twin books', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('ambiguous-pending-session');
 		const pending: EnableBankingTransaction = {
 			...makeTransactions('ambiguous-pending')[0],
@@ -1547,20 +1615,78 @@ describe('BankConnectionController', () => {
 		const stored = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
 		getAccountBalances.mockResolvedValueOnce(makeBalances());
 		getAccountTransactions.mockResolvedValueOnce(
-			fetchedTransactions([{...pending, status: 'BOOK', valueDate: '2026-08-27'}]),
+			fetchedTransactions([{...pending, status: 'BOOK', valueDate: '2026-08-27'}, pending]),
 		);
 		expect(await synchronizeDue(connection.id)).toMatchObject({
 			status: 'SUCCEEDED',
 			transactionsAdded: 1,
 		});
 		const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
-		expect(rows).toHaveLength(3);
-		expect(
-			rows
-				.filter(({transactionStatus}) => transactionStatus === 'PDNG')
-				.map(({id}) => id)
-				.sort(),
-		).toEqual(stored.map(({id}) => id).sort());
+		expect(rows.map(({transactionStatus}) => transactionStatus).sort()).toEqual(['BOOK', 'PDNG']);
+		const stillPending = rows.find(({transactionStatus}) => transactionStatus === 'PDNG')!;
+		expect(stored.map(({id}) => id)).toContain(stillPending.id);
+		expect(stored.map(({id}) => id)).not.toContain(
+			rows.find(({transactionStatus}) => transactionStatus === 'BOOK')!.id,
+		);
+	});
+
+	it('removes pending rows a complete fetch no longer returns, so totals count each payment once', async () => {
+		const {connection, bankAccount} = await createAuthorizedConnection('pending-lifecycle-session');
+		const row = (reference: string, amount: string, status: string, bookingDate?: string) => ({
+			entry_reference: reference,
+			transaction_amount: {amount, currency: 'EUR'},
+			credit_debit_indicator: 'DBIT',
+			status,
+			transaction_date: '2026-08-20',
+			...(bookingDate ? {booking_date: bookingDate, value_date: bookingDate} : {}),
+			remittance_information: [`Example Shop ${reference}`],
+		});
+		const booked = row('lifecycle-booked', '10.00', 'BOOK', '2026-08-20');
+		const hold = row('lifecycle-hold', '50.00', 'PDNG');
+		const tipPending = row('lifecycle-tip', '20.00', 'PDNG');
+		// The final amount differs from the pending one, so the booked row is a new row, not the pending one updated.
+		const tipBooked = row('lifecycle-tip', '23.00', 'BOOK', '2026-08-22');
+		const totals = async () =>
+			(
+				await verifiedAgent
+					.get('/bank-transactions/totals')
+					.query({'filter[bankAccountIds][]': bankAccount.id})
+					.expect(200)
+			).body;
+		const accounts = app.get(DataSource).getRepository(Account);
+		await accounts.update({id: account.id}, {baseCurrency: 'EUR'});
+		try {
+			expect(await synchronizeProviderRows(connection.id, [booked, hold, tipPending])).toMatchObject({
+				status: 'SUCCEEDED',
+				transactionsAdded: 3,
+			});
+			// Pending payments count, as in the bank's own app.
+			expect(await totals()).toMatchObject({count: 3, spending: '80.00'});
+
+			// A fetch with a row the client cannot read is incomplete, so it removes nothing.
+			const unreadable = {entry_reference: 'lifecycle-unreadable', transaction_amount: {currency: 'EUR'}};
+			expect(await synchronizeProviderRows(connection.id, [booked, unreadable])).toMatchObject({
+				status: 'PARTIAL',
+				transactionsAdded: 0,
+			});
+			expect(await totals()).toMatchObject({count: 3, spending: '80.00'});
+
+			// The hold was released and the tip booked at its final amount.
+			expect(await synchronizeProviderRows(connection.id, [booked, tipBooked])).toMatchObject({
+				status: 'SUCCEEDED',
+				transactionsAdded: 1,
+			});
+			// The window reaches back to the oldest pending row, so the fetch covers every row it removes.
+			expect(getAccountTransactions.mock.lastCall?.[1]).toMatchObject({dateFrom: '2026-08-20'});
+			const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
+			expect(rows.map(({amount, transactionStatus}) => [amount, transactionStatus]).sort()).toEqual([
+				['-10.00000000', 'BOOK'],
+				['-23.00000000', 'BOOK'],
+			]);
+			expect(await totals()).toMatchObject({count: 2, spending: '33.00'});
+		} finally {
+			await accounts.update({id: account.id}, {baseCurrency: null});
+		}
 	});
 
 	it('normalizes incoming currency and direction codes before persisting a sync', async () => {
@@ -1975,8 +2101,8 @@ describe('BankConnectionController', () => {
 		}
 	});
 
-	it('keeps stored transaction ids when a synchronization adds new transactions', async () => {
-		const {connection} = await createAuthorizedConnectionFixture('stable-id-session', [
+	it('keeps stored transaction ids when a re-sync adds rows, changes a reference or edits look-alike rows', async () => {
+		const {connection, bankAccounts} = await createAuthorizedConnectionFixture('stable-id-session', [
 			{
 				providerAccountId: 'stable-id-account',
 				identificationHash: 'hash-stable-id-account',
@@ -2002,17 +2128,35 @@ describe('BankConnectionController', () => {
 			bookingDate: '2026-08-21',
 			valueDate: '2026-08-21',
 		};
+		// Two payments with the same date, amount and currency, told apart only by their details.
+		const lookAlikes: EnableBankingTransaction[] = ['Example Cafe', 'Example Bakery'].map((counterpartyName) => ({
+			amount: '3.50',
+			currency: 'EUR',
+			creditDebitIndicator: 'DBIT',
+			status: 'BOOK',
+			bookingDate: '2026-08-22',
+			valueDate: '2026-08-22',
+			description: `Card payment ${counterpartyName}`,
+			counterpartyName,
+		}));
 
 		try {
 			getAccountBalances.mockResolvedValue([]);
-			getAccountTransactions.mockResolvedValueOnce(fetchedTransactions([storedPayment]));
+			getAccountTransactions.mockResolvedValueOnce(fetchedTransactions([storedPayment, ...lookAlikes]));
 			await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
 			const {id, createdAt} = await bankTransactionRepository.findOneByOrFail({
 				providerTransactionId: storedPayment.providerTransactionId,
 			});
+			const lookAlikeIds = new Map(
+				(await bankTransactionRepository.findBy({bankAccountId: bankAccounts[0].id, amount: '-3.50'})).map(
+					(row) => [row.counterpartyName, row.id],
+				),
+			);
 
 			// Providers list the newest booking first, so the new row precedes the stored one.
-			getAccountTransactions.mockResolvedValueOnce(fetchedTransactions([newPayment, storedPayment]));
+			getAccountTransactions.mockResolvedValueOnce(
+				fetchedTransactions([newPayment, storedPayment, ...lookAlikes]),
+			);
 			await expect(synchronizeDue(connection.id)).resolves.toMatchObject({
 				status: 'SUCCEEDED',
 				transactionsAdded: 1,
@@ -2023,6 +2167,32 @@ describe('BankConnectionController', () => {
 					providerTransactionId: storedPayment.providerTransactionId,
 				}),
 			).toMatchObject({id, createdAt});
+			const storedCount = await bankTransactionRepository.countBy({bankAccountId: bankAccounts[0].id});
+
+			// The bank renames the stored payment's entry reference and rewrites both look-alikes' descriptions.
+			getAccountTransactions.mockResolvedValueOnce(
+				fetchedTransactions([
+					newPayment,
+					{...storedPayment, entryReference: 'entry-stable-id-renamed'},
+					...lookAlikes.map((lookAlike) => ({
+						...lookAlike,
+						description: `${lookAlike.counterpartyName} 22.08 Exampletown`,
+					})),
+				]),
+			);
+			await expect(synchronizeDue(connection.id)).resolves.toMatchObject({
+				status: 'SUCCEEDED',
+				transactionsAdded: 0,
+			});
+			const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccounts[0].id});
+			expect(rows).toHaveLength(storedCount);
+			expect(rows.find(({id: rowId}) => rowId === id)).toMatchObject({entryReference: 'entry-stable-id-renamed'});
+			for (const [counterpartyName, lookAlikeId] of lookAlikeIds) {
+				expect(rows.find(({id: rowId}) => rowId === lookAlikeId)).toMatchObject({
+					counterpartyName,
+					description: `${counterpartyName} 22.08 Exampletown`,
+				});
+			}
 		} finally {
 			await bankConnectionRepository.delete(connection.id);
 		}
@@ -2714,6 +2884,25 @@ describe('BankConnectionController', () => {
 		getAccountBalances.mockResolvedValueOnce(makeBalances());
 		getAccountTransactions.mockResolvedValueOnce(fetchedTransactions(transactions));
 		return synchronizeDue(connectionId);
+	}
+
+	/** An automatic sync whose transactions call reads these raw provider rows through the real client. */
+	async function synchronizeProviderRows(connectionId: string, rows: Array<Record<string, unknown>>) {
+		getAccountBalances.mockResolvedValueOnce(makeBalances());
+		const transport = jest.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+			const parsed = new URL(String(url));
+			if (parsed.origin !== 'https://provider.example.test' || !parsed.pathname.endsWith('/transactions'))
+				throw new Error('Unexpected provider request');
+			return new Response(JSON.stringify({transactions: rows}), {status: 200});
+		});
+		getAccountTransactions.mockImplementationOnce((...args) =>
+			EnableBankingClient.prototype.getAccountTransactions.call(enableBankingClient, ...args),
+		);
+		try {
+			return await synchronizeDue(connectionId);
+		} finally {
+			transport.mockRestore();
+		}
 	}
 
 	/** Makes the connection due and runs its automatic sync with the provider mocks already in place. */

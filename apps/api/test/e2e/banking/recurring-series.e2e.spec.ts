@@ -5,7 +5,6 @@ import {randomUUID} from 'node:crypto';
 import TestAgent from 'supertest/lib/agent';
 import {ArrayContains, DataSource, In, Repository, SelectQueryBuilder} from 'typeorm';
 
-import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
@@ -36,6 +35,7 @@ import {
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
 import {createBankingOwner} from '../../utils/banking-utils';
+import {MAILPIT_API_URL} from '../../utils/email-utils';
 
 const AS_OF = '2026-10-17';
 const MONTHS = ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'];
@@ -186,7 +186,7 @@ describe('RecurringSeries', () => {
 
 	it('recognizes one payee across the bank’s name formats for a new owner with no setup', async () => {
 		const httpServer = app.getHttpServer();
-		const fresh = await createVerifiedAccount(httpServer, app.get(ConfigurationService).get('EMAIL_UI_URL'));
+		const fresh = await createVerifiedAccount(httpServer, MAILPIT_API_URL);
 		const freshOwner = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
 		const connection = await fixtures.createConnection(freshOwner);
 		const bank = await fixtures.createBankAccount(connection);
@@ -1708,10 +1708,7 @@ describe('RecurringSeries', () => {
 
 		/** A plan paid under a company name, then from another account under its branch name. */
 		async function renamedPlan(newerAmount = '-25.00') {
-			const fresh = await createVerifiedAccount(
-				app.getHttpServer(),
-				app.get(ConfigurationService).get('EMAIL_UI_URL'),
-			);
+			const fresh = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
 			const freshOwner = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
 			const connection = await fixtures.createConnection(freshOwner);
 			const [first, second] = [
@@ -1868,10 +1865,7 @@ describe('RecurringSeries', () => {
 		});
 
 		it.each([1, 2])('continues established rent with %i new-name payments and a durable unlink', async (count) => {
-			const fresh = await createVerifiedAccount(
-				app.getHttpServer(),
-				app.get(ConfigurationService).get('EMAIL_UI_URL'),
-			);
+			const fresh = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
 			const freshOwner = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
 			const connection = await fixtures.createConnection(freshOwner);
 			const bank = await fixtures.createBankAccount(connection);
@@ -2209,10 +2203,7 @@ describe('RecurringSeries', () => {
 	});
 
 	it('reads and stores one coherent payment version while the ledger changes', async () => {
-		const fresh = await createVerifiedAccount(
-			app.getHttpServer(),
-			app.get(ConfigurationService).get('EMAIL_UI_URL'),
-		);
+		const fresh = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
 		const account = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
 		const connection = await fixtures.createConnection(account);
 		const bank = await fixtures.createBankAccount(connection);
@@ -2262,10 +2253,7 @@ describe('RecurringSeries', () => {
 	});
 
 	it.each(['hash', 'rows', 'commit', 'upsert'] as const)('retries after a failed snapshot %s', async (phase) => {
-		const fresh = await createVerifiedAccount(
-			app.getHttpServer(),
-			app.get(ConfigurationService).get('EMAIL_UI_URL'),
-		);
+		const fresh = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
 		const account = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
 		const connection = await fixtures.createConnection(account);
 		const bank = await fixtures.createBankAccount(connection);

@@ -194,6 +194,7 @@ describe('Personal access tokens', () => {
 		for (const origin of [undefined, 'null', 'https://untrusted.example.test']) {
 			const create = agent.post(PATH).send({name: 'Example denied client'});
 			if (origin) create.set('Origin', origin);
+			else create.unset('Origin');
 			await create.expect(403);
 		}
 		const {body: created} = await agent
@@ -204,6 +205,7 @@ describe('Personal access tokens', () => {
 		for (const origin of [undefined, 'null', 'https://untrusted.example.test']) {
 			const remove = agent.delete(`${PATH}/${created.id}`);
 			if (origin) remove.set('Origin', origin);
+			else remove.unset('Origin');
 			await remove.expect(403);
 		}
 		expect((await agent.get(PATH).expect(200)).body.map(({id}: {id: string}) => id)).toContain(created.id);

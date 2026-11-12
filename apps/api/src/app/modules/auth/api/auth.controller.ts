@@ -11,7 +11,6 @@ import {toAccountResponse} from '@modules/account/api/account-response';
 import {CurrentAccount} from '../decorators/current-user.decorator';
 import {Public} from '../decorators/public.decorator';
 import {SkipEmailVerification} from '../decorators/skip-email-verification.decorator';
-import {CsrfOriginGuard} from '../guards/csrf-origin.guard';
 import {LocalLogInGuard} from '../guards/local-login.guard';
 import {AuthService} from '../services/auth.service';
 import {EmailVerifierService} from '../services/email-verifier.service';
@@ -78,11 +77,9 @@ export class AuthController {
 	@Post('signup/verify')
 	@HttpCode(200)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
-	async verifyEmail(@Body() dto: EmailVerifyDto, @Req() request: Request): Promise<MessageResponse> {
-		const user = await this.emailVerifierService.verifySignup(dto.code, dto.email);
-		if (!request.isAuthenticated()) {
-			await this.authService.logIn(user, request);
-		}
+	async verifyEmail(@Body() dto: EmailVerifyDto): Promise<MessageResponse> {
+		// Verifying never signs in: the browser that signed up already has a session, any other logs in.
+		await this.emailVerifierService.verifySignup(dto.code, dto.email);
 		return {message: EMAIL_VERIFICATION_SUCCESS};
 	}
 
@@ -94,18 +91,16 @@ export class AuthController {
 	}
 
 	@Post('change-email/request')
-	@UseGuards(CsrfOriginGuard)
 	@HttpCode(200)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
 	async requestEmailChange(
 		@CurrentAccount() account: Account,
 		@Body() dto: EmailChangeRequestDto,
 	): Promise<MessageResponse> {
-		return await this.emailVerifierService.requestEmailChange(account, dto.newEmail);
+		return await this.emailVerifierService.requestEmailChange(account, dto.newEmail, dto.currentPassword);
 	}
 
 	@Post('change-email/verify')
-	@UseGuards(CsrfOriginGuard)
 	@HttpCode(200)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
 	async verifyEmailChange(

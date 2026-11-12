@@ -11,6 +11,8 @@ export function createBankTransaction(overrides: Partial<BankTransaction> = {}):
 		transactionDate: '2026-09-01',
 		bookingDate: '2026-09-02',
 		valueDate: '2026-09-03',
+		bookingDateFilled: false,
+		valueDateFilled: false,
 		amount: '-12.50',
 		currency: 'EUR',
 		creditDebitIndicator: 'DBIT',

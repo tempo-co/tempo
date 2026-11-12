@@ -11,6 +11,7 @@ import {
 	EMAIL_VERIFICATION_SUCCESS,
 } from '@modules/auth/api/constants/api-messages.constants';
 import {SignUpDto} from '@modules/auth/api/dtos/signup.dto';
+import {SIGNUP_CODE_MAX_ATTEMPTS} from '@modules/auth/services/email-verifier.service';
 
 import {
 	UNVERIFIED_ACCOUNT_EMAIL,
@@ -21,7 +22,7 @@ import {
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, getSessionCookie, loginAgent} from '../../setup/e2e.setup';
 import {createAccountCredentials, expectValidationMessage} from '../../utils/auth-utils';
-import {EmailUtils} from '../../utils/email-utils';
+import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
 
 describe('AuthController - Signup', () => {
 	let mailpitApiUrl: string;
@@ -32,7 +33,7 @@ describe('AuthController - Signup', () => {
 	beforeAll(async () => {
 		const app = getApp();
 		const config = app.get(ConfigurationService);
-		mailpitApiUrl = config.get('EMAIL_UI_URL');
+		mailpitApiUrl = MAILPIT_API_URL;
 		webUrl = config.get('WEB_BASE_URL');
 		emailVerificationExpiration = config.get('EMAIL_VERIFICATION_EXPIRATION');
 
@@ -163,9 +164,9 @@ describe('AuthController - Signup', () => {
 			return response;
 		}
 
-		it('should verify email with correct code and email (unauthenticated)', async () => {
+		it('verifies the email from a browser without a session and leaves it signed out', async () => {
 			const response = await verify(request(httpServer), verificationCode);
-			expect(getSessionCookie(response)).toBeDefined();
+			expect(getSessionCookie(response)).toBeUndefined();
 
 			const newAgent = await loginAgent(httpServer, accountCredentials.email, accountCredentials.password);
 			const meResponse = await newAgent.get('/accounts/me').expect(200);
@@ -179,11 +180,16 @@ describe('AuthController - Signup', () => {
 			expect(accountResponse.body.isEmailVerified).toBe(true);
 		});
 
-		it('should verify email with resend code (authenticated)', async () => {
+		it('verifies with a resent code once the earlier code has stopped working', async () => {
 			await agent.post('/auth/signup/resend').send().expect(200);
 
 			const resendCode = await EmailUtils.getVerificationCode(accountCredentials.email, mailpitApiUrl);
 			expect(resendCode).not.toEqual(verificationCode);
+			const oldCodeResponse = await agent
+				.post('/auth/signup/verify')
+				.send({code: verificationCode, email: accountCredentials.email})
+				.expect(400);
+			expect(oldCodeResponse.body.message).toBe(EMAIL_INVALID_TOKEN);
 
 			await verify(agent, resendCode);
 
@@ -197,6 +203,26 @@ describe('AuthController - Signup', () => {
 				.send({code: '000000', email: accountCredentials.email})
 				.expect(400);
 			expect(response.body.message).toBe(EMAIL_INVALID_TOKEN);
+		});
+
+		it(`locks the code after ${SIGNUP_CODE_MAX_ATTEMPTS} wrong attempts until a new one is sent`, async () => {
+			const wrongCode = verificationCode === '000000' ? '111111' : '000000';
+			for (let attempt = 0; attempt < SIGNUP_CODE_MAX_ATTEMPTS; attempt++) {
+				await request(httpServer)
+					.post('/auth/signup/verify')
+					.send({code: wrongCode, email: accountCredentials.email})
+					.expect(400);
+			}
+
+			const lockedResponse = await request(httpServer)
+				.post('/auth/signup/verify')
+				.send({code: verificationCode, email: accountCredentials.email})
+				.expect(400);
+			expect(lockedResponse.body.message).toBe(EMAIL_INVALID_TOKEN);
+			expect((await agent.get('/accounts/me').expect(200)).body.isEmailVerified).toBe(false);
+
+			await agent.post('/auth/signup/resend').send().expect(200);
+			await verify(agent, await EmailUtils.getVerificationCode(accountCredentials.email, mailpitApiUrl));
 		});
 
 		it('should fail with 400 Bad Request if email is already verified', async () => {

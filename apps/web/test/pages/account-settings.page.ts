@@ -4,6 +4,9 @@ export class AccountSettingsPage {
   readonly page: Page;
   readonly changeEmailButton: Locator;
   readonly newEmailInput: Locator;
+  readonly emailChangePasswordInput: Locator;
+  readonly emailChangeInvalidPasswordError: Locator;
+  readonly emailChangeMissingPasswordError: Locator;
   readonly sendVerificationLinkButton: Locator;
   readonly emailChangeSentTo: Locator;
   readonly useDifferentEmailButton: Locator;
@@ -24,6 +27,9 @@ export class AccountSettingsPage {
     this.page = page;
     this.changeEmailButton = page.getByTestId('change-email-button');
     this.newEmailInput = page.getByTestId('new-email-input');
+    this.emailChangePasswordInput = page.getByLabel('Current password');
+    this.emailChangeInvalidPasswordError = page.getByText('Invalid password.');
+    this.emailChangeMissingPasswordError = page.getByText('Please enter your current password.');
     this.sendVerificationLinkButton = page.getByTestId('send-verification-link-button');
     this.emailChangeSentTo = page.getByTestId('email-change-sent-to');
     this.useDifferentEmailButton = page.getByTestId('use-different-email-button');
@@ -51,10 +57,11 @@ export class AccountSettingsPage {
     await this.saveNameButton.click();
   }
 
-  async requestEmailChange(newEmail: string) {
+  async requestEmailChange(newEmail: string, currentPassword: string) {
     await this.navigate();
     await this.changeEmailButton.click();
     await this.newEmailInput.fill(newEmail);
+    await this.emailChangePasswordInput.fill(currentPassword);
     await this.sendVerificationLinkButton.click();
   }
 

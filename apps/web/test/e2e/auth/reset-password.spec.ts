@@ -1,23 +1,33 @@
 import {faker} from '@faker-js/faker';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
-import {PW_RESET_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_EMAIL} from '../../constants/seed.constants';
+import {VERIFIED_ACCOUNT_EMAIL} from '../../constants/seed.constants';
 import {invalidResetPasswordSearchParams} from '../../data/reset-password-params.data';
-import {expect, test} from '../../fixtures';
+import {createVerifiedAccount, expect, test} from '../../fixtures';
 import {EmailUtils} from '../../utils/email-utils';
 import {withSearchParams} from '../../utils/url';
 
 test.describe.serial('Password Reset', () => {
   test.describe('Successful Flow', () => {
-    test('should successfully reset password', async ({resetPasswordPage, loginPage, homePage}) => {
-      await resetPasswordPage.openResetLink(PW_RESET_ACCOUNT_EMAIL);
+    test('refuses the current password, then resets to a new one', async ({
+      request,
+      resetPasswordPage,
+      loginPage,
+      homePage,
+    }) => {
+      const account = await createVerifiedAccount(request);
+      await resetPasswordPage.openResetLink(account.email);
+
+      await resetPasswordPage.setNewPassword(account.password);
+      await expect(resetPasswordPage.samePasswordError).toBeVisible();
+      await resetPasswordPage.expectVerifyFormIsVisible();
 
       const newPassword = faker.internet.password();
       await resetPasswordPage.setNewPassword(newPassword);
       await expect(resetPasswordPage.verifySuccessMessage).toBeVisible();
 
       await resetPasswordPage.returnToLoginLink.click();
-      await loginPage.login(PW_RESET_ACCOUNT_EMAIL, newPassword);
+      await loginPage.login(account.email, newPassword);
       await homePage.expectToBeOnPage();
       await homePage.expectUserLoggedIn();
     });
