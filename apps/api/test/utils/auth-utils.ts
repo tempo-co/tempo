@@ -5,7 +5,7 @@ import TestAgent from 'supertest/lib/agent';
 
 import {SignUpDto} from '@modules/auth/api/dtos/signup.dto';
 
-import {loginAgent} from '../setup/e2e.setup';
+import {loginAgent, webOrigin} from '../setup/e2e.setup';
 import {EmailUtils} from './email-utils';
 
 export function uniqueEmail(): string {
@@ -39,9 +39,17 @@ export async function createVerifiedAccount(
 	mailpitApiUrl: string,
 ): Promise<{id: string; credentials: SignUpDto; agent: TestAgent}> {
 	const credentials = createAccountCredentials();
-	const signupResponse = await request(httpServer).post('/auth/signup').send(credentials).expect(201);
+	const signupResponse = await request(httpServer)
+		.post('/auth/signup')
+		.set('Origin', webOrigin())
+		.send(credentials)
+		.expect(201);
 	const code = await EmailUtils.getVerificationCode(credentials.email, mailpitApiUrl);
-	await request(httpServer).post('/auth/signup/verify').send({email: credentials.email, code}).expect(200);
+	await request(httpServer)
+		.post('/auth/signup/verify')
+		.set('Origin', webOrigin())
+		.send({email: credentials.email, code})
+		.expect(200);
 	const agent = await loginAgent(httpServer, credentials.email, credentials.password);
 	return {id: signupResponse.body.id, credentials, agent};
 }

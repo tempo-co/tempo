@@ -14,7 +14,7 @@ import {
 import {PasswordResetVerifyDto} from '@modules/auth/api/dtos/password-reset-verify.dto';
 
 import {PW_RESET_ACCOUNT_EMAIL, PW_RESET_ACCOUNT_PASSWORD} from '../../../scripts/seed-data/seed.constants';
-import {getApp, loginAgent} from '../../setup/e2e.setup';
+import {getApp, loginAgent, webOrigin} from '../../setup/e2e.setup';
 import {UUID_VALIDATION_REGEX} from '../../types/regex.constants';
 import {expectValidationMessage, uniqueEmail, uniquePassword} from '../../utils/auth-utils';
 import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
@@ -41,15 +41,18 @@ describe('AuthController - Reset Password', () => {
 	});
 
 	function requestReset(email: string) {
-		return request(httpServer).post('/auth/reset-password/request').send({email});
+		return request(httpServer).post('/auth/reset-password/request').set('Origin', webOrigin()).send({email});
 	}
 
 	function verifyReset(body: Partial<PasswordResetVerifyDto>) {
-		return request(httpServer).post('/auth/reset-password/verify').send(body);
+		return request(httpServer).post('/auth/reset-password/verify').set('Origin', webOrigin()).send(body);
 	}
 
 	function login(password: string) {
-		return request(httpServer).post('/auth/login').send({email: PW_RESET_ACCOUNT_EMAIL, password});
+		return request(httpServer)
+			.post('/auth/login')
+			.set('Origin', webOrigin())
+			.send({email: PW_RESET_ACCOUNT_EMAIL, password});
 	}
 
 	describe('POST /auth/reset-password/request', () => {
@@ -82,7 +85,11 @@ describe('AuthController - Reset Password', () => {
 			['email format is invalid', {email: 'not-a-valid-email'}, /email must be an email/i],
 			['email is missing', {}, /email should not be empty/i],
 		])('should fail with 400 Bad Request if %s', async (_case, body, message) => {
-			const response = await request(httpServer).post('/auth/reset-password/request').send(body).expect(400);
+			const response = await request(httpServer)
+				.post('/auth/reset-password/request')
+				.set('Origin', webOrigin())
+				.send(body)
+				.expect(400);
 			expectValidationMessage(response, message);
 		});
 	});
