@@ -1,13 +1,11 @@
-import {BANK_IMPORT_MAX_DROP_BYTES, BANK_IMPORT_MAX_FILES, BANK_IMPORT_MAX_FILE_BYTES} from '@tempo/contracts';
-
 /**
- * Upload and parse limits for one drop. The parse runner and the upload route both read them; the three a person
- * can run into come from the contracts, so the web refuses the same choice before uploading it.
+ * Upload and parse limits for one drop. The parse runner and the upload route both read them, so this file imports
+ * nothing: the parse child loads it alone. The web mirrors the first three to refuse a choice before uploading it.
  */
-export const MAX_FILE_BYTES = BANK_IMPORT_MAX_FILE_BYTES;
-export const MAX_FILES_PER_DROP = BANK_IMPORT_MAX_FILES;
-/** The drop's files together: 25 MB. */
-export const MAX_DROP_BYTES = BANK_IMPORT_MAX_DROP_BYTES;
+export const MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const MAX_FILES_PER_DROP = 20;
+/** The drop's files together. */
+export const MAX_DROP_BYTES = 25 * 1024 * 1024;
 /**
  * The multipart framing around a drop's files: a boundary and headers naming each file, and the two short text
  * fields. An upload is refused once its body is larger than `MAX_DROP_BYTES` plus this.

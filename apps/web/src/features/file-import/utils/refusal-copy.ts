@@ -1,12 +1,15 @@
 import {
   BANK_IMPORT_ERROR_CODES,
-  BANK_IMPORT_MAX_DROP_BYTES,
-  BANK_IMPORT_MAX_FILES,
-  BANK_IMPORT_MAX_FILE_BYTES,
   type BankImportAccountQuestion,
   type BankImportError,
   type BankImportErrorCode,
 } from '@tempo/contracts';
+
+// What one drop may hold, mirrored from the API's apps/api/src/app/modules/file-import/parsers/parse-limits.ts:
+// its parse child loads that file alone, so the limits cannot live in the contracts.
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_FILES_PER_DROP = 20;
+const MAX_DROP_BYTES = 25 * 1024 * 1024;
 
 /** A drop of several files is all or nothing, so every refusal says so. */
 export const NOTHING_IMPORTED = 'Nothing was imported.';
@@ -118,11 +121,11 @@ export function refuseBySize(files: readonly Pick<File, 'size'>[]): BankImportEr
     code,
     file,
   });
-  if (files.length > BANK_IMPORT_MAX_FILES) return refusal('too_many_files', null);
-  const large = files.findIndex((file) => file.size > BANK_IMPORT_MAX_FILE_BYTES);
+  if (files.length > MAX_FILES_PER_DROP) return refusal('too_many_files', null);
+  const large = files.findIndex((file) => file.size > MAX_FILE_BYTES);
   if (large !== -1) return refusal('file_too_large', large + 1);
   const total = files.reduce((sum, file) => sum + file.size, 0);
-  return total > BANK_IMPORT_MAX_DROP_BYTES ? refusal('drop_too_large', null) : null;
+  return total > MAX_DROP_BYTES ? refusal('drop_too_large', null) : null;
 }
 
 /**

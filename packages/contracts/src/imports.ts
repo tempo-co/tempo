@@ -2,21 +2,13 @@
 export const BANK_IMPORT_FORMATS = ['camt053', 'mt940', 'abnAmroTxt', 'revolutCsv', 'revolutXlsx', 'mixed'] as const;
 export type BankImportFormat = (typeof BANK_IMPORT_FORMATS)[number];
 
-/**
- * What one drop may hold. The API refuses more; the web refuses a choice over them before uploading it. A drop's
- * size is the size of its files together.
- */
-export const BANK_IMPORT_MAX_FILE_BYTES = 10 * 1024 * 1024;
-export const BANK_IMPORT_MAX_FILES = 20;
-export const BANK_IMPORT_MAX_DROP_BYTES = 25 * 1024 * 1024;
-
 /** Why a drop was refused. A refused drop writes nothing. */
 export const BANK_IMPORT_ERROR_CODES = [
 	'unsupported_format',
 	/** An old binary Excel (`.xls`) file: the owner picks another export of the same data. */
 	'legacy_xls_not_supported',
 	'file_too_large',
-	/** The drop's files together are larger than `BANK_IMPORT_MAX_DROP_BYTES`. */
+	/** The drop's files together are larger than 25 MB. */
 	'drop_too_large',
 	'archive_too_large',
 	'too_many_files',

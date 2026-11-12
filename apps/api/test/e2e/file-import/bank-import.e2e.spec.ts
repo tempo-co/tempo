@@ -1,6 +1,6 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import {BANK_IMPORT_MAX_DROP_BYTES, type BankImportSummary} from '@tempo/contracts';
+import type {BankImportSummary} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {request as httpRequest} from 'node:http';
@@ -30,6 +30,7 @@ import {EnableBankingClient} from '@modules/banking/services/enable-banking.clie
 import {BankImportUploadQueue} from '@modules/file-import/api/bank-import-upload-queue';
 import {BankImportDoubtfulRow} from '@modules/file-import/bank-import-doubtful-row.entity';
 import {BankImport} from '@modules/file-import/bank-import.entity';
+import {MAX_DROP_BYTES} from '@modules/file-import/parsers/parse-limits';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {EXAMPLE_IBAN, OTHER_EXAMPLE_IBAN, camt053, createZip} from '../../fixtures/statement-file.fixture';
@@ -1601,11 +1602,9 @@ describe('Bank imports', () => {
 	it('imports a drop just under 25 MB together', async () => {
 		const {owner, agent} = await createOwner();
 		// Statements padded with trailing newlines, which the XML reader skips.
-		const padding = Math.floor(BANK_IMPORT_MAX_DROP_BYTES / STATEMENT_FILES.length) - 4096;
-		const padded = STATEMENT_FILES.map((file) => Buffer.concat([file, Buffer.alloc(padding - file.length, 0x0a)]));
-		expect(padded.reduce((total, file) => total + file.length, 0)).toBeGreaterThan(
-			BANK_IMPORT_MAX_DROP_BYTES - 16 * 1024,
-		);
+		const size = Math.floor(MAX_DROP_BYTES / STATEMENT_FILES.length) - 4096;
+		const padded = STATEMENT_FILES.map((file) => Buffer.concat([file, Buffer.alloc(size - file.length, 0x0a)]));
+		expect(padded.reduce((total, file) => total + file.length, 0)).toBeGreaterThan(MAX_DROP_BYTES - 16 * 1024);
 
 		const response = await drop(agent, padded).expect(201);
 
