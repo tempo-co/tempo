@@ -34,7 +34,7 @@ export type MonthPoint = {
 export type YearRow = {
   year: string;
   complete: boolean;
-  /** The balance the year started from: the previous month end, or zero before the history. */
+  /** The balance the year started from: the previous month end; null for the history's first year, as unknown. */
   start: number | null;
   end: number | null;
   income: number;
@@ -88,7 +88,7 @@ export function buildOverview({
       row = {
         year,
         complete: false,
-        start: before ? before.balance : 0,
+        start: before ? before.balance : null,
         end: null,
         income: 0,
         spending: 0,
@@ -126,21 +126,23 @@ export type Span = (typeof SPANS)[number]['value'];
 
 /**
  * The months a span shows and the month end its change is measured from: the last month end on or before the same
- * day N months ago (31 Oct for 5 Nov a year back), where the line starts. "All" measures from zero, before the first
- * account had history, and so does a span longer than the history. `change` is null when either balance could not
- * be converted.
+ * day N months ago (31 Oct for 5 Nov a year back), where the line starts. "All", and a span longer than the history,
+ * measure from the first month end: banks send only part of an account's past, so the balance before the history is
+ * unknown, not zero. Without a complete month there is no base and no change. `change` is null when either balance
+ * could not be converted.
  */
 export function spanMonths(overview: Overview, span: Span) {
   const count = SPANS.find((option) => option.value === span)!.months;
   const all = overview.months;
-  const shownAll = {shown: all, base: null, change: overview.total};
-  if (!Number.isFinite(count)) return shownAll;
-  const target = format(subMonths(parseCalendarDate(overview.today), count), 'yyyy-MM-dd');
   let index = -1;
-  all.forEach((point, at) => {
-    if (point.complete && point.end <= target) index = at;
-  });
-  if (index < 0) return shownAll;
+  if (Number.isFinite(count)) {
+    const target = format(subMonths(parseCalendarDate(overview.today), count), 'yyyy-MM-dd');
+    all.forEach((point, at) => {
+      if (point.complete && point.end <= target) index = at;
+    });
+  }
+  if (index < 0 && all[0]?.complete) index = 0;
+  if (index < 0) return {shown: all, base: null, change: null};
   const base = all[index];
   const change =
     overview.total === null || base.balance === null ? null : overview.total - base.balance;

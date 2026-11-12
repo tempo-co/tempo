@@ -1,6 +1,12 @@
 import type {Locator} from '@playwright/test';
+import type {BankConnection} from '@tempo/contracts';
 
-import {PHONE_KEY, homeHistory, mockSyntheticHome} from '../../data/home-history.data';
+import {
+  HOME_CONNECTION,
+  PHONE_KEY,
+  homeHistory,
+  mockSyntheticHome,
+} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
 import {boxOf, expectLoaded} from '../../utils/layout';
@@ -45,11 +51,14 @@ test('shows the total, its change over each span, and the span’s money in and 
   await expect(card.getByRole('radio', {name: '6M'})).toHaveAttribute('aria-checked', 'true');
   await expect(card).toContainText('+€4,800+25%since 30 Apr 2026');
 
-  // Longer than the history: measured from zero, before the first month.
+  // Longer than the history: measured from the first month end, since the balance before it is unknown, not zero.
   for (const name of ['3Y', 'All']) {
     await card.getByRole('radio', {name, exact: true}).click();
-    await expect(card).toContainText('+€24,300since Dec 2024');
-    await expect(span.getByRole('heading', {level: 2})).toHaveText('Dec 2024 – now');
+    await expect(card).toContainText('+€23,300+2330%since 31 Dec 2024');
+    await expect(span.getByRole('heading', {level: 2})).toHaveText('Jan 2025 – now');
+    await expect(span.getByText('Balance', {exact: true}).locator('..')).toHaveText(
+      'Balance€1,000 → €24,300',
+    );
   }
 
   // A month is measured from the day end 30 days back, and its money is that of the 30 days since, day by day.
@@ -78,6 +87,23 @@ test('shows the total, its change over each span, and the span’s money in and 
   expect(new URL(dayEnds[0]).searchParams.toString()).toBe(
     'interval=day&from=2026-10-06&to=2026-11-05&asOf=2026-11-05',
   );
+});
+
+test('a history shorter than the span shows no change, since the balance before it is unknown', async ({
+  page,
+  homePage,
+}) => {
+  await mockSyntheticHome(page, {history: homeHistory({firstMonth: '2026-11'})});
+  await page.goto('/');
+
+  const card = homePage.whereYouStand;
+  const span = card.getByRole('region', {name: 'This span'});
+  const balance = span.getByText('Balance', {exact: true}).locator('..');
+  for (const name of ['1M', 'All']) {
+    await card.getByRole('radio', {name, exact: true}).click();
+    await expect(balance).toHaveText(`Balance${await homePage.totalBalance.innerText()}`);
+    await expect(card).not.toContainText('since');
+  }
 });
 
 test('on the last day of a month, a span is measured from the month end a span back', async ({
@@ -264,6 +290,26 @@ test('repeats show bills and income a month, late bills first, and open their se
   await expect(page).toHaveURL(/recurring=open/);
   await expect(page).not.toHaveURL(/series=/);
   await expect(dialog).toBeVisible();
+});
+
+test('says the history is importing while the first sync runs, and that there is none once it has', async ({
+  page,
+}) => {
+  let syncStatus: BankConnection['syncStatus'] = 'RUNNING';
+  await mockSyntheticHome(page, {connections: () => [{...HOME_CONNECTION, syncStatus}]});
+  const empty = {baseCurrency: null, interval: 'month', periods: []};
+  await page.route('**/bank-transactions/balance-trend?**', (route) => fulfillJson(route, empty));
+  await page.route('**/bank-transactions/cash-flow?**', (route) => fulfillJson(route, empty));
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', {name: 'Importing your history'})).toBeVisible();
+  await expect(page.getByRole('main')).toContainText(
+    'Example Bank is sending your transactions. They appear here when the import finishes.',
+  );
+
+  syncStatus = 'SUCCEEDED';
+  await page.reload();
+  await expect(page.getByRole('heading', {name: 'No history yet'})).toBeVisible();
 });
 
 test('leaves out repeats when nothing recurring is found', async ({page, homePage}) => {

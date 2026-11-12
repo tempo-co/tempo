@@ -4,7 +4,7 @@ import {History, Landmark} from 'lucide-react';
 import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
-import {isConnectedBank} from '@/features/banking/utils/bank-sync-status';
+import {isConnectedBank, isSyncInProgress} from '@/features/banking/utils/bank-sync-status';
 
 import {useOverview, useYearBreakdowns} from '../api/use-overview';
 import {type Overview, yearColumnWidth} from '../utils/overview';
@@ -32,16 +32,36 @@ export function HomeDashboard({today, onOpenMonth}: HomeDashboardProps) {
 
   return (
     <div className='@container' aria-busy={!connections || undefined}>
-      <HomeHistory today={today} onOpenMonth={onOpenMonth} />
+      <HomeHistory
+        today={today}
+        onOpenMonth={onOpenMonth}
+        importing={connections?.filter(isSyncInProgress).map((bank) => bank.aspspName) ?? []}
+      />
     </div>
   );
 }
 
 /** Each section shows as soon as its own data arrives, in a placeholder of its loaded size until then. */
-function HomeHistory({today, onOpenMonth}: HomeDashboardProps) {
+function HomeHistory({
+  today,
+  onOpenMonth,
+  importing,
+}: HomeDashboardProps & {
+  /** Banks whose sync is running; with no history yet, that is the first import. */
+  importing: string[];
+}) {
   const {overview, isError, error, refetch} = useOverview(today);
   if (isError)
     return <LoadErrorState title="Couldn't load your history" error={error} onRetry={refetch} />;
+  // The connections poll while a sync runs, and Home reloads when it finishes.
+  if (overview?.months.length === 0 && importing.length > 0)
+    return (
+      <StateMessage
+        icon={History}
+        title='Importing your history'
+        description={`${importing.length === 1 ? importing[0] : 'Your banks'} ${importing.length === 1 ? 'is' : 'are'} sending your transactions. They appear here when the import finishes.`}
+      />
+    );
   if (overview?.months.length === 0)
     return (
       <StateMessage
