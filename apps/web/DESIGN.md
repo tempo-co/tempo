@@ -454,7 +454,9 @@ No copy calls import a fallback or assumes a bank is connected.
   outcome then arrives as a toast (View reopens the summary). Focus returns to Import a file.
 - **Refusals.** A drop is all or nothing, so a refusal is a section `StateMessage` in the failure
   tone whose description ends with "Nothing was imported." It names the refused file when the drop
-  held several, and the choose controls stay under it. Failed requests use `LoadErrorState`.
+  held several, and the choose controls stay under it. A choice over a drop's limits (20 files,
+  10 MB each, 25 MB together) is refused the same way before anything is uploaded. Failed
+  requests use `LoadErrorState`.
 - **Summary.** Counts as a bordered `divide-y` list with `numeric` values (the count that needs a
   look in `warning`), the date range, and the accounts the import went to. A drop that added
   nothing shows the `CheckCheck` state instead of the counts.

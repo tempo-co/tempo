@@ -189,6 +189,12 @@ imports = url.removesuffix('/mcp') + '/bank-imports'
 with urllib.request.urlopen(urllib.request.Request(imports, data=upload, method='POST'), timeout=10) as response:
     assert response.status == 201, f'expected the import upload to reach the API, got {response.status}'
     assert json.load(response)['bytes'] == len(upload), 'the import upload reached the API cut short'
+try:
+    urllib.request.urlopen(urllib.request.Request(imports, data=b'x' * (26 * 1024 * 1024 + 1), method='POST'), timeout=10)
+except urllib.error.HTTPError as error:
+    assert error.code == 413, f'expected statement import size cap HTTP 413, got {error.code}'
+else:
+    raise AssertionError('statement imports larger than 26 MB must be refused')
 print('tempo statement import upload size: PASS')
 
 # Use the API's real URL builder, then verify Nginx preserves each name as one segment.

@@ -1,11 +1,13 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import type {BankImportSummary} from '@tempo/contracts';
+import {BANK_IMPORT_MAX_DROP_BYTES, type BankImportSummary} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {Server} from 'node:net';
+import {request as httpRequest} from 'node:http';
+import {AddressInfo, Server} from 'node:net';
 import {join} from 'node:path';
 import {deflateRawSync} from 'node:zlib';
+import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
 import {In, Repository} from 'typeorm';
 
@@ -25,12 +27,13 @@ import {BankingEncryptionService} from '@modules/banking/services/banking-encryp
 import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
 import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
 import {EnableBankingClient} from '@modules/banking/services/enable-banking.client';
+import {BankImportUploadQueue} from '@modules/file-import/api/bank-import-upload-queue';
 import {BankImportDoubtfulRow} from '@modules/file-import/bank-import-doubtful-row.entity';
 import {BankImport} from '@modules/file-import/bank-import.entity';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {EXAMPLE_IBAN, OTHER_EXAMPLE_IBAN, camt053, createZip} from '../../fixtures/statement-file.fixture';
-import {enableFileImportE2e, getApp} from '../../setup/e2e.setup';
+import {enableFileImportE2e, getApp, getSessionCookie} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
 
 enableFileImportE2e();
@@ -142,11 +145,102 @@ describe('Bank imports', () => {
 		doubtfulRows = app.get(getRepositoryToken(BankImportDoubtfulRow));
 	});
 
-	async function createOwner(): Promise<{owner: Account; agent: TestAgent}> {
+	async function createOwner(): Promise<{owner: Account; agent: TestAgent; cookie: string}> {
 		const fresh = await createVerifiedAccount(httpServer, app.get(ConfigurationService).get('EMAIL_UI_URL'));
 		await accounts.update({id: fresh.id}, {baseCurrency: 'EUR'});
-		return {owner: await accounts.findOneByOrFail({id: fresh.id}), agent: fresh.agent};
+		// A session of its own for requests sent byte by byte, outside the agent.
+		const login = await request(httpServer).post('/auth/login').send(fresh.credentials).expect(200);
+		const cookie = getSessionCookie(login)!.split(';')[0];
+		return {owner: await accounts.findOneByOrFail({id: fresh.id}), agent: fresh.agent, cookie};
 	}
+
+	type RawReply = {status: number; body: Record<string, unknown> | null};
+
+	/**
+	 * A drop sent over a socket of its own: its headers and the first part's header go out at once, the files only on
+	 * `finish`. Without `declareLength` the body is sent chunked, with no Content-Length to check.
+	 */
+	async function openUpload(cookie: string, files: Buffer[], {declareLength = true} = {}) {
+		if (!httpServer.listening) await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+		const boundary = 'example-e2e-boundary';
+		const partHeader = (index: number) =>
+			Buffer.from(
+				`--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="upload-${index}.bin"\r\n` +
+					'Content-Type: application/octet-stream\r\n\r\n',
+			);
+		const head = partHeader(0);
+		const rest = Buffer.concat([
+			...files.flatMap((file, index) => (index === 0 ? [file] : [Buffer.from('\r\n'), partHeader(index), file])),
+			Buffer.from(`\r\n--${boundary}--\r\n`),
+		]);
+		const upload = httpRequest({
+			host: '127.0.0.1',
+			port: (httpServer.address() as AddressInfo).port,
+			method: 'POST',
+			path: '/bank-imports',
+			headers: {
+				Cookie: cookie,
+				Origin: ORIGIN,
+				'Content-Type': `multipart/form-data; boundary=${boundary}`,
+				...(declareLength && {'Content-Length': head.length + rest.length}),
+			},
+		});
+		const reply = new Promise<RawReply>((resolve, reject) => {
+			upload.on('response', (response) => {
+				const chunks: Buffer[] = [];
+				response.on('data', (chunk: Buffer) => chunks.push(chunk));
+				response.on('end', () => {
+					const text = Buffer.concat(chunks).toString();
+					resolve({status: response.statusCode!, body: text ? JSON.parse(text) : null});
+				});
+			});
+			upload.on('error', reject);
+		});
+		upload.write(head);
+		return {
+			reply,
+			finish: () => {
+				// Written in parts, so a body that grows too large is refused while it streams.
+				for (let offset = 0; offset < rest.length; offset += 1024 * 1024)
+					upload.write(rest.subarray(offset, offset + 1024 * 1024));
+				upload.end();
+			},
+			leave: () => {
+				reply.catch(() => undefined);
+				upload.destroy();
+			},
+		};
+	}
+
+	/** Records every request's wait for an upload slot, to tell which uploads hold one and which wait. */
+	function watchUploadSlots() {
+		const queue = app.get(BankImportUploadQueue);
+		const acquire = queue.acquire.bind(queue);
+		const waits: Promise<unknown>[] = [];
+		const spy = jest.spyOn(queue, 'acquire').mockImplementation((signal) => {
+			const wait = acquire(signal);
+			waits.push(wait);
+			return wait;
+		});
+		return {
+			waits,
+			/** Resolves once `count` requests have asked for a slot. */
+			asked: async (count: number) => {
+				while (waits.length < count) await new Promise((resolve) => setTimeout(resolve, 10));
+			},
+			restore: () => spy.mockRestore(),
+		};
+	}
+
+	/** Whether a promise has settled, checked after everything already queued has run. */
+	const hasSettled = (promise: Promise<unknown>) =>
+		Promise.race([
+			promise.then(
+				() => true,
+				() => true,
+			),
+			new Promise<boolean>((resolve) => setImmediate(() => resolve(false))),
+		]);
 
 	function drop(agent: TestAgent, files: Buffer[]) {
 		const upload = agent.post('/bank-imports').set('Origin', ORIGIN);
@@ -1481,6 +1575,13 @@ describe('Bank imports', () => {
 			file: 2,
 		},
 		{
+			name: 'files under 10 MB each that are over 25 MB together',
+			files: () => Array.from({length: 3}, () => Buffer.alloc(9 * 1024 * 1024, 0x20)),
+			status: 413,
+			code: 'drop_too_large',
+			file: null,
+		},
+		{
 			name: 'more than 20 files',
 			files: () => Array.from({length: 21}, () => ARCHIVE),
 			status: 422,
@@ -1495,6 +1596,74 @@ describe('Bank imports', () => {
 		expect(response.body).toMatchObject({code, file});
 		expect(await fileConnection(owner)).toBeNull();
 		expect(await imports.countBy({accountId: owner.id})).toBe(0);
+	});
+
+	it('imports a drop just under 25 MB together', async () => {
+		const {owner, agent} = await createOwner();
+		// Statements padded with trailing newlines, which the XML reader skips.
+		const padding = Math.floor(BANK_IMPORT_MAX_DROP_BYTES / STATEMENT_FILES.length) - 4096;
+		const padded = STATEMENT_FILES.map((file) => Buffer.concat([file, Buffer.alloc(padding - file.length, 0x0a)]));
+		expect(padded.reduce((total, file) => total + file.length, 0)).toBeGreaterThan(
+			BANK_IMPORT_MAX_DROP_BYTES - 16 * 1024,
+		);
+
+		const response = await drop(agent, padded).expect(201);
+
+		expect(response.body).toMatchObject({filesCount: 3, rowsParsed: 7, rowsAdded: 7});
+		expect(await ownerRows(owner)).toHaveLength(7);
+	});
+
+	it('refuses a drop that grows past 25 MB as it streams in, with no length declared, and writes nothing', async () => {
+		const {owner, cookie} = await createOwner();
+		const upload = await openUpload(
+			cookie,
+			Array.from({length: 3}, () => Buffer.alloc(9 * 1024 * 1024, 0x20)),
+			{declareLength: false},
+		);
+
+		upload.finish();
+
+		expect(await upload.reply).toMatchObject({status: 413, body: {code: 'drop_too_large', file: null}});
+		expect(await fileConnection(owner)).toBeNull();
+		expect(await imports.countBy({accountId: owner.id})).toBe(0);
+	});
+
+	it('reads at most two uploads at once, in arrival order, and lets a waiting upload whose client left go', async () => {
+		const {agent, cookie} = await createOwner();
+		const slots = watchUploadSlots();
+		try {
+			const first = await openUpload(cookie, [STATEMENT_FILES[0]]);
+			await slots.asked(1);
+			const second = await openUpload(cookie, [STATEMENT_FILES[1]]);
+			await slots.asked(2);
+			await Promise.all(slots.waits);
+			// The third is sent whole, yet waits until an earlier upload is done.
+			const third = await openUpload(cookie, [STATEMENT_FILES[2]]);
+			third.finish();
+			await slots.asked(3);
+			const leaving = await openUpload(cookie, [CAMT_FILES[3]]);
+			await slots.asked(4);
+			leaving.leave();
+			await expect(slots.waits[3]).rejects.toThrow();
+			// Leaving freed no slot it never held: the next upload waits too.
+			const fifth = await openUpload(cookie, [MT940_FILE]);
+			fifth.finish();
+			await slots.asked(5);
+			expect(await hasSettled(slots.waits[2])).toBe(false);
+			expect(await hasSettled(slots.waits[4])).toBe(false);
+
+			first.finish();
+			expect(await first.reply).toMatchObject({status: 201});
+			expect(await third.reply).toMatchObject({status: 201});
+			second.finish();
+			expect(await second.reply).toMatchObject({status: 201});
+			expect(await fifth.reply).toMatchObject({status: 201});
+		} finally {
+			slots.restore();
+		}
+
+		// Every slot came back: two more drops run at once.
+		await Promise.all([drop(agent, [TXT_FILE]).expect(201), drop(agent, [CAMT_FILES[3]]).expect(201)]);
 	});
 
 	it('asks for at least one file', async () => {

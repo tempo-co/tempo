@@ -10,7 +10,12 @@ import {HttpError, NetworkError, SessionChangedError} from '@/utils/api';
 
 import {useImportFiles} from '../api/use-import-files';
 import {summaryTitle} from '../utils/import-format';
-import {type ImportFailure, describeRefusal, toBankImportError} from '../utils/refusal-copy';
+import {
+  type ImportFailure,
+  describeRefusal,
+  refuseBySize,
+  toBankImportError,
+} from '../utils/refusal-copy';
 
 /** Where the import dialog is. The files stay in memory until a drop is imported or other files are chosen. */
 export type ImportStep =
@@ -69,6 +74,24 @@ export function useFileImport() {
 
   const run = useCallback(
     async (files: File[], accountChoices?: Record<string, string>) => {
+      const showFailure = (failure: Exclude<ImportFailure, {kind: 'question'}>) => {
+        // Files worth sending again stay chosen; a file the API refused is chosen again by the owner.
+        const keep = failure.kind === 'failed' || failure.retry;
+        setStep({kind: 'choose', files: keep ? files : [], failure});
+        if (!openRef.current && !(failure.kind === 'failed' && failure.toasted))
+          toast.error(failure.kind === 'refused' ? failure.title : IMPORT_FAILED_TITLE, {
+            id: 'bank-import-failed',
+          });
+      };
+      // A choice the API would refuse for its size is refused here, without uploading it.
+      const tooLarge = refuseBySize(files);
+      if (tooLarge) {
+        const failure = describeRefusal(
+          tooLarge,
+          files.map((file) => file.name),
+        );
+        if (failure.kind === 'refused') return showFailure(failure);
+      }
       setStep({kind: 'importing', files});
       try {
         const summary = await importFiles({files, accountChoices});
@@ -92,13 +115,7 @@ export function useFileImport() {
             });
           return;
         }
-        // Files worth sending again stay chosen; a file the API refused is chosen again by the owner.
-        const keep = failure.kind === 'failed' || failure.retry;
-        setStep({kind: 'choose', files: keep ? files : [], failure});
-        if (!openRef.current && !(failure.kind === 'failed' && failure.toasted))
-          toast.error(failure.kind === 'refused' ? failure.title : IMPORT_FAILED_TITLE, {
-            id: 'bank-import-failed',
-          });
+        showFailure(failure);
       }
     },
     [importFiles, show],

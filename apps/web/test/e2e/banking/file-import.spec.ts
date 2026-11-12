@@ -327,6 +327,31 @@ test.describe('statement file import on Connections', () => {
     expect(api.uploads).toHaveLength(2);
   });
 
+  test('refuses files too large together before uploading them, with the copy the API would answer', async ({
+    page,
+  }) => {
+    const api = await mockFileImport(page, {uploads: [created(importSummary({filesCount: 1}))]});
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    // Three files under 10 MB each, 27 MB together.
+    await dialog.getByTestId('bank-import-file-input').setInputFiles(
+      ['a', 'b', 'c'].map((name) => ({
+        ...statement(`statement-${name}.xml`),
+        buffer: Buffer.alloc(9 * 1024 * 1024, 0x20),
+      })),
+    );
+
+    const alert = dialog.getByRole('alert');
+    await expect(alert.getByText('These files are too large together')).toBeVisible();
+    await expect(alert).toContainText('Import them in smaller batches. Nothing was imported.');
+    expect(api.uploads).toHaveLength(0);
+    await dialog
+      .getByTestId('bank-import-file-input')
+      .setInputFiles([statement('statement-a.xml')]);
+    await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
+    expect(api.uploads).toHaveLength(1);
+  });
+
   test('asks which account a statement is, then sends the same files with the answer', async ({
     page,
   }) => {

@@ -1,5 +1,8 @@
 import {
   BANK_IMPORT_ERROR_CODES,
+  BANK_IMPORT_MAX_DROP_BYTES,
+  BANK_IMPORT_MAX_FILES,
+  BANK_IMPORT_MAX_FILE_BYTES,
   type BankImportAccountQuestion,
   type BankImportError,
   type BankImportErrorCode,
@@ -24,6 +27,10 @@ const REFUSAL_COPY: Record<BankImportErrorCode, RefusalCopy> = {
   file_too_large: {
     title: 'This file is too large',
     description: 'Export shorter periods and import them together.',
+  },
+  drop_too_large: {
+    title: 'These files are too large together',
+    description: 'Import them in smaller batches.',
   },
   archive_too_large: {
     title: 'This file is too large',
@@ -57,6 +64,10 @@ const REFUSAL_COPY: Record<BankImportErrorCode, RefusalCopy> = {
     title: 'These files belong to more than one bank',
     description: "Import each bank's files separately.",
   },
+  import_busy: {
+    title: 'Other files are being imported',
+    description: 'Try again in a minute.',
+  },
   // Asked as a question when the refusal lists what to ask; these cover a refusal with nothing to ask.
   ambiguous_target_account: {
     title: 'This file fits more than one account',
@@ -69,7 +80,7 @@ const REFUSAL_COPY: Record<BankImportErrorCode, RefusalCopy> = {
 };
 
 /** Refusals worth sending the same files again for, without choosing others. */
-const RETRYABLE_CODES: readonly BankImportErrorCode[] = ['account_busy'];
+const RETRYABLE_CODES: readonly BankImportErrorCode[] = ['account_busy', 'import_busy'];
 
 export type ImportFailure =
   /** The API refused the drop: nothing was written. */
@@ -80,8 +91,8 @@ export type ImportFailure =
   | {kind: 'failed'; error: unknown; toasted: boolean};
 
 /**
- * The refusal in an error reply, if it is one. A proxy in front of the API refuses an oversized upload with a
- * 413 before the API can say which file it was.
+ * The refusal in an error reply, if it is one. A proxy in front of the API refuses an upload over its size limit,
+ * which only the drop's files together can reach, with a 413 that is not the API's.
  */
 export function toBankImportError(status: number, body: unknown): BankImportError | null {
   if (
@@ -92,7 +103,26 @@ export function toBankImportError(status: number, body: unknown): BankImportErro
     (BANK_IMPORT_ERROR_CODES as readonly string[]).includes(body.code)
   )
     return body as BankImportError;
-  return status === 413 ? {statusCode: 413, message: '', code: 'file_too_large', file: null} : null;
+  return status === 413 ? {statusCode: 413, message: '', code: 'drop_too_large', file: null} : null;
+}
+
+/**
+ * The refusal the API would answer a choice of files with for its size alone, so it is told before uploading: more
+ * files than a drop holds, a file too large (by its position), or files too large together.
+ */
+export function refuseBySize(files: readonly Pick<File, 'size'>[]): BankImportError | null {
+  // The status the API answers each with.
+  const refusal = (code: BankImportErrorCode, file: number | null): BankImportError => ({
+    statusCode: code === 'too_many_files' ? 422 : 413,
+    message: '',
+    code,
+    file,
+  });
+  if (files.length > BANK_IMPORT_MAX_FILES) return refusal('too_many_files', null);
+  const large = files.findIndex((file) => file.size > BANK_IMPORT_MAX_FILE_BYTES);
+  if (large !== -1) return refusal('file_too_large', large + 1);
+  const total = files.reduce((sum, file) => sum + file.size, 0);
+  return total > BANK_IMPORT_MAX_DROP_BYTES ? refusal('drop_too_large', null) : null;
 }
 
 /**

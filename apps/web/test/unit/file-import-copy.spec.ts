@@ -9,6 +9,7 @@ import {
 } from '../../src/features/file-import/utils/import-format';
 import {
   describeRefusal,
+  refuseBySize,
   toBankImportError,
 } from '../../src/features/file-import/utils/refusal-copy';
 
@@ -40,11 +41,42 @@ test('a refusal names its file only among several, and always says nothing was i
         "Something in it doesn't add up. Download it again from your bank and retry. Nothing was imported.",
     });
   }
-  // A busy bank is worth trying again with the same files; the rest need other files.
+  // A busy bank or a busy import is worth trying again with the same files; the rest need other files.
   expect(describeRefusal(refusal({code: 'account_busy', statusCode: 409}), names)).toMatchObject({
     title: 'This bank is syncing right now',
     description: 'Try again in a minute. Nothing was imported.',
     retry: true,
+  });
+  expect(describeRefusal(refusal({code: 'import_busy', statusCode: 503}), names)).toMatchObject({
+    title: 'Other files are being imported',
+    description: 'Try again in a minute. Nothing was imported.',
+    retry: true,
+  });
+  expect(describeRefusal(refusal({code: 'drop_too_large', statusCode: 413}), names)).toEqual({
+    kind: 'refused',
+    code: 'drop_too_large',
+    title: 'These files are too large together',
+    description: 'Import them in smaller batches. Nothing was imported.',
+    retry: false,
+  });
+});
+
+test('a choice of files too large for one drop is refused before uploading, as the API would', () => {
+  const MB = 1024 * 1024;
+  const sized = (...megabytes: number[]) => megabytes.map((size) => ({size: size * MB}));
+  expect(refuseBySize(sized(10, 10, 5))).toBeNull();
+  expect(refuseBySize(Array.from({length: 20}, () => ({size: 1})))).toBeNull();
+  expect(refuseBySize(sized(10, 10, 5).concat({size: 1}))).toMatchObject({
+    code: 'drop_too_large',
+    file: null,
+  });
+  // The file over 10 MB is named by its position, like the API's refusal.
+  expect(refuseBySize(sized(1).concat({size: 10 * MB + 1}))).toMatchObject({
+    code: 'file_too_large',
+    file: 2,
+  });
+  expect(refuseBySize(Array.from({length: 21}, () => ({size: 1})))).toMatchObject({
+    code: 'too_many_files',
   });
 });
 
@@ -80,8 +112,9 @@ test('an account question asks, unless it has nothing to ask', () => {
 
 test('only typed refusals and a proxy size limit count as refusals', () => {
   expect(toBankImportError(422, refusal({code: 'too_many_rows'}))?.code).toBe('too_many_rows');
+  // The proxy's limit is on the whole upload, so its refusal reads like the API's for files too large together.
   expect(toBankImportError(413, {message: 'Request Entity Too Large'})?.code).toBe(
-    'file_too_large',
+    'drop_too_large',
   );
   expect(toBankImportError(400, {message: 'Choose at least one file to import.'})).toBeNull();
   expect(toBankImportError(422, {code: 'something_new'})).toBeNull();
