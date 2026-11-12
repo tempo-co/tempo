@@ -85,7 +85,7 @@ export function WhereYouStand({
 /** What a span shows: its line, the change since its start, and its money. */
 type SpanView = {
   points: BalancePoint[];
-  /** Where the change is measured from; null measures from zero, before the history. */
+  /** Where the change is measured from; null without a balance to measure from. */
   base: {end: string; balance: number | null} | null;
   /** The day the change is measured from: the base's end, or where the history starts. */
   since: string;
@@ -107,21 +107,19 @@ function useSpanView(overview: Overview | null, today: string, span: Span) {
   const month = daily.lastMonth;
   if (!month)
     return {loaded: null, isError: daily.isError, error: daily.error, refetch: daily.refetch};
+  // A history shorter than the month has no balance to measure from (it is unknown, not zero): no change.
   const base = month.days.find((point) => point.end === month.base) ?? null;
   const from = base ? month.from : (month.days[0]?.end ?? month.from);
   const loaded: SpanView = {
     points: month.days,
     base,
     since: format(parseCalendarDate(base?.end ?? from), 'd MMM yyyy'),
-    change:
-      overview.total === null || (base && base.balance === null)
-        ? null
-        : overview.total - (base?.balance ?? 0),
+    change: overview.total === null || base?.balance == null ? null : overview.total - base.balance,
     from,
     heading: `${format(parseCalendarDate(from), 'd MMM')} – now`,
     income: month.income,
     spending: month.spending,
-    startBalance: base ? base.balance : 0,
+    startBalance: base?.balance ?? null,
   };
   return {loaded, isError: false, refetch: daily.refetch};
 }
@@ -130,7 +128,6 @@ function useSpanView(overview: Overview | null, today: string, span: Span) {
 function monthSpanView(overview: Overview, span: Span): SpanView {
   const {shown, base, change} = spanMonths(overview, span);
   const months = base ? shown.slice(1) : shown;
-  const startIndex = overview.months.indexOf(months[0]) - 1;
   const from = `${months[0].month}-01`;
   return {
     points: shown,
@@ -143,7 +140,7 @@ function monthSpanView(overview: Overview, span: Span): SpanView {
     heading: `${format(parseCalendarDate(from), 'MMM yyyy')} – now`,
     income: months.reduce((sum, point) => sum + point.income, 0),
     spending: months.reduce((sum, point) => sum + point.spending, 0),
-    startBalance: startIndex >= 0 ? overview.months[startIndex].balance : 0,
+    startBalance: base?.balance ?? null,
   };
 }
 
@@ -264,10 +261,15 @@ function SpanDetails({overview, view}: {overview: Overview | null; view: SpanVie
         <Fact
           label='Balance'
           value={
-            <>
-              <span className='whitespace-nowrap'>{wholeCents(view.startBalance, currency)}</span> →{' '}
+            // Without a balance to start from, only where it stands now.
+            view.startBalance === null ? (
               <span className='whitespace-nowrap'>{wholeCents(overview.total, currency)}</span>
-            </>
+            ) : (
+              <>
+                <span className='whitespace-nowrap'>{wholeCents(view.startBalance, currency)}</span>{' '}
+                → <span className='whitespace-nowrap'>{wholeCents(overview.total, currency)}</span>
+              </>
+            )
           }
           wide
         />
