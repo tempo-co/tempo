@@ -48,7 +48,7 @@ export function BankTransactionAccountFilter({filters}: {filters: BankTransactio
               <BankAccountLabel
                 bankName={account.bankName}
                 currency={account.currency}
-                accountName={needsAccountName(account) ? account.label : undefined}
+                accountName={needsAccountName(account.id) ? account.label : undefined}
               />
             </CommandItem>
           ))}

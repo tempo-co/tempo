@@ -68,7 +68,7 @@ export function BankTransactionLedger({
   // The bank names the account unless it holds several in one currency; then the account's own name does.
   const accountLabel = (transaction: BankTransaction) => {
     if (!showAccount) return null;
-    return needsAccountName(transaction)
+    return needsAccountName(transaction.bankAccountId)
       ? resolveBankTransactionAccountLabel(transaction)
       : transaction.bankName;
   };
