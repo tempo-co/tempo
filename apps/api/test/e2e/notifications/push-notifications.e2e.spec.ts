@@ -20,6 +20,7 @@ import {WebPushSender} from '@modules/notifications/web-push.sender';
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {enableWebPushE2e, getApp, loginAgent} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
+import {MAILPIT_API_URL} from '../../utils/email-utils';
 import {waitFor} from '../../utils/wait-utils';
 
 enableWebPushE2e();
@@ -62,7 +63,7 @@ describe('Push notifications', () => {
 		pushQueue = app.get(getQueueToken(PUSH_NOTIFICATION_QUEUE));
 		bankAlerts = app.get(BankConnectionAlertService);
 		const config = app.get(ConfigurationService);
-		mailpitUrl = config.get('EMAIL_UI_URL');
+		mailpitUrl = MAILPIT_API_URL;
 		webBaseUrl = config.get('WEB_BASE_URL');
 		send = jest.spyOn(app.get(WebPushSender), 'send').mockResolvedValue(undefined);
 	});
@@ -193,7 +194,11 @@ describe('Push notifications', () => {
 				.set('Origin', 'https://attacker.example.test')
 				.send(registration('csrf'))
 				.expect(403);
-			await owner.agent.patch('/notifications/preferences').send({bankConnections: false}).expect(403);
+			await owner.agent
+				.patch('/notifications/preferences')
+				.unset('Origin')
+				.send({bankConnections: false})
+				.expect(403);
 			expect(await subscriptions.countBy({accountId: owner.id})).toBe(0);
 		});
 

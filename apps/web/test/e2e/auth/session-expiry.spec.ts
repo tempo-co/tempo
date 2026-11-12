@@ -1,4 +1,4 @@
-import type {BankConnection} from '@tempo/contracts';
+import type {Account, BankConnection} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, expect, test} from '../../fixtures';
@@ -52,6 +52,11 @@ test.describe('auth errors during a session', () => {
         return;
       }
       await fulfillJson(route, {message: 'Email not verified.', statusCode: 403}, 403);
+    });
+    // The verification page moves on once the account reads as verified, which the seeded one is.
+    await page.route(`${API_URL}/accounts/me`, async (route) => {
+      const account = (await (await route.fetch()).json()) as Account;
+      await fulfillJson(route, {...account, isEmailVerified: false});
     });
     await page.getByTestId('bank-transactions-search').fill('coffee');
 

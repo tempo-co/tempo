@@ -84,8 +84,14 @@ export function getApp() {
 	return app;
 }
 
+/** The web app's origin, which the API requires on every signed-in change. */
+export function webOrigin(): string {
+	return new URL(app.get(ConfigurationService).get('WEB_BASE_URL')).origin;
+}
+
+/** A signed-in agent that sends the web app's Origin, as the browser does; `.unset('Origin')` on a request drops it. */
 export async function loginAgent(httpServer: Server, email: string, password: string): Promise<TestAgent> {
-	const agent = request.agent(httpServer);
+	const agent = request.agent(httpServer).set('Origin', webOrigin());
 	await agent.post('/auth/login').send({email, password}).expect(200);
 	return agent;
 }

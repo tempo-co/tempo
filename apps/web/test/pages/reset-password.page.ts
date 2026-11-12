@@ -15,6 +15,7 @@ export class ResetPasswordPage {
   readonly resendButton: Locator;
   readonly useDifferentEmailButton: Locator;
   readonly invalidTokenError: Locator;
+  readonly samePasswordError: Locator;
   readonly requestNewLink: Locator;
 
   constructor(page: Page) {
@@ -34,6 +35,7 @@ export class ResetPasswordPage {
     this.passwordTooShortError = page.getByText('Too short. Must be at least 8 characters.');
     this.requiredError = page.getByText('Required');
     this.invalidTokenError = page.getByText('Invalid or expired token');
+    this.samePasswordError = page.getByText('Choose a different password from your current one.');
     this.requestNewLink = page.getByTestId('request-new-link');
   }
 

@@ -2,19 +2,19 @@ import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
 import {Repository} from 'typeorm';
 
-import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
 import {EnableBankingTransaction, EnableBankingTransactionsResult} from '@modules/banking/enable-banking.types';
 
 import {BankingFixtures} from '../../scripts/seed-data/banking-fixtures';
 import {createVerifiedAccount} from './auth-utils';
+import {MAILPIT_API_URL} from './email-utils';
 
 /** A real verified owner with one empty bank account; transaction history stays with the scenario. */
 export async function createBankingOwner(
 	app: INestApplication,
 	{baseCurrency}: {baseCurrency: Account['baseCurrency']},
 ) {
-	const fresh = await createVerifiedAccount(app.getHttpServer(), app.get(ConfigurationService).get('EMAIL_UI_URL'));
+	const fresh = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
 	const accounts = app.get<Repository<Account>>(getRepositoryToken(Account));
 	await accounts.update({id: fresh.id}, {baseCurrency});
 	const owner = await accounts.findOneByOrFail({id: fresh.id});

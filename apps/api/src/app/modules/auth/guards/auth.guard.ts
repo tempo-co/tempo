@@ -13,6 +13,9 @@ import {MCP_TOKEN_ONLY_KEY} from '../decorators/mcp-token-only.decorator';
 import {IS_PUBLIC_KEY} from '../decorators/public.decorator';
 import {SKIP_EMAIL_VERIFICATION_KEY} from '../decorators/skip-email-verification.decorator';
 import {TOKEN_READABLE_KEY} from '../decorators/token-readable.decorator';
+import {isWebOriginRequest} from './web-origin';
+
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -77,6 +80,15 @@ export class AuthGuard implements CanActivate {
 		]);
 		if (!isSkipEmailVerification && user && !user.isEmailVerified) {
 			throw new ForbiddenException(EMAIL_NOT_VERIFIED);
+		}
+
+		// SameSite cookies still reach sibling hosts of the same site (other devices on one tailnet), so every
+		// session-authenticated change must also come from the web app's origin. Bearer requests returned above.
+		if (
+			!SAFE_METHODS.has(request.method) &&
+			!isWebOriginRequest(request, new URL(this.config.get('WEB_BASE_URL')).origin)
+		) {
+			throw new ForbiddenException();
 		}
 
 		return true;
