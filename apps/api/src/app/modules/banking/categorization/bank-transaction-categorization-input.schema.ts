@@ -99,6 +99,7 @@ const webSearchInputSchema = z
 	})
 	.strict();
 
+/** Build it with `toBankTransactionCategorizationInput`, which normalizes the fields the hash and the model see. */
 export type BankTransactionCategorizationInput = z.infer<typeof categorizationInputSchema>;
 export type BankTransactionCategorizationWebSearchInput = z.infer<typeof webSearchInputSchema>;
 export type PreviousManualCategory = z.infer<typeof previousManualCategorySchema>;

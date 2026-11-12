@@ -75,6 +75,23 @@ describe('CategorizationPipeline', () => {
 		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
 	});
 
+	it('does not search a row the batch no longer holds after standard categorization', async () => {
+		const transaction = createBankTransaction({id: 'web-reclassified-transaction'});
+		// The claim takes the row; by the first search it has become a currency exchange, so the renewal skips it.
+		const queryBuilder = createUpdateQueryBuilder([claimedRows(transaction.id), claimedRows()]);
+		const {pipeline, provider} = createCategorizationServices({
+			rows: [transaction],
+			webSearchEnabled: true,
+			queryBuilder,
+			providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.5}],
+		});
+
+		await pipeline.processTransactionJob([transaction.id]);
+
+		expect(provider.categorize).toHaveBeenCalledTimes(1);
+		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
+	});
+
 	it('sends only normal OTHER results to the web fallback and applies the web result', async () => {
 		const specific = createBankTransaction({id: 'specific-transaction', counterpartyName: 'Cafe'});
 		const other = createBankTransaction({id: 'other-transaction', counterpartyName: 'Ambiguous Cafe'});

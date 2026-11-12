@@ -136,12 +136,17 @@ export class CategorizationRowStore {
 		return {claimed, error};
 	}
 
-	/** Moves the claims of rows still being worked on forward, so no other worker takes them as stale. */
-	async renewClaims(batch: readonly ClaimedTransaction[]): Promise<void> {
-		if (batch.length === 0) return;
-		await this.guardedUpdate({categoryUpdatedAt: new Date()}, claimedInputs(batch))
+	/**
+	 * Moves the claims of rows still being worked on forward, so no other worker takes them as stale. Returns the ids
+	 * still held: a row that was deleted, became a currency exchange or an own transfer, or changed input is not.
+	 */
+	async renewClaims(batch: readonly ClaimedTransaction[]): Promise<Set<string>> {
+		if (batch.length === 0) return new Set();
+		const result = await this.guardedUpdate({categoryUpdatedAt: new Date()}, claimedInputs(batch))
 			.andWhere('"categoryStatus" = :processingStatus', {processingStatus: 'PROCESSING'})
+			.returning('id')
 			.execute();
+		return new Set(((result.raw ?? []) as {id: string}[]).map(({id}) => id));
 	}
 
 	async complete(

@@ -134,6 +134,7 @@ export class CategorizationPipeline {
 		}
 
 		// Rows whose search could run on neither route wait for the job retry instead of going to review.
+		const claimedIds = new Map(activeBatch.map(({input, transaction}) => [input.correlationId, transaction.id]));
 		const unavailableIds = new Set<string>();
 		let searchUnavailable: BankTransactionCategorizationUnavailableError | undefined;
 		for (const input of searches) {
@@ -142,8 +143,10 @@ export class CategorizationPipeline {
 				unavailableIds.add(correlationId);
 				continue;
 			}
-			// Each search can take minutes, and the batch stays claimed until the last one ends.
-			await this.rowStore.renewClaims(activeBatch);
+			// Each search can take minutes, and the batch stays claimed until the last one ends. A row the batch no
+			// longer holds is not searched.
+			const held = await this.rowStore.renewClaims(activeBatch);
+			if (!held.has(claimedIds.get(correlationId)!)) continue;
 			let route: string | undefined;
 			let result: BankTransactionCategorizationResult | null = null;
 			try {
