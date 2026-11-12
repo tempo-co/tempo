@@ -58,7 +58,9 @@ export function NoMatchingTransactions({
       ? `Nothing matches ${quoted} with these filters.`
       : `Nothing matches ${quoted}.`;
   // Dropping only the date is a different way out when something else narrows the list too.
-  const canWidenDates = Boolean(filters.bookingDate?.from) && (Boolean(search) || filterCount > 1);
+  const canWidenDates =
+    Boolean(filters.bookingDate?.from || filters.bookingDate?.to) &&
+    (Boolean(search) || filterCount > 1);
 
   return (
     <StateMessage icon={SearchX} title='No matching transactions' description={description}>

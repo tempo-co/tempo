@@ -67,7 +67,7 @@ export function StateMessage({
           {description}
         </p>
         {detail ? (
-          <p className='mt-2 font-mono text-label text-muted-foreground'>{detail}</p>
+          <p className='mt-2 font-mono text-label break-all text-muted-foreground'>{detail}</p>
         ) : null}
         {children ? <div className='mt-4 flex flex-wrap gap-2'>{children}</div> : null}
       </div>
@@ -168,6 +168,8 @@ export function LoadErrorState({
 }: LoadErrorStateProps) {
   const [failedAt, setFailedAt] = React.useState(() => Date.now());
   const [isRetrying, setIsRetrying] = React.useState(false);
+  // Each failure brings a new error, also from a refetch or a new request the state stays mounted for.
+  React.useEffect(() => setFailedAt(Date.now()), [error]);
   const failure = describeFailure(error);
 
   const retry = async () => {
@@ -176,7 +178,6 @@ export function LoadErrorState({
       await onRetry();
     } finally {
       setIsRetrying(false);
-      setFailedAt(Date.now());
     }
   };
 
