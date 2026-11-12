@@ -280,7 +280,7 @@ test('when the year breakdowns fail, the balance and years stay and Try again fi
   );
   await page.goto('/');
 
-  await expect(page.getByText('Could not load spending and income by year.')).toBeVisible();
+  await expect(page.getByText("Couldn't load spending and income by year")).toBeVisible();
   await expect(homePage.totalBalance).toHaveText('€24,300');
   await expect(homePage.yearTable.getByRole('button', {name: /2026/})).toBeVisible();
   await expect(page.getByRole('region', {name: 'Spending by category'})).toHaveCount(0);
@@ -290,5 +290,5 @@ test('when the year breakdowns fail, the balance and years stay and Try again fi
   await expect(page.getByRole('region', {name: 'Income by source'})).toContainText(
     'Example Employer',
   );
-  await expect(page.getByText('Could not load spending and income by year.')).toHaveCount(0);
+  await expect(page.getByText("Couldn't load spending and income by year")).toHaveCount(0);
 });

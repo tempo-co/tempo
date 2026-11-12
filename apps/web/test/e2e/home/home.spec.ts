@@ -14,7 +14,7 @@ test.describe('Home without banks', () => {
 
     await expect(homePage.emptyStateTitle).toBeVisible();
     await expect(page.getByRole('main')).toContainText(
-      'where your money went once at least one account has synced.',
+      'where the money went, once one account has synced.',
     );
     await homePage.connectBankLink.click();
     await expect(page).toHaveURL(/\/bank-connections$/);

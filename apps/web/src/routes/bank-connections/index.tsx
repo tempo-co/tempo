@@ -61,7 +61,8 @@ function BankConnectionsIndex() {
           bankConnections={bankConnections || []}
           isPending={isPending}
           isError={isError}
-          onRetry={() => void query.refetch()}
+          error={query.error}
+          onRetry={() => query.refetch()}
         />
       </AppBodyLayout>
     </>

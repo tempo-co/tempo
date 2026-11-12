@@ -1,7 +1,5 @@
 import type {CashFlowInterval} from '@tempo/contracts';
 
-import {Button} from '@/components/ui/button';
-
 import {IntervalToggle} from './interval-toggle';
 
 type ChartCardHeaderProps = {
@@ -30,16 +28,5 @@ export function ChartCardHeader({
       </div>
       {children}
     </header>
-  );
-}
-
-export function ChartCardError({message, onRetry}: {message: string; onRetry: () => unknown}) {
-  return (
-    <div className='grid justify-items-start gap-3'>
-      <p className='text-sm'>{message}</p>
-      <Button variant='outline' size='sm' onClick={() => void onRetry()}>
-        Try again
-      </Button>
-    </div>
   );
 }

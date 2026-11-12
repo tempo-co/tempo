@@ -15,7 +15,7 @@ export const useGetBankTransactionTotals = (
   to: string,
   {enabled = true}: {enabled?: boolean} = {},
 ) => {
-  const {data, isError, refetch} = useQuery<BankTransactionTotals>({
+  const {data, isError, error, refetch} = useQuery<BankTransactionTotals>({
     queryKey: dashboardQueryKeys.totals(from, to),
     queryFn: () => {
       const params = new URLSearchParams({
@@ -30,5 +30,5 @@ export const useGetBankTransactionTotals = (
     refetchOnReconnect: 'always',
   });
 
-  return {totals: data, isError, refetch};
+  return {totals: data, isError, error, refetch};
 };

@@ -5,6 +5,7 @@ import {ArrowLeft, Eye, EyeOff, Link2, Link2Off} from 'lucide-react';
 import {Bar, BarChart, Cell, XAxis} from 'recharts';
 
 import {LoadMore} from '@/components/shared/load-more';
+import {LoadErrorState} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
@@ -230,7 +231,7 @@ const CHART_SIZE = 12;
  */
 function PaymentHistory({series}: {series: RecurringSeries}) {
   const query = useGetRecurringPayments(series.key);
-  const {data, isPending, refetch} = query;
+  const {data, isPending, error, refetch} = query;
 
   const transactions = data?.pages.flatMap((page) => page.transactions) ?? [];
   const total = data?.pages[data.pages.length - 1].total ?? series.transactionCount;
@@ -250,12 +251,12 @@ function PaymentHistory({series}: {series: RecurringSeries}) {
         {isPending ? (
           <Skeleton className='h-40' aria-label='Loading payments' />
         ) : !data ? (
-          <div className='grid justify-items-start gap-2'>
-            <p className='text-sm'>Could not load payments.</p>
-            <Button variant='outline' className='max-sm:h-11' onClick={() => void refetch()}>
-              Try again
-            </Button>
-          </div>
+          <LoadErrorState
+            size='section'
+            title="Couldn't load payments"
+            error={error}
+            onRetry={refetch}
+          />
         ) : (
           <>
             <ul

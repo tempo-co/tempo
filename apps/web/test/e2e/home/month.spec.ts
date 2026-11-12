@@ -143,7 +143,7 @@ test('a refresh that fails keeps the loaded month, its parts and its merchants',
   await expect(went.first()).toHaveText('Travel€1,500none usually');
   await expect(came).toHaveText(['Example Employer€3,000']);
   await expect(merchants).toContainText('Example Landlord');
-  await expect(dialog.getByText(/Could not load/)).toHaveCount(0);
+  await expect(dialog.getByText(/Couldn't load/)).toHaveCount(0);
 });
 
 test('a month without a full year of history before it has no usual', async ({page, homePage}) => {

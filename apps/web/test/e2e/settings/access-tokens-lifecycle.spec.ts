@@ -16,7 +16,7 @@ test('a signed-in account creates a one-time token and revokes its read-only acc
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/settings/integrations');
   await expect(page.getByTestId('current-account-email')).toHaveText(freshAccount.email);
-  await expect(page.getByText('No access tokens yet.', {exact: true})).toBeVisible();
+  await expect(page.getByRole('heading', {name: 'No access tokens yet'})).toBeVisible();
   await page.getByRole('button', {name: 'Create token', exact: true}).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Name', {exact: true}).fill('Example API integration');
@@ -75,7 +75,7 @@ test('a signed-in account creates a one-time token and revokes its read-only acc
   expect((await revokedResponse).status()).toBe(204);
   await expect(row).toHaveCount(0);
   await page.reload();
-  await expect(page.getByText('No access tokens yet.', {exact: true})).toBeVisible();
+  await expect(page.getByRole('heading', {name: 'No access tokens yet'})).toBeVisible();
   expect(await (await page.request.get(`${API_URL}/personal-access-tokens`)).json()).toEqual([]);
   expect(
     (await page.request.get(`${API_URL}/bank-connections`, {headers: bearerHeaders})).status(),

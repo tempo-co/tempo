@@ -897,11 +897,11 @@
       },
       "section-title": {
         "displayName": "Section title",
-        "purpose": "Dialog and drawer titles, detail views and empty states."
+        "purpose": "Dialog and drawer titles and detail views."
       },
       "card-title": {
         "displayName": "Card title",
-        "purpose": "Card and settings-group headings."
+        "purpose": "Card and settings-group headings, empty and error states."
       },
       "body": {
         "displayName": "Body",

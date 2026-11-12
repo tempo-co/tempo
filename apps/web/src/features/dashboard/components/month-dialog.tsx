@@ -7,6 +7,7 @@ import {ChevronLeft, ChevronRight} from 'lucide-react';
 import {type KeyboardEvent, type ReactNode} from 'react';
 
 import {LoadMore} from '@/components/shared/load-more';
+import {LoadErrorState} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
 import {
@@ -35,7 +36,6 @@ import {formatMoney, toCents} from '../utils/money';
 import {formatMonth, monthDates, shiftMonth} from '../utils/month';
 import {type MonthPoint, type Overview, partCents} from '../utils/overview';
 import {CategoryName, SourceTile} from './category-name';
-import {ChartCardError} from './chart-card';
 import {Bone, LoadingLabel, TextBone, TileRowsSkeleton} from './loading';
 
 /** A past month's usual is the mean of this many months before, every one inside the history. */
@@ -150,7 +150,7 @@ function StepButton({
 function MonthView({
   month,
   today,
-  history: {overview, isError, refetch},
+  history: {overview, isError, error, refetch},
 }: {
   month: string;
   today: string;
@@ -174,16 +174,18 @@ function MonthView({
   const sameDay = useGetBankTransactionSummary(month, today, {enabled: running});
 
   // A failed refresh keeps what is loaded; only a part that never loaded fails the month.
-  const missing = [
-    categories.isError && !categories.breakdown && categories.refetch,
-    sources.isError && !sources.breakdown && sources.refetch,
-    running && sameDay.isError && !sameDay.summary && sameDay.refetch,
-  ].filter((retry) => retry !== false);
-  if (isError || missing.length > 0)
+  const failed = [
+    categories.isError && !categories.breakdown && categories,
+    sources.isError && !sources.breakdown && sources,
+    running && sameDay.isError && !sameDay.summary && sameDay,
+  ].filter((part) => part !== false);
+  if (isError || failed.length > 0)
     return (
-      <ChartCardError
-        message='Could not load this month.'
-        onRetry={() => Promise.all([isError && refetch(), ...missing.map((retry) => retry())])}
+      <LoadErrorState
+        size='section'
+        title="Couldn't load this month"
+        error={isError ? error : failed[0]?.error}
+        onRetry={() => Promise.all([isError && refetch(), ...failed.map((part) => part.refetch())])}
       />
     );
   if (overview && !point)
@@ -482,7 +484,7 @@ function WhereItWent({
 
 function MonthTransactions({from, to}: {from: string; to: string}) {
   const query = useGetMonthTransactions(from, to);
-  const {data, isPending, refetch} = query;
+  const {data, isPending, error, refetch} = query;
   const transactions = data?.pages.flatMap((page) => page.transactions) ?? [];
   return (
     <section aria-label='Transactions' className='min-w-0 rounded-card border bg-card'>
@@ -503,7 +505,12 @@ function MonthTransactions({from, to}: {from: string; to: string}) {
         </div>
       ) : !data ? (
         <div className='px-5 pb-5'>
-          <ChartCardError message='Could not load transactions.' onRetry={refetch} />
+          <LoadErrorState
+            size='section'
+            title="Couldn't load transactions"
+            error={error}
+            onRetry={refetch}
+          />
         </div>
       ) : transactions.length === 0 ? (
         <p className='px-5 pb-5 text-sm text-muted-foreground'>No transactions this month.</p>
@@ -591,7 +598,7 @@ const MERCHANTS = 8;
 function BiggestMerchants({month, today}: {month: string; today: string}) {
   // A stable date after a past month ends ranks the whole month without changing its cache key each day.
   const asOf = month === today.slice(0, 7) ? today : `${shiftMonth(month, 1)}-01`;
-  const {ranking, isPending, refetch} = useGetMerchantRanking(
+  const {ranking, isPending, error, refetch} = useGetMerchantRanking(
     'month',
     `${month}-01`,
     asOf,
@@ -612,7 +619,12 @@ function BiggestMerchants({month, today}: {month: string; today: string}) {
         </div>
       ) : !ranking ? (
         // A failed refresh keeps the loaded ranking.
-        <ChartCardError message='Could not load merchants.' onRetry={refetch} />
+        <LoadErrorState
+          size='section'
+          title="Couldn't load merchants"
+          error={error}
+          onRetry={refetch}
+        />
       ) : ranking.merchants.length === 0 ? (
         <p className='text-sm text-muted-foreground'>No spending this month.</p>
       ) : (

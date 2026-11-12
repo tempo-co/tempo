@@ -17,7 +17,7 @@ export const useGetMerchantPeriods = (
   to: string,
   asOf: string,
 ) => {
-  const {data, isPending, isError, refetch} = useQuery<MerchantGroupPeriods>({
+  const {data, isPending, isError, error, refetch} = useQuery<MerchantGroupPeriods>({
     queryKey: merchantQueryKeys.periods(id, interval, from, to, asOf),
     queryFn: () =>
       api.get<MerchantGroupPeriods>(
@@ -31,5 +31,5 @@ export const useGetMerchantPeriods = (
     placeholderData: (previous) => (previous?.interval === interval ? previous : undefined),
     refetchOnReconnect: 'always',
   });
-  return {periods: data, isPending, isError, refetch};
+  return {periods: data, isPending, isError, error, refetch};
 };
