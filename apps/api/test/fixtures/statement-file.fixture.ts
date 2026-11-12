@@ -25,10 +25,13 @@ export type CamtStatement = {
 	sequence?: string;
 	opening?: string;
 	closing?: string;
+	/** The account servicer's BIC; ABN AMRO's by default, `null` for none. */
+	servicerBic?: string | null;
+	/** In document order. ABN AMRO lists a statement's entries newest first. */
 	entries: CamtEntry[];
 };
 
-/** A camt.053 document; `version` picks the namespace and, from 08 on, the later status shape. */
+/** A camt.053 document; `version` picks the namespace and, from 08 on, the later status and BIC shapes. */
 export function camt053(statements: CamtStatement[], version = '02'): string {
 	const laterStatus = Number(version) >= 8;
 	return (
@@ -45,13 +48,16 @@ function camtStatement(statement: CamtStatement, laterStatus: boolean): string {
 	const id = statement.otherId
 		? `<Othr><Id>${statement.otherId}</Id></Othr>`
 		: `<IBAN>${statement.iban ?? EXAMPLE_IBAN}</IBAN>`;
+	const bic = statement.servicerBic === undefined ? 'ABNANL2A' : statement.servicerBic;
+	const bicElement = laterStatus ? 'BICFI' : 'BIC';
+	const servicer = bic ? `<Svcr><FinInstnId><${bicElement}>${bic}</${bicElement}></FinInstnId></Svcr>` : '';
 	const balance = (type: string, amount: string) =>
 		`<Bal><Tp><CdOrPrtry><Cd>${type}</Cd></CdOrPrtry></Tp><Amt Ccy="${currency}">${amount.replace('-', '')}</Amt>` +
 		`<CdtDbtInd>${amount.startsWith('-') ? 'DBIT' : 'CRDT'}</CdtDbtInd><Dt><Dt>2026-03-01</Dt></Dt></Bal>`;
 	return (
 		`<Stmt><Id>EXAMPLE-STMT</Id>` +
 		(statement.sequence ? `<ElctrncSeqNb>${statement.sequence}</ElctrncSeqNb>` : '') +
-		`<Acct><Id>${id}</Id><Ccy>${currency}</Ccy></Acct>` +
+		`<Acct><Id>${id}</Id><Ccy>${currency}</Ccy>${servicer}</Acct>` +
 		(statement.opening ? balance('PRCD', statement.opening) : '') +
 		(statement.closing ? balance('CLBD', statement.closing) : '') +
 		statement.entries.map((entry) => camtEntry(entry, currency, laterStatus)).join('') +

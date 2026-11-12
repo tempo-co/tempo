@@ -49,7 +49,8 @@ const OTHER_STATEMENT = Buffer.from(
 		},
 	]),
 );
-// The archive's 7 rows in booking order: [booking date, value date, amount, bank reference, balance after].
+// The archive's 7 rows in booking order; its statements list them newest first.
+// [booking date, value date, amount, bank reference, balance after]
 const ARCHIVE_ROWS = [
 	['2026-03-02', '2026-03-01', '-12.50000000', '6061000000000001', '987.50000000'],
 	['2026-03-02', '2026-03-02', '-850.00000000', '6061000000000002', '137.50000000'],

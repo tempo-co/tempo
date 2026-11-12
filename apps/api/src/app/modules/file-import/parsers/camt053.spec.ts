@@ -114,43 +114,64 @@ describe('parseCamt053', () => {
 		expect(statement.rows).toEqual([expected]);
 	});
 
-	it('reads the statement account and adds the balance after each row when the closing balance reconciles', () => {
-		const statements = parse(
-			camt053([
+	it.each(['02', '08'])(
+		'reads the statement account and, for ABN AMRO in version %s, adds the balance after each row in booking order',
+		(version) => {
+			const statements = parse(
+				camt053(
+					[
+						{
+							sequence: '61',
+							opening: '1000.00',
+							closing: '1137.50',
+							// Newest first, as ABN AMRO lists them.
+							entries: [
+								{amount: '150.00', indicator: 'CRDT', reference: 'B'},
+								{amount: '1.00', status: 'PDNG', reference: 'C'},
+								{amount: '12.50', reference: 'A'},
+							],
+						},
+					],
+					version,
+				),
+			);
+
+			expect(statements).toEqual([
 				{
-					sequence: '61',
-					opening: '1000.00',
-					closing: '1137.50',
-					entries: [
-						{amount: '12.50', reference: 'A'},
-						{amount: '150.00', indicator: 'CRDT', reference: 'B'},
-						{amount: '1.00', status: 'PDNG', reference: 'C'},
+					accountIban: EXAMPLE_IBAN,
+					accountOtherId: null,
+					accountCurrency: 'EUR',
+					sequenceNumber: '61',
+					entriesSkipped: 1,
+					rows: [
+						expect.objectContaining({bankReference: 'B', amount: '150.00', balanceAfter: '1137.50'}),
+						expect.objectContaining({bankReference: 'A', amount: '-12.50', balanceAfter: '987.50'}),
 					],
 				},
+			]);
+		},
+	);
+
+	it('gives the single row of a statement from any bank the closing balance', () => {
+		const [statement] = parse(
+			camt053([{servicerBic: 'EXAMPLEXX', opening: '1000.00', closing: '987.50', entries: [{amount: '12.50'}]}]),
+		);
+
+		expect(statement.rows.map(({balanceAfter}) => balanceAfter)).toEqual(['987.50']);
+	});
+
+	it.each([
+		{name: 'does not reconcile', statement: {opening: '1000.00', closing: '999.00'}},
+		{name: 'comes from a bank whose entry order is unknown', statement: {servicerBic: 'EXAMPLEXX'}},
+		{name: 'names no account servicer', statement: {servicerBic: null}},
+	])('leaves the balance after empty for a statement with several rows that $name', ({statement}) => {
+		const [parsed] = parse(
+			camt053([
+				{opening: '1000.00', closing: '985.50', ...statement, entries: [{amount: '12.50'}, {amount: '2.00'}]},
 			]),
 		);
 
-		expect(statements).toEqual([
-			{
-				accountIban: EXAMPLE_IBAN,
-				accountOtherId: null,
-				accountCurrency: 'EUR',
-				sequenceNumber: '61',
-				entriesSkipped: 1,
-				rows: [
-					expect.objectContaining({bankReference: 'A', amount: '-12.50', balanceAfter: '987.50'}),
-					expect.objectContaining({bankReference: 'B', amount: '150.00', balanceAfter: '1137.50'}),
-				],
-			},
-		]);
-	});
-
-	it('leaves the balance after empty for a statement that does not reconcile', () => {
-		const [statement] = parse(
-			camt053([{opening: '1000.00', closing: '999.00', entries: [{amount: '12.50'}, {amount: '2.00'}]}]),
-		);
-
-		expect(statement.rows.map(({balanceAfter}) => balanceAfter)).toEqual([null, null]);
+		expect(parsed.rows.map(({balanceAfter}) => balanceAfter)).toEqual([null, null]);
 	});
 
 	it('reads a later version: wrapped status codes, DtTm dates as written, nested party names and several statements', () => {

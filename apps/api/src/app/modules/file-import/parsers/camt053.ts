@@ -89,7 +89,7 @@ function parseStatement(statement: Element): NormalizedStatement {
 		rows.push(parseEntry(entry));
 	}
 
-	const balanceAfter = reconcileBalances(balances, rows);
+	const balanceAfter = reconcileBalances(balances, rows, entryOrder(servicerBic(account)));
 	return {
 		accountIban: iban,
 		accountOtherId: otherId,
@@ -170,11 +170,36 @@ function agreed<T>(values: T[]): T | null {
 	return values.every((value) => JSON.stringify(value) === JSON.stringify(first)) ? first : null;
 }
 
+/** The BIC of the bank that holds the account: `Acct/Svcr/FinInstnId/BIC`, or `BICFI` in later versions. */
+function servicerBic(account: Element | null): string | null {
+	const institution = child(child(account, 'Svcr'), 'FinInstnId');
+	return (text(child(institution, 'BIC')) ?? text(child(institution, 'BICFI')))?.toUpperCase() ?? null;
+}
+
+type EntryOrder = 'newest_first';
+
 /**
- * The balance after each row: the opening balance plus the running sum in document order, kept only when the
- * last one equals the closing balance exactly.
+ * How a bank orders the entries of one statement, by the servicer's BIC. The standard leaves the order open and
+ * reconciling cannot tell (opening plus the sum equals closing in any order), so only banks whose order was checked
+ * against the balances bank sync stored for the same transactions are listed.
  */
-function reconcileBalances(balances: Element[], rows: {units: bigint; scale: number}[]): string[] | null {
+function entryOrder(bic: string | null): EntryOrder | null {
+	// ABN AMRO lists entries newest first.
+	if (bic?.startsWith('ABNA')) return 'newest_first';
+	return null;
+}
+
+/**
+ * The balance after each row (in document order): the opening balance plus the running sum in booking order, kept
+ * only when the last one equals the closing balance exactly. Several rows need a known entry order; without one
+ * every row is left without a balance, since a missing balance is better than a wrong one.
+ */
+function reconcileBalances(
+	balances: Element[],
+	rows: {units: bigint; scale: number}[],
+	order: EntryOrder | null,
+): string[] | null {
+	if (rows.length > 1 && !order) return null;
 	const opening = balances.find((balance) => OPENING_BALANCE_TYPES.includes(balanceType(balance) ?? ''));
 	const closing = balances.find((balance) => balanceType(balance) === CLOSING_BALANCE_TYPE);
 	if (!opening || !closing) return null;
@@ -183,11 +208,14 @@ function reconcileBalances(balances: Element[], rows: {units: bigint; scale: num
 	if (!openingAmount || !closingAmount) return null;
 
 	const scale = Math.max(2, openingAmount.scale, closingAmount.scale, ...rows.map((row) => row.scale));
+	const bookingOrder = rows.map((_row, index) => index);
+	if (order === 'newest_first') bookingOrder.reverse();
 	let running = openingAmount.units;
-	const after = rows.map((row) => {
-		running += row.units;
-		return formatUnits(running, scale);
-	});
+	const after: string[] = [];
+	for (const index of bookingOrder) {
+		running += rows[index].units;
+		after[index] = formatUnits(running, scale);
+	}
 	return running === closingAmount.units ? after : null;
 }
 
