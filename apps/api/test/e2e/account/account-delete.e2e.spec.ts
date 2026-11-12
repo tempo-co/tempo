@@ -13,6 +13,7 @@ import {BankAccountBalance} from '@modules/banking/bank-account-balance.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {BankingAuthorizationStateService} from '@modules/banking/services/banking-authorization-state.service';
 import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
 import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
 import {EnableBankingClient, EnableBankingClientError} from '@modules/banking/services/enable-banking.client';
@@ -106,32 +107,21 @@ describe('AccountController - DELETE /accounts/me', () => {
 		await secondSessionAgent.get('/accounts/me').expect(200);
 
 		// Pending bank authorization states are cleaned up per account, not globally.
-		const ownedStateKey = `banking:authorization:e2e-owned-${accountId}`;
-		const otherStateKey = 'banking:authorization:e2e-other';
-		await redis.set(
-			ownedStateKey,
-			JSON.stringify({
-				accountId,
-				connectionId: 'e2e-connection',
-				aspspName: 'ABN AMRO',
-				aspspCountry: 'NL',
-				expiresAt: Date.now() + 60_000,
-			}),
-			'EX',
-			600,
-		);
-		await redis.set(
-			otherStateKey,
-			JSON.stringify({
-				accountId: 'someone-else',
-				connectionId: 'e2e-connection-2',
-				aspspName: 'Rabobank',
-				aspspCountry: 'NL',
-				expiresAt: Date.now() + 60_000,
-			}),
-			'EX',
-			600,
-		);
+		const authorizationStates = app.get(BankingAuthorizationStateService);
+		const ownedState = await authorizationStates.create({
+			accountId,
+			connectionId: 'e2e-connection',
+			aspspName: 'ABN AMRO',
+			aspspCountry: 'NL',
+		});
+		const otherState = await authorizationStates.create({
+			accountId: 'someone-else',
+			connectionId: 'e2e-connection-2',
+			aspspName: 'Rabobank',
+			aspspCountry: 'NL',
+		});
+		const ownedStateKey = `banking:authorization:${ownedState}`;
+		const otherStateKey = `banking:authorization:${otherState}`;
 
 		// A pending email change and a password reset link are cancelled with the account.
 		await agent

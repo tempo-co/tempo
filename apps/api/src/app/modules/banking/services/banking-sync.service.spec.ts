@@ -39,7 +39,7 @@ const BANKING_SYNC_SERVICE_DEPENDENCIES = [
 	'currencyExchangeService',
 	'merchantLogoService',
 	'bankTransactionPersistenceService',
-	'redis',
+	'aspspCatalogService',
 ] as const;
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
@@ -47,7 +47,6 @@ const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
 	currencyExchangeService: {recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
 	merchantLogoService: {enqueueForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
 	bankTransactionPersistenceService: new BankTransactionPersistenceService(),
-	redis: {get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue('OK')},
 };
 
 /** Builds the service with named test doubles; unspecified dependencies are empty objects. */
@@ -122,8 +121,8 @@ describe('BankingSyncService manual refresh context', () => {
 						release: jest.fn().mockResolvedValue(undefined),
 					}),
 				},
-				enableBankingClient: {
-					getAspsps: jest
+				aspspCatalogService: {
+					getCachedAspsps: jest
 						.fn()
 						.mockResolvedValue([
 							{name: 'Example Bank', country: 'FI', maximumConsentValiditySeconds: 86_400},

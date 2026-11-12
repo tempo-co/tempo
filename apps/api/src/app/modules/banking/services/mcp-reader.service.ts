@@ -10,10 +10,10 @@ import {BankTransactionSummaryQueryDto} from '../api/dtos/bank-transaction-summa
 import {MerchantGroupsQueryDto, MerchantRankingQueryDto} from '../api/dtos/merchant-query.dto';
 import {RecurringSeriesQueryDto} from '../api/dtos/recurring-series.dto';
 import {MerchantGroupIdPipe} from '../api/pipes/merchant-group-id.pipe';
-import {BankingService} from '../banking.service';
 import {ToolReadError} from '../mcp/errors';
 import type {ToolReader} from '../mcp/tools';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
+import {BankConnectionQueryService} from './bank-connection-query.service';
 import {BankTransactionHistoryService} from './bank-transaction-history.service';
 import {BankTransactionSummaryService} from './bank-transaction-summary.service';
 import {BankTransactionService} from './bank-transaction.service';
@@ -25,7 +25,7 @@ export class McpReaderService {
 	private readonly merchantId = new MerchantGroupIdPipe();
 
 	constructor(
-		private readonly banking: BankingService,
+		private readonly connections: BankConnectionQueryService,
 		private readonly transactions: BankTransactionService,
 		private readonly summaries: BankTransactionSummaryService,
 		private readonly recurring: RecurringSeriesService,
@@ -47,7 +47,7 @@ export class McpReaderService {
 			}
 		};
 		return {
-			listAccounts: () => read(() => this.banking.findAll(account)),
+			listAccounts: () => read(() => this.connections.findAll(account)),
 			listRecurring: (input) =>
 				read(async () => this.recurring.list(account, (await query(input, RecurringSeriesQueryDto)).asOf)),
 			recurringSummary: (input) =>

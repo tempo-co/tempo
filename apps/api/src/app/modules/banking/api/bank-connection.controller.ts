@@ -17,8 +17,11 @@ import {Public} from '@modules/auth/decorators/public.decorator';
 import {TokenReadable} from '@modules/auth/decorators/token-readable.decorator';
 
 import {BankLogoService} from '../bank-logos/bank-logo.service';
-import {BankingService} from '../banking.service';
 import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
+import {AspspCatalogService} from '../services/aspsp-catalog.service';
+import {BankAuthorizationService} from '../services/bank-authorization.service';
+import {BankConnectionQueryService} from '../services/bank-connection-query.service';
+import {BankConnectionRemovalService} from '../services/bank-connection-removal.service';
 import {BankTransactionService} from '../services/bank-transaction.service';
 import {BankingSyncService} from '../services/banking-sync.service';
 import {BankConnectionAuthorizeDto} from './dtos/bank-connection-authorize.dto';
@@ -29,7 +32,10 @@ import {BankConnectionTransactionsQueryDto} from './dtos/bank-connection-transac
 @Controller('bank-connections')
 export class BankConnectionController {
 	constructor(
-		private readonly bankingService: BankingService,
+		private readonly aspspCatalogService: AspspCatalogService,
+		private readonly bankAuthorizationService: BankAuthorizationService,
+		private readonly bankConnectionQueryService: BankConnectionQueryService,
+		private readonly bankConnectionRemovalService: BankConnectionRemovalService,
 		private readonly bankTransactionService: BankTransactionService,
 		private readonly bankingSyncService: BankingSyncService,
 		private readonly configurationService: ConfigurationService,
@@ -43,12 +49,12 @@ export class BankConnectionController {
 		@Body() dto: BankConnectionAuthorizeDto,
 		@CurrentAccount() account: Account,
 	): Promise<BankConnectionAuthorizationResponse> {
-		return this.bankingService.startAuthorization(account.id, dto);
+		return this.bankAuthorizationService.startAuthorization(account.id, dto);
 	}
 
 	@Get('aspsps')
 	async getSupportedAspsps(): Promise<BankConnectionAspsp[]> {
-		const banks = await this.bankingService.findSupportedAspsps();
+		const banks = await this.aspspCatalogService.findSupportedAspsps();
 		await this.bankLogos.registerSources(banks);
 		return banks;
 	}
@@ -56,7 +62,7 @@ export class BankConnectionController {
 	@Get()
 	@TokenReadable()
 	async getConnections(@CurrentAccount() account: Account): Promise<BankConnection[]> {
-		return this.bankingService.findAll(account);
+		return this.bankConnectionQueryService.findAll(account);
 	}
 
 	@Post(':connectionId/refresh')
@@ -104,13 +110,13 @@ export class BankConnectionController {
 		@Body() dto: BankConnectionRemoveDto,
 		@CurrentAccount() account: Account,
 	) {
-		await this.bankingService.removeConnection(account.id, connectionId, dto.confirmation);
+		await this.bankConnectionRemovalService.removeConnection(account.id, connectionId, dto.confirmation);
 	}
 
 	@Public()
 	@Get('callback')
 	async handleCallback(@Query() query: BankConnectionCallbackDto, @Res() response: Response) {
-		const result = await this.bankingService.handleCallback(query);
+		const result = await this.bankAuthorizationService.handleCallback(query);
 
 		const redirectUrl = createWebUrl('/bank-connections', this.configurationService.get('WEB_BASE_URL'), {result});
 		return response.redirect(302, redirectUrl);

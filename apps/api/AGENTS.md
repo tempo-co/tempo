@@ -29,7 +29,7 @@ NestJS backend for Tempo, a personal-finance app that syncs real bank data throu
 - Use `test/utils/banking-utils.ts` (`createBankingOwner(app, {baseCurrency})`) for an isolated verified owner with one empty bank account. Choose the base currency explicitly, including `null` when the scenario needs it unset; create the transaction rows in the spec. Keep repeated mechanics local to a spec until multiple callers need the same contract.
 - Use the seeded account dedicated to a flow (`PW_CHANGE`, `PW_RESET`, `EMAIL_CHANGE`, `SESSION_TEST`) when a test changes account data, not the shared `VERIFIED` account. Feature scenarios use `BankingFixtures`, not assertions on the full `seedBankingData` dataset; account-deletion coverage uses that dataset to exercise populated cascades.
 - Route authentication (401, 403 `EMAIL_NOT_VERIFIED`, token-readable routes) is covered once in `test/e2e/auth/auth-guard.e2e.spec.ts`; add new protected routes to its tables.
-- Unit tests of services with many dependencies use the named-dependency builders in `banking.service.spec.ts` and `banking-sync.service.spec.ts`, not positional `{} as never` lists. Use `it.each` tables for validation cases.
+- Unit tests of services with many dependencies use named-dependency builders (as in `bank-authorization.service.spec.ts` and `banking-sync.service.spec.ts`), not positional `{} as never` lists. Use `it.each` tables for validation cases.
 - A TypeORM `select: false` column is `undefined` on every plain find, so asserting it is `undefined` proves nothing; assert a selected companion column or `addSelect` it.
 - Compare database read-backs, not the object `save` returned: `numeric` columns change string scale on the first read.
 
