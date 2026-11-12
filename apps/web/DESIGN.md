@@ -434,6 +434,43 @@ Session and access-token details use the same responsive presentation. Account d
 own one-row group with an outline button; destructive actions use the shared destructive
 variant. Selected values (the theme picker) use a clay ring, never the navigation underline.
 
+### File import
+
+Statement file import lives on Connections, and only while the deployment has it on: the import
+list answering is the switch, and until it does the page shows nothing of it. Bank sync stays
+the page's primary action. **Import a file** is the outline button beside **Connect a bank**
+(the two share the row under the title on phones, equal width), and the empty page offers both.
+No copy calls import a fallback or assumes a bank is connected.
+
+- **Drop area.** On fine pointers: a 160px area with a dashed 1px rule at control radius, the
+  `FileUp` Clay tile, "Drop statement files here", a muted "or" and an outline **Choose files**.
+  Drag-over turns the rule to the ring token and the field to the accent wash. Phones and touch
+  screens get the button alone, full width. The picker accepts any extension, since banks name
+  their exports oddly. Files dragged anywhere over Connections show a full-column overlay (dashed
+  2px ring rule, page-field wash, "Drop to import"); it is the only drop target outside the dialog.
+- **One dialog.** Choosing, importing, the summary, the account question, the rows to check and
+  the undo confirmation are steps of one `ResponsiveDialog`, with a scrolling body and a footer
+  that stays in reach. It never closes by itself. Closing it does not cancel an upload; the
+  outcome then arrives as a toast (View reopens the summary). Focus returns to Import a file.
+- **Refusals.** A drop is all or nothing, so a refusal is a section `StateMessage` in the failure
+  tone whose description ends with "Nothing was imported." It names the refused file when the drop
+  held several, and the choose controls stay under it. Failed requests use `LoadErrorState`.
+- **Summary.** Counts as a bordered `divide-y` list with `numeric` values (the count that needs a
+  look in `warning`), the date range, and the accounts the import went to. A drop that added
+  nothing shows the `CheckCheck` state instead of the counts.
+- **Account question.** Native radio rows, so arrow keys move between them; nothing is
+  preselected, and Import stays disabled until every question has an answer.
+- **Rows to check.** Each file row (the `FileQuestion` tile in the 60px row shape) sits over the
+  stored rows it could be. An answer is final and collapses its block to one muted line.
+- **Imports list.** Under the connection cards once an import exists: a small heading, then one
+  bordered `divide-y` list, newest first, five rows before Show all. A row reads "3 files · 212
+  new" over the day, the accounts and any rows still to check (attention tone), with an
+  always-visible outline Undo named with its date. An undone import stays listed, muted, without
+  the button. Undo confirms with the destructive variant and says what goes and what stays.
+- **Imported files.** The imported-files connection uses the bank card with the `Files` Clay tile
+  and "From statement files". It never shows consent, sync or re-authorization states, and its
+  Details hold the accounts and Remove only.
+
 ## Do's and Don'ts
 
 ### Do:

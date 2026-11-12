@@ -183,6 +183,14 @@ else:
     raise AssertionError('MCP requests larger than 100 KiB must be refused')
 print('tempo MCP proxy streaming and request limit: PASS')
 
+# A statement import is larger than Nginx's default 1 MB request limit; it must reach the API whole.
+upload = b'x' * (12 * 1024 * 1024)
+imports = url.removesuffix('/mcp') + '/bank-imports'
+with urllib.request.urlopen(urllib.request.Request(imports, data=upload, method='POST'), timeout=10) as response:
+    assert response.status == 201, f'expected the import upload to reach the API, got {response.status}'
+    assert json.load(response)['bytes'] == len(upload), 'the import upload reached the API cut short'
+print('tempo statement import upload size: PASS')
+
 # Use the API's real URL builder, then verify Nginx preserves each name as one segment.
 base = url.removesuffix('/mcp')
 for name in ('Example Bank', 'Example Bank A/S', 'Example Bank & Épargne', 'Example Bank / ?#%'):

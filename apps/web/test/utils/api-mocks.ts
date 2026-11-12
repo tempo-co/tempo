@@ -84,6 +84,14 @@ export function mockJson(page: Page, url: string, body: unknown, status = 200) {
   return page.route(url, (route) => fulfillJson(route, body, status));
 }
 
+/** The API's answer to every import route while the deployment has file import off. */
+export const FILE_IMPORT_OFF = {statusCode: 404, message: 'Not Found'};
+
+/** Answers the import list, which is also how Connections learns whether file import is on, as off. */
+export function mockFileImportOff(page: Page, apiUrl: string) {
+  return mockJson(page, `${apiUrl}/bank-imports`, FILE_IMPORT_OFF, 404);
+}
+
 /** Completes a foreground refresh without changing the synthetic saved data. */
 export function mockBankRefresh(page: Page) {
   return mockJson(page, '**/bank-connections/*/refresh', successfulBankRefresh);

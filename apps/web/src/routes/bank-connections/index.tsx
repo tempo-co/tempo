@@ -1,6 +1,6 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
-import {useEffect} from 'react';
+import {useEffect, useRef} from 'react';
 import {toast} from 'sonner';
 import {z} from 'zod';
 
@@ -8,6 +8,11 @@ import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {LoadingBar} from '@/components/shared/loading-bar';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
 import {BankConnectionList} from '@/features/banking/components/bank-connection-list';
+import {useBankImports} from '@/features/file-import/api/use-bank-imports';
+import {FileImportDialog} from '@/features/file-import/components/file-import-dialog';
+import {ImportsList} from '@/features/file-import/components/imports-list';
+import {ImportFileButton, PageFileDrop} from '@/features/file-import/components/page-file-drop';
+import {useFileImport} from '@/features/file-import/components/use-file-import';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 import {savedDataStatus} from '@/utils/query-status';
 
@@ -45,6 +50,10 @@ function BankConnectionsIndex() {
   const {result} = Route.useSearch();
   const {bankConnections, ...query} = useGetAllBankConnections();
   const {isPending, isError} = savedDataStatus({...query, data: bankConnections});
+  // The import list answers 404 while file import is off; until it answers, the page shows nothing of it.
+  const imports = useBankImports();
+  const fileImport = useFileImport();
+  const importButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!result) return;
@@ -63,7 +72,31 @@ function BankConnectionsIndex() {
           isError={isError}
           error={query.error}
           onRetry={() => query.refetch()}
+          fileImport={
+            imports.state === 'on'
+              ? {
+                  action: <ImportFileButton ref={importButton} onClick={fileImport.openNew} />,
+                  onImport: fileImport.openNew,
+                  // One import at a time: a drop waits until the running one has answered.
+                  drop: (
+                    <PageFileDrop
+                      enabled={!fileImport.open && fileImport.step.kind !== 'importing'}
+                      onFiles={fileImport.importDropped}
+                    />
+                  ),
+                  imports: (
+                    <ImportsList
+                      query={imports}
+                      onOpen={(summary) => fileImport.show({kind: 'summary', summary})}
+                    />
+                  ),
+                }
+              : undefined
+          }
         />
+        {imports.state === 'on' && (
+          <FileImportDialog controller={fileImport} returnFocus={importButton} />
+        )}
       </AppBodyLayout>
     </>
   );

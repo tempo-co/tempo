@@ -12,7 +12,7 @@ import {SecuritySettingsPage} from './pages/security-settings.page';
 import {SignupPage} from './pages/signup.page';
 import {VerifyEmailChangePage} from './pages/verify-email-change.page';
 import {VerifyEmailPage} from './pages/verify-email.page';
-import {mockBankConnections, mockEmptyHome, mockJson} from './utils/api-mocks';
+import {mockBankConnections, mockEmptyHome, mockFileImportOff, mockJson} from './utils/api-mocks';
 import {EmailUtils} from './utils/email-utils';
 
 export const API_URL = loadEnv('development', process.cwd(), '').VITE_API_URL;
@@ -73,6 +73,8 @@ export const test = base.extend<Fixtures>({
       if (typeof storageState === 'object' && storageState.cookies.length === 0) {
         await mockBankConnections(page, []);
         await mockEmptyHome(page);
+        // Connections asks whether file import is on; specs of import turn it on with their own route.
+        await mockFileImportOff(page, API_URL);
         // Account settings read alert choices; this server sends no push.
         await mockJson(page, `${API_URL}/notifications`, {
           publicKey: null,
