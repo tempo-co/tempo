@@ -146,6 +146,9 @@ test('year by year shows each year, newest first and open; a click anywhere on a
     '+€16,000 40% of in',
     '€17,000 +€16,000',
   ]);
+  // The history's first year has no balance before it, so its change is left out instead of counted from zero.
+  const first = table.getByRole('row').filter({has: page.getByRole('button', {name: /^2024/})});
+  expect(await cells(first)).toEqual(['2024', '€3,000', '€2,000', '+€1,000 33% of in', '€1,000']);
   // A month's whole row opens it, with a hover state on every cell; its link opens it from the keyboard.
   const june = table.getByRole('row').filter({has: page.getByRole('link', {name: 'June'})});
   const kept = june.getByRole('cell').nth(3);
