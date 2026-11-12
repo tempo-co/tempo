@@ -9,7 +9,6 @@ import {deflateRawSync} from 'node:zlib';
 import TestAgent from 'supertest/lib/agent';
 import {In, Repository} from 'typeorm';
 
-import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
 import {BankConnectionAlertService} from '@modules/banking/alerts/bank-connection-alert.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
@@ -32,6 +31,7 @@ import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {EXAMPLE_IBAN, OTHER_EXAMPLE_IBAN, camt053, createZip} from '../../fixtures/statement-file.fixture';
 import {enableFileImportE2e, getApp} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
+import {MAILPIT_API_URL} from '../../utils/email-utils';
 
 enableFileImportE2e();
 
@@ -143,7 +143,7 @@ describe('Bank imports', () => {
 	});
 
 	async function createOwner(): Promise<{owner: Account; agent: TestAgent}> {
-		const fresh = await createVerifiedAccount(httpServer, app.get(ConfigurationService).get('EMAIL_UI_URL'));
+		const fresh = await createVerifiedAccount(httpServer, MAILPIT_API_URL);
 		await accounts.update({id: fresh.id}, {baseCurrency: 'EUR'});
 		return {owner: await accounts.findOneByOrFail({id: fresh.id}), agent: fresh.agent};
 	}
