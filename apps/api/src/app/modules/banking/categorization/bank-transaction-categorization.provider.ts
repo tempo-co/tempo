@@ -4,6 +4,7 @@ import type {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
 	BankTransactionCategorizationWebSearchInput,
+	BankTransactionCategorizationWebSearchOutcome,
 } from './bank-transaction-categorization.types';
 
 export const BANK_TRANSACTION_CATEGORIZATION_PROVIDER = Symbol('BANK_TRANSACTION_CATEGORIZATION_PROVIDER');
@@ -16,7 +17,7 @@ export interface BankTransactionCategorizationProvider {
 	categorizeWithWebSearch(
 		transactions: readonly BankTransactionCategorizationWebSearchInput[],
 		categories: readonly BankTransactionCategoryDefinition[],
-	): Promise<readonly BankTransactionCategorizationResult[]>;
+	): Promise<readonly BankTransactionCategorizationWebSearchOutcome[]>;
 }
 
 export class BankTransactionCategorizationProviderError extends Error {
@@ -29,7 +30,7 @@ export class BankTransactionCategorizationProviderError extends Error {
 	}
 }
 
-/** Both Claude routes are unavailable; leave the transaction pending for reconciliation. */
+/** Nothing ran on either Claude route and a later retry can succeed; leave the transaction pending. */
 export class BankTransactionCategorizationUnavailableError extends BankTransactionCategorizationProviderError {
 	constructor() {
 		super('Claude categorization is temporarily unavailable.', true);

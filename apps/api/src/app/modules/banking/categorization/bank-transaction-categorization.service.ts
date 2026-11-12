@@ -396,7 +396,7 @@ export class BankTransactionCategorizationService {
 			.filter((input): input is NonNullable<typeof input> => input !== null);
 
 		const webResults: BankTransactionCategorizationResult[] = [];
-		const failedWebSearchIds = new Set<string>();
+		const failedWebSearches = new Map<string, BankTransactionCategorizationResult>();
 		// Rows whose search could run on neither route wait for the job retry instead of going to review.
 		const unavailableWebSearch: ClaimedTransaction[] = [];
 		let searchUnavailable: BankTransactionCategorizationUnavailableError | undefined;
@@ -412,36 +412,49 @@ export class BankTransactionCategorizationService {
 			}
 			const activeBeforeWebSearch = await this.getActiveClaimedTransactions([claimed]);
 			if (activeBeforeWebSearch.length === 0) continue;
+			const {correlationId} = webSearchInput;
+			let route: string | undefined;
+			let result: BankTransactionCategorizationResult | null = null;
 			try {
-				const candidateResults = await this.provider.categorizeWithWebSearch(
+				const outcomes = await this.provider.categorizeWithWebSearch(
 					[webSearchInput],
 					BANK_TRANSACTION_CATEGORY_DEFINITIONS,
 				);
-				this.assertCompleteResults([webSearchInput], candidateResults);
-				webResults.push(...candidateResults.map((result) => this.normalizeWebSearchResult(result)));
+				const [outcome] = outcomes;
+				if (outcomes.length === 1 && outcome.correlationId === correlationId) {
+					route = outcome.provider;
+					if (outcome.result) this.assertCompleteResults([webSearchInput], [outcome.result]);
+					result = outcome.result;
+				}
+				if (!result) this.logger.warn('Transaction web-search fallback failed.');
 			} catch (error) {
 				this.logger.warn(`Transaction web-search fallback failed: ${safeErrorName(error)}`);
 				if (error instanceof BankTransactionCategorizationUnavailableError) {
 					searchUnavailable = error;
 					unavailableWebSearch.push(claimed);
-				} else failedWebSearchIds.add(webSearchInput.correlationId);
+					continue;
+				}
 			}
+			// A search that may have run is not retried, whichever layer noticed the failure: the row goes to review.
+			if (result) webResults.push(this.normalizeWebSearchResult(result));
+			else failedWebSearches.set(correlationId, this.failedWebSearchResult(correlationId, route));
 		}
 		if (searchUnavailable) await this.markBatchFailed(unavailableWebSearch, searchUnavailable);
 		const unavailableIds = new Set(unavailableWebSearch.map(({input}) => input.correlationId));
 
-		for (const result of webResults) standardResultById.set(result.correlationId, result);
+		for (const result of [...webResults, ...failedWebSearches.values()])
+			standardResultById.set(result.correlationId, result);
 		const webResultIds = new Set(webResults.map(({correlationId}) => correlationId));
 		await Promise.all(
 			activeBatchAfterStandardCategorization.map(async (claimed) => {
 				const result = standardResultById.get(claimed.input.correlationId);
 				if (!result || unavailableIds.has(claimed.input.correlationId)) return;
-				const promptVersion = webResultIds.has(claimed.input.correlationId)
-					? BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION
-					: skippedWebSearchIds.has(claimed.input.correlationId)
-						? BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_SKIPPED_PROMPT_VERSION
-						: failedWebSearchIds.has(claimed.input.correlationId)
-							? BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION
+				const promptVersion = failedWebSearches.has(claimed.input.correlationId)
+					? BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION
+					: webResultIds.has(claimed.input.correlationId)
+						? BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION
+						: skippedWebSearchIds.has(claimed.input.correlationId)
+							? BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_SKIPPED_PROMPT_VERSION
 							: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION;
 				await this.completeClaimed(claimed, {
 					category: result.category,
@@ -1067,8 +1080,21 @@ export class BankTransactionCategorizationService {
 					!this.isValidSearchTrace(result.searchTrace),
 			)
 		) {
-			throw new BankTransactionCategorizationProviderError('Invalid categorization provider result.', false);
+			// Retried like the provider's own validation failures: a malformed reply is a model failure, not an outage.
+			throw new BankTransactionCategorizationProviderError('Invalid categorization provider result.', true);
 		}
+	}
+
+	/** A search that failed after it may have run: the purpose stays unknown, so the row goes to review. */
+	private failedWebSearchResult(correlationId: string, provider?: string): BankTransactionCategorizationResult {
+		return {
+			correlationId,
+			category: 'NEEDS_REVIEW',
+			confidence: 0,
+			provider: provider ?? this.configurationService.get('AI_CATEGORIZATION_PROVIDER'),
+			model: this.configurationService.get('AI_CATEGORIZATION_MODEL'),
+			searchTrace: {queries: [], sourceDomains: [], evidenceType: 'INSUFFICIENT'},
+		};
 	}
 
 	private normalizeWebSearchResult(result: BankTransactionCategorizationResult): BankTransactionCategorizationResult {

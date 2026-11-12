@@ -45,10 +45,13 @@ Outgoing payments to a person follow a fixed order, never `NEEDS_REVIEW`: a stat
 The Anthropic API is tried first, then the host-side subscription bridge over a Unix socket (`AI_CATEGORIZATION_SUBSCRIPTION_SOCKET`). Result metadata names the route that answered (`claude-api` or `claude-subscription`). Never add a paid route after the subscription.
 
 - **Standard pass** falls through to the bridge on any API error.
-- **Search pass** falls back only when the API refused before running (`refusedBeforeRunning`), so a row is searched at most once per attempt. If the search could run on neither route the row stays `PENDING`; if it may have run, the row goes to `NEEDS_REVIEW` and is not retried.
-- **Provider error mapping**: only bridge 404/409/415/503 and socket `ENOENT`/`ECONNREFUSED`/`EACCES` mean "unavailable". A timeout, an oversized reply, `ECONNRESET`, 400, 413 or 502 may follow a run and go to review.
-- With no bridge configured, pend only on transient API refusals (401/403/429/529). A 400 the API always returns would otherwise pend forever.
+- **Search pass** falls back only when the API refused before running (`refusedBeforeRunning`), so a row is searched at most once per attempt.
+- **One rule for both passes** (`routesFailed`): a call with no usable answer leaves its rows `PENDING` (the unavailable error) only when nothing ran and a retry can succeed: the bridge refused before running, or, with no bridge configured, the API refused transiently (401/403/429/529). Anything else may have run or would fail the same way again (a truncated or invalid reply, an API 400, bridge 400/413/502, a timeout) and is a retryable provider error. A standard call the API may have run fails the same way when the bridge then refuses, so a waiting bridge never repeats it. Merchant identification (`identifyMerchants`) keeps its own failure rule.
+- **Provider error mapping**: only bridge 404/409/415/503 and socket `ENOENT`/`ECONNREFUSED`/`EACCES` mean "unavailable". A timeout, an oversized reply, `ECONNRESET`, 400, 413 or 502 may follow a run.
+- A standard-pass provider error marks the batch `FAILED`; the job retries it twice within seconds, then the row waits for the next start's sweep, never the hourly one. The service's own result check counts as the same retryable failure.
+- A search that fails is never retried, whichever layer notices: `categorizeWithWebSearch` returns a `null` result for it, and the service completes the row as `NEEDS_REVIEW` with confidence 0 and the `-web-search-failed` prompt version. Any other error from the search call gets the same treatment, except the unavailable error, which leaves the row `PENDING`.
 - Throw the unavailable error only after completing the batch's other rows, so the retry picks up just the pending ones. Categorize jobs retry unavailable routes after 1, 2, 5, 10 and 20 minutes (`UNAVAILABLE_RETRY_DELAYS_MS`); after that the hourly sweep takes over.
+- The standard pass allows 16k output tokens: adaptive thinking shares the budget with a 50-row reply, and a reply cut off at the limit fails the batch.
 - Construct the Anthropic SDK client with `logLevel: 'off'`, or `ANTHROPIC_LOG=debug` prints raw upstream bodies before the adapter sanitizes them.
 
 ## The bridge contract
