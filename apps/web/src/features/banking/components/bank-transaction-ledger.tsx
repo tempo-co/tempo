@@ -10,6 +10,7 @@ import {
   formatBankTransactionActivity,
   formatBankTransactionCategory,
   formatBankTransactionCompactDate,
+  isPendingBankTransaction,
   resolveBankTransactionAccountLabel,
   resolveBankTransactionDisplayTitle,
   toBankTransactionCategory,
@@ -125,6 +126,7 @@ function LedgerRow({
     !activity &&
     (transaction.categoryStatus === 'FAILED' || transaction.category === 'NEEDS_REVIEW');
   const date = formatBankTransactionCompactDate(dayOf(transaction) || null);
+  const pending = isPendingBankTransaction(transaction);
   // Merchant logos fill most tiles, so the category keeps its own icon beside its name.
   const categoryIcon = (className: string, iconClassName: string) => (
     <BankTransactionCategoryIcon
@@ -137,6 +139,7 @@ function LedgerRow({
   const counterparty = transaction.counterpartyName?.replace(/\s+/g, ' ').trim();
   const desktopSubline = [
     showDate ? date : null,
+    pending ? 'Pending' : null,
     counterparty && counterparty !== title ? counterparty : null,
   ]
     .filter(Boolean)
@@ -161,6 +164,7 @@ function LedgerRow({
           data-testid='ledger-row-meta'
         >
           {showDate && <span className='shrink-0'>{date} ·</span>}
+          {pending && <span className='shrink-0'>Pending ·</span>}
           {categoryIcon('h-4 w-4', 'h-2.5 w-2.5')}
           <span className={cn('truncate', needsOwner && 'text-warning')}>{category}</span>
           {account && <span className='min-w-0 shrink-[2] truncate'>· {account}</span>}

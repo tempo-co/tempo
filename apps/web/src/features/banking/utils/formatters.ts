@@ -46,6 +46,11 @@ export function formatBankTransactionExchangeRate(
   return unit && quote ? `1 ${unit} ≈ ${rate} ${quote}` : null;
 }
 
+/** The bank has not booked the transaction yet; its amount or merchant can still change. */
+export function isPendingBankTransaction(transaction: Pick<BankTransaction, 'transactionStatus'>) {
+  return transaction.transactionStatus?.trim().toUpperCase() === 'PDNG';
+}
+
 /** Day and month, with the year only when it is not the current one. */
 export function formatBankTransactionCompactDate(value: string | null) {
   return formatBankTransactionDateValue(value, (date) =>

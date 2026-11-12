@@ -504,6 +504,9 @@ export class EnableBankingClient {
 		const counterpartyIban =
 			normalizeIban(this.asString(this.asRecord(counterpartyAccount)?.iban)) ??
 			parseSepaDescriptionIban(description);
+		const transactionDate = this.asOptionalString(record?.transaction_date);
+		const providedBookingDate = this.asOptionalString(record?.booking_date);
+		const providedValueDate = this.asOptionalString(record?.value_date);
 
 		return [
 			{
@@ -514,10 +517,11 @@ export class EnableBankingClient {
 				currency,
 				creditDebitIndicator,
 				status: this.asOptionalString(record?.status),
-				transactionDate: this.asOptionalString(record?.transaction_date),
-				bookingDate:
-					this.asOptionalString(record?.booking_date) ?? this.asOptionalString(record?.transaction_date),
-				valueDate: this.asOptionalString(record?.value_date) ?? this.asOptionalString(record?.transaction_date),
+				transactionDate,
+				bookingDate: providedBookingDate ?? transactionDate,
+				valueDate: providedValueDate ?? transactionDate,
+				...(!providedBookingDate && transactionDate ? {bookingDateFilled: true} : {}),
+				...(!providedValueDate && transactionDate ? {valueDateFilled: true} : {}),
 				description,
 				counterpartyName,
 				...(counterpartyIban ? {counterpartyIban} : {}),

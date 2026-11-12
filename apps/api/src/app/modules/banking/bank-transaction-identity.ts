@@ -28,7 +28,7 @@ export type BankTransactionIdentityInput = Pick<
 	| 'referenceNumber'
 	| 'referenceNumberScheme'
 > &
-	Partial<Pick<BankTransaction, 'transactionStatus'>>;
+	Partial<Pick<BankTransaction, 'transactionStatus' | 'bookingDateFilled' | 'valueDateFilled'>>;
 
 export type BankTransactionStableIdentityFields = {
 	stableIdentityGroupKey: string;
@@ -45,13 +45,14 @@ export const LEGACY_BANK_TRANSACTION_DEDUPE_KEY_PATTERN = '^[a-f0-9]{64}$';
 const LEGACY_BANK_TRANSACTION_DEDUPE_KEY_REGEX = new RegExp(LEGACY_BANK_TRANSACTION_DEDUPE_KEY_PATTERN);
 
 function createBankTransactionCoreFingerprint(transaction: BankTransactionIdentityInput): string[] {
+	// Stored group keys hash these exact values, so their normalization must not change.
 	return [
 		normalizeIdentityDate(transaction.transactionDate),
 		normalizeIdentityDate(transaction.bookingDate),
 		normalizeIdentityDate(transaction.valueDate),
 		normalizeIdentityAmount(transaction.amount),
-		normalizeIdentityText(transaction.currency).toUpperCase(),
-		normalizeIdentityText(transaction.creditDebitIndicator).toUpperCase(),
+		(transaction.currency ?? '').toUpperCase(),
+		(transaction.creditDebitIndicator ?? '').toUpperCase(),
 	];
 }
 
@@ -155,10 +156,12 @@ export function assignBankTransactionStableIdentityKeys<T extends BankTransactio
 	}
 
 	const assignments = new Map<number, BankTransactionStableIdentityFields>();
+	// Booking can set or change both dates, so a pending row is looked up without them; `canBookPendingRow` then
+	// compares the dates the provider actually sent for the pending row.
 	const transitionKey = (transaction: BankTransactionIdentityInput) =>
 		JSON.stringify([
 			transaction.bankAccountId,
-			createBankTransactionCoreFingerprint({...transaction, valueDate: null}),
+			createBankTransactionCoreFingerprint({...transaction, bookingDate: null, valueDate: null}),
 			createBankTransactionContentFingerprint(transaction),
 		]);
 	const incomingByTransition = new Map<string, number[]>();
@@ -175,25 +178,16 @@ export function assignBankTransactionStableIdentityKeys<T extends BankTransactio
 		group.push(transaction);
 		existingByTransition.set(key, group);
 	}
+	const incomingReferences = new Set(
+		transactions.map(({entryReference}) => normalizeReference(entryReference)).filter(Boolean),
+	);
 	const reusedKeys = new Set<string>();
 	for (const [key, indexes] of incomingByTransition) {
 		const candidates = existingByTransition.get(key) ?? [];
 		if (indexes.length !== 1 || candidates.length !== 1) continue;
 		const incoming = transactions[indexes[0]];
 		const existing = candidates[0];
-		// Enable Banking fills a missing value_date from transactionDate.
-		const existingValueDateDiffersFromTransactionDate =
-			existing.valueDate !== null &&
-			normalizeIdentityDate(existing.valueDate) !== normalizeIdentityDate(existing.transactionDate);
-		if (
-			incoming.transactionStatus !== 'BOOK' ||
-			existing.transactionStatus !== 'PDNG' ||
-			!incoming.entryReference?.trim() ||
-			existingValueDateDiffersFromTransactionDate ||
-			!normalizeIdentityDate(incoming.valueDate) ||
-			!existing.stableIdentityKey ||
-			!existing.stableIdentityGroupKey
-		)
+		if (!canBookPendingRow(existing, incoming) || !existing.stableIdentityKey || !existing.stableIdentityGroupKey)
 			continue;
 		assignments.set(indexes[0], {
 			stableIdentityGroupKey: createBankTransactionStableIdentityGroupKey(incoming),
@@ -243,21 +237,17 @@ export function assignBankTransactionStableIdentityKeys<T extends BankTransactio
 			}
 		}
 
-		const unmatchedExistingRows = [...unmatchedExisting];
-		if (
-			unmatchedIncoming.length === 1 &&
-			unmatchedExistingRows.length === 1 &&
-			canMatchUniqueCoreCandidate(unmatchedExistingRows[0], unmatchedIncoming[0].transaction)
-		) {
-			assignments.set(unmatchedIncoming[0].index, {
-				stableIdentityGroupKey: groupKey,
-				stableIdentityKey: unmatchedExistingRows[0].stableIdentityKey,
-			});
-			unmatchedIncoming.length = 0;
+		// The same number of stored and new rows left over means the provider edited their details: pair them.
+		const pairedIncoming =
+			unmatchedIncoming.length === unmatchedExisting.size
+				? pairEditedRows([...unmatchedExisting], unmatchedIncoming, incomingReferences)
+				: new Map<number, string>();
+		for (const [index, stableIdentityKey] of pairedIncoming) {
+			assignments.set(index, {stableIdentityGroupKey: groupKey, stableIdentityKey});
 		}
 
 		let nextOccurrence = 1;
-		for (const incoming of unmatchedIncoming) {
+		for (const incoming of unmatchedIncoming.filter(({index}) => !pairedIncoming.has(index))) {
 			const allocation = allocateNextBankTransactionStableIdentityKey(groupKey, usedKeys, nextOccurrence);
 			nextOccurrence = allocation.nextOccurrence;
 			assignments.set(incoming.index, {
@@ -274,17 +264,82 @@ export function assignBankTransactionStableIdentityKeys<T extends BankTransactio
 	}));
 }
 
-function canMatchUniqueCoreCandidate(
-	existing: BankTransactionIdentityInput,
-	incoming: BankTransactionIdentityInput,
-): boolean {
-	const existingReference = existing.entryReference?.trim() ? existing.entryReference : null;
-	const incomingReference = incoming.entryReference?.trim() ? incoming.entryReference : null;
-	return !existingReference || !incomingReference || existingReference === incomingReference;
+/**
+ * A booked row continues a stored pending row with the same reference and content. A date the provider sent for the
+ * pending row must stay the same; a date the client filled in from `transactionDate` says nothing.
+ */
+function canBookPendingRow(existing: BankTransactionIdentityInput, incoming: BankTransactionIdentityInput): boolean {
+	const keepsDate = (field: 'bookingDate' | 'valueDate', filled: boolean | undefined) =>
+		filled === true ||
+		normalizeIdentityDate(existing[field]) === '' ||
+		normalizeIdentityDate(existing[field]) === normalizeIdentityDate(incoming[field]);
+	return (
+		incoming.transactionStatus === 'BOOK' &&
+		existing.transactionStatus === 'PDNG' &&
+		normalizeReference(incoming.entryReference).length > 0 &&
+		normalizeIdentityDate(incoming.valueDate) !== '' &&
+		keepsDate('bookingDate', existing.bookingDateFilled) &&
+		keepsDate('valueDate', existing.valueDateFilled)
+	);
 }
 
+/**
+ * Pairs stored rows with the new rows of the same group whose details changed, most equal details first, then in
+ * key and content order so every sync pairs the same way. A booked row never turns back into a pending one, and a
+ * stored entry reference that this fetch still sends belongs to that row, not to one with another reference.
+ */
+function pairEditedRows(
+	existingRows: Array<BankTransactionIdentityInput & BankTransactionStableIdentityFields>,
+	incomingRows: Array<{index: number; transaction: BankTransactionIdentityInput; contentKey: string}>,
+	incomingReferences: ReadonlySet<string>,
+): Map<number, string> {
+	const candidates = existingRows.flatMap((existing) => {
+		const existingContent = createBankTransactionContentFingerprint(existing);
+		const existingReference = normalizeReference(existing.entryReference);
+		return incomingRows.flatMap((incoming) => {
+			const incomingReference = normalizeReference(incoming.transaction.entryReference);
+			if (
+				(existing.transactionStatus === 'BOOK' && incoming.transaction.transactionStatus === 'PDNG') ||
+				(existingReference &&
+					incomingReference &&
+					existingReference !== incomingReference &&
+					incomingReferences.has(existingReference))
+			)
+				return [];
+			const incomingContent = createBankTransactionContentFingerprint(incoming.transaction);
+			const equalDetails = existingContent.filter(
+				(value, field) => JSON.stringify(value) === JSON.stringify(incomingContent[field]),
+			).length;
+			return [{existing, incoming, equalDetails}];
+		});
+	});
+	candidates.sort(
+		(left, right) =>
+			right.equalDetails - left.equalDetails ||
+			left.existing.stableIdentityKey.localeCompare(right.existing.stableIdentityKey) ||
+			(left.incoming.contentKey < right.incoming.contentKey
+				? -1
+				: left.incoming.contentKey > right.incoming.contentKey
+					? 1
+					: left.incoming.index - right.incoming.index),
+	);
+	const paired = new Map<number, string>();
+	const pairedKeys = new Set<string>();
+	for (const {existing, incoming} of candidates) {
+		if (paired.has(incoming.index) || pairedKeys.has(existing.stableIdentityKey)) continue;
+		paired.set(incoming.index, existing.stableIdentityKey);
+		pairedKeys.add(existing.stableIdentityKey);
+	}
+	return paired;
+}
+
+function normalizeReference(value: string | null | undefined): string {
+	return value?.trim() ?? '';
+}
+
+/** Provider text as a person would compare it: surrounding and repeated whitespace and letter case don't count. */
 function normalizeIdentityText(value: string | null): string {
-	return value ?? '';
+	return (value ?? '').normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 function normalizeIdentityDate(value: string | Date | null): string {

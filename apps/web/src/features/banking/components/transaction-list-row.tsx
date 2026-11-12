@@ -5,6 +5,7 @@ import {CurrencyAmount} from '@/components/shared/currency-amount';
 
 import {
   formatBankTransactionCompactDate,
+  isPendingBankTransaction,
   resolveBankTransactionDisplayTitle,
 } from '../utils/formatters';
 import {MerchantLogoTile} from './merchant-logo-tile';
@@ -27,6 +28,7 @@ export function TransactionListRow({
         <p className='truncate text-sm'>{resolveBankTransactionDisplayTitle(transaction)}</p>
         <p className='truncate text-xs text-muted-foreground'>
           {formatBankTransactionCompactDate(transaction.bookingDate ?? transaction.transactionDate)}
+          {isPendingBankTransaction(transaction) && ' · Pending'}
         </p>
       </div>
       <span className='text-sm'>

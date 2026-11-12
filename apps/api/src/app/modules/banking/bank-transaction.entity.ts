@@ -63,6 +63,14 @@ export class BankTransaction {
 	@Column({type: 'date', nullable: true})
 	valueDate: string | null;
 
+	/** The provider sent no booking date, so `bookingDate` holds the transaction date. Identity matching ignores it. */
+	@Column({type: 'boolean', default: false})
+	bookingDateFilled: boolean;
+
+	/** The provider sent no value date, so `valueDate` holds the transaction date. Identity matching ignores it. */
+	@Column({type: 'boolean', default: false})
+	valueDateFilled: boolean;
+
 	@Column({type: 'date', nullable: true})
 	transactionDate: string | null;
 
