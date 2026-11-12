@@ -2,6 +2,7 @@ import {type BankTransaction} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, expect, test} from '../../fixtures';
+import {openTransactionFilter} from '../../utils/transaction-filters';
 
 test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
@@ -15,9 +16,11 @@ for (const [value, label] of [
 ]) {
   test(`cash flow ${label} is selectable and renders real filtered results`, async ({page}) => {
     await page.goto('/bank-transactions');
-    await page.getByRole('button', {name: 'Cash flow', exact: true}).click();
-    const responsePromise = page.waitForResponse((response) =>
-      response.url().includes(`filter%5BcashFlows%5D%5B%5D=${value}`),
+    await openTransactionFilter(page, 'Cash flow');
+    const responsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes(`filter%5BcashFlows%5D%5B%5D=${value}`) &&
+        !response.url().includes('/totals'),
     );
     await page.getByRole('option', {name: label, exact: true}).click();
     const response = await responsePromise;
@@ -28,12 +31,10 @@ for (const [value, label] of [
     ]);
     await page.keyboard.press('Escape');
     await expect(
-      page.getByRole('button', {name: `Cash flow: ${label}`, exact: true}),
+      page.getByRole('button', {name: `Remove filter: ${label}`, exact: true}),
     ).toBeVisible();
     if (list.total === 0) {
-      await expect(
-        page.getByText('The applied filters did not match any transactions.'),
-      ).toBeVisible();
+      await expect(page.getByText('No transactions match these filters.')).toBeVisible();
     } else {
       for (const row of list.transactions) {
         await expect(page.getByTestId(`bank-transaction-row-${row.id}`)).toBeVisible();
@@ -66,24 +67,21 @@ test('mobile pickers share combined drills, preserve category status and clear a
     cashFlows: JSON.stringify(['SPENDING', 'INCOME', 'UNKNOWN']),
     baseAmount: 'MISSING',
     categoryStatuses: JSON.stringify(['FAILED']),
-    pageIndex: '2',
   });
   await page.goto(`/bank-transactions?${params}`);
   await expect(page.getByRole('button', {name: 'Remove filter: Not categorized'})).toBeVisible();
-  await page.getByTestId('bank-transaction-mobile-filters-trigger').click();
-  const drawer = page.getByTestId('bank-transaction-mobile-filters');
-  await expect(drawer.getByRole('heading', {name: 'Cash flow'})).toBeVisible();
-  const cashFlow = drawer
-    .locator('section')
-    .filter({has: page.getByRole('heading', {name: 'Cash flow', exact: true})});
+  const drawer = await openTransactionFilter(page, 'Cash flow');
   for (const label of ['Spending', 'Income', 'Unknown direction']) {
-    await expect(cashFlow.getByRole('option', {name: label, exact: true})).toHaveAttribute(
+    await expect(drawer.getByRole('option', {name: label, exact: true})).toHaveAttribute(
       'data-filter-selected',
       'true',
     );
   }
   await drawer.getByRole('option', {name: 'Internal movements', exact: true}).click();
-  await expect.poll(() => Number(new URL(page.url()).searchParams.get('pageIndex') ?? 0)).toBe(0);
+  await expect
+    .poll(() => JSON.parse(new URL(page.url()).searchParams.get('cashFlows')!) as string[])
+    .toEqual(['SPENDING', 'INCOME', 'INTERNAL', 'UNKNOWN']);
+  await openTransactionFilter(page, 'Amount in EUR');
   await expect(
     drawer.getByRole('option', {name: 'Not available yet', exact: true}),
   ).toHaveAttribute('data-filter-selected', 'true');
@@ -106,11 +104,13 @@ test('amount availability picker shares direct URL filters and clears combinatio
   const params = new URLSearchParams({
     cashFlows: JSON.stringify(['INCOME']),
     baseAmount: 'PRESENT',
-    pageIndex: '2',
   });
   await page.goto(`/bank-transactions?${params}`);
-  await expect(page.getByRole('button', {name: 'Cash flow: Income', exact: true})).toBeVisible();
-  await page.getByRole('button', {name: 'Amount in EUR: Available', exact: true}).click();
+  await expect(
+    page.getByRole('button', {name: 'Remove filter: Income', exact: true}),
+  ).toBeVisible();
+  const panel = await openTransactionFilter(page, 'Amount in EUR');
+  await expect(panel.getByRole('tab', {name: 'Amount in EUR Has base amount'})).toBeVisible();
   await expect(page.getByRole('option', {name: 'Available', exact: true})).toHaveAttribute(
     'data-filter-selected',
     'true',
@@ -120,42 +120,39 @@ test('amount availability picker shares direct URL filters and clears combinatio
   );
   await page.getByRole('option', {name: 'Not available yet', exact: true}).click();
   expect((await responsePromise).ok()).toBe(true);
-  await expect(
-    page.getByRole('button', {name: 'Amount in EUR: Not available yet', exact: true}),
-  ).toBeVisible();
+  await expect(panel.getByRole('tab', {name: 'Amount in EUR No base amount yet'})).toBeVisible();
   let search = new URL(page.url()).searchParams;
   expect(search.get('baseAmount')).toBe('MISSING');
   expect(JSON.parse(search.get('cashFlows')!)).toEqual(['INCOME']);
-  expect(Number(search.get('pageIndex') ?? 0)).toBe(0);
-  await page.keyboard.press('Escape');
-  await page.getByRole('button', {name: 'Clear filters', exact: true}).first().click();
-  await expect(page.getByRole('button', {name: 'Amount in EUR', exact: true})).toBeVisible();
+  await panel.getByRole('button', {name: 'Clear all', exact: true}).click();
+  await expect(panel.getByRole('tab', {name: 'Amount in EUR', exact: true})).toBeVisible();
   search = new URL(page.url()).searchParams;
   expect(search.has('baseAmount')).toBe(false);
   expect(search.has('cashFlows')).toBe(false);
 });
 
-test('cash flow picker applies the real spending predicate and resets pagination', async ({
-  page,
-}) => {
-  await page.goto('/bank-transactions?pageIndex=2');
-  await page.getByRole('button', {name: 'Cash flow', exact: true}).click();
-  const responsePromise = page.waitForResponse((response) =>
-    response.url().includes('filter%5BcashFlows%5D%5B%5D=SPENDING'),
+test('cash flow picker applies the real spending predicate from the first page', async ({page}) => {
+  // Older links carry page keys; the list loads more in place, so they are dropped.
+  await page.goto('/bank-transactions?pageIndex=2&pageSize=10');
+  await expect(page).not.toHaveURL(/pageIndex|pageSize/);
+  await openTransactionFilter(page, 'Cash flow');
+  const responsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes('filter%5BcashFlows%5D%5B%5D=SPENDING') &&
+      !response.url().includes('/totals'),
   );
   await page.getByRole('option', {name: 'Spending', exact: true}).click();
   const response = await responsePromise;
   expect(response.ok()).toBe(true);
   const list: unknown = await response.json();
   const expected = await page.request.get(
-    `${API_URL}/bank-transactions?filter[cashFlows][]=SPENDING&pagination[pageIndex]=0&pagination[pageSize]=10`,
+    `${API_URL}/bank-transactions?filter[cashFlows][]=SPENDING&sort[by]=bookingDate&sort[order]=DESC&pagination[pageIndex]=0&pagination[pageSize]=50`,
   );
   expect(expected.ok()).toBe(true);
   expect(list).toEqual(await expected.json());
   await expect(page).toHaveURL(/cashFlows/);
   const search = new URL(page.url()).searchParams;
   expect(JSON.parse(search.get('cashFlows')!)).toEqual(['SPENDING']);
-  expect(Number(search.get('pageIndex') ?? 0)).toBe(0);
   await expect(page.getByRole('option', {name: 'Spending', exact: true})).toHaveAttribute(
     'data-filter-selected',
     'true',
@@ -178,8 +175,7 @@ for (const mobile of [false, true]) {
       .click();
     await expect(page).toHaveURL(/bank-transactions/);
     const bookingDate = new URL(page.url()).searchParams.get('bookingDate');
-    if (mobile) await page.getByTestId('bank-transaction-mobile-filters-trigger').click();
-    else await page.getByRole('button', {name: /^Cash flow/}).click();
+    await openTransactionFilter(page, 'Cash flow');
     const parent = page.getByRole('option', {name: 'Internal movements', exact: true});
     const exchange = page.getByRole('option', {name: 'Currency exchange', exact: true});
     const transfer = page.getByRole('option', {name: 'Own transfer', exact: true});
@@ -201,9 +197,12 @@ for (const mobile of [false, true]) {
     await expect
       .poll(() => JSON.parse(new URL(page.url()).searchParams.get('cashFlows')!) as string[])
       .toEqual(['SPENDING', 'INTERNAL']);
+    // The desktop panel names each filter's values beside it.
     if (!mobile)
       await expect(
-        page.getByRole('button', {name: 'Cash flow: Spending, Internal movements', exact: true}),
+        page
+          .getByTestId('bank-transaction-filters')
+          .getByRole('tab', {name: 'Cash flow Spending, Internal movements'}),
       ).toBeVisible();
     await parent.click();
     await expect(exchange).toHaveAttribute('data-filter-selected', 'false');
@@ -231,18 +230,15 @@ for (const mobile of [false, true]) {
         [key]: JSON.stringify(values),
         baseAmount: 'PRESENT',
         categoryStatuses: JSON.stringify(['FAILED']),
-        pageIndex: '2',
       });
       await page.goto(`/bank-transactions?${params}`);
-      if (!mobile)
-        await expect(
-          page.getByRole('button', {
-            name: `Cash flow: ${values.includes('INTERNAL') || values.length === 2 ? 'Internal movements' : values[0] === 'OWN_TRANSFER' ? 'Own transfer' : 'Currency exchange'}`,
-            exact: true,
-          }),
-        ).toBeVisible();
-      if (mobile) await page.getByTestId('bank-transaction-mobile-filters-trigger').click();
-      else await page.getByRole('button', {name: /^Cash flow/}).click();
+      await expect(
+        page.getByRole('button', {
+          name: `Remove filter: ${values.includes('INTERNAL') || values.length === 2 ? 'Internal movements' : values[0] === 'OWN_TRANSFER' ? 'Own transfer' : 'Currency exchange'}`,
+          exact: true,
+        }),
+      ).toBeVisible();
+      await openTransactionFilter(page, 'Cash flow');
       const parent = page.getByRole('option', {name: 'Internal movements', exact: true});
       const both = values.includes('INTERNAL') || values.length === 2;
       await expect(parent).toHaveAttribute('data-filter-selected', both ? 'true' : 'mixed');
@@ -264,7 +260,6 @@ for (const mobile of [false, true]) {
       const search = new URL(page.url()).searchParams;
       expect(search.get('baseAmount')).toBe('PRESENT');
       expect(JSON.parse(search.get('categoryStatuses')!)).toEqual(['FAILED']);
-      expect(Number(search.get('pageIndex') ?? 0)).toBe(0);
       expect(search.has('financialEventTypes')).toBe(false);
       await page
         .getByRole('option', {

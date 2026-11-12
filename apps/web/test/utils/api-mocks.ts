@@ -6,6 +6,7 @@ import type {
   BankTransactionCashFlow,
   BankTransactionReviewCounts,
   BankTransactionSummary,
+  BankTransactionTotals,
   MerchantRanking,
   RecurringSeriesLists,
   RecurringSummary,
@@ -26,9 +27,9 @@ export function fulfillRedirect(route: Route, location: string) {
 }
 
 /**
- * Fails the API reads of `url` that `isLater` picks (a paged list's later pages) with a final error until
- * `failing` is turned off; every other read goes on to the mocks behind. `pages` records each later page asked
- * for, failed or not, by what `isLater` returns for it.
+ * Fails the API reads of `url` that `isLater` picks (a paged list's later pages) with a server error, which the
+ * api wrapper leaves to the caller to report, until `failing` is turned off; every other read goes on to the mocks
+ * behind. `pages` records each later page asked for, failed or not, by what `isLater` returns for it.
  */
 export async function failLaterPages(
   page: Page,
@@ -43,16 +44,15 @@ export async function failLaterPages(
       : null;
     if (later === null) return route.fallback();
     state.pages.push(later);
-    // 429 is final, so the query does not retry it on its own.
-    if (state.failing) return fulfillJson(route, {message: 'Too Many Requests'}, 429);
+    if (state.failing) return fulfillJson(route, {message: 'Synthetic server error'}, 500);
     return route.fallback();
   });
   return state;
 }
 
 /**
- * Presses `scope`'s Load more while {@link failLaterPages} fails the next page: the `loaded` rows stay with a note
- * under them, and Retry asks for the same page again and adds its rows, `after` in all.
+ * Presses `scope`'s Load more while {@link failLaterPages} fails the next page: the `loaded` rows and the button
+ * stay, a toast says so, and its Retry asks for the same page again and adds its rows, `after` in all.
  */
 export async function expectFailedPageRetried(
   scope: Locator,
@@ -62,17 +62,21 @@ export async function expectFailedPageRetried(
 ) {
   await expect(rows).toHaveCount(loaded);
   await scope.getByRole('button', {name: 'Load more'}).click();
-  const note = scope.getByRole('status').filter({hasText: "Couldn't load more."});
-  await expect(note).toBeVisible();
+  const toast = scope
+    .page()
+    .locator('[data-sonner-toast]')
+    .filter({hasText: "Couldn't load more."});
+  // The query client retries a server error three times (about seven seconds) before giving up.
+  await expect(toast).toBeVisible({timeout: 15_000});
   await expect(rows).toHaveCount(loaded);
-  await expect(scope.getByRole('button', {name: 'Load more'})).toHaveCount(0);
-  expect(later.pages).toHaveLength(1);
+  await expect(scope.getByRole('button', {name: 'Load more'})).toBeVisible();
+  expect(new Set(later.pages).size).toBe(1);
 
   later.failing = false;
-  await scope.getByRole('button', {name: 'Retry'}).click();
+  await toast.getByRole('button', {name: 'Retry'}).click();
   await expect(rows).toHaveCount(after);
-  await expect(note).toHaveCount(0);
-  expect(later.pages).toEqual([later.pages[0], later.pages[0]]);
+  await expect(toast).toHaveCount(0);
+  expect(new Set(later.pages).size).toBe(1);
 }
 
 /** Answers every request to `url` with the same JSON response. */
@@ -132,7 +136,8 @@ export const EMPTY_REVIEW_COUNTS: BankTransactionReviewCounts = {
 };
 
 /**
- * Answers Home's requests, and the navigation's review counts, with empty data. Home requests its
+ * Answers Home's requests, the totals the Transactions page asks for with a filter in force, and the
+ * navigation's review counts, with empty data. Home requests its
  * history while the connections load, so a fully mocked spec that opens Home without banks still
  * sends them.
  */
@@ -167,6 +172,14 @@ export async function mockEmptyHome(page: Page) {
     } satisfies BankTransactionBreakdown);
   });
   await mockJson(page, '**/bank-transactions/review-counts', EMPTY_REVIEW_COUNTS);
+  await mockJson(page, '**/bank-transactions/totals?**', {
+    baseCurrency: null,
+    spending: '0.00',
+    income: '0.00',
+    net: '0.00',
+    count: 0,
+    excluded: {unknownDirection: 0, missingBaseAmount: 0},
+  } satisfies BankTransactionTotals);
   await page.route('**/bank-transactions/summary?**', (route) => {
     const params = new URL(route.request().url()).searchParams;
     const month = params.get('month') ?? '';

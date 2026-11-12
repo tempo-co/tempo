@@ -2,7 +2,6 @@ import {
   BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES,
   BankTransactionCashFlowFilterValue,
 } from '@tempo/contracts';
-import {ArrowLeftRight} from 'lucide-react';
 import * as React from 'react';
 
 import {Command, CommandGroup, CommandItem, CommandList} from '@/components/ui/command';
@@ -14,25 +13,16 @@ import {
   BankTransactionFilterParams,
 } from '../types/bank-transaction';
 import {CASH_FLOW_LABELS} from '../utils/drill-filters';
-import {FacetedFilter, FilterResetGroup} from './bank-transaction-faceted-filter';
-import {FilterCheckIndicator, SelectedFilterSummary} from './bank-transaction-multi-select-filter';
-
-type BankTransactionCashFlowFilterProps = {
-  filters: BankTransactionFilterParams;
-  variant?: 'popover' | 'mobile';
-  className?: string;
-};
+import {FilterResetGroup} from './bank-transaction-faceted-filter';
+import {FilterCheckIndicator} from './bank-transaction-multi-select-filter';
 
 type InternalKind = (typeof BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS)[number];
 
 const isInternalKind = (value: BankTransactionCashFlowFilterValue): value is InternalKind =>
   (BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS as readonly string[]).includes(value);
 
-export function BankTransactionCashFlowFilter({
-  filters,
-  variant = 'popover',
-  className,
-}: BankTransactionCashFlowFilterProps) {
+/** The cash flow options for the Filters panel. */
+export function BankTransactionCashFlowFilter({filters}: {filters: BankTransactionFilterParams}) {
   const {
     selectedValues,
     setSelectedValues,
@@ -77,7 +67,7 @@ export function BankTransactionCashFlowFilter({
   };
   const selectionDescriptionId = React.useId();
 
-  const eventCommand = (
+  return (
     <Command>
       <CommandList>
         <CommandGroup>
@@ -112,28 +102,5 @@ export function BankTransactionCashFlowFilter({
         <FilterResetGroup show={selectedValues.length > 0} onReset={() => void handleReset()} />
       </CommandList>
     </Command>
-  );
-
-  return (
-    <FacetedFilter
-      variant={variant}
-      label='Cash flow'
-      icon={<ArrowLeftRight />}
-      isActive={selectedValues.length > 0}
-      summary={
-        <SelectedFilterSummary
-          items={selectedValues.map((value) => ({key: value, label: CASH_FLOW_LABELS[value]}))}
-        />
-      }
-      ariaLabel={
-        selectedValues.length > 0
-          ? `Cash flow: ${selectedValues.map((value) => CASH_FLOW_LABELS[value]).join(', ')}`
-          : 'Cash flow'
-      }
-      contentClassName='w-[240px] p-0'
-      className={className}
-    >
-      {eventCommand}
-    </FacetedFilter>
   );
 }

@@ -40,5 +40,8 @@ export const useActiveBankAccounts = () => {
   const needsAccountName = (account: {bankName: string; currency: string}) =>
     ambiguousKeys.has(bankAccountLabelKey(account));
 
-  return {accounts, needsAccountName, isPending, isError};
+  // The Filters panel offers accounts unless the owner is known to have a single one.
+  const showsAccountFilter = isPending || isError || accounts.length > 1;
+
+  return {accounts, needsAccountName, showsAccountFilter, isPending, isError};
 };

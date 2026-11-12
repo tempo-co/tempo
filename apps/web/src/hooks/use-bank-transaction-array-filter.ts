@@ -14,7 +14,7 @@ export function useBankTransactionArrayFilter<K extends ArrayFilterKey>(
 
   const setSelectedValues = (values: Value[]) =>
     navigate({
-      search: (prev) => ({...prev, [key]: values.length === 0 ? undefined : values, pageIndex: 0}),
+      search: (prev) => ({...prev, [key]: values.length === 0 ? undefined : values}),
     });
 
   const toggle = (value: Value) =>

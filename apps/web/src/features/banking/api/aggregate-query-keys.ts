@@ -1,3 +1,5 @@
+import type {BankTransactionFilterParams} from '../types/bank-transaction';
+
 export const dashboardQueryKeys = {
   root: ['bank-dashboard'] as const,
   cashFlow: (interval: string, from: string, to: string, asOf: string) =>
@@ -8,10 +10,13 @@ export const dashboardQueryKeys = {
     ['bank-dashboard', 'breakdown', interval, by, from, to, asOf] as const,
   /** Spending and income over a few days, where cash flow's periods are too coarse. */
   totals: (from: string, to: string) => ['bank-dashboard', 'totals', from, to] as const,
+  /** Spending and income of every row the Transactions page's filters match; under this root so bank-derived invalidation refreshes it. */
+  listTotals: (filters: BankTransactionFilterParams) =>
+    ['bank-dashboard', 'list-totals', filters] as const,
   /** One month's spending by category with each category's usual by the same day. */
   summary: (month: string, asOf: string) => ['bank-dashboard', 'summary', month, asOf] as const,
   reviewCounts: ['bank-dashboard', 'review-counts'] as const,
-  /** Pages of a month's transactions; kept apart from transaction lists, whose caches hold one page. */
+  /** Pages of a month's transactions; kept apart from the Transactions page's lists. */
   monthTransactions: (from: string, to: string) =>
     ['bank-dashboard', 'month-transactions', from, to] as const,
 };

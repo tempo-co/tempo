@@ -22,7 +22,7 @@ import {
 	SORT_ORDERS,
 	type SortOrder,
 } from '@tempo/contracts';
-import {Transform, Type} from 'class-transformer';
+import {Transform, type TransformFnParams, Type} from 'class-transformer';
 import {
 	IsArray,
 	IsEnum,
@@ -139,6 +139,12 @@ export class BankTransactionFilterQueryDto implements BankTransactionFilter {
 	@IsString()
 	@MaxLength(BANK_TRANSACTION_SEARCH_MAX_LENGTH)
 	incomeSource?: string;
+
+	/** Only the rows the review counts count as needing attention; sent as `true`. */
+	@IsOptional()
+	@Transform(({value}: TransformFnParams) => (value === 'true' ? true : value))
+	@IsIn([true])
+	needsAttention?: true;
 }
 
 /** Totals use the list's filter contract, without sort or pagination inputs. */

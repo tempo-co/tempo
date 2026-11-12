@@ -26,9 +26,10 @@ test('searches with a long description and restores it from the URL', async ({pa
   const search = page.getByRole('textbox', {name: 'Search transactions'});
   await search.fill(description);
   await expect.poll(() => searches[searches.length - 1]).toBe(description);
-  await expect(page.getByText('The applied filters did not match any transactions.')).toBeVisible();
+  await expect(page.getByText('No transactions match these filters.')).toBeVisible();
   expect(new URL(page.url()).searchParams.get('search')).toBe(description);
-  expect(new URL(page.url()).searchParams.get('pageIndex')).toBe('0');
+  // The list loads more in place, so an older link's page is dropped.
+  expect(new URL(page.url()).searchParams.has('pageIndex')).toBe(false);
 
   await page.reload();
   await expect(search).toHaveValue(description);
