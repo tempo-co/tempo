@@ -1,3 +1,4 @@
+import {jest} from '@jest/globals';
 import {INestApplication} from '@nestjs/common';
 import Redis from 'ioredis';
 import {Server} from 'node:net';
@@ -12,11 +13,16 @@ import {BankAccountBalance} from '@modules/banking/bank-account-balance.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
+import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
+import {EnableBankingClient, EnableBankingClientError} from '@modules/banking/services/enable-banking.client';
 
+import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {seedBankingData} from '../../../scripts/seed-data/seed-banking-data';
 import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
+import {fetchedTransactions} from '../../utils/banking-utils';
 import {EmailUtils} from '../../utils/email-utils';
 
 describe('AccountController - DELETE /accounts/me', () => {
@@ -29,6 +35,10 @@ describe('AccountController - DELETE /accounts/me', () => {
 	let balanceRepository: ReturnType<DataSource['getRepository']>;
 	let transactionRepository: ReturnType<DataSource['getRepository']>;
 	let redis: Redis;
+	let fixtures: BankingFixtures;
+	let encryption: BankingEncryptionService;
+	let enableBankingClient: EnableBankingClient;
+	let deleteSession: jest.SpiedFunction<EnableBankingClient['deleteSession']>;
 
 	beforeAll(async () => {
 		app = getApp();
@@ -41,17 +51,27 @@ describe('AccountController - DELETE /accounts/me', () => {
 		balanceRepository = dataSource.getRepository(BankAccountBalance);
 		transactionRepository = dataSource.getRepository(BankTransaction);
 		redis = app.get<Redis>(REDIS);
+		fixtures = new BankingFixtures(app);
+		encryption = app.get(BankingEncryptionService);
+		enableBankingClient = app.get(EnableBankingClient);
+		deleteSession = jest.spyOn(enableBankingClient, 'deleteSession');
 	});
 
 	beforeEach(async () => {
 		await EmailUtils.clearEmails(mailpitApiUrl);
+		deleteSession.mockReset();
+		deleteSession.mockResolvedValue(undefined);
+	});
+
+	afterAll(() => {
+		jest.restoreAllMocks();
 	});
 
 	async function countOwnedAccounts(repository: ReturnType<DataSource['getRepository']>, accountId: string) {
 		return repository.count({where: {account: {id: accountId}}});
 	}
 
-	it('deletes a verified account with password confirmation and cascades all bank data', async () => {
+	it('deletes a verified account with password confirmation, revokes its bank consents and cascades all bank data', async () => {
 		const {
 			id: accountId,
 			credentials: {email, password},
@@ -64,7 +84,23 @@ describe('AccountController - DELETE /accounts/me', () => {
 			.send({name: 'Example deletion client'})
 			.expect(201);
 		await seedBankingData(app, {accountEmail: email});
-		expect(await countOwnedAccounts(connectionRepository, accountId)).toBe(1);
+		await connectionRepository.update(
+			{accountId},
+			{providerSessionId: encryption.encrypt('account-delete-session-one')},
+		);
+		await fixtures.createConnection(
+			{id: accountId},
+			{aspspName: 'Example Bank', providerSessionId: encryption.encrypt('account-delete-session-two')},
+		);
+		await fixtures.createConnection({id: accountId}, {status: 'PENDING_AUTHORIZATION', providerSessionId: null});
+		expect(await countOwnedAccounts(connectionRepository, accountId)).toBe(3);
+		const connectionsAtRevocation: number[] = [];
+		deleteSession.mockImplementation(async (sessionId) => {
+			connectionsAtRevocation.push(await countOwnedAccounts(connectionRepository, accountId));
+			// One failing provider call must not stop the account's deletion.
+			if (sessionId === 'account-delete-session-two')
+				throw new EnableBankingClientError('provider_request_failed', 500);
+		});
 
 		// A second session of the same account must die with the account too.
 		const secondSessionAgent = await loginAgent(httpServer, email, password);
@@ -113,11 +149,18 @@ describe('AccountController - DELETE /accounts/me', () => {
 		// Wrong password is rejected and the account survives.
 		const wrongPasswordResponse = await agent.delete('/accounts/me').send({password: 'wrong-password'}).expect(401);
 		expect(wrongPasswordResponse.body.message).toBe(INVALID_PASSWORD);
-		expect(await countOwnedAccounts(connectionRepository, accountId)).toBe(1);
+		expect(await countOwnedAccounts(connectionRepository, accountId)).toBe(3);
+		expect(deleteSession).not.toHaveBeenCalled();
 		expect(await redis.get(ownedStateKey)).not.toBeNull();
 
 		const deleteResponse = await agent.delete('/accounts/me').send({password}).expect(200);
 		expect(deleteResponse.body.message).toEqual(ACCOUNT_DELETED_MESSAGE);
+		// Every connection with a provider session was revoked once, while its row still existed.
+		expect(deleteSession.mock.calls.map(([sessionId]) => sessionId).sort()).toEqual([
+			'account-delete-session-one',
+			'account-delete-session-two',
+		]);
+		expect(connectionsAtRevocation).toEqual([3, 3]);
 		expect(
 			await dataSource.query('SELECT id FROM personal_access_tokens WHERE "accountId" = $1', [accountId]),
 		).toEqual([]);
@@ -158,6 +201,60 @@ describe('AccountController - DELETE /accounts/me', () => {
 			ACCOUNT_DELETED_EMAIL_SUBJECT,
 		);
 		expect(farewellEmail?.Subject).toEqual(ACCOUNT_DELETED_EMAIL_SUBJECT);
+	}, 30_000);
+
+	it('deletes the account while a bank sync is running, and the sync writes nothing back', async () => {
+		const {
+			id: accountId,
+			credentials: {password},
+			agent,
+		} = await createVerifiedAccount(httpServer, mailpitApiUrl);
+		const connection = await fixtures.createConnection(
+			{id: accountId},
+			{providerSessionId: encryption.encrypt('account-delete-sync-session'), nextSyncAt: new Date(0)},
+		);
+		const bankAccount = await fixtures.createBankAccount(connection, {providerAccountId: 'account-delete-sync'});
+		let fetchStarted!: () => void;
+		const started = new Promise<void>((resolve) => (fetchStarted = resolve));
+		let releaseFetch!: () => void;
+		const released = new Promise<void>((resolve) => (releaseFetch = resolve));
+		const syncSpies = [
+			jest
+				.spyOn(enableBankingClient, 'getSessionAccounts')
+				.mockResolvedValue({status: 'AUTHORIZED', accountIds: ['account-delete-sync']}),
+			jest.spyOn(enableBankingClient, 'getAccountBalances').mockResolvedValue([]),
+			jest.spyOn(enableBankingClient, 'getAccountTransactions').mockImplementation(async () => {
+				fetchStarted();
+				await released;
+				return fetchedTransactions([
+					{amount: '10.00', currency: 'EUR', creditDebitIndicator: 'DBIT', bookingDate: '2026-08-20'},
+				]);
+			}),
+		];
+
+		try {
+			const sync = app.get(BankingSyncService).synchronizeAutomatically(connection.id);
+			const syncOutcome = sync.then(
+				() => 'finished',
+				(error: unknown) => error,
+			);
+			await started;
+			expect(await redis.exists(`banking:sync:${connection.id}`)).toBe(1);
+
+			// Deletion does not wait for the sync's lease.
+			await agent.delete('/accounts/me').send({password}).expect(200);
+			expect(deleteSession).toHaveBeenCalledWith('account-delete-sync-session', expect.any(AbortSignal));
+			releaseFetch();
+
+			expect(await syncOutcome).toMatchObject({status: 409});
+			expect(await connectionRepository.countBy({id: connection.id})).toBe(0);
+			expect(await bankAccountRepository.countBy({id: bankAccount.id})).toBe(0);
+			expect(await transactionRepository.countBy({bankAccountId: bankAccount.id})).toBe(0);
+			expect(await redis.exists(`banking:sync:${connection.id}`)).toBe(0);
+		} finally {
+			releaseFetch();
+			for (const spy of syncSpies) spy.mockRestore();
+		}
 	}, 30_000);
 
 	it('returns 400 Bad Request if the password is missing', async () => {

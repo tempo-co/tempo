@@ -31,14 +31,16 @@ From `enable-banking.client.ts` `parseAccount()`:
 
 Treat a connection as a concurrent lifecycle: provider callbacks, background sync, deletion and Redis authorization state overlap.
 
-- Sync and deletion share one per-connection Redis lease (`banking:sync:<connection-id>`, `banking-connection-lock.service.ts`). Deletion fails with 409 while sync holds it.
+- Sync and connection removal share one per-connection Redis lease (`banking:sync:<connection-id>`, `banking-connection-lock.service.ts`). Removal fails with 409 while sync holds it.
+- Account deletion takes no lease: it deletes every connection of the account even while one syncs. The running sync's fenced write then matches no row, so its transaction rolls back and nothing of the deleted account is written again.
+- Connection removal and account deletion first delete each connection's provider session (`DELETE /sessions/{id}`, which closes the bank consent where the bank supports it), then the rows. Removal does it under the lease, after the same refusals the transaction checks, so a refused removal revokes nothing. Revocation is best-effort (`banking-consent-revocation.service.ts`): all of one deletion's sessions run in parallel under a shared 10-second deadline; a 404 or a session-ended code counts as revoked; any other failure is logged by code and HTTP status only and the local deletion goes ahead. Account deletion's `BankingConsentRevocationModule` is a leaf module, so the account module does not import `BankingModule`.
 - Sync re-reads the owned connection **after** acquiring the lease; otherwise it continues with a stale entity after a deletion commits. Every success, failure and status write is fenced by the run identity (`syncStatus = RUNNING` + `syncStartedAt`); a zero-row guarded update means ownership was lost, so roll back.
 - Database lock order, in both callback persistence and deletion: pending authorization row(s), then the reusable connection, then children. Reversing it in one path deadlocks against the other.
 - Destructive removal of AUTHORIZED/EXPIRED connections requires the exact body `confirmation: "DELETE"`, checked by the API. Pending/cancelled/failed connections with child data are protected separately (409).
 - Delete, then remove Redis authorization state for every invalidated connection after commit. Release the lease in `finally`; a cleanup or logging failure must not turn a committed deletion into a reported failure.
 - FKs from `bank_accounts`, `bank_transactions`, `bank_account_balances` and `bank_sync_runs` cascade on delete. Expired consent or an inactive account keeps rows; only explicit DELETE erases them.
 
-Regression matrix worth keeping green: missing/wrong/lowercase/padded confirmation → 400 and nothing removed; other owner → 404; held lease → 409; authorized and expired deletion → 204 with cascade; incomplete connection with an account → 409; pending re-authorization cancelled by deletion, and its late callback cannot recreate a connection; callback replay or superseded state → error, no second persistence.
+Regression matrix worth keeping green: missing/wrong/lowercase/padded confirmation → 400 and nothing removed; other owner → 404; held lease → 409; authorized and expired deletion → 204 with cascade; incomplete connection with an account → 409; pending re-authorization cancelled by deletion, and its late callback cannot recreate a connection; callback replay or superseded state → error, no second persistence; the provider session is revoked once before the rows go, and a provider failure still removes them.
 
 ## Background and foreground sync
 

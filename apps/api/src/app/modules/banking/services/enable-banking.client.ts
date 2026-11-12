@@ -226,11 +226,17 @@ export class EnableBankingClient {
 		return fail(new EnableBankingClientError('provider_pagination_limit_exceeded'));
 	}
 
+	/** Deletes the session, which also closes the user's consent at the bank where the bank supports it. */
+	async deleteSession(sessionId: string, signal?: AbortSignal): Promise<void> {
+		await this.request(`/sessions/${encodeURIComponent(sessionId)}`, undefined, signal, undefined, 'DELETE');
+	}
+
 	private async request(
 		path: string,
 		body?: Record<string, unknown>,
 		signal?: AbortSignal,
 		psu?: EnableBankingPsuContext,
+		method: 'GET' | 'POST' | 'DELETE' = body ? 'POST' : 'GET',
 	): Promise<unknown> {
 		if (!this.enabled) throw new EnableBankingClientError('banking_integration_disabled');
 
@@ -243,7 +249,7 @@ export class EnableBankingClient {
 		try {
 			requestSignal.throwIfAborted();
 			response = await fetch(`${this.apiUrl}${path}`, {
-				method: body ? 'POST' : 'GET',
+				method,
 				headers: {
 					Accept: 'application/json',
 					...(psu ? {'Psu-Ip-Address': psu.ipAddress} : {}),
