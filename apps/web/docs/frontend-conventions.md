@@ -90,7 +90,7 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 ## Copy
 
 - Name a feature by its use and an item by convention (tab `Integrations`, item `Access tokens`). Explain the use once on the page; keep dialogs about the item.
-- Never name specific third-party products in UI copy, placeholders or hints, and do not name Tempo itself in descriptions ("Bills and income found in your history").
+- Never name the services Tempo is built on (its bank-data, AI or logo providers, for example) in UI copy, placeholders or hints, and do not name Tempo itself in descriptions ("Bills and income found in your history"). The owner's own banks and their export formats may be named, because that is how the owner recognises them: connection cards show bank names, and the file-import help names the exports it reads ("ABN AMRO TXT or a Revolut statement").
 - Do not ship setup snippets that need a local checkout path; only developers could use them.
 
 ## Routing and URL state
