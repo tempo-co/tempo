@@ -20,13 +20,19 @@ import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 import {CsrfOriginGuard} from '@modules/auth/guards/csrf-origin.guard';
 
-import {BankImportService} from '../bank-import.service';
-import {BANK_IMPORT_ACCOUNT_FIELD, BankImportUploadInterceptor} from './bank-import-upload.interceptor';
+import {BankImportRefusalException} from '../bank-import-refusal.exception';
+import {ACCOUNT_CHOICE_NEW, AccountChoices, BankImportService} from '../bank-import.service';
+import {
+	BANK_IMPORT_ACCOUNT_CHOICES_FIELD,
+	BANK_IMPORT_ACCOUNT_FIELD,
+	BankImportUploadInterceptor,
+} from './bank-import-upload.interceptor';
 import {FileImportEnabledGuard} from './file-import-enabled.guard';
 import {ResolveBankImportDoubtfulRowDto} from './resolve-bank-import-doubtful-row.dto';
 
 const NO_FILES = 'Choose at least one file to import.';
 const INVALID_ACCOUNT_ID = 'bankAccountId must be a UUID.';
+const ACCOUNT_FIELDS_COMBINED = 'Send bankAccountId or accountChoices, not both.';
 const UUID_PIPE = new ParseUUIDPipe({version: '4'});
 
 @Controller('bank-imports')
@@ -43,17 +49,23 @@ export class BankImportController {
 	async importFiles(
 		@UploadedFiles() files: {buffer: Buffer}[] | undefined,
 		@Body(BANK_IMPORT_ACCOUNT_FIELD) bankAccountId: unknown,
+		@Body(BANK_IMPORT_ACCOUNT_CHOICES_FIELD) accountChoices: unknown,
 		@CurrentAccount() account: Account,
 	): Promise<BankImportSummary> {
 		if (!files?.length) throw new BadRequestException(NO_FILES);
 		if (bankAccountId !== undefined && !(typeof bankAccountId === 'string' && isUUID(bankAccountId))) {
 			throw new BadRequestException(INVALID_ACCOUNT_ID);
 		}
-		return this.bankImportService.importFiles(
-			account.id,
-			files.map(({buffer}) => buffer),
-			bankAccountId ?? null,
-		);
+		if (bankAccountId !== undefined && accountChoices !== undefined) {
+			throw new BadRequestException(ACCOUNT_FIELDS_COMBINED);
+		}
+		const buffers = files.map(({buffer}) => buffer);
+		if (accountChoices !== undefined) {
+			return this.bankImportService.importFiles(account.id, buffers, {
+				accountChoices: parseAccountChoices(accountChoices),
+			});
+		}
+		return this.bankImportService.importFiles(account.id, buffers, {bankAccountId: bankAccountId ?? null});
 	}
 
 	@Get()
@@ -87,4 +99,28 @@ export class BankImportController {
 	async undo(@Param('importId', UUID_PIPE) importId: string, @CurrentAccount() account: Account): Promise<void> {
 		await this.bankImportService.undo(account.id, importId);
 	}
+}
+
+/**
+ * `accountChoices` as sent: a JSON object from `<bank>:<currency>` to a bank account id or `new`. Anything else
+ * answers no question the drop can ask, so it is refused like a choice that does not fit.
+ */
+function parseAccountChoices(value: unknown): AccountChoices {
+	let parsed: unknown;
+	try {
+		parsed = typeof value === 'string' ? JSON.parse(value) : null;
+	} catch {
+		parsed = null;
+	}
+	if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+		throw new BankImportRefusalException('target_account_mismatch');
+	}
+	const choices = new Map<string, string>();
+	for (const [key, choice] of Object.entries(parsed)) {
+		if (typeof choice !== 'string' || !(choice === ACCOUNT_CHOICE_NEW || isUUID(choice))) {
+			throw new BankImportRefusalException('target_account_mismatch');
+		}
+		choices.set(key, choice);
+	}
+	return choices;
 }

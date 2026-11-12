@@ -88,6 +88,34 @@ const ARCHIVE_ROWS = [
 	['2026-03-04', '2026-03-04', '-1.95000000', '6063000000000004', '2570.56000000'],
 ];
 const MARCH_ROWS = [...ARCHIVE_ROWS, ['2026-03-05', '2026-03-05', '-24.95000000', '6064000000000001', '2545.61000000']];
+const REVOLUT_HEADER = 'Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance';
+
+type RevolutRow = readonly [day: string, amount: string, currency: string];
+
+/** A Revolut CSV statement of completed current-account rows. */
+function revolutStatement(rows: readonly RevolutRow[]): Buffer {
+	const lines = rows.map(
+		([day, amount, currency], index) =>
+			`Card Payment,Current,${day} 10:00:00,${day} 12:00:00,Example Shop ${index + 1},${amount},0,${currency},COMPLETED,`,
+	);
+	return Buffer.from([REVOLUT_HEADER, ...lines, ''].join('\r\n'));
+}
+
+// What a synced Revolut EUR account holds in the guard tests: rows from 1 to 10 March.
+const SYNCED_REVOLUT_ROWS = [
+	['2026-03-01', '-40.00'],
+	['2026-03-04', '-41.00'],
+	['2026-03-07', '-42.00'],
+	['2026-03-10', '-43.00'],
+] as const;
+// Five EUR rows within those dates, none of them stored there.
+const UNSTORED_EUR_ROWS = [
+	['2026-03-02', '-3.10', 'EUR'],
+	['2026-03-03', '-3.20', 'EUR'],
+	['2026-03-05', '-3.30', 'EUR'],
+	['2026-03-06', '-3.40', 'EUR'],
+	['2026-03-08', '-3.50', 'EUR'],
+] as const;
 
 describe('Bank imports', () => {
 	jest.setTimeout(60_000);
@@ -557,6 +585,256 @@ describe('Bank imports', () => {
 		});
 	});
 
+	async function createSyncedRevolutAccount(owner: Account, currency = 'EUR') {
+		const connection = await fixtures.createConnection(owner, {aspspName: 'Revolut'});
+		const account = await fixtures.createBankAccount(connection, {currency});
+		await fixtures.createTransactions(
+			account,
+			SYNCED_REVOLUT_ROWS.map(([bookingDate, amount]) => ({
+				bookingDate,
+				valueDate: bookingDate,
+				amount,
+				currency,
+			})),
+		);
+		return {connection, account};
+	}
+
+	it('refuses a statement that names no account when it overlaps the synced account of its bank without one stored row, and imports it where the owner chooses', async () => {
+		const {owner, agent} = await createOwner();
+		const other = await createOwner();
+		// An imported-files account in EUR, and an account in another currency.
+		await drop(agent, [STATEMENT_FILES[0]]).expect(201);
+		const fileAccount = await bankAccounts.findOneByOrFail({
+			bankConnection: {accountId: owner.id, provider: 'file'},
+		});
+		const {connection, account: synced} = await createSyncedRevolutAccount(owner);
+		// A Revolut EUR account bank sync no longer reports: it neither competes for the statement nor is offered.
+		await fixtures.createBankAccount(connection, {name: 'Example closed EUR', currency: 'EUR', isActive: false});
+		const dollarAccount = await fixtures.createBankAccount(await fixtures.createConnection(owner), {
+			currency: 'USD',
+		});
+		const othersAccount = await fixtures.createBankAccount(await fixtures.createConnection(other.owner));
+		// Five unstored rows within the account's dates, one after them, and a currency without a synced account.
+		const statement = revolutStatement([
+			...UNSTORED_EUR_ROWS,
+			['2026-03-20', '-3.60', 'EUR'],
+			['2026-03-02', '-9.00', 'GBP'],
+		]);
+		const storedBefore = await ownerRows(owner);
+		const accountsBefore = await bankAccounts.countBy({bankConnection: {accountId: owner.id}});
+
+		const refused = await drop(agent, [statement]).expect(409);
+
+		expect(refused.body).toEqual({
+			statusCode: 409,
+			message: expect.any(String),
+			code: 'target_account_unconfirmed',
+			file: null,
+			accountQuestions: [
+				{
+					bank: 'Revolut',
+					currency: 'EUR',
+					candidates: [
+						{
+							bankAccountId: synced.id,
+							name: 'Main account',
+							currency: 'EUR',
+							bankName: 'Revolut',
+							imported: false,
+						},
+						{
+							bankAccountId: fileAccount.id,
+							name: 'NL91 ABNA 0417 1643 00',
+							currency: 'EUR',
+							bankName: 'Imported files',
+							imported: true,
+						},
+					],
+				},
+			],
+		});
+		const expectNothingWritten = async () => {
+			expect(await imports.countBy({accountId: owner.id})).toBe(1);
+			expect(await ownerRows(owner)).toEqual(storedBefore);
+			expect(await bankAccounts.countBy({bankConnection: {accountId: owner.id}})).toBe(accountsBefore);
+		};
+		await expectNothingWritten();
+
+		for (const [files, choices] of [
+			[[statement], 'Revolut:EUR'],
+			[[statement], '["Revolut:EUR"]'],
+			[[statement], '{"Revolut:USD": "new"}'],
+			[[statement], JSON.stringify({'Revolut:EUR': 'other'})],
+			[[statement], JSON.stringify({'Revolut:EUR': othersAccount.id})],
+			[[statement], JSON.stringify({'Revolut:EUR': dollarAccount.id})],
+			// A statement that names its own account is not asked about.
+			[[STATEMENT_FILES[2]], JSON.stringify({'Revolut:EUR': 'new'})],
+		] as const) {
+			const mismatch = await drop(agent, [...files])
+				.field('accountChoices', choices)
+				.expect(422);
+			expect(mismatch.body).toMatchObject({code: 'target_account_mismatch', file: null});
+		}
+		await drop(agent, [statement])
+			.field('bankAccountId', synced.id)
+			.field('accountChoices', JSON.stringify({'Revolut:EUR': synced.id}))
+			.expect(400);
+		await expectNothingWritten();
+
+		const syncedRowsBefore = await transactions.find({where: {bankAccountId: synced.id}, order: {id: 'ASC'}});
+
+		const chosen = await drop(agent, [statement])
+			.field('accountChoices', JSON.stringify({'Revolut:EUR': fileAccount.id}))
+			.expect(201);
+
+		expect(chosen.body).toMatchObject({
+			rowsParsed: 7,
+			rowsAdded: 7,
+			accounts: [
+				{id: fileAccount.id, name: 'NL91 ABNA 0417 1643 00', currency: 'EUR', created: false},
+				{name: 'Revolut GBP', currency: 'GBP', created: true},
+			],
+		});
+		expect(await transactions.countBy({bankAccountId: fileAccount.id, importId: chosen.body.id})).toBe(6);
+		expect(await transactions.find({where: {bankAccountId: synced.id}, order: {id: 'ASC'}})).toEqual(
+			syncedRowsBefore,
+		);
+		expect(await transactions.countBy({bankAccountId: othersAccount.id})).toBe(0);
+	});
+
+	it('refuses a statement that names no account when only a coincidental few of its rows within the dates the synced account holds are stored there, also when bank sync no longer reports that account', async () => {
+		const {owner, agent} = await createOwner();
+		const {account: synced} = await createSyncedRevolutAccount(owner);
+		// The only Revolut EUR account still receives the statement, and is offered first.
+		await bankAccounts.update({id: synced.id}, {isActive: false});
+		const storedBefore = await ownerRows(owner);
+
+		// Six rows within the account's dates, one of them stored there.
+		const refused = await drop(agent, [
+			revolutStatement([...UNSTORED_EUR_ROWS, ['2026-03-04', '-41.00', 'EUR']]),
+		]).expect(409);
+
+		expect(refused.body).toMatchObject({
+			code: 'target_account_unconfirmed',
+			accountQuestions: [{bank: 'Revolut', currency: 'EUR', candidates: [{bankAccountId: synced.id}]}],
+		});
+		expect(await imports.countBy({accountId: owner.id})).toBe(0);
+		expect(await ownerRows(owner)).toEqual(storedBefore);
+		expect(await fileConnection(owner)).toBeNull();
+	});
+
+	it.each<{name: string; rows: readonly RevolutRow[]; added: number}>([
+		{
+			name: 'at least half of its rows within the dates the account holds are stored there',
+			rows: [
+				...SYNCED_REVOLUT_ROWS.slice(0, 3).map(([day, amount]) => [day, amount, 'EUR'] as const),
+				...UNSTORED_EUR_ROWS.slice(0, 3),
+			],
+			added: 3,
+		},
+		{
+			name: 'it lies entirely after the dates the account holds',
+			rows: UNSTORED_EUR_ROWS.map(([day, amount, currency]) => [day.replace('-03-0', '-03-2'), amount, currency]),
+			added: 5,
+		},
+		{
+			name: 'fewer than 5 of its rows fall within the dates the account holds',
+			rows: [...UNSTORED_EUR_ROWS.slice(0, 4), ['2026-03-11', '-3.50', 'EUR']],
+			added: 5,
+		},
+	])(
+		'imports a statement that names no account into the synced account of its bank when $name',
+		async ({rows, added}) => {
+			const {owner, agent} = await createOwner();
+			const {account: synced} = await createSyncedRevolutAccount(owner);
+
+			const response = await drop(agent, [revolutStatement(rows)]).expect(201);
+
+			expect(response.body).toMatchObject({rowsAdded: added, accounts: [{id: synced.id, created: false}]});
+			expect(await transactions.countBy({bankAccountId: synced.id, importId: response.body.id})).toBe(added);
+		},
+	);
+
+	it('asks once for every statement whose account needs a choice, and imports each as answered', async () => {
+		const {owner, agent} = await createOwner();
+		const connection = await fixtures.createConnection(owner, {aspspName: 'Revolut'});
+		const euroAccounts = (
+			await fixtures.createBankAccounts(connection, [
+				{name: 'Example EUR one', currency: 'EUR'},
+				{name: 'Example EUR two', currency: 'EUR'},
+			])
+		).sort((left, right) => (left.id < right.id ? -1 : 1));
+		const pound = await fixtures.createBankAccount(connection, {name: 'Example GBP', currency: 'GBP'});
+		await fixtures.createTransactions(
+			pound,
+			SYNCED_REVOLUT_ROWS.map(([bookingDate, amount]) => ({
+				bookingDate,
+				valueDate: bookingDate,
+				amount,
+				currency: 'GBP',
+			})),
+		);
+		const statement = revolutStatement([
+			['2026-03-02', '-5.00', 'EUR'],
+			['2026-03-03', '-6.00', 'EUR'],
+			...UNSTORED_EUR_ROWS.map(([day, amount]) => [day, amount, 'GBP'] as const),
+		]);
+		const candidate = (account: BankAccount) => ({
+			bankAccountId: account.id,
+			name: account.name,
+			currency: account.currency,
+			bankName: 'Revolut',
+			imported: false,
+		});
+
+		const refused = await drop(agent, [statement]).expect(409);
+
+		expect(refused.body).toMatchObject({
+			code: 'ambiguous_target_account',
+			file: null,
+			accountQuestions: [
+				{bank: 'Revolut', currency: 'EUR', candidates: euroAccounts.map(candidate)},
+				{bank: 'Revolut', currency: 'GBP', candidates: [candidate(pound)]},
+			],
+		});
+		expect(await imports.countBy({accountId: owner.id})).toBe(0);
+		expect(await fileConnection(owner)).toBeNull();
+		const poundRows = () => transactions.find({where: {bankAccountId: pound.id}, order: {id: 'ASC'}});
+		const poundRowsBefore = await poundRows();
+
+		const answered = await drop(agent, [statement])
+			.field('accountChoices', JSON.stringify({'Revolut:EUR': euroAccounts[1].id, 'Revolut:GBP': 'new'}))
+			.expect(201);
+
+		expect(answered.body).toMatchObject({
+			rowsAdded: 7,
+			accounts: [
+				{id: euroAccounts[1].id, created: false},
+				{name: 'Revolut GBP', currency: 'GBP', created: true},
+			],
+		});
+		const poundFileAccount = await bankAccounts.findOneByOrFail({id: answered.body.accounts[1].id});
+		expect(poundFileAccount.providerAccountId).toBe('file-bank:Revolut:GBP');
+		expect(await transactions.countBy({bankAccountId: poundFileAccount.id})).toBe(5);
+		expect(await transactions.countBy({bankAccountId: euroAccounts[1].id})).toBe(2);
+		expect(await transactions.countBy({bankAccountId: euroAccounts[0].id})).toBe(0);
+		expect(await poundRows()).toEqual(poundRowsBefore);
+
+		// The same answers again find the imported-files account the first one created.
+		const again = await drop(agent, [statement])
+			.field('accountChoices', JSON.stringify({'Revolut:EUR': euroAccounts[1].id, 'Revolut:GBP': 'new'}))
+			.expect(201);
+		expect(again.body).toMatchObject({
+			rowsAdded: 0,
+			rowsAlreadyPresent: 7,
+			accounts: [
+				{id: euroAccounts[1].id, created: false},
+				{id: poundFileAccount.id, created: false},
+			],
+		});
+	});
+
 	it('records a drop into a synced and an imported-files account under the synced connection, and refuses a drop reaching two synced connections', async () => {
 		const {owner, agent} = await createOwner();
 		const connection = await fixtures.createConnection(owner);
@@ -877,7 +1155,8 @@ describe('Bank imports', () => {
 		});
 
 		const ambiguous = await drop(agent, [STATEMENT_FILES[0]]).expect(409);
-		expect(ambiguous.body).toMatchObject({code: 'ambiguous_target_account', file: null});
+		// A statement with an IBAN is answered with bankAccountId, so no per-bank question is asked.
+		expect(ambiguous.body).toMatchObject({code: 'ambiguous_target_account', file: null, accountQuestions: []});
 
 		const named = await drop(agent, [STATEMENT_FILES[0]]).field('bankAccountId', newAccount.id).expect(201);
 		expect(named.body).toMatchObject({rowsAdded: 3, accounts: [{id: newAccount.id, created: false}]});

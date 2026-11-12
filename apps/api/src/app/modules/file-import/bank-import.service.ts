@@ -1,5 +1,7 @@
 import {BadRequestException, ConflictException, Injectable, Logger, NotFoundException} from '@nestjs/common';
 import type {
+	BankImportAccountCandidate,
+	BankImportAccountQuestion,
 	BankImportDoubtfulRow as BankImportDoubtfulRowResponse,
 	BankImportSummary,
 	ResolveBankImportDoubtfulRowRequest,
@@ -53,6 +55,26 @@ const BANK_IMPORT_DOUBTFUL_ROW_RESOLVED = 'This row has already been decided.';
 const BANK_IMPORT_NOT_A_CANDIDATE = 'Choose one of the transactions this row may be.';
 /** How long an import waits for a running sync of the same connection before refusing with `account_busy`. */
 const SYNC_LOCK_WAIT_MS = 10_000;
+/**
+ * A statement that names no account, routed by its bank to a synced account, is only checked against that account
+ * when at least this many of its rows fall within the dates the account already holds; with fewer there is too little
+ * to compare. A chosen value, not a measured one.
+ */
+export const UNCONFIRMED_TARGET_MIN_OVERLAP_ROWS = 5;
+/**
+ * The share of those rows the account must already hold for the statement to be its own, as numerator and
+ * denominator so the check stays in integers. From a one-off check of real exports (no fixture in the repo):
+ * dropped on the wrong account, under 3% of the overlapping rows matched by coincidence (equal amounts on nearby
+ * days); on the right account, over 99% matched. One half sits well between them.
+ */
+export const UNCONFIRMED_TARGET_MIN_MATCH_SHARE = {numerator: 1, denominator: 2} as const;
+
+/** The `accountChoices` value that sends a statement to the imported-files account of its bank and currency. */
+export const ACCOUNT_CHOICE_NEW = 'new';
+/** The owner's answers to `accountQuestions`: `<bank>:<currency>` to a bank account id or `new`. */
+export type AccountChoices = ReadonlyMap<string, string>;
+/** Where the request says a drop goes: one named account, or a choice per statement that names no account. */
+export type BankImportRequest = {bankAccountId?: BankAccount['id'] | null; accountChoices?: AccountChoices};
 
 /** The statements of one account in one drop: its rows per format, in matching order (`FORMAT_ORDER`), each in booking order. */
 type AccountRows = {
@@ -72,6 +94,9 @@ const FORMAT_ORDER: readonly StatementFormat[] = ['camt053', 'mt940', 'abnAmroTx
 
 /** Where an account's rows go: an account bank sync writes to, or an imported-files account found or created. */
 type Target = {kind: 'synced'; account: BankAccount} | {kind: 'file'; account?: BankAccount};
+
+/** A statement's target, and whether it was found by bank and currency alone (the case the unconfirmed guard checks). */
+type RoutedTarget = {target: Target; routedByBank: boolean};
 
 type ImportedAccount = {account: BankAccount; connection: BankConnection; created: boolean};
 
@@ -96,15 +121,16 @@ export class BankImportService {
 	) {}
 
 	/**
-	 * Imports one drop, all or nothing. A statement goes to the owner's synced account with its IBAN and currency
-	 * (for a file that names no account, the one synced account at its bank in that currency), to the account the
-	 * request names, or else to an imported-files account. Each row runs the duplicate ladder against the account's
-	 * stored rows: matched rows are skipped, doubtful rows are held for the owner, and only new rows are inserted.
+	 * Imports one drop, all or nothing. A statement goes to the account the request names (`bankAccountId`, or its
+	 * `accountChoices` entry), else to the owner's synced account with its IBAN and currency (for a file that names no
+	 * account, the one synced account at its bank in that currency, once the file's rows confirm it), or else to an
+	 * imported-files account. Each row runs the duplicate ladder against the account's stored rows: matched rows are
+	 * skipped, doubtful rows are held for the owner, and only new rows are inserted.
 	 */
 	async importFiles(
 		ownerId: Account['id'],
 		files: readonly Buffer[],
-		bankAccountId: BankAccount['id'] | null = null,
+		{bankAccountId = null, accountChoices = new Map()}: BankImportRequest = {},
 	): Promise<BankImportSummary> {
 		const {statements, formats} = await this.parseDrop(files);
 		const accountRows = groupByAccount(statements);
@@ -113,7 +139,7 @@ export class BankImportService {
 		const rowsParsed = allRows.length;
 		const targets = bankAccountId
 			? [await this.findNamedTarget(ownerId, bankAccountId, accountRows)]
-			: await this.findSyncedTargets(ownerId, accountRows);
+			: await this.findRoutedTargets(ownerId, accountRows, accountChoices);
 
 		const syncedConnectionIds = [
 			...new Set(
@@ -469,11 +495,25 @@ export class BankImportService {
 	}
 
 	/**
-	 * The synced account each statement belongs to by IBAN and currency (stored IBAN, or the identification hash);
-	 * for a file that names no account, the synced account in its currency at a connection of its bank. Otherwise an
-	 * imported-files account. Two matching synced accounts need the owner to name one.
+	 * The target of each statement of a request that names no single account. A statement of a file that names no
+	 * account and has an `accountChoices` entry goes where the owner chose. The others go to the synced account with
+	 * their IBAN and currency (stored IBAN, or the identification hash); for a file that names no account, the synced
+	 * account in its currency at a connection of its bank, an active one when any fits. Otherwise an imported-files
+	 * account.
+	 *
+	 * Refuses, listing every statement that needs an answer: `ambiguous_target_account` when two synced accounts fit
+	 * a statement, else `target_account_unconfirmed` when a statement routed by its bank alone is not confirmed by the
+	 * account's stored rows (`isTargetConfirmed`).
 	 */
-	private async findSyncedTargets(ownerId: Account['id'], accountRows: readonly AccountRows[]): Promise<Target[]> {
+	private async findRoutedTargets(
+		ownerId: Account['id'],
+		accountRows: readonly AccountRows[],
+		accountChoices: AccountChoices,
+	): Promise<Target[]> {
+		const keys = accountRows.map(({bank, currency}) => (bank ? accountChoiceKey(bank, currency) : null));
+		for (const key of accountChoices.keys()) {
+			if (!keys.includes(key)) throw new BankImportRefusalException('target_account_mismatch');
+		}
 		const syncedAccounts = accountRows.some(({iban, bank}) => iban || bank)
 			? await this.dataSource.getRepository(BankAccount).find({
 					where: {bankConnection: {accountId: ownerId, provider: Not(BANK_CONNECTION_PROVIDERS.FILE)}},
@@ -481,8 +521,16 @@ export class BankImportService {
 					order: {id: 'ASC'},
 				})
 			: [];
-		return accountRows.map(({iban, bank, currency}) => {
-			const matches = syncedAccounts.filter(
+		const routed: Array<RoutedTarget | null> = [];
+		const ambiguous: Array<{index: number; matches: BankAccount[]}> = [];
+		for (const [index, rows] of accountRows.entries()) {
+			const choice = keys[index] === null ? undefined : accountChoices.get(keys[index]);
+			if (choice !== undefined) {
+				routed.push({target: await this.findChosenTarget(ownerId, choice, rows), routedByBank: false});
+				continue;
+			}
+			const {iban, bank, currency} = rows;
+			const fitting = syncedAccounts.filter(
 				(account) =>
 					account.currency === currency &&
 					(iban
@@ -490,9 +538,124 @@ export class BankImportService {
 							verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency)
 						: !!bank && account.bankConnection.aspspName.trim().toLowerCase() === bank.toLowerCase()),
 			);
-			if (matches.length > 1) throw new BankImportRefusalException('ambiguous_target_account');
-			return matches.length === 1 ? {kind: 'synced', account: matches[0]} : {kind: 'file'};
-		});
+			// By bank alone, an account bank sync no longer reports (closed, or left out of the consent) fits only when
+			// no active one does, so it cannot make the statement of an active account ambiguous.
+			const active = iban ? [] : fitting.filter(({isActive}) => isActive);
+			const matches = active.length > 0 ? active : fitting;
+			if (matches.length > 1) {
+				ambiguous.push({index, matches});
+				routed.push(null);
+			} else {
+				routed.push({
+					target: matches.length === 1 ? {kind: 'synced', account: matches[0]} : {kind: 'file'},
+					routedByBank: !!bank && matches.length === 1,
+				});
+			}
+		}
+
+		// Read without the sync lock: this only decides whether to ask the owner, and the ladder runs again under it.
+		const unconfirmed: number[] = [];
+		for (const [index, entry] of routed.entries()) {
+			if (!entry?.routedByBank || entry.target.kind !== 'synced') continue;
+			if (!(await this.isTargetConfirmed(ownerId, entry.target.account, accountRows[index]))) {
+				unconfirmed.push(index);
+			}
+		}
+		if (ambiguous.length === 0 && unconfirmed.length === 0) return routed.map((entry) => entry!.target);
+
+		const questions: Array<{index: number; candidates: BankAccount[]}> = ambiguous.map(({index, matches}) => ({
+			index,
+			candidates: matches,
+		}));
+		if (unconfirmed.length > 0) {
+			const ownedAccounts = await this.dataSource.getRepository(BankAccount).find({
+				where: {bankConnection: {accountId: ownerId}},
+				relations: {bankConnection: true},
+				order: {id: 'ASC'},
+			});
+			for (const index of unconfirmed) {
+				const routedTo = (routed[index]!.target as {account: BankAccount}).account;
+				questions.push({
+					index,
+					// The account the statement would have gone to first, then every other active account in its currency.
+					candidates: [
+						routedTo,
+						...ownedAccounts.filter(
+							({id, currency, isActive}) =>
+								isActive && id !== routedTo.id && currency === accountRows[index].currency,
+						),
+					],
+				});
+			}
+		}
+		throw new BankImportRefusalException(
+			ambiguous.length > 0 ? 'ambiguous_target_account' : 'target_account_unconfirmed',
+			null,
+			questions
+				.sort((left, right) => left.index - right.index)
+				.flatMap(({index, candidates}) => {
+					const {bank, currency} = accountRows[index];
+					return bank ? [{bank, currency, candidates: candidates.map(toAccountCandidate)}] : [];
+				}) satisfies BankImportAccountQuestion[],
+		);
+	}
+
+	/** The owner's `accountChoices` answer for a statement that names no account: any account of theirs in its currency. */
+	private async findChosenTarget(ownerId: Account['id'], choice: string, rows: AccountRows): Promise<Target> {
+		if (choice === ACCOUNT_CHOICE_NEW) return {kind: 'file'};
+		const [account] = await this.findOwnedAccounts(ownerId, [choice]);
+		if (!account?.bankConnection || account.currency !== rows.currency) {
+			throw new BankImportRefusalException('target_account_mismatch');
+		}
+		return account.bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE
+			? {kind: 'file', account}
+			: {kind: 'synced', account};
+	}
+
+	/**
+	 * Whether a statement found only by its bank and currency looks like the synced account's own history. It takes
+	 * the format with the most rows within the first and last day the account stores (on a tie, the earlier in
+	 * `FORMAT_ORDER`). With fewer than `UNCONFIRMED_TARGET_MIN_OVERLAP_ROWS` such rows, including a statement entirely
+	 * outside the stored dates, it is confirmed: there is too little to compare it with. Otherwise it is confirmed
+	 * only when the ladder matches at least `UNCONFIRMED_TARGET_MIN_MATCH_SHARE` of those rows against the stored
+	 * rows. A doubtful row is no match.
+	 */
+	private async isTargetConfirmed(ownerId: Account['id'], account: BankAccount, rows: AccountRows): Promise<boolean> {
+		const range = (await this.dataSource
+			.getRepository(BankTransaction)
+			.createQueryBuilder('transaction')
+			.innerJoin('transaction.bankAccount', 'bankAccount')
+			.innerJoin('bankAccount.bankConnection', 'connection')
+			.select(
+				`to_char(MIN(COALESCE("transaction"."bookingDate", "transaction"."valueDate")), 'YYYY-MM-DD')`,
+				'from',
+			)
+			.addSelect(
+				`to_char(MAX(COALESCE("transaction"."bookingDate", "transaction"."valueDate")), 'YYYY-MM-DD')`,
+				'to',
+			)
+			.where('transaction.bankAccountId = :bankAccountId', {bankAccountId: account.id})
+			.andWhere('connection.accountId = :ownerId', {ownerId})
+			.getRawOne<{from: string | null; to: string | null}>()) ?? {from: null, to: null};
+		if (!range.from || !range.to) return true;
+		const {from, to} = range;
+		// `byFormat` is in `FORMAT_ORDER`, so keeping only a strictly larger overlap breaks ties to the earlier format.
+		let largest: {rows: NormalizedRow[]; inRange: number[]} | null = null;
+		for (const {rows: formatRows} of rows.byFormat) {
+			const inRange = formatRows.flatMap((row, index) => {
+				const day = matchDay(row);
+				return day && day >= from && day <= to ? [index] : [];
+			});
+			if (inRange.length > (largest?.inRange.length ?? 0)) largest = {rows: formatRows, inRange};
+		}
+		if (!largest || largest.inRange.length < UNCONFIRMED_TARGET_MIN_OVERLAP_ROWS) return true;
+		const outcomes = matchTransactions(
+			largest.rows.map(toMatchRow),
+			await this.findMatchCandidates(this.dataSource.manager, account.id, largest.rows),
+		);
+		const matched = largest.inRange.filter((index) => outcomes[index].kind === 'matched').length;
+		const {numerator, denominator} = UNCONFIRMED_TARGET_MIN_MATCH_SHARE;
+		return matched * denominator >= largest.inRange.length * numerator;
 	}
 
 	/** The account the request names; the drop must be one account in its currency that does not contradict it. */
@@ -570,6 +733,16 @@ export class BankImportService {
 				: null;
 		const accounts: ImportedAccount[] = [];
 		for (const [index, target] of targets.entries()) {
+			if (target.kind === 'file' && target.account) {
+				// The imported-files account the request names, read again under the locked connection.
+				const account = await manager.getRepository(BankAccount).findOne({
+					where: {id: target.account.id, bankConnection: {id: fileConnection!.id, accountId: ownerId}},
+				});
+				// Only an undo or removal committing before the lock was taken gets here.
+				if (!account) throw new ConflictException(BANK_IMPORT_NOT_SAVED);
+				accounts.push({account, connection: fileConnection!, created: false});
+				continue;
+			}
 			if (target.kind === 'file') {
 				accounts.push(await this.findOrCreateFileAccount(manager, fileConnection!, accountRows[index]));
 				continue;
@@ -871,6 +1044,21 @@ function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): {
 		providerAccountId: `file:${identifier}:${currency}`,
 		hashSeed: `${identifier}:${currency}`,
 		name: iban ? iban.replace(/(.{4})(?=.)/g, '$1 ') : identifier,
+	};
+}
+
+/** The `accountChoices` key of the statements of a file that names no account. */
+function accountChoiceKey(bank: StatementBank, currency: string): string {
+	return `${bank}:${currency}`;
+}
+
+function toAccountCandidate(account: BankAccount): BankImportAccountCandidate {
+	return {
+		bankAccountId: account.id,
+		name: account.name,
+		currency: account.currency,
+		bankName: account.bankConnection.aspspName.trim(),
+		imported: account.bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE,
 	};
 }
 

@@ -13,12 +13,39 @@ export const BANK_IMPORT_ERROR_CODES = [
 	'too_many_rows',
 	'parse_failed',
 	'parse_timeout',
+	/** More than one synced account fits a statement: the owner chooses one. */
 	'ambiguous_target_account',
+	/**
+	 * A statement that names no account was routed by its bank to a synced account, but fewer than half of its rows
+	 * within that account's stored dates are found there: the owner confirms or chooses the account.
+	 */
+	'target_account_unconfirmed',
 	'target_account_mismatch',
 	'account_busy',
 	'multiple_bank_connections',
 ] as const;
 export type BankImportErrorCode = (typeof BANK_IMPORT_ERROR_CODES)[number];
+
+/** An account the owner can choose for a statement. */
+export type BankImportAccountCandidate = {
+	bankAccountId: string;
+	name: string | null;
+	currency: string;
+	/** The bank of the account's connection; `Imported files` for an imported-files account. */
+	bankName: string;
+	/** Whether this is an imported-files account rather than one bank sync holds. */
+	imported: boolean;
+};
+
+/**
+ * A statement of a file that names no account, which needs the owner to choose its account. It is answered with
+ * the key `<bank>:<currency>` in `accountChoices`; besides `candidates`, the owner can choose `new`.
+ */
+export type BankImportAccountQuestion = {
+	bank: string;
+	currency: string;
+	candidates: BankImportAccountCandidate[];
+};
 
 /** The body of a refused `POST /bank-imports`. */
 export type BankImportError = {
@@ -27,6 +54,12 @@ export type BankImportError = {
 	code: BankImportErrorCode;
 	/** The refused file's 1-based position in the request; null when the refusal is about the whole drop. */
 	file: number | null;
+	/**
+	 * On `ambiguous_target_account` and `target_account_unconfirmed`: every statement of the drop that names no
+	 * account and needs an answer, one per bank and currency. A statement that names its account (by IBAN or another
+	 * id) is not listed; the owner names its account in `bankAccountId` instead.
+	 */
+	accountQuestions?: BankImportAccountQuestion[];
 };
 
 /** An account an import wrote to. Accounts removed since (for example by an undo) are left out. */
@@ -40,7 +73,11 @@ export type BankImportAccount = {
 
 /**
  * `POST /bank-imports` (201), each item of `GET /bank-imports`, newest first, and the answer to resolving a doubtful
- * row. The request may name the target account in the optional multipart text field `bankAccountId`.
+ * row. The request may carry one of two optional multipart text fields, never both:
+ * - `bankAccountId`: the account a drop of one account's statements goes to.
+ * - `accountChoices`: a JSON object answering `accountQuestions`, from `<bank>:<currency>` (for example
+ *   `Revolut:EUR`) to a bank account id or `new` (the imported-files account of that bank and currency, created when
+ *   missing). A statement with a key goes where it says; the others are routed automatically.
  */
 export type BankImportSummary = {
 	id: string;
