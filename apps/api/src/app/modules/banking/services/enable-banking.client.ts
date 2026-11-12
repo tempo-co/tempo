@@ -32,6 +32,8 @@ export class EnableBankingClientError extends Error {
 		public readonly retryAfterSeconds?: number,
 		/** Whether the response carried a Retry-After header, even one too far off or malformed to use. */
 		public readonly retryAfterPresent = retryAfterSeconds !== undefined,
+		/** The transaction pages fetched before a later page failed, so they can still be imported. */
+		public readonly partialTransactions?: EnableBankingTransactionsResult,
 	) {
 		super(code);
 		this.name = 'EnableBankingClientError';
@@ -177,6 +179,19 @@ export class EnableBankingClient {
 		const transactions: EnableBankingTransaction[] = [];
 		let unparseableCount = 0;
 		let continuationKey: string | undefined;
+		const seenContinuationKeys = new Set<string>();
+		// A failure after the first page keeps what was fetched, so the caller can import it.
+		const fail = (error: unknown): never => {
+			if (!(error instanceof EnableBankingClientError) || (!transactions.length && !unparseableCount))
+				throw error;
+			throw new EnableBankingClientError(
+				error.code,
+				error.providerStatus,
+				error.retryAfterSeconds,
+				error.retryAfterPresent,
+				{transactions, unparseableCount},
+			);
+		};
 
 		for (let page = 0; page < MAX_TRANSACTION_PAGES; page += 1) {
 			const params = new URLSearchParams({strategy: options.strategy});
@@ -184,21 +199,31 @@ export class EnableBankingClient {
 			if (options.dateTo) params.set('date_to', options.dateTo);
 			if (continuationKey) params.set('continuation_key', continuationKey);
 
-			const response = await this.request(
-				`/accounts/${encodeURIComponent(accountId)}/transactions?${params.toString()}`,
-				undefined,
-				signal,
-				psu,
-			);
-			const parsed = this.parseTransactionsPage(response);
+			let parsed: ReturnType<EnableBankingClient['parseTransactionsPage']>;
+			try {
+				const response = await this.request(
+					`/accounts/${encodeURIComponent(accountId)}/transactions?${params.toString()}`,
+					undefined,
+					signal,
+					psu,
+				);
+				parsed = this.parseTransactionsPage(response);
+			} catch (error) {
+				return fail(error);
+			}
 			transactions.push(...parsed.transactions);
 			unparseableCount += parsed.unparseableCount;
 
 			if (!parsed.continuationKey) return {transactions, unparseableCount};
+			// A key the provider already sent would page in a loop.
+			if (seenContinuationKeys.has(parsed.continuationKey)) {
+				return fail(new EnableBankingClientError('provider_pagination_loop'));
+			}
+			seenContinuationKeys.add(parsed.continuationKey);
 			continuationKey = parsed.continuationKey;
 		}
 
-		throw new EnableBankingClientError('provider_pagination_limit_exceeded');
+		return fail(new EnableBankingClientError('provider_pagination_limit_exceeded'));
 	}
 
 	private async request(

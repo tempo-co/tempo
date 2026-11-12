@@ -28,6 +28,11 @@ export const BANKING_MIN_RETRY_AFTER_SECONDS = 15 * 60;
 /** A rate-limit cooldown never lasts longer than this, so one odd Retry-After cannot stop syncing for weeks. */
 export const BANKING_MAX_RETRY_AFTER_SECONDS = 24 * 60 * 60;
 export const BANKING_TRANSIENT_RETRY_BASE_MS = 15 * 60 * 1000;
+/**
+ * How far back many banks serve transactions without the user present (Enable Banking FAQ: often 90 days once the
+ * first hour after authorization has passed). No bank publishes its own limit.
+ */
+export const BANKING_UNATTENDED_HISTORY_DAYS = 90;
 /** A foreground refresh is skipped when the connection synchronized more recently than this. */
 export const BANKING_FOREGROUND_REFRESH_MIN_INTERVAL_MS = 5 * 60 * 1000;
 
