@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk';
 import {Logger} from '@nestjs/common';
 import {BANK_TRANSACTION_CATEGORIES, BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
@@ -375,6 +376,22 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			}
 		});
 
+		it.each([
+			['ran and failed', {status: 500}, 'failed'],
+			['refused it', {status: 400}, 'pending'],
+			['never reached', new Anthropic.APIConnectionError({message: 'synthetic'}), 'pending'],
+		] as const)(
+			'ends a standard call the API %s as %s when the bridge then refuses before running',
+			async (_case, apiError, expected) => {
+				await withBridge(unavailable, async (socket, requests) => {
+					const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
+					create.mockRejectedValue(apiError);
+					await expect(outcomeOf(provider, 'standard')).resolves.toBe(expected);
+					expect(requests).toHaveLength(1);
+				});
+			},
+		);
+
 		it('leaves a call pending when the configured bridge socket is missing', async () => {
 			for (const route of ['standard', 'search'] as const) {
 				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/missing-synthetic.sock'});
@@ -628,7 +645,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 
 	it('returns a sanitized pending-retry error when API and subscription are unavailable', async () => {
 		const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/missing-synthetic.sock'});
-		create.mockRejectedValue({status: 500, message: 'synthetic-api-key raw transaction'});
+		create.mockRejectedValue({status: 429, message: 'synthetic-api-key raw transaction'});
 		await expect(provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).rejects.toMatchObject({
 			name: 'BankTransactionCategorizationUnavailableError',
 			message: 'Claude categorization is temporarily unavailable.',

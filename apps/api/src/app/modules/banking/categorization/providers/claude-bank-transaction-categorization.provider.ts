@@ -120,6 +120,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			correlationId: String(index),
 		}));
 		const input = this.createInput(categories, requestTransactions);
+		let apiError: unknown;
 		try {
 			const response = await this.callApi(
 				this.createRequest(
@@ -133,12 +134,17 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		} catch (error) {
 			// A billing/quota/transport failure must never turn into a category or a paid alternative.
 			if (!this.subscriptionSocket) throw this.routesFailed(error, CLAUDE_API);
+			apiError = error;
 		}
 		try {
 			const response = await this.callSubscription(input);
 			return this.parseResults(this.parseJson(response), transactions, CLAUDE_SUBSCRIPTION);
 		} catch (error) {
-			throw this.routesFailed(error, CLAUDE_SUBSCRIPTION);
+			const failure = this.routesFailed(error, CLAUDE_SUBSCRIPTION);
+			// Waiting for the bridge would repeat an API call that may already have run, so that attempt counts.
+			if (failure instanceof BankTransactionCategorizationUnavailableError && this.mayHaveRun(apiError))
+				throw this.routesFailed(apiError, CLAUDE_API);
+			throw failure;
 		}
 	}
 
