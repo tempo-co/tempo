@@ -1,4 +1,5 @@
 import {BadRequestException, Inject, Injectable} from '@nestjs/common';
+import type {CodedErrorResponse, PasswordResetErrorCode} from '@tempo/contracts';
 import Redis from 'ioredis';
 import ms from 'ms';
 import crypto from 'node:crypto';
@@ -23,6 +24,14 @@ import {
 	PASSWORD_RESET_SUCCESS,
 	PASSWORD_SAME_AS_OLD,
 } from '../api/constants/api-messages.constants';
+
+const resetError = (code: PasswordResetErrorCode, message: string) =>
+	new BadRequestException({
+		statusCode: 400,
+		error: 'Bad Request',
+		message,
+		code,
+	} satisfies CodedErrorResponse<PasswordResetErrorCode>);
 
 /**
  * An account has at most one live reset link: a new request replaces it, and a reset, password
@@ -72,7 +81,7 @@ export class PasswordResetService {
 		const tokenKey = passwordResetTokenKey(this.REDIS_KEY, hashSecret(token));
 		const accountId = await this.redisClient.get(tokenKey);
 		if (!accountId) {
-			throw new BadRequestException(PASSWORD_RESET_INVALID_TOKEN);
+			throw resetError('invalid_token', PASSWORD_RESET_INVALID_TOKEN);
 		}
 
 		// Checked before the token is consumed, so the link still works with a different password.
@@ -81,7 +90,7 @@ export class PasswordResetService {
 
 		// GETDEL lets exactly one of concurrent submissions of the same link through.
 		if ((await this.redisClient.getdel(tokenKey)) !== accountId) {
-			throw new BadRequestException(PASSWORD_RESET_INVALID_TOKEN);
+			throw resetError('invalid_token', PASSWORD_RESET_INVALID_TOKEN);
 		}
 		await this.accountService.updateFields(accountId, {password: hash});
 		await this.revokeForAccount(accountId);
@@ -125,7 +134,7 @@ export class PasswordResetService {
 	private async _assertPasswordIsNew(accountId: Account['id'], newPassword: string) {
 		const account = await this.accountService.findById(accountId);
 		if (await this.accountService.isPasswordValid(account.password, newPassword)) {
-			throw new BadRequestException(PASSWORD_SAME_AS_OLD);
+			throw resetError('password_unchanged', PASSWORD_SAME_AS_OLD);
 		}
 	}
 }

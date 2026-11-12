@@ -11,7 +11,6 @@ import {toAccountResponse} from '@modules/account/api/account-response';
 import {CurrentAccount} from '../decorators/current-user.decorator';
 import {Public} from '../decorators/public.decorator';
 import {SkipEmailVerification} from '../decorators/skip-email-verification.decorator';
-import {CsrfOriginGuard} from '../guards/csrf-origin.guard';
 import {LocalLogInGuard} from '../guards/local-login.guard';
 import {AuthService} from '../services/auth.service';
 import {EmailVerifierService} from '../services/email-verifier.service';
@@ -92,7 +91,6 @@ export class AuthController {
 	}
 
 	@Post('change-email/request')
-	@UseGuards(CsrfOriginGuard)
 	@HttpCode(200)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
 	async requestEmailChange(
@@ -103,7 +101,6 @@ export class AuthController {
 	}
 
 	@Post('change-email/verify')
-	@UseGuards(CsrfOriginGuard)
 	@HttpCode(200)
 	@Throttle({default: {limit: 6, ttl: minutes(1)}})
 	async verifyEmailChange(

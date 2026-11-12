@@ -11,7 +11,7 @@ const baseConfig = {
 	DB_PASSWORD: 'test-password',
 	DB_NAME: 'tempo',
 	DB_SYNCHRONIZE: 'false',
-	SESSION_SECRET: 'test-session-secret',
+	SESSION_SECRET: 'x'.repeat(32),
 	SESSION_EXPIRATION: '30d',
 	SESSION_REDIS_KEY: 'sess',
 	REDIS_URL: 'redis://redis:6379',
@@ -19,10 +19,9 @@ const baseConfig = {
 	ENABLE_BANKING_APPLICATION_ID: 'test-application',
 	ENABLE_BANKING_PRIVATE_KEY_B64: 'test-private-key',
 	ENABLE_BANKING_REDIRECT_URL: 'https://example.test/callback',
-	BANKING_SESSION_ENCRYPTION_KEY_B64: 'test-encryption-key',
+	BANKING_SESSION_ENCRYPTION_KEY_B64: Buffer.alloc(32, 7).toString('base64'),
 	EMAIL_HOST: 'mailpit',
 	EMAIL_PORT: '1025',
-	EMAIL_UI_URL: 'http://mailpit:8025',
 	EMAIL_VERIFICATION_EXPIRATION: '1d',
 	EMAIL_VERIFICATION_REDIS_KEY: 'email-verification',
 	PASSWORD_RESET_EXPIRATION: '1h',
@@ -30,6 +29,48 @@ const baseConfig = {
 	THROTTLE_TTL: '1m',
 	THROTTLE_LIMIT: '100',
 };
+
+describe('secrets and schema configuration', () => {
+	it('accepts a 32-character session secret and a 32-byte banking key', () => {
+		expect(configSchema.parse(baseConfig)).toMatchObject({
+			SESSION_SECRET: baseConfig.SESSION_SECRET,
+			BANKING_SESSION_ENCRYPTION_KEY_B64: baseConfig.BANKING_SESSION_ENCRYPTION_KEY_B64,
+		});
+	});
+
+	it.each([
+		['a session secret shorter than 32 characters', {SESSION_SECRET: 'x'.repeat(31)}, 'SESSION_SECRET'],
+		[
+			'a banking key of 31 bytes',
+			{BANKING_SESSION_ENCRYPTION_KEY_B64: Buffer.alloc(31, 7).toString('base64')},
+			'BANKING_SESSION_ENCRYPTION_KEY_B64',
+		],
+		[
+			'a banking key of 33 bytes',
+			{BANKING_SESSION_ENCRYPTION_KEY_B64: Buffer.alloc(33, 7).toString('base64')},
+			'BANKING_SESSION_ENCRYPTION_KEY_B64',
+		],
+		[
+			'a banking key that is not base64 of a key',
+			{BANKING_SESSION_ENCRYPTION_KEY_B64: 'synthetic-key'},
+			'BANKING_SESSION_ENCRYPTION_KEY_B64',
+		],
+		['schema sync in production', {NODE_ENV: 'production', DB_SYNCHRONIZE: 'true'}, 'DB_SYNCHRONIZE'],
+	])('rejects %s', (_description, override, path) => {
+		const result = configSchema.safeParse({...baseConfig, ...override});
+
+		expect(result.success).toBe(false);
+		expect(result.error?.issues.map((issue) => issue.path.join('.'))).toEqual([path]);
+	});
+
+	it.each([
+		['development', 'true'],
+		['test', 'true'],
+		['production', 'false'],
+	])('accepts DB_SYNCHRONIZE in %s set to %s', (NODE_ENV, DB_SYNCHRONIZE) => {
+		expect(configSchema.safeParse({...baseConfig, NODE_ENV, DB_SYNCHRONIZE}).success).toBe(true);
+	});
+});
 
 describe('boolean environment configuration', () => {
 	it('parses false strings as false for schema sync and email TLS', () => {

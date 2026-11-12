@@ -17,7 +17,7 @@ import {PW_RESET_ACCOUNT_EMAIL, PW_RESET_ACCOUNT_PASSWORD} from '../../../script
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 import {UUID_VALIDATION_REGEX} from '../../types/regex.constants';
 import {expectValidationMessage, uniqueEmail, uniquePassword} from '../../utils/auth-utils';
-import {EmailUtils} from '../../utils/email-utils';
+import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
 
 describe('AuthController - Reset Password', () => {
 	let mailpitApiUrl: string;
@@ -30,7 +30,7 @@ describe('AuthController - Reset Password', () => {
 	beforeAll(async () => {
 		const app = getApp();
 		const config = app.get(ConfigurationService);
-		mailpitApiUrl = config.get('EMAIL_UI_URL');
+		mailpitApiUrl = MAILPIT_API_URL;
 		passwordResetExpiration = config.get('PASSWORD_RESET_EXPIRATION');
 		webUrl = config.get('WEB_BASE_URL');
 		httpServer = app.getHttpServer();
@@ -97,7 +97,7 @@ describe('AuthController - Reset Password', () => {
 
 		it('refuses the current password and keeps the link usable for a new one', async () => {
 			const response = await verifyReset({token: resetToken, newPassword: currentPassword}).expect(400);
-			expect(response.body.message).toBe(PASSWORD_SAME_AS_OLD);
+			expect(response.body).toMatchObject({message: PASSWORD_SAME_AS_OLD, code: 'password_unchanged'});
 			await login(currentPassword).expect(200);
 
 			const newPassword = uniquePassword();
@@ -129,7 +129,7 @@ describe('AuthController - Reset Password', () => {
 				token: randomUUID(),
 				newPassword: uniquePassword(),
 			}).expect(400);
-			expect(response.body.message).toBe(PASSWORD_RESET_INVALID_TOKEN);
+			expect(response.body).toMatchObject({message: PASSWORD_RESET_INVALID_TOKEN, code: 'invalid_token'});
 		});
 
 		it('accepts one of two concurrent submissions of the same link', async () => {
@@ -152,7 +152,7 @@ describe('AuthController - Reset Password', () => {
 			expect(newerToken).not.toBe(resetToken);
 
 			const response = await verifyReset({token: resetToken, newPassword: uniquePassword()}).expect(400);
-			expect(response.body.message).toBe(PASSWORD_RESET_INVALID_TOKEN);
+			expect(response.body).toMatchObject({message: PASSWORD_RESET_INVALID_TOKEN, code: 'invalid_token'});
 
 			const newPassword = uniquePassword();
 			await verifyReset({token: newerToken, newPassword}).expect(200);
@@ -176,7 +176,7 @@ describe('AuthController - Reset Password', () => {
 			currentPassword = verifyDto.newPassword;
 
 			const response = await verifyReset(verifyDto).expect(400);
-			expect(response.body.message).toBe(PASSWORD_RESET_INVALID_TOKEN);
+			expect(response.body).toMatchObject({message: PASSWORD_RESET_INVALID_TOKEN, code: 'invalid_token'});
 		});
 
 		it.each<[string, (token: string) => Partial<PasswordResetVerifyDto>, RegExp]>([

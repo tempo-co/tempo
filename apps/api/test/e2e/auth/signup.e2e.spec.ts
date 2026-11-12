@@ -22,7 +22,7 @@ import {
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, getSessionCookie, loginAgent} from '../../setup/e2e.setup';
 import {createAccountCredentials, expectValidationMessage} from '../../utils/auth-utils';
-import {EmailUtils} from '../../utils/email-utils';
+import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
 
 describe('AuthController - Signup', () => {
 	let mailpitApiUrl: string;
@@ -33,7 +33,7 @@ describe('AuthController - Signup', () => {
 	beforeAll(async () => {
 		const app = getApp();
 		const config = app.get(ConfigurationService);
-		mailpitApiUrl = config.get('EMAIL_UI_URL');
+		mailpitApiUrl = MAILPIT_API_URL;
 		webUrl = config.get('WEB_BASE_URL');
 		emailVerificationExpiration = config.get('EMAIL_VERIFICATION_EXPIRATION');
 

@@ -9,10 +9,18 @@ const devDependencies = JSON.parse(fs.readFileSync('/tmp/dev-dependencies.json',
 const modulesPath = '/usr/src/app/node_modules';
 const remainingDevDependencies = devDependencies.filter((name) => fs.existsSync(path.join(modulesPath, name)));
 
-assert.deepEqual(remainingDevDependencies, [], `Development dependencies remain in runtime image: ${remainingDevDependencies.join(', ')}`);
+assert.deepEqual(
+	remainingDevDependencies,
+	[],
+	`Development dependencies remain in runtime image: ${remainingDevDependencies.join(', ')}`,
+);
 
 const manifest = require('/usr/src/app/package.json');
-assert.deepEqual(Object.keys(manifest.devDependencies ?? {}), [], 'Runtime package.json still declares devDependencies');
+assert.deepEqual(
+	Object.keys(manifest.devDependencies ?? {}),
+	[],
+	'Runtime package.json still declares devDependencies',
+);
 
 // Env files are host configuration; test values in the image would be loaded whenever NODE_ENV=test.
 const envFiles = fs.readdirSync('/usr/src/app').filter((name) => name === '.env' || name.startsWith('.env.'));
@@ -55,7 +63,7 @@ Object.assign(process.env, {
 	DB_PASSWORD: 'synthetic',
 	DB_NAME: 'tempo',
 	DB_SYNCHRONIZE: 'false',
-	SESSION_SECRET: 'synthetic-only',
+	SESSION_SECRET: 'synthetic-only-session-secret-0032',
 	SESSION_EXPIRATION: '1d',
 	SESSION_REDIS_KEY: 'synthetic:session',
 	REDIS_URL: 'redis://redis:6379',
@@ -63,10 +71,9 @@ Object.assign(process.env, {
 	ENABLE_BANKING_API_URL: 'https://banking.example.invalid',
 	ENABLE_BANKING_APPLICATION_ID: 'synthetic',
 	ENABLE_BANKING_REDIRECT_URL: 'https://web.example.invalid/callback',
-	BANKING_SESSION_ENCRYPTION_KEY_B64: 'synthetic-only',
+	BANKING_SESSION_ENCRYPTION_KEY_B64: 'c3ludGhldGljLW9ubHktYmFua2luZy1rZXktMDAwMzI=',
 	EMAIL_HOST: 'mailpit',
 	EMAIL_PORT: '1025',
-	EMAIL_UI_URL: 'http://mailpit.example.invalid',
 	EMAIL_VERIFICATION_EXPIRATION: '1d',
 	EMAIL_VERIFICATION_REDIS_KEY: 'synthetic:verify',
 	PASSWORD_RESET_EXPIRATION: '1d',

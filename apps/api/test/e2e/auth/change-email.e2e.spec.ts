@@ -37,7 +37,7 @@ import {
 	uniqueEmail,
 	uniquePassword,
 } from '../../utils/auth-utils';
-import {EmailUtils} from '../../utils/email-utils';
+import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
 
 const TEST_WEB_BASE_URL = 'https://app.example.test';
 const TEST_SIBLING_ORIGIN = 'https://evil.example.test';
@@ -67,7 +67,7 @@ describe('AuthController - Change email', () => {
 		const app = getApp();
 
 		const config = app.get(ConfigurationService);
-		mailpitApiUrl = config.get('EMAIL_UI_URL');
+		mailpitApiUrl = MAILPIT_API_URL;
 		webUrl = config.get('WEB_BASE_URL');
 		webOrigin = new URL(webUrl).origin;
 		expect(webOrigin).toBe(TEST_WEB_BASE_URL);
@@ -87,7 +87,8 @@ describe('AuthController - Change email', () => {
 
 	/** Sends a form-encoded (CORS-simple) request, which is what the Origin check has to stop. */
 	function sendWithOrigin(test: request.Test, origin: string | undefined, body: object) {
-		if (origin !== undefined) test.set('Origin', origin);
+		if (origin === undefined) test.unset('Origin');
+		else test.set('Origin', origin);
 		return test.type('form').send(body);
 	}
 

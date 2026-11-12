@@ -23,7 +23,7 @@ import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from '../../../script
 import {getApp, loginAgent} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
 import {fetchedTransactions} from '../../utils/banking-utils';
-import {EmailUtils} from '../../utils/email-utils';
+import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
 
 describe('AccountController - DELETE /accounts/me', () => {
 	let app: INestApplication;
@@ -43,8 +43,7 @@ describe('AccountController - DELETE /accounts/me', () => {
 	beforeAll(async () => {
 		app = getApp();
 		httpServer = app.getHttpServer();
-		const config = app.get(ConfigurationService);
-		mailpitApiUrl = config.get('EMAIL_UI_URL');
+		mailpitApiUrl = MAILPIT_API_URL;
 		dataSource = app.get(DataSource);
 		connectionRepository = dataSource.getRepository(BankConnection);
 		bankAccountRepository = dataSource.getRepository(BankAccount);

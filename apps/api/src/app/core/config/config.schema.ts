@@ -37,7 +37,7 @@ export const configSchema = z
 		DB_SYNCHRONIZE: strictBooleanEnvSchema,
 
 		// --- Session ---
-		SESSION_SECRET: z.string().min(1),
+		SESSION_SECRET: z.string().min(32),
 		SESSION_EXPIRATION: durationSchema,
 		SESSION_REDIS_KEY: z.string().min(1),
 		SESSION_COOKIE_NAME: z.string().min(1).default('session'),
@@ -73,7 +73,10 @@ export const configSchema = z
 		ENABLE_BANKING_PRIVATE_KEY_B64: z.string().min(1).optional(),
 		ENABLE_BANKING_PRIVATE_KEY_PATH: z.string().min(1).optional(),
 		ENABLE_BANKING_REDIRECT_URL: z.string().url(),
-		BANKING_SESSION_ENCRYPTION_KEY_B64: z.string().min(1),
+		/** AES-256-GCM key for stored provider sessions: base64 of exactly 32 bytes. */
+		BANKING_SESSION_ENCRYPTION_KEY_B64: z
+			.string()
+			.refine((value) => Buffer.from(value, 'base64').length === 32, 'Must be base64 of exactly 32 bytes.'),
 
 		// --- Banking synchronization ---
 		BANKING_SYNC_INTERVAL: durationSchema.default('6h'),
@@ -103,7 +106,6 @@ export const configSchema = z
 		EMAIL_PASSWORD: z.string().min(1).optional(),
 		EMAIL_REQUIRE_TLS: strictBooleanEnvSchema.default(false),
 		EMAIL_FROM: z.string().trim().min(1).optional(),
-		EMAIL_UI_URL: z.string().url(),
 		EMAIL_VERIFICATION_EXPIRATION: durationSchema,
 		EMAIL_VERIFICATION_REDIS_KEY: z.string().min(1),
 
@@ -116,6 +118,15 @@ export const configSchema = z
 		THROTTLE_LIMIT: z.coerce.number().int().positive(),
 	})
 	.superRefine((config, context) => {
+		// Production schema changes go through migrations only.
+		if (config.NODE_ENV === 'production' && config.DB_SYNCHRONIZE) {
+			context.addIssue({
+				code: 'custom',
+				path: ['DB_SYNCHRONIZE'],
+				message: 'DB_SYNCHRONIZE must be false in production.',
+			});
+		}
+
 		const hasEmailUsername = config.EMAIL_USERNAME !== undefined;
 		const hasEmailPassword = config.EMAIL_PASSWORD !== undefined;
 

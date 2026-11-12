@@ -15,6 +15,13 @@ import {
 import {expectNoHorizontalOverflow} from '../../utils/layout';
 import {openTransactionFilter} from '../../utils/transaction-filters';
 
+/** Ends the page's session on the server, as another tab of the app would. */
+function logOutOnServer(page: Page) {
+  return page.request.post(`${API_URL}/auth/logout`, {
+    headers: {Origin: new URL(page.url()).origin},
+  });
+}
+
 const CACHE_KEY = 'tempo-offline-cache';
 type SavedCache = {
   timestamp: number;
@@ -779,7 +786,7 @@ test('confirms a saved session before routing on an online reload', async ({
   await page.goto('/settings/appearance');
   await expect(homePage.accountName).toHaveText(freshAccount.name);
   await expect.poll(() => readCache(page)).not.toBe(null);
-  expect((await page.request.post(`${API_URL}/auth/logout`)).status()).toBe(200);
+  expect((await logOutOnServer(page)).status()).toBe(200);
 
   let releaseCheck!: () => void;
   const checkReleased = new Promise<void>((resolve) => (releaseCheck = resolve));
@@ -825,7 +832,7 @@ for (const outage of ['browser offline', 'Tempo unreachable'] as const) {
     await expect(savedStatus(page)).toBeVisible();
     await expect(page.getByRole('heading', {name: 'Theme', exact: true})).toBeVisible();
     expect(await page.evaluate(() => navigator.onLine)).toBe(outage !== 'browser offline');
-    expect((await page.request.post(`${API_URL}/auth/logout`)).status()).toBe(200);
+    expect((await logOutOnServer(page)).status()).toBe(200);
 
     const rejectedCheck = page.waitForResponse(
       (response) => response.url() === `${API_URL}/accounts/me` && response.status() === 401,
@@ -850,7 +857,7 @@ test('a session revoked on the server clears saved data and is not reopened offl
   await page.goto('/');
   await expect(homePage.accountName).toHaveText(freshAccount.name);
   await expect.poll(() => readCache(page)).not.toBe(null);
-  const revoked = await page.request.post(`${API_URL}/auth/logout`);
+  const revoked = await logOutOnServer(page);
   expect(revoked.status()).toBe(200);
   await page.reload();
   await expect(page).toHaveURL(/\/login$/);
