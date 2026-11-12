@@ -18,8 +18,8 @@ describe('runParseChild', () => {
 		expect(outcome).toEqual({
 			ok: true,
 			result: {
-				format: 'camt053',
 				files: 1,
+				formats: ['camt053'],
 				statements: [expect.objectContaining({rows: [expect.objectContaining({amount: '-12.50'})]})],
 			},
 		});
@@ -88,7 +88,7 @@ describe('runParseChild', () => {
 		{
 			name: 'returns rows that fail validation',
 			args: script(
-				`process.stdout.write(JSON.stringify({ok: true, format: 'camt053', files: 1, statements: [{accountIban: 'NL91ABNA0417164300', accountOtherId: null, accountCurrency: 'EUR', sequenceNumber: null, entriesSkipped: 0, rows: [{amount: 12.5}]}]}))`,
+				`process.stdout.write(JSON.stringify({ok: true, files: 1, formats: ['camt053'], statements: [{format: 'camt053', accountIban: 'NL91ABNA0417164300', accountOtherId: null, bank: null, accountCurrency: 'EUR', sequenceNumber: null, entriesSkipped: 0, rows: [{amount: 12.5}]}]}))`,
 			),
 		},
 	])('refuses a child that $name', async ({args}) => {

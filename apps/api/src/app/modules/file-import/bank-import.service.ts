@@ -43,7 +43,7 @@ import {BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {BankImport} from './bank-import.entity';
 import {MAX_ROWS_PER_DROP} from './parsers/parse-limits';
-import {NormalizedRow, NormalizedStatement} from './parsers/parse-result';
+import {NormalizedRow, NormalizedStatement, StatementBank, StatementFormat} from './parsers/parse-result';
 import {ParseRunnerService} from './runner/parse-runner.service';
 
 export const BANK_IMPORT_NOT_FOUND = 'Import not found.';
@@ -54,13 +54,21 @@ const BANK_IMPORT_NOT_A_CANDIDATE = 'Choose one of the transactions this row may
 /** How long an import waits for a running sync of the same connection before refusing with `account_busy`. */
 const SYNC_LOCK_WAIT_MS = 10_000;
 
-/** The statements of one account in one drop, in booking order. */
+/** The statements of one account in one drop: its rows per format, in matching order (`FORMAT_ORDER`), each in booking order. */
 type AccountRows = {
 	identifier: string;
 	iban: string | null;
+	/** The bank of a file that names no account (Revolut); null when it names one. */
+	bank: StatementBank | null;
 	currency: string;
-	rows: NormalizedRow[];
+	byFormat: {format: StatementFormat; rows: NormalizedRow[]}[];
 };
+
+/**
+ * The order the formats of one account in one drop are matched in: each format's rows meet the rows the formats
+ * before it added as if they were already stored, so one payment exported in several formats is imported once.
+ */
+const FORMAT_ORDER: readonly StatementFormat[] = ['camt053', 'mt940', 'abnAmroTxt', 'revolutCsv', 'revolutXlsx'];
 
 /** Where an account's rows go: an account bank sync writes to, or an imported-files account found or created. */
 type Target = {kind: 'synced'; account: BankAccount} | {kind: 'file'; account?: BankAccount};
@@ -88,22 +96,21 @@ export class BankImportService {
 	) {}
 
 	/**
-	 * Imports one drop, all or nothing. A statement goes to the owner's synced account with its IBAN and currency,
-	 * to the account the request names, or else to an imported-files account. Each row runs the duplicate ladder
-	 * against the account's stored rows: matched rows are skipped, doubtful rows are held for the owner, and only
-	 * new rows are inserted.
+	 * Imports one drop, all or nothing. A statement goes to the owner's synced account with its IBAN and currency
+	 * (for a file that names no account, the one synced account at its bank in that currency), to the account the
+	 * request names, or else to an imported-files account. Each row runs the duplicate ladder against the account's
+	 * stored rows: matched rows are skipped, doubtful rows are held for the owner, and only new rows are inserted.
 	 */
 	async importFiles(
 		ownerId: Account['id'],
 		files: readonly Buffer[],
 		bankAccountId: BankAccount['id'] | null = null,
 	): Promise<BankImportSummary> {
-		const statements = await this.parseDrop(files);
+		const {statements, formats} = await this.parseDrop(files);
 		const accountRows = groupByAccount(statements);
-		const bookingDates = accountRows
-			.flatMap(({rows}) => rows.flatMap(({bookingDate}) => (bookingDate ? [bookingDate] : [])))
-			.sort();
-		const rowsParsed = accountRows.reduce((count, {rows}) => count + rows.length, 0);
+		const allRows = accountRows.flatMap(({byFormat}) => byFormat.flatMap(({rows}) => rows));
+		const bookingDates = allRows.flatMap(({bookingDate}) => (bookingDate ? [bookingDate] : [])).sort();
+		const rowsParsed = allRows.length;
 		const targets = bankAccountId
 			? [await this.findNamedTarget(ownerId, bankAccountId, accountRows)]
 			: await this.findSyncedTargets(ownerId, accountRows);
@@ -132,7 +139,7 @@ export class BankImportService {
 						// imported-files connection takes only its own accounts, and the record still undoes the rest.
 						bankConnectionId: (syncedAccount?.connection ?? fileConnection!).id,
 						fileHash: hashDrop(files),
-						format: 'camt053',
+						format: formats.size === 1 ? [...formats][0] : 'mixed',
 						layout: null,
 						filesCount: files.length,
 						rowsParsed,
@@ -157,41 +164,45 @@ export class BankImportService {
 					rowsDoubtful: 0,
 				};
 				const persistedTransactionIds: string[] = [];
-				for (const [index, {rows}] of accountRows.entries()) {
+				for (const [index, {byFormat}] of accountRows.entries()) {
 					const {account, connection} = accounts[index];
-					const outcomes = matchTransactions(
-						rows.map(toMatchRow),
-						await this.findMatchCandidates(manager, account.id, rows),
-					);
-					const newRows = rows.filter((_, rowIndex) => outcomes[rowIndex].kind === 'new');
-					if (newRows.length > 0) {
-						const persisted = await this.persistence.persistTransactions(
-							manager.getRepository(BankTransaction),
-							account,
-							newRows.map((row) => toTransactionInput(row, account.currency)),
-							connection.aspspName,
-							connection.provider,
-							{importId: record.id},
+					// Candidates are read again per format, inside the transaction, so they include the rows the
+					// formats before this one just inserted.
+					for (const {rows} of byFormat) {
+						const outcomes = matchTransactions(
+							rows.map(toMatchRow),
+							await this.findMatchCandidates(manager, account.id, rows),
 						);
-						persistedTransactionIds.push(...persisted.insertedTransactionIds);
+						const newRows = rows.filter((_, rowIndex) => outcomes[rowIndex].kind === 'new');
+						if (newRows.length > 0) {
+							const persisted = await this.persistence.persistTransactions(
+								manager.getRepository(BankTransaction),
+								account,
+								newRows.map((row) => toTransactionInput(row, account.currency)),
+								connection.aspspName,
+								connection.provider,
+								{importId: record.id},
+							);
+							persistedTransactionIds.push(...persisted.insertedTransactionIds);
+						}
+						const doubtful = rows.flatMap((row, rowIndex) => {
+							const outcome = outcomes[rowIndex];
+							return outcome.kind === 'doubtful'
+								? [
+										{
+											importId: record.id,
+											bankAccountId: account.id,
+											row,
+											candidateTransactionIds: outcome.candidateIds,
+										},
+									]
+								: [];
+						});
+						for (const chunk of chunkArray(doubtful, BATCH_WRITE_CHUNK_SIZE)) {
+							await manager.getRepository(BankImportDoubtfulRow).insert(chunk);
+						}
+						addLadderCounts(counts, outcomes);
 					}
-					const doubtful = rows.flatMap((row, rowIndex) => {
-						const outcome = outcomes[rowIndex];
-						return outcome.kind === 'doubtful'
-							? [
-									{
-										importId: record.id,
-										bankAccountId: account.id,
-										row,
-										candidateTransactionIds: outcome.candidateIds,
-									},
-								]
-							: [];
-					});
-					for (const chunk of chunkArray(doubtful, BATCH_WRITE_CHUNK_SIZE)) {
-						await manager.getRepository(BankImportDoubtfulRow).insert(chunk);
-					}
-					addLadderCounts(counts, outcomes);
 				}
 				Object.assign(record, counts, {
 					rowsAlreadyPresent:
@@ -433,13 +444,17 @@ export class BankImportService {
 	}
 
 	/** Parses every file in request order; the first refusal names its file and nothing is written. */
-	private async parseDrop(files: readonly Buffer[]): Promise<NormalizedStatement[]> {
+	private async parseDrop(
+		files: readonly Buffer[],
+	): Promise<{statements: NormalizedStatement[]; formats: Set<StatementFormat>}> {
 		const statements: NormalizedStatement[] = [];
+		const formats = new Set<StatementFormat>();
 		const seen = new Set<string>();
 		let rows = 0;
 		for (const [index, file] of files.entries()) {
 			const outcome = await this.parseRunner.parse(file);
 			if (!outcome.ok) throw new BankImportRefusalException(outcome.code, index + 1);
+			for (const format of outcome.result.formats) formats.add(format);
 			for (const statement of outcome.result.statements) {
 				// A statement dropped twice in one go (an archive and its own files) is the same statement.
 				const key = JSON.stringify(statement);
@@ -450,30 +465,31 @@ export class BankImportService {
 				statements.push(statement);
 			}
 		}
-		return statements;
+		return {statements, formats};
 	}
 
 	/**
-	 * The synced account each statement belongs to by IBAN and currency (stored IBAN, or the identification hash),
-	 * else an imported-files account. Two matching synced accounts need the owner to name one.
+	 * The synced account each statement belongs to by IBAN and currency (stored IBAN, or the identification hash);
+	 * for a file that names no account, the synced account in its currency at a connection of its bank. Otherwise an
+	 * imported-files account. Two matching synced accounts need the owner to name one.
 	 */
 	private async findSyncedTargets(ownerId: Account['id'], accountRows: readonly AccountRows[]): Promise<Target[]> {
-		const syncedAccounts = accountRows.some(({iban}) => iban)
+		const syncedAccounts = accountRows.some(({iban, bank}) => iban || bank)
 			? await this.dataSource.getRepository(BankAccount).find({
 					where: {bankConnection: {accountId: ownerId, provider: Not(BANK_CONNECTION_PROVIDERS.FILE)}},
 					relations: {bankConnection: true},
 					order: {id: 'ASC'},
 				})
 			: [];
-		return accountRows.map(({iban, currency}) => {
-			const matches = iban
-				? syncedAccounts.filter(
-						(account) =>
-							account.currency === currency &&
-							(normalizeStoredIban(account.iban) === iban ||
-								verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency)),
-					)
-				: [];
+		return accountRows.map(({iban, bank, currency}) => {
+			const matches = syncedAccounts.filter(
+				(account) =>
+					account.currency === currency &&
+					(iban
+						? normalizeStoredIban(account.iban) === iban ||
+							verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency)
+						: !!bank && account.bankConnection.aspspName.trim().toLowerCase() === bank.toLowerCase()),
+			);
 			if (matches.length > 1) throw new BankImportRefusalException('ambiguous_target_account');
 			return matches.length === 1 ? {kind: 'synced', account: matches[0]} : {kind: 'file'};
 		});
@@ -489,9 +505,10 @@ export class BankImportService {
 		if (!account?.bankConnection || accountRows.length !== 1 || accountRows[0].currency !== account.currency) {
 			throw new BankImportRefusalException('target_account_mismatch');
 		}
-		const {identifier, iban, currency} = accountRows[0];
+		const {iban, bank, currency} = accountRows[0];
 		if (account.bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE) {
-			if (account.providerAccountId !== fileProviderAccountId(identifier, currency)) {
+			// A file that names no account fits any account in its currency.
+			if (!bank && account.providerAccountId !== fileAccountIdentity(accountRows[0]).providerAccountId) {
 				throw new BankImportRefusalException('target_account_mismatch');
 			}
 			return {kind: 'file', account};
@@ -608,20 +625,20 @@ export class BankImportService {
 	private async findOrCreateFileAccount(
 		manager: EntityManager,
 		connection: BankConnection,
-		{identifier, iban, currency}: AccountRows,
+		rows: AccountRows,
 	): Promise<ImportedAccount> {
 		const bankAccounts = manager.getRepository(BankAccount);
-		const providerAccountId = fileProviderAccountId(identifier, currency);
+		const {providerAccountId, hashSeed, name} = fileAccountIdentity(rows);
 		const existing = await bankAccounts.findOne({where: {bankConnection: {id: connection.id}, providerAccountId}});
 		if (existing) return {account: existing, connection, created: false};
 		const account = await bankAccounts.save(
 			bankAccounts.create({
 				bankConnection: {id: connection.id},
 				providerAccountId,
-				identificationHash: `file:${createHash('sha256').update(`${identifier}:${currency}`).digest('hex')}`,
-				iban,
-				name: iban ? iban.replace(/(.{4})(?=.)/g, '$1 ') : identifier,
-				currency,
+				identificationHash: `file:${createHash('sha256').update(hashSeed).digest('hex')}`,
+				iban: rows.iban,
+				name,
+				currency: rows.currency,
 				isActive: true,
 			}),
 		);
@@ -724,22 +741,32 @@ export class BankImportService {
 
 /**
  * Orders statements by electronic sequence number, then first booking date, and joins each account's rows in that
- * order. An account is one (IBAN or other id, currency) pair.
+ * order, per format. An account is one (IBAN, other id or bank; currency) pair.
  */
 function groupByAccount(statements: readonly NormalizedStatement[]): AccountRows[] {
 	const ordered = [...statements].sort(compareStatements);
 	const groups = new Map<string, AccountRows>();
 	for (const statement of ordered) {
-		const identifier = (statement.accountIban ?? statement.accountOtherId) as string;
-		const key = JSON.stringify([identifier, statement.accountCurrency]);
+		const [kind, identifier] = statement.accountIban
+			? ['iban', statement.accountIban]
+			: statement.accountOtherId
+				? ['other', statement.accountOtherId]
+				: ['bank', statement.bank as string];
+		const key = JSON.stringify([kind, identifier, statement.accountCurrency]);
 		const group = groups.get(key) ?? {
 			identifier,
 			iban: statement.accountIban,
+			bank: statement.accountIban || statement.accountOtherId ? null : statement.bank,
 			currency: statement.accountCurrency,
-			rows: [],
+			byFormat: [],
 		};
-		group.rows.push(...statement.rows);
+		const part = group.byFormat.find(({format}) => format === statement.format);
+		if (part) part.rows.push(...statement.rows);
+		else group.byFormat.push({format: statement.format, rows: [...statement.rows]});
 		groups.set(key, group);
+	}
+	for (const group of groups.values()) {
+		group.byFormat.sort((left, right) => FORMAT_ORDER.indexOf(left.format) - FORMAT_ORDER.indexOf(right.format));
 	}
 	return [...groups.values()];
 }
@@ -824,8 +851,27 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 	};
 }
 
-function fileProviderAccountId(identifier: string, currency: string): string {
-	return `file:${identifier}:${currency}`;
+/**
+ * How an imported-files account is found again on the next drop: by its IBAN or other id and currency, or, for a
+ * bank whose files name no account, by that bank and currency (one such account per currency).
+ */
+function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): {
+	providerAccountId: string;
+	hashSeed: string;
+	name: string;
+} {
+	if (bank) {
+		return {
+			providerAccountId: `file-bank:${bank}:${currency}`,
+			hashSeed: `bank:${bank}:${currency}`,
+			name: `${bank} ${currency}`,
+		};
+	}
+	return {
+		providerAccountId: `file:${identifier}:${currency}`,
+		hashSeed: `${identifier}:${currency}`,
+		name: iban ? iban.replace(/(.{4})(?=.)/g, '$1 ') : identifier,
+	};
 }
 
 function normalizeStoredIban(iban: string | null): string | null {

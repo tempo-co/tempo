@@ -4,7 +4,13 @@ import type {BankImportError, BankImportErrorCode} from '@tempo/contracts';
 const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string}> = {
 	unsupported_format: {
 		status: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
-		message: 'This file type is not supported. Export a CAMT.053 statement from your bank.',
+		message:
+			'This file type is not supported yet. Export a CAMT.053, MT940 or ABN AMRO TXT statement, or a Revolut CSV or Excel statement.',
+	},
+	legacy_xls_not_supported: {
+		status: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+		message:
+			'Old Excel files (.xls) are not supported. Export the same statement as CAMT.053, MT940 or TXT instead, or from Revolut as CSV or Excel (.xlsx).',
 	},
 	file_too_large: {status: HttpStatus.PAYLOAD_TOO_LARGE, message: 'A file can be at most 10 MB.'},
 	archive_too_large: {status: HttpStatus.PAYLOAD_TOO_LARGE, message: 'An archive can unpack to at most 50 MB.'},

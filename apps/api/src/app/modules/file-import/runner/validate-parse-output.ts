@@ -8,6 +8,10 @@ import {
 	ParseRefusal,
 	ParseRefusalCode,
 	ParseResult,
+	STATEMENT_BANKS,
+	STATEMENT_FORMATS,
+	StatementBank,
+	StatementFormat,
 } from '../parsers/parse-result';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -42,37 +46,57 @@ export function validateParseOutput(output: unknown): ValidatedParseOutput {
 		}
 		return {ok: false, code: code as ParseRefusalCode};
 	}
-	if (record.ok !== true || record.format !== 'camt053') throw new ParseRefusal('parse_failed');
+	if (record.ok !== true) throw new ParseRefusal('parse_failed');
 	const files = record.files;
 	if (typeof files !== 'number' || !Number.isInteger(files) || files < 1 || files > MAX_ARCHIVE_ENTRIES) {
 		throw new ParseRefusal('parse_failed');
 	}
+	const formats = record.formats;
+	if (
+		!Array.isArray(formats) ||
+		formats.length === 0 ||
+		formats.length > files ||
+		new Set(formats).size !== formats.length
+	) {
+		throw new ParseRefusal('parse_failed');
+	}
 	if (!Array.isArray(record.statements)) throw new ParseRefusal('parse_failed');
 
+	const fileFormats = formats.map(validFormat);
 	let rowCount = 0;
 	const statements = record.statements.map((value) => {
 		const rows = asRecord(value).rows;
 		if (!Array.isArray(rows)) throw new ParseRefusal('parse_failed');
 		rowCount += rows.length;
 		if (rowCount > MAX_ROWS_PER_DROP) throw new ParseRefusal('too_many_rows');
-		return validateStatement(value);
+		const statement = validateStatement(value);
+		// Every statement comes from one of the files read.
+		if (!fileFormats.includes(statement.format)) throw new ParseRefusal('parse_failed');
+		return statement;
 	});
-	return {ok: true, result: {format: 'camt053', files, statements}};
+	return {ok: true, result: {files, formats: fileFormats, statements}};
 }
 
+/** A statement names its account by IBAN or other id, or else, for a file that names none, by its bank. */
 function validateStatement(value: unknown): NormalizedStatement {
 	const statement = asRecord(value);
 	const accountIban = statement.accountIban === null ? null : normalizeIban(asString(statement.accountIban));
 	if (statement.accountIban !== null && !accountIban) throw new ParseRefusal('parse_failed');
 	const accountOtherId = accountIban ? null : cleanText(statement.accountOtherId, MAX_ACCOUNT_ID_LENGTH, true);
-	if (!accountIban && !accountOtherId) throw new ParseRefusal('parse_failed');
+	const bank = statement.bank;
+	if (bank !== null && (!(STATEMENT_BANKS as readonly unknown[]).includes(bank) || accountIban || accountOtherId)) {
+		throw new ParseRefusal('parse_failed');
+	}
+	if (!accountIban && !accountOtherId && !bank) throw new ParseRefusal('parse_failed');
 	const entriesSkipped = statement.entriesSkipped;
 	if (typeof entriesSkipped !== 'number' || !Number.isInteger(entriesSkipped) || entriesSkipped < 0) {
 		throw new ParseRefusal('parse_failed');
 	}
 	return {
+		format: validFormat(statement.format),
 		accountIban,
 		accountOtherId,
+		bank: bank as StatementBank | null,
 		accountCurrency: validCurrency(statement.accountCurrency),
 		sequenceNumber: cleanText(statement.sequenceNumber, MAX_SEQUENCE_NUMBER_LENGTH, true),
 		entriesSkipped,
@@ -106,6 +130,11 @@ function validateRow(value: unknown): NormalizedRow {
 		bankTransactionSubCode: cleanText(row.bankTransactionSubCode, TEXT_LIMITS.bankTransactionSubCode),
 		referenceNumber: cleanText(row.referenceNumber, TEXT_LIMITS.referenceNumber),
 	};
+}
+
+function validFormat(value: unknown): StatementFormat {
+	if (!(STATEMENT_FORMATS as readonly unknown[]).includes(value)) throw new ParseRefusal('parse_failed');
+	return value as StatementFormat;
 }
 
 function validDate(value: unknown): string | null {

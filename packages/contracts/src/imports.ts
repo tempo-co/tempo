@@ -1,9 +1,12 @@
-export const BANK_IMPORT_FORMATS = ['camt053'] as const;
+/** The format of a drop's files; `mixed` when the drop held files of more than one format. */
+export const BANK_IMPORT_FORMATS = ['camt053', 'mt940', 'abnAmroTxt', 'revolutCsv', 'revolutXlsx', 'mixed'] as const;
 export type BankImportFormat = (typeof BANK_IMPORT_FORMATS)[number];
 
 /** Why a drop was refused. A refused drop writes nothing. */
 export const BANK_IMPORT_ERROR_CODES = [
 	'unsupported_format',
+	/** An old binary Excel (`.xls`) file: the owner picks another export of the same data. */
+	'legacy_xls_not_supported',
 	'file_too_large',
 	'archive_too_large',
 	'too_many_files',

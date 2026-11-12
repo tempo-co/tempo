@@ -1,1 +1,3 @@
 * text=auto eol=lf
+# Statement fixtures keep the exact bytes of real exports (CRLF line endings, latin-1).
+apps/api/test/fixtures/file-import/** -text

@@ -1,6 +1,7 @@
 /** Refusals a parser can reach on its own; the parent adds size, timeout and account refusals. */
 export const PARSE_REFUSAL_CODES = [
 	'unsupported_format',
+	'legacy_xls_not_supported',
 	'file_too_large',
 	'archive_too_large',
 	'too_many_files',
@@ -38,11 +39,21 @@ export type NormalizedRow = {
 	referenceNumber: string | null;
 };
 
+export const STATEMENT_FORMATS = ['camt053', 'mt940', 'abnAmroTxt', 'revolutCsv', 'revolutXlsx'] as const;
+export type StatementFormat = (typeof STATEMENT_FORMATS)[number];
+
+/** Banks whose files name no account; the owner's account at that bank is found by currency instead. */
+export const STATEMENT_BANKS = ['Revolut'] as const;
+export type StatementBank = (typeof STATEMENT_BANKS)[number];
+
 export type NormalizedStatement = {
+	format: StatementFormat;
 	/** The statement account's IBAN, or null when it is identified by another id. */
 	accountIban: string | null;
-	/** The account's other id (CAMT `Acct/Id/Othr/Id`) when it has no IBAN. */
+	/** The account's other id (CAMT `Acct/Id/Othr/Id`, MT940 `:25:`) when it has no IBAN. */
 	accountOtherId: string | null;
+	/** The bank whose file names no account at all; null whenever the file has an IBAN or other id. */
+	bank: StatementBank | null;
 	accountCurrency: string;
 	/** The statement's electronic sequence number, as written. */
 	sequenceNumber: string | null;
@@ -52,9 +63,10 @@ export type NormalizedStatement = {
 };
 
 export type ParseResult = {
-	format: 'camt053';
-	/** Statement files read: 1 for a plain file, the entry count for an archive. */
+	/** Statement files read: 1 for a plain file or a workbook, the entry count for an archive. */
 	files: number;
+	/** The formats of the files read, each once, in the order first met; a file without statements counts too. */
+	formats: StatementFormat[];
 	statements: NormalizedStatement[];
 };
 

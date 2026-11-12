@@ -24,12 +24,14 @@ const row = (overrides: Record<string, unknown> = {}) => ({
 
 const output = (rows: unknown[], statement: Record<string, unknown> = {}) => ({
 	ok: true,
-	format: 'camt053',
 	files: 1,
+	formats: ['camt053'],
 	statements: [
 		{
+			format: 'camt053',
 			accountIban: EXAMPLE_IBAN,
 			accountOtherId: null,
+			bank: null,
 			accountCurrency: 'EUR',
 			sequenceNumber: '1',
 			entriesSkipped: 0,
@@ -60,6 +62,18 @@ describe('validateParseOutput', () => {
 		expect(second.counterpartyIban).toBeNull();
 	});
 
+	it('accepts a statement that names no account when it names a known bank', () => {
+		const result = validateParseOutput({
+			...output([], {format: 'revolutCsv', accountIban: null, bank: 'Revolut'}),
+			formats: ['revolutCsv'],
+		});
+
+		expect(result).toMatchObject({
+			ok: true,
+			result: {formats: ['revolutCsv'], statements: [{accountIban: null, accountOtherId: null, bank: 'Revolut'}]},
+		});
+	});
+
 	it('passes a refusal code the child may use', () => {
 		expect(validateParseOutput({ok: false, code: 'archive_too_large'})).toEqual({
 			ok: false,
@@ -69,7 +83,11 @@ describe('validateParseOutput', () => {
 
 	it.each([
 		{name: 'not an object', value: 'rows'},
-		{name: 'an unknown format', value: {...output([]), format: 'mt940'}},
+		{name: 'an unknown file format', value: {...output([]), formats: ['ofx']}},
+		{name: 'an unknown statement format', value: output([], {format: 'ofx'})},
+		{name: 'a statement in a format none of the files has', value: output([], {format: 'mt940'})},
+		{name: 'an unknown bank', value: output([], {accountIban: null, bank: 'Example Bank'})},
+		{name: 'a bank next to an IBAN', value: output([], {bank: 'Revolut'})},
 		{name: 'a refusal code the child may not use', value: {ok: false, code: 'synced_account_not_supported_yet'}},
 		{name: 'an amount as a number', value: output([row({amount: -12.5})])},
 		{name: 'an amount with an exponent', value: output([row({amount: '-1e3'})])},

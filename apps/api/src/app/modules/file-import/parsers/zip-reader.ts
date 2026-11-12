@@ -10,6 +10,7 @@ const END_OF_CENTRAL_DIRECTORY_SIZE = 22;
 const MAX_COMMENT_SIZE = 0xffff;
 const STORED = 0;
 const DEFLATED = 8;
+const UTF8_NAME_FLAG = 0x800;
 
 export type ZipLimits = {maxEntries: number; maxUnpackedBytes: number};
 
@@ -20,15 +21,31 @@ export function isZip(bytes: Uint8Array): boolean {
 	return signature === LOCAL_FILE_HEADER || signature === END_OF_CENTRAL_DIRECTORY;
 }
 
+/** A file entry. Its name is only ever compared, never used as a path: nothing is written anywhere. */
+export type ZipFile = {name: string; content: Buffer};
+
+const DEFAULT_LIMITS: ZipLimits = {maxEntries: MAX_ARCHIVE_ENTRIES, maxUnpackedBytes: MAX_ARCHIVE_UNPACKED_BYTES};
+
+/** The names of the file entries, in central-directory order, without unpacking any. */
+export function zipEntryNames(bytes: Uint8Array): string[] {
+	const names: string[] = [];
+	readZipEntries(bytes, DEFAULT_LIMITS, (name) => {
+		names.push(name);
+		return false;
+	});
+	return names;
+}
+
 /**
- * The contents of every file entry, in central-directory order. Entry names are never read: nothing is written
- * anywhere and directories are skipped. Declared sizes are not trusted; inflation is capped by the bytes left in
+ * The file entries `select` picks by name (all by default), in central-directory order; directories are skipped
+ * and only picked entries are unpacked. Declared sizes are not trusted; inflation is capped by the bytes left in
  * the archive budget, so a zip bomb stops at the cap instead of filling memory.
  */
 export function readZipEntries(
 	bytes: Uint8Array,
-	limits: ZipLimits = {maxEntries: MAX_ARCHIVE_ENTRIES, maxUnpackedBytes: MAX_ARCHIVE_UNPACKED_BYTES},
-): Buffer[] {
+	limits: ZipLimits = DEFAULT_LIMITS,
+	select: (name: string) => boolean = () => true,
+): ZipFile[] {
 	const archive = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 	const end = findEndOfCentralDirectory(archive);
 	const entryCount = archive.readUInt16LE(end + 10);
@@ -40,7 +57,8 @@ export function readZipEntries(
 	}
 	if (directoryOffset + directorySize > end) throw new ParseRefusal('parse_failed');
 
-	const entries: Buffer[] = [];
+	const entries: ZipFile[] = [];
+	let fileCount = 0;
 	let unpackedBytes = 0;
 	let offset = directoryOffset;
 	for (let index = 0; index < entryCount; index++) {
@@ -59,10 +77,12 @@ export function readZipEntries(
 		const nameEnd = offset + 46 + nameLength;
 		if (nameEnd > end) throw new ParseRefusal('parse_failed');
 		const isDirectory = archive[nameEnd - 1] === 0x2f || (externalAttributes & 0x10) !== 0;
+		const name = archive.toString((flags & UTF8_NAME_FLAG) !== 0 ? 'utf8' : 'latin1', offset + 46, nameEnd);
 		offset = nameEnd + extraLength + commentLength;
 		if (isDirectory) continue;
 
-		if (entries.length >= limits.maxEntries) throw new ParseRefusal('too_many_files');
+		if (++fileCount > limits.maxEntries) throw new ParseRefusal('too_many_files');
+		if (!select(name)) continue;
 		// Bit 0 marks an encrypted entry.
 		if ((flags & 0x1) !== 0) throw new ParseRefusal('parse_failed');
 
@@ -71,7 +91,7 @@ export function readZipEntries(
 		unpackedBytes += content.length;
 		if (unpackedBytes > limits.maxUnpackedBytes) throw new ParseRefusal('archive_too_large');
 		if (crc32(content) !== checksum) throw new ParseRefusal('parse_failed');
-		entries.push(content);
+		entries.push({name, content});
 	}
 	return entries;
 }

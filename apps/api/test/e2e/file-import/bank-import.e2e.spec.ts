@@ -41,6 +41,13 @@ const ARCHIVE = readFileSync(join(FIXTURES, 'camt053-synthetic.zip'));
 const STATEMENT_FILES = ['020326', '030326', '040326'].map((day) =>
 	readFileSync(join(FIXTURES, `0417164300_99999999_${day}000000.xml`)),
 );
+// The same account and days as the CAMT.053 files plus 5 March, in each of ABN AMRO's other export formats.
+const CAMT_FILES = [...STATEMENT_FILES, readFileSync(join(FIXTURES, '0417164300_99999999_050326000000.xml'))];
+const MT940_FILE = readFileSync(join(FIXTURES, 'MT940260305120000.STA'));
+const TXT_FILE = readFileSync(join(FIXTURES, 'TXT260305120000.TAB'));
+// One Revolut export with EUR and RON rows, as CSV and as a workbook.
+const REVOLUT_CSV = readFileSync(join(FIXTURES, 'account-statement_2026-03-01_2026-03-05_en-gb_a0b1c2.csv'));
+const REVOLUT_XLSX = readFileSync(join(FIXTURES, 'account-statement_2026-03-01_2026-03-05_en-gb_a0b1c2.xlsx'));
 // Enable Banking's identification hash of EXAMPLE_IBAN in EUR, in the shape it uses for IBAN accounts.
 const EXAMPLE_IBAN_HASH = [
 	Buffer.from(
@@ -80,6 +87,7 @@ const ARCHIVE_ROWS = [
 	['2026-03-04', '2026-03-04', '-39.99000000', '6063000000000003', '2572.51000000'],
 	['2026-03-04', '2026-03-04', '-1.95000000', '6063000000000004', '2570.56000000'],
 ];
+const MARCH_ROWS = [...ARCHIVE_ROWS, ['2026-03-05', '2026-03-05', '-24.95000000', '6064000000000001', '2545.61000000']];
 
 describe('Bank imports', () => {
 	jest.setTimeout(60_000);
@@ -406,6 +414,147 @@ describe('Bank imports', () => {
 		});
 		expect(await transactions.countBy({bankAccountId: synced.id, importId: response.body.id})).toBe(4);
 		expect(await transactions.countBy({bankAccountId: fileAccount.id})).toBe(3);
+	});
+
+	it("imports one account's rows once across CAMT.053, MT940 and TXT, dropped in either order or all at once", async () => {
+		const camtFirst = await createOwner();
+		expect((await drop(camtFirst.agent, CAMT_FILES).expect(201)).body).toMatchObject({
+			format: 'camt053',
+			rowsAdded: 8,
+		});
+		// TXT books each row on its value date, MT940 on its statement's date.
+		for (const [file, format, dateFrom] of [
+			[TXT_FILE, 'abnAmroTxt', '2026-03-01'],
+			[MT940_FILE, 'mt940', '2026-03-02'],
+		] as const) {
+			const again = await drop(camtFirst.agent, [file]).expect(201);
+			expect(again.body).toMatchObject({
+				format,
+				rowsParsed: 8,
+				rowsAdded: 0,
+				rowsAlreadyPresent: 8,
+				rowsMatchedByBalance: 8,
+				rowsDoubtful: 0,
+				dateFrom,
+				dateTo: '2026-03-05',
+			});
+		}
+		const camtRows = await ownerRows(camtFirst.owner);
+		expect(camtRows).toHaveLength(8);
+
+		const txtFirst = await createOwner();
+		expect((await drop(txtFirst.agent, [TXT_FILE]).expect(201)).body).toMatchObject({rowsAdded: 8});
+		const camtAfter = await drop(txtFirst.agent, CAMT_FILES).expect(201);
+		expect(camtAfter.body).toMatchObject({rowsAdded: 0, rowsAlreadyPresent: 8, rowsDoubtful: 0});
+		expect(await ownerRows(txtFirst.owner)).toHaveLength(8);
+
+		const allAtOnce = await createOwner();
+		const mixed = await drop(allAtOnce.agent, [TXT_FILE, MT940_FILE, ...CAMT_FILES]).expect(201);
+		expect(mixed.body).toMatchObject({
+			format: 'mixed',
+			filesCount: 6,
+			rowsParsed: 24,
+			rowsAdded: 8,
+			rowsAlreadyPresent: 16,
+			rowsDoubtful: 0,
+		});
+		// CAMT.053 is matched first whatever the drop order, so the rows stored are its own, with bank references.
+		expect((await ownerRows(allAtOnce.owner)).map(rowContent)).toEqual(camtRows.map(rowContent));
+	});
+
+	it('adds nothing from the MT940 or TXT export of a synced account that holds its rows as bank sync stores them', async () => {
+		const {owner, agent} = await createOwner();
+		const connection = await fixtures.createConnection(owner);
+		const account = await fixtures.createBankAccount(connection, {iban: EXAMPLE_IBAN});
+		await fixtures.createTransactions(
+			account,
+			MARCH_ROWS.map(([bookingDate, valueDate, amount, entryReference, balanceAfterAmount]) => ({
+				bookingDate,
+				valueDate,
+				amount,
+				creditDebitIndicator: amount.startsWith('-') ? 'DBIT' : 'CRDT',
+				entryReference,
+				balanceAfterAmount,
+				balanceAfterCurrency: 'EUR',
+			})),
+		);
+
+		for (const file of [MT940_FILE, TXT_FILE]) {
+			const response = await drop(agent, [file]).expect(201);
+
+			expect(response.body).toMatchObject({
+				rowsAdded: 0,
+				rowsMatchedByBalance: 8,
+				rowsDoubtful: 0,
+				accounts: [{id: account.id, created: false}],
+			});
+		}
+		expect(await transactions.countBy({bankAccountId: account.id})).toBe(8);
+	});
+
+	it('imports a Revolut statement into the synced Revolut account of its currency, and into Revolut accounts of their own otherwise', async () => {
+		const {owner, agent} = await createOwner();
+		const connection = await fixtures.createConnection(owner, {aspspName: ' revolut '});
+		const synced = await fixtures.createBankAccount(connection, {currency: 'EUR'});
+		// As bank sync stores them: booked on the started date, without balances. The fee, the exchange and the
+		// incoming transfer are missing.
+		await fixtures.createTransactions(
+			synced,
+			[
+				['2026-03-01', '200.00'],
+				['2026-03-01', '-4.50'],
+				['2026-03-01', '-4.50'],
+				['2026-03-02', '-50.00'],
+			].map(([bookingDate, amount]) => ({
+				bookingDate,
+				amount,
+				creditDebitIndicator: amount.startsWith('-') ? 'DBIT' : 'CRDT',
+			})),
+		);
+
+		const response = await drop(agent, [REVOLUT_CSV]).expect(201);
+
+		expect(response.body).toMatchObject({
+			format: 'revolutCsv',
+			rowsParsed: 9,
+			rowsAdded: 5,
+			rowsAlreadyPresent: 4,
+			rowsMatchedByDate: 4,
+			rowsDoubtful: 0,
+			accounts: [
+				{id: synced.id, name: 'Main account', currency: 'EUR', created: false},
+				{id: expect.any(String), name: 'Revolut RON', currency: 'RON', created: true},
+			],
+		});
+		expect(await imports.findOneByOrFail({id: response.body.id})).toMatchObject({bankConnectionId: connection.id});
+		const added = await transactions.find({where: {bankAccountId: synced.id, importId: response.body.id}});
+		expect(added.map(({amount}) => amount).sort()).toEqual(['-20.00000000', '-7.99000000', '25.00000000']);
+		const ron = await bankAccounts.findOneOrFail({
+			where: {id: response.body.accounts[1].id},
+			relations: {bankConnection: true},
+		});
+		expect(ron).toMatchObject({providerAccountId: 'file-bank:Revolut:RON', iban: null});
+		expect(ron.bankConnection.provider).toBe('file');
+		expect(await transactions.countBy({bankAccountId: ron.id})).toBe(2);
+
+		const other = await createOwner();
+		const csv = await drop(other.agent, [REVOLUT_CSV]).expect(201);
+		expect(csv.body).toMatchObject({
+			rowsAdded: 9,
+			accounts: [
+				{name: 'Revolut EUR', currency: 'EUR', created: true},
+				{name: 'Revolut RON', currency: 'RON', created: true},
+			],
+		});
+		const xlsx = await drop(other.agent, [REVOLUT_XLSX]).expect(201);
+		expect(xlsx.body).toMatchObject({
+			format: 'revolutXlsx',
+			rowsParsed: 9,
+			rowsAdded: 0,
+			rowsAlreadyPresent: 9,
+			rowsDoubtful: 0,
+			accounts: csv.body.accounts.map(({id}: BankImportSummary['accounts'][number]) => ({id, created: false})),
+		});
 	});
 
 	it('records a drop into a synced and an imported-files account under the synced connection, and refuses a drop reaching two synced connections', async () => {
@@ -1006,6 +1155,13 @@ describe('Bank imports', () => {
 			status: 415,
 			code: 'unsupported_format',
 			file: 2,
+		},
+		{
+			name: 'an old binary Excel file',
+			files: () => [Buffer.concat([Buffer.from('d0cf11e0a1b11ae1', 'hex'), Buffer.alloc(504)])],
+			status: 415,
+			code: 'legacy_xls_not_supported',
+			file: 1,
 		},
 		{
 			name: 'XML that declares entities',

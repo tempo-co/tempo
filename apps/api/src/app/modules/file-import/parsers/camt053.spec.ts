@@ -138,8 +138,10 @@ describe('parseCamt053', () => {
 
 			expect(statements).toEqual([
 				{
+					format: 'camt053',
 					accountIban: EXAMPLE_IBAN,
 					accountOtherId: null,
+					bank: null,
 					accountCurrency: 'EUR',
 					sequenceNumber: '61',
 					entriesSkipped: 1,
