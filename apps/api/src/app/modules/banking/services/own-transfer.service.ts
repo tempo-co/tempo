@@ -4,7 +4,7 @@ import {DataSource} from 'typeorm';
 import {Account} from '@modules/account/account.entity';
 
 import {safeErrorName} from '../banking.utils';
-import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
+import {CategorizationScheduler} from '../categorization/categorization-scheduler.service';
 import {applyOwnTransferCategories} from '../own-transfer/own-transfer-category';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
 import {
@@ -19,7 +19,7 @@ export class OwnTransferService {
 
 	constructor(
 		private readonly dataSource: DataSource,
-		private readonly categorizationService: BankTransactionCategorizationService,
+		private readonly categorizationService: CategorizationScheduler,
 	) {}
 
 	async recomputeForOwner(ownerId: Account['id']): Promise<OwnTransferRecomputeResult> {

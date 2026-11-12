@@ -7,7 +7,7 @@ How AI categorization in `src/app/modules/banking/categorization/` and the subsc
 PostgreSQL is the record; BullMQ only schedules work.
 
 - Per row: `category` (nullable until a result is applied), `categoryStatus` (`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `NOT_APPLICABLE`), `categorySource` (`AI`, `HISTORY`, `MANUAL`), confidence, provider, model, prompt version, search trace, `categoryInputHash` and `categoryAppliedInputHash`.
-- The input hash covers only classification-relevant fields. A provider upsert that changes references, balances or timestamps must not trigger a model call.
+- The input hash covers only classification-relevant fields: the input schema's fields minus the correlation id and the history hints. A provider upsert that changes references, balances or timestamps must not trigger a model call. A fixed row's hash is pinned in the input spec, because changing it re-queues every row.
 
 | Event | Effect |
 |---|---|
@@ -18,7 +18,8 @@ PostgreSQL is the record; BullMQ only schedules work.
 | Row becomes an own transfer or currency exchange | `NOT_APPLICABLE`; never sent to the model. |
 | Owner sets a category | `MANUAL`, applied hash = current hash, AI metadata cleared; later syncs never overwrite it. |
 
-- Jobs carry transaction ids, never financial payloads. The worker claims `PENDING`/`FAILED` rows and every write is conditional on id, expected input hash and non-manual source, so a stale job cannot overwrite newer data.
+- Jobs carry transaction ids, never financial payloads. The worker claims a job's `PENDING`/`FAILED` rows in one guarded update and every write is conditional on id, expected input hash and non-manual source, so a stale job cannot overwrite newer data.
+- A `PROCESSING` claim older than 15 minutes counts as abandoned and can be claimed again. The worker renews its batch's claims before each web search, so a batch that searches row by row for longer than that is never taken by a second worker or replica.
 - A database commit and a Redis enqueue are not atomic: the hourly reconciliation sweep re-enqueues rows still waiting.
 - `NEEDS_REVIEW` is an ordinary category value meaning "purpose unknown or evidence conflicts". `OTHER` means a known kind of transaction outside the taxonomy. A provider or queue failure is neither: rows stay `PENDING`/`FAILED`.
 - Never erase a completed category (including historical `OTHER`) in a response shim, sync reset or worker path; guard resets with the row's current status and hash.
@@ -31,7 +32,7 @@ The processor-collected-business refresh migration updates only these two derive
 
 ## Pipeline order
 
-Read `categorizeClaimedBatch` before explaining a result.
+Read `CategorizationPipeline` before explaining a result. The categorization module splits into `CategorizationScheduler` (enqueue, job ids, retry delays, reconciliation), `CategorizationRowStore` (claim, guarded writes), `CategorizationContextLoader` (manual history, same-amount payments), `ManualCategoryService` (preview, manual category, follow-up) and `CategorizationPipeline` (the job itself).
 
 1. **Manual-history hint.** The owner's `MANUAL` picks for the same `merchantKey` go to the model as `previousManualCategories` (counts plus a few recent examples). AI rows are never examples. `withoutOneOffChoices` drops a category picked exactly once when the merchant's other completed rows show a different category.
 2. **Fixed rules** (`bank-transaction-category-rules.ts`) apply only when the merchant has no manual history.
@@ -48,7 +49,7 @@ The Anthropic API is tried first, then the host-side subscription bridge over a 
 - **Search pass** falls back only when the API refused before running (`refusedBeforeRunning`), so a row is searched at most once per attempt.
 - **One rule for both passes** (`routesFailed`): a call with no usable answer leaves its rows `PENDING` (the unavailable error) only when nothing ran and a retry can succeed: the bridge refused before running, or, with no bridge configured, the API refused transiently (401/403/429/529). Anything else may have run or would fail the same way again (a truncated or invalid reply, an API 400, bridge 400/413/502, a timeout) and is a retryable provider error. A standard call the API may have run fails the same way when the bridge then refuses, so a waiting bridge never repeats it. Merchant identification (`identifyMerchants`) keeps its own failure rule.
 - **Provider error mapping**: only bridge 404/409/415/503 and socket `ENOENT`/`ECONNREFUSED`/`EACCES` mean "unavailable". A timeout, an oversized reply, `ECONNRESET`, 400, 413 or 502 may follow a run.
-- A standard-pass provider error marks the batch `FAILED`; the job retries it twice within seconds, then the row waits for the next start's sweep, never the hourly one. The service's own result check counts as the same retryable failure.
+- A standard-pass provider error marks the batch `FAILED`; the job retries it twice within seconds, then the row waits for the next start's sweep, never the hourly one. The provider validates every reply once (ids, categories, confidence, search trace) and reports an invalid one as that retryable error; the pipeline trusts what it returns.
 - A search that fails is never retried, whichever layer notices: `categorizeWithWebSearch` returns a `null` result for it, and the service completes the row as `NEEDS_REVIEW` with confidence 0 and the `-web-search-failed` prompt version. Any other error from the search call gets the same treatment, except the unavailable error, which leaves the row `PENDING`.
 - Throw the unavailable error only after completing the batch's other rows, so the retry picks up just the pending ones. Categorize jobs retry unavailable routes after 1, 2, 5, 10 and 20 minutes (`UNAVAILABLE_RETRY_DELAYS_MS`); after that the hourly sweep takes over.
 - The standard pass allows 16k output tokens: adaptive thinking shares the budget with a 50-row reply, and a reply cut off at the limit fails the batch.
@@ -61,7 +62,7 @@ The Anthropic API is tried first, then the host-side subscription bridge over a 
 - Any change to `contract.json` (prompt, enum, models) changes the fingerprint. A bridge still running the old contract then refuses every fallback call, so the bridge must be reinstalled (root `ops/install.sh claude-bridge`) after the API that carries the new contract is deployed. A bridge change that leaves the contract alone can be installed first.
 - A new bridge route gets its own contract file and fingerprint rather than a new section in `contract.json`, so existing routes keep working on a bridge that has not been reinstalled. Add the file to the `Dockerfile` and the root `ops/install.sh`, and pin in `bridge.test.mjs` that each route refuses the other's fingerprint.
 - A prompt change bumps `BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION` (pinned in the service spec).
-- `claude-bridge/validation.mjs` checks input keys exactly. A new input field or example key needs the validator and `bridge.test.mjs` updated in the same PR, or the fallback rejects every request that carries it. Also assert in the provider spec that the field reaches the serialized bridge request: an E2E that spies on `provider.categorize` passes even when the provider drops it.
+- The input a transaction sends to the model is defined once, in `bank-transaction-categorization-input.schema.ts` (zod). It yields the TypeScript types, the fields the provider serializes and the input hash's fields. `npm run contract:input` writes its JSON Schema into `contract.json` (`input`, `webSearch.input`), which `claude-bridge/validation.mjs` checks requests against exactly; the provider spec fails while the two differ. A new input field is a schema edit plus a regenerated contract, so it changes the fingerprint and follows the rollout order above. Also assert in the provider spec that the field reaches the serialized bridge request: an E2E that spies on `provider.categorize` passes even when the provider drops it.
 - `AI_CATEGORIZATION_MODEL`/`AI_CATEGORIZATION_EFFORT` are validated against the contract lists at config load.
 
 ### Bridge status codes

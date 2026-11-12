@@ -53,7 +53,7 @@ import {
 	toDateOnly,
 	truncate,
 } from '../banking.utils';
-import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
+import {CategorizationScheduler} from '../categorization/categorization-scheduler.service';
 import {
 	EnableBankingBalance,
 	EnableBankingPsuContext,
@@ -142,7 +142,7 @@ export class BankingSyncService {
 		private readonly enableBankingClient: EnableBankingClient,
 		private readonly encryptionService: BankingEncryptionService,
 		private readonly connectionLockService: BankingConnectionLockService,
-		private readonly categorizationService: BankTransactionCategorizationService,
+		private readonly categorizationService: CategorizationScheduler,
 		private readonly configurationService: ConfigurationService,
 		private readonly ownTransferService: OwnTransferService,
 		private readonly currencyExchangeService: CurrencyExchangeService,

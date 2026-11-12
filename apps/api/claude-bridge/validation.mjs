@@ -2,20 +2,6 @@ import contract from './contract.json' with {type: 'json'};
 import merchantContract from './merchant-contract.json' with {type: 'json'};
 
 const categories = new Set(contract.schema.properties.classifications.items.properties.category.enum);
-const nullableFields = [
-	'transactionDate',
-	'bookingDate',
-	'valueDate',
-	'creditDebitIndicator',
-	'bankTransactionCode',
-	'bankTransactionSubCode',
-	'description',
-	'counterpartyName',
-	'bankTransactionDescription',
-	'merchantCategoryCode',
-	'remittanceInformation',
-];
-const requiredFields = ['correlationId', 'amount', 'currency', 'direction', 'transactionType', ...nullableFields];
 const directions = ['INCOME', 'EXPENSE', 'UNKNOWN'];
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => typeof value === 'string' && value.length <= 8192;
@@ -24,6 +10,84 @@ const keys = (value, required, optional = []) =>
 	isRecord(value) &&
 	required.every((k) => Object.hasOwn(value, k)) &&
 	Object.keys(value).every((k) => required.includes(k) || optional.includes(k));
+
+const types = {
+	string: (value) => typeof value === 'string',
+	number: Number.isFinite,
+	integer: Number.isInteger,
+	boolean: (value) => typeof value === 'boolean',
+	null: (value) => value === null,
+	object: isRecord,
+	array: Array.isArray,
+};
+// A keyword this checker does not know would otherwise be ignored, so the bridge refuses to start on one.
+const keywords = new Set([
+	'$schema',
+	'type',
+	'enum',
+	'anyOf',
+	'minLength',
+	'maxLength',
+	'pattern',
+	'exclusiveMinimum',
+	'minimum',
+	'maximum',
+	'properties',
+	'required',
+	'additionalProperties',
+	'items',
+	'minItems',
+	'maxItems',
+]);
+
+/** Throws unless every keyword in `schema` is one {@link matchesSchema} checks. */
+export function assertSupportedSchema(schema) {
+	for (const [keyword, value] of Object.entries(schema)) {
+		if (!keywords.has(keyword) || (keyword === 'type' && !Object.hasOwn(types, value)))
+			throw new Error(`Unsupported input schema keyword: ${keyword}`);
+		if (keyword === 'additionalProperties' && value !== false)
+			throw new Error('Input schema objects must not allow additional properties.');
+		if (keyword === 'properties') Object.values(value).forEach(assertSupportedSchema);
+		if (keyword === 'items') assertSupportedSchema(value);
+		if (keyword === 'anyOf') value.forEach(assertSupportedSchema);
+	}
+}
+
+/**
+ * Checks `value` against the JSON Schema the API generates from its zod input schema (`input` in `contract.json`). It
+ * implements the keywords that generator emits; lengths count UTF-16 code units, as zod does.
+ */
+export function matchesSchema(schema, value) {
+	if (schema.type !== undefined && !types[schema.type](value)) return false;
+	if (schema.enum && !schema.enum.includes(value)) return false;
+	if (schema.anyOf && !schema.anyOf.some((option) => matchesSchema(option, value))) return false;
+	if (typeof value === 'string') {
+		if (schema.minLength !== undefined && value.length < schema.minLength) return false;
+		if (schema.maxLength !== undefined && value.length > schema.maxLength) return false;
+		if (schema.pattern !== undefined && !new RegExp(schema.pattern, 'u').test(value)) return false;
+	}
+	if (typeof value === 'number') {
+		if (schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum) return false;
+		if (schema.minimum !== undefined && value < schema.minimum) return false;
+		if (schema.maximum !== undefined && value > schema.maximum) return false;
+	}
+	if (Array.isArray(value)) {
+		if (schema.minItems !== undefined && value.length < schema.minItems) return false;
+		if (schema.maxItems !== undefined && value.length > schema.maxItems) return false;
+		if (schema.items && !value.every((item) => matchesSchema(schema.items, item))) return false;
+	}
+	if (isRecord(value) && schema.properties) {
+		const properties = Object.keys(schema.properties);
+		if (!keys(value, schema.required ?? [], properties)) return false;
+		if (!Object.entries(value).every(([key, field]) => matchesSchema(schema.properties[key], field))) return false;
+	}
+	return true;
+}
+
+const transactionSchema = contract.input.transaction;
+const searchTransactionSchema = contract.webSearch.input.transaction;
+assertSupportedSchema(transactionSchema);
+assertSupportedSchema(searchTransactionSchema);
 
 const evidenceTypes = new Set(contract.webSearch.schema.properties.classifications.items.properties.evidenceType.enum);
 
@@ -51,35 +115,12 @@ export function validResponse(output, input, search = false) {
 	return ids.size === 0;
 }
 
-const searchFields = [
-	'correlationId',
-	'amount',
-	'currency',
-	'direction',
-	'transactionType',
-	'merchantName',
-	'merchantLocation',
-	'searchQuery',
-	'merchantCategoryCode',
-];
-
 export function validSearchRequest(body) {
 	if (!validEnvelope(body)) return false;
 	const {transactions} = body.input;
 	if (!Array.isArray(transactions) || transactions.length !== 1) return false;
 	const [tx] = transactions;
-	return (
-		keys(tx, searchFields) &&
-		tx.correlationId === '0' &&
-		[tx.amount, tx.currency, tx.transactionType, tx.merchantName].every(text) &&
-		directions.includes(tx.direction) &&
-		tx.merchantName.trim() !== '' &&
-		text(tx.searchQuery) &&
-		tx.searchQuery.trim() !== '' &&
-		tx.searchQuery.length <= contract.webSearch.maxSearchQueryLength &&
-		nullableText(tx.merchantLocation) &&
-		nullableText(tx.merchantCategoryCode)
-	);
+	return matchesSchema(searchTransactionSchema, tx) && tx.correlationId === '0';
 }
 
 function validEnvelope(body) {
@@ -108,61 +149,10 @@ function validEnvelope(body) {
 
 export function validRequest(body) {
 	if (!validEnvelope(body)) return false;
-	const input = body.input;
-	if (!Array.isArray(input.transactions) || !input.transactions.length || input.transactions.length > 50)
+	const {transactions} = body.input;
+	if (!Array.isArray(transactions) || !transactions.length || transactions.length > contract.input.maxTransactions)
 		return false;
-	return input.transactions.every((tx, index) => {
-		if (!keys(tx, requiredFields, ['merchantLocation', 'previousManualCategories', 'sameAmountPayments']))
-			return false;
-		if (tx.correlationId !== String(index) || !text(tx.amount) || !text(tx.currency) || !text(tx.transactionType))
-			return false;
-		if (!directions.includes(tx.direction) || !nullableFields.every((f) => nullableText(tx[f]))) return false;
-		if (
-			tx.merchantLocation !== undefined &&
-			tx.merchantLocation !== null &&
-			(!keys(tx.merchantLocation, ['city', 'region', 'country']) ||
-				!Object.values(tx.merchantLocation).every(nullableText))
-		)
-			return false;
-		if (
-			tx.previousManualCategories !== undefined &&
-			(!Array.isArray(tx.previousManualCategories) ||
-				tx.previousManualCategories.length > categories.size ||
-				!tx.previousManualCategories.every(
-					(previous) =>
-						keys(previous, ['category', 'count', 'recentExamples']) &&
-						categories.has(previous.category) &&
-						Number.isSafeInteger(previous.count) &&
-						previous.count > 0 &&
-						Array.isArray(previous.recentExamples) &&
-						previous.recentExamples.length <= 50 &&
-						previous.recentExamples.every(
-							(example) =>
-								keys(example, ['amount', 'currency', 'date']) &&
-								text(example.amount) &&
-								text(example.currency) &&
-								nullableText(example.date),
-						),
-				))
-		)
-			return false;
-		if (
-			tx.sameAmountPayments !== undefined &&
-			(!Array.isArray(tx.sameAmountPayments) ||
-				tx.sameAmountPayments.length < 2 ||
-				tx.sameAmountPayments.length > 15 ||
-				!tx.sameAmountPayments.every(
-					(payment) =>
-						keys(payment, ['date', 'category', 'source', 'text']) &&
-						nullableText(payment.date) &&
-						categories.has(payment.category) &&
-						['MANUAL', 'AI'].includes(payment.source) &&
-						nullableText(payment.text),
-				))
-		)
-			return false;
-		return true;
-	});
+	return transactions.every((tx, index) => matchesSchema(transactionSchema, tx) && tx.correlationId === String(index));
 }
 
 const merchantFields = ['correlationId', 'name', 'location', 'transactionType', 'direction', 'searchSourceDomains'];

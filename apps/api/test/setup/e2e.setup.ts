@@ -52,7 +52,6 @@ beforeAll(async () => {
 
 	// Merchant logos call the same model routes, so they need a key too; their specs replace the provider call.
 	if (aiCategorizationEnabled || merchantLogosEnabled) {
-		process.env.AI_CATEGORIZATION_PROVIDER = 'claude';
 		process.env.AI_CATEGORIZATION_MODEL = 'test-model';
 		process.env.ANTHROPIC_API_KEY = 'test-only-placeholder';
 	} else {

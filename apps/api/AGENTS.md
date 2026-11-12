@@ -57,5 +57,5 @@ NestJS backend for Tempo, a personal-finance app that syncs real bank data throu
 - Compose files use fixed container names and env-interpolated host ports; stale containers or another worktree's stack block startup. Check `docker compose ls --all` before starting or tearing anything down.
 - Process environment overrides the env files, so an inherited `NODE_ENV` or `DB_*` silently retargets tests and seeds. Prefix with `NODE_ENV=test` when unsure.
 - The runtime image ships no env files and `NODE_ENV=production`; the image smoke check fails the build if an env file appears. Web E2E (`apps/web/docker-compose.e2e.yml`) passes its own synthetic config when it runs the image with `NODE_ENV=test`.
-- Changing `claude-bridge/contract.json` changes the fingerprint the bridge checks; an un-reinstalled bridge then refuses every fallback call. See `docs/categorization.md` before editing it.
+- Changing `claude-bridge/contract.json` changes the fingerprint the bridge checks; an un-reinstalled bridge then refuses every fallback call. Its `input` sections are generated from the categorization input schema (`npm run contract:input`). See `docs/categorization.md` before editing it.
 - `dist/` and `coverage/` are generated.

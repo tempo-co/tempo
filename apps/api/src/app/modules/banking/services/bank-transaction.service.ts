@@ -27,7 +27,7 @@ import {toBankTransactionDirection} from '../bank-transaction-direction';
 import {getBankTransactionCashFlowTreatment} from '../bank-transaction-financial-event';
 import {BANK_TRANSACTION_TYPES} from '../bank-transaction-type';
 import {BankTransaction} from '../bank-transaction.entity';
-import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
+import {ManualCategoryService} from '../categorization/manual-category.service';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
@@ -47,7 +47,7 @@ export class BankTransactionService {
 		@InjectRepository(BankTransaction)
 		private readonly bankTransactionRepository: Repository<BankTransaction>,
 		private readonly ownTransferService: OwnTransferService,
-		private readonly categorizationService: BankTransactionCategorizationService,
+		private readonly manualCategoryService: ManualCategoryService,
 		private readonly recurringSeriesService: RecurringSeriesService,
 		private readonly merchantLogoService: MerchantLogoService,
 	) {}
@@ -133,7 +133,7 @@ export class BankTransactionService {
 		category: BankTransactionCategory,
 	): Promise<BankTransactionCategoryImpact> {
 		const transaction = await this.findOwnedTransaction(accountId, id);
-		const {followUp, transactions, total} = await this.categorizationService.previewManualCategory(
+		const {followUp, transactions, total} = await this.manualCategoryService.previewManualCategory(
 			accountId,
 			transaction,
 			category,
@@ -161,7 +161,7 @@ export class BankTransactionService {
 		applyToTransactionIds?: readonly string[],
 	): Promise<BankTransactionResponse> {
 		const transaction = await this.findOwnedTransaction(accountId, id);
-		const saved = await this.categorizationService.setManualCategory(
+		const saved = await this.manualCategoryService.setManualCategory(
 			accountId,
 			transaction,
 			category,

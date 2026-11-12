@@ -28,6 +28,7 @@
 		"test:e2e:cov": "npm run docker:test:down && npm run docker:test:up && rimraf dist && jest --config ./test/jest-e2e.json --verbose --coverage --runInBand",
 		"db:seed": "ts-node -r tsconfig-paths/register ./scripts/seed.ts",
 		"db:schema": "ts-node -r tsconfig-paths/register ./scripts/schema.ts",
+		"contract:input": "ts-node -r tsconfig-paths/register ./scripts/contract-input.ts",
 		"contracts:build": "tsc -p ../../packages/contracts",
 		"prebuild": "npm run contracts:build",
 		"prestart": "npm run contracts:build",
@@ -35,6 +36,7 @@
 		"prestart:debug": "npm run contracts:build",
 		"predb:seed": "npm run contracts:build",
 		"predb:schema": "npm run contracts:build",
+		"precontract:input": "npm run contracts:build",
 		"pretest:e2e": "npm run contracts:build",
 		"pretest:e2e:cov": "npm run contracts:build"
 	},
