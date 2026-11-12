@@ -103,6 +103,10 @@ type AccountFetchResult = {
 	balancesSucceeded: boolean;
 	/** Every transaction page was fetched, so the account's watermark may advance. */
 	transactionsSucceeded: boolean;
+	/** Every page was fetched and every row read, so pending rows the fetch did not return are gone. */
+	transactionsComplete: boolean;
+	/** The first date the transactions call asked for; null when it asked for the whole history. */
+	transactionsFrom: string | null;
 };
 
 type SyncFetchResult = {
@@ -250,7 +254,11 @@ export class BankingSyncService {
 				const requestedTo = dateInAppTimeZone(new Date());
 				// A foreground refresh is always full; an automatic one repeats only what the last run failed, if anything.
 				const retryCalls = psu ? null : connection.syncRetryCalls;
-				const requestedFrom = this.getRequestedFrom(bankAccounts, retryCalls, requestedTo);
+				const pendingStarts = await this.bankTransactionPersistenceService.findPendingTransactionStarts(
+					this.dataSource.getRepository(BankTransaction),
+					bankAccounts.map(({id}) => id),
+				);
+				const requestedFrom = this.getRequestedFrom(bankAccounts, retryCalls, requestedTo, pendingStarts);
 
 				run = await this.bankSyncRunRepository.save(
 					this.bankSyncRunRepository.create({
@@ -268,6 +276,7 @@ export class BankingSyncService {
 						bankAccounts,
 						providerSessionId,
 						requestedTo,
+						pendingStarts,
 						retryCalls,
 						lockLease,
 						failures,
@@ -470,12 +479,18 @@ export class BankingSyncService {
 
 	/**
 	 * Each account's own window: its longest history until one fetch completed, then from that fetch's date minus
-	 * the overlap. A start older than banks serve without the user present asks for the longest history from that
+	 * the overlap, or from its oldest pending row when that is earlier, so a complete fetch shows which pending rows
+	 * are gone. A start older than banks serve without the user present asks for the longest history from that
 	 * start instead, which returns what the bank still has rather than failing the request.
 	 */
-	private getTransactionFetchOptions(bankAccount: BankAccount, today: string): EnableBankingTransactionFetchOptions {
+	private getTransactionFetchOptions(
+		bankAccount: BankAccount,
+		today: string,
+		pendingStart: string | undefined,
+	): EnableBankingTransactionFetchOptions {
 		if (!bankAccount.transactionsFetchedThrough) return {strategy: 'longest'};
-		const dateFrom = addDays(bankAccount.transactionsFetchedThrough, -INCREMENTAL_OVERLAP_DAYS);
+		const overlapStart = addDays(bankAccount.transactionsFetchedThrough, -INCREMENTAL_OVERLAP_DAYS);
+		const dateFrom = pendingStart && pendingStart < overlapStart ? pendingStart : overlapStart;
 		if (dateFrom < addDays(today, -BANKING_UNATTENDED_HISTORY_DAYS)) return {strategy: 'longest', dateFrom};
 		return {strategy: 'default', dateFrom};
 	}
@@ -485,6 +500,7 @@ export class BankingSyncService {
 		bankAccounts: BankAccount[],
 		retryCalls: BankSyncRetryCall[] | null,
 		today: string,
+		pendingStarts: ReadonlyMap<string, string>,
 	): string | null {
 		const starts = bankAccounts
 			.filter(
@@ -495,7 +511,10 @@ export class BankingSyncService {
 							(call) => call.kind === 'transactions' && call.bankAccountId === bankAccount.id,
 						)),
 			)
-			.map((bankAccount) => this.getTransactionFetchOptions(bankAccount, today).dateFrom);
+			.map(
+				(bankAccount) =>
+					this.getTransactionFetchOptions(bankAccount, today, pendingStarts.get(bankAccount.id)).dateFrom,
+			);
 		if (!starts.length || starts.includes(undefined)) return null;
 		return (starts as string[]).sort()[0];
 	}
@@ -505,6 +524,7 @@ export class BankingSyncService {
 		bankAccounts: BankAccount[],
 		providerSessionId: string,
 		today: string,
+		pendingStarts: ReadonlyMap<string, string>,
 		retryCalls: BankSyncRetryCall[] | null,
 		lockLease: BankingConnectionLock,
 		failures: BankSyncFailure[],
@@ -597,6 +617,8 @@ export class BankingSyncService {
 			let transactions: EnableBankingTransaction[] = [];
 			let balancesSucceeded = false;
 			let transactionsSucceeded = false;
+			let transactionsComplete = false;
+			const fetchOptions = this.getTransactionFetchOptions(bankAccount, today, pendingStarts.get(bankAccount.id));
 			const recordUnparseable = (count: number) => {
 				if (count <= 0) return;
 				// The readable rows are still imported; the account's history is incomplete, so the run is partial.
@@ -630,13 +652,14 @@ export class BankingSyncService {
 				try {
 					const fetched = await this.enableBankingClient.getAccountTransactions(
 						bankAccount.providerAccountId,
-						this.getTransactionFetchOptions(bankAccount, today),
+						fetchOptions,
 						lockLease.signal,
 						...(psu ? [psu] : []),
 					);
 					lockLease.assertHealthy();
 					transactions = fetched.transactions;
 					transactionsSucceeded = true;
+					transactionsComplete = fetched.unparseableCount === 0;
 					hasSuccessfulEndpoint = true;
 					recordUnparseable(fetched.unparseableCount);
 				} catch (error) {
@@ -657,6 +680,8 @@ export class BankingSyncService {
 				transactions,
 				balancesSucceeded,
 				transactionsSucceeded,
+				transactionsComplete,
+				transactionsFrom: fetchOptions.dateFrom ?? null,
 			});
 
 			if (stopped()) break;
@@ -746,6 +771,7 @@ export class BankingSyncService {
 					);
 				}
 
+				let returnedTransactionIds: string[] = [];
 				if (accountResult.transactions.length > 0) {
 					const transactionPersistence = await this.bankTransactionPersistenceService.persistTransactions(
 						bankTransactionRepository,
@@ -755,7 +781,17 @@ export class BankingSyncService {
 						connection.provider,
 					);
 					transactionsAdded += transactionPersistence.transactionsAdded;
-					persistedTransactionIds.push(...transactionPersistence.persistedTransactionIds);
+					returnedTransactionIds = transactionPersistence.persistedTransactionIds;
+					persistedTransactionIds.push(...returnedTransactionIds);
+				}
+
+				if (accountResult.transactionsComplete) {
+					await this.bankTransactionPersistenceService.removeUnreturnedPendingTransactions(
+						bankTransactionRepository,
+						accountResult.bankAccount.id,
+						returnedTransactionIds,
+						accountResult.transactionsFrom,
+					);
 				}
 
 				if (accountResult.transactionsSucceeded) {

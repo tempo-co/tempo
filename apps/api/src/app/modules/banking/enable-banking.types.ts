@@ -76,6 +76,10 @@ export type EnableBankingTransaction = {
 	transactionDate?: string;
 	bookingDate?: string;
 	valueDate?: string;
+	/** The provider sent no booking date; `bookingDate` is the transaction date. */
+	bookingDateFilled?: boolean;
+	/** The provider sent no value date; `valueDate` is the transaction date. */
+	valueDateFilled?: boolean;
 	description?: string;
 	counterpartyName?: string;
 	counterpartyIban?: string;

@@ -321,7 +321,7 @@ async function mockMerchants(page: Page) {
     requests.push(params);
     return fulfillJson(route, {
       transactions: [
-        burgerTransaction(4),
+        burgerTransaction(4, {transactionStatus: 'PDNG'}),
         burgerTransaction(2, {amount: '10.00', category: 'REFUND'}),
       ],
       total: 2,
@@ -533,6 +533,10 @@ test('merchant details show all-time totals, periods, grouped names and transact
 
   const transactions = details.getByRole('region', {name: 'Transactions'});
   await expect(transactions.getByRole('heading', {name: '2 transactions'})).toBeVisible();
+  const rows = transactions.getByRole('link', {name: /Example Burger NL/});
+  await expect(rows.first()).toContainText('14 Oct · Pending');
+  await expect(rows.nth(1)).toContainText('12 Oct');
+  await expect(rows.nth(1)).not.toContainText('Pending');
   expect(requests.some((params) => params.get('filter[merchantGroup]') === BRAND)).toBe(true);
   await expectNoHorizontalOverflow(page);
 
