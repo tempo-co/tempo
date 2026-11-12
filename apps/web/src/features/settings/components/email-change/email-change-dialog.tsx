@@ -7,6 +7,7 @@ import {PendingLabel} from '@/components/shared/pending-label';
 import {Button} from '@/components/ui/button';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
+import {PasswordInputField} from '@/components/ui/password-input-field';
 import {
   ResponsiveDialog,
   ResponsiveDialogBody,
@@ -18,6 +19,7 @@ import {
   ResponsiveDialogTitle,
   ResponsiveDialogTrigger,
 } from '@/components/ui/responsive-dialog';
+import {isAuthError} from '@/utils/api';
 
 import {useChangeEmailRequest} from '../../api/use-change-email-request';
 import {EmailChangeDto, emailChangeDtoSchema} from '../../types/email-change.dto';
@@ -36,7 +38,7 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
   const form = useForm<EmailChangeDto>({
     resolver: zodResolver(emailChangeDtoSchema),
     mode: 'onSubmit',
-    defaultValues: {newEmail: ''},
+    defaultValues: {newEmail: '', currentPassword: ''},
   });
 
   const handleOpenChange = (open: boolean) => {
@@ -48,7 +50,7 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
     }
   };
 
-  const onSubmit = ({newEmail}: EmailChangeDto) => {
+  const onSubmit = ({newEmail, currentPassword}: EmailChangeDto) => {
     const email = normalizeEmail(newEmail);
     if (email === normalizeEmail(currentEmail)) {
       form.setError('newEmail', {message: 'This is already your email.'}, {shouldFocus: true});
@@ -56,10 +58,16 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
     }
 
     changeEmailRequest(
-      {newEmail: email},
+      {newEmail: email, currentPassword},
       {
         onSuccess: () => setSentTo(email),
         onError: (error) => {
+          if (error.status === 401) {
+            if (!isAuthError(error)) {
+              form.setError('currentPassword', {message: 'Invalid password.'}, {shouldFocus: true});
+            }
+            return;
+          }
           const message =
             error.status === 409
               ? 'Another account already uses this email.'
@@ -134,7 +142,7 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
             </ResponsiveDialogHeader>
             <Form {...form}>
               <form className='grid gap-4' onSubmit={form.handleSubmit(onSubmit)} noValidate>
-                <ResponsiveDialogBody>
+                <ResponsiveDialogBody className='grid gap-4'>
                   <FormField
                     control={form.control}
                     name='newEmail'
@@ -156,6 +164,20 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
                         </FormControl>
                         <FormMessage />
                       </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='currentPassword'
+                    render={({field, fieldState}) => (
+                      <PasswordInputField<EmailChangeDto, 'currentPassword'>
+                        field={field}
+                        fieldState={fieldState}
+                        label='Current password'
+                        id='email-change-current-password'
+                        autoComplete='current-password'
+                        disabled={isPending}
+                      />
                     )}
                   />
                 </ResponsiveDialogBody>

@@ -51,6 +51,30 @@ test.describe('Signup', () => {
       await expect(homePage.alreadyVerifiedToastTitle).toBeVisible();
     });
 
+    test('should verify email via LINK in a signed-out browser, then ask to log in', async ({
+      page,
+      signupPage,
+      verifyEmailPage,
+      loginPage,
+      homePage,
+    }) => {
+      const password = faker.internet.password({length: 12});
+      const email = await signupPage.fillAndSubmitForm(password);
+      await verifyEmailPage.expectToBeOnPage();
+      const message = await EmailUtils.findEmailByRecipient(email);
+      await page.context().clearCookies();
+
+      await page.goto(EmailUtils.extractOnboardingVerifyEmailLink(message?.Text));
+
+      await loginPage.expectToBeOnPage();
+      await expect(page.getByText('Your email has been verified.')).toBeVisible();
+      await loginPage.emailInput.fill(email);
+      await loginPage.passwordInput.fill(password);
+      await loginPage.submitButton.click();
+      await homePage.expectToBeOnPage();
+      await homePage.expectUserLoggedIn();
+    });
+
     test('should redirect to login on link click', async ({page, signupPage}) => {
       await signupPage.loginLink.click();
       expect(page.url()).toContain('/login');
