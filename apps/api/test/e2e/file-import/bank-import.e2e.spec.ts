@@ -608,7 +608,9 @@ describe('Bank imports', () => {
 		const fileAccount = await bankAccounts.findOneByOrFail({
 			bankConnection: {accountId: owner.id, provider: 'file'},
 		});
-		const {account: synced} = await createSyncedRevolutAccount(owner);
+		const {connection, account: synced} = await createSyncedRevolutAccount(owner);
+		// A Revolut EUR account bank sync no longer reports: it neither competes for the statement nor is offered.
+		await fixtures.createBankAccount(connection, {name: 'Example closed EUR', currency: 'EUR', isActive: false});
 		const dollarAccount = await fixtures.createBankAccount(await fixtures.createConnection(owner), {
 			currency: 'USD',
 		});
@@ -701,11 +703,35 @@ describe('Bank imports', () => {
 		expect(await transactions.countBy({bankAccountId: othersAccount.id})).toBe(0);
 	});
 
+	it('refuses a statement that names no account when only a coincidental few of its rows within the dates the synced account holds are stored there, also when bank sync no longer reports that account', async () => {
+		const {owner, agent} = await createOwner();
+		const {account: synced} = await createSyncedRevolutAccount(owner);
+		// The only Revolut EUR account still receives the statement, and is offered first.
+		await bankAccounts.update({id: synced.id}, {isActive: false});
+		const storedBefore = await ownerRows(owner);
+
+		// Six rows within the account's dates, one of them stored there.
+		const refused = await drop(agent, [
+			revolutStatement([...UNSTORED_EUR_ROWS, ['2026-03-04', '-41.00', 'EUR']]),
+		]).expect(409);
+
+		expect(refused.body).toMatchObject({
+			code: 'target_account_unconfirmed',
+			accountQuestions: [{bank: 'Revolut', currency: 'EUR', candidates: [{bankAccountId: synced.id}]}],
+		});
+		expect(await imports.countBy({accountId: owner.id})).toBe(0);
+		expect(await ownerRows(owner)).toEqual(storedBefore);
+		expect(await fileConnection(owner)).toBeNull();
+	});
+
 	it.each<{name: string; rows: readonly RevolutRow[]; added: number}>([
 		{
-			name: 'one of its rows within the dates the account holds is stored there',
-			rows: [...UNSTORED_EUR_ROWS, ['2026-03-04', '-41.00', 'EUR']],
-			added: 5,
+			name: 'at least half of its rows within the dates the account holds are stored there',
+			rows: [
+				...SYNCED_REVOLUT_ROWS.slice(0, 3).map(([day, amount]) => [day, amount, 'EUR'] as const),
+				...UNSTORED_EUR_ROWS.slice(0, 3),
+			],
+			added: 3,
 		},
 		{
 			name: 'it lies entirely after the dates the account holds',

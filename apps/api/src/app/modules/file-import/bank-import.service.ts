@@ -56,11 +56,18 @@ const BANK_IMPORT_NOT_A_CANDIDATE = 'Choose one of the transactions this row may
 /** How long an import waits for a running sync of the same connection before refusing with `account_busy`. */
 const SYNC_LOCK_WAIT_MS = 10_000;
 /**
- * A statement that names no account, routed by its bank to a synced account, is refused as unconfirmed when at least
- * this many of its rows fall within the dates that account already holds and none of them is found there. A chosen
- * value, not a measured one: enough rows that a real export of the account would almost surely share one.
+ * A statement that names no account, routed by its bank to a synced account, is only checked against that account
+ * when at least this many of its rows fall within the dates the account already holds; with fewer there is too little
+ * to compare. A chosen value, not a measured one.
  */
 export const UNCONFIRMED_TARGET_MIN_OVERLAP_ROWS = 5;
+/**
+ * The share of those rows the account must already hold for the statement to be its own, as numerator and
+ * denominator so the check stays in integers. From a one-off check of real exports (no fixture in the repo):
+ * dropped on the wrong account, under 3% of the overlapping rows matched by coincidence (equal amounts on nearby
+ * days); on the right account, over 99% matched. One half sits well between them.
+ */
+export const UNCONFIRMED_TARGET_MIN_MATCH_SHARE = {numerator: 1, denominator: 2} as const;
 
 /** The `accountChoices` value that sends a statement to the imported-files account of its bank and currency. */
 export const ACCOUNT_CHOICE_NEW = 'new';
@@ -491,7 +498,8 @@ export class BankImportService {
 	 * The target of each statement of a request that names no single account. A statement of a file that names no
 	 * account and has an `accountChoices` entry goes where the owner chose. The others go to the synced account with
 	 * their IBAN and currency (stored IBAN, or the identification hash); for a file that names no account, the synced
-	 * account in its currency at a connection of its bank. Otherwise an imported-files account.
+	 * account in its currency at a connection of its bank, an active one when any fits. Otherwise an imported-files
+	 * account.
 	 *
 	 * Refuses, listing every statement that needs an answer: `ambiguous_target_account` when two synced accounts fit
 	 * a statement, else `target_account_unconfirmed` when a statement routed by its bank alone is not confirmed by the
@@ -522,7 +530,7 @@ export class BankImportService {
 				continue;
 			}
 			const {iban, bank, currency} = rows;
-			const matches = syncedAccounts.filter(
+			const fitting = syncedAccounts.filter(
 				(account) =>
 					account.currency === currency &&
 					(iban
@@ -530,6 +538,10 @@ export class BankImportService {
 							verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency)
 						: !!bank && account.bankConnection.aspspName.trim().toLowerCase() === bank.toLowerCase()),
 			);
+			// By bank alone, an account bank sync no longer reports (closed, or left out of the consent) fits only when
+			// no active one does, so it cannot make the statement of an active account ambiguous.
+			const active = iban ? [] : fitting.filter(({isActive}) => isActive);
+			const matches = active.length > 0 ? active : fitting;
 			if (matches.length > 1) {
 				ambiguous.push({index, matches});
 				routed.push(null);
@@ -565,11 +577,12 @@ export class BankImportService {
 				const routedTo = (routed[index]!.target as {account: BankAccount}).account;
 				questions.push({
 					index,
-					// The account the statement would have gone to first, then every other account in its currency.
+					// The account the statement would have gone to first, then every other active account in its currency.
 					candidates: [
 						routedTo,
 						...ownedAccounts.filter(
-							({id, currency}) => id !== routedTo.id && currency === accountRows[index].currency,
+							({id, currency, isActive}) =>
+								isActive && id !== routedTo.id && currency === accountRows[index].currency,
 						),
 					],
 				});
@@ -600,11 +613,12 @@ export class BankImportService {
 	}
 
 	/**
-	 * Whether a statement found only by its bank and currency looks like the synced account's own history. It is
-	 * unconfirmed when at least `UNCONFIRMED_TARGET_MIN_OVERLAP_ROWS` of its rows (in the format that has the most)
-	 * fall within the first and last day the account stores, and the ladder matches none of those rows against the
-	 * stored rows. A doubtful row is no match. A statement outside the stored dates, or overlapping them by fewer
-	 * rows, is confirmed: there is nothing to compare it with.
+	 * Whether a statement found only by its bank and currency looks like the synced account's own history. It takes
+	 * the format with the most rows within the first and last day the account stores (on a tie, the earlier in
+	 * `FORMAT_ORDER`). With fewer than `UNCONFIRMED_TARGET_MIN_OVERLAP_ROWS` such rows, including a statement entirely
+	 * outside the stored dates, it is confirmed: there is too little to compare it with. Otherwise it is confirmed
+	 * only when the ladder matches at least `UNCONFIRMED_TARGET_MIN_MATCH_SHARE` of those rows against the stored
+	 * rows. A doubtful row is no match.
 	 */
 	private async isTargetConfirmed(ownerId: Account['id'], account: BankAccount, rows: AccountRows): Promise<boolean> {
 		const range = (await this.dataSource
@@ -625,21 +639,23 @@ export class BankImportService {
 			.getRawOne<{from: string | null; to: string | null}>()) ?? {from: null, to: null};
 		if (!range.from || !range.to) return true;
 		const {from, to} = range;
-		let overlap = 0;
+		// `byFormat` is in `FORMAT_ORDER`, so keeping only a strictly larger overlap breaks ties to the earlier format.
+		let largest: {rows: NormalizedRow[]; inRange: number[]} | null = null;
 		for (const {rows: formatRows} of rows.byFormat) {
 			const inRange = formatRows.flatMap((row, index) => {
 				const day = matchDay(row);
 				return day && day >= from && day <= to ? [index] : [];
 			});
-			if (inRange.length === 0) continue;
-			const outcomes = matchTransactions(
-				formatRows.map(toMatchRow),
-				await this.findMatchCandidates(this.dataSource.manager, account.id, formatRows),
-			);
-			if (inRange.some((index) => outcomes[index].kind === 'matched')) return true;
-			overlap = Math.max(overlap, inRange.length);
+			if (inRange.length > (largest?.inRange.length ?? 0)) largest = {rows: formatRows, inRange};
 		}
-		return overlap < UNCONFIRMED_TARGET_MIN_OVERLAP_ROWS;
+		if (!largest || largest.inRange.length < UNCONFIRMED_TARGET_MIN_OVERLAP_ROWS) return true;
+		const outcomes = matchTransactions(
+			largest.rows.map(toMatchRow),
+			await this.findMatchCandidates(this.dataSource.manager, account.id, largest.rows),
+		);
+		const matched = largest.inRange.filter((index) => outcomes[index].kind === 'matched').length;
+		const {numerator, denominator} = UNCONFIRMED_TARGET_MIN_MATCH_SHARE;
+		return matched * denominator >= largest.inRange.length * numerator;
 	}
 
 	/** The account the request names; the drop must be one account in its currency that does not contradict it. */

@@ -16,8 +16,8 @@ export const BANK_IMPORT_ERROR_CODES = [
 	/** More than one synced account fits a statement: the owner chooses one. */
 	'ambiguous_target_account',
 	/**
-	 * A statement that names no account was routed by its bank to a synced account, but overlaps that account's
-	 * stored dates without any of its rows being found there: the owner confirms or chooses the account.
+	 * A statement that names no account was routed by its bank to a synced account, but fewer than half of its rows
+	 * within that account's stored dates are found there: the owner confirms or chooses the account.
 	 */
 	'target_account_unconfirmed',
 	'target_account_mismatch',

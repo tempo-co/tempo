@@ -28,7 +28,7 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 	target_account_unconfirmed: {
 		status: HttpStatus.CONFLICT,
 		message:
-			'None of these transactions were found in the account this statement would go to. Choose the account to import into.',
+			'Few of these transactions were found in the account this statement would go to. Choose the account to import into.',
 	},
 	target_account_mismatch: {
 		status: HttpStatus.UNPROCESSABLE_ENTITY,
