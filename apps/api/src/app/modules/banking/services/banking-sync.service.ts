@@ -764,13 +764,6 @@ export class BankingSyncService {
 					);
 				}
 
-				if (accountResult.transactionsSucceeded || accountResult.transactions.length > 0) {
-					await this.bankTransactionPersistenceService.repairIncompleteTransactionIdentities(
-						bankTransactionRepository,
-						accountResult.bankAccount,
-					);
-				}
-
 				let returnedTransactionIds: string[] = [];
 				if (accountResult.transactions.length > 0) {
 					const transactionPersistence = await this.bankTransactionPersistenceService.persistTransactions(

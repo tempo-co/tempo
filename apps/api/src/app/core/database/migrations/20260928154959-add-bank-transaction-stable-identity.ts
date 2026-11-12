@@ -1,17 +1,10 @@
 import {MigrationInterface, QueryRunner, TableColumn, TableIndex} from 'typeorm';
 
 import {
-	LEGACY_BANK_TRANSACTION_DEDUPE_KEY_PATTERN,
-	allocateNextBankTransactionStableIdentityKey,
-	createBankTransactionStableIdentityGroupKey,
-} from '../../../modules/banking/bank-transaction-identity';
-import type {BankTransactionIdentityInput} from '../../../modules/banking/bank-transaction-identity';
-
-type BankTransactionIdentityRow = BankTransactionIdentityInput & {
-	id: string;
-	stableIdentityKey: string | null;
-	stableIdentityGroupKey: string | null;
-};
+	BANK_TRANSACTION_IDENTITY_ROW_V2_COLUMNS,
+	BankTransactionIdentityRowV2,
+	assignIncompleteBankTransactionIdentityKeysV2,
+} from '../migration-support/bank-transaction-identity-v2';
 
 const TABLE_NAME = 'bank_transactions';
 const IDENTITY_COLUMN_NAME = 'stableIdentityKey';
@@ -19,6 +12,8 @@ const IDENTITY_GROUP_COLUMN_NAME = 'stableIdentityGroupKey';
 const IDENTITY_INDEX_NAME = 'idx_bank_transactions_account_stable_identity';
 const IDENTITY_GROUP_INDEX_NAME = 'idx_bank_transactions_account_identity_group';
 const UPDATE_BATCH_SIZE = 500;
+/** The 64-character SHA-256 dedupe keys of the sync that ran before stable identities. */
+const LEGACY_DEDUPE_KEY_PATTERN = '^[a-f0-9]{64}$';
 
 export class AddBankTransactionStableIdentity20260928154959 implements MigrationInterface {
 	name = 'AddBankTransactionStableIdentity20260928154959';
@@ -56,20 +51,9 @@ export class AddBankTransactionStableIdentity20260928154959 implements Migration
 
 		if (hasIncompleteIdentity) {
 			const rows = (await queryRunner.query(
-				`SELECT id, "bankAccountId", "stableIdentityKey", "stableIdentityGroupKey", "entryReference",
-					to_char("transactionDate", 'YYYY-MM-DD') AS "transactionDate",
-					to_char("bookingDate", 'YYYY-MM-DD') AS "bookingDate",
-					to_char("valueDate", 'YYYY-MM-DD') AS "valueDate",
-					amount::text AS amount,
-					"currency", "creditDebitIndicator", "bankTransactionCode", "bankTransactionSubCode",
-					"bankTransactionDescription", description, "counterpartyName", "merchantLocation", "merchantCategoryCode",
-					"remittanceInformation", "instructedAmount"::text AS "instructedAmount", "instructedCurrency",
-					"exchangeRate"::text AS "exchangeRate", "exchangeRateUnitCurrency", "exchangeRateType",
-					"referenceNumber", "referenceNumberScheme"
-				 FROM "${TABLE_NAME}"
-				 ORDER BY "bankAccountId", id`,
-			)) as BankTransactionIdentityRow[];
-			const identifiedRows = assignIncompleteBankTransactionIdentityKeys(rows);
+				`SELECT ${BANK_TRANSACTION_IDENTITY_ROW_V2_COLUMNS} FROM "${TABLE_NAME}" ORDER BY "bankAccountId", id`,
+			)) as BankTransactionIdentityRowV2[];
+			const identifiedRows = assignIncompleteBankTransactionIdentityKeysV2(rows);
 
 			for (let offset = 0; offset < identifiedRows.length; offset += UPDATE_BATCH_SIZE) {
 				const batch = identifiedRows.slice(offset, offset + UPDATE_BATCH_SIZE);
@@ -131,7 +115,7 @@ export class AddBankTransactionStableIdentity20260928154959 implements Migration
 		const incompatibleDedupeKeyResult = (await queryRunner.query(
 			`SELECT EXISTS (
 				SELECT 1 FROM "${TABLE_NAME}"
-				WHERE "dedupeKey" IS NULL OR "dedupeKey" !~ '${LEGACY_BANK_TRANSACTION_DEDUPE_KEY_PATTERN}'
+				WHERE "dedupeKey" IS NULL OR "dedupeKey" !~ '${LEGACY_DEDUPE_KEY_PATTERN}'
 			) AS "hasIncompatibleDedupeKey"`,
 		)) as Array<{hasIncompatibleDedupeKey: boolean}>;
 		if (incompatibleDedupeKeyResult[0]?.hasIncompatibleDedupeKey) {
@@ -151,45 +135,6 @@ export class AddBankTransactionStableIdentity20260928154959 implements Migration
 			await queryRunner.dropColumn(TABLE_NAME, IDENTITY_COLUMN_NAME);
 		}
 	}
-}
-
-type BankTransactionIdentityUpdate = {
-	id: string;
-	stableIdentityGroupKey: string;
-	stableIdentityKey: string;
-};
-
-function assignIncompleteBankTransactionIdentityKeys(
-	rows: BankTransactionIdentityRow[],
-): BankTransactionIdentityUpdate[] {
-	const usedKeysByAccount = new Map<string, Set<string>>();
-	const getUsedKeys = (bankAccountId: string): Set<string> => {
-		let usedKeys = usedKeysByAccount.get(bankAccountId);
-		if (!usedKeys) {
-			usedKeys = new Set();
-			usedKeysByAccount.set(bankAccountId, usedKeys);
-		}
-		return usedKeys;
-	};
-
-	for (const row of rows) {
-		if (row.stableIdentityKey) getUsedKeys(row.bankAccountId).add(row.stableIdentityKey);
-	}
-
-	const updates: BankTransactionIdentityUpdate[] = [];
-	for (const row of rows) {
-		if (row.stableIdentityKey && row.stableIdentityGroupKey) continue;
-
-		const stableIdentityGroupKey = row.stableIdentityGroupKey || createBankTransactionStableIdentityGroupKey(row);
-		const usedKeys = getUsedKeys(row.bankAccountId);
-		const stableIdentityKey =
-			row.stableIdentityKey ||
-			allocateNextBankTransactionStableIdentityKey(stableIdentityGroupKey, usedKeys).stableIdentityKey;
-		usedKeys.add(stableIdentityKey);
-		updates.push({id: row.id, stableIdentityGroupKey, stableIdentityKey});
-	}
-
-	return updates;
 }
 
 function hasExpectedIndexDefinition(index: TableIndex | undefined, columnNames: string[], isUnique: boolean): boolean {

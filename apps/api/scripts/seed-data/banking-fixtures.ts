@@ -13,6 +13,10 @@ import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES,
 	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
 } from '@modules/banking/bank-transaction-financial-event';
+import {
+	BankTransactionIdentityInput,
+	createBankTransactionStableIdentityGroupKey,
+} from '@modules/banking/bank-transaction-identity';
 import {deriveBankTransactionTextColumns} from '@modules/banking/bank-transaction-text-columns';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 
@@ -109,14 +113,20 @@ export class BankingFixtures {
 			overrides.map((overrideValues) => {
 				const values = {
 					bankAccountId: bankAccount.id,
-					dedupeKey: randomUUID(),
 					amount: '-1.00',
 					currency: 'EUR',
 					creditDebitIndicator: 'DBIT',
 					transactionStatus: 'BOOK',
 					...overrideValues,
 				};
-				return this.transactions.create({...deriveBankTransactionTextColumns(values), ...values});
+				// The row's real identity group, with a key no sync would allocate, so rows never collide.
+				const identity = {
+					stableIdentityGroupKey: createBankTransactionStableIdentityGroupKey(
+						values as BankTransactionIdentityInput,
+					),
+					stableIdentityKey: randomUUID(),
+				};
+				return this.transactions.create({...deriveBankTransactionTextColumns(values), ...identity, ...values});
 			}),
 		);
 	}

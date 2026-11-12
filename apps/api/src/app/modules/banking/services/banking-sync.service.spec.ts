@@ -366,6 +366,10 @@ describe('BankingSyncService synchronization lock', () => {
 			{id: 'new-transaction-id', inserted: true},
 		]);
 		transactionRepository.createQueryBuilder.mockReturnValue(insertQueryBuilder);
+		// Sync reads back the rows it wrote, by identity, to hand them to categorization and logos.
+		transactionRepository.find
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([{id: 'existing-transaction-id'}, {id: 'new-transaction-id'}]);
 		enableBankingClient.getAccountTransactions.mockResolvedValue({transactions, unparseableCount: 0});
 		bankSyncRunRepository.findOneBy.mockResolvedValue({
 			id: 'run-id',
