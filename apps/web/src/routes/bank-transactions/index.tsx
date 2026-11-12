@@ -80,7 +80,7 @@ function BankTransactionsIndex() {
     <>
       {/* The first load shows skeleton rows; a refetch after a filter change uses the page's bar, never one on a card. */}
       <LoadingBar isPending={pages.isPlaceholderData} />
-      <AppBodyLayout className='max-md:my-6'>
+      <AppBodyLayout>
         <div className='space-y-5 max-md:space-y-4'>
           <div className='flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1'>
             <h1 className='text-page-title'>Bank transactions</h1>

@@ -187,7 +187,9 @@ test.describe('the Tempo mark', () => {
       expect(header.height).toBe(49);
       expect(Math.abs(mark.y + mark.height / 2 - (header.y + 24))).toBeLessThanOrEqual(1);
       expect(target.y).toBeGreaterThanOrEqual(header.y);
-      expect(mark.x).toBe(width >= 1280 ? (width - 1280) / 2 + 16 : 16);
+      // The column centres in the room beside the scrollbar's reserved gutter, which is the body's width.
+      const room = (await boxOf(page.locator('body'))).width;
+      expect(mark.x).toBe(room >= 1280 ? (room - 1280) / 2 + 16 : 16);
 
       await link.click();
       await expect(page).toHaveURL(/^https?:\/\/[^/]+\/(?:\?|$)/);

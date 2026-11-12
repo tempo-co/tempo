@@ -56,7 +56,7 @@ function BankConnectionsIndex() {
   return (
     <>
       <LoadingBar isPending={isPending} />
-      <AppBodyLayout className='max-md:my-6'>
+      <AppBodyLayout>
         <BankConnectionList
           bankConnections={bankConnections || []}
           isPending={isPending}
