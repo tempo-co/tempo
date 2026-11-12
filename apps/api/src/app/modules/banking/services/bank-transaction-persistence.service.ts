@@ -1,6 +1,5 @@
 import {Injectable} from '@nestjs/common';
-import {createHash, randomUUID} from 'node:crypto';
-import {FindOptionsSelect, In, IsNull, Not, Repository} from 'typeorm';
+import {FindOptionsSelect, In, Repository} from 'typeorm';
 
 import {BankAccount} from '../bank-account.entity';
 import {
@@ -8,11 +7,10 @@ import {
 	detectBankTransactionFinancialEvent,
 } from '../bank-transaction-financial-event';
 import {
-	allocateNextBankTransactionStableIdentityKey,
 	assignBankTransactionStableIdentityKeys,
+	bankTransactionStableIdentityKeyRange,
 	createBankTransactionStableIdentityGroupKey,
 	createBankTransactionStableIdentityKey,
-	isLegacyBankTransactionDedupeKey,
 } from '../bank-transaction-identity';
 import {normalizeBankTransactionLocation} from '../bank-transaction-location';
 import {deriveBankTransactionTextColumns} from '../bank-transaction-text-columns';
@@ -79,84 +77,48 @@ export type PersistTransactionsResult = {
 	persistedTransactionIds: string[];
 };
 
-type LegacyDedupeKeyValues = {
-	providerTransactionId: string | null;
-	entryReference: string | null;
-	bookingDate: string | null;
-	valueDate: string | null;
-	amount: string;
-	currency: string;
-	creditDebitIndicator: string | null;
-	description: string | null;
-	counterpartyName: string | null;
-	remittanceInformation: string | null;
-};
-
 @Injectable()
 export class BankTransactionPersistenceService {
-	async repairIncompleteTransactionIdentities(
+	/**
+	 * The stored keys among the occurrences new rows of these groups could take. Each group is checked from its first
+	 * occurrence until it has as many free occurrences as it has new rows, so allocating from the result never
+	 * overwrites a stored row, including one that kept its key after moving to another group. The first query covers
+	 * `newRows + storedRows` occurrences, which is enough unless rows moved between groups.
+	 */
+	private async findOccupiedTransactionIdentityKeys(
 		repository: Repository<BankTransaction>,
-		bankAccount: BankAccount,
-	): Promise<void> {
-		const incompleteTransactions = await repository.find({
-			select: BANK_TRANSACTION_IDENTITY_SELECT,
-			where: [
-				{bankAccountId: bankAccount.id, stableIdentityKey: IsNull()},
-				{bankAccountId: bankAccount.id, stableIdentityKey: ''},
-				{bankAccountId: bankAccount.id, stableIdentityGroupKey: IsNull()},
-				{bankAccountId: bankAccount.id, stableIdentityGroupKey: ''},
-			],
-			order: {id: 'ASC'},
-		});
-		if (incompleteTransactions.length === 0) return;
-
-		const usedKeys = await this.getOccupiedTransactionIdentityKeys(repository, bankAccount.id);
-		const identityUpdates = incompleteTransactions.map((transaction) => {
-			const stableIdentityGroupKey =
-				transaction.stableIdentityGroupKey || createBankTransactionStableIdentityGroupKey(transaction);
-			let stableIdentityKey = transaction.stableIdentityKey;
-			if (!stableIdentityKey) {
-				stableIdentityKey = allocateNextBankTransactionStableIdentityKey(
-					stableIdentityGroupKey,
-					usedKeys,
-				).stableIdentityKey;
-			}
-			usedKeys.add(stableIdentityKey);
-			return {id: transaction.id, stableIdentityKey, stableIdentityGroupKey};
-		});
-
-		for (const chunk of chunkArray(identityUpdates, BATCH_WRITE_CHUNK_SIZE)) {
-			const values = buildPostgresValuesList(
-				chunk.map(({id, stableIdentityKey, stableIdentityGroupKey}) => [
-					id,
-					stableIdentityKey,
-					stableIdentityGroupKey,
-				]),
-				['uuid', 'varchar', 'varchar'],
-			);
-			await repository.query(
-				`UPDATE "bank_transactions" AS t
-				SET "stableIdentityKey" = v."stableIdentityKey",
-					"stableIdentityGroupKey" = v."stableIdentityGroupKey",
-					"updatedAt" = CURRENT_TIMESTAMP
-				FROM (VALUES ${values.sql}) AS v("id", "stableIdentityKey", "stableIdentityGroupKey")
-				WHERE t."id" = v."id"`,
-				values.parameters,
-			);
-		}
-	}
-
-	private async getOccupiedTransactionIdentityKeys(
-		repository: Repository<BankTransaction>,
-		bankAccountId: string,
+		bankAccountId: BankAccount['id'],
+		groups: ReadonlyArray<{groupKey: string; newRows: number; storedRows: number}>,
 	): Promise<Set<string>> {
-		const occupiedIdentities = await repository.find({
-			select: {stableIdentityKey: true},
-			where: {bankAccountId, stableIdentityKey: Not(IsNull())},
-		});
-		return new Set(
-			occupiedIdentities.flatMap(({stableIdentityKey}) => (stableIdentityKey ? [stableIdentityKey] : [])),
-		);
+		const occupied = new Set<string>();
+		let ranges = groups.map(({groupKey, newRows, storedRows}) => ({
+			groupKey,
+			needed: newRows,
+			first: 1,
+			count: newRows + storedRows,
+		}));
+		while (ranges.length > 0) {
+			const candidates = ranges.map((range) => ({
+				...range,
+				keys: bankTransactionStableIdentityKeyRange(range.groupKey, range.first, range.count),
+			}));
+			for (const keys of chunkArray(
+				candidates.flatMap(({keys}) => keys),
+				BATCH_WRITE_CHUNK_SIZE,
+			)) {
+				const rows: Array<{stableIdentityKey: string}> = await repository.query(
+					`SELECT "stableIdentityKey" FROM "bank_transactions"
+					WHERE "bankAccountId" = $1 AND "stableIdentityKey" = ANY($2::varchar[])`,
+					[bankAccountId, keys],
+				);
+				for (const {stableIdentityKey} of rows) occupied.add(stableIdentityKey);
+			}
+			ranges = candidates.flatMap(({groupKey, needed, first, count, keys}) => {
+				const stillNeeded = needed - keys.filter((key) => !occupied.has(key)).length;
+				return stillNeeded > 0 ? [{groupKey, needed: stillNeeded, first: first + count, count: count * 2}] : [];
+			});
+		}
+		return occupied;
 	}
 
 	async persistTransactions(
@@ -182,7 +144,6 @@ export class BankTransactionPersistenceService {
 		const existingTransactions = await repository.find({
 			select: {
 				...BANK_TRANSACTION_IDENTITY_SELECT,
-				dedupeKey: true,
 				categoryInputHash: true,
 				categorySource: true,
 				categoryStatus: true,
@@ -196,31 +157,31 @@ export class BankTransactionPersistenceService {
 					]
 				: {bankAccountId: bankAccount.id, stableIdentityGroupKey: In(stableIdentityGroupKeys)},
 		});
-		// A booked row can retain a key from its former pending group while no longer
-		// matching the incoming group or reference. Reserve keys independently of matching.
-		const occupiedIdentityKeys = await this.getOccupiedTransactionIdentityKeys(repository, bankAccount.id);
+		// Rows the assignment cannot match need free occurrences of their group; a stored row can hold one of them
+		// after it moved to another group, so look at the keys themselves, not just the rows of the group.
+		const countByGroup = (rows: ReadonlyArray<{stableIdentityGroupKey: string}>) =>
+			rows.reduce(
+				(counts, {stableIdentityGroupKey}) =>
+					counts.set(stableIdentityGroupKey, (counts.get(stableIdentityGroupKey) ?? 0) + 1),
+				new Map<string, number>(),
+			);
+		const newRowsByGroup = countByGroup(unassignedTransactionValues);
+		const storedRowsByGroup = countByGroup(existingTransactions);
+		const occupiedIdentityKeys = await this.findOccupiedTransactionIdentityKeys(
+			repository,
+			bankAccount.id,
+			stableIdentityGroupKeys.map((groupKey) => ({
+				groupKey,
+				newRows: newRowsByGroup.get(groupKey) ?? 0,
+				storedRows: storedRowsByGroup.get(groupKey) ?? 0,
+			})),
+		);
 		const transactionValues = assignBankTransactionStableIdentityKeys(
 			unassignedTransactionValues,
 			existingTransactions,
 			occupiedIdentityKeys,
 		);
 		const stableIdentityKeys = transactionValues.map(({stableIdentityKey}) => stableIdentityKey);
-		const existingTransactionsByIdentity = new Map(
-			existingTransactions
-				.filter(({stableIdentityKey}) => stableIdentityKey)
-				.map((transaction) => [transaction.stableIdentityKey as string, transaction]),
-		);
-		for (const transactionValue of transactionValues) {
-			const existingTransaction = existingTransactionsByIdentity.get(transactionValue.stableIdentityKey);
-			if (!existingTransaction) {
-				transactionValue.dedupeKey = randomUUID();
-			} else if (existingTransaction.dedupeKey !== transactionValue.dedupeKey) {
-				// UUID markers make rollback refuse rows the previous sync can no longer match by this legacy key.
-				transactionValue.dedupeKey = isLegacyBankTransactionDedupeKey(existingTransaction.dedupeKey)
-					? randomUUID()
-					: existingTransaction.dedupeKey;
-			}
-		}
 
 		const conflictColumns = ['bankAccountId', 'stableIdentityKey'];
 		const overwriteColumns = Object.keys(transactionValues[0]).filter(
@@ -248,13 +209,12 @@ export class BankTransactionPersistenceService {
 			// the wrong ids to the values; keep them unmodified.
 			.updateEntity(false)
 			.execute();
-		const insertedTransactionIds = this.getInsertedTransactionIds(upsertResult.raw);
-		const transactionsAdded = insertedTransactionIds.length;
+		const transactionsAdded = this.getInsertedTransactionIds(upsertResult.raw).length;
 
 		const eventTransactionValues = transactionValues.filter(
 			({financialEventType}) => financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
 		);
-		await this.clearStaleBaseAmounts(repository, existingTransactions);
+		await this.clearStaleBaseAmounts(repository, bankAccount.id, existingTransactions);
 		await this.copySameCurrencyBaseAmounts(repository, bankAccount.id);
 
 		const eventStableIdentityKeys = [
@@ -284,7 +244,6 @@ export class BankTransactionPersistenceService {
 		);
 		const staleCategorizationIds: string[] = [];
 		for (const existingTransaction of existingTransactions) {
-			if (!existingTransaction.stableIdentityKey) continue;
 			const currentValue = transactionByStableIdentityKey.get(existingTransaction.stableIdentityKey);
 			if (
 				!currentValue ||
@@ -308,7 +267,8 @@ export class BankTransactionPersistenceService {
 					categoryStatus: 'PENDING',
 					categoryUpdatedAt: null,
 				})
-				.where('id IN (:...ids)', {ids})
+				.where('"bankAccountId" = :bankAccountId', {bankAccountId: bankAccount.id})
+				.andWhere('id IN (:...ids)', {ids})
 				.andWhere(notManualCategorySourceSql())
 				.andWhere('categoryStatus IS DISTINCT FROM :completedCategoryStatus', {
 					completedCategoryStatus: 'COMPLETED',
@@ -322,10 +282,7 @@ export class BankTransactionPersistenceService {
 			select: {id: true},
 			where: {bankAccountId: bankAccount.id, stableIdentityKey: In(stableIdentityKeys)},
 		});
-		const persistedTransactionIds =
-			persistedRows.length > 0 ? persistedRows.map(({id}) => id) : insertedTransactionIds;
-
-		return {transactionsAdded, persistedTransactionIds};
+		return {transactionsAdded, persistedTransactionIds: persistedRows.map(({id}) => id)};
 	}
 
 	/** The earliest date of each account's pending rows, so the account's next fetch still covers all of them. */
@@ -394,6 +351,7 @@ export class BankTransactionPersistenceService {
 	 */
 	private async clearStaleBaseAmounts(
 		repository: Repository<BankTransaction>,
+		bankAccountId: BankAccount['id'],
 		previousTransactions: readonly BankTransaction[],
 	): Promise<void> {
 		const rows = previousTransactions.map((transaction) => [
@@ -408,10 +366,11 @@ export class BankTransactionPersistenceService {
 				`UPDATE "bank_transactions" AS t
 				SET "amountInBaseCurrency" = NULL, "baseAmountMethod" = NULL, "baseAmountRateDate" = NULL
 				FROM (VALUES ${values.sql}) AS previous(${columns.join(', ')})
-				WHERE t."id" = previous."id"
+				WHERE t."bankAccountId" = $${values.parameters.length + 1}
+					AND t."id" = previous."id"
 					AND t."amountInBaseCurrency" IS NOT NULL
 					AND ${baseAmountInputsSql('t')} IS DISTINCT FROM ${baseAmountInputsSql('previous')}`,
-				values.parameters,
+				[...values.parameters, bankAccountId],
 			);
 		}
 	}
@@ -500,18 +459,6 @@ export class BankTransactionPersistenceService {
 		};
 		const stableIdentityGroupKey = createBankTransactionStableIdentityGroupKey(identityValues);
 		const stableIdentityKey = createBankTransactionStableIdentityKey(identityValues, 1);
-		const dedupeKey = this.createLegacyDedupeKey({
-			providerTransactionId,
-			entryReference,
-			bookingDate,
-			valueDate,
-			amount,
-			currency,
-			creditDebitIndicator,
-			description,
-			counterpartyName,
-			remittanceInformation,
-		});
 		const categoryInputHash = financialEvent
 			? null
 			: createBankTransactionCategorizationInputHash(
@@ -539,7 +486,6 @@ export class BankTransactionPersistenceService {
 			bankAccountId: bankAccount.id,
 			providerTransactionId,
 			entryReference,
-			dedupeKey,
 			stableIdentityKey,
 			stableIdentityGroupKey,
 			transactionDate,
@@ -586,30 +532,6 @@ export class BankTransactionPersistenceService {
 			const {id, inserted} = row as {id?: unknown; inserted?: unknown};
 			return typeof id === 'string' && inserted === true ? [id] : [];
 		});
-	}
-
-	private createLegacyDedupeKey(values: LegacyDedupeKeyValues): string {
-		const fallbackValues: Record<string, string | null> = {
-			providerTransactionId: values.providerTransactionId,
-			entryReference: values.entryReference,
-			bookingDate: values.bookingDate,
-			valueDate: values.valueDate,
-			amount: values.amount,
-			currency: values.currency,
-			creditDebitIndicator: values.creditDebitIndicator,
-			description: values.description,
-			counterpartyName: values.counterpartyName,
-			remittanceInformation: values.remittanceInformation,
-		};
-		const identity = values.providerTransactionId
-			? `transaction:${values.providerTransactionId}`
-			: values.entryReference
-				? `entry:${values.entryReference}`
-				: Object.entries(fallbackValues)
-						.map(([key, value]) => `${key}:${value?.trim().toLowerCase() ?? ''}`)
-						.join('|');
-
-		return createHash('sha256').update(identity).digest('hex');
 	}
 
 	private toSignedAmount(amount: string, creditDebitIndicator: string | null): string {

@@ -189,7 +189,6 @@ function seedTransactions(transactions: (DeepPartial<BankTransaction> & {id: str
 		creditDebitIndicator: transaction.amount.startsWith('-') ? 'DBIT' : 'CRDT',
 		transactionType: BANK_TRANSACTION_TYPES.TRANSFER,
 		...transaction,
-		dedupeKey: `seed-${transaction.id}`,
 		providerTransactionId: transaction.id,
 		entryReference: transaction.id,
 	}));

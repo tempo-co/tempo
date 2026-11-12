@@ -192,7 +192,7 @@ describe('BankTransactionController', () => {
 		expect(serializedResponse).not.toContain('provider-entry-coffee');
 		expect(serializedResponse).not.toContain('identification-hash-must-not-leak');
 		expect(serializedResponse).not.toContain('provider-account-must-not-leak');
-		expect(response.body.transactions[0]).not.toHaveProperty('dedupeKey');
+		expect(response.body.transactions[0]).not.toHaveProperty('stableIdentityKey');
 		expect(response.body.transactions[0]).not.toHaveProperty('bankTransactionCode');
 		expect(response.body.transactions[0]).not.toHaveProperty('bankTransactionSubCode');
 	});

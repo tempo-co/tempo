@@ -14,4 +14,5 @@ CI builds and releases this image; see the root `docs/ci-and-images.md`.
 
 - Migrations live in `src/app/core/database/migrations/` and run automatically only in production. After merging main, check for a timestamp collision with an unshipped branch migration; rename the file and its class/`name` together.
 - Prove a migration with the real QueryRunner against disposable PostgreSQL: up, read/write through the migrated schema, down, up again, and a second run that applies nothing. Fingerprint unrelated tables (row count plus an md5 over rows) before and after to show they did not change.
+- A failed rollout restores the previous images but never rolls back migrations. After a migration that drops or renames a column the previous image reads, that image fails on the column until the migration's `down` runs or the pre-deploy backup is restored.
 - A data-migration spec may ship with its migration and be removed once the migration has run everywhere it needs to.

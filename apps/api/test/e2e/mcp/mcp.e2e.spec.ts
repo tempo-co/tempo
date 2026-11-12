@@ -570,7 +570,7 @@ describe('Hosted MCP', () => {
 					'identificationHash',
 					'providerAccountId',
 					'counterpartyIban',
-					'dedupeKey',
+					'stableIdentityKey',
 					'categoryLastError',
 					'example-private',
 					'NL91ABNA0417164300',

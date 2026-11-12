@@ -1,4 +1,3 @@
-import {createHash} from 'node:crypto';
 import {Repository} from 'typeorm';
 
 import {BankAccount} from '../bank-account.entity';
@@ -43,59 +42,6 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 		).toBankTransactionValues(bankAccount, transaction, aspspName, provider);
 	}
 
-	function createLegacyFallbackDedupeKey(values: Record<string, string | null>): string {
-		const identity = Object.entries(values)
-			.map(([key, value]) => `${key}:${value?.trim().toLowerCase() ?? ''}`)
-			.join('|');
-		return createHash('sha256').update(identity).digest('hex');
-	}
-
-	it('repairs empty stable identity keys and group keys', async () => {
-		const service = createServiceForTransactionValues();
-		const bankAccount = {id: 'bank-account-id', currency: 'EUR'} as BankAccount;
-		const transaction = toBankTransactionValues(
-			service,
-			{amount: '12.00', currency: 'EUR', bookingDate: '2026-09-01'},
-			bankAccount as unknown as Record<string, unknown>,
-		);
-		const incompleteTransaction = {
-			...transaction,
-			id: 'existing-transaction-id',
-			stableIdentityKey: '',
-			stableIdentityGroupKey: '',
-		};
-		const repositoryFind = jest.fn().mockResolvedValueOnce([incompleteTransaction]).mockResolvedValueOnce([]);
-		const repository = {
-			find: repositoryFind,
-			query: jest.fn().mockResolvedValue(undefined),
-		} as unknown as Repository<BankTransaction>;
-
-		await (
-			service as unknown as {
-				repairIncompleteTransactionIdentities: (...args: unknown[]) => Promise<void>;
-			}
-		).repairIncompleteTransactionIdentities(repository, bankAccount);
-
-		expect(repositoryFind).toHaveBeenNthCalledWith(
-			1,
-			expect.objectContaining({
-				where: expect.arrayContaining([
-					{bankAccountId: bankAccount.id, stableIdentityKey: ''},
-					{bankAccountId: bankAccount.id, stableIdentityGroupKey: ''},
-				]),
-			}),
-		);
-		expect(repository.query).toHaveBeenCalledTimes(1);
-		const [sql, parameters] = (repository.query as jest.Mock).mock.calls[0] as [string, string[]];
-		expect(sql).toContain('UPDATE "bank_transactions" AS t');
-		expect(sql).toContain('FROM (VALUES ($1::uuid, $2::varchar, $3::varchar))');
-		expect(sql).toContain('WHERE t."id" = v."id"');
-		const [id, stableIdentityKey, stableIdentityGroupKey] = parameters;
-		expect(id).toBe('existing-transaction-id');
-		expect(stableIdentityKey).not.toBe('');
-		expect(stableIdentityGroupKey).not.toBe('');
-	});
-
 	it('uses the stable entry reference instead of a changing provider transaction ID', () => {
 		const service = createServiceForTransactionValues();
 		const transaction = {
@@ -126,39 +72,6 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 
 		expect(first.stableIdentityKey).toEqual(expect.any(String));
 		expect(first.stableIdentityKey).toBe(nextFetch.stableIdentityKey);
-	});
-
-	it('reproduces the legacy fallback key from the provider amount text and fallback fields', () => {
-		const service = createServiceForTransactionValues();
-		const values = toBankTransactionValues(
-			service,
-			{
-				amount: '12.00',
-				currency: 'eur',
-				creditDebitIndicator: 'dbit',
-				bookingDate: '2026-09-01',
-				valueDate: '2026-09-02',
-				description: ' Synthetic test payment ',
-				counterpartyName: ' Synthetic Counterparty ',
-				remittanceInformation: ' Synthetic remittance ',
-			},
-			{id: 'account', currency: 'EUR'},
-		);
-
-		expect(values.dedupeKey).toBe(
-			createLegacyFallbackDedupeKey({
-				providerTransactionId: null,
-				entryReference: null,
-				bookingDate: '2026-09-01',
-				valueDate: '2026-09-02',
-				amount: '-12.00',
-				currency: 'EUR',
-				creditDebitIndicator: 'DBIT',
-				description: ' Synthetic test payment ',
-				counterpartyName: ' Synthetic Counterparty ',
-				remittanceInformation: ' Synthetic remittance ',
-			}),
-		);
 	});
 
 	it('keeps an entry-referenced transaction identity when mutable provider details change', () => {
@@ -431,27 +344,13 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 			originalTransaction,
 			bankAccount as unknown as Record<string, unknown>,
 		);
-		const originalLegacyDedupeKey = createLegacyFallbackDedupeKey({
-			providerTransactionId: null,
-			entryReference: null,
-			bookingDate: '2026-09-01',
-			valueDate: '2026-09-01',
-			amount: '-12.00',
-			currency: 'EUR',
-			creditDebitIndicator: 'DBIT',
-			description: 'Synthetic detail before update',
-			counterpartyName: 'Synthetic counterparty before update',
-			remittanceInformation: null,
-		});
 		const existingTransaction = {
 			...originalValue,
 			id: 'existing-transaction-id',
-			dedupeKey: originalLegacyDedupeKey,
 			categoryStatus: 'COMPLETED',
 		};
 		const repositoryFind = jest
 			.fn()
-			.mockResolvedValueOnce([existingTransaction])
 			.mockResolvedValueOnce([existingTransaction])
 			.mockResolvedValueOnce([{id: existingTransaction.id}]);
 		const repository = {
@@ -484,8 +383,6 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 		expect(persistedValues[0]).toMatchObject({
 			stableIdentityKey: originalValue.stableIdentityKey,
 		});
-		expect(persistedValues[0].dedupeKey).not.toBe(originalLegacyDedupeKey);
-		expect(persistedValues[0].dedupeKey).not.toMatch(/^[a-f0-9]{64}$/);
 	});
 
 	it('stores currency exchange metadata and skips the categorization input hash', () => {
@@ -543,19 +440,16 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 			transaction,
 			bankAccount as unknown as Record<string, unknown>,
 		);
-		const legacyDedupeKey = createHash('sha256').update('transaction:provider-transaction-id').digest('hex');
 		transaction.providerTransactionId = 'changed-provider-transaction-id';
 		repositoryFind
 			.mockResolvedValueOnce([
 				{
 					...mappedValue,
 					id: 'existing-transaction-id',
-					dedupeKey: legacyDedupeKey,
 					categoryInputHash: 'legacy-input-hash',
 					categorySource: null,
 				},
 			])
-			.mockResolvedValueOnce([{stableIdentityKey: mappedValue.stableIdentityKey}])
 			.mockResolvedValueOnce([{id: 'existing-transaction-id'}]);
 
 		await (
@@ -578,8 +472,6 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 			providerTransactionId: 'changed-provider-transaction-id',
 			stableIdentityKey: mappedValue.stableIdentityKey,
 		});
-		expect(persistedValues[0].dedupeKey).not.toBe(legacyDedupeKey);
-		expect(persistedValues[0].dedupeKey).not.toMatch(/^[a-f0-9]{64}$/);
 		expect(insertQueryBuilder.orUpdate).toHaveBeenCalledWith(
 			expect.any(Array),
 			['bankAccountId', 'stableIdentityKey'],
@@ -629,7 +521,6 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 		const repositoryFind = jest
 			.fn()
 			.mockResolvedValueOnce(existingTransactions)
-			.mockResolvedValueOnce(existingTransactions)
 			.mockResolvedValueOnce(existingTransactions.map(({id}) => ({id})));
 		const repository = {
 			query: jest.fn().mockResolvedValue([]),
@@ -647,7 +538,10 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 		expect(queryBuilder.set).toHaveBeenCalledWith(
 			expect.objectContaining({categoryStatus: 'PENDING', categoryUpdatedAt: null, category: null}),
 		);
-		expect(queryBuilder.where).toHaveBeenCalledWith('id IN (:...ids)', {
+		expect(queryBuilder.where).toHaveBeenCalledWith('"bankAccountId" = :bankAccountId', {
+			bankAccountId: bankAccount.id,
+		});
+		expect(queryBuilder.andWhere).toHaveBeenCalledWith('id IN (:...ids)', {
 			ids: ['existing-transaction-0', 'existing-transaction-1'],
 		});
 		expect(queryBuilder.andWhere).toHaveBeenCalledWith(`"categorySource" IS DISTINCT FROM 'MANUAL'`);
@@ -705,7 +599,6 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 		const existingTransactions = initialValues.map((value, index) => ({
 			...value,
 			id: `existing-transaction-${index}`,
-			dedupeKey: `legacy-dedupe-key-${index}`,
 			categorySource: 'AI',
 			categoryStatus: 'COMPLETED',
 		}));
@@ -713,7 +606,6 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 			query: jest.fn().mockResolvedValue([]),
 			find: jest
 				.fn()
-				.mockResolvedValueOnce(existingTransactions)
 				.mockResolvedValueOnce(existingTransactions)
 				.mockResolvedValueOnce(existingTransactions.map(({id}) => ({id}))),
 			createQueryBuilder: jest.fn().mockReturnValue(insertQueryBuilder),
