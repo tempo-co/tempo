@@ -66,7 +66,7 @@ for (const width of [1440, 1280]) {
       .getByRole('navigation', {name: 'Primary'})
       .getByRole('link', {name: 'Connections'})
       .click();
-    await expect(page.getByRole('heading', {name: 'Bank connections'})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'Bank connections', exact: true})).toBeVisible();
     expect(await scrolls(page)).toBe(false);
     expect(await column(page)).toEqual(home);
     // Home has no title, so its content starts where the title does; the Connect button overhangs the title's row.
@@ -86,14 +86,14 @@ for (const width of [1440, 1280]) {
       .getByRole('navigation', {name: 'Primary'})
       .getByRole('link', {name: /^Transactions/})
       .click();
-    await expect(page.getByRole('heading', {name: 'Bank transactions'})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'Bank transactions', exact: true})).toBeVisible();
     await expectLoaded(page);
     expect(await column(page)).toEqual(home);
     expect(await title(page)).toEqual(connections);
 
     // Settings narrows its own content, inside the same column.
     await page.goto('/settings/account');
-    await expect(page.getByRole('heading', {name: 'Settings'})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'Settings', exact: true})).toBeVisible();
     expect(await column(page)).toEqual(home);
     expect((await title(page)).y).toBe(home.top);
   });
@@ -111,7 +111,7 @@ test('starts every page title where Home starts its content on a phone', async (
     ['/settings/account', 'Settings'],
   ]) {
     await page.goto(path);
-    await expect(page.getByRole('heading', {name})).toBeVisible();
+    await expect(page.getByRole('heading', {name, exact: true})).toBeVisible();
     expect(await title(page), path).toMatchObject({x: 16, y: home.top});
   }
 });

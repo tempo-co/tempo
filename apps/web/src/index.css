@@ -378,6 +378,11 @@
   @media (width >= --theme(--breakpoint-md)) {
     html {
       scrollbar-gutter: stable;
+      /* The page's own scrollbar looks like ScrollArea's: a thin border-coloured thumb on the page.
+         The colour inherits, so any other native scroller matches too. Standard properties only:
+         ::-webkit-scrollbar would make macOS Safari's overlay bar permanent. */
+      scrollbar-color: var(--color-border) transparent;
+      scrollbar-width: thin;
     }
     /* The gutter already holds the scrollbar's room, so a dialog's scroll lock must not add it again.
        Inside this layer, !important beats react-remove-scroll-bar's unlayered !important margin. */
