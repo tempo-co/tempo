@@ -240,7 +240,13 @@ async function request<T = unknown>(
       throw toasted(new HttpError(response.status, response.statusText, retryAfterSeconds));
     }
     if (response.status >= 500) {
-      throw new HttpError(response.status, 'Tempo is temporarily unavailable. Please try again.');
+      const unavailable = new HttpError(
+        response.status,
+        'Tempo is temporarily unavailable. Please try again.',
+      );
+      // A busy refusal is a 503 with a typed body the caller can tell apart from an outage.
+      unavailable.body = await response.json().catch(() => undefined);
+      throw unavailable;
     }
 
     if (init?.parseJson === false) {

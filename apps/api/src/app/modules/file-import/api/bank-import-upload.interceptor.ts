@@ -87,8 +87,9 @@ function discardBody(request: Request): Promise<void> {
  * `accountChoices`, and turns multer's limit errors into typed refusals. Nothing reaches disk.
  *
  * Each upload first takes one of the queue's slots and keeps it until its import has finished or failed, so at most
- * two drops are held in memory at once. A drop declared or counted larger than 25 MB together is refused without
- * waiting for a slot or reading further.
+ * two drops are held in memory at once. A drop declared larger than 25 MB together is refused without waiting for a
+ * slot, its body read and dropped so the client can read the refusal; one counted larger as it streams is refused
+ * then, keeping nothing more of it.
  */
 @Injectable()
 export class BankImportUploadInterceptor implements NestInterceptor {

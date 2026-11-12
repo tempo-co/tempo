@@ -735,6 +735,36 @@ test.describe('statement file import on Connections', () => {
     expect(api.uploads).toHaveLength(1);
   });
 
+  test('a busy import keeps the chosen files for another try, and a proxy size refusal reads as too large together', async ({
+    page,
+  }) => {
+    const api = await mockFileImport(page, {
+      uploads: [
+        refused({code: 'import_busy', statusCode: 503}),
+        // The proxy in front of the API answers with its own page, not a typed refusal.
+        (route) => route.fulfill({status: 413, contentType: 'text/html', body: '<html>413</html>'}),
+      ],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog
+      .getByTestId('bank-import-file-input')
+      .setInputFiles([statement('statement-a.xml'), statement('statement-b.xml')]);
+
+    const alert = dialog.getByRole('alert');
+    await expect(alert.getByText('Other files are being imported')).toBeVisible();
+    await expect(alert).toContainText('Try again in a minute. Nothing was imported.');
+    await expect(
+      dialog.getByRole('list', {name: 'Chosen files'}).getByRole('listitem'),
+    ).toHaveCount(2);
+
+    await dialog.getByRole('button', {name: 'Import', exact: true}).click();
+    await expect(alert.getByText('These files are too large together')).toBeVisible();
+    await expect(alert).toContainText('Import them in smaller batches. Nothing was imported.');
+    await expect(dialog.getByRole('list', {name: 'Chosen files'})).toHaveCount(0);
+    expect(api.uploads).toHaveLength(2);
+  });
+
   test('a lost connection keeps the chosen files for another try', async ({page}) => {
     await mockFileImport(page, {uploads: [(route) => route.abort('failed')]});
     await page.goto('/bank-connections');
