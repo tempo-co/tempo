@@ -1,5 +1,6 @@
 import {
 	BadRequestException,
+	Body,
 	Controller,
 	Delete,
 	Get,
@@ -12,17 +13,21 @@ import {
 	UseInterceptors,
 } from '@nestjs/common';
 import {Throttle, minutes} from '@nestjs/throttler';
-import type {BankImportSummary} from '@tempo/contracts';
+import type {BankImportDoubtfulRow, BankImportSummary} from '@tempo/contracts';
+import {isUUID} from 'class-validator';
 
 import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 import {CsrfOriginGuard} from '@modules/auth/guards/csrf-origin.guard';
 
 import {BankImportService} from '../bank-import.service';
-import {BankImportUploadInterceptor} from './bank-import-upload.interceptor';
+import {BANK_IMPORT_ACCOUNT_FIELD, BankImportUploadInterceptor} from './bank-import-upload.interceptor';
 import {FileImportEnabledGuard} from './file-import-enabled.guard';
+import {ResolveBankImportDoubtfulRowDto} from './resolve-bank-import-doubtful-row.dto';
 
 const NO_FILES = 'Choose at least one file to import.';
+const INVALID_ACCOUNT_ID = 'bankAccountId must be a UUID.';
+const UUID_PIPE = new ParseUUIDPipe({version: '4'});
 
 @Controller('bank-imports')
 @UseGuards(FileImportEnabledGuard)
@@ -37,12 +42,17 @@ export class BankImportController {
 	@UseInterceptors(BankImportUploadInterceptor)
 	async importFiles(
 		@UploadedFiles() files: {buffer: Buffer}[] | undefined,
+		@Body(BANK_IMPORT_ACCOUNT_FIELD) bankAccountId: unknown,
 		@CurrentAccount() account: Account,
 	): Promise<BankImportSummary> {
 		if (!files?.length) throw new BadRequestException(NO_FILES);
+		if (bankAccountId !== undefined && !(typeof bankAccountId === 'string' && isUUID(bankAccountId))) {
+			throw new BadRequestException(INVALID_ACCOUNT_ID);
+		}
 		return this.bankImportService.importFiles(
 			account.id,
 			files.map(({buffer}) => buffer),
+			bankAccountId ?? null,
 		);
 	}
 
@@ -51,13 +61,30 @@ export class BankImportController {
 		return this.bankImportService.findAll(account.id);
 	}
 
+	@Get(':importId/doubtful-rows')
+	async findDoubtfulRows(
+		@Param('importId', UUID_PIPE) importId: string,
+		@CurrentAccount() account: Account,
+	): Promise<BankImportDoubtfulRow[]> {
+		return this.bankImportService.findDoubtfulRows(account.id, importId);
+	}
+
+	@Post(':importId/doubtful-rows/:rowId/resolve')
+	@HttpCode(200)
+	@UseGuards(CsrfOriginGuard)
+	async resolveDoubtfulRow(
+		@Param('importId', UUID_PIPE) importId: string,
+		@Param('rowId', UUID_PIPE) rowId: string,
+		@Body() body: ResolveBankImportDoubtfulRowDto,
+		@CurrentAccount() account: Account,
+	): Promise<BankImportSummary> {
+		return this.bankImportService.resolveDoubtfulRow(account.id, importId, rowId, body);
+	}
+
 	@Delete(':importId')
 	@HttpCode(204)
 	@UseGuards(CsrfOriginGuard)
-	async undo(
-		@Param('importId', new ParseUUIDPipe({version: '4'})) importId: string,
-		@CurrentAccount() account: Account,
-	): Promise<void> {
+	async undo(@Param('importId', UUID_PIPE) importId: string, @CurrentAccount() account: Account): Promise<void> {
 		await this.bankImportService.undo(account.id, importId);
 	}
 }

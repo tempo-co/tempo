@@ -15,9 +15,22 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 	too_many_rows: {status: HttpStatus.UNPROCESSABLE_ENTITY, message: 'One drop can hold at most 50,000 transactions.'},
 	parse_failed: {status: HttpStatus.UNPROCESSABLE_ENTITY, message: 'This file could not be read.'},
 	parse_timeout: {status: HttpStatus.UNPROCESSABLE_ENTITY, message: 'Reading this file took too long.'},
-	synced_account_not_supported_yet: {
+	ambiguous_target_account: {
 		status: HttpStatus.CONFLICT,
-		message: 'This statement belongs to an account Tempo already syncs. Importing into it is not supported yet.',
+		message: 'More than one of your accounts has this IBAN. Choose the account to import into.',
+	},
+	target_account_mismatch: {
+		status: HttpStatus.UNPROCESSABLE_ENTITY,
+		message: 'This file does not belong to the chosen account. Drop the statements of one account in its currency.',
+	},
+	account_busy: {
+		status: HttpStatus.CONFLICT,
+		message: 'This account is syncing with your bank. Try again in a moment.',
+	},
+	multiple_bank_connections: {
+		status: HttpStatus.UNPROCESSABLE_ENTITY,
+		message:
+			'This drop holds statements of accounts from more than one bank connection. Import each bank separately.',
 	},
 };
 

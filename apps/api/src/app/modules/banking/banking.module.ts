@@ -109,6 +109,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 	],
 	exports: [
 		BankTransactionPersistenceService,
+		BankingConnectionLockService,
 		OwnTransferService,
 		CurrencyExchangeService,
 		BankTransactionCategorizationModule,

@@ -7,15 +7,25 @@ import {Server} from 'node:net';
 import {join} from 'node:path';
 import {deflateRawSync} from 'node:zlib';
 import TestAgent from 'supertest/lib/agent';
-import {Repository} from 'typeorm';
+import {In, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
 import {BankConnectionAlertService} from '@modules/banking/alerts/bank-connection-alert.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
+import {
+	createBankTransactionStableIdentityGroupKey,
+	createBankTransactionStableIdentityKey,
+} from '@modules/banking/bank-transaction-identity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {EnableBankingTransaction} from '@modules/banking/enable-banking.types';
+import {BankingConnectionLockService} from '@modules/banking/services/banking-connection-lock.service';
+import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
 import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
+import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
+import {EnableBankingClient} from '@modules/banking/services/enable-banking.client';
+import {BankImportDoubtfulRow} from '@modules/file-import/bank-import-doubtful-row.entity';
 import {BankImport} from '@modules/file-import/bank-import.entity';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
@@ -31,6 +41,16 @@ const ARCHIVE = readFileSync(join(FIXTURES, 'camt053-synthetic.zip'));
 const STATEMENT_FILES = ['020326', '030326', '040326'].map((day) =>
 	readFileSync(join(FIXTURES, `0417164300_99999999_${day}000000.xml`)),
 );
+// Enable Banking's identification hash of EXAMPLE_IBAN in EUR, in the shape it uses for IBAN accounts.
+const EXAMPLE_IBAN_HASH = [
+	Buffer.from(
+		JSON.stringify([
+			['account', 'account_id', 'iban'],
+			['account', 'currency'],
+		]),
+	).toString('base64url'),
+	createHash('sha256').update(`[\n"${EXAMPLE_IBAN}",\n"EUR"\n]`).digest('base64url'),
+].join('.');
 const OTHER_STATEMENT = Buffer.from(
 	camt053([
 		{
@@ -72,6 +92,7 @@ describe('Bank imports', () => {
 	let bankAccounts: Repository<BankAccount>;
 	let transactions: Repository<BankTransaction>;
 	let imports: Repository<BankImport>;
+	let doubtfulRows: Repository<BankImportDoubtfulRow>;
 
 	beforeAll(() => {
 		app = getApp();
@@ -82,6 +103,7 @@ describe('Bank imports', () => {
 		bankAccounts = fixtures.bankAccounts;
 		transactions = fixtures.transactions;
 		imports = app.get(getRepositoryToken(BankImport));
+		doubtfulRows = app.get(getRepositoryToken(BankImportDoubtfulRow));
 	});
 
 	async function createOwner(): Promise<{owner: Account; agent: TestAgent}> {
@@ -173,6 +195,9 @@ describe('Bank imports', () => {
 			rowsParsed: 7,
 			rowsAdded: 7,
 			rowsAlreadyPresent: 0,
+			rowsMatchedByReference: 0,
+			rowsMatchedByBalance: 0,
+			rowsMatchedByDate: 0,
 			rowsDoubtful: 0,
 			dateFrom: '2026-03-02',
 			dateTo: '2026-03-04',
@@ -217,6 +242,7 @@ describe('Bank imports', () => {
 			rowsParsed: 7,
 			rowsAdded: 0,
 			rowsAlreadyPresent: 7,
+			rowsMatchedByReference: 7,
 			accounts: [{id: account.id, created: false}],
 		});
 		expect(await ownerRows(owner)).toHaveLength(7);
@@ -356,33 +382,575 @@ describe('Bank imports', () => {
 	});
 
 	it.each([
-		{
-			name: 'its IBAN',
-			values: {iban: EXAMPLE_IBAN},
-		},
-		{
-			name: 'its identification hash',
-			values: {
-				identificationHash: [
-					Buffer.from(
-						JSON.stringify([
-							['account', 'account_id', 'iban'],
-							['account', 'currency'],
-						]),
-					).toString('base64url'),
-					createHash('sha256').update(`[\n"${EXAMPLE_IBAN}",\n"EUR"\n]`).digest('base64url'),
-				].join('.'),
-			},
-		},
-	])('refuses a statement for an account bank sync already holds, recognized by $name', async ({values}) => {
+		{name: 'its IBAN', values: {iban: EXAMPLE_IBAN}},
+		{name: 'its identification hash', values: {identificationHash: EXAMPLE_IBAN_HASH}},
+	])('imports into the account bank sync holds, recognized by $name', async ({values}) => {
 		const {owner, agent} = await createOwner();
-		await fixtures.createBankAccount(await fixtures.createConnection(owner), values);
+		// An imported-files account with the same IBAN loses to the synced one.
+		await drop(agent, [STATEMENT_FILES[0]]).expect(201);
+		const fileAccount = await bankAccounts.findOneByOrFail({
+			bankConnection: {accountId: owner.id, provider: 'file'},
+		});
+		const connection = await fixtures.createConnection(owner);
+		const synced = await fixtures.createBankAccount(connection, values);
 
-		const response = await drop(agent, [ARCHIVE]).expect(409);
+		const response = await drop(agent, [STATEMENT_FILES[2]]).expect(201);
 
-		expect(response.body).toMatchObject({code: 'synced_account_not_supported_yet', file: null});
+		expect(response.body).toMatchObject({
+			rowsAdded: 4,
+			accounts: [{id: synced.id, name: 'Main account', currency: 'EUR', created: false}],
+		});
+		expect(await imports.findOneByOrFail({id: response.body.id})).toMatchObject({
+			bankConnectionId: connection.id,
+			bankAccountIds: [synced.id],
+		});
+		expect(await transactions.countBy({bankAccountId: synced.id, importId: response.body.id})).toBe(4);
+		expect(await transactions.countBy({bankAccountId: fileAccount.id})).toBe(3);
+	});
+
+	it('records a drop into a synced and an imported-files account under the synced connection, and refuses a drop reaching two synced connections', async () => {
+		const {owner, agent} = await createOwner();
+		const connection = await fixtures.createConnection(owner);
+		const synced = await fixtures.createBankAccount(connection, {iban: EXAMPLE_IBAN});
+
+		const mixed = await drop(agent, [STATEMENT_FILES[0], OTHER_STATEMENT]).expect(201);
+
+		expect(mixed.body).toMatchObject({rowsAdded: 5});
+		expect(await imports.findOneByOrFail({id: mixed.body.id})).toMatchObject({bankConnectionId: connection.id});
+		// Removing the imported-files connection takes its own account; the record still undoes the synced rows.
+		const files = (await fileConnection(owner))!;
+		await agent.delete(`/bank-connections/${files.id}`).send({confirmation: 'DELETE'}).expect(204);
+		expect(await transactions.countBy({bankAccountId: synced.id, importId: mixed.body.id})).toBe(3);
+		await agent.delete(`/bank-imports/${mixed.body.id}`).set('Origin', ORIGIN).expect(204);
+		expect(await transactions.countBy({bankAccountId: synced.id})).toBe(0);
+
+		await fixtures.createBankAccount(await fixtures.createConnection(owner), {iban: OTHER_EXAMPLE_IBAN});
+		const refused = await drop(agent, [STATEMENT_FILES[0], OTHER_STATEMENT]).expect(422);
+		expect(refused.body).toMatchObject({code: 'multiple_bank_connections', file: null});
+		expect(await imports.countBy({accountId: owner.id})).toBe(1);
+		expect(await transactions.countBy({bankAccountId: synced.id})).toBe(0);
+	});
+
+	it('runs the duplicate ladder against a synced account, holds doubtful rows and undoes only what it added', async () => {
+		const {owner, agent} = await createOwner();
+		const connection = await fixtures.createConnection(owner, {nextSyncAt: new Date('2030-01-01T00:00:00.000Z')});
+		const account = await fixtures.createBankAccount(connection, {
+			iban: EXAMPLE_IBAN,
+			currentBalanceAmount: '470.00',
+		});
+		const synced = (values: Parameters<typeof fixtures.createTransaction>[1]) =>
+			fixtures.createTransaction(account, {
+				transactionDate: null,
+				valueDate: (values?.bookingDate as string) ?? null,
+				amountInBaseCurrency: values?.amount as string,
+				baseAmountMethod: 'SAME',
+				...values,
+			});
+		const byReference = await synced({
+			amount: '-20.00',
+			bookingDate: '2026-03-11',
+			transactionDate: '2026-03-10',
+			entryReference: 'BANK-REF-1',
+		});
+		const byBalance = await synced({
+			amount: '-30.00',
+			bookingDate: '2026-03-12',
+			valueDate: '2026-03-09',
+			balanceAfterAmount: '470.00',
+			balanceAfterCurrency: 'EUR',
+		});
+		// A row a sync stored without a reference, with the identity keys sync gives it.
+		const sameDay = await synced({amount: '-5.00', bookingDate: '2026-03-10'});
+		await transactions.update(
+			{id: sameDay.id},
+			{
+				stableIdentityGroupKey: createBankTransactionStableIdentityGroupKey(sameDay),
+				stableIdentityKey: createBankTransactionStableIdentityKey(sameDay, 1),
+			},
+		);
+		const nearby = await synced({amount: '-7.00', bookingDate: '2026-03-13'});
+		const doubtfulCandidates = [
+			await synced({amount: '-11.00', bookingDate: '2026-03-08'}),
+			await synced({amount: '-11.00', bookingDate: '2026-03-12'}),
+			await synced({amount: '-13.00', bookingDate: '2026-03-09'}),
+			await synced({amount: '-13.00', bookingDate: '2026-03-11'}),
+		];
+		const storedIds = [byReference, byBalance, sameDay, nearby, ...doubtfulCandidates].map(({id}) => id);
+		const stored = () => transactions.find({where: {id: In(storedIds)}, order: {id: 'ASC'}});
+		const storedBefore = await stored();
+		const storedById = new Map(storedBefore.map((row) => [row.id, row]));
+		const connectionBefore = await connections.findOneByOrFail({id: connection.id});
+		const accountBefore = await bankAccounts.findOneByOrFail({id: account.id});
+		const entry = (amount: string, bookingDate: string, reference: string) => ({
+			amount,
+			bookingDate,
+			reference,
+			info: `Example Shop ${reference}`,
+		});
+		const statement = Buffer.from(
+			camt053([
+				{
+					sequence: '1',
+					entries: [
+						entry('20.00', '2026-03-10', 'BANK-REF-1'),
+						entry('5.00', '2026-03-10', 'FILE-REF-3'),
+						entry('5.00', '2026-03-10', 'FILE-REF-3B'),
+						entry('7.00', '2026-03-11', 'FILE-REF-4'),
+						entry('9.00', '2026-03-10', 'FILE-REF-5'),
+						entry('11.00', '2026-03-10', 'FILE-REF-6'),
+						entry('13.00', '2026-03-10', 'FILE-REF-7'),
+					],
+				},
+				// One entry between an opening and a closing balance carries its balance after.
+				{
+					sequence: '2',
+					opening: '500.00',
+					closing: '470.00',
+					entries: [entry('30.00', '2026-03-09', 'FILE-REF-2')],
+				},
+			]),
+		);
+
+		const imported = await drop(agent, [statement]).expect(201);
+
+		expect(imported.body).toMatchObject({
+			rowsParsed: 8,
+			rowsAdded: 2,
+			rowsAlreadyPresent: 4,
+			rowsMatchedByReference: 1,
+			rowsMatchedByBalance: 1,
+			rowsMatchedByDate: 2,
+			rowsDoubtful: 2,
+			accounts: [{id: account.id, name: 'Main account', currency: 'EUR', created: false}],
+		} satisfies Partial<BankImportSummary>);
+		const added = await transactions.find({where: {importId: imported.body.id}, order: {entryReference: 'ASC'}});
+		expect(added.map(({entryReference, amount}) => [entryReference, amount])).toEqual([
+			['FILE-REF-3B', '-5.00000000'],
+			['FILE-REF-5', '-9.00000000'],
+		]);
+		// The added look-alike of the same-day row shares its identity group as a row of its own; no stored row changed.
+		expect(added[0]).toMatchObject({stableIdentityGroupKey: storedById.get(sameDay.id)!.stableIdentityGroupKey});
+		expect(added[0].stableIdentityKey).not.toBe(storedById.get(sameDay.id)!.stableIdentityKey);
+		expect(await stored()).toEqual(storedBefore);
+		expect(await connections.findOneByOrFail({id: connection.id})).toEqual(connectionBefore);
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toEqual(accountBefore);
+		expect(await fixtures.balances.countBy({bankAccountId: account.id})).toBe(0);
 		expect(await fileConnection(owner)).toBeNull();
-		expect(await imports.countBy({accountId: owner.id})).toBe(0);
+
+		const again = await drop(agent, [statement]).expect(201);
+		expect(again.body).toMatchObject({
+			rowsAdded: 0,
+			rowsAlreadyPresent: 6,
+			rowsMatchedByReference: 3,
+			rowsMatchedByBalance: 1,
+			rowsMatchedByDate: 2,
+			rowsDoubtful: 2,
+		});
+		await agent.delete(`/bank-imports/${again.body.id}`).set('Origin', ORIGIN).expect(204);
+		expect(await doubtfulRows.countBy({importId: again.body.id})).toBe(0);
+
+		const listed = await agent.get(`/bank-imports/${imported.body.id}/doubtful-rows`).expect(200);
+		const candidate = ({id}: BankTransaction) => {
+			const row = storedById.get(id)!;
+			return {
+				id,
+				transactionDate: null,
+				bookingDate: row.bookingDate,
+				valueDate: row.valueDate,
+				amount: row.amount,
+				currency: 'EUR',
+				displayDescription: row.displayDescription,
+				counterpartyName: null,
+			};
+		};
+		const listedRows = [...(listed.body as Array<{id: string; row: {bankReference: string}}>)].sort((left, right) =>
+			left.row.bankReference.localeCompare(right.row.bankReference),
+		);
+		expect(listedRows).toEqual([
+			{
+				id: expect.any(String),
+				bankAccountId: account.id,
+				row: expect.objectContaining({
+					amount: '-11.00',
+					bookingDate: '2026-03-10',
+					bankReference: 'FILE-REF-6',
+				}),
+				candidates: doubtfulCandidates.slice(0, 2).map(candidate),
+			},
+			{
+				id: expect.any(String),
+				bankAccountId: account.id,
+				row: expect.objectContaining({
+					amount: '-13.00',
+					bookingDate: '2026-03-10',
+					bankReference: 'FILE-REF-7',
+				}),
+				candidates: doubtfulCandidates.slice(2).map(candidate),
+			},
+		]);
+		const [asNew, asDuplicate] = listedRows;
+		const resolve = (rowId: string, body: object) =>
+			agent
+				.post(`/bank-imports/${imported.body.id}/doubtful-rows/${rowId}/resolve`)
+				.set('Origin', ORIGIN)
+				.send(body);
+
+		await resolve(asDuplicate.id, {decision: 'duplicate', transactionId: doubtfulCandidates[0].id}).expect(400);
+		await resolve(asDuplicate.id, {decision: 'duplicate'}).expect(400);
+		const afterNew = await resolve(asNew.id, {decision: 'new'}).expect(200);
+		expect(afterNew.body).toMatchObject({rowsAdded: 3, rowsAlreadyPresent: 4, rowsDoubtful: 1});
+		const afterDuplicate = await resolve(asDuplicate.id, {
+			decision: 'duplicate',
+			transactionId: doubtfulCandidates[3].id,
+		}).expect(200);
+		expect(afterDuplicate.body).toMatchObject({rowsAdded: 3, rowsAlreadyPresent: 5, rowsDoubtful: 0});
+		await resolve(asNew.id, {decision: 'new'}).expect(409);
+		await agent.get(`/bank-imports/${imported.body.id}/doubtful-rows`).expect(200, []);
+		expect(
+			(await transactions.find({where: {importId: imported.body.id}}))
+				.map(({entryReference}) => entryReference)
+				.sort(),
+		).toEqual(['FILE-REF-3B', 'FILE-REF-5', 'FILE-REF-6']);
+		expect(await stored()).toEqual(storedBefore);
+
+		await agent.delete(`/bank-imports/${imported.body.id}`).set('Origin', ORIGIN).expect(204);
+
+		expect(await transactions.find({where: {bankAccountId: account.id}, order: {id: 'ASC'}})).toEqual(storedBefore);
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toEqual(accountBefore);
+	});
+
+	it('keeps doubtful rows and their decisions to the owner', async () => {
+		const {owner, agent} = await createOwner();
+		const other = await createOwner();
+		const account = await fixtures.createBankAccount(await fixtures.createConnection(owner), {iban: EXAMPLE_IBAN});
+		await fixtures.createTransactions(account, [
+			{amount: '-11.00', bookingDate: '2026-03-01'},
+			{amount: '-11.00', bookingDate: '2026-03-03'},
+		]);
+		const imported = await drop(agent, [
+			Buffer.from(camt053([{entries: [{amount: '11.00', bookingDate: '2026-03-02', reference: 'R-1'}]}])),
+		]).expect(201);
+		const [row] = (await agent.get(`/bank-imports/${imported.body.id}/doubtful-rows`).expect(200)).body as Array<{
+			id: string;
+		}>;
+
+		await other.agent.get(`/bank-imports/${imported.body.id}/doubtful-rows`).expect(404);
+		await other.agent
+			.post(`/bank-imports/${imported.body.id}/doubtful-rows/${row.id}/resolve`)
+			.set('Origin', ORIGIN)
+			.send({decision: 'new'})
+			.expect(404);
+		await agent
+			.post(`/bank-imports/${imported.body.id}/doubtful-rows/${row.id}/resolve`)
+			.set('Origin', 'https://other.example.test')
+			.send({decision: 'new'})
+			.expect(403);
+
+		expect(await doubtfulRows.findOneByOrFail({id: row.id})).toMatchObject({resolution: null});
+	});
+
+	it('keeps an imported-files account while another import still holds an open doubtful row for it', async () => {
+		const {agent} = await createOwner();
+		const first = await drop(agent, [
+			Buffer.from(
+				camt053([
+					{
+						entries: [
+							{amount: '11.00', bookingDate: '2026-03-01', reference: 'R-1'},
+							{amount: '11.00', bookingDate: '2026-03-03', reference: 'R-2'},
+						],
+					},
+				]),
+			),
+		]).expect(201);
+		const second = await drop(agent, [
+			Buffer.from(camt053([{entries: [{amount: '11.00', bookingDate: '2026-03-02', reference: 'R-3'}]}])),
+		]).expect(201);
+		expect(second.body).toMatchObject({rowsAdded: 0, rowsDoubtful: 1});
+
+		await agent.delete(`/bank-imports/${first.body.id}`).set('Origin', ORIGIN).expect(204);
+
+		const [row] = (await agent.get(`/bank-imports/${second.body.id}/doubtful-rows`).expect(200)).body as Array<{
+			id: string;
+			candidates: unknown[];
+		}>;
+		expect(row.candidates).toEqual([]);
+		const resolved = await agent
+			.post(`/bank-imports/${second.body.id}/doubtful-rows/${row.id}/resolve`)
+			.set('Origin', ORIGIN)
+			.send({decision: 'new'})
+			.expect(200);
+		expect(resolved.body).toMatchObject({rowsAdded: 1, rowsDoubtful: 0});
+		expect(await transactions.countBy({importId: second.body.id})).toBe(1);
+	});
+
+	it('imports into the account the request names, and refuses an account the drop does not belong to', async () => {
+		const {owner, agent} = await createOwner();
+		const other = await createOwner();
+		// An old and a new connection to the same bank both hold the account.
+		const [oldAccount, newAccount] = [
+			await fixtures.createBankAccount(await fixtures.createConnection(owner, {status: 'EXPIRED'}), {
+				iban: EXAMPLE_IBAN,
+			}),
+			await fixtures.createBankAccount(await fixtures.createConnection(owner), {
+				identificationHash: EXAMPLE_IBAN_HASH,
+			}),
+		];
+		const otherIbanAccount = await fixtures.createBankAccount(await fixtures.createConnection(owner), {
+			iban: OTHER_EXAMPLE_IBAN,
+		});
+		const dollarAccount = await fixtures.createBankAccount(await fixtures.createConnection(owner), {
+			currency: 'USD',
+		});
+		const othersAccount = await fixtures.createBankAccount(await fixtures.createConnection(other.owner), {
+			iban: EXAMPLE_IBAN,
+		});
+
+		const ambiguous = await drop(agent, [STATEMENT_FILES[0]]).expect(409);
+		expect(ambiguous.body).toMatchObject({code: 'ambiguous_target_account', file: null});
+
+		const named = await drop(agent, [STATEMENT_FILES[0]]).field('bankAccountId', newAccount.id).expect(201);
+		expect(named.body).toMatchObject({rowsAdded: 3, accounts: [{id: newAccount.id, created: false}]});
+		expect(await transactions.countBy({bankAccountId: newAccount.id})).toBe(3);
+		expect(await transactions.countBy({bankAccountId: oldAccount.id})).toBe(0);
+
+		for (const [bankAccountId, files] of [
+			[othersAccount.id, [STATEMENT_FILES[2]]],
+			[oldAccount.id, [STATEMENT_FILES[2], OTHER_STATEMENT]],
+			[dollarAccount.id, [STATEMENT_FILES[2]]],
+			[otherIbanAccount.id, [STATEMENT_FILES[2]]],
+		] as const) {
+			const refused = await drop(agent, [...files])
+				.field('bankAccountId', bankAccountId)
+				.expect(422);
+			expect(refused.body).toMatchObject({code: 'target_account_mismatch', file: null});
+		}
+		await drop(agent, [STATEMENT_FILES[2]]).field('bankAccountId', 'not-a-uuid').expect(400);
+		expect(await imports.countBy({accountId: owner.id})).toBe(1);
+		expect(await transactions.countBy({bankAccountId: othersAccount.id})).toBe(0);
+	});
+
+	it('waits for a running sync of the account and refuses an import or undo while it keeps running', async () => {
+		const {owner, agent} = await createOwner();
+		const connection = await fixtures.createConnection(owner);
+		await fixtures.createBankAccount(connection, {iban: EXAMPLE_IBAN});
+		const imported = await drop(agent, [STATEMENT_FILES[0]]).expect(201);
+		const lock = await app.get(BankingConnectionLockService).acquire(connection.id);
+
+		try {
+			const busyImport = await drop(agent, [STATEMENT_FILES[2]]).expect(409);
+			expect(busyImport.body).toMatchObject({code: 'account_busy'});
+			const busyUndo = await agent.delete(`/bank-imports/${imported.body.id}`).set('Origin', ORIGIN).expect(409);
+			expect(busyUndo.body).toMatchObject({code: 'account_busy'});
+		} finally {
+			lock.stop();
+			await lock.release();
+		}
+
+		expect(await imports.countBy({accountId: owner.id})).toBe(1);
+		expect(await transactions.countBy({importId: imported.body.id})).toBe(3);
+	});
+
+	it('lets a sync take over the only imported twin of a row it delivers, keeping its manual category, so undo leaves it', async () => {
+		const {owner, agent} = await createOwner();
+		const connection = await fixtures.createConnection(owner, {
+			providerSessionId: app.get(BankingEncryptionService).encrypt('file-import-adoption-session'),
+			consentValidUntil: new Date(Date.now() + 60 * 60 * 1000),
+		});
+		const [account, plainAccount] = await fixtures.createBankAccounts(connection, [
+			{iban: EXAMPLE_IBAN, providerAccountId: 'adoption-account'},
+			{iban: OTHER_EXAMPLE_IBAN, providerAccountId: 'adoption-plain-account'},
+		]);
+		const imported = await drop(agent, [
+			Buffer.from(
+				camt053([
+					{
+						entries: [
+							{
+								amount: '25.00',
+								bookingDate: '2026-03-20',
+								reference: 'FILE-ADOPT-1',
+								info: 'Example Shop',
+							},
+							{
+								amount: '40.00',
+								bookingDate: '2026-03-21',
+								reference: 'FILE-ADOPT-2',
+								info: 'Example Cafe',
+							},
+							{
+								amount: '15.00',
+								bookingDate: '2026-03-21',
+								reference: 'FILE-ADOPT-3',
+								info: 'Example Kiosk',
+							},
+							{
+								amount: '15.00',
+								bookingDate: '2026-03-21',
+								reference: 'FILE-ADOPT-4',
+								info: 'Example Kiosk',
+							},
+							{
+								amount: '50.00',
+								bookingDate: '2026-03-22',
+								reference: 'FILE-ADOPT-5',
+								info: 'Example Garage',
+							},
+						],
+					},
+				]),
+			),
+		]).expect(201);
+		const importedRow = (reference: string) =>
+			transactions.findOneByOrFail({importId: imported.body.id, entryReference: reference});
+		const twin = await importedRow('FILE-ADOPT-1');
+		const kept = await importedRow('FILE-ADOPT-2');
+		const lookAlikes = [await importedRow('FILE-ADOPT-3'), await importedRow('FILE-ADOPT-4')];
+		const held = await importedRow('FILE-ADOPT-5');
+		await transactions.update(
+			{id: twin.id},
+			{category: 'GROCERIES', categorySource: 'MANUAL', categoryStatus: 'COMPLETED'},
+		);
+		await transactions.update({id: held.id}, {categoryStatus: 'PROCESSING'});
+		// A stored row of an account without imports: a look-alike a few days off stays separate.
+		const plainRow = await fixtures.createTransaction(plainAccount, {
+			amount: '-60.00',
+			bookingDate: '2026-03-21',
+			valueDate: '2026-03-21',
+		});
+		const delivered: Record<string, EnableBankingTransaction[]> = {
+			'adoption-account': [
+				{
+					providerTransactionId: 'provider-adopt-1',
+					entryReference: 'PROVIDER-REF-1',
+					amount: '25.00',
+					currency: 'EUR',
+					creditDebitIndicator: 'DBIT',
+					status: 'BOOK',
+					transactionDate: '2026-03-19',
+					bookingDate: '2026-03-20',
+					valueDate: '2026-03-20',
+					description: 'Example Shop',
+				},
+				{
+					providerTransactionId: 'provider-new-1',
+					amount: '3.00',
+					currency: 'EUR',
+					creditDebitIndicator: 'DBIT',
+					status: 'BOOK',
+					transactionDate: '2026-03-22',
+					bookingDate: '2026-03-22',
+					valueDate: '2026-03-22',
+					description: 'Example Bakery',
+				},
+				{
+					providerTransactionId: 'provider-look-alike-1',
+					amount: '15.00',
+					currency: 'EUR',
+					creditDebitIndicator: 'DBIT',
+					status: 'BOOK',
+					transactionDate: '2026-03-20',
+					bookingDate: '2026-03-21',
+					valueDate: '2026-03-21',
+					description: 'Example Kiosk',
+				},
+				{
+					providerTransactionId: 'provider-held-1',
+					amount: '50.00',
+					currency: 'EUR',
+					creditDebitIndicator: 'DBIT',
+					status: 'BOOK',
+					transactionDate: '2026-03-21',
+					bookingDate: '2026-03-22',
+					valueDate: '2026-03-22',
+					description: 'Example Garage',
+				},
+			],
+			'adoption-plain-account': [
+				{
+					providerTransactionId: 'provider-plain-1',
+					amount: '60.00',
+					currency: 'EUR',
+					creditDebitIndicator: 'DBIT',
+					status: 'BOOK',
+					transactionDate: '2026-03-23',
+					bookingDate: '2026-03-23',
+					valueDate: '2026-03-23',
+					description: 'Example Market',
+				},
+			],
+		};
+		const client = app.get(EnableBankingClient);
+		const spies = [
+			jest.spyOn(client, 'getSessionAccounts').mockResolvedValue({
+				status: 'AUTHORIZED',
+				accountIds: ['adoption-account', 'adoption-plain-account'],
+			}),
+			jest.spyOn(client, 'getAccountBalances').mockResolvedValue([]),
+			jest
+				.spyOn(client, 'getAccountTransactions')
+				.mockImplementation(async (providerAccountId) => delivered[providerAccountId] ?? []),
+		];
+		const synchronize = async () => {
+			await connections.update(connection.id, {nextSyncAt: new Date(Date.now() - 1), syncStatus: 'QUEUED'});
+			return app.get(BankingSyncService).synchronizeAutomatically(connection.id);
+		};
+
+		try {
+			expect(await synchronize()).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 3});
+			const adopted = await transactions.findOneByOrFail({id: twin.id});
+			expect(adopted).toMatchObject({
+				importId: null,
+				providerTransactionId: 'provider-adopt-1',
+				entryReference: 'PROVIDER-REF-1',
+				transactionDate: '2026-03-19',
+				bookingDate: '2026-03-20',
+				amount: '-25.00000000',
+				category: 'GROCERIES',
+				categorySource: 'MANUAL',
+			});
+			expect(adopted.stableIdentityKey).not.toBe(twin.stableIdentityKey);
+			// Two imported look-alikes give the sync row two candidates, so it is inserted next to them.
+			expect(await transactions.countBy({importId: imported.body.id, id: In(lookAlikes.map(({id}) => id))})).toBe(
+				2,
+			);
+			// The row the worker holds keeps its file fields and its import until a sync can write it.
+			expect(await transactions.findOneByOrFail({id: held.id})).toMatchObject({
+				importId: imported.body.id,
+				providerTransactionId: null,
+			});
+			expect(await transactions.countBy({bankAccountId: account.id})).toBe(7);
+			expect(await transactions.countBy({bankAccountId: plainAccount.id})).toBe(2);
+			expect(await transactions.findOneByOrFail({id: plainRow.id})).toMatchObject({
+				providerTransactionId: null,
+				bookingDate: '2026-03-21',
+				amount: '-60.00000000',
+			});
+
+			// The next sync finds the adopted row by its new identity, and takes over the row the worker released.
+			await transactions.update({id: held.id}, {categoryStatus: 'COMPLETED'});
+			expect(await synchronize()).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 0});
+			expect(await transactions.findOneByOrFail({id: held.id})).toMatchObject({
+				importId: null,
+				providerTransactionId: 'provider-held-1',
+			});
+		} finally {
+			for (const spy of spies) spy.mockRestore();
+		}
+
+		await agent.delete(`/bank-imports/${imported.body.id}`).set('Origin', ORIGIN).expect(204);
+
+		expect(await transactions.findOneBy({id: kept.id})).toBeNull();
+		expect(
+			(await transactions.find({where: {bankAccountId: account.id}, order: {amount: 'ASC'}})).map(
+				({id, providerTransactionId}) => [id, providerTransactionId],
+			),
+		).toEqual([
+			[held.id, 'provider-held-1'],
+			[twin.id, 'provider-adopt-1'],
+			[expect.any(String), 'provider-look-alike-1'],
+			[expect.any(String), 'provider-new-1'],
+		]);
 	});
 
 	it.each([

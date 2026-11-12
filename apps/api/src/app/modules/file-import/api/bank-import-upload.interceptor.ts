@@ -14,14 +14,16 @@ import {BankImportRefusalException} from '../bank-import-refusal.exception';
 import {MAX_FILES_PER_DROP, MAX_FILE_BYTES} from '../parsers/parse-limits';
 
 export const BANK_IMPORT_FILES_FIELD = 'files';
+/** The one text field the route reads: the account to import into. */
+export const BANK_IMPORT_ACCOUNT_FIELD = 'bankAccountId';
 const FILES_SEEN = Symbol('bankImportFilesSeen');
 
 type CountedRequest = Request & {[FILES_SEEN]?: number};
 
 // Without a storage or destination, multer keeps each file in memory as a buffer.
 const Upload = FilesInterceptor(BANK_IMPORT_FILES_FIELD, MAX_FILES_PER_DROP + 1, {
-	// The route reads files only, so text fields are refused instead of collected in memory.
-	limits: {fileSize: MAX_FILE_BYTES, files: MAX_FILES_PER_DROP + 1, fields: 0},
+	// The route reads one short text field; more fields are refused instead of collected in memory.
+	limits: {fileSize: MAX_FILE_BYTES, files: MAX_FILES_PER_DROP + 1, fields: 1, fieldSize: 64},
 	// Counts files as they arrive, so a size refusal can name the file by its position.
 	fileFilter: (request, file, accept) => {
 		const counted = request as CountedRequest;
@@ -35,16 +37,25 @@ const Upload = FilesInterceptor(BANK_IMPORT_FILES_FIELD, MAX_FILES_PER_DROP + 1,
 });
 
 /**
- * Reads the `files` field into memory with the drop's limits and turns multer's limit errors into typed refusals.
- * Nothing reaches disk.
+ * Reads the `files` field into memory with the drop's limits, refuses any text field but `bankAccountId`, and turns
+ * multer's limit errors into typed refusals. Nothing reaches disk.
  */
 @Injectable()
 export class BankImportUploadInterceptor implements NestInterceptor {
 	private readonly upload = new Upload();
 
 	async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<unknown>> {
+		const checkedNext: CallHandler = {
+			handle: () => {
+				const body = context.switchToHttp().getRequest<Request>().body as Record<string, unknown> | undefined;
+				if (Object.keys(body ?? {}).some((field) => field !== BANK_IMPORT_ACCOUNT_FIELD)) {
+					throw new BadRequestException('Unexpected field.');
+				}
+				return next.handle();
+			},
+		};
 		try {
-			return await this.upload.intercept(context, next);
+			return await this.upload.intercept(context, checkedNext);
 		} catch (error) {
 			if (error instanceof PayloadTooLargeException) {
 				const seen = context.switchToHttp().getRequest<CountedRequest>()[FILES_SEEN] ?? null;
