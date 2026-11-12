@@ -398,8 +398,9 @@ optional detail line and the next action. Never centre the state or float a larg
 - **Detail.** A failed load adds one monospace `text-label` line with the status code (or "No
   response") and the time it failed: `503 · 14:02`. The 404 page shows `404 · <path>`.
 - **Failed loads.** `LoadErrorState` derives the glyph, description and detail from the query's
-  error, says "You're offline" when the device is, and gives Try again its pending state ("Trying
-  again…" with a spinner). Extra ways out, such as Clear filters, follow it as ghost buttons.
+  error and says "You're offline" when the device is. Try again usually hands back to the section's
+  loading skeleton; while a retry waits for the connection, the button itself shows "Trying again…"
+  with a spinner. Extra ways out, such as Clear filters, follow it as ghost buttons.
 - **Actions.** Outline buttons by default; a ghost button for a second, wider way out (Search all
   dates). The primary Clay button appears only when the state carries the page's only action
   (Connect a bank, Create token).

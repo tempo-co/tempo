@@ -1197,10 +1197,9 @@ test.describe('bank connection loading errors', () => {
     await expect(alert).toContainText(/503 · \d{2}:\d{2}/);
     expect(connectionRequests).toBe(1);
 
-    // Try again says it is working until the server answers, then the error stays.
+    // Try again loads the list again until the server answers, then the error returns.
     await alert.getByRole('button', {name: 'Try again'}).click();
-    const retrying = alert.getByRole('button', {name: 'Trying again…'});
-    await expect(retrying).toBeDisabled();
+    await expect(page.getByRole('status', {name: 'Loading bank connections'})).toBeVisible();
     await expect.poll(() => connectionRequests).toBe(2);
     answerRetry();
     await expect(alert.getByRole('button', {name: 'Try again'})).toBeEnabled();
