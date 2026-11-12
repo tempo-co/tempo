@@ -3,7 +3,7 @@ import type {BankConnection} from '@tempo/contracts';
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {MOCK_CONNECTION, REFRESH_RESULT, TARGET_ASPSP} from '../../data/bank-connection.data';
-import {expect, test} from '../../fixtures';
+import {API_URL, expect, test} from '../../fixtures';
 import {
   fulfillJson,
   fulfillRedirect,
@@ -961,6 +961,48 @@ test.describe('mocked Enable Banking bank connection', () => {
       await expect(page.getByRole('heading', {name: 'No bank connections'})).toBeVisible();
     });
   }
+
+  test('while the list loads, shows two placeholder cards of one size, as wide as a loaded card', async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 1280, height: 900});
+    await mockBankRefresh(page);
+    let answer = () => {};
+    const answered = new Promise<void>((resolve) => (answer = resolve));
+    await page.route(`${API_URL}/bank-connections`, async (route) => {
+      await answered;
+      await fulfillJson(route, [MOCK_CONNECTION]);
+    });
+    await page.goto('/bank-connections');
+
+    const placeholders = page
+      .getByRole('status', {name: 'Loading bank connections'})
+      .locator(':scope > *');
+    await expect(placeholders).toHaveCount(2);
+    const [first, second] = await Promise.all([
+      boxOf(placeholders.nth(0)),
+      boxOf(placeholders.nth(1)),
+    ]);
+    expect(second.width).toBe(first.width);
+    expect(second.height).toBe(first.height);
+
+    answer();
+    const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
+    await expect(card).toBeVisible();
+    expect((await boxOf(card)).width).toBe(first.width);
+  });
+
+  test('says Tempo is not answering, without mentioning sessions, when the first check fails', async ({
+    page,
+  }) => {
+    await page.route('**/accounts/me', (route) => route.abort('failed'));
+    await page.goto('/bank-connections');
+
+    await expect(page.getByRole('heading', {name: "Can't reach Tempo"})).toBeVisible();
+    await expect(page.locator('body')).toContainText(
+      "Tempo isn't answering right now. Try again in a moment.",
+    );
+  });
 
   test.describe('card layout', () => {
     const DAY = 24 * 60 * 60 * 1000;

@@ -28,7 +28,7 @@ import {
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from '@/components/ui/responsive-dialog';
-import {Skeleton} from '@/components/ui/skeleton';
+import {Bone, TextBone, TileRowsSkeleton} from '@/features/dashboard/components/loading';
 import {wasToasted} from '@/utils/api';
 import {cn} from '@/utils/cn';
 import {formatCurrency} from '@/utils/format-currency';
@@ -143,8 +143,8 @@ export function BankConnectionList({
           aria-label='Loading bank connections'
           data-testid='bank-connections-loading'
         >
-          <Skeleton className='h-80 rounded-card bg-card' />
-          <Skeleton className='h-48 rounded-card bg-card' />
+          <BankCardSkeleton />
+          <BankCardSkeleton />
         </div>
       ) : isError ? (
         <LoadErrorState title="Couldn't load bank connections" error={error} onRetry={onRetry} />
@@ -342,6 +342,28 @@ function BankCard({
           )}
         </ul>
       )}
+    </Card>
+  );
+}
+
+/** A bank card while the list loads: the loaded card's header and two account rows, so any list fills in in place. */
+function BankCardSkeleton() {
+  return (
+    <Card aria-hidden='true' className='grid grid-cols-1 content-start gap-4 p-5 sm:p-6'>
+      <header className='flex items-center gap-3'>
+        <Bone className='size-9 rounded-md' />
+        <div className='min-w-0 flex-1'>
+          <p className='text-card-title'>
+            <TextBone className='w-[8em]' />
+          </p>
+          <p className='text-xs'>
+            <TextBone className='w-[5em]' />
+          </p>
+        </div>
+      </header>
+      <ul className='-mx-3 grid grid-cols-1'>
+        <TileRowsSkeleton count={2} />
+      </ul>
     </Card>
   );
 }
