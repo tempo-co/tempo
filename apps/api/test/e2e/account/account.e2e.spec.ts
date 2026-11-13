@@ -12,7 +12,8 @@ import {
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
-import {expectValidationMessage, uniqueName} from '../../utils/auth-utils';
+import {createVerifiedAccount, expectValidationMessage, uniqueName} from '../../utils/auth-utils';
+import {MAILPIT_API_URL} from '../../utils/email-utils';
 
 describe('Account controller - /me', () => {
 	let httpServer: Server;
@@ -35,6 +36,7 @@ describe('Account controller - /me', () => {
 			expect(account.email).toEqual(VERIFIED_ACCOUNT_EMAIL);
 			expect(account.name).toEqual('Verified Account');
 			expect(account.isEmailVerified).toBe(true);
+			expect(account.timeZone).toBe('Europe/Amsterdam');
 			expect(account.createdAt).toBeDefined();
 			expect(account.password).toBeUndefined();
 		});
@@ -91,8 +93,36 @@ describe('Account controller - /me', () => {
 				});
 		});
 
+		it('should update the time zone alone, keeping the name', async () => {
+			const owner = await createVerifiedAccount(httpServer, MAILPIT_API_URL);
+
+			const {body: updated} = await owner.agent
+				.patch('/accounts/me')
+				.send({timeZone: 'Europe/Helsinki'})
+				.expect(200);
+			expect(updated).toMatchObject({name: owner.credentials.name, timeZone: 'Europe/Helsinki'});
+
+			// Another spelling of a supported zone is stored in the API's spelling.
+			await owner.agent.patch('/accounts/me').send({timeZone: 'europe/lisbon'}).expect(200);
+			const {body: read} = await owner.agent.get('/accounts/me').expect(200);
+			expect(read).toMatchObject({name: owner.credentials.name, timeZone: 'Europe/Lisbon'});
+		});
+
 		it.each([
-			['name is missing', {}, /name must be a string/i],
+			['the time zone is unknown', {timeZone: 'Mars/Olympus_Mons'}],
+			['the time zone is empty', {timeZone: ''}],
+			['the time zone is null', {timeZone: null}],
+			['the time zone is not a string', {timeZone: 12345}],
+		])('should return 400 Bad Request and keep the time zone if %s', async (_case, body) => {
+			const owner = await createVerifiedAccount(httpServer, MAILPIT_API_URL, {timeZone: 'Europe/Lisbon'});
+
+			const response = await owner.agent.patch('/accounts/me').send(body).expect(400);
+			expectValidationMessage(response, /timeZone must be a supported IANA time zone/i);
+			expect((await owner.agent.get('/accounts/me').expect(200)).body.timeZone).toBe('Europe/Lisbon');
+		});
+
+		it.each([
+			['name is null', {name: null}, /name must be a string/i],
 			['name is empty', {name: ''}, /name must be longer than or equal to 1 characters/i],
 			['name is too long', {name: 'a'.repeat(256)}, /name must be shorter than or equal to 255 characters/i],
 			['name is not a string', {name: 12345}, /name must be a string/i],

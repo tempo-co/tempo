@@ -617,6 +617,40 @@ describe('Hosted MCP', () => {
 		}
 	});
 
+	it("defaults asOf to today in the token owner's time zone", async () => {
+		const app = getApp();
+		const zoned = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
+		const zonedToken = (await app.get(PersonalAccessTokenService).create(zoned.id, 'Example zoned client', 30))
+			.token;
+		const accounts = app.get(DataSource).getRepository(Account);
+		const client = new Client({name: 'example-zoned-client', version: '1'});
+		try {
+			await client.connect(
+				new StreamableHTTPClientTransport(url, {
+					requestInit: {headers: {Authorization: `Bearer ${zonedToken}`, Origin: ORIGIN}},
+				}),
+			);
+			// UTC+14 and UTC-11 are always on different calendar dates.
+			for (const timeZone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+				await accounts.update(zoned.id, {timeZone});
+				const today = () => new Intl.DateTimeFormat('en-CA', {timeZone}).format(new Date());
+				const before = today();
+				const result = CallToolResultSchema.parse(
+					await client.callTool({name: 'month_summary', arguments: {month: before.slice(0, 7)}}),
+				);
+				expect(result.isError).not.toBe(true);
+				const content = result.content[0];
+				if (content.type !== 'text') throw new Error('Expected tool JSON text');
+				// A call that crosses midnight there may answer with either date.
+				expect([before, today()]).toContain(JSON.parse(content.text).through);
+				const {tools} = await client.listTools();
+				expect(tools.find(({name}) => name === 'month_summary')?.description).toContain(`(${timeZone})`);
+			}
+		} finally {
+			await client.close();
+		}
+	});
+
 	it.each(METHODS)('%s accepts only the configured Origin or an absent Origin', async (method) => {
 		await isolated(async () => {
 			for (const origin of [

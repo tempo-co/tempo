@@ -1,5 +1,5 @@
 import type {SignUpRequest} from '@tempo/contracts';
-import {IsEmail, IsNotEmpty, IsString, Length} from 'class-validator';
+import {Allow, IsEmail, IsNotEmpty, IsString, Length} from 'class-validator';
 
 import {Account} from '@modules/account/account.entity';
 
@@ -21,4 +21,8 @@ export class SignUpDto implements SignUpRequest {
 	@IsString()
 	@Length(8, 255)
 	password: Account['password'];
+
+	/** Never refused: signup stores the default zone for a missing or unsupported value. */
+	@Allow()
+	timeZone?: Account['timeZone'];
 }

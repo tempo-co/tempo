@@ -97,12 +97,13 @@ export class PushNotificationService {
 	}
 
 	/**
-	 * Queues one alert for delivery, when this server sends push; between 21:00 and 09:00 it waits until 09:00. The job id is the alert's identity,
-	 * so queueing it again while it waits or within a week of delivery adds nothing.
+	 * Queues one alert for delivery, when this server sends push; between 21:00 and 09:00 in the owner's `timeZone` it
+	 * waits until 09:00 there. The job id is the alert's identity, so queueing it again while it waits or within a week
+	 * of delivery adds nothing.
 	 */
-	async queueAlert(job: PushAlertJob, jobId: string, now = new Date()): Promise<void> {
+	async queueAlert(job: PushAlertJob, jobId: string, timeZone: Account['timeZone'], now = new Date()): Promise<void> {
 		if (!this.isConfigured()) return;
-		const delay = pushAlertDeliveryTime(now).getTime() - now.getTime();
+		const delay = pushAlertDeliveryTime(now, timeZone).getTime() - now.getTime();
 		await this.queue.add(DELIVER_PUSH_ALERT_JOB, job, {
 			jobId,
 			delay,

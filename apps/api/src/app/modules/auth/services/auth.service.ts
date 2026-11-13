@@ -2,6 +2,7 @@ import {Injectable, Logger} from '@nestjs/common';
 import {Request} from 'express';
 
 import {SessionService} from '@core/session/session.service';
+import {APP_TIME_ZONE, supportedTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {PushNotificationService} from '@modules/notifications/push-notification.service';
@@ -24,11 +25,11 @@ export class AuthService {
 		private readonly passwordResetService: PasswordResetService,
 	) {}
 
-	async signUp({name, email, password}: SignUpDto, request: Request) {
+	async signUp({name, email, password, timeZone}: SignUpDto, request: Request) {
 		await this.accountService.validateEmailIsUnique(email);
 
 		const hash = await this.accountService.hashPassword(password);
-		const account = await this.accountService.save(name, email, hash);
+		const account = await this.accountService.save(name, email, hash, supportedTimeZone(timeZone) ?? APP_TIME_ZONE);
 
 		await this.emailVerifierService.sendWelcomeEmail(account);
 		await this.logIn(account, request);

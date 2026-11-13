@@ -33,12 +33,16 @@ export function expectValidationMessage(response: Response, pattern: RegExp): vo
 	expect(response.body.message).toEqual(expect.arrayContaining([expect.stringMatching(pattern)]));
 }
 
-/** Signs up a new account, verifies it through the welcome email, and returns a logged-in agent. */
+/**
+ * Signs up a new account, verifies it through the welcome email, and returns a logged-in agent. `signup` adds fields
+ * to the signup request, such as the browser's `timeZone`.
+ */
 export async function createVerifiedAccount(
 	httpServer: Server,
 	mailpitApiUrl: string,
+	signup: Pick<SignUpDto, 'timeZone'> = {},
 ): Promise<{id: string; credentials: SignUpDto; agent: TestAgent}> {
-	const credentials = createAccountCredentials();
+	const credentials = {...createAccountCredentials(), ...signup};
 	const signupResponse = await request(httpServer)
 		.post('/auth/signup')
 		.set('Origin', webOrigin())
