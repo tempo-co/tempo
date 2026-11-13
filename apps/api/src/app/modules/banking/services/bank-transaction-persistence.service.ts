@@ -193,6 +193,7 @@ export class BankTransactionPersistenceService {
 				description: value.description,
 				bankTransactionCode: value.bankTransactionCode,
 				bankTransactionSubCode: value.bankTransactionSubCode,
+				bankTransactionDescription: value.bankTransactionDescription,
 			})
 				? [value.stableIdentityKey]
 				: [],

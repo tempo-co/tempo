@@ -26,6 +26,7 @@ type LegRow = {
 	description: string | null;
 	bankTransactionCode: string | null;
 	bankTransactionSubCode: string | null;
+	bankTransactionDescription: string | null;
 	baseAmount: string | null;
 	financialEventType: string | null;
 	financialEventRuleVersion: string | null;
@@ -70,7 +71,7 @@ export async function recomputeCurrencyExchanges(
 			to_char(COALESCE(transaction."bookingDate", transaction."transactionDate"), 'YYYY-MM-DD') AS "date",
 			transaction."creditDebitIndicator" AS "indicator", transaction."amount"::text AS "amount",
 			transaction."currency", account."currency" AS "accountCurrency", transaction."description",
-			transaction."bankTransactionCode", transaction."bankTransactionSubCode",
+			transaction."bankTransactionCode", transaction."bankTransactionSubCode", transaction."bankTransactionDescription",
 			transaction."amountInBaseCurrency"::text AS "baseAmount", transaction."financialEventType",
 			transaction."financialEventRuleVersion", transaction."currencyExchangeCounterpartId"
 		FROM "bank_transactions" transaction
@@ -79,8 +80,9 @@ export async function recomputeCurrencyExchanges(
 		WHERE connection."accountId" = $1
 			AND (transaction."financialEventType" IS NOT NULL
 				OR transaction."currencyExchangeCounterpartId" IS NOT NULL
-				OR transaction."description" ~* 'exchanged\\s+to'
-				OR concat_ws(' ', transaction."bankTransactionCode", transaction."bankTransactionSubCode") ~* 'spot')`,
+				OR transaction."description" ~* 'exchange'
+				OR concat_ws(' ', transaction."bankTransactionCode", transaction."bankTransactionSubCode",
+					transaction."bankTransactionDescription") ~* 'spot|exchange')`,
 		[ownerId],
 	)) as LegRow[];
 	// A stable row order keeps concurrent writers from locking the same rows in opposite orders.
@@ -94,6 +96,7 @@ export async function recomputeCurrencyExchanges(
 			description: row.description,
 			bankTransactionCode: row.bankTransactionCode,
 			bankTransactionSubCode: row.bankTransactionSubCode,
+			bankTransactionDescription: row.bankTransactionDescription,
 		});
 		return marker ? [{...row, ...marker}] : [];
 	});
