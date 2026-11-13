@@ -1813,6 +1813,101 @@ describe('BankConnectionController', () => {
 		}
 	});
 
+	it('stores the counterparty only from the party the direction names, so debits without a payee keep their own merchants', async () => {
+		const {connection, bankAccount} = await createAuthorizedConnection('counterparty-party-session');
+		const holder = {name: 'Example Account Holder'};
+		const debit = (entry: string, amount: string, fields: Record<string, unknown>) => ({
+			entry_reference: entry,
+			transaction_amount: {amount, currency: 'EUR'},
+			credit_debit_indicator: 'DBIT',
+			status: 'BOOK',
+			booking_date: '2026-08-20',
+			debtor: holder,
+			...fields,
+		});
+		const rows = [
+			debit('holder-only-fee', '1.50', {
+				bank_transaction_code: {code: 'FEES', description: 'Example account fee'},
+			}),
+			debit('holder-only-withdrawal', '40.00', {remittance_information: ['Example cash withdrawal']}),
+			debit('holder-only-bare', '2.00', {}),
+			debit('named-payee', '9.00', {creditor: {name: 'Example Shop'}}),
+			{
+				entry_reference: 'named-payer',
+				transaction_amount: {amount: '25.00', currency: 'EUR'},
+				credit_debit_indicator: 'CRDT',
+				status: 'BOOK',
+				booking_date: '2026-08-20',
+				creditor: holder,
+				debtor: {name: 'Example Employer'},
+			},
+		];
+
+		try {
+			expect(await synchronizeProviderRows(connection.id, rows)).toMatchObject({
+				status: 'SUCCEEDED',
+				transactionsAdded: rows.length,
+			});
+			const stored = await bankTransactionRepository.find({
+				where: {bankAccountId: bankAccount.id},
+				order: {entryReference: 'ASC'},
+			});
+			expect(
+				stored.map(({entryReference, counterpartyName, description, displayDescription, merchantKey}) => ({
+					entryReference,
+					counterpartyName,
+					description,
+					displayDescription,
+					merchantKey,
+				})),
+			).toEqual([
+				{
+					entryReference: 'holder-only-bare',
+					counterpartyName: null,
+					description: null,
+					displayDescription: 'Transaction',
+					merchantKey: null,
+				},
+				{
+					entryReference: 'holder-only-fee',
+					counterpartyName: null,
+					description: 'Example account fee',
+					displayDescription: 'Example account fee',
+					merchantKey: 'EXPENSE:example account fee',
+				},
+				{
+					entryReference: 'holder-only-withdrawal',
+					counterpartyName: null,
+					description: 'Example cash withdrawal',
+					displayDescription: 'Example cash withdrawal',
+					merchantKey: 'EXPENSE:example cash withdrawal',
+				},
+				{
+					entryReference: 'named-payee',
+					counterpartyName: 'Example Shop',
+					description: null,
+					displayDescription: 'Example Shop',
+					merchantKey: 'EXPENSE:example shop',
+				},
+				{
+					entryReference: 'named-payer',
+					counterpartyName: 'Example Employer',
+					description: null,
+					displayDescription: 'Example Employer',
+					merchantKey: 'INCOME:example employer',
+				},
+			]);
+			const response = await verifiedAgent
+				.get('/bank-transactions')
+				.query({'filter[bankAccountIds][]': bankAccount.id})
+				.expect(200);
+			expect(response.body.total).toBe(rows.length);
+			expect(JSON.stringify(response.body)).not.toContain(holder.name);
+		} finally {
+			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
 	it('synchronizes balances and transactions without exposing provider identifiers', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('sync-provider-session');
 		await bankConnectionRepository.update(

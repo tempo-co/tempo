@@ -182,9 +182,8 @@ export function detectOwnTransfers({
 }
 
 /**
- * The other party's name as the bank wrote it in the description. The provider's counterparty field is
- * not used: when the other side is missing it falls back to the account holder, which would make an
- * ordinary debit look like a transfer to oneself.
+ * The other party's name as the bank wrote it in the description. Only the description counts as name
+ * evidence here; the provider's counterparty field is not read.
  */
 export function resolveOwnTransferCounterpartyName({
 	description,
@@ -241,6 +240,11 @@ function getPairEvidence(first: Leg, second: Leg): OwnTransferEvidence {
 		return OWN_TRANSFER_EVIDENCE.MANUAL;
 	}
 	return OWN_TRANSFER_EVIDENCE.NAME;
+}
+
+/** Whether a name is one of the account holder names, compared the way name evidence compares them. */
+export function isAccountHolderName(name: string | null, holderNames: (string | null)[]): boolean {
+	return name !== null && matchesHolder(name, createHolderKeys(holderNames));
 }
 
 function createHolderKeys(holderNames: (string | null)[]): Set<string> {
