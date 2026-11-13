@@ -33,9 +33,16 @@ const OWNER_ACCOUNTS_SQL = `SELECT account."id" FROM "bank_accounts" account
  * Gives every detected own transfer of the owner the matching transfer category (TRANSFER_IN for money in,
  * TRANSFER_OUT for money out) without a model call, and returns rows this rule categorized earlier that are no longer
  * own transfers to the model. Manual categories and currency exchanges are never touched. Returns the ids sent back,
- * which the caller enqueues after its transaction commits.
+ * which the caller enqueues after its transaction commits. With ids, only those rows are checked: the ones whose
+ * own-transfer evidence a scoped recompute may have changed.
  */
-export async function applyOwnTransferCategories(executor: OwnTransferSqlExecutor, ownerId: string): Promise<string[]> {
+export async function applyOwnTransferCategories(
+	executor: OwnTransferSqlExecutor,
+	ownerId: string,
+	transactionIds?: readonly string[],
+): Promise<string[]> {
+	if (transactionIds?.length === 0) return [];
+	const ids = transactionIds ?? null;
 	// A single-table UPDATE keeps every condition on the target row, so Postgres re-checks all of them when a
 	// concurrent write (for example a manual category) commits first.
 	await executor.query(
@@ -45,6 +52,7 @@ export async function applyOwnTransferCategories(executor: OwnTransferSqlExecuto
 			"categorySearchTrace" = NULL, "categoryLastError" = NULL,
 			"categoryAppliedInputHash" = "categoryInputHash", "categoryUpdatedAt" = now()
 		WHERE "bankAccountId" IN (${OWNER_ACCOUNTS_SQL})
+			AND ($4::uuid[] IS NULL OR "id" = ANY($4::uuid[]))
 			AND "ownTransferEvidence" IS NOT NULL
 			AND upper("creditDebitIndicator") IN ('CRDT', 'DBIT')
 			AND "categorySource" IS DISTINCT FROM 'MANUAL'
@@ -55,7 +63,7 @@ export async function applyOwnTransferCategories(executor: OwnTransferSqlExecuto
 				OR "categorySource" IS NOT NULL
 				OR "categoryProvider" IS DISTINCT FROM $2
 			)`,
-		[ownerId, OWN_TRANSFER_CATEGORY_PROVIDER, OWN_TRANSFER_CATEGORY_RULE_VERSION],
+		[ownerId, OWN_TRANSFER_CATEGORY_PROVIDER, OWN_TRANSFER_CATEGORY_RULE_VERSION, ids],
 	);
 
 	const requeued = (await executor.query(
@@ -65,12 +73,13 @@ export async function applyOwnTransferCategories(executor: OwnTransferSqlExecuto
 			"categoryPromptVersion" = NULL, "categorySearchTrace" = NULL, "categoryLastError" = NULL,
 			"categoryUpdatedAt" = now()
 		WHERE "bankAccountId" IN (${OWNER_ACCOUNTS_SQL})
+			AND ($3::uuid[] IS NULL OR "id" = ANY($3::uuid[]))
 			AND "ownTransferEvidence" IS NULL
 			AND "financialEventType" IS NULL
 			AND "categoryProvider" = $2
 			AND "categorySource" IS DISTINCT FROM 'MANUAL'
 		RETURNING "id"`,
-		[ownerId, OWN_TRANSFER_CATEGORY_PROVIDER],
+		[ownerId, OWN_TRANSFER_CATEGORY_PROVIDER, ids],
 	)) as [Array<{id: string}>, number] | Array<{id: string}>;
 	const rows = Array.isArray(requeued[0]) ? (requeued[0] as Array<{id: string}>) : (requeued as Array<{id: string}>);
 	return rows.map(({id}) => id);

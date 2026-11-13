@@ -32,6 +32,7 @@ import {BankingEncryptionService} from '@modules/banking/services/banking-encryp
 import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
 import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
 import {EnableBankingClient, EnableBankingClientError} from '@modules/banking/services/enable-banking.client';
+import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {
@@ -3153,10 +3154,17 @@ describe('BankConnectionController', () => {
 			]),
 		);
 
-		await expect(app.get(BankingSyncService).synchronizeAutomatically(connection.id)).rejects.toMatchObject({
-			status: 500,
-			message: 'Bank synchronization could not be saved.',
-		});
+		// Whether a failed commit stored anything is unknown, so own transfers are recomputed over the whole history.
+		const recompute = jest.spyOn(app.get(OwnTransferService), 'recomputeForOwnerSafely');
+		try {
+			await expect(app.get(BankingSyncService).synchronizeAutomatically(connection.id)).rejects.toMatchObject({
+				status: 500,
+				message: 'Bank synchronization could not be saved.',
+			});
+			expect(recompute.mock.calls).toEqual([[account.id]]);
+		} finally {
+			recompute.mockRestore();
+		}
 		expect(await bankAccountBalanceRepository.count({where: {bankAccountId: bankAccount.id}})).toBe(0);
 		expect(await bankTransactionRepository.count({where: {bankAccountId: bankAccount.id}})).toBe(0);
 		expect(await bankSyncRunRepository.count({where: {bankConnection: {id: connection.id}}})).toBe(1);

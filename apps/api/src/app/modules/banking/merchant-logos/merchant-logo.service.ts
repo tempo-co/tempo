@@ -123,13 +123,14 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 	}
 
 	/**
-	 * Called after a sync persisted rows: adds the owner's new merchants and queues identification right away,
-	 * without failing the sync; the hourly reconcile picks up anything missed.
+	 * Called after a sync persisted rows: adds the merchants of those rows (all of the owner's without ids) and queues
+	 * identification right away, without failing the sync; the hourly reconcile picks up anything missed, such as a
+	 * row that stopped being an own transfer.
 	 */
-	async enqueueForOwnerSafely(accountId: string): Promise<void> {
+	async enqueueForOwnerSafely(accountId: string, transactionIds?: readonly string[]): Promise<void> {
 		if (!this.canAcquire()) return;
 		try {
-			await this.addMerchants(accountId);
+			await this.addMerchants(accountId, transactionIds);
 			await this.enqueuePendingIdentifications();
 		} catch (error) {
 			this.logger.warn(`Merchant logo enqueue failed: ${safeErrorName(error)}`);
@@ -336,8 +337,11 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		return logo.image;
 	}
 
-	/** Creates a pending merchant for every merchant key of the owner's purchases, refunds and payments. */
-	private async addMerchants(accountId: string): Promise<void> {
+	/**
+	 * Creates a pending merchant for every merchant key of the owner's purchases, refunds and payments, or only of the
+	 * given rows.
+	 */
+	private async addMerchants(accountId: string, transactionIds?: readonly string[]): Promise<void> {
 		await this.dataSource.query(
 			// The lateral name is the SQL form of getMerchantKeyName.
 			`INSERT INTO merchants ("accountId", key)
@@ -346,10 +350,11 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 			JOIN bank_accounts a ON a.id = t."bankAccountId"
 			JOIN bank_connections c ON c.id = a."bankConnectionId"
 			CROSS JOIN LATERAL (SELECT substring(t."merchantKey" from position(':' in t."merchantKey") + 1) AS name) merchant
-			WHERE c."accountId" = $1 AND t."ownTransferEvidence" IS NULL AND t."financialEventType" IS NULL
+			WHERE c."accountId" = $1 AND ($2::uuid[] IS NULL OR t.id = ANY($2::uuid[]))
+				AND t."ownTransferEvidence" IS NULL AND t."financialEventType" IS NULL
 				AND merchant.name <> ''
 			ON CONFLICT ("accountId", key) DO NOTHING`,
-			[accountId],
+			[accountId, transactionIds ?? null],
 		);
 	}
 

@@ -38,6 +38,28 @@ describe('bootstrapJobScheduler', () => {
 		expect(queue.removeJobScheduler).not.toHaveBeenCalled();
 	});
 
+	it('installs a job on a cron pattern read in UTC', async () => {
+		const {queue} = setup();
+
+		await expect(
+			bootstrapJobScheduler(
+				queue as never,
+				{schedulerId: 'daily-scheduler', jobName: 'daily-job', pattern: '0 3 * * *'},
+				{
+					enabled: true,
+					configurationService: {get: jest.fn().mockReturnValue('production')} as never,
+					logger: {warn: jest.fn()} as unknown as Logger,
+				},
+			),
+		).resolves.toBe(true);
+
+		expect(queue.upsertJobScheduler).toHaveBeenCalledWith(
+			'daily-scheduler',
+			{pattern: '0 3 * * *', tz: 'UTC'},
+			expect.objectContaining({name: 'daily-job'}),
+		);
+	});
+
 	it('removes the scheduler when the feature is off', async () => {
 		const {queue, bootstrap} = setup();
 

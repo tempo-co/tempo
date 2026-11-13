@@ -162,7 +162,8 @@ describe('CurrencyExchangeService', () => {
 		const enqueue = jest.spyOn(app.get(CategorizationScheduler), 'enqueueForTransactions');
 
 		try {
-			await expect(service.recomputeForOwner(owner.id)).resolves.toBe(2);
+			// The legs come back for own-transfer recognition, which skips exchange legs.
+			expect((await service.recomputeForOwnerSafely(owner.id))?.sort()).toEqual([debit.id, credit.id].sort());
 			expect(enqueue).toHaveBeenCalledTimes(1);
 			expect([...enqueue.mock.calls[0][0]].sort()).toEqual([debit.id, credit.id].sort());
 		} finally {

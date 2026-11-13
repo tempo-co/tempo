@@ -1,4 +1,8 @@
-import {BANK_TRANSACTION_AMOUNT_CONVERSION_SCHEDULER_ID} from '@core/queue/queue.constants';
+import {
+	BANK_TRANSACTION_AMOUNT_CONVERSION_SCHEDULER_ID,
+	OWN_TRANSFER_RECOMPUTE_SCHEDULER_ID,
+	RECOMPUTE_OWN_TRANSFERS_JOB,
+} from '@core/queue/queue.constants';
 
 import {BankTransactionAmountConversionQueueService} from './bank-transaction-amount-conversion.queue.service';
 
@@ -24,7 +28,13 @@ describe('BankTransactionAmountConversionQueueService', () => {
 
 		expect(remove).toHaveBeenCalledTimes(1);
 		expect(queue.add).toHaveBeenCalledTimes(1);
-		expect(queue.upsertJobScheduler).toHaveBeenCalledTimes(1);
+		expect(queue.upsertJobScheduler).toHaveBeenCalledTimes(2);
+		// The whole-history own-transfer recompute runs daily at a fixed UTC hour.
+		expect(queue.upsertJobScheduler).toHaveBeenCalledWith(
+			OWN_TRANSFER_RECOMPUTE_SCHEDULER_ID,
+			{pattern: '0 3 * * *', tz: 'UTC'},
+			expect.objectContaining({name: RECOMPUTE_OWN_TRANSFERS_JOB}),
+		);
 	});
 
 	it('does not enqueue conversion work when banking integration is disabled', async () => {
@@ -45,6 +55,7 @@ describe('BankTransactionAmountConversionQueueService', () => {
 		expect(queue.add).not.toHaveBeenCalled();
 		expect(queue.upsertJobScheduler).not.toHaveBeenCalled();
 		expect(queue.removeJobScheduler).toHaveBeenCalledWith(BANK_TRANSACTION_AMOUNT_CONVERSION_SCHEDULER_ID);
+		expect(queue.removeJobScheduler).toHaveBeenCalledWith(OWN_TRANSFER_RECOMPUTE_SCHEDULER_ID);
 	});
 
 	it('enqueues the one-time backfill and keeps booting when Redis refuses the scheduler or the backfill', async () => {
@@ -61,7 +72,7 @@ describe('BankTransactionAmountConversionQueueService', () => {
 			).onModuleInit(),
 		).resolves.toBeUndefined();
 
-		expect(queue.upsertJobScheduler).toHaveBeenCalledTimes(1);
+		expect(queue.upsertJobScheduler).toHaveBeenCalledTimes(2);
 		expect(queue.add).toHaveBeenCalledTimes(1);
 	});
 
@@ -80,6 +91,6 @@ describe('BankTransactionAmountConversionQueueService', () => {
 		).onModuleInit();
 
 		expect(queue.add).not.toHaveBeenCalled();
-		expect(queue.upsertJobScheduler).toHaveBeenCalledTimes(1);
+		expect(queue.upsertJobScheduler).toHaveBeenCalledTimes(2);
 	});
 });

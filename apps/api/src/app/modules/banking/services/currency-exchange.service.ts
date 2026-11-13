@@ -5,7 +5,10 @@ import {Account} from '@modules/account/account.entity';
 
 import {safeErrorName} from '../banking.utils';
 import {CategorizationScheduler} from '../categorization/categorization-scheduler.service';
-import {recomputeCurrencyExchanges} from '../currency-exchange/currency-exchange-recompute';
+import {
+	CurrencyExchangeRecomputeResult,
+	recomputeCurrencyExchanges,
+} from '../currency-exchange/currency-exchange-recompute';
 
 @Injectable()
 export class CurrencyExchangeService {
@@ -18,23 +21,30 @@ export class CurrencyExchangeService {
 
 	/** Recomputes the owner's exchanges and returns how many rows changed. */
 	async recomputeForOwner(ownerId: Account['id']): Promise<number> {
-		const {transactionsChanged, requeuedIds} = await this.dataSource.transaction((manager) =>
-			recomputeCurrencyExchanges(manager, ownerId),
-		);
-		if (transactionsChanged > 0) {
-			this.logger.log(`Currency exchanges recomputed: ${transactionsChanged} transactions changed`);
-		}
-		await this.enqueueRequeued(requeuedIds);
-		return transactionsChanged;
+		return (await this.recompute(ownerId)).transactionsChanged;
 	}
 
-	/** Recomputes after a bank or amount change without failing the caller; the next change recomputes again. */
-	async recomputeForOwnerSafely(ownerId: Account['id']): Promise<void> {
+	/**
+	 * Recomputes after a bank or amount change without failing the caller; the next change recomputes again. Returns
+	 * the rows that became or stopped being exchanges, so the caller can recompute own transfers for them, or null when
+	 * the recompute failed: it may still have committed, so which rows changed is unknown.
+	 */
+	async recomputeForOwnerSafely(ownerId: Account['id']): Promise<string[] | null> {
 		try {
-			await this.recomputeForOwner(ownerId);
+			return (await this.recompute(ownerId)).reclassifiedIds;
 		} catch (error) {
 			this.logger.warn(`Currency exchange recompute failed: ${safeErrorName(error)}`);
+			return null;
 		}
+	}
+
+	private async recompute(ownerId: Account['id']): Promise<CurrencyExchangeRecomputeResult> {
+		const result = await this.dataSource.transaction((manager) => recomputeCurrencyExchanges(manager, ownerId));
+		if (result.transactionsChanged > 0) {
+			this.logger.log(`Currency exchanges recomputed: ${result.transactionsChanged} transactions changed`);
+		}
+		await this.enqueueRequeued(result.requeuedIds);
+		return result;
 	}
 
 	/** Rows that stopped being exchanges go back to the model once the transaction has committed. */
