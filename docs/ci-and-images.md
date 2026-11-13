@@ -22,7 +22,7 @@ A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, an
 - `Ops checks`: `shellcheck -x` on the `ops/` scripts, and `docker compose config -q` on the production, Tailscale and staging Compose files with synthetic values for every required variable. A new `${VAR:?}` in a Compose file needs a synthetic export there.
 - `API lint & format`: the API's `lint:check`/`format:check`.
 - `API build`: `npm run build`.
-- `API unit tests`: Jest and `node --test claude-bridge/*.test.mjs`.
+- `API unit tests`: Jest.
 - `API E2E tests`: `npm run test:e2e:cov` on fresh services. It normally takes a few minutes; a run far beyond that is stuck, not slow.
 - `API image` and `Web image`: build `apps/api/Dockerfile` and `apps/web/Dockerfile.production` with the repository root as context, so both can copy `packages/contracts`. The root `.dockerignore` allowlists the two apps and that package and keeps `node_modules`, `dist` and env files out. The API Dockerfile runs a runtime smoke check, so a built API image is a smoke-tested image. Same-repo, non-Dependabot PRs and pushes to `main` publish `ghcr.io/<owner>/api` and `ghcr.io/<owner>/web` as `:sha-<sha>` and `:pr-<n>`. Images carry `org.opencontainers.image.source` (this repository) and `org.opencontainers.image.revision` (the commit).
 - `Web build`: `npm run build` plus `scripts/tempo-web-security-headers-test.sh`, which builds the production web image and probes Nginx.

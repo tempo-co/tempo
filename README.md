@@ -13,7 +13,7 @@ Tempo is a private, self-hosted personal-finance app. It synchronizes real bank 
 
 | Path | Contents |
 |---|---|
-| [`apps/api`](apps/api/README.md) | NestJS backend, including the hosted MCP endpoint, and the Claude subscription bridge |
+| [`apps/api`](apps/api/README.md) | NestJS backend, including the hosted MCP endpoint |
 | [`apps/web`](apps/web/README.md) | React web app |
 | [`ops`](ops/README.md) | Deployment: deploy, install and backup scripts, host units, production and staging Compose files |
 | [`docs`](docs/ci-and-images.md) | CI and images for both apps |

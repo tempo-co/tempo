@@ -5,7 +5,7 @@ NestJS backend for Tempo, a personal-finance app that syncs real bank data throu
 ## Read before touching
 
 - `src/app/modules/banking/` (authorization, sync, deletion, identity, own transfers, exchanges, totals, alerts) and `src/app/modules/notifications/`: `docs/banking-invariants.md`.
-- `src/app/modules/banking/categorization/` or `claude-bridge/`: `docs/categorization.md`.
+- `src/app/modules/banking/categorization/`: `docs/categorization.md`.
 - `src/app/modules/banking/merchant-logos/` (identification, icon choice, brand trust rules, site fetcher, image route): `docs/merchant-logos.md`. Read for display and merchant spending totals only: categories, merchant keys and recurring payments never read it.
 - Anything calling Enable Banking or Claude, or tests that mock them: `docs/provider-testing.md`.
 - E2E setup, seeds, Compose stacks, `NODE_ENV`, image consumers: `docs/e2e-and-seeding.md`.
@@ -18,7 +18,7 @@ NestJS backend for Tempo, a personal-finance app that syncs real bank data throu
 - Setup: Node.js 26.x, Docker Engine 28+, `npm ci`. Development: `npm run start:dev` (starts `docker-compose.dev.yml`, then Nest in watch mode).
 - `src/app/core/config/config.schema.ts` is the source of truth for environment variables. Local secrets go in `.env.<env>.local`, never in Git.
 - Checks: `npm run lint:check`, `npm run format:check`, `npm run build`. `lint` and `format` rewrite files. Run Prettier only on files you changed; edit Markdown by hand.
-- Unit: `npm run test`. E2E: `npm run test:e2e` (serial, recreates the test containers). Bridge: `node --test claude-bridge/*.test.mjs`.
+- Unit: `npm run test`. E2E: `npm run test:e2e` (serial, recreates the test containers).
 - CI publishes `ghcr.io/tempo-co/api:pr-<n>` for every same-repo PR that changes `apps/api` and, after tests pass on `main`, tags that commit's image `:main`, which production deploys. The same run's web E2E uses that image, so an API contract change needs web E2E coverage in the same PR.
 - Jest unit tests match `src/**/*.spec.ts`; E2E tests match `test/**/*.e2e.spec.ts`. A spec named any other way (for example `*.spec.ts.ts`, or a `test/` file without `.e2e.`) silently never runs.
 
@@ -57,5 +57,5 @@ NestJS backend for Tempo, a personal-finance app that syncs real bank data throu
 - Compose files use fixed container names and env-interpolated host ports; stale containers or another worktree's stack block startup. Check `docker compose ls --all` before starting or tearing anything down.
 - Process environment overrides the env files, so an inherited `NODE_ENV` or `DB_*` silently retargets tests and seeds. Prefix with `NODE_ENV=test` when unsure.
 - The runtime image ships no env files and `NODE_ENV=production`; the image smoke check fails the build if an env file appears. Web E2E (`apps/web/docker-compose.e2e.yml`) passes its own synthetic config when it runs the image with `NODE_ENV=test`.
-- Changing `claude-bridge/contract.json` changes the fingerprint the bridge checks; an un-reinstalled bridge then refuses every fallback call. Its `input` sections are generated from the categorization input schema (`npm run contract:input`). See `docs/categorization.md` before editing it.
+- The `input` sections of `src/app/modules/banking/categorization/providers/claude-categorization-contract.json` are generated from the categorization input schema (`npm run contract:input`). See `docs/categorization.md` before editing it.
 - `dist/` and `coverage/` are generated.

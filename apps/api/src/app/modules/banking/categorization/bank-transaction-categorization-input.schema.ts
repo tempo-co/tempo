@@ -8,11 +8,11 @@ import {BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH} from './ban
 
 /**
  * The one definition of what Tempo sends the model about a transaction. It yields the TypeScript types, the fields the
- * provider serializes, the fields the input hash covers, and the JSON Schema the subscription bridge validates
- * requests against (`input` in `claude-bridge/contract.json`, written by `npm run contract:input`).
+ * provider serializes, the fields the input hash covers, and the JSON Schema of a request (`input` in
+ * `providers/claude-categorization-contract.json`, written by `npm run contract:input`).
  */
 
-/** Longest text the bridge accepts in one field. Lengths count UTF-16 code units, as zod and JavaScript do. */
+/** Longest text of one field. Lengths count UTF-16 code units, as zod and JavaScript do. */
 const MAX_FIELD_LENGTH = 8192;
 /** Most recent manual choices per category the model sees as examples. */
 export const MAX_MANUAL_CATEGORY_EXAMPLES = 5;
@@ -101,7 +101,7 @@ export const MAX_SEARCH_FINDING_DESCRIPTION_LENGTH = 300;
 
 /**
  * What a web search for a row group's merchant found, from a separate call that saw only the query. Sent beside the
- * transactions on the API route; the subscription bridge searches inside its own call and never receives it.
+ * transactions in the categorizing call.
  */
 const searchFindingSchema = z
 	.object({
@@ -147,8 +147,8 @@ export function toCategorizationRequestTransaction(
 	return pickFields(categorizationInputSchema, input) as BankTransactionCategorizationInput;
 }
 
-/** The request limits the subscription bridge checks, as stored under `input` in `claude-bridge/contract.json`. */
-export function toBridgeInputContract() {
+/** The request limits, as stored under `input` in `providers/claude-categorization-contract.json`. */
+export function toInputContract() {
 	return {
 		input: {
 			maxTransactions: BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE,

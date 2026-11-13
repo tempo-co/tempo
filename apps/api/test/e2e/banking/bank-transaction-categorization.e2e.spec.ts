@@ -3,11 +3,7 @@ import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
 import {BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@tempo/contracts';
 import {JobType, Queue} from 'bullmq';
-import {mkdtemp, rm} from 'node:fs/promises';
-import {createServer} from 'node:http';
 import {Server} from 'node:net';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
 import TestAgent from 'supertest/lib/agent';
 import {Repository} from 'typeorm';
 
@@ -96,50 +92,20 @@ const categorizeSpy = jest
 		}));
 	});
 
-type ProviderTransport = {client?: unknown; subscriptionSocket?: string};
+type ProviderTransport = {client?: unknown};
 
-/**
- * Replaces the real provider's Anthropic client with `create` and, with `bridge`, points its subscription route at a
- * loopback socket that answers every request with that status. Nothing leaves the process.
- */
-async function useClaudeTransport(
-	app: INestApplication,
-	create: jest.Mock,
-	bridge?: {status: number; body: object},
-): Promise<{bridgeRequests: number; restore(): Promise<void>}> {
+/** Replaces the real provider's Anthropic client with `create`. Nothing leaves the process. */
+async function useClaudeTransport(app: INestApplication, create: jest.Mock): Promise<{restore(): Promise<void>}> {
 	const provider = app.get(ClaudeBankTransactionCategorizationProvider) as unknown as ProviderTransport;
-	const previous = {client: provider.client, subscriptionSocket: provider.subscriptionSocket};
-	const state = {bridgeRequests: 0, restore: async () => undefined};
+	const previous = provider.client;
 	provider.client = {messages: {create}};
 	realProvider = true;
-	let close = async () => undefined;
-	if (bridge) {
-		const directory = await mkdtemp(join(tmpdir(), 'categorization-bridge-'));
-		const socket = join(directory, 'bridge.sock');
-		const server = createServer((request, response) => {
-			request.resume();
-			request.on('end', () => {
-				state.bridgeRequests += 1;
-				response.writeHead(bridge.status, {'content-type': 'application/json'});
-				response.end(JSON.stringify(bridge.body));
-			});
-		});
-		await new Promise<void>((resolve) => server.listen(socket, resolve));
-		provider.subscriptionSocket = socket;
-		close = async () => {
-			await new Promise<void>((resolve) => server.close(() => resolve()));
-			await rm(directory, {recursive: true, force: true});
-		};
-	}
-	state.restore = async () => {
-		realProvider = false;
-		provider.client = previous.client;
-		provider.subscriptionSocket = previous.subscriptionSocket;
-		const closeBridge = close;
-		close = async () => undefined;
-		await closeBridge();
+	return {
+		restore: async () => {
+			realProvider = false;
+			provider.client = previous;
+		},
 	};
-	return state;
 }
 
 describe('Bank transaction categorization integration', () => {
@@ -619,8 +585,23 @@ describe('Bank transaction categorization integration', () => {
 		});
 	});
 
-	it('keeps a row pending while the API rate-limits it, with no bridge, and retries the job a minute later', async () => {
-		const transport = await useClaudeTransport(app, jest.fn().mockRejectedValue({status: 429}));
+	it.each([
+		['rate-limits it', {status: 429}],
+		[
+			'reports a credit balance too low',
+			{
+				status: 400,
+				error: {
+					type: 'error',
+					error: {
+						type: 'invalid_request_error',
+						message: 'Your credit balance is too low to access the API.',
+					},
+				},
+			},
+		],
+	])('keeps a row pending while the API %s, and retries the job a minute later', async (_case, apiError) => {
+		const transport = await useClaudeTransport(app, jest.fn().mockRejectedValue(apiError));
 		const categorizationService = app.get(CategorizationScheduler);
 		const queue = app.get<Queue>(getQueueToken(BANK_TRANSACTION_CATEGORIZATION_QUEUE));
 		await resetFailureFixture({categorySearchTrace: null});
@@ -705,21 +686,19 @@ describe('Bank transaction categorization integration', () => {
 					usage: {server_tool_use: {web_search_requests: 0}},
 					content: [{type: 'text', text: '{"classifications":[{"correlationId":"0","cate'}],
 				}),
-			undefined,
 			'Claude returned an invalid categorization response.',
 		],
 		[
-			'a request the bridge rejects',
+			'a request the API rejects',
 			() => jest.fn().mockRejectedValue({status: 400}),
-			{status: 400, body: {error: 'invalid_request'}},
 			'Claude categorization request failed.',
 		],
 	])(
 		'retries %s twice within seconds, then leaves the row failed for the hourly sweep to skip',
-		async (_case, create, bridge, lastError) => {
+		async (_case, create, lastError) => {
 			const queue = app.get<Queue>(getQueueToken(BANK_TRANSACTION_CATEGORIZATION_QUEUE));
 			const categorizationService = app.get(CategorizationScheduler);
-			const transport = await useClaudeTransport(app, create(), bridge);
+			const transport = await useClaudeTransport(app, create());
 			try {
 				await resetFailureFixture();
 				await categorizationService.enqueueForTransactions([CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID]);
@@ -740,7 +719,6 @@ describe('Bank transaction categorization integration', () => {
 					categoryStatus: 'FAILED',
 					categoryLastError: lastError,
 				});
-				expect(transport.bridgeRequests).toBe(bridge ? 3 : 0);
 
 				await transport.restore();
 				await categorizationService.reconcilePendingTransactions({includeFailed: false});

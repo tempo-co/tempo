@@ -1,18 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import {Logger} from '@nestjs/common';
 import {BANK_TRANSACTION_CATEGORIES, BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@tempo/contracts';
-import {createHash} from 'node:crypto';
-import {mkdtemp, rm} from 'node:fs/promises';
 import {createServer} from 'node:http';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
 
 import {ConfigurationService} from '@core/config/config.service';
 
-import contract from '../../../../../../claude-bridge/contract.json';
-import merchantContract from '../../../../../../claude-bridge/merchant-contract.json';
 import {toBankTransactionCategorizationInput} from '../bank-transaction-categorization-input';
-import {toBridgeInputContract} from '../bank-transaction-categorization-input.schema';
+import {toInputContract} from '../bank-transaction-categorization-input.schema';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS,
 	BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH,
@@ -27,6 +21,8 @@ import {
 	MERCHANT_KINDS,
 } from '../bank-transaction-categorization.types';
 import {ClaudeBankTransactionCategorizationProvider} from './claude-bank-transaction-categorization.provider';
+import contract from './claude-categorization-contract.json';
+import merchantContract from './claude-merchant-contract.json';
 
 const SEARCH_QUERY = 'Example Cafe';
 
@@ -145,39 +141,13 @@ function searchedResponse(query: string) {
 	};
 }
 
-type BridgeRequest = {url?: string; body: unknown; hash?: string};
-const unavailable = {status: 503, body: {error: 'claude_unavailable'}};
-
-/** A fake subscription bridge on a Unix socket that records requests and returns one fixed reply. */
-async function withBridge(
-	reply: {status?: number; body: object},
-	run: (socket: string, requests: BridgeRequest[]) => Promise<void>,
-): Promise<void> {
-	const {status = 200, body} = reply;
-	const directory = await mkdtemp(join(tmpdir(), 'claude-provider-'));
-	const socket = join(directory, 'bridge.sock');
-	const requests: BridgeRequest[] = [];
-	const server = createServer((req, res) => {
-		const chunks: Buffer[] = [];
-		req.on('data', (chunk: Buffer) => chunks.push(chunk));
-		req.on('end', () => {
-			requests.push({
-				url: req.url,
-				body: JSON.parse(Buffer.concat(chunks).toString()),
-				hash: req.headers['x-tempo-contract'] as string | undefined,
-			});
-			res.writeHead(status, {'content-type': 'application/json'});
-			res.end(JSON.stringify(body));
-		});
-	});
-	await new Promise<void>((resolve) => server.listen(socket, resolve));
-	try {
-		await run(socket, requests);
-	} finally {
-		await new Promise<void>((resolve) => server.close(() => resolve()));
-		await rm(directory, {recursive: true, force: true});
-	}
+/** The error the SDK throws for an HTTP error reply, with the body Anthropic sends. */
+function apiError(status: number, type: string, message: string) {
+	return {status, type, message: `${status} ${message}`, error: {type: 'error', error: {type, message}}};
 }
+
+const CREDIT_BALANCE_TOO_LOW =
+	'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.';
 
 describe('ClaudeBankTransactionCategorizationProvider', () => {
 	it.each([
@@ -224,9 +194,9 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(contract.search.maxSourceDomains).toBe(BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS);
 	});
 
-	it('keeps the request schemas the bridge validates equal to the app input schema', () => {
-		// Regenerate with `npm run contract:input`; the bridge must be reinstalled after the API deploys.
-		expect(contract.input).toEqual(toBridgeInputContract().input);
+	it('keeps the contract input schemas equal to the app input schema', () => {
+		// Regenerate with `npm run contract:input`.
+		expect(contract.input).toEqual(toInputContract().input);
 	});
 
 	it('keeps the shared contract enums equal to the app categories and evidence types', () => {
@@ -466,13 +436,42 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			['the API refuses access', 403, 'pending'],
 			['the API always rejects the request', 400, 'failed'],
 			['the API fails after accepting the request', 500, 'failed'],
-		] as const)('without a bridge, ends a call where %s (%s) as %s', async (_case, status, expected) => {
+		] as const)('ends a call where %s (%s) as %s', async (_case, status, expected) => {
 			for (const kind of ['plain', 'search'] as const) {
 				const {provider, create} = setup();
 				create.mockRejectedValue({status, message: 'secret raw input'});
 				await expect(outcomeOf(provider, kind)).resolves.toBe(expected);
 				// A failed merchant search leaves the categorizing call to decide the outcome.
 				expect(create).toHaveBeenCalledTimes(kind === 'search' ? 2 : 1);
+			}
+		});
+
+		it.each([
+			[
+				'the credit balance is too low',
+				apiError(400, 'invalid_request_error', CREDIT_BALANCE_TOO_LOW),
+				'pending',
+			],
+			[
+				'the credit balance is too low, as an SDK error',
+				new Anthropic.BadRequestError(
+					400,
+					{type: 'error', error: {type: 'invalid_request_error', message: CREDIT_BALANCE_TOO_LOW}},
+					undefined,
+					new Headers(),
+				),
+				'pending',
+			],
+			['billing fails', apiError(402, 'billing_error', 'synthetic billing failure'), 'pending'],
+			['the connection never opens', new Anthropic.APIConnectionError({message: 'synthetic'}), 'pending'],
+			['the request times out', new Anthropic.APIConnectionTimeoutError({message: 'synthetic'}), 'failed'],
+			['the request is invalid', apiError(400, 'invalid_request_error', 'synthetic invalid field'), 'failed'],
+			['the model does not exist', apiError(404, 'not_found_error', 'synthetic model'), 'failed'],
+		] as const)('ends a call where %s as %s', async (_case, error, expected) => {
+			for (const kind of ['plain', 'search'] as const) {
+				const {provider, create} = setup();
+				create.mockRejectedValue(error);
+				await expect(outcomeOf(provider, kind)).resolves.toBe(expected);
 			}
 		});
 
@@ -496,183 +495,6 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 				await expect(outcomeOf(provider, 'search')).resolves.toBe('failed');
 			}
 		});
-
-		it.each([
-			['ran and failed', 502, 'failed', {error: 'claude_failed'}],
-			['rejected the request', 400, 'failed', {error: 'invalid_request'}],
-			['refused before running', 503, 'pending', {error: 'claude_unavailable'}],
-		] as const)('ends a call the bridge %s (%s) as %s', async (_case, status, expected, body) => {
-			for (const kind of ['plain', 'search'] as const) {
-				await withBridge({status, body}, async (socket, requests) => {
-					const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-					create.mockRejectedValue({status: 429});
-					await expect(outcomeOf(provider, kind)).resolves.toBe(expected);
-					expect(requests).toHaveLength(1);
-				});
-			}
-		});
-
-		it.each([
-			['ran and failed', {status: 500}, 'failed'],
-			['refused it', {status: 400}, 'pending'],
-			['never reached', new Anthropic.APIConnectionError({message: 'synthetic'}), 'pending'],
-		] as const)(
-			'ends a call the API %s as %s when the bridge then refuses before running',
-			async (_case, apiError, expected) => {
-				await withBridge(unavailable, async (socket, requests) => {
-					const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-					create.mockRejectedValue(apiError);
-					await expect(outcomeOf(provider, 'search')).resolves.toBe(expected);
-					expect(requests).toHaveLength(1);
-				});
-			},
-		);
-
-		it('leaves a call pending when the configured bridge socket is missing', async () => {
-			for (const kind of ['plain', 'search'] as const) {
-				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/missing-synthetic.sock'});
-				create.mockRejectedValue({status: 400, message: 'secret raw input'});
-				await expect(outcomeOf(provider, kind)).resolves.toBe('pending');
-			}
-		});
-
-		it.each([
-			['no search flag', {classifications: [classification()]}, 'plain'],
-			[
-				'a search it was not allowed',
-				{classifications: [classification()], searched: true, sourceDomains: []},
-				'plain',
-			],
-		] as const)('fails a bridge reply with %s', async (_case, body, kind) => {
-			await withBridge({body}, async (socket) => {
-				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-				create.mockRejectedValue({status: 400});
-				await expect(outcomeOf(provider, kind)).resolves.toBe('failed');
-			});
-		});
-	});
-
-	it('falls back over a local socket, preserves history hints, and records the actual subscription route', async () => {
-		const reply = {classifications: [classification({category: 'SHOPPING'})], searched: false, sourceDomains: []};
-		await withBridge({body: reply}, async (socket, requests) => {
-			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-			create.mockRejectedValue({status: 400, message: 'API credit balance exhausted, secret'});
-			const transaction = {
-				...input(),
-				previousManualCategories: [
-					{
-						category: 'SHOPPING' as const,
-						count: 2,
-						recentExamples: [{amount: '-8.00', currency: 'EUR', date: '2026-08-01', text: 'Gift'}],
-					},
-				],
-				sameAmountPayments: [
-					{date: '2026-07-01', category: 'SHOPPING' as const, source: 'MANUAL' as const, text: null},
-					{date: '2026-06-01', category: 'SHOPPING' as const, source: 'AI' as const, text: 'gift'},
-				],
-			};
-			await expect(provider.categorize([transaction], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).resolves.toEqual([
-				{
-					correlationId: 'transaction-1',
-					category: 'SHOPPING',
-					confidence: 0.9,
-					provider: 'claude-subscription',
-					model: 'claude-sonnet-5-5',
-				},
-			]);
-			expect(requests.map(({url, body}) => ({url, body}))).toEqual([
-				{
-					url: '/categorize',
-					body: {
-						model: 'claude-sonnet-5-5',
-						effort: 'high',
-						input: {
-							categories: BANK_TRANSACTION_CATEGORY_DEFINITIONS,
-							transactions: [{...transaction, correlationId: '0'}],
-						},
-					},
-				},
-			]);
-			expect(JSON.stringify(requests)).not.toContain('synthetic-api-key');
-		});
-	});
-
-	it('falls back to a pinned subscription search and keeps only valid source hostnames', async () => {
-		const reply = {
-			classifications: [classification({evidenceType: 'MERCHANT_IDENTITY_ONLY'})],
-			searched: true,
-			sourceDomains: ['www.example.test', 'not a domain', 'javascript:alert(1)'],
-		};
-		await withBridge({body: reply}, async (socket, requests) => {
-			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-			create.mockRejectedValue({status: 400, message: 'API credit balance exhausted, secret'});
-			await expect(categorizeOn(provider, 'search')).resolves.toEqual([
-				{
-					correlationId: 'transaction-1',
-					category: 'FOOD_AND_DRINK',
-					confidence: 0.9,
-					provider: 'claude-subscription',
-					model: 'claude-sonnet-5-5',
-					searchTrace: {
-						queries: [SEARCH_QUERY],
-						sourceDomains: ['example.test'],
-						evidenceType: 'MERCHANT_IDENTITY_ONLY',
-					},
-				},
-			]);
-			expect(requests).toHaveLength(1);
-			expect(requests[0].url).toBe('/categorize');
-			expect(requests[0].body).toEqual({
-				model: 'claude-sonnet-5-5',
-				effort: 'high',
-				input: {...JSON.parse(create.mock.calls.at(-1)[0].messages[0].content), searchQuery: SEARCH_QUERY},
-			});
-		});
-	});
-
-	it('falls back to the bridge with the search query, never the API finding, when categorizing fails', async () => {
-		const reply = {classifications: [classification()], searched: false, sourceDomains: []};
-		await withBridge({body: reply}, async (socket, requests) => {
-			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-			create.mockResolvedValueOnce(searchReply()).mockRejectedValueOnce({status: 500});
-			const [result] = await categorizeOn(provider, 'search');
-			expect(result).toMatchObject({provider: 'claude-subscription'});
-			expect(result).not.toHaveProperty('searchTrace');
-			expect(JSON.parse(create.mock.calls[1][0].messages[0].content)).toHaveProperty('searchFinding');
-			expect(requests).toHaveLength(1);
-			expect((requests[0].body as {input: object}).input).toEqual({
-				categories: BANK_TRANSACTION_CATEGORY_DEFINITIONS,
-				transactions: [{...input(), correlationId: '0'}],
-				searchQuery: SEARCH_QUERY,
-			});
-		});
-	});
-
-	it.each(['plain', 'search'] as const)('sends the contract fingerprint on %s fallback requests', async (kind) => {
-		await withBridge(unavailable, async (socket, requests) => {
-			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-			create.mockRejectedValue({status: 400});
-			await expect(categorizeOn(provider, kind)).rejects.toThrow(BankTransactionCategorizationUnavailableError);
-			expect(requests).toHaveLength(1);
-			expect(requests[0].hash).toBe(createHash('sha256').update(JSON.stringify(contract)).digest('hex'));
-		});
-	});
-
-	it.each(['plain', 'search'] as const)('logs a safe actionable warning on a %s contract mismatch', async (kind) => {
-		const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-		try {
-			await withBridge({status: 409, body: {error: 'synthetic-private-text'}}, async (socket) => {
-				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-				create.mockRejectedValue({status: 400});
-				await expect(categorizeOn(provider, kind)).rejects.toThrow(
-					BankTransactionCategorizationUnavailableError,
-				);
-			});
-			expect(warn).toHaveBeenCalledWith('Claude bridge contract mismatch; reinstall and restart the bridge.');
-			expect(JSON.stringify(warn.mock.calls)).not.toContain('synthetic-private-text');
-		} finally {
-			warn.mockRestore();
-		}
 	});
 
 	it('does not let SDK debug logging print upstream error bodies', async () => {
@@ -712,8 +534,8 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		}
 	});
 
-	it('returns a sanitized pending-retry error when API and subscription are unavailable', async () => {
-		const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/missing-synthetic.sock'});
+	it('returns a sanitized pending-retry error when the API is unavailable', async () => {
+		const {provider, create} = setup();
 		create.mockRejectedValue({status: 429, message: 'synthetic-api-key raw transaction'});
 		await expect(provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).rejects.toMatchObject({
 			name: 'BankTransactionCategorizationUnavailableError',
@@ -800,43 +622,40 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			});
 		});
 
-		it('falls back to the subscription bridge, and stays pending only when both routes refused', async () => {
-			const reply = {
-				merchants: [{correlationId: '0', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false}],
-			};
-			await withBridge({body: reply}, async (socket, requests) => {
-				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-				create.mockRejectedValue({status: 400});
-				await expect(provider.identifyMerchants([merchant()])).resolves.toEqual([
-					{correlationId: 'merchant-1', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false},
-				]);
-				expect(requests).toEqual([
-					{
-						url: '/identify-merchants',
-						body: {
-							model: 'claude-sonnet-5-5',
-							effort: 'high',
-							input: {merchants: [{...merchant(), correlationId: '0'}]},
-						},
-						hash: createHash('sha256').update(JSON.stringify(merchantContract)).digest('hex'),
-					},
-				]);
-			});
-			await withBridge(unavailable, async (socket) => {
-				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-				create.mockRejectedValue({status: 429});
-				await expect(provider.identifyMerchants([merchant()])).rejects.toBeInstanceOf(
-					BankTransactionCategorizationUnavailableError,
-				);
-				// The API model ran but answered for an unknown merchant: an attempt that counts, not an outage.
-				create.mockResolvedValue(
-					merchantResponse([
-						{correlationId: '9', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false},
-					]),
-				);
-				await expect(provider.identifyMerchants([merchant()])).rejects.toMatchObject({
-					name: 'BankTransactionCategorizationProviderError',
-				});
+		it.each([
+			['the credit balance is too low', apiError(400, 'invalid_request_error', CREDIT_BALANCE_TOO_LOW)],
+			['the API is rate limited', {status: 429}],
+			['the API refuses the key', {status: 401}],
+			['the connection never opens', new Anthropic.APIConnectionError({message: 'synthetic'})],
+		])('leaves merchants pending when %s', async (_case, error) => {
+			const {provider, create} = setup();
+			create.mockRejectedValue(error);
+			await expect(provider.identifyMerchants([merchant()])).rejects.toBeInstanceOf(
+				BankTransactionCategorizationUnavailableError,
+			);
+		});
+
+		it.each([
+			['the request is invalid', apiError(400, 'invalid_request_error', 'synthetic invalid field')],
+			['the API fails after accepting the request', {status: 500}],
+			['the request times out', new Anthropic.APIConnectionTimeoutError({message: 'synthetic'})],
+		])('counts an attempt when %s', async (_case, error) => {
+			const {provider, create} = setup();
+			create.mockRejectedValue(error);
+			const failure = await provider.identifyMerchants([merchant()]).catch((caught: unknown) => caught);
+			expect(failure).toBeInstanceOf(BankTransactionCategorizationProviderError);
+			expect(failure).not.toBeInstanceOf(BankTransactionCategorizationUnavailableError);
+		});
+
+		it('counts an attempt when the model answers for an unknown merchant', async () => {
+			const {provider, create} = setup();
+			create.mockResolvedValue(
+				merchantResponse([
+					{correlationId: '9', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false},
+				]),
+			);
+			await expect(provider.identifyMerchants([merchant()])).rejects.toMatchObject({
+				name: 'BankTransactionCategorizationProviderError',
 			});
 		});
 	});
