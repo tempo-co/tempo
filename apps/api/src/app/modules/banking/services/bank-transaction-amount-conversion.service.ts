@@ -167,11 +167,13 @@ export class BankTransactionAmountConversionService {
 			])) as Array<{count: number}>;
 			scanned += owner.currencies.reduce((total, row) => total + row.count, 0);
 			converted += count;
-			// Same-day exchanges are matched on base amounts, so new amounts can complete a pairing; own-transfer
-			// detection skips exchange legs, so it follows over the whole history.
+			// Same-day exchanges are matched on base amounts, so new amounts can complete a pairing. Own-transfer
+			// detection reads no converted amount, only whether a row is an exchange leg, so it follows over the whole
+			// history only when a row became or stopped being one, or when that is unknown because the recompute failed.
 			if (count > 0) {
-				await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
-				await this.ownTransferService.recomputeForOwnerSafely(accountId);
+				const reclassifiedIds = await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
+				if (reclassifiedIds === null || reclassifiedIds.length > 0)
+					await this.ownTransferService.recomputeForOwnerSafely(accountId);
 			}
 		}
 
