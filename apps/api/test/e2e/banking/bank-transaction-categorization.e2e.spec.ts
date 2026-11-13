@@ -1,6 +1,7 @@
 import {getQueueToken} from '@nestjs/bullmq';
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
+import {BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@tempo/contracts';
 import {JobType, Queue} from 'bullmq';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {createServer} from 'node:http';
@@ -222,7 +223,7 @@ describe('Bank transaction categorization integration', () => {
 			merchantCategoryCode: '5814',
 			remittanceInformation: 'Fiction and non-fiction',
 		});
-		expect(categorizeSpy.mock.calls[0][1]).toHaveLength(19);
+		expect(categorizeSpy.mock.calls[0][1]).toEqual(BANK_TRANSACTION_CATEGORY_DEFINITIONS);
 		// The call may search for the merchant; this model skipped it, so the row stores no search trace.
 		expect(categorizeSpy.mock.calls[0][2]).toEqual({searchQuery: 'Lantern Books'});
 

@@ -17,9 +17,12 @@ describe('bank transaction categorization contract', () => {
 			'TRAVEL',
 			'ENTERTAINMENT',
 			'PERSONAL_CARE',
+			'SERVICES',
 			'EDUCATION',
 			'INSURANCE',
 			'FEES',
+			'TAXES_AND_GOVERNMENT',
+			'GIFTS_AND_DONATIONS',
 			'CASH_WITHDRAWAL',
 			'INCOME',
 			'REFUND',
@@ -28,7 +31,7 @@ describe('bank transaction categorization contract', () => {
 			'NEEDS_REVIEW',
 			'OTHER',
 		]);
-		expect(BANK_TRANSACTION_CATEGORY_DEFINITIONS).toHaveLength(19);
+		expect(BANK_TRANSACTION_CATEGORY_DEFINITIONS).toHaveLength(22);
 		expect(BANK_TRANSACTION_CATEGORY_DEFINITIONS).toEqual(
 			expect.arrayContaining(
 				BANK_TRANSACTION_CATEGORIES.map((value) =>
@@ -53,9 +56,15 @@ describe('bank transaction categorization contract', () => {
 		expect(BANK_TRANSACTION_CATEGORIZATION_SOURCES).toEqual(['AI', 'HISTORY', 'MANUAL']);
 	});
 
-	it('makes grocery and convenience purchases explicit in Food and drink guidance', () => {
-		const foodAndDrink = BANK_TRANSACTION_CATEGORY_DEFINITIONS.find(({value}) => value === 'FOOD_AND_DRINK');
+	it('states the scope of each category that borders another', () => {
+		const description = (category: string) =>
+			BANK_TRANSACTION_CATEGORY_DEFINITIONS.find(({value}) => value === category)?.description;
 
-		expect(foodAndDrink?.description).toContain('typical convenience-store purchases');
+		expect(description('FOOD_AND_DRINK')).toContain('typical convenience-store purchases');
+		expect(description('SERVICES')).toContain('postage, parcel and delivery fees');
+		expect(description('SERVICES')).toContain('food delivery orders, bank fees, subscriptions, personal grooming');
+		expect(description('SHOPPING')).toContain('repairs, cleaning, postage');
+		expect(description('TAXES_AND_GOVERNMENT')).toContain('fines, passport, ID, permit, and registration fees');
+		expect(description('GIFTS_AND_DONATIONS')).toContain('an item bought in a shop as a gift is Shopping');
 	});
 });
