@@ -8,6 +8,8 @@ export const BANK_IMPORT_ERROR_CODES = [
 	/** An old binary Excel (`.xls`) file: the owner picks another export of the same data. */
 	'legacy_xls_not_supported',
 	'file_too_large',
+	/** The drop's files together are larger than 25 MB. */
+	'drop_too_large',
 	'archive_too_large',
 	'too_many_files',
 	'too_many_rows',
@@ -23,6 +25,8 @@ export const BANK_IMPORT_ERROR_CODES = [
 	'target_account_mismatch',
 	'account_busy',
 	'multiple_bank_connections',
+	/** Other drops took every upload slot for too long (HTTP 503 with `Retry-After`): the same files can be sent again. */
+	'import_busy',
 ] as const;
 export type BankImportErrorCode = (typeof BANK_IMPORT_ERROR_CODES)[number];
 

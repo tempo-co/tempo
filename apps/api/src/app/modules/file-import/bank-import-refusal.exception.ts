@@ -13,6 +13,10 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 			'Old Excel files (.xls) are not supported. Export the same statement as CAMT.053, MT940 or TXT instead, or from Revolut as CSV or Excel (.xlsx).',
 	},
 	file_too_large: {status: HttpStatus.PAYLOAD_TOO_LARGE, message: 'A file can be at most 10 MB.'},
+	drop_too_large: {
+		status: HttpStatus.PAYLOAD_TOO_LARGE,
+		message: 'These files are too large together. One drop can hold at most 25 MB.',
+	},
 	archive_too_large: {status: HttpStatus.PAYLOAD_TOO_LARGE, message: 'An archive can unpack to at most 50 MB.'},
 	too_many_files: {
 		status: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -42,6 +46,10 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 		status: HttpStatus.UNPROCESSABLE_ENTITY,
 		message:
 			'This drop holds statements of accounts from more than one bank connection. Import each bank separately.',
+	},
+	import_busy: {
+		status: HttpStatus.SERVICE_UNAVAILABLE,
+		message: 'Other files are being imported. Try again in a moment.',
 	},
 };
 

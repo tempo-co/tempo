@@ -8,6 +8,14 @@ function isPastTimestamp(value: string | null | undefined, now = Date.now()): bo
   return !Number.isFinite(timestamp) || timestamp <= now;
 }
 
+/** The provider of the owner's imported-files connection; it holds accounts that statement files fill. */
+export const FILE_CONNECTION_PROVIDER = 'file';
+
+/** Imported files: no bank behind it, so it has no consent, sync or re-authorization. */
+export function isFileConnection(connection: Pick<BankConnection, 'provider'>) {
+  return connection.provider === FILE_CONNECTION_PROVIDER;
+}
+
 /** Connections that can hold accounts: authorized now or authorized before their consent ended. */
 export function isConnectedBank(connection: BankConnection) {
   return connection.status === 'AUTHORIZED' || connection.status === 'EXPIRED';
@@ -18,6 +26,7 @@ export function isSyncInProgress(connection: BankConnection) {
 }
 
 export function isReauthorizationRequired(connection: BankConnection) {
+  if (isFileConnection(connection)) return false;
   if (connection.status === 'EXPIRED' || connection.syncStatus === 'EXPIRED') return true;
   if (connection.status !== 'AUTHORIZED') return false;
 
@@ -26,7 +35,12 @@ export function isReauthorizationRequired(connection: BankConnection) {
 
 /** An authorized bank whose consent is still valid but ends within the window the owner is emailed in. */
 export function isConsentEndingSoon(connection: BankConnection) {
-  if (connection.status !== 'AUTHORIZED' || isReauthorizationRequired(connection)) return false;
+  if (
+    isFileConnection(connection) ||
+    connection.status !== 'AUTHORIZED' ||
+    isReauthorizationRequired(connection)
+  )
+    return false;
   const timestamp = Date.parse(connection.consentValidUntil ?? '');
   return timestamp - Date.now() <= CONSENT_ENDING_SOON_MS;
 }
@@ -83,7 +97,7 @@ function isSyncBroken(connection: BankConnection, now = Date.now()) {
 export function getAutomaticSyncProblemForConnection(
   connection: BankConnection,
 ): AutomaticSyncProblem | null {
-  if (!isConnectedBank(connection)) return null;
+  if (!isConnectedBank(connection) || isFileConnection(connection)) return null;
   if (isReauthorizationRequired(connection)) {
     return getAutomaticSyncProblem('EXPIRED', connection.lastSyncError);
   }

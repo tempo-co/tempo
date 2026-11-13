@@ -1,0 +1,341 @@
+import {useQuery} from '@tanstack/react-query';
+import type {BankImportSummary} from '@tempo/contracts';
+import {ArrowLeft, FileX} from 'lucide-react';
+import {type ReactNode, type RefObject, useState} from 'react';
+
+import {PendingLabel} from '@/components/shared/pending-label';
+import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
+import {Button} from '@/components/ui/button';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogCornerClose,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
+import {ScrollArea} from '@/components/ui/scroll-area';
+import {useIsMobile} from '@/hooks/use-is-mobile';
+import {cn} from '@/utils/cn';
+
+import {bankImportsQueryOptions} from '../api/use-bank-imports';
+import {plural, summaryTitle} from '../utils/import-format';
+import {accountQuestionKey} from '../utils/refusal-copy';
+import {AccountQuestions} from './account-questions';
+import {DoubtfulRowsReview} from './doubtful-rows-review';
+import {FileChoice, FileList} from './file-choice';
+import {ImportSummaryBody} from './import-summary';
+import {
+  ACCOUNT_QUESTION_TITLE,
+  type FileImportController,
+  IMPORT_FAILED_TITLE,
+  type ImportStep,
+} from './use-file-import';
+import {useUndoImport} from './use-undo-import';
+
+const FOOTER =
+  'flex shrink-0 flex-col gap-2 border-t px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:flex-row md:items-center md:justify-end md:px-6 md:pb-4';
+
+/**
+ * Importing statement files, in one dialog (a bottom sheet on phones) from choosing files to the summary, the
+ * account question and the rows to check. Closing it never cancels an import.
+ */
+export function FileImportDialog({
+  controller,
+  returnFocus,
+}: {
+  controller: FileImportController;
+  /** The Import a file button: focus goes back there whichever way the dialog was opened. */
+  returnFocus: RefObject<HTMLButtonElement | null>;
+}) {
+  const {open, setOpen, step, setStep, run} = controller;
+  const isMobile = useIsMobile();
+  // The list holds the latest of a shown import, such as its counts after rows were checked elsewhere.
+  const {data: imports} = useQuery({...bankImportsQueryOptions, enabled: false});
+  const shown =
+    'summary' in step
+      ? (imports?.find((summary) => summary.id === step.summary.id) ?? step.summary)
+      : null;
+
+  return (
+    <ResponsiveDialog open={open} onOpenChange={setOpen}>
+      <ResponsiveDialogContent
+        data-testid='bank-import-dialog'
+        className='flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 md:max-h-[86dvh] md:max-w-lg [&>button:last-child]:hidden'
+        onCloseAutoFocus={(event) => {
+          if (!returnFocus.current?.isConnected) return;
+          event.preventDefault();
+          returnFocus.current.focus();
+        }}
+      >
+        {/* Centred on the title's row; a phone sheet closes by its handle like the others. */}
+        {!isMobile && <ResponsiveDialogCornerClose label='Close' />}
+        {step.kind === 'choose' ? (
+          <ChooseStep step={step} onFiles={(files) => void run(files)} />
+        ) : step.kind === 'importing' ? (
+          <Frame
+            title='Import a file'
+            body={<FileList files={step.files} />}
+            footer={
+              <Button disabled>
+                <PendingLabel>Importing…</PendingLabel>
+              </Button>
+            }
+          />
+        ) : step.kind === 'question' ? (
+          <QuestionStep
+            key={step.questions.map(accountQuestionKey).join('|')}
+            step={step}
+            onCancel={() => setStep({kind: 'choose', files: [], failure: null})}
+            onImport={(choices) => void run(step.files, choices)}
+          />
+        ) : step.kind === 'summary' ? (
+          <SummaryStep summary={shown!} onStep={setStep} onClose={() => setOpen(false)} />
+        ) : step.kind === 'review' ? (
+          <Frame
+            title={`Check ${plural(step.count, 'transaction')}`}
+            onBack={() => setStep({kind: 'summary', summary: shown!})}
+            body={
+              <DoubtfulRowsReview
+                summary={shown!}
+                onSummary={(summary) => setStep({...step, summary})}
+                onDone={(summary) => setStep({kind: 'summary', summary})}
+              />
+            }
+          />
+        ) : (
+          <UndoStep
+            summary={shown!}
+            onCancel={() => setStep({kind: 'summary', summary: shown!})}
+            onUndone={() => setOpen(false)}
+          />
+        )}
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
+  );
+}
+
+/** One step of the dialog: its header, a body that scrolls on its own, and a footer that stays in reach. */
+function Frame({
+  title,
+  description,
+  onBack,
+  body,
+  footer,
+}: {
+  title: string;
+  /** Shown under the title; without it, assistive technology still hears what the dialog is for. */
+  description?: string;
+  onBack?: () => void;
+  body: ReactNode;
+  footer?: ReactNode;
+}) {
+  return (
+    <>
+      <ResponsiveDialogHeader className='shrink-0 grid-cols-[minmax(0,1fr)] px-4 pt-3 pb-4 text-start md:px-6'>
+        <div className='flex min-h-11 items-center gap-1 md:pr-10'>
+          {onBack && (
+            <Button
+              variant='ghost'
+              size='icon'
+              aria-label='Back to the summary'
+              className='-ml-2 size-11'
+              onClick={onBack}
+            >
+              <ArrowLeft />
+            </Button>
+          )}
+          <ResponsiveDialogTitle className='min-w-0 wrap-anywhere'>{title}</ResponsiveDialogTitle>
+        </div>
+        <ResponsiveDialogDescription className={description ? 'pt-1' : 'sr-only'}>
+          {description ?? 'Statement files from your bank, imported into your accounts.'}
+        </ResponsiveDialogDescription>
+      </ResponsiveDialogHeader>
+      {body && (
+        <ScrollArea
+          type='auto'
+          data-testid='bank-import-dialog-body'
+          className='grid min-h-0 grid-rows-[minmax(0,1fr)] [&_[data-radix-scroll-area-viewport]>div]:block! [&>[data-radix-scroll-area-viewport]]:min-h-0 [&>[data-radix-scroll-area-viewport]]:overscroll-contain'
+        >
+          {/* Without a footer, the body keeps clear of a phone's home indicator itself. */}
+          <div
+            className={cn(
+              'px-4 md:px-6 md:pb-6',
+              footer ? 'pb-4' : 'pb-[calc(1rem+env(safe-area-inset-bottom))]',
+            )}
+          >
+            {body}
+          </div>
+        </ScrollArea>
+      )}
+      {footer && <div className={FOOTER}>{footer}</div>}
+    </>
+  );
+}
+
+function ChooseStep({
+  step,
+  onFiles,
+}: {
+  step: Extract<ImportStep, {kind: 'choose'}>;
+  onFiles: (files: File[]) => void;
+}) {
+  const {failure, files} = step;
+  return (
+    <Frame
+      title='Import a file'
+      body={
+        <div className='grid grid-cols-1 gap-4'>
+          {failure?.kind === 'refused' && (
+            <div role='alert'>
+              <StateMessage
+                tone='error'
+                size='section'
+                icon={FileX}
+                title={failure.title}
+                description={failure.description}
+              />
+            </div>
+          )}
+          {failure?.kind === 'failed' && !failure.toasted && (
+            <LoadErrorState
+              size='section'
+              title={IMPORT_FAILED_TITLE}
+              error={failure.error}
+              onRetry={() => onFiles(files)}
+            />
+          )}
+          {files.length > 0 && <FileList files={files} />}
+          <FileChoice onFiles={onFiles} />
+        </div>
+      }
+      // Files kept after a lost connection or a busy bank go again as they are.
+      footer={files.length > 0 && <Button onClick={() => onFiles(files)}>Import</Button>}
+    />
+  );
+}
+
+function QuestionStep({
+  step,
+  onCancel,
+  onImport,
+}: {
+  step: Extract<ImportStep, {kind: 'question'}>;
+  onCancel: () => void;
+  onImport: (choices: Record<string, string>) => void;
+}) {
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const complete = step.questions.every((question) => answers[accountQuestionKey(question)]);
+  return (
+    <Frame
+      title={ACCOUNT_QUESTION_TITLE}
+      body={
+        <AccountQuestions
+          code={step.code}
+          questions={step.questions}
+          answers={answers}
+          onAnswer={(key, value) => setAnswers((current) => ({...current, [key]: value}))}
+        />
+      }
+      footer={
+        <>
+          <Button variant='outline' onClick={onCancel} className='order-2 md:order-1'>
+            Cancel
+          </Button>
+          <Button
+            disabled={!complete}
+            onClick={() => onImport(answers)}
+            className='order-1 md:order-2'
+          >
+            Import
+          </Button>
+        </>
+      }
+    />
+  );
+}
+
+function SummaryStep({
+  summary,
+  onStep,
+  onClose,
+}: {
+  summary: BankImportSummary;
+  onStep: (step: ImportStep) => void;
+  onClose: () => void;
+}) {
+  const review = summary.rowsDoubtful > 0 && !summary.undoneAt;
+  return (
+    <Frame
+      title={summaryTitle(summary)}
+      body={<ImportSummaryBody summary={summary} />}
+      footer={
+        <>
+          {!summary.undoneAt && (
+            <Button
+              variant='ghost'
+              onClick={() => onStep({kind: 'undo', summary})}
+              className='order-3 md:order-1 md:mr-auto md:-ml-4'
+            >
+              Undo import
+            </Button>
+          )}
+          <Button
+            variant={review ? 'outline' : 'default'}
+            onClick={onClose}
+            className='order-2 md:order-2'
+          >
+            Done
+          </Button>
+          {review && (
+            <Button
+              onClick={() => onStep({kind: 'review', summary, count: summary.rowsDoubtful})}
+              className='order-1 md:order-3'
+            >
+              Review {plural(summary.rowsDoubtful, 'row')}
+            </Button>
+          )}
+        </>
+      }
+    />
+  );
+}
+
+function UndoStep({
+  summary,
+  onCancel,
+  onUndone,
+}: {
+  summary: BankImportSummary;
+  onCancel: () => void;
+  onUndone: () => void;
+}) {
+  const {undo, describe, isPending} = useUndoImport();
+  return (
+    <Frame
+      title='Undo this import?'
+      description={describe(summary)}
+      body={null}
+      footer={
+        <>
+          <Button
+            variant='outline'
+            onClick={onCancel}
+            disabled={isPending}
+            className='order-2 md:order-1'
+          >
+            Cancel
+          </Button>
+          <Button
+            variant='destructive'
+            disabled={isPending}
+            onClick={() => void undo(summary).then((undone) => undone && onUndone())}
+            className='order-1 md:order-2'
+          >
+            {isPending ? <PendingLabel>Undoing…</PendingLabel> : 'Undo import'}
+          </Button>
+        </>
+      }
+    />
+  );
+}

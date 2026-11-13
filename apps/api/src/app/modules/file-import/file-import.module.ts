@@ -3,6 +3,7 @@ import {TypeOrmModule} from '@nestjs/typeorm';
 
 import {BankingModule} from '@modules/banking/banking.module';
 
+import {BankImportUploadQueue} from './api/bank-import-upload-queue';
 import {BankImportController} from './api/bank-import.controller';
 import {BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
 import {BankImport} from './bank-import.entity';
@@ -12,7 +13,7 @@ import {ParseRunnerService} from './runner/parse-runner.service';
 /** Statement file import into synced and imported-files accounts, behind `FILE_IMPORT_ENABLED`. */
 @Module({
 	imports: [TypeOrmModule.forFeature([BankImport, BankImportDoubtfulRow]), BankingModule],
-	providers: [BankImportService, ParseRunnerService],
+	providers: [BankImportService, ParseRunnerService, BankImportUploadQueue],
 	controllers: [BankImportController],
 })
 export class FileImportModule {}
