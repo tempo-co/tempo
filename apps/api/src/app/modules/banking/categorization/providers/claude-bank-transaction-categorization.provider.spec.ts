@@ -92,13 +92,26 @@ function classification(overrides: Record<string, unknown> = {}) {
 	return {correlationId: '0', category: 'FOOD_AND_DRINK', confidence: 0.9, evidenceType: 'MCC', ...overrides};
 }
 
+/** The categorizing call's reply: the answer as the input of its one StructuredOutput tool call. */
 function response(classifications: unknown[]) {
 	return {
-		stop_reason: 'end_turn',
-		content: [{type: 'text', text: JSON.stringify({classifications})}],
+		stop_reason: 'tool_use',
+		content: [{type: 'thinking', thinking: '', signature: ''}, structuredOutput({classifications})],
 		usage: {server_tool_use: {web_search_requests: 0}},
 	};
 }
+
+function structuredOutput(input: unknown, name = 'StructuredOutput') {
+	return {type: 'tool_use', id: 'toolu_synthetic', name, input};
+}
+
+/** The tool the categorizing request offers, and only it: no server tool, an auto choice, one call. */
+const STRUCTURED_OUTPUT_REQUEST = {
+	tools: [
+		{name: 'StructuredOutput', description: expect.stringContaining('exactly once'), input_schema: contract.schema},
+	],
+	tool_choice: {type: 'auto', disable_parallel_tool_use: true},
+};
 
 /** The merchant search call's reply: one web search with `query` and the finding it reports. */
 function searchReply({
@@ -123,10 +136,10 @@ function searchReply({
 	};
 }
 
-/** An API reply that ran one web search with `query`, which a request without tools must never produce. */
+/** A categorizing reply that ran one web search with `query`, which a request without a server tool must never produce. */
 function searchedResponse(query: string) {
 	return {
-		stop_reason: 'end_turn',
+		stop_reason: 'tool_use',
 		usage: {server_tool_use: {web_search_requests: 1}},
 		content: [
 			{type: 'text', text: 'I will look up this merchant.'},
@@ -135,8 +148,7 @@ function searchedResponse(query: string) {
 				type: 'web_search_tool_result',
 				content: [{type: 'web_search_result', url: 'https://www.example.test/path?token=private'}],
 			},
-			{type: 'text', text: '{"classifications":['},
-			{type: 'text', text: `${JSON.stringify(classification({evidenceType: 'MERCHANT_IDENTITY_ONLY'}))}]}`},
+			structuredOutput({classifications: [classification({evidenceType: 'MERCHANT_IDENTITY_ONLY'})]}),
 		],
 	};
 }
@@ -171,9 +183,11 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			model,
 			max_tokens: 16_384,
 			thinking: {type: 'adaptive'},
-			output_config: {effort, format: {type: 'json_schema'}},
+			...STRUCTURED_OUTPUT_REQUEST,
 		});
-		expect(request.output_config.format.schema.properties.classifications.items.properties.category.enum).toEqual(
+		// The answer comes back through the tool, not a strict json_schema format.
+		expect(request.output_config).toEqual({effort});
+		expect(request.tools[0].input_schema.properties.classifications.items.properties.category.enum).toEqual(
 			BANK_TRANSACTION_CATEGORIES,
 		);
 		expect(JSON.parse(request.messages[0].content)).toEqual({
@@ -185,7 +199,6 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			'when previousManualCategories holds a single category other than TRANSFER_OUT',
 		);
 		expect(request.system).toContain('identifies only a payment processor, payment terminal provider or acquirer');
-		expect(request).not.toHaveProperty('tools');
 		expect(request).not.toHaveProperty('cache_control');
 	});
 
@@ -206,15 +219,16 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(merchantContract.schema.properties.merchants.items.properties.kind.enum).toEqual(MERCHANT_KINDS);
 	});
 
-	it('sends the shared contract prompt and schema without tools when no search query is given', async () => {
+	it('sends the shared contract prompt and schema with only the StructuredOutput tool when no search query is given', async () => {
 		const {provider, create} = setup();
 		create.mockResolvedValue(response([classification()]));
 		const [result] = await categorizeOn(provider, 'plain');
 		expect(result).not.toHaveProperty('searchTrace');
 		expect(create).toHaveBeenCalledTimes(1);
 		const [[request]] = create.mock.calls;
-		expect([request.system, request.output_config.format.schema]).toEqual([contract.instructions, contract.schema]);
-		expect(request).not.toHaveProperty('tools');
+		expect(request.system).toBe(contract.instructions);
+		expect(request).toMatchObject(STRUCTURED_OUTPUT_REQUEST);
+		expect(request.tools).toHaveLength(1);
 		expect(Object.keys(JSON.parse(request.messages[0].content))).toEqual(['categories', 'transactions']);
 	});
 
@@ -277,7 +291,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			/42\.17|9\.99|synthetic-private-note|synthetic-history-note|transaction-1|5814|2026-0/,
 		);
 		expect(categorizeRequest.system).toBe(contract.instructions);
-		expect(categorizeRequest).not.toHaveProperty('tools');
+		expect(categorizeRequest.tools).toEqual(STRUCTURED_OUTPUT_REQUEST.tools);
 		expect(JSON.parse(categorizeRequest.messages[0].content)).toEqual({
 			categories: BANK_TRANSACTION_CATEGORY_DEFINITIONS,
 			transactions: [{...transaction, correlationId: '0'}],
@@ -371,7 +385,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			expect(result).not.toHaveProperty('searchTrace');
 			expect(create).toHaveBeenCalledTimes(2);
 			const categorizeRequest = create.mock.calls[1][0];
-			expect(categorizeRequest).not.toHaveProperty('tools');
+			expect(categorizeRequest.tools).toEqual(STRUCTURED_OUTPUT_REQUEST.tools);
 			expect(JSON.parse(categorizeRequest.messages[0].content)).not.toHaveProperty('searchFinding');
 		} finally {
 			warn.mockRestore();
@@ -392,10 +406,41 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			create.mockResolvedValue(response(classifications));
 			await expect(outcomeOf(provider, 'plain')).resolves.toBe('failed');
 		});
-		it.each(['max_tokens', 'pause_turn', 'refusal'])('fails an incomplete %s response', async (stopReason) => {
+		it.each(['max_tokens', 'pause_turn', 'refusal', 'end_turn'])(
+			'fails a %s response that did not stop to call the tool',
+			async (stopReason) => {
+				const {provider, create} = setup();
+				create.mockResolvedValue({...response([classification()]), stop_reason: stopReason});
+				await expect(outcomeOf(provider, 'plain')).resolves.toBe('failed');
+			},
+		);
+		it.each([
+			[
+				'answers in text instead of calling the tool',
+				[{type: 'text', text: JSON.stringify({classifications: [classification()]})}],
+			],
+			['calls another tool', [structuredOutput({classifications: [classification()]}, 'web_search')]],
+			[
+				'calls the tool twice',
+				[
+					structuredOutput({classifications: [classification()]}),
+					structuredOutput({classifications: [classification()]}),
+				],
+			],
+			['passes a tool input that is not an object', [structuredOutput(JSON.stringify({classifications: []}))]],
+		])('fails a reply that %s', async (_case, content) => {
 			const {provider, create} = setup();
-			create.mockResolvedValue({...response([classification()]), stop_reason: stopReason});
+			create.mockResolvedValue({...response([]), content});
 			await expect(outcomeOf(provider, 'plain')).resolves.toBe('failed');
+		});
+		it('reads the tool call when the reply also holds text', async () => {
+			const {provider, create} = setup();
+			const reply = response([classification({category: 'SHOPPING'})]);
+			create.mockResolvedValue({
+				...reply,
+				content: [{type: 'text', text: 'Synthetic preface.'}, ...reply.content],
+			});
+			await expect(categorizeOn(provider, 'plain')).resolves.toMatchObject([{category: 'SHOPPING'}]);
 		});
 		it('does not dispatch invalid or oversized input batches', async () => {
 			const {provider, create} = setup();
