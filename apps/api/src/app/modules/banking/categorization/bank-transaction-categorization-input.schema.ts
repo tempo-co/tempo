@@ -94,8 +94,33 @@ const categorizationInputSchema = z.object({correlationId: text, ...classifiedFi
 /** The one web search query a call may run: sanitized merchant text, never identifiers, amounts or dates. */
 const searchQuerySchema = nonBlankText.max(BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH);
 
+/** What a merchant web search can report about the business behind a query. */
+export const MERCHANT_SEARCH_FINDING_KINDS = ['BUSINESS', 'PAYMENT_PROCESSOR', 'PERSON', 'NOTHING'] as const;
+/** Longest description of a business the model sees from a search finding. */
+export const MAX_SEARCH_FINDING_DESCRIPTION_LENGTH = 300;
+
+/**
+ * What a web search for a row group's merchant found, from a separate call that saw only the query. Sent beside the
+ * transactions on the API route; the subscription bridge searches inside its own call and never receives it.
+ */
+const searchFindingSchema = z
+	.object({
+		query: searchQuerySchema,
+		// Only a business or a payment processor: a search that found a person or nothing is not sent.
+		identifies: z.enum(MERCHANT_SEARCH_FINDING_KINDS).extract(['BUSINESS', 'PAYMENT_PROCESSOR']),
+		description: z.string().max(MAX_SEARCH_FINDING_DESCRIPTION_LENGTH).nullable(),
+	})
+	.strict();
+
 /** Build it with `toBankTransactionCategorizationInput`, which normalizes the fields the hash and the model see. */
 export type BankTransactionCategorizationInput = z.infer<typeof categorizationInputSchema>;
+export type BankTransactionCategorizationSearchFinding = z.infer<typeof searchFindingSchema>;
+
+/** The finding exactly as the model may see it, or null when `value` is not one. */
+export function toSearchFinding(value: unknown): BankTransactionCategorizationSearchFinding | null {
+	const parsed = searchFindingSchema.safeParse(value);
+	return parsed.success ? parsed.data : null;
+}
 export type PreviousManualCategory = z.infer<typeof previousManualCategorySchema>;
 export type SameAmountPayment = z.infer<typeof sameAmountPaymentSchema>;
 

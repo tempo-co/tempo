@@ -9,8 +9,8 @@ export const BANK_TRANSACTION_CATEGORIZATION_PROVIDER = Symbol('BANK_TRANSACTION
 
 export interface BankTransactionCategorizationProvider {
 	/**
-	 * Categorizes one row group in one model call. With `searchQuery`, the model may run one web search with exactly
-	 * that query, or skip it; results of a call that searched carry a search trace.
+	 * Categorizes one row group. With `searchQuery`, the call may first be informed by one web search for that
+	 * merchant query; results informed by a search that ran carry a search trace.
 	 */
 	categorize(
 		transactions: readonly BankTransactionCategorizationInput[],
