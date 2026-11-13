@@ -126,14 +126,17 @@ export function BankConnectionList({
       className='@container grid grid-cols-1 gap-5 max-md:gap-4'
       data-testid='bank-connections-list'
     >
-      <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-3'>
+      {/* The padding keeps the cards 16px below the overhanging button; the 18px row gap leaves 12px between the
+          title and a button wrapped under it. */}
+      <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-4.5 max-md:pb-1.5 md:pointer-coarse:pb-0.5'>
         <h1 className='text-page-title'>Bank connections</h1>
         {/* Always there: loading, retrying or failing to load the list never closes an open sheet.
-            Beside the title it overhangs the title's row, so the title and the cards start where other pages' do. */}
+            It overhangs the title's row (44px tall on phones and touch screens, 40px otherwise), so the title and
+            the cards start where other pages' do. */}
         <BankConnectionPicker
           onBankSelect={connectBank}
           isStarting={isStarting}
-          className='md:-my-1'
+          className='-my-1.5 md:-my-1 md:pointer-coarse:-my-1.5'
         />
       </header>
       {isPending ? (
