@@ -13,4 +13,4 @@ export const MAX_DROP_BYTES = 25 * 1024 * 1024;
 export const MULTIPART_ALLOWANCE_BYTES = 64 * 1024;
 export const MAX_ARCHIVE_UNPACKED_BYTES = 50 * 1024 * 1024;
 export const MAX_ARCHIVE_ENTRIES = 500;
-export const MAX_ROWS_PER_DROP = 50_000;
+export const MAX_ROWS_PER_DROP = 20_000;

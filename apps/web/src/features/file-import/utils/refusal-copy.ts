@@ -75,7 +75,9 @@ const REFUSAL_COPY: Record<
   },
   too_many_rows: {
     title: 'Too many transactions at once',
-    description: 'Export shorter periods and import them one after another.',
+    // The API's MAX_ROWS_PER_DROP.
+    description:
+      'One import can hold 20,000 transactions. Export shorter periods and import them one after another.',
   },
   parse_failed: {
     title: "This file couldn't be read",
