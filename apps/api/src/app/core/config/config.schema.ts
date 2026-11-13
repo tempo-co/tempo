@@ -102,6 +102,8 @@ export const configSchema = z
 		EMAIL_PASSWORD: z.string().min(1).optional(),
 		EMAIL_REQUIRE_TLS: strictBooleanEnvSchema.default(false),
 		EMAIL_FROM: z.string().trim().min(1).optional(),
+		/** Receives operator alerts (an exhausted Anthropic credit balance); without it they are only logged. */
+		OPERATOR_ALERT_EMAIL: emptyAsUnset(z.email().optional()),
 		EMAIL_VERIFICATION_EXPIRATION: durationSchema,
 		EMAIL_VERIFICATION_REDIS_KEY: z.string().min(1),
 

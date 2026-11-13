@@ -13,7 +13,8 @@ const IDEMPOTENT_JOB_RETENTION = {age: 7 * 24 * 60 * 60};
 export class EmailService {
 	constructor(@InjectQueue(EMAIL_QUEUE) private readonly emailQueue: Queue<EmailJobData>) {}
 
-	async send(options: ISendMailOptions, accountId: string, jobId?: string) {
+	/** `accountId` ties an account's email to it, so deleting the account cancels it; operator alerts have none. */
+	async send(options: ISendMailOptions, accountId?: string, jobId?: string) {
 		// Retain idempotent jobs for a week so retries after a database rollback cannot queue the same email again.
 		await this.emailQueue.add(
 			SEND_EMAIL_JOB,

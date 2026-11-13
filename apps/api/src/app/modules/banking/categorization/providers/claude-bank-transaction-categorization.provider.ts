@@ -9,6 +9,7 @@ import {BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE} from '@core/queue/queue.cons
 
 import {normalizeBankTransactionText} from '../../bank-transaction-display';
 import {isHostname, safeErrorName, truncate} from '../../banking.utils';
+import {AnthropicCreditAlert} from '../anthropic-credit-alert.service';
 import {
 	type BankTransactionCategorizationSearchFinding,
 	MAX_SEARCH_FINDING_DESCRIPTION_LENGTH,
@@ -129,7 +130,11 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	private readonly effort: ClaudeEffort;
 	private readonly apiKey?: string;
 
-	constructor(configurationService: ConfigurationService, @Optional() client?: ClaudeClient) {
+	constructor(
+		configurationService: ConfigurationService,
+		private readonly creditAlert: AnthropicCreditAlert,
+		@Optional() client?: ClaudeClient,
+	) {
 		this.model = configurationService.get('AI_CATEGORIZATION_MODEL');
 		// The config schema checks the value against the contract's effort list.
 		this.effort = configurationService.get('AI_CATEGORIZATION_EFFORT') as ClaudeEffort;
@@ -271,9 +276,10 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	 * The error for a call that got no usable answer. It is the unavailable error, which leaves rows pending for a
 	 * retry without counting an attempt, only when the API refused before running and the refusal clears on its own
 	 * ({@link isUnavailable}). Anything else may have run or would fail the same way again, so it is a retryable
-	 * provider error with a bounded number of attempts.
+	 * provider error with a bounded number of attempts. An exhausted credit balance also alerts the operator.
 	 */
 	private callFailed(error: unknown): BankTransactionCategorizationProviderError {
+		if (this.isCreditExhausted(error)) void this.creditAlert.creditExhausted();
 		if (this.isUnavailable(error)) return new BankTransactionCategorizationUnavailableError();
 		if (
 			error instanceof BankTransactionCategorizationProviderError &&
@@ -376,6 +382,8 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 				logLevel: 'off',
 			}));
 		const response = await client.messages.create(request);
+		// Not awaited: the alert never throws, and a slow Redis must not hold up categorization.
+		void this.creditAlert.callSucceeded();
 		if (response.stop_reason !== stopReason) throw this.invalidResponseError();
 		return response;
 	}
@@ -395,6 +403,12 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		if (error instanceof BankTransactionCategorizationUnavailableError) return true;
 		if (error instanceof Anthropic.APIConnectionError)
 			return !(error instanceof Anthropic.APIConnectionTimeoutError);
+		const {status} = (error ?? {}) as {status?: unknown};
+		return (typeof status === 'number' && UNAVAILABLE_STATUSES.has(status)) || this.isCreditExhausted(error);
+	}
+
+	/** Whether the API refused a call because the account's credit balance is exhausted or billing failed. */
+	private isCreditExhausted(error: unknown): boolean {
 		const {
 			status,
 			type,
@@ -407,7 +421,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			error?: {error?: {message?: unknown}};
 		};
 		if (typeof status !== 'number') return false;
-		if (UNAVAILABLE_STATUSES.has(status) || status === 402 || type === 'billing_error') return true;
+		if (status === 402 || type === 'billing_error') return true;
 		// The SDK error's message repeats the body's; either one names the credit balance.
 		return (
 			status === 400 &&

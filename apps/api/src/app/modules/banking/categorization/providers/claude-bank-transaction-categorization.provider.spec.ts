@@ -5,6 +5,7 @@ import {createServer} from 'node:http';
 
 import {ConfigurationService} from '@core/config/config.service';
 
+import {AnthropicCreditAlert} from '../anthropic-credit-alert.service';
 import {toBankTransactionCategorizationInput} from '../bank-transaction-categorization-input';
 import {toInputContract} from '../bank-transaction-categorization-input.schema';
 import {
@@ -85,7 +86,16 @@ function setup(overrides: Record<string, unknown> = {}) {
 				...overrides,
 			})[key],
 	} as unknown as ConfigurationService;
-	return {provider: new ClaudeBankTransactionCategorizationProvider(config, {messages: {create}} as never), create};
+	const creditAlert = creditAlertDouble();
+	return {
+		provider: new ClaudeBankTransactionCategorizationProvider(config, creditAlert, {messages: {create}} as never),
+		create,
+		creditAlert,
+	};
+}
+
+function creditAlertDouble() {
+	return {creditExhausted: jest.fn(), callSucceeded: jest.fn()} as unknown as jest.Mocked<AnthropicCreditAlert>;
 }
 
 function classification(overrides: Record<string, unknown> = {}) {
@@ -166,7 +176,10 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		['claude-sonnet-5-5', 'high'],
 		['claude-opus-5-5', 'medium'],
 	])('uses the configured %s model at %s effort and maps compact IDs back to the caller', async (model, effort) => {
-		const {provider, create} = setup({AI_CATEGORIZATION_MODEL: model, AI_CATEGORIZATION_EFFORT: effort});
+		const {provider, create, creditAlert} = setup({
+			AI_CATEGORIZATION_MODEL: model,
+			AI_CATEGORIZATION_EFFORT: effort,
+		});
 		create.mockResolvedValue(response([classification()]));
 		await expect(provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).resolves.toEqual([
 			{
@@ -178,6 +191,9 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			},
 		]);
 		expect(create).toHaveBeenCalledTimes(1);
+		// An answered call ends a credit pause, which sends the operator one recovery note.
+		expect(creditAlert.callSucceeded).toHaveBeenCalledTimes(1);
+		expect(creditAlert.creditExhausted).not.toHaveBeenCalled();
 		const request = create.mock.calls[0][0];
 		expect(request).toMatchObject({
 			model,
@@ -481,13 +497,15 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			['the API refuses access', 403, 'pending'],
 			['the API always rejects the request', 400, 'failed'],
 			['the API fails after accepting the request', 500, 'failed'],
-		] as const)('ends a call where %s (%s) as %s', async (_case, status, expected) => {
+		] as const)('ends a call where %s (%s) as %s without a credit alert', async (_case, status, expected) => {
 			for (const kind of ['plain', 'search'] as const) {
-				const {provider, create} = setup();
+				const {provider, create, creditAlert} = setup();
 				create.mockRejectedValue({status, message: 'secret raw input'});
 				await expect(outcomeOf(provider, kind)).resolves.toBe(expected);
 				// A failed merchant search leaves the categorizing call to decide the outcome.
 				expect(create).toHaveBeenCalledTimes(kind === 'search' ? 2 : 1);
+				expect(creditAlert.creditExhausted).not.toHaveBeenCalled();
+				expect(creditAlert.callSucceeded).not.toHaveBeenCalled();
 			}
 		});
 
@@ -496,6 +514,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 				'the credit balance is too low',
 				apiError(400, 'invalid_request_error', CREDIT_BALANCE_TOO_LOW),
 				'pending',
+				'alerts',
 			],
 			[
 				'the credit balance is too low, as an SDK error',
@@ -506,17 +525,42 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 					new Headers(),
 				),
 				'pending',
+				'alerts',
 			],
-			['billing fails', apiError(402, 'billing_error', 'synthetic billing failure'), 'pending'],
-			['the connection never opens', new Anthropic.APIConnectionError({message: 'synthetic'}), 'pending'],
-			['the request times out', new Anthropic.APIConnectionTimeoutError({message: 'synthetic'}), 'failed'],
-			['the request is invalid', apiError(400, 'invalid_request_error', 'synthetic invalid field'), 'failed'],
-			['the model does not exist', apiError(404, 'not_found_error', 'synthetic model'), 'failed'],
-		] as const)('ends a call where %s as %s', async (_case, error, expected) => {
+			['billing fails', apiError(402, 'billing_error', 'synthetic billing failure'), 'pending', 'alerts'],
+			['the API asks for payment', {status: 402, message: 'synthetic'}, 'pending', 'alerts'],
+			[
+				'billing fails with another status',
+				apiError(400, 'billing_error', 'synthetic billing failure'),
+				'pending',
+				'alerts',
+			],
+			[
+				'the connection never opens',
+				new Anthropic.APIConnectionError({message: 'synthetic'}),
+				'pending',
+				'stays quiet',
+			],
+			[
+				'the request times out',
+				new Anthropic.APIConnectionTimeoutError({message: 'synthetic'}),
+				'failed',
+				'stays quiet',
+			],
+			[
+				'the request is invalid',
+				apiError(400, 'invalid_request_error', 'synthetic invalid field'),
+				'failed',
+				'stays quiet',
+			],
+			['the model does not exist', apiError(404, 'not_found_error', 'synthetic model'), 'failed', 'stays quiet'],
+		] as const)('ends a call where %s as %s and %s to the operator', async (_case, error, expected, alert) => {
 			for (const kind of ['plain', 'search'] as const) {
-				const {provider, create} = setup();
+				const {provider, create, creditAlert} = setup();
 				create.mockRejectedValue(error);
 				await expect(outcomeOf(provider, kind)).resolves.toBe(expected);
+				expect(creditAlert.creditExhausted).toHaveBeenCalledTimes(alert === 'alerts' ? 1 : 0);
+				expect(creditAlert.callSucceeded).not.toHaveBeenCalled();
 			}
 		});
 
@@ -564,7 +608,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 						AI_CATEGORIZATION_EFFORT: 'high',
 					})[key],
 			} as unknown as ConfigurationService;
-			const provider = new ClaudeBankTransactionCategorizationProvider(config);
+			const provider = new ClaudeBankTransactionCategorizationProvider(config, creditAlertDouble());
 			await expect(outcomeOf(provider, 'plain')).resolves.toBe('failed');
 			const logged = JSON.stringify(spies.flatMap((spy) => spy.mock.calls));
 			expect(logged).not.toContain('synthetic-leaked-transaction-text');
@@ -668,16 +712,17 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		});
 
 		it.each([
-			['the credit balance is too low', apiError(400, 'invalid_request_error', CREDIT_BALANCE_TOO_LOW)],
-			['the API is rate limited', {status: 429}],
-			['the API refuses the key', {status: 401}],
-			['the connection never opens', new Anthropic.APIConnectionError({message: 'synthetic'})],
-		])('leaves merchants pending when %s', async (_case, error) => {
-			const {provider, create} = setup();
+			['the credit balance is too low', apiError(400, 'invalid_request_error', CREDIT_BALANCE_TOO_LOW), 1],
+			['the API is rate limited', {status: 429}, 0],
+			['the API refuses the key', {status: 401}, 0],
+			['the connection never opens', new Anthropic.APIConnectionError({message: 'synthetic'}), 0],
+		])('leaves merchants pending when %s', async (_case, error, alerts) => {
+			const {provider, create, creditAlert} = setup();
 			create.mockRejectedValue(error);
 			await expect(provider.identifyMerchants([merchant()])).rejects.toBeInstanceOf(
 				BankTransactionCategorizationUnavailableError,
 			);
+			expect(creditAlert.creditExhausted).toHaveBeenCalledTimes(alerts);
 		});
 
 		it.each([
