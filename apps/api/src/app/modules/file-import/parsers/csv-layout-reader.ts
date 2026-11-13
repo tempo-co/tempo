@@ -281,7 +281,8 @@ function readRows(
 	let rows: ReadRow[];
 	try {
 		const lineIban = layout.accountIbanLine === undefined ? null : ibanOnLine(above[layout.accountIbanLine]);
-		rows = records.map((cells) => readRow(cells, layout, lineIban));
+		const debitsNegative = writesDebitsNegative(records, layout);
+		rows = records.map((cells) => readRow(cells, layout, lineIban, debitsNegative));
 	} catch (error) {
 		if (error instanceof RowProblem) return null;
 		throw error;
@@ -340,7 +341,25 @@ function balanceOrder(groups: readonly ReadRow[][]): 'file' | 'reversed' | null 
 	return null;
 }
 
-function readRow(row: readonly TableCell[], layout: CsvLayout, lineIban: string | null): ReadRow {
+/**
+ * Whether the file writes its money out as negative numbers: every non-empty value of its money out column is zero
+ * or negative. Decided once per file, before any row is read; false for other amount kinds.
+ */
+function writesDebitsNegative(records: readonly TableCell[][], layout: CsvLayout): boolean {
+	const {amount} = layout;
+	if (amount.kind !== 'debitCredit') return false;
+	return records.every((row) => {
+		const cell = row[amount.debitColumn];
+		return !cell || cell.text.trim() === '' || parseAmount(cell, layout, true).units <= 0n;
+	});
+}
+
+function readRow(
+	row: readonly TableCell[],
+	layout: CsvLayout,
+	lineIban: string | null,
+	debitsNegative: boolean,
+): ReadRow {
 	const {recognize} = layout;
 	const columns = csvLayoutColumnCount(layout);
 	const workbook = layout.source === 'xlsx';
@@ -366,7 +385,7 @@ function readRow(row: readonly TableCell[], layout: CsvLayout, lineIban: string 
 	const currency = 'fixed' in layout.currency ? layout.currency.fixed : cell(layout.currency.column);
 	if (!CURRENCY.test(currency)) throw new RowProblem();
 
-	const amount = readAmount(cells, layout);
+	const amount = readAmount(cells, layout, debitsNegative);
 	const stated = layout.balance ? parseAmount(cells[layout.balance.column], layout, true) : null;
 	// The balance after the row, whichever side of it the file states.
 	const balance =
@@ -397,8 +416,11 @@ function readRow(row: readonly TableCell[], layout: CsvLayout, lineIban: string 
 	};
 }
 
-/** The row's signed amount, however the layout states it. */
-function readAmount(cells: readonly TableCell[], layout: CsvLayout): Decimal {
+/**
+ * The row's signed amount, however the layout states it. `debitsNegative`: the file writes money out as negative
+ * numbers (`writesDebitsNegative`).
+ */
+function readAmount(cells: readonly TableCell[], layout: CsvLayout, debitsNegative: boolean): Decimal {
 	const {amount} = layout;
 	if (amount.kind === 'signed') return parseAmount(cells[amount.column], layout, true);
 	if (amount.kind === 'direction') {
@@ -413,9 +435,12 @@ function readAmount(cells: readonly TableCell[], layout: CsvLayout): Decimal {
 	const credit = read(cells[amount.creditColumn]);
 	const filled = [debit, credit].filter((value) => value !== null && value.units !== 0n);
 	if (filled.length > 1 || (debit === null && credit === null)) throw new RowProblem();
-	// Each side is read by its sign: money out v is -v and money in v is v, so a negative money in (a reversal) is
-	// money out and a negative money out is money in.
-	if (debit && debit.units !== 0n) return {units: -debit.units, scale: debit.scale};
+	// Money in is read by its sign as written, so a negative one (a reversal) is money out. Money out from a file that
+	// writes it as negative numbers is money out by its size; otherwise v is -v, so a negative one among positive ones
+	// (a reversal) is money in.
+	if (debit && debit.units !== 0n) {
+		return {units: debitsNegative ? debit.units : -debit.units, scale: debit.scale};
+	}
 	return credit ?? {units: 0n, scale: debit!.scale};
 }
 

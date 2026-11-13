@@ -469,6 +469,72 @@ describe("an owner's saved layouts", () => {
 		});
 	});
 
+	describe('with money out and money in columns', () => {
+		const layout = (balance: boolean): CsvLayout => ({
+			id: 'learned-sides',
+			bank: 'Example Bank',
+			recognize: {header: balance ? ['Date', 'Out', 'In', 'Balance'] : ['Date', 'Out', 'In']},
+			delimiter: ';',
+			quote: '"',
+			encoding: 'utf-8',
+			decimalMark: ',',
+			dateFormat: 'DD.MM.YYYY',
+			currency: {fixed: 'EUR'},
+			bookingDate: 0,
+			amount: {kind: 'debitCredit', debitColumn: 1, creditColumn: 2},
+			...(balance ? {balance: {column: 3, when: 'after' as const}} : {}),
+			description: [],
+		});
+		const file = (rows: string[], balance = false) =>
+			[balance ? 'Date;Out;In;Balance' : 'Date;Out;In', ...rows, ''].join('\n');
+		const amounts = (text: string, balance = false) =>
+			ROWS_OF(layout(balance), text)?.[0].rows.map(([, amount]) => amount);
+
+		it('read a money out column written all negative as money out, by size', () => {
+			expect(
+				amounts(file(['01.03.2026;-10,00;', '02.03.2026;;5,00', '03.03.2026;-2,50;', '04.03.2026;0,00;1,00'])),
+			).toEqual(['-10.00', '5.00', '-2.50', '1.00']);
+		});
+
+		it('read a negative entry among positive money out as money in, a reversal', () => {
+			expect(amounts(file(['01.03.2026;10,00;', '02.03.2026;-2,00;', '03.03.2026;;5,00']))).toEqual([
+				'-10.00',
+				'2.00',
+				'5.00',
+			]);
+			// The whole column decides, so a negative entry before the first positive one is money in too.
+			expect(amounts(file(['01.03.2026;-2,00;', '02.03.2026;10,00;']))).toEqual(['2.00', '-10.00']);
+		});
+
+		it('keep the balance check on the amounts as read, and refuse balances that contradict them', () => {
+			const allNegative = (balances: string[]) =>
+				file(
+					[
+						`01.03.2026;-10,00;;${balances[0]}`,
+						`02.03.2026;;5,00;${balances[1]}`,
+						`03.03.2026;-2,50;;${balances[2]}`,
+					],
+					true,
+				);
+			const reversal = (balances: string[]) =>
+				file(
+					[
+						`01.03.2026;10,00;;${balances[0]}`,
+						`02.03.2026;-2,00;;${balances[1]}`,
+						`03.03.2026;;5,00;${balances[2]}`,
+					],
+					true,
+				);
+
+			expect(amounts(allNegative(['90,00', '95,00', '92,50']), true)).toEqual(['-10.00', '5.00', '-2.50']);
+			expect(amounts(reversal(['90,00', '92,00', '97,00']), true)).toEqual(['-10.00', '2.00', '5.00']);
+			// Balances that follow the other reading of each file.
+			const nearMiss = {code: 'layout_not_recognized', layout: 'learned-sides'};
+			expect(refusal(allNegative(['110,00', '115,00', '117,50']), [layout(true)])).toEqual(nearMiss);
+			expect(refusal(reversal(['90,00', '88,00', '93,00']), [layout(true)])).toEqual(nearMiss);
+		});
+	});
+
 	it('refuse a file whose amounts are all zero, and a header without rows', () => {
 		const zero = ['Date,Description,Type,Amount,Balance', '02/03/2026,Example,DEB,0.00,1.00', ''].join('\n');
 		const nearMiss = {code: 'layout_not_recognized', layout: BALANCE.id};

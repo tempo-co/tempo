@@ -100,7 +100,12 @@ export type CsvAmount =
 	| {kind: 'signed'; column: number}
 	/** An unsigned amount and a column whose value says which way it went. */
 	| {kind: 'direction'; column: number; directionColumn: number; debit: string; credit: string}
-	/** Money out and money in in two columns, exactly one of them filled in each row. */
+	/**
+	 * Money out and money in in two columns, exactly one of them filled in each row. Money in is read by its sign as
+	 * written (a negative one is money out). Money out is read for the whole file: when every value of its column is
+	 * zero or negative, the bank writes debits as negative numbers and each is money out by its size; otherwise a value
+	 * v is -v, so a negative one among positive ones is money in. A balance column must agree with the amounts read.
+	 */
 	| {kind: 'debitCredit'; debitColumn: number; creditColumn: number};
 
 export type CsvLayoutValidation = {ok: true; layout: CsvLayout} | {ok: false; error: string};
