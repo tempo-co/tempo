@@ -7,14 +7,20 @@ import {request as httpRequest} from 'node:http';
 import {z} from 'zod';
 
 import {ConfigurationService} from '@core/config/config.service';
+import {BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE} from '@core/queue/queue.constants';
 
 import contract from '../../../../../../claude-bridge/contract.json';
 import merchantContract from '../../../../../../claude-bridge/merchant-contract.json';
 import {normalizeBankTransactionText} from '../../bank-transaction-display';
-import {normalizeBankTransactionLocation} from '../../bank-transaction-location';
 import {isHostname} from '../../banking.utils';
-import {normalizeMerchantCategoryCode} from '../bank-transaction-categorization-input';
-import {BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS} from '../bank-transaction-categorization.constants';
+import {
+	toCategorizationRequestTransaction,
+	toWebSearchRequestTransaction,
+} from '../bank-transaction-categorization-input.schema';
+import {
+	BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS,
+	BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH,
+} from '../bank-transaction-categorization.constants';
 import {
 	BankTransactionCategorizationProvider,
 	BankTransactionCategorizationProviderError,
@@ -24,6 +30,7 @@ import {
 	BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES,
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
+	BankTransactionCategorizationSearchTrace,
 	BankTransactionCategorizationWebSearchInput,
 	BankTransactionCategorizationWebSearchOutcome,
 	MERCHANT_KINDS,
@@ -52,6 +59,20 @@ const webSearchCategorizationResponseSchema = z
 		classifications: z.array(webSearchCategorizationClassificationSchema),
 	})
 	.strict();
+/** What a stored search trace may hold: the one pinned query and well-formed source hostnames. */
+const searchTraceSchema = z.object({
+	queries: z
+		.array(
+			z
+				.string()
+				.min(1)
+				.max(BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH)
+				.regex(/^[^\u0000-\u001f\u007f]*$/),
+		)
+		.max(1),
+	sourceDomains: z.array(z.string().refine(isHostname)).max(BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS),
+	evidenceType: z.enum(BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES),
+});
 
 const merchantIdentificationResponseSchema = z
 	.object({
@@ -76,7 +97,7 @@ const {instructions: WEB_SEARCH_CATEGORIZATION_INSTRUCTIONS, schema: webSearchCa
 const CLAUDE_API = 'claude-api';
 const CLAUDE_SUBSCRIPTION = 'claude-subscription';
 type ClaudeRoute = typeof CLAUDE_API | typeof CLAUDE_SUBSCRIPTION;
-type SearchTrace = {queries: string[]; sourceDomains: string[]};
+type SearchTrace = Omit<BankTransactionCategorizationSearchTrace, 'evidenceType'>;
 
 type ClaudeClient = Pick<Anthropic, 'messages'>;
 type RequestInput = {correlationId: string};
@@ -116,7 +137,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		this.assertUniqueCorrelationIds(transactions);
 		if (!transactions.length) return [];
 		const requestTransactions = transactions.map((transaction, index) => ({
-			...this.toSafeInput(transaction),
+			...toCategorizationRequestTransaction(transaction),
 			correlationId: String(index),
 		}));
 		const input = this.createInput(categories, requestTransactions);
@@ -198,17 +219,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		const outcomes: BankTransactionCategorizationWebSearchOutcome[] = [];
 		for (const transaction of transactions) {
 			const input = this.createInput(categories, [
-				{
-					correlationId: '0',
-					amount: transaction.amount,
-					currency: transaction.currency,
-					direction: transaction.direction,
-					transactionType: transaction.transactionType,
-					merchantName: transaction.merchantName,
-					merchantLocation: transaction.merchantLocation,
-					searchQuery: transaction.searchQuery,
-					merchantCategoryCode: normalizeMerchantCategoryCode(transaction.merchantCategoryCode),
-				},
+				{...toWebSearchRequestTransaction(transaction), correlationId: '0'},
 			]);
 			const request = this.createRequest(
 				WEB_SEARCH_CATEGORIZATION_INSTRUCTIONS,
@@ -385,10 +396,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		for (const value of Array.isArray(values) ? values : []) {
 			if (typeof value !== 'string') continue;
 			const hostname = value.toLowerCase().replace(/^www\./, '');
-			if (
-				/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(hostname) &&
-				domains.size < BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS
-			)
+			if (isHostname(hostname) && domains.size < BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS)
 				domains.add(hostname);
 		}
 		return [...domains];
@@ -427,15 +435,15 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			provider,
 			model: this.model,
 			...(searchTrace && 'evidenceType' in item
-				? {
-						searchTrace: {
-							...searchTrace,
-							evidenceType:
-								item.evidenceType as (typeof BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES)[number],
-						},
-					}
+				? {searchTrace: this.parseSearchTrace({...searchTrace, evidenceType: item.evidenceType})}
 				: {}),
 		}));
+	}
+
+	private parseSearchTrace(trace: SearchTrace & {evidenceType: unknown}): BankTransactionCategorizationSearchTrace {
+		const validation = searchTraceSchema.safeParse(trace);
+		if (!validation.success) throw this.invalidResponseError();
+		return validation.data;
 	}
 
 	private parseMerchants(
@@ -536,59 +544,10 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 
 	private assertUniqueCorrelationIds(transactions: readonly RequestInput[]): void {
 		if (
-			transactions.length > 50 ||
+			transactions.length > BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE ||
 			new Set(transactions.map(({correlationId}) => correlationId)).size !== transactions.length
 		)
 			throw this.invalidResponseError();
-	}
-
-	private toSafeInput(transaction: BankTransactionCategorizationInput): BankTransactionCategorizationInput {
-		const merchantLocation = normalizeBankTransactionLocation(transaction.merchantLocation);
-
-		return {
-			correlationId: transaction.correlationId,
-			transactionDate: transaction.transactionDate,
-			bookingDate: transaction.bookingDate,
-			valueDate: transaction.valueDate,
-			amount: transaction.amount,
-			currency: transaction.currency,
-			creditDebitIndicator: transaction.creditDebitIndicator,
-			direction: transaction.direction,
-			transactionType: transaction.transactionType,
-			bankTransactionCode: transaction.bankTransactionCode,
-			bankTransactionSubCode: transaction.bankTransactionSubCode,
-			description: transaction.description,
-			counterpartyName: transaction.counterpartyName,
-			bankTransactionDescription: transaction.bankTransactionDescription,
-			merchantCategoryCode: transaction.merchantCategoryCode,
-			remittanceInformation: transaction.remittanceInformation,
-			...(merchantLocation ? {merchantLocation} : {}),
-			...(transaction.previousManualCategories?.length
-				? {
-						previousManualCategories: transaction.previousManualCategories.map(
-							({category, count, recentExamples}) => ({
-								category,
-								count,
-								recentExamples: recentExamples.map(({amount, currency, date}) => ({
-									amount,
-									currency,
-									date,
-								})),
-							}),
-						),
-					}
-				: {}),
-			...(transaction.sameAmountPayments?.length
-				? {
-						sameAmountPayments: transaction.sameAmountPayments.map(({date, category, source, text}) => ({
-							date,
-							category,
-							source,
-							text,
-						})),
-					}
-				: {}),
-		};
 	}
 
 	private invalidResponseError(): BankTransactionCategorizationProviderError {

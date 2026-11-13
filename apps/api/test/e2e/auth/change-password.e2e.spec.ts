@@ -14,7 +14,7 @@ import {
 	VERIFIED_ACCOUNT_EMAIL,
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
-import {getApp, loginAgent} from '../../setup/e2e.setup';
+import {getApp, loginAgent, webOrigin} from '../../setup/e2e.setup';
 import {expectValidationMessage, uniquePassword} from '../../utils/auth-utils';
 import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
 
@@ -31,6 +31,7 @@ describe('AuthController - Change password', () => {
 			await EmailUtils.clearEmails(mailpitApiUrl);
 			await request(httpServer)
 				.post('/auth/reset-password/request')
+				.set('Origin', webOrigin())
 				.send({email: PW_CHANGE_ACCOUNT_EMAIL})
 				.expect(200);
 			const resetToken = await EmailUtils.getToken(PW_CHANGE_ACCOUNT_EMAIL, mailpitApiUrl);
@@ -59,6 +60,7 @@ describe('AuthController - Change password', () => {
 			await request(httpServer).get('/bank-transactions').auth(pat.token, {type: 'bearer'}).expect(401);
 			const resetResponse = await request(httpServer)
 				.post('/auth/reset-password/verify')
+				.set('Origin', webOrigin())
 				.send({token: resetToken, newPassword: uniquePassword()})
 				.expect(400);
 			expect(resetResponse.body.message).toBe(PASSWORD_RESET_INVALID_TOKEN);
@@ -69,12 +71,14 @@ describe('AuthController - Change password', () => {
 			// Old password fails login
 			await request(httpServer)
 				.post('/auth/login')
+				.set('Origin', webOrigin())
 				.send({email: PW_CHANGE_ACCOUNT_EMAIL, password: PW_CHANGE_ACCOUNT_PASSWORD})
 				.expect(401);
 
 			// New password succeeds login
 			await request(httpServer)
 				.post('/auth/login')
+				.set('Origin', webOrigin())
 				.send({email: PW_CHANGE_ACCOUNT_EMAIL, password: newPassword})
 				.expect(200);
 		});

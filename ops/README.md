@@ -46,7 +46,7 @@ ops/install.sh claude-bridge
 systemctl --user enable --now tempo-claude-bridge.service
 ```
 
-Then set `AI_CATEGORIZATION_PROVIDER=claude`, `ANTHROPIC_API_KEY` and `TEMPO_CLAUDE_BRIDGE_DIR` (the bridge unit's socket directory) in the production env file, and remove `OPENAI_API_KEY`. When neither route is available, transactions stay pending and hourly reconciliation retries them.
+Then set `ANTHROPIC_API_KEY` and `TEMPO_CLAUDE_BRIDGE_DIR` (the bridge unit's socket directory) in the production env file, and remove `OPENAI_API_KEY`. When neither route is available, transactions stay pending and hourly reconciliation retries them.
 
 ### Merchant logos
 

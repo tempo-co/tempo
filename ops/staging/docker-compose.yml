@@ -100,7 +100,6 @@ services:
             SESSION_EXPIRATION: 30d
             SESSION_REDIS_KEY: tempo-staging-session
             AI_CATEGORIZATION_ENABLED: 'false'
-            AI_CATEGORIZATION_PROVIDER: claude
             AI_CATEGORIZATION_MODEL: claude-sonnet-5-5
             AI_CATEGORIZATION_WEB_SEARCH_ENABLED: 'false'
             BANKING_INTEGRATION_ENABLED: 'false'

@@ -15,7 +15,10 @@ import {VerifyEmailPage} from './pages/verify-email.page';
 import {mockBankConnections, mockEmptyHome, mockFileImportOff, mockJson} from './utils/api-mocks';
 import {EmailUtils} from './utils/email-utils';
 
-export const API_URL = loadEnv('development', process.cwd(), '').VITE_API_URL;
+const env = loadEnv('development', process.cwd(), '');
+export const API_URL = env.VITE_API_URL;
+/** The API refuses login, signup and other changes without the app's Origin, which browsers send. */
+const APP_ORIGIN_HEADERS = {Origin: new URL(env.VITE_APP_URL).origin};
 
 export type TestAccount = {name: string; email: string; password: string};
 
@@ -30,12 +33,16 @@ export async function createVerifiedAccount(request: APIRequestContext): Promise
     email: faker.internet.email().toLowerCase(),
     password: faker.internet.password({length: 12}),
   };
-  const signup = await request.post(`${API_URL}/auth/signup`, {data: account});
+  const signup = await request.post(`${API_URL}/auth/signup`, {
+    data: account,
+    headers: APP_ORIGIN_HEADERS,
+  });
   expect(signup.status()).toBe(201);
 
   const code = await EmailUtils.getVerificationCode(account.email);
   const verify = await request.post(`${API_URL}/auth/signup/verify`, {
     data: {email: account.email, code},
+    headers: APP_ORIGIN_HEADERS,
   });
   expect(verify.status()).toBe(200);
 
@@ -98,6 +105,7 @@ export const test = base.extend<Fixtures>({
     const account = await createVerifiedAccount(page.request);
     const login = await page.request.post(`${API_URL}/auth/login`, {
       data: {email: account.email, password: account.password},
+      headers: APP_ORIGIN_HEADERS,
     });
     expect(login.status()).toBe(200);
     await provide(account);

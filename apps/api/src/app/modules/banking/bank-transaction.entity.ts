@@ -28,7 +28,6 @@ export type {BankTransactionBaseAmountMethod};
 @Entity('bank_transactions')
 @Index('idx_bank_transactions_own_transfer_counterpart', ['ownTransferCounterpartId'])
 @Index('idx_bank_transactions_currency_exchange_counterpart', ['currencyExchangeCounterpartId'])
-@Index('idx_bank_transactions_account_dedupe', ['bankAccountId', 'dedupeKey'], {unique: true})
 @Index('idx_bank_transactions_account_stable_identity', ['bankAccountId', 'stableIdentityKey'], {unique: true})
 @Index('idx_bank_transactions_account_identity_group', ['bankAccountId', 'stableIdentityGroupKey'])
 @Index('idx_bank_transactions_account_booking_date', ['bankAccountId', 'bookingDate'])
@@ -52,13 +51,10 @@ export class BankTransaction {
 	entryReference: string | null;
 
 	@Column({type: 'varchar', length: 64})
-	dedupeKey: string;
+	stableIdentityKey: string;
 
-	@Column({type: 'varchar', length: 64, nullable: true})
-	stableIdentityKey: string | null;
-
-	@Column({type: 'varchar', length: 64, nullable: true})
-	stableIdentityGroupKey: string | null;
+	@Column({type: 'varchar', length: 64})
+	stableIdentityGroupKey: string;
 
 	@Column({type: 'date', nullable: true})
 	bookingDate: string | null;

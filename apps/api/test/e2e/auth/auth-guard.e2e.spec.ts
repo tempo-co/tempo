@@ -14,7 +14,7 @@ import {
 	VERIFIED_ACCOUNT_EMAIL,
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
-import {getApp, loginAgent} from '../../setup/e2e.setup';
+import {getApp, loginAgent, webOrigin} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
 import {MAILPIT_API_URL} from '../../utils/email-utils';
 
@@ -122,6 +122,16 @@ const SESSION_CHANGE_ROUTES = [...SESSION_ROUTES, ...VERIFIED_SESSION_ONLY_ROUTE
 	([method]) => method !== 'get' && method !== 'head',
 );
 
+// Public changes, which must carry the web app's Origin and a JSON body. A cross-site page could otherwise
+// sign the victim in to an account it controls. Each body passes the guard and reaches the handler.
+const PUBLIC_CHANGE_ROUTES: [path: string, body: object, status: number][] = [
+	['/auth/login', {email: VERIFIED_ACCOUNT_EMAIL, password: VERIFIED_ACCOUNT_PASSWORD}, 200],
+	['/auth/signup', {}, 400],
+	['/auth/signup/verify', {}, 400],
+	['/auth/reset-password/request', {}, 400],
+	['/auth/reset-password/verify', {}, 400],
+];
+
 // HEAD requests cannot carry a body, and their responses omit it.
 function send(test: request.Test, method: Method) {
 	return method === 'head' ? test : test.send({});
@@ -213,6 +223,35 @@ describe('AuthGuard - protected routes', () => {
 				expect(response.body.message).toBe('Forbidden');
 			}
 			await ownerAgent.get('/accounts/me').expect(200);
+		},
+	);
+
+	it.each(PUBLIC_CHANGE_ROUTES)(
+		'POST %s refuses a request from another origin, an opaque origin or none, and a body that is not JSON',
+		async (path, body, status) => {
+			for (const origin of ['https://attacker.example.test', 'null', undefined]) {
+				const change = request(httpServer).post(path);
+				if (origin !== undefined) change.set('Origin', origin);
+				const response = await change.send(body).expect(403);
+				expect(response.body.message).toBe('Forbidden');
+				expect(response.headers['set-cookie']).toBeUndefined();
+			}
+			// What an HTML form can send: url-encoded fields, or JSON-looking text/plain.
+			for (const [type, payload] of [
+				['application/x-www-form-urlencoded', new URLSearchParams(body as Record<string, string>).toString()],
+				['text/plain', JSON.stringify(body)],
+			]) {
+				const response = await request(httpServer)
+					.post(path)
+					.set('Origin', webOrigin())
+					.set('Content-Type', type)
+					.send(payload)
+					.expect(415);
+				expect(response.headers['set-cookie']).toBeUndefined();
+			}
+
+			const response = await request(httpServer).post(path).set('Origin', webOrigin()).send(body).expect(status);
+			if (status === 200) expect(response.headers['set-cookie']).toBeDefined();
 		},
 	);
 

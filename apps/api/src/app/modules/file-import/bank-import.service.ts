@@ -21,7 +21,7 @@ import {
 } from '@modules/banking/bank-transaction-matcher';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {BATCH_WRITE_CHUNK_SIZE, chunkArray, safeErrorName} from '@modules/banking/banking.utils';
-import {BankTransactionCategorizationService} from '@modules/banking/categorization/bank-transaction-categorization.service';
+import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
 import {MerchantLogoService} from '@modules/banking/merchant-logos/merchant-logo.service';
 import {isIbanIdentificationHash, verifyIbanAgainstIdentificationHash} from '@modules/banking/own-transfer/iban';
 import {
@@ -116,7 +116,7 @@ export class BankImportService {
 		private readonly connectionLockService: BankingConnectionLockService,
 		private readonly ownTransferService: OwnTransferService,
 		private readonly currencyExchangeService: CurrencyExchangeService,
-		private readonly categorizationService: BankTransactionCategorizationService,
+		private readonly categorizationService: CategorizationScheduler,
 		private readonly merchantLogoService: MerchantLogoService,
 	) {}
 

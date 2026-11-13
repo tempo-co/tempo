@@ -111,6 +111,28 @@ describe('bank transaction categorization input', () => {
 		);
 	});
 
+	it('hashes the classified fields of fixed rows to stored values', () => {
+		// Stored hashes decide whether a row goes back to the model, so a change here re-queues every row.
+		expect(createBankTransactionCategorizationInputHash(createTransaction({amount: '-12.50000000'}))).toBe(
+			'33f7fa32a851321146e7ecd1bb113effd55e40873f76e7f9c0a92891538a41aa',
+		);
+		const located = toBankTransactionCategorizationInput(
+			Object.assign(
+				createBankTransaction({
+					description: 'Example Bakery',
+					counterpartyName: null,
+					merchantCategoryCode: ' 5462 ',
+					amount: '-3.10',
+				}),
+				{merchantLocation: {city: ' Exampletown ', region: null, country: 'nl', streetName: 'Private Street'}},
+			),
+		);
+		const previousManualCategories = [{category: 'SHOPPING' as const, count: 1, recentExamples: []}];
+		expect(createBankTransactionCategorizationInputHash({...located, previousManualCategories})).toBe(
+			'65e0514a03ef15313b05a45e8d955d27f1ccb1fac05af0343f0adcfdc0035d13',
+		);
+	});
+
 	it('keeps the hash stable across database numeric scale normalization', () => {
 		expect(createBankTransactionCategorizationInputHash(createTransaction({amount: '2.50'}))).toBe(
 			createBankTransactionCategorizationInputHash(createTransaction({amount: '2.50000000'})),
@@ -312,7 +334,6 @@ describe('bank transaction categorization input', () => {
 			transactionType: 'CARD_PAYMENT',
 			merchantName: 'Example Merchant',
 			merchantLocation: 'Exampletown Example Region NL',
-			approximateLocation: {city: 'Exampletown', region: 'Example Region', country: 'NL'},
 			searchQuery: 'Example Merchant Exampletown Example Region NL',
 			merchantCategoryCode: '5814',
 		});

@@ -1,5 +1,3 @@
-import {EnableBankingBalance} from './enable-banking.types';
-
 const AVAILABLE_BALANCE_PREFERENCE = 2;
 const BOOKED_BALANCE_PREFERENCE = 1;
 const UNKNOWN_BALANCE_PREFERENCE = 0;
@@ -43,19 +41,36 @@ function compareDescending(left: string, right: string): number {
 	return left > right ? -1 : 1;
 }
 
-function getBalanceTieBreaker(balance: EnableBankingBalance): string {
+/** A provider balance or a stored one: the fields the preferred-balance rule compares. */
+type BalanceCandidate = {
+	name?: string | null;
+	balanceType: string;
+	amount: string;
+	currency: string;
+	lastChangeDateTime?: string | Date | null;
+	referenceDate?: string | null;
+	lastCommittedTransaction?: string | null;
+};
+
+function getLastChange(balance: BalanceCandidate): string {
+	const value = balance.lastChangeDateTime;
+	return value instanceof Date ? value.toISOString() : (value ?? '');
+}
+
+function getBalanceTieBreaker(balance: BalanceCandidate): string {
 	return JSON.stringify([
 		balance.balanceType,
 		balance.amount,
 		balance.currency,
 		balance.name ?? '',
-		balance.lastChangeDateTime ?? '',
+		getLastChange(balance),
 		balance.referenceDate ?? '',
 		balance.lastCommittedTransaction ?? '',
 	]);
 }
 
-export function selectPreferredBalance(balances: EnableBankingBalance[]): EnableBankingBalance | undefined {
+/** The balance shown as an account's current one: available before booked, then the most recent, then a stable order. */
+export function selectPreferredBalance<T extends BalanceCandidate>(balances: T[]): T | undefined {
 	return [...balances].sort((left, right) => {
 		const preferenceDifference = getBalancePreference(right.balanceType) - getBalancePreference(left.balanceType);
 		if (preferenceDifference !== 0) return preferenceDifference;
@@ -63,7 +78,7 @@ export function selectPreferredBalance(balances: EnableBankingBalance[]): Enable
 		const referenceDateDifference = compareDescending(left.referenceDate ?? '', right.referenceDate ?? '');
 		if (referenceDateDifference !== 0) return referenceDateDifference;
 
-		const lastChangeDifference = compareDescending(left.lastChangeDateTime ?? '', right.lastChangeDateTime ?? '');
+		const lastChangeDifference = compareDescending(getLastChange(left), getLastChange(right));
 		if (lastChangeDifference !== 0) return lastChangeDifference;
 
 		return compareDescending(getBalanceTieBreaker(left), getBalanceTieBreaker(right));

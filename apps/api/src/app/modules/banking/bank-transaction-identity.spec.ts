@@ -4,7 +4,6 @@ import {
 	allocateNextBankTransactionStableIdentityKey,
 	assignBankTransactionStableIdentityKeys,
 	createBankTransactionStableIdentityKeyForGroup,
-	isLegacyBankTransactionDedupeKey,
 } from './bank-transaction-identity';
 
 describe('bank transaction stable identity assignment', () => {
@@ -429,11 +428,5 @@ describe('bank transaction stable identity assignment', () => {
 		const allocation = allocateNextBankTransactionStableIdentityKey('synthetic-group', new Set([firstKey]));
 
 		expect(allocation).toEqual({stableIdentityKey: secondKey, nextOccurrence: 3});
-	});
-
-	it('recognizes legacy SHA-256 dedupe keys', () => {
-		expect(isLegacyBankTransactionDedupeKey('a'.repeat(64))).toBe(true);
-		expect(isLegacyBankTransactionDedupeKey('123e4567-e89b-42d3-a456-426614174000')).toBe(false);
-		expect(isLegacyBankTransactionDedupeKey(null)).toBe(false);
 	});
 });

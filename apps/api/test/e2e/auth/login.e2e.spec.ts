@@ -9,7 +9,7 @@ import {
 	VERIFIED_ACCOUNT_NAME,
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
-import {getApp, getSessionCookie, loginAgent} from '../../setup/e2e.setup';
+import {getApp, getSessionCookie, loginAgent, webOrigin} from '../../setup/e2e.setup';
 import {expectValidationMessage} from '../../utils/auth-utils';
 
 describe('AuthController - Login', () => {
@@ -24,6 +24,7 @@ describe('AuthController - Login', () => {
 			const agent = request.agent(httpServer);
 			const loginResponse = await agent
 				.post('/auth/login')
+				.set('Origin', webOrigin())
 				.send({email: VERIFIED_ACCOUNT_EMAIL, password: VERIFIED_ACCOUNT_PASSWORD})
 				.expect(200);
 			const response = await agent.get('/accounts/me').expect(200);
@@ -49,7 +50,11 @@ describe('AuthController - Login', () => {
 			['an incorrect password', {email: VERIFIED_ACCOUNT_EMAIL, password: 'incorrect-password'}],
 			['an unknown email', {email: 'incorrect@email.com', password: VERIFIED_ACCOUNT_PASSWORD}],
 		])('should fail to log in with %s without setting a session', async (_case, credentials) => {
-			const response = await request(httpServer).post('/auth/login').send(credentials).expect(401);
+			const response = await request(httpServer)
+				.post('/auth/login')
+				.set('Origin', webOrigin())
+				.send(credentials)
+				.expect(401);
 			expect(response.body.message).toBe(INVALID_CREDENTIALS);
 			expect(response.headers['set-cookie']).toBeUndefined();
 		});
@@ -60,7 +65,7 @@ describe('AuthController - Login', () => {
 			['password is missing', {email: VERIFIED_ACCOUNT_EMAIL}],
 			['password is empty', {email: VERIFIED_ACCOUNT_EMAIL, password: ''}],
 		])('should fail with 401 Unauthorized if %s', async (_case, body) => {
-			await request(httpServer).post('/auth/login').send(body).expect(401);
+			await request(httpServer).post('/auth/login').set('Origin', webOrigin()).send(body).expect(401);
 		});
 
 		it.each([
@@ -75,7 +80,11 @@ describe('AuthController - Login', () => {
 				/password must be longer than or equal to 8 characters/i,
 			],
 		])('should fail with 400 Bad Request if %s', async (_case, body, message) => {
-			const response = await request(httpServer).post('/auth/login').send(body).expect(400);
+			const response = await request(httpServer)
+				.post('/auth/login')
+				.set('Origin', webOrigin())
+				.send(body)
+				.expect(400);
 			expectValidationMessage(response, message);
 		});
 	});

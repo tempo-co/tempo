@@ -162,7 +162,6 @@ function createSeedTransactions() {
 		amountInBaseCurrency: Number(transaction.amount).toFixed(2),
 		baseAmountMethod: 'SAME' as const,
 		baseAmountRateDate: null,
-		dedupeKey: `seed-${transaction.id}`,
 		providerTransactionId: transaction.id,
 		entryReference: transaction.id,
 	}));

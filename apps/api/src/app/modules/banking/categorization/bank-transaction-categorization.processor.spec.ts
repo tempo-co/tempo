@@ -7,11 +7,13 @@ import {
 } from '@core/queue/queue.constants';
 
 import {BankTransactionCategorizationProcessor} from './bank-transaction-categorization.processor';
+import {CategorizationPipeline} from './categorization-pipeline.service';
 import {
 	BankTransactionCategorizationJobData,
 	BankTransactionCategorizationQueueData,
-	BankTransactionCategorizationService,
-} from './bank-transaction-categorization.service';
+	CategorizationScheduler,
+} from './categorization-scheduler.service';
+import {ManualCategoryService} from './manual-category.service';
 
 describe('BankTransactionCategorizationProcessor', () => {
 	it('forwards only transaction IDs to the categorization service', async () => {
@@ -19,7 +21,9 @@ describe('BankTransactionCategorizationProcessor', () => {
 			processTransactionJob: jest.fn().mockResolvedValue(undefined),
 		};
 		const processor = new BankTransactionCategorizationProcessor(
-			service as unknown as BankTransactionCategorizationService,
+			service as unknown as CategorizationPipeline,
+			{} as ManualCategoryService,
+			{} as CategorizationScheduler,
 		);
 		const job = {
 			name: CATEGORIZE_BANK_TRANSACTIONS_JOB,
@@ -37,9 +41,11 @@ describe('BankTransactionCategorizationProcessor', () => {
 			reconcilePendingTransactions: jest.fn().mockResolvedValue(undefined),
 		};
 		const processor = new BankTransactionCategorizationProcessor(
-			service as unknown as BankTransactionCategorizationService,
+			{} as CategorizationPipeline,
+			service as unknown as ManualCategoryService,
+			service as unknown as CategorizationScheduler,
 		);
-		const followUp = {accountId: 'account-1', merchantKey: 'EXPENSE:example shop'};
+		const followUp = {accountId: 'account-1', merchantKey: 'EXPENSE:example shop', transactionIds: ['sibling-1']};
 
 		await processor.process({
 			name: APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB,

@@ -31,6 +31,10 @@ A mocked spec is a UI integration test, not full-stack coverage. Report it separ
 - Parallel Playwright runs in one checkout overwrite `test-results/` and `playwright-report/`. Give each run its own `--output` directory and `PLAYWRIGHT_HTML_OUTPUT_DIR`.
 - Stop a background preview by PID or port. `pkill -f "<command line>"` also matches the shell running it.
 
+## Flaky tests
+
+CI retries a failed test twice, so a test that fails and then passes leaves the run green. The `Web E2E tests` job lists every such test in its run summary, with its project and the first attempt's error; the shard logs end with the same names under `flaky`. A flake is fixed at its cause, in the test or in the product: find which step failed and why from the first attempt's error and the retry's trace. Raising a timeout, adding retries or sleeps, skipping the test or loosening a tolerance without a measured reason is not a fix.
+
 ## Reusing fixtures
 
 - Use `freshAccount` from `test/fixtures.ts` when a test changes account data or sessions. Read-only banking journeys can use seeded storage state; password changes and session revocation must not invalidate an identity another test or browser project reuses. Request `freshAccount` in the setup hook before navigating.

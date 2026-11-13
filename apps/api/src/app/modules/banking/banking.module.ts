@@ -29,13 +29,16 @@ import {BankLogoService} from './bank-logos/bank-logo.service';
 import {BankSyncRun} from './bank-sync-run.entity';
 import {BankTransactionFxRate} from './bank-transaction-fx-rate.entity';
 import {BankTransaction} from './bank-transaction.entity';
-import {BankingService} from './banking.service';
 import {BankTransactionCategorizationModule} from './categorization/bank-transaction-categorization.module';
 import {MerchantLogoModule} from './merchant-logos/merchant-logo.module';
 import {RecurringContinuationUnlink} from './recurring/recurring-continuation-unlink.entity';
 import {RecurringSeriesHide} from './recurring/recurring-series-hide.entity';
 import {RecurringSeriesService} from './recurring/recurring-series.service';
 import {RecurringSnapshot} from './recurring/recurring-snapshot.entity';
+import {AspspCatalogService} from './services/aspsp-catalog.service';
+import {BankAuthorizationService} from './services/bank-authorization.service';
+import {BankConnectionQueryService} from './services/bank-connection-query.service';
+import {BankConnectionRemovalService} from './services/bank-connection-removal.service';
 import {BankTransactionAmountConversionProcessor} from './services/bank-transaction-amount-conversion.processor';
 import {BankTransactionAmountConversionQueueService} from './services/bank-transaction-amount-conversion.queue.service';
 import {BankTransactionAmountConversionService} from './services/bank-transaction-amount-conversion.service';
@@ -82,7 +85,10 @@ import {OwnTransferService} from './services/own-transfer.service';
 		NotificationsModule,
 	],
 	providers: [
-		BankingService,
+		AspspCatalogService,
+		BankAuthorizationService,
+		BankConnectionQueryService,
+		BankConnectionRemovalService,
 		BankLogoService,
 		McpReaderService,
 		BankingConnectionLockService,

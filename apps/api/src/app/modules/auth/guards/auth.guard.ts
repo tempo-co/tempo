@@ -1,4 +1,11 @@
-import {CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException} from '@nestjs/common';
+import {
+	CanActivate,
+	ExecutionContext,
+	ForbiddenException,
+	Injectable,
+	UnauthorizedException,
+	UnsupportedMediaTypeException,
+} from '@nestjs/common';
 import {Reflector} from '@nestjs/core';
 import {Request, Response} from 'express';
 
@@ -65,6 +72,13 @@ export class AuthGuard implements CanActivate {
 			context.getClass(),
 		]);
 		if (isPublic) {
+			// Public changes (login, signup, verification, password reset) set or affect a session, so a page on
+			// another origin must not be able to submit them: that would sign the victim in to another account.
+			if (!SAFE_METHODS.has(request.method)) {
+				this.assertWebOrigin(request);
+				// HTML forms cannot send JSON, so only the app's own fetches reach these routes.
+				if (!request.is('application/json')) throw new UnsupportedMediaTypeException();
+			}
 			return true;
 		}
 
@@ -84,13 +98,14 @@ export class AuthGuard implements CanActivate {
 
 		// SameSite cookies still reach sibling hosts of the same site (other devices on one tailnet), so every
 		// session-authenticated change must also come from the web app's origin. Bearer requests returned above.
-		if (
-			!SAFE_METHODS.has(request.method) &&
-			!isWebOriginRequest(request, new URL(this.config.get('WEB_BASE_URL')).origin)
-		) {
-			throw new ForbiddenException();
-		}
+		if (!SAFE_METHODS.has(request.method)) this.assertWebOrigin(request);
 
 		return true;
+	}
+
+	private assertWebOrigin(request: Request): void {
+		if (!isWebOriginRequest(request, new URL(this.config.get('WEB_BASE_URL')).origin)) {
+			throw new ForbiddenException();
+		}
 	}
 }

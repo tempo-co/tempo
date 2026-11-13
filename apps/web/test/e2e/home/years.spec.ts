@@ -149,7 +149,21 @@ test('year by year shows each year, newest first and open; a click anywhere on a
   // The history's first year has no balance before it, so its change is left out instead of counted from zero.
   const first = table.getByRole('row').filter({has: page.getByRole('button', {name: /^2024/})});
   expect(await cells(first)).toEqual(['2024', '€3,000', '€2,000', '+€1,000 33% of in', '€1,000']);
-  // A month's whole row opens it, with a hover state on every cell; its link opens it from the keyboard.
+});
+
+test('a month’s whole row in year by year opens it, and its link opens it from the keyboard', async ({
+  page,
+  homePage,
+}) => {
+  await mockSyntheticHome(page);
+  await page.goto('/');
+
+  const table = homePage.yearTable;
+  // One year is open at a time, so 2025's months are the only ones named June and July.
+  const year = table.getByRole('button', {name: /^2025/});
+  await year.click();
+  await expect(year).toHaveAttribute('aria-expanded', 'true');
+  // The whole row opens the month, with a hover state on every cell.
   const june = table.getByRole('row').filter({has: page.getByRole('link', {name: 'June'})});
   const kept = june.getByRole('cell').nth(3);
   const plain = await june.evaluate((row) => getComputedStyle(row).backgroundColor);

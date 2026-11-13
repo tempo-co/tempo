@@ -58,7 +58,6 @@ beforeAll(async () => {
 
 	// Merchant logos call the same model routes, so they need a key too; their specs replace the provider call.
 	if (aiCategorizationEnabled || merchantLogosEnabled) {
-		process.env.AI_CATEGORIZATION_PROVIDER = 'claude';
 		process.env.AI_CATEGORIZATION_MODEL = 'test-model';
 		process.env.ANTHROPIC_API_KEY = 'test-only-placeholder';
 	} else {
@@ -70,7 +69,8 @@ beforeAll(async () => {
 		import('../../src/app.module'),
 	]);
 	const moduleFixture = await Test.createTestingModule({imports: [AppModule]}).compile();
-	app = moduleFixture.createNestApplication({forceCloseConnections: true});
+	app = moduleFixture.createNestApplication({forceCloseConnections: true, bodyParser: false});
+	(app as NestExpressApplication).useBodyParser('json');
 	(app as NestExpressApplication).set('query parser', 'extended');
 	const webOrigin = new URL(app.get(ConfigurationService).get('WEB_BASE_URL')).origin;
 	app.use(mcpOriginMiddleware(webOrigin));

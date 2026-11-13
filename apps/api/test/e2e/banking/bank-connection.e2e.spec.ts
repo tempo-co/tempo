@@ -26,6 +26,8 @@ import {BankTransactionFxRate} from '@modules/banking/bank-transaction-fx-rate.e
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {addDays} from '@modules/banking/banking.utils';
 import {EnableBankingBalance, EnableBankingTransaction} from '@modules/banking/enable-banking.types';
+import {BankTransactionPersistenceService} from '@modules/banking/services/bank-transaction-persistence.service';
+import {BankingAuthorizationStateService} from '@modules/banking/services/banking-authorization-state.service';
 import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
 import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
 import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
@@ -1065,6 +1067,51 @@ describe('BankConnectionController', () => {
 		expect(expiredConnection?.status).toBe('FAILED');
 	});
 
+	it('reports a state the callback consumed before the authorization id was stored as consumed', async () => {
+		const authorizationStates = app.get(BankingAuthorizationStateService);
+		const state = await authorizationStates.create({
+			accountId: account.id,
+			connectionId: randomUUID(),
+			aspspName: 'ABN AMRO',
+			aspspCountry: 'NL',
+		});
+		const stateKey = `banking:authorization:${state}`;
+
+		try {
+			await expect(authorizationStates.consumeWithStatus(state)).resolves.toMatchObject({status: 'consumed'});
+			await expect(authorizationStates.setAuthorizationId(state, 'late-authorization-id')).rejects.toMatchObject({
+				code: 'state_consumed',
+			});
+		} finally {
+			await redis.del(stateKey, `${stateKey}:consumed`);
+		}
+	});
+
+	it('stores the authorization id without extending the state expiry', async () => {
+		const authorizationStates = app.get(BankingAuthorizationStateService);
+		const state = await authorizationStates.create({
+			accountId: account.id,
+			connectionId: randomUUID(),
+			aspspName: 'ABN AMRO',
+			aspspCountry: 'NL',
+		});
+		const stateKey = `banking:authorization:${state}`;
+
+		try {
+			await redis.expire(stateKey, 120);
+			await authorizationStates.setAuthorizationId(state, 'stored-authorization-id');
+
+			expect(JSON.parse((await redis.get(stateKey)) ?? '{}')).toMatchObject({
+				authorizationId: 'stored-authorization-id',
+			});
+			const ttl = await redis.ttl(stateKey);
+			expect(ttl).toBeGreaterThan(0);
+			expect(ttl).toBeLessThanOrEqual(120);
+		} finally {
+			await redis.del(stateKey);
+		}
+	});
+
 	it('marks provider failures as failed without leaking provider details', async () => {
 		const state = await authorize();
 		createSession.mockRejectedValueOnce(new EnableBankingClientError('secret-provider-error'));
@@ -1537,6 +1584,37 @@ describe('BankConnectionController', () => {
 		expect(rows.find(({entryReference}) => entryReference === unchanged.entryReference)).toMatchObject(converted);
 	});
 
+	it('writes only rows of the synced account, even when its stored-row snapshot names another account’s row', async () => {
+		const {connection, bankAccount} = await createAuthorizedConnection('scoped-write-session');
+		const {bankAccount: otherBankAccount} = await createAuthorizedConnection('scoped-write-other-session');
+		const [incoming] = makeTransactions('scoped-write');
+		expect(await synchronizeQueued(connection.id, [incoming])).toMatchObject({transactionsAdded: 1});
+		const synced = await bankTransactionRepository.findOneByOrFail({bankAccountId: bankAccount.id});
+		const otherRow = await fixtures.createTransaction(otherBankAccount, {
+			amount: '-5.00',
+			amountInBaseCurrency: '-5.00',
+			baseAmountMethod: 'SAME',
+			categoryInputHash: 'other-account-input-hash',
+			categoryStatus: 'FAILED',
+		});
+		const otherRowBefore = await bankTransactionRepository.findOneByOrFail({id: otherRow.id});
+
+		// The snapshot claims the other account's row holds the synced key, with stale category and amount inputs.
+		const find = bankTransactionRepository.find.bind(bankTransactionRepository);
+		jest.spyOn(bankTransactionRepository, 'find').mockImplementationOnce(async (options) => [
+			...(await find(options)),
+			{...otherRowBefore, stableIdentityKey: synced.stableIdentityKey, amount: '-6.00'},
+		]);
+		await app
+			.get(BankTransactionPersistenceService)
+			.persistTransactions(bankTransactionRepository, bankAccount, [incoming], 'ABN AMRO', 'enable-banking');
+
+		expect(await bankTransactionRepository.findOneByOrFail({id: otherRow.id})).toEqual(otherRowBefore);
+		expect(await bankTransactionRepository.findBy({bankAccountId: bankAccount.id})).toEqual([
+			expect.objectContaining({id: synced.id, stableIdentityKey: synced.stableIdentityKey}),
+		]);
+	});
+
 	it.each([
 		['different-reference pending payment', 'payment-b'],
 		['missing-reference stale pending input', undefined],
@@ -1859,11 +1937,6 @@ describe('BankConnectionController', () => {
 
 		const priorFirstStableIdentityKey = firstPersistedTransaction.stableIdentityKey;
 		const priorFirstStableIdentityGroupKey = firstPersistedTransaction.stableIdentityGroupKey;
-		await bankTransactionRepository.update(
-			{id: firstPersistedTransaction.id},
-			{stableIdentityKey: null, stableIdentityGroupKey: null, dedupeKey: 'a'.repeat(64)},
-		);
-
 		getAccountBalances.mockResolvedValueOnce(balances);
 		const updatedTransactions = makeTransactions('sync');
 		updatedTransactions[1] = {...updatedTransactions[1], ...duplicateEntryReferenceDetails};

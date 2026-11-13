@@ -35,14 +35,7 @@ export type BankTransactionStableIdentityFields = {
 	stableIdentityKey: string;
 };
 
-export type BankTransactionStoredStableIdentityFields = {
-	stableIdentityGroupKey: string | null;
-	stableIdentityKey: string | null;
-};
-
 const BANK_TRANSACTION_IDENTITY_VERSION = 'enable-banking-transaction-v2';
-export const LEGACY_BANK_TRANSACTION_DEDUPE_KEY_PATTERN = '^[a-f0-9]{64}$';
-const LEGACY_BANK_TRANSACTION_DEDUPE_KEY_REGEX = new RegExp(LEGACY_BANK_TRANSACTION_DEDUPE_KEY_PATTERN);
 
 function createBankTransactionCoreFingerprint(transaction: BankTransactionIdentityInput): string[] {
 	// Stored group keys hash these exact values, so their normalization must not change.
@@ -105,6 +98,17 @@ export function createBankTransactionStableIdentityKeyForGroup(groupKey: string,
 	return createHash('sha256').update(identity).digest('hex');
 }
 
+/** The keys of `count` consecutive occurrences of a group, starting at `firstOccurrence`. */
+export function bankTransactionStableIdentityKeyRange(
+	groupKey: string,
+	firstOccurrence: number,
+	count: number,
+): string[] {
+	return Array.from({length: count}, (_, offset) =>
+		createBankTransactionStableIdentityKeyForGroup(groupKey, firstOccurrence + offset),
+	);
+}
+
 export function allocateNextBankTransactionStableIdentityKey(
 	groupKey: string,
 	usedKeys: ReadonlySet<string>,
@@ -118,13 +122,10 @@ export function allocateNextBankTransactionStableIdentityKey(
 	}
 }
 
-export function isLegacyBankTransactionDedupeKey(value: string | null | undefined): boolean {
-	return typeof value === 'string' && LEGACY_BANK_TRANSACTION_DEDUPE_KEY_REGEX.test(value);
-}
-
 export function assignBankTransactionStableIdentityKeys<T extends BankTransactionIdentityInput>(
 	transactions: T[],
-	existingTransactions: Array<BankTransactionIdentityInput & BankTransactionStoredStableIdentityFields> = [],
+	existingTransactions: Array<BankTransactionIdentityInput & BankTransactionStableIdentityFields> = [],
+	/** Stored keys among the occurrences new rows could take (see `bankTransactionStableIdentityKeyRange`). */
 	occupiedIdentityKeys: ReadonlySet<string> = new Set(),
 ): Array<T & BankTransactionStableIdentityFields> {
 	const incomingByGroup = new Map<string, Array<{index: number; transaction: T; contentKey: string}>>();
@@ -144,15 +145,9 @@ export function assignBankTransactionStableIdentityKeys<T extends BankTransactio
 		Array<BankTransactionIdentityInput & BankTransactionStableIdentityFields>
 	>();
 	for (const transaction of existingTransactions) {
-		if (!transaction.stableIdentityKey || !transaction.stableIdentityGroupKey) continue;
-		const groupKey = transaction.stableIdentityGroupKey;
-		const group = existingByGroup.get(groupKey) ?? [];
-		group.push({
-			...transaction,
-			stableIdentityGroupKey: groupKey,
-			stableIdentityKey: transaction.stableIdentityKey,
-		});
-		existingByGroup.set(groupKey, group);
+		const group = existingByGroup.get(transaction.stableIdentityGroupKey) ?? [];
+		group.push(transaction);
+		existingByGroup.set(transaction.stableIdentityGroupKey, group);
 	}
 
 	const assignments = new Map<number, BankTransactionStableIdentityFields>();
@@ -187,8 +182,7 @@ export function assignBankTransactionStableIdentityKeys<T extends BankTransactio
 		if (indexes.length !== 1 || candidates.length !== 1) continue;
 		const incoming = transactions[indexes[0]];
 		const existing = candidates[0];
-		if (!canBookPendingRow(existing, incoming) || !existing.stableIdentityKey || !existing.stableIdentityGroupKey)
-			continue;
+		if (!canBookPendingRow(existing, incoming)) continue;
 		assignments.set(indexes[0], {
 			stableIdentityGroupKey: createBankTransactionStableIdentityGroupKey(incoming),
 			stableIdentityKey: existing.stableIdentityKey,
@@ -197,7 +191,7 @@ export function assignBankTransactionStableIdentityKeys<T extends BankTransactio
 	}
 	const reservedKeys = new Set([
 		...occupiedIdentityKeys,
-		...existingTransactions.flatMap(({stableIdentityKey}) => (stableIdentityKey ? [stableIdentityKey] : [])),
+		...existingTransactions.map(({stableIdentityKey}) => stableIdentityKey),
 	]);
 	const usedKeys = new Set(reservedKeys);
 	for (const [groupKey, incomingGroup] of incomingByGroup) {

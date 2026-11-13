@@ -10,6 +10,12 @@ export const BANK_CONNECTION_STATUSES = {
 	FAILED: 'FAILED',
 } as const satisfies {[S in BankConnectionStatus]: S};
 
+/** Connections that hold bank data: removing one deletes it, and re-authorizing the bank refreshes one in place. */
+export const DESTRUCTIVE_CONNECTION_STATUSES = [
+	BANK_CONNECTION_STATUSES.AUTHORIZED,
+	BANK_CONNECTION_STATUSES.EXPIRED,
+] as const;
+
 export const BANK_SYNC_STATUSES = {
 	IDLE: 'IDLE',
 	QUEUED: 'QUEUED',

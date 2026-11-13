@@ -13,6 +13,7 @@ import {BankAccountBalance} from '@modules/banking/bank-account-balance.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {BankingAuthorizationStateService} from '@modules/banking/services/banking-authorization-state.service';
 import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
 import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
 import {EnableBankingClient, EnableBankingClientError} from '@modules/banking/services/enable-banking.client';
@@ -20,7 +21,7 @@ import {EnableBankingClient, EnableBankingClientError} from '@modules/banking/se
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {seedBankingData} from '../../../scripts/seed-data/seed-banking-data';
 import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from '../../../scripts/seed-data/seed.constants';
-import {getApp, loginAgent} from '../../setup/e2e.setup';
+import {getApp, loginAgent, webOrigin} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
 import {fetchedTransactions} from '../../utils/banking-utils';
 import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
@@ -106,32 +107,21 @@ describe('AccountController - DELETE /accounts/me', () => {
 		await secondSessionAgent.get('/accounts/me').expect(200);
 
 		// Pending bank authorization states are cleaned up per account, not globally.
-		const ownedStateKey = `banking:authorization:e2e-owned-${accountId}`;
-		const otherStateKey = 'banking:authorization:e2e-other';
-		await redis.set(
-			ownedStateKey,
-			JSON.stringify({
-				accountId,
-				connectionId: 'e2e-connection',
-				aspspName: 'ABN AMRO',
-				aspspCountry: 'NL',
-				expiresAt: Date.now() + 60_000,
-			}),
-			'EX',
-			600,
-		);
-		await redis.set(
-			otherStateKey,
-			JSON.stringify({
-				accountId: 'someone-else',
-				connectionId: 'e2e-connection-2',
-				aspspName: 'Rabobank',
-				aspspCountry: 'NL',
-				expiresAt: Date.now() + 60_000,
-			}),
-			'EX',
-			600,
-		);
+		const authorizationStates = app.get(BankingAuthorizationStateService);
+		const ownedState = await authorizationStates.create({
+			accountId,
+			connectionId: 'e2e-connection',
+			aspspName: 'ABN AMRO',
+			aspspCountry: 'NL',
+		});
+		const otherState = await authorizationStates.create({
+			accountId: 'someone-else',
+			connectionId: 'e2e-connection-2',
+			aspspName: 'Rabobank',
+			aspspCountry: 'NL',
+		});
+		const ownedStateKey = `banking:authorization:${ownedState}`;
+		const otherStateKey = `banking:authorization:${otherState}`;
 
 		// A pending email change and a password reset link are cancelled with the account.
 		await agent
@@ -141,7 +131,11 @@ describe('AccountController - DELETE /accounts/me', () => {
 			.expect(200);
 		const emailChangeKey = `${app.get(ConfigurationService).get('EMAIL_VERIFICATION_REDIS_KEY')}:change:${accountId}`;
 		expect(await redis.get(emailChangeKey)).not.toBeNull();
-		await request(httpServer).post('/auth/reset-password/request').send({email}).expect(200);
+		await request(httpServer)
+			.post('/auth/reset-password/request')
+			.set('Origin', webOrigin())
+			.send({email})
+			.expect(200);
 		const resetEmail = await EmailUtils.findEmailByRecipient(email, mailpitApiUrl, 'Reset your Tempo password');
 		const resetToken = EmailUtils.extractToken(resetEmail?.Text);
 
@@ -182,6 +176,7 @@ describe('AccountController - DELETE /accounts/me', () => {
 		expect(await redis.get(emailChangeKey)).toBeNull();
 		const resetResponse = await request(httpServer)
 			.post('/auth/reset-password/verify')
+			.set('Origin', webOrigin())
 			.send({token: resetToken, newPassword: `${password}-new`})
 			.expect(400);
 		expect(resetResponse.body.message).toBe(PASSWORD_RESET_INVALID_TOKEN);
@@ -191,7 +186,7 @@ describe('AccountController - DELETE /accounts/me', () => {
 		await secondSessionAgent.get('/accounts/me').expect(401);
 
 		// The account can no longer log in.
-		await request(httpServer).post('/auth/login').send({email, password}).expect(401);
+		await request(httpServer).post('/auth/login').set('Origin', webOrigin()).send({email, password}).expect(401);
 
 		// A farewell email is delivered to the deleted address.
 		const farewellEmail = await EmailUtils.findEmailByRecipient(

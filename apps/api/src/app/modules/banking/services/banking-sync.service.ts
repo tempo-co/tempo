@@ -1,9 +1,7 @@
 import {
-	BadGatewayException,
 	BadRequestException,
 	ConflictException,
 	HttpException,
-	Inject,
 	Injectable,
 	InternalServerErrorException,
 	Logger,
@@ -12,12 +10,10 @@ import {
 } from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import type {BankSyncRun as BankSyncRunResponse, BankSyncStatus} from '@tempo/contracts';
-import Redis from 'ioredis';
 import {isIP} from 'node:net';
 import {DataSource, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
-import {REDIS} from '@core/redis/redis.constants';
 import {dateInAppTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
 
@@ -33,7 +29,6 @@ import {
 	BANKING_REFRESH_CONTEXT_UNAVAILABLE,
 	BANKING_SELECTED_BANK_UNAVAILABLE,
 	BANKING_SERVICE_UNAVAILABLE,
-	BANKING_SUPPORTED_BANKS_UNAVAILABLE,
 } from '../api/constants/banking-messages.constants';
 import {BankAccountBalance} from '../bank-account-balance.entity';
 import {BankAccount} from '../bank-account.entity';
@@ -58,9 +53,8 @@ import {
 	toDateOnly,
 	truncate,
 } from '../banking.utils';
-import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
+import {CategorizationScheduler} from '../categorization/categorization-scheduler.service';
 import {
-	EnableBankingAspsp,
 	EnableBankingBalance,
 	EnableBankingPsuContext,
 	EnableBankingTransaction,
@@ -71,6 +65,7 @@ import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {BankingSyncOwnershipLostError} from '../errors/banking-sync-ownership-lost.error';
 import {FileConnectionNotSyncableException} from '../errors/file-connection-not-syncable.exception';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
+import {AspspCatalogService} from './aspsp-catalog.service';
 import {BankTransactionPersistenceService, PersistTransactionsResult} from './bank-transaction-persistence.service';
 import {BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';
 import {BankingEncryptionService} from './banking-encryption.service';
@@ -94,8 +89,6 @@ const FAILED = BANK_SYNC_STATUSES.FAILED;
 const PARTIAL = BANK_SYNC_STATUSES.PARTIAL;
 
 const INCREMENTAL_OVERLAP_DAYS = 7;
-/** How long a country's bank catalog is reused for foreground refreshes. */
-const ASPSP_CATALOG_CACHE_SECONDS = 60 * 60;
 
 type AccountFetchResult = {
 	bankAccount: BankAccount;
@@ -151,13 +144,13 @@ export class BankingSyncService {
 		private readonly enableBankingClient: EnableBankingClient,
 		private readonly encryptionService: BankingEncryptionService,
 		private readonly connectionLockService: BankingConnectionLockService,
-		private readonly categorizationService: BankTransactionCategorizationService,
+		private readonly categorizationService: CategorizationScheduler,
 		private readonly configurationService: ConfigurationService,
 		private readonly ownTransferService: OwnTransferService,
 		private readonly currencyExchangeService: CurrencyExchangeService,
 		private readonly merchantLogoService: MerchantLogoService,
 		private readonly bankTransactionPersistenceService: BankTransactionPersistenceService,
-		@Inject(REDIS) private readonly redis: Redis,
+		private readonly aspspCatalogService: AspspCatalogService,
 	) {
 		this.bankingIntegrationEnabled = configurationService.get('BANKING_INTEGRATION_ENABLED') !== false;
 	}
@@ -392,7 +385,7 @@ export class BankingSyncService {
 		psu: EnableBankingPsuContext,
 		signal: AbortSignal,
 	): Promise<EnableBankingPsuContext> {
-		const aspsps = await this.getAspspCatalog(connection.aspspCountry, signal);
+		const aspsps = await this.aspspCatalogService.getCachedAspsps(connection.aspspCountry, signal);
 		const aspsp = aspsps.find(
 			({name, country}) => name === connection.aspspName && country === connection.aspspCountry,
 		);
@@ -409,29 +402,6 @@ export class BankingSyncService {
 			throw new BadRequestException(BANKING_REFRESH_CONTEXT_UNAVAILABLE);
 		}
 		return {ipAddress: psu.ipAddress, userAgent};
-	}
-
-	/** The country's bank catalog, shared through Redis for an hour so refreshes do not download it every time. */
-	private async getAspspCatalog(country: string, signal: AbortSignal): Promise<EnableBankingAspsp[]> {
-		const key = `banking:aspsp-catalog:${country}`;
-		try {
-			const cached = await this.redis.get(key);
-			if (cached) return JSON.parse(cached) as EnableBankingAspsp[];
-		} catch (error) {
-			this.logger.warn(`Bank catalog cache read failed: ${safeErrorName(error)}`);
-		}
-		let aspsps: EnableBankingAspsp[];
-		try {
-			aspsps = await this.enableBankingClient.getAspsps(country, signal);
-		} catch {
-			throw new BadGatewayException(BANKING_SUPPORTED_BANKS_UNAVAILABLE);
-		}
-		try {
-			await this.redis.set(key, JSON.stringify(aspsps), 'EX', ASPSP_CATALOG_CACHE_SECONDS);
-		} catch (error) {
-			this.logger.warn(`Bank catalog cache write failed: ${safeErrorName(error)}`);
-		}
-		return aspsps;
 	}
 
 	private isAutomaticSyncEligible(
@@ -770,13 +740,6 @@ export class BankingSyncService {
 						accountResult.balances.map((balance) =>
 							this.toBalanceValues(accountResult.bankAccount, run, balance, observedAt),
 						),
-					);
-				}
-
-				if (accountResult.transactionsSucceeded || accountResult.transactions.length > 0) {
-					await this.bankTransactionPersistenceService.repairIncompleteTransactionIdentities(
-						bankTransactionRepository,
-						accountResult.bankAccount,
 					);
 				}
 

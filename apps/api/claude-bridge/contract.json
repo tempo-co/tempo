@@ -107,8 +107,428 @@
 			"required": ["classifications"]
 		},
 		"maxSearchQueryLength": 240,
-		"maxSourceDomains": 20
+		"maxSourceDomains": 20,
+		"input": {
+			"transaction": {
+				"$schema": "https://json-schema.org/draft/2020-12/schema",
+				"type": "object",
+				"properties": {
+					"correlationId": {
+						"type": "string",
+						"maxLength": 8192
+					},
+					"amount": {
+						"type": "string",
+						"maxLength": 8192
+					},
+					"currency": {
+						"type": "string",
+						"maxLength": 8192
+					},
+					"direction": {
+						"type": "string",
+						"enum": ["INCOME", "EXPENSE", "UNKNOWN"]
+					},
+					"transactionType": {
+						"type": "string",
+						"maxLength": 8192
+					},
+					"merchantName": {
+						"type": "string",
+						"maxLength": 8192,
+						"pattern": "\\S"
+					},
+					"merchantLocation": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 8192
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"searchQuery": {
+						"type": "string",
+						"maxLength": 240,
+						"pattern": "\\S"
+					},
+					"merchantCategoryCode": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 8192
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				"required": [
+					"correlationId",
+					"amount",
+					"currency",
+					"direction",
+					"transactionType",
+					"merchantName",
+					"merchantLocation",
+					"searchQuery",
+					"merchantCategoryCode"
+				],
+				"additionalProperties": false
+			}
+		}
 	},
 	"models": ["claude-sonnet-5-5", "claude-opus-5-5"],
-	"efforts": ["low", "medium", "high", "xhigh", "max"]
+	"efforts": ["low", "medium", "high", "xhigh", "max"],
+	"input": {
+		"maxTransactions": 50,
+		"transaction": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"correlationId": {
+					"type": "string",
+					"maxLength": 8192
+				},
+				"transactionDate": {
+					"anyOf": [
+						{
+							"type": "string",
+							"maxLength": 8192
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"bookingDate": {
+					"anyOf": [
+						{
+							"type": "string",
+							"maxLength": 8192
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"valueDate": {
+					"anyOf": [
+						{
+							"type": "string",
+							"maxLength": 8192
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"amount": {
+					"type": "string",
+					"maxLength": 8192
+				},
+				"currency": {
+					"type": "string",
+					"maxLength": 8192
+				},
+				"creditDebitIndicator": {
+					"anyOf": [
+						{
+							"type": "string",
+							"maxLength": 8192
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"direction": {
+					"type": "string",
+					"enum": ["INCOME", "EXPENSE", "UNKNOWN"]
+				},
+				"transactionType": {
+					"type": "string",
+					"maxLength": 8192
+				},
+				"bankTransactionCode": {
+					"anyOf": [
+						{
+							"type": "string",
+							"maxLength": 8192
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"bankTransactionSubCode": {
+					"anyOf": [
+						{
+							"type": "string",
+							"maxLength": 8192
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"description": {
+					"anyOf": [
+						{
+							"type": "string",
+							"maxLength": 8192
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"counterpartyName": {
+					"anyOf": [
+						{
+							"type": "string",
+							"maxLength": 8192
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"bankTransactionDescription": {
+					"anyOf": [
+						{
+							"type": "string",
+							"maxLength": 8192
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"merchantCategoryCode": {
+					"anyOf": [
+						{
+							"type": "string",
+							"maxLength": 8192
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"remittanceInformation": {
+					"anyOf": [
+						{
+							"type": "string",
+							"maxLength": 8192
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"merchantLocation": {
+					"anyOf": [
+						{
+							"type": "object",
+							"properties": {
+								"city": {
+									"anyOf": [
+										{
+											"type": "string",
+											"maxLength": 8192
+										},
+										{
+											"type": "null"
+										}
+									]
+								},
+								"region": {
+									"anyOf": [
+										{
+											"type": "string",
+											"maxLength": 8192
+										},
+										{
+											"type": "null"
+										}
+									]
+								},
+								"country": {
+									"anyOf": [
+										{
+											"type": "string",
+											"maxLength": 8192
+										},
+										{
+											"type": "null"
+										}
+									]
+								}
+							},
+							"required": ["city", "region", "country"],
+							"additionalProperties": false
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"previousManualCategories": {
+					"maxItems": 19,
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"category": {
+								"type": "string",
+								"enum": [
+									"HOUSING_AND_UTILITIES",
+									"FOOD_AND_DRINK",
+									"TRANSPORTATION",
+									"SHOPPING",
+									"SUBSCRIPTIONS",
+									"HEALTH",
+									"TRAVEL",
+									"ENTERTAINMENT",
+									"PERSONAL_CARE",
+									"EDUCATION",
+									"INSURANCE",
+									"FEES",
+									"CASH_WITHDRAWAL",
+									"INCOME",
+									"REFUND",
+									"TRANSFER_IN",
+									"TRANSFER_OUT",
+									"NEEDS_REVIEW",
+									"OTHER"
+								]
+							},
+							"count": {
+								"type": "integer",
+								"exclusiveMinimum": 0,
+								"maximum": 9007199254740991
+							},
+							"recentExamples": {
+								"maxItems": 5,
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"amount": {
+											"type": "string",
+											"maxLength": 8192
+										},
+										"currency": {
+											"type": "string",
+											"maxLength": 8192
+										},
+										"date": {
+											"anyOf": [
+												{
+													"type": "string",
+													"maxLength": 8192
+												},
+												{
+													"type": "null"
+												}
+											]
+										}
+									},
+									"required": ["amount", "currency", "date"],
+									"additionalProperties": false
+								}
+							}
+						},
+						"required": ["category", "count", "recentExamples"],
+						"additionalProperties": false
+					}
+				},
+				"sameAmountPayments": {
+					"minItems": 2,
+					"maxItems": 15,
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"date": {
+								"anyOf": [
+									{
+										"type": "string",
+										"maxLength": 8192
+									},
+									{
+										"type": "null"
+									}
+								]
+							},
+							"category": {
+								"type": "string",
+								"enum": [
+									"HOUSING_AND_UTILITIES",
+									"FOOD_AND_DRINK",
+									"TRANSPORTATION",
+									"SHOPPING",
+									"SUBSCRIPTIONS",
+									"HEALTH",
+									"TRAVEL",
+									"ENTERTAINMENT",
+									"PERSONAL_CARE",
+									"EDUCATION",
+									"INSURANCE",
+									"FEES",
+									"CASH_WITHDRAWAL",
+									"INCOME",
+									"REFUND",
+									"TRANSFER_IN",
+									"TRANSFER_OUT",
+									"NEEDS_REVIEW",
+									"OTHER"
+								]
+							},
+							"source": {
+								"type": "string",
+								"enum": ["MANUAL", "AI"]
+							},
+							"text": {
+								"anyOf": [
+									{
+										"type": "string",
+										"maxLength": 8192
+									},
+									{
+										"type": "null"
+									}
+								]
+							}
+						},
+						"required": ["date", "category", "source", "text"],
+						"additionalProperties": false
+					}
+				}
+			},
+			"required": [
+				"correlationId",
+				"transactionDate",
+				"bookingDate",
+				"valueDate",
+				"amount",
+				"currency",
+				"creditDebitIndicator",
+				"direction",
+				"transactionType",
+				"bankTransactionCode",
+				"bankTransactionSubCode",
+				"description",
+				"counterpartyName",
+				"bankTransactionDescription",
+				"merchantCategoryCode",
+				"remittanceInformation"
+			],
+			"additionalProperties": false
+		}
+	}
 }
