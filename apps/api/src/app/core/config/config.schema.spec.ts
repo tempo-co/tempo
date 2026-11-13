@@ -214,46 +214,39 @@ describe('AI categorization configuration', () => {
 		expect(() => configSchema.parse({...baseConfig, AI_CATEGORIZATION_EFFORT: 'extreme'})).toThrow();
 	});
 
-	it.each([
-		['API only', {ANTHROPIC_API_KEY: 'synthetic-api-key'}],
-		['subscription only', {AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/run/claude-bridge.sock'}],
-		[
-			'both routes',
-			{ANTHROPIC_API_KEY: 'synthetic-api-key', AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/run/claude-bridge.sock'},
-		],
-	])('allows enabled categorization with %s', (_description, routeConfig) => {
-		const parsed = configSchema.parse({...baseConfig, AI_CATEGORIZATION_ENABLED: 'true', ...routeConfig});
-
-		expect(parsed).toMatchObject({AI_CATEGORIZATION_ENABLED: true, ...routeConfig});
-	});
-
-	it('rejects enabled categorization without either route', () => {
-		expect(() => configSchema.parse({...baseConfig, AI_CATEGORIZATION_ENABLED: 'true'})).toThrow(
-			'Configure ANTHROPIC_API_KEY or AI_CATEGORIZATION_SUBSCRIPTION_SOCKET',
-		);
-	});
-
-	it('rejects a model the subscription bridge does not accept when the bridge is configured', () => {
-		const bridgeConfig = {
+	it('allows enabled categorization with an API key and any model name', () => {
+		const parsed = configSchema.parse({
 			...baseConfig,
 			AI_CATEGORIZATION_ENABLED: 'true',
-			AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/run/claude-bridge.sock',
-		};
-
-		expect(() => configSchema.parse({...bridgeConfig, AI_CATEGORIZATION_MODEL: 'synthetic-model'})).toThrow(
-			'AI_CATEGORIZATION_MODEL must be one of the subscription bridge models',
-		);
-		expect(configSchema.parse({...bridgeConfig, AI_CATEGORIZATION_MODEL: 'claude-opus-5-5'})).toMatchObject({
-			AI_CATEGORIZATION_MODEL: 'claude-opus-5-5',
+			ANTHROPIC_API_KEY: 'synthetic-api-key',
+			AI_CATEGORIZATION_MODEL: 'synthetic-model',
 		});
-		expect(
+
+		expect(parsed).toMatchObject({AI_CATEGORIZATION_ENABLED: true, AI_CATEGORIZATION_MODEL: 'synthetic-model'});
+	});
+
+	it('rejects enabled categorization without an API key', () => {
+		expect(() => configSchema.parse({...baseConfig, AI_CATEGORIZATION_ENABLED: 'true'})).toThrow(
+			'Configure ANTHROPIC_API_KEY when Claude categorization is enabled.',
+		);
+	});
+
+	it('ignores a leftover subscription socket setting, so an older Compose file still starts the API', () => {
+		const parsed = configSchema.parse({
+			...baseConfig,
+			AI_CATEGORIZATION_ENABLED: 'true',
+			ANTHROPIC_API_KEY: 'synthetic-api-key',
+			AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/run/synthetic/bridge.sock',
+		});
+
+		expect(parsed).not.toHaveProperty('AI_CATEGORIZATION_SUBSCRIPTION_SOCKET');
+		expect(() =>
 			configSchema.parse({
 				...baseConfig,
 				AI_CATEGORIZATION_ENABLED: 'true',
-				ANTHROPIC_API_KEY: 'synthetic-api-key',
-				AI_CATEGORIZATION_MODEL: 'synthetic-model',
+				AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/run/synthetic/bridge.sock',
 			}),
-		).toMatchObject({AI_CATEGORIZATION_MODEL: 'synthetic-model'});
+		).toThrow('Configure ANTHROPIC_API_KEY');
 	});
 });
 
@@ -287,10 +280,9 @@ describe('merchant logo configuration', () => {
 		expect(() => configSchema.parse({...baseConfig, MERCHANT_LOGOS_ENABLED: 'true'})).toThrow(
 			'when merchant logos are enabled',
 		);
-		const subscription = {AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/run/claude-bridge.sock'};
-		expect(configSchema.parse({...baseConfig, MERCHANT_LOGOS_ENABLED: 'true', ...subscription})).toMatchObject({
-			MERCHANT_LOGOS_ENABLED: true,
-		});
+		expect(
+			configSchema.parse({...baseConfig, MERCHANT_LOGOS_ENABLED: 'true', ANTHROPIC_API_KEY: 'synthetic-api-key'}),
+		).toMatchObject({MERCHANT_LOGOS_ENABLED: true});
 	});
 });
 

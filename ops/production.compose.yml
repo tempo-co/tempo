@@ -40,7 +40,7 @@ services:
     image: ${TEMPO_API_IMAGE:?TEMPO_API_IMAGE must be set}
     restart: unless-stopped
     # A uid of its own, set here by number so an image cannot choose root or the host user's uid (1000).
-    # The banking key and the Claude bridge socket grant it access; see "Container privileges" in ops/README.md.
+    # The banking key grants it access; see "Container privileges" in ops/README.md.
     user: '10001:10001'
     <<: *no-new-privileges
     cap_drop: [ALL]
@@ -55,18 +55,11 @@ services:
       EMAIL_SECURE: 'false'
       EMAIL_REQUIRE_TLS: 'true'
       ENABLE_BANKING_PRIVATE_KEY_PATH: /run/secrets/enable-banking-private.key
-      AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: /run/tempo-claude/bridge.sock
     volumes:
       - type: bind
         source: ${ENABLE_BANKING_PRIVATE_KEY_HOST_PATH}
         target: /run/secrets/enable-banking-private.key
         read_only: true
-      - type: bind
-        source: ${TEMPO_CLAUDE_BRIDGE_DIR:?Set TEMPO_CLAUDE_BRIDGE_DIR}
-        target: /run/tempo-claude
-        read_only: true
-        bind:
-          create_host_path: false
     expose:
       - '3000'
     networks:

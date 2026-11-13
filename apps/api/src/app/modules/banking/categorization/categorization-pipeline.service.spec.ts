@@ -300,24 +300,21 @@ describe('CategorizationPipeline', () => {
 		]);
 	});
 
-	it.each(['claude-api', 'claude-subscription'])(
-		'persists the actual %s result provider and model instead of configured defaults',
-		async (provider) => {
-			const transaction = createBankTransaction({id: 'routed-transaction'});
-			const result = {
-				correlationId: transaction.id,
-				category: 'FOOD_AND_DRINK' as const,
-				confidence: 0.9,
-				provider,
-				model: 'actual-model',
-			};
-			const {pipeline} = createCategorizationServices({rows: [transaction], providerResult: [result]});
+	it('persists the actual result provider and model instead of configured defaults', async () => {
+		const transaction = createBankTransaction({id: 'routed-transaction'});
+		const result = {
+			correlationId: transaction.id,
+			category: 'FOOD_AND_DRINK' as const,
+			confidence: 0.9,
+			provider: 'claude-api',
+			model: 'actual-model',
+		};
+		const {pipeline} = createCategorizationServices({rows: [transaction], providerResult: [result]});
 
-			await pipeline.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
-			expect(transaction).toMatchObject({categoryProvider: provider, categoryModel: 'actual-model'});
-		},
-	);
+		expect(transaction).toMatchObject({categoryProvider: 'claude-api', categoryModel: 'actual-model'});
+	});
 
 	it('persists NEEDS_REVIEW as a completed category', async () => {
 		const transaction = createBankTransaction({id: 'ambiguous-transaction'});

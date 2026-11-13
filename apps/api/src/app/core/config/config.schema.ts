@@ -1,6 +1,6 @@
 import {z} from 'zod';
 
-import categorizationContract from '../../../../claude-bridge/contract.json';
+import categorizationContract from '../../modules/banking/categorization/providers/claude-categorization-contract.json';
 
 const portSchema = z.coerce.number().int().min(0).max(65535);
 
@@ -55,7 +55,6 @@ export const configSchema = z
 		AI_CATEGORIZATION_EFFORT: z.enum(categorizationContract.efforts).default('high'),
 		AI_CATEGORIZATION_WEB_SEARCH_ENABLED: strictBooleanEnvSchema.default(false),
 		ANTHROPIC_API_KEY: z.string().min(1).optional(),
-		AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: z.string().min(1).optional(),
 
 		// --- Merchant logos ---
 		MERCHANT_LOGOS_ENABLED: strictBooleanEnvSchema.default(false),
@@ -194,43 +193,19 @@ export const configSchema = z
 			});
 		}
 
-		if (
-			config.AI_CATEGORIZATION_ENABLED &&
-			!config.ANTHROPIC_API_KEY &&
-			!config.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET
-		) {
+		if (config.AI_CATEGORIZATION_ENABLED && !config.ANTHROPIC_API_KEY) {
 			context.addIssue({
 				code: 'custom',
 				path: ['ANTHROPIC_API_KEY'],
-				message:
-					'Configure ANTHROPIC_API_KEY or AI_CATEGORIZATION_SUBSCRIPTION_SOCKET when Claude categorization is enabled.',
+				message: 'Configure ANTHROPIC_API_KEY when Claude categorization is enabled.',
 			});
 		}
 
-		// The bridge refuses other models outright, which would fail rows instead of leaving them pending.
-		if (
-			config.AI_CATEGORIZATION_ENABLED &&
-			config.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET &&
-			!categorizationContract.models.includes(config.AI_CATEGORIZATION_MODEL)
-		) {
-			context.addIssue({
-				code: 'custom',
-				path: ['AI_CATEGORIZATION_MODEL'],
-				message: `AI_CATEGORIZATION_MODEL must be one of the subscription bridge models: ${categorizationContract.models.join(', ')}.`,
-			});
-		}
-
-		if (
-			config.MERCHANT_LOGOS_ENABLED &&
-			!config.MERCHANT_LOGOS_CACHED_ONLY &&
-			!config.ANTHROPIC_API_KEY &&
-			!config.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET
-		) {
+		if (config.MERCHANT_LOGOS_ENABLED && !config.MERCHANT_LOGOS_CACHED_ONLY && !config.ANTHROPIC_API_KEY) {
 			context.addIssue({
 				code: 'custom',
 				path: ['ANTHROPIC_API_KEY'],
-				message:
-					'Configure ANTHROPIC_API_KEY or AI_CATEGORIZATION_SUBSCRIPTION_SOCKET when merchant logos are enabled.',
+				message: 'Configure ANTHROPIC_API_KEY when merchant logos are enabled.',
 			});
 		}
 	});

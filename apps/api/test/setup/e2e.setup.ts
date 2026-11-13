@@ -37,7 +37,6 @@ beforeAll(async () => {
 	process.env.AI_CATEGORIZATION_ENABLED = String(aiCategorizationEnabled);
 	process.env.AI_CATEGORIZATION_WEB_SEARCH_ENABLED = String(aiCategorizationWebSearchEnabled);
 	process.env.MERCHANT_LOGOS_ENABLED = String(merchantLogosEnabled);
-	delete process.env.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET;
 
 	if (webPushEnabled) {
 		const {publicKey, privateKey} = webPush.generateVAPIDKeys();
@@ -50,7 +49,7 @@ beforeAll(async () => {
 		delete process.env.WEB_PUSH_VAPID_SUBJECT;
 	}
 
-	// Merchant logos call the same model routes, so they need a key too; their specs replace the provider call.
+	// Merchant logos call the same model API, so they need a key too; their specs replace the provider call.
 	if (aiCategorizationEnabled || merchantLogosEnabled) {
 		process.env.AI_CATEGORIZATION_MODEL = 'test-model';
 		process.env.ANTHROPIC_API_KEY = 'test-only-placeholder';

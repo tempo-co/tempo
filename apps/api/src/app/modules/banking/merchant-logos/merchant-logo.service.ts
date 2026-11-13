@@ -15,7 +15,6 @@ import {
 	RECONCILE_MERCHANT_LOGOS_JOB,
 } from '@core/queue/queue.constants';
 
-import merchantContract from '../../../../../claude-bridge/merchant-contract.json';
 import {MERCHANT_LOGO_NOT_FOUND} from '../api/constants/banking-messages.constants';
 import {BankTransaction} from '../bank-transaction.entity';
 import {chunkArray, safeErrorName} from '../banking.utils';
@@ -32,6 +31,7 @@ import {
 	isTransferDescriptionMerchantKey,
 } from '../categorization/bank-transaction-merchant-key';
 import {ClaudeBankTransactionCategorizationProvider} from '../categorization/providers/claude-bank-transaction-categorization.provider';
+import merchantContract from '../categorization/providers/claude-merchant-contract.json';
 import {LogoDevClient} from './logo-dev.client';
 import {MERCHANT_LOGO_STATUSES, MerchantLogo} from './merchant-logo.entity';
 import {

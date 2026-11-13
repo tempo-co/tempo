@@ -80,7 +80,6 @@
 			"required": ["identifies", "description"]
 		}
 	},
-	"models": ["claude-sonnet-5-5", "claude-opus-5-5"],
 	"efforts": ["low", "medium", "high", "xhigh", "max"],
 	"input": {
 		"maxTransactions": 50,
