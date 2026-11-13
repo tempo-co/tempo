@@ -41,6 +41,8 @@ Production secrets live in the production env file (path set by `install.sh`, mo
 
 The API calls the Anthropic API with `ANTHROPIC_API_KEY` from the production env file; there is no other route. While the API is unavailable (rate limit, overload, an exhausted credit balance, a refused key, no connection), transactions stay pending and queue retries, then hourly reconciliation, retry them.
 
+A host that ran the removed Claude subscription bridge keeps `TEMPO_CLAUDE_BRIDGE_DIR` in its env file, which the previous Compose file requires. Install this Compose file and recreate the API first; only then run `systemctl --user disable --now tempo-claude-bridge.service`, remove the unit file, `~/.local/lib/tempo-claude-bridge` and the socket directory, and drop `TEMPO_CLAUDE_BRIDGE_DIR`.
+
 ### Merchant logos
 
 `MERCHANT_LOGOS_ENABLED=true` in `/etc/tempo/production.env` turns merchant logos on. The first start identifies every existing merchant key in batches of 50 and then fetches each confirmed site's icon, so expect a few minutes of model calls and outbound HTTPS requests to merchant sites, `icons.duckduckgo.com` and, with `LOGO_DEV_SECRET_KEY` set, `api.logo.dev`. logo.dev's free plan has a monthly credit allowance; when it runs out, logos come from the merchants' sites and logo.dev is asked again the next day.
