@@ -406,82 +406,91 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 		expect(values.categoryInputHash).toEqual(expect.any(String));
 	});
 
-	it('keeps an existing exchange row out of categorization and lets a held row take a new exchange marker', async () => {
-		const service = createServiceForTransactionValues();
-		const insertQueryBuilder = createInsertQueryBuilder([]);
-		const repositoryFind = jest.fn();
-		const repository = {
-			query: jest.fn().mockResolvedValue([]),
-			find: repositoryFind,
-			createQueryBuilder: jest.fn().mockReturnValueOnce(insertQueryBuilder),
-		} as unknown as Repository<BankTransaction>;
-		const bankAccount = {id: 'bank-account-id', currency: 'EUR'} as BankAccount;
-		const transaction = {
-			id: 'provider-transaction-id',
-			providerTransactionId: 'provider-transaction-id',
-			amount: '10.00',
-			currency: 'EUR',
-			creditDebitIndicator: 'DBIT',
-			description: 'Exchanged to GBP',
-		};
-		const mappedValue = toBankTransactionValues(
-			service,
-			transaction,
-			bankAccount as unknown as Record<string, unknown>,
-		);
-		transaction.providerTransactionId = 'changed-provider-transaction-id';
-		repositoryFind
-			.mockResolvedValueOnce([
-				{
-					...mappedValue,
-					id: 'existing-transaction-id',
-					categoryInputHash: 'legacy-input-hash',
-					categorySource: null,
-					categoryStatus: 'NOT_APPLICABLE',
-					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-				},
-			])
-			.mockResolvedValueOnce([{id: 'existing-transaction-id'}]);
+	it.each([
+		['the exchange description', {description: 'Exchanged to GBP'}],
+		['the bank exchange word', {description: 'Conversion', bankTransactionDescription: 'Exchange'}],
+	])(
+		'keeps an existing exchange row out of categorization and lets a held row take %s',
+		async (_caseName, marker) => {
+			const service = createServiceForTransactionValues();
+			const insertQueryBuilder = createInsertQueryBuilder([]);
+			const repositoryFind = jest.fn();
+			const repository = {
+				query: jest.fn().mockResolvedValue([]),
+				find: repositoryFind,
+				createQueryBuilder: jest.fn().mockReturnValueOnce(insertQueryBuilder),
+			} as unknown as Repository<BankTransaction>;
+			const bankAccount = {id: 'bank-account-id', currency: 'EUR'} as BankAccount;
+			const transaction = {
+				id: 'provider-transaction-id',
+				providerTransactionId: 'provider-transaction-id',
+				amount: '10.00',
+				currency: 'EUR',
+				creditDebitIndicator: 'DBIT',
+				...marker,
+			};
+			const mappedValue = toBankTransactionValues(
+				service,
+				transaction,
+				bankAccount as unknown as Record<string, unknown>,
+			);
+			transaction.providerTransactionId = 'changed-provider-transaction-id';
+			repositoryFind
+				.mockResolvedValueOnce([
+					{
+						...mappedValue,
+						id: 'existing-transaction-id',
+						categoryInputHash: 'legacy-input-hash',
+						categorySource: null,
+						categoryStatus: 'NOT_APPLICABLE',
+						financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+					},
+				])
+				.mockResolvedValueOnce([{id: 'existing-transaction-id'}]);
 
-		await (
-			service as unknown as {
-				persistTransactions: (...args: unknown[]) => Promise<unknown>;
-			}
-		).persistTransactions(repository, bankAccount, [transaction], 'Synthetic Bank', 'enable-banking');
+			await (
+				service as unknown as {
+					persistTransactions: (...args: unknown[]) => Promise<unknown>;
+				}
+			).persistTransactions(repository, bankAccount, [transaction], 'Synthetic Bank', 'enable-banking');
 
-		expect(repositoryFind).toHaveBeenNthCalledWith(
-			1,
-			expect.objectContaining({
-				select: expect.objectContaining({financialEventType: true}),
-				where: expect.objectContaining({
-					bankAccountId: bankAccount.id,
-					stableIdentityGroupKey: expect.any(Object),
+			expect(repositoryFind).toHaveBeenNthCalledWith(
+				1,
+				expect.objectContaining({
+					select: expect.objectContaining({financialEventType: true}),
+					where: expect.objectContaining({
+						bankAccountId: bankAccount.id,
+						stableIdentityGroupKey: expect.any(Object),
+					}),
 				}),
-			}),
-		);
-		const persistedValues = insertQueryBuilder.values.mock.calls[0][0] as Array<Record<string, unknown>>;
-		expect(persistedValues[0]).toMatchObject({
-			providerTransactionId: 'changed-provider-transaction-id',
-			stableIdentityKey: mappedValue.stableIdentityKey,
-		});
-		const overwriteColumns = insertQueryBuilder.orUpdate.mock.calls[0][0] as string[];
-		expect(overwriteColumns).toContain('description');
-		for (const column of ['financialEventType', 'financialEventSource', 'financialEventRuleVersion']) {
-			expect(overwriteColumns).not.toContain(column);
-		}
-		expect(insertQueryBuilder.orUpdate).toHaveBeenCalledWith(
-			expect.any(Array),
-			['bankAccountId', 'stableIdentityKey'],
-			expect.objectContaining({
-				overwriteCondition: {
-					where: expect.stringContaining('EXCLUDED."stableIdentityKey" IN (:...exchangeMarkerKeys)'),
-					parameters: {processingStatus: 'PROCESSING', exchangeMarkerKeys: [mappedValue.stableIdentityKey]},
-				},
-			}),
-		);
-		// The changed input hash does not send the exchange row back to the model: no reset update runs.
-		expect(repository.createQueryBuilder).toHaveBeenCalledTimes(1);
-	});
+			);
+			const persistedValues = insertQueryBuilder.values.mock.calls[0][0] as Array<Record<string, unknown>>;
+			expect(persistedValues[0]).toMatchObject({
+				providerTransactionId: 'changed-provider-transaction-id',
+				stableIdentityKey: mappedValue.stableIdentityKey,
+			});
+			const overwriteColumns = insertQueryBuilder.orUpdate.mock.calls[0][0] as string[];
+			expect(overwriteColumns).toContain('description');
+			for (const column of ['financialEventType', 'financialEventSource', 'financialEventRuleVersion']) {
+				expect(overwriteColumns).not.toContain(column);
+			}
+			expect(insertQueryBuilder.orUpdate).toHaveBeenCalledWith(
+				expect.any(Array),
+				['bankAccountId', 'stableIdentityKey'],
+				expect.objectContaining({
+					overwriteCondition: {
+						where: expect.stringContaining('EXCLUDED."stableIdentityKey" IN (:...exchangeMarkerKeys)'),
+						parameters: {
+							processingStatus: 'PROCESSING',
+							exchangeMarkerKeys: [mappedValue.stableIdentityKey],
+						},
+					},
+				}),
+			);
+			// The changed input hash does not send the exchange row back to the model: no reset update runs.
+			expect(repository.createQueryBuilder).toHaveBeenCalledTimes(1);
+		},
+	);
 
 	it('sends existing rows whose classification-relevant fields changed back to the model in one guarded update', async () => {
 		const service = createServiceForTransactionValues();
