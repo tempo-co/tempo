@@ -4,6 +4,7 @@ import {type Ref, useEffect, useRef, useState} from 'react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/utils/cn';
 
+import {droppedFiles} from '../utils/dropped-files';
 import {dragHasFiles, useCanDropFiles} from './drop-files';
 import {IMPORT_TILE} from './file-choice';
 
@@ -81,8 +82,10 @@ export function PageFileDrop({
       event.preventDefault();
       reset();
       if (taken) return;
-      const files = Array.from(event.dataTransfer?.files ?? []);
-      if (active && files.length > 0) latestOnFiles.current(files);
+      if (!active) return;
+      void droppedFiles(event.dataTransfer).then((files) => {
+        if (files.length > 0) latestOnFiles.current(files);
+      });
     };
     if (!active) reset();
     window.addEventListener('dragenter', onEnter);

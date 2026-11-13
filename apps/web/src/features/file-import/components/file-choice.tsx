@@ -4,6 +4,7 @@ import {useRef, useState} from 'react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/utils/cn';
 
+import {droppedFiles} from '../utils/dropped-files';
 import {fileNameTail, formatFileSize} from '../utils/import-format';
 import {dragHasFiles, useCanDropFiles} from './drop-files';
 import {SupportedFiles} from './supported-files';
@@ -80,8 +81,10 @@ export function FileChoice({
             event.preventDefault();
             depth.current = 0;
             setOver(false);
-            const files = Array.from(event.dataTransfer.files);
-            if (files.length > 0 && !disabled) onFiles(files);
+            if (disabled) return;
+            void droppedFiles(event.dataTransfer).then((files) => {
+              if (files.length > 0) onFiles(files);
+            });
           }}
           className={cn(
             'grid min-h-40 place-content-center justify-items-center gap-2 rounded-md border border-dashed p-4 text-center transition-colors',
