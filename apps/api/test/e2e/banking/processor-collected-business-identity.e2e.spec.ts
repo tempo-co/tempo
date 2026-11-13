@@ -114,7 +114,8 @@ describe('Processor-collected business identity', () => {
 				runner.query('SELECT to_jsonb(t) AS state, ctid::text AS tuple FROM bank_transactions t ORDER BY id');
 			const unrelatedTables = async () => {
 				const tables: Array<{tablename: string}> = await runner.query(
-					"SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'bank_transactions' ORDER BY tablename",
+					// Change notes record the writes to bank_transactions.
+					"SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('bank_transactions', 'bank_history_changes') ORDER BY tablename",
 				);
 				const states = [];
 				for (const {tablename} of tables) {

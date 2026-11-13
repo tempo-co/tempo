@@ -154,7 +154,8 @@ async function identitySchema(runner: QueryRunner) {
 
 async function otherTables(ds: DataSource, runner: QueryRunner) {
 	const tables: Array<{tablename: string}> = await runner.query(
-		"SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'bank_transactions' ORDER BY tablename",
+		// Change notes record the writes to bank_transactions.
+		"SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('bank_transactions', 'bank_history_changes') ORDER BY tablename",
 	);
 	const states = [];
 	for (const {tablename} of tables) {

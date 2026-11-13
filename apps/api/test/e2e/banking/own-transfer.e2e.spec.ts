@@ -16,6 +16,7 @@ const UNSTORED_IBAN = 'FR1420041010050500013M02606';
 /** Few enough that legs compete for partners, enough that one round's edits leave most amounts untouched. */
 const AMOUNTS = Array.from({length: 20}, (_, index) => `${10 + index * 5}.50`);
 const HOLDER = 'Jane Example';
+const OTHER_PERSON = 'John Sample';
 
 /** Enable Banking's identification hash of an IBAN in a currency, so the recompute can verify it. */
 function identificationHash(iban: string, currency: string): string {
@@ -81,6 +82,10 @@ describe('OwnTransferService', () => {
 				transactionStatus: generator.chance(0.1) ? 'PDNG' : 'BOOK',
 				transactionType: generator.chance(0.1) ? 'CARD_PAYMENT' : null,
 				counterpartyIban: generator.chance(0.4) ? generator.pick(IBANS) : null,
+				// The holder's own name is name evidence; another person's name is not.
+				counterpartyName: generator.chance(0.3)
+					? generator.pick([HOLDER, HOLDER.toUpperCase(), OTHER_PERSON])
+					: null,
 				description: generator.chance(0.2) ? named : 'Example Shop',
 				ownTransferOverride: generator.chance(0.05) ? generator.pick(['MARKED', 'UNMARKED']) : null,
 				financialEventType: generator.chance(0.05)
@@ -173,6 +178,7 @@ describe('OwnTransferService', () => {
 					transactionStatus,
 					financialEventType,
 					counterpartyIban,
+					counterpartyName,
 					ownTransferOverride,
 				} = rowValues();
 				const update = generator.pick([
@@ -181,6 +187,8 @@ describe('OwnTransferService', () => {
 					{transactionStatus},
 					{financialEventType},
 					{counterpartyIban},
+					{counterpartyName},
+					{counterpartyName: generator.pick([HOLDER, OTHER_PERSON])},
 					{ownTransferOverride},
 				]);
 				await fixtures.transactions.update(id, update as DeepPartial<BankTransaction>);
@@ -230,5 +238,10 @@ describe('OwnTransferService', () => {
 		expect(scopedChanges).toBeGreaterThan(20);
 		expect(removedPendingPairs).toBeGreaterThan(4);
 		expect((await snapshot()).ibans).toContain(UNSTORED_IBAN);
+		// Some name evidence came only from a counterparty name the rounds set or changed.
+		const nameOnly = await fixtures.transactions.countBy(
+			accounts.map(({id}) => ({bankAccountId: id, ownTransferEvidence: 'NAME', description: 'Example Shop'})),
+		);
+		expect(nameOnly).toBeGreaterThan(2);
 	}, 30_000);
 });

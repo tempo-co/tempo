@@ -20,7 +20,7 @@ Consequences:
 - Anything seeded before a `NODE_ENV=test` API finishes booting is wiped. Seeds for a long-lived test API must run after it reports healthy, and data must be rechecked after boot. The symptom is every seeded login failing with 401 while the seed itself logged success.
 - For a long-lived API used by browser tests against a disposable database, seed first and then run the API in development mode with `DB_SYNCHRONIZE=true`; never point that at real data.
 - `npm run db:seed` truncates and recreates `public` before seeding; `db:schema` creates tables from entities without data. Production has no baseline migration, so a fresh production database needs `node dist/scripts/schema.js` first.
-- Synchronize creates tables and indexes, not triggers or SQL functions. Anything a migration installs beyond entities must also be installed for synchronized schemas, or tests pass on a schema production does not have.
+- Synchronize creates tables and indexes, not triggers or SQL functions. A migration that installs anything beyond entities must be safe to rerun, return early while its tables do not exist (a fresh production database runs migrations before `schema.js` synchronizes), and be listed in `SCHEMA_EXTRA_MIGRATIONS` (`src/app/core/database/synchronized-schema-extras.ts`). `installSchemaExtras` runs that list after every synchronize: at boot when the schema is synchronized, and in `db:schema` and `db:seed`. Otherwise tests pass on a schema production does not have.
 
 ## Disposable stacks
 
