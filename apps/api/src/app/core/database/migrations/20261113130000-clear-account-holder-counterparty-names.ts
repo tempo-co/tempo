@@ -22,8 +22,8 @@ type CounterpartyRow = {
  * description that is a copy of the name (no remittance or bank code text to come from) is cleared as well. The
  * display description and merchant key are derived again; categories, own-transfer and owner data stay as they are.
  */
-export class ClearAccountHolderCounterpartyNames20261113120000 implements MigrationInterface {
-	name = 'ClearAccountHolderCounterpartyNames20261113120000';
+export class ClearAccountHolderCounterpartyNames20261113130000 implements MigrationInterface {
+	name = 'ClearAccountHolderCounterpartyNames20261113130000';
 
 	public async up(queryRunner: QueryRunner): Promise<void> {
 		const rows = (await queryRunner.query(

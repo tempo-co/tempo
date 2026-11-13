@@ -6,7 +6,7 @@ import {BankingFixtures, bookedRow} from '../../../scripts/seed-data/banking-fix
 import {getApp} from '../../setup/e2e.setup';
 import {createBankingOwner} from '../../utils/banking-utils';
 
-const MIGRATION_NAME = 'ClearAccountHolderCounterpartyNames20261113120000';
+const MIGRATION_NAME = 'ClearAccountHolderCounterpartyNames20261113130000';
 const HOLDER = 'Example Account Holder';
 const REWRITTEN_COLUMNS = ['counterpartyName', 'description', 'displayDescription', 'merchantKey'] as const;
 
