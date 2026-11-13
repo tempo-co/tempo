@@ -51,7 +51,7 @@ function input(correlationId = 'transaction-1'): BankTransactionCategorizationIn
 	};
 }
 
-/** A call for one row, without a web search (`plain`) or allowed to search for the merchant (`search`). */
+/** A call for one row, without a web search (`plain`) or allowed to search for the merchant on the bridge (`search`). */
 type CallKind = 'plain' | 'search';
 
 function categorizeOn(provider: ClaudeBankTransactionCategorizationProvider, kind: CallKind) {
@@ -104,8 +104,8 @@ function response(classifications: unknown[]) {
 	};
 }
 
-/** An API reply that ran one web search with `query`. */
-function searchedResponse(query: unknown, overrides: object = {}) {
+/** An API reply that ran one web search with `query`, which a request without tools must never produce. */
+function searchedResponse(query: string) {
 	return {
 		stop_reason: 'end_turn',
 		usage: {server_tool_use: {web_search_requests: 1}},
@@ -119,7 +119,6 @@ function searchedResponse(query: unknown, overrides: object = {}) {
 			{type: 'text', text: '{"classifications":['},
 			{type: 'text', text: `${JSON.stringify(classification({evidenceType: 'MERCHANT_IDENTITY_ONLY'}))}]}`},
 		],
-		...overrides,
 	};
 }
 
@@ -214,22 +213,23 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(merchantContract.schema.properties.merchants.items.properties.kind.enum).toEqual(MERCHANT_KINDS);
 	});
 
-	it('sends the shared contract prompt and schema, offering one web search only with a query', async () => {
+	it('sends the shared contract prompt and schema and never offers a web search on the API', async () => {
+		// The API cannot pin the query before a server-side search runs, so searches run only on the bridge.
 		const {provider, create} = setup();
 		create.mockResolvedValue(response([classification()]));
 		await categorizeOn(provider, 'plain');
-		await categorizeOn(provider, 'search');
+		const [result] = await categorizeOn(provider, 'search');
+		expect(result).not.toHaveProperty('searchTrace');
 		const [plain, search] = create.mock.calls.map(([request]) => request);
-		for (const request of [plain, search])
+		for (const request of [plain, search]) {
 			expect([request.system, request.output_config.format.schema]).toEqual([
 				contract.instructions,
 				contract.schema,
 			]);
-		expect(plain).not.toHaveProperty('tools');
-		expect(JSON.parse(plain.messages[0].content)).not.toHaveProperty('searchQuery');
-		expect(search.tools).toEqual([{type: 'web_search_20250305', name: 'web_search', max_uses: 1}]);
-		expect(JSON.parse(search.messages[0].content)).toMatchObject({searchQuery: SEARCH_QUERY});
-		expect(search.messages[0].content).not.toContain('transaction-1');
+			expect(request).not.toHaveProperty('tools');
+			expect(JSON.parse(request.messages[0].content)).not.toHaveProperty('searchQuery');
+		}
+		expect(search).toEqual(plain);
 	});
 
 	describe('structured response validation', () => {
@@ -282,41 +282,6 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(sent).not.toMatch(/NL00|ABCD|123456|7654321|private-id|sample-token|seller@example/);
 	});
 
-	it('records the query an API search ran and only its source hostnames, keeping the final JSON', async () => {
-		const {provider, create} = setup();
-		create.mockResolvedValue(searchedResponse(SEARCH_QUERY));
-		await expect(categorizeOn(provider, 'search')).resolves.toEqual([
-			{
-				correlationId: 'transaction-1',
-				category: 'FOOD_AND_DRINK',
-				confidence: 0.9,
-				provider: 'claude-api',
-				model: 'claude-sonnet-5-5',
-				searchTrace: {
-					queries: [SEARCH_QUERY],
-					sourceDomains: ['example.test'],
-					evidenceType: 'MERCHANT_IDENTITY_ONLY',
-				},
-			},
-		]);
-		expect(create).toHaveBeenCalledTimes(1);
-	});
-
-	it('keeps the result of an API search that used another query, recording the query that ran', async () => {
-		// The API cannot enforce the query before it runs; the paid answer is kept and the trace tells the truth.
-		const {provider, create} = setup();
-		create.mockResolvedValue(searchedResponse('Example Cafe menu'));
-		const [result] = await categorizeOn(provider, 'search');
-		expect(result.searchTrace?.queries).toEqual(['Example Cafe menu']);
-	});
-
-	it('stores no search trace when the model skipped the search it was offered', async () => {
-		const {provider, create} = setup();
-		create.mockResolvedValue(response([classification()]));
-		const [result] = await categorizeOn(provider, 'search');
-		expect(result).not.toHaveProperty('searchTrace');
-	});
-
 	describe('failure classification', () => {
 		it.each([
 			['the API is rate limited', 429, 'pending'],
@@ -334,26 +299,19 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			}
 		});
 
-		it.each([
-			['a control character', 'Example\u0007Cafe'],
-			[
-				'a query longer than a trace holds',
-				'x'.repeat(BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH + 1),
-			],
-			['a query that is not text', 42],
-		])('fails an API search with %s in its query', async (_case, query) => {
-			const {provider, create} = setup();
-			create.mockResolvedValue(searchedResponse(query));
-			await expect(outcomeOf(provider, 'search')).resolves.toBe('failed');
-			expect(create).toHaveBeenCalledTimes(1);
+		it('fails an API reply that ran a web search, keeping nothing from it', async () => {
+			for (const kind of ['plain', 'search'] as const) {
+				const {provider, create} = setup();
+				create.mockResolvedValue(searchedResponse('Example Cafe menu'));
+				await expect(outcomeOf(provider, kind)).resolves.toBe('failed');
+				expect(create).toHaveBeenCalledTimes(1);
+			}
 		});
 
 		it('fails a reply that does not validate', async () => {
 			for (const reply of [
 				response([{correlationId: '0', category: 'SHOPPING'}]),
-				searchedResponse(SEARCH_QUERY, {
-					content: [{type: 'text', text: JSON.stringify({classifications: [{correlationId: '0'}]})}],
-				}),
+				response([{correlationId: '0'}]),
 			]) {
 				const {provider, create} = setup();
 				create.mockResolvedValue(reply);
@@ -489,7 +447,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			expect(requests[0].body).toEqual({
 				model: 'claude-sonnet-5-5',
 				effort: 'high',
-				input: JSON.parse(create.mock.calls[0][0].messages[0].content),
+				input: {...JSON.parse(create.mock.calls[0][0].messages[0].content), searchQuery: SEARCH_QUERY},
 			});
 		});
 	});

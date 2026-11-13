@@ -525,44 +525,40 @@ describe('Bank transaction categorization integration', () => {
 		});
 	});
 
-	it('keeps an API search answer that used another query, recording the query that ran', async () => {
-		const transport = await useClaudeTransport(
-			app,
-			jest.fn().mockResolvedValue({
-				stop_reason: 'end_turn',
-				usage: {server_tool_use: {web_search_requests: 1}},
-				content: [
-					{type: 'server_tool_use', name: 'web_search', input: {query: 'Synthetic other query'}},
-					{type: 'web_search_tool_result', content: []},
-					{
-						type: 'text',
-						text: '{"classifications":[{"correlationId":"0","category":"SHOPPING","confidence":0.9,"evidenceType":"PURCHASE_CONTEXT"}]}',
-					},
-				],
-			}),
-		);
+	it('never offers the API a web search, even for a row whose merchant allows one', async () => {
+		const create = jest.fn().mockResolvedValue({
+			stop_reason: 'end_turn',
+			usage: {server_tool_use: {web_search_requests: 0}},
+			content: [
+				{
+					type: 'text',
+					text: '{"classifications":[{"correlationId":"0","category":"SHOPPING","confidence":0.9,"evidenceType":"PURCHASE_CONTEXT"}]}',
+				},
+			],
+		});
+		const transport = await useClaudeTransport(app, create);
 		try {
 			await bankTransactionRepository.update(CATEGORIZATION_E2E_WEB_TRANSACTION_ID, {categoryStatus: 'PENDING'});
 			await app.get(CategorizationScheduler).enqueueForTransactions([CATEGORIZATION_E2E_WEB_TRANSACTION_ID]);
 
-			const searched = await waitFor(
+			const categorized = await waitFor(
 				() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_WEB_TRANSACTION_ID}),
 				(row) => row.categoryStatus === 'COMPLETED',
 			);
-			expect(searched).toMatchObject({
+			expect(categorizeSpy.mock.calls[0][2]).toEqual({searchQuery: WEB_SEARCH_TRACE.queries[0]});
+			expect(create).toHaveBeenCalledTimes(1);
+			const [request] = create.mock.calls[0];
+			expect(request).not.toHaveProperty('tools');
+			expect(JSON.parse(request.messages[0].content)).not.toHaveProperty('searchQuery');
+			expect(categorized).toMatchObject({
 				category: 'SHOPPING',
 				categoryConfidence: '0.900',
 				categorySource: 'AI',
 				categoryProvider: 'claude-api',
 				categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION,
-				categorySearchTrace: {
-					queries: ['Synthetic other query'],
-					sourceDomains: [],
-					evidenceType: 'PURCHASE_CONTEXT',
-				},
+				categorySearchTrace: null,
 				categoryLastError: null,
 			});
-			expect(categorizeSpy).toHaveBeenCalledTimes(1);
 		} finally {
 			await transport.restore();
 		}

@@ -117,9 +117,9 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	}
 
 	/**
-	 * One call for a row group, on the API first and then on the subscription bridge. With a `searchQuery` the model
-	 * may run one web search: on the bridge a hook allows only that exact query, while the API can only be asked to use
-	 * it, so a result records the query that actually ran.
+	 * One call for a row group, on the API first and then on the subscription bridge. The API call never offers a web
+	 * search, because the API cannot hold the model to the code-built query before it runs; rows its evidence can't
+	 * settle go to NEEDS_REVIEW. Only the bridge receives a `searchQuery`, and its hook allows exactly that query.
 	 */
 	async categorize(
 		transactions: readonly BankTransactionCategorizationInput[],
@@ -132,28 +132,26 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			...toCategorizationRequestTransaction(transaction),
 			correlationId: String(index),
 		}));
-		const input = {...this.createInput(categories, requestTransactions), ...(searchQuery ? {searchQuery} : {})};
+		const input = this.createInput(categories, requestTransactions);
 		let apiError: unknown;
 		try {
-			const request = this.createRequest(
-				CATEGORIZATION_INSTRUCTIONS,
-				input,
-				categorizationResponseJsonSchema,
-				CATEGORIZATION_MAX_TOKENS,
+			const text = await this.callApi(
+				this.createRequest(
+					CATEGORIZATION_INSTRUCTIONS,
+					input,
+					categorizationResponseJsonSchema,
+					CATEGORIZATION_MAX_TOKENS,
+				),
 			);
-			if (searchQuery) request.tools = [{type: 'web_search_20250305', name: 'web_search', max_uses: 1}];
-			const response = await this.callApi(request);
-			const searchTrace = response.queries.length
-				? {queries: response.queries, sourceDomains: response.domains}
-				: undefined;
-			return this.parseResults(this.parseJson(response.text), transactions, CLAUDE_API, searchTrace);
+			return this.parseResults(this.parseJson(text), transactions, CLAUDE_API);
 		} catch (error) {
 			// A billing/quota/transport failure must never turn into a category or a paid alternative.
 			if (!this.subscriptionSocket) throw this.routesFailed(error, CLAUDE_API);
 			apiError = error;
 		}
 		try {
-			const {searched, sourceDomains, ...output} = this.parseJson(await this.callSubscription(input)) as {
+			const bridgeInput = searchQuery ? {...input, searchQuery} : input;
+			const {searched, sourceDomains, ...output} = this.parseJson(await this.callSubscription(bridgeInput)) as {
 				searched?: unknown;
 				sourceDomains?: unknown;
 			};
@@ -196,10 +194,10 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		};
 		let ran = false;
 		try {
-			const response = await this.callApi(
+			const text = await this.callApi(
 				this.createRequest(merchantContract.instructions, input, merchantContract.schema, 16384),
 			);
-			return this.parseMerchants(this.parseJson(response.text), merchants);
+			return this.parseMerchants(this.parseJson(text), merchants);
 		} catch (error) {
 			ran = this.mayHaveRun(error);
 		}
@@ -253,9 +251,8 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		};
 	}
 
-	private async callApi(
-		request: MessageCreateParamsNonStreaming,
-	): Promise<{text: string; domains: string[]; queries: string[]}> {
+	/** Sends a request that offers no tools and returns its reply text; a reply that used a tool is invalid. */
+	private async callApi(request: MessageCreateParamsNonStreaming): Promise<string> {
 		if (!this.apiKey && !this.client) throw new BankTransactionCategorizationUnavailableError();
 		const client =
 			this.client ??
@@ -267,36 +264,14 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			}));
 		const response = await client.messages.create(request);
 		if (response.stop_reason !== 'end_turn') throw this.invalidResponseError();
-		const lastSearch = response.content.findLastIndex((block) => block.type === 'web_search_tool_result');
-		const text = response.content
-			.slice(lastSearch + 1)
-			.flatMap((block) => (block.type === 'text' ? [block.text] : []))
-			.join('');
-		if (!text.trim()) throw this.invalidResponseError();
-		const queries = response.content.flatMap((block) =>
-			block.type === 'server_tool_use' && block.name === 'web_search'
-				? [(block.input as {query?: unknown} | null)?.query]
-				: [],
-		);
 		if (
-			queries.length !== (response.usage.server_tool_use?.web_search_requests ?? 0) ||
-			!queries.every((query) => typeof query === 'string')
+			response.content.some((block) => !['text', 'thinking', 'redacted_thinking'].includes(block.type)) ||
+			(response.usage.server_tool_use?.web_search_requests ?? 0) > 0
 		)
 			throw this.invalidResponseError();
-		const hostnames: string[] = [];
-		for (const block of response.content) {
-			if (block.type !== 'web_search_tool_result') continue;
-			if (!Array.isArray(block.content)) throw this.invalidResponseError();
-			for (const result of block.content) {
-				try {
-					const url = new URL(result.url);
-					if (url.protocol === 'https:' || url.protocol === 'http:') hostnames.push(url.hostname);
-				} catch {
-					continue;
-				}
-			}
-		}
-		return {text, domains: this.toSourceDomains(hostnames), queries: queries as string[]};
+		const text = response.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('');
+		if (!text.trim()) throw this.invalidResponseError();
+		return text;
 	}
 
 	/** Refusals that clear on their own: no key, auth, rate limit, overload. */
@@ -306,7 +281,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		return typeof status === 'number' && [401, 403, 429, 529].includes(status);
 	}
 
-	/** An HTTP refusal (billing, auth, rate limit, overload) means the request, and so its search, never ran. */
+	/** An HTTP refusal (billing, auth, rate limit, overload) means the request never ran. */
 	private refusedBeforeRunning(error: unknown): boolean {
 		if (error instanceof BankTransactionCategorizationUnavailableError) return true;
 		const status = (error as {status?: unknown} | null)?.status;
