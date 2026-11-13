@@ -1,10 +1,12 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
 import type {BankTransactionRecurring} from '@tempo/contracts';
+import {Job} from 'bullmq';
 import {randomUUID} from 'node:crypto';
 import TestAgent from 'supertest/lib/agent';
 import {ArrayContains, DataSource, In, type QueryDeepPartialEntity, Repository, SelectQueryBuilder} from 'typeorm';
 
+import {RECOMPUTE_OWN_TRANSFERS_JOB} from '@core/queue/queue.constants';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
@@ -19,6 +21,8 @@ import {
 	RecurringSeriesService,
 } from '@modules/banking/recurring/recurring-series.service';
 import {RecurringSnapshot} from '@modules/banking/recurring/recurring-snapshot.entity';
+import {BankTransactionAmountConversionProcessor} from '@modules/banking/services/bank-transaction-amount-conversion.processor';
+import {BankTransactionAmountConversionJobData} from '@modules/banking/services/bank-transaction-amount-conversion.queue.service';
 import {parseCents} from '@modules/banking/summary/bank-transaction-summary';
 
 import {
@@ -2618,6 +2622,22 @@ describe('RecurringSeries', () => {
 			detect.mockClear();
 			expect(await read()).toEqual(stored);
 			expect(detect).not.toHaveBeenCalled();
+
+			// The daily recompute folds the notes of owners who write but do not read, and the stored detection stays valid.
+			for (const amount of ['-25.02', '-25.03', '-25.00']) await fixtures.transactions.update(ids[1], {amount});
+			const beforeDaily = await read();
+			expect(await notes()).toBe(4);
+			await app
+				.get(BankTransactionAmountConversionProcessor)
+				.process({name: RECOMPUTE_OWN_TRANSFERS_JOB} as Job<BankTransactionAmountConversionJobData>);
+			expect(await notes()).toBe(1);
+			detect.mockClear();
+			expect(await read()).toEqual(beforeDaily);
+			expect(detect).not.toHaveBeenCalled();
+			// A write after the fold is a change.
+			await fixtures.transactions.update(ids[1], {amount: '-25.04'});
+			await read();
+			expect(detect).toHaveBeenCalledTimes(1);
 		} finally {
 			detect.mockRestore();
 			await fixtures.connections.delete(connection.id);

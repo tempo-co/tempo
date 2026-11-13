@@ -424,6 +424,17 @@ export class RecurringSeriesService {
 	}
 
 	/**
+	 * Folds the change notes of every owner with more than one, so owners whose history changes but who never read
+	 * their recurring payments keep few notes too. Stored detections stay valid: folding keeps each owner's version.
+	 */
+	async foldAllChangeNotes(): Promise<void> {
+		const owners: Array<{accountId: string}> = await this.bankTransactionRepository.manager.query(
+			'SELECT "accountId" FROM "bank_history_changes" GROUP BY "accountId" HAVING COUNT(*) > 1',
+		);
+		for (const {accountId} of owners) await this.foldChangeNotes(accountId);
+	}
+
+	/**
 	 * Replaces the owner's committed change notes with one note of the same weight, so the version stays the same and
 	 * the notes stay few. Notes of transactions still running are not visible here and keep their own weight.
 	 */
