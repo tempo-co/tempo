@@ -1,10 +1,11 @@
 import {FileUp} from 'lucide-react';
 import {type Ref, useEffect, useRef, useState} from 'react';
+import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
 import {cn} from '@/utils/cn';
 
-import {droppedFiles} from '../utils/dropped-files';
+import {droppedFiles, folderNotRead} from '../utils/dropped-files';
 import {dragHasFiles, useCanDropFiles} from './drop-files';
 import {IMPORT_TILE} from './file-choice';
 
@@ -56,6 +57,8 @@ export function PageFileDrop({
   }, [onFiles]);
 
   useEffect(() => {
+    // Set when this effect ends (the page goes away or drops stop being taken): a folder still being read is dropped.
+    let stale = false;
     const reset = () => {
       depth.current = 0;
       setDragging(false);
@@ -83,9 +86,14 @@ export function PageFileDrop({
       reset();
       if (taken) return;
       if (!active) return;
-      void droppedFiles(event.dataTransfer).then((files) => {
-        if (files.length > 0) latestOnFiles.current(files);
-      });
+      droppedFiles(event.dataTransfer).then(
+        (files) => {
+          if (!stale && files.length > 0) latestOnFiles.current(files);
+        },
+        () => {
+          if (!stale) folderNotRead(toast.error);
+        },
+      );
     };
     if (!active) reset();
     window.addEventListener('dragenter', onEnter);
@@ -93,6 +101,7 @@ export function PageFileDrop({
     window.addEventListener('dragover', onOver);
     window.addEventListener('drop', onDrop);
     return () => {
+      stale = true;
       window.removeEventListener('dragenter', onEnter);
       window.removeEventListener('dragleave', onLeave);
       window.removeEventListener('dragover', onOver);

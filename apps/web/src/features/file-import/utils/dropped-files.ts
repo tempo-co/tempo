@@ -14,6 +14,23 @@ export type DroppedEntry = {
 
 /** More files than any drop may hold, so a huge folder stops being read early; the import refuses the rest. */
 const MAX_FOLDER_FILES = 200;
+/** Entries looked at before a folder counts as too big to read, however few of them are files. */
+const MAX_FOLDER_ENTRIES = 2000;
+
+/** A dropped folder that could not be read, or holds too much to look through. */
+export class FolderReadError extends Error {
+  constructor() {
+    super('The dropped folder could not be read.');
+    this.name = 'FolderReadError';
+  }
+}
+
+/** Tells the owner a dropped folder was not read; the drop imports nothing. */
+export function folderNotRead(notify: (title: string, options: {description: string}) => void) {
+  notify("Couldn't read that folder", {
+    description: 'Nothing was imported. Choose the files inside it instead.',
+  });
+}
 
 /**
  * The files inside dropped folders, at any depth, in name order. A folder itself is not a file: uploading it fails
@@ -21,8 +38,11 @@ const MAX_FOLDER_FILES = 200;
  */
 export async function filesInFolders(folders: readonly DroppedEntry[]): Promise<File[]> {
   const files: File[] = [];
+  let seen = 0;
   const visit = async (entry: DroppedEntry): Promise<void> => {
     if (files.length >= MAX_FOLDER_FILES || entry.name.startsWith('.')) return;
+    seen += 1;
+    if (seen > MAX_FOLDER_ENTRIES) throw new FolderReadError();
     if (entry.isFile && entry.file) {
       files.push(await new Promise<File>((resolve, reject) => entry.file!(resolve, reject)));
     } else if (entry.isDirectory && entry.createReader) {
@@ -46,7 +66,8 @@ export async function filesInFolders(folders: readonly DroppedEntry[]): Promise<
 
 /**
  * The files of a drop, with each dropped folder replaced by the files inside it. The drop's items are only readable
- * while its event is being handled, so they are collected before the first await.
+ * while its event is being handled, so they are collected before the first await. A drop is all or nothing: when a
+ * folder cannot be read the promise rejects with `FolderReadError` and no file of the drop is given.
  */
 export function droppedFiles(dataTransfer: DataTransfer | null): Promise<File[]> {
   if (!dataTransfer) return Promise.resolve([]);
@@ -65,6 +86,8 @@ export function droppedFiles(dataTransfer: DataTransfer | null): Promise<File[]>
   if (folders.length === 0) return Promise.resolve(plain);
   return filesInFolders(folders).then(
     (inside) => [...plain, ...inside],
-    () => plain,
+    () => {
+      throw new FolderReadError();
+    },
   );
 }

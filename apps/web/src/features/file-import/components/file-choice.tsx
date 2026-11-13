@@ -1,10 +1,11 @@
 import {FileUp} from 'lucide-react';
-import {useRef, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
+import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
 import {cn} from '@/utils/cn';
 
-import {droppedFiles} from '../utils/dropped-files';
+import {droppedFiles, folderNotRead} from '../utils/dropped-files';
 import {fileNameTail, formatFileSize} from '../utils/import-format';
 import {dragHasFiles, useCanDropFiles} from './drop-files';
 import {SupportedFiles} from './supported-files';
@@ -29,6 +30,19 @@ export function FileChoice({
   const [over, setOver] = useState(false);
   // dragenter and dragleave fire for every child, so the area counts how deep the drag is.
   const depth = useRef(0);
+  const latestDrop = useRef(0);
+  const latest = useRef({onFiles});
+  useEffect(() => {
+    latest.current = {onFiles};
+    // Becoming unavailable, like unmounting, drops a folder still being read.
+    if (disabled) latestDrop.current += 1;
+  }, [onFiles, disabled]);
+  useEffect(
+    () => () => {
+      latestDrop.current += 1;
+    },
+    [],
+  );
 
   const chooseButton = (
     <Button
@@ -52,6 +66,7 @@ export function FileChoice({
         data-testid='bank-import-file-input'
         onChange={(event) => {
           const files = Array.from(event.target.files ?? []);
+          latestDrop.current += 1;
           // Cleared so choosing the same file again still counts as a choice.
           event.target.value = '';
           if (files.length > 0) onFiles(files);
@@ -82,9 +97,16 @@ export function FileChoice({
             depth.current = 0;
             setOver(false);
             if (disabled) return;
-            void droppedFiles(event.dataTransfer).then((files) => {
-              if (files.length > 0) onFiles(files);
-            });
+            // Reading a folder takes a moment; a choice made meanwhile, or this area going away, wins over it.
+            const drop = ++latestDrop.current;
+            droppedFiles(event.dataTransfer).then(
+              (files) => {
+                if (drop === latestDrop.current && files.length > 0) latest.current.onFiles(files);
+              },
+              () => {
+                if (drop === latestDrop.current) folderNotRead(toast.error);
+              },
+            );
           }}
           className={cn(
             'grid min-h-40 place-content-center justify-items-center gap-2 rounded-md border border-dashed p-4 text-center transition-colors',

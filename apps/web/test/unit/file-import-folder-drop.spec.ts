@@ -50,3 +50,57 @@ test('a dropped folder gives the files inside it, at any depth, without hidden f
 test('an empty folder gives no files', async () => {
   expect(await filesInFolders([folder('empty', [])])).toEqual([]);
 });
+
+const failing: DroppedEntry = {
+  isFile: true,
+  isDirectory: false,
+  name: 'unreadable.xml',
+  file: (_resolve, reject) => reject(new Error('synthetic')),
+};
+
+/** A drop as the browser hands it over: each item gives its file and, for the walker, its entry. */
+const transfer = (items: Array<{file: File | null; entry: DroppedEntry | null}>) =>
+  ({
+    items: items.map(({file: itemFile, entry}) => ({
+      kind: 'file',
+      getAsFile: () => itemFile,
+      webkitGetAsEntry: () => entry,
+    })),
+    files: items.flatMap(({file: itemFile}) => (itemFile ? [itemFile] : [])),
+  }) as unknown as DataTransfer;
+
+test("a drop of files and a folder gives the files and the folder's files", async () => {
+  const plain = new File(['synthetic'], 'loose.csv');
+  const files = await droppedFiles(
+    transfer([
+      {file: plain, entry: file('loose.csv')},
+      {file: null, entry: folder('statements', [file('march.xml')])},
+    ]),
+  );
+  expect(files.map(({name}) => name)).toEqual(['loose.csv', 'march.xml']);
+});
+
+test('a folder that cannot be read fails the whole drop, its plain files included', async () => {
+  const plain = new File(['synthetic'], 'loose.csv');
+  await expect(
+    droppedFiles(
+      transfer([
+        {file: plain, entry: file('loose.csv')},
+        {file: null, entry: folder('statements', [failing])},
+      ]),
+    ),
+  ).rejects.toBeInstanceOf(FolderReadError);
+});
+
+test('a drop without readable entries, as a test makes one, gives its files', async () => {
+  const plain = new File(['synthetic'], 'loose.csv');
+  expect(await droppedFiles(transfer([{file: plain, entry: null}]))).toEqual([plain]);
+  expect(await droppedFiles({items: [], files: [plain]} as unknown as DataTransfer)).toEqual([
+    plain,
+  ]);
+});
+
+test('a folder with more entries than can be looked through is refused', async () => {
+  const many = Array.from({length: 2001}, (_, index) => folder(`empty-${index}`, []));
+  await expect(filesInFolders([folder('huge', many)])).rejects.toBeInstanceOf(FolderReadError);
+});
