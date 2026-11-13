@@ -447,6 +447,22 @@ describe('BankingSyncService synchronization lock', () => {
 		]);
 	});
 
+	it('recomputes own transfers around the former counterparts of removed pending rows', async () => {
+		transactionGate.resolve(NO_TRANSACTIONS);
+		// The fetch no longer returns two pending rows; one of them was paired with a row that may have had evidence
+		// only through it.
+		transactionRepository.query.mockImplementation(async (sql: string) =>
+			sql.includes('DELETE FROM')
+				? [[{ownTransferCounterpartId: 'former-counterpart-id'}, {ownTransferCounterpartId: null}], 2]
+				: [],
+		);
+
+		await expect(service.synchronizeAutomatically('connection-id')).resolves.toMatchObject({status: 'SUCCEEDED'});
+		expect(ownTransferService.recomputeForOwnerSafely.mock.calls).toEqual([
+			['account-id', {transactionIds: ['former-counterpart-id']}],
+		]);
+	});
+
 	it('recomputes own transfers over the whole history when the exchange recompute failed', async () => {
 		transactionGate.resolve(NO_TRANSACTIONS);
 		// A failed recompute may still have committed, so which rows it reclassified is unknown.

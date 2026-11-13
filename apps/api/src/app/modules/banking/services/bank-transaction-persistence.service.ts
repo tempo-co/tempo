@@ -295,20 +295,29 @@ export class BankTransactionPersistenceService {
 	/**
 	 * Pending rows are temporary. After a complete fetch from `coveredFrom` (null: the account's whole history), a
 	 * pending row of that window the fetch did not return was released or booked as another row, so it is deleted.
-	 * Rows without any date count as covered.
+	 * Rows without any date count as covered. Returns the own-transfer counterparts the deleted rows were paired with,
+	 * whose own-transfer state the recompute after the sync must decide again.
 	 */
 	async removeUnreturnedPendingTransactions(
 		repository: Repository<BankTransaction>,
 		bankAccountId: BankAccount['id'],
 		returnedTransactionIds: readonly string[],
 		coveredFrom: string | null,
-	): Promise<void> {
-		await repository.query(
+	): Promise<string[]> {
+		const result: unknown = await repository.query(
 			`DELETE FROM "bank_transactions"
 			WHERE "bankAccountId" = $1 AND ${PENDING_ROW_SQL}
 				AND NOT ("id" = ANY($2::uuid[]))
-				AND ($3::date IS NULL OR COALESCE(${PENDING_ROW_START_SQL}, $3::date) >= $3::date)`,
+				AND ($3::date IS NULL OR COALESCE(${PENDING_ROW_START_SQL}, $3::date) >= $3::date)
+			RETURNING "ownTransferCounterpartId"`,
 			[bankAccountId, returnedTransactionIds, coveredFrom],
+		);
+		// TypeORM returns [rows, affected] for a DELETE on PostgreSQL.
+		const rows = (Array.isArray(result) && Array.isArray(result[0]) ? result[0] : (result ?? [])) as Array<{
+			ownTransferCounterpartId: string | null;
+		}>;
+		return rows.flatMap(({ownTransferCounterpartId}) =>
+			ownTransferCounterpartId ? [ownTransferCounterpartId] : [],
 		);
 	}
 

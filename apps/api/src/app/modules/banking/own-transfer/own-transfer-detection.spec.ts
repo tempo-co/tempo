@@ -210,14 +210,56 @@ describe('detectOwnTransfers', () => {
 		).toEqual([leg.id]);
 	});
 
-	it.each([
-		{name: 'pending legs', overrides: {transactionStatus: 'PDNG'}},
-		{name: 'currency-exchange legs', overrides: {financialEventType: 'CURRENCY_EXCHANGE'}},
-	])('excludes $name', ({overrides}) => {
-		const outgoing = tx({bankAccountId: BANK_EUR, amount: '-75', counterpartyIban: WALLET_IBAN, ...overrides});
+	it('excludes currency-exchange legs', () => {
+		const outgoing = tx({
+			bankAccountId: BANK_EUR,
+			amount: '-75',
+			counterpartyIban: WALLET_IBAN,
+			financialEventType: 'CURRENCY_EXCHANGE',
+		});
 		const incoming = tx({bankAccountId: WALLET_EUR, amount: '75'});
 
 		expect(detect([outgoing, incoming])).toEqual({});
+	});
+
+	it('recognizes pending legs only on their own evidence', () => {
+		const pendingOut = tx({
+			bankAccountId: BANK_EUR,
+			amount: '-75',
+			counterpartyIban: WALLET_IBAN,
+			transactionStatus: ' pdng ',
+		});
+		const bookedIn = tx({bankAccountId: WALLET_EUR, amount: '75'});
+		const pendingNamed = tx({
+			bankAccountId: WALLET_EUR,
+			amount: '-30',
+			description: 'To Jane-Marie Example',
+			transactionStatus: 'PDNG',
+		});
+		const pendingMarked = tx({
+			bankAccountId: WALLET_EUR,
+			amount: '-31',
+			override: OWN_TRANSFER_OVERRIDES.MARKED,
+			transactionStatus: 'PDNG',
+		});
+		// The booked leg's IBAN points at the wallet, but the pending credit there has no evidence of its own.
+		const bookedOut = tx({bankAccountId: BANK_EUR, amount: '-40', counterpartyIban: WALLET_IBAN});
+		const pendingIn = tx({bankAccountId: WALLET_EUR, amount: '40', transactionStatus: 'PDNG'});
+		const pendingCard = tx({
+			bankAccountId: WALLET_EUR,
+			amount: '-12',
+			counterpartyName: 'Jane-Marie Example',
+			transactionType: 'CARD_PAYMENT',
+			transactionStatus: 'PDNG',
+		});
+
+		expect(detect([pendingOut, bookedIn, pendingNamed, pendingMarked, bookedOut, pendingIn, pendingCard])).toEqual({
+			[pendingOut.id]: {evidence: OWN_TRANSFER_EVIDENCE.IBAN, counterpartId: bookedIn.id},
+			[bookedIn.id]: {evidence: OWN_TRANSFER_EVIDENCE.IBAN, counterpartId: pendingOut.id},
+			[pendingNamed.id]: {evidence: OWN_TRANSFER_EVIDENCE.NAME, counterpartId: null},
+			[pendingMarked.id]: {evidence: OWN_TRANSFER_EVIDENCE.MANUAL, counterpartId: null},
+			[bookedOut.id]: {evidence: OWN_TRANSFER_EVIDENCE.IBAN, counterpartId: null},
+		});
 	});
 
 	it('never pairs legs within the same account', () => {

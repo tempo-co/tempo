@@ -143,8 +143,28 @@ describe('OwnTransferService', () => {
 		});
 
 		let scopedChanges = 0;
+		let removedPendingPairs = 0;
 		for (let round = 0; round < 8; round++) {
 			const changed = await createRows(4);
+			// A pending transfer with evidence of its own and its booked leg, so later rounds have a pair to remove.
+			const pendingAmount = generator.pick(AMOUNTS);
+			const pendingDate = day(generator.integer(28));
+			for (const [account, values] of [
+				[
+					accounts[0],
+					{amount: `-${pendingAmount}`, transactionStatus: 'PDNG', counterpartyIban: accounts[1].iban},
+				],
+				[accounts[1], {amount: pendingAmount, transactionStatus: 'BOOK'}],
+			] as const) {
+				const transaction = await fixtures.createTransaction(account, {
+					...values,
+					creditDebitIndicator: values.amount.startsWith('-') ? 'DBIT' : 'CRDT',
+					bookingDate: pendingDate,
+					valueDate: pendingDate,
+					description: 'Example Shop',
+				});
+				changed.push(transaction.id);
+			}
 			for (let edit = 0; edit < 12; edit++) {
 				const id = generator.pick(ids);
 				const {
@@ -175,6 +195,22 @@ describe('OwnTransferService', () => {
 			const moved = generator.pick(paired);
 			await fixtures.transactions.update(moved.id, {amount: `${moved.amount.startsWith('-') ? '-' : ''}7.25`});
 			changed.push(moved.id);
+			// A sync that removes a paired pending leg scopes in its former counterpart, which the leg can no longer name.
+			const pairedPending = await fixtures.transactions.find({
+				select: {id: true, ownTransferCounterpartId: true},
+				where: accounts.map(({id}) => ({
+					bankAccountId: id,
+					transactionStatus: 'PDNG',
+					ownTransferCounterpartId: Not(IsNull()),
+				})),
+				order: {id: 'ASC'},
+			});
+			if (pairedPending.length > 0) {
+				const removed = generator.pick(pairedPending);
+				await fixtures.transactions.delete(removed.id);
+				removedPendingPairs += 1;
+				changed.push(removed.ownTransferCounterpartId!);
+			}
 			if (round === 5) {
 				changed.push(...(await createRows(1)));
 				await fixtures.transactions.update(changed.at(-1)!, {counterpartyIban: UNSTORED_IBAN, currency: 'EUR'});
@@ -192,6 +228,7 @@ describe('OwnTransferService', () => {
 		}
 		// The edits paired and unpaired legs, and the named IBAN was filled in.
 		expect(scopedChanges).toBeGreaterThan(20);
+		expect(removedPendingPairs).toBeGreaterThan(4);
 		expect((await snapshot()).ibans).toContain(UNSTORED_IBAN);
-	});
+	}, 30_000);
 });
