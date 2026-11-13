@@ -9,7 +9,7 @@ import {Server} from 'node:net';
 import sharp from 'sharp';
 import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
-import {Repository} from 'typeorm';
+import {In, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {MERCHANT_LOGO_QUEUE, MERCHANT_LOGO_RECONCILE_SCHEDULER_ID} from '@core/queue/queue.constants';
@@ -20,6 +20,7 @@ import {
 	MerchantIdentification,
 	MerchantIdentificationInput,
 } from '@modules/banking/categorization/bank-transaction-categorization.types';
+import {getMerchantKeyName} from '@modules/banking/categorization/bank-transaction-merchant-key';
 import {ClaudeBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/claude-bank-transaction-categorization.provider';
 import {LogoDevClient, LogoDevResult} from '@modules/banking/merchant-logos/logo-dev.client';
 import * as maskConversion from '@modules/banking/merchant-logos/merchant-logo-mask';
@@ -329,6 +330,19 @@ describe('Merchant logos', () => {
 			]),
 		);
 		expect(await merchants.countBy({accountId: owner.id})).toBe(5);
+		// After a sync only the merchants of the rows it wrote are added; the hourly reconcile adds the owner's others.
+		const [synced, unsynced] = await fixtures.createTransactions(bankAccount, [
+			bookedRow('2026-10-12', '-3.00', {description: 'Example Bakery', transactionType: 'CARD_PAYMENT'}),
+			bookedRow('2026-10-12', '-6.00', {description: 'Example Florist', transactionType: 'CARD_PAYMENT'}),
+		]);
+		await app.get(MerchantLogoService).enqueueForOwnerSafely(owner.id, [synced.id]);
+		const keys = [synced, unsynced].map(({merchantKey}) => getMerchantKeyName(merchantKey)!);
+		const added = await merchants.findBy({accountId: owner.id, key: In(keys)});
+		expect(added.map(({key}) => key)).toEqual([keys[0]]);
+		await waitFor(
+			() => merchants.findOneByOrFail({id: added[0].id}),
+			({status}) => status !== 'PENDING',
+		);
 		// logo.dev's logo, rated by its vector original; a site logo.dev doesn't know shows its own icon.
 		expect(await logos.findOneByOrFail({domain: 'shop.example.test'})).toMatchObject({
 			sourceUrl: `${LOGO_DEV_ASSET}shop`,

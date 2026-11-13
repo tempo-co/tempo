@@ -32,6 +32,7 @@ import {BankingEncryptionService} from '@modules/banking/services/banking-encryp
 import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
 import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
 import {EnableBankingClient, EnableBankingClientError} from '@modules/banking/services/enable-banking.client';
+import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {
@@ -1430,7 +1431,7 @@ describe('BankConnectionController', () => {
 		await verifiedAgent.get('/bank-connections/not-a-uuid/transactions').expect(400);
 	});
 
-	it('books a pending payment the bank sent without booking or value date into the same row, keeping its manual category', async () => {
+	it('books a pending payment into the same row and keeps its category; only a changed description sends an AI row back to the model', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('pending-booked-session');
 		const pending = {
 			entry_reference: 'pending-booked-entry',
@@ -1440,11 +1441,23 @@ describe('BankConnectionController', () => {
 			transaction_date: '2026-08-24',
 			remittance_information: ['Example Shop card payment'],
 		};
-		expect(await synchronizeProviderRows(connection.id, [pending])).toMatchObject({
+		const pendingAi = {
+			...pending,
+			entry_reference: 'pending-booked-ai-entry',
+			remittance_information: ['Example Bakery card payment'],
+		};
+		expect(await synchronizeProviderRows(connection.id, [pending, pendingAi])).toMatchObject({
 			status: 'SUCCEEDED',
-			transactionsAdded: 1,
+			transactionsAdded: 2,
 		});
-		const stored = await bankTransactionRepository.findOneByOrFail({bankAccountId: bankAccount.id});
+		const stored = await bankTransactionRepository.findOneByOrFail({
+			bankAccountId: bankAccount.id,
+			entryReference: pending.entry_reference,
+		});
+		const storedAi = await bankTransactionRepository.findOneByOrFail({
+			bankAccountId: bankAccount.id,
+			entryReference: pendingAi.entry_reference,
+		});
 		// The client fills both missing dates from the transaction date.
 		expect(stored).toMatchObject({
 			transactionStatus: 'PDNG',
@@ -1458,19 +1471,27 @@ describe('BankConnectionController', () => {
 			categorySource: 'MANUAL',
 			categoryStatus: 'COMPLETED',
 		});
+		await bankTransactionRepository.update(storedAi.id, {
+			category: 'FOOD_AND_DRINK',
+			categorySource: 'AI',
+			categoryStatus: 'COMPLETED',
+			categoryAppliedInputHash: storedAi.categoryInputHash,
+		});
+		// Booking changes the dates, never what the payment was for.
 		const booked = {...pending, status: 'BOOK', booking_date: '2026-08-26', value_date: '2026-08-27'};
-		expect(await synchronizeProviderRows(connection.id, [booked])).toMatchObject({
+		const bookedAi = {...pendingAi, status: 'BOOK', booking_date: '2026-08-26', value_date: '2026-08-27'};
+		expect(await synchronizeProviderRows(connection.id, [booked, bookedAi])).toMatchObject({
 			status: 'SUCCEEDED',
 			transactionsAdded: 0,
 		});
-		expect(await synchronizeProviderRows(connection.id, [booked])).toMatchObject({
+		expect(await synchronizeProviderRows(connection.id, [booked, bookedAi])).toMatchObject({
 			status: 'SUCCEEDED',
 			transactionsAdded: 0,
 		});
 		const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
-		expect(rows).toHaveLength(1);
-		expect(rows[0]).toMatchObject({
-			id: stored.id,
+		expect(rows).toHaveLength(2);
+		const byId = new Map(rows.map((row) => [row.id, row]));
+		expect(byId.get(stored.id)).toMatchObject({
 			stableIdentityKey: stored.stableIdentityKey,
 			transactionDate: '2026-08-24',
 			bookingDate: '2026-08-26',
@@ -1482,9 +1503,30 @@ describe('BankConnectionController', () => {
 			categorySource: 'MANUAL',
 			categoryStatus: 'COMPLETED',
 		});
+		expect(byId.get(storedAi.id)).toMatchObject({
+			bookingDate: '2026-08-26',
+			category: 'FOOD_AND_DRINK',
+			categorySource: 'AI',
+			categoryStatus: 'COMPLETED',
+			categoryInputHash: storedAi.categoryInputHash,
+		});
 		const response = await verifiedAgent.get(`/bank-connections/${connection.id}/transactions`).expect(200);
-		expect(response.body.transactions).toHaveLength(1);
-		expect(response.body.transactions[0].id).toBe(stored.id);
+		expect(response.body.transactions.map(({id}: {id: string}) => id).sort()).toEqual(
+			[stored.id, storedAi.id].sort(),
+		);
+
+		// A changed description goes back to the model, keeping the category it had until the new one lands; the
+		// owner's own category never changes.
+		const described = (row: typeof booked) => ({...row, remittance_information: ['Example Pharmacy card payment']});
+		await synchronizeProviderRows(connection.id, [described(booked), described(bookedAi)]);
+		const rechecked = await bankTransactionRepository.findOneByOrFail({id: storedAi.id});
+		expect(rechecked).toMatchObject({category: 'FOOD_AND_DRINK', categorySource: 'AI', categoryStatus: 'PENDING'});
+		expect(rechecked.categoryInputHash).not.toBe(storedAi.categoryInputHash);
+		expect(await bankTransactionRepository.findOneByOrFail({id: stored.id})).toMatchObject({
+			category: 'GROCERIES',
+			categorySource: 'MANUAL',
+			categoryStatus: 'COMPLETED',
+		});
 	});
 
 	it('leaves a row the categorization worker holds unchanged on re-sync unless it becomes a currency exchange', async () => {
@@ -1729,22 +1771,92 @@ describe('BankConnectionController', () => {
 		);
 	});
 
-	it('removes pending rows a complete fetch no longer returns, so totals count each payment once', async () => {
+	it('removes pending rows a complete fetch no longer returns and keeps pending own transfers out of totals, so totals count each payment once', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('pending-lifecycle-session');
-		const row = (reference: string, amount: string, status: string, bookingDate?: string) => ({
+		// The owner's savings account at another bank, which that bank's transfers name by IBAN and holder name.
+		const savingsIban = 'GB33BUKB20201555555555';
+		const holderName = 'Example Savings Holder';
+		const {connection: savingsConnection, bankAccounts: savingsAccounts} = await createAuthorizedConnectionFixture(
+			'pending-lifecycle-savings-session',
+			[
+				{
+					providerAccountId: 'pending-lifecycle-savings',
+					identificationHash: 'hash-pending-lifecycle-savings',
+					iban: savingsIban,
+					name: holderName,
+				},
+			],
+			'Example Savings Bank',
+		);
+		const savingsLeg = await fixtures.createTransaction(savingsAccounts[0], {
+			providerTransactionId: 'pending-lifecycle-savings-leg',
+			amount: '40.00',
+			creditDebitIndicator: 'CRDT',
+			bookingDate: '2026-08-21',
+			description: null,
+		});
+		// Answers a pending transfer that the bank later drops; it has no evidence of its own.
+		const savingsReleasedLeg = await fixtures.createTransaction(savingsAccounts[0], {
+			providerTransactionId: 'pending-lifecycle-savings-released-leg',
+			amount: '60.00',
+			creditDebitIndicator: 'CRDT',
+			bookingDate: '2026-08-21',
+			description: null,
+		});
+		const row = (
+			reference: string,
+			amount: string,
+			status: string,
+			bookingDate?: string,
+			fields: Record<string, unknown> = {remittance_information: [`Example Shop ${reference}`]},
+		) => ({
 			entry_reference: reference,
 			transaction_amount: {amount, currency: 'EUR'},
 			credit_debit_indicator: 'DBIT',
 			status,
 			transaction_date: '2026-08-20',
 			...(bookingDate ? {booking_date: bookingDate, value_date: bookingDate} : {}),
-			remittance_information: [`Example Shop ${reference}`],
+			...fields,
 		});
 		const booked = row('lifecycle-booked', '10.00', 'BOOK', '2026-08-20');
 		const hold = row('lifecycle-hold', '50.00', 'PDNG');
 		const tipPending = row('lifecycle-tip', '20.00', 'PDNG');
 		// The final amount differs from the pending one, so the booked row is a new row, not the pending one updated.
 		const tipBooked = row('lifecycle-tip', '23.00', 'BOOK', '2026-08-22');
+		const transferPending = row('lifecycle-transfer', '40.00', 'PDNG', undefined, {
+			creditor_account: {iban: savingsIban},
+			remittance_information: ['Example savings top-up'],
+		});
+		// The bank books the transfer under a new reference, so the booked row replaces the pending one.
+		const transferBooked = {
+			...transferPending,
+			entry_reference: 'lifecycle-transfer-booked',
+			status: 'BOOK',
+			booking_date: '2026-08-21',
+			value_date: '2026-08-21',
+		};
+		const releasedTransferPending = row('lifecycle-released-transfer', '60.00', 'PDNG', undefined, {
+			creditor_account: {iban: savingsIban},
+			remittance_information: ['Example savings top-up, cancelled'],
+		});
+		const namedTransferPending = row('lifecycle-named-transfer', '15.00', 'PDNG', undefined, {
+			creditor: {name: holderName},
+		});
+		const namedTransferBooked = {...namedTransferPending, status: 'BOOK', booking_date: '2026-08-21'};
+		// A card payment is never an own transfer, even when the merchant name is the holder's.
+		const cardPending = row('lifecycle-card', '5.00', 'PDNG', undefined, {
+			creditor: {name: holderName},
+			bank_transaction_code: {code: 'CCRD'},
+		});
+		const ownTransferState = async () =>
+			Object.fromEntries(
+				(await bankTransactionRepository.findBy({bankAccountId: bankAccount.id}))
+					.filter(({entryReference}) => entryReference !== null && /transfer|card/.test(entryReference))
+					.map(({entryReference, transactionStatus, ownTransferEvidence, ownTransferCounterpartId}) => [
+						entryReference,
+						{transactionStatus, ownTransferEvidence, ownTransferCounterpartId},
+					]),
+			);
 		const totals = async () =>
 			(
 				await verifiedAgent
@@ -1755,12 +1867,59 @@ describe('BankConnectionController', () => {
 		const accounts = app.get(DataSource).getRepository(Account);
 		await accounts.update({id: account.id}, {baseCurrency: 'EUR'});
 		try {
-			expect(await synchronizeProviderRows(connection.id, [booked, hold, tipPending])).toMatchObject({
+			const firstFetch = [
+				booked,
+				hold,
+				tipPending,
+				transferPending,
+				releasedTransferPending,
+				namedTransferPending,
+				cardPending,
+			];
+			expect(await synchronizeProviderRows(connection.id, firstFetch)).toMatchObject({
 				status: 'SUCCEEDED',
-				transactionsAdded: 3,
+				transactionsAdded: 7,
 			});
-			// Pending payments count, as in the bank's own app.
-			expect(await totals()).toMatchObject({count: 3, spending: '80.00'});
+			// Pending payments count, as in the bank's own app; pending own transfers are internal until they book.
+			expect(await totals()).toMatchObject({count: 7, spending: '85.00', income: '0.00'});
+			const releasedTransfer = await bankTransactionRepository.findOneByOrFail({
+				bankAccountId: bankAccount.id,
+				entryReference: 'lifecycle-released-transfer',
+			});
+			const pendingTransfer = await bankTransactionRepository.findOneByOrFail({
+				bankAccountId: bankAccount.id,
+				entryReference: 'lifecycle-transfer',
+			});
+			expect(await ownTransferState()).toEqual({
+				'lifecycle-transfer': {
+					transactionStatus: 'PDNG',
+					ownTransferEvidence: 'IBAN',
+					ownTransferCounterpartId: savingsLeg.id,
+				},
+				'lifecycle-released-transfer': {
+					transactionStatus: 'PDNG',
+					ownTransferEvidence: 'IBAN',
+					ownTransferCounterpartId: savingsReleasedLeg.id,
+				},
+				'lifecycle-named-transfer': {
+					transactionStatus: 'PDNG',
+					ownTransferEvidence: 'NAME',
+					ownTransferCounterpartId: null,
+				},
+				'lifecycle-card': {
+					transactionStatus: 'PDNG',
+					ownTransferEvidence: null,
+					ownTransferCounterpartId: null,
+				},
+			});
+			expect(await bankTransactionRepository.findOneByOrFail({id: savingsLeg.id})).toMatchObject({
+				ownTransferEvidence: 'IBAN',
+				ownTransferCounterpartId: pendingTransfer.id,
+			});
+			expect(await bankTransactionRepository.findOneByOrFail({id: savingsReleasedLeg.id})).toMatchObject({
+				ownTransferEvidence: 'IBAN',
+				ownTransferCounterpartId: releasedTransfer.id,
+			});
 
 			// A fetch with a row the client cannot read is incomplete, so it removes nothing.
 			const unreadable = {entry_reference: 'lifecycle-unreadable', transaction_amount: {currency: 'EUR'}};
@@ -1768,23 +1927,63 @@ describe('BankConnectionController', () => {
 				status: 'PARTIAL',
 				transactionsAdded: 0,
 			});
-			expect(await totals()).toMatchObject({count: 3, spending: '80.00'});
+			expect(await totals()).toMatchObject({count: 7, spending: '85.00'});
 
-			// The hold was released and the tip booked at its final amount.
-			expect(await synchronizeProviderRows(connection.id, [booked, tipBooked])).toMatchObject({
+			// The hold and the second transfer were released, the tip and the IBAN transfer booked as new rows, the named
+			// transfer booked into its pending row and the card payment is still pending.
+			expect(
+				await synchronizeProviderRows(connection.id, [
+					booked,
+					tipBooked,
+					transferBooked,
+					namedTransferBooked,
+					cardPending,
+				]),
+			).toMatchObject({
 				status: 'SUCCEEDED',
-				transactionsAdded: 1,
+				transactionsAdded: 2,
 			});
 			// The window reaches back to the oldest pending row, so the fetch covers every row it removes.
 			expect(getAccountTransactions.mock.lastCall?.[1]).toMatchObject({dateFrom: '2026-08-20'});
 			const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
 			expect(rows.map(({amount, transactionStatus}) => [amount, transactionStatus]).sort()).toEqual([
 				['-10.00000000', 'BOOK'],
+				['-15.00000000', 'BOOK'],
 				['-23.00000000', 'BOOK'],
+				['-40.00000000', 'BOOK'],
+				['-5.00000000', 'PDNG'],
 			]);
-			expect(await totals()).toMatchObject({count: 2, spending: '33.00'});
+			const bookedTransfer = rows.find(({entryReference}) => entryReference === 'lifecycle-transfer-booked')!;
+			expect(await ownTransferState()).toEqual({
+				'lifecycle-transfer-booked': {
+					transactionStatus: 'BOOK',
+					ownTransferEvidence: 'IBAN',
+					ownTransferCounterpartId: savingsLeg.id,
+				},
+				'lifecycle-named-transfer': {
+					transactionStatus: 'BOOK',
+					ownTransferEvidence: 'NAME',
+					ownTransferCounterpartId: null,
+				},
+				'lifecycle-card': {
+					transactionStatus: 'PDNG',
+					ownTransferEvidence: null,
+					ownTransferCounterpartId: null,
+				},
+			});
+			expect(await bankTransactionRepository.findOneByOrFail({id: savingsLeg.id})).toMatchObject({
+				ownTransferEvidence: 'IBAN',
+				ownTransferCounterpartId: bookedTransfer.id,
+			});
+			// The savings credit had evidence only through the released transfer, which no fetched row replaces.
+			expect(await bankTransactionRepository.findOneByOrFail({id: savingsReleasedLeg.id})).toMatchObject({
+				ownTransferEvidence: null,
+				ownTransferCounterpartId: null,
+			});
+			expect(await totals()).toMatchObject({count: 5, spending: '38.00'});
 		} finally {
 			await accounts.update({id: account.id}, {baseCurrency: null});
+			await bankConnectionRepository.delete({id: savingsConnection.id});
 		}
 	});
 
@@ -3153,10 +3352,17 @@ describe('BankConnectionController', () => {
 			]),
 		);
 
-		await expect(app.get(BankingSyncService).synchronizeAutomatically(connection.id)).rejects.toMatchObject({
-			status: 500,
-			message: 'Bank synchronization could not be saved.',
-		});
+		// Whether a failed commit stored anything is unknown, so own transfers are recomputed over the whole history.
+		const recompute = jest.spyOn(app.get(OwnTransferService), 'recomputeForOwnerSafely');
+		try {
+			await expect(app.get(BankingSyncService).synchronizeAutomatically(connection.id)).rejects.toMatchObject({
+				status: 500,
+				message: 'Bank synchronization could not be saved.',
+			});
+			expect(recompute.mock.calls).toEqual([[account.id]]);
+		} finally {
+			recompute.mockRestore();
+		}
 		expect(await bankAccountBalanceRepository.count({where: {bankAccountId: bankAccount.id}})).toBe(0);
 		expect(await bankTransactionRepository.count({where: {bankAccountId: bankAccount.id}})).toBe(0);
 		expect(await bankSyncRunRepository.count({where: {bankConnection: {id: connection.id}}})).toBe(1);

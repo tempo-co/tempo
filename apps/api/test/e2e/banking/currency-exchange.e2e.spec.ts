@@ -110,6 +110,56 @@ describe('CurrencyExchangeService', () => {
 		});
 	});
 
+	it('recognizes legs whose only marker is the bank exchange word in the code label or proprietary code', async () => {
+		const [debit, credit] = await createLegs(
+			owner,
+			{description: 'Conversion', bankTransactionDescription: 'Exchange'},
+			{description: 'Conversion', bankTransactionCode: 'EXCHANGE'},
+		);
+
+		await expect(service.recomputeForOwner(owner.id)).resolves.toBe(2);
+
+		expect(await stored(debit.id)).toMatchObject({
+			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+			currencyExchangeCounterpartId: credit.id,
+			categoryStatus: 'NOT_APPLICABLE',
+		});
+		expect(await stored(credit.id)).toMatchObject({
+			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+			currencyExchangeCounterpartId: debit.id,
+			categoryStatus: 'NOT_APPLICABLE',
+		});
+	});
+
+	it('never hides a leg marked only by the exchange word when no other leg answers it', async () => {
+		// The credit carries the bank's exchange word, but the same-day debit in the other currency is a transfer.
+		const [debit, credit] = await createLegs(
+			owner,
+			{description: 'Transfer', bankTransactionDescription: 'Transfer'},
+			{description: 'Conversion', bankTransactionDescription: 'Exchange'},
+		);
+
+		await expect(service.recomputeForOwner(owner.id)).resolves.toBe(0);
+
+		for (const leg of [debit, credit]) {
+			expect(await stored(leg.id)).toMatchObject({financialEventType: null, ...categorized});
+		}
+	});
+
+	it('does not read the exchange word inside remittance text as a marker', async () => {
+		const [debit, credit] = await createLegs(
+			owner,
+			{description: 'Book exchange club'},
+			{description: 'Exchange of keys', bankTransactionCode: 'CURRENCY_EXCHANGE'},
+		);
+
+		await expect(service.recomputeForOwner(owner.id)).resolves.toBe(0);
+
+		for (const leg of [debit, credit]) {
+			expect(await stored(leg.id)).toMatchObject({financialEventType: null, ...categorized});
+		}
+	});
+
 	it('never hides a marked leg that no other leg answers', async () => {
 		// An incoming payment whose text happens to read like an exchange, next to an unmarked same-day debit.
 		const [debit, credit] = await createLegs(
@@ -162,7 +212,8 @@ describe('CurrencyExchangeService', () => {
 		const enqueue = jest.spyOn(app.get(CategorizationScheduler), 'enqueueForTransactions');
 
 		try {
-			await expect(service.recomputeForOwner(owner.id)).resolves.toBe(2);
+			// The legs come back for own-transfer recognition, which skips exchange legs.
+			expect((await service.recomputeForOwnerSafely(owner.id))?.sort()).toEqual([debit.id, credit.id].sort());
 			expect(enqueue).toHaveBeenCalledTimes(1);
 			expect([...enqueue.mock.calls[0][0]].sort()).toEqual([debit.id, credit.id].sort());
 		} finally {

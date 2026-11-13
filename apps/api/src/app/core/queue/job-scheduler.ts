@@ -3,11 +3,11 @@ import {Queue} from 'bullmq';
 
 import {ConfigurationService} from '@core/config/config.service';
 
+/** Repeats every `everyMs`, or on a cron `pattern` read in UTC. */
 export type RepeatingJob = {
 	schedulerId: string;
 	jobName: string;
-	everyMs: number;
-};
+} & ({everyMs: number} | {pattern: string});
 
 type BootstrapJobSchedulerOptions = {
 	enabled: boolean;
@@ -22,9 +22,10 @@ type BootstrapJobSchedulerOptions = {
  */
 export async function bootstrapJobScheduler(
 	queue: Queue,
-	{schedulerId, jobName, everyMs}: RepeatingJob,
+	job: RepeatingJob,
 	{enabled, configurationService, logger}: BootstrapJobSchedulerOptions,
 ): Promise<boolean> {
+	const {schedulerId, jobName} = job;
 	if (configurationService.get('NODE_ENV') === 'test') return false;
 	try {
 		if (!enabled) {
@@ -33,7 +34,7 @@ export async function bootstrapJobScheduler(
 		}
 		await queue.upsertJobScheduler(
 			schedulerId,
-			{every: everyMs},
+			'pattern' in job ? {pattern: job.pattern, tz: 'UTC'} : {every: job.everyMs},
 			{
 				name: jobName,
 				data: {},

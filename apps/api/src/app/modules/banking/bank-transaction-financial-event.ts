@@ -18,7 +18,7 @@ export const BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES = {
 	RULE: 'RULE',
 } as const satisfies {[S in BankTransactionFinancialEventSource]: S};
 
-export const BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION = 'currency-exchange-v2';
+export const BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION = 'currency-exchange-v3';
 
 export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = {
 	INCOME: 'INCOME',
@@ -34,6 +34,8 @@ export type CurrencyExchangeMarkerInput = {
 	description: string | null | undefined;
 	bankTransactionCode: string | null | undefined;
 	bankTransactionSubCode: string | null | undefined;
+	/** The bank's own label for its transaction code, which some banks send instead of a code. */
+	bankTransactionDescription: string | null | undefined;
 };
 
 /** One leg's own evidence that it is half of a currency exchange; only a matching other leg makes it one. */
@@ -44,7 +46,10 @@ export type CurrencyExchangeMarker = {
 	targetCurrency: string | null;
 };
 
-const EXCHANGED_TO_DESCRIPTION = /^Exchanged to ([A-Z]{3})$/i;
+/** The whole text is a short exchange phrase naming the bought currency, such as "Exchanged to EUR". */
+const EXCHANGE_TO_PHRASE = /^Exchanged? to ([A-Z]{3})$/i;
+/** The whole text, or a whole proprietary code, is the single word "exchange". */
+const EXCHANGE_WORD = /^exchange$/i;
 
 /** ISO 20022 domain and family of a foreign exchange spot: two currencies exchanged for cash delivery. */
 const FOREIGN_EXCHANGE_DOMAIN = 'FORX';
@@ -52,13 +57,15 @@ const FOREIGN_EXCHANGE_SPOT_FAMILY = 'SPOT';
 
 export function parseCurrencyExchangeTarget(description: string | null | undefined): string | null {
 	const normalized = normalizeBankTransactionText(description);
-	return normalized ? (EXCHANGED_TO_DESCRIPTION.exec(normalized)?.[1].toUpperCase() ?? null) : null;
+	return normalized ? (EXCHANGE_TO_PHRASE.exec(normalized)?.[1].toUpperCase() ?? null) : null;
 }
 
 /**
- * Reads a leg's exchange marker: the exact description "Exchanged to <currency>", or the ISO 20022 foreign
- * exchange spot code (Enable Banking sends the family as the code, without its domain; a code that carries the
- * domain must name FORX). The leg must move its own account's currency. Conflicting evidence is no marker.
+ * Reads a leg's exchange marker. Each text (the description and the bank's code label) counts only as a whole: the
+ * phrase "Exchange(d) to <currency>" or the single word "exchange". A code counts as a whole too: the proprietary
+ * word "exchange", or the ISO 20022 foreign exchange spot code (Enable Banking sends the family as the code, without
+ * its domain; a code that carries the domain must name FORX). The leg must move its own account's currency.
+ * Conflicting evidence is no marker.
  */
 export function detectCurrencyExchangeMarker(input: CurrencyExchangeMarkerInput): CurrencyExchangeMarker | null {
 	const accountCurrency = normalizeCurrency(input.accountCurrency);
@@ -67,13 +74,24 @@ export function detectCurrencyExchangeMarker(input: CurrencyExchangeMarkerInput)
 	const indicator = input.creditDebitIndicator?.trim().toUpperCase();
 	if (indicator !== 'DBIT' && indicator !== 'CRDT') return null;
 
-	const targetCurrency = parseCurrencyExchangeTarget(input.description);
+	const texts = [input.description, input.bankTransactionDescription];
+	const targets = new Set(texts.flatMap((text) => parseCurrencyExchangeTarget(text) ?? []));
+	if (targets.size > 1) return null;
+	const [targetCurrency] = targets;
 	if (targetCurrency) {
 		const consistent = indicator === 'DBIT' ? targetCurrency !== currency : targetCurrency === currency;
 		return consistent ? {indicator, currency, targetCurrency} : null;
 	}
-	if (!hasForeignExchangeSpotCode(input.bankTransactionCode, input.bankTransactionSubCode)) return null;
+	const hasMarker =
+		texts.some(isExchangeWord) ||
+		[input.bankTransactionCode, input.bankTransactionSubCode].some(isExchangeWord) ||
+		hasForeignExchangeSpotCode(input.bankTransactionCode, input.bankTransactionSubCode);
+	if (!hasMarker) return null;
 	return {indicator, currency, targetCurrency: indicator === 'CRDT' ? currency : null};
+}
+
+function isExchangeWord(value: string | null | undefined): boolean {
+	return EXCHANGE_WORD.test(normalizeBankTransactionText(value) ?? '');
 }
 
 function hasForeignExchangeSpotCode(code: string | null | undefined, subCode: string | null | undefined): boolean {

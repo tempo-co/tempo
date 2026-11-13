@@ -9,6 +9,8 @@ import {
 	BANK_TRANSACTION_AMOUNT_CONVERSION_JOB,
 	BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE,
 	BANK_TRANSACTION_AMOUNT_CONVERSION_SCHEDULER_ID,
+	OWN_TRANSFER_RECOMPUTE_SCHEDULER_ID,
+	RECOMPUTE_OWN_TRANSFERS_JOB,
 } from '@core/queue/queue.constants';
 
 import {safeErrorName} from '../banking.utils';
@@ -18,6 +20,8 @@ export type BankTransactionAmountConversionJobData = Record<string, never>;
 // Bumped when a migration clears stored amounts, so they reconvert on deploy instead of on the next tick.
 const BACKFILL_JOB_ID = 'bank-transaction-amount-backfill-v2';
 const CONVERSION_INTERVAL_MS = 15 * 60 * 1000;
+// Daily at a quiet hour: the whole-history own-transfer recompute that backs the scoped one after each sync.
+const OWN_TRANSFER_RECOMPUTE_PATTERN = '0 3 * * *';
 
 @Injectable()
 export class BankTransactionAmountConversionQueueService implements OnModuleInit {
@@ -31,6 +35,7 @@ export class BankTransactionAmountConversionQueueService implements OnModuleInit
 
 	async onModuleInit(): Promise<void> {
 		const enabled = Boolean(this.configurationService.get('BANKING_INTEGRATION_ENABLED'));
+		const options = {enabled, configurationService: this.configurationService, logger: this.logger};
 		await bootstrapJobScheduler(
 			this.queue,
 			{
@@ -38,11 +43,16 @@ export class BankTransactionAmountConversionQueueService implements OnModuleInit
 				jobName: BANK_TRANSACTION_AMOUNT_CONVERSION_JOB,
 				everyMs: CONVERSION_INTERVAL_MS,
 			},
+			options,
+		);
+		await bootstrapJobScheduler(
+			this.queue,
 			{
-				enabled,
-				configurationService: this.configurationService,
-				logger: this.logger,
+				schedulerId: OWN_TRANSFER_RECOMPUTE_SCHEDULER_ID,
+				jobName: RECOMPUTE_OWN_TRANSFERS_JOB,
+				pattern: OWN_TRANSFER_RECOMPUTE_PATTERN,
 			},
+			options,
 		);
 		if (!enabled || this.configurationService.get('NODE_ENV') === 'test') return;
 		try {

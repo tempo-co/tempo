@@ -9,13 +9,7 @@ import {promisify} from 'node:util';
 import contract from './contract.json' with {type: 'json'};
 import merchantContract from './merchant-contract.json' with {type: 'json'};
 import {createSubscriptionCheck, storedTokenExpiresAt} from './subscription.mjs';
-import {
-	validMerchantRequest,
-	validMerchantResponse,
-	validRequest,
-	validResponse,
-	validSearchRequest,
-} from './validation.mjs';
+import {validMerchantRequest, validMerchantResponse, validRequest, validResponse} from './validation.mjs';
 
 const runSetfacl = (args) => promisify(execFile)('setfacl', args, {timeout: 5000});
 
@@ -49,7 +43,7 @@ const MERCHANT_CONTRACT_HASH = hash(merchantContract);
 const hookPath = fileURLToPath(new URL('./search-hook.mjs', import.meta.url));
 if ([process.execPath, hookPath].some((part) => part.includes("'"))) throw new Error('Unsupported bridge path.');
 // dontAsk denies every tool call that no hook allows; the hook allows only the one pinned search.
-const SEARCH_CLI_ARGS = cliArgs(contract.webSearch, 'WebSearch', [
+const SEARCH_CLI_ARGS = cliArgs(contract, 'WebSearch', [
 	'--settings',
 	JSON.stringify({
 		hooks: {
@@ -60,37 +54,28 @@ const SEARCH_CLI_ARGS = cliArgs(contract.webSearch, 'WebSearch', [
 	}),
 ]);
 
+// A categorization request that carries a searchQuery may run that one search; one without it gets no tools.
 const ROUTES = new Map([
 	[
 		'/categorize',
 		{
-			args: CLI_ARGS,
-			tools: ['StructuredOutput'],
+			args: (input) => (input.searchQuery === undefined ? CLI_ARGS : SEARCH_CLI_ARGS),
+			tools: (input) =>
+				input.searchQuery === undefined ? ['StructuredOutput'] : ['StructuredOutput', 'WebSearch'],
 			valid: validRequest,
 			validOutput: validResponse,
-			search: false,
-			contractHash: CONTRACT_HASH,
-		},
-	],
-	[
-		'/categorize-with-search',
-		{
-			args: SEARCH_CLI_ARGS,
-			tools: ['StructuredOutput', 'WebSearch'],
-			valid: validSearchRequest,
-			validOutput: (output, input) => validResponse(output, input, true),
-			search: true,
+			search: (input) => input.searchQuery,
 			contractHash: CONTRACT_HASH,
 		},
 	],
 	[
 		'/identify-merchants',
 		{
-			args: MERCHANT_CLI_ARGS,
-			tools: ['StructuredOutput'],
+			args: () => MERCHANT_CLI_ARGS,
+			tools: () => ['StructuredOutput'],
 			valid: validMerchantRequest,
 			validOutput: validMerchantResponse,
-			search: false,
+			search: () => undefined,
 			contractHash: MERCHANT_CONTRACT_HASH,
 			// Any model output means the run used quota, so a failure after it counts as an attempt (502).
 			outputActs: true,
@@ -110,7 +95,7 @@ function sourceDomains(results) {
 				continue;
 			}
 		}
-	return [...domains].slice(0, contract.webSearch.maxSourceDomains);
+	return [...domains].slice(0, contract.search.maxSourceDomains);
 }
 
 export async function startBridge({
@@ -127,7 +112,10 @@ export async function startBridge({
 } = {}) {
 	if (
 		clientUid !== undefined &&
-		(!Number.isSafeInteger(clientUid) || clientUid <= 0 || clientUid >= 2 ** 32 - 1 || clientUid === process.getuid())
+		(!Number.isSafeInteger(clientUid) ||
+			clientUid <= 0 ||
+			clientUid >= 2 ** 32 - 1 ||
+			clientUid === process.getuid())
 	)
 		throw new Error('Invalid Claude bridge client uid.');
 	socketPath ??= path.join(env.XDG_RUNTIME_DIR, 'tempo-claude', 'bridge.sock');
@@ -262,7 +250,6 @@ export async function startBridge({
 			return reply(200, {hash: CONTRACT_HASH, merchantHash: MERCHANT_CONTRACT_HASH});
 		const route = ROUTES.get(req.url);
 		if (req.method !== 'POST' || !route) return reply(404, {error: 'not_found'});
-		const {search, tools} = route;
 		if (req.headers['content-type']?.split(';')[0].trim() !== 'application/json')
 			return reply(415, {error: 'unsupported_media_type'});
 		if (req.headers['x-tempo-contract'] !== route.contractHash) return reply(409, {error: 'contract_mismatch'});
@@ -291,14 +278,15 @@ export async function startBridge({
 			}
 			if (!route.valid(parsed)) return reply(400, {error: 'invalid_request'});
 			const {input} = parsed;
-			const query = search ? input.transactions[0].searchQuery : undefined;
+			const query = route.search(input);
+			const tools = route.tools(input);
 			await verifySubscription();
 			let initialized = false;
 			let overageRejected = false;
 			let searchId;
 			let domains;
 			await run(
-				['-p', '--model', parsed.model, '--effort', parsed.effort, ...route.args],
+				['-p', '--model', parsed.model, '--effort', parsed.effort, ...route.args(input)],
 				JSON.stringify(input),
 				(event) => {
 					if (event.type === 'system' && event.subtype === 'init') {
@@ -330,7 +318,7 @@ export async function startBridge({
 							modelActed = true;
 							// One search, with exactly the pinned query; the hook enforces the same before it runs.
 							if (
-								!search ||
+								query === undefined ||
 								item.name !== 'WebSearch' ||
 								searchId !== undefined ||
 								item.input?.query !== query
@@ -351,17 +339,24 @@ export async function startBridge({
 					}
 				},
 				caller.signal,
-				search ? {'search.json': JSON.stringify({query})} : {},
+				query === undefined ? {} : {'search.json': JSON.stringify({query})},
 			);
 			if (
 				!result ||
 				result.subtype !== 'success' ||
 				result.is_error !== false ||
 				!route.validOutput(result.structured_output, input) ||
-				(search && !domains)
+				// A search that was called must have returned its results.
+				(searchId !== undefined && !domains)
 			)
 				throw new Error('Invalid result.');
-			reply(200, search ? {...result.structured_output, sourceDomains: domains} : result.structured_output);
+			// The model may skip the search; `searched` tells the API whether the pinned query ran.
+			reply(
+				200,
+				route.outputActs
+					? result.structured_output
+					: {...result.structured_output, searched: domains !== undefined, sourceDomains: domains ?? []},
+			);
 		} catch {
 			// 503: refused before the model acted (quota, overage, unsafe runtime), so the caller may retry. 502: the model
 			// called a tool or returned a result, so a retry could search again or fail the same way.

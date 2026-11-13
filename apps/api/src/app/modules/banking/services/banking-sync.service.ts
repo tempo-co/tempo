@@ -128,6 +128,11 @@ type SyncRateLimit = {
 	retryAfterSeconds: number;
 };
 
+type PersistSyncResult = Pick<PersistTransactionsResult, 'transactionsAdded' | 'persistedTransactionIds'> & {
+	/** Rows whose own-transfer counterpart was a pending row the sync removed. */
+	formerCounterpartIds: string[];
+};
+
 @Injectable()
 export class BankingSyncService {
 	private readonly logger = new Logger(BankingSyncService.name);
@@ -308,23 +313,51 @@ export class BankingSyncService {
 
 				const status = this.getRunStatus(fetchResult);
 				const finishedAt = new Date();
-				const persistenceResult = await this.persistSync(
-					connection,
-					run,
-					fetchResult,
-					status,
-					finishedAt,
-					syncStartedAt,
-				);
+				let persistenceResult: PersistSyncResult;
+				try {
+					persistenceResult = await this.persistSync(
+						connection,
+						run,
+						fetchResult,
+						status,
+						finishedAt,
+						syncStartedAt,
+					);
+				} catch (error) {
+					// The rows may have committed even so, and which ones is unknown: recompute the whole history.
+					await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
+					await this.ownTransferService.recomputeForOwnerSafely(accountId);
+					throw error;
+				}
 				committed = true;
 				this.logFailures(run.id, connection.id, status, failures);
 				// Recompute first so new exchanges and own transfers are marked before the worker can claim them.
 				// Exchanges go first: own-transfer detection skips exchange legs.
-				await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
-				await this.ownTransferService.recomputeForOwnerSafely(accountId);
+				// Own transfers can only change around the rows this sync wrote, the rows whose exchange
+				// classification changed and the former counterparts of the pending rows it removed, so a sync that
+				// changed none of them does no own-transfer work. A failed exchange recompute leaves the changed rows
+				// unknown.
+				const reclassifiedIds = await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
+				await this.ownTransferService.recomputeForOwnerSafely(
+					accountId,
+					reclassifiedIds
+						? {
+								transactionIds: [
+									...new Set([
+										...persistenceResult.persistedTransactionIds,
+										...reclassifiedIds,
+										...persistenceResult.formerCounterpartIds,
+									]),
+								],
+							}
+						: undefined,
+				);
 				await this.enqueuePersistedTransactions(persistenceResult.persistedTransactionIds);
 				if (persistenceResult.persistedTransactionIds.length)
-					await this.merchantLogoService.enqueueForOwnerSafely(accountId);
+					await this.merchantLogoService.enqueueForOwnerSafely(
+						accountId,
+						persistenceResult.persistedTransactionIds,
+					);
 
 				// The run is committed: a lease blip or a disconnect from here on must not report it as failed.
 				const completedRun = await this.bankSyncRunRepository.findOneBy({id: run.id});
@@ -696,10 +729,11 @@ export class BankingSyncService {
 		status: string,
 		finishedAt: Date,
 		syncStartedAt: Date,
-	): Promise<Pick<PersistTransactionsResult, 'transactionsAdded' | 'persistedTransactionIds'>> {
+	): Promise<PersistSyncResult> {
 		let errorMessage: string | null = null;
 		let transactionsAdded = 0;
 		const persistedTransactionIds: string[] = [];
+		const formerCounterpartIds: string[] = [];
 		if (fetchResult.connectionExpired) {
 			errorMessage = BANKING_CONSENT_EXPIRED;
 		} else if (fetchResult.rateLimit) {
@@ -759,11 +793,13 @@ export class BankingSyncService {
 				}
 
 				if (accountResult.transactionsComplete) {
-					await this.bankTransactionPersistenceService.removeUnreturnedPendingTransactions(
-						bankTransactionRepository,
-						accountResult.bankAccount.id,
-						returnedTransactionIds,
-						accountResult.transactionsFrom,
+					formerCounterpartIds.push(
+						...(await this.bankTransactionPersistenceService.removeUnreturnedPendingTransactions(
+							bankTransactionRepository,
+							accountResult.bankAccount.id,
+							returnedTransactionIds,
+							accountResult.transactionsFrom,
+						)),
 					);
 				}
 
@@ -822,7 +858,11 @@ export class BankingSyncService {
 			if (connectionUpdateResult.affected === 0) throw new BankingSyncOwnershipLostError();
 		});
 
-		return {transactionsAdded, persistedTransactionIds: [...new Set(persistedTransactionIds)]};
+		return {
+			transactionsAdded,
+			persistedTransactionIds: [...new Set(persistedTransactionIds)],
+			formerCounterpartIds: [...new Set(formerCounterpartIds)],
+		};
 	}
 
 	private expiredSchedulingUpdate(): Pick<BankConnection, 'nextSyncAt' | 'syncStartedAt' | 'syncStatus'> {

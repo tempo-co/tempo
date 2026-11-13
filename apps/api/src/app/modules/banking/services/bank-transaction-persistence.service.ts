@@ -30,11 +30,11 @@ import {
 	createBankTransactionCategorizationInputHash,
 	toBankTransactionCategorizationInput,
 } from '../categorization/bank-transaction-categorization-input';
-import {BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES} from '../categorization/bank-transaction-categorization.constants';
 import {
 	isManualCategorySource,
 	notManualCategorySourceSql,
 } from '../categorization/bank-transaction-categorization.types';
+import {notOwnTransferCategorizedSql} from '../own-transfer/own-transfer-category';
 import {BASE_AMOUNT_INPUT_COLUMNS, baseAmountInputsSql} from './bank-transaction-amount-conversion.utils';
 
 const BANK_TRANSACTION_IDENTITY_SELECT = {
@@ -266,6 +266,7 @@ export class BankTransactionPersistenceService {
 				description: value.description,
 				bankTransactionCode: value.bankTransactionCode,
 				bankTransactionSubCode: value.bankTransactionSubCode,
+				bankTransactionDescription: value.bankTransactionDescription,
 			})
 				? [value.stableIdentityKey]
 				: [],
@@ -312,38 +313,40 @@ export class BankTransactionPersistenceService {
 		const transactionByStableIdentityKey = new Map(
 			transactionValues.map((value) => [value.stableIdentityKey, value]),
 		);
-		const staleCategorizationIds: string[] = [];
+		// A row whose classification-relevant fields changed goes back to the model, keeping its category until the new
+		// one lands. Both sides are hashed here with the current rules, so a hash stored under older rules (which, for
+		// example, still covered the dates) never counts as a change.
+		const recheckIds: string[] = [];
 		for (const existingTransaction of existingTransactions) {
 			const currentValue = transactionByStableIdentityKey.get(existingTransaction.stableIdentityKey);
 			if (
 				!currentValue ||
 				existingTransaction.financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE ||
 				isManualCategorySource(existingTransaction.categorySource) ||
-				existingTransaction.categoryStatus === 'COMPLETED' ||
-				existingTransaction.categoryInputHash === currentValue.categoryInputHash
+				// A row without a stored hash has never been categorized for this input.
+				(existingTransaction.categoryInputHash !== null &&
+					createBankTransactionCategorizationInputHash(
+						toBankTransactionCategorizationInput({...existingTransaction, aspspName}),
+					) === currentValue.categoryInputHash)
 			) {
 				continue;
 			}
-			staleCategorizationIds.push(existingTransaction.id);
+			recheckIds.push(existingTransaction.id);
 		}
 
-		for (const ids of chunkArray(staleCategorizationIds, BATCH_WRITE_CHUNK_SIZE)) {
-			// The guards are evaluated per row, so one statement matches the former per-row updates exactly.
+		for (const ids of chunkArray(recheckIds, BATCH_WRITE_CHUNK_SIZE)) {
+			// The guards are evaluated per row, so one statement matches per-row updates exactly.
 			await repository
 				.createQueryBuilder()
 				.update(BankTransaction)
-				.set({
-					...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-					categoryStatus: 'PENDING',
-					categoryUpdatedAt: null,
-				})
+				.set({categoryStatus: 'PENDING', categoryLastError: null})
 				.where('"bankAccountId" = :bankAccountId', {bankAccountId: bankAccount.id})
 				.andWhere('id IN (:...ids)', {ids})
 				.andWhere(notManualCategorySourceSql())
-				.andWhere('categoryStatus IS DISTINCT FROM :completedCategoryStatus', {
-					completedCategoryStatus: 'COMPLETED',
+				.andWhere(notOwnTransferCategorizedSql())
+				.andWhere('"categoryStatus" IN (:...recheckStatuses)', {
+					recheckStatuses: ['COMPLETED', 'FAILED', 'NOT_APPLICABLE'],
 				})
-				.andWhere('"categoryStatus" IS DISTINCT FROM \'PROCESSING\'')
 				.andWhere('"financialEventType" IS NULL')
 				.execute();
 		}
@@ -512,20 +515,29 @@ export class BankTransactionPersistenceService {
 	/**
 	 * Pending rows are temporary. After a complete fetch from `coveredFrom` (null: the account's whole history), a
 	 * pending row of that window the fetch did not return was released or booked as another row, so it is deleted.
-	 * Rows without any date count as covered.
+	 * Rows without any date count as covered. Returns the own-transfer counterparts the deleted rows were paired with,
+	 * whose own-transfer state the recompute after the sync must decide again.
 	 */
 	async removeUnreturnedPendingTransactions(
 		repository: Repository<BankTransaction>,
 		bankAccountId: BankAccount['id'],
 		returnedTransactionIds: readonly string[],
 		coveredFrom: string | null,
-	): Promise<void> {
-		await repository.query(
+	): Promise<string[]> {
+		const result: unknown = await repository.query(
 			`DELETE FROM "bank_transactions"
 			WHERE "bankAccountId" = $1 AND ${PENDING_ROW_SQL}
 				AND NOT ("id" = ANY($2::uuid[]))
-				AND ($3::date IS NULL OR COALESCE(${PENDING_ROW_START_SQL}, $3::date) >= $3::date)`,
+				AND ($3::date IS NULL OR COALESCE(${PENDING_ROW_START_SQL}, $3::date) >= $3::date)
+			RETURNING "ownTransferCounterpartId"`,
 			[bankAccountId, returnedTransactionIds, coveredFrom],
+		);
+		// TypeORM returns [rows, affected] for a DELETE on PostgreSQL.
+		const rows = (Array.isArray(result) && Array.isArray(result[0]) ? result[0] : (result ?? [])) as Array<{
+			ownTransferCounterpartId: string | null;
+		}>;
+		return rows.flatMap(({ownTransferCounterpartId}) =>
+			ownTransferCounterpartId ? [ownTransferCounterpartId] : [],
 		);
 	}
 

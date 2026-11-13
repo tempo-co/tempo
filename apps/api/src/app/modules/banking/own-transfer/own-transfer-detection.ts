@@ -88,7 +88,8 @@ const DAY_MS = 86_400_000;
  * A leg has evidence when its counterparty IBAN is another owned account in the same currency, when its
  * counterparty name is the account holder's name (never for card payments), or when the owner marked it.
  * Legs pair across accounts on the exact opposite amount in the same currency within the date window; the
- * second leg needs its own evidence unless the first leg's IBAN points at its account.
+ * second leg needs its own evidence unless the first leg's IBAN points at its account. A pending leg takes part only
+ * with evidence of its own; once it books, the booked row is recomputed like any other.
  */
 export function detectOwnTransfers({
 	accounts,
@@ -123,6 +124,9 @@ export function detectOwnTransfers({
 				: [],
 		);
 		const evidence = getEvidence(transaction, ibanTargets, holderKeys);
+		// A pending row counts only on its own evidence, so a card hold or other payment the bank has not booked yet
+		// never becomes the second leg of a pair.
+		if (!evidence && isPending(transaction)) continue;
 		legs.push({
 			transaction,
 			day: day ?? Number.NaN,
@@ -207,11 +211,11 @@ export function resolveOwnTransferCounterpartyName({
 }
 
 function isEligible(transaction: OwnTransferTransaction): boolean {
-	return (
-		transaction.transactionStatus?.toUpperCase() !== 'PDNG' &&
-		!transaction.financialEventType &&
-		transaction.override !== OWN_TRANSFER_OVERRIDES.UNMARKED
-	);
+	return !transaction.financialEventType && transaction.override !== OWN_TRANSFER_OVERRIDES.UNMARKED;
+}
+
+function isPending(transaction: OwnTransferTransaction): boolean {
+	return transaction.transactionStatus?.trim().toUpperCase() === 'PDNG';
 }
 
 function getEvidence(

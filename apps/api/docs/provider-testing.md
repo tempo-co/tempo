@@ -6,13 +6,13 @@ Enable Banking, Claude and the browsers' push services are paid, credentialed or
 
 - **Off by default.** AI categorization and web search are off in `.env.development`, `.env.test` and the shared E2E setup. A spec that needs them opts in through `test/setup/e2e.setup.ts` (`enableAiCategorizationE2e()` at module scope, before the app boots), not through a second env file, Jest config, npm script or CI job.
 - **Synthetic credentials only.** The opt-in sets `ANTHROPIC_API_KEY=test-only-placeholder`. Never read, forward or require a real key in development or tests.
-- **Mock only the provider boundary.** Keep schema, persistence, queue, worker, retries, routes, auth, DTOs and ownership real. Spy on every provider method the path uses (`categorize`, `categorizeWithWebSearch`) before bootstrap, so startup reconciliation cannot reach the network.
+- **Mock only the provider boundary.** Keep schema, persistence, queue, worker, retries, routes, auth, DTOs and ownership real. Spy on every provider method the path uses (`categorize`, `identifyMerchants`) before bootstrap, so startup reconciliation cannot reach the network.
 - **Deterministic doubles.** Return schema-valid results keyed by the input correlation ids, with categories from the real catalog and bounded confidence.
 - **Both suites.** The default suite proves the feature is off and the provider is never called; the opted-in suite proves orchestration and persistence end to end.
 - **Adapter tests separately.** Test the concrete provider against a mocked transport or loopback server that matches the real schema: malformed, incomplete, duplicate and out-of-domain responses.
 - **Real infrastructure for diagnosis.** Query-builder mocks hide identifier quoting, column widths, races and affected-row guards. Fix the SQL or schema rather than weakening the test.
-- **Outbound privacy.** Write adversarial synthetic fixtures before changing sanitization and assert on the serialized request (standard, search and fallback).
-- **Cost limits are enforced in code.** Assert at most one provider request per candidate (e.g. one search per unresolved row). A batch size, prompt wording or a provider flag is not a cap.
+- **Outbound privacy.** Write adversarial synthetic fixtures before changing sanitization and assert on the serialized request (with and without a search allowed, and on the fallback).
+- **Cost limits are enforced in code.** Assert the number of provider requests per batch (one call per row group, no search tool on the API, at most one pinned-query search per call on the bridge). Prompt wording alone is not a cap.
 - **Separate gates.** The API route succeeding does not verify the bridge route, and a refusal verifies failure handling, not a successful fallback. Rows inserted by direct SQL bypass enqueue hooks; pending rows with no jobs mean the provider path never ran.
 - **Accuracy is a separate claim.** Schema validity and model confidence say nothing about correctness.
 

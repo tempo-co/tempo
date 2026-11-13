@@ -3,21 +3,20 @@ import type {BankTransactionCategoryDefinition} from '@tempo/contracts';
 import type {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
-	BankTransactionCategorizationWebSearchInput,
-	BankTransactionCategorizationWebSearchOutcome,
 } from './bank-transaction-categorization.types';
 
 export const BANK_TRANSACTION_CATEGORIZATION_PROVIDER = Symbol('BANK_TRANSACTION_CATEGORIZATION_PROVIDER');
 
 export interface BankTransactionCategorizationProvider {
+	/**
+	 * Categorizes one row group in one model call. With `searchQuery`, the model may run one web search with exactly
+	 * that query, or skip it; results of a call that searched carry a search trace.
+	 */
 	categorize(
 		transactions: readonly BankTransactionCategorizationInput[],
 		categories: readonly BankTransactionCategoryDefinition[],
+		options?: {searchQuery?: string},
 	): Promise<readonly BankTransactionCategorizationResult[]>;
-	categorizeWithWebSearch(
-		transactions: readonly BankTransactionCategorizationWebSearchInput[],
-		categories: readonly BankTransactionCategoryDefinition[],
-	): Promise<readonly BankTransactionCategorizationWebSearchOutcome[]>;
 }
 
 export class BankTransactionCategorizationProviderError extends Error {
