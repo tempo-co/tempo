@@ -769,7 +769,7 @@ test.describe('bank transactions', () => {
     await page.goto('/bank-transactions');
 
     const filters = await openTransactionFilter(page, 'Categories');
-    await expect(filters.getByRole('option')).toHaveCount(20);
+    await expect(filters.getByRole('option')).toHaveCount(23);
     await page.getByRole('option', {name: 'Food and drink', exact: true}).click();
 
     const singleCategoryParam = new URL(page.url()).searchParams.get('categories');
