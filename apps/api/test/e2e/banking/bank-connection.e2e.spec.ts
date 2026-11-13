@@ -1795,6 +1795,14 @@ describe('BankConnectionController', () => {
 			bookingDate: '2026-08-21',
 			description: null,
 		});
+		// Answers a pending transfer that the bank later drops; it has no evidence of its own.
+		const savingsReleasedLeg = await fixtures.createTransaction(savingsAccounts[0], {
+			providerTransactionId: 'pending-lifecycle-savings-released-leg',
+			amount: '60.00',
+			creditDebitIndicator: 'CRDT',
+			bookingDate: '2026-08-21',
+			description: null,
+		});
 		const row = (
 			reference: string,
 			amount: string,
@@ -1827,6 +1835,10 @@ describe('BankConnectionController', () => {
 			booking_date: '2026-08-21',
 			value_date: '2026-08-21',
 		};
+		const releasedTransferPending = row('lifecycle-released-transfer', '60.00', 'PDNG', undefined, {
+			creditor_account: {iban: savingsIban},
+			remittance_information: ['Example savings top-up, cancelled'],
+		});
 		const namedTransferPending = row('lifecycle-named-transfer', '15.00', 'PDNG', undefined, {
 			creditor: {name: holderName},
 		});
@@ -1855,13 +1867,25 @@ describe('BankConnectionController', () => {
 		const accounts = app.get(DataSource).getRepository(Account);
 		await accounts.update({id: account.id}, {baseCurrency: 'EUR'});
 		try {
-			const firstFetch = [booked, hold, tipPending, transferPending, namedTransferPending, cardPending];
+			const firstFetch = [
+				booked,
+				hold,
+				tipPending,
+				transferPending,
+				releasedTransferPending,
+				namedTransferPending,
+				cardPending,
+			];
 			expect(await synchronizeProviderRows(connection.id, firstFetch)).toMatchObject({
 				status: 'SUCCEEDED',
-				transactionsAdded: 6,
+				transactionsAdded: 7,
 			});
 			// Pending payments count, as in the bank's own app; pending own transfers are internal until they book.
-			expect(await totals()).toMatchObject({count: 6, spending: '85.00', income: '0.00'});
+			expect(await totals()).toMatchObject({count: 7, spending: '85.00', income: '0.00'});
+			const releasedTransfer = await bankTransactionRepository.findOneByOrFail({
+				bankAccountId: bankAccount.id,
+				entryReference: 'lifecycle-released-transfer',
+			});
 			const pendingTransfer = await bankTransactionRepository.findOneByOrFail({
 				bankAccountId: bankAccount.id,
 				entryReference: 'lifecycle-transfer',
@@ -1871,6 +1895,11 @@ describe('BankConnectionController', () => {
 					transactionStatus: 'PDNG',
 					ownTransferEvidence: 'IBAN',
 					ownTransferCounterpartId: savingsLeg.id,
+				},
+				'lifecycle-released-transfer': {
+					transactionStatus: 'PDNG',
+					ownTransferEvidence: 'IBAN',
+					ownTransferCounterpartId: savingsReleasedLeg.id,
 				},
 				'lifecycle-named-transfer': {
 					transactionStatus: 'PDNG',
@@ -1887,6 +1916,10 @@ describe('BankConnectionController', () => {
 				ownTransferEvidence: 'IBAN',
 				ownTransferCounterpartId: pendingTransfer.id,
 			});
+			expect(await bankTransactionRepository.findOneByOrFail({id: savingsReleasedLeg.id})).toMatchObject({
+				ownTransferEvidence: 'IBAN',
+				ownTransferCounterpartId: releasedTransfer.id,
+			});
 
 			// A fetch with a row the client cannot read is incomplete, so it removes nothing.
 			const unreadable = {entry_reference: 'lifecycle-unreadable', transaction_amount: {currency: 'EUR'}};
@@ -1894,10 +1927,10 @@ describe('BankConnectionController', () => {
 				status: 'PARTIAL',
 				transactionsAdded: 0,
 			});
-			expect(await totals()).toMatchObject({count: 6, spending: '85.00'});
+			expect(await totals()).toMatchObject({count: 7, spending: '85.00'});
 
-			// The hold was released, the tip and the IBAN transfer booked as new rows, the named transfer booked into its
-			// pending row and the card payment is still pending.
+			// The hold and the second transfer were released, the tip and the IBAN transfer booked as new rows, the named
+			// transfer booked into its pending row and the card payment is still pending.
 			expect(
 				await synchronizeProviderRows(connection.id, [
 					booked,
@@ -1941,6 +1974,11 @@ describe('BankConnectionController', () => {
 			expect(await bankTransactionRepository.findOneByOrFail({id: savingsLeg.id})).toMatchObject({
 				ownTransferEvidence: 'IBAN',
 				ownTransferCounterpartId: bookedTransfer.id,
+			});
+			// The savings credit had evidence only through the released transfer, which no fetched row replaces.
+			expect(await bankTransactionRepository.findOneByOrFail({id: savingsReleasedLeg.id})).toMatchObject({
+				ownTransferEvidence: null,
+				ownTransferCounterpartId: null,
 			});
 			expect(await totals()).toMatchObject({count: 5, spending: '38.00'});
 		} finally {
