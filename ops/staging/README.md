@@ -12,7 +12,7 @@ Staging is a separate copy of Tempo on this host, deployed with `tempo-deploy st
 
 ## Safety
 
-The Compose file hard-codes `BANKING_INTEGRATION_ENABLED=false`, `AI_CATEGORIZATION_ENABLED=false` and `AI_CATEGORIZATION_WEB_SEARCH_ENABLED=false`, and the env template has no Anthropic or banking keys and no subscription socket, so staging makes no billable AI calls and no bank calls.
+The Compose file hard-codes `BANKING_INTEGRATION_ENABLED=false`, `AI_CATEGORIZATION_ENABLED=false` and `AI_CATEGORIZATION_WEB_SEARCH_ENABLED=false`, and the env template has no Anthropic or banking keys and no subscription socket, so staging makes no billable AI calls and no bank calls. It sets `FILE_IMPORT_ENABLED=true`, so statement file import can be tried there; production leaves it off unless its env file turns it on.
 
 ## Database refresh
 
