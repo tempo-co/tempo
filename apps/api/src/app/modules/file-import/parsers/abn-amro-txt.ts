@@ -40,6 +40,7 @@ export function parseAbnAmroTxt(bytes: Uint8Array): NormalizedStatement[] {
 		const key = JSON.stringify([iban, currency]);
 		const statement: NormalizedStatement = statements.get(key) ?? {
 			format: 'abnAmroTxt',
+			layout: null,
 			accountIban: iban,
 			accountOtherId: null,
 			bank: null,

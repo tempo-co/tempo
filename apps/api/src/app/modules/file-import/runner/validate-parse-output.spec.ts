@@ -26,9 +26,11 @@ const output = (rows: unknown[], statement: Record<string, unknown> = {}) => ({
 	ok: true,
 	files: 1,
 	formats: ['camt053'],
+	layouts: [],
 	statements: [
 		{
 			format: 'camt053',
+			layout: null,
 			accountIban: EXAMPLE_IBAN,
 			accountOtherId: null,
 			bank: null,
@@ -74,17 +76,51 @@ describe('validateParseOutput', () => {
 		});
 	});
 
-	it('passes a refusal code the child may use', () => {
+	it('accepts the statement of a bank CSV export that names its layout', () => {
+		const result = validateParseOutput({
+			...output([], {format: 'csv', layout: 'example-bank'}),
+			formats: ['csv'],
+			layouts: ['example-bank'],
+		});
+
+		expect(result).toMatchObject({
+			ok: true,
+			result: {
+				formats: ['csv'],
+				layouts: ['example-bank'],
+				statements: [{format: 'csv', layout: 'example-bank'}],
+			},
+		});
+	});
+
+	it('passes a refusal code the child may use, with the layout of a CSV near miss', () => {
 		expect(validateParseOutput({ok: false, code: 'archive_too_large'})).toEqual({
 			ok: false,
 			code: 'archive_too_large',
+		});
+		expect(validateParseOutput({ok: false, code: 'layout_not_recognized', layout: 'example-bank'})).toEqual({
+			ok: false,
+			code: 'layout_not_recognized',
+			layout: 'example-bank',
 		});
 	});
 
 	it.each([
 		{name: 'not an object', value: 'rows'},
-		{name: 'an unknown file format', value: {...output([]), formats: ['ofx']}},
-		{name: 'an unknown statement format', value: output([], {format: 'ofx'})},
+		{name: 'an unknown file format', value: {...output([]), formats: ['qif']}},
+		{name: 'an unknown statement format', value: output([], {format: 'qif'})},
+		{name: 'a CSV statement without its layout', value: {...output([], {format: 'csv'}), formats: ['csv']}},
+		{
+			name: 'a layout on a statement in a standard format',
+			value: {...output([], {layout: 'example-bank'}), layouts: ['example-bank']},
+		},
+		{
+			name: 'a CSV statement whose layout none of the files has',
+			value: {...output([], {format: 'csv', layout: 'example-bank'}), formats: ['csv'], layouts: ['other-bank']},
+		},
+		{name: 'a layout id that is not one', value: {...output([]), formats: ['csv'], layouts: ['Example Bank']}},
+		{name: 'a near miss of a CSV layout that names none', value: {ok: false, code: 'layout_not_recognized'}},
+		{name: 'a layout on another refusal', value: {ok: false, code: 'parse_failed', layout: 'example-bank'}},
 		{name: 'a statement in a format none of the files has', value: output([], {format: 'mt940'})},
 		{name: 'an unknown bank', value: output([], {accountIban: null, bank: 'Example Bank'})},
 		{name: 'a bank next to an IBAN', value: output([], {bank: 'Revolut'})},

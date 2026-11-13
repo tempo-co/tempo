@@ -6,6 +6,7 @@ import {cn} from '@/utils/cn';
 
 import {fileNameTail, formatFileSize} from '../utils/import-format';
 import {dragHasFiles, useCanDropFiles} from './drop-files';
+import {SupportedFiles} from './supported-files';
 
 /** The 36px Clay tile the import surfaces lead with. */
 export const IMPORT_TILE =
@@ -97,10 +98,12 @@ export function FileChoice({
       ) : (
         chooseButton
       )}
-      <p className='text-sm text-pretty text-muted-foreground'>
-        CAMT.053, MT940, ABN AMRO TXT or a Revolut statement (CSV or Excel). Several files or a zip
-        at once.
-      </p>
+      <div className='flex flex-wrap items-center justify-between gap-x-3'>
+        <p className='text-sm text-pretty text-muted-foreground'>
+          Statement files from your bank, several at once or in a zip.
+        </p>
+        <SupportedFiles />
+      </div>
     </div>
   );
 }

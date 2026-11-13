@@ -103,6 +103,7 @@ function parseStatement(statement: RawStatement): NormalizedStatement {
 	const {iban, otherId} = accountOf(account, abnAmro);
 	return {
 		format: 'mt940',
+		layout: null,
 		accountIban: iban,
 		accountOtherId: otherId,
 		bank: null,

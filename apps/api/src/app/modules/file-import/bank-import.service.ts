@@ -77,21 +77,32 @@ export type AccountChoices = ReadonlyMap<string, string>;
 /** Where the request says a drop goes: one named account, or a choice per statement that names no account. */
 export type BankImportRequest = {bankAccountId?: BankAccount['id'] | null; accountChoices?: AccountChoices};
 
-/** The statements of one account in one drop: its rows per format, in matching order (`FORMAT_ORDER`), each in booking order. */
+/**
+ * The statements of one account in one drop: its rows per format (a bank CSV export per layout), in matching order
+ * (`FORMAT_ORDER`, then layout id), each in booking order.
+ */
 type AccountRows = {
 	identifier: string;
 	iban: string | null;
 	/** The bank of a file that names no account (Revolut); null when it names one. */
 	bank: StatementBank | null;
 	currency: string;
-	byFormat: {format: StatementFormat; rows: NormalizedRow[]}[];
+	byFormat: {format: StatementFormat; layout: string | null; rows: NormalizedRow[]}[];
 };
 
 /**
  * The order the formats of one account in one drop are matched in: each format's rows meet the rows the formats
  * before it added as if they were already stored, so one payment exported in several formats is imported once.
  */
-const FORMAT_ORDER: readonly StatementFormat[] = ['camt053', 'mt940', 'abnAmroTxt', 'revolutCsv', 'revolutXlsx'];
+const FORMAT_ORDER: readonly StatementFormat[] = [
+	'camt053',
+	'mt940',
+	'abnAmroTxt',
+	'revolutCsv',
+	'revolutXlsx',
+	'csv',
+	'ofx',
+];
 
 /** Where an account's rows go: an account bank sync writes to, or an imported-files account found or created. */
 type Target = {kind: 'synced'; account: BankAccount} | {kind: 'file'; account?: BankAccount};
@@ -100,6 +111,9 @@ type Target = {kind: 'synced'; account: BankAccount} | {kind: 'file'; account?: 
 type RoutedTarget = {target: Target; routedByBank: boolean};
 
 type ImportedAccount = {account: BankAccount; connection: BankConnection; created: boolean};
+
+/** A kind of statement file: its format, and the layout of a bank's CSV export. */
+type FileKind = {format: StatementFormat; layout: string | null};
 
 type LadderCounts = Pick<
 	BankImport,
@@ -134,7 +148,7 @@ export class BankImportService {
 		files: readonly Buffer[],
 		{bankAccountId = null, accountChoices = new Map()}: BankImportRequest = {},
 	): Promise<BankImportSummary> {
-		const {statements, formats} = await this.parseDrop(files);
+		const {statements, kinds} = await this.parseDrop(files);
 		const accountRows = groupByAccount(statements);
 		const allRows = accountRows.flatMap(({byFormat}) => byFormat.flatMap(({rows}) => rows));
 		const bookingDates = allRows.flatMap(({bookingDate}) => (bookingDate ? [bookingDate] : [])).sort();
@@ -167,8 +181,9 @@ export class BankImportService {
 						// imported-files connection takes only its own accounts, and the record still undoes the rest.
 						bankConnectionId: (syncedAccount?.connection ?? fileConnection!).id,
 						fileHash: hashDrop(files),
-						format: formats.size === 1 ? [...formats][0] : 'mixed',
-						layout: null,
+						// A drop of one kind of file records its format and, for a bank's CSV export, its layout.
+						format: kinds.size === 1 ? [...kinds.values()][0].format : 'mixed',
+						layout: kinds.size === 1 ? [...kinds.values()][0].layout : null,
 						filesCount: files.length,
 						rowsParsed,
 						rowsAdded: 0,
@@ -498,18 +513,26 @@ export class BankImportService {
 		return toSummary(resolved.record, await this.findOwnedAccounts(ownerId, resolved.record.bankAccountIds));
 	}
 
-	/** Parses every file in request order; the first refusal names its file and nothing is written. */
+	/**
+	 * Parses every file in request order; the first refusal names its file and nothing is written. `kinds` holds each
+	 * kind of file read once: its format, and its layout when it is a bank's CSV export.
+	 */
 	private async parseDrop(
 		files: readonly Buffer[],
-	): Promise<{statements: NormalizedStatement[]; formats: Set<StatementFormat>}> {
+	): Promise<{statements: NormalizedStatement[]; kinds: Map<string, FileKind>}> {
 		const statements: NormalizedStatement[] = [];
-		const formats = new Set<StatementFormat>();
+		const kinds = new Map<string, FileKind>();
 		const seen = new Set<string>();
 		let rows = 0;
 		for (const [index, file] of files.entries()) {
 			const outcome = await this.parseRunner.parse(file);
-			if (!outcome.ok) throw new BankImportRefusalException(outcome.code, index + 1);
-			for (const format of outcome.result.formats) formats.add(format);
+			if (!outcome.ok) {
+				throw new BankImportRefusalException(outcome.code, index + 1, undefined, outcome.layout);
+			}
+			const {formats, layouts} = outcome.result;
+			for (const format of formats.filter((format) => format !== 'csv'))
+				kinds.set(format, {format, layout: null});
+			for (const layout of layouts) kinds.set(`csv:${layout}`, {format: 'csv', layout});
 			for (const statement of outcome.result.statements) {
 				// A statement dropped twice in one go (an archive and its own files) is the same statement.
 				const key = JSON.stringify(statement);
@@ -520,7 +543,7 @@ export class BankImportService {
 				statements.push(statement);
 			}
 		}
-		return {statements, formats};
+		return {statements, kinds};
 	}
 
 	/**
@@ -963,13 +986,20 @@ function groupByAccount(statements: readonly NormalizedStatement[]): AccountRows
 			currency: statement.accountCurrency,
 			byFormat: [],
 		};
-		const part = group.byFormat.find(({format}) => format === statement.format);
+		// Exports of one bank in two CSV layouts (such as two languages) are two formats to each other.
+		const part = group.byFormat.find(
+			({format, layout}) => format === statement.format && layout === statement.layout,
+		);
 		if (part) part.rows.push(...statement.rows);
-		else group.byFormat.push({format: statement.format, rows: [...statement.rows]});
+		else group.byFormat.push({format: statement.format, layout: statement.layout, rows: [...statement.rows]});
 		groups.set(key, group);
 	}
 	for (const group of groups.values()) {
-		group.byFormat.sort((left, right) => FORMAT_ORDER.indexOf(left.format) - FORMAT_ORDER.indexOf(right.format));
+		group.byFormat.sort(
+			(left, right) =>
+				FORMAT_ORDER.indexOf(left.format) - FORMAT_ORDER.indexOf(right.format) ||
+				(left.layout ?? '').localeCompare(right.layout ?? ''),
+		);
 	}
 	return [...groups.values()];
 }
@@ -1031,6 +1061,7 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 	return {
 		id: record.id,
 		format: record.format,
+		layout: record.layout,
 		filesCount: record.filesCount,
 		rowsParsed: record.rowsParsed,
 		rowsAdded: record.rowsAdded,

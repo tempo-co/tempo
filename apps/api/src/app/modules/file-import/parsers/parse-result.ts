@@ -7,11 +7,17 @@ export const PARSE_REFUSAL_CODES = [
 	'too_many_files',
 	'too_many_rows',
 	'parse_failed',
+	/** A file laid out like a known bank's CSV export whose rows do not read as that export's. */
+	'layout_not_recognized',
 ] as const;
 export type ParseRefusalCode = (typeof PARSE_REFUSAL_CODES)[number];
 
 export class ParseRefusal extends Error {
-	constructor(readonly code: ParseRefusalCode) {
+	/** On `layout_not_recognized`: the id of the CSV layout the file looked like. */
+	constructor(
+		readonly code: ParseRefusalCode,
+		readonly layout: string | null = null,
+	) {
 		super(code);
 		this.name = 'ParseRefusal';
 	}
@@ -39,7 +45,7 @@ export type NormalizedRow = {
 	referenceNumber: string | null;
 };
 
-export const STATEMENT_FORMATS = ['camt053', 'mt940', 'abnAmroTxt', 'revolutCsv', 'revolutXlsx'] as const;
+export const STATEMENT_FORMATS = ['camt053', 'mt940', 'abnAmroTxt', 'revolutCsv', 'revolutXlsx', 'csv', 'ofx'] as const;
 export type StatementFormat = (typeof STATEMENT_FORMATS)[number];
 
 /** Banks whose files name no account; the owner's account at that bank is found by currency instead. */
@@ -48,6 +54,8 @@ export type StatementBank = (typeof STATEMENT_BANKS)[number];
 
 export type NormalizedStatement = {
 	format: StatementFormat;
+	/** The id of the bank's CSV layout the statement was read with; null for every other format. */
+	layout: string | null;
 	/** The statement account's IBAN, or null when it is identified by another id. */
 	accountIban: string | null;
 	/** The account's other id (CAMT `Acct/Id/Othr/Id`, MT940 `:25:`) when it has no IBAN. */
@@ -67,8 +75,13 @@ export type ParseResult = {
 	files: number;
 	/** The formats of the files read, each once, in the order first met; a file without statements counts too. */
 	formats: StatementFormat[];
+	/** The CSV layouts of the files read, each once, in the order first met. */
+	layouts: string[];
 	statements: NormalizedStatement[];
 };
 
 /** What the parse runner writes to stdout. */
-export type ParseRunnerOutput = ({ok: true} & ParseResult) | {ok: false; code: ParseRefusalCode};
+export type ParseRunnerOutput =
+	| ({ok: true} & ParseResult)
+	/** `layout`: on `layout_not_recognized` only, the id of the CSV layout the file looked like. */
+	| {ok: false; code: ParseRefusalCode; layout?: string};
