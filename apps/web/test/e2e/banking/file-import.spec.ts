@@ -658,6 +658,39 @@ test.describe('statement file import on Connections', () => {
     expect(api.uploads).toHaveLength(1);
   });
 
+  test("imports files dropped on the dialog's drop area", async ({page}) => {
+    const api = await mockFileImport(page, {uploads: [created(importSummary({filesCount: 1}))]});
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    const area = dialog.getByTestId('bank-import-drop-area');
+
+    // The browser lets a drop through only when the drag's last answer allows it. A drag event made in a test
+    // ignores what handlers set, so record the answers.
+    const answers = await area.evaluate((target) => {
+      const data = new DataTransfer();
+      data.items.add(new File(['synthetic'], 'dropped-statement.xml'));
+      const written: string[] = [];
+      Object.defineProperty(data, 'dropEffect', {
+        set: (value: string) => written.push(value),
+        get: () => written[written.length - 1] ?? 'none',
+      });
+      const init = {bubbles: true, cancelable: true, dataTransfer: data};
+      target.dispatchEvent(new DragEvent('dragenter', init));
+      target.dispatchEvent(new DragEvent('dragover', init));
+      return written;
+    });
+    expect(answers[answers.length - 1]).toBe('copy');
+
+    const transfer = await page.evaluateHandle(() => {
+      const data = new DataTransfer();
+      data.items.add(new File(['synthetic'], 'dropped-statement.xml'));
+      return data;
+    });
+    await area.dispatchEvent('drop', {dataTransfer: transfer});
+    await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
+    expect(api.uploads).toHaveLength(1);
+  });
+
   test('an import closed mid-upload still finishes, and its toast reopens the summary', async ({
     page,
   }) => {

@@ -70,14 +70,17 @@ export function PageFileDrop({
       if (depth.current === 0) setDragging(false);
     };
     const onOver = (event: DragEvent) => {
-      if (!dragHasFiles(event)) return;
+      // A drop area that already took the drag (the import dialog's) keeps its answer.
+      if (!dragHasFiles(event) || event.defaultPrevented) return;
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = active ? 'copy' : 'none';
     };
     const onDrop = (event: DragEvent) => {
       if (!dragHasFiles(event)) return;
+      const taken = event.defaultPrevented;
       event.preventDefault();
       reset();
+      if (taken) return;
       const files = Array.from(event.dataTransfer?.files ?? []);
       if (active && files.length > 0) latestOnFiles.current(files);
     };
