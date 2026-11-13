@@ -35,6 +35,10 @@ $ npm run start:dev
 
 This script starts the necessary Docker services, cleans any previous build output and starts the server in watch mode.
 
+## Statement file import
+
+How statement files become transactions, the formats read, the limits and the column mapper are described in [docs/file-import.md](docs/file-import.md).
+
 ## MCP
 
 The API serves sixteen read-only banking tools over a hosted [Streamable HTTP MCP endpoint](docs/mcp.md) at `/api/mcp`. Clients authenticate with a Tempo personal access token, not a browser session.
