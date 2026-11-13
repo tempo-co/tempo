@@ -126,7 +126,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'TAXES_AND_GOVERNMENT',
 		label: 'Taxes and government',
 		description:
-			'Payments to a government: municipal and national taxes, fines, passport, ID, permit, and registration fees, and court or government agency fees; insurance, utilities, and public transport fares belong elsewhere, and money received from a government is income or a refund.',
+			'Payments to a government: municipal and national taxes, fines, passport, ID, permit, and registration fees, and court or government agency fees; insurance, utilities, and public transport fares belong elsewhere, and money received from a government is Income or Refund as those categories describe.',
 	},
 	{
 		value: 'GIFTS_AND_DONATIONS',
@@ -144,13 +144,13 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'INCOME',
 		label: 'Income',
 		description:
-			'Money received as salary, wages, interest, benefits, or other earned income; refunds, reimbursements, and transfers have separate categories.',
+			'Money received as salary, wages, interest, benefits, or other earned income, and money received from a government, such as income tax refunds, allowances, and benefits, unless it pays back a payment the owner made from their account (Refund); refunds of purchases, reimbursements, and transfers have separate categories.',
 	},
 	{
 		value: 'REFUND',
 		label: 'Refund',
 		description:
-			'Money returned for an earlier purchase or expense, including reversals and reimbursements; ordinary income and transfers do not qualify.',
+			'Money returned for an earlier purchase or expense, including reversals and reimbursements; money from a government counts only when it pays back a payment the owner made from their account, such as an overpaid municipal tax bill or a cancelled fine, and is otherwise Income. Ordinary income and transfers do not qualify.',
 	},
 	{
 		value: 'TRANSFER_IN',

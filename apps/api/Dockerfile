@@ -12,7 +12,6 @@ RUN npm ci
 
 COPY apps/api/tsconfig*.json ./
 COPY apps/api/src/ ./src/
-COPY apps/api/claude-bridge/contract.json apps/api/claude-bridge/merchant-contract.json ./claude-bridge/
 COPY apps/api/scripts/ ./scripts/
 COPY apps/api/nest-cli.json ./
 RUN npm run build

@@ -51,7 +51,6 @@ beforeAll(async () => {
 	process.env.MERCHANT_LOGOS_ENABLED = String(merchantLogosEnabled);
 	process.env.FILE_IMPORT_ENABLED = String(fileImportEnabled);
 	process.env.FILE_IMPORT_MAPPER_ENABLED = String(fileImportMapperEnabled);
-	delete process.env.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET;
 
 	if (webPushEnabled) {
 		const {publicKey, privateKey} = webPush.generateVAPIDKeys();
@@ -64,7 +63,7 @@ beforeAll(async () => {
 		delete process.env.WEB_PUSH_VAPID_SUBJECT;
 	}
 
-	// Merchant logos and the column mapper call model routes too, so they need a key; their specs replace the call.
+	// Merchant logos and the column mapper call the same model API, so they need a key; their specs replace the call.
 	if (aiCategorizationEnabled || merchantLogosEnabled || fileImportMapperEnabled) {
 		process.env.AI_CATEGORIZATION_MODEL = 'test-model';
 		process.env.ANTHROPIC_API_KEY = 'test-only-placeholder';

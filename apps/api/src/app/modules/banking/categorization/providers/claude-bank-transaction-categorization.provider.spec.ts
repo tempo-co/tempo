@@ -1,18 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import {Logger} from '@nestjs/common';
 import {BANK_TRANSACTION_CATEGORIES, BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@tempo/contracts';
-import {createHash} from 'node:crypto';
-import {mkdtemp, rm} from 'node:fs/promises';
 import {createServer} from 'node:http';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
 
 import {ConfigurationService} from '@core/config/config.service';
 
-import contract from '../../../../../../claude-bridge/contract.json';
-import merchantContract from '../../../../../../claude-bridge/merchant-contract.json';
 import {toBankTransactionCategorizationInput} from '../bank-transaction-categorization-input';
-import {toBridgeInputContract} from '../bank-transaction-categorization-input.schema';
+import {toInputContract} from '../bank-transaction-categorization-input.schema';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS,
 	BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH,
@@ -27,6 +21,8 @@ import {
 	MERCHANT_KINDS,
 } from '../bank-transaction-categorization.types';
 import {ClaudeBankTransactionCategorizationProvider} from './claude-bank-transaction-categorization.provider';
+import contract from './claude-categorization-contract.json';
+import merchantContract from './claude-merchant-contract.json';
 
 const SEARCH_QUERY = 'Example Cafe';
 
@@ -51,7 +47,7 @@ function input(correlationId = 'transaction-1'): BankTransactionCategorizationIn
 	};
 }
 
-/** A call for one row, without a web search (`plain`) or allowed to search for the merchant on the bridge (`search`). */
+/** A call for one row, without a web search (`plain`) or with a merchant search query (`search`). */
 type CallKind = 'plain' | 'search';
 
 function categorizeOn(provider: ClaudeBankTransactionCategorizationProvider, kind: CallKind) {
@@ -96,18 +92,54 @@ function classification(overrides: Record<string, unknown> = {}) {
 	return {correlationId: '0', category: 'FOOD_AND_DRINK', confidence: 0.9, evidenceType: 'MCC', ...overrides};
 }
 
+/** The categorizing call's reply: the answer as the input of its one StructuredOutput tool call. */
 function response(classifications: unknown[]) {
 	return {
-		stop_reason: 'end_turn',
-		content: [{type: 'text', text: JSON.stringify({classifications})}],
+		stop_reason: 'tool_use',
+		content: [{type: 'thinking', thinking: '', signature: ''}, structuredOutput({classifications})],
 		usage: {server_tool_use: {web_search_requests: 0}},
 	};
 }
 
-/** An API reply that ran one web search with `query`, which a request without tools must never produce. */
-function searchedResponse(query: string) {
+function structuredOutput(input: unknown, name = 'StructuredOutput') {
+	return {type: 'tool_use', id: 'toolu_synthetic', name, input};
+}
+
+/** The tool the categorizing request offers, and only it: no server tool, an auto choice, one call. */
+const STRUCTURED_OUTPUT_REQUEST = {
+	tools: [
+		{name: 'StructuredOutput', description: expect.stringContaining('exactly once'), input_schema: contract.schema},
+	],
+	tool_choice: {type: 'auto', disable_parallel_tool_use: true},
+};
+
+/** The merchant search call's reply: one web search with `query` and the finding it reports. */
+function searchReply({
+	query = SEARCH_QUERY,
+	finding = {identifies: 'BUSINESS', description: 'A cafe serving coffee and pastries.'} as object | string,
+	searches = 1,
+	results = [{type: 'web_search_result', url: 'https://www.cafe.example.test/menu?private=1'}] as unknown,
+} = {}) {
 	return {
 		stop_reason: 'end_turn',
+		usage: {server_tool_use: {web_search_requests: searches}},
+		content: [
+			{type: 'thinking', thinking: '', signature: ''},
+			...(searches
+				? [
+						{type: 'server_tool_use', name: 'web_search', input: {query}},
+						{type: 'web_search_tool_result', content: results},
+					]
+				: []),
+			{type: 'text', text: typeof finding === 'string' ? finding : JSON.stringify(finding)},
+		],
+	};
+}
+
+/** A categorizing reply that ran one web search with `query`, which a request without a server tool must never produce. */
+function searchedResponse(query: string) {
+	return {
+		stop_reason: 'tool_use',
 		usage: {server_tool_use: {web_search_requests: 1}},
 		content: [
 			{type: 'text', text: 'I will look up this merchant.'},
@@ -116,45 +148,18 @@ function searchedResponse(query: string) {
 				type: 'web_search_tool_result',
 				content: [{type: 'web_search_result', url: 'https://www.example.test/path?token=private'}],
 			},
-			{type: 'text', text: '{"classifications":['},
-			{type: 'text', text: `${JSON.stringify(classification({evidenceType: 'MERCHANT_IDENTITY_ONLY'}))}]}`},
+			structuredOutput({classifications: [classification({evidenceType: 'MERCHANT_IDENTITY_ONLY'})]}),
 		],
 	};
 }
 
-type BridgeRequest = {url?: string; body: unknown; hash?: string};
-const unavailable = {status: 503, body: {error: 'claude_unavailable'}};
-
-/** A fake subscription bridge on a Unix socket that records requests and returns one fixed reply. */
-async function withBridge(
-	reply: {status?: number; body: object},
-	run: (socket: string, requests: BridgeRequest[]) => Promise<void>,
-): Promise<void> {
-	const {status = 200, body} = reply;
-	const directory = await mkdtemp(join(tmpdir(), 'claude-provider-'));
-	const socket = join(directory, 'bridge.sock');
-	const requests: BridgeRequest[] = [];
-	const server = createServer((req, res) => {
-		const chunks: Buffer[] = [];
-		req.on('data', (chunk: Buffer) => chunks.push(chunk));
-		req.on('end', () => {
-			requests.push({
-				url: req.url,
-				body: JSON.parse(Buffer.concat(chunks).toString()),
-				hash: req.headers['x-tempo-contract'] as string | undefined,
-			});
-			res.writeHead(status, {'content-type': 'application/json'});
-			res.end(JSON.stringify(body));
-		});
-	});
-	await new Promise<void>((resolve) => server.listen(socket, resolve));
-	try {
-		await run(socket, requests);
-	} finally {
-		await new Promise<void>((resolve) => server.close(() => resolve()));
-		await rm(directory, {recursive: true, force: true});
-	}
+/** The error the SDK throws for an HTTP error reply, with the body Anthropic sends. */
+function apiError(status: number, type: string, message: string) {
+	return {status, type, message: `${status} ${message}`, error: {type: 'error', error: {type, message}}};
 }
+
+const CREDIT_BALANCE_TOO_LOW =
+	'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.';
 
 describe('ClaudeBankTransactionCategorizationProvider', () => {
 	it.each([
@@ -178,9 +183,11 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			model,
 			max_tokens: 16_384,
 			thinking: {type: 'adaptive'},
-			output_config: {effort, format: {type: 'json_schema'}},
+			...STRUCTURED_OUTPUT_REQUEST,
 		});
-		expect(request.output_config.format.schema.properties.classifications.items.properties.category.enum).toEqual(
+		// The answer comes back through the tool, not a strict json_schema format.
+		expect(request.output_config).toEqual({effort});
+		expect(request.tools[0].input_schema.properties.classifications.items.properties.category.enum).toEqual(
 			BANK_TRANSACTION_CATEGORIES,
 		);
 		expect(JSON.parse(request.messages[0].content)).toEqual({
@@ -192,7 +199,6 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			'when previousManualCategories holds a single category other than TRANSFER_OUT',
 		);
 		expect(request.system).toContain('identifies only a payment processor, payment terminal provider or acquirer');
-		expect(request).not.toHaveProperty('tools');
 		expect(request).not.toHaveProperty('cache_control');
 	});
 
@@ -201,9 +207,9 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(contract.search.maxSourceDomains).toBe(BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS);
 	});
 
-	it('keeps the request schemas the bridge validates equal to the app input schema', () => {
-		// Regenerate with `npm run contract:input`; the bridge must be reinstalled after the API deploys.
-		expect(contract.input).toEqual(toBridgeInputContract().input);
+	it('keeps the contract input schemas equal to the app input schema', () => {
+		// Regenerate with `npm run contract:input`.
+		expect(contract.input).toEqual(toInputContract().input);
 	});
 
 	it('keeps the shared contract enums equal to the app categories and evidence types', () => {
@@ -213,23 +219,177 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(merchantContract.schema.properties.merchants.items.properties.kind.enum).toEqual(MERCHANT_KINDS);
 	});
 
-	it('sends the shared contract prompt and schema and never offers a web search on the API', async () => {
-		// The API cannot pin the query before a server-side search runs, so searches run only on the bridge.
+	it('sends the shared contract prompt and schema with only the StructuredOutput tool when no search query is given', async () => {
 		const {provider, create} = setup();
 		create.mockResolvedValue(response([classification()]));
-		await categorizeOn(provider, 'plain');
-		const [result] = await categorizeOn(provider, 'search');
+		const [result] = await categorizeOn(provider, 'plain');
 		expect(result).not.toHaveProperty('searchTrace');
-		const [plain, search] = create.mock.calls.map(([request]) => request);
-		for (const request of [plain, search]) {
-			expect([request.system, request.output_config.format.schema]).toEqual([
-				contract.instructions,
-				contract.schema,
-			]);
-			expect(request).not.toHaveProperty('tools');
-			expect(JSON.parse(request.messages[0].content)).not.toHaveProperty('searchQuery');
+		expect(create).toHaveBeenCalledTimes(1);
+		const [[request]] = create.mock.calls;
+		expect(request.system).toBe(contract.instructions);
+		expect(request).toMatchObject(STRUCTURED_OUTPUT_REQUEST);
+		expect(request.tools).toHaveLength(1);
+		expect(Object.keys(JSON.parse(request.messages[0].content))).toEqual(['categories', 'transactions']);
+	});
+
+	it('searches for the merchant in a call that receives only the query, then categorizes with its finding', async () => {
+		const {provider, create} = setup();
+		create
+			.mockResolvedValueOnce(
+				searchReply({
+					results: [
+						{type: 'web_search_result', url: 'https://www.cafe.example.test/menu?private=1'},
+						{type: 'web_search_result', url: 'https://reviews.example.test/cafe'},
+						{type: 'web_search_result', url: 'not a url'},
+					],
+				}),
+			)
+			.mockResolvedValueOnce(response([classification({evidenceType: 'MERCHANT_IDENTITY_ONLY'})]));
+		const transaction = {
+			...input(),
+			amount: '-42.17',
+			remittanceInformation: 'synthetic-private-note',
+			previousManualCategories: [
+				{
+					category: 'FOOD_AND_DRINK' as const,
+					count: 2,
+					recentExamples: [
+						{amount: '-9.99', currency: 'EUR', date: '2026-08-01', text: 'synthetic-history-note'},
+					],
+				},
+			],
+		};
+		await expect(
+			provider.categorize([transaction], BANK_TRANSACTION_CATEGORY_DEFINITIONS, {searchQuery: SEARCH_QUERY}),
+		).resolves.toEqual([
+			{
+				correlationId: 'transaction-1',
+				category: 'FOOD_AND_DRINK',
+				confidence: 0.9,
+				provider: 'claude-api',
+				model: 'claude-sonnet-5-5',
+				searchTrace: {
+					queries: [SEARCH_QUERY],
+					sourceDomains: ['cafe.example.test', 'reviews.example.test'],
+					evidenceType: 'MERCHANT_IDENTITY_ONLY',
+				},
+			},
+		]);
+		expect(create).toHaveBeenCalledTimes(2);
+		const [[searchRequest], [categorizeRequest]] = create.mock.calls;
+		// The whole searching request: the query is the only input it carries.
+		expect(searchRequest).toEqual({
+			model: 'claude-sonnet-5-5',
+			max_tokens: 4096,
+			system: contract.search.instructions,
+			messages: [{role: 'user', content: JSON.stringify({query: SEARCH_QUERY})}],
+			thinking: {type: 'adaptive'},
+			output_config: {effort: 'low', format: {type: 'json_schema', schema: contract.search.schema}},
+			tools: [{type: 'web_search_20250305', name: 'web_search', max_uses: 1, allowed_callers: ['direct']}],
+		});
+		expect(JSON.stringify(searchRequest)).not.toMatch(
+			/42\.17|9\.99|synthetic-private-note|synthetic-history-note|transaction-1|5814|2026-0/,
+		);
+		expect(categorizeRequest.system).toBe(contract.instructions);
+		expect(categorizeRequest.tools).toEqual(STRUCTURED_OUTPUT_REQUEST.tools);
+		expect(JSON.parse(categorizeRequest.messages[0].content)).toEqual({
+			categories: BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+			transactions: [{...transaction, correlationId: '0'}],
+			searchFinding: {
+				query: SEARCH_QUERY,
+				identifies: 'BUSINESS',
+				description: 'A cafe serving coffee and pastries.',
+			},
+		});
+	});
+
+	it('records the query the search ran and passes a bounded description', async () => {
+		const {provider, create} = setup();
+		const ranQuery = `${SEARCH_QUERY} Example City`;
+		create
+			.mockResolvedValueOnce(
+				searchReply({
+					query: ranQuery,
+					finding: {identifies: 'PAYMENT_PROCESSOR', description: ` ${'x'.repeat(400)} `},
+				}),
+			)
+			.mockResolvedValueOnce(response([classification({category: 'NEEDS_REVIEW', evidenceType: 'INSUFFICIENT'})]))
+			.mockResolvedValueOnce(searchReply({finding: {identifies: 'BUSINESS', description: '  '}}))
+			.mockResolvedValueOnce(response([classification()]));
+		const [processor] = await categorizeOn(provider, 'search');
+		const [business] = await categorizeOn(provider, 'search');
+		expect(processor.searchTrace?.queries).toEqual([ranQuery]);
+		expect(business.searchTrace?.queries).toEqual([SEARCH_QUERY]);
+		const findings = [1, 3].map((call) => JSON.parse(create.mock.calls[call][0].messages[0].content).searchFinding);
+		expect(findings).toEqual([
+			{query: ranQuery, identifies: 'PAYMENT_PROCESSOR', description: 'x'.repeat(300)},
+			{query: SEARCH_QUERY, identifies: 'BUSINESS', description: null},
+		]);
+	});
+
+	it.each(['NOTHING', 'PERSON'])(
+		'keeps the trace of a search that found %s but sends no finding',
+		async (identifies) => {
+			const {provider, create} = setup();
+			create
+				.mockResolvedValueOnce(searchReply({finding: {identifies, description: 'Example Person'}}))
+				.mockResolvedValueOnce(
+					response([classification({category: 'NEEDS_REVIEW', evidenceType: 'INSUFFICIENT'})]),
+				);
+			const [result] = await categorizeOn(provider, 'search');
+			expect(result.searchTrace).toEqual({
+				queries: [SEARCH_QUERY],
+				sourceDomains: ['cafe.example.test'],
+				evidenceType: 'INSUFFICIENT',
+			});
+			expect(JSON.parse(create.mock.calls[1][0].messages[0].content)).not.toHaveProperty('searchFinding');
+		},
+	);
+
+	it.each([
+		['the search call fails', {status: 500}],
+		['the search call is refused', {status: 429}],
+		['the search reply is not a finding', searchReply({finding: 'not json'})],
+		['the search reply has an unknown finding', searchReply({finding: {identifies: 'SHOP', description: null}})],
+		['the model answers without searching', searchReply({searches: 0})],
+		[
+			'the search tool returns an error',
+			searchReply({results: {type: 'web_search_tool_result_error', error_code: 'unavailable'}}),
+		],
+		['the reply ran more than one search', searchReply({searches: 2})],
+		[
+			'the reply invoked the search twice',
+			(() => {
+				const reply = searchReply();
+				const [thinking, ...rest] = reply.content;
+				const retry = [
+					{type: 'server_tool_use', name: 'web_search', input: {query: `${SEARCH_QUERY} menu`}},
+					{
+						type: 'web_search_tool_result',
+						content: {type: 'web_search_tool_result_error', error_code: 'max_uses_exceeded'},
+					},
+				];
+				return {...reply, content: [thinking, ...rest.slice(0, 2), ...retry, ...rest.slice(2)]};
+			})(),
+		],
+		['the search reply is cut off', {...searchReply(), stop_reason: 'max_tokens'}],
+	])('categorizes without a finding or trace when %s', async (_case, searchOutcome) => {
+		const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+		try {
+			const {provider, create} = setup();
+			if ('status' in searchOutcome) create.mockRejectedValueOnce(searchOutcome);
+			else create.mockResolvedValueOnce(searchOutcome);
+			create.mockResolvedValueOnce(response([classification({category: 'NEEDS_REVIEW'})]));
+			const [result] = await categorizeOn(provider, 'search');
+			expect(result).toMatchObject({category: 'NEEDS_REVIEW', provider: 'claude-api'});
+			expect(result).not.toHaveProperty('searchTrace');
+			expect(create).toHaveBeenCalledTimes(2);
+			const categorizeRequest = create.mock.calls[1][0];
+			expect(categorizeRequest.tools).toEqual(STRUCTURED_OUTPUT_REQUEST.tools);
+			expect(JSON.parse(categorizeRequest.messages[0].content)).not.toHaveProperty('searchFinding');
+		} finally {
+			warn.mockRestore();
 		}
-		expect(search).toEqual(plain);
 	});
 
 	describe('structured response validation', () => {
@@ -246,10 +406,41 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			create.mockResolvedValue(response(classifications));
 			await expect(outcomeOf(provider, 'plain')).resolves.toBe('failed');
 		});
-		it.each(['max_tokens', 'pause_turn', 'refusal'])('fails an incomplete %s response', async (stopReason) => {
+		it.each(['max_tokens', 'pause_turn', 'refusal', 'end_turn'])(
+			'fails a %s response that did not stop to call the tool',
+			async (stopReason) => {
+				const {provider, create} = setup();
+				create.mockResolvedValue({...response([classification()]), stop_reason: stopReason});
+				await expect(outcomeOf(provider, 'plain')).resolves.toBe('failed');
+			},
+		);
+		it.each([
+			[
+				'answers in text instead of calling the tool',
+				[{type: 'text', text: JSON.stringify({classifications: [classification()]})}],
+			],
+			['calls another tool', [structuredOutput({classifications: [classification()]}, 'web_search')]],
+			[
+				'calls the tool twice',
+				[
+					structuredOutput({classifications: [classification()]}),
+					structuredOutput({classifications: [classification()]}),
+				],
+			],
+			['passes a tool input that is not an object', [structuredOutput(JSON.stringify({classifications: []}))]],
+		])('fails a reply that %s', async (_case, content) => {
 			const {provider, create} = setup();
-			create.mockResolvedValue({...response([classification()]), stop_reason: stopReason});
+			create.mockResolvedValue({...response([]), content});
 			await expect(outcomeOf(provider, 'plain')).resolves.toBe('failed');
+		});
+		it('reads the tool call when the reply also holds text', async () => {
+			const {provider, create} = setup();
+			const reply = response([classification({category: 'SHOPPING'})]);
+			create.mockResolvedValue({
+				...reply,
+				content: [{type: 'text', text: 'Synthetic preface.'}, ...reply.content],
+			});
+			await expect(categorizeOn(provider, 'plain')).resolves.toMatchObject([{category: 'SHOPPING'}]);
 		});
 		it('does not dispatch invalid or oversized input batches', async () => {
 			const {provider, create} = setup();
@@ -290,21 +481,52 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			['the API refuses access', 403, 'pending'],
 			['the API always rejects the request', 400, 'failed'],
 			['the API fails after accepting the request', 500, 'failed'],
-		] as const)('without a bridge, ends a call where %s (%s) as %s', async (_case, status, expected) => {
+		] as const)('ends a call where %s (%s) as %s', async (_case, status, expected) => {
 			for (const kind of ['plain', 'search'] as const) {
 				const {provider, create} = setup();
 				create.mockRejectedValue({status, message: 'secret raw input'});
 				await expect(outcomeOf(provider, kind)).resolves.toBe(expected);
-				expect(create).toHaveBeenCalledTimes(1);
+				// A failed merchant search leaves the categorizing call to decide the outcome.
+				expect(create).toHaveBeenCalledTimes(kind === 'search' ? 2 : 1);
 			}
 		});
 
-		it('fails an API reply that ran a web search, keeping nothing from it', async () => {
+		it.each([
+			[
+				'the credit balance is too low',
+				apiError(400, 'invalid_request_error', CREDIT_BALANCE_TOO_LOW),
+				'pending',
+			],
+			[
+				'the credit balance is too low, as an SDK error',
+				new Anthropic.BadRequestError(
+					400,
+					{type: 'error', error: {type: 'invalid_request_error', message: CREDIT_BALANCE_TOO_LOW}},
+					undefined,
+					new Headers(),
+				),
+				'pending',
+			],
+			['billing fails', apiError(402, 'billing_error', 'synthetic billing failure'), 'pending'],
+			['the connection never opens', new Anthropic.APIConnectionError({message: 'synthetic'}), 'pending'],
+			['the request times out', new Anthropic.APIConnectionTimeoutError({message: 'synthetic'}), 'failed'],
+			['the request is invalid', apiError(400, 'invalid_request_error', 'synthetic invalid field'), 'failed'],
+			['the model does not exist', apiError(404, 'not_found_error', 'synthetic model'), 'failed'],
+		] as const)('ends a call where %s as %s', async (_case, error, expected) => {
 			for (const kind of ['plain', 'search'] as const) {
 				const {provider, create} = setup();
-				create.mockResolvedValue(searchedResponse('Example Cafe menu'));
+				create.mockRejectedValue(error);
+				await expect(outcomeOf(provider, kind)).resolves.toBe(expected);
+			}
+		});
+
+		it('fails a categorizing reply that ran a web search, keeping nothing from it', async () => {
+			for (const kind of ['plain', 'search'] as const) {
+				const {provider, create} = setup();
+				if (kind === 'search') create.mockResolvedValueOnce(searchReply());
+				create.mockResolvedValueOnce(searchedResponse('Example Cafe menu'));
 				await expect(outcomeOf(provider, kind)).resolves.toBe('failed');
-				expect(create).toHaveBeenCalledTimes(1);
+				expect(create).toHaveBeenCalledTimes(kind === 'search' ? 2 : 1);
 			}
 		});
 
@@ -318,165 +540,6 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 				await expect(outcomeOf(provider, 'search')).resolves.toBe('failed');
 			}
 		});
-
-		it.each([
-			['ran and failed', 502, 'failed', {error: 'claude_failed'}],
-			['rejected the request', 400, 'failed', {error: 'invalid_request'}],
-			['refused before running', 503, 'pending', {error: 'claude_unavailable'}],
-		] as const)('ends a call the bridge %s (%s) as %s', async (_case, status, expected, body) => {
-			for (const kind of ['plain', 'search'] as const) {
-				await withBridge({status, body}, async (socket, requests) => {
-					const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-					create.mockRejectedValue({status: 429});
-					await expect(outcomeOf(provider, kind)).resolves.toBe(expected);
-					expect(requests).toHaveLength(1);
-				});
-			}
-		});
-
-		it.each([
-			['ran and failed', {status: 500}, 'failed'],
-			['refused it', {status: 400}, 'pending'],
-			['never reached', new Anthropic.APIConnectionError({message: 'synthetic'}), 'pending'],
-		] as const)(
-			'ends a call the API %s as %s when the bridge then refuses before running',
-			async (_case, apiError, expected) => {
-				await withBridge(unavailable, async (socket, requests) => {
-					const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-					create.mockRejectedValue(apiError);
-					await expect(outcomeOf(provider, 'search')).resolves.toBe(expected);
-					expect(requests).toHaveLength(1);
-				});
-			},
-		);
-
-		it('leaves a call pending when the configured bridge socket is missing', async () => {
-			for (const kind of ['plain', 'search'] as const) {
-				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/missing-synthetic.sock'});
-				create.mockRejectedValue({status: 400, message: 'secret raw input'});
-				await expect(outcomeOf(provider, kind)).resolves.toBe('pending');
-			}
-		});
-
-		it.each([
-			['no search flag', {classifications: [classification()]}, 'plain'],
-			[
-				'a search it was not allowed',
-				{classifications: [classification()], searched: true, sourceDomains: []},
-				'plain',
-			],
-		] as const)('fails a bridge reply with %s', async (_case, body, kind) => {
-			await withBridge({body}, async (socket) => {
-				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-				create.mockRejectedValue({status: 400});
-				await expect(outcomeOf(provider, kind)).resolves.toBe('failed');
-			});
-		});
-	});
-
-	it('falls back over a local socket, preserves history hints, and records the actual subscription route', async () => {
-		const reply = {classifications: [classification({category: 'SHOPPING'})], searched: false, sourceDomains: []};
-		await withBridge({body: reply}, async (socket, requests) => {
-			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-			create.mockRejectedValue({status: 400, message: 'API credit balance exhausted, secret'});
-			const transaction = {
-				...input(),
-				previousManualCategories: [
-					{
-						category: 'SHOPPING' as const,
-						count: 2,
-						recentExamples: [{amount: '-8.00', currency: 'EUR', date: '2026-08-01', text: 'Gift'}],
-					},
-				],
-				sameAmountPayments: [
-					{date: '2026-07-01', category: 'SHOPPING' as const, source: 'MANUAL' as const, text: null},
-					{date: '2026-06-01', category: 'SHOPPING' as const, source: 'AI' as const, text: 'gift'},
-				],
-			};
-			await expect(provider.categorize([transaction], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).resolves.toEqual([
-				{
-					correlationId: 'transaction-1',
-					category: 'SHOPPING',
-					confidence: 0.9,
-					provider: 'claude-subscription',
-					model: 'claude-sonnet-5-5',
-				},
-			]);
-			expect(requests.map(({url, body}) => ({url, body}))).toEqual([
-				{
-					url: '/categorize',
-					body: {
-						model: 'claude-sonnet-5-5',
-						effort: 'high',
-						input: {
-							categories: BANK_TRANSACTION_CATEGORY_DEFINITIONS,
-							transactions: [{...transaction, correlationId: '0'}],
-						},
-					},
-				},
-			]);
-			expect(JSON.stringify(requests)).not.toContain('synthetic-api-key');
-		});
-	});
-
-	it('falls back to a pinned subscription search and keeps only valid source hostnames', async () => {
-		const reply = {
-			classifications: [classification({evidenceType: 'MERCHANT_IDENTITY_ONLY'})],
-			searched: true,
-			sourceDomains: ['www.example.test', 'not a domain', 'javascript:alert(1)'],
-		};
-		await withBridge({body: reply}, async (socket, requests) => {
-			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-			create.mockRejectedValue({status: 400, message: 'API credit balance exhausted, secret'});
-			await expect(categorizeOn(provider, 'search')).resolves.toEqual([
-				{
-					correlationId: 'transaction-1',
-					category: 'FOOD_AND_DRINK',
-					confidence: 0.9,
-					provider: 'claude-subscription',
-					model: 'claude-sonnet-5-5',
-					searchTrace: {
-						queries: [SEARCH_QUERY],
-						sourceDomains: ['example.test'],
-						evidenceType: 'MERCHANT_IDENTITY_ONLY',
-					},
-				},
-			]);
-			expect(requests).toHaveLength(1);
-			expect(requests[0].url).toBe('/categorize');
-			expect(requests[0].body).toEqual({
-				model: 'claude-sonnet-5-5',
-				effort: 'high',
-				input: {...JSON.parse(create.mock.calls[0][0].messages[0].content), searchQuery: SEARCH_QUERY},
-			});
-		});
-	});
-
-	it.each(['plain', 'search'] as const)('sends the contract fingerprint on %s fallback requests', async (kind) => {
-		await withBridge(unavailable, async (socket, requests) => {
-			const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-			create.mockRejectedValue({status: 400});
-			await expect(categorizeOn(provider, kind)).rejects.toThrow(BankTransactionCategorizationUnavailableError);
-			expect(requests).toHaveLength(1);
-			expect(requests[0].hash).toBe(createHash('sha256').update(JSON.stringify(contract)).digest('hex'));
-		});
-	});
-
-	it.each(['plain', 'search'] as const)('logs a safe actionable warning on a %s contract mismatch', async (kind) => {
-		const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-		try {
-			await withBridge({status: 409, body: {error: 'synthetic-private-text'}}, async (socket) => {
-				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-				create.mockRejectedValue({status: 400});
-				await expect(categorizeOn(provider, kind)).rejects.toThrow(
-					BankTransactionCategorizationUnavailableError,
-				);
-			});
-			expect(warn).toHaveBeenCalledWith('Claude bridge contract mismatch; reinstall and restart the bridge.');
-			expect(JSON.stringify(warn.mock.calls)).not.toContain('synthetic-private-text');
-		} finally {
-			warn.mockRestore();
-		}
 	});
 
 	it('does not let SDK debug logging print upstream error bodies', async () => {
@@ -516,8 +579,8 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		}
 	});
 
-	it('returns a sanitized pending-retry error when API and subscription are unavailable', async () => {
-		const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/missing-synthetic.sock'});
+	it('returns a sanitized pending-retry error when the API is unavailable', async () => {
+		const {provider, create} = setup();
 		create.mockRejectedValue({status: 429, message: 'synthetic-api-key raw transaction'});
 		await expect(provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).rejects.toMatchObject({
 			name: 'BankTransactionCategorizationUnavailableError',
@@ -604,43 +667,40 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			});
 		});
 
-		it('falls back to the subscription bridge, and stays pending only when both routes refused', async () => {
-			const reply = {
-				merchants: [{correlationId: '0', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false}],
-			};
-			await withBridge({body: reply}, async (socket, requests) => {
-				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-				create.mockRejectedValue({status: 400});
-				await expect(provider.identifyMerchants([merchant()])).resolves.toEqual([
-					{correlationId: 'merchant-1', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false},
-				]);
-				expect(requests).toEqual([
-					{
-						url: '/identify-merchants',
-						body: {
-							model: 'claude-sonnet-5-5',
-							effort: 'high',
-							input: {merchants: [{...merchant(), correlationId: '0'}]},
-						},
-						hash: createHash('sha256').update(JSON.stringify(merchantContract)).digest('hex'),
-					},
-				]);
-			});
-			await withBridge(unavailable, async (socket) => {
-				const {provider, create} = setup({AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: socket});
-				create.mockRejectedValue({status: 429});
-				await expect(provider.identifyMerchants([merchant()])).rejects.toBeInstanceOf(
-					BankTransactionCategorizationUnavailableError,
-				);
-				// The API model ran but answered for an unknown merchant: an attempt that counts, not an outage.
-				create.mockResolvedValue(
-					merchantResponse([
-						{correlationId: '9', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false},
-					]),
-				);
-				await expect(provider.identifyMerchants([merchant()])).rejects.toMatchObject({
-					name: 'BankTransactionCategorizationProviderError',
-				});
+		it.each([
+			['the credit balance is too low', apiError(400, 'invalid_request_error', CREDIT_BALANCE_TOO_LOW)],
+			['the API is rate limited', {status: 429}],
+			['the API refuses the key', {status: 401}],
+			['the connection never opens', new Anthropic.APIConnectionError({message: 'synthetic'})],
+		])('leaves merchants pending when %s', async (_case, error) => {
+			const {provider, create} = setup();
+			create.mockRejectedValue(error);
+			await expect(provider.identifyMerchants([merchant()])).rejects.toBeInstanceOf(
+				BankTransactionCategorizationUnavailableError,
+			);
+		});
+
+		it.each([
+			['the request is invalid', apiError(400, 'invalid_request_error', 'synthetic invalid field')],
+			['the API fails after accepting the request', {status: 500}],
+			['the request times out', new Anthropic.APIConnectionTimeoutError({message: 'synthetic'})],
+		])('counts an attempt when %s', async (_case, error) => {
+			const {provider, create} = setup();
+			create.mockRejectedValue(error);
+			const failure = await provider.identifyMerchants([merchant()]).catch((caught: unknown) => caught);
+			expect(failure).toBeInstanceOf(BankTransactionCategorizationProviderError);
+			expect(failure).not.toBeInstanceOf(BankTransactionCategorizationUnavailableError);
+		});
+
+		it('counts an attempt when the model answers for an unknown merchant', async () => {
+			const {provider, create} = setup();
+			create.mockResolvedValue(
+				merchantResponse([
+					{correlationId: '9', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false},
+				]),
+			);
+			await expect(provider.identifyMerchants([merchant()])).rejects.toMatchObject({
+				name: 'BankTransactionCategorizationProviderError',
 			});
 		});
 	});

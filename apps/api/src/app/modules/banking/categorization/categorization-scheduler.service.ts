@@ -47,7 +47,7 @@ const FOLLOW_UP_JOB_OPTIONS = {
 const FOLLOW_UP_ENQUEUE_TIMEOUT_MS = 2_000;
 /** Backoff type of categorize jobs, resolved by {@link categorizationRetryDelay} in the worker. */
 export const CATEGORIZATION_RETRY_BACKOFF_TYPE = 'categorization-retry';
-// A refusal from both Claude routes (busy bridge, rate limit, login renewal) usually clears within minutes.
+// An API refusal (rate limit, overload, credit balance, key) or an unreachable API usually clears within minutes.
 const UNAVAILABLE_RETRY_DELAYS_MS = [60_000, 120_000, 300_000, 600_000, 1_200_000] as const;
 const ORDINARY_RETRY_ATTEMPTS = 3;
 const ORDINARY_RETRY_BASE_DELAY_MS = 1_000;

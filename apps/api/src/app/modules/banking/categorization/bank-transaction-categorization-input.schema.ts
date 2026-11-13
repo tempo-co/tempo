@@ -8,11 +8,11 @@ import {BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH} from './ban
 
 /**
  * The one definition of what Tempo sends the model about a transaction. It yields the TypeScript types, the fields the
- * provider serializes, the fields the input hash covers, and the JSON Schema the subscription bridge validates
- * requests against (`input` in `claude-bridge/contract.json`, written by `npm run contract:input`).
+ * provider serializes, the fields the input hash covers, and the JSON Schema of a request (`input` in
+ * `providers/claude-categorization-contract.json`, written by `npm run contract:input`).
  */
 
-/** Longest text the bridge accepts in one field. Lengths count UTF-16 code units, as zod and JavaScript do. */
+/** Longest text of one field. Lengths count UTF-16 code units, as zod and JavaScript do. */
 const MAX_FIELD_LENGTH = 8192;
 /** Most recent manual choices per category the model sees as examples. */
 export const MAX_MANUAL_CATEGORY_EXAMPLES = 5;
@@ -94,8 +94,33 @@ const categorizationInputSchema = z.object({correlationId: text, ...classifiedFi
 /** The one web search query a call may run: sanitized merchant text, never identifiers, amounts or dates. */
 const searchQuerySchema = nonBlankText.max(BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH);
 
+/** What a merchant web search can report about the business behind a query. */
+export const MERCHANT_SEARCH_FINDING_KINDS = ['BUSINESS', 'PAYMENT_PROCESSOR', 'PERSON', 'NOTHING'] as const;
+/** Longest description of a business the model sees from a search finding. */
+export const MAX_SEARCH_FINDING_DESCRIPTION_LENGTH = 300;
+
+/**
+ * What a web search for a row group's merchant found, from a separate call that saw only the query. Sent beside the
+ * transactions in the categorizing call.
+ */
+const searchFindingSchema = z
+	.object({
+		query: searchQuerySchema,
+		// Only a business or a payment processor: a search that found a person or nothing is not sent.
+		identifies: z.enum(MERCHANT_SEARCH_FINDING_KINDS).extract(['BUSINESS', 'PAYMENT_PROCESSOR']),
+		description: z.string().max(MAX_SEARCH_FINDING_DESCRIPTION_LENGTH).nullable(),
+	})
+	.strict();
+
 /** Build it with `toBankTransactionCategorizationInput`, which normalizes the fields the hash and the model see. */
 export type BankTransactionCategorizationInput = z.infer<typeof categorizationInputSchema>;
+export type BankTransactionCategorizationSearchFinding = z.infer<typeof searchFindingSchema>;
+
+/** The finding exactly as the model may see it, or null when `value` is not one. */
+export function toSearchFinding(value: unknown): BankTransactionCategorizationSearchFinding | null {
+	const parsed = searchFindingSchema.safeParse(value);
+	return parsed.success ? parsed.data : null;
+}
 export type PreviousManualCategory = z.infer<typeof previousManualCategorySchema>;
 export type SameAmountPayment = z.infer<typeof sameAmountPaymentSchema>;
 
@@ -122,8 +147,8 @@ export function toCategorizationRequestTransaction(
 	return pickFields(categorizationInputSchema, input) as BankTransactionCategorizationInput;
 }
 
-/** The request limits the subscription bridge checks, as stored under `input` in `claude-bridge/contract.json`. */
-export function toBridgeInputContract() {
+/** The request limits, as stored under `input` in `providers/claude-categorization-contract.json`. */
+export function toInputContract() {
 	return {
 		input: {
 			maxTransactions: BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE,
