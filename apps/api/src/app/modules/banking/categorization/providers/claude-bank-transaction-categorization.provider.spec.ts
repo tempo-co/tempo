@@ -188,7 +188,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			categories: BANK_TRANSACTION_CATEGORY_DEFINITIONS,
 			transactions: [{...input(), correlationId: '0'}],
 		});
-		expect(request.system).toContain('Use OTHER only for a known kind of transaction');
+		expect(request.system).toContain('Use OTHER only when the evidence names a kind of spending');
 		expect(request).not.toHaveProperty('tools');
 		expect(request).not.toHaveProperty('cache_control');
 	});

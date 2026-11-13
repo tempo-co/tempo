@@ -25,7 +25,7 @@ PostgreSQL is the record; BullMQ only schedules work.
 - A row keeps its category, even one given for an older input, until a new one is applied: a claim never clears it and a failed call leaves it in place.
 - A `PROCESSING` claim older than 15 minutes counts as abandoned and can be claimed again. The worker renews the claims of the rows still waiting before every model call after the first, so a batch that runs many calls for longer than that is never taken by a second worker or replica.
 - A database commit and a Redis enqueue are not atomic: the hourly reconciliation sweep re-enqueues rows still waiting.
-- `NEEDS_REVIEW` is an ordinary category value meaning "purpose unknown or evidence conflicts". `OTHER` means a known kind of transaction outside the taxonomy. A provider or queue failure is neither: rows stay `PENDING`/`FAILED`.
+- `NEEDS_REVIEW` is an ordinary category value meaning "purpose unknown or evidence conflicts". `OTHER` means the evidence names a kind of spending no category covers; a merchant known only by its name, with nothing that pins down what it sells, is `NEEDS_REVIEW`. A provider or queue failure is neither: rows stay `PENDING`/`FAILED`.
 - Never erase a completed category (including historical `OTHER`) in a response shim, sync reset or worker path; guard resets with the row's current status and hash.
 
 ## Merchant identity
