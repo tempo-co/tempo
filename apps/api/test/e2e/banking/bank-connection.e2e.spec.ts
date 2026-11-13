@@ -2480,6 +2480,117 @@ describe('BankConnectionController', () => {
 		}
 	});
 
+	it('recognizes own transfers from the account holder name at any bank', async () => {
+		const holderName = 'Example Account Holder';
+		const {connection, bankAccounts} = await createAuthorizedConnectionFixture(
+			'holder-name-bank-session',
+			[{providerAccountId: 'holder-name-bank', identificationHash: 'hash-holder-name-bank', name: holderName}],
+			'Example Bank',
+		);
+		// A second connection whose account IBAN the banks never report.
+		const {connection: walletConnection, bankAccounts: walletAccounts} = await createAuthorizedConnectionFixture(
+			'holder-name-wallet-session',
+			[
+				{
+					providerAccountId: 'holder-name-wallet',
+					identificationHash: 'hash-holder-name-wallet',
+					name: 'EXAMPLE ACCOUNT HOLDER',
+				},
+			],
+			'Example Wallet',
+		);
+		const walletLeg = await fixtures.createTransaction(walletAccounts[0], {
+			providerTransactionId: 'holder-name-wallet-leg',
+			amount: '80.00',
+			creditDebitIndicator: 'CRDT',
+			bookingDate: '2026-08-21',
+			description: null,
+			counterpartyName: holderName,
+		});
+		const row = (entry: string, direction: string, amount: string, fields: Record<string, unknown>) => ({
+			entry_reference: entry,
+			transaction_amount: {amount, currency: 'EUR'},
+			credit_debit_indicator: direction,
+			status: 'BOOK',
+			booking_date: '2026-08-20',
+			...fields,
+		});
+		const rows = [
+			row('to-connected-account', 'DBIT', '80.00', {
+				creditor: {name: holderName},
+				bank_transaction_code: {code: 'ICDT'},
+			}),
+			row('to-unconnected-account', 'DBIT', '30.00', {creditor: {name: 'example account holder'}}),
+			row('transfer-wording', 'DBIT', '12.00', {remittance_information: [`To ${holderName}`]}),
+			row('sepa-name-field', 'CRDT', '7.00', {
+				remittance_information: [
+					`SEPA Overboeking IBAN: DE89370400440532013000 BIC: TESTDEFF Naam: ${holderName} Omschrijving: x`,
+				],
+			}),
+			row('card-payment', 'DBIT', '5.00', {
+				creditor: {name: holderName},
+				bank_transaction_code: {code: 'CCRD'},
+			}),
+			// The holder as the debtor of a debit is the account's own side, not the other party.
+			row('holder-own-side', 'DBIT', '4.00', {debtor: {name: holderName}}),
+		];
+
+		try {
+			expect(await synchronizeProviderRows(connection.id, rows)).toMatchObject({
+				status: 'SUCCEEDED',
+				transactionsAdded: rows.length,
+			});
+			const stored = await bankTransactionRepository.find({
+				where: {bankAccountId: bankAccounts[0].id},
+				order: {entryReference: 'ASC'},
+			});
+			const legId = (entry: string) => stored.find(({entryReference}) => entryReference === entry)?.id;
+			expect(
+				stored.map(({entryReference, ownTransferEvidence, ownTransferCounterpartId}) => ({
+					entryReference,
+					ownTransferEvidence,
+					ownTransferCounterpartId,
+				})),
+			).toEqual([
+				{entryReference: 'card-payment', ownTransferEvidence: null, ownTransferCounterpartId: null},
+				{entryReference: 'holder-own-side', ownTransferEvidence: null, ownTransferCounterpartId: null},
+				{entryReference: 'sepa-name-field', ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
+				{
+					entryReference: 'to-connected-account',
+					ownTransferEvidence: 'NAME',
+					ownTransferCounterpartId: walletLeg.id,
+				},
+				{entryReference: 'to-unconnected-account', ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
+				{entryReference: 'transfer-wording', ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
+			]);
+			expect(await bankTransactionRepository.findOneByOrFail({id: walletLeg.id})).toMatchObject({
+				ownTransferEvidence: 'NAME',
+				ownTransferCounterpartId: legId('to-connected-account'),
+			});
+
+			const response = await verifiedAgent
+				.get('/bank-transactions')
+				.query({'filter[bankAccountIds][]': bankAccounts[0].id})
+				.expect(200);
+			const treatments = Object.fromEntries(
+				response.body.transactions.map(({id, cashFlowTreatment}: {id: string; cashFlowTreatment: string}) => [
+					stored.find((transaction) => transaction.id === id)?.entryReference,
+					cashFlowTreatment,
+				]),
+			);
+			expect(treatments).toEqual({
+				'card-payment': 'EXPENSE',
+				'holder-own-side': 'EXPENSE',
+				'sepa-name-field': 'INTERNAL',
+				'to-connected-account': 'INTERNAL',
+				'to-unconnected-account': 'INTERNAL',
+				'transfer-wording': 'INTERNAL',
+			});
+		} finally {
+			await bankConnectionRepository.delete([connection.id, walletConnection.id]);
+		}
+	});
+
 	it('validates representative transaction limits', async () => {
 		const {connection} = await createAuthorizedConnection('limit-validation');
 
