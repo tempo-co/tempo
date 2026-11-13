@@ -203,7 +203,6 @@ describe('AI categorization configuration', () => {
 		const parsed = configSchema.parse(baseConfig);
 
 		expect(parsed.AI_CATEGORIZATION_ENABLED).toBe(false);
-		expect(parsed.AI_CATEGORIZATION_PROVIDER).toBe('claude');
 		expect(parsed.AI_CATEGORIZATION_MODEL).toBe('claude-sonnet-5-5');
 		expect(parsed.AI_CATEGORIZATION_EFFORT).toBe('high');
 	});
@@ -255,12 +254,6 @@ describe('AI categorization configuration', () => {
 				AI_CATEGORIZATION_MODEL: 'synthetic-model',
 			}),
 		).toMatchObject({AI_CATEGORIZATION_MODEL: 'synthetic-model'});
-	});
-
-	it('rejects a provider other than claude', () => {
-		expect(
-			configSchema.safeParse({...baseConfig, AI_CATEGORIZATION_PROVIDER: 'unsupported-provider'}).success,
-		).toBe(false);
 	});
 });
 

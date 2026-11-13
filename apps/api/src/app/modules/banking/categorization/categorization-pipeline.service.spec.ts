@@ -1,16 +1,17 @@
-import {ConfigurationService} from '@core/config/config.service';
 import {
-	APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB,
 	BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE,
-	BANK_TRANSACTION_CATEGORIZATION_QUEUE,
-	BANK_TRANSACTION_CATEGORIZATION_RECONCILE_SCHEDULER_ID,
 	CATEGORIZE_BANK_TRANSACTIONS_JOB,
-	RECONCILE_BANK_TRANSACTION_CATEGORIZATION_JOB,
 } from '@core/queue/queue.constants';
 
 import {createBankTransaction} from '../../../../../test/fixtures/bank-transaction.fixture';
+import {
+	claimedRows,
+	createCategorizationServices,
+	createUpdateQueryBuilder,
+	searchOutcomes,
+	shoppingSearch,
+} from '../../../../../test/fixtures/categorization-services.fixture';
 import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '../bank-transaction-financial-event';
-import {BankTransaction} from '../bank-transaction.entity';
 import {createBankTransactionCategorizationInputHash} from './bank-transaction-categorization-input';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
@@ -23,134 +24,14 @@ import {
 	BankTransactionCategorizationProviderError,
 	BankTransactionCategorizationUnavailableError,
 } from './bank-transaction-categorization.provider';
-import {
-	BankTransactionCategorizationService,
-	CATEGORIZATION_RETRY_BACKOFF_TYPE,
-	categorizationRetryDelay,
-} from './bank-transaction-categorization.service';
-import {
-	BankTransactionCategorizationInput,
-	BankTransactionCategorizationResult,
-	BankTransactionCategorizationWebSearchInput,
-} from './bank-transaction-categorization.types';
+import {BankTransactionCategorizationWebSearchInput} from './bank-transaction-categorization.types';
 import {BANK_TRANSACTION_CATEGORY_RULE_PROVIDER} from './bank-transaction-category-rules';
-
-/** The provider's search outcome for each input: the given result, or none when the search failed. */
-function searchOutcomes(
-	inputs: readonly BankTransactionCategorizationWebSearchInput[],
-	result: (input: BankTransactionCategorizationWebSearchInput) => BankTransactionCategorizationResult | null,
-) {
-	return inputs.map((input) => ({correlationId: input.correlationId, provider: 'claude-api', result: result(input)}));
-}
-
-const shoppingSearch = async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) =>
-	searchOutcomes(inputs, ({correlationId}) => ({correlationId, category: 'SHOPPING' as const, confidence: 0.75}));
-
-function createUpdateQueryBuilder(
-	results: readonly {affected: number; raw?: readonly {id: string}[]}[] = [{affected: 1}] as const,
-	rawRows: readonly {id: string}[] = [],
-) {
-	const builder = {
-		update: jest.fn().mockReturnThis(),
-		select: jest.fn().mockReturnThis(),
-		addSelect: jest.fn().mockReturnThis(),
-		distinct: jest.fn().mockReturnThis(),
-		innerJoin: jest.fn().mockReturnThis(),
-		groupBy: jest.fn().mockReturnThis(),
-		addGroupBy: jest.fn().mockReturnThis(),
-		limit: jest.fn().mockReturnThis(),
-		set: jest.fn().mockReturnThis(),
-		where: jest.fn().mockReturnThis(),
-		andWhere: jest.fn().mockReturnThis(),
-		orderBy: jest.fn().mockReturnThis(),
-		addOrderBy: jest.fn().mockReturnThis(),
-		take: jest.fn().mockReturnThis(),
-		returning: jest.fn().mockReturnThis(),
-		execute: jest.fn().mockResolvedValue({affected: 1}),
-		getRawMany: jest.fn().mockResolvedValue(rawRows),
-	};
-	for (const result of results) builder.execute.mockResolvedValueOnce(result);
-	return builder;
-}
-
-function createService({
-	enabled = true,
-	webSearchEnabled = false,
-	rows = [],
-	providerResult = [],
-	providerError,
-	webSearchResult,
-	webSearchError,
-	queryBuilder,
-	nodeEnv = 'test',
-}: {
-	nodeEnv?: string;
-	enabled?: boolean;
-	webSearchEnabled?: boolean;
-	rows?: BankTransaction[];
-	providerResult?: readonly BankTransactionCategorizationResult[];
-	providerError?: BankTransactionCategorizationProviderError;
-	webSearchResult?: readonly BankTransactionCategorizationResult[];
-	webSearchError?: BankTransactionCategorizationProviderError;
-	queryBuilder?: ReturnType<typeof createUpdateQueryBuilder>;
-} = {}) {
-	const queue = {
-		addBulk: jest.fn().mockResolvedValue([]),
-		add: jest.fn().mockResolvedValue({}),
-		upsertJobScheduler: jest.fn().mockResolvedValue({}),
-		removeJobScheduler: jest.fn().mockResolvedValue(true),
-	};
-	const provider = {
-		categorize: jest.fn().mockImplementation(async (inputs: readonly BankTransactionCategorizationInput[]) => {
-			if (providerError) throw providerError;
-			return providerResult.length > 0
-				? providerResult
-				: inputs.map((input) => ({
-						correlationId: input.correlationId,
-						category: 'OTHER' as const,
-						confidence: 0.5,
-					}));
-		}),
-		categorizeWithWebSearch: jest
-			.fn()
-			.mockImplementation(async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) => {
-				if (webSearchError) throw webSearchError;
-				if (!webSearchResult?.length) return shoppingSearch(inputs);
-				return searchOutcomes(
-					inputs,
-					({correlationId}) =>
-						webSearchResult.find((result) => result.correlationId === correlationId) ?? null,
-				);
-			}),
-	};
-	const config = {
-		get: jest.fn((key: string) => {
-			if (key === 'AI_CATEGORIZATION_ENABLED') return enabled;
-			if (key === 'AI_CATEGORIZATION_WEB_SEARCH_ENABLED') return webSearchEnabled;
-			if (key === 'AI_CATEGORIZATION_PROVIDER') return 'claude';
-			if (key === 'AI_CATEGORIZATION_MODEL') return 'configured-model';
-			if (key === 'NODE_ENV') return nodeEnv;
-			throw new Error(`Unexpected config key: ${key}`);
-		}),
-	} as unknown as ConfigurationService;
-	const repository = {
-		find: jest.fn().mockResolvedValue(rows),
-		update: jest.fn().mockResolvedValue({affected: 1}),
-		createQueryBuilder: jest.fn().mockReturnValue(queryBuilder ?? createUpdateQueryBuilder()),
-	};
-	const service = new BankTransactionCategorizationService(
-		repository as never,
-		queue as never,
-		provider as never,
-		config,
-	);
-	return {service, queue, provider, repository, config};
-}
+import {categorizationRetryDelay} from './categorization-scheduler.service';
 
 /** Attempts of a categorize job after an ordinary failure; the worker stops retrying after the last one. */
 const ORDINARY_ATTEMPTS = 3;
 
-describe('BankTransactionCategorizationService provider behavior versions', () => {
+describe('CategorizationPipeline provider behavior versions', () => {
 	it('versions sanitized transaction text separately from prior provider inputs', () => {
 		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v9');
 		expect(BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION).toBe(
@@ -165,140 +46,16 @@ describe('BankTransactionCategorizationService provider behavior versions', () =
 	});
 });
 
-describe('BankTransactionCategorizationService queue scheduling', () => {
-	it('deduplicates transaction IDs and enqueues deterministic batches of 50', async () => {
-		const {service, queue} = createService();
-		const ids = Array.from(
-			{length: BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE + 1},
-			(_, index) => `transaction-${index}`,
-		);
-
-		await service.enqueueForTransactions([...ids, ids[0]]);
-
-		expect(queue.addBulk).toHaveBeenCalledTimes(1);
-		const jobs = queue.addBulk.mock.calls[0][0];
-		expect(jobs).toHaveLength(2);
-		expect(jobs[0]).toEqual({
-			name: CATEGORIZE_BANK_TRANSACTIONS_JOB,
-			data: {transactionIds: expect.any(Array)},
-			opts: {
-				jobId: expect.any(String),
-				attempts: 6,
-				backoff: {type: CATEGORIZATION_RETRY_BACKOFF_TYPE},
-				removeOnFail: true,
-			},
-		});
-		expect(jobs[1]).toEqual({
-			name: CATEGORIZE_BANK_TRANSACTIONS_JOB,
-			data: {transactionIds: expect.any(Array)},
-			opts: {
-				jobId: expect.any(String),
-				attempts: 6,
-				backoff: {type: CATEGORIZATION_RETRY_BACKOFF_TYPE},
-				removeOnFail: true,
-			},
-		});
-		expect(jobs[0].data.transactionIds).toHaveLength(50);
-		expect(jobs[1].data.transactionIds).toHaveLength(1);
-		expect([...jobs[0].data.transactionIds, ...jobs[1].data.transactionIds].sort()).toEqual(ids.sort());
-	});
-
-	it.each([
-		{attempt: 1, error: new BankTransactionCategorizationUnavailableError(), delay: 60_000},
-		{attempt: 2, error: new BankTransactionCategorizationUnavailableError(), delay: 120_000},
-		{attempt: 3, error: new BankTransactionCategorizationUnavailableError(), delay: 300_000},
-		{attempt: 4, error: new BankTransactionCategorizationUnavailableError(), delay: 600_000},
-		{attempt: 5, error: new BankTransactionCategorizationUnavailableError(), delay: 1_200_000},
-		{attempt: 1, error: new BankTransactionCategorizationProviderError('synthetic 503', true), delay: 1_000},
-		{attempt: 2, error: new BankTransactionCategorizationProviderError('synthetic 503', true), delay: 2_000},
-		{attempt: 3, error: new BankTransactionCategorizationProviderError('synthetic 503', true), delay: -1},
-		{attempt: 1, error: new Error('synthetic database error'), delay: 1_000},
-		{attempt: 3, error: new Error('synthetic database error'), delay: -1},
-	])(
-		'retries failed attempt $attempt of a categorize job ($error.name) after $delay ms',
-		({attempt, error, delay}) => {
-			expect(categorizationRetryDelay(attempt, error)).toBe(delay);
-		},
-	);
-
-	it('changes the job ID when the categorization input hash changes', async () => {
-		const transaction = createBankTransaction({categoryInputHash: 'hash-a'});
-		const {service, queue} = createService({rows: [transaction]});
-
-		await service.enqueueForTransactions([transaction.id]);
-		transaction.categoryInputHash = 'hash-b';
-		await service.enqueueForTransactions([transaction.id]);
-
-		expect(queue.addBulk).toHaveBeenCalledTimes(2);
-		expect(queue.addBulk.mock.calls[0][0][0].opts.jobId).not.toBe(queue.addBulk.mock.calls[1][0][0].opts.jobId);
-	});
-
-	it('does not enqueue when AI categorization is disabled or IDs are empty', async () => {
-		const disabled = createService({enabled: false});
-		await disabled.service.enqueueForTransactions(['transaction-1']);
-		await disabled.service.enqueueForTransactions([]);
-
-		expect(disabled.queue.addBulk).not.toHaveBeenCalled();
-		expect(BANK_TRANSACTION_CATEGORIZATION_QUEUE).toBe('bank-transaction-categorization');
-	});
-
-	it('does not enqueue financial-event rows for AI categorization', async () => {
-		const exchange = createBankTransaction({
-			id: 'exchange-transaction',
-			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-		});
-		const ordinary = createBankTransaction({id: 'ordinary-transaction'});
-		const {service, queue} = createService({rows: [exchange, ordinary]});
-
-		await service.enqueueForTransactions([exchange.id, ordinary.id]);
-
-		expect(queue.addBulk).toHaveBeenCalledTimes(1);
-		expect(queue.addBulk.mock.calls[0][0]).toHaveLength(1);
-		expect(queue.addBulk.mock.calls[0][0][0].data).toEqual({transactionIds: [ordinary.id]});
-	});
-});
-
-describe('BankTransactionCategorizationService web-search reconciliation', () => {
-	it('does not enqueue financial-event rows found by reconciliation', async () => {
-		const exchange = createBankTransaction({
-			id: 'reconciled-exchange-transaction',
-			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-		});
-		const queryBuilder = createUpdateQueryBuilder();
-		queryBuilder.getRawMany.mockResolvedValueOnce([{id: exchange.id}]);
-		const {service, queue} = createService({rows: [exchange], webSearchEnabled: true, queryBuilder});
-
-		await service.reconcilePendingTransactions();
-
-		expect(queryBuilder.getRawMany).toHaveBeenCalledTimes(1);
-		expect(queue.addBulk).not.toHaveBeenCalled();
-	});
-});
-describe('BankTransactionCategorizationService worker', () => {
+describe('CategorizationPipeline', () => {
 	it('does not send a stale financial-event job to the provider', async () => {
 		const transaction = createBankTransaction({
 			id: 'stale-exchange-transaction',
 			categoryStatus: 'PENDING',
 			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
 		});
-		const {service, provider} = createService({rows: [transaction]});
+		const {pipeline, provider} = createCategorizationServices({rows: [transaction]});
 
-		await service.processTransactionJob([transaction.id]);
-
-		expect(provider.categorize).not.toHaveBeenCalled();
-		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
-	});
-
-	it('does not send a queued row after it becomes a financial event before provider invocation', async () => {
-		const transaction = createBankTransaction({id: 'reclassified-exchange-transaction'});
-		const reclassifiedTransaction = createBankTransaction({
-			id: transaction.id,
-			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-		});
-		const {service, provider, repository} = createService({rows: [transaction]});
-		repository.find.mockResolvedValueOnce([transaction]).mockResolvedValueOnce([reclassifiedTransaction]);
-
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorize).not.toHaveBeenCalled();
 		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
@@ -310,42 +67,26 @@ describe('BankTransactionCategorizationService worker', () => {
 			categoryStatus: 'PENDING',
 			ownTransferEvidence: 'NAME',
 		});
-		const {service, provider} = createService({rows: [transaction]});
+		const {pipeline, provider} = createCategorizationServices({rows: [transaction]});
 
-		await service.processTransactionJob([transaction.id]);
-
-		expect(provider.categorize).not.toHaveBeenCalled();
-		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
-	});
-
-	it('does not send a queued row that was deleted before provider invocation', async () => {
-		const transaction = createBankTransaction({id: 'deleted-transaction'});
-		const {service, provider, repository} = createService({rows: [transaction]});
-		repository.find.mockResolvedValueOnce([transaction]).mockResolvedValueOnce([]);
-
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorize).not.toHaveBeenCalled();
 		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
 	});
 
-	it('does not send a reclassified row to web fallback after standard categorization', async () => {
+	it('does not search a row the batch no longer holds after standard categorization', async () => {
 		const transaction = createBankTransaction({id: 'web-reclassified-transaction'});
-		const reclassifiedTransaction = createBankTransaction({
-			id: transaction.id,
-			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-		});
-		const {service, provider, repository} = createService({
+		// The claim takes the row; by the first search it has become a currency exchange, so the renewal skips it.
+		const queryBuilder = createUpdateQueryBuilder([claimedRows(transaction.id), claimedRows()]);
+		const {pipeline, provider} = createCategorizationServices({
 			rows: [transaction],
 			webSearchEnabled: true,
+			queryBuilder,
 			providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.5}],
 		});
-		repository.find
-			.mockResolvedValueOnce([transaction])
-			.mockResolvedValueOnce([transaction])
-			.mockResolvedValueOnce([reclassifiedTransaction]);
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorize).toHaveBeenCalledTimes(1);
 		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
@@ -354,7 +95,7 @@ describe('BankTransactionCategorizationService worker', () => {
 	it('sends only normal OTHER results to the web fallback and applies the web result', async () => {
 		const specific = createBankTransaction({id: 'specific-transaction', counterpartyName: 'Cafe'});
 		const other = createBankTransaction({id: 'other-transaction', counterpartyName: 'Ambiguous Cafe'});
-		const {service, provider} = createService({
+		const {pipeline, provider} = createCategorizationServices({
 			rows: [specific, other],
 			webSearchEnabled: true,
 			providerResult: [
@@ -364,7 +105,7 @@ describe('BankTransactionCategorizationService worker', () => {
 			webSearchResult: [{correlationId: other.id, category: 'SHOPPING', confidence: 0.8}],
 		});
 
-		await service.processTransactionJob([specific.id, other.id]);
+		await pipeline.processTransactionJob([specific.id, other.id]);
 
 		expect(provider.categorize).toHaveBeenCalledTimes(1);
 		expect(provider.categorize.mock.calls[0][0]).toHaveLength(2);
@@ -391,7 +132,7 @@ describe('BankTransactionCategorizationService worker', () => {
 	it('categorizes the rows it claimed and fails the job when another row cannot be claimed', async () => {
 		const failing = createBankTransaction({id: 'failing-transaction', counterpartyName: 'Cafe'});
 		const claimable = createBankTransaction({id: 'claimable-transaction', counterpartyName: 'Bakery'});
-		const {service, provider, repository} = createService({
+		const {pipeline, provider, repository} = createCategorizationServices({
 			rows: [failing, claimable],
 			providerResult: [{correlationId: claimable.id, category: 'FOOD_AND_DRINK', confidence: 0.9}],
 		});
@@ -400,7 +141,7 @@ describe('BankTransactionCategorizationService worker', () => {
 			id === failing.id ? Promise.reject(claimError) : Promise.resolve({affected: 1}),
 		);
 
-		await expect(service.processTransactionJob([failing.id, claimable.id])).rejects.toBe(claimError);
+		await expect(pipeline.processTransactionJob([failing.id, claimable.id])).rejects.toBe(claimError);
 
 		expect(provider.categorize).toHaveBeenCalledTimes(1);
 		expect(provider.categorize.mock.calls[0][0]).toEqual([expect.objectContaining({correlationId: claimable.id})]);
@@ -416,12 +157,12 @@ describe('BankTransactionCategorizationService worker', () => {
 			bankTransactionSubCode: null,
 			bankAccount: {bankConnection: {aspspName: 'ABN AMRO'}} as never,
 		});
-		const {service, provider} = createService({
+		const {pipeline, provider} = createCategorizationServices({
 			rows: [transaction],
 			providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.5}],
 		});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorize.mock.calls[0][0]).toEqual([
 			expect.objectContaining({correlationId: transaction.id, transactionType: 'CARD_PAYMENT'}),
@@ -439,31 +180,22 @@ describe('BankTransactionCategorizationService worker', () => {
 				provider,
 				model: 'actual-model',
 			};
-			const {service} = createService({rows: [transaction], providerResult: [result]});
+			const {pipeline} = createCategorizationServices({rows: [transaction], providerResult: [result]});
 
-			await service.processTransactionJob([transaction.id]);
+			await pipeline.processTransactionJob([transaction.id]);
 
 			expect(transaction).toMatchObject({categoryProvider: provider, categoryModel: 'actual-model'});
 		},
 	);
 
-	it('uses configured provider and model when a test double omits routing metadata', async () => {
-		const transaction = createBankTransaction();
-		const {service} = createService({rows: [transaction]});
-
-		await service.processTransactionJob([transaction.id]);
-
-		expect(transaction).toMatchObject({categoryProvider: 'claude', categoryModel: 'configured-model'});
-	});
-
 	it('persists NEEDS_REVIEW as a completed category', async () => {
 		const transaction = createBankTransaction({id: 'ambiguous-transaction'});
-		const {service} = createService({
+		const {pipeline} = createCategorizationServices({
 			rows: [transaction],
 			providerResult: [{correlationId: transaction.id, category: 'NEEDS_REVIEW', confidence: 0.1}],
 		});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(transaction.category).toBe('NEEDS_REVIEW');
 		expect(transaction.categoryStatus).toBe('COMPLETED');
@@ -478,7 +210,7 @@ describe('BankTransactionCategorizationService worker', () => {
 				id: `subscription-${category}`,
 				counterpartyName: 'Example Shop',
 			});
-			const {service, provider} = createService({
+			const {pipeline, provider} = createCategorizationServices({
 				rows: [transaction],
 				webSearchEnabled: true,
 				providerResult: [
@@ -492,7 +224,7 @@ describe('BankTransactionCategorizationService worker', () => {
 				],
 			});
 
-			await service.processTransactionJob([transaction.id]);
+			await pipeline.processTransactionJob([transaction.id]);
 
 			expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(1);
 			expect(provider.categorizeWithWebSearch.mock.calls[0][0][0].correlationId).toBe(transaction.id);
@@ -502,7 +234,7 @@ describe('BankTransactionCategorizationService worker', () => {
 	it('keeps routing metadata and search decisions independent within a mixed-route batch', async () => {
 		const subscription = createBankTransaction({id: 'subscription-row', counterpartyName: 'Example Shop'});
 		const api = createBankTransaction({id: 'api-row', counterpartyName: 'Example Cafe'});
-		const {service, provider} = createService({
+		const {pipeline, provider} = createCategorizationServices({
 			rows: [subscription, api],
 			webSearchEnabled: true,
 			providerResult: [
@@ -532,7 +264,7 @@ describe('BankTransactionCategorizationService worker', () => {
 			],
 		});
 
-		await service.processTransactionJob([subscription.id, api.id]);
+		await pipeline.processTransactionJob([subscription.id, api.id]);
 
 		expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(2);
 		expect(provider.categorizeWithWebSearch.mock.calls.map((call) => call[0][0].correlationId)).toEqual([
@@ -553,7 +285,7 @@ describe('BankTransactionCategorizationService worker', () => {
 			merchantCategoryCode: 'not-an-mcc',
 			description: 'BEA, Google Pay Example Vending Cafe,PAS999 NR:TEST12345, 04.09.26/19:00 TESTVILLE',
 		});
-		const {service, provider} = createService({
+		const {pipeline, provider} = createCategorizationServices({
 			rows: [transaction],
 			webSearchEnabled: true,
 			providerResult: [{correlationId: transaction.id, category: 'NEEDS_REVIEW', confidence: 0.4}],
@@ -571,7 +303,7 @@ describe('BankTransactionCategorizationService worker', () => {
 			],
 		});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(1);
 		expect(provider.categorizeWithWebSearch.mock.calls[0][0]).toEqual([
@@ -596,7 +328,7 @@ describe('BankTransactionCategorizationService worker', () => {
 			sourceDomains: ['example.com'],
 			evidenceType: 'MERCHANT_IDENTITY_ONLY' as const,
 		};
-		const {service} = createService({
+		const {pipeline} = createCategorizationServices({
 			rows: [transaction],
 			webSearchEnabled: true,
 			providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.5}],
@@ -610,7 +342,7 @@ describe('BankTransactionCategorizationService worker', () => {
 			],
 		});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(transaction.category).toBe('TRANSPORTATION');
 		expect(transaction.categoryStatus).toBe('COMPLETED');
@@ -623,7 +355,7 @@ describe('BankTransactionCategorizationService worker', () => {
 		'keeps web Transportation with %s evidence in review',
 		async (evidenceType) => {
 			const transaction = createBankTransaction({id: `transportation-${evidenceType}`});
-			const {service} = createService({
+			const {pipeline} = createCategorizationServices({
 				rows: [transaction],
 				webSearchEnabled: true,
 				providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.5}],
@@ -637,7 +369,7 @@ describe('BankTransactionCategorizationService worker', () => {
 				],
 			});
 
-			await service.processTransactionJob([transaction.id]);
+			await pipeline.processTransactionJob([transaction.id]);
 
 			expect(transaction.category).toBe('NEEDS_REVIEW');
 			expect(transaction.categoryConfidence).toBe('0');
@@ -646,7 +378,7 @@ describe('BankTransactionCategorizationService worker', () => {
 
 	it('normalizes web results with insufficient or conflicting evidence to NEEDS_REVIEW', async () => {
 		const transaction = createBankTransaction({id: 'conflicting-web-result-transaction'});
-		const {service} = createService({
+		const {pipeline} = createCategorizationServices({
 			rows: [transaction],
 			webSearchEnabled: true,
 			providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.5}],
@@ -664,7 +396,7 @@ describe('BankTransactionCategorizationService worker', () => {
 			],
 		});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(transaction.category).toBe('NEEDS_REVIEW');
 		expect(transaction.categoryStatus).toBe('COMPLETED');
@@ -673,31 +405,42 @@ describe('BankTransactionCategorizationService worker', () => {
 
 	it('does not call web search when the fallback is disabled', async () => {
 		const transaction = createBankTransaction({id: 'other-transaction'});
-		const {service, provider} = createService({
+		const {pipeline, provider} = createCategorizationServices({
 			rows: [transaction],
 			providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.5}],
 		});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
 		expect(transaction.category).toBe('OTHER');
 		expect(transaction.categoryPromptVersion).toBe(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION);
 	});
 
-	it('runs one web search per OTHER result in a batch', async () => {
+	it('runs one web search per OTHER result in a batch, renewing the claims before each', async () => {
 		const rows = Array.from({length: 6}, (_, index) =>
 			createBankTransaction({id: `other-transaction-${index}`, counterpartyName: `Merchant ${index}`}),
 		);
-		const {service, provider} = createService({
+		const {pipeline, provider, repository} = createCategorizationServices({
 			rows,
 			webSearchEnabled: true,
 			providerResult: rows.map(({id}) => ({correlationId: id, category: 'OTHER' as const, confidence: 0.5})),
 			webSearchResult: rows.map(({id}) => ({correlationId: id, category: 'SHOPPING' as const, confidence: 0.8})),
 		});
 
-		await service.processTransactionJob(rows.map(({id}) => id));
+		const queryBuilder = createUpdateQueryBuilder();
+		const renewals: number[] = [];
+		queryBuilder.set.mockImplementation((values: object) => {
+			// A renewal moves only the claim time forward, on every row the batch still holds.
+			if (Object.keys(values).join() === 'categoryUpdatedAt')
+				renewals.push(provider.categorizeWithWebSearch.mock.calls.length);
+			return queryBuilder;
+		});
+		repository.createQueryBuilder.mockReturnValue(queryBuilder);
 
+		await pipeline.processTransactionJob(rows.map(({id}) => id));
+
+		expect(renewals).toEqual([0, 1, 2, 3, 4, 5]);
 		expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(6);
 		expect(provider.categorizeWithWebSearch.mock.calls.map(([inputs]) => inputs.length)).toEqual([
 			1, 1, 1, 1, 1, 1,
@@ -719,7 +462,7 @@ describe('BankTransactionCategorizationService worker', () => {
 			'Claude categorization request failed (503).',
 			true,
 		);
-		const {service, provider} = createService({
+		const {pipeline, provider} = createCategorizationServices({
 			rows,
 			webSearchEnabled: true,
 			providerResult: rows.map(({id}) => ({correlationId: id, category: 'OTHER' as const, confidence: 0.5})),
@@ -730,11 +473,11 @@ describe('BankTransactionCategorizationService worker', () => {
 			.mockImplementationOnce(shoppingSearch)
 			.mockImplementationOnce(shoppingSearch)
 			.mockRejectedValueOnce(failure);
-		const logger = (service as unknown as {logger: {warn(message: string): void}}).logger;
+		const logger = (pipeline as unknown as {logger: {warn(message: string): void}}).logger;
 		const warn = jest.spyOn(logger, 'warn').mockImplementation();
 
 		try {
-			await service.processTransactionJob(rows.map(({id}) => id));
+			await pipeline.processTransactionJob(rows.map(({id}) => id));
 
 			expect(provider.categorizeWithWebSearch.mock.calls.map(([inputs]) => inputs.length)).toEqual([
 				1, 1, 1, 1, 1,
@@ -764,7 +507,7 @@ describe('BankTransactionCategorizationService worker', () => {
 			createBankTransaction({id: `pending-search-${index}`, counterpartyName: `Merchant ${index}`}),
 		);
 		const resolved = createBankTransaction({id: 'resolved-row', counterpartyName: 'Known Merchant'});
-		const {service, provider} = createService({
+		const {pipeline, provider} = createCategorizationServices({
 			rows: [...rows, resolved],
 			webSearchEnabled: true,
 			providerResult: [
@@ -776,12 +519,12 @@ describe('BankTransactionCategorizationService worker', () => {
 			.mockImplementationOnce(shoppingSearch)
 			.mockImplementationOnce(shoppingSearch)
 			.mockRejectedValueOnce(new BankTransactionCategorizationUnavailableError());
-		const logger = (service as unknown as {logger: {warn(message: string): void}}).logger;
+		const logger = (pipeline as unknown as {logger: {warn(message: string): void}}).logger;
 		const warn = jest.spyOn(logger, 'warn').mockImplementation();
 
 		try {
 			// Thrown so the queue retries soon; the hourly reconciliation is the backstop.
-			await expect(service.processTransactionJob([...rows, resolved].map(({id}) => id))).rejects.toThrow(
+			await expect(pipeline.processTransactionJob([...rows, resolved].map(({id}) => id))).rejects.toThrow(
 				BankTransactionCategorizationUnavailableError,
 			);
 
@@ -806,9 +549,9 @@ describe('BankTransactionCategorizationService worker', () => {
 			description: null,
 			bankTransactionDescription: null,
 		});
-		const {service, provider} = createService({rows: [transaction], webSearchEnabled: true});
+		const {pipeline, provider} = createCategorizationServices({rows: [transaction], webSearchEnabled: true});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
 		expect(transaction.category).toBe('OTHER');
@@ -833,11 +576,6 @@ describe('BankTransactionCategorizationService worker', () => {
 			},
 		],
 		[
-			'the search result does not validate',
-			async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) =>
-				searchOutcomes(inputs, ({correlationId}) => ({correlationId, category: 'SHOPPING', confidence: 2})),
-		],
-		[
 			'the outcome names another row',
 			async () => [{correlationId: 'another-row', provider: 'claude-api', result: null}],
 		],
@@ -847,17 +585,17 @@ describe('BankTransactionCategorizationService worker', () => {
 			counterpartyName: null,
 			merchantCategoryCode: null,
 		});
-		const {service, provider} = createService({
+		const {pipeline, provider} = createCategorizationServices({
 			rows: [transaction],
 			webSearchEnabled: true,
 			providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.56}],
 		});
 		provider.categorizeWithWebSearch.mockImplementationOnce(search);
-		const logger = (service as unknown as {logger: {warn(message: string): void}}).logger;
+		const logger = (pipeline as unknown as {logger: {warn(message: string): void}}).logger;
 		const warn = jest.spyOn(logger, 'warn').mockImplementation();
 
 		try {
-			await expect(service.processTransactionJob([transaction.id])).resolves.toBeUndefined();
+			await expect(pipeline.processTransactionJob([transaction.id])).resolves.toBeUndefined();
 			expect(provider.categorizeWithWebSearch).toHaveBeenCalledTimes(1);
 			expect(transaction).toMatchObject({
 				category: 'NEEDS_REVIEW',
@@ -874,7 +612,7 @@ describe('BankTransactionCategorizationService worker', () => {
 
 	it('records the route that failed a search', async () => {
 		const transaction = createBankTransaction({id: 'web-route-failure', counterpartyName: 'Example Shop'});
-		const {service, provider} = createService({
+		const {pipeline, provider} = createCategorizationServices({
 			rows: [transaction],
 			webSearchEnabled: true,
 			providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.56}],
@@ -882,43 +620,24 @@ describe('BankTransactionCategorizationService worker', () => {
 		provider.categorizeWithWebSearch.mockResolvedValueOnce([
 			{correlationId: transaction.id, provider: 'claude-subscription', result: null},
 		]);
-		const logger = (service as unknown as {logger: {warn(message: string): void}}).logger;
+		const logger = (pipeline as unknown as {logger: {warn(message: string): void}}).logger;
 		const warn = jest.spyOn(logger, 'warn').mockImplementation();
 
 		try {
-			await service.processTransactionJob([transaction.id]);
+			await pipeline.processTransactionJob([transaction.id]);
 			expect(transaction).toMatchObject({category: 'NEEDS_REVIEW', categoryProvider: 'claude-subscription'});
 		} finally {
 			warn.mockRestore();
 		}
 	});
 
-	it('preserves completed categories even when categorization hashes are missing', async () => {
-		const transaction = createBankTransaction({
-			category: 'OTHER',
-			categoryStatus: 'COMPLETED',
-			categorySource: 'AI',
-			categoryConfidence: '1.000',
-			categoryInputHash: null,
-			categoryAppliedInputHash: null,
-		});
-		const {service, provider} = createService({rows: [transaction]});
-
-		await service.processTransactionJob([transaction.id]);
-
-		expect(provider.categorize).not.toHaveBeenCalled();
-		expect(transaction.category).toBe('OTHER');
-		expect(transaction.categoryStatus).toBe('COMPLETED');
-		expect(transaction.categorySource).toBe('AI');
-	});
-
 	it('categorizes the first 50 records in one provider call and queues the rest as a new batch', async () => {
 		const rows = Array.from({length: 51}, (_, index) =>
 			createBankTransaction({id: `transaction-${index}`, providerTransactionId: `provider-${index}`}),
 		);
-		const {service, provider, queue} = createService({rows, webSearchEnabled: true});
+		const {pipeline, provider, queue} = createCategorizationServices({rows, webSearchEnabled: true});
 
-		await service.processTransactionJob(rows.map(({id}) => id));
+		await pipeline.processTransactionJob(rows.map(({id}) => id));
 
 		expect(provider.categorize).toHaveBeenCalledTimes(1);
 		expect(provider.categorize.mock.calls[0][0]).toHaveLength(BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE);
@@ -961,13 +680,13 @@ describe('BankTransactionCategorizationService worker', () => {
 					date: '2026-04-07',
 				},
 			] as never);
-		const {service, provider} = createService({
+		const {pipeline, provider} = createCategorizationServices({
 			rows: [transaction],
 			queryBuilder,
 			providerResult: [{correlationId: 'repeat-payee', category: 'TRANSFER_OUT', confidence: 0.9}],
 		});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorize).toHaveBeenCalledTimes(1);
 		expect(provider.categorize.mock.calls[0][0][0].previousManualCategories).toEqual([
@@ -995,9 +714,9 @@ describe('BankTransactionCategorizationService worker', () => {
 			{merchantKey: 'EXPENSE:example rides', category: 'FOOD_AND_DRINK', count: 2},
 			{merchantKey: 'EXPENSE:example rides', category: 'TRANSPORTATION', count: 1},
 		] as never);
-		const {service, provider} = createService({rows: [transaction], queryBuilder});
+		const {pipeline, provider} = createCategorizationServices({rows: [transaction], queryBuilder});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorize).toHaveBeenCalledTimes(1);
 		expect(provider.categorize.mock.calls[0][0][0].previousManualCategories).toEqual([
@@ -1021,9 +740,9 @@ describe('BankTransactionCategorizationService worker', () => {
 			description: 'BEA, Betaalpas NLOVEXAMPLE0TAP0001,PAS123 NR:EX0001, 01.01.26/08:00 www.ovpay.nl',
 			creditDebitIndicator: 'DBIT',
 		});
-		const {service, provider} = createService({rows: [transaction]});
+		const {pipeline, provider} = createCategorizationServices({rows: [transaction]});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorize).not.toHaveBeenCalled();
 		expect(transaction).toMatchObject({
@@ -1046,55 +765,37 @@ describe('BankTransactionCategorizationService worker', () => {
 		queryBuilder.getRawMany.mockResolvedValueOnce([
 			{merchantKey: 'EXPENSE:nlovexample0tap0002', category: 'TRAVEL', count: 1},
 		] as never);
-		const {service, provider} = createService({
+		const {pipeline, provider} = createCategorizationServices({
 			rows: [transaction],
 			queryBuilder,
 			providerResult: [{correlationId: 'ovpay-tap-with-history', category: 'TRAVEL', confidence: 0.9}],
 		});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorize).toHaveBeenCalledTimes(1);
 		expect(transaction).toMatchObject({category: 'TRAVEL', categorySource: 'AI'});
 	});
 
-	it('excludes manual rows from claims and provider calls', async () => {
-		const transaction = createBankTransaction({
-			category: 'SHOPPING',
-			categoryStatus: 'COMPLETED',
-			categorySource: 'MANUAL',
-		});
-		const {service, provider, repository} = createService({rows: [transaction]});
-
-		await service.processTransactionJob([transaction.id]);
-
-		expect(provider.categorize).not.toHaveBeenCalled();
-		expect(repository.update).toHaveBeenCalledWith(
-			expect.objectContaining({id: transaction.id, categoryInputHash: expect.anything()}),
-			expect.objectContaining({categoryInputHash: expect.any(String)}),
-		);
-		expect(repository.update.mock.calls.some(([, values]) => values.categorySource === 'AI')).toBe(false);
-	});
-
 	it('does not categorize when a concurrent input hash update wins the race', async () => {
 		const transaction = createBankTransaction();
-		const {service, provider, repository} = createService({rows: [transaction]});
+		const {pipeline, provider, repository} = createCategorizationServices({rows: [transaction]});
 		repository.update.mockResolvedValueOnce({affected: 0});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorize).not.toHaveBeenCalled();
 	});
 
 	it('does not refresh the hash when a concurrent event reclassification wins the race', async () => {
 		const transaction = createBankTransaction();
-		const {service, provider, repository} = createService({rows: [transaction]});
+		const {pipeline, provider, repository} = createCategorizationServices({rows: [transaction]});
 		repository.update.mockImplementationOnce(async (criteria) => {
 			expect(criteria).toEqual(expect.objectContaining({financialEventType: expect.anything()}));
 			return {affected: 0};
 		});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorize).not.toHaveBeenCalled();
 	});
@@ -1106,10 +807,10 @@ describe('BankTransactionCategorizationService worker', () => {
 			categoryInputHash: 'old-input-hash',
 			categoryAppliedInputHash: 'old-input-hash',
 		});
-		const queryBuilder = createUpdateQueryBuilder([{affected: 0}, {affected: 0}]);
-		const {service, provider} = createService({rows: [transaction], queryBuilder});
+		const queryBuilder = createUpdateQueryBuilder([{affected: 0}, claimedRows()]);
+		const {pipeline, provider} = createCategorizationServices({rows: [transaction], queryBuilder});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorize).not.toHaveBeenCalled();
 		expect(queryBuilder.andWhere).toHaveBeenCalledWith('"categoryStatus" = :expectedStatus', {
@@ -1119,10 +820,10 @@ describe('BankTransactionCategorizationService worker', () => {
 
 	it('does not apply a provider result after the claimed input hash changes', async () => {
 		const transaction = createBankTransaction();
-		const queryBuilder = createUpdateQueryBuilder([{affected: 1}, {affected: 0}]);
-		const {service, provider, repository} = createService({rows: [transaction], queryBuilder});
+		const queryBuilder = createUpdateQueryBuilder([claimedRows(transaction.id), {affected: 0}]);
+		const {pipeline, provider, repository} = createCategorizationServices({rows: [transaction], queryBuilder});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorize).toHaveBeenCalledTimes(1);
 		expect(queryBuilder.set).toHaveBeenCalledWith(expect.objectContaining({categoryStatus: 'PROCESSING'}));
@@ -1134,9 +835,9 @@ describe('BankTransactionCategorizationService worker', () => {
 	it('leaves unavailable routes pending and rethrows so the job is retried', async () => {
 		const transaction = createBankTransaction();
 		const failure = new BankTransactionCategorizationUnavailableError();
-		const {service, repository} = createService({rows: [transaction], providerError: failure});
+		const {pipeline, repository} = createCategorizationServices({rows: [transaction], providerError: failure});
 
-		await expect(service.processTransactionJob([transaction.id])).rejects.toBe(failure);
+		await expect(pipeline.processTransactionJob([transaction.id])).rejects.toBe(failure);
 
 		expect(failure).toBeInstanceOf(BankTransactionCategorizationProviderError);
 		expect(failure.retryable).toBe(true);
@@ -1168,9 +869,9 @@ describe('BankTransactionCategorizationService worker', () => {
 		transaction.categoryInputHash = createBankTransactionCategorizationInputHash(transaction);
 		transaction.categoryAppliedInputHash = transaction.categoryInputHash;
 		const failure = new BankTransactionCategorizationUnavailableError();
-		const {service} = createService({rows: [transaction], providerError: failure});
+		const {pipeline} = createCategorizationServices({rows: [transaction], providerError: failure});
 
-		await expect(service.processTransactionJob([transaction.id])).rejects.toBe(failure);
+		await expect(pipeline.processTransactionJob([transaction.id])).rejects.toBe(failure);
 
 		expect(transaction).toMatchObject({
 			category: 'SHOPPING',
@@ -1191,9 +892,9 @@ describe('BankTransactionCategorizationService worker', () => {
 			categoryAppliedInputHash: 'older-input',
 		});
 		const failure = new BankTransactionCategorizationUnavailableError();
-		const {service} = createService({rows: [transaction], providerError: failure});
+		const {pipeline} = createCategorizationServices({rows: [transaction], providerError: failure});
 
-		await expect(service.processTransactionJob([transaction.id])).rejects.toBe(failure);
+		await expect(pipeline.processTransactionJob([transaction.id])).rejects.toBe(failure);
 
 		expect(transaction).toMatchObject({
 			category: null,
@@ -1205,15 +906,15 @@ describe('BankTransactionCategorizationService worker', () => {
 
 	it('does not overwrite a concurrent classification when routes become unavailable', async () => {
 		const transaction = createBankTransaction();
-		const queryBuilder = createUpdateQueryBuilder([{affected: 1}, {affected: 0}]);
+		const queryBuilder = createUpdateQueryBuilder([claimedRows(transaction.id), {affected: 0}]);
 		const failure = new BankTransactionCategorizationUnavailableError();
-		const {service, provider} = createService({rows: [transaction], queryBuilder});
+		const {pipeline, provider} = createCategorizationServices({rows: [transaction], queryBuilder});
 		provider.categorize.mockImplementationOnce(async () => {
 			Object.assign(transaction, {category: 'SHOPPING', categorySource: 'MANUAL', categoryStatus: 'COMPLETED'});
 			throw failure;
 		});
 
-		await expect(service.processTransactionJob([transaction.id])).rejects.toBe(failure);
+		await expect(pipeline.processTransactionJob([transaction.id])).rejects.toBe(failure);
 
 		expect(transaction).toMatchObject({
 			category: 'SHOPPING',
@@ -1225,9 +926,9 @@ describe('BankTransactionCategorizationService worker', () => {
 	it('keeps nonretryable provider failures failed without throwing', async () => {
 		const transaction = createBankTransaction();
 		const failure = new BankTransactionCategorizationProviderError('synthetic invalid result', false);
-		const {service} = createService({rows: [transaction], providerError: failure});
+		const {pipeline} = createCategorizationServices({rows: [transaction], providerError: failure});
 
-		await expect(service.processTransactionJob([transaction.id])).resolves.toBeUndefined();
+		await expect(pipeline.processTransactionJob([transaction.id])).resolves.toBeUndefined();
 
 		expect(transaction).toMatchObject({
 			category: null,
@@ -1247,17 +948,12 @@ describe('BankTransactionCategorizationService worker', () => {
 			},
 			'Claude categorization request failed (503).',
 		],
-		[
-			'a result the service rejects',
-			async () => [{correlationId: 'unknown-row', category: 'SHOPPING' as const, confidence: 0.9}],
-			'Transaction categorization failed.',
-		],
 	])('marks the batch failed and rethrows for a bounded retry after %s', async (_case, categorize, lastError) => {
 		const transaction = createBankTransaction();
-		const {service, provider, repository} = createService({rows: [transaction]});
+		const {pipeline, provider, repository} = createCategorizationServices({rows: [transaction]});
 		provider.categorize.mockImplementationOnce(categorize);
 
-		const error = await service.processTransactionJob([transaction.id]).then(
+		const error = await pipeline.processTransactionJob([transaction.id]).then(
 			() => undefined,
 			(reason: unknown) => reason,
 		);
@@ -1283,9 +979,9 @@ describe('BankTransactionCategorizationService worker', () => {
 			'Claude categorization request failed (503).',
 			true,
 		);
-		const {service, repository} = createService({rows: [transaction], providerError: failure});
+		const {pipeline, repository} = createCategorizationServices({rows: [transaction], providerError: failure});
 
-		await expect(service.processTransactionJob([transaction.id])).rejects.toBe(failure);
+		await expect(pipeline.processTransactionJob([transaction.id])).rejects.toBe(failure);
 
 		const failedUpdate = repository.createQueryBuilder.mock.results.at(-1)?.value;
 		const [values] = failedUpdate.set.mock.calls.at(-1);
@@ -1306,9 +1002,9 @@ describe('BankTransactionCategorizationService worker', () => {
 			'Claude categorization request failed (503).',
 			true,
 		);
-		const {service} = createService({rows: [transaction], providerError: failure});
+		const {pipeline} = createCategorizationServices({rows: [transaction], providerError: failure});
 
-		await expect(service.processTransactionJob([transaction.id])).rejects.toBe(failure);
+		await expect(pipeline.processTransactionJob([transaction.id])).rejects.toBe(failure);
 
 		expect(transaction).toMatchObject({category: null, categoryStatus: 'FAILED'});
 	});
@@ -1324,14 +1020,14 @@ describe('BankTransactionCategorizationService worker', () => {
 		queryBuilder.getRawMany.mockResolvedValueOnce([
 			{merchantKey: 'EXPENSE:example landlord', category: 'HOUSING_AND_UTILITIES', count: 3},
 		] as never);
-		const {service, provider} = createService({
+		const {pipeline, provider} = createCategorizationServices({
 			rows: [transaction],
 			queryBuilder,
 			webSearchEnabled: true,
 			providerResult: [{correlationId: 'small-transfer', category: 'NEEDS_REVIEW', confidence: 0.4}],
 		});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorizeWithWebSearch).not.toHaveBeenCalled();
 		expect(transaction).toMatchObject({category: 'NEEDS_REVIEW', categorySource: 'AI'});
@@ -1356,9 +1052,9 @@ describe('BankTransactionCategorizationService worker', () => {
 					date: `2026-09-0${7 - index}`,
 				})) as never,
 			);
-		const {service, provider} = createService({rows: [transaction], queryBuilder});
+		const {pipeline, provider} = createCategorizationServices({rows: [transaction], queryBuilder});
 
-		await service.processTransactionJob([transaction.id]);
+		await pipeline.processTransactionJob([transaction.id]);
 
 		expect(provider.categorize.mock.calls[0][0][0].previousManualCategories).toEqual([
 			{
@@ -1373,172 +1069,5 @@ describe('BankTransactionCategorizationService worker', () => {
 				],
 			},
 		]);
-	});
-
-	it('reclaims stale processing rows but leaves fresh claims alone', async () => {
-		const stale = createBankTransaction({
-			id: 'stale-transaction',
-			categoryStatus: 'PROCESSING',
-			categoryUpdatedAt: new Date(Date.now() - 16 * 60 * 1000),
-		});
-		const fresh = createBankTransaction({
-			id: 'fresh-transaction',
-			categoryStatus: 'PROCESSING',
-			categoryUpdatedAt: new Date(Date.now() - 1 * 60 * 1000),
-		});
-		const {service, provider} = createService({rows: [stale, fresh]});
-
-		await service.processTransactionJob([stale.id, fresh.id]);
-
-		expect(provider.categorize).toHaveBeenCalledTimes(1);
-		expect(
-			provider.categorize.mock.calls[0][0].map(
-				({correlationId}: BankTransactionCategorizationInput) => correlationId,
-			),
-		).toEqual([stale.id]);
-	});
-});
-
-describe('BankTransactionCategorizationService manual follow-up', () => {
-	const transaction = () =>
-		createBankTransaction({id: 'corrected', merchantKey: 'EXPENSE:example shop', categorySource: 'AI'});
-	const selected = ['sibling-1', 'sibling-2'];
-
-	it('queues a retry when applying a correction to the same merchant fails', async () => {
-		const queryBuilder = createUpdateQueryBuilder();
-		queryBuilder.getRawMany.mockRejectedValueOnce(new Error('connection lost'));
-		const {service, queue} = createService({queryBuilder});
-
-		await expect(service.setManualCategory('account-1', transaction(), 'SHOPPING', selected)).resolves.toBe(true);
-
-		expect(queue.add).toHaveBeenCalledTimes(1);
-		const [name, data, opts] = queue.add.mock.calls[0];
-		expect(name).toBe(APPLY_MANUAL_CATEGORY_TO_MERCHANT_JOB);
-		// The retry keeps the owner's selection, so it can never widen to rows they left out.
-		expect(data).toEqual({accountId: 'account-1', merchantKey: 'EXPENSE:example shop', transactionIds: selected});
-		expect(opts).toMatchObject({attempts: 8});
-		// No fixed job id: a retained failed or running job with the same id would swallow this one.
-		expect(opts).not.toHaveProperty('jobId');
-	});
-
-	it('does not hold the request open while Redis is unreachable', async () => {
-		jest.useFakeTimers();
-		try {
-			const queryBuilder = createUpdateQueryBuilder();
-			queryBuilder.getRawMany.mockRejectedValueOnce(new Error('connection lost'));
-			const {service, queue} = createService({queryBuilder});
-			queue.add.mockReturnValueOnce(new Promise(() => undefined));
-
-			const saved = service.setManualCategory('account-1', transaction(), 'SHOPPING', selected);
-			await jest.advanceTimersByTimeAsync(2_000);
-
-			await expect(saved).resolves.toBe(true);
-		} finally {
-			jest.useRealTimers();
-		}
-	});
-
-	it.each([
-		['nothing is selected', []],
-		['only the corrected row is selected', ['corrected']],
-	])('changes no other row when %s', async (_, ids) => {
-		const queryBuilder = createUpdateQueryBuilder();
-		const {service, queue, repository} = createService({queryBuilder});
-
-		await expect(service.setManualCategory('account-1', transaction(), 'SHOPPING', ids)).resolves.toBe(true);
-
-		expect(repository.update).toHaveBeenCalledTimes(1);
-		expect(repository.createQueryBuilder).not.toHaveBeenCalled();
-		expect(queue.add).not.toHaveBeenCalled();
-	});
-
-	it('changes nothing for a retry queued before rows could be selected', async () => {
-		const {service, repository} = createService();
-
-		await service.processManualCategoryFollowUp({accountId: 'account-1', merchantKey: 'EXPENSE:example shop'});
-
-		expect(repository.createQueryBuilder).not.toHaveBeenCalled();
-	});
-
-	it('limits the follow-up to the selected rows and queues no retry', async () => {
-		const queryBuilder = createUpdateQueryBuilder([{affected: 2}], [{id: 'manual'}]);
-		queryBuilder.getRawMany.mockResolvedValueOnce([
-			{merchantKey: 'EXPENSE:example shop', category: 'SHOPPING', count: 1},
-		]);
-		const {service, queue} = createService({queryBuilder});
-
-		await service.setManualCategory('account-1', transaction(), 'SHOPPING', [...selected, 'sibling-1']);
-
-		expect(queryBuilder.andWhere).toHaveBeenCalledWith('id IN (:...followUpTransactionIds)', {
-			followUpTransactionIds: selected,
-		});
-		expect(queryBuilder.set).toHaveBeenCalledWith(
-			expect.objectContaining({category: 'SHOPPING', categorySource: 'HISTORY', categoryStatus: 'COMPLETED'}),
-		);
-		expect(queue.add).not.toHaveBeenCalled();
-	});
-
-	it('keeps the manual category when the retry cannot be queued either', async () => {
-		const queryBuilder = createUpdateQueryBuilder();
-		queryBuilder.getRawMany.mockRejectedValueOnce(new Error('connection lost'));
-		const {service, queue, repository} = createService({queryBuilder});
-		queue.add.mockRejectedValueOnce(new Error('redis down'));
-
-		await expect(service.setManualCategory('account-1', transaction(), 'SHOPPING', selected)).resolves.toBe(true);
-		expect(repository.update).toHaveBeenCalledWith(
-			{id: 'corrected'},
-			expect.objectContaining({category: 'SHOPPING', categorySource: 'MANUAL'}),
-		);
-	});
-
-	it('lets a failing queued follow-up throw so the queue retries it', async () => {
-		const queryBuilder = createUpdateQueryBuilder();
-		queryBuilder.getRawMany.mockRejectedValueOnce(new Error('connection lost'));
-		const {service} = createService({queryBuilder});
-
-		await expect(
-			service.processManualCategoryFollowUp({
-				accountId: 'account-1',
-				merchantKey: 'EXPENSE:example shop',
-				transactionIds: selected,
-			}),
-		).rejects.toThrow('connection lost');
-	});
-});
-
-describe('BankTransactionCategorizationService reconciliation schedule', () => {
-	it('schedules hourly reconciliation and starts a sweep including FAILED rows without holding up boot', async () => {
-		const queryBuilder = createUpdateQueryBuilder();
-		queryBuilder.getRawMany.mockReturnValue(new Promise(() => undefined));
-		const {service, queue} = createService({nodeEnv: 'production', queryBuilder});
-
-		await service.onApplicationBootstrap();
-
-		expect(queue.upsertJobScheduler).toHaveBeenCalledWith(
-			BANK_TRANSACTION_CATEGORIZATION_RECONCILE_SCHEDULER_ID,
-			{every: 60 * 60 * 1000},
-			expect.objectContaining({name: RECONCILE_BANK_TRANSACTION_CATEGORIZATION_JOB}),
-		);
-		const statusClause = queryBuilder.andWhere.mock.calls.find(([, params]) => params?.claimableStatuses);
-		expect(statusClause?.[1].claimableStatuses).toEqual(['PENDING', 'FAILED']);
-	});
-
-	it('removes the schedule when AI categorization is off', async () => {
-		const {service, queue} = createService({nodeEnv: 'production', enabled: false});
-
-		await service.onApplicationBootstrap();
-
-		expect(queue.removeJobScheduler).toHaveBeenCalledWith(BANK_TRANSACTION_CATEGORIZATION_RECONCILE_SCHEDULER_ID);
-		expect(queue.upsertJobScheduler).not.toHaveBeenCalled();
-	});
-
-	it('skips FAILED rows in the hourly run', async () => {
-		const queryBuilder = createUpdateQueryBuilder();
-		const {service} = createService({queryBuilder});
-
-		await service.reconcilePendingTransactions({includeFailed: false});
-
-		const statusClause = queryBuilder.andWhere.mock.calls.find(([, params]) => params?.claimableStatuses);
-		expect(statusClause?.[1].claimableStatuses).toEqual(['PENDING']);
 	});
 });

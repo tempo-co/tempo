@@ -1,10 +1,10 @@
-import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
+import {CategorizationScheduler} from '../categorization/categorization-scheduler.service';
 import {BankingSyncService} from './banking-sync.service';
 
 type TestableSyncService = {
 	persistSync: jest.Mock;
 	enqueuePersistedTransactions: (ids: readonly string[]) => Promise<void>;
-	categorizationService: BankTransactionCategorizationService;
+	categorizationService: CategorizationScheduler;
 	logger: {warn: jest.Mock};
 };
 

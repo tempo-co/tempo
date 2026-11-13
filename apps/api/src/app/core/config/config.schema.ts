@@ -51,7 +51,6 @@ export const configSchema = z
 
 		// --- AI categorization ---
 		AI_CATEGORIZATION_ENABLED: strictBooleanEnvSchema.default(false),
-		AI_CATEGORIZATION_PROVIDER: z.enum(['claude']).default('claude'),
 		AI_CATEGORIZATION_MODEL: z.string().min(1).max(128).default('claude-sonnet-5-5'),
 		AI_CATEGORIZATION_EFFORT: z.enum(categorizationContract.efforts).default('high'),
 		AI_CATEGORIZATION_WEB_SEARCH_ENABLED: strictBooleanEnvSchema.default(false),

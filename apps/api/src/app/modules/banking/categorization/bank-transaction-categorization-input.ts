@@ -6,11 +6,12 @@ import {formatBankTransactionLocation, normalizeBankTransactionLocation} from '.
 import {normalizeBankTransactionType} from '../bank-transaction-type';
 import {BankTransaction} from '../bank-transaction.entity';
 import {truncate} from '../banking.utils';
-import {BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH} from './bank-transaction-categorization.constants';
 import {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationWebSearchInput,
-} from './bank-transaction-categorization.types';
+	CATEGORIZATION_HASHED_FIELDS,
+} from './bank-transaction-categorization-input.schema';
+import {BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH} from './bank-transaction-categorization.constants';
 
 const MAX_REMITTANCE_INFORMATION_LENGTH = 2_000;
 const MAX_WEB_SEARCH_MERCHANT_NAME_LENGTH = 160;
@@ -50,8 +51,6 @@ const LONG_NUMERIC_IDENTIFIER_PATTERN = /\b\d{6,}\b/g;
 const REDACTED_IDENTIFIER_LABEL_PATTERN =
 	/\b(?:iban|bic|swift|account|acct|rekening|reference|ref|order|invoice|mandate|identifier|id|pas|nr|card|phone|telephone|mobile|tel|fax)\b(?:\s+(?:no\.?|number|num|nr\.?))?\s*[:#=_-]?\s*\[REDACTED\]/gi;
 const CARD_LOCATION_PATTERN = /,\s*\d{2}[./]\d{2}[./]\d{2}\/\d{2}:\d{2}\s+(.+)$/i;
-
-type CategorizationHashInput = Omit<BankTransactionCategorizationInput, 'correlationId'>;
 
 type BankTransactionCategorizationTransaction = Pick<
 	BankTransaction,
@@ -134,7 +133,6 @@ export function toBankTransactionCategorizationWebSearchInput(
 		transactionType: input.transactionType,
 		merchantName,
 		merchantLocation,
-		...(merchantDetails.approximateLocation ? {approximateLocation: merchantDetails.approximateLocation} : {}),
 		searchQuery,
 		merchantCategoryCode: input.merchantCategoryCode,
 	};
@@ -155,23 +153,25 @@ export function toMerchantIdentificationName(input: BankTransactionCategorizatio
 function getWebSearchMerchantDetails(input: BankTransactionCategorizationInput): {
 	merchantName: string | null;
 	merchantLocation: string | null;
-	approximateLocation: BankTransactionCategorizationInput['merchantLocation'];
 } {
 	const counterpartyName = normalizeNullableText(input.counterpartyName);
 	const description = normalizeNullableText(input.description);
-	const approximateLocation = normalizeBankTransactionLocation(input.merchantLocation);
 	const merchantName =
 		counterpartyName ??
 		(description ? getBankTransactionDisplayDescription({description, counterpartyName: null}) : null) ??
 		normalizeNullableText(input.bankTransactionDescription);
 	const merchantLocation =
-		formatBankTransactionLocation(approximateLocation) ??
+		formatBankTransactionLocation(input.merchantLocation) ??
 		description?.match(CARD_LOCATION_PATTERN)?.[1]?.trim() ??
 		null;
 
-	return {merchantName, merchantLocation, approximateLocation};
+	return {merchantName, merchantLocation};
 }
 
+/**
+ * The hash of the classified fields of the input (the input minus its correlation id and history hints). The amount is
+ * hashed at its smallest scale, so a database read-back of the same value hashes the same.
+ */
 export function createBankTransactionCategorizationInputHash(
 	value: BankTransaction | BankTransactionCategorizationInput,
 ): string {
@@ -181,25 +181,13 @@ export function createBankTransactionCategorizationInputHash(
 				...value,
 				aspspName: value.bankAccount?.bankConnection?.aspspName,
 			});
-	const merchantLocation = normalizeBankTransactionLocation(input.merchantLocation);
-	const hashInput: CategorizationHashInput = {
-		transactionDate: input.transactionDate,
-		bookingDate: input.bookingDate,
-		valueDate: input.valueDate,
-		amount: normalizeAmountForHash(input.amount),
-		currency: input.currency,
-		creditDebitIndicator: input.creditDebitIndicator,
-		direction: input.direction,
-		transactionType: input.transactionType,
-		bankTransactionCode: input.bankTransactionCode,
-		bankTransactionSubCode: input.bankTransactionSubCode,
-		description: input.description,
-		counterpartyName: input.counterpartyName,
-		bankTransactionDescription: input.bankTransactionDescription,
-		merchantCategoryCode: input.merchantCategoryCode,
-		remittanceInformation: input.remittanceInformation,
-		...(merchantLocation ? {merchantLocation} : {}),
-	};
+	const hashInput: Record<string, unknown> = {};
+	for (const field of CATEGORIZATION_HASHED_FIELDS) {
+		const fieldValue = field === 'amount' ? normalizeAmountForHash(input.amount) : input[field];
+		// An absent location is left out rather than hashed as null.
+		if (field === 'merchantLocation' && !fieldValue) continue;
+		hashInput[field] = fieldValue;
+	}
 
 	return createHash('sha256').update(JSON.stringify(hashInput)).digest('hex');
 }
@@ -325,7 +313,7 @@ function normalizeUppercase(value: string | null | undefined): string | null {
 	return normalized?.toUpperCase() ?? null;
 }
 
-export function normalizeMerchantCategoryCode(value: string | null | undefined): string | null {
+function normalizeMerchantCategoryCode(value: string | null | undefined): string | null {
 	const normalized = normalizeNullableText(value);
 	return normalized !== null && /^\d{4}$/.test(normalized) ? normalized : null;
 }

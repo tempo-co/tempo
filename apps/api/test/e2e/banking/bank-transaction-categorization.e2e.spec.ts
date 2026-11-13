@@ -15,7 +15,6 @@ import {BANK_TRANSACTION_CATEGORIZATION_QUEUE, CATEGORIZE_BANK_TRANSACTIONS_JOB}
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
-	BANK_TRANSACTION_CATEGORIZATION_PROVIDER_NAME,
 	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION,
 	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
 } from '@modules/banking/categorization/bank-transaction-categorization.constants';
@@ -23,15 +22,17 @@ import {
 	BankTransactionCategorizationProviderError,
 	BankTransactionCategorizationUnavailableError,
 } from '@modules/banking/categorization/bank-transaction-categorization.provider';
-import {BankTransactionCategorizationService} from '@modules/banking/categorization/bank-transaction-categorization.service';
 import type {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
 	BankTransactionCategorizationWebSearchInput,
 	BankTransactionCategorizationWebSearchOutcome,
 } from '@modules/banking/categorization/bank-transaction-categorization.types';
+import {CategorizationPipeline} from '@modules/banking/categorization/categorization-pipeline.service';
+import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
 import {ClaudeBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/claude-bank-transaction-categorization.provider';
 
+import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from '../../../scripts/seed-data/seed.constants';
 import {
 	CATEGORIZATION_E2E_AI_TRANSACTION_ID,
@@ -47,6 +48,7 @@ import {
 	seedBankTransactionCategorizationData,
 } from '../../setup/e2e-categorization-data';
 import {enableAiCategorizationE2e, enableAiCategorizationWebSearchE2e, getApp, loginAgent} from '../../setup/e2e.setup';
+import {createBankingOwner} from '../../utils/banking-utils';
 import {waitFor} from '../../utils/wait-utils';
 
 enableAiCategorizationE2e();
@@ -184,9 +186,6 @@ describe('Bank transaction categorization integration', () => {
 
 		const configurationService = app.get(ConfigurationService);
 		expect(configurationService.get('AI_CATEGORIZATION_ENABLED')).toBe(true);
-		expect(configurationService.get('AI_CATEGORIZATION_PROVIDER')).toBe(
-			BANK_TRANSACTION_CATEGORIZATION_PROVIDER_NAME,
-		);
 		expect(configurationService.get('AI_CATEGORIZATION_WEB_SEARCH_ENABLED')).toBe(true);
 		expect(configurationService.get('ANTHROPIC_API_KEY')).toBeTruthy();
 
@@ -210,7 +209,7 @@ describe('Bank transaction categorization integration', () => {
 	});
 
 	it('runs the real HTTP, database, queue, worker, and persistence path with a mocked provider response', async () => {
-		const categorizationService = app.get(BankTransactionCategorizationService);
+		const categorizationService = app.get(CategorizationScheduler);
 		await categorizationService.enqueueForTransactions([CATEGORIZATION_E2E_AI_TRANSACTION_ID]);
 
 		const response = await waitFor(
@@ -252,7 +251,7 @@ describe('Bank transaction categorization integration', () => {
 
 	it("never applies the owner's manual category to another row; it is only a hint for the model", async () => {
 		// Both accounts' rows go through one batch, as reconciliation does across users.
-		const categorizationService = app.get(BankTransactionCategorizationService);
+		const categorizationService = app.get(CategorizationScheduler);
 		await categorizationService.enqueueForTransactions([
 			CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
 			CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID,
@@ -296,7 +295,7 @@ describe('Bank transaction categorization integration', () => {
 
 	it('sends earlier same-amount payments to the same payee only when there are at least two', async () => {
 		const ids = [CATEGORIZATION_E2E_REPEAT_AMOUNT_TRANSACTION_ID, CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID];
-		await app.get(BankTransactionCategorizationService).enqueueForTransactions(ids);
+		await app.get(CategorizationScheduler).enqueueForTransactions(ids);
 		await Promise.all(
 			ids.map((id) =>
 				waitFor(
@@ -337,7 +336,7 @@ describe('Bank transaction categorization integration', () => {
 
 	it("leaves the owner's one-off manual choice out of the next row's hint", async () => {
 		await app
-			.get(BankTransactionCategorizationService)
+			.get(CategorizationScheduler)
 			.enqueueForTransactions([CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID]);
 
 		const row = await waitFor(
@@ -381,7 +380,7 @@ describe('Bank transaction categorization integration', () => {
 			{categoryStatus: 'PENDING'},
 		);
 		await app
-			.get(BankTransactionCategorizationService)
+			.get(CategorizationScheduler)
 			.enqueueForTransactions([CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID]);
 		const recategorized = await waitFor(
 			() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID}),
@@ -466,7 +465,7 @@ describe('Bank transaction categorization integration', () => {
 	});
 
 	it('runs one normal pass and one web-search fallback for an OTHER result', async () => {
-		const categorizationService = app.get(BankTransactionCategorizationService);
+		const categorizationService = app.get(CategorizationScheduler);
 		await categorizationService.enqueueForTransactions([CATEGORIZATION_E2E_WEB_TRANSACTION_ID]);
 
 		const response = await waitFor(
@@ -526,15 +525,19 @@ describe('Bank transaction categorization integration', () => {
 		);
 		try {
 			categorizeSpy.mockImplementationOnce(async (transactions) =>
-				transactions.map(({correlationId}) => ({correlationId, category: 'OTHER' as const, confidence: 0.25})),
+				transactions.map(({correlationId}) => ({
+					correlationId,
+					category: 'OTHER' as const,
+					confidence: 0.25,
+					provider: 'claude-api',
+					model: 'test-model',
+				})),
 			);
 			await bankTransactionRepository.update(CATEGORIZATION_E2E_WEB_TRANSACTION_ID, {
 				categoryStatus: 'PENDING',
 				categoryAppliedInputHash: null,
 			});
-			await app
-				.get(BankTransactionCategorizationService)
-				.enqueueForTransactions([CATEGORIZATION_E2E_WEB_TRANSACTION_ID]);
+			await app.get(CategorizationScheduler).enqueueForTransactions([CATEGORIZATION_E2E_WEB_TRANSACTION_ID]);
 
 			const reviewed = await waitFor(
 				() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_WEB_TRANSACTION_ID}),
@@ -557,7 +560,7 @@ describe('Bank transaction categorization integration', () => {
 
 	it('keeps a row pending when its web search is unavailable on both routes, then completes it on retry', async () => {
 		searchUnavailable = true;
-		const categorizationService = app.get(BankTransactionCategorizationService);
+		const categorizationService = app.get(CategorizationScheduler);
 		await bankTransactionRepository.update(CATEGORIZATION_E2E_WEB_TRANSACTION_ID, {
 			category: null,
 			categoryStatus: 'PENDING',
@@ -571,7 +574,7 @@ describe('Bank transaction categorization integration', () => {
 			categoryLastError: null,
 		});
 		await expect(
-			categorizationService.processTransactionJob([CATEGORIZATION_E2E_WEB_TRANSACTION_ID]),
+			app.get(CategorizationPipeline).processTransactionJob([CATEGORIZATION_E2E_WEB_TRANSACTION_ID]),
 		).rejects.toThrow(BankTransactionCategorizationUnavailableError);
 		const pending = await bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_WEB_TRANSACTION_ID});
 		expect(pending).toMatchObject({
@@ -596,7 +599,7 @@ describe('Bank transaction categorization integration', () => {
 
 	it('keeps a row pending while the API rate-limits it, with no bridge, and retries the job a minute later', async () => {
 		const transport = await useClaudeTransport(app, jest.fn().mockRejectedValue({status: 429}));
-		const categorizationService = app.get(BankTransactionCategorizationService);
+		const categorizationService = app.get(CategorizationScheduler);
 		const queue = app.get<Queue>(getQueueToken(BANK_TRANSACTION_CATEGORIZATION_QUEUE));
 		await resetFailureFixture({categorySearchTrace: null});
 		const rowJobs = async (states: JobType[]) =>
@@ -694,7 +697,7 @@ describe('Bank transaction categorization integration', () => {
 		'retries %s twice within seconds, then leaves the row failed for the hourly sweep to skip',
 		async (_case, create, bridge, lastError) => {
 			const queue = app.get<Queue>(getQueueToken(BANK_TRANSACTION_CATEGORIZATION_QUEUE));
-			const categorizationService = app.get(BankTransactionCategorizationService);
+			const categorizationService = app.get(CategorizationScheduler);
 			const transport = await useClaudeTransport(app, create(), bridge);
 			try {
 				await resetFailureFixture();
@@ -743,11 +746,54 @@ describe('Bank transaction categorization integration', () => {
 		},
 	);
 
+	it('claims only rows waiting for the model, including a claim another worker abandoned', async () => {
+		const {bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+		const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
+		const row = (description: string, values: Partial<BankTransaction>) => ({
+			description,
+			counterpartyName: description,
+			amount: '-4.20',
+			...values,
+		});
+		const [pending, failed, abandoned, working, manual, completed] = await new BankingFixtures(
+			app,
+		).createTransactions(bankAccount, [
+			row('Example Claim Pending', {categoryStatus: 'PENDING'}),
+			row('Example Claim Failed', {categoryStatus: 'FAILED'}),
+			row('Example Claim Abandoned', {categoryStatus: 'PROCESSING', categoryUpdatedAt: minutesAgo(16)}),
+			row('Example Claim Working', {categoryStatus: 'PROCESSING', categoryUpdatedAt: minutesAgo(1)}),
+			row('Example Claim Manual', {category: 'SHOPPING', categoryStatus: 'COMPLETED', categorySource: 'MANUAL'}),
+			row('Example Claim Completed', {category: 'TRAVEL', categoryStatus: 'COMPLETED', categorySource: 'AI'}),
+		]);
+
+		await app
+			.get(CategorizationPipeline)
+			.processTransactionJob([pending, failed, abandoned, working, manual, completed].map(({id}) => id));
+
+		expect(categorizeSpy).toHaveBeenCalledTimes(1);
+		expect(categorizeSpy.mock.calls[0][0].map(({correlationId}) => correlationId)).toEqual([
+			pending.id,
+			failed.id,
+			abandoned.id,
+		]);
+		const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
+		const byId = new Map(rows.map((transaction) => [transaction.id, transaction]));
+		for (const {id} of [pending, failed, abandoned])
+			expect(byId.get(id)).toMatchObject({
+				category: AI_CATEGORY,
+				categoryStatus: 'COMPLETED',
+				categorySource: 'AI',
+			});
+		expect(byId.get(working.id)).toMatchObject({category: null, categoryStatus: 'PROCESSING'});
+		expect(byId.get(manual.id)).toMatchObject({category: 'SHOPPING', categorySource: 'MANUAL'});
+		expect(byId.get(completed.id)).toMatchObject({category: 'TRAVEL', categorySource: 'AI'});
+	});
+
 	it('persists a provider failure through the real worker path without calling an external provider', async () => {
 		shouldFail = true;
 		try {
 			await resetFailureFixture();
-			const categorizationService = app.get(BankTransactionCategorizationService);
+			const categorizationService = app.get(CategorizationScheduler);
 			await categorizationService.enqueueForTransactions([CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID]);
 
 			const response = await waitFor(

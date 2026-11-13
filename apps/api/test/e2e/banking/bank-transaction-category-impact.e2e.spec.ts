@@ -6,7 +6,7 @@ import {DataSource, DeepPartial} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
-import {BankTransactionCategorizationService} from '@modules/banking/categorization/bank-transaction-categorization.service';
+import {ManualCategoryService} from '@modules/banking/categorization/manual-category.service';
 
 import {BankingFixtures, CURRENCY_EXCHANGE_EVENT, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {getApp} from '../../setup/e2e.setup';
@@ -181,7 +181,7 @@ describe('Bank transaction category impact', () => {
 
 	it('leaves selected rows unchanged when a queued retry names an obsolete merchant key', async () => {
 		const before = await reload('aiSibling');
-		await app.get(BankTransactionCategorizationService).processManualCategoryFollowUp({
+		await app.get(ManualCategoryService).processManualCategoryFollowUp({
 			accountId: ownerId,
 			merchantKey: 'EXPENSE:transfer to alex-sam example',
 			transactionIds: [before.id],

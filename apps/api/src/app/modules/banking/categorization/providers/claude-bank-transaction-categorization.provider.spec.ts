@@ -15,6 +15,7 @@ import {
 	toBankTransactionCategorizationInput,
 	toBankTransactionCategorizationWebSearchInput,
 } from '../bank-transaction-categorization-input';
+import {toBridgeInputContract} from '../bank-transaction-categorization-input.schema';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS,
 	BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH,
@@ -184,6 +185,13 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(contract.webSearch.maxSourceDomains).toBe(BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS);
 	});
 
+	it('keeps the request schemas the bridge validates equal to the app input schema', () => {
+		// Regenerate with `npm run contract:input`; the bridge must be reinstalled after the API deploys.
+		const {input: requestInput, webSearchInput} = toBridgeInputContract();
+		expect(contract.input).toEqual(requestInput);
+		expect(contract.webSearch.input).toEqual(webSearchInput);
+	});
+
 	it('keeps the shared contract enums equal to the app categories and evidence types', () => {
 		const item = (schema: typeof contract.schema) => schema.properties.classifications.items.properties;
 		expect(item(contract.schema).category.enum).toEqual(BANK_TRANSACTION_CATEGORIES);
@@ -336,6 +344,30 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 				await expect(outcomeOf(provider, route)).resolves.toBe(expected);
 				expect(create).toHaveBeenCalledTimes(1);
 			}
+		});
+
+		it('fails a search whose pinned query cannot be stored in its trace', async () => {
+			const {provider, create} = setup();
+			const transaction = {
+				...toBankTransactionCategorizationWebSearchInput(input())!,
+				searchQuery: 'Example\u0007Cafe',
+			};
+			create.mockResolvedValue({
+				stop_reason: 'end_turn',
+				usage: {server_tool_use: {web_search_requests: 1}},
+				content: [
+					{type: 'server_tool_use', name: 'web_search', input: {query: transaction.searchQuery}},
+					{type: 'web_search_tool_result', content: []},
+					{
+						type: 'text',
+						text: '{"classifications":[{"correlationId":"0","category":"SHOPPING","confidence":0.9,"evidenceType":"PURCHASE_CONTEXT"}]}',
+					},
+				],
+			});
+			await expect(
+				provider.categorizeWithWebSearch([transaction], BANK_TRANSACTION_CATEGORY_DEFINITIONS),
+			).resolves.toEqual([{correlationId: transaction.correlationId, provider: 'claude-api', result: null}]);
+			expect(create).toHaveBeenCalledTimes(1);
 		});
 
 		it.each(['standard', 'search'] as const)('fails a %s reply that does not validate', async (route) => {
