@@ -18,10 +18,10 @@ const WALLET_GBP = 'aaaaaaaa-0000-4000-8000-000000000003';
 const OTHER_GBP = 'aaaaaaaa-0000-4000-8000-000000000004';
 
 const accounts: OwnTransferAccount[] = [
-	{id: BANK_EUR, aspspName: 'Example Bank', currency: 'EUR', iban: BANK_IBAN, holderName: 'J M EXAMPLE'},
-	{id: WALLET_EUR, aspspName: 'Revolut', currency: 'EUR', iban: WALLET_IBAN, holderName: 'Jane-Marie Example'},
-	{id: WALLET_GBP, aspspName: 'Revolut', currency: 'GBP', iban: WALLET_IBAN, holderName: 'Jane-Marie Example'},
-	{id: OTHER_GBP, aspspName: 'Revolut', currency: 'GBP', iban: null, holderName: 'Jane-Marie Example'},
+	{id: BANK_EUR, currency: 'EUR', iban: BANK_IBAN, holderName: 'J M EXAMPLE'},
+	{id: WALLET_EUR, currency: 'EUR', iban: WALLET_IBAN, holderName: 'Jane-Marie Example'},
+	{id: WALLET_GBP, currency: 'GBP', iban: WALLET_IBAN, holderName: 'Jane-Marie Example'},
+	{id: OTHER_GBP, currency: 'GBP', iban: null, holderName: 'Jane-Marie Example'},
 ];
 
 let sequence = 0;
@@ -35,6 +35,7 @@ function tx(overrides: Partial<OwnTransferTransaction> & Pick<OwnTransferTransac
 		transactionType: 'TRANSFER',
 		financialEventType: null,
 		counterpartyIban: null,
+		counterpartyName: null,
 		description: null,
 		override: null,
 		...overrides,
@@ -53,26 +54,31 @@ function detect(transactions: OwnTransferTransaction[]) {
 describe('resolveOwnTransferCounterpartyName', () => {
 	it.each([
 		{
-			name: 'the SEPA name field',
+			name: 'the provider counterparty over the description',
+			input: {counterpartyName: '  Jane-Marie   Example ', description: 'SEPA Overboeking Naam: Example Shop'},
+			expected: 'Jane-Marie Example',
+		},
+		{
+			name: 'the SEPA name field without a counterparty',
 			input: {
+				counterpartyName: null,
 				description: `SEPA Overboeking IBAN: ${WALLET_IBAN} BIC: TESTGB2L Naam: J M Example Omschrijving: savings`,
-				aspspName: 'Example Bank',
 			},
 			expected: 'J M Example',
 		},
 		{
-			name: 'a Revolut outgoing transfer',
-			input: {description: 'To  Jane-Marie Example', aspspName: 'Revolut'},
+			name: 'outgoing transfer wording',
+			input: {counterpartyName: ' ', description: 'To  Jane-Marie Example'},
 			expected: 'Jane-Marie Example',
 		},
 		{
-			name: 'a Revolut incoming transfer',
-			input: {description: 'Payment from Jane-Marie Example', aspspName: 'revolut'},
+			name: 'incoming transfer wording',
+			input: {counterpartyName: null, description: 'Payment from Jane-Marie Example'},
 			expected: 'Jane-Marie Example',
 		},
 		{
-			name: 'nothing for the transfer wording at another bank',
-			input: {description: 'To Jane-Marie Example', aspspName: 'Example Bank'},
+			name: 'nothing for other bank text',
+			input: {counterpartyName: null, description: 'Online banking transfer'},
 			expected: null,
 		},
 	])('uses $name', ({input, expected}) => {
@@ -130,16 +136,48 @@ describe('detectOwnTransfers', () => {
 		});
 	});
 
-	it('ignores the provider counterparty name, which can be the holder themselves', () => {
-		// When the bank omits the creditor, the provider repeats the debtor: the holder's own name.
-		const fee = tx({
+	it('takes name evidence from the provider counterparty at any bank', () => {
+		// The counterparty is only the party the direction names, so the holder's name there is the other side.
+		const outgoing = tx({
 			bankAccountId: BANK_EUR,
-			amount: '-4.50',
+			amount: '-60',
 			transactionType: 'OTHER',
-			description: 'Account fee',
+			counterpartyName: 'Jane-Marie Example',
+			description: 'Online banking transfer',
+		});
+		const incoming = tx({
+			bankAccountId: OTHER_GBP,
+			currency: 'GBP',
+			amount: '60',
+			counterpartyName: 'J.M. Example',
+		});
+		const card = tx({
+			bankAccountId: BANK_EUR,
+			amount: '-9',
+			transactionType: 'CARD_PAYMENT',
+			counterpartyName: 'J M EXAMPLE',
+		});
+		const shop = tx({
+			bankAccountId: BANK_EUR,
+			amount: '-15',
+			counterpartyName: 'Example Shop',
+			description: 'To Jane-Marie Example',
 		});
 
-		expect(detect([{...fee, counterpartyName: 'J M EXAMPLE'} as OwnTransferTransaction])).toEqual({});
+		expect(detect([outgoing, incoming, card, shop])).toEqual({
+			[outgoing.id]: {evidence: OWN_TRANSFER_EVIDENCE.NAME, counterpartId: null},
+			[incoming.id]: {evidence: OWN_TRANSFER_EVIDENCE.NAME, counterpartId: null},
+		});
+	});
+
+	it('reads transfer wording for a name at any bank', () => {
+		const outgoing = tx({bankAccountId: BANK_EUR, amount: '-35', description: 'To Jane-Marie Example'});
+		const incoming = tx({bankAccountId: WALLET_EUR, amount: '35', description: 'Payment from J M Example'});
+
+		expect(detect([outgoing, incoming])).toEqual({
+			[outgoing.id]: {evidence: OWN_TRANSFER_EVIDENCE.NAME, counterpartId: incoming.id},
+			[incoming.id]: {evidence: OWN_TRANSFER_EVIDENCE.NAME, counterpartId: outgoing.id},
+		});
 	});
 
 	it.each([

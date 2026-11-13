@@ -21,7 +21,6 @@ export const OWN_TRANSFER_PAIR_WINDOW_DAYS = 5;
 
 export type OwnTransferAccount = {
 	id: string;
-	aspspName: string;
 	currency: string;
 	iban: string | null;
 	/** Account holder name as reported by the bank. */
@@ -40,6 +39,8 @@ export type OwnTransferTransaction = {
 	transactionType: string | null;
 	financialEventType: string | null;
 	counterpartyIban: string | null;
+	/** The party the direction names (creditor of a debit, debtor of a credit), as the provider reported it. */
+	counterpartyName: string | null;
 	description: string | null;
 	override: OwnTransferOverride | string | null;
 };
@@ -76,7 +77,8 @@ const SALUTATIONS = new Set([
 	'MME',
 	'MLLE',
 ]);
-const REVOLUT_TRANSFER_NAME = /^(?:To|Payment from)\s+(.+)$/i;
+/** Transfer wording that names the other party: "To <name>", "Payment from <name>". */
+const TRANSFER_DESCRIPTION_NAME = /^(?:To|Payment from)\s+(.+)$/i;
 const DAY_MS = 86_400_000;
 
 /**
@@ -120,7 +122,7 @@ export function detectOwnTransfers({
 					)
 				: [],
 		);
-		const evidence = getEvidence(transaction, account, ibanTargets, holderKeys);
+		const evidence = getEvidence(transaction, ibanTargets, holderKeys);
 		legs.push({
 			transaction,
 			day: day ?? Number.NaN,
@@ -182,24 +184,26 @@ export function detectOwnTransfers({
 }
 
 /**
- * The other party's name as the bank wrote it in the description. Only the description counts as name
- * evidence here; the provider's counterparty field is not read.
+ * The other party's name: the provider's counterparty, which is only ever the party the direction names. When the
+ * bank reports none, the name the description gives in a structured SEPA field or in transfer wording, for any bank.
  */
 export function resolveOwnTransferCounterpartyName({
+	counterpartyName,
 	description,
-	aspspName,
 }: {
+	counterpartyName: string | null;
 	description: string | null;
-	aspspName: string;
 }): string | null {
+	const normalizedCounterpartyName = normalizeBankTransactionText(counterpartyName);
+	if (normalizedCounterpartyName) return normalizedCounterpartyName;
+
 	const normalizedDescription = normalizeBankTransactionText(description);
 	if (!normalizedDescription) return null;
 
-	const structuredName = extractStructuredCounterpartyName(normalizedDescription);
-	if (structuredName) return structuredName;
-
-	if (aspspName.trim().toLowerCase() !== 'revolut') return null;
-	return REVOLUT_TRANSFER_NAME.exec(normalizedDescription)?.[1]?.trim() || null;
+	return (
+		extractStructuredCounterpartyName(normalizedDescription) ??
+		(TRANSFER_DESCRIPTION_NAME.exec(normalizedDescription)?.[1]?.trim() || null)
+	);
 }
 
 function isEligible(transaction: OwnTransferTransaction): boolean {
@@ -212,17 +216,13 @@ function isEligible(transaction: OwnTransferTransaction): boolean {
 
 function getEvidence(
 	transaction: OwnTransferTransaction,
-	account: OwnTransferAccount,
 	ibanTargets: Set<string>,
 	holderKeys: Set<string>,
 ): OwnTransferEvidence | null {
 	if (ibanTargets.size > 0) return OWN_TRANSFER_EVIDENCE.IBAN;
 
 	if (transaction.transactionType !== BANK_TRANSACTION_TYPES.CARD_PAYMENT) {
-		const counterpartyName = resolveOwnTransferCounterpartyName({
-			description: transaction.description,
-			aspspName: account.aspspName,
-		});
+		const counterpartyName = resolveOwnTransferCounterpartyName(transaction);
 		if (counterpartyName && matchesHolder(counterpartyName, holderKeys)) return OWN_TRANSFER_EVIDENCE.NAME;
 	}
 

@@ -36,7 +36,7 @@ export async function recomputeOwnTransfers(
 
 	const accounts = (await executor.query(
 		`SELECT account."id", account."currency", account."iban", account."name" AS "holderName",
-			account."identificationHash", connection."aspspName"
+			account."identificationHash"
 		FROM "bank_accounts" account
 		JOIN "bank_connections" connection ON connection."id" = account."bankConnectionId"
 		WHERE connection."accountId" = $1`,
@@ -49,7 +49,7 @@ export async function recomputeOwnTransfers(
 			transaction."currency",
 			to_char(COALESCE(transaction."bookingDate", transaction."transactionDate", transaction."valueDate"), 'YYYY-MM-DD') AS "date",
 			transaction."transactionStatus", transaction."transactionType", transaction."financialEventType",
-			transaction."counterpartyIban", transaction."description",
+			transaction."counterpartyIban", transaction."counterpartyName", transaction."description",
 			transaction."ownTransferOverride" AS "override", transaction."ownTransferEvidence",
 			transaction."ownTransferCounterpartId"
 		FROM "bank_transactions" transaction
