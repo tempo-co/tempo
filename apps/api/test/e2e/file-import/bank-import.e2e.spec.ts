@@ -150,7 +150,11 @@ describe('Bank imports', () => {
 		const fresh = await createVerifiedAccount(httpServer, MAILPIT_API_URL);
 		await accounts.update({id: fresh.id}, {baseCurrency: 'EUR'});
 		// A session of its own for requests sent byte by byte, outside the agent.
-		const login = await request(httpServer).post('/auth/login').send(fresh.credentials).expect(200);
+		const login = await request(httpServer)
+			.post('/auth/login')
+			.set('Origin', ORIGIN)
+			.send(fresh.credentials)
+			.expect(200);
 		const cookie = getSessionCookie(login)!.split(';')[0];
 		return {owner: await accounts.findOneByOrFail({id: fresh.id}), agent: fresh.agent, cookie};
 	}
