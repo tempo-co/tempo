@@ -17,7 +17,8 @@ export async function runParseChild(input: AsyncIterable<Buffer>): Promise<Parse
 	try {
 		return {ok: true, ...parseFile(Buffer.concat(chunks))};
 	} catch (error) {
-		return {ok: false, code: error instanceof ParseRefusal ? error.code : 'parse_failed'};
+		if (!(error instanceof ParseRefusal)) return {ok: false, code: 'parse_failed'};
+		return error.layout ? {ok: false, code: error.code, layout: error.layout} : {ok: false, code: error.code};
 	}
 }
 

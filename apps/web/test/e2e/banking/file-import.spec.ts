@@ -29,6 +29,7 @@ function importSummary(fields: Partial<BankImportSummary> = {}): BankImportSumma
   return {
     id: '00000000-0000-4000-8000-000000000501',
     format: 'camt053',
+    layout: null,
     filesCount: 3,
     rowsParsed: 313,
     rowsAdded: 212,
@@ -262,9 +263,7 @@ test.describe('statement file import on Connections', () => {
     const dialog = await openImport(page);
     await expect(dialog.getByText('Drop statement files here')).toBeVisible();
     await expect(
-      dialog.getByText(
-        'CAMT.053, MT940, ABN AMRO TXT or a Revolut statement (CSV or Excel). Several files or a zip at once.',
-      ),
+      dialog.getByText('Statement files from your bank, several at once or in a zip.'),
     ).toBeVisible();
     await dialog
       .getByTestId('bank-import-file-input')
@@ -363,6 +362,50 @@ test.describe('statement file import on Connections', () => {
       .setInputFiles([statement('statement-april.xml')]);
     await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
     expect(api.uploads).toHaveLength(2);
+  });
+
+  test("lists the supported files, and a file laid out like a bank's export that doesn't read as one names the bank", async ({
+    page,
+  }) => {
+    await mockFileImport(page, {
+      uploads: [refused({code: 'layout_not_recognized', file: 1, layout: 'rabobank-nl'})],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+
+    await dialog.getByRole('button', {name: 'Supported files'}).click();
+
+    const supported = page.getByRole('dialog', {name: 'Supported files'});
+    await expect(supported.getByText('CAMT.053, MT940, OFX and QFX')).toBeVisible();
+    await expect(
+      supported.getByRole('list', {name: 'Bank exports'}).getByRole('listitem'),
+    ).toHaveText([
+      /^ABN AMRO\s*TXT$/,
+      /^ASN Bank\s*CSV$/,
+      /^bunq\s*CSV$/,
+      /^ING\s*CSV$/,
+      /^Knab\s*CSV$/,
+      /^Rabobank\s*CSV$/,
+      /^Revolut\s*CSV and Excel$/,
+    ]);
+    // Closing the list goes back to choosing files, where it was opened.
+    await page.keyboard.press('Escape');
+    await expect(supported).toBeHidden();
+    await expect(dialog.getByRole('heading', {name: 'Import a file'})).toBeVisible();
+    await expect(dialog.getByRole('button', {name: 'Supported files'})).toBeFocused();
+
+    await dialog
+      .getByTestId('bank-import-file-input')
+      .setInputFiles([statement('transactions.csv')]);
+
+    const alert = dialog.getByRole('alert');
+    await expect(
+      alert.getByText("This file doesn't look the way Rabobank's exports usually do"),
+    ).toBeVisible();
+    await expect(alert).toHaveText(
+      /Tempo didn't import anything from it\. Try exporting it again, or use CAMT\.053 or MT940 if your bank offers them\.$/,
+    );
+    await expect(dialog.getByRole('button', {name: 'Choose files'})).toBeVisible();
   });
 
   test('refuses files too large together before uploading them, with the copy the API would answer', async ({

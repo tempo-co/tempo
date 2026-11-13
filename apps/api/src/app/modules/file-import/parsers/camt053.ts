@@ -79,6 +79,7 @@ function parseStatement(statement: Element): NormalizedStatement {
 	const balanceAfter = reconcileBalances(balances, rows, entryOrder(servicerBic(account)));
 	return {
 		format: 'camt053',
+		layout: null,
 		accountIban: iban,
 		accountOtherId: otherId,
 		bank: null,

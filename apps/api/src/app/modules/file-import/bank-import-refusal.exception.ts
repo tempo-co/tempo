@@ -5,7 +5,11 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 	unsupported_format: {
 		status: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
 		message:
-			'This file type is not supported yet. Export a CAMT.053, MT940 or ABN AMRO TXT statement, or a Revolut CSV or Excel statement.',
+			'This file type is not supported yet. Export a CAMT.053, MT940 or OFX statement, or one of the bank exports Tempo reads.',
+	},
+	layout_not_recognized: {
+		status: HttpStatus.UNPROCESSABLE_ENTITY,
+		message: "This file looks like a bank's CSV export, but its rows do not read the way that export's do.",
 	},
 	legacy_xls_not_supported: {
 		status: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
@@ -55,17 +59,20 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 
 /**
  * A refused drop. Nothing was written; `file` names the refused file by its 1-based position, not its name.
- * `accountQuestions` lists the statements the owner must choose an account for.
+ * `accountQuestions` lists the statements the owner must choose an account for; `layout` names the CSV layout a
+ * file refused with `layout_not_recognized` looked like.
  */
 export class BankImportRefusalException extends HttpException {
 	constructor(
 		readonly code: BankImportErrorCode,
 		file: number | null = null,
 		accountQuestions?: BankImportAccountQuestion[],
+		layout?: string,
 	) {
 		const {status, message} = REFUSALS[code];
 		const body: BankImportError = {statusCode: status, message, code, file};
 		if (accountQuestions) body.accountQuestions = accountQuestions;
+		if (layout) body.layout = layout;
 		super(body, status);
 	}
 }

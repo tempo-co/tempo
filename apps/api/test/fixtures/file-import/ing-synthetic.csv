@@ -1,0 +1,5 @@
+"Datum","Naam / Omschrijving","Rekening","Tegenrekening","Code","Af Bij","Bedrag (EUR)","MutatieSoort","Mededelingen"
+"20260305","Example Shop","NL20INGB0001234567","","BA","Af","24,95","Betaalautomaat","Pasvolgnr: 901 Transactie: EX0001 Term: EX01 Valutadatum: 05-03-2026"
+"20260304","Voorbeeld Verhuur BV","NL20INGB0001234567","NL91ABNA0417164300","OV","Af","850,00","Overschrijving","Naam: Voorbeeld Verhuur BV Omschrijving: Huur maart IBAN: NL91ABNA0417164300 Valutadatum: 04-03-2026"
+"20260302","Example Employer BV","NL20INGB0001234567","NL44RABO0123456789","GT","Bij","2500,00","Online bankieren","Naam: Example Employer BV Omschrijving: Salaris februari IBAN: NL44RABO0123456789 Valutadatum: 02-03-2026"
+"20260302","Kwijtschelding","NL20INGB0001234567","","VZ","Bij","0,00","Verzamelbetaling","Valutadatum: 02-03-2026"

@@ -1,10 +1,27 @@
-/** The format of a drop's files; `mixed` when the drop held files of more than one format. */
-export const BANK_IMPORT_FORMATS = ['camt053', 'mt940', 'abnAmroTxt', 'revolutCsv', 'revolutXlsx', 'mixed'] as const;
+/**
+ * The format of a drop's files; `mixed` when the drop held files of more than one format, or bank CSV exports of
+ * more than one layout. `csv` is a bank's CSV export, whose layout `BankImportSummary.layout` names.
+ */
+export const BANK_IMPORT_FORMATS = [
+	'camt053',
+	'mt940',
+	'abnAmroTxt',
+	'revolutCsv',
+	'revolutXlsx',
+	'csv',
+	'ofx',
+	'mixed',
+] as const;
 export type BankImportFormat = (typeof BANK_IMPORT_FORMATS)[number];
 
 /** Why a drop was refused. A refused drop writes nothing. */
 export const BANK_IMPORT_ERROR_CODES = [
 	'unsupported_format',
+	/**
+	 * A file laid out like a bank's CSV export (`layout` names it) whose rows do not read the way that export's do:
+	 * a moved column, another date format, an invalid IBAN or balances that do not follow the amounts.
+	 */
+	'layout_not_recognized',
 	/** An old binary Excel (`.xls`) file: the owner picks another export of the same data. */
 	'legacy_xls_not_supported',
 	'file_too_large',
@@ -64,6 +81,8 @@ export type BankImportError = {
 	 * id) is not listed; the owner names its account in `bankAccountId` instead.
 	 */
 	accountQuestions?: BankImportAccountQuestion[];
+	/** On `layout_not_recognized`: the id of the bank CSV layout the file looked like, such as `ing-nl`. */
+	layout?: string;
 };
 
 /** An account an import wrote to. Accounts removed since (for example by an undo) are left out. */
@@ -93,6 +112,8 @@ export type BankImportAccountWithoutBalance = {
 export type BankImportSummary = {
 	id: string;
 	format: BankImportFormat;
+	/** The bank CSV layout the drop's files were read with (such as `ing-nl`) when `format` is `csv`; else null. */
+	layout: string | null;
 	filesCount: number;
 	rowsParsed: number;
 	rowsAdded: number;

@@ -8,10 +8,14 @@ import {NormalizedStatement, ParseRefusal, StatementFormat} from './parse-result
 
 const FIXTURES = join(__dirname, '../../../../../test/fixtures/file-import');
 const fixture = (name: string) => readFileSync(join(FIXTURES, name));
-// The normalized statements each synthetic export must parse to, without the format and bank fields.
+// The normalized statements each synthetic export must parse to, without the format and bank fields, and without
+// the layout field outside the bank CSV exports.
 const EXPECTED = JSON.parse(fixture('expected.json').toString('utf8')) as Record<
 	string,
-	{format: StatementFormat; statements: Omit<NormalizedStatement, 'format' | 'bank'>[]}
+	{
+		format: StatementFormat;
+		statements: (Omit<NormalizedStatement, 'format' | 'bank' | 'layout'> & {layout?: string | null})[];
+	}
 >;
 
 const statement = (reference: string, sequence: string) =>
@@ -30,7 +34,9 @@ describe('parseFile', () => {
 		expect(result).toEqual({
 			files: 1,
 			formats: [expected.format],
+			layouts: expected.format === 'csv' ? [expected.statements[0].layout] : [],
 			statements: expected.statements.map((statement) => ({
+				layout: null,
 				...statement,
 				format: expected.format,
 				bank: expected.format.startsWith('revolut') ? 'Revolut' : null,

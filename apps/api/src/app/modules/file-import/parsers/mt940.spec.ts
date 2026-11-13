@@ -24,6 +24,7 @@ describe('parseMt940', () => {
 		expect(parseMt940(Buffer.from(file, 'latin1'))).toEqual([
 			{
 				format: 'mt940',
+				layout: null,
 				accountIban: OTHER_EXAMPLE_IBAN,
 				accountOtherId: null,
 				bank: null,

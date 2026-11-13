@@ -5,6 +5,8 @@ import {
   type BankImportErrorCode,
 } from '@tempo/contracts';
 
+import {layoutBank} from './supported-files';
+
 // What one drop may hold, mirrored from the API's apps/api/src/app/modules/file-import/parsers/parse-limits.ts:
 // its parse child loads that file alone, so the limits cannot live in the contracts.
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -16,12 +18,15 @@ export const NOTHING_IMPORTED = 'Nothing was imported.';
 
 type RefusalCopy = {title: string; description: string};
 
-/** Copy for each refusal the dialog shows as a refused state. The two account questions ask instead. */
-const REFUSAL_COPY: Record<BankImportErrorCode, RefusalCopy> = {
+/**
+ * Copy for each refusal the dialog shows as a refused state. The two account questions ask instead; a file that
+ * looks like a bank's CSV export names the bank (`layoutRefusalCopy`).
+ */
+const REFUSAL_COPY: Record<Exclude<BankImportErrorCode, 'layout_not_recognized'>, RefusalCopy> = {
   unsupported_format: {
     title: "Tempo can't read this file",
     description:
-      "It isn't a statement format Tempo knows yet. Export it from your bank as CAMT.053, MT940 or CSV.",
+      "It isn't a statement format Tempo knows yet. Supported files lists the formats and bank exports it reads.",
   },
   legacy_xls_not_supported: {
     title: "Old Excel files aren't supported",
@@ -82,6 +87,16 @@ const REFUSAL_COPY: Record<BankImportErrorCode, RefusalCopy> = {
   },
 };
 
+/** A file laid out like a bank's CSV export whose rows do not read as that export's; it already says nothing came in. */
+function layoutRefusalCopy(layout: string | undefined): RefusalCopy {
+  const bank = layoutBank(layout);
+  return {
+    title: `This file doesn't look the way ${bank ? `${bank}'s` : "your bank's"} exports usually do`,
+    description:
+      "Tempo didn't import anything from it. Try exporting it again, or use CAMT.053 or MT940 if your bank offers them.",
+  };
+}
+
 /** Refusals worth sending the same files again for, without choosing others. */
 const RETRYABLE_CODES: readonly BankImportErrorCode[] = ['account_busy', 'import_busy'];
 
@@ -139,14 +154,20 @@ export function describeRefusal(
   if (refusal.accountQuestions && refusal.accountQuestions.length > 0) {
     return {kind: 'question', code: refusal.code, questions: refusal.accountQuestions};
   }
-  const copy = REFUSAL_COPY[refusal.code];
+  const copy =
+    refusal.code === 'layout_not_recognized'
+      ? layoutRefusalCopy(refusal.layout)
+      : REFUSAL_COPY[refusal.code];
   const fileName =
     refusal.file !== null && fileNames.length > 1 ? fileNames[refusal.file - 1] : undefined;
+  // The layout copy says nothing came in from its file; with other files, the drop's outcome still needs saying.
+  const nothingImported =
+    refusal.code === 'layout_not_recognized' && !fileName ? '' : ` ${NOTHING_IMPORTED}`;
   return {
     kind: 'refused',
     code: refusal.code,
     title: copy.title,
-    description: `${fileName ? `${fileName}: ` : ''}${copy.description} ${NOTHING_IMPORTED}`,
+    description: `${fileName ? `${fileName}: ` : ''}${copy.description}${nothingImported}`,
     retry: RETRYABLE_CODES.includes(refusal.code),
   };
 }

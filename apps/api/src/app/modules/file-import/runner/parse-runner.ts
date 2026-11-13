@@ -9,7 +9,10 @@ export const PARSE_MEMORY_LIMIT_MB = 256;
 export const PARSE_TIMEOUT_MS = 10_000;
 export const PARSE_MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
 
-export type ParseOutcome = {ok: true; result: ParseResult} | {ok: false; code: ParseRefusalCode | 'parse_timeout'};
+export type ParseOutcome =
+	| {ok: true; result: ParseResult}
+	/** `layout`: on `layout_not_recognized` only, the id of the CSV layout the file looked like. */
+	| {ok: false; code: ParseRefusalCode | 'parse_timeout'; layout?: string};
 
 export type ParseChildOptions = {
 	/** Arguments for `process.execPath`; the default runs the parse child with the memory cap. */

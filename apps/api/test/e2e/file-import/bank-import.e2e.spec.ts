@@ -61,6 +61,10 @@ const TXT_FILE = readFileSync(join(FIXTURES, 'TXT260305120000.TAB'));
 // One Revolut export with EUR and RON rows, as CSV and as a workbook.
 const REVOLUT_CSV = readFileSync(join(FIXTURES, 'account-statement_2026-03-01_2026-03-05_en-gb_a0b1c2.csv'));
 const REVOLUT_XLSX = readFileSync(join(FIXTURES, 'account-statement_2026-03-01_2026-03-05_en-gb_a0b1c2.xlsx'));
+// A Rabobank CSV export of two accounts that states balances, and an OFX statement that states none per row.
+const RABOBANK_CSV = readFileSync(join(FIXTURES, 'rabobank-synthetic.csv'));
+const OFX_FILE = readFileSync(join(FIXTURES, 'ofx-sgml-synthetic.ofx'));
+const ING_CSV = readFileSync(join(FIXTURES, 'ing-synthetic.csv'));
 // Enable Banking's identification hash of EXAMPLE_IBAN in EUR, in the shape it uses for IBAN accounts.
 const EXAMPLE_IBAN_HASH = [
 	Buffer.from(
@@ -392,6 +396,7 @@ describe('Bank imports', () => {
 		expect(first.body).toEqual({
 			id: expect.any(String),
 			format: 'camt053',
+			layout: null,
 			filesCount: 1,
 			rowsParsed: 7,
 			rowsAdded: 7,
@@ -1060,6 +1065,92 @@ describe('Bank imports', () => {
 			rowsDoubtful: 0,
 			accounts: csv.body.accounts.map(({id}: BankImportSummary['accounts'][number]) => ({id, created: false})),
 		});
+	});
+
+	it('imports a bank CSV export and an OFX statement, recording the format and the layout of each', async () => {
+		const {owner, agent} = await createOwner();
+
+		const csv = await drop(agent, [RABOBANK_CSV]).expect(201);
+
+		expect(csv.body).toMatchObject({
+			format: 'csv',
+			layout: 'rabobank-nl',
+			rowsParsed: 5,
+			rowsAdded: 5,
+			dateFrom: '2026-03-02',
+			dateTo: '2026-03-05',
+			accounts: [
+				{name: 'NL38 RABO 0300 0000 01', currency: 'EUR', created: true},
+				{name: 'NL11 RABO 0300 0000 02', currency: 'EUR', created: true},
+			],
+			accountsWithoutBalance: [],
+		});
+		expect(await imports.findOneByOrFail({id: csv.body.id})).toMatchObject({format: 'csv', layout: 'rabobank-nl'});
+		const [current, savings] = await bankAccounts.find({
+			where: {id: In(csv.body.accounts.map(({id}: {id: string}) => id))},
+			order: {iban: 'DESC'},
+		});
+		expect([current.iban, current.currentBalanceAmount]).toEqual(['NL38RABO0300000001', '3197.51000000']);
+		expect([savings.iban, savings.currentBalanceAmount]).toEqual(['NL11RABO0300000002', '5250.00000000']);
+		expect(
+			(await transactions.find({where: {bankAccountId: current.id}, order: {bookingDate: 'ASC'}})).map(
+				({amount, balanceAfterAmount, entryReference, counterpartyName}) => [
+					amount,
+					balanceAfterAmount,
+					entryReference,
+					counterpartyName,
+				],
+			),
+		).toEqual([
+			['-12.50000000', '987.50000000', null, 'Example Cafe'],
+			['-250.00000000', '737.50000000', null, 'Test Persoon'],
+			['2500.00000000', '3237.50000000', null, 'Example Employer BV'],
+			['-39.99000000', '3197.51000000', null, 'Voorbeeld Café'],
+		]);
+		const again = await drop(agent, [RABOBANK_CSV]).expect(201);
+		expect(again.body).toMatchObject({format: 'csv', layout: 'rabobank-nl', rowsAdded: 0, rowsAlreadyPresent: 5});
+
+		// The same rows exported in another layout of the same bank are found already there, even in one drop.
+		const bunqDutch = readFileSync(join(FIXTURES, 'bunq-nl-synthetic.csv'));
+		const bunqEnglish = Buffer.from(
+			bunqDutch
+				.toString('utf8')
+				.replace(
+					'"Datum","Bedrag","Rekening","Tegenrekening","Naam","Omschrijving"',
+					'"Date","Amount","Account","Counterparty","Name","Description"',
+				),
+		);
+		const bunq = await drop(agent, [bunqDutch, bunqEnglish]).expect(201);
+		expect(bunq.body).toMatchObject({
+			format: 'mixed',
+			layout: null,
+			rowsParsed: 6,
+			rowsAdded: 3,
+			rowsAlreadyPresent: 3,
+		});
+
+		const ofx = await drop(agent, [OFX_FILE]).expect(201);
+
+		expect(ofx.body).toMatchObject({
+			format: 'ofx',
+			layout: null,
+			rowsParsed: 3,
+			rowsAdded: 3,
+			accounts: [{name: 'NL91 ABNA 0417 1643 00', currency: 'EUR', created: true}],
+			// The statement's ledger balance is not read: the owner is asked for the balance.
+			accountsWithoutBalance: [{id: ofx.body.accounts[0].id, currency: 'EUR'}],
+		});
+		expect(await imports.findOneByOrFail({id: ofx.body.id})).toMatchObject({format: 'ofx', layout: null});
+		expect(
+			(
+				await transactions.find({where: {bankAccountId: ofx.body.accounts[0].id}, order: {bookingDate: 'ASC'}})
+			).map(({amount, entryReference, counterpartyName}) => [amount, entryReference, counterpartyName]),
+		).toEqual([
+			['-12.50000000', 'EX-OFX-0001', 'Café Voorbeeld'],
+			['150.00000000', 'EX-OFX-0002', 'Test Persoon'],
+			['-3.77000000', 'EX-OFX-0003', null],
+		]);
+		expect(await imports.countBy({accountId: owner.id})).toBe(4);
 	});
 
 	async function createSyncedRevolutAccount(owner: Account, currency = 'EUR') {
@@ -1930,6 +2021,14 @@ describe('Bank imports', () => {
 			file: 1,
 		},
 		{
+			name: "a file with a bank's CSV header whose dates are written another way",
+			files: () => [ARCHIVE, Buffer.from(ING_CSV.toString('utf8').replace('"20260305"', '"05-03-2026"'))],
+			status: 422,
+			code: 'layout_not_recognized',
+			file: 2,
+			layout: 'ing-nl',
+		},
+		{
 			name: 'XML that declares entities',
 			files: () => [
 				Buffer.from(
@@ -1980,12 +2079,14 @@ describe('Bank imports', () => {
 			code: 'too_many_files',
 			file: null,
 		},
-	])('refuses $name and writes nothing', async ({files, status, code, file}) => {
+	])('refuses $name and writes nothing', async ({files, status, code, file, layout}) => {
 		const {owner, agent} = await createOwner();
 
 		const response = await drop(agent, files()).expect(status);
 
 		expect(response.body).toMatchObject({code, file});
+		// Only a near miss of a bank's CSV layout names the layout.
+		expect(response.body.layout).toBe(layout);
 		expect(await fileConnection(owner)).toBeNull();
 		expect(await imports.countBy({accountId: owner.id})).toBe(0);
 	});

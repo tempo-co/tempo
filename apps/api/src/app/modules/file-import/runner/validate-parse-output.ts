@@ -1,5 +1,6 @@
 import {normalizeIban} from '@modules/banking/own-transfer/iban';
 
+import {isCsvLayoutId} from '../parsers/csv-layout';
 import {MAX_ARCHIVE_ENTRIES, MAX_ROWS_PER_DROP} from '../parsers/parse-limits';
 import {
 	NormalizedRow,
@@ -31,7 +32,8 @@ const MAX_ACCOUNT_ID_LENGTH = 34;
 const MAX_SEQUENCE_NUMBER_LENGTH = 32;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]+/g;
 
-export type ValidatedParseOutput = {ok: true; result: ParseResult} | {ok: false; code: ParseRefusalCode};
+export type ValidatedParseOutput =
+	{ok: true; result: ParseResult} | {ok: false; code: ParseRefusalCode; layout?: string};
 
 /**
  * Checks everything the parse child returned before any of it is used: the child parsed hostile input, so its
@@ -44,7 +46,13 @@ export function validateParseOutput(output: unknown): ValidatedParseOutput {
 		if (typeof code !== 'string' || !(PARSE_REFUSAL_CODES as readonly string[]).includes(code)) {
 			throw new ParseRefusal('parse_failed');
 		}
-		return {ok: false, code: code as ParseRefusalCode};
+		// Only a near miss of a CSV layout names the layout, and it always does.
+		if (code !== 'layout_not_recognized') {
+			if (record.layout !== undefined) throw new ParseRefusal('parse_failed');
+			return {ok: false, code: code as ParseRefusalCode};
+		}
+		if (!isCsvLayoutId(record.layout)) throw new ParseRefusal('parse_failed');
+		return {ok: false, code, layout: record.layout};
 	}
 	if (record.ok !== true) throw new ParseRefusal('parse_failed');
 	const files = record.files;
@@ -63,6 +71,17 @@ export function validateParseOutput(output: unknown): ValidatedParseOutput {
 	if (!Array.isArray(record.statements)) throw new ParseRefusal('parse_failed');
 
 	const fileFormats = formats.map(validFormat);
+	// The CSV layouts of the files read: at least one when a CSV file was read, none otherwise.
+	const layouts = record.layouts;
+	if (
+		!Array.isArray(layouts) ||
+		layouts.length > files ||
+		new Set(layouts).size !== layouts.length ||
+		!layouts.every(isCsvLayoutId) ||
+		layouts.length > 0 !== fileFormats.includes('csv')
+	) {
+		throw new ParseRefusal('parse_failed');
+	}
 	let rowCount = 0;
 	const statements = record.statements.map((value) => {
 		const rows = asRecord(value).rows;
@@ -72,9 +91,10 @@ export function validateParseOutput(output: unknown): ValidatedParseOutput {
 		const statement = validateStatement(value);
 		// Every statement comes from one of the files read.
 		if (!fileFormats.includes(statement.format)) throw new ParseRefusal('parse_failed');
+		if (statement.layout !== null && !layouts.includes(statement.layout)) throw new ParseRefusal('parse_failed');
 		return statement;
 	});
-	return {ok: true, result: {files, formats: fileFormats, statements}};
+	return {ok: true, result: {files, formats: fileFormats, layouts, statements}};
 }
 
 /** A statement names its account by IBAN or other id, or else, for a file that names none, by its bank. */
@@ -92,8 +112,13 @@ function validateStatement(value: unknown): NormalizedStatement {
 	if (typeof entriesSkipped !== 'number' || !Number.isInteger(entriesSkipped) || entriesSkipped < 0) {
 		throw new ParseRefusal('parse_failed');
 	}
+	const format = validFormat(statement.format);
+	// A statement of a CSV file names its layout; no other statement does.
+	const layout = statement.layout;
+	if (format === 'csv' ? !isCsvLayoutId(layout) : layout !== null) throw new ParseRefusal('parse_failed');
 	return {
-		format: validFormat(statement.format),
+		format,
+		layout: layout as string | null,
 		accountIban,
 		accountOtherId,
 		bank: bank as StatementBank | null,

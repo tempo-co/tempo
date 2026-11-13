@@ -1,3 +1,4 @@
+import {readCsv} from './csv';
 import {amountScale, formatUnits, parseDecimal} from './decimal';
 import {NormalizedRow, NormalizedStatement, ParseRefusal, StatementFormat} from './parse-result';
 import {XlsxCell, readFirstSheet} from './xlsx';
@@ -50,7 +51,10 @@ export function parseRevolutCsv(bytes: Uint8Array): NormalizedStatement[] {
 	} catch {
 		throw new ParseRefusal('parse_failed');
 	}
-	const [header, ...records] = readCsv(text.startsWith(BYTE_ORDER_MARK) ? text.slice(1) : text);
+	const [header, ...records] = readCsv(text.startsWith(BYTE_ORDER_MARK) ? text.slice(1) : text, {
+		delimiter: ',',
+		quote: '"',
+	});
 	if (header?.join(',') !== HEADER_LINE) throw new ParseRefusal('unsupported_format');
 	return revolutStatements(
 		records.map((cells) => {
@@ -120,6 +124,7 @@ function revolutStatements(records: readonly RevolutRecord[], format: StatementF
 		if (!CURRENCY.test(currency)) throw new ParseRefusal('parse_failed');
 		const statement: NormalizedStatement = statements.get(currency) ?? {
 			format,
+			layout: null,
 			accountIban: null,
 			accountOtherId: null,
 			bank: 'Revolut',
@@ -169,39 +174,4 @@ function toDecimal(value: string | null) {
 	const parsed = value === null ? null : parseDecimal(value, '.');
 	if (!parsed) throw new ParseRefusal('parse_failed');
 	return parsed;
-}
-
-/** RFC 4180 records: `"` quotes a field, `""` inside one is a quote; CRLF or LF ends a record. */
-function readCsv(text: string): string[][] {
-	const records: string[][] = [];
-	let record: string[] = [];
-	let field = '';
-	let quoted = false;
-	for (let index = 0; index < text.length; index++) {
-		const character = text[index];
-		if (quoted) {
-			if (character !== '"') field += character;
-			else if (text[index + 1] === '"') {
-				field += '"';
-				index++;
-			} else quoted = false;
-		} else if (character === '"' && field === '') {
-			quoted = true;
-		} else if (character === ',') {
-			record.push(field);
-			field = '';
-		} else if (character === '\n' || character === '\r') {
-			if (character === '\r' && text[index + 1] === '\n') index++;
-			record.push(field);
-			if (record.length > 1 || record[0] !== '') records.push(record);
-			record = [];
-			field = '';
-		} else {
-			field += character;
-		}
-	}
-	if (quoted) throw new ParseRefusal('parse_failed');
-	record.push(field);
-	if (record.length > 1 || record[0] !== '') records.push(record);
-	return records;
 }
