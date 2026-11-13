@@ -80,7 +80,8 @@ Regression matrix worth keeping green: missing/wrong/lowercase/padded confirmati
 ## Provider field normalization
 
 - Normalize currency and debit/credit codes at the authorization/sync persistence boundary. Prove it with padded, mixed-case provider input in real-PostgreSQL E2E; fixtures saved already uppercase prove nothing.
-- Counterparty locality comes from the party the direction names: creditor for `DBIT`, debtor for `CRDT`. If that party is missing or the direction unknown, store no location; the other party may be the account holder. Keep only city, region and a valid two-letter country.
+- The counterparty is the party the direction names: creditor for `DBIT`, debtor for `CRDT` (Enable Banking: the creditor receives the funds, the debtor sends them). Its name and locality come only from that party. If it is missing or the direction unknown, store no name and no location; the other party may be the account holder. Keep only city, region and a valid two-letter country.
+- `description` is bank text: the PSU note, else the remittance, else the bank transaction code's description. It never falls back to the counterparty name; display and merchant identity read that field themselves.
 
 ## Totals and financial events
 

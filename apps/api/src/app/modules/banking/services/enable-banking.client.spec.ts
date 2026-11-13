@@ -838,7 +838,7 @@ describe('EnableBankingClient', () => {
 		expect(mappedTransaction.counterpartyIban).toBe(expected);
 	});
 
-	it('omits location when the direction-selected counterparty is missing', async () => {
+	it('leaves the counterparty empty when the party the direction names is missing', async () => {
 		fetchMock.mockResolvedValueOnce(
 			new Response(
 				JSON.stringify({
@@ -848,6 +848,7 @@ describe('EnableBankingClient', () => {
 							transaction_amount: {currency: 'EUR', amount: '1.00'},
 							credit_debit_indicator: 'DBIT',
 							debtor: {
+								name: 'Account Holder Example',
 								postal_address: {
 									town_name: 'Account Holder Town',
 									country_sub_division: 'Account Holder Region',
@@ -860,21 +861,25 @@ describe('EnableBankingClient', () => {
 							transaction_amount: {currency: 'EUR', amount: '2.00'},
 							credit_debit_indicator: 'CRDT',
 							creditor: {
+								name: 'Account Holder Example',
 								postal_address: {
 									town_name: 'Creditor Town',
 									country_sub_division: 'Creditor Region',
 									country: 'DE',
 								},
 							},
+							bank_transaction_code: {code: 'RCDT', description: 'Example incoming transfer'},
 						},
 						{
 							transaction_id: 'unknown-direction',
 							transaction_amount: {currency: 'EUR', amount: '3.00'},
 							credit_debit_indicator: 'UNKNOWN',
 							creditor: {
+								name: 'Example Creditor',
 								postal_address: {town_name: 'Creditor Town', country: 'DE'},
 							},
 							debtor: {
+								name: 'Account Holder Example',
 								postal_address: {town_name: 'Account Holder Town', country: 'BE'},
 							},
 						},
@@ -886,8 +891,17 @@ describe('EnableBankingClient', () => {
 
 		const {transactions} = await client.getAccountTransactions('account-id', {strategy: 'default'});
 
-		expect(transactions).toHaveLength(3);
-		for (const transaction of transactions) expect(transaction).not.toHaveProperty('counterpartyLocation');
+		// The other party may be the account holder, so neither its name nor its address stands in. Without a note or
+		// remittance, the description is the bank transaction code's text.
+		expect(transactions.map(({description}) => description)).toEqual([
+			undefined,
+			'Example incoming transfer',
+			undefined,
+		]);
+		for (const transaction of transactions) {
+			expect(transaction.counterpartyName).toBeUndefined();
+			expect(transaction).not.toHaveProperty('counterpartyLocation');
+		}
 	});
 
 	it('cancels pagination before dispatching another PSU request', async () => {
