@@ -6,6 +6,7 @@ import {type BankTransactionIdentityInput, assignBankTransactionStableIdentityKe
 import {BankTransaction} from '../bank-transaction.entity';
 import {BankTransactionPersistenceService} from './bank-transaction-persistence.service';
 
+/** The query builder for the upsert, and for the re-check update that follows when a row's input changed. */
 function createInsertQueryBuilder(raw: Array<{id: string; inserted: boolean}>) {
 	return {
 		insert: jest.fn().mockReturnThis(),
@@ -15,6 +16,10 @@ function createInsertQueryBuilder(raw: Array<{id: string; inserted: boolean}>) {
 		orUpdate: jest.fn().mockReturnThis(),
 		returning: jest.fn().mockReturnThis(),
 		updateEntity: jest.fn().mockReturnThis(),
+		update: jest.fn().mockReturnThis(),
+		set: jest.fn().mockReturnThis(),
+		where: jest.fn().mockReturnThis(),
+		andWhere: jest.fn().mockReturnThis(),
 		execute: jest.fn().mockResolvedValue({raw}),
 	};
 }
@@ -478,7 +483,7 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 		expect(repository.createQueryBuilder).toHaveBeenCalledTimes(1);
 	});
 
-	it('resets stale categorization for all qualifying existing rows in one guarded update', async () => {
+	it('sends existing rows whose classification-relevant fields changed back to the model in one guarded update', async () => {
 		const service = createServiceForTransactionValues();
 		const queryBuilder = {
 			insert: jest.fn().mockReturnThis(),
@@ -503,12 +508,22 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 			bookingDate: '2026-09-01',
 			description,
 		}));
-		const existingTransactions = transactions.map((transaction, index) => ({
-			...toBankTransactionValues(service, transaction, bankAccount as unknown as Record<string, unknown>),
+		// Rows 0-2 had another description; row 3 only had other dates and a hash stored under older rules.
+		const existingTransactions = [
+			...transactions,
+			{...transactions[0], providerTransactionId: 'provider-transaction-3'},
+		].map((transaction, index) => ({
+			...toBankTransactionValues(
+				service,
+				index < 3
+					? {...transaction, description: `Earlier ${transaction.description}`}
+					: {...transaction, bookingDate: '2026-08-30'},
+				bankAccount as unknown as Record<string, unknown>,
+			),
 			id: `existing-transaction-${index}`,
-			categoryInputHash: 'stale-input-hash',
-			categorySource: null,
-			categoryStatus: index === 2 ? 'COMPLETED' : 'FAILED',
+			categoryInputHash: 'hash-under-older-rules',
+			categorySource: index === 1 ? 'MANUAL' : 'AI',
+			categoryStatus: index === 2 ? 'FAILED' : 'COMPLETED',
 		}));
 		const repositoryFind = jest
 			.fn()
@@ -527,14 +542,16 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 		).persistTransactions(repository, bankAccount, transactions, 'Synthetic Bank', 'enable-banking');
 
 		expect(queryBuilder.update).toHaveBeenCalledTimes(1);
-		expect(queryBuilder.set).toHaveBeenCalledWith(
-			expect.objectContaining({categoryStatus: 'PENDING', categoryUpdatedAt: null, category: null}),
-		);
+		// The category stays until the model answers for the new input.
+		expect(queryBuilder.set).toHaveBeenCalledWith({categoryStatus: 'PENDING', categoryLastError: null});
 		expect(queryBuilder.where).toHaveBeenCalledWith('"bankAccountId" = :bankAccountId', {
 			bankAccountId: bankAccount.id,
 		});
 		expect(queryBuilder.andWhere).toHaveBeenCalledWith('id IN (:...ids)', {
-			ids: ['existing-transaction-0', 'existing-transaction-1'],
+			ids: ['existing-transaction-0', 'existing-transaction-2'],
+		});
+		expect(queryBuilder.andWhere).toHaveBeenCalledWith('"categoryStatus" IN (:...recheckStatuses)', {
+			recheckStatuses: ['COMPLETED', 'FAILED', 'NOT_APPLICABLE'],
 		});
 		expect(queryBuilder.andWhere).toHaveBeenCalledWith(`"categorySource" IS DISTINCT FROM 'MANUAL'`);
 		expect(queryBuilder.andWhere).toHaveBeenCalledWith('"financialEventType" IS NULL');

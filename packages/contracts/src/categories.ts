@@ -51,7 +51,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'FOOD_AND_DRINK',
 		label: 'Food and drink',
 		description:
-			'Food and beverages for consumption, including groceries, typical convenience-store purchases, restaurants, cafes, takeaways, workplace coffee and tea, drinks, snacks, and vending purchases; equipment, installation, servicing, fuel, and other non-food purchases are excluded.',
+			'Food and beverages for consumption, including groceries, typical convenience-store purchases, restaurants, cafes, takeaways, workplace coffee and tea, drinks, snacks, vending purchases, and dietary supplements such as protein or vitamins; equipment, installation, servicing, fuel, and other non-food purchases are excluded.',
 	},
 	{
 		value: 'TRANSPORTATION',
@@ -63,7 +63,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'SHOPPING',
 		label: 'Shopping',
 		description:
-			'Goods bought from general retailers, including clothing, electronics, household items, and online orders; food, bills, and clearly specialized services belong elsewhere.',
+			'Goods bought from general retailers, including clothing, electronics, household items, drugstore items, and online orders, and small services tied to goods, such as repairs, alterations, and parcel or delivery fees; food, bills, and clearly specialized services belong elsewhere.',
 	},
 	{
 		value: 'SUBSCRIPTIONS',
@@ -93,7 +93,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'PERSONAL_CARE',
 		label: 'Personal care',
 		description:
-			'Hair, beauty, grooming, cosmetics, and similar personal-care services or products; medical treatment belongs in Health.',
+			'Hair, beauty, grooming, cosmetics, toiletries, and similar personal-care services or products, including drugstore purchases of them; medical treatment belongs in Health.',
 	},
 	{
 		value: 'EDUCATION',

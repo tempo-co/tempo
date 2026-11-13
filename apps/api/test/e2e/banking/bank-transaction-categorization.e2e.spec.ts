@@ -15,8 +15,7 @@ import {BANK_TRANSACTION_CATEGORIZATION_QUEUE, CATEGORIZE_BANK_TRANSACTIONS_JOB}
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
-	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION,
-	BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
+	BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION,
 } from '@modules/banking/categorization/bank-transaction-categorization.constants';
 import {
 	BankTransactionCategorizationProviderError,
@@ -25,8 +24,6 @@ import {
 import type {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
-	BankTransactionCategorizationWebSearchInput,
-	BankTransactionCategorizationWebSearchOutcome,
 } from '@modules/banking/categorization/bank-transaction-categorization.types';
 import {CategorizationPipeline} from '@modules/banking/categorization/categorization-pipeline.service';
 import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
@@ -58,53 +55,43 @@ const AI_CATEGORY = 'FOOD_AND_DRINK' as const;
 const AI_CONFIDENCE = 0.875;
 const WEB_CATEGORY = 'SHOPPING' as const;
 const WEB_CONFIDENCE = 0.812;
+const WEB_SEARCH_TRACE = {
+	queries: ['Synthetic ambiguous merchant'],
+	sourceDomains: ['example.test'],
+	evidenceType: 'PURCHASE_CONTEXT' as const,
+};
 let shouldFail = false;
 let searchUnavailable = false;
 /** Sends calls through the real provider, whose transport each test stubs with {@link useClaudeTransport}. */
 let realProvider = false;
 
 const realCategorize = ClaudeBankTransactionCategorizationProvider.prototype.categorize;
-const realCategorizeWithWebSearch = ClaudeBankTransactionCategorizationProvider.prototype.categorizeWithWebSearch;
 
+/**
+ * The provider stub: the model searches only for the ambiguous merchant, whose call allows that search, and skips
+ * the search for every other row.
+ */
 const categorizeSpy = jest
 	.spyOn(ClaudeBankTransactionCategorizationProvider.prototype, 'categorize')
 	.mockImplementation(async function (
 		this: ClaudeBankTransactionCategorizationProvider,
 		transactions: readonly BankTransactionCategorizationInput[],
 		categories,
+		options,
 	): Promise<readonly BankTransactionCategorizationResult[]> {
-		if (realProvider) return realCategorize.call(this, transactions, categories);
+		if (realProvider) return realCategorize.call(this, transactions, categories, options);
 		if (shouldFail) {
 			throw new BankTransactionCategorizationProviderError('synthetic provider failure', false);
 		}
+		const searched = options?.searchQuery === WEB_SEARCH_TRACE.queries[0];
+		if (searched && searchUnavailable) throw new BankTransactionCategorizationUnavailableError();
 		return transactions.map(({correlationId}) => ({
 			correlationId,
-			category: correlationId === CATEGORIZATION_E2E_WEB_TRANSACTION_ID ? 'OTHER' : AI_CATEGORY,
-			confidence: correlationId === CATEGORIZATION_E2E_WEB_TRANSACTION_ID ? 0.25 : AI_CONFIDENCE,
+			category: searched ? WEB_CATEGORY : AI_CATEGORY,
+			confidence: searched ? WEB_CONFIDENCE : AI_CONFIDENCE,
 			provider: 'claude-api',
 			model: 'test-model',
-		}));
-	});
-
-const categorizeWithWebSearchSpy = jest
-	.spyOn(ClaudeBankTransactionCategorizationProvider.prototype, 'categorizeWithWebSearch')
-	.mockImplementation(async function (
-		this: ClaudeBankTransactionCategorizationProvider,
-		transactions: readonly BankTransactionCategorizationWebSearchInput[],
-		categories,
-	): Promise<readonly BankTransactionCategorizationWebSearchOutcome[]> {
-		if (realProvider) return realCategorizeWithWebSearch.call(this, transactions, categories);
-		if (searchUnavailable) throw new BankTransactionCategorizationUnavailableError();
-		return transactions.map(({correlationId}) => ({
-			correlationId,
-			provider: 'claude-api',
-			result: {
-				correlationId,
-				category: WEB_CATEGORY,
-				confidence: WEB_CONFIDENCE,
-				provider: 'claude-api',
-				model: 'test-model',
-			},
+			...(searched ? {searchTrace: WEB_SEARCH_TRACE} : {}),
 		}));
 	});
 
@@ -198,17 +185,15 @@ describe('Bank transaction categorization integration', () => {
 		searchUnavailable = false;
 		realProvider = false;
 		categorizeSpy.mockClear();
-		categorizeWithWebSearchSpy.mockClear();
 	});
 
 	afterAll(() => {
 		shouldFail = false;
 		realProvider = false;
-		categorizeWithWebSearchSpy.mockRestore();
 		categorizeSpy.mockRestore();
 	});
 
-	it('runs the real HTTP, database, queue, worker, and persistence path with a mocked provider response', async () => {
+	it('categorizes a row in one call with its full input, through the real HTTP, queue, worker and database', async () => {
 		const categorizationService = app.get(CategorizationScheduler);
 		await categorizationService.enqueueForTransactions([CATEGORIZATION_E2E_AI_TRANSACTION_ID]);
 
@@ -235,8 +220,11 @@ describe('Bank transaction categorization integration', () => {
 			bankTransactionCode: 'PMNT',
 			bankTransactionSubCode: 'CARD',
 			merchantCategoryCode: '5814',
+			remittanceInformation: 'Fiction and non-fiction',
 		});
 		expect(categorizeSpy.mock.calls[0][1]).toHaveLength(19);
+		// The call may search for the merchant; this model skipped it, so the row stores no search trace.
+		expect(categorizeSpy.mock.calls[0][2]).toEqual({searchQuery: 'Lantern Books'});
 
 		const persisted = await bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_AI_TRANSACTION_ID});
 		expect(persisted).toMatchObject({
@@ -246,6 +234,8 @@ describe('Bank transaction categorization integration', () => {
 			categoryConfidence: String(AI_CONFIDENCE),
 			categoryProvider: 'claude-api',
 			categoryModel: 'test-model',
+			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION,
+			categorySearchTrace: null,
 		});
 	});
 
@@ -271,7 +261,7 @@ describe('Bank transaction categorization integration', () => {
 			expect(row.categoryProvider).not.toBe(BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER);
 		}
 
-		// Each row's hint carries only its own owner's choices, with the amount, currency and date of each.
+		// Each row's hint carries only its own owner's choices, with the amount, currency, date and note of each.
 		const inputs = new Map(
 			categorizeSpy.mock.calls.flatMap(([transactions]) =>
 				transactions.map((input) => [input.correlationId, input]),
@@ -281,14 +271,28 @@ describe('Bank transaction categorization integration', () => {
 			{
 				category: 'TRANSPORTATION',
 				count: 1,
-				recentExamples: [{amount: '-20.00', currency: 'EUR', date: '2026-09-04'}],
+				recentExamples: [
+					{
+						amount: '-20.00',
+						currency: 'EUR',
+						date: '2026-09-04',
+						text: expect.stringContaining('Synthetic Rail'),
+					},
+				],
 			},
 		]);
 		expect(inputs.get(CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID)?.previousManualCategories).toEqual([
 			{
 				category: 'ENTERTAINMENT',
 				count: 1,
-				recentExamples: [{amount: '-20.00', currency: 'EUR', date: '2026-09-04'}],
+				recentExamples: [
+					{
+						amount: '-20.00',
+						currency: 'EUR',
+						date: '2026-09-04',
+						text: expect.stringContaining('Synthetic Rail'),
+					},
+				],
 			},
 		]);
 	});
@@ -334,7 +338,7 @@ describe('Bank transaction categorization integration', () => {
 		expect(inputs.get(CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID)?.sameAmountPayments).toBeUndefined();
 	});
 
-	it("leaves the owner's one-off manual choice out of the next row's hint", async () => {
+	it("sends the owner's one-off manual choice in the next row's hint, for the model to weigh", async () => {
 		await app
 			.get(CategorizationScheduler)
 			.enqueueForTransactions([CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID]);
@@ -344,7 +348,7 @@ describe('Bank transaction categorization integration', () => {
 			(value) => value.categoryStatus === 'COMPLETED',
 		);
 		expect(row).toMatchObject({category: AI_CATEGORY, categorySource: 'AI'});
-		// The one-off choice belongs to the same merchant, so without the filter it would have been the hint.
+		// The one-off choice belongs to the same merchant, whose other rows have another category.
 		const oneOffChoice = await bankTransactionRepository.findOneByOrFail({
 			id: CATEGORIZATION_E2E_ONE_OFF_CHOICE_TRANSACTION_ID,
 		});
@@ -356,8 +360,18 @@ describe('Bank transaction categorization integration', () => {
 		const input = categorizeSpy.mock.calls
 			.flatMap(([transactions]) => transactions)
 			.find(({correlationId}) => correlationId === CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID);
-		expect(input).toMatchObject({correlationId: CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID});
-		expect(input).not.toHaveProperty('previousManualCategories');
+		expect(input?.previousManualCategories).toEqual([
+			{
+				category: 'HEALTH',
+				count: 1,
+				recentExamples: [
+					expect.objectContaining({
+						date: oneOffChoice.transactionDate,
+						text: expect.stringContaining('Synthetic Market'),
+					}),
+				],
+			},
+		]);
 	});
 
 	it('changes no other row when a correction is saved without selecting it', async () => {
@@ -390,7 +404,18 @@ describe('Bank transaction categorization integration', () => {
 		expect(recategorized.categoryProvider).not.toBe(BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER);
 		expect(categorizeSpy).toHaveBeenCalledTimes(1);
 		expect(categorizeSpy.mock.calls[0][0][0].previousManualCategories).toEqual([
-			{category: 'TRAVEL', count: 1, recentExamples: [{amount: '-20.00', currency: 'EUR', date: '2026-09-04'}]},
+			{
+				category: 'TRAVEL',
+				count: 1,
+				recentExamples: [
+					{
+						amount: '-20.00',
+						currency: 'EUR',
+						date: '2026-09-04',
+						text: expect.stringContaining('Synthetic Rail'),
+					},
+				],
+			},
 		]);
 		categorizeSpy.mockClear();
 
@@ -464,16 +489,13 @@ describe('Bank transaction categorization integration', () => {
 		]);
 	});
 
-	it('runs one normal pass and one web-search fallback for an OTHER result', async () => {
+	it('searches, in the same call, for a merchant the model needs to look up', async () => {
 		const categorizationService = app.get(CategorizationScheduler);
 		await categorizationService.enqueueForTransactions([CATEGORIZATION_E2E_WEB_TRANSACTION_ID]);
 
 		const response = await waitFor(
 			() => verifiedAgent.get(`/bank-transactions/${CATEGORIZATION_E2E_WEB_TRANSACTION_ID}`),
-			(value) =>
-				value.status === 200 &&
-				value.body.categoryStatus === 'COMPLETED' &&
-				value.body.category === WEB_CATEGORY,
+			(value) => value.status === 200 && value.body.categoryStatus === 'COMPLETED',
 		);
 
 		expect(response.body).toMatchObject({
@@ -484,105 +506,79 @@ describe('Bank transaction categorization integration', () => {
 			categoryConfidence: String(WEB_CONFIDENCE),
 		});
 		expect(categorizeSpy).toHaveBeenCalledTimes(1);
-		expect(categorizeWithWebSearchSpy).toHaveBeenCalledTimes(1);
-		expect(categorizeWithWebSearchSpy.mock.calls[0][0]).toEqual([
-			{
+		expect(categorizeSpy.mock.calls[0][0]).toEqual([
+			expect.objectContaining({
 				correlationId: CATEGORIZATION_E2E_WEB_TRANSACTION_ID,
 				amount: '-23.00000000',
-				currency: 'EUR',
-				direction: 'EXPENSE',
-				transactionType: 'OTHER',
-				merchantName: 'Synthetic ambiguous merchant',
-				merchantLocation: null,
-				searchQuery: 'Synthetic ambiguous merchant',
-				merchantCategoryCode: null,
-			},
+				description: 'Synthetic ambiguous merchant',
+				counterpartyName: 'Synthetic ambiguous merchant',
+			}),
 		]);
+		expect(categorizeSpy.mock.calls[0][2]).toEqual({searchQuery: 'Synthetic ambiguous merchant'});
 
 		const persisted = await bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_WEB_TRANSACTION_ID});
 		expect(persisted).toMatchObject({
 			category: WEB_CATEGORY,
 			categorySource: 'AI',
-			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
+			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION,
+			categorySearchTrace: WEB_SEARCH_TRACE,
 		});
 	});
 
-	it('sends a row to review, without searching again, when its search used another query', async () => {
-		const transport = await useClaudeTransport(
-			app,
-			jest.fn().mockResolvedValue({
-				stop_reason: 'end_turn',
-				usage: {server_tool_use: {web_search_requests: 1}},
-				content: [
-					{type: 'server_tool_use', name: 'web_search', input: {query: 'Synthetic other query'}},
-					{type: 'web_search_tool_result', content: []},
-					{
-						type: 'text',
-						text: '{"classifications":[{"correlationId":"0","category":"SHOPPING","confidence":0.9,"evidenceType":"PURCHASE_CONTEXT"}]}',
-					},
-				],
-			}),
-		);
+	it('never offers the API a web search, even for a row whose merchant allows one', async () => {
+		const create = jest.fn().mockResolvedValue({
+			stop_reason: 'end_turn',
+			usage: {server_tool_use: {web_search_requests: 0}},
+			content: [
+				{
+					type: 'text',
+					text: '{"classifications":[{"correlationId":"0","category":"SHOPPING","confidence":0.9,"evidenceType":"PURCHASE_CONTEXT"}]}',
+				},
+			],
+		});
+		const transport = await useClaudeTransport(app, create);
 		try {
-			categorizeSpy.mockImplementationOnce(async (transactions) =>
-				transactions.map(({correlationId}) => ({
-					correlationId,
-					category: 'OTHER' as const,
-					confidence: 0.25,
-					provider: 'claude-api',
-					model: 'test-model',
-				})),
-			);
-			await bankTransactionRepository.update(CATEGORIZATION_E2E_WEB_TRANSACTION_ID, {
-				categoryStatus: 'PENDING',
-				categoryAppliedInputHash: null,
-			});
+			await bankTransactionRepository.update(CATEGORIZATION_E2E_WEB_TRANSACTION_ID, {categoryStatus: 'PENDING'});
 			await app.get(CategorizationScheduler).enqueueForTransactions([CATEGORIZATION_E2E_WEB_TRANSACTION_ID]);
 
-			const reviewed = await waitFor(
+			const categorized = await waitFor(
 				() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_WEB_TRANSACTION_ID}),
 				(row) => row.categoryStatus === 'COMPLETED',
 			);
-			expect(reviewed).toMatchObject({
-				category: 'NEEDS_REVIEW',
-				categoryConfidence: '0.000',
+			expect(categorizeSpy.mock.calls[0][2]).toEqual({searchQuery: WEB_SEARCH_TRACE.queries[0]});
+			expect(create).toHaveBeenCalledTimes(1);
+			const [request] = create.mock.calls[0];
+			expect(request).not.toHaveProperty('tools');
+			expect(JSON.parse(request.messages[0].content)).not.toHaveProperty('searchQuery');
+			expect(categorized).toMatchObject({
+				category: 'SHOPPING',
+				categoryConfidence: '0.900',
 				categorySource: 'AI',
 				categoryProvider: 'claude-api',
-				categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_FAILED_PROMPT_VERSION,
-				categorySearchTrace: {queries: [], sourceDomains: [], evidenceType: 'INSUFFICIENT'},
+				categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION,
+				categorySearchTrace: null,
 				categoryLastError: null,
 			});
-			expect(categorizeWithWebSearchSpy).toHaveBeenCalledTimes(1);
 		} finally {
 			await transport.restore();
 		}
 	});
 
-	it('keeps a row pending when its web search is unavailable on both routes, then completes it on retry', async () => {
+	it('keeps a row pending, with its category, when its call is unavailable on both routes, then completes it on retry', async () => {
 		searchUnavailable = true;
 		const categorizationService = app.get(CategorizationScheduler);
-		await bankTransactionRepository.update(CATEGORIZATION_E2E_WEB_TRANSACTION_ID, {
-			category: null,
-			categoryStatus: 'PENDING',
-			categorySource: null,
-			categoryConfidence: null,
-			categoryAppliedInputHash: null,
-			categoryProvider: null,
-			categoryModel: null,
-			categoryPromptVersion: null,
-			categorySearchTrace: null,
-			categoryLastError: null,
-		});
+		// The previous test left the row categorized; a changed input sends it back to the model.
+		await bankTransactionRepository.update(CATEGORIZATION_E2E_WEB_TRANSACTION_ID, {categoryStatus: 'PENDING'});
 		await expect(
 			app.get(CategorizationPipeline).processTransactionJob([CATEGORIZATION_E2E_WEB_TRANSACTION_ID]),
 		).rejects.toThrow(BankTransactionCategorizationUnavailableError);
 		const pending = await bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_WEB_TRANSACTION_ID});
 		expect(pending).toMatchObject({
-			category: null,
+			category: 'SHOPPING',
 			categoryStatus: 'PENDING',
 			categoryLastError: 'Claude categorization is temporarily unavailable.',
 		});
-		expect(categorizeWithWebSearchSpy).toHaveBeenCalledTimes(1);
+		expect(categorizeSpy).toHaveBeenCalledTimes(1);
 
 		searchUnavailable = false;
 		await categorizationService.reconcilePendingTransactions({includeFailed: false});
@@ -592,7 +588,7 @@ describe('Bank transaction categorization integration', () => {
 		);
 		expect(recovered).toMatchObject({
 			category: WEB_CATEGORY,
-			categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_WEB_SEARCH_PROMPT_VERSION,
+			categorySearchTrace: WEB_SEARCH_TRACE,
 			categoryLastError: null,
 		});
 	});
@@ -632,7 +628,6 @@ describe('Bank transaction categorization integration', () => {
 				categoryLastError: 'Claude categorization is temporarily unavailable.',
 			});
 			expect(modelCallsForRow()).toBe(1);
-			expect(categorizeWithWebSearchSpy).not.toHaveBeenCalled();
 			const pendingResponse = await verifiedAgent
 				.get(`/bank-transactions/${CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID}`)
 				.expect(200);
@@ -770,8 +765,8 @@ describe('Bank transaction categorization integration', () => {
 			.get(CategorizationPipeline)
 			.processTransactionJob([pending, failed, abandoned, working, manual, completed].map(({id}) => id));
 
-		expect(categorizeSpy).toHaveBeenCalledTimes(1);
-		expect(categorizeSpy.mock.calls[0][0].map(({correlationId}) => correlationId)).toEqual([
+		// One call per merchant, as each row names a different one.
+		expect(categorizeSpy.mock.calls.flatMap(([inputs]) => inputs.map(({correlationId}) => correlationId))).toEqual([
 			pending.id,
 			failed.id,
 			abandoned.id,

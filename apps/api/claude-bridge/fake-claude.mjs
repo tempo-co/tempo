@@ -55,7 +55,7 @@ if (args[0] === 'doctor') {
 		emit({type: 'assistant', message: {content: [{type: 'tool_use', name: 'WebSearch', input: {query: 'x'}}]}});
 	const searches = {'search-none': 0, 'search-twice': 2}[mode] ?? 1;
 	for (let i = 0; searchRun && i < searches; i++) {
-		const query = mode === 'search-other-query' ? 'other query' : parsed.transactions[0].searchQuery;
+		const query = mode === 'search-other-query' ? 'other query' : parsed.searchQuery;
 		emit({
 			type: 'assistant',
 			message: {content: [{type: 'tool_use', id: `t${i}`, name: 'WebSearch', input: {query, mode: 'standard'}}]},
@@ -113,7 +113,7 @@ if (args[0] === 'doctor') {
 			correlationId,
 			category: mode === 'bad-category' ? 'INVENTED' : 'SHOPPING',
 			confidence: mode === 'bad-confidence' ? 4 : 0.9,
-			...(searchRun && mode !== 'search-no-evidence' ? {evidenceType: 'MERCHANT_IDENTITY_ONLY'} : {}),
+			...(mode !== 'no-evidence-type' ? {evidenceType: 'MERCHANT_IDENTITY_ONLY'} : {}),
 		}));
 		if (mode === 'wrong-id') classifications[0].correlationId = 'unknown';
 		if (mode === 'duplicate-id') classifications.push(classifications[0]);
