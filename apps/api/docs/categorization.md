@@ -48,6 +48,8 @@ Own transfers and currency exchanges never reach the model, and `MANUAL` rows ar
 
 Outgoing payments to a person follow a fixed order, never `NEEDS_REVIEW`: goods or a purpose named in the text → that category (a gift, birthday or present → `GIFTS_AND_DONATIONS`); otherwise owner picks for that payee that all name one category (other than `TRANSFER_OUT`) → that category, unless the payment's amount or note clearly differs; otherwise at least two earlier same-amount, same-currency payments to that person with a manual or purpose-derived category → reuse it; otherwise `TRANSFER_OUT`. Mixed owner picks for one person decide nothing. The amount matching happens in code (`sameAmountPayments`); the model only receives the matches. Money received from a person stays `TRANSFER_IN`.
 
+Money received from a government (an income tax refund, an allowance, a benefit) is `INCOME`. It is `REFUND` only when it pays back a payment the owner made from their account, such as an overpaid municipal tax bill or a cancelled fine. Income tax is mostly withheld from salary and never shows as spending, so calling its refund `REFUND` would reduce spending that was never counted. The `INCOME`, `REFUND` and `TAXES_AND_GOVERNMENT` descriptions in `categories.ts` carry this boundary to the model.
+
 ## Routes and failure handling
 
 The Anthropic API is tried first, then the host-side subscription bridge over a Unix socket (`AI_CATEGORIZATION_SUBSCRIPTION_SOCKET`). Result metadata names the route that answered (`claude-api` or `claude-subscription`). Never add a paid route after the subscription.

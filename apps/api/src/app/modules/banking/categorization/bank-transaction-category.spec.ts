@@ -66,5 +66,10 @@ describe('bank transaction categorization contract', () => {
 		expect(description('SHOPPING')).toContain('repairs, cleaning, postage');
 		expect(description('TAXES_AND_GOVERNMENT')).toContain('fines, passport, ID, permit, and registration fees');
 		expect(description('GIFTS_AND_DONATIONS')).toContain('an item bought in a shop as a gift is Shopping');
+		expect(description('TAXES_AND_GOVERNMENT')).toContain('money received from a government is Income or Refund');
+		expect(description('INCOME')).toContain('money received from a government, such as income tax refunds');
+		expect(description('INCOME')).toContain('unless it pays back a payment the owner made from their account');
+		expect(description('REFUND')).toContain('pays back a payment the owner made from their account');
+		expect(description('REFUND')).toContain('and is otherwise Income');
 	});
 });
