@@ -413,10 +413,10 @@ function readAmount(cells: readonly TableCell[], layout: CsvLayout): Decimal {
 	const credit = read(cells[amount.creditColumn]);
 	const filled = [debit, credit].filter((value) => value !== null && value.units !== 0n);
 	if (filled.length > 1 || (debit === null && credit === null)) throw new RowProblem();
-	const magnitude = (value: Decimal) => (value.units < 0n ? -value.units : value.units);
-	if (debit && debit.units !== 0n) return {units: -magnitude(debit), scale: debit.scale};
-	const side = credit ?? debit!;
-	return {units: magnitude(side), scale: side.scale};
+	// Each side is read by its sign: money out v is -v and money in v is v, so a negative money in (a reversal) is
+	// money out and a negative money out is money in.
+	if (debit && debit.units !== 0n) return {units: -debit.units, scale: debit.scale};
+	return credit ?? {units: 0n, scale: debit!.scale};
 }
 
 /**

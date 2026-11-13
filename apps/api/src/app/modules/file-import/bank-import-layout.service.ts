@@ -22,7 +22,7 @@ import {LayoutAnswer, toMapperInput} from './mapper/layout-mapper.contract';
 import {CsvLayout, MAX_SKIP_AFTER, MAX_SKIP_BEFORE, validateCsvLayout} from './parsers/csv-layout';
 import {ISO_CURRENCY_CODES} from './parsers/currency-codes';
 import {amountScale, formatUnits, parseDecimal} from './parsers/decimal';
-import {NormalizedRow, NormalizedStatement} from './parsers/parse-result';
+import {NormalizedRow, NormalizedStatement, STATEMENT_BANKS} from './parsers/parse-result';
 import {TableSample} from './parsers/table-sample';
 import {ParseRunnerService} from './runner/parse-runner.service';
 
@@ -30,6 +30,8 @@ import {ParseRunnerService} from './runner/parse-runner.service';
 export const MAX_PROPOSALS_PER_DAY = 5;
 export const PROPOSAL_LIFETIME_MS = 60 * 60 * 1000;
 export const MAX_SAVED_LAYOUTS = 50;
+/** A saved layout's JSON at most: an owner's 50 always fit one request to the parse child. */
+export const MAX_SAVED_LAYOUT_BYTES = 16 * 1024;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_BANK_NAME_LENGTH = 60;
 const PREVIEW_FIRST_ROWS = 5;
@@ -46,6 +48,9 @@ export const LAYOUT_NOT_FOUND = 'Layout not found.';
 export const INVALID_BANK_NAME = 'Name the bank in 1 to 60 characters.';
 export const INVALID_CURRENCY = 'Choose the currency of this file.';
 export const CURRENCY_NOT_ASKED = 'This file states its currency.';
+/** A bank whose built-in files name no account: a layout under its name would share its imported-files accounts. */
+const reservedBankName = (bank: string) =>
+	`${bank}'s own exports already import into your ${bank} accounts. Name this bank differently.`;
 
 /**
  * Works out the columns of a file no reader claims, with one model call that sees only a masked sample, and keeps the
@@ -161,6 +166,8 @@ export class BankImportLayoutService {
 		const bankName =
 			typeof request.bankName === 'string' ? request.bankName.replace(CONTROL_CHARACTERS, ' ').trim() : '';
 		if (!bankName || bankName.length > MAX_BANK_NAME_LENGTH) throw new BadRequestException(INVALID_BANK_NAME);
+		const reserved = STATEMENT_BANKS.find((bank) => bank.toLowerCase() === bankName.toLowerCase());
+		if (reserved) throw new BadRequestException(reservedBankName(reserved));
 		return this.dataSource.transaction(async (manager) => {
 			await lockOwner(manager, ownerId);
 			const proposal = await this.lockProposal(manager, ownerId, proposalId);
@@ -186,6 +193,9 @@ export class BankImportLayoutService {
 			});
 			// Only a layout stored by an older build of these checks gets here.
 			if (!validation.ok) throw new ConflictException(LAYOUT_PROPOSAL_DECIDED);
+			if (Buffer.byteLength(JSON.stringify(validation.layout)) > MAX_SAVED_LAYOUT_BYTES) {
+				throw new BankImportRefusalException('layout_not_mappable');
+			}
 			const saved = await layouts.save(
 				layouts.create({id, accountId: ownerId, layout: validation.layout, bankName}),
 			);
@@ -290,7 +300,8 @@ function bankNameOf(value: string | null): string | null {
 /**
  * The layout the answer describes, on the table the parse child found: its header (or column count), source and
  * skipped lines come from the file, the columns and formats from the answer. Only the answer's layout fields are
- * used. Null when the answer cannot be one (a currency that is no code, an account line that is not above the table).
+ * used. Null when the answer names a currency that is no ISO 4217 code; `validateCsvLayout` checks everything else,
+ * such as an account line that is not above the table.
  */
 export function buildLayout(
 	answer: LayoutAnswer,

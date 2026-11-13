@@ -21,6 +21,8 @@ const TODAY = new Date('2026-11-12T10:00:00+01:00');
 const CHECKING = MOCK_CONNECTION.bankAccounts[0];
 const FILE_ACCOUNT_ID = '00000000-0000-4000-8000-000000000401';
 const LAYOUT_ID = '00000000-0000-4000-8000-000000000601';
+const RESERVED_BANK_NAME =
+  "Revolut's own exports already import into your Revolut accounts. Name this bank differently.";
 
 /** A proposal for a synthetic German-style export: debit and credit columns, the account on a line above. */
 function layoutProposal(fields: Partial<BankImportLayoutProposal> = {}): BankImportLayoutProposal {
@@ -211,6 +213,12 @@ async function mockFileImport(
   await page.route(`${API_URL}/bank-imports/layout-proposals/*/confirm`, (route) => {
     const request = route.request().postDataJSON() as ConfirmBankImportLayoutProposalRequest;
     api.confirms.push(request);
+    if (request.bankName.trim().toLowerCase() === 'revolut')
+      return fulfillJson(
+        route,
+        {statusCode: 400, message: RESERVED_BANK_NAME, error: 'Bad Request'},
+        400,
+      );
     const layout = {id: LAYOUT_ID, bankName: request.bankName, createdAt: TODAY.toISOString()};
     api.layouts = [layout, ...api.layouts];
     return fulfillJson(route, layout, 201);
@@ -654,7 +662,14 @@ test.describe('statement file import on Connections', () => {
     const confirm = dialog.getByRole('button', {name: 'Looks right'});
     await expect(preview.getByLabel('Bank')).toHaveValue('');
     await expect(confirm).toBeDisabled();
+    // A name the API refuses says why under the field, and the preview stays.
+    await preview.getByLabel('Bank').fill('Revolut');
+    await confirm.click();
+    await expect(preview.getByText(RESERVED_BANK_NAME)).toBeVisible();
+    await expect(preview.getByLabel('Bank')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByText("Couldn't save this layout")).toHaveCount(0);
     await preview.getByLabel('Bank').fill('  Example Savings Bank ');
+    await expect(preview.getByText(RESERVED_BANK_NAME)).toHaveCount(0);
     await expect(preview.getByLabel('Currency')).toHaveText('EUR');
     await preview.getByLabel('Currency').click();
     await page.getByRole('option', {name: 'GBP'}).click();
@@ -667,7 +682,10 @@ test.describe('statement file import on Connections', () => {
     await confirm.click();
 
     await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
-    expect(api.confirms).toEqual([{bankName: 'Example Savings Bank', currency: 'GBP'}]);
+    expect(api.confirms).toEqual([
+      {bankName: 'Revolut', currency: 'EUR'},
+      {bankName: 'Example Savings Bank', currency: 'GBP'},
+    ]);
   });
 
   test('Not right discards the proposal and imports nothing; Cancel stops waiting and keeps the files', async ({

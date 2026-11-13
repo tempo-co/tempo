@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/responsive-dialog';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {useIsMobile} from '@/hooks/use-is-mobile';
-import {wasToasted} from '@/utils/api';
+import {HttpError, NetworkError, wasToasted} from '@/utils/api';
 import {cn} from '@/utils/cn';
 
 import {bankImportsQueryOptions} from '../api/use-bank-imports';
@@ -275,6 +275,8 @@ function PreviewStep({
   const [bankName, setBankName] = useState(proposal.bankName ?? '');
   const [currency, setCurrency] = useState(proposal.defaultCurrency);
   const [pending, setPending] = useState(false);
+  // Why the API refused the name, such as a bank whose own files Tempo reads; cleared as the name changes.
+  const [bankError, setBankError] = useState<string | null>(null);
   const name = bankName.trim();
 
   const confirm = async () => {
@@ -284,6 +286,10 @@ function PreviewStep({
     } catch (error) {
       setPending(false);
       if (wasToasted(error)) return;
+      if (error instanceof HttpError && !(error instanceof NetworkError) && error.status === 400) {
+        setBankError(error.message);
+        return;
+      }
       toast.error("Couldn't save this layout", {
         description: 'Please try again in a moment.',
         id: 'bank-import-layout-confirm-failed',
@@ -299,7 +305,11 @@ function PreviewStep({
         <LayoutPreview
           proposal={proposal}
           bankName={bankName}
-          onBankName={setBankName}
+          bankError={bankError}
+          onBankName={(value) => {
+            setBankName(value);
+            setBankError(null);
+          }}
           currency={currency}
           onCurrency={setCurrency}
           disabled={pending}

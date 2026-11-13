@@ -432,6 +432,43 @@ describe("an owner's saved layouts", () => {
 		);
 	});
 
+	it('read a negative entry by its sign: a negative money in is money out, a negative money out is money in', () => {
+		const layout: CsvLayout = {
+			id: 'learned-reversals',
+			bank: 'Example Bank',
+			recognize: {header: ['Date', 'Out', 'In', 'Balance']},
+			delimiter: ';',
+			quote: '"',
+			encoding: 'utf-8',
+			decimalMark: ',',
+			dateFormat: 'DD.MM.YYYY',
+			currency: {fixed: 'EUR'},
+			bookingDate: 0,
+			amount: {kind: 'debitCredit', debitColumn: 1, creditColumn: 2},
+			balance: {column: 3, when: 'after'},
+			description: [],
+		};
+		const file = (balances: string[]) =>
+			[
+				'Date;Out;In;Balance',
+				`01.03.2026;10,00;;${balances[0]}`,
+				`02.03.2026;;-5,00;${balances[1]}`,
+				`03.03.2026;-2,00;;${balances[2]}`,
+				'',
+			].join('\n');
+
+		expect(ROWS_OF(layout, file(['90,00', '85,00', '87,00']))?.[0].rows).toEqual([
+			['2026-03-01', '-10.00', '90.00'],
+			['2026-03-02', '-5.00', '85.00'],
+			['2026-03-03', '2.00', '87.00'],
+		]);
+		// Balances that follow the entries as unsigned amounts on their column's side do not agree.
+		expect(refusal(file(['90,00', '95,00', '93,00']), [layout])).toEqual({
+			code: 'layout_not_recognized',
+			layout: 'learned-reversals',
+		});
+	});
+
 	it('refuse a file whose amounts are all zero, and a header without rows', () => {
 		const zero = ['Date,Description,Type,Amount,Balance', '02/03/2026,Example,DEB,0.00,1.00', ''].join('\n');
 		const nearMiss = {code: 'layout_not_recognized', layout: BALANCE.id};

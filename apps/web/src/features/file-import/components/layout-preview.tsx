@@ -64,6 +64,7 @@ const CURRENCIES = [
 export function LayoutPreview({
   proposal,
   bankName,
+  bankError,
   onBankName,
   currency,
   onCurrency,
@@ -71,6 +72,8 @@ export function LayoutPreview({
 }: {
   proposal: BankImportLayoutProposal;
   bankName: string;
+  /** Why the API refused the name, shown under the field. */
+  bankError: string | null;
   onBankName: (value: string) => void;
   currency: string;
   onCurrency: (value: string) => void;
@@ -79,6 +82,7 @@ export function LayoutPreview({
   const {preview, mapping, dateCheck, currencyNeeded} = proposal;
   const bankField = useId();
   const currencyField = useId();
+  const bankHint = useId();
   const range = formatDateRange(preview.dateFrom, preview.dateTo);
   // A file that states no currency previews in the default one; the owner's choice shows at once.
   const rowCurrency = (row: BankImportLayoutPreviewRow) =>
@@ -161,11 +165,19 @@ export function LayoutPreview({
             maxLength={60}
             autoComplete='off'
             disabled={disabled}
+            aria-invalid={bankError ? true : undefined}
+            aria-describedby={bankHint}
             onChange={(event) => onBankName(event.target.value)}
           />
-          <p className='text-xs text-muted-foreground'>
-            Files of this layout are listed under this name.
-          </p>
+          {bankError ? (
+            <p id={bankHint} role='alert' className='text-xs text-destructive'>
+              {bankError}
+            </p>
+          ) : (
+            <p id={bankHint} className='text-xs text-muted-foreground'>
+              Files of this layout are listed under this name.
+            </p>
+          )}
         </div>
         {currencyNeeded && (
           <div className='grid gap-1.5'>

@@ -345,6 +345,52 @@ describe('Bank import column mapper', () => {
 		]);
 	});
 
+	it("refuses a bank name of Tempo's own files that name no account, so a layout never shares their accounts", async () => {
+		const {owner, agent} = await createOwner();
+		mapLayout.mockResolvedValueOnce(ANSWER.balance);
+		const proposed = await propose(agent, BALANCE_CSV).expect(201);
+
+		for (const bankName of [' revolut ', 'REVOLUT']) {
+			const refused = await confirm(agent, proposed.body.id, {bankName, currency: 'GBP'}).expect(400);
+			expect(refused.body.message).toBe(
+				"Revolut's own exports already import into your Revolut accounts. Name this bank differently.",
+			);
+		}
+		expect(await layouts.countBy({accountId: owner.id})).toBe(0);
+		await confirm(agent, proposed.body.id, {bankName: 'Revolut Example', currency: 'GBP'}).expect(201);
+	});
+
+	it('refuses to save a layout too large to send to the file reader with the others', async () => {
+		const {owner, agent} = await createOwner();
+		// 100 headings of 190 characters: a layout of about 20 KiB.
+		const headings = Array.from({length: 100}, (_, index) => `Heading ${index} `.padEnd(190, 'x'));
+		const filler = Array.from({length: 98}, () => 'x');
+		const wide = Buffer.from(
+			[
+				headings.join(';'),
+				['02.03.2026', '-12,50', ...filler].join(';'),
+				['03.03.2026', '-4,20', ...filler].join(';'),
+				'',
+			].join('\n'),
+		);
+		mapLayout.mockResolvedValueOnce({
+			...ANSWER.balance,
+			dateFormat: 'DD.MM.YYYY',
+			amount: {kind: 'signed', column: 1},
+			decimalMark: ',',
+			thousandsSeparator: null,
+			currency: {code: 'EUR'},
+			balance: null,
+			description: [],
+		});
+		const proposed = await propose(agent, wide).expect(201);
+
+		const refused = await confirm(agent, proposed.body.id, {bankName: 'Example Bank'}).expect(422);
+
+		expect(refused.body).toMatchObject({code: 'layout_not_mappable'});
+		expect(await layouts.countBy({accountId: owner.id})).toBe(0);
+	});
+
 	it('removes a saved layout without touching what it imported', async () => {
 		const {agent} = await createOwner();
 		const saved = await saveLayout(agent, HEADERLESS_CSV, ANSWER.headerless, {bankName: 'Example Bank'});

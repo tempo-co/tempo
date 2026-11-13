@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
 import {createWorkbook} from '../../../../../test/fixtures/statement-file.fixture';
+import {validateSampleOutput} from '../runner/validate-parse-output';
 import {maskTable} from './table-mask';
 import {sampleTable} from './table-sample';
 
@@ -46,6 +47,7 @@ describe('maskTable', () => {
 			],
 			linesBelow: [['Aaaaaa', '99,99']],
 			columnShapes: ['Aa', 'AAA', 'Aaa Aaaaaaa', '9,99'],
+			columns: expect.any(Array),
 		});
 	});
 
@@ -88,6 +90,57 @@ describe('maskTable', () => {
 		});
 
 		expect(masked.header).toEqual(['Datum', 'Aaaaaaaa AA99AAAA9999999999']);
+	});
+
+	it('lists the distinct shapes each column takes over the whole table, most frequent first, and whether it repeats one value', () => {
+		const iban = 'DE89370400440532013000';
+		const masked = maskTable({
+			header: null,
+			linesAbove: [],
+			rows: [
+				['12,50', iban, 'Af', 'Example Shop'],
+				['1.234,56', iban, 'Bij', 'Example Shop'],
+				['', iban, 'Af', 'x'.repeat(70)],
+				['3,40', iban, 'Af', 'EUR'],
+			],
+			linesBelow: [],
+			columnCount: 4,
+		});
+
+		expect(masked.columns).toEqual([
+			// Ties keep the order the shapes first appear in.
+			{shapes: ['99,99', '9.999,99', '', '9,99'], sameValue: false},
+			{shapes: ['AA99999999999999999999'], sameValue: true},
+			{shapes: ['Aa', 'Aaa'], sameValue: false},
+			// No exceptions: currency codes and short values are masked too.
+			{shapes: ['Aaaaaaa Aaaa', 'a'.repeat(60), 'AAA'], sameValue: false},
+		]);
+		expect(JSON.stringify(masked.columns)).not.toMatch(/Example|DE89|Bij|EUR|1|2|3|4|5/);
+	});
+
+	it('keeps at most six shapes of a column, the empty one always among them, and needs three rows for one value', () => {
+		const masked = maskTable({
+			header: null,
+			linesAbove: [],
+			rows: [
+				...['1', '22', '333', '4444', '55555', '666666', '7777777'].flatMap((value) => [[value], [value]]),
+				[''],
+			],
+			linesBelow: [],
+			columnCount: 1,
+		});
+		expect(masked.columns[0].shapes).toEqual(['9', '99', '999', '9999', '99999', '']);
+
+		const twoRows = maskTable({header: null, linesAbove: [], rows: [['X'], ['X']], linesBelow: [], columnCount: 1});
+		expect(twoRows.columns).toEqual([{shapes: ['A'], sameValue: false}]);
+		const threeRows = maskTable({
+			header: null,
+			linesAbove: [],
+			rows: [['X'], [''], ['X'], ['X']],
+			linesBelow: [],
+			columnCount: 1,
+		});
+		expect(threeRows.columns).toEqual([{shapes: ['A', ''], sameValue: true}]);
 	});
 
 	it('keeps the first, middle and last rows only, the 10 lines above the table and the 3 below it', () => {
@@ -174,6 +227,43 @@ describe('sampleTable', () => {
 				Buffer.from(text.replace(';extra', '').replace('2026-03-06;-3.00;EUR;Example', 'Total;-22.70')),
 			),
 		).toMatchObject({rowCount: 4, skipAfter: 1});
+	});
+
+	it('reads a comma file with quoted decimal-comma amounts with the quote that keeps them whole', () => {
+		const sample = sampleTable(fixture('headerless-direction-synthetic.csv'));
+
+		expect(sample).toMatchObject({
+			shape: {source: 'text', delimiter: ',', quote: '"'},
+			columnCount: 6,
+			header: null,
+		});
+		expect(sample?.masked.rows[0].slice(0, 4)).toEqual(['99999999', 'AA99AAAA9999999999', 'Af', '99,99']);
+		expect(JSON.stringify(sample?.masked)).not.toContain('\\"');
+	});
+
+	it('masks every numeric character in the column shapes, so a superscript in any row cannot stop the sample', () => {
+		const lines = fixture('headerless-direction-synthetic.csv').toString('utf8').split('\r\n');
+		// Row 4 is none of the first, middle and last rows the model sees as rows.
+		lines[3] = lines[3].replace(/,[^,]*$/, ',Huur 50m²');
+		const sample = sampleTable(Buffer.from(lines.join('\r\n')));
+
+		expect(sample?.masked.columns[5].shapes).toContain('Aaaa 99a9');
+		expect(() => validateSampleOutput({ok: true, sample})).not.toThrow();
+	});
+
+	it('keeps the double quote for a file whose cells start with an apostrophe, as Dutch names do', () => {
+		const text = [
+			'2026-03-02,"\'t Hoekje","\'s-Hertogenbosch","-12,50"',
+			'2026-03-03,"\'t Winkeltje","\'s-Gravenhage","-4,20"',
+			'2026-03-04,"Example Shop","Example City","-1,00"',
+			'',
+		].join('\n');
+
+		expect(sampleTable(Buffer.from(text))).toMatchObject({
+			shape: {delimiter: ',', quote: '"'},
+			columnCount: 4,
+			rowCount: 3,
+		});
 	});
 
 	it('finds a table without a header, and a workbook', () => {

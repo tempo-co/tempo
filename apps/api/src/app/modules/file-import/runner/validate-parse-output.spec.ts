@@ -176,6 +176,11 @@ describe('validateSampleOutput', () => {
 				rows: [['99-99-9999', '-99,99', 'Af']],
 				linesBelow: [],
 				columnShapes: ['99-99-9999', '-99,99', 'Aa'],
+				columns: [
+					{shapes: ['99-99-9999'], sameValue: false},
+					{shapes: ['-99,99', '9.999,99', ''], sameValue: false},
+					{shapes: ['Aa', 'Aaa'], sameValue: false},
+				],
 				...masked,
 			},
 		},
@@ -190,6 +195,27 @@ describe('validateSampleOutput', () => {
 		{name: 'a long unmasked row cell', masked: {rows: [['99-99-9999', '-99,99', 'Example Lender BV']]}},
 		{name: 'an unmasked line above', masked: {linesAbove: [{line: 0, cells: ['Rekening']}]}},
 		{name: 'an unmasked column shape', masked: {columnShapes: ['99-99-9999', '-99,99', 'Af']}},
+		{
+			name: 'an unmasked shape in the column hints',
+			masked: {
+				columns: [
+					{shapes: ['99-99-9999'], sameValue: false},
+					{shapes: ['-12,50'], sameValue: false},
+					{shapes: ['Aa'], sameValue: false},
+				],
+			},
+		},
+		{
+			name: 'more than six shapes of a column',
+			masked: {
+				columns: [
+					{shapes: ['9', '99', '999', '9999', '99999', '999999', ''], sameValue: false},
+					{shapes: ['9'], sameValue: false},
+					{shapes: ['Aa'], sameValue: false},
+				],
+			},
+		},
+		{name: 'hints for fewer columns than the table', masked: {columns: [{shapes: ['9'], sameValue: true}]}},
 		{name: 'more rows than three', masked: {rows: Array.from({length: 4}, () => ['9', '9', 'Af'])}},
 	])('refuses a sample with $name', ({masked}) => {
 		expect(() => validateSampleOutput(sample(masked))).toThrow(new ParseRefusal('parse_failed'));

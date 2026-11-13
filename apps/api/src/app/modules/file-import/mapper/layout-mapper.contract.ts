@@ -1,6 +1,7 @@
 import {z} from 'zod';
 
 import {CSV_DATE_FORMATS, CSV_THOUSANDS_SEPARATORS} from '../parsers/csv-layout';
+import type {ColumnHint} from '../parsers/table-mask';
 import type {TableSample} from '../parsers/table-sample';
 
 /** The system prompt of the column mapper's one model call. */
@@ -8,6 +9,7 @@ export const LAYOUT_MAPPER_INSTRUCTIONS = [
 	'You work out which column of a bank statement table holds what, so that an app can read the file.',
 	"The user message is JSON describing one table in a file the account holder exported from their bank. header is the table's header row as written, or null when the table has none. rows are the table's first, middle and last rows; linesAbove are lines of the file just above the table, each with its line number, and linesBelow are lines just below it.",
 	'In rows and lines, every letter is replaced by a or A and every digit by 9, keeping punctuation, spaces and length; ISO currency codes, and the few short values of a column such as a direction column, are as written. columnCount is the number of columns and rowCount the number of rows. Columns are 0-based indexes into the row arrays.',
+	"columns lists, per column, the distinct shapes its values take over the whole table (masked the same way, with no values as written), most frequent first, and sameValue, whether every non-empty cell of the column holds the same value. Use them for what the three rows do not show: a shape with a grouping character, such as 9.999,99 or 9 999,99, shows a thousands separator, and a column with the same IBAN on every row is the account holder's own account, not the other party's.",
 	'Return how to read every row. bookingDate is the column with the date the payment was booked: the only date, or the booking date when there are two. valueDate is a second date column, such as a value or interest date, or null. dateFormat is how dates are written, ignoring any time of day after the date; choose day first or month first from the header, the lines and the values.',
 	'amount says how the amount is written: kind signed when one column holds it with a minus (or parentheses) for money out; kind direction when one column holds an unsigned amount and another column says whether it went out or came in, with moneyOut and moneyIn the exact values of that column; kind debitCredit when money out and money in are in two columns. decimalMark is the character before the cents, and thousandsSeparator the character that groups thousands, or null when amounts have none.',
 	"currency is the column with each row's currency code, or code when the file states one currency for the whole table (in its header or lines), or null when it states none. balance is the column with the account's balance after each row (when after) or before it (when before), or null.",
@@ -102,6 +104,7 @@ export type LayoutMapperInput = {
 	linesAbove: {line: number; cells: string[]}[];
 	rows: string[][];
 	linesBelow: string[][];
+	columns: ColumnHint[];
 };
 
 /** The request for a sampled table: its shape and the masked cells `maskTable` let through, nothing else. */
@@ -114,5 +117,6 @@ export function toMapperInput(sample: TableSample): LayoutMapperInput {
 		linesAbove: sample.masked.linesAbove,
 		rows: sample.masked.rows,
 		linesBelow: sample.masked.linesBelow,
+		columns: sample.masked.columns,
 	};
 }

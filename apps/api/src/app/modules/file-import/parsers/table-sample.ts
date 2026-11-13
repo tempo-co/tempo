@@ -97,6 +97,7 @@ function textTable(bytes: Uint8Array): FoundTable | null {
 			} catch {
 				continue;
 			}
+			if (splitsQuotedCells(records, delimiter, quote)) continue;
 			const run = longestRun(records);
 			if (!run) continue;
 			const columns = records[run.start].length;
@@ -107,6 +108,23 @@ function textTable(bytes: Uint8Array): FoundTable | null {
 		}
 	}
 	return best && {shape: best.shape, records: best.records, start: best.start, end: best.end};
+}
+
+/**
+ * The other quote character is the file's: on a line that holds an even count of it, a cell starts with it and a
+ * later cell ends with it, as `"23,40"` read with `'` as the quote does (it splits at the comma and keeps the quotes).
+ * Cells that only start with it, such as Dutch `'t Hoekje`, do not count.
+ */
+function splitsQuotedCells(records: readonly string[][], delimiter: string, quote: '"' | "'"): boolean {
+	const other = quote === '"' ? "'" : '"';
+	return records.some((cells) => {
+		if (cells.join(delimiter).split(other).length % 2 === 0) return false;
+		const opened = cells.findIndex((cell) => cell.startsWith(other));
+		return (
+			opened !== -1 &&
+			cells.slice(opened).some((cell, index) => cell.endsWith(other) && (index > 0 || cell.length > 1))
+		);
+	});
 }
 
 /** The longest stretch (earliest on a tie) of at least two lines with the same number of cells, two or more. */

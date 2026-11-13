@@ -14,7 +14,7 @@ import {
 	STATEMENT_FORMATS,
 	StatementFormat,
 } from '../parsers/parse-result';
-import {MAX_HEADER_CELL_LENGTH, MAX_MASKED_CELL_LENGTH} from '../parsers/table-mask';
+import {MAX_COLUMN_SHAPES, MAX_HEADER_CELL_LENGTH, MAX_MASKED_CELL_LENGTH} from '../parsers/table-mask';
 import {TableSample, TableShape} from '../parsers/table-sample';
 import {PreviewChildOutput, SampleChildOutput} from './parse-runner.protocol';
 
@@ -262,8 +262,15 @@ export function validateSampleOutput(output: unknown): SampleChildOutput {
 			rows: list(masked.rows, 3).map((row) => maskedCells(row, rowCell)),
 			linesBelow: list(masked.linesBelow, 3).map((row) => maskedCells(row, plain)),
 			columnShapes: maskedCells(masked.columnShapes, (cell) => MASKED.test(cell)),
+			columns: list(masked.columns, MAX_LAYOUT_COLUMNS).map((value) => {
+				const hint = asRecord(value);
+				const shapes = maskedCells(list(hint.shapes, MAX_COLUMN_SHAPES), (cell) => MASKED.test(cell));
+				if (typeof hint.sameValue !== 'boolean') throw new ParseRefusal('parse_failed');
+				return {shapes, sameValue: hint.sameValue};
+			}),
 		},
 	};
+	if (validated.masked.columns.length !== columnCount) throw new ParseRefusal('parse_failed');
 	if (validated.masked.rows.some((row) => row.length > columnCount)) throw new ParseRefusal('parse_failed');
 	if (validated.masked.columnShapes.length !== columnCount) throw new ParseRefusal('parse_failed');
 	return {ok: true, sample: validated};

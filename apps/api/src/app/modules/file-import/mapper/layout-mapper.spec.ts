@@ -87,6 +87,15 @@ describe('LayoutMapper', () => {
 		expect(options).toEqual({timeout: LAYOUT_MAPPER_TIMEOUT_MS, maxRetries: 0});
 		const body = JSON.stringify(request);
 		expect(body).toContain('Auftraggeber/Empfänger');
+		// Each column's shapes over the whole file: the money in column shows its thousands separator, which none of
+		// the three sampled rows holds, and the currency column one value on every row.
+		const sent = JSON.parse((request.messages as {content: string}[])[0].content) as {
+			columns: {shapes: string[]; sameValue: boolean}[];
+		};
+		expect(sent.columns).toHaveLength(7);
+		expect(sent.columns[5]).toEqual({shapes: ['', '9.999,99'], sameValue: true});
+		expect(sent.columns[6]).toEqual({shapes: ['AAA'], sameValue: true});
+		expect(LAYOUT_MAPPER_INSTRUCTIONS).toMatch(/columns lists/);
 		for (const value of FIXTURE_CONTENT) expect(body).not.toContain(value);
 	});
 
