@@ -11,7 +11,7 @@ const HOLDER = 'Example Account Holder';
 const REWRITTEN_COLUMNS = ['counterpartyName', 'description', 'displayDescription', 'merchantKey'] as const;
 
 describe('ClearAccountHolderCounterpartyNames migration', () => {
-	it('clears holder names and copied descriptions the old client stored, re-derives identity and keeps everything else', async () => {
+	it('clears wrong-party holder names and copied descriptions, re-derives identity and keeps everything else', async () => {
 		const app = getApp();
 		const ds = app.get(DataSource);
 		const fixtures = new BankingFixtures(app);
