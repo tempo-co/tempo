@@ -3,6 +3,8 @@ import {expect, test} from '@playwright/test';
 
 import {
   type DroppedEntry,
+  FolderReadError,
+  droppedFiles,
   filesInFolders,
 } from '../../src/features/file-import/utils/dropped-files';
 
@@ -42,8 +44,8 @@ test('a dropped folder gives the files inside it, at any depth, without hidden f
   expect(files.map(({name}) => name)).toEqual([
     'april.xml',
     'march.xml',
-    'january.sta',
     'february.sta',
+    'january.sta',
   ]);
 });
 

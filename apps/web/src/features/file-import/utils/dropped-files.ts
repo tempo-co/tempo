@@ -41,8 +41,6 @@ export async function filesInFolders(folders: readonly DroppedEntry[]): Promise<
   let seen = 0;
   const visit = async (entry: DroppedEntry): Promise<void> => {
     if (files.length >= MAX_FOLDER_FILES || entry.name.startsWith('.')) return;
-    seen += 1;
-    if (seen > MAX_FOLDER_ENTRIES) throw new FolderReadError();
     if (entry.isFile && entry.file) {
       files.push(await new Promise<File>((resolve, reject) => entry.file!(resolve, reject)));
     } else if (entry.isDirectory && entry.createReader) {
@@ -54,6 +52,9 @@ export async function filesInFolders(folders: readonly DroppedEntry[]): Promise<
           reader.readEntries(resolve, reject),
         );
         if (batch.length === 0) break;
+        // Counted as they arrive, hidden ones too, so a huge folder is given up on before it is held in memory.
+        seen += batch.length;
+        if (seen > MAX_FOLDER_ENTRIES) throw new FolderReadError();
         children.push(...batch);
       }
       children.sort((first, second) => first.name.localeCompare(second.name));
