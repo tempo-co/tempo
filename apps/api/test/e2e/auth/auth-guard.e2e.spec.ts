@@ -87,6 +87,7 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['get', `/bank-connections/aspsps/logos/XX/Example/colour-v2/${'a'.repeat(64)}`],
 	['delete', `/bank-connections/${RESOURCE_ID}`],
 	['get', `/bank-connections/${RESOURCE_ID}/transactions`],
+	['put', `/bank-connections/${RESOURCE_ID}/accounts/${RESOURCE_ID}/balance`],
 	['post', '/bank-imports'],
 	['get', '/bank-imports'],
 	['delete', `/bank-imports/${RESOURCE_ID}`],

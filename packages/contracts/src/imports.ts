@@ -75,6 +75,13 @@ export type BankImportAccount = {
 	created: boolean;
 };
 
+/** An account the owner can give a balance (`SetBankAccountBalanceRequest`). */
+export type BankImportAccountWithoutBalance = {
+	id: string;
+	name: string | null;
+	currency: string;
+};
+
 /**
  * `POST /bank-imports` (201), each item of `GET /bank-imports`, newest first, and the answer to resolving a doubtful
  * row. The request may carry one of two optional multipart text fields, never both:
@@ -103,6 +110,11 @@ export type BankImportSummary = {
 	dateFrom: string | null;
 	dateTo: string | null;
 	accounts: BankImportAccount[];
+	/**
+	 * The imported-files accounts this import wrote to that have no balance: neither their rows state one nor has
+	 * the owner entered one. Empty for synced accounts and once the import is undone.
+	 */
+	accountsWithoutBalance: BankImportAccountWithoutBalance[];
 	undoneAt: string | null;
 	createdAt: string;
 };

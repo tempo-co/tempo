@@ -9,7 +9,8 @@ export type CamtEntry = {
 	amount: string;
 	indicator?: 'CRDT' | 'DBIT';
 	status?: string;
-	bookingDate?: string;
+	/** `null` leaves the entry without a booking date. */
+	bookingDate?: string | null;
 	valueDate?: string;
 	reference?: string;
 	/** Raw `NtryDtls` content (one or more `TxDtls`); omitted entries carry no details, like card payments. */
@@ -71,7 +72,7 @@ function camtEntry(entry: CamtEntry, accountCurrency: string, laterStatus: boole
 		`<Ntry><Amt Ccy="${entry.currency ?? accountCurrency}">${entry.amount}</Amt>` +
 		`<CdtDbtInd>${entry.indicator ?? 'DBIT'}</CdtDbtInd>` +
 		(laterStatus ? `<Sts><Cd>${status}</Cd></Sts>` : `<Sts>${status}</Sts>`) +
-		`<BookgDt><Dt>${entry.bookingDate ?? '2026-03-02'}</Dt></BookgDt>` +
+		(entry.bookingDate === null ? '' : `<BookgDt><Dt>${entry.bookingDate ?? '2026-03-02'}</Dt></BookgDt>`) +
 		`<ValDt><Dt>${entry.valueDate ?? entry.bookingDate ?? '2026-03-02'}</Dt></ValDt>` +
 		(entry.reference ? `<AcctSvcrRef>${entry.reference}</AcctSvcrRef>` : '') +
 		`<BkTxCd><Domn><Cd>PMNT</Cd><Fmly><Cd>CCRD</Cd><SubFmlyCd>POSD</SubFmlyCd></Fmly></Domn></BkTxCd>` +

@@ -39,6 +39,7 @@ import {
 	FILE_CONNECTION_ASPSP,
 } from '@modules/banking/services/banking-sync.constants';
 import {CurrencyExchangeService} from '@modules/banking/services/currency-exchange.service';
+import {FileAccountBalanceService} from '@modules/banking/services/file-account-balance.service';
 import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
 
 import {BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
@@ -118,6 +119,7 @@ export class BankImportService {
 		private readonly currencyExchangeService: CurrencyExchangeService,
 		private readonly categorizationService: CategorizationScheduler,
 		private readonly merchantLogoService: MerchantLogoService,
+		private readonly fileAccountBalanceService: FileAccountBalanceService,
 	) {}
 
 	/**
@@ -230,6 +232,12 @@ export class BankImportService {
 						addLadderCounts(counts, outcomes);
 					}
 				}
+				// An imported-files account's balance follows its rows; a synced account keeps the one sync reports.
+				for (const {account, connection} of accounts) {
+					if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE) continue;
+					const balance = await this.fileAccountBalanceService.recompute(manager, ownerId, account.id);
+					if (balance) Object.assign(account, balance);
+				}
 				Object.assign(record, counts, {
 					rowsAlreadyPresent:
 						counts.rowsMatchedByReference + counts.rowsMatchedByBalance + counts.rowsMatchedByDate,
@@ -245,7 +253,7 @@ export class BankImportService {
 		await this.afterRowsChanged(ownerId, result.persistedTransactionIds);
 		return toSummary(
 			result.record,
-			result.accounts.map(({account}) => account),
+			result.accounts.map(({account, connection}) => ({...account, bankConnection: connection})),
 		);
 	}
 
@@ -316,6 +324,11 @@ export class BankImportService {
 							)`,
 						[fileConnection.id, ownerId],
 					);
+					// Accounts the delete just removed are skipped.
+					for (const account of ownedAccounts) {
+						if (account.bankConnection.id !== fileConnection.id) continue;
+						await this.fileAccountBalanceService.recompute(manager, ownerId, account.id);
+					}
 				}
 				for (const lock of locks) lock.assertHealthy();
 			});
@@ -409,13 +422,27 @@ export class BankImportService {
 		const [account] = doubtful ? await this.findOwnedAccounts(ownerId, [doubtful.bankAccountId]) : [];
 		if (!doubtful || !account?.bankConnection) throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
 		const connection = account.bankConnection;
-		const locks = await this.lockSyncedConnections(
-			connection.provider === BANK_CONNECTION_PROVIDERS.FILE ? [] : [connection.id],
-		);
+		const locks = await this.lockSyncedConnections([
+			...(connection.provider === BANK_CONNECTION_PROVIDERS.FILE ? [] : [connection.id]),
+			// A drop into a synced and an imported-files account is recorded under the synced connection, which
+			// lockImport locks before the imported-files one: its sync lock first, as imports and undo take it.
+			...(owned.bankConnectionId === connection.id ? [] : [owned.bankConnectionId]),
+		]);
 		let resolved: {record: BankImport; insertedTransactionIds: string[]};
 		try {
 			resolved = await this.dataSource.transaction(async (manager) => {
 				const {record} = await this.lockImport(manager, ownerId, owned);
+				// An imported-files account's connection after the record's own, the order an import and an undo take
+				// them in, so its balance is recomputed over rows and an entered balance no one else is changing.
+				if (
+					connection.provider === BANK_CONNECTION_PROVIDERS.FILE &&
+					!(await manager.getRepository(BankConnection).findOne({
+						where: {id: connection.id, accountId: ownerId},
+						lock: {mode: 'pessimistic_write'},
+					}))
+				) {
+					throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
+				}
 				const rows = manager.getRepository(BankImportDoubtfulRow);
 				const current = await rows.findOne({where: {id: doubtful.id}, lock: {mode: 'pessimistic_write'}});
 				if (!current) throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
@@ -447,6 +474,8 @@ export class BankImportService {
 					insertedTransactionIds.push(...persisted.insertedTransactionIds);
 					resolvedTransactionId = persisted.insertedTransactionIds[0];
 					record.rowsAdded += 1;
+					// Does nothing for a synced account.
+					await this.fileAccountBalanceService.recompute(manager, ownerId, account.id);
 				}
 				record.rowsDoubtful -= 1;
 				await rows.update({id: current.id}, {resolution: request.decision, resolvedTransactionId});
@@ -965,6 +994,9 @@ function firstBookingDate(statement: NormalizedStatement): string {
 }
 
 function toTransactionInput(row: NormalizedRow, accountCurrency: string): BankTransactionInput {
+	// Balances and the balance trend go by booking date, so an entry without one takes its value date, else its
+	// transaction date, and says so, as bank sync does.
+	const bookingDate = row.bookingDate ?? row.valueDate ?? row.transactionDate;
 	return {
 		entryReference: row.bankReference ?? undefined,
 		amount: row.amount,
@@ -972,7 +1004,8 @@ function toTransactionInput(row: NormalizedRow, accountCurrency: string): BankTr
 		creditDebitIndicator: row.creditDebitIndicator,
 		status: 'BOOK',
 		transactionDate: row.transactionDate ?? undefined,
-		bookingDate: row.bookingDate ?? undefined,
+		bookingDate: bookingDate ?? undefined,
+		...(!row.bookingDate && bookingDate ? {bookingDateFilled: true} : {}),
 		valueDate: row.valueDate ?? undefined,
 		description: row.description ?? undefined,
 		counterpartyName: row.counterpartyName ?? undefined,
@@ -1020,6 +1053,19 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 				},
 			];
 		}),
+		accountsWithoutBalance: record.undoneAt
+			? []
+			: record.bankAccountIds.flatMap((id) => {
+					const account = accountsById.get(id);
+					if (
+						!account ||
+						account.bankConnection?.provider !== BANK_CONNECTION_PROVIDERS.FILE ||
+						account.currentBalanceAmount !== null
+					) {
+						return [];
+					}
+					return [{id, name: account.name, currency: account.currency}];
+				}),
 		undoneAt: record.undoneAt?.toISOString() ?? null,
 		createdAt: record.createdAt.toISOString(),
 	};

@@ -100,7 +100,10 @@ export type BankTransactionInput = {
 	transactionDate?: string;
 	bookingDate?: string;
 	valueDate?: string;
-	/** The source sent no booking date; `bookingDate` is the transaction date. Statement files never set it. */
+	/**
+	 * The source sent no booking date; `bookingDate` is the transaction date (bank sync), or the value date, else the
+	 * transaction date (statement files).
+	 */
 	bookingDateFilled?: boolean;
 	/** The source sent no value date; `valueDate` is the transaction date. Statement files never set it. */
 	valueDateFilled?: boolean;

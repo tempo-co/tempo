@@ -61,6 +61,16 @@ export class BankAccount {
 	@Column({type: 'timestamptz', nullable: true})
 	balanceUpdatedAt: Date | null;
 
+	/**
+	 * A balance the owner entered for an imported-files account, and the day (in their time zone) they entered it.
+	 * It anchors the account's balance only while no imported row states one (`FileAccountBalanceService`).
+	 */
+	@Column({type: 'numeric', precision: 20, scale: 8, nullable: true})
+	statedBalanceAmount: string | null;
+
+	@Column({type: 'date', nullable: true})
+	statedBalanceDate: string | null;
+
 	@Column({type: 'boolean', default: true})
 	isActive: boolean;
 

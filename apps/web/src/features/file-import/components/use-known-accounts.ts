@@ -28,7 +28,7 @@ export function useKnownAccounts() {
 }
 
 export function importAccountName(
-  account: BankImportSummary['accounts'][number],
+  account: Pick<BankImportSummary['accounts'][number], 'id' | 'name' | 'currency'>,
   known: Map<string, KnownAccount>,
 ) {
   return known.get(account.id)?.name ?? account.name ?? `${account.currency} account`;
