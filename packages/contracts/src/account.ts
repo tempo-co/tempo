@@ -6,13 +6,17 @@ export type Account = {
 	isEmailVerified: boolean;
 	/** Null until the owner's first conversion run has picked a base currency. */
 	baseCurrency: string | null;
+	/** IANA name of the owner's time zone (`Europe/Lisbon`); alert quiet hours and the MCP default date follow it. */
+	timeZone: string;
 	createdAt: string;
 	updatedAt: string;
 };
 
-/** `PATCH /accounts/me` */
+/** `PATCH /accounts/me`: the fields to change. */
 export type AccountUpdateRequest = {
-	name: string;
+	name?: string;
+	/** An IANA name the API supports, or `UTC`; anything else is a 400. */
+	timeZone?: string;
 };
 
 /** `DELETE /accounts/me` */

@@ -4,7 +4,7 @@ import {FindOptionsSelect, In, IsNull, Not, Raw, Repository} from 'typeorm';
 import {BankAccount} from '../bank-account.entity';
 import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
-	detectBankTransactionFinancialEvent,
+	detectCurrencyExchangeMarker,
 } from '../bank-transaction-financial-event';
 import {
 	allocateNextBankTransactionStableIdentityKey,
@@ -176,11 +176,12 @@ export class BankTransactionPersistenceService {
 		bankAccount: BankAccount,
 		transactions: readonly BankTransactionInput[],
 		aspspName: string,
-		provider: string,
+		// Nothing stored depends on the provider; the parameter keeps the callers' shared signature.
+		_provider: string,
 		options: PersistTransactionsOptions = {},
 	): Promise<PersistTransactionsResult> {
 		const unassignedTransactionValues = transactions.map((transaction) =>
-			this.toBankTransactionValues(bankAccount, transaction, aspspName, provider),
+			this.toBankTransactionValues(bankAccount, transaction, aspspName),
 		);
 		if (options.importId) {
 			return this.insertImportedTransactions(
@@ -207,6 +208,7 @@ export class BankTransactionPersistenceService {
 				categorySource: true,
 				categoryStatus: true,
 				importId: true,
+				financialEventType: true,
 			},
 			// Include every same-reference candidate, not just pending rows: repeated references
 			// and already-booked copies must make a cross-group transition ambiguous.
@@ -252,6 +254,19 @@ export class BankTransactionPersistenceService {
 		const takenOverIds = hasImportedRows
 			? await this.adoptImportedTwins(repository, bankAccount, transactionValues, existingTransactions)
 			: [];
+		// The exchange recompute after the sync decides which marked rows are exchanges.
+		const exchangeMarkerKeys = transactionValues.flatMap((value) =>
+			detectCurrencyExchangeMarker({
+				accountCurrency: bankAccount.currency,
+				transactionCurrency: value.currency,
+				creditDebitIndicator: value.creditDebitIndicator,
+				description: value.description,
+				bankTransactionCode: value.bankTransactionCode,
+				bankTransactionSubCode: value.bankTransactionSubCode,
+			})
+				? [value.stableIdentityKey]
+				: [],
+		);
 
 		const conflictColumns = ['bankAccountId', 'stableIdentityKey'];
 		const overwriteColumns = Object.keys(transactionValues[0]).filter(
@@ -263,14 +278,13 @@ export class BankTransactionPersistenceService {
 			.into(BankTransaction)
 			.values(transactionValues)
 			.orUpdate(overwriteColumns, conflictColumns, {
-				// A row the categorization worker holds keeps its values until the worker finishes, except a currency
-				// exchange, which leaves categorization below.
+				// A row the categorization worker holds keeps its values until the worker finishes, except one that
+				// now carries a currency exchange marker, so the exchange recompute can take it out of categorization.
 				overwriteCondition: {
-					where: '("bank_transactions"."categoryStatus" IS DISTINCT FROM :processingStatus OR EXCLUDED."financialEventType" = :currencyExchangeType)',
-					parameters: {
-						processingStatus: 'PROCESSING',
-						currencyExchangeType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-					},
+					where: exchangeMarkerKeys.length
+						? '("bank_transactions"."categoryStatus" IS DISTINCT FROM :processingStatus OR EXCLUDED."stableIdentityKey" IN (:...exchangeMarkerKeys))'
+						: '"bank_transactions"."categoryStatus" IS DISTINCT FROM :processingStatus',
+					parameters: {processingStatus: 'PROCESSING', exchangeMarkerKeys},
 				},
 			})
 			// xmax is 0 only on a freshly inserted row version, so it tells inserts apart from updates.
@@ -289,13 +303,8 @@ export class BankTransactionPersistenceService {
 			await repository.update({id: In(ids)}, {importId: null});
 		}
 
-		const eventTransactionValues = transactionValues.filter(
-			({financialEventType}) => financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-		);
 		await this.clearStaleBaseAmounts(repository, bankAccount.id, existingTransactions);
 		await this.copySameCurrencyBaseAmounts(repository, bankAccount.id);
-
-		await this.markCurrencyExchangesNotCategorized(repository, bankAccount.id, eventTransactionValues);
 
 		const transactionByStableIdentityKey = new Map(
 			transactionValues.map((value) => [value.stableIdentityKey, value]),
@@ -305,7 +314,7 @@ export class BankTransactionPersistenceService {
 			const currentValue = transactionByStableIdentityKey.get(existingTransaction.stableIdentityKey);
 			if (
 				!currentValue ||
-				currentValue.financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE ||
+				existingTransaction.financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE ||
 				isManualCategorySource(existingTransaction.categorySource) ||
 				existingTransaction.categoryStatus === 'COMPLETED' ||
 				existingTransaction.categoryInputHash === currentValue.categoryInputHash
@@ -383,14 +392,6 @@ export class BankTransactionPersistenceService {
 				.execute();
 			insertedTransactionIds.push(...(result.raw as Array<{id: string}>).map(({id}) => id));
 		}
-		await this.markCurrencyExchangesNotCategorized(
-			repository,
-			bankAccount.id,
-			transactionValues.filter(
-				({financialEventType}) =>
-					financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-			),
-		);
 		await this.copySameCurrencyBaseAmounts(repository, bankAccount.id, insertedTransactionIds);
 		return {
 			transactionsAdded: insertedTransactionIds.length,
@@ -489,33 +490,6 @@ export class BankTransactionPersistenceService {
 		return [...takenOverIds];
 	}
 
-	private async markCurrencyExchangesNotCategorized(
-		repository: Repository<BankTransaction>,
-		bankAccountId: BankAccount['id'],
-		eventTransactionValues: ReadonlyArray<{stableIdentityKey: string}>,
-	): Promise<void> {
-		const eventStableIdentityKeys = [
-			...new Set(eventTransactionValues.map(({stableIdentityKey}) => stableIdentityKey)),
-		];
-		if (eventStableIdentityKeys.length === 0) return;
-		await repository
-			.createQueryBuilder()
-			.update(BankTransaction)
-			.set({
-				...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-				categoryInputHash: null,
-				categoryStatus: 'NOT_APPLICABLE',
-				categoryUpdatedAt: null,
-			})
-			.where('"bankAccountId" = :bankAccountId', {bankAccountId})
-			.andWhere('"stableIdentityKey" IN (:...eventStableIdentityKeys)', {eventStableIdentityKeys})
-			.andWhere('"financialEventType" = :financialEventType', {
-				financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-			})
-			.andWhere('"categorySource" IS DISTINCT FROM \'MANUAL\'')
-			.execute();
-	}
-
 	/** The earliest date of each account's pending rows, so the account's next fetch still covers all of them. */
 	async findPendingTransactionStarts(
 		repository: Repository<BankTransaction>,
@@ -609,12 +583,7 @@ export class BankTransactionPersistenceService {
 		}
 	}
 
-	private toBankTransactionValues(
-		bankAccount: BankAccount,
-		transaction: BankTransactionInput,
-		aspspName: string,
-		provider: string,
-	) {
+	private toBankTransactionValues(bankAccount: BankAccount, transaction: BankTransactionInput, aspspName: string) {
 		const creditDebitIndicator = truncate(normalizeBankCode(transaction.creditDebitIndicator ?? ''), 8);
 		const amount = this.toSignedAmount(transaction.amount, creditDebitIndicator);
 		const currency = normalizeBankCode(transaction.currency);
@@ -642,14 +611,6 @@ export class BankTransactionPersistenceService {
 			code: bankTransactionCode ?? undefined,
 			subCode: bankTransactionSubCode ?? undefined,
 			aspspName,
-		});
-		const financialEvent = detectBankTransactionFinancialEvent({
-			provider,
-			aspspName,
-			accountCurrency: bankAccount.currency,
-			transactionCurrency: currency,
-			creditDebitIndicator,
-			description,
 		});
 		const merchantCategoryCode = truncate(transaction.merchantCategoryCode, 16);
 		const hasBalanceAfter = Boolean(transaction.balanceAfterAmount && transaction.balanceAfterCurrency);
@@ -693,28 +654,26 @@ export class BankTransactionPersistenceService {
 		};
 		const stableIdentityGroupKey = createBankTransactionStableIdentityGroupKey(identityValues);
 		const stableIdentityKey = createBankTransactionStableIdentityKey(identityValues, 1);
-		const categoryInputHash = financialEvent
-			? null
-			: createBankTransactionCategorizationInputHash(
-					toBankTransactionCategorizationInput({
-						id: stableIdentityKey,
-						transactionDate,
-						bookingDate,
-						valueDate,
-						amount,
-						currency,
-						creditDebitIndicator,
-						bankTransactionCode,
-						bankTransactionSubCode,
-						aspspName,
-						description,
-						counterpartyName,
-						bankTransactionDescription,
-						merchantCategoryCode,
-						remittanceInformation,
-						merchantLocation,
-					}),
-				);
+		const categoryInputHash = createBankTransactionCategorizationInputHash(
+			toBankTransactionCategorizationInput({
+				id: stableIdentityKey,
+				transactionDate,
+				bookingDate,
+				valueDate,
+				amount,
+				currency,
+				creditDebitIndicator,
+				bankTransactionCode,
+				bankTransactionSubCode,
+				aspspName,
+				description,
+				counterpartyName,
+				bankTransactionDescription,
+				merchantCategoryCode,
+				remittanceInformation,
+				merchantLocation,
+			}),
+		);
 
 		return {
 			bankAccountId: bankAccount.id,
@@ -744,9 +703,6 @@ export class BankTransactionPersistenceService {
 			remittanceInformation,
 			merchantLocation,
 			categoryInputHash,
-			financialEventType: financialEvent?.type ?? null,
-			financialEventSource: financialEvent?.source ?? null,
-			financialEventRuleVersion: financialEvent?.ruleVersion ?? null,
 			balanceAfterAmount: hasBalanceAfter ? transaction.balanceAfterAmount : null,
 			balanceAfterCurrency: hasBalanceAfter ? normalizeBankCode(transaction.balanceAfterCurrency!) : null,
 			instructedAmount,

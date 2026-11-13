@@ -3,6 +3,8 @@ export type SignUpRequest = {
 	name: string;
 	email: string;
 	password: string;
+	/** The browser's IANA time zone; a missing or unsupported one stores the default (`Europe/Amsterdam`). */
+	timeZone?: string;
 };
 
 /** `POST /auth/login` */

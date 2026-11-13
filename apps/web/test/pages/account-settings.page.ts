@@ -22,6 +22,9 @@ export class AccountSettingsPage {
   readonly deleteConfirmButton: Locator;
   readonly deleteInvalidPasswordError: Locator;
   readonly deleteMissingPasswordError: Locator;
+  readonly timeZone: Locator;
+  readonly editTimeZoneButton: Locator;
+  readonly timeZoneSearch: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -45,6 +48,9 @@ export class AccountSettingsPage {
     this.deleteConfirmButton = page.getByTestId('delete-account-confirm');
     this.deleteInvalidPasswordError = page.getByText('Invalid password.');
     this.deleteMissingPasswordError = page.getByText('Please enter your password.');
+    this.timeZone = page.getByTestId('account-time-zone');
+    this.editTimeZoneButton = page.getByTestId('edit-time-zone-button');
+    this.timeZoneSearch = page.getByTestId('time-zone-search');
   }
 
   async navigate() {
@@ -55,6 +61,13 @@ export class AccountSettingsPage {
     await this.editNameButton.click();
     await this.nameInput.fill(newName);
     await this.saveNameButton.click();
+  }
+
+  /** Opens the time zone list, searches it and picks the one option whose name is `label`. */
+  async chooseTimeZone(search: string, label: string) {
+    await this.editTimeZoneButton.click();
+    await this.timeZoneSearch.fill(search);
+    await this.page.getByRole('dialog').getByRole('button', {name: label}).click();
   }
 
   async requestEmailChange(newEmail: string, currentPassword: string) {

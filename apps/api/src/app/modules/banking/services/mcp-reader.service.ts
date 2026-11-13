@@ -1,4 +1,4 @@
-import {HttpException, Injectable, ValidationPipe} from '@nestjs/common';
+import {HttpException, Injectable, Logger, ValidationPipe} from '@nestjs/common';
 import {instanceToPlain} from 'class-transformer';
 
 import {Account} from '@modules/account/account.entity';
@@ -10,6 +10,7 @@ import {BankTransactionSummaryQueryDto} from '../api/dtos/bank-transaction-summa
 import {MerchantGroupsQueryDto, MerchantRankingQueryDto} from '../api/dtos/merchant-query.dto';
 import {RecurringSeriesQueryDto} from '../api/dtos/recurring-series.dto';
 import {MerchantGroupIdPipe} from '../api/pipes/merchant-group-id.pipe';
+import {safeErrorStack} from '../bank-sync-failure';
 import {ToolReadError} from '../mcp/errors';
 import type {ToolReader} from '../mcp/tools';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
@@ -21,6 +22,7 @@ import {MerchantSpendingService} from './merchant-spending.service';
 
 @Injectable()
 export class McpReaderService {
+	private readonly logger = new Logger(McpReaderService.name);
 	private readonly validation = new ValidationPipe({whitelist: true, transform: true});
 	private readonly merchantId = new MerchantGroupIdPipe();
 
@@ -43,7 +45,10 @@ export class McpReaderService {
 				// Apply the global REST ClassSerializerInterceptor's class-transformer boundary too; it keeps the shape.
 				return instanceToPlain(await operation()) as T;
 			} catch (error) {
-				throw new ToolReadError(error instanceof HttpException ? error.getStatus() : 500);
+				if (error instanceof HttpException) throw new ToolReadError(error.getStatus());
+				// Like REST's exception filter, log unexpected failures; name and stack frames only, never the message.
+				this.logger.error(`MCP read failed unexpectedly: ${safeErrorStack(error)}`);
+				throw new ToolReadError(500);
 			}
 		};
 		return {

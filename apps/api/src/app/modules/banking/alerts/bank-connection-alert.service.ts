@@ -41,11 +41,7 @@ const CONSENT_MARKER_UPDATES: Record<
 	[BANK_CONNECTION_ALERTS.CONSENT_EXPIRING]: {consentExpiringAlertFor: () => '"consentValidUntil"'},
 	[BANK_CONNECTION_ALERTS.CONSENT_FINAL]: {consentFinalAlertFor: () => '"consentValidUntil"'},
 };
-const dateTimeFormat = new Intl.DateTimeFormat('en-GB', {
-	dateStyle: 'long',
-	timeStyle: 'short',
-	timeZone: 'UTC',
-});
+const dateTimeFormats = new Map<string, Intl.DateTimeFormat>();
 
 @Injectable()
 export class BankConnectionAlertService implements OnModuleInit {
@@ -143,6 +139,7 @@ export class BankConnectionAlertService implements OnModuleInit {
 					alert: {alert, connectionId: connection.id, episode: episode.toISOString()},
 				},
 				`push-${jobId}`,
+				account.timeZone,
 				now,
 			);
 			return true;
@@ -207,7 +204,7 @@ export class BankConnectionAlertService implements OnModuleInit {
 					bankConnectionsUrl,
 					reason: this.describeSyncProblem(connection),
 					lastSyncDescription: connection.lastSuccessfulSyncAt
-						? `The last successful sync was on ${formatDateTime(connection.lastSuccessfulSyncAt)}.`
+						? `The last successful sync was on ${formatDateTime(connection.lastSuccessfulSyncAt, account.timeZone)}.`
 						: 'It has not synced successfully since you connected it.',
 				},
 			};
@@ -225,7 +222,7 @@ export class BankConnectionAlertService implements OnModuleInit {
 				subject,
 				bankName,
 				bankConnectionsUrl,
-				consentEndsOn: formatDateTime(connection.consentValidUntil as Date),
+				consentEndsOn: formatDateTime(connection.consentValidUntil as Date, account.timeZone),
 			},
 		};
 	}
@@ -251,6 +248,21 @@ function alertEpisode(
 		: (connection.consentValidUntil as Date);
 }
 
-function formatDateTime(value: Date): string {
-	return `${dateTimeFormat.format(value)} UTC`;
+/** A date and time in the owner's time zone, with the zone's abbreviation: `16 November 2026 at 22:30 EET`. */
+function formatDateTime(value: Date, timeZone: Account['timeZone']): string {
+	let format = dateTimeFormats.get(timeZone);
+	if (!format) {
+		format = new Intl.DateTimeFormat('en-GB', {
+			timeZone,
+			day: 'numeric',
+			month: 'long',
+			year: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit',
+			hourCycle: 'h23',
+			timeZoneName: 'short',
+		});
+		dateTimeFormats.set(timeZone, format);
+	}
+	return format.format(value);
 }

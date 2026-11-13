@@ -1488,30 +1488,52 @@ describe('BankConnectionController', () => {
 	});
 
 	it('leaves a row the categorization worker holds unchanged on re-sync unless it becomes a currency exchange', async () => {
-		const {connection, bankAccounts} = await createAuthorizedConnectionFixture(
-			'held-categorization-session',
-			[{providerAccountId: 'sync-provider-account', identificationHash: 'hash-held-categorization'}],
-			'Revolut',
-		);
+		const {connection, bankAccounts} = await createAuthorizedConnectionFixture('held-categorization-session', [
+			{providerAccountId: 'sync-provider-account', identificationHash: 'hash-held-categorization'},
+			{
+				providerAccountId: 'sync-provider-account-gbp',
+				identificationHash: 'hash-held-categorization-gbp',
+				currency: 'GBP',
+			},
+		]);
 		const [payment, exchange, added] = makeTransactions('held-categorization').map((transaction) => ({
 			...transaction,
 			creditDebitIndicator: 'DBIT',
 		}));
-		const synchronize = (transactions: EnableBankingTransaction[]) =>
-			synchronizeQueued(connection.id, transactions);
-		expect(await synchronize([payment, exchange])).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 2});
+		const exchangeCredit: EnableBankingTransaction = {
+			...exchange,
+			providerTransactionId: 'provider-transaction-held-categorization-credit',
+			entryReference: 'provider-entry-held-categorization-credit',
+			currency: 'GBP',
+			creditDebitIndicator: 'CRDT',
+			description: 'Exchanged to GBP',
+		};
+		const synchronize = (
+			eurTransactions: EnableBankingTransaction[],
+			gbpTransactions: EnableBankingTransaction[],
+		) => {
+			getAccountBalances.mockResolvedValue([]);
+			getAccountTransactions
+				.mockResolvedValueOnce(fetchedTransactions(eurTransactions))
+				.mockResolvedValueOnce(fetchedTransactions(gbpTransactions));
+			return synchronizeDue(connection.id);
+		};
+		expect(await synchronize([payment, exchange], [])).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 2});
 		await bankTransactionRepository.update(
 			{bankAccountId: bankAccounts[0].id},
 			{categoryStatus: 'PROCESSING', categoryUpdatedAt: new Date()},
 		);
 
 		expect(
-			await synchronize([
-				{...payment, description: 'Corrected provider description'},
-				{...exchange, description: 'Exchanged to GBP'},
-				added,
-			]),
-		).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 1});
+			await synchronize(
+				[
+					{...payment, description: 'Corrected provider description'},
+					{...exchange, description: 'Exchanged to GBP'},
+					added,
+				],
+				[exchangeCredit],
+			),
+		).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 2});
 
 		const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccounts[0].id});
 		expect(rows).toHaveLength(3);
@@ -1524,7 +1546,6 @@ describe('BankConnectionController', () => {
 			description: 'Exchanged to GBP',
 			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
 			categoryStatus: 'NOT_APPLICABLE',
-			categoryInputHash: null,
 		});
 	});
 
@@ -1813,6 +1834,102 @@ describe('BankConnectionController', () => {
 		}
 	});
 
+	it('stores the counterparty only from the party the direction names, so debits without a payee keep their own merchants', async () => {
+		const {connection, bankAccount} = await createAuthorizedConnection('counterparty-party-session');
+		const holder = {name: 'Example Account Holder'};
+		const debit = (entry: string, amount: string, fields: Record<string, unknown>) => ({
+			entry_reference: entry,
+			transaction_amount: {amount, currency: 'EUR'},
+			credit_debit_indicator: 'DBIT',
+			status: 'BOOK',
+			booking_date: '2026-08-20',
+			debtor: holder,
+			...fields,
+		});
+		const rows = [
+			debit('holder-only-fee', '1.50', {
+				bank_transaction_code: {code: 'FEES', description: 'Example account fee'},
+			}),
+			debit('holder-only-withdrawal', '40.00', {remittance_information: ['Example cash withdrawal']}),
+			debit('holder-only-bare', '2.00', {}),
+			// Banks may pad or lowercase the direction code; it still names the party.
+			debit('named-payee', '9.00', {credit_debit_indicator: ' dbit ', creditor: {name: 'Example Shop'}}),
+			{
+				entry_reference: 'named-payer',
+				transaction_amount: {amount: '25.00', currency: 'EUR'},
+				credit_debit_indicator: 'Crdt ',
+				status: 'BOOK',
+				booking_date: '2026-08-20',
+				creditor: holder,
+				debtor: {name: 'Example Employer'},
+			},
+		];
+
+		try {
+			expect(await synchronizeProviderRows(connection.id, rows)).toMatchObject({
+				status: 'SUCCEEDED',
+				transactionsAdded: rows.length,
+			});
+			const stored = await bankTransactionRepository.find({
+				where: {bankAccountId: bankAccount.id},
+				order: {entryReference: 'ASC'},
+			});
+			expect(
+				stored.map(({entryReference, counterpartyName, description, displayDescription, merchantKey}) => ({
+					entryReference,
+					counterpartyName,
+					description,
+					displayDescription,
+					merchantKey,
+				})),
+			).toEqual([
+				{
+					entryReference: 'holder-only-bare',
+					counterpartyName: null,
+					description: null,
+					displayDescription: 'Transaction',
+					merchantKey: null,
+				},
+				{
+					entryReference: 'holder-only-fee',
+					counterpartyName: null,
+					description: 'Example account fee',
+					displayDescription: 'Example account fee',
+					merchantKey: 'EXPENSE:example account fee',
+				},
+				{
+					entryReference: 'holder-only-withdrawal',
+					counterpartyName: null,
+					description: 'Example cash withdrawal',
+					displayDescription: 'Example cash withdrawal',
+					merchantKey: 'EXPENSE:example cash withdrawal',
+				},
+				{
+					entryReference: 'named-payee',
+					counterpartyName: 'Example Shop',
+					description: null,
+					displayDescription: 'Example Shop',
+					merchantKey: 'EXPENSE:example shop',
+				},
+				{
+					entryReference: 'named-payer',
+					counterpartyName: 'Example Employer',
+					description: null,
+					displayDescription: 'Example Employer',
+					merchantKey: 'INCOME:example employer',
+				},
+			]);
+			const response = await verifiedAgent
+				.get('/bank-transactions')
+				.query({'filter[bankAccountIds][]': bankAccount.id})
+				.expect(200);
+			expect(response.body.total).toBe(rows.length);
+			expect(JSON.stringify(response.body)).not.toContain(holder.name);
+		} finally {
+			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
 	it('synchronizes balances and transactions without exposing provider identifiers', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('sync-provider-session');
 		await bankConnectionRepository.update(
@@ -1998,7 +2115,7 @@ describe('BankConnectionController', () => {
 		});
 	});
 
-	it('classifies Revolut currency exchange legs as internal non-category events and remains idempotent', async () => {
+	it('classifies currency exchange legs at any bank as internal non-category events and remains idempotent', async () => {
 		const {connection} = await createAuthorizedConnectionFixture(
 			'currency-exchange-session',
 			[
@@ -2013,7 +2130,7 @@ describe('BankConnectionController', () => {
 					currency: 'GBP',
 				},
 			],
-			'Revolut',
+			'Synthetic Bank',
 		);
 		const sourceLeg: EnableBankingTransaction = {
 			providerTransactionId: 'provider-currency-exchange-source',
@@ -2057,18 +2174,33 @@ describe('BankConnectionController', () => {
 			exchangeRateUnitCurrency: 'USD',
 		};
 
+		// Reads like an exchange, but no leg on the owner's other account answers it: an ordinary incoming payment.
+		const lookalikeCredit: EnableBankingTransaction = {
+			providerTransactionId: 'provider-currency-exchange-lookalike',
+			entryReference: 'entry-currency-exchange-lookalike',
+			amount: '25.00',
+			currency: 'EUR',
+			creditDebitIndicator: 'CRDT',
+			status: 'BOOK',
+			bookingDate: '2026-08-21',
+			valueDate: '2026-08-21',
+			description: 'Exchanged to EUR',
+			counterpartyName: 'Example Sender',
+			remittanceInformation: 'Exchanged to EUR',
+		};
+
 		try {
 			getAccountBalances.mockResolvedValue([]);
 			getAccountTransactions
-				.mockResolvedValueOnce(fetchedTransactions([sourceLeg, ordinaryPayment]))
+				.mockResolvedValueOnce(fetchedTransactions([sourceLeg, ordinaryPayment, lookalikeCredit]))
 				.mockResolvedValueOnce(fetchedTransactions([targetLeg]));
 
 			const firstResponse = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
 			expect(firstResponse).toEqual(
 				expect.objectContaining({
 					status: 'SUCCEEDED',
-					transactionsFetched: 3,
-					transactionsAdded: 3,
+					transactionsFetched: 4,
+					transactionsAdded: 4,
 				}),
 			);
 
@@ -2097,7 +2229,7 @@ describe('BankConnectionController', () => {
 						financialEventRuleVersion: BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION,
 						category: null,
 						categoryStatus: 'NOT_APPLICABLE',
-						categoryInputHash: null,
+						categoryInputHash: expect.any(String),
 					}),
 					expect.objectContaining({
 						providerTransactionId: targetLeg.providerTransactionId,
@@ -2121,6 +2253,12 @@ describe('BankConnectionController', () => {
 				currencyExchangeCounterpartId: null,
 			});
 
+			expect(
+				await bankTransactionRepository.findOneByOrFail({
+					providerTransactionId: lookalikeCredit.providerTransactionId,
+				}),
+			).toMatchObject({financialEventType: null, categoryStatus: 'PENDING', currencyExchangeCounterpartId: null});
+
 			// The only exchange of the day into GBP: its two legs are linked both ways.
 			const storedSource = exchangeRows.find(({currency}) => currency === 'EUR')!;
 			const storedTarget = exchangeRows.find(({currency}) => currency === 'GBP')!;
@@ -2129,7 +2267,7 @@ describe('BankConnectionController', () => {
 			const detailResponse = await verifiedAgent.get(`/bank-transactions/${storedSource.id}`).expect(200);
 			expect(detailResponse.body.currencyExchangeCounterpart).toEqual({
 				id: storedTarget.id,
-				bankName: 'Revolut',
+				bankName: 'Synthetic Bank',
 				bankAccountName: expect.any(String),
 				bankAccountAlias: null,
 				amount: '8.50000000',
@@ -2151,13 +2289,13 @@ describe('BankConnectionController', () => {
 
 			getAccountBalances.mockResolvedValue([]);
 			getAccountTransactions
-				.mockResolvedValueOnce(fetchedTransactions([sourceLeg, ordinaryPayment]))
+				.mockResolvedValueOnce(fetchedTransactions([sourceLeg, ordinaryPayment, lookalikeCredit]))
 				.mockResolvedValueOnce(fetchedTransactions([targetLeg]));
 			const secondResponse = await synchronizeDue(connection.id);
 			expect(secondResponse).toEqual(
 				expect.objectContaining({
 					status: 'SUCCEEDED',
-					transactionsFetched: 3,
+					transactionsFetched: 4,
 					transactionsAdded: 0,
 				}),
 			);
@@ -2381,6 +2519,117 @@ describe('BankConnectionController', () => {
 			});
 		} finally {
 			await bankConnectionRepository.delete([abnConnection.id, revolutConnection.id]);
+		}
+	});
+
+	it('recognizes own transfers from the account holder name at any bank', async () => {
+		const holderName = 'Example Account Holder';
+		const {connection, bankAccounts} = await createAuthorizedConnectionFixture(
+			'holder-name-bank-session',
+			[{providerAccountId: 'holder-name-bank', identificationHash: 'hash-holder-name-bank', name: holderName}],
+			'Example Bank',
+		);
+		// A second connection whose account IBAN the banks never report.
+		const {connection: walletConnection, bankAccounts: walletAccounts} = await createAuthorizedConnectionFixture(
+			'holder-name-wallet-session',
+			[
+				{
+					providerAccountId: 'holder-name-wallet',
+					identificationHash: 'hash-holder-name-wallet',
+					name: 'EXAMPLE ACCOUNT HOLDER',
+				},
+			],
+			'Example Wallet',
+		);
+		const walletLeg = await fixtures.createTransaction(walletAccounts[0], {
+			providerTransactionId: 'holder-name-wallet-leg',
+			amount: '80.00',
+			creditDebitIndicator: 'CRDT',
+			bookingDate: '2026-08-21',
+			description: null,
+			counterpartyName: holderName,
+		});
+		const row = (entry: string, direction: string, amount: string, fields: Record<string, unknown>) => ({
+			entry_reference: entry,
+			transaction_amount: {amount, currency: 'EUR'},
+			credit_debit_indicator: direction,
+			status: 'BOOK',
+			booking_date: '2026-08-20',
+			...fields,
+		});
+		const rows = [
+			row('to-connected-account', 'DBIT', '80.00', {
+				creditor: {name: holderName},
+				bank_transaction_code: {code: 'ICDT'},
+			}),
+			row('to-unconnected-account', 'DBIT', '30.00', {creditor: {name: 'example account holder'}}),
+			row('transfer-wording', 'DBIT', '12.00', {remittance_information: [`To ${holderName}`]}),
+			row('sepa-name-field', 'CRDT', '7.00', {
+				remittance_information: [
+					`SEPA Overboeking IBAN: DE89370400440532013000 BIC: TESTDEFF Naam: ${holderName} Omschrijving: x`,
+				],
+			}),
+			row('card-payment', 'DBIT', '5.00', {
+				creditor: {name: holderName},
+				bank_transaction_code: {code: 'CCRD'},
+			}),
+			// The holder as the debtor of a debit is the account's own side, not the other party.
+			row('holder-own-side', 'DBIT', '4.00', {debtor: {name: holderName}}),
+		];
+
+		try {
+			expect(await synchronizeProviderRows(connection.id, rows)).toMatchObject({
+				status: 'SUCCEEDED',
+				transactionsAdded: rows.length,
+			});
+			const stored = await bankTransactionRepository.find({
+				where: {bankAccountId: bankAccounts[0].id},
+				order: {entryReference: 'ASC'},
+			});
+			const legId = (entry: string) => stored.find(({entryReference}) => entryReference === entry)?.id;
+			expect(
+				stored.map(({entryReference, ownTransferEvidence, ownTransferCounterpartId}) => ({
+					entryReference,
+					ownTransferEvidence,
+					ownTransferCounterpartId,
+				})),
+			).toEqual([
+				{entryReference: 'card-payment', ownTransferEvidence: null, ownTransferCounterpartId: null},
+				{entryReference: 'holder-own-side', ownTransferEvidence: null, ownTransferCounterpartId: null},
+				{entryReference: 'sepa-name-field', ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
+				{
+					entryReference: 'to-connected-account',
+					ownTransferEvidence: 'NAME',
+					ownTransferCounterpartId: walletLeg.id,
+				},
+				{entryReference: 'to-unconnected-account', ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
+				{entryReference: 'transfer-wording', ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
+			]);
+			expect(await bankTransactionRepository.findOneByOrFail({id: walletLeg.id})).toMatchObject({
+				ownTransferEvidence: 'NAME',
+				ownTransferCounterpartId: legId('to-connected-account'),
+			});
+
+			const response = await verifiedAgent
+				.get('/bank-transactions')
+				.query({'filter[bankAccountIds][]': bankAccounts[0].id})
+				.expect(200);
+			const treatments = Object.fromEntries(
+				response.body.transactions.map(({id, cashFlowTreatment}: {id: string; cashFlowTreatment: string}) => [
+					stored.find((transaction) => transaction.id === id)?.entryReference,
+					cashFlowTreatment,
+				]),
+			);
+			expect(treatments).toEqual({
+				'card-payment': 'EXPENSE',
+				'holder-own-side': 'EXPENSE',
+				'sepa-name-field': 'INTERNAL',
+				'to-connected-account': 'INTERNAL',
+				'to-unconnected-account': 'INTERNAL',
+				'transfer-wording': 'INTERNAL',
+			});
+		} finally {
+			await bankConnectionRepository.delete([connection.id, walletConnection.id]);
 		}
 	});
 

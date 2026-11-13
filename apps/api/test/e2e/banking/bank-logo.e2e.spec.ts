@@ -5,7 +5,6 @@ import TestAgent from 'supertest/lib/agent';
 
 import {REDIS} from '@core/redis/redis.constants';
 import {AccountService} from '@modules/account/account.service';
-import {BankLogoService} from '@modules/banking/bank-logos/bank-logo.service';
 import {MerchantSiteFetcher} from '@modules/banking/merchant-logos/merchant-site-fetcher';
 import {EnableBankingClient} from '@modules/banking/services/enable-banking.client';
 
@@ -20,18 +19,25 @@ describe('bank logo delivery', () => {
 	let app: INestApplication;
 	let agent: TestAgent;
 	let fetchImage: jest.SpyInstance;
+	let getAspsps: jest.SpyInstance;
 	beforeAll(async () => {
 		app = getApp();
 		const redis = app.get<Redis>(REDIS);
 		const keys = await redis.keys('bank-logo:*');
+		await redis.del('banking:aspsp-catalog:XX');
 		if (keys.length) await redis.del(...keys);
 		agent = await loginAgent(app.getHttpServer(), VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
 		const png = await sharp({create: {width: 40, height: 20, channels: 4, background: '#00145a'}})
 			.png()
 			.toBuffer();
 		fetchImage = jest.spyOn(MerchantSiteFetcher.prototype, 'fetch').mockResolvedValue({bytes: png, url: SOURCE});
-		jest.spyOn(app.get(EnableBankingClient), 'getAspsps').mockResolvedValue([
-			{name: 'Example Bank A/S & Épargne', country: 'XX', logoUrl: SOURCE, maximumConsentValiditySeconds: 86400},
+		getAspsps = jest.spyOn(app.get(EnableBankingClient), 'getAspsps').mockResolvedValue([
+			{
+				name: 'Example Bank A/S & Épargne',
+				country: 'XX',
+				logoUrl: SOURCE,
+				maximumConsentValiditySeconds: 86400,
+			},
 		]);
 	});
 	afterAll(() => jest.restoreAllMocks());
@@ -68,6 +74,8 @@ describe('bank logo delivery', () => {
 		await app.get<Redis>(REDIS).del(`bank-logo:colour-v2:${hash}`);
 		await agent.get(metadata.body.url).expect(200);
 		expect(fetchImage).toHaveBeenCalledTimes(2);
+		// The picker lists live; logo sources come from the shared country catalog, downloaded once.
+		expect(getAspsps.mock.calls.map(([country]) => country)).toEqual([undefined, 'XX']);
 		const bad = await agent.get(metadata.body.url.replace(/[0-9a-f]{64}/, 'f'.repeat(64))).expect(404);
 		expect(bad.headers['cache-control']).toBeUndefined();
 		const unknown = await agent.get(metadata.body.url.replace('colour-v2', 'colour-v99')).expect(404);
@@ -75,7 +83,10 @@ describe('bank logo delivery', () => {
 	});
 
 	it('refuses missing or undecodable logos without immutable error caching', async () => {
-		await app.get(BankLogoService).registerSources([{name: 'Invalid', country: 'XX', logoUrl: SOURCE + 'invalid'}]);
+		await app.get<Redis>(REDIS).del('banking:aspsp-catalog:XX');
+		getAspsps.mockResolvedValueOnce([
+			{name: 'Invalid', country: 'XX', logoUrl: SOURCE + 'invalid', maximumConsentValiditySeconds: 86400},
+		]);
 		fetchImage.mockResolvedValueOnce({bytes: Buffer.from('not an image'), url: SOURCE + 'invalid'});
 		const invalid = await agent.get('/bank-connections/aspsps/logos/XX/SW52YWxpZA').expect(404);
 		expect(invalid.headers['cache-control']).toBeUndefined();

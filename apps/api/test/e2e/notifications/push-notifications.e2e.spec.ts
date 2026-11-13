@@ -10,6 +10,7 @@ import {WebPushError} from 'web-push';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {DELIVER_PUSH_ALERT_JOB, PUSH_NOTIFICATION_QUEUE} from '@core/queue/queue.constants';
+import {APP_TIME_ZONE} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
 import {BankConnectionAlertService} from '@modules/banking/alerts/bank-connection-alert.service';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
@@ -74,9 +75,9 @@ describe('Push notifications', () => {
 		jest.restoreAllMocks();
 	});
 
-	/** A new verified owner, signed in, with this browser subscribed. */
-	async function subscribedOwner(name: string) {
-		const owner = await createVerifiedAccount(httpServer, mailpitUrl);
+	/** A new verified owner, signed in, with this browser subscribed; signed up without a time zone unless given one. */
+	async function subscribedOwner(name: string, timeZone?: string) {
+		const owner = await createVerifiedAccount(httpServer, mailpitUrl, {timeZone});
 		await subscribe(owner.agent, name);
 		return owner;
 	}
@@ -101,8 +102,8 @@ describe('Push notifications', () => {
 		);
 	}
 
-	/** A time during the day, at or just after now, so alerts are not held until morning. */
-	const daytime = () => pushAlertDeliveryTime(new Date());
+	/** A time during the day for an owner in the default zone, at or just after now, so alerts are not held. */
+	const daytime = () => pushAlertDeliveryTime(new Date(), APP_TIME_ZONE);
 
 	/** A connection whose last successful sync was 25 hours ago, unless overridden. */
 	async function createBrokenConnection(accountId: string, overrides: DeepPartial<BankConnection> = {}) {
@@ -314,14 +315,34 @@ describe('Push notifications', () => {
 			const held = (await pushQueue.getJobs(['delayed'])).filter((job) => job.data.accountId === owner.id);
 			expect(held).toHaveLength(1);
 			expect(held[0].name).toBe(DELIVER_PUSH_ALERT_JOB);
-			const morning = pushAlertDeliveryTime(night);
-			expect(alertTime(morning)).toBe('09:00');
+			const morning = pushAlertDeliveryTime(night, APP_TIME_ZONE);
+			expect(alertTime(morning, APP_TIME_ZONE)).toBe('09:00');
 			expect(held[0].opts.delay).toBe(morning.getTime() - night.getTime());
 			expect(send).not.toHaveBeenCalled();
 
 			await held[0].promote();
 			await deliverDuePushes();
 			expect(sentPushes()).toEqual([expect.objectContaining({endpoint: endpoint('night')})]);
+		});
+
+		it("times alerts in each owner's time zone", async () => {
+			const lisbon = await subscribedOwner('lisbon', 'Europe/Lisbon');
+			const helsinki = await subscribedOwner('helsinki', 'Europe/Helsinki');
+			await createBrokenConnection(lisbon.id);
+			await createBrokenConnection(helsinki.id);
+			// One instant: 20:30 in Lisbon, 22:30 in Helsinki.
+			const instant = nextWallTime('Europe/Lisbon', '20:30');
+			expect(alertTime(instant, 'Europe/Helsinki')).toBe('22:30');
+
+			await bankAlerts.scan(instant);
+			await deliverDuePushes();
+
+			expect(sentPushes()).toEqual([expect.objectContaining({endpoint: endpoint('lisbon')})]);
+			const held = (await pushQueue.getJobs(['delayed'])).filter((job) => job.data.accountId === helsinki.id);
+			expect(held).toHaveLength(1);
+			const morning = new Date(instant.getTime() + held[0].opts.delay!);
+			expect(alertTime(morning, 'Europe/Helsinki')).toBe('09:00');
+			expect(morning.getTime() - instant.getTime()).toBeLessThan(12 * HOUR);
 		});
 
 		it('drops an alert that no longer applies when it is delivered', async () => {
@@ -382,10 +403,20 @@ describe('Push notifications', () => {
 	});
 });
 
-/** `HH:MM` in Amsterdam. */
-function alertTime(instant: Date): string {
+/** The first whole half hour after now that reads `HH:MM` (`hourMinute`) in `timeZone`. */
+function nextWallTime(timeZone: string, hourMinute: string): Date {
+	const halfHour = 30 * 60 * 1000;
+	const start = Math.ceil(Date.now() / halfHour) * halfHour;
+	for (let instant = start; instant < start + 2 * 24 * 60 * 60 * 1000; instant += halfHour) {
+		if (alertTime(new Date(instant), timeZone) === hourMinute) return new Date(instant);
+	}
+	throw new Error(`No ${hourMinute} in ${timeZone} within two days.`);
+}
+
+/** `HH:MM` in `timeZone`. */
+function alertTime(instant: Date, timeZone: string): string {
 	return new Intl.DateTimeFormat('en-GB', {
-		timeZone: 'Europe/Amsterdam',
+		timeZone,
 		hour: '2-digit',
 		minute: '2-digit',
 		hourCycle: 'h23',

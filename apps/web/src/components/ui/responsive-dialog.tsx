@@ -114,6 +114,8 @@ const ResponsiveDialogContent = ({
   onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
   /** Where focus goes once it closes, for a dialog opened from more than one place. */
   onCloseAutoFocus?: (event: Event) => void;
+  /** Replaces focusing the first control on open; call `preventDefault` and focus something else. */
+  onOpenAutoFocus?: (event: Event) => void;
 }) => {
   const {isDesktop} = useResponsiveDialogContext();
   const ResponsiveDialogContent = isDesktop ? DialogContent : DrawerContent;

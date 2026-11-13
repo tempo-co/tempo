@@ -26,7 +26,15 @@ export class AccountController {
 	}
 
 	@Patch('me')
-	async update(@Body() updates: AccountUpdateDto, @CurrentAccount() account: Account): Promise<AccountResponse> {
+	async update(
+		@Body() {name, timeZone}: AccountUpdateDto,
+		@CurrentAccount() account: Account,
+	): Promise<AccountResponse> {
+		const updates = {
+			...(name !== undefined && {name}),
+			...(timeZone !== undefined && {timeZone}),
+		};
+		if (Object.keys(updates).length === 0) return toAccountResponse(account);
 		return toAccountResponse(await this.accountService.update(account.id, updates));
 	}
 

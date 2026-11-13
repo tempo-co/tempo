@@ -16,7 +16,6 @@ import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 import {Public} from '@modules/auth/decorators/public.decorator';
 import {TokenReadable} from '@modules/auth/decorators/token-readable.decorator';
 
-import {BankLogoService} from '../bank-logos/bank-logo.service';
 import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {AspspCatalogService} from '../services/aspsp-catalog.service';
 import {BankAuthorizationService} from '../services/bank-authorization.service';
@@ -39,7 +38,6 @@ export class BankConnectionController {
 		private readonly bankTransactionService: BankTransactionService,
 		private readonly bankingSyncService: BankingSyncService,
 		private readonly configurationService: ConfigurationService,
-		private readonly bankLogos: BankLogoService,
 	) {}
 
 	@Post('authorize')
@@ -54,9 +52,7 @@ export class BankConnectionController {
 
 	@Get('aspsps')
 	async getSupportedAspsps(): Promise<BankConnectionAspsp[]> {
-		const banks = await this.aspspCatalogService.findSupportedAspsps();
-		await this.bankLogos.registerSources(banks);
-		return banks;
+		return this.aspspCatalogService.findSupportedAspsps();
 	}
 
 	@Get()

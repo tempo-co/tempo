@@ -475,15 +475,16 @@ export class EnableBankingClient {
 		const currency = this.asCurrency(amountRecord?.currency);
 		if (!amount || !currency) return [];
 
-		const creditDebitIndicator = this.asOptionalString(record?.credit_debit_indicator)?.toUpperCase();
-		const creditor = this.asRecord(record?.creditor);
-		const debtor = this.asRecord(record?.debtor);
-		const creditorName = this.asString(creditor?.name);
-		const debtorName = this.asString(debtor?.name);
+		const creditDebitIndicator = this.asOptionalString(record?.credit_debit_indicator)?.trim().toUpperCase();
+		// The other party is the creditor of a debit and the debtor of a credit. The opposite party may be the
+		// account holder, so a missing counterparty or an unknown direction leaves the name and location empty.
 		const counterparty =
-			creditDebitIndicator === 'DBIT' ? creditor : creditDebitIndicator === 'CRDT' ? debtor : undefined;
-		const counterpartyName =
-			creditDebitIndicator === 'CRDT' ? (debtorName ?? creditorName) : (creditorName ?? debtorName);
+			creditDebitIndicator === 'DBIT'
+				? this.asRecord(record?.creditor)
+				: creditDebitIndicator === 'CRDT'
+					? this.asRecord(record?.debtor)
+					: undefined;
+		const counterpartyName = this.asString(counterparty?.name);
 		const counterpartyLocation = this.parseCounterpartyLocation(counterparty);
 		const remittanceInformation = this.parseRemittanceInformation(record?.remittance_information);
 		const counterpartyAccount =
@@ -496,11 +497,11 @@ export class EnableBankingClient {
 		const balanceAfter = this.parseAmountAndCurrency(record?.balance_after_transaction);
 		const exchangeRate = this.asRecord(record?.exchange_rate);
 		const instructedAmount = this.parseAmountAndCurrency(exchangeRate?.instructed_amount);
+		// Bank text only: display and merchant identity read the counterparty name from its own field.
 		const description =
 			this.asOptionalString(record?.note) ??
 			remittanceInformation ??
-			this.asString(bankTransactionCode?.description) ??
-			counterpartyName;
+			this.asString(bankTransactionCode?.description);
 		const counterpartyIban =
 			normalizeIban(this.asString(this.asRecord(counterpartyAccount)?.iban)) ??
 			parseSepaDescriptionIban(description);

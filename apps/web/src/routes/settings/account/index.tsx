@@ -10,6 +10,8 @@ import {
   SettingsList,
   SettingsRow,
 } from '@/features/settings/components/settings-group';
+import {TimeZoneDialog} from '@/features/settings/components/time-zone-dialog';
+import {formatTimeZone} from '@/features/settings/utils/time-zones';
 import {useCurrentAccount} from '@/hooks/use-current-account';
 
 export const Route = createFileRoute('/settings/account/')({
@@ -36,6 +38,13 @@ function SettingsAccountIndex() {
             label='Email'
             value={currentAccount.email}
             action={<EmailChangeDialog currentEmail={currentAccount.email} />}
+          />
+          <SettingsRow
+            label='Time zone'
+            value={
+              <span data-testid='account-time-zone'>{formatTimeZone(currentAccount.timeZone)}</span>
+            }
+            action={<TimeZoneDialog currentTimeZone={currentAccount.timeZone} />}
           />
         </SettingsList>
       </SettingsGroup>

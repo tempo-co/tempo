@@ -6,7 +6,7 @@ Bank artwork comes from Enable Banking, in its original colours. The picker uses
 
 `GET /bank-connections/aspsps` and `GET /bank-connections` expose `logo.metadataUrl`, a same-origin path under `/bank-connections/aspsps/logos/:country/:name`. The name segment is UTF-8 encoded as base64url so punctuation and slashes survive reverse-proxy path normalization. The catalogue also keeps its original `logoUrl` for older clients. Current clients display the converted artwork, not the provider URL.
 
-Metadata returns one PNG `url`, used in both themes. Conversion is lazy: opening a catalogue never downloads all its artwork, and clients request metadata only when a logo slot enters the viewport. The country catalogue is cached for a day, so showing connected banks does not repeatedly list every supported bank. Saved connection reads themselves never contact the provider.
+Metadata returns one PNG `url`, used in both themes. Conversion is lazy: opening a catalogue never downloads all its artwork, and clients request metadata only when a logo slot enters the viewport. Logo sources come from the country's bank catalog that authorization and sync also read, cached in Redis for an hour (`banking:aspsp-catalog:<country>`), so showing connected banks does not repeatedly list every supported bank. Saved connection reads themselves never contact the provider.
 
 The metadata route and `/:algorithm/:hash` image route require a verified session. Successful metadata has `Cache-Control: private, max-age=86400`; successful PNGs have `Cache-Control: private, max-age=31536000, immutable` and `Cross-Origin-Resource-Policy: same-site`. Errors have no image cache headers. The browser uses initials for missing metadata or failed images; another source version retries the image. Theme changes affect only the plate, reusing the same loaded PNG without pixel analysis or filters.
 
@@ -22,9 +22,9 @@ Pixel-affecting changes require a new converter version and visual comparison of
 
 ## Fetching and caching
 
-Only catalogue-provided URLs enter the source registry. `MerchantSiteFetcher` supplies the public-address, redirect, timeout and byte-limit checks; source images have a 1 MiB limit, with at most four fetch/conversion operations active per process. SVG uses the existing 256 KiB limit and five-second kill deadline. No browser request goes to Enable Banking for a current logo.
+Only catalogue-provided URLs are logo sources; a request cannot supply a fetch target. `MerchantSiteFetcher` supplies the public-address, redirect, timeout and byte-limit checks; source images have a 1 MiB limit, with at most four fetch/conversion operations active per process. SVG uses the existing 256 KiB limit and five-second kill deadline. No browser request goes to Enable Banking for a current logo.
 
-`LogoCache` is shared with merchant masks. It keys successful derivatives by source-byte SHA-256 plus converter version, deduplicates in-flight work, and atomically bounds each family at 256 entries with seven-day TTLs. A bank entry stores one PNG. A one-day source-URL index avoids downloading unchanged sources for each metadata read. An evicted image is rebuilt from its registered bank source; a mismatching hash or unknown algorithm returns 404, never different pixels at an immutable URL. No banking or merchant database rows are changed.
+`LogoCache` is shared with merchant masks. It keys successful derivatives by source-byte SHA-256 plus converter version, deduplicates in-flight work, and atomically bounds each family at 256 entries with seven-day TTLs. A bank entry stores one PNG. A one-day source-URL index avoids downloading unchanged sources for each metadata read. An evicted image is rebuilt from its catalog source; a mismatching hash or unknown algorithm returns 404, never different pixels at an immutable URL. No banking or merchant database rows are changed.
 
 ## Verification
 

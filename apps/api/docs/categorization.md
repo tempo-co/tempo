@@ -16,6 +16,7 @@ PostgreSQL is the record; BullMQ only schedules work.
 | Sync upserts with the same input hash | Category kept, no AI work. |
 | Sync changes a classification-relevant field | Hash updated, row back to `PENDING` unless `MANUAL`. |
 | Row becomes an own transfer or currency exchange | `NOT_APPLICABLE`; never sent to the model. |
+| Exchange recompute finds a row is no longer an exchange | Back to `PENDING` unless `MANUAL`, enqueued after commit. |
 | Owner sets a category | `MANUAL`, applied hash = current hash, AI metadata cleared; later syncs never overwrite it. |
 
 - Jobs carry transaction ids, never financial payloads. The worker claims a job's `PENDING`/`FAILED` rows in one guarded update and every write is conditional on id, expected input hash and non-manual source, so a stale job cannot overwrite newer data.
@@ -27,6 +28,8 @@ PostgreSQL is the record; BullMQ only schedules work.
 ## Merchant identity
 
 `merchantKey` and `displayDescription` are derived from retained bank text at sync. A bare payment processor does not identify the business it collects for. A structured SEPA direct debit can supply that identity when its remittance begins with one explicitly named legal entity, bounded before the locality/reference tail, and its declared counterparty is absent or a processor. Display and key derivation share this evidence extractor; arbitrary notes, narrative remittances, multiple entities and a declared nonprocessor counterparty do not qualify.
+
+The counterparty name comes only from the party the direction names, never from the opposite party, which may be the account holder (`banking-invariants.md`, provider field normalization). So debits without a named payee (fees, cash withdrawals) are keyed by their own bank text. The account-holder counterparty migration clears stored names recognizably taken from the wrong party (the account's holder name on a row that is not an own transfer, any name on a row without a direction) and descriptions that only copy the name, then derives these two columns again. It leaves categories, their hashes, manual choices and owner decisions unchanged and enqueues nothing; a changed non-manual row is recategorized only when a later sync fetches it again.
 
 The processor-collected-business refresh migration updates only these two derived columns for qualifying rows whose values differ. It leaves source text, categorization metadata and manual choices, owner decisions and unrelated rows unchanged, and neither enqueues categorization nor calls a provider. Repeating it writes nothing once the derived values match.
 

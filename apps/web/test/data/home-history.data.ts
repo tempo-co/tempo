@@ -18,6 +18,7 @@ import type {
 } from '@tempo/contracts';
 
 import {fulfillJson, mockBankConnections, mockJson} from '../utils/api-mocks';
+import {createAccount} from './account.data';
 
 export const HOME_CONNECTION: BankConnection = {
   id: '00000000-0000-4000-8000-0000000000c1',
@@ -77,12 +78,7 @@ export async function mockSyntheticHome(
 ) {
   if (clock === 'installed') await page.clock.install({time: HOME_NOW});
   else await page.clock.setFixedTime(HOME_NOW);
-  await mockJson(page, '**/accounts/me', {
-    id: '00000000-0000-4000-8000-000000000001',
-    name: 'Example Owner',
-    email: 'owner@example.com',
-    isEmailVerified: true,
-  });
+  await mockJson(page, '**/accounts/me', createAccount({email: 'owner@example.com'}));
   // The bank synced moments ago (204), so opening Tempo reloads nothing and request counts stay exact.
   await page.route('**/bank-connections/*/refresh', (route) => route.fulfill({status: 204}));
   await mockBankConnections(page, connections);

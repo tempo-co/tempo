@@ -899,9 +899,10 @@ export class BankImportService {
 
 	/** The steps sync runs after it persists rows, in the same order. */
 	private async afterRowsChanged(ownerId: Account['id'], transactionIds: readonly string[]): Promise<void> {
-		// Recompute first so new own transfers and exchanges are marked before the worker can claim them.
-		await this.ownTransferService.recomputeForOwnerSafely(ownerId);
+		// Recompute first so new exchanges and own transfers are marked before the worker can claim them.
+		// Exchanges go first: own-transfer detection skips exchange legs.
 		await this.currencyExchangeService.recomputeForOwnerSafely(ownerId);
+		await this.ownTransferService.recomputeForOwnerSafely(ownerId);
 		if (transactionIds.length === 0) return;
 		try {
 			await this.categorizationService.enqueueForTransactions(transactionIds);
