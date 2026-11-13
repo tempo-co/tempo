@@ -309,9 +309,10 @@ export class BankingSyncService {
 				);
 				committed = true;
 				this.logFailures(run.id, connection.id, status, failures);
-				// Recompute first so new own transfers and exchanges are marked before the worker can claim them.
-				await this.ownTransferService.recomputeForOwnerSafely(accountId);
+				// Recompute first so new exchanges and own transfers are marked before the worker can claim them.
+				// Exchanges go first: own-transfer detection skips exchange legs.
 				await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
+				await this.ownTransferService.recomputeForOwnerSafely(accountId);
 				await this.enqueuePersistedTransactions(persistenceResult.persistedTransactionIds);
 				if (persistenceResult.persistedTransactionIds.length)
 					await this.merchantLogoService.enqueueForOwnerSafely(accountId);

@@ -1,11 +1,7 @@
 import {Repository} from 'typeorm';
 
 import {BankAccount} from '../bank-account.entity';
-import {
-	BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION,
-	BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES,
-	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
-} from '../bank-transaction-financial-event';
+import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '../bank-transaction-financial-event';
 import {type BankTransactionIdentityInput, assignBankTransactionStableIdentityKeys} from '../bank-transaction-identity';
 import {BankTransaction} from '../bank-transaction.entity';
 import {BankTransactionPersistenceService} from './bank-transaction-persistence.service';
@@ -32,14 +28,14 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 		service: BankTransactionPersistenceService,
 		transaction: Record<string, unknown>,
 		bankAccount: Record<string, unknown>,
-		provider = 'enable-banking',
-		aspspName = 'Revolut',
+		_provider = 'enable-banking',
+		aspspName = 'Synthetic Bank',
 	): BankTransactionIdentityInput & Record<string, unknown> {
 		return (
 			service as unknown as {
 				toBankTransactionValues: (...args: unknown[]) => BankTransactionIdentityInput & Record<string, unknown>;
 			}
-		).toBankTransactionValues(bankAccount, transaction, aspspName, provider);
+		).toBankTransactionValues(bankAccount, transaction, aspspName);
 	}
 
 	it('uses the stable entry reference instead of a changing provider transaction ID', () => {
@@ -385,7 +381,7 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 		});
 	});
 
-	it('stores currency exchange metadata and skips the categorization input hash', () => {
+	it('leaves currency exchange classification to the recompute and keeps the categorization input hash', () => {
 		const service = createServiceForTransactionValues();
 		const values = toBankTransactionValues(
 			service,
@@ -399,32 +395,20 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 			{id: 'bank-account-id', currency: 'EUR'},
 		);
 
-		expect(values).toMatchObject({
-			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-			financialEventSource: BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES.RULE,
-			financialEventRuleVersion: BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION,
-			categoryInputHash: null,
-		});
+		expect(values).not.toHaveProperty('financialEventType');
+		expect(values).not.toHaveProperty('financialEventSource');
+		expect(values).not.toHaveProperty('financialEventRuleVersion');
+		expect(values.categoryInputHash).toEqual(expect.any(String));
 	});
 
-	it('keeps an existing non-manual exchange row out of categorization after reclassification', async () => {
+	it('keeps an existing exchange row out of categorization and lets a held row take a new exchange marker', async () => {
 		const service = createServiceForTransactionValues();
 		const insertQueryBuilder = createInsertQueryBuilder([]);
-		const eventUpdateQueryBuilder = {
-			update: jest.fn().mockReturnThis(),
-			set: jest.fn().mockReturnThis(),
-			where: jest.fn().mockReturnThis(),
-			andWhere: jest.fn().mockReturnThis(),
-			execute: jest.fn().mockResolvedValue({affected: 1}),
-		};
 		const repositoryFind = jest.fn();
 		const repository = {
 			query: jest.fn().mockResolvedValue([]),
 			find: repositoryFind,
-			createQueryBuilder: jest
-				.fn()
-				.mockReturnValueOnce(insertQueryBuilder)
-				.mockReturnValueOnce(eventUpdateQueryBuilder),
+			createQueryBuilder: jest.fn().mockReturnValueOnce(insertQueryBuilder),
 		} as unknown as Repository<BankTransaction>;
 		const bankAccount = {id: 'bank-account-id', currency: 'EUR'} as BankAccount;
 		const transaction = {
@@ -448,6 +432,8 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 					id: 'existing-transaction-id',
 					categoryInputHash: 'legacy-input-hash',
 					categorySource: null,
+					categoryStatus: 'NOT_APPLICABLE',
+					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
 				},
 			])
 			.mockResolvedValueOnce([{id: 'existing-transaction-id'}]);
@@ -456,11 +442,12 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 			service as unknown as {
 				persistTransactions: (...args: unknown[]) => Promise<unknown>;
 			}
-		).persistTransactions(repository, bankAccount, [transaction], 'Revolut', 'enable-banking');
+		).persistTransactions(repository, bankAccount, [transaction], 'Synthetic Bank', 'enable-banking');
 
 		expect(repositoryFind).toHaveBeenNthCalledWith(
 			1,
 			expect.objectContaining({
+				select: expect.objectContaining({financialEventType: true}),
 				where: expect.objectContaining({
 					bankAccountId: bankAccount.id,
 					stableIdentityGroupKey: expect.any(Object),
@@ -472,18 +459,23 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 			providerTransactionId: 'changed-provider-transaction-id',
 			stableIdentityKey: mappedValue.stableIdentityKey,
 		});
+		const overwriteColumns = insertQueryBuilder.orUpdate.mock.calls[0][0] as string[];
+		expect(overwriteColumns).toContain('description');
+		for (const column of ['financialEventType', 'financialEventSource', 'financialEventRuleVersion']) {
+			expect(overwriteColumns).not.toContain(column);
+		}
 		expect(insertQueryBuilder.orUpdate).toHaveBeenCalledWith(
 			expect.any(Array),
 			['bankAccountId', 'stableIdentityKey'],
 			expect.objectContaining({
-				overwriteCondition: expect.objectContaining({
-					parameters: expect.objectContaining({processingStatus: 'PROCESSING'}),
-				}),
+				overwriteCondition: {
+					where: expect.stringContaining('EXCLUDED."stableIdentityKey" IN (:...exchangeMarkerKeys)'),
+					parameters: {processingStatus: 'PROCESSING', exchangeMarkerKeys: [mappedValue.stableIdentityKey]},
+				},
 			}),
 		);
-		expect(eventUpdateQueryBuilder.set).toHaveBeenCalledWith(
-			expect.objectContaining({categoryStatus: 'NOT_APPLICABLE', categoryInputHash: null}),
-		);
+		// The changed input hash does not send the exchange row back to the model: no reset update runs.
+		expect(repository.createQueryBuilder).toHaveBeenCalledTimes(1);
 	});
 
 	it('resets stale categorization for all qualifying existing rows in one guarded update', async () => {
@@ -659,7 +651,7 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 			{id: 'bank-account-id', currency: 'EUR'},
 		);
 
-		expect(values.financialEventType).toBeNull();
+		expect(values).not.toHaveProperty('financialEventType');
 		expect(values.categoryInputHash).toEqual(expect.any(String));
 	});
 });

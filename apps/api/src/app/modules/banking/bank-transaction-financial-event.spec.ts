@@ -1,53 +1,68 @@
 import {
 	BANK_TRANSACTION_CASH_FLOW_TREATMENTS,
-	BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION,
-	BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES,
 	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
-	detectBankTransactionFinancialEvent,
+	CurrencyExchangeMarkerInput,
+	detectCurrencyExchangeMarker,
 	getBankTransactionCashFlowTreatment,
 } from './bank-transaction-financial-event';
 
 describe('bank transaction financial events', () => {
-	const baseInput = {
-		provider: 'enable-banking',
-		aspspName: 'Revolut',
+	const baseInput: CurrencyExchangeMarkerInput = {
 		accountCurrency: 'EUR',
 		transactionCurrency: 'EUR',
 		description: 'Exchanged to GBP',
-		creditDebitIndicator: null,
+		creditDebitIndicator: 'DBIT',
+		bankTransactionCode: null,
+		bankTransactionSubCode: null,
+	};
+	const spotInput: CurrencyExchangeMarkerInput = {
+		...baseInput,
+		description: 'Currency conversion',
+		bankTransactionCode: 'SPOT',
 	};
 
-	it('classifies a Revolut debit leg as a currency exchange', () => {
-		expect(
-			detectBankTransactionFinancialEvent({
-				...baseInput,
-				creditDebitIndicator: 'DBIT',
-			}),
-		).toEqual({
-			type: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-			source: BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES.RULE,
-			ruleVersion: BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION,
+	it('reads the exchange description as a debit marker naming the bought currency', () => {
+		expect(detectCurrencyExchangeMarker(baseInput)).toEqual({
+			indicator: 'DBIT',
+			currency: 'EUR',
+			targetCurrency: 'GBP',
 		});
 	});
 
-	it('classifies a Revolut credit leg when its currency is the target currency', () => {
+	it('reads the exchange description as a credit marker when the leg buys its own currency', () => {
 		expect(
-			detectBankTransactionFinancialEvent({
+			detectCurrencyExchangeMarker({
 				...baseInput,
-				accountCurrency: 'GBP',
+				accountCurrency: ' gbp ',
 				transactionCurrency: 'GBP',
-				creditDebitIndicator: 'CRDT',
+				creditDebitIndicator: ' crdt ',
+				description: '  Exchanged\tto  gbp\n',
 			}),
-		).toEqual({
-			type: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-			source: BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES.RULE,
-			ruleVersion: BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION,
+		).toEqual({indicator: 'CRDT', currency: 'GBP', targetCurrency: 'GBP'});
+	});
+
+	it.each([
+		['the ISO 20022 spot family', {bankTransactionCode: 'SPOT'}],
+		['the spot family with a sub-family', {bankTransactionCode: ' spot ', bankTransactionSubCode: 'OTHR'}],
+		['the foreign exchange domain and spot family in one code', {bankTransactionCode: 'FORX-SPOT-NTAV'}],
+		[
+			'the domain as code and the family as sub-code',
+			{bankTransactionCode: 'FORX', bankTransactionSubCode: 'SPOT'},
+		],
+	])('reads %s as a marker at any bank, without a target currency on the debit', (_caseName, codes) => {
+		expect(detectCurrencyExchangeMarker({...spotInput, ...codes})).toEqual({
+			indicator: 'DBIT',
+			currency: 'EUR',
+			targetCurrency: null,
+		});
+		expect(detectCurrencyExchangeMarker({...spotInput, ...codes, creditDebitIndicator: 'CRDT'})).toEqual({
+			indicator: 'CRDT',
+			currency: 'EUR',
+			targetCurrency: 'EUR',
 		});
 	});
 
 	it.each([
-		['a different provider', {...baseInput, aspspName: 'Synthetic Bank'}],
-		['a different provider integration', {...baseInput, provider: 'other-provider'}],
 		['a malformed description', {...baseInput, description: 'Exchange to GBP'}],
 		['a description with extra text', {...baseInput, description: 'Exchanged to GBP fee'}],
 		['a description for the reverse direction', {...baseInput, description: 'Exchanged from EUR'}],
@@ -55,27 +70,22 @@ describe('bank transaction financial events', () => {
 		['an unknown indicator', {...baseInput, creditDebitIndicator: 'BOOK'}],
 		[
 			'a debit leg already in the target currency',
-			{...baseInput, creditDebitIndicator: 'DBIT', transactionCurrency: 'GBP'},
+			{...baseInput, transactionCurrency: 'GBP', accountCurrency: 'GBP'},
 		],
-		[
-			'a credit leg outside the target currency',
-			{...baseInput, creditDebitIndicator: 'CRDT', transactionCurrency: 'EUR', accountCurrency: 'EUR'},
-		],
+		['a credit leg outside the target currency', {...baseInput, creditDebitIndicator: 'CRDT'}],
 		['an account and transaction currency mismatch', {...baseInput, accountCurrency: 'GBP'}],
-		['a same-currency exchange', {...baseInput, creditDebitIndicator: 'DBIT', description: 'Exchanged to EUR'}],
-	])('does not classify %s', (_caseName, input) => {
-		expect(detectBankTransactionFinancialEvent(input)).toBeNull();
-	});
-
-	it('does not use exchange-rate metadata as an exchange signal', () => {
-		const inputWithExchangeRateMetadata = {
-			...baseInput,
-			description: 'Card payment',
-			creditDebitIndicator: 'DBIT',
-			exchangeRate: '1.12',
-		};
-
-		expect(detectBankTransactionFinancialEvent(inputWithExchangeRateMetadata)).toBeNull();
+		['a same-currency exchange', {...baseInput, description: 'Exchanged to EUR'}],
+		['a spot code on a leg in another currency than its account', {...spotInput, accountCurrency: 'USD'}],
+		['a spot family under another domain', {...spotInput, bankTransactionCode: 'PMET-SPOT'}],
+		['another foreign exchange family', {...spotInput, bankTransactionCode: 'FORX-NDFX'}],
+		['a spot code next to a contradicting exchange description', {...spotInput, description: 'Exchanged to EUR'}],
+		['a code that only contains the word', {...spotInput, bankTransactionCode: 'SPOTIFY'}],
+		[
+			'a card payment carrying exchange-rate data',
+			{...baseInput, description: 'Card payment', bankTransactionCode: 'PMNT', bankTransactionSubCode: 'CCRD'},
+		],
+	])('reads no marker from %s', (_caseName, input) => {
+		expect(detectCurrencyExchangeMarker(input)).toBeNull();
 	});
 
 	it('maps a currency exchange to internal cash-flow treatment', () => {

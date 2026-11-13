@@ -18,7 +18,7 @@ export const BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES = {
 	RULE: 'RULE',
 } as const satisfies {[S in BankTransactionFinancialEventSource]: S};
 
-export const BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION = 'revolut-currency-exchange-v1';
+export const BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION = 'currency-exchange-v2';
 
 export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = {
 	INCOME: 'INCOME',
@@ -27,49 +27,65 @@ export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = {
 	UNKNOWN: 'UNKNOWN',
 } as const satisfies {[T in BankTransactionCashFlowTreatment]: T};
 
-export type BankTransactionFinancialEvent = {
-	type: BankTransactionFinancialEventType;
-	source: BankTransactionFinancialEventSource;
-	ruleVersion: string;
-};
-
-export type BankTransactionFinancialEventInput = {
-	provider: string | null | undefined;
-	aspspName: string | null | undefined;
+export type CurrencyExchangeMarkerInput = {
 	accountCurrency: string | null | undefined;
 	transactionCurrency: string | null | undefined;
 	creditDebitIndicator: string | null | undefined;
 	description: string | null | undefined;
+	bankTransactionCode: string | null | undefined;
+	bankTransactionSubCode: string | null | undefined;
+};
+
+/** One leg's own evidence that it is half of a currency exchange; only a matching other leg makes it one. */
+export type CurrencyExchangeMarker = {
+	indicator: 'DBIT' | 'CRDT';
+	currency: string;
+	/** The currency bought, when the leg names it; a credit leg always buys its own currency. */
+	targetCurrency: string | null;
 };
 
 const EXCHANGED_TO_DESCRIPTION = /^Exchanged to ([A-Z]{3})$/i;
+
+/** ISO 20022 domain and family of a foreign exchange spot: two currencies exchanged for cash delivery. */
+const FOREIGN_EXCHANGE_DOMAIN = 'FORX';
+const FOREIGN_EXCHANGE_SPOT_FAMILY = 'SPOT';
 
 export function parseCurrencyExchangeTarget(description: string | null | undefined): string | null {
 	const normalized = normalizeBankTransactionText(description);
 	return normalized ? (EXCHANGED_TO_DESCRIPTION.exec(normalized)?.[1].toUpperCase() ?? null) : null;
 }
 
-export function detectBankTransactionFinancialEvent(
-	input: BankTransactionFinancialEventInput,
-): BankTransactionFinancialEvent | null {
-	if (!isRevolutEnableBankingTransaction(input)) return null;
-
+/**
+ * Reads a leg's exchange marker: the exact description "Exchanged to <currency>", or the ISO 20022 foreign
+ * exchange spot code (Enable Banking sends the family as the code, without its domain; a code that carries the
+ * domain must name FORX). The leg must move its own account's currency. Conflicting evidence is no marker.
+ */
+export function detectCurrencyExchangeMarker(input: CurrencyExchangeMarkerInput): CurrencyExchangeMarker | null {
 	const accountCurrency = normalizeCurrency(input.accountCurrency);
-	const transactionCurrency = normalizeCurrency(input.transactionCurrency);
-	if (!accountCurrency || !transactionCurrency || accountCurrency !== transactionCurrency) return null;
-
-	const normalizedTargetCurrency = parseCurrencyExchangeTarget(input.description);
-	if (!normalizedTargetCurrency) return null;
+	const currency = normalizeCurrency(input.transactionCurrency);
+	if (!accountCurrency || !currency || accountCurrency !== currency) return null;
 	const indicator = input.creditDebitIndicator?.trim().toUpperCase();
-	const isSourceLeg = indicator === 'DBIT' && transactionCurrency !== normalizedTargetCurrency;
-	const isTargetLeg = indicator === 'CRDT' && transactionCurrency === normalizedTargetCurrency;
-	if (!isSourceLeg && !isTargetLeg) return null;
+	if (indicator !== 'DBIT' && indicator !== 'CRDT') return null;
 
-	return {
-		type: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-		source: BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES.RULE,
-		ruleVersion: BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION,
-	};
+	const targetCurrency = parseCurrencyExchangeTarget(input.description);
+	if (targetCurrency) {
+		const consistent = indicator === 'DBIT' ? targetCurrency !== currency : targetCurrency === currency;
+		return consistent ? {indicator, currency, targetCurrency} : null;
+	}
+	if (!hasForeignExchangeSpotCode(input.bankTransactionCode, input.bankTransactionSubCode)) return null;
+	return {indicator, currency, targetCurrency: indicator === 'CRDT' ? currency : null};
+}
+
+function hasForeignExchangeSpotCode(code: string | null | undefined, subCode: string | null | undefined): boolean {
+	const segments = [code, subCode].flatMap((value) =>
+		(value ?? '')
+			.trim()
+			.toUpperCase()
+			.split(/[\s\-/.]+/)
+			.filter(Boolean),
+	);
+	const family = segments[0] === FOREIGN_EXCHANGE_DOMAIN ? segments[1] : segments[0];
+	return family === FOREIGN_EXCHANGE_SPOT_FAMILY;
 }
 
 export function getBankTransactionCashFlowTreatment(
@@ -87,10 +103,4 @@ export function getBankTransactionCashFlowTreatment(
 		return BANK_TRANSACTION_CASH_FLOW_TREATMENTS.EXPENSE;
 	}
 	return BANK_TRANSACTION_CASH_FLOW_TREATMENTS.UNKNOWN;
-}
-
-function isRevolutEnableBankingTransaction(input: BankTransactionFinancialEventInput): boolean {
-	return (
-		input.provider?.trim().toLowerCase() === 'enable-banking' && input.aspspName?.trim().toLowerCase() === 'revolut'
-	);
 }
