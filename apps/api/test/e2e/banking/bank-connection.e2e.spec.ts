@@ -1771,22 +1771,80 @@ describe('BankConnectionController', () => {
 		);
 	});
 
-	it('removes pending rows a complete fetch no longer returns, so totals count each payment once', async () => {
+	it('removes pending rows a complete fetch no longer returns and keeps pending own transfers out of totals, so totals count each payment once', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('pending-lifecycle-session');
-		const row = (reference: string, amount: string, status: string, bookingDate?: string) => ({
+		// The owner's savings account at another bank, which that bank's transfers name by IBAN and holder name.
+		const savingsIban = 'GB33BUKB20201555555555';
+		const holderName = 'Example Savings Holder';
+		const {connection: savingsConnection, bankAccounts: savingsAccounts} = await createAuthorizedConnectionFixture(
+			'pending-lifecycle-savings-session',
+			[
+				{
+					providerAccountId: 'pending-lifecycle-savings',
+					identificationHash: 'hash-pending-lifecycle-savings',
+					iban: savingsIban,
+					name: holderName,
+				},
+			],
+			'Example Savings Bank',
+		);
+		const savingsLeg = await fixtures.createTransaction(savingsAccounts[0], {
+			providerTransactionId: 'pending-lifecycle-savings-leg',
+			amount: '40.00',
+			creditDebitIndicator: 'CRDT',
+			bookingDate: '2026-08-21',
+			description: null,
+		});
+		const row = (
+			reference: string,
+			amount: string,
+			status: string,
+			bookingDate?: string,
+			fields: Record<string, unknown> = {remittance_information: [`Example Shop ${reference}`]},
+		) => ({
 			entry_reference: reference,
 			transaction_amount: {amount, currency: 'EUR'},
 			credit_debit_indicator: 'DBIT',
 			status,
 			transaction_date: '2026-08-20',
 			...(bookingDate ? {booking_date: bookingDate, value_date: bookingDate} : {}),
-			remittance_information: [`Example Shop ${reference}`],
+			...fields,
 		});
 		const booked = row('lifecycle-booked', '10.00', 'BOOK', '2026-08-20');
 		const hold = row('lifecycle-hold', '50.00', 'PDNG');
 		const tipPending = row('lifecycle-tip', '20.00', 'PDNG');
 		// The final amount differs from the pending one, so the booked row is a new row, not the pending one updated.
 		const tipBooked = row('lifecycle-tip', '23.00', 'BOOK', '2026-08-22');
+		const transferPending = row('lifecycle-transfer', '40.00', 'PDNG', undefined, {
+			creditor_account: {iban: savingsIban},
+			remittance_information: ['Example savings top-up'],
+		});
+		// The bank books the transfer under a new reference, so the booked row replaces the pending one.
+		const transferBooked = {
+			...transferPending,
+			entry_reference: 'lifecycle-transfer-booked',
+			status: 'BOOK',
+			booking_date: '2026-08-21',
+			value_date: '2026-08-21',
+		};
+		const namedTransferPending = row('lifecycle-named-transfer', '15.00', 'PDNG', undefined, {
+			creditor: {name: holderName},
+		});
+		const namedTransferBooked = {...namedTransferPending, status: 'BOOK', booking_date: '2026-08-21'};
+		// A card payment is never an own transfer, even when the merchant name is the holder's.
+		const cardPending = row('lifecycle-card', '5.00', 'PDNG', undefined, {
+			creditor: {name: holderName},
+			bank_transaction_code: {code: 'CCRD'},
+		});
+		const ownTransferState = async () =>
+			Object.fromEntries(
+				(await bankTransactionRepository.findBy({bankAccountId: bankAccount.id}))
+					.filter(({entryReference}) => entryReference !== null && /transfer|card/.test(entryReference))
+					.map(({entryReference, transactionStatus, ownTransferEvidence, ownTransferCounterpartId}) => [
+						entryReference,
+						{transactionStatus, ownTransferEvidence, ownTransferCounterpartId},
+					]),
+			);
 		const totals = async () =>
 			(
 				await verifiedAgent
@@ -1797,12 +1855,38 @@ describe('BankConnectionController', () => {
 		const accounts = app.get(DataSource).getRepository(Account);
 		await accounts.update({id: account.id}, {baseCurrency: 'EUR'});
 		try {
-			expect(await synchronizeProviderRows(connection.id, [booked, hold, tipPending])).toMatchObject({
+			const firstFetch = [booked, hold, tipPending, transferPending, namedTransferPending, cardPending];
+			expect(await synchronizeProviderRows(connection.id, firstFetch)).toMatchObject({
 				status: 'SUCCEEDED',
-				transactionsAdded: 3,
+				transactionsAdded: 6,
 			});
-			// Pending payments count, as in the bank's own app.
-			expect(await totals()).toMatchObject({count: 3, spending: '80.00'});
+			// Pending payments count, as in the bank's own app; pending own transfers are internal until they book.
+			expect(await totals()).toMatchObject({count: 6, spending: '85.00', income: '0.00'});
+			const pendingTransfer = await bankTransactionRepository.findOneByOrFail({
+				bankAccountId: bankAccount.id,
+				entryReference: 'lifecycle-transfer',
+			});
+			expect(await ownTransferState()).toEqual({
+				'lifecycle-transfer': {
+					transactionStatus: 'PDNG',
+					ownTransferEvidence: 'IBAN',
+					ownTransferCounterpartId: savingsLeg.id,
+				},
+				'lifecycle-named-transfer': {
+					transactionStatus: 'PDNG',
+					ownTransferEvidence: 'NAME',
+					ownTransferCounterpartId: null,
+				},
+				'lifecycle-card': {
+					transactionStatus: 'PDNG',
+					ownTransferEvidence: null,
+					ownTransferCounterpartId: null,
+				},
+			});
+			expect(await bankTransactionRepository.findOneByOrFail({id: savingsLeg.id})).toMatchObject({
+				ownTransferEvidence: 'IBAN',
+				ownTransferCounterpartId: pendingTransfer.id,
+			});
 
 			// A fetch with a row the client cannot read is incomplete, so it removes nothing.
 			const unreadable = {entry_reference: 'lifecycle-unreadable', transaction_amount: {currency: 'EUR'}};
@@ -1810,23 +1894,58 @@ describe('BankConnectionController', () => {
 				status: 'PARTIAL',
 				transactionsAdded: 0,
 			});
-			expect(await totals()).toMatchObject({count: 3, spending: '80.00'});
+			expect(await totals()).toMatchObject({count: 6, spending: '85.00'});
 
-			// The hold was released and the tip booked at its final amount.
-			expect(await synchronizeProviderRows(connection.id, [booked, tipBooked])).toMatchObject({
+			// The hold was released, the tip and the IBAN transfer booked as new rows, the named transfer booked into its
+			// pending row and the card payment is still pending.
+			expect(
+				await synchronizeProviderRows(connection.id, [
+					booked,
+					tipBooked,
+					transferBooked,
+					namedTransferBooked,
+					cardPending,
+				]),
+			).toMatchObject({
 				status: 'SUCCEEDED',
-				transactionsAdded: 1,
+				transactionsAdded: 2,
 			});
 			// The window reaches back to the oldest pending row, so the fetch covers every row it removes.
 			expect(getAccountTransactions.mock.lastCall?.[1]).toMatchObject({dateFrom: '2026-08-20'});
 			const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
 			expect(rows.map(({amount, transactionStatus}) => [amount, transactionStatus]).sort()).toEqual([
 				['-10.00000000', 'BOOK'],
+				['-15.00000000', 'BOOK'],
 				['-23.00000000', 'BOOK'],
+				['-40.00000000', 'BOOK'],
+				['-5.00000000', 'PDNG'],
 			]);
-			expect(await totals()).toMatchObject({count: 2, spending: '33.00'});
+			const bookedTransfer = rows.find(({entryReference}) => entryReference === 'lifecycle-transfer-booked')!;
+			expect(await ownTransferState()).toEqual({
+				'lifecycle-transfer-booked': {
+					transactionStatus: 'BOOK',
+					ownTransferEvidence: 'IBAN',
+					ownTransferCounterpartId: savingsLeg.id,
+				},
+				'lifecycle-named-transfer': {
+					transactionStatus: 'BOOK',
+					ownTransferEvidence: 'NAME',
+					ownTransferCounterpartId: null,
+				},
+				'lifecycle-card': {
+					transactionStatus: 'PDNG',
+					ownTransferEvidence: null,
+					ownTransferCounterpartId: null,
+				},
+			});
+			expect(await bankTransactionRepository.findOneByOrFail({id: savingsLeg.id})).toMatchObject({
+				ownTransferEvidence: 'IBAN',
+				ownTransferCounterpartId: bookedTransfer.id,
+			});
+			expect(await totals()).toMatchObject({count: 5, spending: '38.00'});
 		} finally {
 			await accounts.update({id: account.id}, {baseCurrency: null});
+			await bankConnectionRepository.delete({id: savingsConnection.id});
 		}
 	});
 
