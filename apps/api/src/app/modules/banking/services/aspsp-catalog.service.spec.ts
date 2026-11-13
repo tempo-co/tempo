@@ -34,8 +34,8 @@ describe('AspspCatalogService', () => {
 		const service = createAspspCatalogService({enableBankingClient, redis});
 		const signal = new AbortController().signal;
 
-		await expect(service.getCachedAspsps('XX', signal)).resolves.toEqual(CATALOG);
-		await expect(service.getCachedAspsps('XX', signal)).resolves.toEqual(CATALOG);
+		await expect(service.getAspsps('XX', signal)).resolves.toEqual(CATALOG);
+		await expect(service.getAspsps('XX', signal)).resolves.toEqual(CATALOG);
 
 		expect(enableBankingClient.getAspsps).toHaveBeenCalledTimes(1);
 		expect(enableBankingClient.getAspsps).toHaveBeenCalledWith('XX', signal);
@@ -50,6 +50,6 @@ describe('AspspCatalogService', () => {
 			},
 		});
 
-		await expect(service.getCachedAspsps('XX', new AbortController().signal)).resolves.toEqual(CATALOG);
+		await expect(service.getAspsps('XX')).resolves.toEqual(CATALOG);
 	});
 });

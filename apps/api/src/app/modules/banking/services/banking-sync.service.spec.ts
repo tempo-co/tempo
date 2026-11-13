@@ -122,7 +122,7 @@ describe('BankingSyncService manual refresh context', () => {
 					}),
 				},
 				aspspCatalogService: {
-					getCachedAspsps: jest
+					getAspsps: jest
 						.fn()
 						.mockResolvedValue([
 							{name: 'Example Bank', country: 'FI', maximumConsentValiditySeconds: 86_400},

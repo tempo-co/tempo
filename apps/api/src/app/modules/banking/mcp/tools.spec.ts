@@ -1,6 +1,7 @@
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {InMemoryTransport} from '@modelcontextprotocol/sdk/inMemory.js';
 import type {CallToolResult} from '@modelcontextprotocol/sdk/types.js';
+import {Logger} from '@nestjs/common';
 import {BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@tempo/contracts';
 
 import {ToolReadError} from './errors';
@@ -327,13 +328,23 @@ describe('MCP tool registration', () => {
 		expect(await call('get_merchant', {id: MERCHANT})).toEqual({isError: true, content: [{type: 'text', text}]});
 	});
 
-	it('returns static error text without the raw message when a read fails unexpectedly', async () => {
+	it('returns static error text and logs only the error name and stack frames when a read fails unexpectedly', async () => {
+		const log = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 		respond = async () => {
-			throw new Error('example-private-failure synthetic-test-token');
+			throw new TypeError('example-private-failure synthetic-test-token');
 		};
-		expect(await call('list_accounts')).toEqual({
-			isError: true,
-			content: [{type: 'text', text: 'Tempo API HTTP 500: Tempo API unavailable. Retry later.'}],
-		});
+		try {
+			expect(await call('list_accounts')).toEqual({
+				isError: true,
+				content: [{type: 'text', text: 'Tempo API HTTP 500: Tempo API unavailable. Retry later.'}],
+			});
+			expect(log).toHaveBeenCalledTimes(1);
+			expect(log).toHaveBeenCalledWith(
+				expect.stringMatching(/^MCP tool read failed unexpectedly: TypeError\n\s+at /),
+			);
+			expect(JSON.stringify(log.mock.calls)).not.toContain('example-private-failure');
+		} finally {
+			log.mockRestore();
+		}
 	});
 });

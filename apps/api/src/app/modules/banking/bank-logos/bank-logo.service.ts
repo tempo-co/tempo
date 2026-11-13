@@ -1,14 +1,14 @@
 import {Inject, Injectable, NotFoundException} from '@nestjs/common';
-import type {BankConnectionAspsp, BankLogo} from '@tempo/contracts';
+import type {BankLogo} from '@tempo/contracts';
 import Redis from 'ioredis';
 import {createHash} from 'node:crypto';
 
-import {ConfigurationService} from '@core/config/config.service';
 import {REDIS} from '@core/redis/redis.constants';
 
+import {EnableBankingAspsp} from '../enable-banking.types';
 import {LogoCache} from '../logo-cache';
 import {MerchantSiteFetcher} from '../merchant-logos/merchant-site-fetcher';
-import {EnableBankingClient} from '../services/enable-banking.client';
+import {AspspCatalogService} from '../services/aspsp-catalog.service';
 import {BANK_LOGO_VERSION, convertBankLogo} from './bank-logo';
 import {bankLogoReference} from './bank-logo-reference';
 
@@ -21,52 +21,25 @@ export class BankLogoService {
 	private readonly cache: LogoCache;
 	private readonly fetcher = new MerchantSiteFetcher();
 	private readonly inFlight = new Map<string, Promise<string>>();
-	private readonly catalogues = new Map<string, Promise<void>>();
+	private readonly catalogues = new Map<string, Promise<EnableBankingAspsp[]>>();
 	private active = 0;
 	private readonly waiting: (() => void)[] = [];
 
 	constructor(
 		@Inject(REDIS) private readonly redis: Redis,
-		private readonly provider: EnableBankingClient,
-		private readonly config: ConfigurationService,
+		private readonly catalog: AspspCatalogService,
 	) {
 		this.cache = new LogoCache(redis);
-	}
-
-	/** Only provider catalogue URLs enter this registry; a request cannot supply a fetch target. */
-	async registerSources(banks: BankConnectionAspsp[]): Promise<void> {
-		const countries = new Map<string, [string, string][]>();
-		for (const {country, name, logoUrl} of banks) {
-			const entries = countries.get(country) ?? [];
-			if (logoUrl) entries.push([name, logoUrl]);
-			countries.set(country, entries);
-		}
-		const transaction = this.redis.multi();
-		for (const [country, entries] of countries)
-			transaction.set(`bank-logo:catalogue:${country}`, JSON.stringify(entries), 'EX', DAY);
-		await transaction.exec();
 	}
 
 	async getMetadata(country: string, name: string): Promise<BankLogo> {
 		if (!/^[A-Z]{2}$/.test(country) || !name || name.length > 512) throw missing();
 		try {
-			let catalogue = await this.redis.get(`bank-logo:catalogue:${country}`);
-			if (!catalogue) {
-				if (this.config.get('BANKING_INTEGRATION_ENABLED') === false) throw missing();
-				let pending = this.catalogues.get(country);
-				if (!pending) {
-					pending = this.provider.getAspsps(country).then((banks) => this.registerSources(banks));
-					this.catalogues.set(country, pending);
-				}
-				try {
-					await pending;
-				} finally {
-					this.catalogues.delete(country);
-				}
-				catalogue = await this.redis.get(`bank-logo:catalogue:${country}`);
-			}
-			const entries = JSON.parse(catalogue ?? '[]') as [string, string][];
-			const source = entries.find(([bank]) => bank === name)?.[1];
+			// Only the provider catalog's URLs are fetch sources; a request cannot supply a fetch target.
+			const banks = await this.getCatalog(country);
+			const source = banks.find(
+				(bank) => bank.country === country && bank.name === name && bank.logoUrl,
+			)?.logoUrl;
 			if (!source) throw missing();
 			const hash = await this.getSource(source);
 			return {url: `${bankLogoReference(name, country).metadataUrl}/${BANK_LOGO_VERSION}/${hash}`};
@@ -85,6 +58,19 @@ export class BankLogoService {
 		}
 		if (!bytes) throw missing();
 		return bytes;
+	}
+
+	/** One catalog read per country at a time, so a picker mounting many logos does not repeat it. */
+	private async getCatalog(country: string): Promise<EnableBankingAspsp[]> {
+		const known = this.catalogues.get(country);
+		if (known) return known;
+		const work = this.catalog.getAspsps(country);
+		this.catalogues.set(country, work);
+		try {
+			return await work;
+		} finally {
+			this.catalogues.delete(country);
+		}
 	}
 
 	private async getSource(source: string) {

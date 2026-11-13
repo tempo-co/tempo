@@ -420,6 +420,36 @@ describe('BankTransactionController', () => {
 		} finally {
 			await bankTransactionRepository.remove(longSearchTransaction);
 		}
+
+		// Search text is literal: LIKE wildcards and the escape character match only themselves.
+		const literalRows = await Promise.all(
+			['Example 50% off', 'Example 500 off', 'Example a_b', 'Example axb', 'Example c\\d', 'Example cd'].map(
+				(description) =>
+					fixtures.createTransaction(fixtureBankAccount, {bookingDate: '2026-08-25', description}),
+			),
+		);
+		try {
+			for (const [search, description] of [
+				['50%', 'Example 50% off'],
+				['a_b', 'Example a_b'],
+				['c\\d', 'Example c\\d'],
+			]) {
+				const list = await verifiedAgent
+					.get('/bank-transactions')
+					.query({'filter[search]': search})
+					.expect(200);
+				expect(list.body.transactions.map((row: {description: string}) => row.description)).toEqual([
+					description,
+				]);
+				const totals = await verifiedAgent
+					.get('/bank-transactions/totals')
+					.query({'filter[search]': search})
+					.expect(200);
+				expect(totals.body.count).toBe(1);
+			}
+		} finally {
+			await bankTransactionRepository.remove(literalRows);
+		}
 	});
 
 	it('applies one or multiple category filters', async () => {
