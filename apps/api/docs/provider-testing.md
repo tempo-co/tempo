@@ -12,7 +12,7 @@ Enable Banking, Claude and the browsers' push services are paid, credentialed or
 - **Adapter tests separately.** Test the concrete provider against a mocked transport or loopback server that matches the real schema: malformed, incomplete, duplicate and out-of-domain responses.
 - **Real infrastructure for diagnosis.** Query-builder mocks hide identifier quoting, column widths, races and affected-row guards. Fix the SQL or schema rather than weakening the test.
 - **Outbound privacy.** Write adversarial synthetic fixtures before changing sanitization and assert on the serialized request (with and without a search allowed, and on the fallback).
-- **Cost limits are enforced in code.** Assert the number of provider requests per batch (one call per row group, no search tool on the API, at most one pinned-query search per call on the bridge). Prompt wording alone is not a cap.
+- **Cost limits are enforced in code.** Assert the number of provider requests per batch (one categorizing call per row group, without tools on the API; on the API at most one separate search call per group with a search query, its tool capped at one use; at most one pinned-query search per call on the bridge). Prompt wording alone is not a cap.
 - **Separate gates.** The API route succeeding does not verify the bridge route, and a refusal verifies failure handling, not a successful fallback. Rows inserted by direct SQL bypass enqueue hooks; pending rows with no jobs mean the provider path never ran.
 - **Accuracy is a separate claim.** Schema validity and model confidence say nothing about correctness.
 

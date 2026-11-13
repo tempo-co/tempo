@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type {MessageCreateParamsNonStreaming} from '@anthropic-ai/sdk/resources/messages';
+import type {Message, MessageCreateParamsNonStreaming} from '@anthropic-ai/sdk/resources/messages';
 import {Injectable, Logger, Optional} from '@nestjs/common';
 import {BANK_TRANSACTION_CATEGORIES, type BankTransactionCategoryDefinition} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
@@ -12,8 +12,14 @@ import {BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE} from '@core/queue/queue.cons
 import contract from '../../../../../../claude-bridge/contract.json';
 import merchantContract from '../../../../../../claude-bridge/merchant-contract.json';
 import {normalizeBankTransactionText} from '../../bank-transaction-display';
-import {isHostname} from '../../banking.utils';
-import {toCategorizationRequestTransaction} from '../bank-transaction-categorization-input.schema';
+import {isHostname, safeErrorName, truncate} from '../../banking.utils';
+import {
+	type BankTransactionCategorizationSearchFinding,
+	MAX_SEARCH_FINDING_DESCRIPTION_LENGTH,
+	MERCHANT_SEARCH_FINDING_KINDS,
+	toCategorizationRequestTransaction,
+	toSearchFinding,
+} from '../bank-transaction-categorization-input.schema';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS,
 	BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH,
@@ -62,6 +68,10 @@ const searchTraceSchema = z.object({
 	evidenceType: z.enum(BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES),
 });
 
+const searchFindingResponseSchema = z
+	.object({identifies: z.enum(MERCHANT_SEARCH_FINDING_KINDS), description: z.string().nullable()})
+	.strict();
+
 const merchantIdentificationResponseSchema = z
 	.object({
 		merchants: z.array(
@@ -80,6 +90,7 @@ const merchantIdentificationResponseSchema = z
 
 // One source for the prompts and schemas, shared with the host-installed subscription bridge.
 const {instructions: CATEGORIZATION_INSTRUCTIONS, schema: categorizationResponseJsonSchema} = contract;
+const {instructions: SEARCH_INSTRUCTIONS, schema: searchFindingResponseJsonSchema} = contract.search;
 const CLAUDE_API = 'claude-api';
 const CLAUDE_SUBSCRIPTION = 'claude-subscription';
 type ClaudeRoute = typeof CLAUDE_API | typeof CLAUDE_SUBSCRIPTION;
@@ -97,6 +108,16 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
 // Adaptive thinking at high effort shares this budget with the reply, about 40 tokens per row of a 50-row group; a
 // reply cut off at the limit fails the group rather than leaving it pending.
 const CATEGORIZATION_MAX_TOKENS = 16_384;
+// The merchant search reads one query and answers in a sentence, so it thinks briefly.
+const SEARCH_EFFORT: ClaudeEffort = 'low';
+const SEARCH_MAX_TOKENS = 4096;
+const SEARCH_REPLY_BLOCKS = new Set([
+	'text',
+	'thinking',
+	'redacted_thinking',
+	'server_tool_use',
+	'web_search_tool_result',
+]);
 
 @Injectable()
 export class ClaudeBankTransactionCategorizationProvider implements BankTransactionCategorizationProvider {
@@ -117,9 +138,11 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	}
 
 	/**
-	 * One call for a row group, on the API first and then on the subscription bridge. The API call never offers a web
-	 * search, because the API cannot hold the model to the code-built query before it runs; rows its evidence can't
-	 * settle go to NEEDS_REVIEW. Only the bridge receives a `searchQuery`, and its hook allows exactly that query.
+	 * One call for a row group, on the API first and then on the subscription bridge. With a `searchQuery`, the API
+	 * route first runs a separate merchant search that sees only that query, then categorizes without tools and with
+	 * its finding; a failed search leaves the call without one. The categorizing call never offers a tool, because the
+	 * API cannot hold a model that sees the full input to the code-built query. The bridge instead receives the
+	 * `searchQuery`, and its hook allows exactly that query.
 	 */
 	async categorize(
 		transactions: readonly BankTransactionCategorizationInput[],
@@ -135,15 +158,16 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		const input = this.createInput(categories, requestTransactions);
 		let apiError: unknown;
 		try {
+			const search = searchQuery && this.hasApi() ? await this.searchMerchant(searchQuery) : undefined;
 			const text = await this.callApi(
 				this.createRequest(
 					CATEGORIZATION_INSTRUCTIONS,
-					input,
+					search?.finding ? {...input, searchFinding: search.finding} : input,
 					categorizationResponseJsonSchema,
 					CATEGORIZATION_MAX_TOKENS,
 				),
 			);
-			return this.parseResults(this.parseJson(text), transactions, CLAUDE_API);
+			return this.parseResults(this.parseJson(text), transactions, CLAUDE_API, search?.trace);
 		} catch (error) {
 			// A billing/quota/transport failure must never turn into a category or a paid alternative.
 			if (!this.subscriptionSocket) throw this.routesFailed(error, CLAUDE_API);
@@ -167,6 +191,70 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			if (failure instanceof BankTransactionCategorizationUnavailableError && this.mayHaveRun(apiError))
 				throw this.routesFailed(apiError, CLAUDE_API);
 			throw failure;
+		}
+	}
+
+	/**
+	 * Runs at most one web search for a merchant in a call that receives only the code-built query, never transaction
+	 * text, amounts, history or other names, so whatever query the model writes can reveal nothing else. Returns the
+	 * trace only when a search ran, and with it a finding when the results identified a business; an answer from the
+	 * model's own knowledge adds nothing the categorizing call lacks. Never throws: a failed search must not fail
+	 * categorization.
+	 */
+	private async searchMerchant(
+		searchQuery: string,
+	): Promise<{finding?: BankTransactionCategorizationSearchFinding; trace: SearchTrace} | undefined> {
+		try {
+			const response = await this.createMessage({
+				...this.createRequest(
+					SEARCH_INSTRUCTIONS,
+					{query: searchQuery},
+					searchFindingResponseJsonSchema,
+					SEARCH_MAX_TOKENS,
+					SEARCH_EFFORT,
+				),
+				tools: [{type: 'web_search_20250305', name: 'web_search', max_uses: 1, allowed_callers: ['direct']}],
+			});
+			const searches = response.usage.server_tool_use?.web_search_requests ?? 0;
+			const invocations = response.content.filter((block) => block.type === 'server_tool_use');
+			// One search at most, counted both ways: an invocation the tool refused is not billed but still a second try.
+			if (
+				searches > 1 ||
+				invocations.length > 1 ||
+				response.content.some(
+					(block) =>
+						!SEARCH_REPLY_BLOCKS.has(block.type) ||
+						(block.type === 'server_tool_use' && block.name !== 'web_search'),
+				)
+			)
+				throw this.invalidResponseError();
+			// A search that ran returns a list of results, possibly empty; a tool error is not a search.
+			const results = response.content.flatMap((block) =>
+				block.type === 'web_search_tool_result' && Array.isArray(block.content) ? [block.content] : [],
+			);
+			const ranQuery = (invocations[0]?.input as {query?: unknown} | undefined)?.query;
+			if (searches === 0 || results.length === 0) return undefined;
+			const parsed = searchFindingResponseSchema.safeParse(this.parseJson(this.replyText(response)));
+			if (!parsed.success) throw this.invalidResponseError();
+			const query = (typeof ranQuery === 'string' && this.toTraceQuery(ranQuery)) || searchQuery;
+			const {identifies, description} = parsed.data;
+			const trace = {
+				queries: [query],
+				sourceDomains: this.toSourceDomains(results.flat().map(({url}) => this.toHostname(url))),
+			};
+			// A search that ran but identified no business is no evidence: results for a name can be about anyone
+			// sharing it, so the call decides from the transaction alone.
+			if (identifies !== 'BUSINESS' && identifies !== 'PAYMENT_PROCESSOR') return {trace};
+			const finding = toSearchFinding({
+				query,
+				identifies,
+				description: truncate(description?.trim(), MAX_SEARCH_FINDING_DESCRIPTION_LENGTH),
+			});
+			if (!finding) throw this.invalidResponseError();
+			return {finding, trace};
+		} catch (error) {
+			this.logger.warn(`Merchant web search failed; categorizing without it: ${safeErrorName(error)}`);
+			return undefined;
 		}
 	}
 
@@ -237,6 +325,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		input: object,
 		schema: object,
 		maxTokens: number,
+		effort = this.effort,
 	): MessageCreateParamsNonStreaming {
 		return {
 			model: this.model,
@@ -245,7 +334,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			messages: [{role: 'user', content: JSON.stringify(input)}],
 			thinking: {type: 'adaptive'},
 			output_config: {
-				effort: this.effort,
+				effort,
 				format: {type: 'json_schema', schema: schema as Record<string, unknown>},
 			},
 		};
@@ -253,7 +342,22 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 
 	/** Sends a request that offers no tools and returns its reply text; a reply that used a tool is invalid. */
 	private async callApi(request: MessageCreateParamsNonStreaming): Promise<string> {
-		if (!this.apiKey && !this.client) throw new BankTransactionCategorizationUnavailableError();
+		const response = await this.createMessage(request);
+		if (
+			response.content.some((block) => !['text', 'thinking', 'redacted_thinking'].includes(block.type)) ||
+			(response.usage.server_tool_use?.web_search_requests ?? 0) > 0
+		)
+			throw this.invalidResponseError();
+		return this.replyText(response);
+	}
+
+	private hasApi(): boolean {
+		return !!this.apiKey || !!this.client;
+	}
+
+	/** Sends one API request and returns a complete reply. */
+	private async createMessage(request: MessageCreateParamsNonStreaming): Promise<Message> {
+		if (!this.hasApi()) throw new BankTransactionCategorizationUnavailableError();
 		const client =
 			this.client ??
 			(this.client = new Anthropic({
@@ -264,11 +368,10 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			}));
 		const response = await client.messages.create(request);
 		if (response.stop_reason !== 'end_turn') throw this.invalidResponseError();
-		if (
-			response.content.some((block) => !['text', 'thinking', 'redacted_thinking'].includes(block.type)) ||
-			(response.usage.server_tool_use?.web_search_requests ?? 0) > 0
-		)
-			throw this.invalidResponseError();
+		return response;
+	}
+
+	private replyText(response: Message): string {
 		const text = response.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('');
 		if (!text.trim()) throw this.invalidResponseError();
 		return text;
@@ -293,6 +396,20 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	private mayHaveRun(error: unknown): boolean {
 		if (this.refusedBeforeRunning(error)) return false;
 		return !(error instanceof Anthropic.APIConnectionError) || error instanceof Anthropic.APIConnectionTimeoutError;
+	}
+
+	/** The query a search ran, as the trace stores it: control characters removed, within the query limit. */
+	private toTraceQuery(query: string): string | null {
+		const cleaned = query.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
+		return truncate(cleaned, BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH);
+	}
+
+	private toHostname(url: unknown): string | null {
+		try {
+			return typeof url === 'string' ? new URL(url).hostname : null;
+		} catch {
+			return null;
+		}
 	}
 
 	/** Keeps well-formed hostnames only, up to the trace limit. */

@@ -526,17 +526,32 @@ describe('Bank transaction categorization integration', () => {
 		});
 	});
 
-	it('never offers the API a web search, even for a row whose merchant allows one', async () => {
-		const create = jest.fn().mockResolvedValue({
-			stop_reason: 'end_turn',
-			usage: {server_tool_use: {web_search_requests: 0}},
-			content: [
-				{
-					type: 'text',
-					text: '{"classifications":[{"correlationId":"0","category":"SHOPPING","confidence":0.9,"evidenceType":"PURCHASE_CONTEXT"}]}',
-				},
-			],
-		});
+	it('searches the merchant on the API with only its query, then categorizes without tools and stores the trace', async () => {
+		const query = WEB_SEARCH_TRACE.queries[0];
+		const create = jest
+			.fn()
+			.mockResolvedValueOnce({
+				stop_reason: 'end_turn',
+				usage: {server_tool_use: {web_search_requests: 1}},
+				content: [
+					{type: 'server_tool_use', name: 'web_search', input: {query}},
+					{
+						type: 'web_search_tool_result',
+						content: [{type: 'web_search_result', url: 'https://www.example.test/about'}],
+					},
+					{type: 'text', text: '{"identifies":"BUSINESS","description":"A synthetic shop selling gadgets."}'},
+				],
+			})
+			.mockResolvedValueOnce({
+				stop_reason: 'end_turn',
+				usage: {server_tool_use: {web_search_requests: 0}},
+				content: [
+					{
+						type: 'text',
+						text: '{"classifications":[{"correlationId":"0","category":"SHOPPING","confidence":0.9,"evidenceType":"PURCHASE_CONTEXT"}]}',
+					},
+				],
+			});
 		const transport = await useClaudeTransport(app, create);
 		try {
 			await bankTransactionRepository.update(CATEGORIZATION_E2E_WEB_TRANSACTION_ID, {categoryStatus: 'PENDING'});
@@ -546,18 +561,28 @@ describe('Bank transaction categorization integration', () => {
 				() => bankTransactionRepository.findOneByOrFail({id: CATEGORIZATION_E2E_WEB_TRANSACTION_ID}),
 				(row) => row.categoryStatus === 'COMPLETED',
 			);
-			expect(categorizeSpy.mock.calls[0][2]).toEqual({searchQuery: WEB_SEARCH_TRACE.queries[0]});
-			expect(create).toHaveBeenCalledTimes(1);
-			const [request] = create.mock.calls[0];
-			expect(request).not.toHaveProperty('tools');
-			expect(JSON.parse(request.messages[0].content)).not.toHaveProperty('searchQuery');
+			expect(categorizeSpy.mock.calls[0][2]).toEqual({searchQuery: query});
+			expect(create).toHaveBeenCalledTimes(2);
+			const [[search], [categorize]] = create.mock.calls;
+			expect(search.tools).toEqual([
+				{type: 'web_search_20250305', name: 'web_search', max_uses: 1, allowed_callers: ['direct']},
+			]);
+			expect(search.messages).toEqual([{role: 'user', content: JSON.stringify({query})}]);
+			expect(categorize).not.toHaveProperty('tools');
+			const sent = JSON.parse(categorize.messages[0].content);
+			expect(sent).not.toHaveProperty('searchQuery');
+			expect(sent.searchFinding).toEqual({
+				query,
+				identifies: 'BUSINESS',
+				description: 'A synthetic shop selling gadgets.',
+			});
 			expect(categorized).toMatchObject({
 				category: 'SHOPPING',
 				categoryConfidence: '0.900',
 				categorySource: 'AI',
 				categoryProvider: 'claude-api',
 				categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION,
-				categorySearchTrace: null,
+				categorySearchTrace: WEB_SEARCH_TRACE,
 				categoryLastError: null,
 			});
 		} finally {
