@@ -8,9 +8,12 @@ export const BANK_TRANSACTION_CATEGORIES = [
 	'TRAVEL',
 	'ENTERTAINMENT',
 	'PERSONAL_CARE',
+	'SERVICES',
 	'EDUCATION',
 	'INSURANCE',
 	'FEES',
+	'TAXES_AND_GOVERNMENT',
+	'GIFTS_AND_DONATIONS',
 	'CASH_WITHDRAWAL',
 	'INCOME',
 	'REFUND',
@@ -45,7 +48,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'HOUSING_AND_UTILITIES',
 		label: 'Housing and utilities',
 		description:
-			'Household rent, mortgage, energy, water, internet, and phone bills, including recurring bills; repairs, furnishings, and one-off household purchases belong elsewhere.',
+			'Household rent, mortgage, energy, water, internet, and phone bills, including recurring bills; repairs, furnishings, one-off household purchases, and municipal taxes belong elsewhere.',
 	},
 	{
 		value: 'FOOD_AND_DRINK',
@@ -63,7 +66,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'SHOPPING',
 		label: 'Shopping',
 		description:
-			'Goods bought from general retailers, including clothing, electronics, household items, drugstore items, and online orders, and small services tied to goods, such as repairs, alterations, and parcel or delivery fees; food, bills, and clearly specialized services belong elsewhere.',
+			'Goods bought from general retailers, including clothing, electronics, household items, drugstore items, online orders, and items bought as a gift; repairs, cleaning, postage, food, bills, and other services belong elsewhere.',
 	},
 	{
 		value: 'SUBSCRIPTIONS',
@@ -96,6 +99,12 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 			'Hair, beauty, grooming, cosmetics, toiletries, and similar personal-care services or products, including drugstore purchases of them; medical treatment belongs in Health.',
 	},
 	{
+		value: 'SERVICES',
+		label: 'Services',
+		description:
+			'Paid practical services and small service charges, such as repairs of shoes, phones, bikes, or clothing, alterations, cleaning, laundry and dry cleaning, postage, parcel and delivery fees, and locksmiths; food delivery orders, bank fees, subscriptions, personal grooming, and utilities belong to their own categories.',
+	},
+	{
 		value: 'EDUCATION',
 		label: 'Education',
 		description:
@@ -111,7 +120,19 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'FEES',
 		label: 'Fees',
 		description:
-			'Charges for banking, payments, commissions, account services, or late and transaction fees; the underlying purchase belongs to its own category.',
+			'Charges for banking, payments, commissions, account services, or late and transaction fees; the underlying purchase belongs to its own category, and fees paid to a government belong in Taxes and government.',
+	},
+	{
+		value: 'TAXES_AND_GOVERNMENT',
+		label: 'Taxes and government',
+		description:
+			'Payments to a government: municipal and national taxes, fines, passport, ID, permit, and registration fees, and court or government agency fees; insurance, utilities, and public transport fares belong elsewhere, and money received from a government is income or a refund.',
+	},
+	{
+		value: 'GIFTS_AND_DONATIONS',
+		label: 'Gifts and donations',
+		description:
+			'Charity donations and money given as a gift, including a payment to a person whose text names a gift, birthday, or present; an item bought in a shop as a gift is Shopping.',
 	},
 	{
 		value: 'CASH_WITHDRAWAL',
@@ -140,7 +161,8 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 	{
 		value: 'TRANSFER_OUT',
 		label: 'Transfer out',
-		description: 'Money moved out to another account or person without being payment for goods, services, or fees.',
+		description:
+			'Money moved out to another account or person that is not a payment for goods, services, or fees, and not a gift.',
 	},
 	{
 		value: 'NEEDS_REVIEW',

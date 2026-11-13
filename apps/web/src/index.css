@@ -98,9 +98,12 @@
   --color-category-travel: rgb(var(--category-travel));
   --color-category-entertainment: rgb(var(--category-entertainment));
   --color-category-personal-care: rgb(var(--category-personal-care));
+  --color-category-services: rgb(var(--category-services));
   --color-category-education: rgb(var(--category-education));
   --color-category-insurance: rgb(var(--category-insurance));
   --color-category-fees: rgb(var(--category-fees));
+  --color-category-taxes-and-government: rgb(var(--category-taxes-and-government));
+  --color-category-gifts-and-donations: rgb(var(--category-gifts-and-donations));
   --color-category-cash-withdrawal: rgb(var(--category-cash-withdrawal));
   --color-category-income: rgb(var(--category-income));
   --color-category-refund: rgb(var(--category-refund));
@@ -220,9 +223,12 @@
     --category-travel: 32 112 151;
     --category-entertainment: 138 56 108;
     --category-personal-care: 134 76 148;
+    --category-services: 81 103 50;
     --category-education: 48 71 145;
     --category-insurance: 111 109 42;
     --category-fees: 134 44 39;
+    --category-taxes-and-government: 114 92 49;
+    --category-gifts-and-donations: 113 61 69;
     --category-cash-withdrawal: 75 95 93;
     --category-income: 36 106 74;
     --category-refund: 72 119 49;
@@ -296,9 +302,12 @@
     --category-travel: 125 196 232;
     --category-entertainment: 210 137 183;
     --category-personal-care: 208 163 220;
+    --category-services: 179 206 141;
     --category-education: 141 161 226;
     --category-insurance: 202 199 114;
     --category-fees: 222 120 115;
+    --category-taxes-and-government: 213 190 144;
+    --category-gifts-and-donations: 209 159 167;
     --category-cash-withdrawal: 166 193 190;
     --category-income: 125 210 163;
     --category-refund: 148 209 117;

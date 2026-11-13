@@ -8,9 +8,11 @@ import {
   CircleAlert,
   CircleHelp,
   Clapperboard,
+  Gift,
   GraduationCap,
   HeartPulse,
   House,
+  Landmark,
   Plane,
   ReceiptText,
   Scissors,
@@ -19,6 +21,7 @@ import {
   TrendingUp,
   Undo2,
   Utensils,
+  Wrench,
 } from 'lucide-react';
 import type {LucideIcon} from 'lucide-react';
 
@@ -91,6 +94,11 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
     Scissors,
     'border-category-personal-care/30 bg-category-personal-care/10 text-category-personal-care',
   ),
+  SERVICES: createCategoryMeta(
+    'SERVICES',
+    Wrench,
+    'border-category-services/30 bg-category-services/10 text-category-services',
+  ),
   EDUCATION: createCategoryMeta(
     'EDUCATION',
     GraduationCap,
@@ -105,6 +113,16 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
     'FEES',
     ReceiptText,
     'border-category-fees/30 bg-category-fees/10 text-category-fees',
+  ),
+  TAXES_AND_GOVERNMENT: createCategoryMeta(
+    'TAXES_AND_GOVERNMENT',
+    Landmark,
+    'border-category-taxes-and-government/30 bg-category-taxes-and-government/10 text-category-taxes-and-government',
+  ),
+  GIFTS_AND_DONATIONS: createCategoryMeta(
+    'GIFTS_AND_DONATIONS',
+    Gift,
+    'border-category-gifts-and-donations/30 bg-category-gifts-and-donations/10 text-category-gifts-and-donations',
   ),
   CASH_WITHDRAWAL: createCategoryMeta(
     'CASH_WITHDRAWAL',

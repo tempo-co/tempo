@@ -244,13 +244,13 @@ test.describe('bank transactions', () => {
     const rowCategory = transactionRow.getByTestId('ledger-row-category');
     await expect(rowCategory).toBeVisible();
     const currentCategory = await rowCategory.textContent();
-    const target = currentCategory?.includes('Food and drink')
-      ? {name: 'Shopping', className: /text-category-shopping/, icon: 'svg.lucide-shopping-bag'}
-      : {
-          name: 'Food and drink',
-          className: /text-category-food-and-drink/,
-          icon: 'svg.lucide-utensils',
-        };
+    const target = currentCategory?.includes('Services')
+      ? {
+          name: 'Gifts and donations',
+          className: /text-category-gifts-and-donations/,
+          icon: 'svg.lucide-gift',
+        }
+      : {name: 'Services', className: /text-category-services/, icon: 'svg.lucide-wrench'};
 
     await transactionRow
       .getByRole('button', {name: `View ${transactionName} transaction details`})
@@ -260,7 +260,7 @@ test.describe('bank transactions', () => {
     const categorySelect = inspector.getByRole('combobox', {name: 'Transaction category'});
     await expect(categorySelect).toBeVisible();
     await categorySelect.click();
-    await expect(page.getByRole('option')).toHaveCount(19);
+    await expect(page.getByRole('option')).toHaveCount(22);
     await expect(page.getByRole('option')).toHaveText([
       'Housing and utilities',
       'Food and drink',
@@ -271,9 +271,12 @@ test.describe('bank transactions', () => {
       'Travel',
       'Entertainment',
       'Personal care',
+      'Services',
       'Education',
       'Insurance',
       'Fees',
+      'Taxes and government',
+      'Gifts and donations',
       'Cash withdrawal',
       'Income',
       'Refund',
@@ -283,7 +286,7 @@ test.describe('bank transactions', () => {
       'Other',
     ]);
     // Every option has a category icon; the selected one also shows a check mark.
-    await expect(page.getByRole('option').filter({has: page.locator('svg')})).toHaveCount(19);
+    await expect(page.getByRole('option').filter({has: page.locator('svg')})).toHaveCount(22);
     const targetOption = page.getByRole('option', {name: target.name, exact: true});
     await expect(targetOption.locator('svg').locator('..')).toHaveClass(target.className);
     await targetOption.click();

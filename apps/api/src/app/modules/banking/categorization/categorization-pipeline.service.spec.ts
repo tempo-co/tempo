@@ -28,7 +28,7 @@ const ORDINARY_ATTEMPTS = 3;
 
 describe('CategorizationPipeline provider behavior versions', () => {
 	it('versions the categorization prompt separately from prior provider inputs', () => {
-		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v12');
+		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v13');
 	});
 });
 
