@@ -1,8 +1,10 @@
 import {Server} from 'node:net';
 import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
+import {DataSource} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
+import {Account} from '@modules/account/account.entity';
 import {
 	EMAIL_ALREADY_IN_USE,
 	EMAIL_ALREADY_VERIFIED,
@@ -29,6 +31,7 @@ describe('AuthController - Signup', () => {
 	let webUrl: string;
 	let emailVerificationExpiration: string;
 	let httpServer: Server;
+	let storedTimeZone: (id: string) => Promise<string>;
 
 	beforeAll(async () => {
 		const app = getApp();
@@ -38,6 +41,8 @@ describe('AuthController - Signup', () => {
 		emailVerificationExpiration = config.get('EMAIL_VERIFICATION_EXPIRATION');
 
 		httpServer = app.getHttpServer();
+		const accounts = app.get(DataSource).getRepository(Account);
+		storedTimeZone = async (id) => (await accounts.findOneByOrFail({id})).timeZone;
 	});
 
 	beforeEach(async () => {
@@ -57,8 +62,8 @@ describe('AuthController - Signup', () => {
 	}
 
 	describe('POST /auth/signup', () => {
-		it('should create a new account and send welcome email', async () => {
-			const signUpDto = createAccountCredentials();
+		it("should create a new account in the browser's time zone and send welcome email", async () => {
+			const signUpDto = {...createAccountCredentials(), timeZone: 'Europe/Lisbon'};
 
 			const response = await request(httpServer)
 				.post('/auth/signup')
@@ -71,10 +76,30 @@ describe('AuthController - Signup', () => {
 			expect(response.body?.id).toBeDefined();
 			expect(response.body?.isEmailVerified).toBe(false);
 			expect(response.body?.baseCurrency).toBeNull();
+			expect(response.body?.timeZone).toBe('Europe/Lisbon');
 			expect(response.body?.createdAt).toBeDefined();
 			expect(response.body?.password).toBeUndefined();
+			expect(await storedTimeZone(response.body.id)).toBe('Europe/Lisbon');
 
 			await expectWelcomeEmail(signUpDto.email, signUpDto.name);
+		});
+
+		it.each<[string, unknown, string]>([
+			['no time zone', undefined, 'Europe/Amsterdam'],
+			['an unknown time zone', 'Mars/Olympus_Mons', 'Europe/Amsterdam'],
+			['a time zone that is not a string', 12345, 'Europe/Amsterdam'],
+			['an empty time zone', '', 'Europe/Amsterdam'],
+			['a time zone in other casing', 'europe/helsinki', 'Europe/Helsinki'],
+			['UTC', 'UTC', 'UTC'],
+		])('should store a supported time zone, or the default, for %s', async (_case, timeZone, expected) => {
+			const response = await request(httpServer)
+				.post('/auth/signup')
+				.set('Origin', webOrigin())
+				.send({...createAccountCredentials(), timeZone})
+				.expect(201);
+
+			expect(response.body.timeZone).toBe(expected);
+			expect(await storedTimeZone(response.body.id)).toBe(expected);
 		});
 
 		it('should store the email trimmed and lowercased', async () => {

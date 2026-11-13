@@ -1,5 +1,6 @@
 import {type Locator, type Page, expect} from '@playwright/test';
 
+import {createAccount} from '../data/account.data';
 import {REFRESH_RESULT} from '../data/bank-connection.data';
 import {API_URL} from '../fixtures';
 import {EMPTY_REVIEW_COUNTS, fulfillJson} from './api-mocks';
@@ -27,13 +28,7 @@ export async function routeMockedBankApp(page: Page, baseURL: string | undefined
     const url = new URL(route.request().url());
     if (url.origin === new URL(baseURL!).origin) return route.continue();
     if (url.origin === API_URL && url.pathname === '/accounts/me') {
-      return fulfillJson(route, {
-        id: '00000000-0000-4000-8000-000000000001',
-        name: 'Example User',
-        email: 'user@example.com',
-        isEmailVerified: true,
-        createdAt: '2026-01-01T00:00:00.000Z',
-      });
+      return fulfillJson(route, createAccount({name: 'Example User'}));
     }
     if (url.origin === API_URL && url.pathname === '/bank-connections/aspsps')
       return fulfillJson(route, []);

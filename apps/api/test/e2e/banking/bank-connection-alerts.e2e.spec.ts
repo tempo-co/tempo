@@ -33,6 +33,22 @@ const OTHER_EMAIL = 'alert-other@example.test';
 const UNVERIFIED_EMAIL = 'alert-unverified@example.test';
 const BANK_NAME = 'Example Bank';
 const SYNTHETIC_IBAN = 'NL91ABNA0417164300';
+const OWNER_TIME_ZONE = 'Europe/Helsinki';
+
+/** How the owner's emails write a time: in the owner's zone, with its abbreviation. */
+const ownerTime = (instant: Date) =>
+	new Intl.DateTimeFormat('en-GB', {
+		timeZone: OWNER_TIME_ZONE,
+		day: 'numeric',
+		month: 'long',
+		year: 'numeric',
+		hour: '2-digit',
+		minute: '2-digit',
+		hourCycle: 'h23',
+		timeZoneName: 'short',
+	}).format(instant);
+/** Email text with line wrapping undone. */
+const oneLine = (text: string) => text.replace(/\s+/g, ' ');
 
 describe('Bank connection email alerts', () => {
 	// Each scanAndDeliver() waits up to 5 s for the email queue, so the 5 s default would time out a slow run
@@ -66,7 +82,7 @@ describe('Bank connection email alerts', () => {
 		mailpitUrl = MAILPIT_API_URL;
 		webBaseUrl = config.get('WEB_BASE_URL');
 
-		owner = await createAccount('Alert Owner', OWNER_EMAIL, true, OWNER_PASSWORD);
+		owner = await createAccount('Alert Owner', OWNER_EMAIL, true, OWNER_PASSWORD, OWNER_TIME_ZONE);
 		other = await createAccount('Alert Other', OTHER_EMAIL, true);
 		unverified = await createAccount('Alert Unverified', UNVERIFIED_EMAIL, false);
 		ownerAgent = await loginAgent(httpServer, OWNER_EMAIL, OWNER_PASSWORD);
@@ -115,6 +131,7 @@ describe('Bank connection email alerts', () => {
 		const [weekWarning] = await expectMessages(OWNER_EMAIL, 1);
 		expect(weekWarning.Subject).toBe(`Your ${BANK_NAME} connection to Tempo ends soon`);
 		expect(weekWarning.Text).toContain(BANK_NAME);
+		expect(oneLine(weekWarning.Text)).toContain(`ends on ${ownerTime(consentValidUntil)}.`);
 		expect(weekWarning.HTML).toContain(`href="${webBaseUrl}/bank-connections"`);
 
 		// The consent date moves into the last day without reauthorization.
@@ -185,7 +202,7 @@ describe('Bank connection email alerts', () => {
 	});
 
 	it('alerts about an expired consent that has stopped syncing', async () => {
-		await createConnection(owner, {
+		const connection = await createConnection(owner, {
 			status: 'EXPIRED',
 			syncStatus: 'EXPIRED',
 			consentValidUntil: new Date(Date.now() - 2 * DAY),
@@ -198,6 +215,9 @@ describe('Bank connection email alerts', () => {
 		const [message] = await expectMessages(OWNER_EMAIL, 1);
 		expect(message.Subject).toBe(`Tempo can't sync ${BANK_NAME}`);
 		expect(message.Text).toContain(`The access you gave Tempo to ${BANK_NAME} has ended.`);
+		expect(oneLine(message.Text)).toContain(
+			`The last successful sync was on ${ownerTime(connection.lastSyncedAt!)}.`,
+		);
 	});
 
 	it('gives a never-synced connection a day from creation before alerting', async () => {
@@ -389,8 +409,16 @@ describe('Bank connection email alerts', () => {
 		}
 	});
 
-	async function createAccount(name: string, email: string, isEmailVerified: boolean, password = 'unused') {
-		return accounts.save(accounts.create({name, email, isEmailVerified, password: await argon2.hash(password)}));
+	async function createAccount(
+		name: string,
+		email: string,
+		isEmailVerified: boolean,
+		password = 'unused',
+		timeZone?: string,
+	) {
+		return accounts.save(
+			accounts.create({name, email, isEmailVerified, password: await argon2.hash(password), timeZone}),
+		);
 	}
 
 	async function createConnection(account: Account, overrides: DeepPartial<BankConnection> = {}) {

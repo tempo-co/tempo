@@ -142,7 +142,7 @@ describe('MCP tool registration', () => {
 					return respond(method);
 				},
 		});
-		const server = createToolServer(reader, () => now);
+		const server = createToolServer(reader, 'Europe/Amsterdam', () => now);
 		client = new Client({name: 'synthetic-test', version: '1'});
 		const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
 		await server.connect(serverTransport);

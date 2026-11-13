@@ -11,6 +11,7 @@ export function toAccountResponse(account: Account): AccountResponse {
 		isEmailVerified: account.isEmailVerified,
 		// A freshly saved signup entity omits the column.
 		baseCurrency: account.baseCurrency ?? null,
+		timeZone: account.timeZone,
 		createdAt: account.createdAt.toISOString(),
 		updatedAt: account.updatedAt.toISOString(),
 	};

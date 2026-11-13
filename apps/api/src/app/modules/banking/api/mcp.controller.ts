@@ -18,7 +18,7 @@ export class McpController {
 
 	@Post()
 	async post(@CurrentAccount() account: Account, @Req() request: Request, @Res() response: Response) {
-		const server = createToolServer(this.reader.forAccount(account));
+		const server = createToolServer(this.reader.forAccount(account), account.timeZone);
 		const transport = new StreamableHTTPServerTransport({
 			sessionIdGenerator: undefined,
 			maxRequestBodySize: 100 * 1024,

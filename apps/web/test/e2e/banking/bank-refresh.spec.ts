@@ -3,6 +3,7 @@ import {type QueryClient, QueryObserver} from '@tanstack/react-query';
 import {dashboardQueryKeys} from '../../../src/features/banking/api/aggregate-query-keys';
 import {bankQueryKeys} from '../../../src/features/banking/api/query-keys';
 import {recurringQueryKeys} from '../../../src/features/banking/api/recurring-query-keys';
+import {createAccount} from '../../data/account.data';
 import {MOCK_CONNECTION, REFRESH_RESULT, TARGET_ASPSP} from '../../data/bank-connection.data';
 import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
@@ -508,13 +509,14 @@ test.describe('mocked Enable Banking bank connection', () => {
     await mockJson(page, `${API_URL}/auth/logout`, {});
     await page.route(`${API_URL}/auth/login`, (route) => {
       nextSession = true;
-      return fulfillJson(route, {
-        id: '00000000-0000-4000-8000-000000000002',
-        name: 'Next Example',
-        email: 'next@example.test',
-        isEmailVerified: true,
-        createdAt: '2026-01-01T00:00:00Z',
-      });
+      return fulfillJson(
+        route,
+        createAccount({
+          id: '00000000-0000-4000-8000-000000000002',
+          name: 'Next Example',
+          email: 'next@example.test',
+        }),
+      );
     });
     await page.goto('/bank-connections');
     await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id]);

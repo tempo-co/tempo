@@ -63,8 +63,13 @@ export class AccountService {
 		}
 	}
 
-	async save(name: Account['name'], email: Account['email'], password: Account['password']) {
-		return this.accountRepository.save(this.accountRepository.create({name, email, password}));
+	async save(
+		name: Account['name'],
+		email: Account['email'],
+		password: Account['password'],
+		timeZone: Account['timeZone'],
+	) {
+		return this.accountRepository.save(this.accountRepository.create({name, email, password, timeZone}));
 	}
 
 	async update(id: Account['id'], updates: Partial<Account>) {

@@ -36,6 +36,8 @@ import {
 import validator from 'validator';
 import {z} from 'zod';
 
+import {dateInTimeZone} from '@core/time/app-time-zone';
+
 import {ToolReadError} from './errors';
 import {filtersSchema, sortSchema} from './inputs';
 
@@ -71,7 +73,10 @@ export interface ToolReader {
 const rangeLimits = (intervals: readonly (keyof typeof MAX_RANGE_PERIODS)[]) =>
 	`API enforces range limits: ${intervals.map((interval) => `${interval} ${MAX_RANGE_PERIODS[interval]}`).join(', ')} periods; to must be on or before asOf.`;
 
-export function createToolServer(reader: ToolReader, now: () => Date = () => new Date()): McpServer {
+/**
+ * The tools for one owner; an omitted `asOf` is today in `timeZone`, the owner's IANA time zone, at each call.
+ */
+export function createToolServer(reader: ToolReader, timeZone: string, now: () => Date = () => new Date()): McpServer {
 	const server = new McpServer({name: 'tempo', version: '0.1.0'});
 	const annotations = {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true};
 	const read = async (operation: () => Promise<unknown>): Promise<CallToolResult> => {
@@ -89,18 +94,12 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 			};
 		}
 	};
-	const today = () =>
-		new Intl.DateTimeFormat('en-CA', {
-			timeZone: 'Europe/Amsterdam',
-			year: 'numeric',
-			month: '2-digit',
-			day: '2-digit',
-		}).format(now());
+	const today = () => dateInTimeZone(now(), timeZone);
+	const asOfDefault = `asOf defaults to today in the account's time zone (${timeZone}).`;
 	server.registerTool(
 		'list_recurring',
 		{
-			description:
-				'Read recurring bills and income, monthly totals and unconverted counts. asOf defaults to today in Europe/Amsterdam.',
+			description: `Read recurring bills and income, monthly totals and unconverted counts. ${asOfDefault}`,
 			inputSchema: z.strictObject({asOf: z.iso.date().optional()}),
 			annotations,
 		},
@@ -109,8 +108,7 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 	server.registerTool(
 		'recurring_summary',
 		{
-			description:
-				'Read recurring monthly totals, unconverted counts, the next three upcoming payments and late or higher-than-usual bills. asOf defaults to today in Europe/Amsterdam.',
+			description: `Read recurring monthly totals, unconverted counts, the next three upcoming payments and late or higher-than-usual bills. ${asOfDefault}`,
 			inputSchema: z.strictObject({asOf: z.iso.date().optional()}),
 			annotations,
 		},
@@ -119,8 +117,7 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 	server.registerTool(
 		'month_summary',
 		{
-			description:
-				'Monthly spending and income with baseline comparisons. asOf defaults to today in Europe/Amsterdam.',
+			description: `Monthly spending and income with baseline comparisons. ${asOfDefault}`,
 			inputSchema: z.strictObject({
 				month: z.string().regex(/^(19|20)\d{2}-(0[1-9]|1[0-2])$/),
 				asOf: z.iso.date().optional(),
@@ -136,7 +133,7 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 		server.registerTool(
 			name,
 			{
-				description: `Read period analytics. asOf defaults to today in Europe/Amsterdam. ${rangeLimits(CASH_FLOW_INTERVALS)}`,
+				description: `Read period analytics. ${asOfDefault} ${rangeLimits(CASH_FLOW_INTERVALS)}`,
 				inputSchema: z.strictObject({
 					interval: z.enum(['week', 'month', 'year']),
 					from: z.iso.date(),
@@ -229,7 +226,7 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 	server.registerTool(
 		'spending_breakdown',
 		{
-			description: `Spending by category (by: category, net of refunds) or income by source (by: source) per month or year, each period's total equal to cash_flow's. asOf defaults to today in Europe/Amsterdam. ${rangeLimits(BREAKDOWN_INTERVALS)}`,
+			description: `Spending by category (by: category, net of refunds) or income by source (by: source) per month or year, each period's total equal to cash_flow's. ${asOfDefault} ${rangeLimits(BREAKDOWN_INTERVALS)}`,
 			inputSchema: z.strictObject({
 				interval: z.enum(BREAKDOWN_INTERVALS),
 				by: z.enum(BREAKDOWN_DIMENSIONS),
@@ -265,8 +262,7 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 	server.registerTool(
 		'merchant_ranking',
 		{
-			description:
-				"Top merchants by net spending in the week, month or year containing period, each against its usual amount in earlier periods, using Tempo's spending semantics. asOf defaults to today in Europe/Amsterdam.",
+			description: `Top merchants by net spending in the week, month or year containing period, each against its usual amount in earlier periods, using Tempo's spending semantics. ${asOfDefault}`,
 			inputSchema: z.strictObject({
 				interval: z.enum(CASH_FLOW_INTERVALS),
 				period: z.iso.date(),
@@ -292,7 +288,7 @@ export function createToolServer(reader: ToolReader, now: () => Date = () => new
 	server.registerTool(
 		'merchant_periods',
 		{
-			description: `How much was spent at and received from one merchant group per week, month or year, using Tempo's spending semantics; id comes from list_merchants, merchant_ranking or a transaction's merchantGroupId. asOf defaults to today in Europe/Amsterdam. ${rangeLimits(CASH_FLOW_INTERVALS)}`,
+			description: `How much was spent at and received from one merchant group per week, month or year, using Tempo's spending semantics; id comes from list_merchants, merchant_ranking or a transaction's merchantGroupId. ${asOfDefault} ${rangeLimits(CASH_FLOW_INTERVALS)}`,
 			inputSchema: z.strictObject({
 				id: merchantId,
 				interval: z.enum(CASH_FLOW_INTERVALS),
