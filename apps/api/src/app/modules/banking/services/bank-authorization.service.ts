@@ -251,9 +251,6 @@ export class BankAuthorizationService {
 			});
 			assertLocksHealthy();
 
-			// Whatever becomes of the write, even a commit whose acknowledgement is lost, own transfers next cover the
-			// whole history: account IBANs and holder names may change.
-			this.ownTransferService.requireWholeHistory(accountId);
 			await this.dataSource.transaction(async (manager) => {
 				assertLocksHealthy();
 				const connectionRepository = manager.getRepository(BankConnection);

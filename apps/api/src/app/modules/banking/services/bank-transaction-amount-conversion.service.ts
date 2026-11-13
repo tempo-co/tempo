@@ -168,13 +168,10 @@ export class BankTransactionAmountConversionService {
 			scanned += owner.currencies.reduce((total, row) => total + row.count, 0);
 			converted += count;
 			// Same-day exchanges are matched on base amounts, so new amounts can complete a pairing; own-transfer
-			// detection skips exchange legs, so it follows the rows whose classification changed.
+			// detection skips exchange legs, so it follows over the whole history.
 			if (count > 0) {
-				const reclassifiedIds = await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
-				await this.ownTransferService.recomputeForOwnerSafely(
-					accountId,
-					reclassifiedIds ? {transactionIds: reclassifiedIds} : undefined,
-				);
+				await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
+				await this.ownTransferService.recomputeForOwnerSafely(accountId);
 			}
 		}
 

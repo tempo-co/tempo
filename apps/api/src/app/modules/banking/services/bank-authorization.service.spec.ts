@@ -23,10 +23,7 @@ const BANK_AUTHORIZATION_SERVICE_DEPENDENCIES = [
 ] as const;
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
-	ownTransferService: {
-		recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined),
-		requireWholeHistory: jest.fn(),
-	},
+	ownTransferService: {recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
 };
 
 /** Builds the service with named test doubles; unspecified dependencies are empty objects. */
@@ -237,16 +234,9 @@ describe('BankAuthorizationService authorization state lifecycle', () => {
 		const connectionLockService = {
 			acquire: jest.fn().mockResolvedValue(connectionLock),
 		};
-		const ownTransferService = {
-			requireWholeHistory: jest.fn(() => events.push('own-transfers-whole-history')),
-			recomputeForOwnerSafely: jest.fn(async () => {
-				events.push('own-transfer-recompute');
-			}),
-		};
 		const service = createBankAuthorizationService({
 			bankConnectionRepository,
 			dataSource,
-			ownTransferService,
 			enableBankingClient: {
 				createSession: jest.fn().mockResolvedValue({
 					sessionId: 'provider-session',
@@ -271,15 +261,12 @@ describe('BankAuthorizationService authorization state lifecycle', () => {
 				syncStatus: 'QUEUED',
 			}),
 		);
-		// Own transfers cover the whole history next, even if the commit's acknowledgement were lost.
 		expect(events).toEqual([
-			'own-transfers-whole-history',
 			'transaction-commit',
 			'lock-stop',
 			'lock-release',
 			'lock-stop',
 			'lock-release',
-			'own-transfer-recompute',
 			'queue',
 		]);
 		expect(queueService.enqueueInitialSync).toHaveBeenCalledWith(state.connectionId);

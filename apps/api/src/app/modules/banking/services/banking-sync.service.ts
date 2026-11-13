@@ -310,8 +310,9 @@ export class BankingSyncService {
 						syncStartedAt,
 					);
 				} catch (error) {
-					// The rows may have committed even so; then only a whole-history recompute would see them.
-					this.ownTransferService.requireWholeHistory(accountId);
+					// The rows may have committed even so, and which ones is unknown: recompute the whole history.
+					await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
+					await this.ownTransferService.recomputeForOwnerSafely(accountId);
 					throw error;
 				}
 				committed = true;
@@ -319,7 +320,8 @@ export class BankingSyncService {
 				// Recompute first so new exchanges and own transfers are marked before the worker can claim them.
 				// Exchanges go first: own-transfer detection skips exchange legs.
 				// Own transfers can only change around the rows this sync wrote and the rows whose exchange
-				// classification changed; removed pending rows never take part in one.
+				// classification changed (removed pending rows never take part in one), so a sync that wrote
+				// nothing does no own-transfer work. A failed exchange recompute leaves the changed rows unknown.
 				const reclassifiedIds = await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
 				await this.ownTransferService.recomputeForOwnerSafely(
 					accountId,

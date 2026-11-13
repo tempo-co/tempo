@@ -3154,14 +3154,17 @@ describe('BankConnectionController', () => {
 			]),
 		);
 
-		// Whether a failed commit stored anything is unknown, so own transfers next cover the whole history.
-		const requireWholeHistory = jest.spyOn(app.get(OwnTransferService), 'requireWholeHistory');
-		await expect(app.get(BankingSyncService).synchronizeAutomatically(connection.id)).rejects.toMatchObject({
-			status: 500,
-			message: 'Bank synchronization could not be saved.',
-		});
-		expect(requireWholeHistory).toHaveBeenCalledWith(account.id);
-		requireWholeHistory.mockRestore();
+		// Whether a failed commit stored anything is unknown, so own transfers are recomputed over the whole history.
+		const recompute = jest.spyOn(app.get(OwnTransferService), 'recomputeForOwnerSafely');
+		try {
+			await expect(app.get(BankingSyncService).synchronizeAutomatically(connection.id)).rejects.toMatchObject({
+				status: 500,
+				message: 'Bank synchronization could not be saved.',
+			});
+			expect(recompute.mock.calls).toEqual([[account.id]]);
+		} finally {
+			recompute.mockRestore();
+		}
 		expect(await bankAccountBalanceRepository.count({where: {bankAccountId: bankAccount.id}})).toBe(0);
 		expect(await bankTransactionRepository.count({where: {bankAccountId: bankAccount.id}})).toBe(0);
 		expect(await bankSyncRunRepository.count({where: {bankConnection: {id: connection.id}}})).toBe(1);

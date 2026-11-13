@@ -12,10 +12,7 @@ const BANK_CONNECTION_REMOVAL_SERVICE_DEPENDENCIES = [
 ] as const;
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
-	ownTransferService: {
-		recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined),
-		requireWholeHistory: jest.fn(),
-	},
+	ownTransferService: {recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
 	consentRevocationService: {revokeSessions: jest.fn().mockResolvedValue(undefined)},
 };
 
@@ -80,21 +77,14 @@ describe('BankConnectionRemovalService', () => {
 		const connectionLockService = {
 			acquire: jest.fn().mockResolvedValue(connectionLock),
 		};
-		const ownTransferService = {recomputeForOwnerSafely: jest.fn(), requireWholeHistory: jest.fn()};
 		const service = createBankConnectionRemovalService({
 			bankConnectionRepository,
 			dataSource,
 			connectionLockService,
-			ownTransferService,
 		});
 
 		await expect(service.removeConnection('owner-account-id', connection.id, 'DELETE')).rejects.toThrow(
 			'deletion failed',
-		);
-		// The failed deletion may still have committed, so own transfers next cover the whole history.
-		expect(ownTransferService.requireWholeHistory).toHaveBeenCalledWith('owner-account-id');
-		expect(ownTransferService.requireWholeHistory.mock.invocationCallOrder[0]).toBeLessThan(
-			dataSource.transaction.mock.invocationCallOrder[0],
 		);
 		expect(connectionLockService.acquire).toHaveBeenCalledWith(connection.id);
 		expect(connectionLock.stop).toHaveBeenCalledTimes(1);

@@ -19,23 +19,15 @@ describe('OwnTransferService', () => {
 	const applyCategories = jest.mocked(applyOwnTransferCategories);
 	// The override update finds its row; everything else the manager runs is mocked out.
 	const manager = {query: jest.fn().mockResolvedValue([[{id: 'overridden-id'}], 1])};
+	let dataSource: {transaction: jest.Mock; query: jest.Mock};
 	let service: OwnTransferService;
 
 	beforeEach(() => {
 		recompute.mockReset().mockResolvedValue({accountIbansAdded: 0, transactionsChanged: 0, changedIds: []});
 		applyCategories.mockReset().mockResolvedValue([]);
-		// Transactions run one at a time, as the owner lock serializes them, and a failed one frees the lock before its
-		// caller hears of the failure, as when the database ends the session.
-		let tail: Promise<unknown> = Promise.resolve();
-		const dataSource = {
-			transaction: jest.fn((work: (manager: unknown) => Promise<unknown>) => {
-				const run = tail.then(() => work(manager));
-				tail = run.catch(() => undefined);
-				return run.catch(async (error: unknown) => {
-					await new Promise(setImmediate);
-					throw error;
-				});
-			}),
+		dataSource = {
+			transaction: jest.fn((work: (manager: unknown) => Promise<unknown>) => work(manager)),
+			query: jest.fn(),
 		};
 		service = new OwnTransferService(
 			dataSource as unknown as DataSource,
@@ -43,53 +35,46 @@ describe('OwnTransferService', () => {
 		);
 	});
 
-	it('recomputes the whole history before an owner’s first scoped recompute and after a failed one', async () => {
-		// Nothing vouches for the stored state yet (a fresh process): the first recompute covers everything.
+	it('recomputes in scope, and does nothing for an empty scope', async () => {
 		await service.recomputeForOwnerSafely('owner-id', {transactionIds: []});
-		expect(recompute).toHaveBeenLastCalledWith(manager, 'owner-id', undefined);
-		expect(applyCategories).toHaveBeenLastCalledWith(manager, 'owner-id', undefined);
-		await service.recomputeForOwnerSafely('owner-id', {transactionIds: []});
-		expect(recompute).toHaveBeenCalledTimes(1);
+		expect(dataSource.transaction).not.toHaveBeenCalled();
 
-		// Categories follow the changed rows and the rows whose evidence changed.
+		// Categories follow the scoped rows and the rows whose evidence changed.
 		recompute.mockResolvedValueOnce({accountIbansAdded: 0, transactionsChanged: 1, changedIds: ['partner-id']});
 		await service.recomputeForOwnerSafely('owner-id', {transactionIds: ['changed-id']});
-		expect(recompute).toHaveBeenLastCalledWith(manager, 'owner-id', {transactionIds: ['changed-id']});
-		expect(applyCategories).toHaveBeenLastCalledWith(manager, 'owner-id', ['changed-id', 'partner-id']);
-
-		// The rows a failed run missed are unknown, so the next run covers everything, even with nothing new.
-		recompute.mockRejectedValueOnce(new Error('deadlock detected'));
-		await service.recomputeForOwnerSafely('owner-id', {transactionIds: ['next-id']});
-		await service.recomputeForOwnerSafely('owner-id', {transactionIds: []});
-		expect(recompute).toHaveBeenLastCalledWith(manager, 'owner-id', undefined);
-		await service.recomputeForOwnerSafely('owner-id', {transactionIds: ['later-id']});
-		expect(recompute).toHaveBeenLastCalledWith(manager, 'owner-id', {transactionIds: ['later-id']});
-
-		// A write whose commit outcome is unknown asks for the whole history too.
-		service.requireWholeHistory('owner-id');
-		await service.recomputeForOwnerSafely('owner-id', {transactionIds: ['unknown-id']});
-		expect(recompute).toHaveBeenLastCalledWith(manager, 'owner-id', undefined);
+		expect(recompute).toHaveBeenCalledWith(manager, 'owner-id', {transactionIds: ['changed-id']});
+		expect(applyCategories).toHaveBeenCalledWith(manager, 'owner-id', ['changed-id', 'partner-id']);
 	});
 
-	it('recomputes the whole history when a recompute it waited for failed', async () => {
-		await service.recomputeForOwnerSafely('owner-id');
+	it('retries a failed scoped recompute over the whole history, and a failed whole-history one not at all', async () => {
 		recompute.mockRejectedValueOnce(new Error('deadlock detected'));
-
-		await Promise.all([
-			service.recomputeForOwnerSafely('owner-id', {transactionIds: ['first-id']}),
-			service.recomputeForOwnerSafely('owner-id', {transactionIds: ['second-id']}),
+		await service.recomputeForOwnerSafely('owner-id', {transactionIds: ['changed-id']});
+		expect(recompute.mock.calls).toEqual([
+			[manager, 'owner-id', {transactionIds: ['changed-id']}],
+			[manager, 'owner-id', undefined],
 		]);
+		expect(applyCategories).toHaveBeenLastCalledWith(manager, 'owner-id', undefined);
 
-		expect(recompute).toHaveBeenNthCalledWith(2, manager, 'owner-id', {transactionIds: ['first-id']});
-		expect(recompute).toHaveBeenNthCalledWith(3, manager, 'owner-id', undefined);
+		recompute.mockClear().mockRejectedValue(new Error('deadlock detected'));
+		await expect(service.recomputeForOwnerSafely('owner-id')).resolves.toBeUndefined();
+		expect(recompute).toHaveBeenCalledTimes(1);
 	});
 
-	it('recomputes an override in scope only for an owner in step', async () => {
+	it('recomputes the whole history after an override', async () => {
 		await expect(service.updateOverride('owner-id', 'overridden-id', 'MARKED')).resolves.toBe(true);
-		expect(recompute).toHaveBeenLastCalledWith(manager, 'owner-id', undefined);
+		expect(recompute).toHaveBeenCalledWith(manager, 'owner-id');
+		expect(applyCategories).toHaveBeenCalledWith(manager, 'owner-id');
+	});
 
-		await expect(service.updateOverride('owner-id', 'overridden-id', null)).resolves.toBe(true);
-		expect(recompute).toHaveBeenLastCalledWith(manager, 'owner-id', {transactionIds: ['overridden-id']});
-		expect(applyCategories).toHaveBeenLastCalledWith(manager, 'owner-id', ['overridden-id']);
+	it('recomputes every owner over the whole history, one failure not stopping the rest', async () => {
+		dataSource.query.mockResolvedValue([{accountId: 'first-owner'}, {accountId: 'second-owner'}]);
+		recompute.mockRejectedValueOnce(new Error('deadlock detected'));
+
+		await service.recomputeAllOwners();
+
+		expect(recompute.mock.calls.map(([, ownerId, scope]) => [ownerId, scope])).toEqual([
+			['first-owner', undefined],
+			['second-owner', undefined],
+		]);
 	});
 });
