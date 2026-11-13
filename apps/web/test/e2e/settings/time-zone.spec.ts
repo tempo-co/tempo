@@ -60,6 +60,22 @@ test.describe('Account Settings: Time zone', () => {
       await expect(accountSettingsPage.timeZone).toHaveText('America/New York');
     });
 
+    test.describe('on a phone', () => {
+      test.use({viewport: {width: 390, height: 844}, hasTouch: true});
+
+      test('opens the sheet on the current zone without focusing the search', async ({
+        page,
+        accountSettingsPage,
+      }) => {
+        await accountSettingsPage.editTimeZoneButton.click();
+
+        const current = page.getByRole('dialog').getByRole('button', {name: 'Europe/Amsterdam'});
+        await expect(current).toBeFocused();
+        await expect(current).toBeInViewport();
+        await expect(accountSettingsPage.timeZoneSearch).not.toBeFocused();
+      });
+    });
+
     test('reports a failed save and keeps the list open', async ({page, accountSettingsPage}) => {
       await page.route('**/accounts/me', (route) =>
         route.request().method() === 'PATCH'
