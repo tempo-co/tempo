@@ -22,11 +22,36 @@ type RefusalCopy = {title: string; description: string};
  * Copy for each refusal the dialog shows as a refused state. The two account questions ask instead; a file that
  * looks like a bank's CSV export names the bank (`layoutRefusalCopy`).
  */
-const REFUSAL_COPY: Record<Exclude<BankImportErrorCode, 'layout_not_recognized'>, RefusalCopy> = {
+const REFUSAL_COPY: Record<
+  Exclude<BankImportErrorCode, 'layout_not_recognized' | 'mapper_limit_reached'>,
+  RefusalCopy
+> = {
   unsupported_format: {
     title: "Tempo can't read this file",
     description:
       "It isn't a statement format Tempo knows yet. Supported files lists the formats and bank exports it reads.",
+  },
+  // A table in no layout Tempo knows, while its columns cannot be worked out here.
+  layout_unknown: {
+    title: "Tempo doesn't know this file's layout yet",
+    description: "It isn't a layout Tempo knows yet.",
+  },
+  mapper_unavailable: {
+    title: "Tempo doesn't know this file's layout yet",
+    description: "It isn't a layout Tempo knows yet.",
+  },
+  layout_not_mappable: {
+    title: "Tempo couldn't work out this file's columns",
+    description:
+      'Nothing was imported. Try another export format from your bank, such as CAMT.053 or MT940.',
+  },
+  layout_proposal_expired: {
+    title: 'This preview has expired',
+    description: 'Work out the columns again to import this file.',
+  },
+  layout_limit_reached: {
+    title: 'You have 50 saved layouts',
+    description: 'Remove one under Supported files before saving another.',
   },
   legacy_xls_not_supported: {
     title: "Old Excel files aren't supported",
@@ -97,12 +122,50 @@ function layoutRefusalCopy(layout: string | undefined): RefusalCopy {
   };
 }
 
+/** A file in no layout Tempo knows, when its columns can be worked out: the owner is offered that. */
+export const MAPPER_COPY: RefusalCopy = {
+  title: "Tempo doesn't know this file's layout yet",
+  description:
+    'Tempo can work out which column is which. It sends the column headings and the shape of a few rows, with letters and digits masked, to its AI service.',
+};
+
+/** After the owner said a proposed layout is not right. */
+export const LAYOUT_DISCARDED_COPY: RefusalCopy = {
+  title: "Tempo didn't import anything",
+  description: "This layout isn't supported yet.",
+};
+
+const timeFormat = new Intl.DateTimeFormat(undefined, {hour: 'numeric', minute: '2-digit'});
+
+/** The daily limit on working out columns, with when the next one may be asked: today or tomorrow. */
+function limitCopy(retryAt: string | undefined, now = new Date()): RefusalCopy {
+  const at = retryAt ? new Date(retryAt) : null;
+  const when = !at
+    ? 'tomorrow'
+    : `${at.toDateString() === now.toDateString() ? 'today' : 'tomorrow'} at ${timeFormat.format(at)}`;
+  return {
+    title: "You've worked out the columns of 5 files today",
+    description: `You can work out another file's columns ${when}.`,
+  };
+}
+
+/** Refusals whose copy already says nothing came in. */
+const SAYS_NOTHING_IMPORTED: readonly BankImportErrorCode[] = ['layout_not_mappable'];
+
 /** Refusals worth sending the same files again for, without choosing others. */
 const RETRYABLE_CODES: readonly BankImportErrorCode[] = ['account_busy', 'import_busy'];
 
 export type ImportFailure =
   /** The API refused the drop: nothing was written. */
-  | {kind: 'refused'; code: BankImportErrorCode; title: string; description: string; retry: boolean}
+  | {
+      kind: 'refused';
+      code: BankImportErrorCode;
+      title: string;
+      description: string;
+      retry: boolean;
+      /** The file (1-based) whose columns the owner is offered to work out; null when there is no such offer. */
+      mapFile: number | null;
+    }
   /** The API asks which account each statement that names none goes to. */
   | {kind: 'question'; code: BankImportErrorCode; questions: BankImportAccountQuestion[]}
   /** No refusal: the request failed. `toasted` failures were already reported by the api wrapper. */
@@ -145,30 +208,47 @@ export function refuseBySize(files: readonly Pick<File, 'size'>[]): BankImportEr
 
 /**
  * What a refused import means for the owner. `fileNames` are the drop's files in the order sent: a refusal
- * names its file by position, and the name is shown when there was more than one to tell apart.
+ * names its file by position, and the name is shown when there was more than one to tell apart. With `mapper`
+ * on, a table in no layout Tempo knows, or one that only looks like a bank's export, is offered to have its
+ * columns worked out.
  */
 export function describeRefusal(
   refusal: BankImportError,
   fileNames: readonly string[],
+  {mapper = false}: {mapper?: boolean} = {},
 ): Exclude<ImportFailure, {kind: 'failed'}> {
   if (refusal.accountQuestions && refusal.accountQuestions.length > 0) {
     return {kind: 'question', code: refusal.code, questions: refusal.accountQuestions};
   }
+  const mappable =
+    mapper &&
+    refusal.file !== null &&
+    (['layout_unknown', 'layout_not_recognized', 'layout_proposal_expired'] as const).some(
+      (code) => code === refusal.code,
+    );
   const copy =
-    refusal.code === 'layout_not_recognized'
-      ? layoutRefusalCopy(refusal.layout)
-      : REFUSAL_COPY[refusal.code];
+    mappable && refusal.code !== 'layout_proposal_expired'
+      ? MAPPER_COPY
+      : refusal.code === 'layout_not_recognized'
+        ? layoutRefusalCopy(refusal.layout)
+        : refusal.code === 'mapper_limit_reached'
+          ? limitCopy(refusal.retryAt)
+          : REFUSAL_COPY[refusal.code];
   const fileName =
     refusal.file !== null && fileNames.length > 1 ? fileNames[refusal.file - 1] : undefined;
   // The layout copy says nothing came in from its file; with other files, the drop's outcome still needs saying.
   const nothingImported =
-    refusal.code === 'layout_not_recognized' && !fileName ? '' : ` ${NOTHING_IMPORTED}`;
+    (refusal.code === 'layout_not_recognized' && !mappable && !fileName) ||
+    SAYS_NOTHING_IMPORTED.includes(refusal.code)
+      ? ''
+      : ` ${NOTHING_IMPORTED}`;
   return {
     kind: 'refused',
     code: refusal.code,
     title: copy.title,
     description: `${fileName ? `${fileName}: ` : ''}${copy.description}${nothingImported}`,
     retry: RETRYABLE_CODES.includes(refusal.code),
+    mapFile: mappable ? refusal.file : null,
   };
 }
 

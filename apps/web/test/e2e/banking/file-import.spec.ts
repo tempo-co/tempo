@@ -3,7 +3,10 @@ import type {
   BankConnection,
   BankImportDoubtfulRow,
   BankImportError,
+  BankImportLayout,
+  BankImportLayoutProposal,
   BankImportSummary,
+  ConfirmBankImportLayoutProposalRequest,
   ResolveBankImportDoubtfulRowRequest,
   SetBankAccountBalanceRequest,
 } from '@tempo/contracts';
@@ -17,6 +20,63 @@ import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 const TODAY = new Date('2026-11-12T10:00:00+01:00');
 const CHECKING = MOCK_CONNECTION.bankAccounts[0];
 const FILE_ACCOUNT_ID = '00000000-0000-4000-8000-000000000401';
+const LAYOUT_ID = '00000000-0000-4000-8000-000000000601';
+const RESERVED_BANK_NAME =
+  "Revolut's own exports already import into your Revolut accounts. Name this bank differently.";
+
+/** A proposal for a synthetic German-style export: debit and credit columns, the account on a line above. */
+function layoutProposal(fields: Partial<BankImportLayoutProposal> = {}): BankImportLayoutProposal {
+  const row = (date: string, amount: string, counterparty: string, description: string) => ({
+    date,
+    amount,
+    currency: 'EUR',
+    counterparty,
+    description,
+    balanceAfter: null,
+  });
+  return {
+    id: '00000000-0000-4000-8000-000000000701',
+    expiresAt: '2026-11-12T10:00:00.000Z',
+    bankName: 'Example Bank',
+    currencyNeeded: false,
+    defaultCurrency: 'EUR',
+    mapping: {
+      columns: [
+        {field: 'date', column: 1, header: 'Buchungstag'},
+        {field: 'moneyOut', column: 5, header: 'Soll'},
+        {field: 'moneyIn', column: 6, header: 'Haben'},
+        {field: 'currency', column: 7, header: 'Währung'},
+        {field: 'counterparty', column: 3, header: 'Auftraggeber/Empfänger'},
+        {field: 'description', column: 4, header: 'Verwendungszweck'},
+      ],
+      amount: 'debitCredit',
+      direction: null,
+      balance: null,
+      accountLine: 2,
+      dateFormat: 'DD.MM.YYYY',
+    },
+    dateCheck: null,
+    preview: {
+      rowCount: 9,
+      dateFrom: '2026-03-02',
+      dateTo: '2026-03-10',
+      firstRows: [
+        row('2026-03-02', '-12.50', 'Example Shop GmbH', 'Card payment Example Shop'),
+        row('2026-03-03', '-850.00', 'Example Lettings GmbH', 'Rent March'),
+        row('2026-03-04', '2500.00', 'Example Employer AG', 'Salary March'),
+        row('2026-03-05', '-39.99', 'Example Shop GmbH', 'Card payment Example Shop'),
+        row('2026-03-06', '-4.20', 'Example Cafe', 'Coffee'),
+      ],
+      lastRows: [
+        row('2026-03-09', '-18.00', 'Example Cinema', 'Tickets'),
+        row('2026-03-10', '45.00', 'Jan Example', 'Dinner share'),
+      ],
+      totals: [{currency: 'EUR', moneyIn: '2545.00', moneyOut: '944.69'}],
+      accounts: ['DE89370400440532013000'],
+    },
+    ...fields,
+  };
+}
 
 /** Synthetic statement files: their content never reaches a parser in these specs. */
 const statement = (name: string) => ({
@@ -78,6 +138,11 @@ type ImportApi = {
   uploads: Request[];
   resolves: ResolveBankImportDoubtfulRowRequest[];
   undos: string[];
+  proposals: Request[];
+  confirms: ConfirmBankImportLayoutProposalRequest[];
+  rejects: string[];
+  layouts: BankImportLayout[];
+  removed: string[];
 };
 
 /**
@@ -90,15 +155,34 @@ async function mockFileImport(
     imports = [],
     uploads = [],
     doubtfulRows = [],
+    mapper = false,
+    proposals = [],
+    layouts = [],
   }: {
     imports?: BankImportSummary[];
     uploads?: ((route: Route, api: ImportApi) => Promise<void>)[];
     doubtfulRows?: BankImportDoubtfulRow[];
+    /** Whether the deployment works out the columns of a table it does not know. */
+    mapper?: boolean;
+    /** The answer to each proposal in turn. */
+    proposals?: ((route: Route) => Promise<void>)[];
+    layouts?: BankImportLayout[];
   } = {},
 ) {
-  const api: ImportApi = {imports: [...imports], uploads: [], resolves: [], undos: []};
+  const api: ImportApi = {
+    imports: [...imports],
+    uploads: [],
+    resolves: [],
+    undos: [],
+    proposals: [],
+    confirms: [],
+    rejects: [],
+    layouts: [...layouts],
+    removed: [],
+  };
   await page.route(`${API_URL}/bank-imports`, async (route) => {
-    if (route.request().method() === 'GET') return fulfillJson(route, api.imports);
+    if (route.request().method() === 'GET')
+      return fulfillJson(route, {imports: api.imports, mapper});
     api.uploads.push(route.request());
     const answer = uploads.shift();
     if (!answer) throw new Error('Unexpected upload');
@@ -119,6 +203,37 @@ async function mockFileImport(
     };
     api.imports = [next, ...api.imports.slice(1)];
     return fulfillJson(route, next);
+  });
+  await page.route(`${API_URL}/bank-imports/layout-proposals`, async (route) => {
+    api.proposals.push(route.request());
+    const answer = proposals.shift();
+    if (!answer) throw new Error('Unexpected proposal');
+    await answer(route);
+  });
+  await page.route(`${API_URL}/bank-imports/layout-proposals/*/confirm`, (route) => {
+    const request = route.request().postDataJSON() as ConfirmBankImportLayoutProposalRequest;
+    api.confirms.push(request);
+    if (request.bankName.trim().toLowerCase() === 'revolut')
+      return fulfillJson(
+        route,
+        {statusCode: 400, message: RESERVED_BANK_NAME, error: 'Bad Request'},
+        400,
+      );
+    const layout = {id: LAYOUT_ID, bankName: request.bankName, createdAt: TODAY.toISOString()};
+    api.layouts = [layout, ...api.layouts];
+    return fulfillJson(route, layout, 201);
+  });
+  await page.route(`${API_URL}/bank-imports/layout-proposals/*/reject`, (route) => {
+    const segments = new URL(route.request().url()).pathname.split('/');
+    api.rejects.push(segments[segments.length - 2]);
+    return route.fulfill({status: 204});
+  });
+  await page.route(`${API_URL}/bank-imports/layouts`, (route) => fulfillJson(route, api.layouts));
+  await page.route(`${API_URL}/bank-imports/layouts/*`, (route) => {
+    const id = new URL(route.request().url()).pathname.split('/').pop()!;
+    api.removed.push(id);
+    api.layouts = api.layouts.filter((layout) => layout.id !== id);
+    return route.fulfill({status: 204});
   });
   await page.route(`${API_URL}/bank-imports/*`, (route) => {
     if (route.request().method() !== 'DELETE') return route.fallback();
@@ -176,6 +291,13 @@ const refused =
       {statusCode: 422, message: 'Refused.', file: null, ...error},
       error.statusCode ?? 422,
     );
+
+/** A proposal the API answered with, after `hold` when given. */
+const proposed =
+  (proposal: BankImportLayoutProposal, hold?: Promise<void>) => async (route: Route) => {
+    await hold;
+    await fulfillJson(route, proposal, 201);
+  };
 
 /** The multipart form an upload sent: its file names in order and its text fields. */
 function sentForm(request: Request) {
@@ -406,6 +528,280 @@ test.describe('statement file import on Connections', () => {
       /Tempo didn't import anything from it\. Try exporting it again, or use CAMT\.053 or MT940 if your bank offers them\.$/,
     );
     await expect(dialog.getByRole('button', {name: 'Choose files'})).toBeVisible();
+  });
+
+  test('a file in no layout Tempo knows says so while working out columns is off, and offers nothing more', async ({
+    page,
+  }) => {
+    await mockFileImport(page, {uploads: [refused({code: 'layout_unknown', file: 1})]});
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+
+    await dialog
+      .getByTestId('bank-import-file-input')
+      .setInputFiles([statement('transactions.csv')]);
+
+    const alert = dialog.getByRole('alert');
+    await expect(alert.getByText("Tempo doesn't know this file's layout yet")).toBeVisible();
+    await expect(alert).toContainText("It isn't a layout Tempo knows yet. Nothing was imported.");
+    await expect(dialog.getByRole('button', {name: 'Work out the columns'})).toHaveCount(0);
+    await expect(dialog.getByRole('button', {name: 'Supported files'})).toBeVisible();
+    await expect(dialog.getByRole('list', {name: 'Chosen files'})).toHaveCount(0);
+  });
+
+  test("works out an unknown file's columns, previews the owner's rows and imports the same drop once they look right", async ({
+    page,
+  }) => {
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => (answer = resolve));
+    const api = await mockFileImport(page, {
+      mapper: true,
+      uploads: [
+        refused({code: 'layout_unknown', file: 2}),
+        created(importSummary({filesCount: 2, format: 'csv', layout: `learned-${LAYOUT_ID}`})),
+      ],
+      proposals: [proposed(layoutProposal(), held)],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog
+      .getByTestId('bank-import-file-input')
+      .setInputFiles([statement('statement-april.xml'), statement('export-example.csv')]);
+
+    const alert = dialog.getByRole('alert');
+    await expect(alert.getByText("Tempo doesn't know this file's layout yet")).toBeVisible();
+    await expect(alert).toContainText(
+      'export-example.csv: Tempo can work out which column is which. It sends the column headings and the shape of a few rows, with letters and digits masked, to its AI service. Nothing was imported.',
+    );
+    // The drop stays chosen, so it can go again once the columns are known.
+    await expect(
+      dialog.getByRole('list', {name: 'Chosen files'}).getByRole('listitem'),
+    ).toHaveCount(2);
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+
+    await expect(dialog.getByRole('status').getByText('Working out the columns…')).toBeVisible();
+    await expect(dialog.getByRole('button', {name: 'Cancel'})).toBeEnabled();
+    answer();
+
+    await expect(dialog.getByRole('heading', {name: 'Check the columns'})).toBeVisible();
+    // Only the refused file went to be worked out.
+    expect(sentForm(api.proposals[0]).files).toEqual(['export-example.csv']);
+    const preview = dialog.getByTestId('bank-import-layout-preview');
+    await expect(preview).toContainText(
+      'Date: column 1 · Money out: column 5 · Money in: column 6 · Currency: column 7 · Name: column 3 · Description: column 4 · Account: line 2 above the table · Dates written DD.MM.YYYY',
+    );
+    await expect(preview.getByText('9 transactions · 2 Mar – 10 Mar 2026')).toBeVisible();
+    const rows = preview.getByTestId('bank-import-layout-row');
+    await expect(rows).toHaveCount(7);
+    await expect(rows.first()).toContainText('Card payment Example Shop');
+    await expect(rows.first()).toContainText('-€12.50');
+    await expect(rows.first()).toContainText('money out');
+    await expect(rows.nth(2)).toContainText('€2,500.00');
+    await expect(rows.nth(2)).toContainText('money in');
+    await expect(preview.getByText('2 more')).toBeVisible();
+    await expect(preview.getByTestId('bank-import-layout-totals')).toHaveText(
+      /Money in\s*€2,545.00\s*Money out\s*-€944.69/,
+    );
+    await expect(preview.getByText('Account DE89370400440532013000')).toBeVisible();
+    await expect(preview.getByTestId('bank-import-date-check')).toHaveCount(0);
+    await expect(preview.getByLabel('Bank')).toHaveValue('Example Bank');
+    await expect(preview.getByLabel('Currency')).toHaveCount(0);
+
+    await dialog.getByRole('button', {name: 'Looks right'}).click();
+
+    await expect(dialog.getByRole('heading', {name: 'Imported 2 files'})).toBeVisible();
+    expect(api.confirms).toEqual([{bankName: 'Example Bank'}]);
+    // The same drop went again, unchanged.
+    expect(api.uploads.map((upload) => sentForm(upload).files)).toEqual([
+      ['statement-april.xml', 'export-example.csv'],
+      ['statement-april.xml', 'export-example.csv'],
+    ]);
+  });
+
+  test('a file whose dates read both ways asks for a check, and one that names no currency or bank asks for them', async ({
+    page,
+  }) => {
+    const api = await mockFileImport(page, {
+      mapper: true,
+      uploads: [
+        refused({code: 'layout_not_recognized', file: 1, layout: 'rabobank-nl'}),
+        created(importSummary({filesCount: 1, format: 'csv'})),
+      ],
+      proposals: [
+        proposed(
+          layoutProposal({
+            bankName: null,
+            currencyNeeded: true,
+            dateCheck: {written: '03/04/2026', date: '2026-04-03'},
+            preview: {
+              ...layoutProposal().preview,
+              firstRows: layoutProposal().preview.firstRows.map((row, index) => ({
+                ...row,
+                balanceAfter: index === 0 ? '995.50' : null,
+              })),
+            },
+          }),
+        ),
+      ],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog
+      .getByTestId('bank-import-file-input')
+      .setInputFiles([statement('transactions.csv')]);
+    // A file that only looks like a known export is offered the same.
+    await expect(
+      dialog.getByRole('alert').getByText("Tempo doesn't know this file's layout yet"),
+    ).toBeVisible();
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+
+    const preview = dialog.getByTestId('bank-import-layout-preview');
+    await expect(preview.getByTestId('bank-import-date-check')).toContainText(
+      'Tempo read 03/04/2026 as 3 April 2026',
+    );
+    const confirm = dialog.getByRole('button', {name: 'Looks right'});
+    await expect(preview.getByLabel('Bank')).toHaveValue('');
+    await expect(confirm).toBeDisabled();
+    // A name the API refuses says why under the field, and the preview stays.
+    await preview.getByLabel('Bank').fill('Revolut');
+    await confirm.click();
+    await expect(preview.getByText(RESERVED_BANK_NAME)).toBeVisible();
+    await expect(preview.getByLabel('Bank')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByText("Couldn't save this layout")).toHaveCount(0);
+    await preview.getByLabel('Bank').fill('  Example Savings Bank ');
+    await expect(preview.getByText(RESERVED_BANK_NAME)).toHaveCount(0);
+    await expect(preview.getByLabel('Currency')).toHaveText('EUR');
+    await preview.getByLabel('Currency').click();
+    await page.getByRole('option', {name: 'GBP'}).click();
+    await expect(preview.getByTestId('bank-import-layout-totals')).toContainText('£2,545.00');
+    // A balance column shows on each row, in the chosen currency.
+    await expect(preview.getByTestId('bank-import-layout-row').first()).toContainText(
+      'Balance £995.50',
+    );
+
+    await confirm.click();
+
+    await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
+    expect(api.confirms).toEqual([
+      {bankName: 'Revolut', currency: 'EUR'},
+      {bankName: 'Example Savings Bank', currency: 'GBP'},
+    ]);
+  });
+
+  test('Not right discards the proposal and imports nothing; Cancel stops waiting and keeps the files', async ({
+    page,
+  }) => {
+    const api = await mockFileImport(page, {
+      mapper: true,
+      uploads: [refused({code: 'layout_unknown', file: 1})],
+      proposals: [
+        proposed(layoutProposal(), new Promise<void>(() => undefined)),
+        proposed(layoutProposal()),
+      ],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog
+      .getByTestId('bank-import-file-input')
+      .setInputFiles([statement('transactions.csv')]);
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+    await dialog.getByRole('button', {name: 'Cancel'}).click();
+
+    await expect(
+      dialog.getByRole('alert').getByText("Tempo doesn't know this file's layout yet"),
+    ).toBeVisible();
+    await expect(dialog.getByRole('list', {name: 'Chosen files'})).toContainText(
+      'transactions.csv',
+    );
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+    await dialog.getByRole('button', {name: 'Not right'}).click();
+
+    const alert = dialog.getByRole('alert');
+    await expect(alert.getByText("Tempo didn't import anything")).toBeVisible();
+    await expect(alert).toContainText("This layout isn't supported yet.");
+    await expect(dialog.getByRole('list', {name: 'Chosen files'})).toHaveCount(0);
+    expect(api.rejects).toEqual([layoutProposal().id]);
+    expect(api.confirms).toEqual([]);
+    expect(api.uploads).toHaveLength(1);
+  });
+
+  test("says when columns couldn't be worked out, and when the day's limit resets", async ({
+    page,
+  }) => {
+    await mockFileImport(page, {
+      mapper: true,
+      uploads: [
+        refused({code: 'layout_unknown', file: 1}),
+        refused({code: 'layout_unknown', file: 1}),
+      ],
+      proposals: [
+        (route) =>
+          fulfillJson(
+            route,
+            {statusCode: 422, message: '', code: 'layout_not_mappable', file: 1},
+            422,
+          ),
+        (route) =>
+          fulfillJson(
+            route,
+            {
+              statusCode: 422,
+              message: '',
+              code: 'mapper_limit_reached',
+              file: 1,
+              retryAt: '2026-11-12T15:30:00.000Z',
+            },
+            422,
+          ),
+      ],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    const input = dialog.getByTestId('bank-import-file-input');
+    await input.setInputFiles([statement('transactions.csv')]);
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+
+    const alert = dialog.getByRole('alert');
+    await expect(alert.getByText("Tempo couldn't work out this file's columns")).toBeVisible();
+    await expect(alert).toContainText(
+      'Nothing was imported. Try another export format from your bank, such as CAMT.053 or MT940.',
+    );
+    await expect(dialog.getByRole('button', {name: 'Work out the columns'})).toHaveCount(0);
+
+    await input.setInputFiles([statement('transactions.csv')]);
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+    await expect(alert.getByText("You've worked out the columns of 5 files today")).toBeVisible();
+    await expect(alert).toContainText(
+      /You can work out another file's columns today at (16:30|4:30\sPM)\. Nothing was imported\./,
+    );
+  });
+
+  test('lists Your layouts in Supported files, and removes one in place', async ({page}) => {
+    const api = await mockFileImport(page, {
+      mapper: true,
+      layouts: [
+        {id: LAYOUT_ID, bankName: 'Example Bank', createdAt: TODAY.toISOString()},
+        {
+          id: '00000000-0000-4000-8000-000000000602',
+          bankName: 'Example Savings Bank',
+          createdAt: '2026-10-01T09:00:00.000Z',
+        },
+      ],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByRole('button', {name: 'Supported files'}).click();
+
+    const supported = page.getByRole('dialog', {name: 'Supported files'});
+    const yours = supported.getByRole('list', {name: 'Your layouts'}).getByRole('listitem');
+    await expect(yours).toHaveText([
+      /^Example Bank\s*Added today\s*Remove$/,
+      /^Example Savings Bank\s*Added 1 Oct\s*Remove$/,
+    ]);
+    await supported.getByRole('button', {name: 'Remove Example Bank'}).click();
+
+    await expect(yours).toHaveText([/^Example Savings Bank/]);
+    expect(api.removed).toEqual([LAYOUT_ID]);
   });
 
   test('refuses files too large together before uploading them, with the copy the API would answer', async ({
@@ -1105,6 +1501,64 @@ test.describe('statement file import on Connections', () => {
       dialog.getByRole('list', {name: 'Chosen files'}).getByRole('listitem'),
     ).toHaveCount(2);
     await expect(dialog.getByRole('button', {name: 'Import', exact: true})).toBeEnabled();
+  });
+
+  test('keeps the column preview and Your layouts inside 390px and 320px with long names and amounts', async ({
+    page,
+  }) => {
+    const long = 'Example Household Shared Everyday Account Payment Reference 2026';
+    const row = (amount: string) => ({
+      date: '2026-03-02',
+      amount,
+      currency: 'EUR',
+      counterparty: long,
+      description: long,
+      balanceAfter: null,
+    });
+    const proposal = layoutProposal({
+      bankName: 'Example Bank With A Long Name For Statements Exported 2026'.slice(0, 60),
+      currencyNeeded: true,
+      dateCheck: {written: '03/04/2026', date: '2026-04-03'},
+      mapping: {
+        ...layoutProposal().mapping,
+        columns: layoutProposal().mapping.columns.map((column) => ({...column, header: long})),
+      },
+      preview: {
+        ...layoutProposal().preview,
+        rowCount: 1_234_567,
+        firstRows: Array.from({length: 5}, () => row('-1234567.89')),
+        lastRows: [row('1234567.89'), row('-1234567.89')],
+        totals: [{currency: 'EUR', moneyIn: '987654321.00', moneyOut: '987654321.00'}],
+        accounts: ['DE89370400440532013000', 'GB82WEST12345698765432'],
+      },
+    });
+    await mockFileImport(page, {
+      mapper: true,
+      uploads: [refused({code: 'layout_unknown', file: 1})],
+      proposals: [proposed(proposal)],
+      layouts: [{id: LAYOUT_ID, bankName: proposal.bankName!, createdAt: TODAY.toISOString()}],
+    });
+    await page.setViewportSize({width: 390, height: 844});
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement(`${long}.csv`)]);
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+    await expect(dialog.getByTestId('bank-import-date-check')).toBeVisible();
+
+    for (const width of [390, 320]) {
+      await page.setViewportSize({width, height: 700});
+      await expectNoHorizontalOverflow(page);
+      const confirm = dialog.getByRole('button', {name: 'Looks right'});
+      await expect(confirm).toBeInViewport();
+      expect((await boxOf(confirm)).height).toBeGreaterThanOrEqual(44);
+    }
+    await dialog.getByRole('button', {name: 'Not right'}).click();
+    await dialog.getByRole('button', {name: 'Supported files'}).click();
+    await expect(page.getByRole('list', {name: 'Your layouts'})).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    expect(
+      (await boxOf(page.getByRole('button', {name: `Remove ${proposal.bankName}`}))).height,
+    ).toBeGreaterThanOrEqual(44);
   });
 
   test.describe('worst-case data on phones', () => {

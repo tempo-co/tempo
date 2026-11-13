@@ -82,6 +82,43 @@ function camtEntry(entry: CamtEntry, accountCurrency: string, laterStatus: boole
 	);
 }
 
+/**
+ * A workbook whose first sheet holds `rows`: strings as inline text cells, numbers as numeric cells (day serials for
+ * dates), `null` as a missing cell.
+ */
+export function createWorkbook(rows: Array<Array<string | number | null>>): Buffer {
+	const column = (index: number) => String.fromCharCode(65 + index);
+	const escape = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+	const sheetRows = rows.map(
+		(cells, rowIndex) =>
+			`<row r="${rowIndex + 1}">${cells
+				.map((cell, index) => {
+					const reference = `${column(index)}${rowIndex + 1}`;
+					if (cell === null) return '';
+					return typeof cell === 'number'
+						? `<c r="${reference}"><v>${cell}</v></c>`
+						: `<c r="${reference}" t="inlineStr"><is><t>${escape(cell)}</t></is></c>`;
+				})
+				.join('')}</row>`,
+	);
+	return createZip([
+		{
+			name: 'xl/workbook.xml',
+			content:
+				'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>',
+		},
+		{
+			name: 'xl/_rels/workbook.xml.rels',
+			content:
+				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+		},
+		{
+			name: 'xl/worksheets/sheet1.xml',
+			content: `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows.join('')}</sheetData></worksheet>`,
+		},
+	]);
+}
+
 export type ZipEntry = {
 	name: string;
 	content: Buffer | string;

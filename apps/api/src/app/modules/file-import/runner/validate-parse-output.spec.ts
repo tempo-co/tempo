@@ -1,7 +1,8 @@
 import {EXAMPLE_IBAN} from '../../../../../test/fixtures/statement-file.fixture';
+import {CsvLayout} from '../parsers/csv-layout';
 import {MAX_ROWS_PER_DROP} from '../parsers/parse-limits';
 import {ParseRefusal} from '../parsers/parse-result';
-import {validateParseOutput} from './validate-parse-output';
+import {validateParseOutput, validateSampleOutput} from './validate-parse-output';
 
 const row = (overrides: Record<string, unknown> = {}) => ({
 	bookingDate: '2026-03-02',
@@ -76,6 +77,18 @@ describe('validateParseOutput', () => {
 		});
 	});
 
+	it("accepts a statement that names no account under the bank of the owner's layout it was read with", () => {
+		const owned = {id: 'learned-example', bank: 'Example Bank'} as CsvLayout;
+		const statement = {format: 'csv', layout: 'learned-example', accountIban: null, bank: 'Example Bank'};
+		const value = {...output([], statement), formats: ['csv'], layouts: ['learned-example']};
+
+		expect(validateParseOutput(value, [owned])).toMatchObject({ok: true, result: {statements: [statement]}});
+		expect(() => validateParseOutput(value, [{...owned, bank: 'Other Bank'}])).toThrow(
+			new ParseRefusal('parse_failed'),
+		);
+		expect(() => validateParseOutput(value)).toThrow(new ParseRefusal('parse_failed'));
+	});
+
 	it('accepts the statement of a bank CSV export that names its layout', () => {
 		const result = validateParseOutput({
 			...output([], {format: 'csv', layout: 'example-bank'}),
@@ -144,5 +157,67 @@ describe('validateParseOutput', () => {
 		const rows = Array.from({length: MAX_ROWS_PER_DROP + 1}, () => row());
 
 		expect(() => validateParseOutput(output(rows))).toThrow(new ParseRefusal('too_many_rows'));
+	});
+});
+
+describe('validateSampleOutput', () => {
+	const sample = (masked: Record<string, unknown> = {}) => ({
+		ok: true,
+		sample: {
+			shape: {source: 'text', delimiter: ';', quote: '"', encoding: 'utf-8'},
+			columnCount: 3,
+			skipBefore: 1,
+			skipAfter: 0,
+			header: ['Datum', 'Bedrag', 'Af Bij'],
+			rowCount: 2,
+			masked: {
+				header: ['Datum', 'Bedrag', 'Af Bij'],
+				linesAbove: [{line: 0, cells: ['Aaaaaaaa AA99AAAA9999999999', 'EUR']}],
+				rows: [['99-99-9999', '-99,99', 'Af']],
+				linesBelow: [],
+				columnShapes: ['99-99-9999', '-99,99', 'Aa'],
+				columns: [
+					{shapes: ['99-99-9999'], sameValue: false},
+					{shapes: ['-99,99', '9.999,99', ''], sameValue: false},
+					{shapes: ['Aa', 'Aaa'], sameValue: false},
+				],
+				...masked,
+			},
+		},
+	});
+
+	it('passes a masked sample with its header, currency codes and short repeated values', () => {
+		expect(validateSampleOutput(sample())).toEqual(sample());
+	});
+
+	it.each([
+		{name: 'a row cell with a digit', masked: {rows: [['99-99-9999', '-12,50', 'Af']]}},
+		{name: 'a long unmasked row cell', masked: {rows: [['99-99-9999', '-99,99', 'Example Lender BV']]}},
+		{name: 'an unmasked line above', masked: {linesAbove: [{line: 0, cells: ['Rekening']}]}},
+		{name: 'an unmasked column shape', masked: {columnShapes: ['99-99-9999', '-99,99', 'Af']}},
+		{
+			name: 'an unmasked shape in the column hints',
+			masked: {
+				columns: [
+					{shapes: ['99-99-9999'], sameValue: false},
+					{shapes: ['-12,50'], sameValue: false},
+					{shapes: ['Aa'], sameValue: false},
+				],
+			},
+		},
+		{
+			name: 'more than six shapes of a column',
+			masked: {
+				columns: [
+					{shapes: ['9', '99', '999', '9999', '99999', '999999', ''], sameValue: false},
+					{shapes: ['9'], sameValue: false},
+					{shapes: ['Aa'], sameValue: false},
+				],
+			},
+		},
+		{name: 'hints for fewer columns than the table', masked: {columns: [{shapes: ['9'], sameValue: true}]}},
+		{name: 'more rows than three', masked: {rows: Array.from({length: 4}, () => ['9', '9', 'Af'])}},
+	])('refuses a sample with $name', ({masked}) => {
+		expect(() => validateSampleOutput(sample(masked))).toThrow(new ParseRefusal('parse_failed'));
 	});
 });

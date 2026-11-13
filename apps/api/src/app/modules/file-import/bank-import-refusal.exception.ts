@@ -11,6 +11,31 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 		status: HttpStatus.UNPROCESSABLE_ENTITY,
 		message: "This file looks like a bank's CSV export, but its rows do not read the way that export's do.",
 	},
+	layout_unknown: {
+		status: HttpStatus.UNPROCESSABLE_ENTITY,
+		message: 'This file holds a table, but not in a layout Tempo knows.',
+	},
+	layout_not_mappable: {
+		status: HttpStatus.UNPROCESSABLE_ENTITY,
+		message: "Tempo couldn't work out this file's columns. Nothing was imported.",
+	},
+	mapper_unavailable: {
+		status: HttpStatus.SERVICE_UNAVAILABLE,
+		message: "Tempo can't work out file columns right now. This file isn't supported yet.",
+	},
+	// A typed refusal, not a 429: the web answers every 429 as the API's general rate limit.
+	mapper_limit_reached: {
+		status: HttpStatus.UNPROCESSABLE_ENTITY,
+		message: 'Tempo has worked out the columns of 5 files in the last 24 hours. Try again later.',
+	},
+	layout_proposal_expired: {
+		status: HttpStatus.GONE,
+		message: 'This preview has expired. Work out the columns again.',
+	},
+	layout_limit_reached: {
+		status: HttpStatus.CONFLICT,
+		message: 'You have 50 saved layouts. Remove one first.',
+	},
 	legacy_xls_not_supported: {
 		status: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
 		message:
@@ -60,7 +85,8 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 /**
  * A refused drop. Nothing was written; `file` names the refused file by its 1-based position, not its name.
  * `accountQuestions` lists the statements the owner must choose an account for; `layout` names the CSV layout a
- * file refused with `layout_not_recognized` looked like.
+ * file refused with `layout_not_recognized` looked like; `retryAt` says when an owner at the column mapper's daily
+ * limit may ask again.
  */
 export class BankImportRefusalException extends HttpException {
 	constructor(
@@ -68,11 +94,13 @@ export class BankImportRefusalException extends HttpException {
 		file: number | null = null,
 		accountQuestions?: BankImportAccountQuestion[],
 		layout?: string,
+		retryAt?: string,
 	) {
 		const {status, message} = REFUSALS[code];
 		const body: BankImportError = {statusCode: status, message, code, file};
 		if (accountQuestions) body.accountQuestions = accountQuestions;
 		if (layout) body.layout = layout;
+		if (retryAt) body.retryAt = retryAt;
 		super(body, status);
 	}
 }

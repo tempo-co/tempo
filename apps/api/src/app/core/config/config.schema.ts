@@ -67,6 +67,9 @@ export const configSchema = z
 		BANKING_INTEGRATION_ENABLED: strictBooleanEnvSchema.default(true),
 		// Statement file upload (`/bank-imports`); every import route answers 404 while it is off.
 		FILE_IMPORT_ENABLED: strictBooleanEnvSchema.default(false),
+		// Working out an unknown table's columns with one Anthropic API call per file; needs ANTHROPIC_API_KEY.
+		FILE_IMPORT_MAPPER_ENABLED: strictBooleanEnvSchema.default(false),
+		FILE_IMPORT_MAPPER_MODEL: z.string().min(1).max(128).default('claude-sonnet-5-5'),
 		ENABLE_BANKING_API_URL: z.string().url(),
 		ENABLE_BANKING_APPLICATION_ID: z.string().min(1),
 		ENABLE_BANKING_PRIVATE_KEY_B64: z.string().min(1).optional(),
@@ -219,6 +222,15 @@ export const configSchema = z
 				code: 'custom',
 				path: ['AI_CATEGORIZATION_MODEL'],
 				message: `AI_CATEGORIZATION_MODEL must be one of the subscription bridge models: ${categorizationContract.models.join(', ')}.`,
+			});
+		}
+
+		// The mapper calls the Anthropic API only.
+		if (config.FILE_IMPORT_MAPPER_ENABLED && !config.ANTHROPIC_API_KEY) {
+			context.addIssue({
+				code: 'custom',
+				path: ['ANTHROPIC_API_KEY'],
+				message: 'Configure ANTHROPIC_API_KEY when the file import column mapper is enabled.',
 			});
 		}
 

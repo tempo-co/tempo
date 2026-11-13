@@ -15,6 +15,7 @@ let aiCategorizationWebSearchEnabled = false;
 let merchantLogosEnabled = false;
 let webPushEnabled = false;
 let fileImportEnabled = false;
+let fileImportMapperEnabled = false;
 
 export function enableAiCategorizationE2e(): void {
 	aiCategorizationEnabled = true;
@@ -32,6 +33,12 @@ export function enableFileImportE2e(): void {
 	fileImportEnabled = true;
 }
 
+/** File import with its column mapper; specs replace `LayoutMapper.mapLayout`, so no model is called. */
+export function enableFileImportMapperE2e(): void {
+	fileImportEnabled = true;
+	fileImportMapperEnabled = true;
+}
+
 /** Gives the app throwaway VAPID keys; specs replace `WebPushSender.send`, so no push service is contacted. */
 export function enableWebPushE2e(): void {
 	webPushEnabled = true;
@@ -43,6 +50,7 @@ beforeAll(async () => {
 	process.env.AI_CATEGORIZATION_WEB_SEARCH_ENABLED = String(aiCategorizationWebSearchEnabled);
 	process.env.MERCHANT_LOGOS_ENABLED = String(merchantLogosEnabled);
 	process.env.FILE_IMPORT_ENABLED = String(fileImportEnabled);
+	process.env.FILE_IMPORT_MAPPER_ENABLED = String(fileImportMapperEnabled);
 	delete process.env.AI_CATEGORIZATION_SUBSCRIPTION_SOCKET;
 
 	if (webPushEnabled) {
@@ -56,8 +64,8 @@ beforeAll(async () => {
 		delete process.env.WEB_PUSH_VAPID_SUBJECT;
 	}
 
-	// Merchant logos call the same model routes, so they need a key too; their specs replace the provider call.
-	if (aiCategorizationEnabled || merchantLogosEnabled) {
+	// Merchant logos and the column mapper call model routes too, so they need a key; their specs replace the call.
+	if (aiCategorizationEnabled || merchantLogosEnabled || fileImportMapperEnabled) {
 		process.env.AI_CATEGORIZATION_MODEL = 'test-model';
 		process.env.ANTHROPIC_API_KEY = 'test-only-placeholder';
 	} else {

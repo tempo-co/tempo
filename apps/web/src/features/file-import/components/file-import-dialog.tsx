@@ -2,6 +2,7 @@ import {useQuery} from '@tanstack/react-query';
 import type {BankImportSummary} from '@tempo/contracts';
 import {ArrowLeft, FileX} from 'lucide-react';
 import {type ReactNode, type RefObject, useState} from 'react';
+import {toast} from 'sonner';
 
 import {PendingLabel} from '@/components/shared/pending-label';
 import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
@@ -16,6 +17,7 @@ import {
 } from '@/components/ui/responsive-dialog';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {useIsMobile} from '@/hooks/use-is-mobile';
+import {HttpError, NetworkError, wasToasted} from '@/utils/api';
 import {cn} from '@/utils/cn';
 
 import {bankImportsQueryOptions} from '../api/use-bank-imports';
@@ -25,6 +27,7 @@ import {AccountQuestions} from './account-questions';
 import {DoubtfulRowsReview} from './doubtful-rows-review';
 import {FileChoice, FileList} from './file-choice';
 import {ImportSummaryBody} from './import-summary';
+import {LayoutPreview} from './layout-preview';
 import {
   ACCOUNT_QUESTION_TITLE,
   type FileImportController,
@@ -48,10 +51,14 @@ export function FileImportDialog({
   /** The Import a file button: focus goes back there whichever way the dialog was opened. */
   returnFocus: RefObject<HTMLButtonElement | null>;
 }) {
-  const {open, setOpen, step, setStep, run} = controller;
+  const {open, setOpen, step, setStep, run, propose} = controller;
   const isMobile = useIsMobile();
   // The list holds the latest of a shown import, such as its counts after rows were checked elsewhere.
-  const {data: imports} = useQuery({...bankImportsQueryOptions, enabled: false});
+  const {data: imports} = useQuery({
+    ...bankImportsQueryOptions,
+    enabled: false,
+    select: (list) => list.imports,
+  });
   const shown =
     'summary' in step
       ? (imports?.find((summary) => summary.id === step.summary.id) ?? step.summary)
@@ -71,7 +78,11 @@ export function FileImportDialog({
         {/* Centred on the title's row; a phone sheet closes by its handle like the others. */}
         {!isMobile && <ResponsiveDialogCornerClose label='Close' />}
         {step.kind === 'choose' ? (
-          <ChooseStep step={step} onFiles={(files) => void run(files)} />
+          <ChooseStep
+            step={step}
+            onFiles={(files) => void run(files)}
+            onMapColumns={(failure) => void propose(step.files, failure)}
+          />
         ) : step.kind === 'importing' ? (
           <Frame
             title='Import a file'
@@ -81,6 +92,30 @@ export function FileImportDialog({
                 <PendingLabel>Importing…</PendingLabel>
               </Button>
             }
+          />
+        ) : step.kind === 'proposing' ? (
+          <Frame
+            title='Import a file'
+            body={
+              <div className='grid grid-cols-1 gap-4'>
+                <p role='status' className='text-sm text-muted-foreground'>
+                  <PendingLabel>Working out the columns…</PendingLabel>
+                </p>
+                <FileList files={[step.files[step.file - 1]]} />
+              </div>
+            }
+            footer={
+              <Button variant='outline' onClick={controller.cancelProposal}>
+                Cancel
+              </Button>
+            }
+          />
+        ) : step.kind === 'preview' ? (
+          <PreviewStep
+            key={step.proposal.id}
+            step={step}
+            onConfirm={(request) => controller.confirmProposal(step, request)}
+            onReject={() => controller.rejectProposal(step)}
           />
         ) : step.kind === 'question' ? (
           <QuestionStep
@@ -176,11 +211,16 @@ function Frame({
 function ChooseStep({
   step,
   onFiles,
+  onMapColumns,
 }: {
   step: Extract<ImportStep, {kind: 'choose'}>;
   onFiles: (files: File[]) => void;
+  onMapColumns: (
+    failure: Extract<ImportStep, {kind: 'choose'}>['failure'] & {kind: 'refused'},
+  ) => void;
 }) {
   const {failure, files} = step;
+  const mappable = failure?.kind === 'refused' && failure.mapFile !== null ? failure : null;
   return (
     <Frame
       title='Import a file'
@@ -209,8 +249,91 @@ function ChooseStep({
           <FileChoice onFiles={onFiles} />
         </div>
       }
-      // Files kept after a lost connection or a busy bank go again as they are.
-      footer={files.length > 0 && <Button onClick={() => onFiles(files)}>Import</Button>}
+      // Files kept after a lost connection or a busy bank go again as they are; a file in no layout Tempo knows
+      // has its columns worked out first.
+      footer={
+        mappable && files.length > 0 ? (
+          <Button onClick={() => onMapColumns(mappable)}>Work out the columns</Button>
+        ) : (
+          files.length > 0 && <Button onClick={() => onFiles(files)}>Import</Button>
+        )
+      }
+    />
+  );
+}
+
+function PreviewStep({
+  step,
+  onConfirm,
+  onReject,
+}: {
+  step: Extract<ImportStep, {kind: 'preview'}>;
+  onConfirm: (request: {bankName: string; currency?: string}) => Promise<void>;
+  onReject: () => void;
+}) {
+  const {proposal} = step;
+  const [bankName, setBankName] = useState(proposal.bankName ?? '');
+  const [currency, setCurrency] = useState(proposal.defaultCurrency);
+  const [pending, setPending] = useState(false);
+  // Why the API refused the name, such as a bank whose own files Tempo reads; cleared as the name changes.
+  const [bankError, setBankError] = useState<string | null>(null);
+  const name = bankName.trim();
+
+  const confirm = async () => {
+    setPending(true);
+    try {
+      await onConfirm({bankName: name, ...(proposal.currencyNeeded ? {currency} : {})});
+    } catch (error) {
+      setPending(false);
+      if (wasToasted(error)) return;
+      if (error instanceof HttpError && !(error instanceof NetworkError) && error.status === 400) {
+        setBankError(error.message);
+        return;
+      }
+      toast.error("Couldn't save this layout", {
+        description: 'Please try again in a moment.',
+        id: 'bank-import-layout-confirm-failed',
+      });
+    }
+  };
+
+  return (
+    <Frame
+      title='Check the columns'
+      description='These are the first and last transactions of your file, as Tempo would import them.'
+      body={
+        <LayoutPreview
+          proposal={proposal}
+          bankName={bankName}
+          bankError={bankError}
+          onBankName={(value) => {
+            setBankName(value);
+            setBankError(null);
+          }}
+          currency={currency}
+          onCurrency={setCurrency}
+          disabled={pending}
+        />
+      }
+      footer={
+        <>
+          <Button
+            variant='outline'
+            onClick={onReject}
+            disabled={pending}
+            className='order-2 md:order-1'
+          >
+            Not right
+          </Button>
+          <Button
+            disabled={pending || name.length === 0}
+            onClick={() => void confirm()}
+            className='order-1 md:order-2'
+          >
+            {pending ? <PendingLabel>Importing…</PendingLabel> : 'Looks right'}
+          </Button>
+        </>
+      }
     />
   );
 }

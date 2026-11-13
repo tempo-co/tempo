@@ -30,6 +30,7 @@ test('a refusal names its file only among several, and always says nothing was i
     description:
       "statement-march.xml: Something in it doesn't add up. Download it again from your bank and retry. Nothing was imported.",
     retry: false,
+    mapFile: null,
   });
   // One file needs no name; a refusal of the whole drop has none.
   for (const [file, fileNames] of [
@@ -58,7 +59,50 @@ test('a refusal names its file only among several, and always says nothing was i
     title: 'These files are too large together',
     description: 'Import them in smaller batches. Nothing was imported.',
     retry: false,
+    mapFile: null,
   });
+});
+
+test('a table in no layout Tempo knows is offered to have its columns worked out, only while that is on', () => {
+  const names = ['statement-april.xml', 'export.csv'];
+  expect(
+    describeRefusal(refusal({code: 'layout_unknown', file: 2}), names, {mapper: true}),
+  ).toEqual({
+    kind: 'refused',
+    code: 'layout_unknown',
+    title: "Tempo doesn't know this file's layout yet",
+    description:
+      'export.csv: Tempo can work out which column is which. It sends the column headings and the shape of a few rows, with letters and digits masked, to its AI service. Nothing was imported.',
+    retry: false,
+    mapFile: 2,
+  });
+  expect(
+    describeRefusal(refusal({code: 'layout_not_recognized', file: 1, layout: 'ing-nl'}), names, {
+      mapper: true,
+    }),
+  ).toMatchObject({title: "Tempo doesn't know this file's layout yet", mapFile: 1});
+  expect(describeRefusal(refusal({code: 'layout_unknown', file: 1}), ['export.csv'])).toMatchObject(
+    {
+      description: "It isn't a layout Tempo knows yet. Nothing was imported.",
+      mapFile: null,
+    },
+  );
+  expect(
+    describeRefusal(refusal({code: 'layout_not_recognized', file: 1, layout: 'ing-nl'}), ['a.csv']),
+  ).toMatchObject({
+    title: "This file doesn't look the way ING's exports usually do",
+    mapFile: null,
+  });
+  expect(
+    describeRefusal(refusal({code: 'layout_not_mappable', file: 1}), ['a.csv'], {mapper: true}),
+  ).toMatchObject({
+    description:
+      'Nothing was imported. Try another export format from your bank, such as CAMT.053 or MT940.',
+    mapFile: null,
+  });
+  expect(
+    describeRefusal(refusal({code: 'mapper_unavailable', file: 1}), ['a.csv'], {mapper: true}),
+  ).toMatchObject({title: "Tempo doesn't know this file's layout yet", mapFile: null});
 });
 
 test('a choice of files too large for one drop is refused before uploading, as the API would', () => {

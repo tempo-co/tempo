@@ -4,6 +4,7 @@ import type {
 	BankAccount as BankAccountResponse,
 	BankBalanceTrend,
 	BankConnection as BankConnectionResponse,
+	BankImportList,
 	BankImportSummary,
 } from '@tempo/contracts';
 import {createHash} from 'node:crypto';
@@ -35,6 +36,7 @@ import {EnableBankingClient} from '@modules/banking/services/enable-banking.clie
 import {FileAccountBalanceService} from '@modules/banking/services/file-account-balance.service';
 import {BankImportUploadQueue} from '@modules/file-import/api/bank-import-upload-queue';
 import {BankImportDoubtfulRow} from '@modules/file-import/bank-import-doubtful-row.entity';
+import {BankImportLayoutProposal} from '@modules/file-import/bank-import-layout-proposal.entity';
 import {BankImport} from '@modules/file-import/bank-import.entity';
 import {BankImportService} from '@modules/file-import/bank-import.service';
 import {MAX_DROP_BYTES} from '@modules/file-import/parsers/parse-limits';
@@ -463,13 +465,13 @@ describe('Bank imports', () => {
 		expect((await ownerRows(owner)).map(rowContent)).toEqual(rows.map(rowContent));
 
 		const history = await agent.get('/bank-imports').expect(200);
-		expect(history.body.map(({id, undoneAt}: BankImportSummary) => [id, Boolean(undoneAt)])).toEqual([
+		expect((history.body as BankImportList).imports.map(({id, undoneAt}) => [id, Boolean(undoneAt)])).toEqual([
 			[unzipped.body.id, false],
 			[again.body.id, false],
 			[first.body.id, true],
 		]);
 		// The undone import's account is gone; the unzipped drop created a new one.
-		expect(history.body[2].accounts).toEqual([]);
+		expect((history.body as BankImportList).imports[2].accounts).toEqual([]);
 	});
 
 	it('undoes exactly the rows one import inserted, keeping the rows and accounts of another', async () => {
@@ -620,7 +622,10 @@ describe('Bank imports', () => {
 		});
 		expect(await marchBalances(agent)).toEqual(await marchBalances(withBalances.agent));
 		const history = await agent.get('/bank-imports').expect(200);
-		expect(history.body[0]).toMatchObject({id: imported.body.id, accountsWithoutBalance: []});
+		expect((history.body as BankImportList).imports[0]).toMatchObject({
+			id: imported.body.id,
+			accountsWithoutBalance: [],
+		});
 	});
 
 	it('moves an entered balance by exactly the rows booked after the day it was entered, until a statement states one', async () => {
@@ -828,7 +833,7 @@ describe('Bank imports', () => {
 		const other = await createOwner();
 		const imported = await drop(agent, [ARCHIVE]).expect(201);
 
-		await other.agent.get('/bank-imports').expect(200, []);
+		await other.agent.get('/bank-imports').expect(200, {imports: [], mapper: false});
 		await other.agent.delete(`/bank-imports/${imported.body.id}`).set('Origin', ORIGIN).expect(404);
 
 		expect(await ownerRows(owner)).toHaveLength(7);
@@ -2008,9 +2013,16 @@ describe('Bank imports', () => {
 	it.each([
 		{
 			name: 'a file that is not a statement',
-			files: () => [ARCHIVE, Buffer.from('Date,Amount\n2026-03-02,1.00\n')],
+			files: () => [ARCHIVE, Buffer.from('Example notes\nmore notes\n')],
 			status: 415,
 			code: 'unsupported_format',
+			file: 2,
+		},
+		{
+			name: 'a table in no layout Tempo knows',
+			files: () => [ARCHIVE, Buffer.from('Date,Amount\n2026-03-02,1.00\n')],
+			status: 422,
+			code: 'layout_unknown',
 			file: 2,
 		},
 		{
@@ -2155,6 +2167,21 @@ describe('Bank imports', () => {
 
 		// Every slot came back: two more drops run at once.
 		await Promise.all([drop(agent, [TXT_FILE]).expect(201), drop(agent, [CAMT_FILES[3]]).expect(201)]);
+	});
+
+	it('works out no columns while the column mapper is off', async () => {
+		const {owner, agent} = await createOwner();
+		const table = Buffer.from('Date,Amount\n2026-03-02,1.00\n');
+
+		await agent.get('/bank-imports').expect(200, {imports: [], mapper: false});
+		const refused = await agent
+			.post('/bank-imports/layout-proposals')
+			.set('Origin', ORIGIN)
+			.attach('files', table, 'upload-0.bin')
+			.expect(503);
+
+		expect(refused.body).toMatchObject({code: 'mapper_unavailable', file: 1});
+		expect(await app.get(getRepositoryToken(BankImportLayoutProposal)).countBy({accountId: owner.id})).toBe(0);
 	});
 
 	it('asks for at least one file', async () => {
