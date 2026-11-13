@@ -110,7 +110,11 @@ const ResponsiveDialogContent = ({
   className,
   children,
   ...props
-}: ResponsiveDialogProps & {onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>}) => {
+}: ResponsiveDialogProps & {
+  onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
+  /** Replaces focusing the first control on open; call `preventDefault` and focus something else. */
+  onOpenAutoFocus?: (event: Event) => void;
+}) => {
   const {isDesktop} = useResponsiveDialogContext();
   const ResponsiveDialogContent = isDesktop ? DialogContent : DrawerContent;
 

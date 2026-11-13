@@ -6,6 +6,7 @@ test.describe('Account Settings: Time zone', () => {
     test.use({timezoneId: 'Europe/Lisbon'});
 
     test("starts in the browser's time zone", async ({
+      page,
       signupPage,
       verifyEmailPage,
       homePage,
@@ -17,8 +18,10 @@ test.describe('Account Settings: Time zone', () => {
       await verifyEmailPage.expectToBeOnPage();
       await verifyEmailPage.inputCodeAndSubmit(await EmailUtils.getVerificationCode(email));
       await homePage.expectToBeOnPage();
+      await homePage.expectUserLoggedIn();
 
-      await accountSettingsPage.navigate();
+      await page.getByTestId('account-menu-trigger').click();
+      await page.getByRole('menuitem', {name: 'Settings'}).click();
       await expect(accountSettingsPage.timeZone).toHaveText('Europe/Lisbon');
     });
   });
@@ -38,10 +41,11 @@ test.describe('Account Settings: Time zone', () => {
       await expect(accountSettingsPage.timeZone).toHaveText('Europe/Amsterdam');
       await accountSettingsPage.editTimeZoneButton.click();
       const dialog = page.getByRole('dialog');
-      await expect(dialog.getByRole('button', {name: 'Europe/Amsterdam'})).toHaveAttribute(
-        'aria-current',
-        'true',
-      );
+      // The list opens on the current zone, which is marked.
+      const current = dialog.getByRole('button', {name: 'Europe/Amsterdam'});
+      await expect(current).toHaveAttribute('aria-current', 'true');
+      await expect(current).toBeFocused();
+      await expect(current).toBeInViewport();
       await accountSettingsPage.timeZoneSearch.fill('no such place');
       await expect(dialog.getByText('No time zone called “no such place”')).toBeVisible();
 

@@ -44,6 +44,16 @@ export function TimeZoneDialog({currentTimeZone}: TimeZoneDialogProps) {
     setIsOpen(open);
   };
 
+  // Open on the current zone, not the search field: phones keep the keyboard closed until it is tapped.
+  const focusCurrent = (event: Event) => {
+    event.preventDefault();
+    const current = (event.currentTarget as HTMLElement).querySelector<HTMLElement>(
+      '[aria-current="true"]',
+    );
+    current?.focus({preventScroll: true});
+    current?.scrollIntoView({block: 'center'});
+  };
+
   const choose = async (timeZone: string) => {
     if (timeZone === currentTimeZone) {
       setIsOpen(false);
@@ -73,7 +83,7 @@ export function TimeZoneDialog({currentTimeZone}: TimeZoneDialogProps) {
           Edit
         </Button>
       </ResponsiveDialogTrigger>
-      <ResponsiveDialogContent className='grid-cols-1 sm:max-w-lg'>
+      <ResponsiveDialogContent className='grid-cols-1 sm:max-w-lg' onOpenAutoFocus={focusCurrent}>
         <ResponsiveDialogHeader className='px-4 text-start md:px-0'>
           <ResponsiveDialogTitle>Time zone</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
