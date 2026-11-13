@@ -14,22 +14,25 @@ describe('BankTransactionAmountConversionProcessor', () => {
 	const setup = (enabled: boolean) => {
 		const conversionService = {backfill: jest.fn().mockResolvedValue(undefined)};
 		const ownTransferService = {recomputeAllOwners: jest.fn().mockResolvedValue(undefined)};
+		const recurringSeriesService = {foldAllChangeNotes: jest.fn().mockResolvedValue(undefined)};
 		const processor = new BankTransactionAmountConversionProcessor(
 			conversionService as never,
 			{get: jest.fn().mockReturnValue(enabled)} as never,
 			ownTransferService as never,
+			recurringSeriesService as never,
 		);
-		return {conversionService, ownTransferService, processor};
+		return {conversionService, ownTransferService, recurringSeriesService, processor};
 	};
 
 	it('does not process jobs when banking integration is disabled', async () => {
-		const {conversionService, ownTransferService, processor} = setup(false);
+		const {conversionService, ownTransferService, recurringSeriesService, processor} = setup(false);
 
 		await processor.process(job(BACKFILL_BANK_TRANSACTION_AMOUNTS_JOB));
 		await processor.process(job(RECOMPUTE_OWN_TRANSFERS_JOB));
 
 		expect(conversionService.backfill).not.toHaveBeenCalled();
 		expect(ownTransferService.recomputeAllOwners).not.toHaveBeenCalled();
+		expect(recurringSeriesService.foldAllChangeNotes).not.toHaveBeenCalled();
 	});
 
 	it('processes supported conversion jobs when banking integration is enabled', async () => {
@@ -41,12 +44,16 @@ describe('BankTransactionAmountConversionProcessor', () => {
 		expect(ownTransferService.recomputeAllOwners).not.toHaveBeenCalled();
 	});
 
-	it('runs the daily whole-history own-transfer recompute', async () => {
-		const {conversionService, ownTransferService, processor} = setup(true);
+	it('runs the daily whole-history own-transfer recompute, then folds every owner’s history change notes', async () => {
+		const {conversionService, ownTransferService, recurringSeriesService, processor} = setup(true);
 
 		await processor.process(job(RECOMPUTE_OWN_TRANSFERS_JOB));
 
 		expect(ownTransferService.recomputeAllOwners).toHaveBeenCalledTimes(1);
+		expect(recurringSeriesService.foldAllChangeNotes).toHaveBeenCalledTimes(1);
+		expect(ownTransferService.recomputeAllOwners.mock.invocationCallOrder[0]).toBeLessThan(
+			recurringSeriesService.foldAllChangeNotes.mock.invocationCallOrder[0],
+		);
 		expect(conversionService.backfill).not.toHaveBeenCalled();
 	});
 });

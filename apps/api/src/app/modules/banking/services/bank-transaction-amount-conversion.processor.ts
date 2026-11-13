@@ -9,6 +9,7 @@ import {
 	RECOMPUTE_OWN_TRANSFERS_JOB,
 } from '@core/queue/queue.constants';
 
+import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {BankTransactionAmountConversionJobData} from './bank-transaction-amount-conversion.queue.service';
 import {BankTransactionAmountConversionService} from './bank-transaction-amount-conversion.service';
 import {OwnTransferService} from './own-transfer.service';
@@ -20,6 +21,7 @@ export class BankTransactionAmountConversionProcessor extends WorkerHost {
 		private readonly conversionService: BankTransactionAmountConversionService,
 		private readonly configurationService: ConfigurationService,
 		private readonly ownTransferService: OwnTransferService,
+		private readonly recurringSeriesService: RecurringSeriesService,
 	) {
 		super();
 	}
@@ -28,6 +30,8 @@ export class BankTransactionAmountConversionProcessor extends WorkerHost {
 		if (!this.configurationService.get('BANKING_INTEGRATION_ENABLED')) return;
 		if (job.name === RECOMPUTE_OWN_TRANSFERS_JOB) {
 			await this.ownTransferService.recomputeAllOwners();
+			// After the recompute, so its own change notes are folded too.
+			await this.recurringSeriesService.foldAllChangeNotes();
 			return;
 		}
 		if (job.name !== BACKFILL_BANK_TRANSACTION_AMOUNTS_JOB && job.name !== BANK_TRANSACTION_AMOUNT_CONVERSION_JOB) {
