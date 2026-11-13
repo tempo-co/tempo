@@ -59,6 +59,7 @@ export function PageFileDrop({
   useEffect(() => {
     // Set when this effect ends (the page goes away or drops stop being taken): a folder still being read is dropped.
     let stale = false;
+    let latestDrop = 0;
     const reset = () => {
       depth.current = 0;
       setDragging(false);
@@ -86,12 +87,14 @@ export function PageFileDrop({
       reset();
       if (taken) return;
       if (!active) return;
+      // The newest drop wins: an earlier folder still being read is dropped.
+      const drop = ++latestDrop;
       droppedFiles(event.dataTransfer).then(
         (files) => {
-          if (!stale && files.length > 0) latestOnFiles.current(files);
+          if (!stale && drop === latestDrop && files.length > 0) latestOnFiles.current(files);
         },
         () => {
-          if (!stale) folderNotRead(toast.error);
+          if (!stale && drop === latestDrop) folderNotRead(toast.error);
         },
       );
     };
