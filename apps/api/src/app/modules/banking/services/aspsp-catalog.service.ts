@@ -14,7 +14,7 @@ import {EnableBankingClient} from './enable-banking.client';
 
 const CACHED_CATALOG_TTL_SECONDS = 60 * 60;
 
-/** The Enable Banking bank (ASPSP) catalog: the bank picker list, live lookups and a per-country Redis cache. */
+/** The Enable Banking bank (ASPSP) catalog: the live bank picker list and a per-country Redis cache for every other reader. */
 @Injectable()
 export class AspspCatalogService {
 	private readonly logger = new Logger(AspspCatalogService.name);
@@ -28,7 +28,7 @@ export class AspspCatalogService {
 	/** Every supported bank once per country and name, sorted for the bank picker. */
 	async findSupportedAspsps(): Promise<BankConnectionAspsp[]> {
 		ensureBankingIntegrationEnabled(this.configurationService);
-		const aspsps = await this.getAspsps();
+		const aspsps = await this.fetchAspsps();
 		const uniqueAspsps = new Map<string, BankConnectionAspsp>();
 
 		for (const {name, country, logoUrl} of aspsps) {
@@ -52,18 +52,11 @@ export class AspspCatalogService {
 		);
 	}
 
-	/** The provider's current catalog, optionally for one country; provider failures become a sanitized 502. */
-	async getAspsps(country?: string, signal?: AbortSignal): Promise<EnableBankingAspsp[]> {
-		try {
-			return await this.enableBankingClient.getAspsps(country, signal);
-		} catch (error) {
-			if (error instanceof BadGatewayException) throw error;
-			throw new BadGatewayException(BANKING_SUPPORTED_BANKS_UNAVAILABLE);
-		}
-	}
-
-	/** The country's catalog, shared through Redis for an hour so refreshes do not download it every time. */
-	async getCachedAspsps(country: string, signal: AbortSignal): Promise<EnableBankingAspsp[]> {
+	/**
+	 * The country's catalog for authorization, sync and bank logos, shared through Redis for an hour so they do not
+	 * download it every time. Provider failures become a sanitized 502.
+	 */
+	async getAspsps(country: string, signal?: AbortSignal): Promise<EnableBankingAspsp[]> {
 		const key = `banking:aspsp-catalog:${country}`;
 		try {
 			const cached = await this.redis.get(key);
@@ -71,12 +64,21 @@ export class AspspCatalogService {
 		} catch (error) {
 			this.logger.warn(`Bank catalog cache read failed: ${safeErrorName(error)}`);
 		}
-		const aspsps = await this.getAspsps(country, signal);
+		const aspsps = await this.fetchAspsps(country, signal);
 		try {
 			await this.redis.set(key, JSON.stringify(aspsps), 'EX', CACHED_CATALOG_TTL_SECONDS);
 		} catch (error) {
 			this.logger.warn(`Bank catalog cache write failed: ${safeErrorName(error)}`);
 		}
 		return aspsps;
+	}
+
+	private async fetchAspsps(country?: string, signal?: AbortSignal): Promise<EnableBankingAspsp[]> {
+		try {
+			return await this.enableBankingClient.getAspsps(country, signal);
+		} catch (error) {
+			if (error instanceof BadGatewayException) throw error;
+			throw new BadGatewayException(BANKING_SUPPORTED_BANKS_UNAVAILABLE);
+		}
 	}
 }

@@ -1,5 +1,6 @@
 import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
 import type {CallToolResult} from '@modelcontextprotocol/sdk/types.js';
+import {Logger} from '@nestjs/common';
 import {
 	BANK_TRANSACTION_CATEGORY_DEFINITIONS,
 	BANK_TRANSACTION_UNCATEGORIZED,
@@ -38,6 +39,7 @@ import {z} from 'zod';
 
 import {dateInTimeZone} from '@core/time/app-time-zone';
 
+import {safeErrorStack} from '../bank-sync-failure';
 import {ToolReadError} from './errors';
 import {filtersSchema, sortSchema} from './inputs';
 
@@ -70,6 +72,8 @@ export interface ToolReader {
 	merchantPeriods(id: string, input: PeriodInput): Promise<MerchantGroupPeriods>;
 }
 
+const logger = new Logger('McpTools');
+
 const rangeLimits = (intervals: readonly (keyof typeof MAX_RANGE_PERIODS)[]) =>
 	`API enforces range limits: ${intervals.map((interval) => `${interval} ${MAX_RANGE_PERIODS[interval]}`).join(', ')} periods; to must be on or before asOf.`;
 
@@ -83,6 +87,9 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 		try {
 			return {content: [{type: 'text', text: JSON.stringify(await operation())}]};
 		} catch (error) {
+			// Like REST's exception filter, log unexpected failures; name and stack frames only, never the message.
+			if (!(error instanceof ToolReadError))
+				logger.error(`MCP tool read failed unexpectedly: ${safeErrorStack(error)}`);
 			return {
 				isError: true,
 				content: [

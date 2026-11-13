@@ -176,10 +176,12 @@ export function applyBankTransactionFilters(
 	if (search) {
 		query.andWhere(
 			new Brackets((searchQuery) => {
+				// The search is literal text: escape LIKE's wildcards and its escape character.
+				const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
 				searchQuery
-					.where('transaction.description ILIKE :search', {search: `%${search}%`})
-					.orWhere('transaction.counterpartyName ILIKE :search', {search: `%${search}%`})
-					.orWhere('transaction.remittanceInformation ILIKE :search', {search: `%${search}%`});
+					.where(`transaction.description ILIKE :search ESCAPE '\\'`, {search: pattern})
+					.orWhere(`transaction.counterpartyName ILIKE :search ESCAPE '\\'`, {search: pattern})
+					.orWhere(`transaction.remittanceInformation ILIKE :search ESCAPE '\\'`, {search: pattern});
 			}),
 		);
 	}

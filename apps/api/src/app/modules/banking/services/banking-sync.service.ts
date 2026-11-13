@@ -377,7 +377,7 @@ export class BankingSyncService {
 		psu: EnableBankingPsuContext,
 		signal: AbortSignal,
 	): Promise<EnableBankingPsuContext> {
-		const aspsps = await this.aspspCatalogService.getCachedAspsps(connection.aspspCountry, signal);
+		const aspsps = await this.aspspCatalogService.getAspsps(connection.aspspCountry, signal);
 		const aspsp = aspsps.find(
 			({name, country}) => name === connection.aspspName && country === connection.aspspCountry,
 		);

@@ -11,7 +11,7 @@ BACKUP_DIR=${BACKUP_DIR:?BACKUP_DIR must be set}
 LOG="$BACKUP_DIR/backup.log"
 KEEP=${KEEP:-7}
 [[ $KEEP =~ ^[1-9][0-9]*$ ]] || { printf 'ERROR: KEEP must be a positive integer\n' >&2; exit 1; }
-MIN_FREE_BYTES=$((1024 * 1024 * 1024)) # refuse to run if host free space < 1 GiB
+MIN_FREE_BYTES=$((1024 * 1024 * 1024)) # refuse to run if the backup filesystem has < 1 GiB free
 CONTAINER="tempo-api-production-postgres-1"
 DB_USER="tempo"
 DB_NAME="tempo"
@@ -34,11 +34,11 @@ chmod 700 -- "$BACKUP_DIR"
 touch -- "$LOG"
 chmod 600 -- "$LOG"
 
-# 1) Free-space guard: never let backups fill a small disk.
-free_bytes=$(df -B1 --output=avail / | tail -n 1 | tr -d ' ')
+# 1) Free-space guard: never let backups fill the filesystem that holds them.
+free_bytes=$(df -B1 --output=avail -- "$BACKUP_DIR" | tail -n 1 | tr -d ' ')
 [[ $free_bytes =~ ^[0-9]+$ ]] || fail 'could not determine free disk space'
 if (( free_bytes < MIN_FREE_BYTES )); then
-    fail "skipped: only ${free_bytes} bytes free on / (need >= ${MIN_FREE_BYTES})"
+    fail "skipped: only ${free_bytes} bytes free for $BACKUP_DIR (need >= ${MIN_FREE_BYTES})"
 fi
 
 [[ ! -e $TARGET ]] || fail "timestamped backup already exists: $TARGET"

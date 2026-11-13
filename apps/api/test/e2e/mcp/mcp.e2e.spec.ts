@@ -17,6 +17,7 @@ import {REDIS} from '@core/redis/redis.constants';
 import {SessionService} from '@core/session/session.service';
 import {Account} from '@modules/account/account.entity';
 import {McpController} from '@modules/banking/api/mcp.controller';
+import {BankConnectionQueryService} from '@modules/banking/services/bank-connection-query.service';
 
 import {BankingFixtures, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from '../../../scripts/seed-data/seed.constants';
@@ -602,6 +603,24 @@ describe('Hosted MCP', () => {
 				});
 				const strict = await client.callTool({name: 'list_accounts', arguments: {accountId: otherOwner.id}});
 				expect(strict.isError).toBe(true);
+				const log = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+				const failure = jest
+					.spyOn(getApp().get(BankConnectionQueryService), 'findAll')
+					.mockRejectedValueOnce(new TypeError('example-private-failure'));
+				try {
+					expect(await client.callTool({name: 'list_accounts', arguments: {}})).toMatchObject({
+						isError: true,
+						content: [{type: 'text', text: 'Tempo API HTTP 500: Tempo API unavailable. Retry later.'}],
+					});
+					expect(log).toHaveBeenCalledTimes(1);
+					expect(log).toHaveBeenCalledWith(
+						expect.stringMatching(/^MCP read failed unexpectedly: TypeError\n\s+at /),
+					);
+					expect(JSON.stringify(log.mock.calls)).not.toContain('example-private-failure');
+				} finally {
+					failure.mockRestore();
+					log.mockRestore();
+				}
 			});
 			expect(statuses).toContain(200);
 			expect(statuses).toContain(202);
