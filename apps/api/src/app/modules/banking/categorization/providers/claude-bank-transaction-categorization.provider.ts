@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type {Message, MessageCreateParamsNonStreaming} from '@anthropic-ai/sdk/resources/messages';
+import type {Message, MessageCreateParamsNonStreaming, Tool} from '@anthropic-ai/sdk/resources/messages';
 import {Injectable, Logger, Optional} from '@nestjs/common';
 import {BANK_TRANSACTION_CATEGORIES, type BankTransactionCategoryDefinition} from '@tempo/contracts';
 import {z} from 'zod';
@@ -106,6 +106,13 @@ const CATEGORIZATION_MAX_TOKENS = 16_384;
 // The merchant search reads one query and answers in a sentence, so it thinks briefly.
 const SEARCH_EFFORT: ClaudeEffort = 'low';
 const SEARCH_MAX_TOKENS = 4096;
+// The categorizing call returns its answer as the input of this tool, which Tempo reads and never runs. A strict
+// json_schema format made the model often skip thinking and send well-known merchants to review. Adaptive thinking
+// rejects a forced tool choice, so the choice stays auto and the description asks for exactly one call.
+const STRUCTURED_OUTPUT_TOOL = 'StructuredOutput';
+const STRUCTURED_OUTPUT_DESCRIPTION =
+	'Use this tool to return your final response in the requested structured format. You MUST call this tool exactly once at the end of your response to provide the structured output.';
+const REPLY_BLOCKS = new Set(['text', 'thinking', 'redacted_thinking']);
 const SEARCH_REPLY_BLOCKS = new Set([
 	'text',
 	'thinking',
@@ -132,9 +139,9 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 
 	/**
 	 * One call for a row group on the Anthropic API. With a `searchQuery`, it first runs a separate merchant search
-	 * that sees only that query, then categorizes without tools and with its finding; a failed search leaves the call
-	 * without one. The categorizing call never offers a tool, because the API cannot hold a model that sees the full
-	 * input to the code-built query.
+	 * that sees only that query, then categorizes with its finding; a failed search leaves the call without one. The
+	 * categorizing call offers no server tool, because the API cannot hold a model that sees the full input to the
+	 * code-built query; it only offers the StructuredOutput tool that carries its answer.
 	 */
 	async categorize(
 		transactions: readonly BankTransactionCategorizationInput[],
@@ -150,15 +157,15 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		const input = this.createInput(categories, requestTransactions);
 		try {
 			const search = searchQuery && this.hasApi() ? await this.searchMerchant(searchQuery) : undefined;
-			const text = await this.callApi(
-				this.createRequest(
+			const answer = await this.callStructuredOutput(
+				this.createStructuredOutputRequest(
 					CATEGORIZATION_INSTRUCTIONS,
 					search?.finding ? {...input, searchFinding: search.finding} : input,
 					categorizationResponseJsonSchema,
 					CATEGORIZATION_MAX_TOKENS,
 				),
 			);
-			return this.parseResults(this.parseJson(text), transactions, search?.trace);
+			return this.parseResults(answer, transactions, search?.trace);
 		} catch (error) {
 			// A billing/quota/transport failure must never turn into a category.
 			throw this.callFailed(error);
@@ -296,23 +303,69 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		};
 	}
 
+	/**
+	 * Like {@link createRequest}, but the answer comes back as the input of the StructuredOutput tool rather than
+	 * through a json_schema format. The tool's input is not constrained to the schema; the caller validates it.
+	 */
+	private createStructuredOutputRequest(
+		system: string,
+		input: object,
+		schema: object,
+		maxTokens: number,
+	): MessageCreateParamsNonStreaming {
+		return {
+			...this.createRequest(system, input, schema, maxTokens),
+			// Replaces the json_schema format with effort alone.
+			output_config: {effort: this.effort},
+			tools: [
+				{
+					name: STRUCTURED_OUTPUT_TOOL,
+					description: STRUCTURED_OUTPUT_DESCRIPTION,
+					input_schema: schema as Tool.InputSchema,
+				},
+			],
+			tool_choice: {type: 'auto', disable_parallel_tool_use: true},
+		};
+	}
+
 	/** Sends a request that offers no tools and returns its reply text; a reply that used a tool is invalid. */
 	private async callApi(request: MessageCreateParamsNonStreaming): Promise<string> {
 		const response = await this.createMessage(request);
-		if (
-			response.content.some((block) => !['text', 'thinking', 'redacted_thinking'].includes(block.type)) ||
-			(response.usage.server_tool_use?.web_search_requests ?? 0) > 0
-		)
+		if (response.content.some((block) => !REPLY_BLOCKS.has(block.type)) || this.ranServerTool(response))
 			throw this.invalidResponseError();
 		return this.replyText(response);
+	}
+
+	/**
+	 * Sends a request that offers only the StructuredOutput tool and returns that tool call's input. The reply must
+	 * stop to call it exactly once; a reply without the call, with another tool or a server tool is invalid.
+	 */
+	private async callStructuredOutput(request: MessageCreateParamsNonStreaming): Promise<unknown> {
+		const response = await this.createMessage(request, 'tool_use');
+		const calls = response.content.filter((block) => block.type === 'tool_use');
+		if (
+			calls.length !== 1 ||
+			calls[0].name !== STRUCTURED_OUTPUT_TOOL ||
+			response.content.some((block) => block.type !== 'tool_use' && !REPLY_BLOCKS.has(block.type)) ||
+			this.ranServerTool(response)
+		)
+			throw this.invalidResponseError();
+		return calls[0].input;
+	}
+
+	private ranServerTool(response: Message): boolean {
+		return (response.usage.server_tool_use?.web_search_requests ?? 0) > 0;
 	}
 
 	private hasApi(): boolean {
 		return !!this.apiKey || !!this.client;
 	}
 
-	/** Sends one API request and returns a complete reply. */
-	private async createMessage(request: MessageCreateParamsNonStreaming): Promise<Message> {
+	/** Sends one API request and returns a complete reply, one that ended with the expected stop reason. */
+	private async createMessage(
+		request: MessageCreateParamsNonStreaming,
+		stopReason: 'end_turn' | 'tool_use' = 'end_turn',
+	): Promise<Message> {
 		if (!this.hasApi()) throw new BankTransactionCategorizationUnavailableError();
 		const client =
 			this.client ??
@@ -323,7 +376,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 				logLevel: 'off',
 			}));
 		const response = await client.messages.create(request);
-		if (response.stop_reason !== 'end_turn') throw this.invalidResponseError();
+		if (response.stop_reason !== stopReason) throw this.invalidResponseError();
 		return response;
 	}
 

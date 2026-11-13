@@ -492,7 +492,7 @@ describe('Bank transaction categorization integration', () => {
 		});
 	});
 
-	it('searches the merchant on the API with only its query, then categorizes without tools and stores the trace', async () => {
+	it('searches the merchant on the API with only its query, then categorizes through the StructuredOutput tool and stores the trace', async () => {
 		const query = WEB_SEARCH_TRACE.queries[0];
 		const create = jest
 			.fn()
@@ -509,12 +509,23 @@ describe('Bank transaction categorization integration', () => {
 				],
 			})
 			.mockResolvedValueOnce({
-				stop_reason: 'end_turn',
+				stop_reason: 'tool_use',
 				usage: {server_tool_use: {web_search_requests: 0}},
 				content: [
 					{
-						type: 'text',
-						text: '{"classifications":[{"correlationId":"0","category":"SHOPPING","confidence":0.9,"evidenceType":"PURCHASE_CONTEXT"}]}',
+						type: 'tool_use',
+						id: 'toolu_synthetic',
+						name: 'StructuredOutput',
+						input: {
+							classifications: [
+								{
+									correlationId: '0',
+									category: 'SHOPPING',
+									confidence: 0.9,
+									evidenceType: 'PURCHASE_CONTEXT',
+								},
+							],
+						},
 					},
 				],
 			});
@@ -534,7 +545,8 @@ describe('Bank transaction categorization integration', () => {
 				{type: 'web_search_20250305', name: 'web_search', max_uses: 1, allowed_callers: ['direct']},
 			]);
 			expect(search.messages).toEqual([{role: 'user', content: JSON.stringify({query})}]);
-			expect(categorize).not.toHaveProperty('tools');
+			// Only the client tool that carries the answer; no server tool sees the full input.
+			expect(categorize.tools.map(({name}: {name: string}) => name)).toEqual(['StructuredOutput']);
 			const sent = JSON.parse(categorize.messages[0].content);
 			expect(sent).not.toHaveProperty('searchQuery');
 			expect(sent.searchFinding).toEqual({
