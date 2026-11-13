@@ -51,7 +51,7 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 		status: HttpStatus.UNPROCESSABLE_ENTITY,
 		message: 'Drop at most 20 files at once, with at most 500 statements in an archive.',
 	},
-	too_many_rows: {status: HttpStatus.UNPROCESSABLE_ENTITY, message: 'One drop can hold at most 50,000 transactions.'},
+	too_many_rows: {status: HttpStatus.UNPROCESSABLE_ENTITY, message: 'One drop can hold at most 20,000 transactions.'},
 	parse_failed: {status: HttpStatus.UNPROCESSABLE_ENTITY, message: 'This file could not be read.'},
 	parse_timeout: {status: HttpStatus.UNPROCESSABLE_ENTITY, message: 'Reading this file took too long.'},
 	ambiguous_target_account: {
