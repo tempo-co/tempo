@@ -11,6 +11,7 @@ import {
 	MERCHANT_NOT_FOUND,
 	MERCHANT_RANKING_FUTURE_PERIOD,
 } from '@modules/banking/api/constants/banking-messages.constants';
+import {MerchantLogoService} from '@modules/banking/merchant-logos/merchant-logo.service';
 import {Merchant} from '@modules/banking/merchant-logos/merchant.entity';
 
 import {BankingFixtures, CURRENCY_EXCHANGE_EVENT, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
@@ -160,8 +161,15 @@ describe('Merchant spending', () => {
 
 		const search = await ownerAgent.get('/merchants').query({search: 'ONLINE'}).expect(200);
 		expect(search.body.merchants.map(({id}: {id: string}) => id)).toEqual([BURGER]);
-		const page = await ownerAgent.get('/merchants').query({offset: '1', limit: '1'}).expect(200);
-		expect(page.body).toMatchObject({total: 3, merchants: [{id: BURGER}]});
+		// Logos are looked up for the page only.
+		const logos = jest.spyOn(app.get(MerchantLogoService), 'getLogoUrls');
+		try {
+			const page = await ownerAgent.get('/merchants').query({offset: '1', limit: '1'}).expect(200);
+			expect(page.body).toMatchObject({total: 3, merchants: [{id: BURGER}]});
+			expect(logos.mock.calls.map(([, groups]) => groups.map(({id}) => id))).toEqual([[BURGER]]);
+		} finally {
+			logos.mockRestore();
+		}
 
 		const other = await otherAgent.get('/merchants').expect(200);
 		expect(other.body.merchants).toEqual([expect.objectContaining({id: BURGER, spent: '999.00', count: 1})]);

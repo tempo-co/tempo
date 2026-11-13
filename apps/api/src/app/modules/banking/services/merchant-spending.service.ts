@@ -103,18 +103,15 @@ export class MerchantSpendingService {
 					),
 			)
 			.sort(compareSpent);
-		return {
-			baseCurrency,
-			merchants: groups.slice(offset, offset + limit).map(toListItem),
-			total: groups.length,
-		};
+		const page = await this.withLogos(accountId, groups.slice(offset, offset + limit));
+		return {baseCurrency, merchants: page.map(toListItem), total: groups.length};
 	}
 
 	async get(
 		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
 		groupId: string,
 	): Promise<MerchantGroup> {
-		const [group] = await this.findGroups(accountId, [groupId]);
+		const [group] = await this.withLogos(accountId, await this.findGroups(accountId, [groupId]));
 		if (!group) throw new NotFoundException(MERCHANT_NOT_FOUND);
 		const {spentCents: _spentCents, ...response} = group;
 		return {...response, baseCurrency};
@@ -226,7 +223,7 @@ export class MerchantSpendingService {
 			this.findGroups(
 				accountId,
 				shown.map(([groupId]) => groupId),
-			),
+			).then((found) => this.withLogos(accountId, found)),
 			this.countRows(
 				accountId,
 				shown.map(([groupId]) => groupId),
@@ -265,12 +262,16 @@ export class MerchantSpendingService {
 		};
 	}
 
-	/** All-time totals per group, optionally only the given groups; groups without rows are absent. */
+	/**
+	 * All-time totals per group, optionally only the given groups; groups without rows are absent. Rows are totalled per
+	 * merchant key first and the few keys are then mapped to their groups, so the brand lookup runs once per key rather
+	 * than once per row. Logos are left out: `withLogos` adds them for the groups a response shows.
+	 */
 	private async findGroups(accountId: string, groupIds?: readonly string[]): Promise<Group[]> {
 		if (groupIds?.length === 0) return [];
-		const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId)
-			.select(SQL_MERCHANT_GROUP, 'groupId')
-			.addSelect(SQL_MERCHANT_KEY_NAME, 'key')
+		// Byte order groups exactly like the database's deterministic collation and sorts the history much faster.
+		const variants = createOwnerScopedQuery(this.bankTransactionRepository, accountId)
+			.select(`${SQL_MERCHANT_KEY_NAME} COLLATE "C"`, 'key')
 			.addSelect(
 				`(array_agg("transaction"."displayDescription" ORDER BY "transaction"."bookingDate" DESC NULLS FIRST, "transaction"."createdAt" DESC))[1]`,
 				'name',
@@ -288,10 +289,18 @@ export class MerchantSpendingService {
 			.addSelect(`to_char(MIN("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'firstDate')
 			.addSelect(`to_char(MAX("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'lastDate')
 			.andWhere(`"transaction"."merchantKey" IS NOT NULL AND NOT ${SQL_INTERNAL}`)
-			.groupBy('1')
-			.addGroupBy('2');
-		if (groupIds) query.andWhere(`${SQL_MERCHANT_GROUP} IN (:...groupIds)`, {groupIds});
-		const [rows, brandNames] = await Promise.all([query.getRawMany<VariantRow>(), this.findBrandNames(accountId)]);
+			.groupBy('1');
+		const [variantSql, parameters] = variants.getQueryAndParameters();
+		// The same group as SQL_MERCHANT_GROUP gives each of the key's rows; the default collation keeps the key index.
+		const groupId = `CASE WHEN variant."key" = '' THEN NULL ELSE COALESCE((SELECT 'b_' || md5(lower(btrim(merchant."brand"))) FROM "merchants" merchant WHERE merchant."accountId" = $${parameters.length + 1} AND merchant."key" = variant."key" COLLATE "default" AND merchant."status" = '${MERCHANT_STATUSES.IDENTIFIED}' AND btrim(merchant."brand") <> ''), 'k_' || md5(variant."key")) END`;
+		const filter = groupIds ? `WHERE grouped."groupId" = ANY($${parameters.length + 2}::text[])` : '';
+		const [rows, brandNames]: [VariantRow[], Map<string, string>] = await Promise.all([
+			this.bankTransactionRepository.manager.query(
+				`SELECT grouped.* FROM (SELECT ${groupId} AS "groupId", variant.* FROM (${variantSql}) variant) grouped ${filter}`,
+				[...parameters, accountId, ...(groupIds ? [groupIds] : [])],
+			),
+			this.findBrandNames(accountId),
+		]);
 
 		const variantsByGroup = new Map<string, VariantRow[]>();
 		for (const row of rows) {
@@ -300,8 +309,12 @@ export class MerchantSpendingService {
 			variants.push(row);
 			variantsByGroup.set(row.groupId, variants);
 		}
+		return [...variantsByGroup.entries()].map(([id, rows]) => toGroup(id, rows, brandNames.get(id)));
+	}
 
-		const groups = [...variantsByGroup.entries()].map(([id, rows]) => toGroup(id, rows, brandNames.get(id)));
+	/** The groups with each one's logo; only the groups a response shows are looked up. */
+	private async withLogos(accountId: string, groups: Group[]): Promise<Group[]> {
+		if (groups.length === 0) return groups;
 		const logos = await this.merchantLogoService.getLogoUrls(
 			accountId,
 			groups.map((group) => ({

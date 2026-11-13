@@ -1,4 +1,4 @@
-import {ConflictException, Injectable, NotFoundException} from '@nestjs/common';
+import {ConflictException, Injectable, Logger, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import type {
 	BankTransactionCategory,
@@ -21,6 +21,7 @@ import {
 	BANKING_RECURRING_SERIES_NOT_FOUND,
 } from '../api/constants/banking-messages.constants';
 import {BankTransaction} from '../bank-transaction.entity';
+import {safeErrorName} from '../banking.utils';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {SQL_INTERNAL, createOwnerScopedQuery} from '../services/bank-transaction-filters';
 import {daysInMonth, formatCents} from '../summary/bank-transaction-summary';
@@ -46,7 +47,20 @@ const REFUND = 'REFUND' satisfies BankTransactionCategory;
  */
 export const RECURRING_DETECTION_RULES_VERSION = '11';
 const UPCOMING_COUNT = 3;
-/** Every payment field detection reads; the stored detection's version is a hash over all of them. */
+/** Above this many change notes, a read folds the owner's notes into one; their sum stays the same. */
+const CHANGE_NOTES_FOLDED_AFTER = 32;
+/**
+ * The owner's history version: their bank account ids and the sum of the change notes the bank transaction triggers
+ * write (migration `AddBankHistoryChanges20261113170000`). Every committed write to the owner's rows raises the sum, and
+ * rows removed with a bank account change the ids, so an equal version means the same candidate rows.
+ */
+const HISTORY_VERSION_SQL = `md5(concat_ws('|',
+	(SELECT string_agg(bank_account."id"::text, ',' ORDER BY bank_account."id") FROM "bank_accounts" bank_account
+		JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+		WHERE connection."accountId" = account."id"),
+	(SELECT COALESCE(SUM(change."weight"), 0) FROM "bank_history_changes" change WHERE change."accountId" = account."id")))`;
+const HISTORY_CHANGE_NOTES_SQL = `(SELECT COUNT(*)::int FROM "bank_history_changes" change WHERE change."accountId" = account."id")`;
+/** Every payment field detection reads; a write to any of them changes the owner's history version. */
 const CANDIDATE_COLUMNS: readonly [sql: string, alias: keyof CandidateRow][] = [
 	['"transaction"."id"', 'id'],
 	['"transaction"."bankAccountId"', 'bankAccountId'],
@@ -123,6 +137,8 @@ type CandidateRow = {
  */
 @Injectable()
 export class RecurringSeriesService {
+	private readonly logger = new Logger(RecurringSeriesService.name);
+
 	constructor(
 		@InjectRepository(BankTransaction)
 		private readonly bankTransactionRepository: Repository<BankTransaction>,
@@ -350,23 +366,26 @@ export class RecurringSeriesService {
 		};
 	}
 
-	/** Hash and candidates share a short read snapshot; computation and writes hold no read connection. */
+	/** Version and candidates share a short read snapshot; computation and writes hold no read connection. */
 	private async detect(accountId: Account['id']): Promise<Detection> {
 		const reads = this.detecting.get(accountId) ?? {readers: 0, versions: new Map<string, Promise<Detection>>()};
 		this.detecting.set(accountId, reads);
 		reads.readers++;
 		let leader: Promise<Detection> | undefined;
-		// The callback awaits its hash query before it can chain leader work from this read promise.
+		let changeNotes = 0;
+		// The callback awaits its version query before it can chain leader work from this read promise.
 		const read: Promise<{cached: SnapshotPayload} | {pending: Promise<Detection>}> =
 			this.bankTransactionRepository.manager.transaction('REPEATABLE READ', async (manager) => {
 				const repository = manager.getRepository(BankTransaction);
-				const [{version}] = await this.candidateRows(accountId, repository)
-					.select(
-						`md5(string_agg(json_build_array(${CANDIDATE_COLUMNS.map(([sql]) => sql).join(', ')})::text, ',' ORDER BY "transaction"."id"))`,
-						'version',
-					)
-					.getRawMany<{version: string | null}>();
-				const inputVersion = version ?? 'none';
+				const [history] = await manager
+					.createQueryBuilder()
+					.select(HISTORY_VERSION_SQL, 'version')
+					.addSelect(HISTORY_CHANGE_NOTES_SQL, 'changeNotes')
+					.from('accounts', 'account')
+					.where('account.id = :accountId', {accountId})
+					.getRawMany<{version: string; changeNotes: number}>();
+				const inputVersion = history?.version ?? 'none';
+				changeNotes = history?.changeNotes ?? 0;
 				const stored = await manager.getRepository(RecurringSnapshot).findOneBy({accountId});
 				if (stored?.inputVersion === inputVersion && stored.rulesVersion === RECURRING_DETECTION_RULES_VERSION)
 					return {cached: stored.payload as SnapshotPayload};
@@ -393,6 +412,7 @@ export class RecurringSeriesService {
 			});
 		try {
 			const result = await read;
+			if (changeNotes > CHANGE_NOTES_FOLDED_AFTER) await this.foldChangeNotes(accountId);
 			return 'cached' in result ? fromPayload(result.cached) : await result.pending;
 		} catch (error) {
 			// The leader includes read/commit failures, so consume that same rejection and clear its version.
@@ -400,6 +420,35 @@ export class RecurringSeriesService {
 			throw error;
 		} finally {
 			if (--reads.readers === 0) this.detecting.delete(accountId);
+		}
+	}
+
+	/**
+	 * Folds the change notes of every owner with more than one, so owners whose history changes but who never read
+	 * their recurring payments keep few notes too. Stored detections stay valid: folding keeps each owner's version.
+	 */
+	async foldAllChangeNotes(): Promise<void> {
+		const owners: Array<{accountId: string}> = await this.bankTransactionRepository.manager.query(
+			'SELECT "accountId" FROM "bank_history_changes" GROUP BY "accountId" HAVING COUNT(*) > 1',
+		);
+		for (const {accountId} of owners) await this.foldChangeNotes(accountId);
+	}
+
+	/**
+	 * Replaces the owner's committed change notes with one note of the same weight, so the version stays the same and
+	 * the notes stay few. Notes of transactions still running are not visible here and keep their own weight.
+	 */
+	private async foldChangeNotes(accountId: Account['id']): Promise<void> {
+		try {
+			await this.bankTransactionRepository.manager.query(
+				`WITH folded AS (DELETE FROM "bank_history_changes" WHERE "accountId" = $1 RETURNING "weight")
+				INSERT INTO "bank_history_changes" ("accountId", "transactionId", "weight")
+				SELECT $1, txid_current(), SUM("weight") FROM folded HAVING COUNT(*) > 0`,
+				[accountId],
+			);
+		} catch (error) {
+			// The notes only stay more numerous; the next read folds them.
+			this.logger.warn(`Recurring change notes fold failed: ${safeErrorName(error)}`);
 		}
 	}
 

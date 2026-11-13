@@ -2,6 +2,7 @@ import {NestFactory} from '@nestjs/core';
 import {DataSource} from 'typeorm';
 
 import {AppModule} from '../src/app.module';
+import {installSchemaExtras} from '../src/app/core/database/synchronized-schema-extras';
 
 /**
  * Creates the database schema from the current entities without inserting data.
@@ -24,6 +25,7 @@ async function schema() {
 
 	console.log('Synchronizing database schema...');
 	await dataSource.synchronize();
+	await installSchemaExtras(dataSource);
 	console.log('Schema synchronized.');
 
 	await app.close();
