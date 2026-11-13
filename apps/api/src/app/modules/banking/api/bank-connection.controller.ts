@@ -1,6 +1,21 @@
-import {Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, Res} from '@nestjs/common';
+import {
+	Body,
+	Controller,
+	Delete,
+	Get,
+	HttpCode,
+	NotFoundException,
+	Param,
+	ParseUUIDPipe,
+	Post,
+	Put,
+	Query,
+	Req,
+	Res,
+} from '@nestjs/common';
 import {Throttle, minutes} from '@nestjs/throttler';
 import type {
+	BankAccount,
 	BankConnection,
 	BankConnectionAspsp,
 	BankConnectionAuthorizationResponse,
@@ -23,10 +38,13 @@ import {BankConnectionQueryService} from '../services/bank-connection-query.serv
 import {BankConnectionRemovalService} from '../services/bank-connection-removal.service';
 import {BankTransactionService} from '../services/bank-transaction.service';
 import {BankingSyncService} from '../services/banking-sync.service';
+import {FileAccountBalanceService} from '../services/file-account-balance.service';
+import {BANKING_ACCOUNT_NOT_FOUND} from './constants/banking-messages.constants';
 import {BankConnectionAuthorizeDto} from './dtos/bank-connection-authorize.dto';
 import {BankConnectionCallbackDto} from './dtos/bank-connection-callback.dto';
 import {BankConnectionRemoveDto} from './dtos/bank-connection-remove.dto';
 import {BankConnectionTransactionsQueryDto} from './dtos/bank-connection-transactions-query.dto';
+import {SetBankAccountBalanceDto} from './dtos/set-bank-account-balance.dto';
 
 @Controller('bank-connections')
 export class BankConnectionController {
@@ -38,6 +56,7 @@ export class BankConnectionController {
 		private readonly bankTransactionService: BankTransactionService,
 		private readonly bankingSyncService: BankingSyncService,
 		private readonly configurationService: ConfigurationService,
+		private readonly fileAccountBalanceService: FileAccountBalanceService,
 	) {}
 
 	@Post('authorize')
@@ -97,6 +116,21 @@ export class BankConnectionController {
 			request.off('aborted', abort);
 			response.off('close', close);
 		}
+	}
+
+	/** The balance of an imported-files account today, entered by its owner. */
+	@Put(':connectionId/accounts/:accountId/balance')
+	async setAccountBalance(
+		@Param('connectionId', new ParseUUIDPipe({version: '4'})) connectionId: string,
+		@Param('accountId', new ParseUUIDPipe({version: '4'})) accountId: string,
+		@Body() dto: SetBankAccountBalanceDto,
+		@CurrentAccount() account: Account,
+	): Promise<BankAccount> {
+		await this.fileAccountBalanceService.setStatedBalance(account, connectionId, accountId, dto.amount);
+		const updated = await this.bankConnectionQueryService.findAccount(account, connectionId, accountId);
+		// Only a removal committing right after the balance was stored gets here.
+		if (!updated) throw new NotFoundException(BANKING_ACCOUNT_NOT_FOUND);
+		return updated;
 	}
 
 	@Delete(':connectionId')

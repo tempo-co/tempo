@@ -1,6 +1,11 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import type {BankImportSummary} from '@tempo/contracts';
+import type {
+	BankAccount as BankAccountResponse,
+	BankBalanceTrend,
+	BankConnection as BankConnectionResponse,
+	BankImportSummary,
+} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {request as httpRequest} from 'node:http';
@@ -11,6 +16,7 @@ import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
 import {In, Repository} from 'typeorm';
 
+import {dateInTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
 import {BankConnectionAlertService} from '@modules/banking/alerts/bank-connection-alert.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
@@ -26,16 +32,19 @@ import {BankingEncryptionService} from '@modules/banking/services/banking-encryp
 import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
 import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
 import {EnableBankingClient} from '@modules/banking/services/enable-banking.client';
+import {FileAccountBalanceService} from '@modules/banking/services/file-account-balance.service';
 import {BankImportUploadQueue} from '@modules/file-import/api/bank-import-upload-queue';
 import {BankImportDoubtfulRow} from '@modules/file-import/bank-import-doubtful-row.entity';
 import {BankImport} from '@modules/file-import/bank-import.entity';
+import {BankImportService} from '@modules/file-import/bank-import.service';
 import {MAX_DROP_BYTES} from '@modules/file-import/parsers/parse-limits';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {EXAMPLE_IBAN, OTHER_EXAMPLE_IBAN, camt053, createZip} from '../../fixtures/statement-file.fixture';
 import {enableFileImportE2e, getApp, getSessionCookie} from '../../setup/e2e.setup';
-import {createVerifiedAccount} from '../../utils/auth-utils';
+import {createVerifiedAccount, expectValidationMessage} from '../../utils/auth-utils';
 import {MAILPIT_API_URL} from '../../utils/email-utils';
+import {waitFor} from '../../utils/wait-utils';
 
 enableFileImportE2e();
 
@@ -268,6 +277,62 @@ describe('Bank imports', () => {
 			.getMany();
 	}
 
+	/** The three fields the balance trend reads, as stored. */
+	async function balanceFields(bankAccountId: string) {
+		const {currentBalanceAmount, currentBalanceType, balanceUpdatedAt} = await bankAccounts.findOneByOrFail({
+			id: bankAccountId,
+		});
+		return {currentBalanceAmount, currentBalanceType, balanceUpdatedAt};
+	}
+
+	/** An account as `GET /bank-connections` describes it. */
+	async function accountReply(agent: TestAgent, bankAccountId: string): Promise<BankAccountResponse | undefined> {
+		const reply = await agent.get('/bank-connections').expect(200);
+		return (reply.body as BankConnectionResponse[])
+			.flatMap(({bankAccounts: accounts}) => accounts)
+			.find(({id}) => id === bankAccountId);
+	}
+
+	/** The owner's balance trend at each day's end in March 2026, as [day, total] pairs. */
+	async function marchBalances(agent: TestAgent) {
+		const trend = await agent
+			.get('/bank-transactions/balance-trend?interval=day&from=2026-03-01&to=2026-03-31&asOf=2026-03-31')
+			.expect(200);
+		return (trend.body as BankBalanceTrend).periods.map(({end, total}) => [end, total]);
+	}
+
+	function setBalance(agent: TestAgent, connectionId: string, bankAccountId: string, amount: unknown) {
+		return agent
+			.put(`/bank-connections/${connectionId}/accounts/${bankAccountId}/balance`)
+			.set('Origin', ORIGIN)
+			.send({amount});
+	}
+
+	function undo(agent: TestAgent, importId: string) {
+		return agent.delete(`/bank-imports/${importId}`).set('Origin', ORIGIN).expect(204);
+	}
+
+	/** A statement of EXAMPLE_IBAN in EUR with signed amounts, without balances unless `balances` gives them. */
+	function statement(
+		entries: Array<{amount: string; bookingDate: string | null; valueDate?: string; reference?: string}>,
+		balances: {opening: string; closing: string} | null = null,
+	): Buffer {
+		return Buffer.from(
+			camt053([
+				{
+					sequence: '1',
+					...balances,
+					entries: entries.map(({amount, ...entry}) => ({
+						...entry,
+						amount: amount.replace('-', ''),
+						indicator: amount.startsWith('-') ? 'DBIT' : 'CRDT',
+						info: 'Example Shop',
+					})),
+				},
+			]),
+		);
+	}
+
 	/** What a row says about the payment, without ids, account-scoped keys or timestamps. */
 	const rowContent = (row: BankTransaction) =>
 		Object.fromEntries(
@@ -321,7 +386,8 @@ describe('Bank imports', () => {
 			name: 'NL91 ABNA 0417 1643 00',
 			currency: 'EUR',
 			isActive: true,
-			currentBalanceAmount: null,
+			// The archive's last closing balance.
+			currentBalanceAmount: '2570.56000000',
 		});
 		expect(first.body).toEqual({
 			id: expect.any(String),
@@ -337,6 +403,7 @@ describe('Bank imports', () => {
 			dateFrom: '2026-03-02',
 			dateTo: '2026-03-04',
 			accounts: [{id: account.id, name: 'NL91 ABNA 0417 1643 00', currency: 'EUR', created: true}],
+			accountsWithoutBalance: [],
 			undoneAt: null,
 			createdAt: expect.any(String),
 		} satisfies BankImportSummary);
@@ -438,6 +505,317 @@ describe('Bank imports', () => {
 		expect(await imports.findOneByOrFail({id: overlapping.body.id})).toMatchObject({undoneAt: expect.any(Date)});
 
 		await agent.delete(`/bank-imports/${overlapping.body.id}`).set('Origin', ORIGIN).expect(404);
+	});
+
+	it("gives an imported-files account the last closing balance its statements state, which the balance trend's history follows", async () => {
+		const {agent} = await createOwner();
+
+		const first = await drop(agent, [ARCHIVE]).expect(201);
+
+		const accountId = (first.body as BankImportSummary).accounts[0].id;
+		expect(first.body).toMatchObject({accountsWithoutBalance: []});
+		expect(await balanceFields(accountId)).toEqual({
+			currentBalanceAmount: '2570.56000000',
+			currentBalanceType: 'CLBD',
+			balanceUpdatedAt: new Date('2026-03-04T00:00:00.000Z'),
+		});
+		expect(await accountReply(agent, accountId)).toMatchObject({
+			currentBalanceAmount: '2570.56000000',
+			balanceUpdatedAt: '2026-03-04T00:00:00.000Z',
+			balanceSource: 'file',
+			latestBalances: [],
+		});
+		// Each day ends on the balance after its last row; the history starts on the first booking day.
+		const archiveDays = await marchBalances(agent);
+		expect(archiveDays.slice(0, 4)).toEqual([
+			['2026-03-02', '2637.50'],
+			['2026-03-03', '2637.50'],
+			['2026-03-04', '2570.56'],
+			['2026-03-05', '2570.56'],
+		]);
+		expect(archiveDays.at(-1)).toEqual(['2026-03-31', '2570.56']);
+
+		const later = await drop(agent, [CAMT_FILES[3]]).expect(201);
+
+		expect(later.body).toMatchObject({rowsAdded: 1, accountsWithoutBalance: []});
+		expect(await balanceFields(accountId)).toMatchObject({
+			currentBalanceAmount: '2545.61000000',
+			balanceUpdatedAt: new Date('2026-03-05T00:00:00.000Z'),
+		});
+		const laterDays = await marchBalances(agent);
+		expect(laterDays.slice(0, 4)).toEqual([...archiveDays.slice(0, 3), ['2026-03-05', '2545.61']]);
+		expect(laterDays.at(-1)).toEqual(['2026-03-31', '2545.61']);
+
+		await undo(agent, later.body.id);
+
+		expect(await balanceFields(accountId)).toEqual({
+			currentBalanceAmount: '2570.56000000',
+			currentBalanceType: 'CLBD',
+			balanceUpdatedAt: new Date('2026-03-04T00:00:00.000Z'),
+		});
+		expect(await marchBalances(agent)).toEqual(archiveDays);
+
+		await undo(agent, first.body.id);
+
+		expect(await bankAccounts.findOneBy({id: accountId})).toBeNull();
+		expect(await accountReply(agent, accountId)).toBeUndefined();
+		expect(await marchBalances(agent)).toEqual([]);
+	});
+
+	it('derives the same balance history from statements without balances once the owner enters the balance of today', async () => {
+		const withBalances = await createOwner();
+		await drop(withBalances.agent, [ARCHIVE]).expect(201);
+		const {owner, agent} = await createOwner();
+		const other = await createOwner();
+		const sameBookings = statement(
+			ARCHIVE_ROWS.map(([bookingDate, valueDate, amount, reference]) => ({
+				amount: amount.slice(0, -6),
+				bookingDate,
+				valueDate,
+				reference,
+			})),
+		);
+
+		const imported = await drop(agent, [sameBookings]).expect(201);
+
+		const accountId = (imported.body as BankImportSummary).accounts[0].id;
+		expect(imported.body).toMatchObject({
+			rowsAdded: 7,
+			accountsWithoutBalance: [{id: accountId, name: 'NL91 ABNA 0417 1643 00', currency: 'EUR'}],
+		});
+		expect(await balanceFields(accountId)).toEqual({
+			currentBalanceAmount: null,
+			currentBalanceType: null,
+			balanceUpdatedAt: null,
+		});
+		expect(await accountReply(agent, accountId)).toMatchObject({balanceSource: null});
+		expect(await marchBalances(agent)).toEqual([]);
+		const connectionId = (await fileConnection(owner))!.id;
+		for (const amount of ['2570.561', '2,570.56', '1e3', '', '+5.00', 2570.56, null]) {
+			const refused = await setBalance(agent, connectionId, accountId, amount).expect(400);
+			expectValidationMessage(refused, /at most two decimals/);
+		}
+		await setBalance(other.agent, connectionId, accountId, '1.00').expect(404);
+		expect(await balanceFields(accountId)).toMatchObject({currentBalanceAmount: null});
+
+		const stated = await setBalance(agent, connectionId, accountId, '2570.56').expect(200);
+
+		const today = dateInTimeZone(new Date(), owner.timeZone);
+		expect(stated.body).toMatchObject({
+			id: accountId,
+			currentBalanceAmount: '2570.56000000',
+			currentBalanceType: 'CLBD',
+			balanceUpdatedAt: `${today}T00:00:00.000Z`,
+			balanceSource: 'stated',
+			latestBalances: [],
+		} satisfies Partial<BankAccountResponse>);
+		expect(await bankAccounts.findOneByOrFail({id: accountId})).toMatchObject({
+			statedBalanceAmount: '2570.56000000',
+			statedBalanceDate: today,
+		});
+		expect(await marchBalances(agent)).toEqual(await marchBalances(withBalances.agent));
+		const history = await agent.get('/bank-imports').expect(200);
+		expect(history.body[0]).toMatchObject({id: imported.body.id, accountsWithoutBalance: []});
+	});
+
+	it('moves an entered balance by exactly the rows booked after the day it was entered, until a statement states one', async () => {
+		const {owner, agent} = await createOwner();
+		const first = await drop(agent, [
+			statement([{amount: '-1.00', bookingDate: '2026-03-02', reference: 'R-1'}]),
+		]).expect(201);
+		const accountId = (first.body as BankImportSummary).accounts[0].id;
+		const connectionId = (await fileConnection(owner))!.id;
+		await setBalance(agent, connectionId, accountId, '100.00').expect(200);
+		// As if the owner had entered it on 10 March.
+		await bankAccounts.update({id: accountId}, {statedBalanceDate: '2026-03-10'});
+
+		await drop(agent, [statement([{amount: '-2.00', bookingDate: '2026-03-05', reference: 'R-2'}])]).expect(201);
+
+		expect(await balanceFields(accountId)).toEqual({
+			currentBalanceAmount: '100.00000000',
+			currentBalanceType: 'CLBD',
+			balanceUpdatedAt: new Date('2026-03-10T00:00:00.000Z'),
+		});
+
+		const later = await drop(agent, [
+			statement([
+				{amount: '-20.00', bookingDate: '2026-03-12', reference: 'R-3'},
+				{amount: '5.00', bookingDate: '2026-03-15', reference: 'R-4'},
+				// No booking date: it counts on its value date.
+				{amount: '-11.00', bookingDate: null, valueDate: '2026-03-14'},
+				{amount: '-11.00', bookingDate: '2026-03-16'},
+			]),
+		]).expect(201);
+
+		expect(later.body).toMatchObject({rowsAdded: 4, accountsWithoutBalance: []});
+		expect(await transactions.findOneByOrFail({importId: later.body.id, valueDate: '2026-03-14'})).toMatchObject({
+			bookingDate: '2026-03-14',
+			bookingDateFilled: true,
+		});
+		expect(await balanceFields(accountId)).toMatchObject({
+			currentBalanceAmount: '63.00000000',
+			balanceUpdatedAt: new Date('2026-03-16T00:00:00.000Z'),
+		});
+		expect(await accountReply(agent, accountId)).toMatchObject({balanceSource: 'stated'});
+
+		// Two rows of the same amount lie within three days of this one: the owner decides.
+		const doubtful = await drop(agent, [statement([{amount: '-11.00', bookingDate: '2026-03-15'}])]).expect(201);
+		expect(doubtful.body).toMatchObject({rowsAdded: 0, rowsDoubtful: 1});
+		expect(await balanceFields(accountId)).toMatchObject({currentBalanceAmount: '63.00000000'});
+		const [row] = (await agent.get(`/bank-imports/${doubtful.body.id}/doubtful-rows`).expect(200)).body;
+		await agent
+			.post(`/bank-imports/${doubtful.body.id}/doubtful-rows/${row.id}/resolve`)
+			.set('Origin', ORIGIN)
+			.send({decision: 'new'})
+			.expect(200);
+		expect(await balanceFields(accountId)).toMatchObject({currentBalanceAmount: '52.00000000'});
+
+		// A statement's own balance wins over the entered one, whatever their dates: 990.00 after 8 March, plus the
+		// 48.00 of rows booked since.
+		await drop(agent, [
+			statement([{amount: '-10.00', bookingDate: '2026-03-08', reference: 'R-5'}], {
+				opening: '1000.00',
+				closing: '990.00',
+			}),
+		]).expect(201);
+
+		expect(await balanceFields(accountId)).toEqual({
+			currentBalanceAmount: '942.00000000',
+			currentBalanceType: 'CLBD',
+			balanceUpdatedAt: new Date('2026-03-16T00:00:00.000Z'),
+		});
+		expect(await accountReply(agent, accountId)).toMatchObject({
+			currentBalanceAmount: '942.00000000',
+			balanceSource: 'file',
+		});
+	});
+
+	it('resolves a doubtful row of an imported-files account from a drop into a synced account alongside a balance save and another such drop', async () => {
+		const {owner, agent} = await createOwner();
+		const synced = await fixtures.createConnection(owner, {nextSyncAt: new Date('2030-01-01T00:00:00.000Z')});
+		await fixtures.createBankAccount(synced, {iban: EXAMPLE_IBAN});
+		const ofOtherAccount = (entries: Array<{amount: string; bookingDate: string}>) => ({
+			iban: OTHER_EXAMPLE_IBAN,
+			sequence: '1',
+			entries: entries.map(({amount, bookingDate}) => ({
+				amount: amount.replace('-', ''),
+				bookingDate,
+				info: 'Example Shop',
+			})),
+		});
+		const first = await drop(agent, [
+			Buffer.from(
+				camt053([
+					ofOtherAccount([
+						{amount: '-11.00', bookingDate: '2026-03-14'},
+						{amount: '-11.00', bookingDate: '2026-03-16'},
+					]),
+				]),
+			),
+		]).expect(201);
+		const fileAccountId = (first.body as BankImportSummary).accounts[0].id;
+		// The record of this drop hangs on the synced connection; its rows for the imported-files account are doubtful.
+		const mixed = await drop(agent, [
+			Buffer.from(
+				camt053([
+					{sequence: '1', entries: [{amount: '4.00', reference: 'SYNCED-1', bookingDate: '2026-03-15'}]},
+					ofOtherAccount([
+						{amount: '-11.00', bookingDate: '2026-03-15'},
+						{amount: '-11.00', bookingDate: '2026-03-15'},
+					]),
+				]),
+			),
+		]).expect(201);
+		expect(mixed.body).toMatchObject({rowsDoubtful: 2});
+		const [row, otherRow] = (await agent.get(`/bank-imports/${mixed.body.id}/doubtful-rows`).expect(200)).body;
+		const fileConnectionId = (await fileConnection(owner))!.id;
+		const resolve = (rowId: string) =>
+			agent
+				.post(`/bank-imports/${mixed.body.id}/doubtful-rows/${rowId}/resolve`)
+				.set('Origin', ORIGIN)
+				.send({decision: 'new'})
+				.then((reply) => reply);
+		const lockWaits = async () =>
+			(
+				await transactions.query<Array<{waiting: number}>>(
+					`SELECT count(*)::int AS "waiting" FROM pg_stat_activity
+					WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+				)
+			)[0].waiting;
+
+		// The save pauses after storing its balance, before its transaction commits.
+		const balances = app.get(FileAccountBalanceService);
+		const recompute = balances.recompute.bind(balances);
+		let reached!: () => void;
+		const saveReached = new Promise<void>((resolve) => (reached = resolve));
+		let release!: () => void;
+		const held = new Promise<void>((resolve) => (release = resolve));
+		const spy = jest.spyOn(balances, 'recompute').mockImplementationOnce(async (...args) => {
+			reached();
+			await held;
+			return recompute(...args);
+		});
+		try {
+			const save = setBalance(agent, fileConnectionId, fileAccountId, '50.00').then((reply) => reply);
+			await saveReached;
+			const resolution = resolve(row.id);
+			// The resolution then waits on a lock the save holds.
+			await waitFor(lockWaits, (waiting) => waiting > 0);
+			release();
+
+			expect((await save).status).toBe(200);
+			expect((await resolution).status).toBe(200);
+		} finally {
+			release();
+			spy.mockRestore();
+		}
+		// Today's entered balance, with every row booked on or before today already in it.
+		expect(await balanceFields(fileAccountId)).toMatchObject({currentBalanceAmount: '50.00000000'});
+
+		// Another drop into both accounts pauses once it holds the imported-files connection.
+		const importer = app.get(BankImportService) as unknown as {
+			lockFileConnection: (...args: unknown[]) => Promise<unknown>;
+		};
+		const lockFileConnection = importer.lockFileConnection.bind(importer);
+		let importReached!: () => void;
+		const importHolds = new Promise<void>((resolve) => (importReached = resolve));
+		let releaseImport!: () => void;
+		const importHeld = new Promise<void>((resolve) => (releaseImport = resolve));
+		const importSpy = jest.spyOn(importer, 'lockFileConnection').mockImplementationOnce(async (...args) => {
+			const locked = await lockFileConnection(...args);
+			importReached();
+			await importHeld;
+			return locked;
+		});
+		const leases = jest.spyOn(app.get(BankingConnectionLockService), 'acquire');
+		try {
+			const another = drop(agent, [
+				Buffer.from(
+					camt053([
+						{sequence: '2', entries: [{amount: '6.00', reference: 'SYNCED-2', bookingDate: '2026-03-20'}]},
+						ofOtherAccount([{amount: '-7.00', bookingDate: '2026-03-20'}]),
+					]),
+				),
+			]).then((reply) => reply);
+			await importHolds;
+			const leasesAsked = leases.mock.calls.length;
+			const resolution = resolve(otherRow.id);
+			// The resolution waits for the drop: for its sync lock, or (out of order) for the connection it holds.
+			await waitFor(
+				async () => ({locks: await lockWaits(), leases: leases.mock.calls.length}),
+				({locks, leases: asked}) => locks > 0 || asked > leasesAsked,
+			);
+			releaseImport();
+
+			expect((await another).status).toBe(201);
+			expect((await resolution).status).toBe(200);
+		} finally {
+			releaseImport();
+			importSpy.mockRestore();
+			leases.mockRestore();
+		}
+		expect(await balanceFields(fileAccountId)).toMatchObject({currentBalanceAmount: '50.00000000'});
+		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(5);
 	});
 
 	it('keeps an import to its owner', async () => {
@@ -1057,6 +1435,7 @@ describe('Bank imports', () => {
 			rowsMatchedByDate: 2,
 			rowsDoubtful: 3,
 			accounts: [{id: account.id, name: 'Main account', currency: 'EUR', created: false}],
+			accountsWithoutBalance: [],
 		} satisfies Partial<BankImportSummary>);
 		const added = await transactions.find({where: {importId: imported.body.id}, order: {entryReference: 'ASC'}});
 		expect(added.map(({entryReference, amount}) => [entryReference, amount])).toEqual([
@@ -1071,6 +1450,14 @@ describe('Bank imports', () => {
 		expect(await bankAccounts.findOneByOrFail({id: account.id})).toEqual(accountBefore);
 		expect(await fixtures.balances.countBy({bankAccountId: account.id})).toBe(0);
 		expect(await fileConnection(owner)).toBeNull();
+		// Bank sync reports this account's balance; the owner cannot enter one.
+		const refusedBalance = await agent
+			.put(`/bank-connections/${connection.id}/accounts/${account.id}/balance`)
+			.set('Origin', ORIGIN)
+			.send({amount: '1.00'})
+			.expect(409);
+		expect(refusedBalance.body).toMatchObject({code: 'balance_from_bank'});
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toEqual(accountBefore);
 
 		const again = await drop(agent, [statement]).expect(201);
 		expect(again.body).toMatchObject({

@@ -38,8 +38,12 @@ export const BANK_SYNC_STATUSES = [
 ] as const;
 export type BankSyncStatus = (typeof BANK_SYNC_STATUSES)[number];
 
-/** The `code` of a refused bank-connection request: imported files cannot be refreshed or re-authorized. */
-export type BankConnectionErrorCode = 'file_connection_not_syncable';
+/**
+ * The `code` of a refused bank-connection request: imported files cannot be refreshed or re-authorized
+ * (`file_connection_not_syncable`), and only an imported-files account takes a balance from its owner
+ * (`balance_from_bank`).
+ */
+export type BankConnectionErrorCode = 'file_connection_not_syncable' | 'balance_from_bank';
 
 /** Lazy metadata keeps catalogue reads independent of downloading every bank's artwork. */
 export type BankLogoReference = {metadataUrl: string};
@@ -79,6 +83,13 @@ export type BankAccountBalance = {
 	isPrimary: boolean;
 };
 
+/**
+ * Where an account's current balance comes from: the bank sync reported it (`bank`), the imported statements state
+ * it (`file`), or the owner entered it for an imported-files account (`stated`), with later imported rows added.
+ */
+export const BANK_ACCOUNT_BALANCE_SOURCES = ['bank', 'file', 'stated'] as const;
+export type BankAccountBalanceSource = (typeof BANK_ACCOUNT_BALANCE_SOURCES)[number];
+
 export type BankAccount = {
 	id: string;
 	name: string | null;
@@ -94,10 +105,20 @@ export type BankAccount = {
 	currentBalanceInBaseCurrency: string | null;
 	/** The ECB rate date used; null when no conversion was needed or possible. */
 	baseCurrencyRateDate: string | null;
+	/** When the balance was reported; for an imported-files account midnight UTC of the day it applies to. */
 	balanceUpdatedAt: string | null;
+	/** Null when `currentBalanceAmount` is. */
+	balanceSource: BankAccountBalanceSource | null;
 	isActive: boolean;
+	/** The bank's latest reported balances; always empty for an imported-files account. */
 	latestBalances: BankAccountBalance[];
 };
+
+/**
+ * `PUT /bank-connections/:connectionId/accounts/:accountId/balance`: the balance of an imported-files account today,
+ * answered with the account. A signed decimal with at most two decimals, such as `-12.50`.
+ */
+export type SetBankAccountBalanceRequest = {amount: string};
 
 /** `GET /bank-connections`: one connected bank and its accounts. */
 export type BankConnection = {

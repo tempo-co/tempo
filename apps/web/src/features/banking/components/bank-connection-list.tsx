@@ -73,6 +73,8 @@ type BankConnectionListProps = {
     drop: ReactNode;
     /** The Imports list. */
     imports: ReactNode;
+    /** Where an imported-files account shows its balance, the way to add or edit one the owner enters. */
+    balanceAction: (account: Account) => ReactNode;
   };
 };
 
@@ -202,6 +204,7 @@ export function BankConnectionList({
             <BankCard
               key={connection.id}
               connection={connection}
+              balanceAction={isFileConnection(connection) ? fileImport?.balanceAction : undefined}
               artwork={bankLogos[bankLogoKey(connection.aspspName, connection.aspspCountry)]}
               isStarting={isStarting}
               onReauthorize={reauthorize}
@@ -289,12 +292,14 @@ function problemOf(connection: BankConnection): Problem | null {
 
 function BankCard({
   connection,
+  balanceAction,
   artwork,
   isStarting,
   onReauthorize,
   onDetails,
 }: {
   connection: BankConnection;
+  balanceAction?: (account: Account) => ReactNode;
   artwork?: BankArtwork;
   isStarting: boolean;
   onReauthorize: (connection: BankConnection) => void | Promise<void>;
@@ -370,7 +375,11 @@ function BankCard({
         <ul className='-mx-3 grid grid-cols-1'>
           {accounts.map((account) => (
             <li key={account.id}>
-              <AccountRow account={account} baseCurrency={connection.baseCurrency} />
+              <AccountRow
+                account={account}
+                baseCurrency={connection.baseCurrency}
+                action={balanceAction?.(account)}
+              />
             </li>
           ))}
           {accounts.length > 1 && total && (
@@ -442,7 +451,16 @@ function BankCardSkeleton() {
   );
 }
 
-function AccountRow({account, baseCurrency}: {account: Account; baseCurrency: string | null}) {
+function AccountRow({
+  account,
+  baseCurrency,
+  action,
+}: {
+  account: Account;
+  baseCurrency: string | null;
+  /** Shown under the amount, or in its place when there is none; the row's link then covers the rest. */
+  action?: ReactNode;
+}) {
   const balance = accountBalance(account);
   const converted =
     balance?.amount !== 0 &&
@@ -454,6 +472,52 @@ function AccountRow({account, baseCurrency}: {account: Account; baseCurrency: st
   const name = accountName(account);
   const type = formatAccountType(account.cashAccountType);
   const subline = [type !== name && type, lastDigits(account)].filter(Boolean).join(' · ');
+  const amounts = (
+    <>
+      {balance && (
+        <span className='block numeric text-sm whitespace-nowrap'>
+          {formatCurrency(balance.amount, balance.currency)}
+        </span>
+      )}
+      {converted && (
+        <span className='block numeric text-xs whitespace-nowrap text-muted-foreground'>
+          ≈ {converted}
+        </span>
+      )}
+    </>
+  );
+
+  if (action)
+    // A button cannot sit inside the link, so the link stretches over the row and the action sits above it.
+    return (
+      <div
+        className={cn(
+          ROW,
+          'relative has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-ring',
+        )}
+      >
+        <span aria-hidden='true' className={TILE}>
+          <AccountTypeIcon type={account.cashAccountType} />
+        </span>
+        <span className='min-w-0'>
+          <Link
+            to='/bank-transactions'
+            search={{bankAccountIds: [account.id]}}
+            aria-label={`${name} transactions`}
+            className='block truncate text-sm outline-none after:absolute after:inset-0'
+          >
+            {name}
+          </Link>
+          <span className='block truncate text-xs text-muted-foreground'>
+            {subline || account.currency}
+          </span>
+        </span>
+        <span className='relative flex flex-col items-end text-right'>
+          {amounts}
+          {action}
+        </span>
+      </div>
+    );
 
   return (
     <Link
@@ -471,18 +535,7 @@ function AccountRow({account, baseCurrency}: {account: Account; baseCurrency: st
           {subline || account.currency}
         </span>
       </span>
-      <span className='text-right'>
-        {balance && (
-          <span className='block numeric text-sm whitespace-nowrap'>
-            {formatCurrency(balance.amount, balance.currency)}
-          </span>
-        )}
-        {converted && (
-          <span className='block numeric text-xs whitespace-nowrap text-muted-foreground'>
-            ≈ {converted}
-          </span>
-        )}
-      </span>
+      <span className='text-right'>{amounts}</span>
     </Link>
   );
 }

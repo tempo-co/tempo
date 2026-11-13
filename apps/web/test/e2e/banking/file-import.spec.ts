@@ -5,6 +5,7 @@ import type {
   BankImportError,
   BankImportSummary,
   ResolveBankImportDoubtfulRowRequest,
+  SetBankAccountBalanceRequest,
 } from '@tempo/contracts';
 
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';
@@ -39,6 +40,7 @@ function importSummary(fields: Partial<BankImportSummary> = {}): BankImportSumma
     dateFrom: '2026-05-01',
     dateTo: '2026-10-30',
     accounts: [{id: CHECKING.id, name: 'Holder Name', currency: 'EUR', created: false}],
+    accountsWithoutBalance: [],
     undoneAt: null,
     createdAt: '2026-11-12T09:30:00.000Z',
     ...fields,
@@ -65,6 +67,7 @@ const IMPORTED_FILES: BankConnection = {
       cashAccountType: null,
       maskedIdentifier: null,
       currentBalanceAmount: '-42.10',
+      balanceSource: 'file',
     },
   ],
 };
@@ -126,6 +129,38 @@ async function mockFileImport(
     return route.fulfill({status: 204});
   });
   return api;
+}
+
+/**
+ * The balance route of the imported-files account: answers each request with the account and the balance it was
+ * sent, after `hold` when given, and records the amounts.
+ */
+async function mockSetBalance(
+  page: Page,
+  onSaved: (account: BankConnection['bankAccounts'][number]) => void,
+  hold?: Promise<void>,
+) {
+  const amounts: string[] = [];
+  await page.route(`${API_URL}/bank-connections/*/accounts/*/balance`, async (route) => {
+    const {amount} = route.request().postDataJSON() as SetBankAccountBalanceRequest;
+    amounts.push(amount);
+    const [accountId] = new URL(route.request().url()).pathname.split('/').slice(-2);
+    expect(route.request().method()).toBe('PUT');
+    expect(new URL(route.request().url()).pathname).toBe(
+      `/bank-connections/${IMPORTED_FILES.id}/accounts/${accountId}/balance`,
+    );
+    await hold;
+    const account = {
+      ...IMPORTED_FILES.bankAccounts[0],
+      id: accountId,
+      currentBalanceAmount: `${amount}000000`,
+      balanceUpdatedAt: '2026-11-12T00:00:00.000Z',
+      balanceSource: 'stated' as const,
+    };
+    onSaved(account);
+    await fulfillJson(route, account);
+  });
+  return amounts;
 }
 
 /** A drop the API imported: it heads the import list from then on. */
@@ -260,6 +295,9 @@ test.describe('statement file import on Connections', () => {
     await expect(summaryBody.getByText('Mock ASPSP checking account · EUR')).toBeVisible();
     await expect(dialog.getByRole('button', {name: 'Review 3 rows'})).toBeVisible();
     await expect(dialog.getByRole('button', {name: 'Undo import'})).toBeVisible();
+    // A synced account keeps the balance its bank reports: nothing to ask.
+    await expect(dialog.getByTestId('bank-import-balances')).toHaveCount(0);
+    await expect(dialog.getByText(/^Balance of/)).toHaveCount(0);
 
     expect(api.uploads).toHaveLength(1);
     const form = sentForm(api.uploads[0]);
@@ -592,6 +630,216 @@ test.describe('statement file import on Connections', () => {
     await expect(rows.first().getByRole('button', {name: /^Undo/})).toHaveCount(0);
   });
 
+  test('asks for the balance today of an imported-files account that has none, and saves it in place', async ({
+    page,
+  }) => {
+    const newAccount = {
+      ...IMPORTED_FILES.bankAccounts[0],
+      currentBalanceAmount: null,
+      balanceUpdatedAt: null,
+      balanceSource: null,
+    };
+    let connections: BankConnection[] = [MOCK_CONNECTION];
+    await mockBankConnections(page, () => connections);
+    const summary = importSummary({
+      filesCount: 1,
+      rowsDoubtful: 0,
+      accounts: [
+        {id: FILE_ACCOUNT_ID, name: 'NL91 ABNA 0417 1643 00', currency: 'EUR', created: true},
+      ],
+      accountsWithoutBalance: [
+        {id: FILE_ACCOUNT_ID, name: 'NL91 ABNA 0417 1643 00', currency: 'EUR'},
+      ],
+    });
+    const api = await mockFileImport(page, {
+      uploads: [
+        async (route, api) => {
+          // The import creates the account, so the connection list holds it only from now on.
+          connections = [{...IMPORTED_FILES, bankAccounts: [newAccount]}, MOCK_CONNECTION];
+          await created(summary)(route, api);
+        },
+      ],
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const amounts = await mockSetBalance(
+      page,
+      (account) => {
+        connections = [{...IMPORTED_FILES, bankAccounts: [account]}, MOCK_CONNECTION];
+        api.imports = api.imports.map((existing) => ({...existing, accountsWithoutBalance: []}));
+      },
+      held,
+    );
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.xml')]);
+
+    const prompt = dialog.getByTestId('bank-import-balances');
+    const field = prompt.getByLabel('Balance of Example Card · EUR today');
+    await expect(field).toBeVisible();
+    await expect(
+      prompt.getByText('Tempo works out earlier balances from your transactions.'),
+    ).toBeVisible();
+    // Inline in the summary, not a dialog on top of it.
+    await expect(page.getByRole('dialog')).toHaveCount(1);
+
+    await field.fill('1250.405');
+    await prompt.getByRole('button', {name: 'Save'}).click();
+    await expect(prompt.getByRole('alert')).toContainText('Enter an amount');
+    await expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(amounts).toEqual([]);
+
+    await field.fill('1250,40');
+    await expect(prompt.getByRole('alert')).toHaveCount(0);
+    await prompt.getByRole('button', {name: 'Save'}).click();
+    await expect(prompt.getByRole('button', {name: 'Saving…'})).toBeDisabled();
+    release();
+
+    await expect(prompt.getByRole('status')).toContainText('€1,250.40');
+    await expect(prompt.getByRole('status')).toContainText('Saved');
+    await expect(field).toHaveCount(0);
+    expect(amounts).toEqual(['1250.40']);
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
+
+    await dialog.getByRole('button', {name: 'Done'}).click();
+    await expect(dialog).toBeHidden();
+    const card = page.getByRole('region', {name: 'Imported files'});
+    await expect(card).toContainText('€1,250.40');
+    await expect(
+      card.getByRole('button', {name: 'Edit balance of Example Card · EUR'}),
+    ).toBeVisible();
+  });
+
+  test('closes the summary without a balance, and a refused save says why', async ({page}) => {
+    await mockBankConnections(page, [
+      {
+        ...IMPORTED_FILES,
+        bankAccounts: [
+          {...IMPORTED_FILES.bankAccounts[0], currentBalanceAmount: null, balanceSource: null},
+        ],
+      },
+      MOCK_CONNECTION,
+    ]);
+    const summary = importSummary({
+      filesCount: 1,
+      rowsDoubtful: 0,
+      accounts: [{id: FILE_ACCOUNT_ID, name: null, currency: 'EUR', created: false}],
+      accountsWithoutBalance: [{id: FILE_ACCOUNT_ID, name: null, currency: 'EUR'}],
+    });
+    await mockFileImport(page, {imports: [summary], uploads: [created(summary)]});
+    await page.route(`${API_URL}/bank-connections/*/accounts/*/balance`, (route) =>
+      fulfillJson(route, {statusCode: 409, message: 'Refused.', code: 'balance_from_bank'}, 409),
+    );
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.xml')]);
+    const prompt = dialog.getByTestId('bank-import-balances');
+    await prompt.getByLabel('Balance of Example Card · EUR today').fill('-40.5');
+    await prompt.getByRole('button', {name: 'Save'}).click();
+
+    await expect(page.locator('[data-sonner-toast]')).toContainText(
+      "This account's balance comes from its bank",
+    );
+    await expect(prompt.getByRole('button', {name: 'Save'})).toBeEnabled();
+    await dialog.getByRole('button', {name: 'Done'}).click();
+    await expect(dialog).toBeHidden();
+  });
+
+  test('offers Add balance or Edit on imported-files accounts as their balance comes, in a dialog', async ({
+    page,
+  }) => {
+    const [base] = IMPORTED_FILES.bankAccounts;
+    const accounts = [
+      {
+        ...base,
+        id: FILE_ACCOUNT_ID,
+        name: 'Example Wallet',
+        currentBalanceAmount: null,
+        balanceSource: null,
+      },
+      {
+        ...base,
+        id: '00000000-0000-4000-8000-000000000402',
+        name: 'Example Savings',
+        currentBalanceAmount: '-42.10000000',
+        balanceSource: 'stated',
+      },
+      {
+        ...base,
+        id: '00000000-0000-4000-8000-000000000403',
+        name: 'Example Statement',
+        currentBalanceAmount: '310.00000000',
+        balanceSource: 'file',
+      },
+    ] satisfies BankConnection['bankAccounts'];
+    let connections: BankConnection[] = [{...IMPORTED_FILES, bankAccounts: accounts}];
+    await mockBankConnections(page, () => connections);
+    await mockFileImport(page);
+    const amounts = await mockSetBalance(page, (account) => {
+      connections = [
+        {
+          ...IMPORTED_FILES,
+          bankAccounts: accounts.map((existing) =>
+            existing.id === account.id ? {...existing, ...account, name: existing.name} : existing,
+          ),
+        },
+      ];
+    });
+    await page.goto('/bank-connections');
+    const card = page.getByRole('region', {name: 'Imported files'});
+    const rowOf = (name: string) =>
+      card
+        .getByRole('listitem')
+        .filter({has: page.getByRole('link', {name: `${name} transactions`})});
+
+    // No balance: Add balance where the amount would be.
+    await expect(
+      rowOf('Example Wallet').getByRole('button', {name: 'Add balance of Example Wallet'}),
+    ).toHaveText('Add balance');
+    await expect(rowOf('Example Wallet')).not.toContainText('€');
+    // Entered by the owner: the amount and a quiet Edit.
+    await expect(rowOf('Example Savings')).toContainText('-€42.10');
+    await expect(
+      rowOf('Example Savings').getByRole('button', {name: 'Edit balance of Example Savings'}),
+    ).toHaveText('Edit');
+    // Stated by its statements: the amount only.
+    await expect(rowOf('Example Statement')).toContainText('€310.00');
+    await expect(rowOf('Example Statement').getByRole('button')).toHaveCount(0);
+    // The rest of a row with an action still opens its transactions.
+    await expect(card.getByRole('link', {name: 'Example Wallet transactions'})).toHaveAttribute(
+      'href',
+      new RegExp(`bankAccountIds=.*${FILE_ACCOUNT_ID}`),
+    );
+
+    await rowOf('Example Savings')
+      .getByRole('button', {name: 'Edit balance of Example Savings'})
+      .click();
+    let dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', {name: 'Edit balance'})).toBeVisible();
+    await expect(dialog.getByLabel('Balance of Example Savings today')).toHaveValue('-42.10');
+    await dialog.getByRole('button', {name: 'Cancel'}).click();
+    await expect(dialog).toBeHidden();
+    expect(amounts).toEqual([]);
+
+    await rowOf('Example Wallet')
+      .getByRole('button', {name: 'Add balance of Example Wallet'})
+      .click();
+    dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', {name: 'Add balance'})).toBeVisible();
+    await expect(
+      dialog.getByText('Tempo works out earlier balances from your transactions.'),
+    ).toBeVisible();
+    await dialog.getByLabel('Balance of Example Wallet today').fill('99.5');
+    await dialog.getByRole('button', {name: 'Save'}).click();
+
+    await expect(dialog).toBeHidden();
+    expect(amounts).toEqual(['99.5']);
+    await expect(rowOf('Example Wallet')).toContainText('€99.50');
+    await expect(
+      rowOf('Example Wallet').getByRole('button', {name: 'Edit balance of Example Wallet'}),
+    ).toBeVisible();
+  });
+
   test('shows imported files as a connection with no consent, sync or re-authorization', async ({
     page,
   }) => {
@@ -837,6 +1085,7 @@ test.describe('statement file import on Connections', () => {
           {id: CHECKING.id, name: null, currency: 'EUR', created: false},
           {id: FILE_ACCOUNT_ID, name: null, currency: 'EUR', created: true},
         ],
+        accountsWithoutBalance: [{id: FILE_ACCOUNT_ID, name: null, currency: 'EUR'}],
       });
       const rows = Array.from({length: 40}, (_, index) =>
         doubtfulRow(
@@ -859,7 +1108,14 @@ test.describe('statement file import on Connections', () => {
         },
         {
           ...IMPORTED_FILES,
-          bankAccounts: [{...IMPORTED_FILES.bankAccounts[0], alias: LONG_ACCOUNT}],
+          bankAccounts: [
+            {
+              ...IMPORTED_FILES.bankAccounts[0],
+              alias: LONG_ACCOUNT,
+              currentBalanceAmount: null,
+              balanceSource: null,
+            },
+          ],
         },
       ]);
       let release!: () => void;
@@ -914,6 +1170,7 @@ test.describe('statement file import on Connections', () => {
 
       await expect(dialog.getByRole('heading', {name: 'Imported 12 files'})).toBeVisible();
       await expect(dialog.getByText('1,234,567', {exact: true})).toBeVisible();
+      await expect(dialog.getByLabel(`Balance of ${LONG_ACCOUNT} today`)).toBeVisible();
       await expectNothingWiderThan(dialog);
       const review = dialog.getByRole('button', {name: 'Review 40 rows'});
       await expectInsideViewport(page, review);

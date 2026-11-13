@@ -11,6 +11,7 @@ import {
   isNothingNew,
   nothingNewCopy,
 } from '../utils/import-format';
+import {ImportBalancePrompts} from './account-balance';
 import {importAccountName, useKnownAccounts} from './use-known-accounts';
 
 /** What one import did: its counts, the dates it covered and the accounts it went to. */
@@ -67,6 +68,7 @@ export function ImportSummaryBody({summary}: {summary: BankImportSummary}) {
           </ul>
         </section>
       )}
+      <ImportBalancePrompts summary={summary} />
       {summary.undoneAt && (
         <p className='text-sm text-muted-foreground'>Undone {formatShortDate(summary.undoneAt)}</p>
       )}

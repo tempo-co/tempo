@@ -9,10 +9,12 @@ import {LoadingBar} from '@/components/shared/loading-bar';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
 import {BankConnectionList} from '@/features/banking/components/bank-connection-list';
 import {useBankImports} from '@/features/file-import/api/use-bank-imports';
+import {AccountBalanceAction} from '@/features/file-import/components/account-balance';
 import {FileImportDialog} from '@/features/file-import/components/file-import-dialog';
 import {ImportsList} from '@/features/file-import/components/imports-list';
 import {ImportFileButton, PageFileDrop} from '@/features/file-import/components/page-file-drop';
 import {useFileImport} from '@/features/file-import/components/use-file-import';
+import {balanceActionOf} from '@/features/file-import/utils/balance-copy';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 import {savedDataStatus} from '@/utils/query-status';
 
@@ -90,6 +92,10 @@ function BankConnectionsIndex() {
                       onOpen={(summary) => fileImport.show({kind: 'summary', summary})}
                     />
                   ),
+                  balanceAction: (account) => {
+                    const action = balanceActionOf(account);
+                    return action && <AccountBalanceAction account={account} action={action} />;
+                  },
                 }
               : undefined
           }
