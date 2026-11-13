@@ -436,6 +436,17 @@ describe('BankingSyncService synchronization lock', () => {
 		expect(ownTransferService.recomputeForOwnerSafely.mock.calls).toEqual([['account-id', {transactionIds: []}]]);
 	});
 
+	it('recomputes own transfers around rows that stopped being exchanges, even when the sync stored no rows', async () => {
+		transactionGate.resolve(NO_TRANSACTIONS);
+		// A removed pending leg leaves its booked counterpart a plain row that may now pair as an own transfer.
+		currencyExchangeService.recomputeForOwnerSafely.mockResolvedValue(['former-exchange-leg-id']);
+
+		await expect(service.synchronizeAutomatically('connection-id')).resolves.toMatchObject({status: 'SUCCEEDED'});
+		expect(ownTransferService.recomputeForOwnerSafely.mock.calls).toEqual([
+			['account-id', {transactionIds: ['former-exchange-leg-id']}],
+		]);
+	});
+
 	it('recomputes own transfers over the whole history when the exchange recompute failed', async () => {
 		transactionGate.resolve(NO_TRANSACTIONS);
 		// A failed recompute may still have committed, so which rows it reclassified is unknown.
