@@ -15,6 +15,56 @@ export type CurrencyExchangeLeg = {
 	baseAmount: string | null;
 };
 
+/** A leg that carries an exchange marker, before it is known to be half of an exchange. */
+export type CurrencyExchangeCandidate = {
+	id: string;
+	connectionId: string;
+	bankAccountId: string;
+	/** ISO date (YYYY-MM-DD): booking date, else transaction date. */
+	date: string | null;
+	indicator: 'DBIT' | 'CRDT';
+	currency: string;
+	/** The currency bought, when the marker names it; a credit leg always buys its own currency. */
+	targetCurrency: string | null;
+};
+
+/**
+ * Returns the candidates that are currency exchange legs, each with the currency it exchanges into. A leg is one
+ * only when another marked leg answers it: same connection and day, another of the owner's accounts, the opposite
+ * direction, and another currency that the debit's named target (if any) agrees with. A marker alone never makes an
+ * exchange. A debit that names no target takes the one currency of its answering credits, or none when they differ.
+ */
+export function confirmCurrencyExchanges(candidates: readonly CurrencyExchangeCandidate[]): Map<string, string | null> {
+	const byDay = new Map<string, CurrencyExchangeCandidate[]>();
+	for (const candidate of candidates) {
+		if (!candidate.date) continue;
+		const key = `${candidate.connectionId}:${candidate.date}`;
+		byDay.set(key, [...(byDay.get(key) ?? []), candidate]);
+	}
+
+	const answers = (debit: CurrencyExchangeCandidate, credit: CurrencyExchangeCandidate) =>
+		debit.bankAccountId !== credit.bankAccountId &&
+		debit.currency !== credit.currency &&
+		(debit.targetCurrency === null || debit.targetCurrency === credit.currency);
+
+	const confirmed = new Map<string, string | null>();
+	for (const legs of byDay.values()) {
+		const debits = legs.filter(({indicator}) => indicator === 'DBIT');
+		const credits = legs.filter(({indicator}) => indicator === 'CRDT');
+		for (const debit of debits) {
+			const currencies = new Set(
+				credits.filter((credit) => answers(debit, credit)).map(({currency}) => currency),
+			);
+			if (currencies.size === 0) continue;
+			confirmed.set(debit.id, debit.targetCurrency ?? (currencies.size === 1 ? [...currencies][0] : null));
+		}
+		for (const credit of credits) {
+			if (debits.some((debit) => answers(debit, credit))) confirmed.set(credit.id, credit.currency);
+		}
+	}
+	return confirmed;
+}
+
 /**
  * The largest same-day group matched by amount. Groups above it stay unlinked rather than enumerating
  * every assignment; real days stay far below it.

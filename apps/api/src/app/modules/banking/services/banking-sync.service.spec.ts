@@ -552,7 +552,7 @@ describe('BankingSyncService synchronization lock', () => {
 	it('returns a committed run when lock renewal fails after the commit', async () => {
 		transactionGate.resolve(NO_TRANSACTIONS);
 		const ownTransferService = {
-			// Runs right after the sync transaction commits.
+			// Runs after the sync transaction commits.
 			recomputeForOwnerSafely: jest.fn(async () => {
 				renewalShouldFail = true;
 				await jest.advanceTimersByTimeAsync((15 * 60 * 1000) / 3 + 1);

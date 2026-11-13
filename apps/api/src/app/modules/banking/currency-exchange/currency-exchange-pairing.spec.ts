@@ -1,4 +1,9 @@
-import {CurrencyExchangeLeg, pairCurrencyExchanges} from './currency-exchange-pairing';
+import {
+	CurrencyExchangeCandidate,
+	CurrencyExchangeLeg,
+	confirmCurrencyExchanges,
+	pairCurrencyExchanges,
+} from './currency-exchange-pairing';
 
 const CONNECTION = 'cccccccc-0000-4000-8000-000000000001';
 const OTHER_CONNECTION = 'cccccccc-0000-4000-8000-000000000002';
@@ -124,5 +129,82 @@ describe('pairCurrencyExchanges', () => {
 
 		expect(Object.keys(expected)).toHaveLength(6);
 		expect(pairs([...legs].reverse())).toEqual(expected);
+	});
+});
+
+describe('confirmCurrencyExchanges', () => {
+	const EUR_ACCOUNT = 'aaaaaaaa-0000-4000-8000-000000000001';
+	const USD_ACCOUNT = 'aaaaaaaa-0000-4000-8000-000000000002';
+	const GBP_ACCOUNT = 'aaaaaaaa-0000-4000-8000-000000000003';
+	const accountCurrency = {[EUR_ACCOUNT]: 'EUR', [USD_ACCOUNT]: 'USD', [GBP_ACCOUNT]: 'GBP'};
+
+	let candidateSequence = 0;
+	function candidate(
+		overrides: Partial<CurrencyExchangeCandidate> & Pick<CurrencyExchangeCandidate, 'indicator' | 'bankAccountId'>,
+	): CurrencyExchangeCandidate {
+		candidateSequence += 1;
+		const currency = accountCurrency[overrides.bankAccountId as keyof typeof accountCurrency];
+		return {
+			id: `eeeeeeee-0000-4000-8000-${String(candidateSequence).padStart(12, '0')}`,
+			connectionId: CONNECTION,
+			date: '2026-01-10',
+			currency,
+			targetCurrency: overrides.indicator === 'CRDT' ? currency : null,
+			...overrides,
+		};
+	}
+	const confirmed = (candidates: CurrencyExchangeCandidate[]) =>
+		Object.fromEntries(confirmCurrencyExchanges(candidates));
+
+	it('confirms a debit and a credit on two accounts of one connection and day, in two currencies', () => {
+		const debit = candidate({indicator: 'DBIT', bankAccountId: EUR_ACCOUNT});
+		const credit = candidate({indicator: 'CRDT', bankAccountId: USD_ACCOUNT});
+
+		expect(confirmed([debit, credit])).toEqual({[debit.id]: 'USD', [credit.id]: 'USD'});
+	});
+
+	it('never confirms a marked leg on its own', () => {
+		expect(confirmed([candidate({indicator: 'CRDT', bankAccountId: USD_ACCOUNT, targetCurrency: 'USD'})])).toEqual(
+			{},
+		);
+	});
+
+	it.each([
+		['another connection', {connectionId: OTHER_CONNECTION}],
+		['another day', {date: '2026-01-11'}],
+		['no date', {date: null}],
+		['the same account', {bankAccountId: EUR_ACCOUNT}],
+	])('does not confirm legs on %s', (_caseName, overrides) => {
+		const debit = candidate({indicator: 'DBIT', bankAccountId: EUR_ACCOUNT});
+		const credit = candidate({indicator: 'CRDT', bankAccountId: USD_ACCOUNT, ...overrides});
+
+		expect(confirmed([debit, credit])).toEqual({});
+	});
+
+	it('does not confirm two legs in the same direction or the same currency', () => {
+		const debit = candidate({indicator: 'DBIT', bankAccountId: EUR_ACCOUNT});
+		const otherDebit = candidate({indicator: 'DBIT', bankAccountId: USD_ACCOUNT});
+		const sameCurrencyCredit = candidate({indicator: 'CRDT', bankAccountId: USD_ACCOUNT, currency: 'EUR'});
+
+		expect(confirmed([debit, otherDebit, sameCurrencyCredit])).toEqual({});
+	});
+
+	it('does not confirm a credit in another currency than the debit names', () => {
+		const debit = candidate({indicator: 'DBIT', bankAccountId: EUR_ACCOUNT, targetCurrency: 'GBP'});
+		const credit = candidate({indicator: 'CRDT', bankAccountId: USD_ACCOUNT});
+
+		expect(confirmed([debit, credit])).toEqual({});
+	});
+
+	it('confirms a debit without a named target against credits in two currencies but leaves its target open', () => {
+		const debit = candidate({indicator: 'DBIT', bankAccountId: EUR_ACCOUNT});
+		const usdCredit = candidate({indicator: 'CRDT', bankAccountId: USD_ACCOUNT});
+		const gbpCredit = candidate({indicator: 'CRDT', bankAccountId: GBP_ACCOUNT});
+
+		expect(confirmed([debit, usdCredit, gbpCredit])).toEqual({
+			[debit.id]: null,
+			[usdCredit.id]: 'USD',
+			[gbpCredit.id]: 'GBP',
+		});
 	});
 });

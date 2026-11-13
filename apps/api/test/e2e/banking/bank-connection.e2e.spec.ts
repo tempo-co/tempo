@@ -1488,30 +1488,52 @@ describe('BankConnectionController', () => {
 	});
 
 	it('leaves a row the categorization worker holds unchanged on re-sync unless it becomes a currency exchange', async () => {
-		const {connection, bankAccounts} = await createAuthorizedConnectionFixture(
-			'held-categorization-session',
-			[{providerAccountId: 'sync-provider-account', identificationHash: 'hash-held-categorization'}],
-			'Revolut',
-		);
+		const {connection, bankAccounts} = await createAuthorizedConnectionFixture('held-categorization-session', [
+			{providerAccountId: 'sync-provider-account', identificationHash: 'hash-held-categorization'},
+			{
+				providerAccountId: 'sync-provider-account-gbp',
+				identificationHash: 'hash-held-categorization-gbp',
+				currency: 'GBP',
+			},
+		]);
 		const [payment, exchange, added] = makeTransactions('held-categorization').map((transaction) => ({
 			...transaction,
 			creditDebitIndicator: 'DBIT',
 		}));
-		const synchronize = (transactions: EnableBankingTransaction[]) =>
-			synchronizeQueued(connection.id, transactions);
-		expect(await synchronize([payment, exchange])).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 2});
+		const exchangeCredit: EnableBankingTransaction = {
+			...exchange,
+			providerTransactionId: 'provider-transaction-held-categorization-credit',
+			entryReference: 'provider-entry-held-categorization-credit',
+			currency: 'GBP',
+			creditDebitIndicator: 'CRDT',
+			description: 'Exchanged to GBP',
+		};
+		const synchronize = (
+			eurTransactions: EnableBankingTransaction[],
+			gbpTransactions: EnableBankingTransaction[],
+		) => {
+			getAccountBalances.mockResolvedValue([]);
+			getAccountTransactions
+				.mockResolvedValueOnce(fetchedTransactions(eurTransactions))
+				.mockResolvedValueOnce(fetchedTransactions(gbpTransactions));
+			return synchronizeDue(connection.id);
+		};
+		expect(await synchronize([payment, exchange], [])).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 2});
 		await bankTransactionRepository.update(
 			{bankAccountId: bankAccounts[0].id},
 			{categoryStatus: 'PROCESSING', categoryUpdatedAt: new Date()},
 		);
 
 		expect(
-			await synchronize([
-				{...payment, description: 'Corrected provider description'},
-				{...exchange, description: 'Exchanged to GBP'},
-				added,
-			]),
-		).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 1});
+			await synchronize(
+				[
+					{...payment, description: 'Corrected provider description'},
+					{...exchange, description: 'Exchanged to GBP'},
+					added,
+				],
+				[exchangeCredit],
+			),
+		).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 2});
 
 		const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccounts[0].id});
 		expect(rows).toHaveLength(3);
@@ -1524,7 +1546,6 @@ describe('BankConnectionController', () => {
 			description: 'Exchanged to GBP',
 			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
 			categoryStatus: 'NOT_APPLICABLE',
-			categoryInputHash: null,
 		});
 	});
 
@@ -2094,7 +2115,7 @@ describe('BankConnectionController', () => {
 		});
 	});
 
-	it('classifies Revolut currency exchange legs as internal non-category events and remains idempotent', async () => {
+	it('classifies currency exchange legs at any bank as internal non-category events and remains idempotent', async () => {
 		const {connection} = await createAuthorizedConnectionFixture(
 			'currency-exchange-session',
 			[
@@ -2109,7 +2130,7 @@ describe('BankConnectionController', () => {
 					currency: 'GBP',
 				},
 			],
-			'Revolut',
+			'Synthetic Bank',
 		);
 		const sourceLeg: EnableBankingTransaction = {
 			providerTransactionId: 'provider-currency-exchange-source',
@@ -2153,18 +2174,33 @@ describe('BankConnectionController', () => {
 			exchangeRateUnitCurrency: 'USD',
 		};
 
+		// Reads like an exchange, but no leg on the owner's other account answers it: an ordinary incoming payment.
+		const lookalikeCredit: EnableBankingTransaction = {
+			providerTransactionId: 'provider-currency-exchange-lookalike',
+			entryReference: 'entry-currency-exchange-lookalike',
+			amount: '25.00',
+			currency: 'EUR',
+			creditDebitIndicator: 'CRDT',
+			status: 'BOOK',
+			bookingDate: '2026-08-21',
+			valueDate: '2026-08-21',
+			description: 'Exchanged to EUR',
+			counterpartyName: 'Example Sender',
+			remittanceInformation: 'Exchanged to EUR',
+		};
+
 		try {
 			getAccountBalances.mockResolvedValue([]);
 			getAccountTransactions
-				.mockResolvedValueOnce(fetchedTransactions([sourceLeg, ordinaryPayment]))
+				.mockResolvedValueOnce(fetchedTransactions([sourceLeg, ordinaryPayment, lookalikeCredit]))
 				.mockResolvedValueOnce(fetchedTransactions([targetLeg]));
 
 			const firstResponse = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
 			expect(firstResponse).toEqual(
 				expect.objectContaining({
 					status: 'SUCCEEDED',
-					transactionsFetched: 3,
-					transactionsAdded: 3,
+					transactionsFetched: 4,
+					transactionsAdded: 4,
 				}),
 			);
 
@@ -2193,7 +2229,7 @@ describe('BankConnectionController', () => {
 						financialEventRuleVersion: BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION,
 						category: null,
 						categoryStatus: 'NOT_APPLICABLE',
-						categoryInputHash: null,
+						categoryInputHash: expect.any(String),
 					}),
 					expect.objectContaining({
 						providerTransactionId: targetLeg.providerTransactionId,
@@ -2217,6 +2253,12 @@ describe('BankConnectionController', () => {
 				currencyExchangeCounterpartId: null,
 			});
 
+			expect(
+				await bankTransactionRepository.findOneByOrFail({
+					providerTransactionId: lookalikeCredit.providerTransactionId,
+				}),
+			).toMatchObject({financialEventType: null, categoryStatus: 'PENDING', currencyExchangeCounterpartId: null});
+
 			// The only exchange of the day into GBP: its two legs are linked both ways.
 			const storedSource = exchangeRows.find(({currency}) => currency === 'EUR')!;
 			const storedTarget = exchangeRows.find(({currency}) => currency === 'GBP')!;
@@ -2225,7 +2267,7 @@ describe('BankConnectionController', () => {
 			const detailResponse = await verifiedAgent.get(`/bank-transactions/${storedSource.id}`).expect(200);
 			expect(detailResponse.body.currencyExchangeCounterpart).toEqual({
 				id: storedTarget.id,
-				bankName: 'Revolut',
+				bankName: 'Synthetic Bank',
 				bankAccountName: expect.any(String),
 				bankAccountAlias: null,
 				amount: '8.50000000',
@@ -2247,13 +2289,13 @@ describe('BankConnectionController', () => {
 
 			getAccountBalances.mockResolvedValue([]);
 			getAccountTransactions
-				.mockResolvedValueOnce(fetchedTransactions([sourceLeg, ordinaryPayment]))
+				.mockResolvedValueOnce(fetchedTransactions([sourceLeg, ordinaryPayment, lookalikeCredit]))
 				.mockResolvedValueOnce(fetchedTransactions([targetLeg]));
 			const secondResponse = await synchronizeDue(connection.id);
 			expect(secondResponse).toEqual(
 				expect.objectContaining({
 					status: 'SUCCEEDED',
-					transactionsFetched: 3,
+					transactionsFetched: 4,
 					transactionsAdded: 0,
 				}),
 			);

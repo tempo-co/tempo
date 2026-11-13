@@ -32,12 +32,15 @@ export const SEEDED_OWN_TRANSFER_IDS = {
 	exchangeOutgoing: '00000000-0000-4000-8000-000000000111',
 	exchangeIncoming: '00000000-0000-4000-8000-000000000112',
 	unmatchedExchange: '00000000-0000-4000-8000-000000000113',
+	unmatchedExchangeIncoming: '00000000-0000-4000-8000-000000000114',
+	unmatchedExchangeOtherIncoming: '00000000-0000-4000-8000-000000000115',
 } as const;
 
 /**
  * Seeds an owner with two connected banks and synthetic own-transfer cases: an IBAN pair, a name pair,
  * a one-sided transfer, a same-amount coincidence that must stay unlabelled, and a card top-up. The Revolut
- * connection also holds a USD account with a linked currency exchange and an exchange leg without its other side.
+ * connection also holds a USD account with a linked currency exchange and a day whose exchange legs do not balance
+ * (one debit, two credits), so none of them can be matched to its other side.
  */
 export async function seedOwnTransferData(
 	app: INestApplicationContext,
@@ -159,6 +162,16 @@ export async function seedOwnTransferData(
 				amountInBaseCurrency: '79.80',
 				baseAmountMethod: 'ECB',
 			}),
+			...[ids.unmatchedExchangeIncoming, ids.unmatchedExchangeOtherIncoming].map((id) =>
+				exchangeLeg({
+					id,
+					bookingDate: '2026-08-14',
+					amount: '17.00000000',
+					currency: 'USD',
+					amountInBaseCurrency: '14.75',
+					baseAmountMethod: 'ECB',
+				}),
+			),
 		]),
 	);
 
@@ -167,7 +180,7 @@ export async function seedOwnTransferData(
 	return {abnConnection, abnAccount, revolutConnection, revolutAccount, revolutUsdAccount};
 }
 
-/** A Revolut exchange leg from EUR into USD, as the financial event rule classifies it. */
+/** An exchange leg from EUR into USD, as the exchange recompute classifies it. */
 function exchangeLeg(transaction: DeepPartial<BankTransaction> & {id: string; amount: string}) {
 	return {
 		description: 'Exchanged to USD',

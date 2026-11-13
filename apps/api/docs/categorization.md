@@ -16,6 +16,7 @@ PostgreSQL is the record; BullMQ only schedules work.
 | Sync upserts with the same input hash | Category kept, no AI work. |
 | Sync changes a classification-relevant field | Hash updated, row back to `PENDING` unless `MANUAL`. |
 | Row becomes an own transfer or currency exchange | `NOT_APPLICABLE`; never sent to the model. |
+| Exchange recompute finds a row is no longer an exchange | Back to `PENDING` unless `MANUAL`, enqueued after commit. |
 | Owner sets a category | `MANUAL`, applied hash = current hash, AI metadata cleared; later syncs never overwrite it. |
 
 - Jobs carry transaction ids, never financial payloads. The worker claims a job's `PENDING`/`FAILED` rows in one guarded update and every write is conditional on id, expected input hash and non-manual source, so a stale job cannot overwrite newer data.
