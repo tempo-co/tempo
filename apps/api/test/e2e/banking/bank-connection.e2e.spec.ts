@@ -1831,11 +1831,12 @@ describe('BankConnectionController', () => {
 			}),
 			debit('holder-only-withdrawal', '40.00', {remittance_information: ['Example cash withdrawal']}),
 			debit('holder-only-bare', '2.00', {}),
-			debit('named-payee', '9.00', {creditor: {name: 'Example Shop'}}),
+			// Banks may pad or lowercase the direction code; it still names the party.
+			debit('named-payee', '9.00', {credit_debit_indicator: ' dbit ', creditor: {name: 'Example Shop'}}),
 			{
 				entry_reference: 'named-payer',
 				transaction_amount: {amount: '25.00', currency: 'EUR'},
-				credit_debit_indicator: 'CRDT',
+				credit_debit_indicator: 'Crdt ',
 				status: 'BOOK',
 				booking_date: '2026-08-20',
 				creditor: holder,

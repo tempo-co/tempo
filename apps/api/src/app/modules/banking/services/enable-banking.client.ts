@@ -475,7 +475,7 @@ export class EnableBankingClient {
 		const currency = this.asCurrency(amountRecord?.currency);
 		if (!amount || !currency) return [];
 
-		const creditDebitIndicator = this.asOptionalString(record?.credit_debit_indicator)?.toUpperCase();
+		const creditDebitIndicator = this.asOptionalString(record?.credit_debit_indicator)?.trim().toUpperCase();
 		// The other party is the creditor of a debit and the debtor of a credit. The opposite party may be the
 		// account holder, so a missing counterparty or an unknown direction leaves the name and location empty.
 		const counterparty =

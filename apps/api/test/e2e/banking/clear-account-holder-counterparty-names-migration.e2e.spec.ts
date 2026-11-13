@@ -1,4 +1,6 @@
-import {DataSource} from 'typeorm';
+import {DataSource, QueryRunner} from 'typeorm';
+
+import {RecurringSeriesHide} from '@modules/banking/recurring/recurring-series-hide.entity';
 
 import {BankingFixtures, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {getApp} from '../../setup/e2e.setup';
@@ -13,7 +15,7 @@ describe('ClearAccountHolderCounterpartyNames migration', () => {
 		const app = getApp();
 		const ds = app.get(DataSource);
 		const fixtures = new BankingFixtures(app);
-		const {connection} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+		const {owner, connection} = await createBankingOwner(app, {baseCurrency: 'EUR'});
 		const [bank, otherBank] = await fixtures.createBankAccounts(connection, [
 			{name: HOLDER},
 			{name: 'Sample Other Person'},
@@ -86,6 +88,13 @@ describe('ClearAccountHolderCounterpartyNames migration', () => {
 			}),
 		];
 		const targets = [fee, salutation, topUp, undirected, copied];
+		// An owner decision on a series of rows the migration rewrites.
+		const hides = ds.getRepository(RecurringSeriesHide);
+		const hide = await hides.save({
+			accountId: owner.id,
+			seriesKey: 'example-hidden-series',
+			transactionIds: [fee.id, salutation.id],
+		});
 
 		const runner = ds.createQueryRunner();
 		await runner.startTransaction();
@@ -112,7 +121,11 @@ describe('ClearAccountHolderCounterpartyNames migration', () => {
 				);
 			const physicalRows = () =>
 				runner.query('SELECT to_jsonb(t) AS state, ctid::text AS tuple FROM bank_transactions t ORDER BY id');
-			const before = {other: await otherColumns(), untouched: await untouchedRows()};
+			const before = {
+				other: await otherColumns(),
+				untouched: await untouchedRows(),
+				tables: await otherTables(ds, runner),
+			};
 			const migration = ds.migrations.find(({name}) => name === MIGRATION_NAME);
 			expect(migration).toBeDefined();
 
@@ -153,6 +166,7 @@ describe('ClearAccountHolderCounterpartyNames migration', () => {
 			// Categories (the manual one included), amounts, dates and identity keys stay as they were.
 			expect(await otherColumns()).toEqual(before.other);
 			expect(await untouchedRows()).toEqual(before.untouched);
+			expect(await otherTables(ds, runner)).toEqual(before.tables);
 			expect(before.untouched.map(({state}: {state: {id: string}}) => state.id)).toEqual(
 				expect.arrayContaining(kept.map(({id}) => id)),
 			);
@@ -165,7 +179,23 @@ describe('ClearAccountHolderCounterpartyNames migration', () => {
 		} finally {
 			await runner.rollbackTransaction();
 			await runner.release();
+			await hides.delete(hide.id);
 			await fixtures.connections.delete(connection.id);
 		}
 	});
 });
+
+/** Row count and content hash of every other table: recurring decisions, merchants and categories stay as they are. */
+async function otherTables(ds: DataSource, runner: QueryRunner) {
+	const tables: Array<{tablename: string}> = await runner.query(
+		"SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'bank_transactions' ORDER BY tablename",
+	);
+	const states = [];
+	for (const {tablename} of tables) {
+		const [state] = await runner.query(
+			`SELECT COUNT(*)::int AS count, md5(COALESCE(string_agg(md5(row_to_json(t)::text), '' ORDER BY md5(row_to_json(t)::text)), '')) AS hash FROM ${ds.driver.escape(tablename)} t`,
+		);
+		states.push({tablename, ...state});
+	}
+	return states;
+}
