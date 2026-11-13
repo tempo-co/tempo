@@ -7,6 +7,17 @@ export function isCalendarDate(date: string): boolean {
 	return !Number.isNaN(time) && new Date(time).toISOString().slice(0, 10) === date;
 }
 
+const SERIAL_EPOCH_MS = Date.UTC(1899, 11, 30);
+
+/**
+ * The calendar date of a spreadsheet day serial (days since 1899-12-30, a fraction for the time of day), rounded to
+ * the second first, with no time zone conversion; null for anything that is not a day from 1900 to 9999.
+ */
+export function serialDate(days: number): string | null {
+	if (!Number.isFinite(days) || days < 1 || days > 2_958_465) return null;
+	return new Date(SERIAL_EPOCH_MS + Math.round(days * 86_400) * 1000).toISOString().slice(0, 10);
+}
+
 /** The date when it exists, else a `parse_failed` refusal. */
 export function checkedDate(date: string): string {
 	if (!isCalendarDate(date)) throw new ParseRefusal('parse_failed');

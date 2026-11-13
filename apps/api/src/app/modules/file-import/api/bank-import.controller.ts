@@ -13,12 +13,19 @@ import {
 	UseInterceptors,
 } from '@nestjs/common';
 import {Throttle, minutes} from '@nestjs/throttler';
-import type {BankImportDoubtfulRow, BankImportSummary} from '@tempo/contracts';
+import type {
+	BankImportDoubtfulRow,
+	BankImportLayout,
+	BankImportLayoutProposal,
+	BankImportList,
+	BankImportSummary,
+} from '@tempo/contracts';
 import {isUUID} from 'class-validator';
 
 import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 
+import {BankImportLayoutService} from '../bank-import-layout.service';
 import {BankImportRefusalException} from '../bank-import-refusal.exception';
 import {ACCOUNT_CHOICE_NEW, AccountChoices, BankImportService} from '../bank-import.service';
 import {
@@ -26,18 +33,23 @@ import {
 	BANK_IMPORT_ACCOUNT_FIELD,
 	BankImportUploadInterceptor,
 } from './bank-import-upload.interceptor';
+import {ConfirmBankImportLayoutProposalDto} from './confirm-bank-import-layout-proposal.dto';
 import {FileImportEnabledGuard} from './file-import-enabled.guard';
 import {ResolveBankImportDoubtfulRowDto} from './resolve-bank-import-doubtful-row.dto';
 
 const NO_FILES = 'Choose at least one file to import.';
 const INVALID_ACCOUNT_ID = 'bankAccountId must be a UUID.';
 const ACCOUNT_FIELDS_COMBINED = 'Send bankAccountId or accountChoices, not both.';
+const ONE_FILE = 'Send exactly one file.';
 const UUID_PIPE = new ParseUUIDPipe({version: '4'});
 
 @Controller('bank-imports')
 @UseGuards(FileImportEnabledGuard)
 export class BankImportController {
-	constructor(private readonly bankImportService: BankImportService) {}
+	constructor(
+		private readonly bankImportService: BankImportService,
+		private readonly layoutService: BankImportLayoutService,
+	) {}
 
 	@Post()
 	@HttpCode(201)
@@ -66,8 +78,55 @@ export class BankImportController {
 	}
 
 	@Get()
-	async findAll(@CurrentAccount() account: Account): Promise<BankImportSummary[]> {
-		return this.bankImportService.findAll(account.id);
+	async findAll(@CurrentAccount() account: Account): Promise<BankImportList> {
+		return {imports: await this.bankImportService.findAll(account.id), mapper: this.layoutService.mapperEnabled()};
+	}
+
+	/** One file whose columns no reader knows: one model call, under the upload's limits and slots. */
+	@Post('layout-proposals')
+	@HttpCode(201)
+	@Throttle({default: {limit: 10, ttl: minutes(1)}})
+	@UseInterceptors(BankImportUploadInterceptor)
+	async proposeLayout(
+		@UploadedFiles() files: {buffer: Buffer}[] | undefined,
+		@Body() fields: Record<string, unknown> | undefined,
+		@CurrentAccount() account: Account,
+	): Promise<BankImportLayoutProposal> {
+		if (files?.length !== 1 || Object.keys(fields ?? {}).length > 0) throw new BadRequestException(ONE_FILE);
+		return this.layoutService.propose(account.id, files[0].buffer);
+	}
+
+	@Post('layout-proposals/:proposalId/confirm')
+	@HttpCode(201)
+	async confirmLayout(
+		@Param('proposalId', UUID_PIPE) proposalId: string,
+		@Body() body: ConfirmBankImportLayoutProposalDto,
+		@CurrentAccount() account: Account,
+	): Promise<BankImportLayout> {
+		return this.layoutService.confirm(account.id, proposalId, body);
+	}
+
+	@Post('layout-proposals/:proposalId/reject')
+	@HttpCode(204)
+	async rejectLayout(
+		@Param('proposalId', UUID_PIPE) proposalId: string,
+		@CurrentAccount() account: Account,
+	): Promise<void> {
+		await this.layoutService.reject(account.id, proposalId);
+	}
+
+	@Get('layouts')
+	async findLayouts(@CurrentAccount() account: Account): Promise<BankImportLayout[]> {
+		return this.layoutService.findLayouts(account.id);
+	}
+
+	@Delete('layouts/:layoutId')
+	@HttpCode(204)
+	async removeLayout(
+		@Param('layoutId', UUID_PIPE) layoutId: string,
+		@CurrentAccount() account: Account,
+	): Promise<void> {
+		await this.layoutService.removeLayout(account.id, layoutId);
 	}
 
 	@Get(':importId/doubtful-rows')

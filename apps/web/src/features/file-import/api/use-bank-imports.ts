@@ -1,5 +1,5 @@
 import {type QueryClient, queryOptions, useQuery} from '@tanstack/react-query';
-import type {BankImportSummary} from '@tempo/contracts';
+import type {BankImportList, BankImportSummary} from '@tempo/contracts';
 
 import {invalidateBankDerivedData} from '@/features/banking/api/invalidate-bank-derived-data';
 import {bankQueryKeys} from '@/features/banking/api/query-keys';
@@ -9,6 +9,7 @@ export const bankImportQueryKeys = {
   root: ['bank-imports'] as const,
   list: ['bank-imports', 'list'] as const,
   doubtfulRows: (importId: string) => ['bank-imports', 'doubtful-rows', importId] as const,
+  layouts: ['bank-imports', 'layouts'] as const,
 };
 
 /** The deployment answers 404 on every import route while file import is off. */
@@ -17,7 +18,7 @@ const isOff = (error: unknown) =>
 
 export const bankImportsQueryOptions = queryOptions({
   queryKey: bankImportQueryKeys.list,
-  queryFn: () => api.get<BankImportSummary[]>('/bank-imports'),
+  queryFn: () => api.get<BankImportList>('/bank-imports'),
   // A 404 is the answer, not a failure: import is off here. Like every query, it never retries a
   // signed-out session, a reply for another session or a rate limit.
   retry: (failureCount, error) =>
@@ -34,7 +35,8 @@ export const bankImportsQueryOptions = queryOptions({
  * `off` on a 404; `unknown` while loading or without an answer, when nothing of file import is shown.
  */
 export function useBankImports() {
-  const {data, error, isError, isFetching, refetch} = useQuery(bankImportsQueryOptions);
+  const {data: list, error, isError, isFetching, refetch} = useQuery(bankImportsQueryOptions);
+  const data = list?.imports;
   const state: 'on' | 'off' | 'unknown' =
     data !== undefined
       ? 'on'
@@ -43,7 +45,9 @@ export function useBankImports() {
         : error instanceof HttpError && !(error instanceof NetworkError) && error.status >= 500
           ? 'on'
           : 'unknown';
-  return {data, error, isError, isFetching, refetch, state};
+  // Whether a table in no layout Tempo knows can have its columns worked out.
+  const mapper = list?.mapper ?? false;
+  return {data, error, isError, isFetching, refetch, state, mapper};
 }
 
 /**
@@ -59,10 +63,19 @@ export function invalidateAfterImportChange(queryClient: QueryClient) {
 
 /** Puts an import's latest summary into the list, newest first, without waiting for the reload. */
 export function storeImportSummary(queryClient: QueryClient, summary: BankImportSummary) {
-  queryClient.setQueryData<BankImportSummary[]>(bankImportQueryKeys.list, (imports) => {
-    if (!imports) return imports;
-    return imports.some(({id}) => id === summary.id)
+  updateImports(queryClient, (imports) =>
+    imports.some(({id}) => id === summary.id)
       ? imports.map((existing) => (existing.id === summary.id ? summary : existing))
-      : [summary, ...imports];
-  });
+      : [summary, ...imports],
+  );
+}
+
+/** Changes the cached import list, keeping whether the mapper is on. */
+export function updateImports(
+  queryClient: QueryClient,
+  update: (imports: BankImportSummary[]) => BankImportSummary[],
+) {
+  queryClient.setQueryData<BankImportList>(bankImportQueryKeys.list, (list) =>
+    list ? {...list, imports: update(list.imports)} : list,
+  );
 }

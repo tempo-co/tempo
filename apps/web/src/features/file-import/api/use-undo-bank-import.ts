@@ -1,9 +1,8 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import type {BankImportSummary} from '@tempo/contracts';
 
 import {api} from '@/utils/api';
 
-import {bankImportQueryKeys, invalidateAfterImportChange} from './use-bank-imports';
+import {invalidateAfterImportChange, updateImports} from './use-bank-imports';
 
 /** Undoes an import: the API deletes the rows it still owns and any account it created that is left empty. */
 export function useUndoBankImport() {
@@ -13,8 +12,8 @@ export function useUndoBankImport() {
     onSuccess: (_, importId) => {
       // The row turns undone at once; the reload brings the API's time and accounts.
       const undoneAt = new Date().toISOString();
-      queryClient.setQueryData<BankImportSummary[]>(bankImportQueryKeys.list, (imports) =>
-        imports?.map((summary) =>
+      updateImports(queryClient, (imports) =>
+        imports.map((summary) =>
           summary.id === importId ? {...summary, undoneAt, rowsDoubtful: 0} : summary,
         ),
       );

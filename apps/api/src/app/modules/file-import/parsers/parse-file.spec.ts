@@ -81,7 +81,12 @@ describe('parseFile', () => {
 	});
 
 	it.each([
-		{name: 'plain text', file: () => Buffer.from('Date,Amount\n2026-03-02,1.00\n'), code: 'unsupported_format'},
+		{
+			name: 'a table no layout reads',
+			file: () => Buffer.from('Date,Amount\n2026-03-02,1.00\n'),
+			code: 'layout_unknown',
+		},
+		{name: 'plain text', file: () => Buffer.from('Example notes\nmore notes\n'), code: 'unsupported_format'},
 		{
 			name: 'XML that is not a statement',
 			file: () => Buffer.from('<?xml version="1.0"?><Invoice/>'),

@@ -43,10 +43,11 @@ import {FileAccountBalanceService} from '@modules/banking/services/file-account-
 import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
 
 import {BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
+import {BankImportLayoutService} from './bank-import-layout.service';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {BankImport} from './bank-import.entity';
 import {MAX_ROWS_PER_DROP} from './parsers/parse-limits';
-import {NormalizedRow, NormalizedStatement, StatementBank, StatementFormat} from './parsers/parse-result';
+import {NormalizedRow, NormalizedStatement, StatementFormat} from './parsers/parse-result';
 import {ParseRunnerService} from './runner/parse-runner.service';
 
 export const BANK_IMPORT_NOT_FOUND = 'Import not found.';
@@ -84,8 +85,8 @@ export type BankImportRequest = {bankAccountId?: BankAccount['id'] | null; accou
 type AccountRows = {
 	identifier: string;
 	iban: string | null;
-	/** The bank of a file that names no account (Revolut); null when it names one. */
-	bank: StatementBank | null;
+	/** The bank of a file that names no account (Revolut, or an owner's saved layout); null when it names one. */
+	bank: string | null;
 	currency: string;
 	byFormat: {format: StatementFormat; layout: string | null; rows: NormalizedRow[]}[];
 };
@@ -134,6 +135,7 @@ export class BankImportService {
 		private readonly categorizationService: CategorizationScheduler,
 		private readonly merchantLogoService: MerchantLogoService,
 		private readonly fileAccountBalanceService: FileAccountBalanceService,
+		private readonly layoutService: BankImportLayoutService,
 	) {}
 
 	/**
@@ -148,7 +150,7 @@ export class BankImportService {
 		files: readonly Buffer[],
 		{bankAccountId = null, accountChoices = new Map()}: BankImportRequest = {},
 	): Promise<BankImportSummary> {
-		const {statements, kinds} = await this.parseDrop(files);
+		const {statements, kinds} = await this.parseDrop(ownerId, files);
 		const accountRows = groupByAccount(statements);
 		const allRows = accountRows.flatMap(({byFormat}) => byFormat.flatMap(({rows}) => rows));
 		const bookingDates = allRows.flatMap(({bookingDate}) => (bookingDate ? [bookingDate] : [])).sort();
@@ -514,19 +516,24 @@ export class BankImportService {
 	}
 
 	/**
-	 * Parses every file in request order; the first refusal names its file and nothing is written. `kinds` holds each
-	 * kind of file read once: its format, and its layout when it is a bank's CSV export.
+	 * Parses every file in request order, with the owner's saved layouts after the built-in readers; the first refusal
+	 * names its file and nothing is written. `kinds` holds each kind of file read once: its format, and its layout when
+	 * it is a bank's CSV export or an owner's layout.
 	 */
 	private async parseDrop(
+		ownerId: Account['id'],
 		files: readonly Buffer[],
 	): Promise<{statements: NormalizedStatement[]; kinds: Map<string, FileKind>}> {
+		const owned = await this.layoutService.ownedLayouts(ownerId);
 		const statements: NormalizedStatement[] = [];
 		const kinds = new Map<string, FileKind>();
 		const seen = new Set<string>();
 		let rows = 0;
 		for (const [index, file] of files.entries()) {
-			const outcome = await this.parseRunner.parse(file);
+			const outcome = await this.parseRunner.parse(file, owned);
 			if (!outcome.ok) {
+				// Counted by code and the layout a near miss names; never anything of the file.
+				this.logger.log(`Bank import refused: ${outcome.code}${outcome.layout ? ` (${outcome.layout})` : ''}`);
 				throw new BankImportRefusalException(outcome.code, index + 1, undefined, outcome.layout);
 			}
 			const {formats, layouts} = outcome.result;
@@ -1126,7 +1133,7 @@ function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): {
 }
 
 /** The `accountChoices` key of the statements of a file that names no account. */
-function accountChoiceKey(bank: StatementBank, currency: string): string {
+function accountChoiceKey(bank: string, currency: string): string {
 	return `${bank}:${currency}`;
 }
 

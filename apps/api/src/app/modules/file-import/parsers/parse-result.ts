@@ -9,6 +9,8 @@ export const PARSE_REFUSAL_CODES = [
 	'parse_failed',
 	/** A file laid out like a known bank's CSV export whose rows do not read as that export's. */
 	'layout_not_recognized',
+	/** A file no reader claims that reads as a table: delimited text, or a workbook that is no Revolut statement. */
+	'layout_unknown',
 ] as const;
 export type ParseRefusalCode = (typeof PARSE_REFUSAL_CODES)[number];
 
@@ -48,9 +50,11 @@ export type NormalizedRow = {
 export const STATEMENT_FORMATS = ['camt053', 'mt940', 'abnAmroTxt', 'revolutCsv', 'revolutXlsx', 'csv', 'ofx'] as const;
 export type StatementFormat = (typeof STATEMENT_FORMATS)[number];
 
-/** Banks whose files name no account; the owner's account at that bank is found by currency instead. */
+/**
+ * Banks whose files name no account; the owner's account at that bank is found by currency instead. An owner's
+ * saved layout whose files name no account works the same way, under the bank name the owner gave it.
+ */
 export const STATEMENT_BANKS = ['Revolut'] as const;
-export type StatementBank = (typeof STATEMENT_BANKS)[number];
 
 export type NormalizedStatement = {
 	format: StatementFormat;
@@ -60,8 +64,11 @@ export type NormalizedStatement = {
 	accountIban: string | null;
 	/** The account's other id (CAMT `Acct/Id/Othr/Id`, MT940 `:25:`) when it has no IBAN. */
 	accountOtherId: string | null;
-	/** The bank whose file names no account at all; null whenever the file has an IBAN or other id. */
-	bank: StatementBank | null;
+	/**
+	 * The bank of a file that names no account at all (one of `STATEMENT_BANKS`, or the bank of the owner's saved
+	 * layout it was read with); null whenever the file has an IBAN or other id.
+	 */
+	bank: string | null;
 	accountCurrency: string;
 	/** The statement's electronic sequence number, as written. */
 	sequenceNumber: string | null;
@@ -80,7 +87,7 @@ export type ParseResult = {
 	statements: NormalizedStatement[];
 };
 
-/** What the parse runner writes to stdout. */
+/** What the parse runner writes to stdout for a parse. */
 export type ParseRunnerOutput =
 	| ({ok: true} & ParseResult)
 	/** `layout`: on `layout_not_recognized` only, the id of the CSV layout the file looked like. */
