@@ -4,7 +4,7 @@ import {DataSource} from 'typeorm';
 import {Account} from '@modules/account/account.entity';
 
 import {safeErrorName} from '../banking.utils';
-import {BankTransactionCategorizationService} from '../categorization/bank-transaction-categorization.service';
+import {CategorizationScheduler} from '../categorization/categorization-scheduler.service';
 import {recomputeCurrencyExchanges} from '../currency-exchange/currency-exchange-recompute';
 
 @Injectable()
@@ -13,7 +13,7 @@ export class CurrencyExchangeService {
 
 	constructor(
 		private readonly dataSource: DataSource,
-		private readonly categorizationService: BankTransactionCategorizationService,
+		private readonly categorizationService: CategorizationScheduler,
 	) {}
 
 	/** Recomputes the owner's exchanges and returns how many rows changed. */

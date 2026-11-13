@@ -8,7 +8,7 @@ import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
 } from '@modules/banking/bank-transaction-financial-event';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
-import {BankTransactionCategorizationService} from '@modules/banking/categorization/bank-transaction-categorization.service';
+import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
 import {CurrencyExchangeService} from '@modules/banking/services/currency-exchange.service';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
@@ -159,7 +159,7 @@ describe('CurrencyExchangeService', () => {
 		const [debit, credit] = await createExchange(owner);
 		await service.recomputeForOwner(owner.id);
 		await fixtures.transactions.update(debit.id, {description: 'Corrected provider description'});
-		const enqueue = jest.spyOn(app.get(BankTransactionCategorizationService), 'enqueueForTransactions');
+		const enqueue = jest.spyOn(app.get(CategorizationScheduler), 'enqueueForTransactions');
 
 		try {
 			await expect(service.recomputeForOwner(owner.id)).resolves.toBe(2);
