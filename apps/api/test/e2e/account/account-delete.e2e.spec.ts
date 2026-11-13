@@ -94,6 +94,9 @@ describe('AccountController - DELETE /accounts/me', () => {
 		);
 		await fixtures.createConnection({id: accountId}, {status: 'PENDING_AUTHORIZATION', providerSessionId: null});
 		expect(await countOwnedAccounts(connectionRepository, accountId)).toBe(3);
+		expect(
+			await dataSource.query('SELECT 1 FROM bank_history_changes WHERE "accountId" = $1', [accountId]),
+		).not.toEqual([]);
 		const connectionsAtRevocation: number[] = [];
 		deleteSession.mockImplementation(async (sessionId) => {
 			connectionsAtRevocation.push(await countOwnedAccounts(connectionRepository, accountId));
@@ -168,6 +171,9 @@ describe('AccountController - DELETE /accounts/me', () => {
 		expect(
 			await transactionRepository.count({where: {bankAccount: {bankConnection: {account: {id: accountId}}}}}),
 		).toBe(0);
+		expect(
+			await dataSource.query('SELECT 1 FROM bank_history_changes WHERE "accountId" = $1', [accountId]),
+		).toEqual([]);
 
 		// The owned pending authorization state is gone; the other account's survives.
 		expect(await redis.get(ownedStateKey)).toBeNull();

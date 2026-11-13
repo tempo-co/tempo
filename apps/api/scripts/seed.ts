@@ -2,6 +2,7 @@ import {NestFactory} from '@nestjs/core';
 import {DataSource, QueryRunner} from 'typeorm';
 
 import {AppModule} from '../src/app.module';
+import {installSchemaExtras} from '../src/app/core/database/synchronized-schema-extras';
 import {seedAccounts} from './seed-data/seed-accounts';
 import {seedBankingData} from './seed-data/seed-banking-data';
 import {seedOwnTransferData} from './seed-data/seed-own-transfer-data';
@@ -26,6 +27,7 @@ async function bootstrap() {
 	const app = await NestFactory.createApplicationContext(AppModule, {logger: ['error', 'warn']});
 	const dataSource = app.get(DataSource);
 	await dataSource.synchronize();
+	await installSchemaExtras(dataSource);
 	return app;
 }
 

@@ -3,7 +3,7 @@ import {getRepositoryToken} from '@nestjs/typeorm';
 import type {BankTransactionRecurring} from '@tempo/contracts';
 import {randomUUID} from 'node:crypto';
 import TestAgent from 'supertest/lib/agent';
-import {ArrayContains, DataSource, In, Repository, SelectQueryBuilder} from 'typeorm';
+import {ArrayContains, DataSource, In, type QueryDeepPartialEntity, Repository, SelectQueryBuilder} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
@@ -2218,9 +2218,13 @@ describe('RecurringSeries', () => {
 			this: SelectQueryBuilder<BankTransaction>,
 		) {
 			const result = await read.call(this);
-			if (armed && this.getParameters().accountId === account.id && this.getQuery().includes('md5(string_agg')) {
+			if (
+				armed &&
+				this.getParameters().accountId === account.id &&
+				this.getQuery().includes('bank_history_changes')
+			) {
 				armed = false;
-				// A separate connection commits a payment after the hash's database read.
+				// A separate connection commits a payment after the version's database read.
 				concurrentPayment = await fixtures.createTransaction(
 					bank,
 					bookedRow('2026-08-12', '-40.00', {
@@ -2252,7 +2256,7 @@ describe('RecurringSeries', () => {
 		}
 	});
 
-	it.each(['hash', 'rows', 'commit', 'upsert'] as const)('retries after a failed snapshot %s', async (phase) => {
+	it.each(['version', 'rows', 'commit', 'upsert'] as const)('retries after a failed snapshot %s', async (phase) => {
 		const fresh = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
 		const account = (await app.get(AccountService).findByEmail(fresh.credentials.email))!;
 		const connection = await fixtures.createConnection(account);
@@ -2271,13 +2275,13 @@ describe('RecurringSeries', () => {
 			this: SelectQueryBuilder<BankTransaction>,
 		) {
 			const owner = this.getParameters().accountId === account.id;
-			const hash = this.getQuery().includes('md5(string_agg');
-			if (armed && owner && ((phase === 'hash' && hash) || (phase === 'rows' && !hash))) {
+			const version = this.getQuery().includes('bank_history_changes');
+			if (armed && owner && ((phase === 'version' && version) || (phase === 'rows' && !version))) {
 				armed = false;
 				throw new Error('Synthetic snapshot read failure');
 			}
 			const result = await read.call(this);
-			if (armed && owner && hash && phase === 'commit') {
+			if (armed && owner && version && phase === 'commit') {
 				armed = false;
 				const commit = jest
 					.spyOn(this.queryRunner!, 'commitTransaction')
@@ -2354,9 +2358,9 @@ describe('RecurringSeries', () => {
 			);
 			const server = app.getHttpServer();
 			await app.listen(0, '127.0.0.1');
-			let hashes = 0;
-			let allHashed!: () => void;
-			const snapshotsStarted = new Promise<void>((resolve) => (allHashed = resolve));
+			let versionReads = 0;
+			let allRead!: () => void;
+			const snapshotsStarted = new Promise<void>((resolve) => (allRead = resolve));
 			let releaseFollowers!: () => void;
 			const leaderFinished = new Promise<void>((resolve) => (releaseFollowers = resolve));
 			const read = SelectQueryBuilder.prototype.getRawMany;
@@ -2364,9 +2368,9 @@ describe('RecurringSeries', () => {
 				this: SelectQueryBuilder<BankTransaction>,
 			) {
 				const result = await read.call(this);
-				if (this.getParameters().accountId === owner.id && this.getQuery().includes('md5(string_agg')) {
-					const position = ++hashes;
-					if (position === 3) allHashed();
+				if (this.getParameters().accountId === owner.id && this.getQuery().includes('bank_history_changes')) {
+					const position = ++versionReads;
+					if (position === 3) allRead();
 					if (position <= 3) {
 						// All three database snapshots precede the write; followers resume after the leader responds.
 						await snapshotsStarted;
@@ -2402,7 +2406,7 @@ describe('RecurringSeries', () => {
 				expect(await list(ownerAgent)).toEqual(current);
 				expect(detect).toHaveBeenCalledTimes(detections);
 			} finally {
-				allHashed();
+				allRead();
 				releaseFollowers();
 				await Promise.allSettled(pending);
 				query.mockRestore();
@@ -2483,9 +2487,140 @@ describe('RecurringSeries', () => {
 				.execute();
 			expect(byName((await list(ownerAgent)).series, 'Example Cache Annual')).toEqual([]);
 			await fixtures.transactions.delete(annual.map(({id}) => id));
+
+			// Every field detection reads starts a new detection when it changes, written any way; bookkeeping does not.
+			const probeConnection = await fixtures.createConnection(owner);
+			const probeAccount = await fixtures.createBankAccount(probeConnection);
+			const [probe, other] = await fixtures.createTransactions(
+				probeAccount,
+				monthly('22', '-6.00', 'Example Probe Bill', {category: 'SUBSCRIPTIONS'}),
+			);
+			const inputs: Array<Partial<Record<keyof BankTransaction, unknown>>> = [
+				{bankAccountId: ownerBankAccount.id},
+				{bookingDate: '2026-05-23'},
+				{merchantKey: 'EXPENSE:example probe renamed'},
+				{currency: 'USD'},
+				{amount: '-6.50'},
+				{amountInBaseCurrency: '-6.25'},
+				{displayDescription: 'Example Probe Renamed'},
+				{category: 'UTILITIES'},
+				{description: 'Example Probe Text'},
+				{counterpartyName: 'Example Probe Payee'},
+				{counterpartyIban: 'NL91ABNA0417164300'},
+				{transactionType: 'TRANSFER'},
+				{transactionStatus: 'PDNG'},
+				{creditDebitIndicator: 'CRDT'},
+				{financialEventType: CURRENCY_EXCHANGE_EVENT.financialEventType},
+				{ownTransferEvidence: 'IBAN'},
+			];
+			for (const input of inputs) {
+				await list(ownerAgent);
+				detect.mockClear();
+				await fixtures.transactions.update(probe.id, input as QueryDeepPartialEntity<BankTransaction>);
+				await list(ownerAgent);
+				expect([input, detect.mock.calls.length]).toEqual([input, 1]);
+			}
+			// The sync's write path: an upsert that updates an existing row.
+			await list(ownerAgent);
+			detect.mockClear();
+			await fixtures.transactions
+				.createQueryBuilder()
+				.insert()
+				.values({...(await fixtures.transactions.findOneByOrFail({id: other.id})), amount: '-6.40'})
+				.orUpdate(['amount'], ['id'])
+				.execute();
+			await list(ownerAgent);
+			expect(detect).toHaveBeenCalledTimes(1);
+			detect.mockClear();
+			await fixtures.transactions.update(other.id, {
+				categoryStatus: 'FAILED',
+				categoryLastError: 'Example failure',
+				categoryUpdatedAt: new Date(),
+				financialEventRuleVersion: 'example-rules',
+				ownTransferCounterpartId: probe.id,
+				ownTransferOverride: 'UNMARKED',
+			});
+			await list(ownerAgent);
+			expect(detect).not.toHaveBeenCalled();
+			// Rows that leave with their bank connection change it too.
+			expect(byName((await list(ownerAgent)).series, 'Example Probe Bill')).toHaveLength(1);
+			await fixtures.connections.delete(probeConnection.id);
+			expect(byName((await list(ownerAgent)).series, 'Example Probe Bill')).toEqual([]);
+			expect(detect).toHaveBeenCalledTimes(1);
+			await fixtures.transactions.delete(probe.id);
 		} finally {
 			dating.mockRestore();
 			detect.mockRestore();
+		}
+	});
+
+	it('reads the same series from a stored detection as from a fresh one after any writes', async () => {
+		const {owner: probeOwner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+		const service = app.get(RecurringSeriesService);
+		const snapshots: Repository<RecurringSnapshot> = app.get(getRepositoryToken(RecurringSnapshot));
+		const dataSource = app.get(DataSource);
+		const accounts = [bankAccount, await fixtures.createBankAccount(connection)];
+		const names = ['Example Rent', 'Example Power', 'Example Club', 'Example Insurance'];
+		let state = 20261113;
+		const next = () => {
+			state = (Math.imul(state, 1_103_515_245) + 12_345) >>> 0;
+			return state / 4_294_967_296;
+		};
+		const pick = <T>(values: readonly T[]) => values[Math.floor(next() * values.length)];
+		const ids: string[] = [];
+		for (const name of names) {
+			const rows = await fixtures.createTransactions(
+				pick(accounts),
+				monthly(pick(['05', '12', '20']), pick(['-25.00', '-40.00']), name, {merchantKey: `EXPENSE:${name}`}),
+			);
+			ids.push(...rows.map(({id}) => id));
+		}
+		const read = async () =>
+			JSON.parse(JSON.stringify(await service.list({id: probeOwner.id, baseCurrency: 'EUR'}, AS_OF)));
+		const detect = jest.spyOn(detection, 'detectUndatedRecurringSeries');
+		try {
+			for (let round = 0; round < 40; round++) {
+				const id = pick(ids);
+				const write = pick([
+					{amount: pick(['-25.00', '-26.00', '-40.00'])},
+					{
+						bookingDate: `2026-${pick(['05', '06', '07', '08', '09', '10'])}-${pick(['05', '06', '12', '20'])}`,
+					},
+					{counterpartyName: pick([null, ...names])},
+					{displayDescription: pick(names)},
+					{category: pick(['SUBSCRIPTIONS', 'SHOPPING', 'REFUND', null])},
+					{transactionStatus: pick(['BOOK', 'PDNG'])},
+					{bankAccountId: pick(accounts).id},
+					{categoryStatus: pick(['PENDING', 'DONE'])},
+				] as const);
+				await fixtures.transactions.update(id, write as QueryDeepPartialEntity<BankTransaction>);
+				if (round % 4 === 3) {
+					const stored = await read();
+					await snapshots.delete({accountId: probeOwner.id});
+					detect.mockClear();
+					expect(await read()).toEqual(stored);
+					expect(detect).toHaveBeenCalledTimes(1);
+				}
+			}
+			// Each write leaves a change note; a read folds many into one note of the same weight.
+			const notes = async () =>
+				(
+					await dataSource.query(
+						`SELECT COUNT(*)::int AS "count" FROM "bank_history_changes" WHERE "accountId" = $1`,
+						[probeOwner.id],
+					)
+				)[0].count as number;
+			for (let write = 0; (await notes()) <= 32; write++) {
+				await fixtures.transactions.update(ids[0], {amount: write % 2 ? '-25.00' : '-25.01'});
+			}
+			const stored = await read();
+			expect(await notes()).toBe(1);
+			detect.mockClear();
+			expect(await read()).toEqual(stored);
+			expect(detect).not.toHaveBeenCalled();
+		} finally {
+			detect.mockRestore();
+			await fixtures.connections.delete(connection.id);
 		}
 	});
 

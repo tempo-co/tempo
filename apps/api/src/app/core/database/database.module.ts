@@ -4,6 +4,8 @@ import {join} from 'node:path';
 
 import {ConfigurationService} from '@core/config/config.service';
 
+import {SynchronizedSchemaExtras} from './synchronized-schema-extras';
+
 @Module({
 	imports: [
 		TypeOrmModule.forRootAsync({
@@ -23,5 +25,6 @@ import {ConfigurationService} from '@core/config/config.service';
 			}),
 		}),
 	],
+	providers: [SynchronizedSchemaExtras],
 })
 export class DatabaseModule {}
