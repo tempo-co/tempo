@@ -30,6 +30,7 @@ export type {BankTransactionBaseAmountMethod};
 @Index('idx_bank_transactions_account_identity_group', ['bankAccountId', 'stableIdentityGroupKey'])
 @Index('idx_bank_transactions_account_booking_date', ['bankAccountId', 'bookingDate'])
 @Index('idx_bank_transactions_account_merchant_key', ['bankAccountId', 'merchantKey'])
+@Index('idx_bank_transactions_account_amount', ['bankAccountId', 'amount'])
 export class BankTransaction {
 	@PrimaryGeneratedColumn('uuid')
 	id: string;

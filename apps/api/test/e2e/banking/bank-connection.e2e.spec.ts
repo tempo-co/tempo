@@ -32,6 +32,7 @@ import {BankingEncryptionService} from '@modules/banking/services/banking-encryp
 import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
 import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
 import {EnableBankingClient, EnableBankingClientError} from '@modules/banking/services/enable-banking.client';
+import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {
@@ -3153,10 +3154,14 @@ describe('BankConnectionController', () => {
 			]),
 		);
 
+		// Whether a failed commit stored anything is unknown, so own transfers next cover the whole history.
+		const requireWholeHistory = jest.spyOn(app.get(OwnTransferService), 'requireWholeHistory');
 		await expect(app.get(BankingSyncService).synchronizeAutomatically(connection.id)).rejects.toMatchObject({
 			status: 500,
 			message: 'Bank synchronization could not be saved.',
 		});
+		expect(requireWholeHistory).toHaveBeenCalledWith(account.id);
+		requireWholeHistory.mockRestore();
 		expect(await bankAccountBalanceRepository.count({where: {bankAccountId: bankAccount.id}})).toBe(0);
 		expect(await bankTransactionRepository.count({where: {bankAccountId: bankAccount.id}})).toBe(0);
 		expect(await bankSyncRunRepository.count({where: {bankConnection: {id: connection.id}}})).toBe(1);

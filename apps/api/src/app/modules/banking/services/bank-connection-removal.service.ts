@@ -67,6 +67,9 @@ export class BankConnectionRemovalService {
 			await this.consentRevocationService.revokeSessions([connectionToRevoke]);
 			connectionLock.assertHealthy();
 
+			// Whatever becomes of the deletion, even a commit whose acknowledgement is lost, own transfers next
+			// cover the whole history.
+			this.ownTransferService.requireWholeHistory(accountId);
 			await this.dataSource.transaction(async (manager) => {
 				connectionLock.assertHealthy();
 				const connectionRepository = manager.getRepository(BankConnection);

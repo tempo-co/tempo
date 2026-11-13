@@ -43,8 +43,11 @@ const BANKING_SYNC_SERVICE_DEPENDENCIES = [
 ] as const;
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
-	ownTransferService: {recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
-	currencyExchangeService: {recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
+	ownTransferService: {
+		recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined),
+		requireWholeHistory: jest.fn(),
+	},
+	currencyExchangeService: {recomputeForOwnerSafely: jest.fn().mockResolvedValue([])},
 	merchantLogoService: {enqueueForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
 	bankTransactionPersistenceService: new BankTransactionPersistenceService(),
 };
@@ -209,6 +212,8 @@ describe('BankingSyncService synchronization lock', () => {
 	let bankAccountRepository: {find: jest.Mock; update: jest.Mock};
 	let configurationService: {get: jest.Mock};
 	let merchantLogoService: {enqueueForOwnerSafely: jest.Mock};
+	let ownTransferService: {recomputeForOwnerSafely: jest.Mock; requireWholeHistory: jest.Mock};
+	let currencyExchangeService: {recomputeForOwnerSafely: jest.Mock};
 
 	beforeEach(() => {
 		jest.useFakeTimers();
@@ -311,6 +316,11 @@ describe('BankingSyncService synchronization lock', () => {
 			enqueueForTransactions: jest.fn().mockResolvedValue(undefined),
 		};
 		merchantLogoService = {enqueueForOwnerSafely: jest.fn().mockResolvedValue(undefined)};
+		ownTransferService = {
+			recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined),
+			requireWholeHistory: jest.fn(),
+		};
+		currencyExchangeService = {recomputeForOwnerSafely: jest.fn().mockResolvedValue([])};
 
 		configurationService = {get: jest.fn().mockReturnValue('6h')};
 		service = createBankingSyncService({
@@ -324,6 +334,8 @@ describe('BankingSyncService synchronization lock', () => {
 			categorizationService,
 			configurationService,
 			merchantLogoService,
+			ownTransferService,
+			currencyExchangeService,
 		});
 	});
 
@@ -370,6 +382,10 @@ describe('BankingSyncService synchronization lock', () => {
 			.mockResolvedValueOnce([])
 			.mockResolvedValueOnce([{id: 'existing-transaction-id'}, {id: 'new-transaction-id'}]);
 		enableBankingClient.getAccountTransactions.mockResolvedValue({transactions, unparseableCount: 0});
+		currencyExchangeService.recomputeForOwnerSafely.mockResolvedValue([
+			'reclassified-transaction-id',
+			'new-transaction-id',
+		]);
 		bankSyncRunRepository.findOneBy.mockResolvedValue({
 			id: 'run-id',
 			status: 'SUCCEEDED',
@@ -407,8 +423,24 @@ describe('BankingSyncService synchronization lock', () => {
 				nextSyncAt: expect.any(Date),
 			}),
 		);
-		// New rows bring their owner's new merchants to logo identification.
-		expect(merchantLogoService.enqueueForOwnerSafely).toHaveBeenCalledWith('account-id');
+		// Own transfers are recomputed around the written rows and the rows whose exchange classification changed.
+		expect(ownTransferService.recomputeForOwnerSafely).toHaveBeenCalledWith('account-id', {
+			transactionIds: ['existing-transaction-id', 'new-transaction-id', 'reclassified-transaction-id'],
+		});
+		// The written rows bring their new merchants to logo identification.
+		expect(merchantLogoService.enqueueForOwnerSafely).toHaveBeenCalledWith('account-id', [
+			'existing-transaction-id',
+			'new-transaction-id',
+		]);
+	});
+
+	it('recomputes own transfers over the whole history when the exchange recompute failed', async () => {
+		transactionGate.resolve(NO_TRANSACTIONS);
+		// A failed recompute may still have committed, so which rows it reclassified is unknown.
+		currencyExchangeService.recomputeForOwnerSafely.mockResolvedValue(null);
+
+		await expect(service.synchronizeAutomatically('connection-id')).resolves.toMatchObject({status: 'SUCCEEDED'});
+		expect(ownTransferService.recomputeForOwnerSafely).toHaveBeenCalledWith('account-id', undefined);
 	});
 
 	it.each([

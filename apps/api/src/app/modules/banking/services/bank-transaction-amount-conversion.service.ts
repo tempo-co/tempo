@@ -17,6 +17,7 @@ import {
 } from './bank-transaction-amount-conversion.utils';
 import {CurrencyExchangeService} from './currency-exchange.service';
 import {FxRateService} from './fx-rate.service';
+import {OwnTransferService} from './own-transfer.service';
 
 const DEFAULT_BASE_CURRENCY = 'EUR';
 
@@ -146,6 +147,7 @@ export class BankTransactionAmountConversionService {
 		private readonly bankTransactionRepository: Repository<BankTransaction>,
 		private readonly fxRateService: FxRateService,
 		private readonly currencyExchangeService: CurrencyExchangeService,
+		private readonly ownTransferService: OwnTransferService,
 	) {}
 
 	async backfill(now = new Date()): Promise<{scanned: number; converted: number}> {
@@ -165,8 +167,15 @@ export class BankTransactionAmountConversionService {
 			])) as Array<{count: number}>;
 			scanned += owner.currencies.reduce((total, row) => total + row.count, 0);
 			converted += count;
-			// Same-day exchanges are matched on base amounts, so new amounts can complete a pairing.
-			if (count > 0) await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
+			// Same-day exchanges are matched on base amounts, so new amounts can complete a pairing; own-transfer
+			// detection skips exchange legs, so it follows the rows whose classification changed.
+			if (count > 0) {
+				const reclassifiedIds = await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
+				await this.ownTransferService.recomputeForOwnerSafely(
+					accountId,
+					reclassifiedIds ? {transactionIds: reclassifiedIds} : undefined,
+				);
+			}
 		}
 
 		this.logger.debug(`Converted ${converted} of ${scanned} bank transaction amounts.`);

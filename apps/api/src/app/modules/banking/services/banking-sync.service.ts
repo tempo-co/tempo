@@ -299,23 +299,44 @@ export class BankingSyncService {
 
 				const status = this.getRunStatus(fetchResult);
 				const finishedAt = new Date();
-				const persistenceResult = await this.persistSync(
-					connection,
-					run,
-					fetchResult,
-					status,
-					finishedAt,
-					syncStartedAt,
-				);
+				let persistenceResult: PersistTransactionsResult;
+				try {
+					persistenceResult = await this.persistSync(
+						connection,
+						run,
+						fetchResult,
+						status,
+						finishedAt,
+						syncStartedAt,
+					);
+				} catch (error) {
+					// The rows may have committed even so; then only a whole-history recompute would see them.
+					this.ownTransferService.requireWholeHistory(accountId);
+					throw error;
+				}
 				committed = true;
 				this.logFailures(run.id, connection.id, status, failures);
 				// Recompute first so new exchanges and own transfers are marked before the worker can claim them.
 				// Exchanges go first: own-transfer detection skips exchange legs.
-				await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
-				await this.ownTransferService.recomputeForOwnerSafely(accountId);
+				// Own transfers can only change around the rows this sync wrote and the rows whose exchange
+				// classification changed; removed pending rows never take part in one.
+				const reclassifiedIds = await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
+				await this.ownTransferService.recomputeForOwnerSafely(
+					accountId,
+					reclassifiedIds
+						? {
+								transactionIds: [
+									...new Set([...persistenceResult.persistedTransactionIds, ...reclassifiedIds]),
+								],
+							}
+						: undefined,
+				);
 				await this.enqueuePersistedTransactions(persistenceResult.persistedTransactionIds);
 				if (persistenceResult.persistedTransactionIds.length)
-					await this.merchantLogoService.enqueueForOwnerSafely(accountId);
+					await this.merchantLogoService.enqueueForOwnerSafely(
+						accountId,
+						persistenceResult.persistedTransactionIds,
+					);
 
 				// The run is committed: a lease blip or a disconnect from here on must not report it as failed.
 				const completedRun = await this.bankSyncRunRepository.findOneBy({id: run.id});

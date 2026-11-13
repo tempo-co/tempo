@@ -35,6 +35,8 @@ type LegRow = {
 export type CurrencyExchangeRecomputeResult = {
 	/** Rows whose exchange classification or counterpart changed. */
 	transactionsChanged: number;
+	/** Rows that became or stopped being exchanges; own-transfer detection reads that classification. */
+	reclassifiedIds: string[];
 	/** Rows that stopped being exchanges and went back to categorization; enqueue them after the commit. */
 	requeuedIds: string[];
 };
@@ -181,5 +183,9 @@ export async function recomputeCurrencyExchanges(
 	}
 
 	const changedIds = new Set([...classificationChanges, ...counterpartChanges].map(({id}) => id));
-	return {transactionsChanged: changedIds.size, requeuedIds};
+	return {
+		transactionsChanged: changedIds.size,
+		reclassifiedIds: [...becameExchange, ...leftExchange],
+		requeuedIds,
+	};
 }
