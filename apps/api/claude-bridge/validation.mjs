@@ -85,13 +85,13 @@ export function matchesSchema(schema, value) {
 }
 
 const transactionSchema = contract.input.transaction;
-const searchTransactionSchema = contract.webSearch.input.transaction;
+const searchQuerySchema = contract.input.searchQuery;
 assertSupportedSchema(transactionSchema);
-assertSupportedSchema(searchTransactionSchema);
+assertSupportedSchema(searchQuerySchema);
 
-const evidenceTypes = new Set(contract.webSearch.schema.properties.classifications.items.properties.evidenceType.enum);
+const evidenceTypes = new Set(contract.schema.properties.classifications.items.properties.evidenceType.enum);
 
-export function validResponse(output, input, search = false) {
+export function validResponse(output, input) {
 	if (
 		!keys(output, ['classifications']) ||
 		!Array.isArray(output.classifications) ||
@@ -102,8 +102,8 @@ export function validResponse(output, input, search = false) {
 	const ids = new Set(input.transactions.map((tx) => tx.correlationId));
 	for (const item of output.classifications) {
 		if (
-			!keys(item, ['correlationId', 'category', 'confidence', ...(search ? ['evidenceType'] : [])]) ||
-			(search && !evidenceTypes.has(item.evidenceType)) ||
+			!keys(item, ['correlationId', 'category', 'confidence', 'evidenceType']) ||
+			!evidenceTypes.has(item.evidenceType) ||
 			!ids.delete(item.correlationId) ||
 			!allowedCategories.has(item.category) ||
 			!Number.isFinite(item.confidence) ||
@@ -115,14 +115,6 @@ export function validResponse(output, input, search = false) {
 	return ids.size === 0;
 }
 
-export function validSearchRequest(body) {
-	if (!validEnvelope(body)) return false;
-	const {transactions} = body.input;
-	if (!Array.isArray(transactions) || transactions.length !== 1) return false;
-	const [tx] = transactions;
-	return matchesSchema(searchTransactionSchema, tx) && tx.correlationId === '0';
-}
-
 function validEnvelope(body) {
 	if (
 		!keys(body, ['model', 'effort', 'input']) ||
@@ -131,7 +123,8 @@ function validEnvelope(body) {
 	)
 		return false;
 	const input = body.input;
-	if (!keys(input, ['categories', 'transactions'])) return false;
+	if (!keys(input, ['categories', 'transactions'], ['searchQuery'])) return false;
+	if (input.searchQuery !== undefined && !matchesSchema(searchQuerySchema, input.searchQuery)) return false;
 	if (!Array.isArray(input.categories) || !input.categories.length || input.categories.length > categories.size)
 		return false;
 	if (
@@ -152,7 +145,9 @@ export function validRequest(body) {
 	const {transactions} = body.input;
 	if (!Array.isArray(transactions) || !transactions.length || transactions.length > contract.input.maxTransactions)
 		return false;
-	return transactions.every((tx, index) => matchesSchema(transactionSchema, tx) && tx.correlationId === String(index));
+	return transactions.every(
+		(tx, index) => matchesSchema(transactionSchema, tx) && tx.correlationId === String(index),
+	);
 }
 
 const merchantFields = ['correlationId', 'name', 'location', 'transactionType', 'direction', 'searchSourceDomains'];

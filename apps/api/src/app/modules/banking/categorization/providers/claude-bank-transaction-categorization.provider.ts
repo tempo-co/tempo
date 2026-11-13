@@ -13,10 +13,7 @@ import contract from '../../../../../../claude-bridge/contract.json';
 import merchantContract from '../../../../../../claude-bridge/merchant-contract.json';
 import {normalizeBankTransactionText} from '../../bank-transaction-display';
 import {isHostname} from '../../banking.utils';
-import {
-	toCategorizationRequestTransaction,
-	toWebSearchRequestTransaction,
-} from '../bank-transaction-categorization-input.schema';
+import {toCategorizationRequestTransaction} from '../bank-transaction-categorization-input.schema';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS,
 	BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH,
@@ -31,35 +28,26 @@ import {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
 	BankTransactionCategorizationSearchTrace,
-	BankTransactionCategorizationWebSearchInput,
-	BankTransactionCategorizationWebSearchOutcome,
 	MERCHANT_KINDS,
 	MerchantIdentification,
 	MerchantIdentificationInput,
 } from '../bank-transaction-categorization.types';
 
-const categorizationClassificationSchema = z
-	.object({
-		correlationId: z.string().min(1),
-		category: z.enum(BANK_TRANSACTION_CATEGORIES),
-		confidence: z.number().min(0).max(1),
-	})
-	.strict();
-
 const categorizationResponseSchema = z
 	.object({
-		classifications: z.array(categorizationClassificationSchema),
+		classifications: z.array(
+			z
+				.object({
+					correlationId: z.string().min(1),
+					category: z.enum(BANK_TRANSACTION_CATEGORIES),
+					confidence: z.number().min(0).max(1),
+					evidenceType: z.enum(BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES),
+				})
+				.strict(),
+		),
 	})
 	.strict();
-const webSearchCategorizationClassificationSchema = categorizationClassificationSchema.extend({
-	evidenceType: z.enum(BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES),
-});
-const webSearchCategorizationResponseSchema = z
-	.object({
-		classifications: z.array(webSearchCategorizationClassificationSchema),
-	})
-	.strict();
-/** What a stored search trace may hold: the one pinned query and well-formed source hostnames. */
+/** What a stored search trace may hold: the one query that ran and well-formed source hostnames. */
 const searchTraceSchema = z.object({
 	queries: z
 		.array(
@@ -92,8 +80,6 @@ const merchantIdentificationResponseSchema = z
 
 // One source for the prompts and schemas, shared with the host-installed subscription bridge.
 const {instructions: CATEGORIZATION_INSTRUCTIONS, schema: categorizationResponseJsonSchema} = contract;
-const {instructions: WEB_SEARCH_CATEGORIZATION_INSTRUCTIONS, schema: webSearchCategorizationResponseJsonSchema} =
-	contract.webSearch;
 const CLAUDE_API = 'claude-api';
 const CLAUDE_SUBSCRIPTION = 'claude-subscription';
 type ClaudeRoute = typeof CLAUDE_API | typeof CLAUDE_SUBSCRIPTION;
@@ -108,9 +94,9 @@ const MERCHANT_CONTRACT_HASH = createHash('sha256').update(JSON.stringify(mercha
 const API_TIMEOUT_MS = 90_000;
 const SUBSCRIPTION_TIMEOUT_MS = 125_000;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
-// Adaptive thinking at high effort shares this budget with the reply, about 30 tokens per row of a 50-row batch; a
-// reply cut off at the limit fails the batch rather than leaving it pending.
-const STANDARD_MAX_TOKENS = 16_384;
+// Adaptive thinking at high effort shares this budget with the reply, about 40 tokens per row of a 50-row group; a
+// reply cut off at the limit fails the group rather than leaving it pending.
+const CATEGORIZATION_MAX_TOKENS = 16_384;
 
 @Injectable()
 export class ClaudeBankTransactionCategorizationProvider implements BankTransactionCategorizationProvider {
@@ -130,9 +116,15 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		this.client = client;
 	}
 
+	/**
+	 * One call for a row group, on the API first and then on the subscription bridge. With a `searchQuery` the model
+	 * may run one web search: on the bridge a hook allows only that exact query, while the API can only be asked to use
+	 * it, so a result records the query that actually ran.
+	 */
 	async categorize(
 		transactions: readonly BankTransactionCategorizationInput[],
 		categories: readonly BankTransactionCategoryDefinition[],
+		{searchQuery}: {searchQuery?: string} = {},
 	): Promise<readonly BankTransactionCategorizationResult[]> {
 		this.assertUniqueCorrelationIds(transactions);
 		if (!transactions.length) return [];
@@ -140,26 +132,37 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			...toCategorizationRequestTransaction(transaction),
 			correlationId: String(index),
 		}));
-		const input = this.createInput(categories, requestTransactions);
+		const input = {...this.createInput(categories, requestTransactions), ...(searchQuery ? {searchQuery} : {})};
 		let apiError: unknown;
 		try {
-			const response = await this.callApi(
-				this.createRequest(
-					CATEGORIZATION_INSTRUCTIONS,
-					input,
-					categorizationResponseJsonSchema,
-					STANDARD_MAX_TOKENS,
-				),
+			const request = this.createRequest(
+				CATEGORIZATION_INSTRUCTIONS,
+				input,
+				categorizationResponseJsonSchema,
+				CATEGORIZATION_MAX_TOKENS,
 			);
-			return this.parseResults(this.parseJson(response.text), transactions, CLAUDE_API);
+			if (searchQuery) request.tools = [{type: 'web_search_20250305', name: 'web_search', max_uses: 1}];
+			const response = await this.callApi(request);
+			const searchTrace = response.queries.length
+				? {queries: response.queries, sourceDomains: response.domains}
+				: undefined;
+			return this.parseResults(this.parseJson(response.text), transactions, CLAUDE_API, searchTrace);
 		} catch (error) {
 			// A billing/quota/transport failure must never turn into a category or a paid alternative.
 			if (!this.subscriptionSocket) throw this.routesFailed(error, CLAUDE_API);
 			apiError = error;
 		}
 		try {
-			const response = await this.callSubscription(input);
-			return this.parseResults(this.parseJson(response), transactions, CLAUDE_SUBSCRIPTION);
+			const {searched, sourceDomains, ...output} = this.parseJson(await this.callSubscription(input)) as {
+				searched?: unknown;
+				sourceDomains?: unknown;
+			};
+			if (typeof searched !== 'boolean' || (searched && !searchQuery)) throw this.invalidResponseError();
+			const searchTrace =
+				searched && searchQuery
+					? {queries: [searchQuery], sourceDomains: this.toSourceDomains(sourceDomains)}
+					: undefined;
+			return this.parseResults(output, transactions, CLAUDE_SUBSCRIPTION, searchTrace);
 		} catch (error) {
 			const failure = this.routesFailed(error, CLAUDE_SUBSCRIPTION);
 			// Waiting for the bridge would repeat an API call that may already have run, so that attempt counts.
@@ -211,82 +214,6 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		throw ran ? this.invalidResponseError() : new BankTransactionCategorizationUnavailableError();
 	}
 
-	async categorizeWithWebSearch(
-		transactions: readonly BankTransactionCategorizationWebSearchInput[],
-		categories: readonly BankTransactionCategoryDefinition[],
-	): Promise<readonly BankTransactionCategorizationWebSearchOutcome[]> {
-		this.assertUniqueCorrelationIds(transactions);
-		const outcomes: BankTransactionCategorizationWebSearchOutcome[] = [];
-		for (const transaction of transactions) {
-			const input = this.createInput(categories, [
-				{...toWebSearchRequestTransaction(transaction), correlationId: '0'},
-			]);
-			const request = this.createRequest(
-				WEB_SEARCH_CATEGORIZATION_INSTRUCTIONS,
-				input,
-				webSearchCategorizationResponseJsonSchema,
-				4096,
-			);
-			request.tools = [{type: 'web_search_20250305', name: 'web_search', max_uses: 1}];
-			const {provider, result} = await this.searchOnce(request, input, transaction);
-			outcomes.push({correlationId: transaction.correlationId, provider, result});
-		}
-		return outcomes;
-	}
-
-	/**
-	 * Runs the row's one search: on the API, or on the subscription bridge when the API refused the request outright.
-	 * After a timeout or an incomplete reply the search may already have run, so there is no second attempt. A reply
-	 * that does not validate is a failed search too. Throws the unavailable error only when nothing searched and a
-	 * retry can succeed (see {@link routesFailed}).
-	 */
-	private async searchOnce(
-		request: MessageCreateParamsNonStreaming,
-		input: object,
-		transaction: BankTransactionCategorizationWebSearchInput,
-	): Promise<{provider: ClaudeRoute; result: BankTransactionCategorizationResult | null}> {
-		let route: ClaudeRoute = CLAUDE_API;
-		try {
-			try {
-				const response = await this.callApi(request);
-				// The bridge's hook enforces the query before searching; on the API it can only be checked afterwards.
-				if (response.queries.length !== 1 || response.queries[0] !== transaction.searchQuery)
-					throw this.invalidResponseError();
-				return {
-					provider: route,
-					result: this.parseSearchResult(this.parseJson(response.text), transaction, route, response.domains),
-				};
-			} catch (error) {
-				if (!this.subscriptionSocket || !this.refusedBeforeRunning(error)) throw error;
-			}
-			route = CLAUDE_SUBSCRIPTION;
-			const {sourceDomains, ...output} = this.parseJson(
-				await this.callSubscription(input, '/categorize-with-search'),
-			) as {sourceDomains?: unknown};
-			return {
-				provider: route,
-				result: this.parseSearchResult(output, transaction, route, this.toSourceDomains(sourceDomains)),
-			};
-		} catch (error) {
-			const failure = this.routesFailed(error, route);
-			if (failure instanceof BankTransactionCategorizationUnavailableError) throw failure;
-			return {provider: route, result: null};
-		}
-	}
-
-	private parseSearchResult(
-		output: unknown,
-		transaction: BankTransactionCategorizationWebSearchInput,
-		provider: ClaudeRoute,
-		sourceDomains: string[],
-	): BankTransactionCategorizationResult {
-		const [result] = this.parseResults(output, [transaction], provider, {
-			queries: [transaction.searchQuery],
-			sourceDomains,
-		});
-		return result;
-	}
-
 	/**
 	 * The error for a call that got no usable answer. It is the unavailable error, which leaves rows pending for a
 	 * retry, only when nothing ran and a retry can succeed: the bridge refused before running, or, when the API is the
@@ -328,7 +255,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 
 	private async callApi(
 		request: MessageCreateParamsNonStreaming,
-	): Promise<{text: string; domains: string[]; queries: unknown[]}> {
+	): Promise<{text: string; domains: string[]; queries: string[]}> {
 		if (!this.apiKey && !this.client) throw new BankTransactionCategorizationUnavailableError();
 		const client =
 			this.client ??
@@ -351,7 +278,10 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 				? [(block.input as {query?: unknown} | null)?.query]
 				: [],
 		);
-		if (queries.length !== (response.usage.server_tool_use?.web_search_requests ?? 0))
+		if (
+			queries.length !== (response.usage.server_tool_use?.web_search_requests ?? 0) ||
+			!queries.every((query) => typeof query === 'string')
+		)
 			throw this.invalidResponseError();
 		const hostnames: string[] = [];
 		for (const block of response.content) {
@@ -366,7 +296,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 				}
 			}
 		}
-		return {text, domains: this.toSourceDomains(hostnames), queries};
+		return {text, domains: this.toSourceDomains(hostnames), queries: queries as string[]};
 	}
 
 	/** Refusals that clear on their own: no key, auth, rate limit, overload. */
@@ -416,9 +346,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		provider: ClaudeRoute,
 		searchTrace?: SearchTrace,
 	): BankTransactionCategorizationResult[] {
-		const validation = (
-			searchTrace ? webSearchCategorizationResponseSchema : categorizationResponseSchema
-		).safeParse(parsed);
+		const validation = categorizationResponseSchema.safeParse(parsed);
 		if (!validation.success) throw this.invalidResponseError();
 		const items = validation.data.classifications;
 		const ids = new Set(items.map(({correlationId}) => correlationId));
@@ -434,7 +362,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			confidence: item.confidence,
 			provider,
 			model: this.model,
-			...(searchTrace && 'evidenceType' in item
+			...(searchTrace
 				? {searchTrace: this.parseSearchTrace({...searchTrace, evidenceType: item.evidenceType})}
 				: {}),
 		}));

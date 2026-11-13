@@ -15,7 +15,6 @@ import {
 	createBankTransactionCategorizationInputHash,
 	toBankTransactionCategorizationInput,
 } from './bank-transaction-categorization-input';
-import {BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES} from './bank-transaction-categorization.constants';
 import {
 	BankTransactionCategorizationProviderError,
 	BankTransactionCategorizationUnavailableError,
@@ -24,7 +23,6 @@ import {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationSearchTrace,
 	CLAIMABLE_CATEGORIZATION_STATUSES,
-	isManualCategorySource,
 	notManualCategorySourceSql,
 } from './bank-transaction-categorization.types';
 
@@ -105,8 +103,8 @@ export class CategorizationRowStore {
 	}
 
 	/**
-	 * Refreshes each row's input hash (resetting a classification made for an older input), then claims the claimable
-	 * rows in one update. Returns the claimed rows in batch order, and the first refresh failure, if any, so the rows
+	 * Refreshes each row's input hash, then claims the claimable rows in one update. A row keeps its category, even one
+	 * given for an older input, until a new one is applied. Returns the claimed rows in batch order, and the first refresh failure, if any, so the rows
 	 * that were claimed are still categorized before the job fails and retries the rest.
 	 */
 	async claim(transactions: readonly BankTransaction[]): Promise<{claimed: ClaimedTransaction[]; error?: unknown}> {
@@ -171,21 +169,16 @@ export class CategorizationRowStore {
 	}
 
 	/**
-	 * A row sent back to the model keeps its category when the call fails, as long as that category was given for the
-	 * same input. Unavailable routes stay PENDING for the job retry and hourly reconciliation; ordinary failures stay
-	 * FAILED for the job retry or next start. Other rows are cleared.
+	 * A row whose call failed keeps the category it had, so a re-check never blanks a category the owner sees.
+	 * Unavailable routes stay PENDING for the job retry and hourly reconciliation; ordinary failures stay FAILED for the
+	 * job retry or next start.
 	 */
 	async markFailed(batch: readonly ClaimedTransaction[], error: unknown): Promise<void> {
 		const safeMessage = safeFailureMessage(error);
 		const categoryStatus = error instanceof BankTransactionCategorizationUnavailableError ? 'PENDING' : 'FAILED';
 		await Promise.all(
 			batch.map(async ({transaction, inputHash}) => {
-				const keepCategory = transaction.category != null && transaction.categoryAppliedInputHash === inputHash;
-				const values: CategorizationUpdate = {
-					...(keepCategory ? {} : BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES),
-					categoryStatus,
-					categoryLastError: safeMessage,
-				};
+				const values: CategorizationUpdate = {categoryStatus, categoryLastError: safeMessage};
 				const failed = await this.updateWithGuard(
 					transaction.id,
 					inputHash,
@@ -211,43 +204,25 @@ export class CategorizationRowStore {
 			aspspName: transaction.bankAccount?.bankConnection?.aspspName,
 		});
 		const inputHash = createBankTransactionCategorizationInputHash(input);
-		if (!(await this.refreshInputHashAndResetStaleClassification(transaction, inputHash))) return null;
+		if (!(await this.refreshInputHash(transaction, inputHash))) return null;
 		return {transaction, input, inputHash};
 	}
 
-	private async refreshInputHashAndResetStaleClassification(
-		transaction: BankTransaction,
-		inputHash: string,
-	): Promise<boolean> {
+	/** Stores the row's current input hash; false when a concurrent write changed the row first. */
+	private async refreshInputHash(transaction: BankTransaction, inputHash: string): Promise<boolean> {
 		const previousHash = transaction.categoryInputHash;
-		if (previousHash !== inputHash) {
-			const result = await this.repository.update(
-				{
-					id: transaction.id,
-					categoryInputHash: previousHash == null ? IsNull() : previousHash,
-					financialEventType: IsNull(),
-					categoryStatus: transaction.categoryStatus ?? IsNull(),
-				},
-				{categoryInputHash: inputHash},
-			);
-			if ((result.affected ?? 0) === 0) return false;
-			transaction.categoryInputHash = inputHash;
-		}
-
-		if (isManualCategorySource(transaction.categorySource)) return true;
-		if (transaction.categoryStatus === 'COMPLETED') return true;
-		const appliedHashIsStale =
-			transaction.categoryAppliedInputHash !== null && transaction.categoryAppliedInputHash !== inputHash;
-		if (!appliedHashIsStale) return true;
-
-		const reset = await this.updateWithGuard(
-			transaction.id,
-			inputHash,
-			{...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES, categoryStatus: 'PENDING', categoryUpdatedAt: new Date()},
-			transaction.categoryStatus ?? undefined,
+		if (previousHash === inputHash) return true;
+		const result = await this.repository.update(
+			{
+				id: transaction.id,
+				categoryInputHash: previousHash == null ? IsNull() : previousHash,
+				financialEventType: IsNull(),
+				categoryStatus: transaction.categoryStatus ?? IsNull(),
+			},
+			{categoryInputHash: inputHash},
 		);
-		if (reset)
-			Object.assign(transaction, {...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES, categoryStatus: 'PENDING'});
+		if ((result.affected ?? 0) === 0) return false;
+		transaction.categoryInputHash = inputHash;
 		return true;
 	}
 

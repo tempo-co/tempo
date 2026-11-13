@@ -40,7 +40,6 @@ describe('BankTransactionController', () => {
 	let fixtureGroceriesTransaction: BankTransaction;
 	let fixtureReviewTransaction: BankTransaction;
 	let categorizeSpy: jest.SpyInstance;
-	let categorizeWithWebSearchSpy: jest.SpyInstance;
 
 	beforeAll(async () => {
 		app = getApp();
@@ -48,10 +47,6 @@ describe('BankTransactionController', () => {
 		expect(app.get(ConfigurationService).get('AI_CATEGORIZATION_ENABLED')).toBe(false);
 		expect(app.get(ConfigurationService).get('AI_CATEGORIZATION_WEB_SEARCH_ENABLED')).toBe(false);
 		categorizeSpy = jest.spyOn(app.get(ClaudeBankTransactionCategorizationProvider), 'categorize');
-		categorizeWithWebSearchSpy = jest.spyOn(
-			app.get(ClaudeBankTransactionCategorizationProvider),
-			'categorizeWithWebSearch',
-		);
 		const accountService = app.get(AccountService);
 		const seededAccount = await accountService.findByEmail(VERIFIED_ACCOUNT_EMAIL);
 		if (!seededAccount) throw new Error('Verified test account was not seeded.');
@@ -156,7 +151,6 @@ describe('BankTransactionController', () => {
 
 		expect(response.body.total).toBe(4);
 		expect(categorizeSpy).not.toHaveBeenCalled();
-		expect(categorizeWithWebSearchSpy).not.toHaveBeenCalled();
 		expect(response.body.transactions[0]).toMatchObject({
 			id: fixtureTransaction.id,
 			transactionDate: '2026-08-24',

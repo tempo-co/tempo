@@ -14,9 +14,7 @@ import {toBridgeInputContract} from '../src/app/modules/banking/categorization/b
 async function writeContractInput(): Promise<void> {
 	const path = join(__dirname, '../claude-bridge/contract.json');
 	const contract = JSON.parse(readFileSync(path, 'utf8'));
-	const {input, webSearchInput} = toBridgeInputContract();
-	contract.input = input;
-	contract.webSearch.input = webSearchInput;
+	contract.input = toBridgeInputContract().input;
 	const {useTabs, tabWidth, printWidth, bracketSpacing, endOfLine} = (await resolveConfig(path)) ?? {};
 	const formatted = await format(JSON.stringify(contract, null, '\t'), {
 		parser: 'json',

@@ -5,7 +5,7 @@ import {Repository, SelectQueryBuilder} from 'typeorm';
 
 import {BankTransaction} from '../bank-transaction.entity';
 import {safeErrorName} from '../banking.utils';
-import {toSameAmountPaymentText} from './bank-transaction-categorization-input';
+import {toHistoryNote} from './bank-transaction-categorization-input';
 import {
 	MAX_MANUAL_CATEGORY_EXAMPLES,
 	MAX_SAME_AMOUNT_AI_PAYMENTS,
@@ -14,7 +14,7 @@ import {
 } from './bank-transaction-categorization-input.schema';
 import {PreviousManualCategory, SameAmountPayment} from './bank-transaction-categorization.types';
 import type {ClaimedTransaction} from './categorization-row-store.service';
-import {ManualCategoryCounts, REUSABLE_MANUAL_CATEGORIES, withoutOneOffChoices} from './manual-category-follow-up';
+import {ManualCategoryCounts, REUSABLE_MANUAL_CATEGORIES} from './manual-category-follow-up';
 
 type ManualCategoryExample = PreviousManualCategory['recentExamples'][number];
 
@@ -34,9 +34,10 @@ export class CategorizationContextLoader {
 	) {}
 
 	/**
-	 * Returns, per batch transaction id, the account owner's manual choices for the same merchant as a model hint.
-	 * Batches built by reconciliation can contain several accounts, so history is loaded and matched per account. A
-	 * history failure only drops the hint; the batch still goes to the model.
+	 * Returns, per batch transaction id, every manual choice of the account owner for the same merchant as a model
+	 * hint: raw counts and recent examples, one-offs included, for the model to weigh. Batches built by reconciliation
+	 * can contain several accounts, so history is loaded and matched per account. A history failure only drops the
+	 * hint; the batch still goes to the model.
 	 */
 	async loadManualCategoryHistory(
 		batch: readonly ClaimedTransaction[],
@@ -54,17 +55,14 @@ export class CategorizationContextLoader {
 			await Promise.all(
 				[...batchByAccount].map(async ([accountId, entries]) => {
 					const merchantKeys = [...new Set(entries.map(({merchantKey}) => merchantKey))];
-					const [history, examples, categorized] = await Promise.all([
+					const [history, examples] = await Promise.all([
 						this.loadManualCategoryCounts(accountId, merchantKeys),
 						this.loadManualCategoryExamples(accountId, merchantKeys),
-						this.loadCompletedCategories(accountId, merchantKeys),
 					]);
 					for (const {id, merchantKey} of entries) {
 						const counts = history.get(merchantKey);
-						if (!counts) continue;
-						const habits = withoutOneOffChoices(counts, categorized.get(merchantKey) ?? new Set());
-						if (habits.size)
-							hintsByTransaction.set(id, toPreviousManualCategories(habits, examples.get(merchantKey)));
+						if (counts?.size)
+							hintsByTransaction.set(id, toPreviousManualCategories(counts, examples.get(merchantKey)));
 					}
 				}),
 			);
@@ -151,7 +149,7 @@ export class CategorizationContextLoader {
 							date: row.date,
 							category: row.category,
 							source: row.source,
-							text: toSameAmountPaymentText(row),
+							text: toHistoryNote(row),
 						}));
 						if (payments.length >= MIN_SAME_AMOUNT_PAYMENTS)
 							paymentsByTransaction.set(transaction.id, payments);
@@ -222,8 +220,9 @@ export class CategorizationContextLoader {
 	}
 
 	/**
-	 * The amounts, currencies and dates of the owner's most recent manual choices per merchant and category, so the
-	 * model can tell apart different kinds of payments to the same payee. Uses the same eligibility rules as the counts.
+	 * The amounts, currencies, dates and notes of the owner's most recent manual choices per merchant and category, so
+	 * the model can tell apart different kinds of payments to the same payee. Uses the same eligibility rules as the
+	 * counts.
 	 */
 	private async loadManualCategoryExamples(
 		accountId: string,
@@ -236,6 +235,8 @@ export class CategorizationContextLoader {
 			.addSelect('transaction.amount', 'amount')
 			.addSelect('transaction.currency', 'currency')
 			.addSelect(`${date}::text`, 'date')
+			.addSelect('transaction.description', 'description')
+			.addSelect('transaction.remittanceInformation', 'remittanceInformation')
 			.andWhere('transaction."categorySource" = :manualSource', {manualSource: 'MANUAL'})
 			.orderBy(date, 'DESC', 'NULLS LAST')
 			.addOrderBy('transaction.id', 'DESC')
@@ -245,37 +246,26 @@ export class CategorizationContextLoader {
 				amount: string;
 				currency: string;
 				date: string | null;
+				description: string | null;
+				remittanceInformation: string | null;
 			}>();
 
 		const examples = new Map<string, Map<BankTransactionCategory, ManualCategoryExample[]>>();
-		for (const {merchantKey, category, amount, currency, date: exampleDate} of rows) {
+		for (const row of rows) {
+			const {merchantKey, category} = row;
 			const byCategory = examples.get(merchantKey) ?? new Map<BankTransactionCategory, ManualCategoryExample[]>();
 			const list = byCategory.get(category) ?? [];
 			if (list.length < MAX_MANUAL_CATEGORY_EXAMPLES)
-				list.push({amount: normalizeAmount(amount), currency, date: exampleDate});
+				list.push({
+					amount: normalizeAmount(row.amount),
+					currency: row.currency,
+					date: row.date,
+					text: toHistoryNote(row),
+				});
 			byCategory.set(category, list);
 			examples.set(merchantKey, byCategory);
 		}
 		return examples;
-	}
-
-	/** The categories the owner's completed rows per merchant key currently have, from any source. */
-	private async loadCompletedCategories(
-		accountId: string,
-		merchantKeys: readonly string[],
-	): Promise<Map<string, Set<BankTransactionCategory>>> {
-		const rows = await this.merchantHistoryQuery(accountId, merchantKeys)
-			.select('transaction.merchantKey', 'merchantKey')
-			.addSelect('transaction.category', 'category')
-			.distinct(true)
-			.andWhere('transaction."categoryStatus" = :completed', {completed: 'COMPLETED'})
-			.getRawMany<{merchantKey: string; category: BankTransactionCategory}>();
-
-		const categories = new Map<string, Set<BankTransactionCategory>>();
-		for (const {merchantKey, category} of rows) {
-			categories.set(merchantKey, (categories.get(merchantKey) ?? new Set()).add(category));
-		}
-		return categories;
 	}
 }
 

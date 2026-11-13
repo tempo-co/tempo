@@ -4,7 +4,6 @@ import {BankTransactionCategorizationProviderError} from '@modules/banking/categ
 import {
 	BankTransactionCategorizationInput,
 	BankTransactionCategorizationResult,
-	BankTransactionCategorizationWebSearchInput,
 } from '@modules/banking/categorization/bank-transaction-categorization.types';
 import {CategorizationContextLoader} from '@modules/banking/categorization/categorization-context-loader.service';
 import {CategorizationPipeline} from '@modules/banking/categorization/categorization-pipeline.service';
@@ -16,23 +15,9 @@ import {ManualCategoryService} from '@modules/banking/categorization/manual-cate
 export type ProviderResult = Omit<BankTransactionCategorizationResult, 'provider' | 'model'> &
 	Partial<Pick<BankTransactionCategorizationResult, 'provider' | 'model'>>;
 
-function withRoute(result: ProviderResult): BankTransactionCategorizationResult {
+export function withRoute(result: ProviderResult): BankTransactionCategorizationResult {
 	return {provider: 'claude-api', model: 'test-model', ...result};
 }
-
-/** The provider's search outcome for each input: the given result, or none when the search failed. */
-export function searchOutcomes(
-	inputs: readonly BankTransactionCategorizationWebSearchInput[],
-	result: (input: BankTransactionCategorizationWebSearchInput) => ProviderResult | null,
-) {
-	return inputs.map((input) => {
-		const found = result(input);
-		return {correlationId: input.correlationId, provider: 'claude-api', result: found && withRoute(found)};
-	});
-}
-
-export const shoppingSearch = async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) =>
-	searchOutcomes(inputs, ({correlationId}) => ({correlationId, category: 'SHOPPING' as const, confidence: 0.75}));
 
 /** The result of a claim update that took these rows. */
 export function claimedRows(...ids: string[]) {
@@ -86,8 +71,6 @@ export function createCategorizationServices({
 	rows = [],
 	providerResult = [],
 	providerError,
-	webSearchResult,
-	webSearchError,
 	queryBuilder,
 	nodeEnv = 'test',
 }: {
@@ -97,8 +80,6 @@ export function createCategorizationServices({
 	rows?: BankTransaction[];
 	providerResult?: readonly ProviderResult[];
 	providerError?: BankTransactionCategorizationProviderError;
-	webSearchResult?: readonly ProviderResult[];
-	webSearchError?: BankTransactionCategorizationProviderError;
 	queryBuilder?: ReturnType<typeof createUpdateQueryBuilder>;
 } = {}) {
 	const queue = {
@@ -107,30 +88,21 @@ export function createCategorizationServices({
 		upsertJobScheduler: jest.fn().mockResolvedValue({}),
 		removeJobScheduler: jest.fn().mockResolvedValue(true),
 	};
+	// Answers each call with the given results for its rows, or OTHER for rows without one.
 	const provider = {
 		categorize: jest.fn().mockImplementation(async (inputs: readonly BankTransactionCategorizationInput[]) => {
 			if (providerError) throw providerError;
-			return (
-				providerResult.length > 0
-					? providerResult
-					: inputs.map((input) => ({
-							correlationId: input.correlationId,
+			return inputs
+				.map(
+					({correlationId}) =>
+						providerResult.find((result) => result.correlationId === correlationId) ?? {
+							correlationId,
 							category: 'OTHER' as const,
 							confidence: 0.5,
-						}))
-			).map(withRoute);
+						},
+				)
+				.map(withRoute);
 		}),
-		categorizeWithWebSearch: jest
-			.fn()
-			.mockImplementation(async (inputs: readonly BankTransactionCategorizationWebSearchInput[]) => {
-				if (webSearchError) throw webSearchError;
-				if (!webSearchResult?.length) return shoppingSearch(inputs);
-				return searchOutcomes(
-					inputs,
-					({correlationId}) =>
-						webSearchResult.find((result) => result.correlationId === correlationId) ?? null,
-				);
-			}),
 	};
 	const config = {
 		get: jest.fn((key: string) => {

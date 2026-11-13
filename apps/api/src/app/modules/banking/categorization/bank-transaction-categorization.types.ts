@@ -4,7 +4,6 @@ import type {BankTransactionDirection} from '../bank-transaction-direction';
 
 export type {
 	BankTransactionCategorizationInput,
-	BankTransactionCategorizationWebSearchInput,
 	PreviousManualCategory,
 	SameAmountPayment,
 } from './bank-transaction-categorization-input.schema';
@@ -32,6 +31,7 @@ export const BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES = [
 export type BankTransactionCategorizationSearchEvidenceType =
 	(typeof BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES)[number];
 
+/** Set on a result only when the call ran its web search. */
 export type BankTransactionCategorizationSearchTrace = {
 	queries: string[];
 	sourceDomains: string[];
@@ -46,18 +46,6 @@ export type BankTransactionCategorizationResult = {
 	provider: string;
 	model: string;
 	searchTrace?: BankTransactionCategorizationSearchTrace;
-};
-
-/**
- * One row's web search. `result` is null when the search failed: it may have run, or it was refused in a way a retry
- * would not change. A search that could run on neither route but may succeed later is thrown as the unavailable
- * error instead.
- */
-export type BankTransactionCategorizationWebSearchOutcome = {
-	correlationId: string;
-	/** The route that ran, or last refused, the search. */
-	provider: string;
-	result: BankTransactionCategorizationResult | null;
 };
 
 export const MERCHANT_KINDS = ['BUSINESS', 'PERSON', 'PAYMENT_SERVICE', 'UNCLEAR'] as const;

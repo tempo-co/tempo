@@ -8,8 +8,8 @@ import {BankTransaction} from '../bank-transaction.entity';
 import {truncate} from '../banking.utils';
 import {
 	BankTransactionCategorizationInput,
-	BankTransactionCategorizationWebSearchInput,
 	CATEGORIZATION_HASHED_FIELDS,
+	MAX_HISTORY_NOTE_LENGTH,
 } from './bank-transaction-categorization-input.schema';
 import {BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH} from './bank-transaction-categorization.constants';
 
@@ -111,9 +111,13 @@ export function toBankTransactionCategorizationInput(
 	};
 }
 
-export function toBankTransactionCategorizationWebSearchInput(
+/**
+ * The web search a transaction allows: its sanitized merchant name and location, and the one query built from them.
+ * Null when no merchant text survives sanitizing, such as a card line that names only a tap identifier.
+ */
+export function toCategorizationSearch(
 	input: BankTransactionCategorizationInput,
-): BankTransactionCategorizationWebSearchInput | null {
+): {merchantName: string; merchantLocation: string | null; searchQuery: string} | null {
 	const merchantDetails = getWebSearchMerchantDetails(input);
 	const merchantName = sanitizeWebSearchMerchantName(merchantDetails.merchantName);
 	if (!merchantName) return null;
@@ -125,17 +129,7 @@ export function toBankTransactionCategorizationWebSearchInput(
 	const searchQuery =
 		truncate(searchTerms.join(' '), BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH) ?? merchantName;
 
-	return {
-		correlationId: input.correlationId,
-		amount: input.amount,
-		currency: input.currency,
-		direction: input.direction,
-		transactionType: input.transactionType,
-		merchantName,
-		merchantLocation,
-		searchQuery,
-		merchantCategoryCode: input.merchantCategoryCode,
-	};
+	return {merchantName, merchantLocation, searchQuery};
 }
 
 /**
@@ -169,8 +163,9 @@ function getWebSearchMerchantDetails(input: BankTransactionCategorizationInput):
 }
 
 /**
- * The hash of the classified fields of the input (the input minus its correlation id and history hints). The amount is
- * hashed at its smallest scale, so a database read-back of the same value hashes the same.
+ * The hash of the fields that can change what a transaction is: the input minus its correlation id, history hints and
+ * dates, with the amount reduced to its sign. A pending payment that books, or a card hold that settles at another
+ * amount, keeps its hash and so its category.
  */
 export function createBankTransactionCategorizationInputHash(
 	value: BankTransaction | BankTransactionCategorizationInput,
@@ -183,7 +178,7 @@ export function createBankTransactionCategorizationInputHash(
 			});
 	const hashInput: Record<string, unknown> = {};
 	for (const field of CATEGORIZATION_HASHED_FIELDS) {
-		const fieldValue = field === 'amount' ? normalizeAmountForHash(input.amount) : input[field];
+		const fieldValue = field === 'amount' ? amountSign(input.amount) : input[field];
 		// An absent location is left out rather than hashed as null.
 		if (field === 'merchantLocation' && !fieldValue) continue;
 		hashInput[field] = fieldValue;
@@ -192,10 +187,8 @@ export function createBankTransactionCategorizationInputHash(
 	return createHash('sha256').update(JSON.stringify(hashInput)).digest('hex');
 }
 
-const MAX_SAME_AMOUNT_PAYMENT_TEXT_LENGTH = 200;
-
 /** The sanitized note of an earlier payment, so the model can see whether it stated its purpose. */
-export function toSameAmountPaymentText(transaction: {
+export function toHistoryNote(transaction: {
 	remittanceInformation: string | null;
 	description: string | null;
 }): string | null {
@@ -206,7 +199,7 @@ export function toSameAmountPaymentText(transaction: {
 			? [remittance]
 			: [remittance, description];
 	const text = parts.filter(Boolean).join(' | ');
-	return text ? truncate(text, MAX_SAME_AMOUNT_PAYMENT_TEXT_LENGTH) : null;
+	return text ? truncate(text, MAX_HISTORY_NOTE_LENGTH) : null;
 }
 
 function isCategorizationInput(
@@ -318,14 +311,12 @@ function normalizeMerchantCategoryCode(value: string | null | undefined): string
 	return normalized !== null && /^\d{4}$/.test(normalized) ? normalized : null;
 }
 
-function normalizeAmountForHash(value: string): string {
+/** "-", "0" or "+"; an amount that is not a plain decimal is hashed as it is. */
+function amountSign(value: string): string {
 	const normalized = normalizeRequiredText(value);
 	const match = normalized.match(/^([+-]?)(\d+)(?:\.(\d+))?$/);
 	if (!match) return normalized;
-
 	const [, sign, integerPart, fractionPart = ''] = match;
-	const integer = integerPart.replace(/^0+(?=\d)/, '');
-	const fraction = fractionPart.replace(/0+$/, '');
-	const normalizedSign = sign === '-' && (integer !== '0' || fraction.length > 0) ? '-' : '';
-	return `${normalizedSign}${integer}${fraction.length > 0 ? `.${fraction}` : ''}`;
+	if (/^0*$/.test(integerPart) && /^0*$/.test(fractionPart)) return '0';
+	return sign === '-' ? '-' : '+';
 }

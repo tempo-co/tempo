@@ -3,7 +3,7 @@ import {BankTransaction} from '../bank-transaction.entity';
 import {
 	createBankTransactionCategorizationInputHash,
 	toBankTransactionCategorizationInput,
-	toBankTransactionCategorizationWebSearchInput,
+	toCategorizationSearch,
 	toMerchantIdentificationName,
 } from './bank-transaction-categorization-input';
 
@@ -111,10 +111,10 @@ describe('bank transaction categorization input', () => {
 		);
 	});
 
-	it('hashes the classified fields of fixed rows to stored values', () => {
-		// Stored hashes decide whether a row goes back to the model, so a change here re-queues every row.
+	it('hashes the classified fields of fixed rows to pinned values', () => {
+		// Every categorization write is guarded by the stored hash, so a change to what it covers is deliberate.
 		expect(createBankTransactionCategorizationInputHash(createTransaction({amount: '-12.50000000'}))).toBe(
-			'33f7fa32a851321146e7ecd1bb113effd55e40873f76e7f9c0a92891538a41aa',
+			'c953635763b1e845ca217309f31eb5867c3d0897ed821d66af870b8477b750f1',
 		);
 		const located = toBankTransactionCategorizationInput(
 			Object.assign(
@@ -129,13 +129,25 @@ describe('bank transaction categorization input', () => {
 		);
 		const previousManualCategories = [{category: 'SHOPPING' as const, count: 1, recentExamples: []}];
 		expect(createBankTransactionCategorizationInputHash({...located, previousManualCategories})).toBe(
-			'65e0514a03ef15313b05a45e8d955d27f1ccb1fac05af0343f0adcfdc0035d13',
+			'c5b38589e5db66cb108bb6f968f955ba0c566f9ed45683583860a3154baeb387',
 		);
 	});
 
 	it('keeps the hash stable across database numeric scale normalization', () => {
 		expect(createBankTransactionCategorizationInputHash(createTransaction({amount: '2.50'}))).toBe(
 			createBankTransactionCategorizationInputHash(createTransaction({amount: '2.50000000'})),
+		);
+	});
+
+	it.each([
+		['transaction date', {transactionDate: '2026-09-04'}],
+		['booking date', {bookingDate: '2026-09-04'}],
+		['value date', {valueDate: '2026-09-04'}],
+		['amount, keeping its sign', {amount: '-14.75'}],
+	])('keeps the hash when only the %s changes', (_field, override) => {
+		// A pending payment that books, or a card hold that settles at another amount, is the same transaction.
+		expect(createBankTransactionCategorizationInputHash(createTransaction())).toBe(
+			createBankTransactionCategorizationInputHash(createTransaction(override as Partial<BankTransaction>)),
 		);
 	});
 
@@ -146,13 +158,10 @@ describe('bank transaction categorization input', () => {
 	});
 
 	it.each([
-		['amount', {amount: '-12.51'}],
+		['amount sign', {amount: '12.50'}],
 		['direction indicator', {creditDebitIndicator: 'CRDT'}],
 		['bank transaction code', {bankTransactionCode: 'PMNT2'}],
 		['bank transaction sub-code', {bankTransactionSubCode: 'CARD2'}],
-		['transaction date', {transactionDate: '2026-09-04'}],
-		['booking date', {bookingDate: '2026-09-04'}],
-		['value date', {valueDate: '2026-09-04'}],
 		['description', {description: 'Different description'}],
 		['counterparty', {counterpartyName: 'Different counterparty'}],
 		['bank transaction description', {bankTransactionDescription: 'Different bank description'}],
@@ -274,7 +283,7 @@ describe('bank transaction categorization input', () => {
 		expect(input.merchantCategoryCode).toBeNull();
 	});
 
-	it('keeps only compact transaction context and the selected merchant name', () => {
+	it('searches only the selected merchant name', () => {
 		const input = toBankTransactionCategorizationInput(
 			createTransaction({
 				amount: '-39.99',
@@ -289,18 +298,12 @@ describe('bank transaction categorization input', () => {
 			}),
 		);
 
-		const result = toBankTransactionCategorizationWebSearchInput(input);
+		const result = toCategorizationSearch(input);
 
 		expect(result).toEqual({
-			correlationId: 'transaction-id',
-			amount: '-39.99',
-			currency: 'EUR',
-			direction: 'EXPENSE',
-			transactionType: 'OTHER',
 			merchantName: 'Example Merchant via Payment Service',
 			merchantLocation: null,
 			searchQuery: 'Example Merchant via Payment Service',
-			merchantCategoryCode: null,
 		});
 
 		const serialized = JSON.stringify(result);
@@ -326,16 +329,10 @@ describe('bank transaction categorization input', () => {
 
 		expect(input.merchantLocation).toEqual({city: 'Exampletown', region: 'Example Region', country: 'NL'});
 
-		expect(toBankTransactionCategorizationWebSearchInput(input)).toEqual({
-			correlationId: 'transaction-id',
-			amount: '-12.50',
-			currency: 'EUR',
-			direction: 'EXPENSE',
-			transactionType: 'CARD_PAYMENT',
+		expect(toCategorizationSearch(input)).toEqual({
 			merchantName: 'Example Merchant',
 			merchantLocation: 'Exampletown Example Region NL',
 			searchQuery: 'Example Merchant Exampletown Example Region NL',
-			merchantCategoryCode: '5814',
 		});
 	});
 
@@ -347,7 +344,7 @@ describe('bank transaction categorization input', () => {
 			}),
 		);
 
-		expect(toBankTransactionCategorizationWebSearchInput(input)).toMatchObject({
+		expect(toCategorizationSearch(input)).toMatchObject({
 			merchantName: 'Example Coffee Shop',
 			merchantLocation: 'Sampletown',
 			searchQuery: 'Example Coffee Shop Sampletown',
@@ -362,7 +359,7 @@ describe('bank transaction categorization input', () => {
 			}),
 		);
 
-		expect(toBankTransactionCategorizationWebSearchInput(input)).toMatchObject({
+		expect(toCategorizationSearch(input)).toMatchObject({
 			merchantName: 'Example Vending Cafe',
 			merchantLocation: 'TESTVILLE',
 			searchQuery: 'Example Vending Cafe TESTVILLE',
@@ -377,7 +374,7 @@ describe('bank transaction categorization input', () => {
 			}),
 		);
 
-		expect(toBankTransactionCategorizationWebSearchInput(input)).toMatchObject({
+		expect(toCategorizationSearch(input)).toMatchObject({
 			merchantName: 'Example Vending Cafe',
 			merchantLocation: 'TESTVILLE',
 			searchQuery: 'Example Vending Cafe TESTVILLE',
@@ -393,7 +390,7 @@ describe('bank transaction categorization input', () => {
 			}),
 		);
 
-		expect(toBankTransactionCategorizationWebSearchInput(input)).toMatchObject({
+		expect(toCategorizationSearch(input)).toMatchObject({
 			merchantName: 'Example Vending Cafe - Lobby',
 			merchantLocation: 'TESTVILLE',
 			searchQuery: 'Example Vending Cafe - Lobby TESTVILLE',
@@ -405,7 +402,7 @@ describe('bank transaction categorization input', () => {
 			createTransaction({counterpartyName: 'Example Merchant', description: null}),
 		);
 
-		expect(toBankTransactionCategorizationWebSearchInput(input)).toMatchObject({
+		expect(toCategorizationSearch(input)).toMatchObject({
 			merchantName: 'Example Merchant',
 			merchantLocation: null,
 			searchQuery: 'Example Merchant',
@@ -421,7 +418,7 @@ describe('bank transaction categorization input', () => {
 			}),
 		);
 
-		expect(toBankTransactionCategorizationWebSearchInput(input)).toMatchObject({
+		expect(toCategorizationSearch(input)).toMatchObject({
 			merchantName: 'examplefitness',
 			merchantLocation: null,
 			searchQuery: 'examplefitness',
@@ -437,7 +434,7 @@ describe('bank transaction categorization input', () => {
 			}),
 		);
 
-		const result = toBankTransactionCategorizationWebSearchInput(input);
+		const result = toCategorizationSearch(input);
 
 		expect(result).toBeNull();
 	});
@@ -450,7 +447,7 @@ describe('bank transaction categorization input', () => {
 			}),
 		);
 
-		expect(toBankTransactionCategorizationWebSearchInput(input)?.merchantName).toBe('Known Merchant');
+		expect(toCategorizationSearch(input)?.merchantName).toBe('Known Merchant');
 	});
 
 	it('does not search the web for a card line whose merchant is only a card tap identifier', () => {
@@ -461,7 +458,7 @@ describe('bank transaction categorization input', () => {
 			}),
 		);
 
-		expect(toBankTransactionCategorizationWebSearchInput(input)).toBeNull();
+		expect(toCategorizationSearch(input)).toBeNull();
 	});
 
 	it.each(['PLAYSTATION5', 'MEDIAMARKT12'])(
@@ -471,7 +468,7 @@ describe('bank transaction categorization input', () => {
 				createTransaction({counterpartyName, description: null}),
 			);
 
-			expect(toBankTransactionCategorizationWebSearchInput(input)?.merchantName).toBe(counterpartyName);
+			expect(toCategorizationSearch(input)?.merchantName).toBe(counterpartyName);
 		},
 	);
 
@@ -484,13 +481,13 @@ describe('bank transaction categorization input', () => {
 			}),
 		);
 
-		expect(toBankTransactionCategorizationWebSearchInput(input)?.merchantName).toBe('Fallback Merchant');
+		expect(toCategorizationSearch(input)?.merchantName).toBe('Fallback Merchant');
 	});
 
 	it.each(['Google Pay', 'Apple Pay', 'Bancontact', 'ACH', 'SEPA Wero'])(
 		'does not depend on a locale-specific payment-prefix list for %s',
 		(paymentPrefix) => {
-			const result = toBankTransactionCategorizationWebSearchInput(
+			const result = toCategorizationSearch(
 				toBankTransactionCategorizationInput(
 					createTransaction({
 						counterpartyName: `${paymentPrefix} ACME email@example.com IBAN NL00TEST0123456789 Order 123456789 Transitville 1234`,
@@ -520,7 +517,7 @@ describe('bank transaction categorization input', () => {
 		['ordinary numeric brand tokens', '4Q Store', '4Q Store'],
 		['ordinary hyphenated brand tokens', '7-Example', '7-Example'],
 	] as const)('removes %s from web-search merchant names', (_case, counterpartyName, expected) => {
-		const result = toBankTransactionCategorizationWebSearchInput(
+		const result = toCategorizationSearch(
 			toBankTransactionCategorizationInput(createTransaction({counterpartyName})),
 		);
 
@@ -536,7 +533,7 @@ describe('bank transaction categorization input', () => {
 			}),
 		);
 
-		expect(toBankTransactionCategorizationWebSearchInput(input)).toBeNull();
+		expect(toCategorizationSearch(input)).toBeNull();
 	});
 
 	it.each([

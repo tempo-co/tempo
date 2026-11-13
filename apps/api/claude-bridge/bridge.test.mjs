@@ -43,7 +43,13 @@ const fileHash = async (file) =>
 		.digest('hex');
 const contractHash = await fileHash(contractFile);
 const merchantContractHash = await fileHash(fileURLToPath(new URL('./merchant-contract.json', import.meta.url)));
-const expected = {classifications: [{correlationId: '0', category: 'SHOPPING', confidence: 0.9}]};
+const expected = {
+	classifications: [
+		{correlationId: '0', category: 'SHOPPING', confidence: 0.9, evidenceType: 'MERCHANT_IDENTITY_ONLY'},
+	],
+	searched: false,
+	sourceDomains: [],
+};
 
 function request(socketPath, body = payload, options = {}) {
 	return new Promise((resolve, reject) => {
@@ -521,39 +527,14 @@ test('shutdown kills and reaps its child and removes only its own socket', async
 	assert.deepEqual(await readdir(path.dirname(socketPath)), []);
 });
 
-const searchPayload = {
-	model: 'claude-sonnet-5-5',
-	effort: 'high',
-	input: {
-		categories: payload.input.categories,
-		transactions: [
-			{
-				correlationId: '0',
-				amount: '-12.34',
-				currency: 'EUR',
-				direction: 'EXPENSE',
-				transactionType: 'CARD',
-				merchantName: 'Example Shop',
-				merchantLocation: 'Utrecht',
-				searchQuery: 'Example Shop Utrecht',
-				merchantCategoryCode: null,
-			},
-		],
-	},
-};
-const searchRequest = (socketPath, body = searchPayload) =>
-	request(socketPath, body, {path: '/categorize-with-search'});
+const searchPayload = {...payload, input: {...payload.input, searchQuery: 'Example Shop Utrecht'}};
+const searchRequest = (socketPath, body = searchPayload) => request(socketPath, body);
 
-test('searches once with the pinned query hook and returns only source hostnames', async (t) => {
+test('allows one search with the pinned query hook when the request carries a query, and returns only source hostnames', async (t) => {
 	const {socketPath, calls} = await setup(t);
 	assert.deepEqual(await searchRequest(socketPath), {
 		status: 200,
-		body: {
-			classifications: [
-				{correlationId: '0', category: 'SHOPPING', confidence: 0.9, evidenceType: 'MERCHANT_IDENTITY_ONLY'},
-			],
-			sourceDomains: ['www.example.test', 'shop.example.test'],
-		},
+		body: {...expected, searched: true, sourceDomains: ['www.example.test', 'shop.example.test']},
 	});
 	const contract = JSON.parse(await readFile(new URL('./contract.json', import.meta.url), 'utf8'));
 	const {args, stdin} = calls.at(-1);
@@ -561,8 +542,8 @@ test('searches once with the pinned query hook and returns only source hostnames
 	assert.equal(value('--model'), 'claude-sonnet-5-5');
 	assert.equal(value('--effort'), 'high');
 	assert.equal(value('--tools'), 'WebSearch');
-	assert.equal(value('--system-prompt'), contract.webSearch.instructions);
-	assert.equal(value('--json-schema'), JSON.stringify(contract.webSearch.schema));
+	assert.equal(value('--system-prompt'), contract.instructions);
+	assert.equal(value('--json-schema'), JSON.stringify(contract.schema));
 	assert.equal(value('--setting-sources'), '');
 	assert.equal(value('--permission-mode'), 'dontAsk');
 	assert.ok(!args.some((arg) => /allowed-?tools/i.test(arg)));
@@ -574,17 +555,21 @@ test('searches once with the pinned query hook and returns only source hostnames
 	assert.deepEqual(await readdir(path.dirname(socketPath)), ['bridge.sock']);
 });
 
-test('refuses a search result unless exactly one pinned search succeeded', async (t) => {
+test('lets the model skip the search a request allows', async (t) => {
+	const {socketPath} = await setup(t, {mode: 'search-none'});
+	assert.deepEqual(await searchRequest(socketPath), {status: 200, body: expected});
+});
+
+test('refuses a search result unless at most one pinned search succeeded', async (t) => {
 	// 503 when refused before the model acted, so a retry cannot search twice; 502 once it called a tool or
 	// returned a result.
 	const refused = {status: 503, body: {error: 'claude_unavailable'}};
 	const failed = {status: 502, body: {error: 'claude_failed'}};
 	for (const [mode, expected] of [
-		['search-none', failed],
 		['search-twice', failed],
 		['search-other-query', failed],
 		['search-denied', failed],
-		['search-no-evidence', failed],
+		['no-evidence-type', failed],
 		['tools', refused],
 		['tool-call', failed],
 		['overage', refused],
@@ -596,18 +581,17 @@ test('refuses a search result unless exactly one pinned search succeeded', async
 		});
 });
 
-test('rejects malformed search requests without spawning a categorizer', async (t) => {
+test('rejects malformed search queries without spawning a categorizer', async (t) => {
 	const {socketPath, calls} = await setup(t);
-	const tx = searchPayload.input.transactions[0];
-	const withTx = (transactions) => ({...searchPayload, input: {...searchPayload.input, transactions}});
+	const withQuery = (searchQuery) => ({...searchPayload, input: {...searchPayload.input, searchQuery}});
 	for (const body of [
-		withTx([tx, {...tx, correlationId: '1'}]),
-		withTx([{...tx, searchQuery: ''}]),
-		withTx([{...tx, searchQuery: 'x'.repeat(241)}]),
-		withTx([{...tx, description: 'Example Shop'}]),
-		withTx([{...tx, merchantName: undefined}]),
+		withQuery(''),
+		withQuery('   '),
+		withQuery('x'.repeat(241)),
+		withQuery(42),
+		withQuery(null),
+		{...searchPayload, input: {...searchPayload.input, searchQueries: ['Example Shop']}},
 		{...searchPayload, effort: 'extreme'},
-		payload,
 	])
 		assert.equal((await searchRequest(socketPath, body)).status, 400);
 	assert.equal(calls.length, 1);
@@ -697,7 +681,7 @@ test('reports the running contract without starting Claude', async (t) => {
 	assert.equal(calls.length, before);
 });
 
-for (const route of ['/categorize', '/categorize-with-search', '/identify-merchants'])
+for (const route of ['/categorize', '/identify-merchants'])
 	for (const [name, hash] of [
 		['a different', 'a'.repeat(64)],
 		['no', undefined],
@@ -735,7 +719,7 @@ test('accepts history hints with currencies and same-amount payments, and reject
 					{
 						category: 'FOOD_AND_DRINK',
 						count: 2,
-						recentExamples: [{amount: '-8', currency: 'EUR', date: null}],
+						recentExamples: [{amount: '-8', currency: 'EUR', date: null, text: 'groceries'}],
 					},
 				],
 				sameAmountPayments: [payment(), payment({source: 'AI', text: null, date: null})],

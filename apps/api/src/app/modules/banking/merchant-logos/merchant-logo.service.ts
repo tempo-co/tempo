@@ -21,7 +21,7 @@ import {BankTransaction} from '../bank-transaction.entity';
 import {chunkArray, safeErrorName} from '../banking.utils';
 import {
 	toBankTransactionCategorizationInput,
-	toBankTransactionCategorizationWebSearchInput,
+	toCategorizationSearch,
 	toMerchantIdentificationName,
 } from '../categorization/bank-transaction-categorization-input';
 import {BankTransactionCategorizationUnavailableError} from '../categorization/bank-transaction-categorization.provider';
@@ -478,7 +478,7 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		return {
 			correlationId: merchant.id,
 			name,
-			location: toBankTransactionCategorizationWebSearchInput(input)?.merchantLocation ?? null,
+			location: toCategorizationSearch(input)?.merchantLocation ?? null,
 			transactionType: input.transactionType,
 			direction: input.direction,
 			searchSourceDomains,

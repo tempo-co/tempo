@@ -1431,7 +1431,7 @@ describe('BankConnectionController', () => {
 		await verifiedAgent.get('/bank-connections/not-a-uuid/transactions').expect(400);
 	});
 
-	it('books a pending payment the bank sent without booking or value date into the same row, keeping its manual category', async () => {
+	it('books a pending payment into the same row and keeps its category; only a changed description sends an AI row back to the model', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('pending-booked-session');
 		const pending = {
 			entry_reference: 'pending-booked-entry',
@@ -1441,11 +1441,23 @@ describe('BankConnectionController', () => {
 			transaction_date: '2026-08-24',
 			remittance_information: ['Example Shop card payment'],
 		};
-		expect(await synchronizeProviderRows(connection.id, [pending])).toMatchObject({
+		const pendingAi = {
+			...pending,
+			entry_reference: 'pending-booked-ai-entry',
+			remittance_information: ['Example Bakery card payment'],
+		};
+		expect(await synchronizeProviderRows(connection.id, [pending, pendingAi])).toMatchObject({
 			status: 'SUCCEEDED',
-			transactionsAdded: 1,
+			transactionsAdded: 2,
 		});
-		const stored = await bankTransactionRepository.findOneByOrFail({bankAccountId: bankAccount.id});
+		const stored = await bankTransactionRepository.findOneByOrFail({
+			bankAccountId: bankAccount.id,
+			entryReference: pending.entry_reference,
+		});
+		const storedAi = await bankTransactionRepository.findOneByOrFail({
+			bankAccountId: bankAccount.id,
+			entryReference: pendingAi.entry_reference,
+		});
 		// The client fills both missing dates from the transaction date.
 		expect(stored).toMatchObject({
 			transactionStatus: 'PDNG',
@@ -1459,19 +1471,27 @@ describe('BankConnectionController', () => {
 			categorySource: 'MANUAL',
 			categoryStatus: 'COMPLETED',
 		});
+		await bankTransactionRepository.update(storedAi.id, {
+			category: 'FOOD_AND_DRINK',
+			categorySource: 'AI',
+			categoryStatus: 'COMPLETED',
+			categoryAppliedInputHash: storedAi.categoryInputHash,
+		});
+		// Booking changes the dates, never what the payment was for.
 		const booked = {...pending, status: 'BOOK', booking_date: '2026-08-26', value_date: '2026-08-27'};
-		expect(await synchronizeProviderRows(connection.id, [booked])).toMatchObject({
+		const bookedAi = {...pendingAi, status: 'BOOK', booking_date: '2026-08-26', value_date: '2026-08-27'};
+		expect(await synchronizeProviderRows(connection.id, [booked, bookedAi])).toMatchObject({
 			status: 'SUCCEEDED',
 			transactionsAdded: 0,
 		});
-		expect(await synchronizeProviderRows(connection.id, [booked])).toMatchObject({
+		expect(await synchronizeProviderRows(connection.id, [booked, bookedAi])).toMatchObject({
 			status: 'SUCCEEDED',
 			transactionsAdded: 0,
 		});
 		const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
-		expect(rows).toHaveLength(1);
-		expect(rows[0]).toMatchObject({
-			id: stored.id,
+		expect(rows).toHaveLength(2);
+		const byId = new Map(rows.map((row) => [row.id, row]));
+		expect(byId.get(stored.id)).toMatchObject({
 			stableIdentityKey: stored.stableIdentityKey,
 			transactionDate: '2026-08-24',
 			bookingDate: '2026-08-26',
@@ -1483,9 +1503,30 @@ describe('BankConnectionController', () => {
 			categorySource: 'MANUAL',
 			categoryStatus: 'COMPLETED',
 		});
+		expect(byId.get(storedAi.id)).toMatchObject({
+			bookingDate: '2026-08-26',
+			category: 'FOOD_AND_DRINK',
+			categorySource: 'AI',
+			categoryStatus: 'COMPLETED',
+			categoryInputHash: storedAi.categoryInputHash,
+		});
 		const response = await verifiedAgent.get(`/bank-connections/${connection.id}/transactions`).expect(200);
-		expect(response.body.transactions).toHaveLength(1);
-		expect(response.body.transactions[0].id).toBe(stored.id);
+		expect(response.body.transactions.map(({id}: {id: string}) => id).sort()).toEqual(
+			[stored.id, storedAi.id].sort(),
+		);
+
+		// A changed description goes back to the model, keeping the category it had until the new one lands; the
+		// owner's own category never changes.
+		const described = (row: typeof booked) => ({...row, remittance_information: ['Example Pharmacy card payment']});
+		await synchronizeProviderRows(connection.id, [described(booked), described(bookedAi)]);
+		const rechecked = await bankTransactionRepository.findOneByOrFail({id: storedAi.id});
+		expect(rechecked).toMatchObject({category: 'FOOD_AND_DRINK', categorySource: 'AI', categoryStatus: 'PENDING'});
+		expect(rechecked.categoryInputHash).not.toBe(storedAi.categoryInputHash);
+		expect(await bankTransactionRepository.findOneByOrFail({id: stored.id})).toMatchObject({
+			category: 'GROCERIES',
+			categorySource: 'MANUAL',
+			categoryStatus: 'COMPLETED',
+		});
 	});
 
 	it('leaves a row the categorization worker holds unchanged on re-sync unless it becomes a currency exchange', async () => {
