@@ -1,13 +1,65 @@
-import type {BankImportNeverSentRow} from '@tempo/contracts';
+import type {
+  BankImportNeverSentKind,
+  BankImportNeverSentRow,
+  BankImportSummary,
+} from '@tempo/contracts';
 
 import {plural} from './import-format';
 
 export type NeverSentGroup = {key: string; label: string; rows: BankImportNeverSentRow[]};
 
-/** The summary's line: `Not added: 4 rows your bank never sent`, or that every one was added. */
-export function neverSentLine(count: number) {
-  if (count === 0) return 'Added every row your bank never sent';
-  return `Not added: ${plural(count, 'row')} your bank never sent`;
+/**
+ * What each list of rows the bank never sent says: rows the import left out (`not_in_bank`), which the owner adds,
+ * and rows of the import a later sync removed (`removed_by_sync`), which the owner adds back.
+ */
+export const NEVER_SENT_COPY: Record<
+  BankImportNeverSentKind,
+  {
+    /** The summary's line: `Not added: 4 rows your bank never sent`, or that every one was added. */
+    line: (count: number) => string;
+    intro: string;
+    loading: string;
+    add: string;
+    adding: string;
+    added: string;
+    failed: (count: number) => string;
+  }
+> = {
+  not_in_bank: {
+    line: (count) =>
+      count === 0
+        ? 'Added every row your bank never sent'
+        : `Not added: ${plural(count, 'row')} your bank never sent`,
+    intro:
+      "Your bank sent every transaction for these days, and these weren't among them. Add any you know are real.",
+    loading: 'Loading the rows your bank never sent',
+    add: 'Add',
+    adding: 'Adding…',
+    added: 'Added',
+    failed: (count) =>
+      count === 1 ? "Couldn't add the transaction" : `Couldn't add ${plural(count, 'transaction')}`,
+  },
+  removed_by_sync: {
+    line: (count) =>
+      count === 0
+        ? 'Added back every row your bank never sent'
+        : `Removed: ${plural(count, 'row')} your bank never sent`,
+    intro:
+      "Your bank's sync covered these days and didn't send these, so Tempo removed the file's copies. Add back any you know are real.",
+    loading: 'Loading the removed rows your bank never sent',
+    add: 'Add back',
+    adding: 'Adding back…',
+    added: 'Added back',
+    failed: (count) =>
+      count === 1
+        ? "Couldn't add back the transaction"
+        : `Couldn't add back ${plural(count, 'transaction')}`,
+  },
+};
+
+/** How many of the import's rows of this kind are still listed. */
+export function neverSentCount(summary: BankImportSummary, kind: BankImportNeverSentKind) {
+  return kind === 'not_in_bank' ? summary.rowsNotInBank : summary.rowsRemovedBySync;
 }
 
 const groupLabel = ({row}: BankImportNeverSentRow) =>

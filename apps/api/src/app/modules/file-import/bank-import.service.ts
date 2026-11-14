@@ -4,6 +4,7 @@ import type {
 	BankImportAccountQuestion,
 	BankImportDoubtfulRow as BankImportDoubtfulRowResponse,
 	BankImportFileRow,
+	BankImportNeverSentKind,
 	BankImportNeverSentRow,
 	BankImportSummary,
 	ResolveBankImportDoubtfulRowRequest,
@@ -23,8 +24,6 @@ import {
 } from '@modules/banking/bank-transaction-matcher';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {BATCH_WRITE_CHUNK_SIZE, chunkArray, safeErrorName} from '@modules/banking/banking.utils';
-import {createBankTransactionCategorizationInputHash} from '@modules/banking/categorization/bank-transaction-categorization-input';
-import {BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES} from '@modules/banking/categorization/bank-transaction-categorization.constants';
 import {isManualCategorySource} from '@modules/banking/categorization/bank-transaction-categorization.types';
 import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
 import {MerchantLogoService} from '@modules/banking/merchant-logos/merchant-logo.service';
@@ -48,7 +47,7 @@ import {FileAccountBalanceService} from '@modules/banking/services/file-account-
 import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
 import {FinalSyncDays, finalSyncDays} from '@modules/banking/sync-coverage';
 
-import {BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
+import {BANK_IMPORT_NEVER_SENT_ROW_KINDS, BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
 import {BankImportLayoutService} from './bank-import-layout.service';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {BankImport} from './bank-import.entity';
@@ -369,7 +368,10 @@ export class BankImportService {
 				await manager.getRepository(BankImportDoubtfulRow).delete({importId: record.id, resolution: IsNull()});
 				await manager
 					.getRepository(BankImport)
-					.update({id: record.id}, {undoneAt: new Date(), rowsDoubtful: 0, rowsNotInBank: 0});
+					.update(
+						{id: record.id},
+						{undoneAt: new Date(), rowsDoubtful: 0, rowsNotInBank: 0, rowsRemovedBySync: 0},
+					);
 				if (fileConnection) {
 					await manager.query(
 						`DELETE FROM "bank_accounts" bank_account
@@ -556,24 +558,33 @@ export class BankImportService {
 		return toSummary(resolved.record, await this.findOwnedAccounts(ownerId, resolved.record.bankAccountIds));
 	}
 
-	/** The import's rows on days bank sync is final for that it never sent and the owner has not added, in booking order. */
+	/**
+	 * The import's rows on days bank sync is final for that it never sent, not added (`not_in_bank`) or removed by a
+	 * later sync (`removed_by_sync`), that the owner has not added, in booking order.
+	 */
 	async findNeverSentRows(ownerId: Account['id'], importId: BankImport['id']): Promise<BankImportNeverSentRow[]> {
 		const record = await this.dataSource
 			.getRepository(BankImport)
 			.findOne({where: {id: importId, accountId: ownerId}});
 		if (!record) throw new NotFoundException(BANK_IMPORT_NOT_FOUND);
 		const rows = await this.dataSource.getRepository(BankImportDoubtfulRow).find({
-			where: {importId: record.id, kind: 'not_in_bank', resolution: IsNull()},
+			where: {importId: record.id, kind: In([...BANK_IMPORT_NEVER_SENT_ROW_KINDS]), resolution: IsNull()},
 			order: {id: 'ASC'},
 		});
 		return rows
-			.map(({id, bankAccountId, row}) => ({id, kind: 'not_in_bank' as const, bankAccountId, row: toFileRow(row)}))
+			.map(({id, kind, bankAccountId, row}) => ({
+				id,
+				kind: kind as BankImportNeverSentKind,
+				bankAccountId,
+				row: toFileRow(row),
+			}))
 			.sort((left, right) => (matchDay(left.row) ?? '').localeCompare(matchDay(right.row) ?? ''));
 	}
 
 	/**
 	 * Adds never-sent rows the owner chose as rows of the import, all or none, each resolved `new` with the row it
-	 * became. A row is added once: any already added refuses the whole request.
+	 * became, which bank sync never removes. A row a sync removed gets back its manual category and own-transfer
+	 * choice. A row is added once: any already added refuses the whole request.
 	 */
 	async addNeverSentRows(
 		ownerId: Account['id'],
@@ -584,7 +595,7 @@ export class BankImportService {
 		const ids = [...new Set(rowIds)];
 		const found = await this.dataSource.getRepository(BankImportDoubtfulRow).find({
 			select: {id: true, bankAccountId: true},
-			where: {id: In(ids), importId: owned.id, kind: 'not_in_bank'},
+			where: {id: In(ids), importId: owned.id, kind: In([...BANK_IMPORT_NEVER_SENT_ROW_KINDS])},
 		});
 		if (found.length !== ids.length) throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
 		const accounts = await this.findOwnedAccounts(
@@ -607,7 +618,7 @@ export class BankImportService {
 				const {record} = await this.lockImport(manager, ownerId, owned);
 				const rows = manager.getRepository(BankImportDoubtfulRow);
 				const current = await rows.find({
-					where: {id: In(ids), importId: record.id, kind: 'not_in_bank'},
+					where: {id: In(ids), importId: record.id, kind: In([...BANK_IMPORT_NEVER_SENT_ROW_KINDS])},
 					order: {id: 'ASC'},
 					lock: {mode: 'pessimistic_write'},
 				});
@@ -627,13 +638,28 @@ export class BankImportService {
 					);
 					const [transactionId] = persisted.insertedTransactionIds;
 					insertedTransactionIds.push(transactionId);
+					if (row.ownerEdits) {
+						await this.persistence.applyOwnerEdits(
+							manager.getRepository(BankTransaction),
+							transactionId,
+							row.ownerEdits,
+							account.bankConnection.aspspName,
+						);
+					}
 					await rows.update({id: row.id}, {resolution: 'new', resolvedTransactionId: transactionId});
 				}
+				const removedBySync = current.filter(({kind}) => kind === 'removed_by_sync').length;
 				record.rowsAdded += current.length;
-				record.rowsNotInBank -= current.length;
-				await manager
-					.getRepository(BankImport)
-					.update({id: record.id}, {rowsAdded: record.rowsAdded, rowsNotInBank: record.rowsNotInBank});
+				record.rowsNotInBank -= current.length - removedBySync;
+				record.rowsRemovedBySync -= removedBySync;
+				await manager.getRepository(BankImport).update(
+					{id: record.id},
+					{
+						rowsAdded: record.rowsAdded,
+						rowsNotInBank: record.rowsNotInBank,
+						rowsRemovedBySync: record.rowsRemovedBySync,
+					},
+				);
 				for (const lock of locks) lock.assertHealthy();
 				return {record, insertedTransactionIds};
 			});
@@ -1141,33 +1167,15 @@ export class BankImportService {
 			if (!candidate) throw new BadRequestException(BANK_IMPORT_NOT_A_CANDIDATE);
 			// Each choice moves only where the synced row has none at the moment of the write, so an owner's choice
 			// saved on it meanwhile is kept.
-			if (isManualCategorySource(imported.categorySource) && !isManualCategorySource(candidate.categorySource)) {
-				const inputHash = createBankTransactionCategorizationInputHash(candidate);
-				await transactions
-					.createQueryBuilder()
-					.update()
-					.set({
-						...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-						category: imported.category,
-						categoryStatus: 'COMPLETED',
-						categorySource: 'MANUAL',
-						categoryInputHash: inputHash,
-						categoryAppliedInputHash: inputHash,
-						categoryUpdatedAt: new Date(),
-					})
-					.where('id = :id', {id: candidate.id})
-					.andWhere(`"categorySource" IS DISTINCT FROM 'MANUAL'`)
-					.execute();
-			}
-			if (imported.ownTransferOverride && !candidate.ownTransferOverride) {
-				await transactions
-					.createQueryBuilder()
-					.update()
-					.set({ownTransferOverride: imported.ownTransferOverride})
-					.where('id = :id', {id: candidate.id})
-					.andWhere(`"ownTransferOverride" IS NULL`)
-					.execute();
-			}
+			await this.persistence.applyOwnerEdits(
+				transactions,
+				candidate.id,
+				{
+					category: isManualCategorySource(imported.categorySource) ? imported.category : null,
+					ownTransferOverride: imported.ownTransferOverride,
+				},
+				candidate.bankAccount?.bankConnection?.aspspName,
+			);
 			resolvedTransactionId = candidate.id;
 			record.rowsAdded -= 1;
 			record.rowsAlreadyPresent += 1;
@@ -1350,6 +1358,7 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 		rowsMatchedByDate: record.rowsMatchedByDate,
 		rowsDoubtful: record.rowsDoubtful,
 		rowsNotInBank: record.rowsNotInBank,
+		rowsRemovedBySync: record.rowsRemovedBySync,
 		dateFrom: record.dateFrom,
 		dateTo: record.dateTo,
 		accounts: record.bankAccountIds.flatMap((id) => {

@@ -16,7 +16,7 @@ import {join} from 'node:path';
 import {deflateRawSync} from 'node:zlib';
 import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
-import {In, IsNull, Repository} from 'typeorm';
+import {DataSource, In, IsNull, Repository} from 'typeorm';
 
 import {dateInTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
@@ -29,6 +29,7 @@ import {
 } from '@modules/banking/bank-transaction-identity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {EnableBankingTransaction} from '@modules/banking/enable-banking.types';
+import {RecurringSeriesHide} from '@modules/banking/recurring/recurring-series-hide.entity';
 import {BankingConnectionLockService} from '@modules/banking/services/banking-connection-lock.service';
 import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
 import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
@@ -409,6 +410,7 @@ describe('Bank imports', () => {
 			rowsMatchedByDate: 0,
 			rowsDoubtful: 0,
 			rowsNotInBank: 0,
+			rowsRemovedBySync: 0,
 			dateFrom: '2026-03-02',
 			dateTo: '2026-03-04',
 			accounts: [{id: account.id, name: 'NL91 ABNA 0417 1643 00', currency: 'EUR', created: true}],
@@ -2054,7 +2056,7 @@ describe('Bank imports', () => {
 		expect(await transactions.countBy({importId: imported.body.id})).toBe(3);
 	});
 
-	it('lets a sync take over imported twins of rows it delivers, asks about the rest under their import, and undo leaves what sync took over', async () => {
+	it('lets a sync take over imported twins of rows it delivers, asks about the rest under their import outside its coverage, and undo leaves what sync took over', async () => {
 		const {owner, agent} = await createOwner();
 		const connection = await fixtures.createConnection(owner, {
 			providerSessionId: app.get(BankingEncryptionService).encrypt('file-import-adoption-session'),
@@ -2281,9 +2283,11 @@ describe('Bank imports', () => {
 				accountIds: ['adoption-account', 'adoption-plain-account'],
 			}),
 			jest.spyOn(client, 'getAccountBalances').mockResolvedValue([]),
+			// A row it could not read keeps every fetch of the account incomplete, so sync records no coverage for it:
+			// its days stay outside coverage, where sync asks about what it cannot settle.
 			jest.spyOn(client, 'getAccountTransactions').mockImplementation(async (providerAccountId) => ({
 				transactions: delivered[providerAccountId] ?? [],
-				unparseableCount: 0,
+				unparseableCount: providerAccountId === 'adoption-account' ? 1 : 0,
 			})),
 		];
 		const synchronize = async () => {
@@ -2292,7 +2296,11 @@ describe('Bank imports', () => {
 		};
 
 		try {
-			expect(await synchronize()).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 6});
+			expect(await synchronize()).toMatchObject({status: 'PARTIAL', transactionsAdded: 6});
+			expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({
+				syncCoveredFrom: null,
+				syncCoveredThrough: null,
+			});
 			const adopted = await transactions.findOneByOrFail({id: twin.id});
 			expect(adopted).toMatchObject({
 				importId: null,
@@ -2422,7 +2430,7 @@ describe('Bank imports', () => {
 				valueDate: '2026-03-21',
 				description: 'Example Kiosk',
 			});
-			expect(await synchronize()).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 1});
+			expect(await synchronize()).toMatchObject({status: 'PARTIAL', transactionsAdded: 1});
 			const lateLookAlike = await synced('provider-late-2');
 			expect(await transactions.findOneByOrFail({id: held.id})).toMatchObject({
 				importId: null,
@@ -2580,6 +2588,266 @@ describe('Bank imports', () => {
 			'provider-group-3': expect.any(String),
 		});
 		expect(left).toHaveLength(11);
+	});
+
+	it('sweeps imported rows sync never sent off the days it is final for, moving their edits, and never sweeps a row the owner added', async () => {
+		const {owner, agent} = await createOwner();
+		const connection = await fixtures.createConnection(owner, {
+			providerSessionId: app.get(BankingEncryptionService).encrypt('file-import-sweep-session'),
+			consentValidUntil: new Date(Date.now() + 60 * 60 * 1000),
+		});
+		const [account] = await fixtures.createBankAccounts(connection, [
+			{iban: EXAMPLE_IBAN, providerAccountId: 'sweep-account'},
+		]);
+		const entry = (amount: string, bookingDate: string, info: string, reference?: string) => ({
+			amount,
+			bookingDate,
+			info,
+			...(reference ? {reference} : {}),
+		});
+		const imported = await drop(agent, [
+			Buffer.from(
+				camt053([
+					{
+						entries: [
+							// Inside coverage, before its first 8 days are over: kept, and never asked about.
+							entry('12.00', '2026-03-04', 'Example Early', 'FILE-SWEEP-1'),
+							entry('12.00', '2026-03-04', 'Example Early', 'FILE-SWEEP-2'),
+							entry('9.00', '2026-03-09', 'Example Margin', 'FILE-SWEEP-3'),
+							// The first final day.
+							entry('9.50', '2026-03-10', 'Example Edge', 'FILE-SWEEP-4'),
+							entry('25.00', '2026-03-15', 'Example Shop', 'FILE-SWEEP-5'),
+							entry('15.00', '2026-03-18', 'Example Kiosk', 'FILE-SWEEP-6'),
+							entry('15.00', '2026-03-18', 'Example Kiosk Corner', 'FILE-SWEEP-7'),
+							entry('40.00', '2026-03-20', 'Example Pharmacy', 'FILE-SWEEP-8'),
+							entry('0.40', '2026-03-22', 'Example Pocket'),
+							// On the day of a pending row, which sync reads again: not final.
+							entry('5.00', '2026-03-26', 'Example Late', 'FILE-SWEEP-10'),
+							entry('5.00', '2026-03-26', 'Example Late', 'FILE-SWEEP-12'),
+						],
+					},
+				]),
+			),
+		]).expect(201);
+		const importId = imported.body.id as string;
+		const importedRow = (reference: string) => transactions.findOneByOrFail({importId, entryReference: reference});
+		const [early1, early2, margin, edge, shop, kiosk1, kiosk2, pharmacy, late, lateTwin] = await Promise.all(
+			['1', '2', '3', '4', '5', '6', '7', '8', '10', '12'].map((n) => importedRow(`FILE-SWEEP-${n}`)),
+		);
+		const pocket = await transactions.findOneByOrFail({importId, amount: '-0.40000000'});
+		await transactions.update(
+			{id: kiosk1.id},
+			{
+				category: 'SHOPPING',
+				categorySource: 'MANUAL',
+				categoryStatus: 'COMPLETED',
+				ownTransferOverride: 'UNMARKED',
+			},
+		);
+		await transactions.update(
+			{id: kiosk2.id},
+			{category: 'HEALTH', categorySource: 'MANUAL', categoryStatus: 'COMPLETED'},
+		);
+		await transactions.update(
+			{id: pharmacy.id},
+			{
+				category: 'SHOPPING',
+				categorySource: 'MANUAL',
+				categoryStatus: 'COMPLETED',
+				ownTransferOverride: 'MARKED',
+			},
+		);
+		// A row sync stored before, a day from the pharmacy row, with a category of its own.
+		const storedPharmacy = await fixtures.createTransaction(account, {
+			amount: '-40.00',
+			bookingDate: '2026-03-21',
+			valueDate: '2026-03-21',
+		});
+		await transactions.update(
+			{id: storedPharmacy.id},
+			{category: 'HEALTH', categorySource: 'MANUAL', categoryStatus: 'COMPLETED'},
+		);
+		const hides = app.get(DataSource).getRepository(RecurringSeriesHide);
+		const elsewhere = '00000000-0000-4000-8000-000000000001';
+		const hide = await hides.save({
+			accountId: owner.id,
+			seriesKey: 'example-sweep-series',
+			transactionIds: [kiosk1.id, pocket.id, elsewhere],
+		});
+
+		const booked = (id: string, amount: string, day: string, description: string): EnableBankingTransaction => ({
+			providerTransactionId: id,
+			amount,
+			currency: 'EUR',
+			creditDebitIndicator: 'DBIT',
+			status: 'BOOK',
+			transactionDate: day,
+			bookingDate: day,
+			valueDate: day,
+			description,
+		});
+		const delivered: EnableBankingTransaction[] = [
+			// The earliest row: complete coverage starts the day after it.
+			{
+				...booked('provider-sweep-salary', '900.00', '2026-03-01', 'Example Employer'),
+				creditDebitIndicator: 'CRDT',
+			},
+			booked('provider-sweep-early', '12.00', '2026-03-04', 'Example Early'),
+			booked('provider-sweep-shop', '25.00', '2026-03-15', 'Example Shop'),
+			booked('provider-sweep-kiosk', '15.00', '2026-03-18', 'Example Kiosk'),
+			{
+				...booked('provider-sweep-pending', '7.00', '2026-03-26', 'Example Pending'),
+				status: 'PDNG',
+				entryReference: 'PROVIDER-SWEEP-PENDING',
+			},
+		];
+		let unreadable = 1;
+		const client = app.get(EnableBankingClient);
+		const spies = [
+			jest
+				.spyOn(client, 'getSessionAccounts')
+				.mockResolvedValue({status: 'AUTHORIZED', accountIds: ['sweep-account']}),
+			jest.spyOn(client, 'getAccountBalances').mockResolvedValue([]),
+			jest.spyOn(client, 'getAccountTransactions').mockImplementation(async () => ({
+				transactions: delivered,
+				unparseableCount: unreadable,
+			})),
+		];
+		const synchronize = async () => {
+			await connections.update(connection.id, {nextSyncAt: new Date(Date.now() - 1), syncStatus: 'QUEUED'});
+			return app.get(BankingSyncService).synchronizeAutomatically(connection.id);
+		};
+		const openQuestions = async () =>
+			(
+				(await agent.get(`/bank-imports/${importId}/doubtful-rows`).expect(200)).body as Array<{
+					importedTransactionId: string | null;
+				}>
+			).map(({importedTransactionId}) => importedTransactionId);
+		const listed = async () =>
+			(await agent.get(`/bank-imports/${importId}/never-sent-rows`).expect(200)).body as BankImportNeverSentRow[];
+
+		try {
+			// Without coverage (a row it could not read), sync asks about the look-alikes it cannot settle.
+			expect(await synchronize()).toMatchObject({status: 'PARTIAL'});
+			expect(await transactions.findOneByOrFail({id: shop.id})).toMatchObject({importId: null});
+			expect((await openQuestions()).sort()).toEqual([early1.id, early2.id, kiosk1.id, kiosk2.id].sort());
+			expect(await imports.findOneByOrFail({id: importId})).toMatchObject({rowsDoubtful: 4});
+			const before = await imports.findOneByOrFail({id: importId});
+
+			// A complete fetch of the whole history: coverage from 2 March, final days 10 to 25 March (the pending row's
+			// day is read again).
+			unreadable = 0;
+			await bankAccounts.update({id: account.id}, {transactionsFetchedThrough: null});
+			// A look-alike of the two late rows: inside coverage, so not asked about, and not final, so not removed.
+			delivered.push(booked('provider-sweep-late', '5.00', '2026-03-26', 'Example Late'));
+			expect(await synchronize()).toMatchObject({status: 'SUCCEEDED'});
+			expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({syncCoveredFrom: '2026-03-02'});
+			const synced = (providerTransactionId: string) =>
+				transactions.findOneByOrFail({bankAccountId: account.id, providerTransactionId});
+			const kioskSynced = await synced('provider-sweep-kiosk');
+
+			// On final days, imported rows nothing took over are gone; the rest stay as they were.
+			for (const removed of [edge, kiosk1, kiosk2, pharmacy, pocket]) {
+				expect(await transactions.findOneBy({id: removed.id})).toBeNull();
+			}
+			for (const kept of [early1, early2, margin, late, lateTwin]) {
+				expect(await transactions.findOneByOrFail({id: kept.id})).toMatchObject({importId});
+			}
+			expect(await transactions.findOneByOrFail({id: shop.id})).toMatchObject({
+				importId: null,
+				providerTransactionId: 'provider-sweep-shop',
+			});
+			// Edits move to the closest look-alike sync sent, each only where it has none of its own; one look-alike
+			// takes one removed row's edits.
+			expect(await transactions.findOneByOrFail({id: kioskSynced.id})).toMatchObject({
+				category: 'SHOPPING',
+				categorySource: 'MANUAL',
+				ownTransferOverride: 'UNMARKED',
+			});
+			expect(await transactions.findOneByOrFail({id: storedPharmacy.id})).toMatchObject({
+				category: 'HEALTH',
+				categorySource: 'MANUAL',
+				ownTransferOverride: 'MARKED',
+			});
+			// A hidden series follows the removed payment to its look-alike, and drops one without.
+			expect((await hides.findOneByOrFail({id: hide.id})).transactionIds).toEqual([kioskSynced.id, elsewhere]);
+			// Questions about removed rows go with them; inside coverage none are asked, those already open stay.
+			expect((await openQuestions()).sort()).toEqual([early1.id, early2.id].sort());
+			expect(await imports.findOneByOrFail({id: importId})).toMatchObject({
+				rowsDoubtful: 2,
+				rowsAdded: before.rowsAdded - 5,
+				rowsRemovedBySync: 5,
+			});
+			const removedRows = await listed();
+			// In booking order; rows of one day in any order.
+			expect(
+				removedRows
+					.map(({kind, row}) => [kind, row.bookingDate, row.amount, row.bankReference])
+					.sort((left, right) => `${left[1]}${left[3]}`.localeCompare(`${right[1]}${right[3]}`)),
+			).toEqual([
+				['removed_by_sync', '2026-03-10', '-9.50', 'FILE-SWEEP-4'],
+				['removed_by_sync', '2026-03-18', '-15.00', 'FILE-SWEEP-6'],
+				['removed_by_sync', '2026-03-18', '-15.00', 'FILE-SWEEP-7'],
+				['removed_by_sync', '2026-03-20', '-40.00', 'FILE-SWEEP-8'],
+				['removed_by_sync', '2026-03-22', '-0.40', null],
+			]);
+			expect(removedRows.map(({row}) => row.bookingDate)).toEqual([
+				'2026-03-10',
+				'2026-03-18',
+				'2026-03-18',
+				'2026-03-20',
+				'2026-03-22',
+			]);
+			const list = (await agent.get('/bank-imports').expect(200)).body as BankImportList;
+			expect(list.imports.find(({id}) => id === importId)).toMatchObject({rowsRemovedBySync: 5});
+
+			// Added back: a row of the import again, with the edits it had.
+			const removedKiosk2 = removedRows.find(({row}) => row.bankReference === 'FILE-SWEEP-7')!;
+			const removedPocket = removedRows.find(({row}) => row.bankReference === null)!;
+			const addedBack = await agent
+				.post(`/bank-imports/${importId}/never-sent-rows/add`)
+				.set('Origin', ORIGIN)
+				.send({rowIds: [removedKiosk2.id, removedPocket.id]})
+				.expect(200);
+			expect(addedBack.body).toMatchObject({rowsAdded: before.rowsAdded - 3, rowsRemovedBySync: 3});
+			const kioskBack = await transactions.findOneByOrFail({importId, entryReference: 'FILE-SWEEP-7'});
+			expect(kioskBack).toMatchObject({category: 'HEALTH', categorySource: 'MANUAL', ownTransferOverride: null});
+			const pocketBack = await transactions.findOneByOrFail({importId, amount: '-0.40000000'});
+			expect((await listed()).map(({row}) => row.bankReference)).toEqual([
+				'FILE-SWEEP-4',
+				'FILE-SWEEP-6',
+				'FILE-SWEEP-8',
+			]);
+
+			// A later file's row the bank never sent, added by the owner.
+			const later = await drop(agent, [
+				Buffer.from(camt053([{entries: [entry('30.00', '2026-03-24', 'Example Gift', 'FILE-SWEEP-11')]}])),
+			]).expect(201);
+			expect(later.body).toMatchObject({rowsAdded: 0, rowsNotInBank: 1});
+			const [gift] = (await agent.get(`/bank-imports/${later.body.id}/never-sent-rows`).expect(200))
+				.body as BankImportNeverSentRow[];
+			await agent
+				.post(`/bank-imports/${later.body.id}/never-sent-rows/add`)
+				.set('Origin', ORIGIN)
+				.send({rowIds: [gift.id]})
+				.expect(200);
+			const giftAdded = await transactions.findOneByOrFail({importId: later.body.id});
+
+			// The next syncs leave every row the owner added.
+			expect(await synchronize()).toMatchObject({status: 'SUCCEEDED'});
+			for (const added of [kioskBack, pocketBack, giftAdded]) {
+				expect(await transactions.findOneByOrFail({id: added.id})).toMatchObject({importId: added.importId});
+			}
+			expect(await imports.findOneByOrFail({id: importId})).toMatchObject({rowsRemovedBySync: 3});
+		} finally {
+			for (const spy of spies) spy.mockRestore();
+		}
+
+		// Undo takes the import's rows and the removed rows still listed.
+		await agent.delete(`/bank-imports/${importId}`).set('Origin', ORIGIN).expect(204);
+		expect(await doubtfulRows.countBy({importId, resolution: IsNull()})).toBe(0);
+		expect(await imports.findOneByOrFail({id: importId})).toMatchObject({rowsRemovedBySync: 0});
+		expect(await transactions.countBy({importId})).toBe(0);
 	});
 
 	it('never lets a pending sync row take over an imported row, not even one equal to it in every identity field', async () => {

@@ -159,6 +159,12 @@ export type BankImportSummary = {
 	 * `GET /bank-imports/:importId/never-sent-rows` for the owner to add. Counts those still not added.
 	 */
 	rowsNotInBank: number;
+	/**
+	 * The import's rows a later bank sync removed: on days it is final for, it never sent them and took over none of
+	 * them. Listed under `GET /bank-imports/:importId/never-sent-rows` for the owner to add back. Counts those still
+	 * not added back; `rowsAdded` no longer counts them.
+	 */
+	rowsRemovedBySync: number;
 	/** Earliest and latest booking date in the drop; null when it held no entries. */
 	dateFrom: string | null;
 	dateTo: string | null;
@@ -226,8 +232,11 @@ export type ResolveBankImportDoubtfulRowRequest = {
 	transactionId?: string;
 };
 
-/** Why a row of the import is listed as one the bank never sent. `not_in_bank`: the file's row was not added. */
-export const BANK_IMPORT_NEVER_SENT_KINDS = ['not_in_bank'] as const;
+/**
+ * Why a row of the import is listed as one the bank never sent. `not_in_bank`: the file's row was not added.
+ * `removed_by_sync`: the row was added, and a later sync removed it.
+ */
+export const BANK_IMPORT_NEVER_SENT_KINDS = ['not_in_bank', 'removed_by_sync'] as const;
 export type BankImportNeverSentKind = (typeof BANK_IMPORT_NEVER_SENT_KINDS)[number];
 
 /**
@@ -246,7 +255,8 @@ export const BANK_IMPORT_MAX_ROWS_PER_ADD = 500;
 
 /**
  * `POST /bank-imports/:importId/never-sent-rows/add`, answered with the import's `BankImportSummary`: adds the rows
- * as rows of the import, all or none. A row is added once (409 after).
+ * as rows of the import, all or none, a removed row with the manual category and own-transfer choice it had. A row
+ * is added once (409 after), and bank sync never removes it.
  */
 export type AddBankImportNeverSentRowsRequest = {
 	/** 1 to `BANK_IMPORT_MAX_ROWS_PER_ADD` ids of the import's never-sent rows. */

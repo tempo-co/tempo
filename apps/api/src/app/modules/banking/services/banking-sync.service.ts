@@ -65,7 +65,7 @@ import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {BankingSyncOwnershipLostError} from '../errors/banking-sync-ownership-lost.error';
 import {FileConnectionNotSyncableException} from '../errors/file-connection-not-syncable.exception';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
-import {INCREMENTAL_OVERLAP_DAYS, extendSyncCoverage, recordsSyncCoverage} from '../sync-coverage';
+import {INCREMENTAL_OVERLAP_DAYS, extendSyncCoverage, finalSyncDays, recordsSyncCoverage} from '../sync-coverage';
 import {AspspCatalogService} from './aspsp-catalog.service';
 import {BankTransactionPersistenceService, PersistTransactionsResult} from './bank-transaction-persistence.service';
 import {BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';
@@ -777,7 +777,21 @@ export class BankingSyncService {
 					);
 				}
 
+				// The account's coverage once this fetch is recorded: only a complete fetch extends it.
+				const {syncCoveredFrom, syncCoveredThrough} = accountResult.bankAccount;
+				const storedCoverage =
+					syncCoveredFrom && syncCoveredThrough ? {from: syncCoveredFrom, through: syncCoveredThrough} : null;
+				const recordsCoverage = accountResult.transactionsComplete && recordsSyncCoverage(connection.provider);
+				const coverage = recordsCoverage
+					? extendSyncCoverage(storedCoverage, {
+							options: accountResult.transactionsFetchOptions,
+							transactions: accountResult.transactions,
+							fetchedOn: fetchResult.fetchedThrough,
+						})
+					: storedCoverage;
+
 				let returnedTransactionIds: string[] = [];
+				let takenOverImportedIds: string[] = [];
 				if (accountResult.transactions.length > 0) {
 					const transactionPersistence = await this.bankTransactionPersistenceService.persistTransactions(
 						bankTransactionRepository,
@@ -785,9 +799,11 @@ export class BankingSyncService {
 						accountResult.transactions,
 						connection.aspspName,
 						connection.provider,
+						{syncCoverage: recordsSyncCoverage(connection.provider) ? coverage : null},
 					);
 					transactionsAdded += transactionPersistence.transactionsAdded;
 					returnedTransactionIds = transactionPersistence.persistedTransactionIds;
+					takenOverImportedIds = transactionPersistence.takenOverImportedIds;
 					persistedTransactionIds.push(...returnedTransactionIds);
 				}
 
@@ -802,22 +818,32 @@ export class BankingSyncService {
 					);
 				}
 
-				if (accountResult.transactionsComplete && recordsSyncCoverage(connection.provider)) {
-					const {syncCoveredFrom, syncCoveredThrough} = accountResult.bankAccount;
-					const coverage = extendSyncCoverage(
-						syncCoveredFrom && syncCoveredThrough
-							? {from: syncCoveredFrom, through: syncCoveredThrough}
-							: null,
-						{
-							options: accountResult.transactionsFetchOptions,
-							transactions: accountResult.transactions,
-							fetchedOn: fetchResult.fetchedThrough,
-						},
-					);
+				if (recordsCoverage && coverage) {
 					await bankAccountRepository.update(
 						{id: accountResult.bankAccount.id},
 						{syncCoveredFrom: coverage.from, syncCoveredThrough: coverage.through},
 					);
+					// Sync is final for these days now: imported rows there it never sent go.
+					const pendingStarts = await this.bankTransactionPersistenceService.findPendingTransactionStarts(
+						bankTransactionRepository,
+						[accountResult.bankAccount.id],
+					);
+					const finalDays = finalSyncDays({
+						provider: connection.provider,
+						syncCoveredFrom: coverage.from,
+						syncCoveredThrough: coverage.through,
+						oldestPendingDay: pendingStarts.get(accountResult.bankAccount.id) ?? null,
+					});
+					if (finalDays) {
+						const swept = await this.bankTransactionPersistenceService.sweepImportedRows(
+							bankTransactionRepository,
+							accountResult.bankAccount,
+							finalDays,
+							connection.aspspName,
+							takenOverImportedIds,
+						);
+						formerCounterpartIds.push(...swept.recomputeIds);
+					}
 				}
 
 				if (accountResult.transactionsSucceeded) {

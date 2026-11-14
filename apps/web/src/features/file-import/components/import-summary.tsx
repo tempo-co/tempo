@@ -80,7 +80,8 @@ export function ImportSummaryBody({summary}: {summary: BankImportSummary}) {
           ]}
         />
       )}
-      {!undoneAt && <NeverSentRows summary={summary} />}
+      {!undoneAt && <NeverSentRows summary={summary} kind='not_in_bank' />}
+      {!undoneAt && <NeverSentRows summary={summary} kind='removed_by_sync' />}
       {(range || summary.accounts.length > 0) && (
         <dl className='grid grid-cols-1 gap-4'>
           {range && (
