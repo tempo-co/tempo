@@ -45,6 +45,41 @@ function artwork(name: string): Buffer {
 				const a = Math.max(0, Math.min(1, (61 - radius) / 4));
 				c = [0, 100, 60].map((v) => Math.floor(255 + (v - 255) * a + 0.5));
 			}
+			const angle = Math.atan2(y + 0.5 - 64, x + 0.5 - 64);
+			if (
+				name === 'edgewheel' &&
+				(Math.abs(radius - 58) <= 4 ||
+					(radius <= 58 &&
+						[0, Math.PI / 3, (2 * Math.PI) / 3].some(
+							(spoke) => Math.abs(radius * Math.sin(angle - spoke)) <= 3,
+						)))
+			)
+				c = [17, 17, 17];
+			if (name === 'edgewheelmixed') {
+				if (
+					Math.abs(radius - 58) <= 4 ||
+					(radius <= 58 &&
+						[0, Math.PI / 3, (2 * Math.PI) / 3].some(
+							(spoke) => Math.abs(radius * Math.sin(angle - spoke)) <= 3,
+						))
+				)
+					c = [17, 17, 17];
+				if (radius > 57 && radius <= 62) c = y >= 64 ? [0, 100, 60] : [30, 100, 230];
+			}
+			if (
+				name === 'edgespokes' &&
+				((radius >= 57 && radius <= 65) ||
+					(radius <= 58 &&
+						[Math.PI / 6, Math.PI / 2, (5 * Math.PI) / 6].some(
+							(spoke) => Math.abs(radius * Math.sin(angle - spoke)) <= 3,
+						)))
+			)
+				c = [17, 17, 17];
+			if (name === 'openplate' && radius <= 68) {
+				c = [20, 20, 160];
+				if (radius <= 30 || (x >= 58 && x < 70 && y >= 64)) c = [255, 255, 255];
+			}
+			if (name === 'edgearc' && radius >= 36 && radius <= 63 && Math.abs(angle) > Math.PI / 6) c = [17, 17, 17];
 			if (name === 'details') {
 				c = [192, 48, 32];
 				if (x >= 32 && x < 96 && y >= 32 && y < 96) c = [255, 255, 255];
@@ -91,7 +126,16 @@ const EXPECTED_V2: Record<string, string> = {
 	ringwindow: '8afa433f5d3684e578edc2c7b2041a9a3af9cb69c6ecb416bba5e27b4eb263cb',
 	ringdot: 'e52e8a84e72ec7791cfa7e36d19357455c657f0b0613734c731b1e3843cdfb8e',
 };
-const EXPECTED = {'mask-v1': EXPECTED_V1, 'mask-v2': EXPECTED_V2} as const;
+// mask-v3 keeps every mask-v2 output; its edge-to-edge marks on white corners (`edgewheel`, `edgearc`,
+// `edgewheelmixed`, `edgespokes`) are the ink.
+const EXPECTED_V3: Record<string, string> = {
+	...EXPECTED_V2,
+	edgewheel: '653492cb5c822c74a85895d64bd8803b78443fdd528f284cf9740588ab935e30',
+	edgearc: 'c68bfbe2290ead21cd6a32b1461fb9cf41c0e5eee09b74f3e28248a2cbe2a763',
+	edgewheelmixed: '602d2d36636178d082cf96d747447a9c90a2c6d4e8209da93d5dafe7d7262953',
+	edgespokes: '81a9ec1bbf2a27d883f392834a613dcc938407b2159f1579857b8c157d233903',
+};
+const EXPECTED = {'mask-v1': EXPECTED_V1, 'mask-v2': EXPECTED_V2, 'mask-v3': EXPECTED_V3} as const;
 
 describe('merchant logo mask', () => {
 	it.each([
@@ -143,6 +187,21 @@ describe('merchant logo mask', () => {
 		['glyphbadge', [0, 100 / 255, 60 / 255]],
 	])('takes the corner colour as background only around a plain ring window in mask-v2 (%s)', (name, background) => {
 		expect(sourceForegroundMatte(artwork(name), 128, 128, 'mask-v2')!.background).toEqual(background);
+	});
+	it.each([
+		['edgewheel', 'mask-v2', [17 / 255, 17 / 255, 17 / 255]],
+		['edgearc', 'mask-v2', [17 / 255, 17 / 255, 17 / 255]],
+		['edgewheelmixed', 'mask-v2', [17 / 255, 17 / 255, 17 / 255]],
+		['edgespokes', 'mask-v2', [17 / 255, 17 / 255, 17 / 255]],
+		['edgewheel', 'mask-v3', [1, 1, 1]],
+		['edgewheelmixed', 'mask-v3', [1, 1, 1]],
+		['edgespokes', 'mask-v3', [1, 1, 1]],
+		['edgearc', 'mask-v3', [1, 1, 1]],
+		['badge', 'mask-v3', [1, 1, 1]],
+		['glyphbadge', 'mask-v3', [0, 100 / 255, 60 / 255]],
+		['openplate', 'mask-v3', [20 / 255, 20 / 255, 160 / 255]],
+	] as const)('picks the background of a mark reaching the edge band (%s, %s)', (name, version, background) => {
+		expect(sourceForegroundMatte(artwork(name), 128, 128, version)!.background).toEqual(background);
 	});
 	it.each(['uniform', 'invalid', 'oversized'])('refuses an unconvertible %s input', async (kind) => {
 		const source =

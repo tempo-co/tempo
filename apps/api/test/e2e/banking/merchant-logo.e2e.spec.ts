@@ -58,7 +58,7 @@ const IDENTITIES: Record<string, Omit<MerchantIdentification, 'correlationId'>> 
 const FAVICON_SERVICE = 'https://icons.duckduckgo.com/ip3/';
 const LOGO_DEV_ASSET = 'https://img.logo.dev/assets/';
 const DAY_MS = 24 * 60 * 60 * 1000;
-const MASK_CACHE_PREFIX = 'merchant-logo:mask-v2:';
+const MASK_CACHE_PREFIX = 'merchant-logo:mask-v3:';
 const maskKey = (source: Buffer, prefix = MASK_CACHE_PREFIX) =>
 	prefix + createHash('sha256').update(source).digest('hex');
 function getPng(agent: TestAgent, url: string) {
@@ -371,7 +371,7 @@ describe('Merchant logos', () => {
 		expect(await sharp(image.body as Buffer).metadata()).toMatchObject({format: 'png', width: 128, height: 128});
 		const sourceBefore = Buffer.from(image.body as Buffer);
 		const metadataBefore = await logos.findOneByOrFail({domain: 'shop.example.test'});
-		const maskUrl = `${logoUrl}/mask-v2`;
+		const maskUrl = `${logoUrl}/mask-v3`;
 		const mask = await getPng(owner.agent, maskUrl)
 			.expect(200)
 			.expect('Content-Type', 'image/png')
@@ -391,11 +391,13 @@ describe('Merchant logos', () => {
 		expect(await redis.ttl(maskKey(sourceBefore))).toBeGreaterThan(0);
 		expect(await redis.ttl(maskKey(sourceBefore))).toBeLessThanOrEqual(7 * 24 * 60 * 60);
 		expect((await getPng(owner.agent, maskUrl).expect(200)).body).toEqual(mask.body);
-		// Clients holding the previous algorithm's URL keep a logo, converted and cached under that algorithm.
-		const previous = await getPng(owner.agent, `${logoUrl}/mask-v1`)
-			.expect(200)
-			.expect('Cache-Control', 'private, max-age=31536000, immutable');
-		expect(await redis.getBuffer(maskKey(sourceBefore, 'merchant-logo:mask-v1:'))).toEqual(previous.body);
+		// Clients holding an earlier algorithm's URL keep a logo, converted and cached under that algorithm.
+		for (const algorithm of ['mask-v1', 'mask-v2']) {
+			const previous = await getPng(owner.agent, `${logoUrl}/${algorithm}`)
+				.expect(200)
+				.expect('Cache-Control', 'private, max-age=31536000, immutable');
+			expect(await redis.getBuffer(maskKey(sourceBefore, `merchant-logo:${algorithm}:`))).toEqual(previous.body);
+		}
 		expect((await getPng(owner.agent, logoUrl).expect(200)).body).toEqual(sourceBefore);
 		expect(await logos.findOneByOrFail({domain: 'shop.example.test'})).toEqual(metadataBefore);
 
@@ -404,8 +406,8 @@ describe('Merchant logos', () => {
 		try {
 			for (const [agent, url] of [
 				[other.agent, maskUrl],
-				[owner.agent, `${logoUrl.replace(/[0-9a-f]{64}$/, 'b'.repeat(64))}/mask-v2`],
-				[owner.agent, `${logoUrl}/mask-v3`],
+				[owner.agent, `${logoUrl.replace(/[0-9a-f]{64}$/, 'b'.repeat(64))}/mask-v3`],
+				[owner.agent, `${logoUrl}/mask-v4`],
 			] as const) {
 				expect((await agent.get(url).expect(404)).headers).not.toHaveProperty('cache-control');
 			}
@@ -425,7 +427,7 @@ describe('Merchant logos', () => {
 		const emptyConversion = jest.spyOn(maskConversion, 'createMerchantLogoMask');
 		try {
 			for (let attempt = 0; attempt < 2; attempt++)
-				expect((await owner.agent.get(`${paymentLogo}/mask-v2`).expect(404)).headers).not.toHaveProperty(
+				expect((await owner.agent.get(`${paymentLogo}/mask-v3`).expect(404)).headers).not.toHaveProperty(
 					'cache-control',
 				);
 			expect(emptyConversion).toHaveBeenCalledTimes(2);
@@ -527,7 +529,7 @@ describe('Merchant logos', () => {
 		try {
 			const detail = await account.agent.get(`/bank-transactions/${purchase.id}`).expect(200);
 			expect(detail.body.merchantLogoUrl).toBe(`/merchant-logos/${logo.id}/${logo.version}`);
-			await getPng(account.agent, `${detail.body.merchantLogoUrl}/mask-v2`).expect(200);
+			await getPng(account.agent, `${detail.body.merchantLogoUrl}/mask-v3`).expect(200);
 			for (const operation of [
 				() => service.enqueueForOwnerSafely(account.id),
 				() => service.reconcile(),
