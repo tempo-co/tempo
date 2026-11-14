@@ -1,6 +1,6 @@
 # Banking invariants
 
-Rules for `src/app/modules/banking/` that the code relies on but does not state in one place. Read this before changing authorization, sync, deletion, transaction identity, own transfers, currency exchanges or totals.
+Rules for `src/app/modules/banking/` that the code relies on but does not state in one place.
 
 ## Ownership
 
@@ -22,7 +22,6 @@ From `enable-banking.client.ts` `parseAccount()`:
 `startAuthorization` always inserts a pending row, so failure and cancel semantics stay per attempt. `persistAuthorizedSession` then writes the new session, consent and accounts onto the owner's existing AUTHORIZED/EXPIRED connection for the same provider + ASPSP and drops the pending row. Account upsert by hash rotates `providerAccountId` in place and keeps transaction history.
 
 - The authorization state records `replacesConnectionId`: an exact id must still exist and be eligible, otherwise the callback fails with `state_superseded`; `null` may pick the newest eligible connection under lock; a missing value (legacy state) fails closed.
-- Expected races throw `BankingAuthorizationStateError` with a code from its union (e.g. `state_superseded`), never a bare `Error`, so they are not logged as `internal_error`.
 - Serialize first-time callbacks with the account/ASPSP scope lock before selecting a reusable connection, or two pending rows can each become an authorized connection.
 - In tests, the newest connection row may be CANCELLED under merge semantics: never look up "the" connection by `createdAt DESC`; filter by status.
 - Do not dedupe accounts globally per owner by hash. It forces account re-parenting, and sync's authoritative-account reconciliation would then mark a borrowed account inactive (its `providerAccountId` is not in its own connection's session).
@@ -41,7 +40,7 @@ Treat a connection as a concurrent lifecycle: provider callbacks, background syn
 - Delete, then remove Redis authorization state for every invalidated connection after commit. Release the lease in `finally`; a cleanup or logging failure must not turn a committed deletion into a reported failure.
 - FKs from `bank_accounts`, `bank_transactions`, `bank_account_balances` and `bank_sync_runs` cascade on delete. Expired consent or an inactive account keeps rows; only explicit DELETE erases them.
 
-Regression matrix worth keeping green: missing/wrong/lowercase/padded confirmation → 400 and nothing removed; other owner → 404; held lease → 409; authorized and expired deletion → 204 with cascade; incomplete connection with an account → 409; pending re-authorization cancelled by deletion, and its late callback cannot recreate a connection; callback replay or superseded state → error, no second persistence; the provider session is revoked once before the rows go, and a provider failure still removes them.
+No E2E covers these removal cases; add one when changing removal: lowercase or padded confirmation → 400 and nothing removed; deleting an EXPIRED connection → 204 with cascade; a superseded state at the callback → error, no second persistence.
 
 ## Background and foreground sync
 
@@ -79,7 +78,7 @@ Regression matrix worth keeping green: missing/wrong/lowercase/padded confirmati
 
 ## Provider field normalization
 
-- Normalize currency and debit/credit codes at the authorization/sync persistence boundary. Prove it with padded, mixed-case provider input in real-PostgreSQL E2E; fixtures saved already uppercase prove nothing.
+- Normalize currency and debit/credit codes at the authorization/sync persistence boundary.
 - The counterparty is the party the direction names: creditor for `DBIT`, debtor for `CRDT` (Enable Banking: the creditor receives the funds, the debtor sends them). Its name and locality come only from that party. If it is missing or the direction unknown, store no name and no location; the other party may be the account holder. Keep only city, region and a valid two-letter country.
 - `description` is bank text: the PSU note, else the remittance, else the bank transaction code's description. It never falls back to the counterparty name; display and merchant identity read that field themselves.
 
@@ -111,9 +110,4 @@ Defined in `services/bank-transaction-filters.ts`; read `SQL_SPENDING` / `SQL_IN
 - Recurring detection is stored per owner (`recurring_snapshots`) and reused while the owner's history version is unchanged. Statement triggers on `bank_transactions` (migration `AddBankHistoryChanges20261113170000`) add a change note per owner and writing transaction for every insert, delete and update of a tracked column; the version is the sum of the notes plus the owner's bank account ids, which covers rows deleted with their account. Writers insert only their own note key, so they never wait for each other, and reads fold many notes into one of the same weight. The daily whole-history recompute then folds the notes of every owner with more than one, so owners who never read recurring payments keep few notes too; a fold keeps the version, so stored detections stay valid. Every column counts except the untracked list in that migration (categorization bookkeeping, pair links, rule versions, `updatedAt`); a column detection starts reading must not be on it. Detection reads no `bank_accounts` or `bank_connections` column besides the ownership join, so their other changes leave the version alone; a candidate filter on such a column needs its own note. `TRUNCATE` writes no note.
 - For conflict upserts, inspect the generated SQL and run it against real PostgreSQL; qualify target-table columns in `ON CONFLICT ... WHERE`, or they become ambiguous with `EXCLUDED`.
 
-## Tests
-
-- E2E against real PostgreSQL/Redis/Mailpit for ownership, cascade, locking and dedupe properties. Unit tests only for ordering invariants before side effects, fault injection and pure functions over provider payloads.
-- Compare snapshots read back from the database, not the object `Repository.save` returned: `numeric` columns change their string scale on the first read.
-- Build banking rows with `BankingFixtures`; isolate data a test counts under its own seeded owner (the `OWN_TRANSFER_ACCOUNT_*` constants in `seed.constants.ts` are the example) so shared pagination fixtures keep their counts.
-- New protected routes go into the tables in `test/e2e/auth/auth-guard.e2e.spec.ts`.
+Test conventions (E2E first, `BankingFixtures`, isolated owners, database read-backs, auth-guard tables) are in `apps/api/AGENTS.md`.
