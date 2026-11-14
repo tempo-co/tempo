@@ -24,6 +24,7 @@ import {TransactionListRow} from '@/features/banking/components/transaction-list
 import {useGetMerchantRanking} from '@/features/merchants/api/use-get-merchant-ranking';
 import {MerchantRow} from '@/features/merchants/components/merchant-row';
 import {countLabel, formatUsualComparison} from '@/features/merchants/utils/merchant-format';
+import {useFiguresCurrencyAccepted} from '@/features/reporting-currency/api/use-reporting-currency';
 import {missingAmountsLabel} from '@/features/reporting-currency/utils/currency-names';
 import {cn} from '@/utils/cn';
 
@@ -638,10 +639,13 @@ function BiggestMerchants({month, today}: {month: string; today: string}) {
   const navigate = useNavigate({from: '/'});
   const open = (merchant: string) =>
     void navigate({search: (prev) => ({...prev, merchants: 'open', merchant})});
+  const accepted = useFiguresCurrencyAccepted();
+  // A ranking read mid-conversion or in another currency waits for its refetch; an empty one has nothing to label.
+  const waiting = !!ranking && ranking.merchants.length > 0 && !accepted(ranking.baseCurrency);
   return (
     <section aria-label='Biggest merchants' className='grid gap-3 rounded-card border bg-card p-5'>
       <h2 className='text-card-title'>Biggest merchants</h2>
-      {isPending ? (
+      {isPending || waiting ? (
         <div aria-busy='true'>
           <LoadingLabel>Loading merchants</LoadingLabel>
           <ul aria-hidden='true' className='-mx-3 -mb-3 divide-y divide-border/60'>

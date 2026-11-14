@@ -5,6 +5,8 @@ import {
   HOME_CONNECTION,
   HOME_NOW,
   homeHistory,
+  homeRanking,
+  homeRecurring,
   mockSyntheticHome,
 } from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
@@ -373,6 +375,68 @@ test.describe('fully mocked', () => {
     // Home reads the settings again instead of showing the partial figures as plain numbers.
     await expect(page.getByRole('heading', {name: 'Recalculating totals in USD'})).toBeVisible();
     await expect(homePage.whereYouStand).toBeHidden();
+  });
+
+  test('dialogs wait for figures read while a change elsewhere is converted instead of showing plain numbers', async ({
+    page,
+    baseURL,
+  }) => {
+    await routeMockedBankApp(page, baseURL);
+    await mockSyntheticHome(page);
+    await mockReportingCurrency(page, {
+      ...ASKING,
+      currency: 'EUR',
+      confirmed: true,
+      setupRequired: false,
+      suggestion: null,
+      connectedCurrencies: ['EUR'],
+    });
+    // Each opening reads the settings once; the refetch its first partial answer prompts stays slow.
+    let reads = 0;
+    await page.route('**/reporting-currency', async (route) => {
+      reads += 1;
+      if (reads === 1) return route.fallback();
+      await new Promise((resolve) => setTimeout(resolve, 30_000));
+      return route.fallback().catch(() => undefined);
+    });
+    // Another device switched currency; rankings and recurring lists come back in no currency until converted.
+    const recurring = homeRecurring();
+    await page.route('**/recurring-series?**', (route) =>
+      fulfillJson(route, {
+        expenses: {...recurring.lists.expenses, baseCurrency: null},
+        income: {...recurring.lists.income, baseCurrency: null},
+      }),
+    );
+    await page.route('**/merchants/ranking?**', (route) =>
+      fulfillJson(route, {
+        ...homeRanking(new URL(route.request().url()).searchParams.get('period') ?? ''),
+        baseCurrency: null,
+      }),
+    );
+    await page.route('**/merchants?**', (route) =>
+      fulfillJson(route, {baseCurrency: null, merchants: [], total: 0}),
+    );
+
+    const open = async (url: string, path: string) => {
+      reads = 0;
+      const answered = page.waitForResponse((response) => response.url().includes(path));
+      await page.goto(url);
+      await answered;
+    };
+
+    await open('/?merchants=open', '/merchants/ranking?');
+    const top = page.getByRole('region', {name: 'Top merchants'});
+    await expect(top.getByRole('img', {name: 'Loading top merchants'})).toBeVisible();
+    await expect(top.getByRole('listitem')).toHaveCount(0);
+
+    await open('/?recurring=open', '/recurring-series?');
+    await expect(page.getByLabel('Loading recurring payments')).toBeVisible();
+    await expect(page.getByTestId('recurring-summary')).toBeHidden();
+
+    await open('/?month=2026-10', '/merchants/ranking?');
+    const biggest = page.getByRole('region', {name: 'Biggest merchants'});
+    await expect(biggest.getByText('Loading merchants')).toBeVisible();
+    await expect(biggest.getByRole('listitem')).toHaveCount(0);
   });
 
   for (const width of [390, 320]) {

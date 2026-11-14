@@ -102,7 +102,13 @@ function Ranking({
     asOf,
     MERCHANT_RANKING_DEFAULT_LIMIT,
   );
-  const loaded = ranking?.interval === interval ? ranking : undefined;
+  const accepted = useFiguresCurrencyAccepted();
+  // A ranking read mid-conversion or in another currency waits for its refetch; an empty one has nothing to label.
+  const loaded =
+    ranking?.interval === interval &&
+    (ranking.merchants.length === 0 || accepted(ranking.baseCurrency))
+      ? ranking
+      : undefined;
   const running = loaded ? loaded.through < loaded.end : true;
 
   return (

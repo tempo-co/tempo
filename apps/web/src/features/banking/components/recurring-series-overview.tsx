@@ -13,6 +13,7 @@ import {Skeleton} from '@/components/ui/skeleton';
 import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatWholeMoney, toCents} from '@/features/dashboard/utils/money';
+import {useFiguresCurrencyAccepted} from '@/features/reporting-currency/api/use-reporting-currency';
 import {cn} from '@/utils/cn';
 import {savedDataStatus} from '@/utils/query-status';
 
@@ -59,7 +60,14 @@ export function RecurringSeriesOverview({
     if (selectedDirection) setDirection(selectedDirection);
   }, [selectedDirection]);
 
-  if (isPending) return <RecurringSkeleton />;
+  const accepted = useFiguresCurrencyAccepted();
+  // Lists read mid-conversion or in another currency wait for their refetch; empty ones have nothing to label.
+  const waiting =
+    !!lists &&
+    [lists.expenses, lists.income].some(
+      (list) => list.series.length > 0 && !accepted(list.baseCurrency),
+    );
+  if (isPending || waiting) return <RecurringSkeleton />;
   if (isError || !query.data) {
     return (
       <LoadErrorState
