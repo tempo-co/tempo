@@ -493,8 +493,8 @@ No copy calls import a fallback or assumes a bank is connected.
   small round account-type tile on its corner as on its Connections row; a new account gets the
   `Plus` Clay tile in the same square.
 - **Balances.** The amount field shows its currency inside at the far right, over padding the
-  value scrolls short of. In the summary Save sits beside the field; the Add/Edit balance dialog
-  puts Cancel and Save in its footer under the field.
+  value scrolls short of. Save sits under the field: in the summary on its own row, in the
+  Add/Edit balance dialog in its footer with Cancel.
 - **Rows to check.** Each file row (the `FileQuestion` tile) and the stored rows it could be form one
   bordered block: one radio choice between those rows and "It's a new transaction", nothing
   preselected. Radios take the tile's lead column and amounts share one right-aligned column, with

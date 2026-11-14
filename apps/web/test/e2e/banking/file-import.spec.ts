@@ -326,6 +326,18 @@ async function expectCurrencyInside(field: Locator, currency: string) {
   expect(box.x + box.width - paddingRight).toBeLessThanOrEqual(suffixBox.x);
 }
 
+/** Waits out a dialog's or sheet's opening animation, so boxes read in one go come from one frame. */
+async function settled(scope: Locator) {
+  await scope.evaluate((element) =>
+    Promise.all(
+      element
+        .getAnimations({subtree: true})
+        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+        .map((animation) => animation.finished),
+    ),
+  );
+}
+
 async function openImport(page: Page) {
   await page.getByRole('button', {name: 'Import a file'}).first().click();
   const dialog = page.getByRole('dialog');
@@ -1355,6 +1367,12 @@ test.describe('statement file import on Connections', () => {
       prompt.getByText('Tempo works out earlier balances from your transactions.'),
     ).toBeVisible();
     await expectCurrencyInside(field, 'EUR');
+    // Save under the field, as in the Add balance dialog.
+    const [fieldBox, saveBox] = await Promise.all([
+      boxOf(field),
+      boxOf(prompt.getByRole('button', {name: 'Save'})),
+    ]);
+    expect(saveBox.y).toBeGreaterThanOrEqual(fieldBox.y + fieldBox.height);
     // Inline in the summary, not a dialog on top of it.
     await expect(page.getByRole('dialog')).toHaveCount(1);
 
@@ -1506,6 +1524,7 @@ test.describe('statement file import on Connections', () => {
       dialog.getByText('Tempo works out earlier balances from your transactions.'),
     ).toBeVisible();
     const field = dialog.getByLabel('Balance of Example Wallet today');
+    await settled(dialog);
     await expectCurrencyInside(field, 'EUR');
     // Cancel and Save under the field, Save last.
     const [fieldBox, cancelBox, saveBox] = await Promise.all([
@@ -1534,6 +1553,7 @@ test.describe('statement file import on Connections', () => {
     dialog = page.getByRole('dialog');
     const phoneField = dialog.getByLabel('Balance of Example Savings today');
     await expectInsideViewport(page, dialog.getByRole('button', {name: 'Cancel'}));
+    await settled(dialog);
     await expectCurrencyInside(phoneField, 'EUR');
     const [phoneFieldBox, phoneSave, phoneCancel] = await Promise.all([
       boxOf(phoneField),

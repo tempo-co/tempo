@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/responsive-dialog';
 import {accountName} from '@/features/banking/utils/bank-account-name';
 import {wasToasted} from '@/utils/api';
+import {cn} from '@/utils/cn';
 import {formatCurrency} from '@/utils/format-currency';
 
 import {useSetAccountBalance} from '../api/use-set-account-balance';
@@ -36,8 +37,8 @@ type AccountWithoutBalance = BankImportSummary['accountsWithoutBalance'][number]
 
 /**
  * An amount field with its currency inside, at the far right, and Save for one account's balance today: invalid
- * input is told under the field, a failed save in a toast. Answers the saved account. In the summary Save sits
- * beside the field; in a dialog, Save and Cancel sit in its footer under it.
+ * input is told under the field, a failed save in a toast. Answers the saved account. Save sits under the field:
+ * on its own row in the summary, in the dialog's footer with Cancel.
  */
 function BalanceForm({
   accountId,
@@ -90,7 +91,7 @@ function BalanceForm({
   );
   // The currency sits over the field's right padding, so a long amount scrolls under neither it nor the edge.
   const amountField = (
-    <div className='relative min-w-0 flex-1 basis-40'>
+    <div className='relative'>
       <Input
         id={`${id}-amount`}
         inputMode='decimal'
@@ -127,14 +128,7 @@ function BalanceForm({
           {BALANCE_HELP}
         </p>
       </div>
-      {onCancel ? (
-        amountField
-      ) : (
-        <div className='flex flex-wrap items-center gap-2'>
-          {amountField}
-          <div className='flex max-sm:w-full max-sm:[&>*]:flex-1'>{saveButton}</div>
-        </div>
-      )}
+      {amountField}
       {invalid && (
         <p id={`${id}-error`} role='alert' className='text-xs text-destructive'>
           {INVALID_BALANCE.title}. {INVALID_BALANCE.description}
@@ -146,7 +140,7 @@ function BalanceForm({
   return (
     <form
       noValidate
-      className={onCancel ? 'grid grid-cols-1 gap-4' : undefined}
+      className={cn('grid grid-cols-1', onCancel ? 'gap-4' : 'gap-3')}
       onSubmit={(event) => {
         event.preventDefault();
         void save();
@@ -163,7 +157,10 @@ function BalanceForm({
           </ResponsiveDialogFooter>
         </>
       ) : (
-        fields
+        <>
+          {fields}
+          <div className='flex justify-end max-sm:[&>*]:flex-1'>{saveButton}</div>
+        </>
       )}
     </form>
   );
