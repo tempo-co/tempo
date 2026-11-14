@@ -12,6 +12,10 @@ import {layoutBank} from './supported-files';
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_FILES_PER_DROP = 20;
 const MAX_DROP_BYTES = 25 * 1024 * 1024;
+// Named in copy only: the API's MAX_ARCHIVE_ENTRIES (parse-limits.ts) and MAX_PROPOSALS_PER_DAY
+// (bank-import-layout.service.ts).
+const MAX_ARCHIVE_ENTRIES = 500;
+const MAX_PROPOSALS_PER_DAY = 5;
 
 /** A drop of several files is all or nothing, so every refusal says so. */
 export const NOTHING_IMPORTED = 'Nothing was imported.';
@@ -23,7 +27,7 @@ type RefusalCopy = {title: string; description: string};
  * looks like a bank's CSV export names the bank (`layoutRefusalCopy`).
  */
 const REFUSAL_COPY: Record<
-  Exclude<BankImportErrorCode, 'layout_not_recognized' | 'mapper_limit_reached'>,
+  Exclude<BankImportErrorCode, 'layout_not_recognized' | 'mapper_limit_reached' | 'too_many_files'>,
   RefusalCopy
 > = {
   unsupported_format: {
@@ -36,9 +40,10 @@ const REFUSAL_COPY: Record<
     title: "Tempo doesn't know this file's layout yet",
     description: "It isn't a layout Tempo knows yet.",
   },
+  // Working out the columns was tried and failed; the file stays chosen to try again.
   mapper_unavailable: {
-    title: "Tempo doesn't know this file's layout yet",
-    description: "It isn't a layout Tempo knows yet.",
+    title: "Working out the columns didn't work this time",
+    description: `Try again later. Each try counts towards the ${MAX_PROPOSALS_PER_DAY} allowed in 24 hours.`,
   },
   layout_not_mappable: {
     title: "Tempo couldn't work out this file's columns",
@@ -68,10 +73,6 @@ const REFUSAL_COPY: Record<
   archive_too_large: {
     title: 'This file is too large',
     description: 'Export shorter periods and import them together.',
-  },
-  too_many_files: {
-    title: 'Too many files at once',
-    description: 'Import them in smaller batches.',
   },
   too_many_rows: {
     title: 'Too many transactions at once',
@@ -114,22 +115,46 @@ const REFUSAL_COPY: Record<
   },
 };
 
-/** A file laid out like a bank's CSV export whose rows do not read as that export's; it already says nothing came in. */
-function layoutRefusalCopy(layout: string | undefined): RefusalCopy {
+/** What working out the columns sends, said wherever it is offered. */
+const MAPPER_SENDS =
+  'It sends the column headings and the shape of a few rows, with letters and digits masked, to its AI service.';
+
+/**
+ * A file laid out like a bank's CSV export whose rows do not read as that export's. Without the offer to work out
+ * its columns, it already says nothing came in.
+ */
+function layoutRefusalCopy(
+  layout: string | undefined,
+  {mappable}: {mappable: boolean},
+): RefusalCopy {
   const bank = layoutBank(layout);
+  const advice = 'Try exporting it again, or use CAMT.053 or MT940 if your bank offers them.';
   return {
     title: `This file doesn't look the way ${bank ? `${bank}'s` : "your bank's"} exports usually do`,
-    description:
-      "Tempo didn't import anything from it. Try exporting it again, or use CAMT.053 or MT940 if your bank offers them.",
+    description: mappable
+      ? `${advice} Tempo can also work out which column is which. ${MAPPER_SENDS}`
+      : `Tempo didn't import anything from it. ${advice}`,
   };
 }
 
 /** A file in no layout Tempo knows, when its columns can be worked out: the owner is offered that. */
 export const MAPPER_COPY: RefusalCopy = {
   title: "Tempo doesn't know this file's layout yet",
-  description:
-    'Tempo can work out which column is which. It sends the column headings and the shape of a few rows, with letters and digits masked, to its AI service.',
+  description: `Tempo can work out which column is which. ${MAPPER_SENDS}`,
 };
+
+/** More files than one drop holds (`file` null), or an archive with more statements than one may hold. */
+function tooManyFilesCopy(file: number | null): RefusalCopy {
+  return file === null
+    ? {
+        title: 'Too many files at once',
+        description: `One import can hold ${MAX_FILES_PER_DROP} files. Import them in smaller batches.`,
+      }
+    : {
+        title: 'This archive holds too many statements',
+        description: `One archive can hold ${MAX_ARCHIVE_ENTRIES} statements. Split it into smaller archives.`,
+      };
+}
 
 /** After the owner said a proposed layout is not right. */
 export const LAYOUT_DISCARDED_COPY: RefusalCopy = {
@@ -139,15 +164,18 @@ export const LAYOUT_DISCARDED_COPY: RefusalCopy = {
 
 const timeFormat = new Intl.DateTimeFormat(undefined, {hour: 'numeric', minute: '2-digit'});
 
-/** The daily limit on working out columns, with when the next one may be asked: today or tomorrow. */
+/**
+ * The limit on tries at working out columns in any 24 hours, whatever their outcome, with when the next may be
+ * made: today or tomorrow.
+ */
 function limitCopy(retryAt: string | undefined, now = new Date()): RefusalCopy {
   const at = retryAt ? new Date(retryAt) : null;
   const when = !at
     ? 'tomorrow'
     : `${at.toDateString() === now.toDateString() ? 'today' : 'tomorrow'} at ${timeFormat.format(at)}`;
   return {
-    title: "You've worked out the columns of 5 files today",
-    description: `You can work out another file's columns ${when}.`,
+    title: `You've reached the limit of ${MAX_PROPOSALS_PER_DAY} tries in 24 hours`,
+    description: `Every try at working out columns counts, even one that failed or was cancelled. You can try again ${when}.`,
   };
 }
 
@@ -212,7 +240,7 @@ export function refuseBySize(files: readonly Pick<File, 'size'>[]): BankImportEr
  * What a refused import means for the owner. `fileNames` are the drop's files in the order sent: a refusal
  * names its file by position, and the name is shown when there was more than one to tell apart. With `mapper`
  * on, a table in no layout Tempo knows, or one that only looks like a bank's export, is offered to have its
- * columns worked out.
+ * columns worked out, and a failed try at that is offered again.
  */
 export function describeRefusal(
   refusal: BankImportError,
@@ -225,17 +253,24 @@ export function describeRefusal(
   const mappable =
     mapper &&
     refusal.file !== null &&
-    (['layout_unknown', 'layout_not_recognized', 'layout_proposal_expired'] as const).some(
-      (code) => code === refusal.code,
-    );
+    (
+      [
+        'layout_unknown',
+        'layout_not_recognized',
+        'layout_proposal_expired',
+        'mapper_unavailable',
+      ] as const
+    ).some((code) => code === refusal.code);
   const copy =
-    mappable && refusal.code !== 'layout_proposal_expired'
-      ? MAPPER_COPY
-      : refusal.code === 'layout_not_recognized'
-        ? layoutRefusalCopy(refusal.layout)
+    refusal.code === 'layout_not_recognized'
+      ? layoutRefusalCopy(refusal.layout, {mappable})
+      : mappable && refusal.code === 'layout_unknown'
+        ? MAPPER_COPY
         : refusal.code === 'mapper_limit_reached'
           ? limitCopy(refusal.retryAt)
-          : REFUSAL_COPY[refusal.code];
+          : refusal.code === 'too_many_files'
+            ? tooManyFilesCopy(refusal.file)
+            : REFUSAL_COPY[refusal.code];
   const fileName =
     refusal.file !== null && fileNames.length > 1 ? fileNames[refusal.file - 1] : undefined;
   // The layout copy says nothing came in from its file; with other files, the drop's outcome still needs saying.

@@ -649,10 +649,14 @@ test.describe('statement file import on Connections', () => {
     await dialog
       .getByTestId('bank-import-file-input')
       .setInputFiles([statement('transactions.csv')]);
-    // A file that only looks like a known export is offered the same.
+    // A file that only looks like a known export keeps that bank's advice beside the offer.
+    const alert = dialog.getByRole('alert');
     await expect(
-      dialog.getByRole('alert').getByText("Tempo doesn't know this file's layout yet"),
+      alert.getByText("This file doesn't look the way Rabobank's exports usually do"),
     ).toBeVisible();
+    await expect(alert).toContainText(
+      'Try exporting it again, or use CAMT.053 or MT940 if your bank offers them. Tempo can also work out which column is which.',
+    );
     await dialog.getByRole('button', {name: 'Work out the columns'}).click();
 
     const preview = dialog.getByTestId('bank-import-layout-preview');
@@ -688,7 +692,7 @@ test.describe('statement file import on Connections', () => {
     ]);
   });
 
-  test('Not right discards the proposal and imports nothing; Cancel stops waiting and keeps the files', async ({
+  test('Not right discards the proposal and imports nothing; Cancel or closing stops waiting and keeps the files', async ({
     page,
   }) => {
     const api = await mockFileImport(page, {
@@ -696,17 +700,30 @@ test.describe('statement file import on Connections', () => {
       uploads: [refused({code: 'layout_unknown', file: 1})],
       proposals: [
         proposed(layoutProposal(), new Promise<void>(() => undefined)),
+        proposed(layoutProposal(), new Promise<void>(() => undefined)),
         proposed(layoutProposal()),
       ],
     });
     await page.goto('/bank-connections');
-    const dialog = await openImport(page);
+    let dialog = await openImport(page);
     await dialog
       .getByTestId('bank-import-file-input')
       .setInputFiles([statement('transactions.csv')]);
     await dialog.getByRole('button', {name: 'Work out the columns'}).click();
     await dialog.getByRole('button', {name: 'Cancel'}).click();
 
+    await expect(
+      dialog.getByRole('alert').getByText("Tempo doesn't know this file's layout yet"),
+    ).toBeVisible();
+    await expect(dialog.getByRole('list', {name: 'Chosen files'})).toContainText(
+      'transactions.csv',
+    );
+    // Closing the dialog while working stops too; Import a file opens it where it was.
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+    await expect(dialog.getByRole('status').getByText('Working out the columns…')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    dialog = await openImport(page);
     await expect(
       dialog.getByRole('alert').getByText("Tempo doesn't know this file's layout yet"),
     ).toBeVisible();
@@ -725,7 +742,7 @@ test.describe('statement file import on Connections', () => {
     expect(api.uploads).toHaveLength(1);
   });
 
-  test("says when columns couldn't be worked out, and when the day's limit resets", async ({
+  test('says when a try at working out columns failed or found nothing, and when the limit allows another', async ({
     page,
   }) => {
     await mockFileImport(page, {
@@ -735,6 +752,12 @@ test.describe('statement file import on Connections', () => {
         refused({code: 'layout_unknown', file: 1}),
       ],
       proposals: [
+        (route) =>
+          fulfillJson(
+            route,
+            {statusCode: 503, message: '', code: 'mapper_unavailable', file: 1},
+            503,
+          ),
         (route) =>
           fulfillJson(
             route,
@@ -761,7 +784,17 @@ test.describe('statement file import on Connections', () => {
     await input.setInputFiles([statement('transactions.csv')]);
     await dialog.getByRole('button', {name: 'Work out the columns'}).click();
 
+    // A failed try says so and keeps the file to try again.
     const alert = dialog.getByRole('alert');
+    await expect(alert.getByText("Working out the columns didn't work this time")).toBeVisible();
+    await expect(alert).toContainText(
+      'Try again later. Each try counts towards the 5 allowed in 24 hours. Nothing was imported.',
+    );
+    await expect(dialog.getByRole('list', {name: 'Chosen files'})).toContainText(
+      'transactions.csv',
+    );
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+
     await expect(alert.getByText("Tempo couldn't work out this file's columns")).toBeVisible();
     await expect(alert).toContainText(
       'Nothing was imported. Try another export format from your bank, such as CAMT.053 or MT940.',
@@ -770,9 +803,9 @@ test.describe('statement file import on Connections', () => {
 
     await input.setInputFiles([statement('transactions.csv')]);
     await dialog.getByRole('button', {name: 'Work out the columns'}).click();
-    await expect(alert.getByText("You've worked out the columns of 5 files today")).toBeVisible();
+    await expect(alert.getByText("You've reached the limit of 5 tries in 24 hours")).toBeVisible();
     await expect(alert).toContainText(
-      /You can work out another file's columns today at (16:30|4:30\sPM)\. Nothing was imported\./,
+      /Every try at working out columns counts, even one that failed or was cancelled\. You can try again today at (16:30|4:30\sPM)\. Nothing was imported\./,
     );
   });
 

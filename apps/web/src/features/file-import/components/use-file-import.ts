@@ -185,7 +185,7 @@ export function useFileImport() {
         if (controller.signal.aborted || error instanceof SessionChangedError) return;
         const next = toFailure(error, files, {mapper, file});
         if (next.kind === 'question') return;
-        // A refused proposal keeps the files only when trying again could help.
+        // A refused proposal keeps the files only when trying again could help, as after a failed try.
         const keep = next.kind === 'failed' || next.mapFile !== null;
         setStep({kind: 'choose', files: keep ? files : [], failure: next});
       } finally {
@@ -248,9 +248,17 @@ export function useFileImport() {
     [rejectLayout],
   );
 
-  /** The Import a file button: a fresh start, unless an import is still running. */
+  /**
+   * The Import a file button: a fresh start, unless an import is still running or a refusal kept its files to try
+   * again, such as after closing the dialog while columns were worked out.
+   */
   const openNew = useCallback(() => {
-    setStep((current) => (BUSY.includes(current.kind) ? current : FRESH));
+    setStep((current) =>
+      BUSY.includes(current.kind) ||
+      (current.kind === 'choose' && current.failure !== null && current.files.length > 0)
+        ? current
+        : FRESH,
+    );
     setOpen(true);
   }, [setOpen]);
 
