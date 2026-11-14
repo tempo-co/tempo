@@ -9,6 +9,7 @@ import {toast} from 'sonner';
 import {PendingLabel} from '@/components/shared/pending-label';
 import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
+import {Alert, AlertAction, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {Input} from '@/components/ui/input';
@@ -335,32 +336,24 @@ function BankCard({
       </header>
 
       {problem && (
-        <div
-          role='alert'
-          data-testid='bank-connection-problem'
-          className='grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2.5 rounded-md border border-warning/40 bg-warning/5 px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)_auto]'
-        >
-          {problem.soon ? (
-            <Clock aria-hidden='true' className='size-4 text-warning' />
-          ) : (
-            <AlertTriangle aria-hidden='true' className='size-4 text-warning' />
-          )}
-          <span className='min-w-0'>
-            <span className='block text-sm font-medium'>{problem.title}</span>
-            <span className='block text-xs text-muted-foreground'>{problem.detail}</span>
-          </span>
+        <Alert role='alert' variant='warning' data-testid='bank-connection-problem'>
+          {problem.soon ? <Clock aria-hidden='true' /> : <AlertTriangle aria-hidden='true' />}
+          <AlertTitle>{problem.title}</AlertTitle>
+          <AlertDescription>{problem.detail}</AlertDescription>
           {problem.action === 'reauthorize' && (
-            <Button
-              variant='outline'
-              size='sm'
-              disabled={isStarting}
-              onClick={() => void onReauthorize(connection)}
-              className='col-start-2 justify-self-start sm:col-start-3 pointer-coarse:min-h-11'
-            >
-              {isStarting ? 'Starting…' : 'Re-authorize'}
-            </Button>
+            <AlertAction>
+              <Button
+                variant='outline'
+                size='sm'
+                disabled={isStarting}
+                onClick={() => void onReauthorize(connection)}
+                className='pointer-coarse:min-h-11'
+              >
+                {isStarting ? 'Starting…' : 'Re-authorize'}
+              </Button>
+            </AlertAction>
           )}
-        </div>
+        </Alert>
       )}
 
       {accounts.length > 0 && (

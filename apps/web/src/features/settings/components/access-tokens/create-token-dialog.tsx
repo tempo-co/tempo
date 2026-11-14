@@ -1,8 +1,9 @@
 import {zodResolver} from '@hookform/resolvers/zod';
-import {Loader} from 'lucide-react';
+import {CircleAlert, Loader} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {useForm} from 'react-hook-form';
 
+import {Alert, AlertDescription} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {
   Form,
@@ -172,9 +173,12 @@ export function CreateTokenDialog({open, onOpenChange, onClosed}: CreateTokenDia
                   </p>
                 )}
                 {create.isError && (
-                  <p role='alert' className='text-sm text-destructive'>
-                    Your token could not be created. Please try again.
-                  </p>
+                  <Alert role='alert' variant='destructive'>
+                    <CircleAlert aria-hidden='true' />
+                    <AlertDescription className='text-foreground'>
+                      Your token could not be created. Please try again.
+                    </AlertDescription>
+                  </Alert>
                 )}
               </ResponsiveDialogBody>
               <ResponsiveDialogFooter className='gap-2'>
