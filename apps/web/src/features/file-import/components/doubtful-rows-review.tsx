@@ -88,10 +88,13 @@ export function DoubtfulRowsReview({
     if (index === null) return;
     const block = list.current?.children[index];
     const choice = block?.querySelector<HTMLInputElement>('input:not(:disabled)');
+    const viewport = block?.closest<HTMLElement>('[data-radix-scroll-area-viewport]');
     if (!block || !choice) return;
     choice.focus({preventScroll: true});
-    // To the top of the body: at its end the row would sit under the Save bar.
-    block.scrollIntoView({block: 'start'});
+    // To the top of the body: at its end the row would sit under the Save bar. Only the body's own scroller moves.
+    if (viewport)
+      viewport.scrollTop +=
+        block.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
   }, [shown]);
 
   if (isPending)
@@ -198,6 +201,7 @@ export function DoubtfulRowsReview({
         <Button
           variant='ghost'
           className='-mt-2 w-full text-muted-foreground max-sm:h-11'
+          disabled={saving}
           onClick={() => {
             revealed.current = shown;
             setShown(shown + PAGE);
