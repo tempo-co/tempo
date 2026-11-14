@@ -2,7 +2,6 @@ import {TextBone} from '@/features/dashboard/components/loading';
 import {SettingsRow} from '@/features/settings/components/settings-group';
 
 import {useReportingCurrency} from '../api/use-reporting-currency';
-import {currencyLabel} from '../utils/currency-names';
 import {ReportingCurrencyDialog} from './reporting-currency-dialog';
 
 /** The Settings row for the currency totals use. */
@@ -14,7 +13,7 @@ export function ReportingCurrencyRow() {
       value={
         settings ? (
           <span data-testid='account-reporting-currency'>
-            {settings.currency ? currencyLabel(settings.currency) : 'Not chosen yet'}
+            {settings.currency ?? 'Not chosen yet'}
             {settings.recalculating && ' · Recalculating totals…'}
           </span>
         ) : isError ? (

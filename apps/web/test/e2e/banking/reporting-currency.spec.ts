@@ -501,11 +501,11 @@ test.describe('against the API', () => {
     await dialog.getByRole('button', {name: 'GBP — British Pound'}).click();
     await save.click();
     await expect(dialog).toBeHidden();
-    await expect(value).toHaveText('GBP — British Pound');
+    await expect(value).toHaveText('GBP');
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
 
     await page.reload();
-    await expect(value).toHaveText('GBP — British Pound');
+    await expect(value).toHaveText('GBP');
 
     const other = await browser.newContext({storageState: {cookies: [], origins: []}});
     try {
@@ -513,9 +513,7 @@ test.describe('against the API', () => {
       await new LoginPage(otherPage).login(freshAccount.email, freshAccount.password);
       await new HomePage(otherPage).expectToBeOnPage();
       await otherPage.goto('/settings/account');
-      await expect(otherPage.getByTestId('account-reporting-currency')).toHaveText(
-        'GBP — British Pound',
-      );
+      await expect(otherPage.getByTestId('account-reporting-currency')).toHaveText('GBP');
     } finally {
       await other.close();
     }
