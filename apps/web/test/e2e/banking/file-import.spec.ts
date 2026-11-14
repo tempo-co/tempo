@@ -477,6 +477,11 @@ test.describe('statement file import on Connections', () => {
     await expect(alert).toContainText(
       "statement-march.xml: Something in it doesn't add up. Download it again from your bank and retry. Nothing was imported.",
     );
+    // The refusal ends the dialog, under Supported files.
+    const supportedFiles = dialog.getByRole('button', {name: 'Supported files'});
+    expect((await boxOf(alert)).y).toBeGreaterThanOrEqual(
+      (await boxOf(supportedFiles)).y + (await boxOf(supportedFiles)).height,
+    );
     // The refused files are not kept; the owner chooses again without reopening.
     await expect(dialog.getByRole('list', {name: 'Chosen files'})).toHaveCount(0);
     await dialog
@@ -579,7 +584,13 @@ test.describe('statement file import on Connections', () => {
     ).toHaveCount(2);
     await dialog.getByRole('button', {name: 'Work out the columns'}).click();
 
-    await expect(dialog.getByRole('status').getByText('Working out the columns…')).toBeVisible();
+    const working = dialog.getByRole('status').filter({hasText: 'Working out the columns…'});
+    await expect(working).toBeVisible();
+    // The spinner sits on the text's line.
+    const [line, spinner] = [await boxOf(working), await boxOf(working.locator('svg'))];
+    expect(line.height).toBeLessThan(28);
+    expect(spinner.y).toBeGreaterThanOrEqual(line.y);
+    expect(spinner.y + spinner.height).toBeLessThanOrEqual(line.y + line.height);
     await expect(dialog.getByRole('button', {name: 'Cancel'})).toBeEnabled();
     answer();
 
@@ -1552,6 +1563,38 @@ test.describe('statement file import on Connections', () => {
     await expect(alert).toContainText('Import them in smaller batches. Nothing was imported.');
     await expect(dialog.getByRole('list', {name: 'Chosen files'})).toHaveCount(0);
     expect(api.uploads).toHaveLength(2);
+  });
+
+  test('a server failure says so at the end of the dialog, and Try again sends the same files', async ({
+    page,
+  }) => {
+    const api = await mockFileImport(page, {
+      uploads: [
+        (route) => fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500),
+        created(importSummary({filesCount: 2})),
+      ],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog
+      .getByTestId('bank-import-file-input')
+      .setInputFiles([statement('statement-a.xml'), statement('statement-b.xml')]);
+
+    const alert = dialog.getByRole('alert');
+    await expect(alert.getByText("Couldn't import these files")).toBeVisible();
+    await expect(alert).toContainText('The server ran into a problem.');
+    await expect(alert).toContainText(/500 · \d{2}:\d{2}/);
+    const supportedFiles = dialog.getByRole('button', {name: 'Supported files'});
+    expect((await boxOf(alert)).y).toBeGreaterThanOrEqual(
+      (await boxOf(supportedFiles)).y + (await boxOf(supportedFiles)).height,
+    );
+
+    await alert.getByRole('button', {name: 'Try again'}).click();
+    await expect(dialog.getByRole('heading', {name: 'Imported 2 files'})).toBeVisible();
+    expect(api.uploads.map((upload) => sentForm(upload).files)).toEqual([
+      ['statement-a.xml', 'statement-b.xml'],
+      ['statement-a.xml', 'statement-b.xml'],
+    ]);
   });
 
   test('a lost connection keeps the chosen files for another try', async ({page}) => {

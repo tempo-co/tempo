@@ -1,11 +1,12 @@
 import {useQuery} from '@tanstack/react-query';
 import type {BankImportSummary} from '@tempo/contracts';
-import {ArrowLeft, FileX} from 'lucide-react';
-import {type ReactNode, type RefObject, useState} from 'react';
+import {ArrowLeft, Columns3, FileX, RotateCw} from 'lucide-react';
+import {type ReactNode, type RefObject, useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
+import {describeFailure, failedAtLabel} from '@/components/shared/load-failure';
 import {PendingLabel} from '@/components/shared/pending-label';
-import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
+import {Alert, AlertAction, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {
   ResponsiveDialog,
@@ -22,7 +23,7 @@ import {cn} from '@/utils/cn';
 
 import {bankImportsQueryOptions} from '../api/use-bank-imports';
 import {plural, summaryTitle} from '../utils/import-format';
-import {accountQuestionKey} from '../utils/refusal-copy';
+import {type ImportFailure, accountQuestionKey} from '../utils/refusal-copy';
 import {AccountQuestions} from './account-questions';
 import {DoubtfulRowsReview} from './doubtful-rows-review';
 import {FileChoice, FileList} from './file-choice';
@@ -98,7 +99,8 @@ export function FileImportDialog({
             title='Import a file'
             body={
               <div className='grid grid-cols-1 gap-4'>
-                <p role='status' className='text-sm text-muted-foreground'>
+                {/* A flex row keeps the spinner on the text's line. */}
+                <p role='status' className='flex items-center text-sm text-muted-foreground'>
                   <PendingLabel>Working out the columns…</PendingLabel>
                 </p>
                 <FileList files={[step.files[step.file - 1]]} />
@@ -226,27 +228,10 @@ function ChooseStep({
       title='Import a file'
       body={
         <div className='grid grid-cols-1 gap-4'>
-          {failure?.kind === 'refused' && (
-            <div role='alert'>
-              <StateMessage
-                tone='error'
-                size='section'
-                icon={FileX}
-                title={failure.title}
-                description={failure.description}
-              />
-            </div>
-          )}
-          {failure?.kind === 'failed' && !failure.toasted && (
-            <LoadErrorState
-              size='section'
-              title={IMPORT_FAILED_TITLE}
-              error={failure.error}
-              onRetry={() => onFiles(files)}
-            />
-          )}
           {files.length > 0 && <FileList files={files} />}
           <FileChoice onFiles={onFiles} />
+          {/* Why the last drop was not imported, at the end under Supported files. */}
+          {failure && <FailureAlert failure={failure} onRetry={() => onFiles(files)} />}
         </div>
       }
       // Files kept after a lost connection or a busy bank go again as they are; a file in no layout Tempo knows
@@ -259,6 +244,67 @@ function ChooseStep({
         )
       }
     />
+  );
+}
+
+/** Refusals that offer to work out a file's columns, rather than report a try at it that failed. */
+const offersColumns = (failure: Extract<ImportFailure, {kind: 'refused'}>) =>
+  failure.mapFile !== null && failure.code !== 'mapper_unavailable';
+
+/**
+ * Why a drop or a try at working out its columns was not imported. A refusal says what to do next, which is the
+ * footer's action when there is one; a failed request offers Try again.
+ */
+function FailureAlert({failure, onRetry}: {failure: ImportFailure; onRetry: () => void}) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Below the chosen files the alert can start out of view; it is what the owner reads next. Only the body's own
+  // scroller moves, never the page or a phone sheet still sliding in.
+  useEffect(() => {
+    const alert = ref.current;
+    const viewport = alert?.closest<HTMLElement>('[data-radix-scroll-area-viewport]');
+    if (!alert || !viewport) return;
+    const [box, view] = [alert.getBoundingClientRect(), viewport.getBoundingClientRect()];
+    // Its end into view, but never its start out of it.
+    const by = Math.min(box.bottom - view.bottom, box.top - view.top);
+    if (by > 0) viewport.scrollTop += by;
+  }, [failure]);
+  const [failedAt, setFailedAt] = useState(() => Date.now());
+  useEffect(() => setFailedAt(Date.now()), [failure]);
+
+  if (failure.kind === 'refused') {
+    const offer = offersColumns(failure);
+    const Icon = offer ? Columns3 : FileX;
+    return (
+      <Alert ref={ref} role='alert' variant={offer ? 'default' : 'destructive'}>
+        <Icon aria-hidden='true' />
+        <AlertTitle>{failure.title}</AlertTitle>
+        <AlertDescription>{failure.description}</AlertDescription>
+      </Alert>
+    );
+  }
+  // A question is a step of its own; a failure the api wrapper toasted was already told.
+  if (failure.kind === 'question' || failure.toasted) return null;
+  const cause = describeFailure(failure.error);
+  const Icon = cause.icon;
+  return (
+    <Alert ref={ref} role='alert' variant='destructive'>
+      <Icon aria-hidden='true' />
+      <AlertTitle>{cause.offline ? "You're offline" : IMPORT_FAILED_TITLE}</AlertTitle>
+      <AlertDescription>
+        {cause.description}
+        {cause.code && (
+          <span className='mt-1 block font-mono text-label break-all'>
+            {`${cause.code} · ${failedAtLabel(failedAt)}`}
+          </span>
+        )}
+      </AlertDescription>
+      <AlertAction>
+        <Button variant='outline' size='sm' onClick={onRetry}>
+          <RotateCw aria-hidden='true' />
+          Try again
+        </Button>
+      </AlertAction>
+    </Alert>
   );
 }
 

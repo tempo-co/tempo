@@ -10,6 +10,7 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 ## Feedback: confirm in place, toast the rest
 
 - An edit whose result shows where it was made (category select, inline fields) shows progress and outcome on the control and its status line, and toasts only on failure. `useUpdateBankTransactionCategory` is the reference: no `toast.promise`, `toast.error` for non-auth failures.
+- A message that stays on screen next to what it is about (a refusal, a bank needing attention, a failed save in a dialog) is an `Alert` from `src/components/ui/alert.tsx`; `DESIGN.md` (Alerts) says which variant and role. Do not hand-style bordered callouts or bare red lines for these.
 - Toast failures and outcomes the screen does not show: email sent, session revoked, effects elsewhere, saves that can finish after a dialog closes.
 - The `api` wrapper toasts offline writes, lost write connections, expired sessions, rate limits and unverified email, and marks those errors. A call site that toasts a failure skips errors where `wasToasted(error)` (`src/utils/api.ts`) is true; with a loading toast, use `toastRequest` (`src/utils/toast-request.ts`) instead of `toast.promise`.
 - A toast Undo is a shortcut only. Every reversible choice (hide, unlink, dismiss) also needs a persistent way back on the affected row.
