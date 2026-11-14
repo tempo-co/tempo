@@ -78,10 +78,17 @@ export function nothingNewCopy(
   };
 }
 
-/** An import's first line in the Imports list: `3 files · 212 new`, `1 file · nothing new`. */
-export function importHeadline(summary: Pick<BankImportSummary, 'filesCount' | 'rowsAdded'>) {
+/**
+ * An import's first line in the Imports list: `3 files · 212 new`, `1 file · nothing new`. An undone import shows only
+ * its files (`1 file`), since the rows it added are gone.
+ */
+export function importHeadline(
+  summary: Pick<BankImportSummary, 'filesCount' | 'rowsAdded' | 'undoneAt'>,
+) {
+  const files = plural(summary.filesCount, 'file');
+  if (summary.undoneAt) return files;
   const added = summary.rowsAdded === 0 ? 'nothing new' : `${formatCount(summary.rowsAdded)} new`;
-  return `${plural(summary.filesCount, 'file')} · ${added}`;
+  return `${files} · ${added}`;
 }
 
 /** `3 need a look`, `1 needs a look`. */
