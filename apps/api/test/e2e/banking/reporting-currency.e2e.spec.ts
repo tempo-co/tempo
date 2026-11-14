@@ -7,6 +7,7 @@ import {Repository} from 'typeorm';
 import {dateInAppTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
 import {REPORTING_CURRENCY_UNSUPPORTED} from '@modules/banking/api/constants/banking-messages.constants';
+import {BankTransactionFxRate} from '@modules/banking/bank-transaction-fx-rate.entity';
 import {addDays} from '@modules/banking/banking.utils';
 import {McpReaderService} from '@modules/banking/services/mcp-reader.service';
 import {ReportingCurrencyService} from '@modules/banking/services/reporting-currency.service';
@@ -23,6 +24,7 @@ describe('Reporting currency', () => {
 	let fixtures: BankingFixtures;
 	let accounts: Repository<Account>;
 	let service: ReportingCurrencyService;
+	let fxRates: Repository<BankTransactionFxRate>;
 	/** Today in the app's time zone, as the suggestion counts it. */
 	let today: string;
 
@@ -31,10 +33,12 @@ describe('Reporting currency', () => {
 		fixtures = new BankingFixtures(app);
 		accounts = app.get(getRepositoryToken(Account));
 		service = app.get(ReportingCurrencyService);
+		fxRates = app.get(getRepositoryToken(BankTransactionFxRate));
 	});
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		today = dateInAppTimeZone(new Date());
+		await fxRates.clear();
 	});
 
 	/** A verified owner without a reporting currency, with one connection holding accounts in these currencies. */
@@ -77,6 +81,7 @@ describe('Reporting currency', () => {
 			currency: null,
 			confirmed: false,
 			setupRequired: false,
+			currencyUnavailable: false,
 			suggestion: null,
 			connectedCurrencies: ['EUR', 'GBP'],
 			options: ['EUR', 'GBP', ...REPORTING_CURRENCIES.filter((code) => code !== 'EUR' && code !== 'GBP')],
@@ -239,17 +244,63 @@ describe('Reporting currency', () => {
 
 	it('keeps a currency set before owners could choose one', async () => {
 		const {owner, agent} = await ownerWithAccounts('EUR', 'GBP');
-		await accounts.update({id: owner.id}, {baseCurrency: 'BGN', baseCurrencyState: 'PRESET'});
+		await accounts.update({id: owner.id}, {baseCurrency: 'CHF', baseCurrencyState: 'PRESET'});
 
 		await service.reconcileSafely(owner.id, {historySettled: true});
 		expect(await read(agent)).toMatchObject({
-			currency: 'BGN',
+			currency: 'CHF',
 			confirmed: true,
 			setupRequired: false,
-			// Kept as an option even though amounts can no longer be converted into it.
-			options: ['BGN', 'EUR', 'GBP', ...REPORTING_CURRENCIES.filter((code) => code !== 'EUR' && code !== 'GBP')],
+			currencyUnavailable: false,
 		});
-		await agent.put(ROUTE).send({currency: 'BGN'}).expect(200);
+		await agent.put(ROUTE).send({currency: 'CHF'}).expect(200);
+	});
+
+	it.each([
+		['the ECB no longer publishes', 'BGN', () => Promise.resolve()],
+		[
+			'its rates stopped while others went on',
+			'GBP',
+			async () => {
+				await fxRates.save([
+					{currency: 'GBP', rateDate: addDays(today, -30), rateToEur: '0.85', provider: 'ECB'},
+					{currency: 'USD', rateDate: addDays(today, -1), rateToEur: '1.1', provider: 'ECB'},
+				]);
+			},
+		],
+	])('asks again for a chosen currency %s, and refuses it', async (_case, currency, setUpRates) => {
+		const {owner, agent, bankAccounts} = await ownerWithAccounts('EUR', 'USD');
+		await accounts.update({id: owner.id}, {baseCurrency: currency, baseCurrencyState: 'CONFIRMED'});
+		const usdAccount = bankAccounts.find((bankAccount) => bankAccount.currency === 'USD')!;
+		await fixtures.createTransactions(usdAccount, booked(3, 2, {currency: 'USD'}));
+		await setUpRates();
+
+		const asked = await read(agent);
+		expect(asked).toMatchObject({
+			currency,
+			confirmed: false,
+			setupRequired: true,
+			currencyUnavailable: true,
+			suggestion: 'USD',
+		});
+		expect(asked.options).not.toContain(currency);
+		const response = await agent.put(ROUTE).send({currency}).expect(400);
+		expect(response.body.message).toBe(REPORTING_CURRENCY_UNSUPPORTED);
+
+		await agent.put(ROUTE).send({currency: 'EUR'}).expect(200);
+		expect(await read(agent)).toMatchObject({currency: 'EUR', setupRequired: false, currencyUnavailable: false});
+	});
+
+	it('keeps a chosen currency whose rates fall behind while no other currency gets newer ones', async () => {
+		const {owner, agent} = await ownerWithAccounts('EUR', 'GBP');
+		await accounts.update({id: owner.id}, {baseCurrency: 'GBP', baseCurrencyState: 'CONFIRMED'});
+		// As when the ECB can't be reached: every stored rate is equally old.
+		await fxRates.save([
+			{currency: 'GBP', rateDate: addDays(today, -30), rateToEur: '0.85', provider: 'ECB'},
+			{currency: 'USD', rateDate: addDays(today, -30), rateToEur: '1.1', provider: 'ECB'},
+		]);
+
+		expect(await read(agent)).toMatchObject({currency: 'GBP', setupRequired: false, currencyUnavailable: false});
 	});
 
 	it.each([

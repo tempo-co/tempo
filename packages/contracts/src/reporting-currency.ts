@@ -15,9 +15,20 @@ export type ReportingCurrency = {
 	currency: string | null;
 	/** The owner chose this currency (or had it before choosing existed); Tempo never asks again. */
 	confirmed: boolean;
-	/** The owner has accounts in several currencies and has not chosen one yet. */
+	/**
+	 * The owner is asked to choose: their accounts are in several currencies and none is chosen yet, or
+	 * `currencyUnavailable`.
+	 */
 	setupRequired: boolean;
-	/** The currency of most recent transactions, offered only while no currency is set; null on a tie or no history. */
+	/**
+	 * Tempo can no longer convert amounts into `currency`, because the ECB stopped publishing its rates. Totals stay in
+	 * it until the owner chooses another; it is left out of `options`.
+	 */
+	currencyUnavailable: boolean;
+	/**
+	 * The currency of most recent transactions, offered while no currency is set or it is unavailable; null on a tie or
+	 * no history.
+	 */
 	suggestion: string | null;
 	/** Currencies of the owner's active accounts, in code order. */
 	connectedCurrencies: string[];
