@@ -81,6 +81,16 @@ export class BankAccount {
 	@Column({type: 'date', nullable: true})
 	transactionsFetchedThrough: string | null;
 
+	/**
+	 * The app-time-zone days this account's complete transaction fetches covered without a gap (`sync-coverage.ts`),
+	 * both ends included; null until the first complete fetch of a provider that records coverage.
+	 */
+	@Column({type: 'date', nullable: true})
+	syncCoveredFrom: string | null;
+
+	@Column({type: 'date', nullable: true})
+	syncCoveredThrough: string | null;
+
 	@CreateDateColumn({type: 'timestamptz'})
 	createdAt: Date;
 

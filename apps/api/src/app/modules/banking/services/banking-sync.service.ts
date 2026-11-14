@@ -65,6 +65,7 @@ import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {BankingSyncOwnershipLostError} from '../errors/banking-sync-ownership-lost.error';
 import {FileConnectionNotSyncableException} from '../errors/file-connection-not-syncable.exception';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
+import {INCREMENTAL_OVERLAP_DAYS, extendSyncCoverage, recordsSyncCoverage} from '../sync-coverage';
 import {AspspCatalogService} from './aspsp-catalog.service';
 import {BankTransactionPersistenceService, PersistTransactionsResult} from './bank-transaction-persistence.service';
 import {BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';
@@ -88,8 +89,6 @@ const SUCCEEDED = BANK_SYNC_STATUSES.SUCCEEDED;
 const FAILED = BANK_SYNC_STATUSES.FAILED;
 const PARTIAL = BANK_SYNC_STATUSES.PARTIAL;
 
-const INCREMENTAL_OVERLAP_DAYS = 7;
-
 type AccountFetchResult = {
 	bankAccount: BankAccount;
 	balances: EnableBankingBalance[];
@@ -100,8 +99,8 @@ type AccountFetchResult = {
 	transactionsSucceeded: boolean;
 	/** Every page was fetched and every row read, so pending rows the fetch did not return are gone. */
 	transactionsComplete: boolean;
-	/** The first date the transactions call asked for; null when it asked for the whole history. */
-	transactionsFrom: string | null;
+	/** What the transactions call asked for. */
+	transactionsFetchOptions: EnableBankingTransactionFetchOptions;
 };
 
 type SyncFetchResult = {
@@ -694,7 +693,7 @@ export class BankingSyncService {
 				balancesSucceeded,
 				transactionsSucceeded,
 				transactionsComplete,
-				transactionsFrom: fetchOptions.dateFrom ?? null,
+				transactionsFetchOptions: fetchOptions,
 			});
 
 			if (stopped()) break;
@@ -798,8 +797,26 @@ export class BankingSyncService {
 							bankTransactionRepository,
 							accountResult.bankAccount.id,
 							returnedTransactionIds,
-							accountResult.transactionsFrom,
+							accountResult.transactionsFetchOptions.dateFrom ?? null,
 						)),
+					);
+				}
+
+				if (accountResult.transactionsComplete && recordsSyncCoverage(connection.provider)) {
+					const {syncCoveredFrom, syncCoveredThrough} = accountResult.bankAccount;
+					const coverage = extendSyncCoverage(
+						syncCoveredFrom && syncCoveredThrough
+							? {from: syncCoveredFrom, through: syncCoveredThrough}
+							: null,
+						{
+							options: accountResult.transactionsFetchOptions,
+							transactions: accountResult.transactions,
+							fetchedOn: fetchResult.fetchedThrough,
+						},
+					);
+					await bankAccountRepository.update(
+						{id: accountResult.bankAccount.id},
+						{syncCoveredFrom: coverage.from, syncCoveredThrough: coverage.through},
 					);
 				}
 
