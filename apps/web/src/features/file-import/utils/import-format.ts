@@ -53,7 +53,9 @@ export function formatDateRange(from: string | null, to: string | null) {
   return `${format(start, sameYear ? 'd MMM' : 'd MMM yyyy')} – ${format(end, 'd MMM yyyy')}`;
 }
 
-export function summaryTitle(summary: Pick<BankImportSummary, 'filesCount'>) {
+/** `Imported 3 files`; an undone import's summary says it was undone instead. */
+export function summaryTitle(summary: Pick<BankImportSummary, 'filesCount' | 'undoneAt'>) {
+  if (summary.undoneAt) return 'Import undone';
   return `Imported ${plural(summary.filesCount, 'file')}`;
 }
 
