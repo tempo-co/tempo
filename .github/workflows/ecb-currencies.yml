@@ -9,6 +9,8 @@ on:
     schedule:
         - cron: '23 5 2 * *'
     workflow_dispatch:
+    push:
+        branches: [test/ecb-app]
 
 permissions:
     contents: read
@@ -30,6 +32,11 @@ jobs:
                   private-key: ${{ secrets.ECB_APP_PRIVATE_KEY }}
                   permission-contents: write
                   permission-pull-requests: write
+
+            - name: Show the app's repositories
+              env:
+                  GH_TOKEN: ${{ steps.app.outputs.token }}
+              run: gh api installation/repositories --jq '.repositories[].full_name'
 
             - name: Checkout
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
