@@ -1,10 +1,12 @@
 import type {Locator, Page, Request, Route} from '@playwright/test';
 import type {
+  AddBankImportNeverSentRowsRequest,
   BankConnection,
   BankImportDoubtfulRow,
   BankImportError,
   BankImportLayout,
   BankImportLayoutProposal,
+  BankImportNeverSentRow,
   BankImportSummary,
   ConfirmBankImportLayoutProposalRequest,
   ResolveBankImportDoubtfulRowRequest,
@@ -100,6 +102,7 @@ function importSummary(fields: Partial<BankImportSummary> = {}): BankImportSumma
     rowsMatchedByBalance: 8,
     rowsMatchedByDate: 0,
     rowsDoubtful: 3,
+    rowsNotInBank: 0,
     dateFrom: '2026-05-01',
     dateTo: '2026-10-30',
     accounts: [{id: CHECKING.id, name: 'Holder Name', currency: 'EUR', created: false}],
@@ -139,6 +142,9 @@ type ImportApi = {
   imports: BankImportSummary[];
   uploads: Request[];
   resolves: ResolveBankImportDoubtfulRowRequest[];
+  /** The bodies of never-sent rows added, and how often the list of them was read. */
+  adds: AddBankImportNeverSentRowsRequest[];
+  neverSentReads: number;
   undos: string[];
   proposals: Request[];
   confirms: ConfirmBankImportLayoutProposalRequest[];
@@ -157,6 +163,8 @@ async function mockFileImport(
     imports = [],
     uploads = [],
     doubtfulRows = [],
+    neverSentRows = [],
+    holdAdd,
     mapper = false,
     proposals = [],
     layouts = [],
@@ -164,6 +172,9 @@ async function mockFileImport(
     imports?: BankImportSummary[];
     uploads?: ((route: Route, api: ImportApi) => Promise<void>)[];
     doubtfulRows?: BankImportDoubtfulRow[];
+    neverSentRows?: BankImportNeverSentRow[];
+    /** Holds each add of never-sent rows until it resolves. */
+    holdAdd?: () => Promise<void>;
     /** Whether the deployment works out the columns of a table it does not know. */
     mapper?: boolean;
     /** The answer to each proposal in turn. */
@@ -175,6 +186,8 @@ async function mockFileImport(
     imports: [...imports],
     uploads: [],
     resolves: [],
+    adds: [],
+    neverSentReads: 0,
     undos: [],
     proposals: [],
     confirms: [],
@@ -202,6 +215,23 @@ async function mockFileImport(
       rowsDoubtful: current.rowsDoubtful - 1,
       rowsAdded: current.rowsAdded + (request.decision === 'new' ? 1 : 0),
       rowsAlreadyPresent: current.rowsAlreadyPresent + (request.decision === 'new' ? 0 : 1),
+    };
+    api.imports = [next, ...api.imports.slice(1)];
+    return fulfillJson(route, next);
+  });
+  await page.route(`${API_URL}/bank-imports/*/never-sent-rows`, (route) => {
+    api.neverSentReads += 1;
+    return fulfillJson(route, neverSentRows);
+  });
+  await page.route(`${API_URL}/bank-imports/*/never-sent-rows/add`, async (route) => {
+    const request = route.request().postDataJSON() as AddBankImportNeverSentRowsRequest;
+    api.adds.push(request);
+    await holdAdd?.();
+    const [current] = api.imports;
+    const next = {
+      ...current,
+      rowsAdded: current.rowsAdded + request.rowIds.length,
+      rowsNotInBank: current.rowsNotInBank - request.rowIds.length,
     };
     api.imports = [next, ...api.imports.slice(1)];
     return fulfillJson(route, next);
@@ -497,6 +527,122 @@ test.describe('statement file import on Connections', () => {
       'background-color',
       await bgOf(page, 'bg-primary'),
     );
+  });
+
+  test('lists the rows a bank never sent by who they went to, and adds one or a whole group in place', async ({
+    page,
+  }) => {
+    const neverSent = (
+      id: number,
+      bookingDate: string,
+      amount: string,
+      counterpartyName: string | null,
+      description: string | null,
+    ): BankImportNeverSentRow => ({
+      id: `00000000-0000-4000-8000-00000000090${id}`,
+      kind: 'not_in_bank',
+      bankAccountId: CHECKING.id,
+      row: {
+        bookingDate,
+        valueDate: bookingDate,
+        amount,
+        currency: 'EUR',
+        balanceAfter: null,
+        bankReference: null,
+        counterpartyName,
+        description,
+        remittanceInformation: null,
+      },
+    });
+    const rows = [
+      neverSent(1, '2026-06-02', '-5.00', 'Example Pocket', 'Round-up'),
+      neverSent(2, '2026-06-03', '-30.00', null, 'Example Fee'),
+      neverSent(3, '2026-06-09', '-5.00', 'Example Pocket', 'Round-up'),
+      neverSent(4, '2026-06-16', '-10.00', 'example pocket', 'Top-up'),
+    ];
+    let release!: () => void;
+    let held = new Promise<void>((resolve) => (release = resolve));
+    const api = await mockFileImport(page, {
+      uploads: [
+        created(
+          importSummary({
+            rowsAdded: 0,
+            rowsAlreadyPresent: 309,
+            rowsDoubtful: 0,
+            rowsNotInBank: 4,
+          }),
+        ),
+      ],
+      neverSentRows: rows,
+      holdAdd: () => held,
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('june.xml')]);
+
+    // Nothing waits for the owner: one folded line, not a row to check.
+    const summaryBody = dialog.getByTestId('bank-import-summary');
+    await expect(
+      summaryBody.getByText('New transactions', {exact: true}).locator('..'),
+    ).toContainText('0');
+    await expect(summaryBody.getByText('Need a look')).toHaveCount(0);
+    await expect(dialog.getByRole('button', {name: /^Review/})).toHaveCount(0);
+    const line = summaryBody.getByRole('button', {
+      name: '4 rows in the file your bank never sent, not added',
+    });
+    await expect(line).toHaveAttribute('aria-expanded', 'false');
+    expect(api.neverSentReads).toBe(0);
+
+    await line.click();
+    await expect(line).toHaveAttribute('aria-expanded', 'true');
+    await expect(
+      summaryBody.getByText(
+        "Your bank's sync has every transaction of these days, and none of these. Add any you know are real.",
+      ),
+    ).toBeVisible();
+    // One group per counterparty, else description, largest first; there is no way to add every row at once.
+    const groups = summaryBody.getByTestId('bank-import-never-sent-group');
+    await expect(groups).toHaveCount(2);
+    await expect(groups.nth(0)).toContainText('Example Pocket');
+    await expect(groups.nth(0)).toContainText('3 rows');
+    await expect(groups.nth(1)).toContainText('Example Fee');
+    await expect(summaryBody.getByRole('button', {name: /^Add all/})).toHaveCount(0);
+    const pocketRows = groups.nth(0).getByRole('listitem');
+    await expect(pocketRows).toHaveCount(3);
+    await expect(pocketRows.nth(0)).toContainText('Round-up');
+    await expect(pocketRows.nth(2)).toContainText('Top-up');
+
+    // One row: pending, then added, and the line counts what is left.
+    const addFee = groups.nth(1).getByRole('button', {name: 'Add Example Fee on 3 Jun'});
+    await addFee.click();
+    await expect(groups.nth(1).getByRole('button', {name: 'Adding…'})).toBeDisabled();
+    await expect(
+      groups.nth(0).getByRole('button', {name: 'Add 3 from Example Pocket'}),
+    ).toBeDisabled();
+    release();
+    await expect(groups.nth(1).getByRole('status')).toHaveText('Added');
+    await expect(
+      summaryBody.getByRole('button', {name: '3 rows in the file your bank never sent, not added'}),
+    ).toBeVisible();
+    await expect(
+      summaryBody.getByText('New transactions', {exact: true}).locator('..'),
+    ).toContainText('1');
+
+    // A whole group in one go.
+    held = Promise.resolve();
+    await groups.nth(0).getByRole('button', {name: 'Add 3 from Example Pocket'}).click();
+    await expect(pocketRows.getByRole('status')).toHaveText(['Added', 'Added', 'Added']);
+    await expect(
+      summaryBody.getByRole('button', {name: 'Every row your bank never sent was added'}),
+    ).toBeVisible();
+    await expect(
+      summaryBody.getByText('New transactions', {exact: true}).locator('..'),
+    ).toContainText('4');
+    expect(api.adds).toEqual([
+      {rowIds: [rows[1].id]},
+      {rowIds: [rows[0].id, rows[2].id, rows[3].id]},
+    ]);
+    expect(api.neverSentReads).toBe(1);
   });
 
   test('a refusal names the refused file, says nothing was imported and lets other files be chosen', async ({
@@ -2065,6 +2211,7 @@ test.describe('statement file import on Connections', () => {
         rowsAdded: 1_234_567,
         rowsAlreadyPresent: 7_654_321,
         rowsDoubtful: 40,
+        rowsNotInBank: 1_234,
         accounts: [
           {id: CHECKING.id, name: null, currency: 'EUR', created: false},
           {id: FILE_ACCOUNT_ID, name: null, currency: 'EUR', created: true},
@@ -2104,9 +2251,22 @@ test.describe('statement file import on Connections', () => {
       ]);
       let release!: () => void;
       const held = new Promise<void>((resolve) => (release = resolve));
+      // One long group of a counterparty and 55 groups of one row, each with a long name and amount.
+      const neverSent = Array.from({length: 60}, (_, index): BankImportNeverSentRow => ({
+        id: `00000000-0000-4000-8000-0000000007${String(index).padStart(2, '0')}`,
+        kind: 'not_in_bank',
+        bankAccountId: CHECKING.id,
+        row: {
+          ...doubtfulRow('', '', '', []).row,
+          amount: '-1234567.89',
+          counterpartyName: index < 5 ? LONG_ACCOUNT : null,
+          description: `${LONG_ACCOUNT} ${index}`,
+        },
+      }));
       await mockFileImport(page, {
         imports: [worst],
         doubtfulRows: rows,
+        neverSentRows: neverSent,
         uploads: [
           async (route, api) => {
             await held;
@@ -2162,6 +2322,20 @@ test.describe('statement file import on Connections', () => {
       expect(await balance.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(
         true,
       );
+      await expectNothingWiderThan(dialog);
+      await dialog
+        .getByRole('button', {name: '1,234 rows in the file your bank never sent, not added'})
+        .click();
+      const groups = dialog.getByTestId('bank-import-never-sent-group');
+      await expect(groups).toHaveCount(50);
+      await expect(groups.first()).toContainText('5 rows');
+      const addGroup = groups.first().getByRole('button', {name: `Add 5 from ${LONG_ACCOUNT}`});
+      const addRow = groups.nth(1).getByRole('button', {name: /^Add /});
+      for (const button of [addGroup, addRow])
+        expect((await boxOf(button)).height).toBeGreaterThanOrEqual(44);
+      await expectNothingWiderThan(dialog);
+      await dialog.getByRole('button', {name: 'Show 6 more'}).click();
+      await expect(groups).toHaveCount(56);
       await expectNothingWiderThan(dialog);
       const review = dialog.getByRole('button', {name: 'Review 40 rows'});
       await expectInsideViewport(page, review);

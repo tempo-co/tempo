@@ -93,6 +93,8 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['delete', `/bank-imports/${RESOURCE_ID}`],
 	['get', `/bank-imports/${RESOURCE_ID}/doubtful-rows`],
 	['post', `/bank-imports/${RESOURCE_ID}/doubtful-rows/${RESOURCE_ID}/resolve`],
+	['get', `/bank-imports/${RESOURCE_ID}/never-sent-rows`],
+	['post', `/bank-imports/${RESOURCE_ID}/never-sent-rows/add`],
 	['post', '/bank-imports/layout-proposals'],
 	['post', `/bank-imports/layout-proposals/${RESOURCE_ID}/confirm`],
 	['post', `/bank-imports/layout-proposals/${RESOURCE_ID}/reject`],

@@ -18,6 +18,7 @@ import type {
 	BankImportLayout,
 	BankImportLayoutProposal,
 	BankImportList,
+	BankImportNeverSentRow,
 	BankImportSummary,
 } from '@tempo/contracts';
 import {isUUID} from 'class-validator';
@@ -28,6 +29,7 @@ import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 import {BankImportLayoutService} from '../bank-import-layout.service';
 import {BankImportRefusalException} from '../bank-import-refusal.exception';
 import {ACCOUNT_CHOICE_NEW, AccountChoices, BankImportService} from '../bank-import.service';
+import {AddBankImportNeverSentRowsDto} from './add-bank-import-never-sent-rows.dto';
 import {
 	BANK_IMPORT_ACCOUNT_CHOICES_FIELD,
 	BANK_IMPORT_ACCOUNT_FIELD,
@@ -146,6 +148,24 @@ export class BankImportController {
 		@CurrentAccount() account: Account,
 	): Promise<BankImportSummary> {
 		return this.bankImportService.resolveDoubtfulRow(account.id, importId, rowId, body);
+	}
+
+	@Get(':importId/never-sent-rows')
+	async findNeverSentRows(
+		@Param('importId', UUID_PIPE) importId: string,
+		@CurrentAccount() account: Account,
+	): Promise<BankImportNeverSentRow[]> {
+		return this.bankImportService.findNeverSentRows(account.id, importId);
+	}
+
+	@Post(':importId/never-sent-rows/add')
+	@HttpCode(200)
+	async addNeverSentRows(
+		@Param('importId', UUID_PIPE) importId: string,
+		@Body() body: AddBankImportNeverSentRowsDto,
+		@CurrentAccount() account: Account,
+	): Promise<BankImportSummary> {
+		return this.bankImportService.addNeverSentRows(account.id, importId, body.rowIds);
 	}
 
 	@Delete(':importId')

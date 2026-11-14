@@ -1,5 +1,5 @@
 import {addDays} from './banking.utils';
-import {EnableBankingTransaction, EnableBankingTransactionFetchOptions} from './enable-banking.types';
+import type {EnableBankingTransaction, EnableBankingTransactionFetchOptions} from './enable-banking.types';
 import {BANK_CONNECTION_PROVIDERS} from './services/banking-sync.constants';
 
 /** The days an incremental fetch reads again before the account's last complete fetch. */
@@ -14,6 +14,45 @@ const SYNC_COVERAGE_PROVIDERS: ReadonlySet<string> = new Set([BANK_CONNECTION_PR
 
 export function recordsSyncCoverage(provider: string): boolean {
 	return SYNC_COVERAGE_PROVIDERS.has(provider);
+}
+
+/**
+ * How many days at each end of an account's coverage are not final. The incremental fetch starts
+ * `INCREMENTAL_OVERLAP_DAYS` before the last complete fetch, so it reads the newest 8 days again: a day is final once
+ * no future fetch asks for it. The same margin after the start keeps a payment that a file dates by its purchase day
+ * and sync by its booking day (or the other way round) on the same side of the edge.
+ */
+export const SYNC_FINAL_MARGIN_DAYS = INCREMENTAL_OVERLAP_DAYS + 1;
+
+/** The days on which bank sync is final, both ends included. */
+export type FinalSyncDays = {from: string; through: string};
+
+/**
+ * The days on which an account's bank sync is final: its coverage without the first and last
+ * `SYNC_FINAL_MARGIN_DAYS`, and never on or after its oldest pending row, which sync reads again until it books.
+ * Null for an account without coverage, an imported-files account or a provider that records none.
+ */
+export function finalSyncDays({
+	provider,
+	syncCoveredFrom,
+	syncCoveredThrough,
+	oldestPendingDay,
+}: {
+	provider: string;
+	syncCoveredFrom: string | null;
+	syncCoveredThrough: string | null;
+	oldestPendingDay: string | null;
+}): FinalSyncDays | null {
+	if (!recordsSyncCoverage(provider) || !syncCoveredFrom || !syncCoveredThrough) return null;
+	const from = addDays(syncCoveredFrom, SYNC_FINAL_MARGIN_DAYS);
+	const beforeMargin = addDays(syncCoveredThrough, -SYNC_FINAL_MARGIN_DAYS);
+	const beforePending = oldestPendingDay ? addDays(oldestPendingDay, -1) : null;
+	const through = beforePending && beforePending < beforeMargin ? beforePending : beforeMargin;
+	return through >= from ? {from, through} : null;
+}
+
+export function isFinalSyncDay(day: string | null, finalDays: FinalSyncDays | null): boolean {
+	return day !== null && finalDays !== null && day >= finalDays.from && day <= finalDays.through;
 }
 
 /** The contiguous days an account's complete transaction fetches covered, both ends included. */

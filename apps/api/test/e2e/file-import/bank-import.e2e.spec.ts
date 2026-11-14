@@ -5,6 +5,7 @@ import type {
 	BankBalanceTrend,
 	BankConnection as BankConnectionResponse,
 	BankImportList,
+	BankImportNeverSentRow,
 	BankImportSummary,
 } from '@tempo/contracts';
 import {createHash} from 'node:crypto';
@@ -407,6 +408,7 @@ describe('Bank imports', () => {
 			rowsMatchedByBalance: 0,
 			rowsMatchedByDate: 0,
 			rowsDoubtful: 0,
+			rowsNotInBank: 0,
 			dateFrom: '2026-03-02',
 			dateTo: '2026-03-04',
 			accounts: [{id: account.id, name: 'NL91 ABNA 0417 1643 00', currency: 'EUR', created: true}],
@@ -1816,19 +1818,120 @@ describe('Bank imports', () => {
 			.field('bankAccountId', account.id)
 			.expect(201);
 		expect(byHash.body).toMatchObject(fallback);
+		await agent.delete(`/bank-imports/${byHash.body.id}`).set('Origin', ORIGIN).expect(204);
+
+		// Bank sync fetched 20 March to 31 May completely, so it is final for 28 March to 23 May: a row of those days
+		// it never sent is not added and not asked about, only listed for the owner to add.
+		await bankAccounts.update(account.id, {syncCoveredFrom: '2026-03-20', syncCoveredThrough: '2026-05-31'});
+		const final = await drop(agent, [aprilStatement((day) => `FILE-${day}`)]).expect(201);
+		expect(final.body).toMatchObject({
+			rowsAdded: 0,
+			rowsAlreadyPresent: 23,
+			rowsMatchedByDate: 23,
+			rowsDoubtful: 0,
+			rowsNotInBank: 2,
+		} satisfies Partial<BankImportSummary>);
+		expect(await transactions.countBy({importId: final.body.id})).toBe(0);
+		await agent.get(`/bank-imports/${final.body.id}/doubtful-rows`).expect(200, []);
+		const neverSent = (await agent.get(`/bank-imports/${final.body.id}/never-sent-rows`).expect(200))
+			.body as BankImportNeverSentRow[];
+		expect(neverSent).toEqual([
+			{
+				id: expect.any(String),
+				kind: 'not_in_bank',
+				bankAccountId: account.id,
+				row: expect.objectContaining({amount: '-99.00', bookingDate: '2026-04-10', bankReference: 'FILE-NEXT'}),
+			},
+			{
+				id: expect.any(String),
+				kind: 'not_in_bank',
+				bankAccountId: account.id,
+				row: expect.objectContaining({amount: '-55.00', bookingDate: '2026-04-15', bankReference: 'FILE-NEW'}),
+			},
+		]);
+		const [notSentNext, notSentNew] = neverSent;
+		const add = (importId: string, rowIds: unknown) =>
+			agent.post(`/bank-imports/${importId}/never-sent-rows/add`).set('Origin', ORIGIN).send({rowIds});
+		await add(final.body.id, []).expect(400);
+		await add(final.body.id, ['not-a-uuid']).expect(400);
+		// A row the bank never sent is added, never answered as a doubtful row.
+		await agent
+			.post(`/bank-imports/${final.body.id}/doubtful-rows/${notSentNew.id}/resolve`)
+			.set('Origin', ORIGIN)
+			.send({decision: 'new'})
+			.expect(404);
+		const addedOne = await add(final.body.id, [notSentNext.id]).expect(200);
+		expect(addedOne.body).toMatchObject({rowsAdded: 1, rowsAlreadyPresent: 23, rowsDoubtful: 0, rowsNotInBank: 1});
+		// All or none: one of the two is added already.
+		await add(final.body.id, [notSentNew.id, notSentNext.id]).expect(409);
+		const addedBoth = await add(final.body.id, [notSentNew.id]).expect(200);
+		expect(addedBoth.body).toMatchObject({rowsAdded: 2, rowsNotInBank: 0});
+		await agent.get(`/bank-imports/${final.body.id}/never-sent-rows`).expect(200, []);
+		expect(
+			(await transactions.find({where: {importId: final.body.id}}))
+				.map(({entryReference}) => entryReference)
+				.sort(),
+		).toEqual(['FILE-NEW', 'FILE-NEXT']);
+		await agent.delete(`/bank-imports/${final.body.id}`).set('Origin', ORIGIN).expect(204);
+		expect(await transactions.countBy({importId: final.body.id})).toBe(0);
+
+		// Sync reads again from a pending row until it books, so the days from it on are not final: there the drop
+		// adds what is new, as on any other day. Undo takes the never-sent rows with the rest.
+		await synced({amount: '-3.00', bookingDate: '2026-04-12', transactionStatus: 'PDNG'});
+		const pending = await drop(agent, [aprilStatement((day) => `FILE-${day}`)]).expect(201);
+		expect(pending.body).toMatchObject({
+			rowsAdded: 1,
+			rowsAlreadyPresent: 23,
+			rowsDoubtful: 0,
+			rowsNotInBank: 1,
+		} satisfies Partial<BankImportSummary>);
+		expect(
+			(await transactions.find({where: {importId: pending.body.id}})).map(({entryReference}) => entryReference),
+		).toEqual(['FILE-NEW']);
+		await agent.delete(`/bank-imports/${pending.body.id}`).set('Origin', ORIGIN).expect(204);
+		expect(await doubtfulRows.countBy({importId: pending.body.id})).toBe(0);
 	});
 
-	it('keeps doubtful rows and their decisions to the owner', async () => {
+	it('keeps doubtful and never-sent rows and their decisions to the owner', async () => {
 		const {owner, agent} = await createOwner();
 		const other = await createOwner();
-		const account = await fixtures.createBankAccount(await fixtures.createConnection(owner), {iban: EXAMPLE_IBAN});
+		// Bank sync is final for April only.
+		const account = await fixtures.createBankAccount(await fixtures.createConnection(owner), {
+			iban: EXAMPLE_IBAN,
+			syncCoveredFrom: '2026-03-24',
+			syncCoveredThrough: '2026-05-08',
+		});
 		await fixtures.createTransactions(account, [
 			{amount: '-11.00', bookingDate: '2026-03-01'},
 			{amount: '-11.00', bookingDate: '2026-03-03'},
 		]);
 		const imported = await drop(agent, [
-			Buffer.from(camt053([{entries: [{amount: '11.00', bookingDate: '2026-03-02', reference: 'R-1'}]}])),
+			Buffer.from(
+				camt053([
+					{
+						entries: [
+							{amount: '11.00', bookingDate: '2026-03-02', reference: 'R-1'},
+							{amount: '12.00', bookingDate: '2026-04-15', reference: 'R-2'},
+						],
+					},
+				]),
+			),
 		]).expect(201);
+		expect(imported.body).toMatchObject({rowsAdded: 0, rowsDoubtful: 1, rowsNotInBank: 1});
+		const [neverSent] = (await agent.get(`/bank-imports/${imported.body.id}/never-sent-rows`).expect(200))
+			.body as BankImportNeverSentRow[];
+		await other.agent.get(`/bank-imports/${imported.body.id}/never-sent-rows`).expect(404);
+		await other.agent
+			.post(`/bank-imports/${imported.body.id}/never-sent-rows/add`)
+			.set('Origin', ORIGIN)
+			.send({rowIds: [neverSent.id]})
+			.expect(404);
+		await agent
+			.post(`/bank-imports/${imported.body.id}/never-sent-rows/add`)
+			.set('Origin', 'https://other.example.test')
+			.send({rowIds: [neverSent.id]})
+			.expect(403);
+		expect(await doubtfulRows.findOneByOrFail({id: neverSent.id})).toMatchObject({resolution: null});
 		const [row] = (await agent.get(`/bank-imports/${imported.body.id}/doubtful-rows`).expect(200)).body as Array<{
 			id: string;
 		}>;

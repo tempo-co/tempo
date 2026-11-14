@@ -3,6 +3,8 @@ import type {
 	BankImportAccountCandidate,
 	BankImportAccountQuestion,
 	BankImportDoubtfulRow as BankImportDoubtfulRowResponse,
+	BankImportFileRow,
+	BankImportNeverSentRow,
 	BankImportSummary,
 	ResolveBankImportDoubtfulRowRequest,
 } from '@tempo/contracts';
@@ -15,7 +17,6 @@ import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {
 	MATCH_WINDOW_DAYS,
 	MatchExistingRow,
-	MatchOutcome,
 	matchDay,
 	matchTransactions,
 	matchWithReferenceFallback,
@@ -45,11 +46,13 @@ import {
 import {CurrencyExchangeService} from '@modules/banking/services/currency-exchange.service';
 import {FileAccountBalanceService} from '@modules/banking/services/file-account-balance.service';
 import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
+import {FinalSyncDays, finalSyncDays} from '@modules/banking/sync-coverage';
 
 import {BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
 import {BankImportLayoutService} from './bank-import-layout.service';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {BankImport} from './bank-import.entity';
+import {ImportOutcome, decideOnFinalDays} from './never-sent-rows';
 import {MAX_ROWS_PER_DROP} from './parsers/parse-limits';
 import {NormalizedRow, NormalizedStatement, StatementFormat} from './parsers/parse-result';
 import {ParseRunnerService} from './runner/parse-runner.service';
@@ -59,6 +62,7 @@ export const BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND = 'Row not found.';
 const BANK_IMPORT_NOT_SAVED = 'The import could not be saved. Please try again.';
 const BANK_IMPORT_DOUBTFUL_ROW_RESOLVED = 'This row has already been decided.';
 const BANK_IMPORT_NOT_A_CANDIDATE = 'Choose one of the transactions this row may be.';
+const BANK_IMPORT_ROW_ADDED = 'One of these rows has already been added.';
 /** How long an import waits for a running sync of the same connection before refusing with `account_busy`. */
 const SYNC_LOCK_WAIT_MS = 10_000;
 /**
@@ -126,7 +130,12 @@ type FileKind = {format: StatementFormat; layout: string | null};
 
 type LadderCounts = Pick<
 	BankImport,
-	'rowsAdded' | 'rowsMatchedByReference' | 'rowsMatchedByBalance' | 'rowsMatchedByDate' | 'rowsDoubtful'
+	| 'rowsAdded'
+	| 'rowsMatchedByReference'
+	| 'rowsMatchedByBalance'
+	| 'rowsMatchedByDate'
+	| 'rowsDoubtful'
+	| 'rowsNotInBank'
 >;
 
 @Injectable()
@@ -151,7 +160,8 @@ export class BankImportService {
 	 * `accountChoices` entry), else to the owner's synced account with its IBAN and currency (for a file that names no
 	 * account, the one synced account at its bank in that currency, once the file's rows confirm it), or else to an
 	 * imported-files account. Each row runs the duplicate ladder against the account's stored rows: matched rows are
-	 * skipped, doubtful rows are held for the owner, and only new rows are inserted.
+	 * skipped, doubtful rows are held for the owner, and only new rows are inserted. On a day bank sync is final for,
+	 * a row the ladder did not match is kept beside history as one the bank never sent (`not_in_bank`).
 	 */
 	async importFiles(
 		ownerId: Account['id'],
@@ -202,6 +212,7 @@ export class BankImportService {
 						rowsMatchedByBalance: 0,
 						rowsMatchedByDate: 0,
 						rowsDoubtful: 0,
+						rowsNotInBank: 0,
 						dateFrom: bookingDates[0] ?? null,
 						dateTo: bookingDates.at(-1) ?? null,
 						bankAccountIds: accounts.map(({account}) => account.id),
@@ -215,6 +226,7 @@ export class BankImportService {
 					rowsMatchedByBalance: 0,
 					rowsMatchedByDate: 0,
 					rowsDoubtful: 0,
+					rowsNotInBank: 0,
 				};
 				const persistedTransactionIds: string[] = [];
 				for (const [index, {byFormat}] of accountRows.entries()) {
@@ -223,15 +235,19 @@ export class BankImportService {
 					// Without the bank's references a row of another account's statement can pass for a stored
 					// payment of the same amount and day, so that path needs the statement's own IBAN to agree.
 					const ibanConfirmed = target.kind === 'synced' && target.ibanConfirmed;
+					// Read under the sync lock, which every write of coverage and pending rows holds.
+					const finalDays = await this.findFinalSyncDays(manager, account, connection);
 					// Candidates are read again per format, inside the transaction, so they include the rows the
 					// formats before this one just inserted. Each format numbers its rows in a scheme of its own, so
 					// whether the bank's references are set aside is decided per format.
 					for (const {format, rows} of byFormat) {
 						const incoming = rows.map(toMatchRow);
 						const candidates = await this.findMatchCandidates(manager, account.id, rows);
-						const {outcomes, referencesSetAside} = ibanConfirmed
+						const ladder = ibanConfirmed
 							? matchWithReferenceFallback(incoming, candidates, {pairLookAlikeGroups: true})
 							: {outcomes: matchTransactions(incoming, candidates), referencesSetAside: false};
+						const {referencesSetAside} = ladder;
+						const outcomes = decideOnFinalDays(rows, ladder.outcomes, finalDays);
 						if (referencesSetAside) {
 							this.logger.log(
 								`Import ${record.id} matched ${rows.length} ${format} row(s) of account ${account.id} without the bank's references: none is the file's`,
@@ -251,11 +267,15 @@ export class BankImportService {
 						}
 						const doubtful = rows.flatMap((row, rowIndex) => {
 							const outcome = outcomes[rowIndex];
-							return outcome.kind === 'doubtful'
+							return outcome.kind === 'doubtful' || outcome.kind === 'notInBank'
 								? [
 										{
 											importId: record.id,
 											bankAccountId: account.id,
+											kind:
+												outcome.kind === 'doubtful'
+													? ('doubtful' as const)
+													: ('not_in_bank' as const),
 											row,
 											candidateTransactionIds: outcome.candidateIds,
 										},
@@ -279,6 +299,12 @@ export class BankImportService {
 						counts.rowsMatchedByReference + counts.rowsMatchedByBalance + counts.rowsMatchedByDate,
 				});
 				await imports.update({id: record.id}, {...counts, rowsAlreadyPresent: record.rowsAlreadyPresent});
+				if (counts.rowsNotInBank > 0) {
+					// Counts only: a bank that keeps leaving out a kind of payment shows up here.
+					this.logger.log(
+						`Import ${record.id} left out ${counts.rowsNotInBank} row(s) on days bank sync is final for and never sent`,
+					);
+				}
 				for (const lock of locks) lock.assertHealthy();
 				return {record, accounts, persistedTransactionIds};
 			});
@@ -343,7 +369,7 @@ export class BankImportService {
 				await manager.getRepository(BankImportDoubtfulRow).delete({importId: record.id, resolution: IsNull()});
 				await manager
 					.getRepository(BankImport)
-					.update({id: record.id}, {undoneAt: new Date(), rowsDoubtful: 0});
+					.update({id: record.id}, {undoneAt: new Date(), rowsDoubtful: 0, rowsNotInBank: 0});
 				if (fileConnection) {
 					await manager.query(
 						`DELETE FROM "bank_accounts" bank_account
@@ -385,7 +411,7 @@ export class BankImportService {
 			.findOne({where: {id: importId, accountId: ownerId}});
 		if (!record) throw new NotFoundException(BANK_IMPORT_NOT_FOUND);
 		const rows = await this.dataSource.getRepository(BankImportDoubtfulRow).find({
-			where: {importId: record.id, resolution: IsNull()},
+			where: {importId: record.id, kind: 'doubtful', resolution: IsNull()},
 			order: {id: 'ASC'},
 		});
 		const candidateIds = [...new Set(rows.flatMap(({candidateTransactionIds}) => candidateTransactionIds))];
@@ -411,17 +437,7 @@ export class BankImportService {
 				id: doubtful.id,
 				bankAccountId: doubtful.bankAccountId,
 				importedTransactionId: doubtful.importedTransactionId,
-				row: {
-					bookingDate: doubtful.row.bookingDate,
-					valueDate: doubtful.row.valueDate,
-					amount: doubtful.row.amount,
-					currency: doubtful.row.currency,
-					balanceAfter: doubtful.row.balanceAfter,
-					bankReference: doubtful.row.bankReference,
-					counterpartyName: doubtful.row.counterpartyName,
-					description: doubtful.row.description,
-					remittanceInformation: doubtful.row.remittanceInformation,
-				},
+				row: toFileRow(doubtful.row),
 				candidates: doubtful.candidateTransactionIds.flatMap((id) => {
 					const candidate = candidatesById.get(id);
 					if (!candidate || candidate.bankAccountId !== doubtful.bankAccountId) return [];
@@ -455,7 +471,7 @@ export class BankImportService {
 		const owned = await this.findOwnedImport(ownerId, importId);
 		const doubtful = await this.dataSource
 			.getRepository(BankImportDoubtfulRow)
-			.findOne({where: {id: rowId, importId: owned.id}});
+			.findOne({where: {id: rowId, importId: owned.id, kind: 'doubtful'}});
 		const [account] = doubtful ? await this.findOwnedAccounts(ownerId, [doubtful.bankAccountId]) : [];
 		if (!doubtful || !account?.bankConnection) throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
 		const connection = account.bankConnection;
@@ -538,6 +554,117 @@ export class BankImportService {
 
 		await this.afterRowsChanged(ownerId, resolved.insertedTransactionIds);
 		return toSummary(resolved.record, await this.findOwnedAccounts(ownerId, resolved.record.bankAccountIds));
+	}
+
+	/** The import's rows on days bank sync is final for that it never sent and the owner has not added, in booking order. */
+	async findNeverSentRows(ownerId: Account['id'], importId: BankImport['id']): Promise<BankImportNeverSentRow[]> {
+		const record = await this.dataSource
+			.getRepository(BankImport)
+			.findOne({where: {id: importId, accountId: ownerId}});
+		if (!record) throw new NotFoundException(BANK_IMPORT_NOT_FOUND);
+		const rows = await this.dataSource.getRepository(BankImportDoubtfulRow).find({
+			where: {importId: record.id, kind: 'not_in_bank', resolution: IsNull()},
+			order: {id: 'ASC'},
+		});
+		return rows
+			.map(({id, bankAccountId, row}) => ({id, kind: 'not_in_bank' as const, bankAccountId, row: toFileRow(row)}))
+			.sort((left, right) => (matchDay(left.row) ?? '').localeCompare(matchDay(right.row) ?? ''));
+	}
+
+	/**
+	 * Adds never-sent rows the owner chose as rows of the import, all or none, each resolved `new` with the row it
+	 * became. A row is added once: any already added refuses the whole request.
+	 */
+	async addNeverSentRows(
+		ownerId: Account['id'],
+		importId: BankImport['id'],
+		rowIds: readonly string[],
+	): Promise<BankImportSummary> {
+		const owned = await this.findOwnedImport(ownerId, importId);
+		const ids = [...new Set(rowIds)];
+		const found = await this.dataSource.getRepository(BankImportDoubtfulRow).find({
+			select: {id: true, bankAccountId: true},
+			where: {id: In(ids), importId: owned.id, kind: 'not_in_bank'},
+		});
+		if (found.length !== ids.length) throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
+		const accounts = await this.findOwnedAccounts(
+			ownerId,
+			found.map(({bankAccountId}) => bankAccountId),
+		);
+		const accountsById = new Map(accounts.map((account) => [account.id, account]));
+		if (found.some(({bankAccountId}) => !accountsById.get(bankAccountId)?.bankConnection)) {
+			throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
+		}
+		// Only synced accounts have final days, so only their sync locks are taken, before the record's own as always.
+		const locks = await this.lockSyncedConnections(
+			accounts.flatMap(({bankConnection}) =>
+				bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE ? [] : [bankConnection.id],
+			),
+		);
+		let added: {record: BankImport; insertedTransactionIds: string[]};
+		try {
+			added = await this.dataSource.transaction(async (manager) => {
+				const {record} = await this.lockImport(manager, ownerId, owned);
+				const rows = manager.getRepository(BankImportDoubtfulRow);
+				const current = await rows.find({
+					where: {id: In(ids), importId: record.id, kind: 'not_in_bank'},
+					order: {id: 'ASC'},
+					lock: {mode: 'pessimistic_write'},
+				});
+				if (current.length !== ids.length) throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
+				if (current.some(({resolution}) => resolution)) throw new ConflictException(BANK_IMPORT_ROW_ADDED);
+				const insertedTransactionIds: string[] = [];
+				for (const row of current) {
+					const account = accountsById.get(row.bankAccountId)!;
+					// One row per call, so each never-sent row records the transaction it became.
+					const persisted = await this.persistence.persistTransactions(
+						manager.getRepository(BankTransaction),
+						account,
+						[toTransactionInput(row.row, account.currency)],
+						account.bankConnection.aspspName,
+						account.bankConnection.provider,
+						{importId: record.id},
+					);
+					const [transactionId] = persisted.insertedTransactionIds;
+					insertedTransactionIds.push(transactionId);
+					await rows.update({id: row.id}, {resolution: 'new', resolvedTransactionId: transactionId});
+				}
+				record.rowsAdded += current.length;
+				record.rowsNotInBank -= current.length;
+				await manager
+					.getRepository(BankImport)
+					.update({id: record.id}, {rowsAdded: record.rowsAdded, rowsNotInBank: record.rowsNotInBank});
+				for (const lock of locks) lock.assertHealthy();
+				return {record, insertedTransactionIds};
+			});
+		} finally {
+			await this.releaseLocks(locks);
+		}
+
+		await this.afterRowsChanged(ownerId, added.insertedTransactionIds);
+		return toSummary(added.record, await this.findOwnedAccounts(ownerId, added.record.bankAccountIds));
+	}
+
+	/**
+	 * The days bank sync is final for on the account (`finalSyncDays`): none for an imported-files account, or one
+	 * without complete coverage. Pending rows end them, since sync reads again from the oldest one.
+	 */
+	private async findFinalSyncDays(
+		manager: EntityManager,
+		account: BankAccount,
+		connection: BankConnection,
+	): Promise<FinalSyncDays | null> {
+		if (!account.syncCoveredFrom || !account.syncCoveredThrough) return null;
+		const pendingStarts = await this.persistence.findPendingTransactionStarts(
+			manager.getRepository(BankTransaction),
+			[account.id],
+		);
+		return finalSyncDays({
+			provider: connection.provider,
+			syncCoveredFrom: account.syncCoveredFrom,
+			syncCoveredThrough: account.syncCoveredThrough,
+			oldestPendingDay: pendingStarts.get(account.id) ?? null,
+		});
 	}
 
 	/**
@@ -1222,6 +1349,7 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 		rowsMatchedByBalance: record.rowsMatchedByBalance,
 		rowsMatchedByDate: record.rowsMatchedByDate,
 		rowsDoubtful: record.rowsDoubtful,
+		rowsNotInBank: record.rowsNotInBank,
 		dateFrom: record.dateFrom,
 		dateTo: record.dateTo,
 		accounts: record.bankAccountIds.flatMap((id) => {
@@ -1300,6 +1428,20 @@ function normalizeStoredIban(iban: string | null): string | null {
 	return iban ? iban.replace(/\s+/g, '').toUpperCase() : null;
 }
 
+function toFileRow(row: NormalizedRow): BankImportFileRow {
+	return {
+		bookingDate: row.bookingDate,
+		valueDate: row.valueDate,
+		amount: row.amount,
+		currency: row.currency,
+		balanceAfter: row.balanceAfter,
+		bankReference: row.bankReference,
+		counterpartyName: row.counterpartyName,
+		description: row.description,
+		remittanceInformation: row.remittanceInformation,
+	};
+}
+
 function toMatchRow(row: NormalizedRow) {
 	return {
 		text: matchText(row.counterpartyName, row.description),
@@ -1317,10 +1459,11 @@ function matchText(counterpartyName: string | null, description: string | null):
 	return [counterpartyName, description].filter(Boolean).join(' ') || null;
 }
 
-function addLadderCounts(counts: LadderCounts, outcomes: readonly MatchOutcome[]): void {
+function addLadderCounts(counts: LadderCounts, outcomes: readonly ImportOutcome[]): void {
 	for (const outcome of outcomes) {
 		if (outcome.kind === 'new') counts.rowsAdded += 1;
 		else if (outcome.kind === 'doubtful') counts.rowsDoubtful += 1;
+		else if (outcome.kind === 'notInBank') counts.rowsNotInBank += 1;
 		else if (outcome.step === 'reference') counts.rowsMatchedByReference += 1;
 		else if (outcome.step === 'balance') counts.rowsMatchedByBalance += 1;
 		else counts.rowsMatchedByDate += 1;

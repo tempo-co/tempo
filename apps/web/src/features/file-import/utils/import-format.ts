@@ -73,9 +73,11 @@ export function summaryTitle(summary: Pick<BankImportSummary, 'filesCount' | 'un
   return `Imported ${plural(summary.filesCount, 'file')}`;
 }
 
-/** Nothing was added and nothing waits for the owner. */
-export function isNothingNew(summary: Pick<BankImportSummary, 'rowsAdded' | 'rowsDoubtful'>) {
-  return summary.rowsAdded === 0 && summary.rowsDoubtful === 0;
+/** Nothing was added, nothing waits for the owner and nothing is offered to add. */
+export function isNothingNew(
+  summary: Pick<BankImportSummary, 'rowsAdded' | 'rowsDoubtful' | 'rowsNotInBank'>,
+) {
+  return summary.rowsAdded === 0 && summary.rowsDoubtful === 0 && summary.rowsNotInBank === 0;
 }
 
 export function nothingNewCopy(
