@@ -1715,10 +1715,11 @@ describe('Bank imports', () => {
 			Buffer.from(camt053([{entries: [entry('99.00', '2026-04-09', 'FILE-OLD')]}])),
 		]).expect(201);
 		const [earlierRow] = await transactions.find({where: {importId: earlier.body.id}});
-		const aprilStatement = (reference: (day: number) => string) =>
+		const aprilStatement = (reference: (day: number) => string, statementAccount: {otherId?: string} = {}) =>
 			Buffer.from(
 				camt053([
 					{
+						...statementAccount,
 						entries: [
 							...april.map(({amount, bookingDate}, day) =>
 								entry(amount.slice(1), bookingDate, reference(day)),
@@ -1747,25 +1748,27 @@ describe('Bank imports', () => {
 
 		const unrelated = await drop(agent, [aprilStatement((day) => `FILE-${day}`)]).expect(201);
 
-		expect(unrelated.body).toMatchObject({
+		// The statement's IBAN is the account's, so its references are set aside, and the two equal coffees pair with
+		// sync's two of that day.
+		const fallback = {
 			rowsAdded: 1,
-			rowsAlreadyPresent: 21,
+			rowsAlreadyPresent: 23,
 			rowsMatchedByReference: 0,
-			rowsMatchedByDate: 21,
-			rowsDoubtful: 3,
-		} satisfies Partial<BankImportSummary>);
-		// The look-alikes on one day are asked about, each offered both synced rows; the row next to the earlier
-		// statement's keeps the reference conflict with it, so it is asked about too.
-		const held = await agent.get(`/bank-imports/${unrelated.body.id}/doubtful-rows`).expect(200);
-		expect(
-			(held.body as Array<{row: {bankReference: string}; candidates: Array<{id: string}>}>)
+			rowsMatchedByDate: 23,
+			rowsDoubtful: 1,
+		} satisfies Partial<BankImportSummary>;
+		expect(unrelated.body).toMatchObject(fallback);
+		// The row next to the earlier statement's keeps the reference conflict with it, so it is asked about.
+		const heldReferences = async (importId: string) =>
+			(
+				(await agent.get(`/bank-imports/${importId}/doubtful-rows`).expect(200)).body as Array<{
+					row: {bankReference: string};
+					candidates: Array<{id: string}>;
+				}>
+			)
 				.map(({row, candidates}) => [row.bankReference, candidates.map(({id}) => id).sort()])
-				.sort(),
-		).toEqual([
-			['FILE-C1', [...coffeeIds].sort()],
-			['FILE-C2', [...coffeeIds].sort()],
-			['FILE-NEXT', [earlierRow.id]],
-		]);
+				.sort();
+		expect(await heldReferences(unrelated.body.id)).toEqual([['FILE-NEXT', [earlierRow.id]]]);
 		// The new row keeps its statement reference; nothing stored changed.
 		expect(
 			(await transactions.find({where: {importId: unrelated.body.id}})).map(({entryReference}) => entryReference),
@@ -1773,6 +1776,46 @@ describe('Bank imports', () => {
 		expect(
 			await transactions.find({where: {bankAccountId: account.id, importId: IsNull()}, order: {id: 'ASC'}}),
 		).toEqual(storedWithApril);
+		await agent.delete(`/bank-imports/${unrelated.body.id}`).set('Origin', ORIGIN).expect(204);
+
+		// Named by the account's id with the statement's IBAN agreeing: the same.
+		const named = await drop(agent, [aprilStatement((day) => `FILE-${day}`)])
+			.field('bankAccountId', account.id)
+			.expect(201);
+		expect(named.body).toMatchObject(fallback);
+		await agent.delete(`/bank-imports/${named.body.id}`).set('Origin', ORIGIN).expect(204);
+
+		// A statement that names its account by no IBAN, sent to this account by its id: nothing shows it is this
+		// account's, so its references count and every row they set apart from sync's is held, none taken as present.
+		const unconfirmed = await drop(agent, [aprilStatement((day) => `FILE-${day}`, {otherId: 'EXAMPLE-ACCOUNT-7'})])
+			.field('bankAccountId', account.id)
+			.expect(201);
+		expect(unconfirmed.body).toMatchObject({
+			rowsAdded: 1,
+			rowsAlreadyPresent: 0,
+			rowsMatchedByDate: 0,
+			rowsDoubtful: 24,
+		} satisfies Partial<BankImportSummary>);
+		expect(await heldReferences(unconfirmed.body.id)).toEqual(
+			[
+				...april.map((_, day) => [
+					`FILE-${day}`,
+					[storedWithApril.find((row) => row.entryReference === `SYNC-${day}`)!.id],
+				]),
+				['FILE-C1', [...coffeeIds].sort()],
+				['FILE-C2', [...coffeeIds].sort()],
+				['FILE-NEXT', [earlierRow.id]],
+			].sort(),
+		);
+		await agent.delete(`/bank-imports/${unconfirmed.body.id}`).set('Origin', ORIGIN).expect(204);
+
+		// An account bank sync knows by the hash of its IBAN only, named by its id: the statement's IBAN confirms it
+		// all the same.
+		await bankAccounts.update(account.id, {iban: null, identificationHash: EXAMPLE_IBAN_HASH});
+		const byHash = await drop(agent, [aprilStatement((day) => `FILE-${day}`)])
+			.field('bankAccountId', account.id)
+			.expect(201);
+		expect(byHash.body).toMatchObject(fallback);
 	});
 
 	it('keeps doubtful rows and their decisions to the owner', async () => {
