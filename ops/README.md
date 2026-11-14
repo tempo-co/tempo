@@ -9,6 +9,7 @@ CI builds an image of each app a commit changes, publishes `ghcr.io/tempo-co/{ap
 | `backup.sh` | Validated `pg_dump`, scheduled and pre-deploy |
 | `install.sh` | Copies the above to the host |
 | `sync-pins.sh` | Applies image-pin-only Compose changes from `main` before each production deploy |
+| `test-deploy.sh`, `test-sync-pins.sh` | Offline tests of `deploy.sh` and `sync-pins.sh`, run by CI's `Ops checks`: stub `docker` and `curl` in a temporary sandbox, never a Docker daemon, registry or installed file |
 | `production.compose.yml` | Production stack: PostgreSQL, Redis, API and web |
 | `tailscale.compose.yml` | Tailscale sidecar giving production its own tailnet device |
 | `ghcr-retention.sh` | Weekly GHCR cleanup of both packages (`.github/workflows/ghcr-retention.yml`): keeps `main`, open PRs' `pr-<n>` and anything newer than 30 days. Also keeps the images of the last 5 `main` commits that changed the app as rollback targets. Dry run until the repo variable `GHCR_RETENTION_DELETE=true`; GitHub pauses scheduled workflows after 60 days without repo activity |

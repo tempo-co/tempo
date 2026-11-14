@@ -19,7 +19,7 @@ A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, an
 
 ## What each job covers
 
-- `Ops checks`: `shellcheck -x` on the `ops/` scripts, and `docker compose config -q` on the production, Tailscale and staging Compose files with synthetic values for every required variable. A new `${VAR:?}` in a Compose file needs a synthetic export there.
+- `Ops checks`: `shellcheck -x` on the `ops/` scripts, the offline `ops/test-deploy.sh` and `ops/test-sync-pins.sh`, and `docker compose config -q` on the production, Tailscale and staging Compose files with synthetic values for every required variable. A new `${VAR:?}` in a Compose file needs a synthetic export there.
 - `API lint & format`: the API's `lint:check`/`format:check`.
 - `API build`: `npm run build`.
 - `API unit tests`: Jest.
