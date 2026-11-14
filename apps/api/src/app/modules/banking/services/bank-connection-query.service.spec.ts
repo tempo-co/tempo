@@ -10,7 +10,7 @@ const BANK_CONNECTION_QUERY_SERVICE_DEPENDENCIES = [
 ] as const;
 
 /** An owner whose base currency is not chosen yet, so balances are not converted. */
-const OWNER = {id: 'owner-account-id', baseCurrency: null};
+const OWNER = {id: 'owner-account-id', baseCurrency: null, baseCurrencyRevision: 0, baseAmountsRevision: 0};
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
 	// Reads rows only for an imported-files account with both a file and an entered balance, which no test here has.

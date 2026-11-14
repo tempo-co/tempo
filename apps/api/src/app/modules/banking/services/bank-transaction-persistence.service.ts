@@ -542,9 +542,10 @@ export class BankTransactionPersistenceService {
 	}
 
 	/**
-	 * Stores amounts already in the owner's base currency right away, so they never wait for the conversion job
+	 * Stores amounts already in the owner's reporting currency right away, so they never wait for the conversion job
 	 * and count in totals as soon as they are synced. Matches the job's `SAME` method; other currencies still wait
-	 * for rates. Owners without a base currency yet (before their first conversion run) are left to the job.
+	 * for rates, and owners without a reporting currency for one. The calling transaction holds
+	 * `lockReportingCurrencyForAmountWrites`, so the currency read here cannot change before it commits.
 	 */
 	private async copySameCurrencyBaseAmounts(
 		repository: Repository<BankTransaction>,

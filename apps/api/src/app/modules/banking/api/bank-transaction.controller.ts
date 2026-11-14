@@ -1,4 +1,4 @@
-import {Body, Controller, Get, Param, ParseUUIDPipe, Patch, Query, Res} from '@nestjs/common';
+import {Body, Controller, Get, Param, ParseUUIDPipe, Patch, Query, Res, UseInterceptors} from '@nestjs/common';
 import {Throttle} from '@nestjs/throttler';
 import type {
 	BankBalanceTrend,
@@ -30,7 +30,9 @@ import {BankTransactionOwnTransferUpdateDto} from './dtos/bank-transaction-own-t
 import {BankTransactionQueryDto, BankTransactionTotalsQueryDto} from './dtos/bank-transaction-query.dto';
 import {BankTransactionSummaryQueryDto} from './dtos/bank-transaction-summary-query.dto';
 import {RecurringSeriesQueryDto} from './dtos/recurring-series.dto';
+import {TotalsCurrencyInterceptor} from './totals-currency.interceptor';
 
+@UseInterceptors(TotalsCurrencyInterceptor)
 @Controller('bank-transactions')
 export class BankTransactionController {
 	constructor(

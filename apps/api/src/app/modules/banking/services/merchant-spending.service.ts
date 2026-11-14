@@ -19,8 +19,6 @@ import {
 } from '@tempo/contracts';
 import {Repository} from 'typeorm';
 
-import {Account} from '@modules/account/account.entity';
-
 import {
 	MERCHANT_NOT_FOUND,
 	MERCHANT_PERIODS_RANGE,
@@ -30,6 +28,7 @@ import {BankTransaction} from '../bank-transaction.entity';
 import {addDays} from '../banking.utils';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {MERCHANT_STATUSES} from '../merchant-logos/merchant.entity';
+import {type ReportingOwner, totalsCurrency} from '../reporting-currency';
 import {
 	averageCents,
 	divideRounded,
@@ -90,9 +89,11 @@ export class MerchantSpendingService {
 	) {}
 
 	async list(
-		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
+		owner: ReportingOwner,
 		{search, offset = 0, limit = MERCHANT_LIST_DEFAULT_LIMIT}: MerchantGroupsQuery,
 	): Promise<MerchantGroupsResponse> {
+		const {id: accountId} = owner;
+		const baseCurrency = totalsCurrency(owner);
 		const needle = search?.trim().toLocaleLowerCase();
 		const groups = (await this.findGroups(accountId))
 			.filter(
@@ -107,10 +108,9 @@ export class MerchantSpendingService {
 		return {baseCurrency, merchants: page.map(toListItem), total: groups.length};
 	}
 
-	async get(
-		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
-		groupId: string,
-	): Promise<MerchantGroup> {
+	async get(owner: ReportingOwner, groupId: string): Promise<MerchantGroup> {
+		const {id: accountId} = owner;
+		const baseCurrency = totalsCurrency(owner);
 		const [group] = await this.withLogos(accountId, await this.findGroups(accountId, [groupId]));
 		if (!group) throw new NotFoundException(MERCHANT_NOT_FOUND);
 		const {spentCents: _spentCents, ...response} = group;
@@ -118,10 +118,12 @@ export class MerchantSpendingService {
 	}
 
 	async getPeriods(
-		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
+		owner: ReportingOwner,
 		groupId: string,
 		{interval, from, to, asOf}: MerchantGroupPeriodsQuery,
 	): Promise<MerchantGroupPeriods> {
+		const {id: accountId} = owner;
+		const baseCurrency = totalsCurrency(owner);
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(MERCHANT_PERIODS_RANGE);
 		const [exists, firstBookingDate] = await Promise.all([
@@ -162,9 +164,11 @@ export class MerchantSpendingService {
 	 * summary's category baselines.
 	 */
 	async getRanking(
-		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
+		owner: ReportingOwner,
 		{interval, period, asOf, limit = MERCHANT_RANKING_DEFAULT_LIMIT}: MerchantRankingQuery,
 	): Promise<MerchantRanking> {
+		const {id: accountId} = owner;
+		const baseCurrency = totalsCurrency(owner);
 		const start = periodStart(period, interval);
 		if (start > asOf) throw new BadRequestException(MERCHANT_RANKING_FUTURE_PERIOD);
 		const end = addDays(nextPeriodStart(start, interval), -1);

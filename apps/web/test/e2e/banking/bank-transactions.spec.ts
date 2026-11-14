@@ -882,7 +882,6 @@ test.describe('bank transactions', () => {
       /^CategoriesAny/,
       /^Cash flowAny/,
       /^Category sourceAny/,
-      /^Amount in EURAny/,
     ]);
     for (const facet of await facets.all()) {
       expect((await boxOf(facet)).height).toBeGreaterThanOrEqual(44);

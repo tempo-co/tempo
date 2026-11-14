@@ -17,6 +17,7 @@ import {BankConnection} from '../bank-connection.entity';
 import {bankLogoReference} from '../bank-logos/bank-logo-reference';
 import {BankSyncRun} from '../bank-sync-run.entity';
 import {selectPreferredBalance} from '../banking.utils';
+import {type ReportingOwner, totalsCurrency} from '../reporting-currency';
 import {convertEcbAmountSql, newestEcbRatePairSql} from './bank-transaction-amount-conversion.utils';
 import {BANK_CONNECTION_PROVIDERS, BANK_SYNC_STATUSES} from './banking-sync.constants';
 import {FileAccountBalanceService} from './file-account-balance.service';
@@ -37,10 +38,9 @@ export class BankConnectionQueryService {
 		private readonly fileAccountBalanceService: FileAccountBalanceService,
 	) {}
 
-	async findAll({
-		id: accountId,
-		baseCurrency,
-	}: Pick<Account, 'id' | 'baseCurrency'>): Promise<BankConnectionResponse[]> {
+	async findAll(owner: ReportingOwner): Promise<BankConnectionResponse[]> {
+		const {id: accountId} = owner;
+		const baseCurrency = totalsCurrency(owner);
 		const connections = await this.bankConnectionRepository
 			.createQueryBuilder('connection')
 			.where('connection.accountId = :accountId', {accountId})
@@ -116,7 +116,7 @@ export class BankConnectionQueryService {
 
 	/** One account of the owner's connection as `findAll` describes it; null when it is not theirs. */
 	async findAccount(
-		owner: Pick<Account, 'id' | 'baseCurrency'>,
+		owner: ReportingOwner,
 		connectionId: BankConnection['id'],
 		bankAccountId: BankAccount['id'],
 	): Promise<BankAccountResponse | null> {

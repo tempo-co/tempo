@@ -15,6 +15,7 @@ import {ImportsList} from '@/features/file-import/components/imports-list';
 import {ImportFileButton, PageFileDrop} from '@/features/file-import/components/page-file-drop';
 import {BUSY, useFileImport} from '@/features/file-import/components/use-file-import';
 import {balanceActionOf} from '@/features/file-import/utils/balance-copy';
+import {ReportingCurrencySetup} from '@/features/reporting-currency/components/reporting-currency-setup';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 import {savedDataStatus} from '@/utils/query-status';
 
@@ -74,6 +75,7 @@ function BankConnectionsIndex() {
           isError={isError}
           error={query.error}
           onRetry={() => query.refetch()}
+          notice={<ReportingCurrencySetup />}
           fileImport={
             imports.state === 'on'
               ? {

@@ -1,17 +1,25 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import {DeepPartial, Repository} from 'typeorm';
+import type {BankTransactionTotals, ReportingCurrency} from '@tempo/contracts';
+import TestAgent from 'supertest/lib/agent';
+import {DataSource, DeepPartial, In, Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankTransactionFxRate} from '@modules/banking/bank-transaction-fx-rate.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {lockReportingCurrencyForAmountWrites} from '@modules/banking/reporting-currency';
 import {BankTransactionAmountConversionService} from '@modules/banking/services/bank-transaction-amount-conversion.service';
+import {BankTransactionPersistenceService} from '@modules/banking/services/bank-transaction-persistence.service';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
-import {SESSION_TEST_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_EMAIL} from '../../../scripts/seed-data/seed.constants';
-import {getApp} from '../../setup/e2e.setup';
+import {
+	SESSION_TEST_ACCOUNT_EMAIL,
+	VERIFIED_ACCOUNT_EMAIL,
+	VERIFIED_ACCOUNT_PASSWORD,
+} from '../../../scripts/seed-data/seed.constants';
+import {getApp, loginAgent} from '../../setup/e2e.setup';
 
 // Synthetic reference rates (units of currency per 1 EUR).
 const SYNTHETIC_RATES: Readonly<Record<string, string>> = {GBP: '0.800000', USD: '1.250000', RON: '5.000000'};
@@ -19,6 +27,18 @@ const SYNTHETIC_RATES: Readonly<Record<string, string>> = {GBP: '0.800000', USD:
 const NOW = new Date('2026-09-09T15:00:00.000Z');
 // The same Wednesday at 10:00 in Berlin, before that day's publication.
 const BEFORE_PUBLICATION = new Date('2026-09-09T08:00:00.000Z');
+
+const UNCONVERTED = {amountInBaseCurrency: null, baseAmountMethod: null, baseAmountRateDate: null};
+const same = (amountInBaseCurrency: string) => ({
+	amountInBaseCurrency,
+	baseAmountMethod: 'SAME',
+	baseAmountRateDate: null,
+});
+const ecb = (amountInBaseCurrency: string, baseAmountRateDate: string) => ({
+	amountInBaseCurrency,
+	baseAmountMethod: 'ECB',
+	baseAmountRateDate,
+});
 
 describe('BankTransactionAmountConversionService', () => {
 	let app: INestApplication;
@@ -49,7 +69,11 @@ describe('BankTransactionAmountConversionService', () => {
 	beforeEach(async () => {
 		await fixtures.connections.createQueryBuilder().delete().execute();
 		await fxRates.clear();
-		await accounts.createQueryBuilder().update().set({baseCurrency: null}).execute();
+		await accounts
+			.createQueryBuilder()
+			.update()
+			.set({baseCurrency: null, baseCurrencyState: null, baseCurrencyRevision: 0, baseAmountsRevision: 0})
+			.execute();
 		ecbRequests = [];
 		publishedThrough = '2026-09-09';
 		holidays = new Set();
@@ -120,18 +144,6 @@ describe('BankTransactionAmountConversionService', () => {
 	});
 
 	describe('conversion', () => {
-		const UNCONVERTED = {amountInBaseCurrency: null, baseAmountMethod: null, baseAmountRateDate: null};
-		const same = (amountInBaseCurrency: string) => ({
-			amountInBaseCurrency,
-			baseAmountMethod: 'SAME',
-			baseAmountRateDate: null,
-		});
-		const ecb = (amountInBaseCurrency: string, baseAmountRateDate: string) => ({
-			amountInBaseCurrency,
-			baseAmountMethod: 'ECB',
-			baseAmountRateDate,
-		});
-
 		async function stored(id: string) {
 			const {amountInBaseCurrency, baseAmountMethod, baseAmountRateDate} =
 				await fixtures.transactions.findOneByOrFail({id});
@@ -223,19 +235,15 @@ describe('BankTransactionAmountConversionService', () => {
 			expect(await stored(otherRow.id)).toEqual(ecb('-15.63', '2026-09-04'));
 		});
 
-		it('picks the most common active account currency as the base when none is set', async () => {
+		it('leaves amounts unconverted while the owner has no reporting currency', async () => {
 			const connection = await fixtures.createConnection(otherOwner);
-			const [gbpAccount] = await fixtures.createBankAccounts(connection, [
-				{currency: 'GBP'},
-				{currency: 'GBP'},
-				{currency: 'EUR'},
-			]);
-			const [row] = await createRows(gbpAccount, [{amount: '-10.004', bookingDate: '2026-09-04'}]);
+			const [gbpAccount] = await fixtures.createBankAccounts(connection, [{currency: 'GBP'}, {currency: 'EUR'}]);
+			const [row] = await createRows(gbpAccount, [{amount: '-10.00', bookingDate: '2026-09-04'}]);
 
-			await service.backfill(NOW);
+			await expect(service.backfill(NOW)).resolves.toEqual({scanned: 0, converted: 0});
 
-			expect((await accounts.findOneByOrFail({id: otherOwner.id})).baseCurrency).toBe('GBP');
-			expect(await stored(row.id)).toEqual(same('-10.00'));
+			expect((await accounts.findOneByOrFail({id: otherOwner.id})).baseCurrency).toBeNull();
+			expect(await stored(row.id)).toEqual(UNCONVERTED);
 		});
 
 		it("waits for the transaction day's own rate while it is not yet published", async () => {
@@ -370,6 +378,207 @@ describe('BankTransactionAmountConversionService', () => {
 				baseAmountMethod: 'INSTRUCTED',
 				baseAmountRateDate: null,
 			});
+		});
+	});
+
+	describe('a change of reporting currency', () => {
+		let agent: TestAgent;
+		let persistence: BankTransactionPersistenceService;
+		let dataSource: DataSource;
+
+		beforeAll(async () => {
+			agent = await loginAgent(app.getHttpServer(), VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
+			persistence = app.get(BankTransactionPersistenceService);
+			dataSource = app.get(DataSource);
+		});
+
+		async function storedAmounts(ids: string[]) {
+			const rows = await fixtures.transactions.findBy({id: In(ids)});
+			return ids.map((id) => {
+				const {amountInBaseCurrency, baseAmountMethod, baseAmountRateDate} = rows.find((row) => row.id === id)!;
+				return {amountInBaseCurrency, baseAmountMethod, baseAmountRateDate};
+			});
+		}
+
+		/** Everything stored about the rows besides their converted amounts. */
+		async function transactionsThemselves(ids: string[]) {
+			const rows = await fixtures.transactions.find({where: {id: In(ids)}, order: {id: 'ASC'}});
+			return rows.map(
+				({amountInBaseCurrency: _a, baseAmountMethod: _m, baseAmountRateDate: _d, updatedAt: _u, ...row}) =>
+					row,
+			);
+		}
+
+		async function readiness() {
+			const {currency, recalculating} = (await agent.get('/reporting-currency').expect(200))
+				.body as ReportingCurrency;
+			const totals = (await agent.get('/bank-transactions/totals').expect(200)).body as BankTransactionTotals;
+			return {currency, recalculating, totals};
+		}
+
+		async function eurOwnerWithHistory() {
+			await accounts.update({id: owner.id}, {baseCurrency: 'EUR', baseCurrencyState: 'CONFIRMED'});
+			const eurAccount = await createBankAccount(owner, 'EUR');
+			const gbpAccount = await createBankAccount(owner, 'GBP');
+			const categorized = {category: 'SHOPPING', categoryStatus: 'COMPLETED', categorySource: 'MANUAL'} as const;
+			const [eurDebit] = await createRows(eurAccount, [
+				{amount: '-10.00', bookingDate: '2026-09-04', ...categorized},
+			]);
+			const [gbpDebit, gbpCredit, chfDebit] = await createRows(gbpAccount, [
+				{amount: '-10.00', bookingDate: '2026-09-04', ...categorized},
+				{amount: '20.00', creditDebitIndicator: 'CRDT', bookingDate: '2026-09-04'},
+				{amount: '-5.00', currency: 'CHF', bookingDate: '2026-09-04'},
+			]);
+			await service.backfill(NOW);
+			return {eurAccount, gbpAccount, ids: [eurDebit.id, gbpDebit.id, gbpCredit.id, chfDebit.id]};
+		}
+
+		it('converts every amount again into the new currency while the transactions stay as they are', async () => {
+			const {ids} = await eurOwnerWithHistory();
+			expect(await readiness()).toMatchObject({
+				currency: 'EUR',
+				recalculating: false,
+				totals: {baseCurrency: 'EUR', spending: '22.50', income: '25.00', excluded: {missingBaseAmount: 1}},
+			});
+			const transactions = await transactionsThemselves(ids);
+			ecbRequests = [];
+
+			// USD is no account's currency; its rates are fetched for the history anyway.
+			await agent.put('/reporting-currency').send({currency: 'USD'}).expect(200);
+
+			// No figure is labelled USD before the amounts are in USD, and no EUR amount is left to be read as USD.
+			expect(await readiness()).toMatchObject({
+				currency: 'USD',
+				recalculating: true,
+				totals: {baseCurrency: null},
+			});
+			expect(await storedAmounts(ids)).toEqual([UNCONVERTED, UNCONVERTED, UNCONVERTED, UNCONVERTED]);
+
+			await service.backfill(NOW);
+
+			expect(ecbRequests).toContainEqual(expect.objectContaining({currency: 'USD'}));
+			// -10 EUR * 1.25; -10 GBP / 0.8 * 1.25 = -15.625; 20 GBP / 0.8 * 1.25; CHF has no rate.
+			expect(await storedAmounts(ids)).toEqual([
+				ecb('-12.50', '2026-09-04'),
+				ecb('-15.63', '2026-09-04'),
+				ecb('31.25', '2026-09-04'),
+				UNCONVERTED,
+			]);
+			expect(await readiness()).toMatchObject({
+				currency: 'USD',
+				recalculating: false,
+				totals: {baseCurrency: 'USD', spending: '28.13', income: '31.25', excluded: {missingBaseAmount: 1}},
+			});
+			expect(await transactionsThemselves(ids)).toEqual(transactions);
+
+			// Choosing it again changes nothing.
+			await agent.put('/reporting-currency').send({currency: 'USD'}).expect(200);
+			expect(await readiness()).toMatchObject({currency: 'USD', recalculating: false});
+			expect((await storedAmounts(ids))[0]).toEqual(ecb('-12.50', '2026-09-04'));
+		});
+
+		it('finishes a change after one pass even while ECB is unavailable, and converts the rest once it is back', async () => {
+			const {ids} = await eurOwnerWithHistory();
+			await fxRates.clear();
+			publishedThrough = null;
+
+			await agent.put('/reporting-currency').send({currency: 'GBP'}).expect(200);
+			await service.backfill(NOW);
+
+			// Rows already in GBP were copied; the others are reported as left out of the totals, not waited for.
+			expect(await readiness()).toMatchObject({
+				currency: 'GBP',
+				recalculating: false,
+				totals: {baseCurrency: 'GBP', spending: '10.00', income: '20.00', excluded: {missingBaseAmount: 2}},
+			});
+
+			publishedThrough = '2026-09-09';
+			await service.backfill(NOW);
+
+			expect(await storedAmounts(ids)).toEqual([
+				ecb('-8.00', '2026-09-04'),
+				same('-10.00'),
+				same('20.00'),
+				UNCONVERTED,
+			]);
+		});
+
+		it('keeps a sync write that races a change from leaving amounts in the old currency', async () => {
+			const {gbpAccount} = await eurOwnerWithHistory();
+			let commitSync!: () => void;
+			const syncHolds = new Promise<void>((resolve) => (commitSync = resolve));
+			let written!: () => void;
+			const rowWritten = new Promise<void>((resolve) => (written = resolve));
+			// As a sync's write does: the lock first, then rows, some of them in the reporting currency (EUR).
+			const sync = dataSource.transaction(async (manager) => {
+				await lockReportingCurrencyForAmountWrites(manager, owner.id);
+				await persistence.persistTransactions(
+					manager.getRepository(BankTransaction),
+					gbpAccount,
+					[
+						{
+							amount: '7.00',
+							currency: 'EUR',
+							creditDebitIndicator: 'CRDT',
+							bookingDate: '2026-09-07',
+							status: 'BOOK',
+						},
+					],
+					'Example Bank',
+					'enable_banking',
+				);
+				written();
+				await syncHolds;
+			});
+			await rowWritten;
+
+			let changed = false;
+			const change = agent
+				.put('/reporting-currency')
+				.send({currency: 'GBP'})
+				.expect(200)
+				.then(() => (changed = true));
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			expect(changed).toBe(false);
+			commitSync();
+			await Promise.all([sync, change]);
+
+			const synced = await fixtures.transactions.findOneByOrFail({bankAccountId: gbpAccount.id, amount: '7.00'});
+			expect(await storedAmounts([synced.id])).toEqual([UNCONVERTED]);
+		});
+
+		it('discards a conversion pass that started before a change', async () => {
+			const {ids} = await eurOwnerWithHistory();
+			await fixtures.transactions.update({id: In(ids)}, {amountInBaseCurrency: null, baseAmountMethod: null});
+			// The pass waits on ECB while the owner switches to GBP.
+			let answerEcb!: () => void;
+			const ecbAnswered = new Promise<void>((resolve) => (answerEcb = resolve));
+			let asked!: () => void;
+			const ecbAsked = new Promise<void>((resolve) => (asked = resolve));
+			const respond = fetchSpy.getMockImplementation()!;
+			// Only the history fetch, which comes after the pass read the owner's currency.
+			fetchSpy.mockImplementation(async (input: string) => {
+				if (new URL(input).searchParams.get('startPeriod')! < '2026-09-01') {
+					asked();
+					await ecbAnswered;
+				}
+				return respond(input);
+			});
+			await fxRates.clear();
+
+			const pass = service.backfill(NOW);
+			await ecbAsked;
+			await agent.put('/reporting-currency').send({currency: 'GBP'}).expect(200);
+			answerEcb();
+			await pass;
+
+			// Nothing in EUR came back: only the rows copied by the change itself hold amounts.
+			expect(await storedAmounts(ids)).toEqual([UNCONVERTED, same('-10.00'), same('20.00'), UNCONVERTED]);
+			expect(await readiness()).toMatchObject({currency: 'GBP', recalculating: true});
+
+			await service.backfill(NOW);
+			expect(await readiness()).toMatchObject({currency: 'GBP', recalculating: false});
+			expect((await storedAmounts(ids))[0]).toEqual(ecb('-8.00', '2026-09-04'));
 		});
 	});
 });

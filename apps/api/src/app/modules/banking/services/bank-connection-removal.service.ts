@@ -18,6 +18,7 @@ import {BankingConsentRevocationService} from './banking-consent-revocation.serv
 import {BANK_CONNECTION_STATUSES, DESTRUCTIVE_CONNECTION_STATUSES} from './banking-sync.constants';
 import {findOwnedConnection} from './find-owned-connection';
 import {OwnTransferService} from './own-transfer.service';
+import {ReportingCurrencyService} from './reporting-currency.service';
 
 const REMOVABLE_CONNECTION_STATUSES = [
 	BANK_CONNECTION_STATUSES.PENDING_AUTHORIZATION,
@@ -41,6 +42,7 @@ export class BankConnectionRemovalService {
 		private readonly connectionLockService: BankingConnectionLockService,
 		private readonly ownTransferService: OwnTransferService,
 		private readonly consentRevocationService: BankingConsentRevocationService,
+		private readonly reportingCurrencyService: ReportingCurrencyService,
 	) {}
 
 	async removeConnection(
@@ -123,6 +125,8 @@ export class BankConnectionRemovalService {
 
 		// Remaining legs whose counterpart was deleted become one-sided or unlabelled.
 		await this.ownTransferService.recomputeForOwnerSafely(accountId);
+		// Removing every account in other currencies leaves one an owner without a currency can use right away.
+		await this.reportingCurrencyService.reconcileSafely(accountId, {historySettled: false});
 	}
 
 	/** Refuses a removal the connection's status or the confirmation does not allow; returns whether it is destructive. */

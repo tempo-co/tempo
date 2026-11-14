@@ -21,6 +21,7 @@ import {BankTransactionController} from './api/bank-transaction.controller';
 import {McpController} from './api/mcp.controller';
 import {MerchantController} from './api/merchant.controller';
 import {RecurringSeriesController} from './api/recurring-series.controller';
+import {ReportingCurrencyController} from './api/reporting-currency.controller';
 import {BankAccountBalance} from './bank-account-balance.entity';
 import {BankAccount} from './bank-account.entity';
 import {BankConnection} from './bank-connection.entity';
@@ -58,6 +59,7 @@ import {FxRateService} from './services/fx-rate.service';
 import {McpReaderService} from './services/mcp-reader.service';
 import {MerchantSpendingService} from './services/merchant-spending.service';
 import {OwnTransferService} from './services/own-transfer.service';
+import {ReportingCurrencyService} from './services/reporting-currency.service';
 
 @Module({
 	imports: [
@@ -112,6 +114,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankConnectionAlertProcessor,
 		PushAlertProcessor,
 		RecurringSeriesService,
+		ReportingCurrencyService,
 	],
 	exports: [
 		BankTransactionPersistenceService,
@@ -119,6 +122,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankingConnectionLockService,
 		OwnTransferService,
 		CurrencyExchangeService,
+		ReportingCurrencyService,
 		BankTransactionCategorizationModule,
 		MerchantLogoModule,
 	],
@@ -128,6 +132,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankTransactionController,
 		MerchantController,
 		RecurringSeriesController,
+		ReportingCurrencyController,
 		McpController,
 	],
 })

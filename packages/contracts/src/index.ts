@@ -7,5 +7,6 @@ export * from './imports.js';
 export * from './merchants.js';
 export * from './notifications.js';
 export * from './recurring.js';
+export * from './reporting-currency.js';
 export * from './tokens.js';
 export * from './transactions.js';

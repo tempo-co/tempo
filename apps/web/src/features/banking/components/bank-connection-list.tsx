@@ -60,6 +60,8 @@ type BankConnectionListProps = {
   isError: boolean;
   error: unknown;
   onRetry: () => unknown;
+  /** Shown under the title, above the bank cards: a question the owner has to answer, such as the reporting currency. */
+  notice?: ReactNode;
   /**
    * Statement file import, once the deployment has it on: its button beside Connect a bank, a page-wide drop,
    * an empty page that offers both, and the Imports list under the cards. Without it the page is unchanged.
@@ -95,6 +97,7 @@ export function BankConnectionList({
   isError,
   error,
   onRetry,
+  notice,
   fileImport,
 }: BankConnectionListProps) {
   const {startBankConnection, isPending: isStarting} = useStartBankConnection();
@@ -168,6 +171,7 @@ export function BankConnectionList({
           />
         )}
       </header>
+      {notice}
       {isPending ? (
         <div
           className='grid grid-cols-1 items-start gap-6 max-md:gap-4 @[60rem]:grid-cols-2'

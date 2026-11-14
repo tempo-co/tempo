@@ -9,6 +9,7 @@ import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
   EMPTY_REVIEW_COUNTS,
+  SETTLED_REPORTING_CURRENCY,
   fulfillJson,
   mockBankConnections,
   mockBankRefresh,
@@ -216,6 +217,7 @@ async function mockMerchantLogos(page: Page) {
   await mockEmptyRecurringLists(page);
   await mockMerchantRanking(page);
   await mockJson(page, '**/bank-transactions/review-counts', EMPTY_REVIEW_COUNTS);
+  await mockJson(page, '**/reporting-currency', SETTLED_REPORTING_CURRENCY);
   await page.route('**/bank-transactions?**', (route) => {
     if (route.request().resourceType() === 'document') return route.continue();
     return fulfillJson(route, {transactions: state.rows, total: state.rows.length});

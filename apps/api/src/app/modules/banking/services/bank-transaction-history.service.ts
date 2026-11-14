@@ -15,6 +15,7 @@ import {BANKING_TRANSACTION_BREAKDOWN_RANGE} from '../api/constants/banking-mess
 import type {BankTransactionBreakdownQueryDto} from '../api/dtos/bank-transaction-breakdown-query.dto';
 import {BankTransaction} from '../bank-transaction.entity';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
+import {type ReportingOwner, totalsCurrency} from '../reporting-currency';
 import {formatCents, parseCents, periodStarts, periodWindows} from '../summary/bank-transaction-summary';
 import {
 	SQL_BASE_AMOUNT,
@@ -45,9 +46,11 @@ export class BankTransactionHistoryService {
 	 * left out, and rows without a base-currency amount are not counted.
 	 */
 	async getBreakdown(
-		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
+		owner: ReportingOwner,
 		{interval, by, from, to, asOf}: BankTransactionBreakdownQueryDto,
 	): Promise<BankTransactionBreakdown> {
+		const {id: accountId} = owner;
+		const baseCurrency = totalsCurrency(owner);
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(BANKING_TRANSACTION_BREAKDOWN_RANGE);
 		const flow = by === 'category' ? 'SPENDING' : 'INCOME';

@@ -1,4 +1,4 @@
-import {Body, Controller, Get, HttpCode, Param, Patch, Query} from '@nestjs/common';
+import {Body, Controller, Get, HttpCode, Param, Patch, Query, UseInterceptors} from '@nestjs/common';
 import type {RecurringSeriesLists, RecurringSummary} from '@tempo/contracts';
 
 import {Account} from '@modules/account/account.entity';
@@ -12,7 +12,9 @@ import {
 	RecurringSeriesQueryDto,
 } from './dtos/recurring-series.dto';
 import {SeriesKeyPipe} from './pipes/series-key.pipe';
+import {TotalsCurrencyInterceptor} from './totals-currency.interceptor';
 
+@UseInterceptors(TotalsCurrencyInterceptor)
 @Controller('recurring-series')
 export class RecurringSeriesController {
 	constructor(private readonly recurringSeriesService: RecurringSeriesService) {}

@@ -17,6 +17,14 @@ import {safeErrorName} from '../banking.utils';
 
 export type BankTransactionAmountConversionJobData = Record<string, never>;
 
+/** Transactions arrive through bank sync or statement import; either needs their amounts converted. */
+export function isAmountConversionEnabled(configurationService: ConfigurationService): boolean {
+	return (
+		Boolean(configurationService.get('BANKING_INTEGRATION_ENABLED')) ||
+		configurationService.get('FILE_IMPORT_ENABLED') === true
+	);
+}
+
 // Bumped when a migration clears stored amounts, so they reconvert on deploy instead of on the next tick.
 const BACKFILL_JOB_ID = 'bank-transaction-amount-backfill-v2';
 const CONVERSION_INTERVAL_MS = 15 * 60 * 1000;
@@ -34,7 +42,7 @@ export class BankTransactionAmountConversionQueueService implements OnModuleInit
 	) {}
 
 	async onModuleInit(): Promise<void> {
-		const enabled = Boolean(this.configurationService.get('BANKING_INTEGRATION_ENABLED'));
+		const enabled = isAmountConversionEnabled(this.configurationService);
 		const options = {enabled, configurationService: this.configurationService, logger: this.logger};
 		await bootstrapJobScheduler(
 			this.queue,
@@ -61,6 +69,17 @@ export class BankTransactionAmountConversionQueueService implements OnModuleInit
 			// The 15-minute conversion run picks up the same rows.
 			this.logger.warn(`FX backfill enqueue failed: ${safeErrorName(error)}`);
 		}
+	}
+
+	/** Runs a conversion pass now, for a reporting currency that just changed (`key` names the change). */
+	async enqueueConversion(key: string): Promise<void> {
+		// Tests run without schedulers or the boot backfill and run conversion passes themselves.
+		if (this.configurationService.get('NODE_ENV') === 'test') return;
+		await this.queue.add(
+			BANK_TRANSACTION_AMOUNT_CONVERSION_JOB,
+			{},
+			{jobId: `reporting-currency-${key}`, removeOnComplete: true, removeOnFail: {age: 86_400, count: 10}},
+		);
 	}
 
 	private async enqueueBackfill(): Promise<void> {

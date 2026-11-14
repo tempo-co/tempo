@@ -40,6 +40,7 @@ const BANKING_SYNC_SERVICE_DEPENDENCIES = [
 	'merchantLogoService',
 	'bankTransactionPersistenceService',
 	'aspspCatalogService',
+	'reportingCurrencyService',
 ] as const;
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
@@ -47,6 +48,7 @@ const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
 	currencyExchangeService: {recomputeForOwnerSafely: jest.fn().mockResolvedValue([])},
 	merchantLogoService: {enqueueForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
 	bankTransactionPersistenceService: new BankTransactionPersistenceService(),
+	reportingCurrencyService: {reconcileSafely: jest.fn().mockResolvedValue(undefined)},
 };
 
 /** Builds the service with named test doubles; unspecified dependencies are empty objects. */
@@ -295,7 +297,10 @@ describe('BankingSyncService synchronization lock', () => {
 		};
 		const dataSource = {
 			transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) =>
-				callback({getRepository: jest.fn().mockReturnValue(transactionRepository)}),
+				callback({
+					getRepository: jest.fn().mockReturnValue(transactionRepository),
+					query: jest.fn().mockResolvedValue([]),
+				}),
 			),
 			getRepository: jest.fn().mockReturnValue(transactionRepository),
 		};
@@ -625,7 +630,10 @@ describe('BankingSyncService synchronization lock', () => {
 			bankSyncRunRepository,
 			dataSource: {
 				transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) =>
-					callback({getRepository: jest.fn().mockReturnValue(transactionRepository)}),
+					callback({
+						getRepository: jest.fn().mockReturnValue(transactionRepository),
+						query: jest.fn().mockResolvedValue([]),
+					}),
 				),
 				getRepository: jest.fn().mockReturnValue(transactionRepository),
 			},

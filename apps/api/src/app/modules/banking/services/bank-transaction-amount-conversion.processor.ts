@@ -10,7 +10,10 @@ import {
 } from '@core/queue/queue.constants';
 
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
-import {BankTransactionAmountConversionJobData} from './bank-transaction-amount-conversion.queue.service';
+import {
+	BankTransactionAmountConversionJobData,
+	isAmountConversionEnabled,
+} from './bank-transaction-amount-conversion.queue.service';
 import {BankTransactionAmountConversionService} from './bank-transaction-amount-conversion.service';
 import {OwnTransferService} from './own-transfer.service';
 
@@ -27,7 +30,7 @@ export class BankTransactionAmountConversionProcessor extends WorkerHost {
 	}
 
 	async process(job: Job<BankTransactionAmountConversionJobData>): Promise<void> {
-		if (!this.configurationService.get('BANKING_INTEGRATION_ENABLED')) return;
+		if (!isAmountConversionEnabled(this.configurationService)) return;
 		if (job.name === RECOMPUTE_OWN_TRANSFERS_JOB) {
 			await this.ownTransferService.recomputeAllOwners();
 			// After the recompute, so its own change notes are folded too.
