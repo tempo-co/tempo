@@ -1,6 +1,6 @@
 import type {BankAccount, BankImportSummary} from '@tempo/contracts';
 import {Check} from 'lucide-react';
-import {type ReactNode, useId, useState} from 'react';
+import {useId, useState} from 'react';
 import {toast} from 'sonner';
 
 import {PendingLabel} from '@/components/shared/pending-label';
@@ -12,11 +12,13 @@ import {
   ResponsiveDialogBody,
   ResponsiveDialogContent,
   ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from '@/components/ui/responsive-dialog';
 import {accountName} from '@/features/banking/utils/bank-account-name';
 import {wasToasted} from '@/utils/api';
+import {cn} from '@/utils/cn';
 import {formatCurrency} from '@/utils/format-currency';
 
 import {useSetAccountBalance} from '../api/use-set-account-balance';
@@ -34,8 +36,9 @@ import {importAccountName, useKnownAccounts} from './use-known-accounts';
 type AccountWithoutBalance = BankImportSummary['accountsWithoutBalance'][number];
 
 /**
- * An amount field and Save for one account's balance today: invalid input is told under the field, a failed save
- * in a toast. Answers the saved account.
+ * An amount field with its currency inside, at the far right, and Save for one account's balance today: invalid
+ * input is told under the field, a failed save in a toast. Answers the saved account. Save sits under the field:
+ * on its own row in the summary, in the dialog's footer with Cancel.
  */
 function BalanceForm({
   accountId,
@@ -43,7 +46,7 @@ function BalanceForm({
   currency,
   initial = '',
   autoFocus,
-  secondary,
+  onCancel,
   optional,
   onSaved,
 }: {
@@ -52,8 +55,8 @@ function BalanceForm({
   currency: string;
   initial?: string;
   autoFocus?: boolean;
-  /** Shown before Save, such as the dialog's Cancel. */
-  secondary?: ReactNode;
+  /** The dialog's Cancel: given, the form fills the dialog's body and footer. */
+  onCancel?: () => void;
   /** Asked beside the summary's own actions: Save is outlined, so Done stays the main one. */
   optional?: boolean;
   onSaved: (account: BankAccount) => void;
@@ -76,15 +79,47 @@ function BalanceForm({
     }
   };
 
-  return (
-    <form
-      noValidate
-      className='grid grid-cols-1 gap-2'
-      onSubmit={(event) => {
-        event.preventDefault();
-        void save();
-      }}
+  const saveButton = (
+    <Button
+      type='submit'
+      variant={optional ? 'outline' : 'default'}
+      disabled={isPending}
+      className={onCancel ? 'md:order-2' : undefined}
     >
+      {isPending ? <PendingLabel>Saving…</PendingLabel> : 'Save'}
+    </Button>
+  );
+  // The currency sits over the field's right padding, so a long amount scrolls under neither it nor the edge.
+  const amountField = (
+    <div className='relative'>
+      <Input
+        id={`${id}-amount`}
+        inputMode='decimal'
+        autoComplete='off'
+        autoFocus={autoFocus}
+        placeholder='0.00'
+        value={value}
+        disabled={isPending}
+        aria-invalid={invalid || undefined}
+        aria-describedby={
+          invalid ? `${id}-currency ${id}-help ${id}-error` : `${id}-currency ${id}-help`
+        }
+        onChange={(event) => {
+          setValue(event.target.value);
+          setInvalid(false);
+        }}
+        className='peer pr-14 numeric max-sm:h-12'
+      />
+      <span
+        id={`${id}-currency`}
+        className='pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground peer-disabled:opacity-50'
+      >
+        {currency}
+      </span>
+    </div>
+  );
+  const fields = (
+    <div className='grid grid-cols-1 gap-2'>
       <div className='grid grid-cols-1 gap-0.5'>
         <label htmlFor={`${id}-amount`} className='text-sm font-medium wrap-anywhere'>
           {label}
@@ -93,37 +128,39 @@ function BalanceForm({
           {BALANCE_HELP}
         </p>
       </div>
-      <div className='flex flex-wrap items-center gap-2'>
-        <div className='flex min-w-0 flex-1 basis-40 items-center gap-2'>
-          <Input
-            id={`${id}-amount`}
-            inputMode='decimal'
-            autoComplete='off'
-            autoFocus={autoFocus}
-            placeholder='0.00'
-            value={value}
-            disabled={isPending}
-            aria-invalid={invalid || undefined}
-            aria-describedby={invalid ? `${id}-help ${id}-error` : `${id}-help`}
-            onChange={(event) => {
-              setValue(event.target.value);
-              setInvalid(false);
-            }}
-            className='numeric max-sm:h-12'
-          />
-          <span className='text-sm text-muted-foreground'>{currency}</span>
-        </div>
-        <div className='flex gap-2 max-sm:w-full max-sm:[&>*]:flex-1'>
-          {secondary}
-          <Button type='submit' variant={optional ? 'outline' : 'default'} disabled={isPending}>
-            {isPending ? <PendingLabel>Saving…</PendingLabel> : 'Save'}
-          </Button>
-        </div>
-      </div>
+      {amountField}
       {invalid && (
         <p id={`${id}-error`} role='alert' className='text-xs text-destructive'>
           {INVALID_BALANCE.title}. {INVALID_BALANCE.description}
         </p>
+      )}
+    </div>
+  );
+
+  return (
+    <form
+      noValidate
+      className={cn('grid grid-cols-1', onCancel ? 'gap-4' : 'gap-3')}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+    >
+      {onCancel ? (
+        <>
+          <ResponsiveDialogBody>{fields}</ResponsiveDialogBody>
+          <ResponsiveDialogFooter className='gap-2'>
+            {saveButton}
+            <Button type='button' variant='outline' className='md:order-1' onClick={onCancel}>
+              Cancel
+            </Button>
+          </ResponsiveDialogFooter>
+        </>
+      ) : (
+        <>
+          {fields}
+          <div className='flex justify-end max-sm:[&>*]:flex-1'>{saveButton}</div>
+        </>
       )}
     </form>
   );
@@ -229,25 +266,17 @@ export function AccountBalanceAction({
               {balanceLabel(name)}
             </ResponsiveDialogDescription>
           </ResponsiveDialogHeader>
-          <ResponsiveDialogBody>
-            <div className='pb-4 md:pb-0'>
-              {open && (
-                <BalanceForm
-                  accountId={account.id}
-                  label={balanceLabel(name)}
-                  currency={account.currency}
-                  initial={source ? toTwoDecimals(account.currentBalanceAmount!) : ''}
-                  autoFocus
-                  secondary={
-                    <Button type='button' variant='outline' onClick={() => setOpen(false)}>
-                      Cancel
-                    </Button>
-                  }
-                  onSaved={() => setOpen(false)}
-                />
-              )}
-            </div>
-          </ResponsiveDialogBody>
+          {open && (
+            <BalanceForm
+              accountId={account.id}
+              label={balanceLabel(name)}
+              currency={account.currency}
+              initial={source ? toTwoDecimals(account.currentBalanceAmount!) : ''}
+              autoFocus
+              onCancel={() => setOpen(false)}
+              onSaved={() => setOpen(false)}
+            />
+          )}
         </ResponsiveDialogContent>
       </ResponsiveDialog>
     </>

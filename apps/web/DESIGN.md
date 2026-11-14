@@ -488,7 +488,13 @@ No copy calls import a fallback or assumes a bank is connected.
   look in `warning`), the date range, and the accounts the import went to. A drop that added
   nothing shows the `CheckCheck` state instead of the counts.
 - **Account question.** Native radio rows, so arrow keys move between them; nothing is
-  preselected, and Import stays disabled until every question has an answer.
+  preselected, and Import stays disabled until every question has an answer. Each row starts
+  with its bank's logo as on its Connections card (imported files: the `Files` Clay tile) and a
+  small round account-type tile on its corner as on its Connections row; a new account gets the
+  `Plus` Clay tile in the same square.
+- **Balances.** The amount field shows its currency inside at the far right, over padding the
+  value scrolls short of. Save sits under the field: in the summary on its own row, in the
+  Add/Edit balance dialog in its footer with Cancel.
 - **Rows to check.** Each file row (the `FileQuestion` tile) and the stored rows it could be form one
   bordered block: one radio choice between those rows and "It's a new transaction", nothing
   preselected. Radios take the tile's lead column and amounts share one right-aligned column, with

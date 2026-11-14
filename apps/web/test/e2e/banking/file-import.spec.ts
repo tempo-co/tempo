@@ -1,4 +1,4 @@
-import type {Page, Request, Route} from '@playwright/test';
+import type {Locator, Page, Request, Route} from '@playwright/test';
 import type {
   BankConnection,
   BankImportDoubtfulRow,
@@ -307,6 +307,35 @@ function sentForm(request: Request) {
     [...body.matchAll(/name="(\w+)"\r\n\r\n([^\r]*)\r\n/g)].map((match) => [match[1], match[2]]),
   );
   return {files, fields};
+}
+
+/**
+ * A balance field shows its currency inside, at the far right, over the padding its value scrolls short of; and
+ * names it in its description.
+ */
+async function expectCurrencyInside(field: Locator, currency: string) {
+  const suffix = field.locator('xpath=..').getByText(currency, {exact: true});
+  await expect(suffix).toBeVisible();
+  await expect(field).toHaveAccessibleDescription(new RegExp(`^${currency} `));
+  const [box, suffixBox, paddingRight] = await Promise.all([
+    boxOf(field),
+    boxOf(suffix),
+    field.evaluate((element) => parseFloat(getComputedStyle(element).paddingRight)),
+  ]);
+  expect(suffixBox.x + suffixBox.width).toBeLessThanOrEqual(box.x + box.width);
+  expect(box.x + box.width - paddingRight).toBeLessThanOrEqual(suffixBox.x);
+}
+
+/** Waits out a dialog's or sheet's opening animation, so boxes read in one go come from one frame. */
+async function settled(scope: Locator) {
+  await scope.evaluate((element) =>
+    Promise.all(
+      element
+        .getAnimations({subtree: true})
+        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+        .map((animation) => animation.finished),
+    ),
+  );
 }
 
 async function openImport(page: Page) {
@@ -885,6 +914,16 @@ test.describe('statement file import on Connections', () => {
       bankName: 'Example Bank',
       imported: false,
     };
+    const logo =
+      'data:image/svg+xml,' +
+      encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#808080"/></svg>',
+      );
+    await page.route(`${API_URL}/bank-connections/aspsps`, (route) =>
+      fulfillJson(route, [
+        {name: MOCK_CONNECTION.aspspName, country: MOCK_CONNECTION.aspspCountry, logoUrl: logo},
+      ]),
+    );
     const api = await mockFileImport(page, {
       uploads: [
         refused({
@@ -950,6 +989,19 @@ test.describe('statement file import on Connections', () => {
       /^Rainy day\s*Savings · ••1234 · Example Bank$/,
     );
     await expect(radios.nth(2)).toHaveAccessibleName(/^Example Bank EUR\s*Imported files$/);
+    // Each starts with its bank's logo as on its Connections card (imported files: the files tile), and its type
+    // as on its Connections row.
+    const tiles = question.getByTestId('bank-import-account-tile');
+    await expect(tiles).toHaveCount(3);
+    for (const index of [0, 1])
+      await expect(tiles.nth(index).getByTestId('bank-logo').locator('img')).toHaveAttribute(
+        'src',
+        logo,
+      );
+    await expect(tiles.nth(2).getByTestId('bank-logo')).toHaveCount(0);
+    await expect(tiles.nth(2).locator('svg.lucide-files')).toBeVisible();
+    for (const [index, type] of ['wallet', 'piggy-bank', 'landmark'].entries())
+      await expect(tiles.nth(index).locator(`svg.lucide-${type}`)).toBeVisible();
     const importButton = dialog.getByRole('button', {name: 'Import', exact: true});
     await expect(importButton).toBeDisabled();
 
@@ -1009,6 +1061,14 @@ test.describe('statement file import on Connections', () => {
     await expect(dialog.getByRole('heading', {name: 'Import a file'})).toBeVisible();
 
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.csv')]);
+    // A new account starts with its own tile, in line with the accounts above it.
+    const eur = dialog.getByRole('group', {name: 'Example Bank · EUR'});
+    const tiles = eur.getByTestId('bank-import-account-tile');
+    await expect(tiles).toHaveCount(2);
+    await expect(tiles.nth(1).locator('svg.lucide-plus')).toBeVisible();
+    const [accountTile, newTile] = await Promise.all([boxOf(tiles.nth(0)), boxOf(tiles.nth(1))]);
+    expect(newTile.x).toBe(accountTile.x);
+    expect(newTile.width).toBe(accountTile.width);
     for (const currency of ['EUR', 'USD'])
       await dialog
         .getByRole('group', {name: `Example Bank · ${currency}`})
@@ -1306,6 +1366,13 @@ test.describe('statement file import on Connections', () => {
     await expect(
       prompt.getByText('Tempo works out earlier balances from your transactions.'),
     ).toBeVisible();
+    await expectCurrencyInside(field, 'EUR');
+    // Save under the field, as in the Add balance dialog.
+    const [fieldBox, saveBox] = await Promise.all([
+      boxOf(field),
+      boxOf(prompt.getByRole('button', {name: 'Save'})),
+    ]);
+    expect(saveBox.y).toBeGreaterThanOrEqual(fieldBox.y + fieldBox.height);
     // Inline in the summary, not a dialog on top of it.
     await expect(page.getByRole('dialog')).toHaveCount(1);
 
@@ -1374,6 +1441,7 @@ test.describe('statement file import on Connections', () => {
   test('offers Add balance or Edit on imported-files accounts as their balance comes, in a dialog', async ({
     page,
   }) => {
+    test.setTimeout(20_000);
     const [base] = IMPORTED_FILES.bankAccounts;
     const accounts = [
       {
@@ -1455,7 +1523,19 @@ test.describe('statement file import on Connections', () => {
     await expect(
       dialog.getByText('Tempo works out earlier balances from your transactions.'),
     ).toBeVisible();
-    await dialog.getByLabel('Balance of Example Wallet today').fill('99.5');
+    const field = dialog.getByLabel('Balance of Example Wallet today');
+    await settled(dialog);
+    await expectCurrencyInside(field, 'EUR');
+    // Cancel and Save under the field, Save last.
+    const [fieldBox, cancelBox, saveBox] = await Promise.all([
+      boxOf(field),
+      boxOf(dialog.getByRole('button', {name: 'Cancel'})),
+      boxOf(dialog.getByRole('button', {name: 'Save'})),
+    ]);
+    expect(cancelBox.y).toBeGreaterThanOrEqual(fieldBox.y + fieldBox.height);
+    expect(saveBox.y).toBe(cancelBox.y);
+    expect(saveBox.x).toBeGreaterThan(cancelBox.x);
+    await field.fill('99.5');
     await dialog.getByRole('button', {name: 'Save'}).click();
 
     await expect(dialog).toBeHidden();
@@ -1464,6 +1544,30 @@ test.describe('statement file import on Connections', () => {
     await expect(
       rowOf('Example Wallet').getByRole('button', {name: 'Edit balance of Example Wallet'}),
     ).toBeVisible();
+
+    // On a phone the dialog is a sheet: Save over Cancel, full width under the field, and Enter saves.
+    await page.setViewportSize({width: 390, height: 844});
+    await rowOf('Example Savings')
+      .getByRole('button', {name: 'Edit balance of Example Savings'})
+      .click();
+    dialog = page.getByRole('dialog');
+    const phoneField = dialog.getByLabel('Balance of Example Savings today');
+    await expectInsideViewport(page, dialog.getByRole('button', {name: 'Cancel'}));
+    await settled(dialog);
+    await expectCurrencyInside(phoneField, 'EUR');
+    const [phoneFieldBox, phoneSave, phoneCancel] = await Promise.all([
+      boxOf(phoneField),
+      boxOf(dialog.getByRole('button', {name: 'Save'})),
+      boxOf(dialog.getByRole('button', {name: 'Cancel'})),
+    ]);
+    expect(phoneSave.y).toBeGreaterThanOrEqual(phoneFieldBox.y + phoneFieldBox.height);
+    expect(phoneCancel.y).toBeGreaterThan(phoneSave.y);
+    expect(Math.abs(phoneSave.width - phoneFieldBox.width)).toBeLessThanOrEqual(1);
+    await phoneField.fill('-40.00');
+    await phoneField.press('Enter');
+    await expect(dialog).toBeHidden();
+    expect(amounts).toEqual(['99.5', '-40.00']);
+    await expect(rowOf('Example Savings')).toContainText('-€40.00');
   });
 
   test('shows imported files as a connection with no consent, sync or re-authorization', async ({
@@ -1896,7 +2000,14 @@ test.describe('statement file import on Connections', () => {
 
       await expect(dialog.getByRole('heading', {name: 'Imported 12 files'})).toBeVisible();
       await expect(dialog.getByText('1,234,567', {exact: true})).toBeVisible();
-      await expect(dialog.getByLabel(`Balance of ${LONG_ACCOUNT} today`)).toBeVisible();
+      const balance = dialog.getByLabel(`Balance of ${LONG_ACCOUNT} today`);
+      await expect(balance).toBeVisible();
+      // A long amount scrolls inside the field and leaves its currency in view.
+      await balance.fill('-123456789012345678901234567890.55');
+      await expectCurrencyInside(balance, 'EUR');
+      expect(await balance.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(
+        true,
+      );
       await expectNothingWiderThan(dialog);
       const review = dialog.getByRole('button', {name: 'Review 40 rows'});
       await expectInsideViewport(page, review);
