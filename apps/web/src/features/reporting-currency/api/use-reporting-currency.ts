@@ -117,12 +117,17 @@ export function useFiguresCurrencyAccepted() {
   return (currency: string | null | undefined) => figuresCurrencyAccepted(settings, currency);
 }
 
-const responseCurrency = (data: unknown): string | null | undefined => {
-  const first: unknown = Array.isArray(data) ? (data as unknown[])[0] : data;
-  return typeof first === 'object' && first !== null && 'baseCurrency' in first
-    ? (first as {baseCurrency: string | null}).baseCurrency
-    : undefined;
-};
+/**
+ * Every currency a money response names: at its top, per page of a paged list, or per part (such as the recurring
+ * bills and income lists). Rows deeper down name their own currency, not the reporting one.
+ */
+function responseCurrencies(data: unknown, depth = 0): Array<string | null> {
+  if (depth > 2 || typeof data !== 'object' || data === null) return [];
+  if (Array.isArray(data)) return data.flatMap((item) => responseCurrencies(item, depth + 1));
+  const record = data as Record<string, unknown>;
+  if ('baseCurrency' in record) return [record.baseCurrency as string | null];
+  return Object.values(record).flatMap((value) => responseCurrencies(value, depth + 1));
+}
 
 /**
  * Reads the reporting currency again whenever a money response names another currency than the cached settings,
@@ -137,11 +142,12 @@ export function useWatchTotalsCurrency() {
         if (event.type !== 'updated' || event.action.type !== 'success') return;
         const [key] = event.query.queryKey as readonly unknown[];
         if (!MONEY_QUERY_ROOTS.some((root) => root[0] === key)) return;
-        const currency = responseCurrency(event.query.state.data);
-        if (currency === undefined) return;
+        const currencies = responseCurrencies(event.query.state.data);
+        if (currencies.length === 0) return;
         const settings = queryClient.getQueryState<ReportingCurrency>(reportingCurrencyQueryKey);
         if (!settings?.data || settings.fetchStatus !== 'idle') return;
-        if (figuresCurrencyAccepted(settings.data, currency)) return;
+        const {data: cached} = settings;
+        if (currencies.every((currency) => figuresCurrencyAccepted(cached, currency))) return;
         void queryClient.invalidateQueries({queryKey: reportingCurrencyQueryKey});
       }),
     [queryClient],

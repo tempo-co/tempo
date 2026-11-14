@@ -16,6 +16,7 @@ import {formatBankTransactionCompactDate} from '@/features/banking/utils/formatt
 import {ChartCardHeader} from '@/features/dashboard/components/chart-card';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatMoney, toCents} from '@/features/dashboard/utils/money';
+import {useFiguresCurrencyAccepted} from '@/features/reporting-currency/api/use-reporting-currency';
 import {useLocalDate} from '@/hooks/use-local-date';
 
 import {useGetMerchantRanking} from '../api/use-get-merchant-ranking';
@@ -183,6 +184,10 @@ function AllMerchants({
   const merchants = data?.pages.flatMap((page) => page.merchants) ?? [];
   const last = data?.pages[data.pages.length - 1];
   const currency = last?.baseCurrency ?? null;
+  // Pages read on either side of a currency change, or outside the reporting currency, wait for the list to reload.
+  const accepted = useFiguresCurrencyAccepted();
+  const consistent =
+    !!data?.pages.every((page) => page.baseCurrency === currency) && accepted(currency);
 
   return (
     <section
@@ -198,7 +203,7 @@ function AllMerchants({
           </p>
         )}
       </header>
-      {isPending ? (
+      {isPending || (last && !consistent) ? (
         <Skeleton className='h-72' role='img' aria-label='Loading merchants' />
       ) : !last ? (
         <LoadErrorState

@@ -124,6 +124,17 @@ test.describe('fully mocked', () => {
     await mockSyntheticHome(page);
     // The two currencies tie, so nothing is suggested.
     const api = await mockReportingCurrency(page, {...ASKING, suggestion: null});
+    // The history answers in no currency until one is chosen and its amounts are converted.
+    const history = homeHistory();
+    let currency: string | null = null;
+    await page.route('**/bank-transactions/balance-trend?**', (route) =>
+      new URL(route.request().url()).searchParams.get('interval') === 'month'
+        ? fulfillJson(route, {...history.trend, baseCurrency: currency})
+        : route.fallback(),
+    );
+    await page.route('**/bank-transactions/cash-flow?**', (route) =>
+      fulfillJson(route, {...history.flow, baseCurrency: currency}),
+    );
     await page.goto('/?month=2026-10');
 
     const setup = page.getByRole('region', {name: QUESTION});
@@ -140,12 +151,14 @@ test.describe('fully mocked', () => {
     await expect(homePage.whereYouStand).toBeHidden();
     await expect(month).toBeHidden();
 
-    // Once the amounts are converted, the figures and the month come back without a reload.
+    // Once the amounts are converted, the figures and the month come back in GBP without a reload.
+    currency = 'GBP';
     api.state = {...api.state, recalculating: false};
     await expect(month).toBeVisible({timeout: 10_000});
     await expect(page.getByRole('heading', {name: 'Recalculating totals in GBP'})).toBeHidden();
+    await expect(month.getByRole('region', {name: 'The month'})).toContainText('£');
     await page.keyboard.press('Escape');
-    await expect(homePage.whereYouStand).toBeVisible();
+    await expect(homePage.totalBalance).toContainText('£');
   });
 
   test('Home and a linked month show no figures before the reporting currency is known', async ({
