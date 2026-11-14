@@ -43,17 +43,17 @@ export function SupportedFiles() {
         </ResponsiveDialogHeader>
         <ResponsiveDialogBody>
           <div className='grid grid-cols-1 gap-4 pb-4 text-sm md:pb-0'>
-            <section aria-labelledby='supported-files-standard' className='grid gap-1'>
+            <section aria-labelledby='supported-files-standard' className='grid grid-cols-1 gap-1'>
               <h3 id='supported-files-standard' className='font-medium'>
                 Standard formats
               </h3>
               <p className='text-muted-foreground'>{STANDARD_FORMATS.join(', ')}</p>
             </section>
-            <section aria-labelledby='supported-files-banks' className='grid gap-1'>
+            <section aria-labelledby='supported-files-banks' className='grid grid-cols-1 gap-1'>
               <h3 id='supported-files-banks' className='font-medium'>
                 Bank exports
               </h3>
-              <ul aria-labelledby='supported-files-banks' className='grid gap-1'>
+              <ul aria-labelledby='supported-files-banks' className='grid grid-cols-1 gap-1'>
                 {BANK_EXPORTS.map(({bank, files}) => (
                   <li key={bank} className='flex justify-between gap-3'>
                     <span>{bank}</span>
@@ -78,11 +78,11 @@ function YourLayouts({enabled}: {enabled: boolean}) {
   const {data: layouts} = useBankImportLayouts(enabled);
   if (!layouts || layouts.length === 0) return null;
   return (
-    <section aria-labelledby='supported-files-yours' className='grid gap-1'>
+    <section aria-labelledby='supported-files-yours' className='grid grid-cols-1 gap-1'>
       <h3 id='supported-files-yours' className='font-medium'>
         Your layouts
       </h3>
-      <ul aria-labelledby='supported-files-yours' className='grid gap-1'>
+      <ul aria-labelledby='supported-files-yours' className='grid grid-cols-1 gap-1'>
         {layouts.map((layout) => (
           <LayoutRow key={layout.id} layout={layout} />
         ))}

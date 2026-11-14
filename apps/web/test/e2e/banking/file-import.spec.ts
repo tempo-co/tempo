@@ -1048,6 +1048,7 @@ test.describe('statement file import on Connections', () => {
     await expect(rows.nth(1)).toContainText('1 file · nothing new');
     await expect(rows.nth(1)).toContainText('Yesterday');
     const undone = rows.nth(2);
+    await expect(undone.getByRole('button', {name: '3 files', exact: true})).toBeVisible();
     await expect(undone).toContainText('Undone 3 Oct');
     await expect(undone.getByRole('button', {name: /^Undo/})).toHaveCount(0);
     await page.getByRole('button', {name: 'Show all'}).click();
@@ -1066,6 +1067,7 @@ test.describe('statement file import on Connections', () => {
     await expect(confirm).toBeHidden();
     expect(api.undos).toEqual(['00000000-0000-4000-8000-000000000511']);
     await expect(rows.first()).toContainText('Undone 12 Nov');
+    await expect(rows.first().getByRole('button', {name: '3 files', exact: true})).toBeVisible();
     await expect(rows.first().getByRole('button', {name: /^Undo/})).toHaveCount(0);
   });
 
@@ -1554,11 +1556,21 @@ test.describe('statement file import on Connections', () => {
     }
     await dialog.getByRole('button', {name: 'Not right'}).click();
     await dialog.getByRole('button', {name: 'Supported files'}).click();
-    await expect(page.getByRole('list', {name: 'Your layouts'})).toBeVisible();
-    await expectNoHorizontalOverflow(page);
-    expect(
-      (await boxOf(page.getByRole('button', {name: `Remove ${proposal.bankName}`}))).height,
-    ).toBeGreaterThanOrEqual(44);
+    const supported = page.getByTestId('supported-files');
+    await expect(supported.getByRole('list', {name: 'Your layouts'})).toBeVisible();
+    const remove = supported.getByRole('button', {name: `Remove ${proposal.bankName}`});
+    for (const width of [390, 320]) {
+      await page.setViewportSize({width, height: 700});
+      await expectNoHorizontalOverflow(page);
+      const [sheet, name, button] = await Promise.all([
+        boxOf(supported),
+        boxOf(supported.getByText(proposal.bankName!, {exact: true})),
+        boxOf(remove),
+      ]);
+      expect(name.x + name.width).toBeLessThanOrEqual(button.x);
+      expect(button.x + button.width).toBeLessThanOrEqual(sheet.x + sheet.width);
+      expect(button.height).toBeGreaterThanOrEqual(44);
+    }
   });
 
   test.describe('worst-case data on phones', () => {
