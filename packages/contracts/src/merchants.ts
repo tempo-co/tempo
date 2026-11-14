@@ -1,13 +1,16 @@
 import type {CashFlowInterval} from './dashboard.js';
 
 /**
- * A merchant group's id: `b_` plus the MD5 of the lowercased brand for merchants identified with a brand, otherwise
- * `k_` plus the MD5 of the merchant key without its direction (people and merchants without a brand). Stable for as
- * long as the brand or key is.
+ * A merchant group's id: `b_` plus the MD5 of the lowercased company (or brand, until one is named) for merchants
+ * identified with a brand, otherwise `k_` plus the MD5 of the merchant key without its direction (people and merchants
+ * without a brand). Stable for as long as the company, brand or key is.
  */
 export const MERCHANT_GROUP_ID_PATTERN = '^[bk]_[0-9a-f]{32}$';
 
-/** `BRAND` groups every merchant key identified with one brand; `MERCHANT` is one merchant key, such as a person. */
+/**
+ * `BRAND` groups every merchant key identified with one company: its own brands and the products it sells under other
+ * names. `MERCHANT` is one merchant key, such as a person.
+ */
 export const MERCHANT_GROUP_KINDS = ['BRAND', 'MERCHANT'] as const;
 export type MerchantGroupKind = (typeof MERCHANT_GROUP_KINDS)[number];
 
@@ -26,10 +29,10 @@ export const MERCHANT_RANKING_BASELINE_PERIODS = 6;
  */
 export type MerchantGroupListItem = {
 	id: string;
-	/** The brand, or the latest description of the merchant key. */
+	/** The company, or the latest description of the merchant key. */
 	name: string;
 	kind: MerchantGroupKind;
-	/** Path of the brand's logo image, null when no confirmed logo exists. */
+	/** Path of a logo of the group's brands, null when no confirmed logo exists. */
 	logoUrl: string | null;
 	/** Payments minus refunds; negative when more was refunded than paid. */
 	spent: string;
