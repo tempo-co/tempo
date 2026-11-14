@@ -8,9 +8,12 @@ import {normalizeIdentityAmount} from './bank-transaction-identity';
 /** How many calendar days apart two rows may be for step 4, and how far around the incoming dates to look. */
 export const MATCH_WINDOW_DAYS = 3;
 
-export type MatchStep = 'reference' | 'balance' | 'sameDay' | 'nearby';
+/** `sameDayGroup`: paired inside a same-day look-alike group by `pairLookAlikeGroups`. */
+export type MatchStep = 'reference' | 'balance' | 'sameDay' | 'nearby' | 'sameDayGroup';
 
 export type MatchIncomingRow = {
+	/** The row's counterparty and description, read only to order the pairs of a look-alike group. */
+	text?: string | null;
 	amount: string;
 	currency: string;
 	bookingDate: string | null;
@@ -22,8 +25,11 @@ export type MatchIncomingRow = {
 export type MatchExistingRow = MatchIncomingRow & {
 	id: string;
 	createdAt: Date;
-	/** Stored by a file import, so its reference is in a file's numbering rather than the bank's. */
-	imported?: boolean;
+	/**
+	 * Its reference is in the incoming rows' own numbering (at an import: a row an earlier import stored), so the
+	 * reference fallback keeps it. Rows without it are in the other source's numbering.
+	 */
+	sameNumbering?: boolean;
 };
 
 export type MatchOutcome =
@@ -143,32 +149,32 @@ export function matchTransactions(
 }
 
 /**
- * How many rows must be probed (`probeReferences`) before a statement's references count as unrelated to the
- * bank's. A chosen value, not a measured one: enough rows that a statement sharing the bank's references has shown
- * at least one of them.
+ * How many rows must be probed (`probeReferences`) before the incoming references count as unrelated to the other
+ * source's. A chosen value, not a measured one: enough rows that two sources sharing references have shown at least
+ * one of them.
  */
 export const REFERENCE_FALLBACK_MIN_PROBED_ROWS = 20;
 
 export type ReferenceProbe = {
 	/**
-	 * Incoming rows with a reference that have at least one existing row in the bank's numbering (not `imported`)
-	 * with the same amount and currency at most `MATCH_WINDOW_DAYS` away that carries a reference too: rows whose
-	 * twin, if the bank stored it, could show whether the file and the bank share references.
+	 * Incoming rows with a reference that have at least one existing row in the other source's numbering (not
+	 * `sameNumbering`) with the same amount and currency at most `MATCH_WINDOW_DAYS` away that carries a reference
+	 * too: rows whose twin, if stored, could show whether the two sources share references.
 	 */
 	probedRows: number;
-	/** Incoming rows whose reference equals the reference of any existing row in the bank's numbering. */
+	/** Incoming rows whose reference equals the reference of any existing row in the other source's numbering. */
 	rowsWithStoredReference: number;
 };
 
-/** What the incoming rows' references have in common with the bank's stored ones (references compared trimmed). */
+/** What the incoming rows' references have in common with the other source's (references compared trimmed). */
 export function probeReferences(
 	incoming: readonly MatchIncomingRow[],
 	existing: readonly MatchExistingRow[],
 ): ReferenceProbe {
-	const banks = existing.filter((row) => !row.imported && row.reference?.trim());
-	const storedReferences = new Set(banks.map(({reference}) => reference!.trim()));
+	const others = existing.filter((row) => !row.sameNumbering && row.reference?.trim());
+	const storedReferences = new Set(others.map(({reference}) => reference!.trim()));
 	const referencedByAmount = groupBy(
-		banks.filter((row) => matchDay(row)),
+		others.filter((row) => matchDay(row)),
 		amountKey,
 	);
 	let probedRows = 0;
@@ -184,32 +190,107 @@ export function probeReferences(
 	return {probedRows, rowsWithStoredReference};
 }
 
-export type StatementMatch = {outcomes: MatchOutcome[]; referencesSetAside: boolean};
+export type ReferenceFallbackMatch = {outcomes: MatchOutcome[]; referencesSetAside: boolean};
+
+export type ReferenceFallbackOptions = MatchOptions & {
+	/** Pair same-day look-alike groups as large on both sides (`pairLookAlikeGroups`) after the ladder. */
+	pairLookAlikeGroups?: boolean;
+};
 
 /**
- * The ladder for a statement file's rows. Some banks number their files in another scheme than the one bank sync
- * stores. When at least `REFERENCE_FALLBACK_MIN_PROBED_ROWS` rows were probed and none of the file's references is
- * one the bank stored, the bank's references are set aside and the ladder runs with `uniqueCandidatesOnly`: rows
- * then match the bank's rows by balance or date, and same-day look-alike groups are held as doubtful rather than
- * paired in order, since nothing tells their rows apart. Rows stored by an import keep their references, so they
- * still match or conflict with the file's. Otherwise this is `matchTransactions` unchanged.
+ * The ladder between two sources that may number payments in different schemes: a statement file against what bank
+ * sync stored, or a sync's rows against imported ones. When at least `REFERENCE_FALLBACK_MIN_PROBED_ROWS` rows were
+ * probed and none of the incoming references is one the other source stored, the other source's references are set
+ * aside and the ladder runs with `uniqueCandidatesOnly`: rows then match by balance or date, and same-day look-alike
+ * groups are held as doubtful rather than paired in order. Rows marked `sameNumbering` keep their references, so
+ * they still match or conflict. Otherwise the ladder runs with the given options.
  */
-export function matchStatementRows(
+export function matchWithReferenceFallback(
 	incoming: readonly MatchIncomingRow[],
 	existing: readonly MatchExistingRow[],
-): StatementMatch {
+	{pairLookAlikeGroups: pairGroups = false, ...options}: ReferenceFallbackOptions = {},
+): ReferenceFallbackMatch {
 	const {probedRows, rowsWithStoredReference} = probeReferences(incoming, existing);
-	if (probedRows < REFERENCE_FALLBACK_MIN_PROBED_ROWS || rowsWithStoredReference > 0) {
-		return {outcomes: matchTransactions(incoming, existing), referencesSetAside: false};
-	}
+	const referencesSetAside = probedRows >= REFERENCE_FALLBACK_MIN_PROBED_ROWS && rowsWithStoredReference === 0;
+	const compared = referencesSetAside
+		? existing.map((row) => (row.sameNumbering ? row : {...row, reference: null}))
+		: existing;
+	const outcomes = matchTransactions(incoming, compared, referencesSetAside ? {uniqueCandidatesOnly: true} : options);
 	return {
-		outcomes: matchTransactions(
-			incoming,
-			existing.map((row) => (row.imported ? row : {...row, reference: null})),
-			{uniqueCandidatesOnly: true},
-		),
-		referencesSetAside: true,
+		outcomes: pairGroups ? pairLookAlikeGroups(incoming, compared, outcomes) : outcomes,
+		referencesSetAside,
 	};
+}
+
+/**
+ * Pairs what the ladder left doubtful inside same-day look-alike groups: when the doubtful incoming rows and the
+ * unclaimed existing rows with one amount, currency and day are equally many and no two of them have
+ * conflicting references, they are taken as the same payments. Pairs go most similar `text` first (the share of
+ * words in common, case folded), then in incoming order against existing rows by
+ * `createdAt` and `id`. Two indistinguishable rows may swap; nothing is added or lost. Other outcomes are returned
+ * as they were.
+ */
+export function pairLookAlikeGroups(
+	incoming: readonly MatchIncomingRow[],
+	existing: readonly MatchExistingRow[],
+	outcomes: readonly MatchOutcome[],
+): MatchOutcome[] {
+	const paired = [...outcomes];
+	const claimed = new Set(outcomes.flatMap((outcome) => (outcome.kind === 'matched' ? [outcome.existingId] : [])));
+	const ordered = [...existing].sort(
+		(left, right) => left.createdAt.getTime() - right.createdAt.getTime() || left.id.localeCompare(right.id),
+	);
+	const existingByDay = groupBy(
+		ordered.filter((row) => !claimed.has(row.id) && matchDay(row)),
+		dayKey,
+	);
+	const doubtfulByDay = groupBy(
+		incoming.flatMap((row, index) => (outcomes[index].kind === 'doubtful' && matchDay(row) ? [index] : [])),
+		(index) => dayKey(incoming[index]),
+	);
+	for (const [key, indexes] of doubtfulByDay) {
+		const group = existingByDay.get(key) ?? [];
+		if (group.length !== indexes.length) continue;
+		if (indexes.some((index) => group.some((row) => referencesConflict(incoming[index], row)))) continue;
+		const pairs = indexes
+			.flatMap((index, position) =>
+				group.map((row, rank) => ({
+					index,
+					position,
+					row,
+					rank,
+					score: textSimilarity(incoming[index].text, row.text),
+				})),
+			)
+			.sort(
+				(left, right) => right.score - left.score || left.position - right.position || left.rank - right.rank,
+			);
+		const taken = new Set<string>();
+		const done = new Set<number>();
+		for (const {index, row} of pairs) {
+			if (done.has(index) || taken.has(row.id)) continue;
+			done.add(index);
+			taken.add(row.id);
+			paired[index] = {kind: 'matched', existingId: row.id, step: 'sameDayGroup'};
+		}
+	}
+	return paired;
+}
+
+/** The share of words two texts have in common, case folded; 0 when either has none. */
+function textSimilarity(left: string | null | undefined, right: string | null | undefined): number {
+	const [leftWords, rightWords] = [words(left), words(right)];
+	const shared = [...leftWords].filter((word) => rightWords.has(word)).length;
+	return shared / (leftWords.size + rightWords.size - shared || 1);
+}
+
+function words(text: string | null | undefined): Set<string> {
+	return new Set(
+		(text ?? '')
+			.toLowerCase()
+			.split(/[^\p{L}\p{N}]+/u)
+			.filter(Boolean),
+	);
 }
 
 function referencesConflict(left: MatchIncomingRow, right: MatchIncomingRow): boolean {

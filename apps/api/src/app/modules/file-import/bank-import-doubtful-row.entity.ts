@@ -16,9 +16,14 @@ import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {BankImport} from './bank-import.entity';
 import {NormalizedRow} from './parsers/parse-result';
 
-/** A file row with more than one stored look-alike, held out of `bank_transactions` until the owner decides. */
+/**
+ * A question for the owner about one of an import's rows. Usually a file row the duplicate ladder could not decide,
+ * held out of `bank_transactions` until the owner answers. When `importedTransactionId` is set, the import's row is
+ * already in history and a sync later delivered look-alikes it may be (the candidates).
+ */
 @Entity('bank_import_doubtful_rows')
 @Index('idx_bank_import_doubtful_rows_import', ['importId'])
+@Index('idx_bank_import_doubtful_rows_imported_transaction', ['importedTransactionId'])
 export class BankImportDoubtfulRow {
 	@PrimaryGeneratedColumn('uuid', {primaryKeyConstraintName: 'pk_bank_import_doubtful_rows'})
 	id: string;
@@ -43,6 +48,17 @@ export class BankImportDoubtfulRow {
 
 	@Column({type: 'uuid', array: true})
 	candidateTransactionIds: string[];
+
+	/** The import's row in history this question is about; null for a row held out of history. */
+	@Column({type: 'uuid', nullable: true})
+	importedTransactionId: string | null;
+
+	@ManyToOne(() => BankTransaction, {onDelete: 'CASCADE', nullable: true})
+	@JoinColumn({
+		name: 'importedTransactionId',
+		foreignKeyConstraintName: 'fk_bank_import_doubtful_rows_imported_transaction',
+	})
+	importedTransaction?: BankTransaction | null;
 
 	/** Null while open. */
 	@Column({type: 'varchar', length: 16, nullable: true})
