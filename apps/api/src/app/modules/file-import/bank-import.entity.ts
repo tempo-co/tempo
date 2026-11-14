@@ -67,6 +67,10 @@ export class BankImport {
 	@Column({type: 'integer', default: 0})
 	rowsDoubtful: number;
 
+	/** Rows on days bank sync is final for that it never sent, not added and still not added by the owner. */
+	@Column({type: 'integer', default: 0})
+	rowsNotInBank: number;
+
 	@Column({type: 'date', nullable: true})
 	dateFrom: string | null;
 

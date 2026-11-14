@@ -17,9 +17,17 @@ import {BankImport} from './bank-import.entity';
 import {NormalizedRow} from './parsers/parse-result';
 
 /**
- * A question for the owner about one of an import's rows. Usually a file row the duplicate ladder could not decide,
- * held out of `bank_transactions` until the owner answers. When `importedTransactionId` is set, the import's row is
- * already in history and a sync later delivered look-alikes it may be (the candidates).
+ * What a stored row of an import is: `doubtful`, a question for the owner; `not_in_bank`, a file row on a day bank
+ * sync is final for that sync never sent, kept out of history and offered to add.
+ */
+export const BANK_IMPORT_ROW_KINDS = ['doubtful', 'not_in_bank'] as const;
+export type BankImportRowKind = (typeof BANK_IMPORT_ROW_KINDS)[number];
+
+/**
+ * A row of an import kept beside history (`kind`). A `doubtful` row is a question for the owner: usually a file row
+ * the duplicate ladder could not decide, held out of `bank_transactions` until the owner answers. When
+ * `importedTransactionId` is set, the import's row is already in history and a sync later delivered look-alikes it
+ * may be (the candidates). A `not_in_bank` row is resolved `new` when the owner adds it.
  */
 @Entity('bank_import_doubtful_rows')
 @Index('idx_bank_import_doubtful_rows_import', ['importId'])
@@ -41,6 +49,9 @@ export class BankImportDoubtfulRow {
 	@ManyToOne(() => BankAccount, {onDelete: 'CASCADE', nullable: false})
 	@JoinColumn({name: 'bankAccountId', foreignKeyConstraintName: 'fk_bank_import_doubtful_rows_bank_account'})
 	bankAccount?: BankAccount;
+
+	@Column({type: 'varchar', length: 16, default: 'doubtful'})
+	kind: BankImportRowKind;
 
 	/** The parsed row, as it would be written. */
 	@Column({type: 'jsonb'})

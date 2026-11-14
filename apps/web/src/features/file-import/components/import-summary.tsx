@@ -24,6 +24,7 @@ import {
   undoneTitle,
 } from '../utils/import-format';
 import {ImportBalancePrompts} from './account-balance';
+import {NeverSentRows} from './never-sent-rows';
 import {type KnownAccount, importAccountName, useKnownAccounts} from './use-known-accounts';
 
 type Count = {label: string; value: number; attention?: boolean};
@@ -79,6 +80,7 @@ export function ImportSummaryBody({summary}: {summary: BankImportSummary}) {
           ]}
         />
       )}
+      {!undoneAt && <NeverSentRows summary={summary} />}
       {(range || summary.accounts.length > 0) && (
         <dl className='grid grid-cols-1 gap-4'>
           {range && (
