@@ -78,6 +78,7 @@ const merchantIdentificationResponseSchema = z
 					correlationId: z.string().min(1),
 					kind: z.enum(MERCHANT_KINDS),
 					brand: z.string().nullable(),
+					company: z.string().nullable(),
 					domain: z.string().nullable(),
 					domainConfident: z.boolean(),
 				})
@@ -500,8 +501,9 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			throw this.invalidResponseError();
 		return items.map((item) => {
 			const named = item.kind === 'BUSINESS' || item.kind === 'PAYMENT_SERVICE';
-			const normalized = named ? normalizeBankTransactionText(item.brand) : null;
-			const brand = normalized && normalized.length <= merchantContract.maxBrandLength ? normalized : null;
+			const brand = named ? this.toBrandName(item.brand) : null;
+			// A payment service moved someone else's money, so it never groups under a company other than itself.
+			const company = brand && item.kind === 'BUSINESS' ? (this.toBrandName(item.company) ?? brand) : brand;
 			const domain = named
 				? item.domain
 						?.trim()
@@ -513,10 +515,16 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 				correlationId: merchants[Number(item.correlationId)].correlationId,
 				kind: item.kind,
 				brand,
+				company,
 				domain: validDomain,
 				domainConfident: !!validDomain && item.domainConfident,
 			};
 		});
+	}
+
+	private toBrandName(name: string | null): string | null {
+		const normalized = normalizeBankTransactionText(name);
+		return normalized && normalized.length <= merchantContract.maxBrandLength ? normalized : null;
 	}
 
 	private createInput(

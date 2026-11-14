@@ -604,7 +604,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			usage: {server_tool_use: {web_search_requests: 0}},
 		});
 
-		it('sends only merchant names with the merchant contract and keeps a well-formed official domain', async () => {
+		it('sends only merchant names with the merchant contract and keeps a well-formed official domain and a business’s company', async () => {
 			const {provider, create} = setup();
 			create.mockResolvedValue(
 				merchantResponse([
@@ -612,6 +612,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 						correlationId: '0',
 						kind: 'BUSINESS',
 						brand: ' Example  Shop ',
+						company: null,
 						domain: 'WWW.Shop.Example.test',
 						domainConfident: true,
 					},
@@ -619,6 +620,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 						correlationId: '1',
 						kind: 'BUSINESS',
 						brand: 'Example Cafe',
+						company: ' Example  Foods ',
 						domain: 'https://cafe.example.test/',
 						domainConfident: true,
 					},
@@ -626,6 +628,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 						correlationId: '2',
 						kind: 'PERSON',
 						brand: 'Example Person',
+						company: 'Example Person',
 						domain: 'person.example.test',
 						domainConfident: true,
 					},
@@ -633,6 +636,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 						correlationId: '3',
 						kind: 'PAYMENT_SERVICE',
 						brand: 'Example Pay',
+						company: 'Example Bank',
 						domain: 'pay.example.test',
 						domainConfident: false,
 					},
@@ -645,15 +649,26 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 					correlationId: 'a',
 					kind: 'BUSINESS',
 					brand: 'Example Shop',
+					// A business without a company sells under its own brand.
+					company: 'Example Shop',
 					domain: 'shop.example.test',
 					domainConfident: true,
 				},
-				{correlationId: 'b', kind: 'BUSINESS', brand: 'Example Cafe', domain: null, domainConfident: false},
-				{correlationId: 'c', kind: 'PERSON', brand: null, domain: null, domainConfident: false},
+				{
+					correlationId: 'b',
+					kind: 'BUSINESS',
+					brand: 'Example Cafe',
+					company: 'Example Foods',
+					domain: null,
+					domainConfident: false,
+				},
+				{correlationId: 'c', kind: 'PERSON', brand: null, company: null, domain: null, domainConfident: false},
 				{
 					correlationId: 'd',
 					kind: 'PAYMENT_SERVICE',
 					brand: 'Example Pay',
+					// Money a payment service moved never groups under another business.
+					company: 'Example Pay',
 					domain: 'pay.example.test',
 					domainConfident: false,
 				},
@@ -696,7 +711,14 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			const {provider, create} = setup();
 			create.mockResolvedValue(
 				merchantResponse([
-					{correlationId: '9', kind: 'UNCLEAR', brand: null, domain: null, domainConfident: false},
+					{
+						correlationId: '9',
+						kind: 'UNCLEAR',
+						brand: null,
+						company: null,
+						domain: null,
+						domainConfident: false,
+					},
 				]),
 			);
 			await expect(provider.identifyMerchants([merchant()])).rejects.toMatchObject({
