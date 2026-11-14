@@ -18,6 +18,7 @@ import {
   formatCount,
   formatDateRange,
   isNothingNew,
+  nameEndsWithCurrency,
   nothingNewCopy,
   undoneDescription,
   undoneTitle,
@@ -151,11 +152,12 @@ function ImportAccounts({
     <ul className='grid grid-cols-1 gap-3' data-testid='bank-import-accounts'>
       {summary.accounts.map((account) => {
         const match = known.get(account.id);
+        const name = importAccountName(account, known);
         const subline = match ? accountSubline(match.account) : '';
         const detail = [
           account.created && 'New account',
           subline,
-          account.currency,
+          !nameEndsWithCurrency(name, account.currency) && account.currency,
           match && (match.synced ? match.connection.aspspName : 'Imported files'),
         ]
           .filter(Boolean)
@@ -164,9 +166,7 @@ function ImportAccounts({
           <li key={account.id} className='grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3'>
             <AccountTile match={match} logos={logos} />
             <span className='min-w-0'>
-              <span className='block text-sm wrap-anywhere'>
-                {importAccountName(account, known)}
-              </span>
+              <span className='block text-sm wrap-anywhere'>{name}</span>
               <span className='block text-xs wrap-anywhere text-muted-foreground'>{detail}</span>
             </span>
           </li>

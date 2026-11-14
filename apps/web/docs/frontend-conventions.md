@@ -93,6 +93,7 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 - Name a feature by its use and an item by convention (tab `Integrations`, item `Access tokens`). Explain the use once on the page; keep dialogs about the item.
 - Never name the services Tempo is built on (its bank-data, AI or logo providers, for example) in UI copy, placeholders or hints, and do not name Tempo itself in descriptions ("Bills and income found in your history"). The owner's own banks and their export formats may be named, because that is how the owner recognises them: connection cards show bank names, and the file-import Supported files list names the exports it reads ("ABN AMRO TXT", "Rabobank CSV").
 - Do not ship setup snippets that need a local checkout path; only developers could use them.
+- When something is briefly busy or failed for a moment, say what the owner can do, not which internal process is busy ("Tempo is busy right now", not "Other files are being imported"). Say "Try again in a moment." for a short wait; name a duration only when the server gives a real one (`formatRetryAfter`).
 
 ## Routing and URL state
 

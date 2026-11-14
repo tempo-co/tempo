@@ -133,7 +133,7 @@ export function DoubtfulRowsReview({
           ? "Couldn't save your answer"
           : `Couldn't save ${plural(failures.length, 'answer')}`,
         {
-          description: 'Please try again in a moment.',
+          description: 'Try again in a moment.',
           id: `bank-import-resolve-failed-${summary.id}`,
         },
       );

@@ -1339,7 +1339,10 @@ test.describe('statement file import on Connections', () => {
     const wentTo = summary.getByTestId('bank-import-accounts').getByRole('listitem');
     await expect(wentTo).toHaveCount(2);
     await expect(wentTo.nth(0).getByTestId('bank-logo')).toBeVisible();
-    await expect(wentTo.nth(1)).toContainText('New account · EUR · Imported files');
+    await expect(wentTo.nth(0)).toContainText('Current account · ••1234 · EUR · Mock ASPSP');
+    // A name that already ends with its currency is not followed by it again.
+    await expect(wentTo.nth(1)).toContainText('Example Card · EUR');
+    await expect(wentTo.nth(1)).toContainText('New account · Imported files');
     await expect(wentTo.nth(1).getByTestId('bank-logo')).toHaveCount(0);
     await expect(summary.getByRole('button', {name: 'Undo import'})).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
@@ -1792,8 +1795,8 @@ test.describe('statement file import on Connections', () => {
       .setInputFiles([statement('statement-a.xml'), statement('statement-b.xml')]);
 
     const alert = dialog.getByRole('alert');
-    await expect(alert.getByText('Other files are being imported')).toBeVisible();
-    await expect(alert).toContainText('Try again in a minute. Nothing was imported.');
+    await expect(alert.getByText('Tempo is busy right now')).toBeVisible();
+    await expect(alert).toContainText('Try again in a moment. Nothing was imported.');
     await expect(
       dialog.getByRole('list', {name: 'Chosen files'}).getByRole('listitem'),
     ).toHaveCount(2);

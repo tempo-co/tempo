@@ -90,7 +90,7 @@ const REFUSAL_COPY: Record<
   },
   account_busy: {
     title: 'This bank is syncing right now',
-    description: 'Try again in a minute.',
+    description: 'Try again in a moment.',
   },
   target_account_mismatch: {
     title: 'This file belongs to a different account',
@@ -100,9 +100,10 @@ const REFUSAL_COPY: Record<
     title: 'These files belong to more than one bank',
     description: "Import each bank's files separately.",
   },
+  // Another drop is being read: the owner can only wait and import the same files again.
   import_busy: {
-    title: 'Other files are being imported',
-    description: 'Try again in a minute.',
+    title: 'Tempo is busy right now',
+    description: 'Try again in a moment.',
   },
   // Asked as a question when the refusal lists what to ask; these cover a refusal with nothing to ask.
   ambiguous_target_account: {

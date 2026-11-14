@@ -53,6 +53,20 @@ export function formatDateRange(from: string | null, to: string | null) {
   return `${format(start, sameYear ? 'd MMM' : 'd MMM yyyy')} – ${format(end, 'd MMM yyyy')}`;
 }
 
+/**
+ * Whether an account's name already ends with its currency code as a whole word (`Revolut EUR`, `Card · usd`), so a
+ * detail line under it need not repeat the code. Elsewhere the code stays, keeping same-named accounts apart.
+ */
+export function nameEndsWithCurrency(name: string, currency: string) {
+  const code = currency.trim();
+  if (!code) return false;
+  const tail = name.trimEnd().slice(-code.length - 1);
+  return (
+    tail.slice(-code.length).toUpperCase() === code.toUpperCase() &&
+    (tail.length === code.length || !/[\p{L}\p{M}\p{N}]/u.test(tail[0]))
+  );
+}
+
 export function summaryTitle(summary: Pick<BankImportSummary, 'filesCount'>) {
   return `Imported ${plural(summary.filesCount, 'file')}`;
 }
