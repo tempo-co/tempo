@@ -62,10 +62,14 @@ export const BANK_IMPORT_ERROR_CODES = [
 ] as const;
 export type BankImportErrorCode = (typeof BANK_IMPORT_ERROR_CODES)[number];
 
-/** An account the owner can choose for a statement. */
+/** An account the owner can choose for a statement, with the fields the Connections page names accounts by. */
 export type BankImportAccountCandidate = {
 	bankAccountId: string;
 	name: string | null;
+	details: string | null;
+	alias: string | null;
+	cashAccountType: string | null;
+	maskedIdentifier: string | null;
 	currency: string;
 	/** The bank of the account's connection; `Imported files` for an imported-files account. */
 	bankName: string;
@@ -81,6 +85,11 @@ export type BankImportAccountQuestion = {
 	bank: string;
 	currency: string;
 	candidates: BankImportAccountCandidate[];
+	/**
+	 * Whether `new` creates an account. False once the imported-files account of this bank and currency exists: it is
+	 * then among `candidates`, and `new` goes to it.
+	 */
+	newAccount: boolean;
 };
 
 /** The body of a refused `POST /bank-imports`. */

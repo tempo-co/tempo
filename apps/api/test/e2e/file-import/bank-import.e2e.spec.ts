@@ -1182,6 +1182,11 @@ describe('Bank imports', () => {
 			bankConnection: {accountId: owner.id, provider: 'file'},
 		});
 		const {connection, account: synced} = await createSyncedRevolutAccount(owner);
+		// The names the Connections page shows travel with each candidate.
+		await bankAccounts.update(
+			{id: synced.id},
+			{details: 'Example details', alias: 'Example spending', cashAccountType: 'CACC', maskedIdentifier: '*4300'},
+		);
 		// A Revolut EUR account bank sync no longer reports: it neither competes for the statement nor is offered.
 		await fixtures.createBankAccount(connection, {name: 'Example closed EUR', currency: 'EUR', isActive: false});
 		const dollarAccount = await fixtures.createBankAccount(await fixtures.createConnection(owner), {
@@ -1212,6 +1217,10 @@ describe('Bank imports', () => {
 						{
 							bankAccountId: synced.id,
 							name: 'Main account',
+							details: 'Example details',
+							alias: 'Example spending',
+							cashAccountType: 'CACC',
+							maskedIdentifier: '*4300',
 							currency: 'EUR',
 							bankName: 'Revolut',
 							imported: false,
@@ -1219,11 +1228,16 @@ describe('Bank imports', () => {
 						{
 							bankAccountId: fileAccount.id,
 							name: 'NL91 ABNA 0417 1643 00',
+							details: null,
+							alias: null,
+							cashAccountType: null,
+							maskedIdentifier: null,
 							currency: 'EUR',
 							bankName: 'Imported files',
 							imported: true,
 						},
 					],
+					newAccount: true,
 				},
 			],
 		});
@@ -1367,8 +1381,8 @@ describe('Bank imports', () => {
 			code: 'ambiguous_target_account',
 			file: null,
 			accountQuestions: [
-				{bank: 'Revolut', currency: 'EUR', candidates: euroAccounts.map(candidate)},
-				{bank: 'Revolut', currency: 'GBP', candidates: [candidate(pound)]},
+				{bank: 'Revolut', currency: 'EUR', candidates: euroAccounts.map(candidate), newAccount: true},
+				{bank: 'Revolut', currency: 'GBP', candidates: [candidate(pound)], newAccount: true},
 			],
 		});
 		expect(await imports.countBy({accountId: owner.id})).toBe(0);
@@ -1404,6 +1418,38 @@ describe('Bank imports', () => {
 			accounts: [
 				{id: euroAccounts[1].id, created: false},
 				{id: poundFileAccount.id, created: false},
+			],
+		});
+
+		// Once a bank and currency has its imported-files account, the question offers that account instead of a new one.
+		const fileCandidate = (account: BankAccount) => ({
+			bankAccountId: account.id,
+			name: account.name,
+			bankName: 'Imported files',
+			imported: true,
+		});
+		const euroStatement = revolutStatement([['2026-03-02', '-5.00', 'EUR']]);
+		const euroNew = await drop(agent, [euroStatement])
+			.field('accountChoices', JSON.stringify({'Revolut:EUR': 'new'}))
+			.expect(201);
+		const euroFileAccount = await bankAccounts.findOneByOrFail({id: euroNew.body.accounts[0].id});
+		expect(euroFileAccount.providerAccountId).toBe('file-bank:Revolut:EUR');
+		const askedAgain = await drop(agent, [statement]).expect(409);
+		expect(askedAgain.body).toMatchObject({
+			code: 'ambiguous_target_account',
+			accountQuestions: [
+				{
+					bank: 'Revolut',
+					currency: 'EUR',
+					candidates: [...euroAccounts.map(candidate), fileCandidate(euroFileAccount)],
+					newAccount: false,
+				},
+				{
+					bank: 'Revolut',
+					currency: 'GBP',
+					candidates: [candidate(pound), fileCandidate(poundFileAccount)],
+					newAccount: false,
+				},
 			],
 		});
 	});

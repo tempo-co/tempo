@@ -133,11 +133,16 @@ test('an account question asks, unless it has nothing to ask', () => {
         {
           bankAccountId: '00000000-0000-4000-8000-000000000301',
           name: 'Everyday',
+          details: null,
+          alias: null,
+          cashAccountType: null,
+          maskedIdentifier: null,
           currency: 'EUR',
           bankName: 'Example Bank',
           imported: false,
         },
       ],
+      newAccount: true,
     },
   ];
   expect(

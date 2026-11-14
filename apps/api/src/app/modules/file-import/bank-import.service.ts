@@ -647,15 +647,38 @@ export class BankImportService {
 				});
 			}
 		}
+		const asked = questions
+			.filter(({index}) => accountRows[index].bank)
+			.sort((left, right) => left.index - right.index)
+			.map(({index, candidates}) => ({
+				rows: accountRows[index],
+				providerAccountId: fileAccountIdentity(accountRows[index]).providerAccountId,
+				candidates,
+			}));
+		// `new` goes to the imported-files account of the bank and currency once it exists, so it is offered as itself.
+		const fileAccounts =
+			asked.length > 0
+				? await this.dataSource.getRepository(BankAccount).find({
+						where: {
+							bankConnection: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
+							providerAccountId: In(asked.map(({providerAccountId}) => providerAccountId)),
+						},
+						relations: {bankConnection: true},
+					})
+				: [];
 		throw new BankImportRefusalException(
 			ambiguous.length > 0 ? 'ambiguous_target_account' : 'target_account_unconfirmed',
 			null,
-			questions
-				.sort((left, right) => left.index - right.index)
-				.flatMap(({index, candidates}) => {
-					const {bank, currency} = accountRows[index];
-					return bank ? [{bank, currency, candidates: candidates.map(toAccountCandidate)}] : [];
-				}) satisfies BankImportAccountQuestion[],
+			asked.map(({rows: {bank, currency}, providerAccountId, candidates}) => {
+				const fileAccount = fileAccounts.find((account) => account.providerAccountId === providerAccountId);
+				const unlisted = fileAccount && !candidates.some(({id}) => id === fileAccount.id);
+				return {
+					bank: bank!,
+					currency,
+					candidates: (unlisted ? [...candidates, fileAccount] : candidates).map(toAccountCandidate),
+					newAccount: !fileAccount,
+				};
+			}) satisfies BankImportAccountQuestion[],
 		);
 	}
 
@@ -1141,6 +1164,10 @@ function toAccountCandidate(account: BankAccount): BankImportAccountCandidate {
 	return {
 		bankAccountId: account.id,
 		name: account.name,
+		details: account.details,
+		alias: account.alias,
+		cashAccountType: account.cashAccountType,
+		maskedIdentifier: account.maskedIdentifier,
 		currency: account.currency,
 		bankName: account.bankConnection.aspspName.trim(),
 		imported: account.bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE,
