@@ -2738,7 +2738,20 @@ describe('Bank imports', () => {
 			expect(await transactions.findOneByOrFail({id: shop.id})).toMatchObject({importId: null});
 			expect((await openQuestions()).sort()).toEqual([early1.id, early2.id, kiosk1.id, kiosk2.id].sort());
 			expect(await imports.findOneByOrFail({id: importId})).toMatchObject({rowsDoubtful: 4});
+			// The owner says one kiosk row is a payment of its own: that answer outlasts the sweep.
+			const asked = (await agent.get(`/bank-imports/${importId}/doubtful-rows`).expect(200)).body as Array<{
+				id: string;
+				importedTransactionId: string | null;
+			}>;
+			await agent
+				.post(
+					`/bank-imports/${importId}/doubtful-rows/${asked.find(({importedTransactionId}) => importedTransactionId === kiosk2.id)!.id}/resolve`,
+				)
+				.set('Origin', ORIGIN)
+				.send({decision: 'new'})
+				.expect(200);
 			const before = await imports.findOneByOrFail({id: importId});
+			expect(before).toMatchObject({rowsDoubtful: 3});
 
 			// A complete fetch of the whole history: coverage from 2 March, final days 10 to 25 March (the pending row's
 			// day is read again).
@@ -2752,13 +2765,19 @@ describe('Bank imports', () => {
 				transactions.findOneByOrFail({bankAccountId: account.id, providerTransactionId});
 			const kioskSynced = await synced('provider-sweep-kiosk');
 
-			// On final days, imported rows nothing took over are gone; the rest stay as they were.
-			for (const removed of [edge, kiosk1, kiosk2, pharmacy, pocket]) {
+			// On final days, imported rows nothing took over are gone; the rest stay as they were, and so does the row
+			// the owner answered was a payment of its own, with its category.
+			for (const removed of [edge, kiosk1, pharmacy, pocket]) {
 				expect(await transactions.findOneBy({id: removed.id})).toBeNull();
 			}
 			for (const kept of [early1, early2, margin, late, lateTwin]) {
 				expect(await transactions.findOneByOrFail({id: kept.id})).toMatchObject({importId});
 			}
+			expect(await transactions.findOneByOrFail({id: kiosk2.id})).toMatchObject({
+				importId,
+				category: 'HEALTH',
+				categorySource: 'MANUAL',
+			});
 			expect(await transactions.findOneByOrFail({id: shop.id})).toMatchObject({
 				importId: null,
 				providerTransactionId: 'provider-sweep-shop',
@@ -2789,8 +2808,8 @@ describe('Bank imports', () => {
 			expect((await openQuestions()).sort()).toEqual([early1.id, early2.id].sort());
 			expect(await imports.findOneByOrFail({id: importId})).toMatchObject({
 				rowsDoubtful: 2,
-				rowsAdded: before.rowsAdded - 5,
-				rowsRemovedBySync: 5,
+				rowsAdded: before.rowsAdded - 4,
+				rowsRemovedBySync: 4,
 			});
 			const removedRows = await listed();
 			// In booking order; rows of one day in any order.
@@ -2801,37 +2820,45 @@ describe('Bank imports', () => {
 			).toEqual([
 				['removed_by_sync', '2026-03-10', '-9.50', 'FILE-SWEEP-4'],
 				['removed_by_sync', '2026-03-18', '-15.00', 'FILE-SWEEP-6'],
-				['removed_by_sync', '2026-03-18', '-15.00', 'FILE-SWEEP-7'],
 				['removed_by_sync', '2026-03-20', '-40.00', 'FILE-SWEEP-8'],
 				['removed_by_sync', '2026-03-22', '-0.40', null],
 			]);
 			expect(removedRows.map(({row}) => row.bookingDate)).toEqual([
 				'2026-03-10',
 				'2026-03-18',
-				'2026-03-18',
 				'2026-03-20',
 				'2026-03-22',
 			]);
 			const list = (await agent.get('/bank-imports').expect(200)).body as BankImportList;
-			expect(list.imports.find(({id}) => id === importId)).toMatchObject({rowsRemovedBySync: 5});
+			expect(list.imports.find(({id}) => id === importId)).toMatchObject({rowsRemovedBySync: 4});
 
-			// Added back: a row of the import again, with the edits it had.
-			const removedKiosk2 = removedRows.find(({row}) => row.bankReference === 'FILE-SWEEP-7')!;
+			// One request takes at most 500 rows: 501 is refused before anything is read, and 500 rows that are not the
+			// import's are not found. Nothing is added either way.
+			const addBack = (rowIds: string[]) =>
+				agent.post(`/bank-imports/${importId}/never-sent-rows/add`).set('Origin', ORIGIN).send({rowIds});
+			const unknownIds = (count: number) =>
+				Array.from({length: count}, (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`);
+			await addBack(unknownIds(501)).expect(400);
+			await addBack(unknownIds(500)).expect(404);
+			expect(await imports.findOneByOrFail({id: importId})).toMatchObject({rowsRemovedBySync: 4});
+
+			// Added back in one request, all or none: rows of the import again, with the edits they had.
+			const removedPharmacy = removedRows.find(({row}) => row.bankReference === 'FILE-SWEEP-8')!;
 			const removedPocket = removedRows.find(({row}) => row.bankReference === null)!;
 			const addedBack = await agent
 				.post(`/bank-imports/${importId}/never-sent-rows/add`)
 				.set('Origin', ORIGIN)
-				.send({rowIds: [removedKiosk2.id, removedPocket.id]})
+				.send({rowIds: [removedPharmacy.id, removedPocket.id]})
 				.expect(200);
-			expect(addedBack.body).toMatchObject({rowsAdded: before.rowsAdded - 3, rowsRemovedBySync: 3});
-			const kioskBack = await transactions.findOneByOrFail({importId, entryReference: 'FILE-SWEEP-7'});
-			expect(kioskBack).toMatchObject({category: 'HEALTH', categorySource: 'MANUAL', ownTransferOverride: null});
+			expect(addedBack.body).toMatchObject({rowsAdded: before.rowsAdded - 2, rowsRemovedBySync: 2});
+			const pharmacyBack = await transactions.findOneByOrFail({importId, entryReference: 'FILE-SWEEP-8'});
+			expect(pharmacyBack).toMatchObject({
+				category: 'SHOPPING',
+				categorySource: 'MANUAL',
+				ownTransferOverride: 'MARKED',
+			});
 			const pocketBack = await transactions.findOneByOrFail({importId, amount: '-0.40000000'});
-			expect((await listed()).map(({row}) => row.bankReference)).toEqual([
-				'FILE-SWEEP-4',
-				'FILE-SWEEP-6',
-				'FILE-SWEEP-8',
-			]);
+			expect((await listed()).map(({row}) => row.bankReference)).toEqual(['FILE-SWEEP-4', 'FILE-SWEEP-6']);
 
 			// A later file's row the bank never sent, added by the owner.
 			const later = await drop(agent, [
@@ -2849,10 +2876,10 @@ describe('Bank imports', () => {
 
 			// The next syncs leave every row the owner added.
 			expect(await synchronize()).toMatchObject({status: 'SUCCEEDED'});
-			for (const added of [kioskBack, pocketBack, giftAdded]) {
+			for (const added of [pharmacyBack, pocketBack, giftAdded, kiosk2]) {
 				expect(await transactions.findOneByOrFail({id: added.id})).toMatchObject({importId: added.importId});
 			}
-			expect(await imports.findOneByOrFail({id: importId})).toMatchObject({rowsRemovedBySync: 3});
+			expect(await imports.findOneByOrFail({id: importId})).toMatchObject({rowsRemovedBySync: 2});
 		} finally {
 			for (const spy of spies) spy.mockRestore();
 		}

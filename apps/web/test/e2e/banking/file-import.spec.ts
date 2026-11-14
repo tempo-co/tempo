@@ -700,7 +700,7 @@ test.describe('statement file import on Connections', () => {
     await line.click();
     await expect(
       summaryBody.getByText(
-        "Your bank's sync covered these days and didn't send these, so Tempo removed the file's copies. Add back any you know are real.",
+        "Your bank sent every transaction for these days, and these weren't among them, so Tempo removed the file's copies. Add back any you know are real.",
       ),
     ).toBeVisible();
     const groups = summaryBody.getByTestId('bank-import-never-sent-group');

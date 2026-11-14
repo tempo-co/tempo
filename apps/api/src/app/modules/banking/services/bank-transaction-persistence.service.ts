@@ -664,8 +664,9 @@ export class BankTransactionPersistenceService {
 	 * imported row there that sync did not take over is one the bank never sent, so it is removed, with a snapshot on
 	 * its import (`removed_by_sync`) the owner can add back. Its manual category and own-transfer choice move to the
 	 * closest synced look-alike (`pickCarryTargets`) where that row has none, and its recurring hides follow it there.
-	 * Rows the owner added from a never-sent list stay, and so do the rows this write took over (`takenOverIds`), even
-	 * one the upsert skipped. Open questions about removed rows go with them; answered ones keep their answer.
+	 * Rows the owner kept stay: any row a resolution `new` points at (`resolvedTransactionId`), whether added from a
+	 * never-sent list, inserted by answering a doubtful row, or kept by answering a sync's question that it is a payment
+	 * of its own. So do the rows this write took over (`takenOverIds`), even one the upsert skipped. Open questions about removed rows go with them; answered ones keep their answer.
 	 */
 	async sweepImportedRows(
 		repository: Repository<BankTransaction>,
@@ -680,9 +681,8 @@ export class BankTransactionPersistenceService {
 				AND COALESCE(t."bookingDate", t."valueDate") BETWEEN $2::date AND $3::date
 				AND NOT (t."id" = ANY($4::uuid[]))
 				AND NOT EXISTS (
-					SELECT 1 FROM "bank_import_doubtful_rows" added
-					WHERE added."resolvedTransactionId" = t."id" AND added."resolution" = 'new'
-						AND added."kind" IN ('not_in_bank', 'removed_by_sync')
+					SELECT 1 FROM "bank_import_doubtful_rows" answered
+					WHERE answered."resolvedTransactionId" = t."id" AND answered."resolution" = 'new'
 				)`,
 			[bankAccount.id, finalDays.from, finalDays.through, takenOverIds],
 		);
