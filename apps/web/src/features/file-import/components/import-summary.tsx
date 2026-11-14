@@ -44,7 +44,10 @@ export function ImportSummaryBody({summary}: {summary: BankImportSummary}) {
           <AlertTitle>{undoneTitle(undoneAt)}</AlertTitle>
           <AlertDescription>
             {undoneDescription(summary, {
-              intoSyncedAccount: summary.accounts.some((account) => known.get(account.id)?.synced),
+              // An account the loaded list lacks may be synced: say what sync keeps unless it is known not to be.
+              intoSyncedAccount: summary.accounts.some(
+                (account) => known.get(account.id)?.synced !== false,
+              ),
             })}
           </AlertDescription>
         </Alert>
@@ -151,7 +154,8 @@ function ImportAccounts({
         const subline = match ? accountSubline(match.account) : '';
         const detail = [
           account.created && 'New account',
-          subline || account.currency,
+          subline,
+          account.currency,
           match && (match.synced ? match.connection.aspspName : 'Imported files'),
         ]
           .filter(Boolean)

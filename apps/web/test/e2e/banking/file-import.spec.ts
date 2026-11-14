@@ -448,7 +448,7 @@ test.describe('statement file import on Connections', () => {
     const wentTo = summaryBody.getByTestId('bank-import-accounts').getByRole('listitem');
     await expect(wentTo).toHaveCount(1);
     await expect(wentTo).toContainText('Mock ASPSP checking account');
-    await expect(wentTo).toContainText('Current account · ••1234 · Mock ASPSP');
+    await expect(wentTo).toContainText('Current account · ••1234 · EUR · Mock ASPSP');
     await expect(wentTo.getByTestId('bank-logo')).toBeVisible();
     await expect(dialog.getByTestId('bank-import-undone')).toHaveCount(0);
     await expect(dialog.getByRole('button', {name: 'Review 3 rows'})).toBeVisible();
