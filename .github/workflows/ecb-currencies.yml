@@ -1,0 +1,69 @@
+name: ECB currencies
+
+# Monthly comparison of the currencies the ECB publishes euro reference rates for with
+# packages/contracts/src/ecb-currencies.ts (see .github/scripts/ecb-currencies.mjs). When they differ, it opens a
+# pull request with the new table, or updates the one already open. Not part of CI: an ECB outage fails only this run.
+on:
+    schedule:
+        - cron: '23 5 2 * *'
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency: ecb-currencies
+
+jobs:
+    table:
+        name: ECB currencies
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            pull-requests: write
+        env:
+            BRANCH: chore/ecb-currencies
+        steps:
+            - name: Checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+            - name: Setup Node.js 26.x
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              with:
+                  node-version: 26.x
+
+            - name: Compare with the ECB
+              id: table
+              run: |
+                  changes=$(node .github/scripts/ecb-currencies.mjs)
+                  {
+                      echo 'changes<<END_OF_CHANGES'
+                      echo "$changes"
+                      echo 'END_OF_CHANGES'
+                  } >> "$GITHUB_OUTPUT"
+
+            - name: Open or update the pull request
+              if: steps.table.outputs.changes != ''
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  CHANGES: ${{ steps.table.outputs.changes }}
+              run: |
+                  git config user.name 'github-actions[bot]'
+                  git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+                  git switch -c "$BRANCH"
+                  git commit -qam 'chore(contracts): update the ECB currency table'
+                  git push --force origin "$BRANCH"
+                  body=$(
+                      echo 'The ECB changed the currencies it publishes euro reference rates for:'
+                      echo
+                      sed 's/^/- /' <<<"$CHANGES"
+                      echo
+                      echo 'This updates the table the reporting-currency choices and the currencies offered for an imported file come from.'
+                      echo
+                      echo "**Note:** CI doesn't start on pull requests this workflow opens. Close and reopen this PR to run it."
+                  )
+                  pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+                  if [[ -n "$pr" ]]; then
+                      gh api -X PATCH "repos/$GITHUB_REPOSITORY/pulls/$pr" -f body="$body" >/dev/null
+                  else
+                      gh pr create --base main --head "$BRANCH" --title 'chore(contracts): update the ECB currency table' --body "$body"
+                  fi

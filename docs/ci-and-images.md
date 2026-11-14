@@ -37,6 +37,10 @@ A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, an
 - When two PRs both edit an `AGENTS.md` or the same docs, simulate the second merge (`git merge-tree --write-tree`) before handing them over.
 - Image cleanup on a host must filter on `org.opencontainers.image.source` and pass `--all`; tagged leftovers are never dangling.
 
+## ECB currencies
+
+`.github/workflows/ecb-currencies.yml` runs `.github/scripts/ecb-currencies.mjs` monthly (and by hand from the Actions tab). The script rewrites `packages/contracts/src/ecb-currencies.ts` from the ECB's list of euro reference rates and prints what changed. When the table changed, the workflow opens a pull request from `chore/ecb-currencies`, or updates the open one. Pull requests opened with the workflow's token start no other workflow, so close and reopen the PR to run CI. The repository setting that lets Actions create pull requests must stay on. The workflow is separate from `CI/CD`, so an ECB outage fails only its own run.
+
 ## GHCR retention
 
 `.github/workflows/ghcr-retention.yml` runs `ops/ghcr-retention.sh` weekly for both packages (see `ops/README.md`). Scheduled runs only report until the repository variable `GHCR_RETENTION_DELETE` is `true`. Both packages are linked to this repository, which gives its workflows write and admin access; if that link is removed, image pushes and deletions fail with 403.

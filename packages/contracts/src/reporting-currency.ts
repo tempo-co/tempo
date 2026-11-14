@@ -1,40 +1,13 @@
+import {ECB_CURRENCIES} from './ecb-currencies.js';
+
 /**
- * The currencies an owner can choose for totals: EUR plus every currency the ECB publishes a daily euro reference
- * rate for, since amounts are converted through those rates. Codes only; names come from the client's locale.
+ * The currencies an owner can choose for totals: EUR plus every currency the ECB still publishes a daily euro
+ * reference rate for, since amounts are converted through those rates. Codes only; names come from the client's locale.
  */
-export const REPORTING_CURRENCIES = [
-	'AUD',
-	'BRL',
-	'CAD',
-	'CHF',
-	'CNY',
-	'CZK',
-	'DKK',
+export const REPORTING_CURRENCIES: readonly string[] = [
 	'EUR',
-	'GBP',
-	'HKD',
-	'HUF',
-	'IDR',
-	'ILS',
-	'INR',
-	'ISK',
-	'JPY',
-	'KRW',
-	'MXN',
-	'MYR',
-	'NOK',
-	'NZD',
-	'PHP',
-	'PLN',
-	'RON',
-	'SEK',
-	'SGD',
-	'THB',
-	'TRY',
-	'USD',
-	'ZAR',
-] as const;
-export type ReportingCurrencyCode = (typeof REPORTING_CURRENCIES)[number];
+	...Object.keys(ECB_CURRENCIES).filter((code) => ECB_CURRENCIES[code] === null),
+].sort();
 
 /** `GET /reporting-currency` and `PUT /reporting-currency`: the currency Tempo adds amounts up in. */
 export type ReportingCurrency = {
