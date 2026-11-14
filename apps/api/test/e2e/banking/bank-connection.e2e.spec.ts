@@ -1381,7 +1381,11 @@ describe('BankConnectionController', () => {
 		};
 
 		try {
-			await accounts.update({id: account.id}, {baseCurrency: null});
+			// Converted amounts are up to date: syncs earlier in this file may have set a currency in the meantime.
+			await accounts.update(
+				{id: account.id},
+				{baseCurrency: null, baseAmountsRevision: () => '"baseCurrencyRevision"'},
+			);
 			expect(await balancesOf()).toEqual({
 				baseCurrency: null,
 				accounts: {

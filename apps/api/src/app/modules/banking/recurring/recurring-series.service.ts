@@ -23,6 +23,7 @@ import {
 import {BankTransaction} from '../bank-transaction.entity';
 import {safeErrorName} from '../banking.utils';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
+import {type ReportingOwner, totalsCurrency} from '../reporting-currency';
 import {SQL_INTERNAL, createOwnerScopedQuery} from '../services/bank-transaction-filters';
 import {daysInMonth, formatCents} from '../summary/bank-transaction-summary';
 import {type ContinuationPair, findContinuationPairs} from './recurring-continuation';
@@ -155,10 +156,9 @@ export class RecurringSeriesService {
 	private readonly detecting = new Map<string, {readers: number; versions: Map<string, Promise<Detection>>}>();
 
 	/** Bills and income from one read. */
-	async list(
-		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
-		asOf: string,
-	): Promise<RecurringSeriesLists> {
+	async list(owner: ReportingOwner, asOf: string): Promise<RecurringSeriesLists> {
+		const {id: accountId} = owner;
+		const baseCurrency = totalsCurrency(owner);
 		const state = await this.readState(accountId);
 		const [paid, logos] = await Promise.all([
 			this.paidThisMonth(accountId, state.detected, asOf),
@@ -213,11 +213,9 @@ export class RecurringSeriesService {
 	}
 
 	/** Both lists' totals and the next payments due, from one read. */
-	async summary(
-		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
-		asOf: string,
-	): Promise<RecurringSummary> {
-		const {expenses, income} = await this.list({id: accountId, baseCurrency}, asOf);
+	async summary(owner: ReportingOwner, asOf: string): Promise<RecurringSummary> {
+		const baseCurrency = totalsCurrency(owner);
+		const {expenses, income} = await this.list(owner, asOf);
 		const counted = ({hidden, status}: RecurringSeries) => !hidden && status === 'ACTIVE';
 		const upcoming = [...expenses.series, ...income.series]
 			.filter(counted)

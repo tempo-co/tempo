@@ -81,7 +81,13 @@ const rangeLimits = (intervals: readonly (keyof typeof MAX_RANGE_PERIODS)[]) =>
  * The tools for one owner; an omitted `asOf` is today in `timeZone`, the owner's IANA time zone, at each call.
  */
 export function createToolServer(reader: ToolReader, timeZone: string, now: () => Date = () => new Date()): McpServer {
-	const server = new McpServer({name: 'tempo', version: '0.1.0'});
+	const server = new McpServer(
+		{name: 'tempo', version: '0.1.0'},
+		{
+			instructions:
+				"Combined money figures are in the response's baseCurrency, the owner's reporting currency. When baseCurrency is null, Tempo has no reporting currency yet or is still converting amounts into a new one: do not present those figures as totals. Amounts with their own currency field are always in that currency.",
+		},
+	);
 	const annotations = {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true};
 	const read = async (operation: () => Promise<unknown>): Promise<CallToolResult> => {
 		try {

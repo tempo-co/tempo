@@ -53,6 +53,7 @@ export const BANKING_BALANCE_TREND_RANGE = rangeMessage('balance trend', BALANCE
 export const BANKING_TRANSACTION_CASH_FLOW_RANGE = rangeMessage('cash flow', CASH_FLOW_INTERVALS);
 export const BANKING_TRANSACTION_BREAKDOWN_RANGE = rangeMessage('breakdown', BREAKDOWN_INTERVALS);
 export const MERCHANT_NOT_FOUND = 'Merchant not found.';
+export const REPORTING_CURRENCY_UNSUPPORTED = 'Tempo cannot convert amounts into this currency.';
 export const MERCHANT_GROUP_ID_INVALID = 'Merchant id must be b_ or k_ followed by 32 lowercase hex characters.';
 export const MERCHANT_PERIODS_RANGE = rangeMessage('merchant period', CASH_FLOW_INTERVALS);
 export const MERCHANT_RANKING_FUTURE_PERIOD = 'The ranked period cannot start after the given date.';

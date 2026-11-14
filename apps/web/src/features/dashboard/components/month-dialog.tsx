@@ -3,7 +3,7 @@ import type {
   BankTransactionBreakdownPeriod,
   BankTransactionCategoryFilterValue,
 } from '@tempo/contracts';
-import {ChevronLeft, ChevronRight} from 'lucide-react';
+import {ChevronLeft, ChevronRight, CircleAlert} from 'lucide-react';
 import {type KeyboardEvent, type ReactNode} from 'react';
 
 import {LoadMore} from '@/components/shared/load-more';
@@ -24,10 +24,13 @@ import {TransactionListRow} from '@/features/banking/components/transaction-list
 import {useGetMerchantRanking} from '@/features/merchants/api/use-get-merchant-ranking';
 import {MerchantRow} from '@/features/merchants/components/merchant-row';
 import {countLabel, formatUsualComparison} from '@/features/merchants/utils/merchant-format';
+import {useFiguresCurrencyAccepted} from '@/features/reporting-currency/api/use-reporting-currency';
+import {missingAmountsLabel} from '@/features/reporting-currency/utils/currency-names';
 import {cn} from '@/utils/cn';
 
 import {useGetBankTransactionBreakdown} from '../api/use-get-bank-transaction-breakdown';
 import {useGetBankTransactionSummary} from '../api/use-get-bank-transaction-summary';
+import {useGetBankTransactionTotals} from '../api/use-get-bank-transaction-totals';
 import {useGetMonthTransactions} from '../api/use-get-month-transactions';
 import {useOverview} from '../api/use-overview';
 import {categoryDrill, periodDrill, sourceDrill} from '../utils/drill-links';
@@ -191,17 +194,23 @@ function MonthView({
   if (overview && !point)
     return <p className='text-sm text-muted-foreground'>No history for {formatMonth(month)}.</p>;
 
-  // Each part shows once its own data is in, in a placeholder of its loaded size until then.
+  // Each part shows once its own data is in, in a placeholder of its loaded size until then, and only in the
+  // history's currency: a part read on the other side of a currency change waits for its refetch.
   const currency = overview?.currency ?? null;
+  const inCurrency = <T extends {baseCurrency: string | null}>(response: T | undefined) =>
+    response?.baseCurrency === currency ? response : undefined;
+  const categoryBreakdown = inCurrency(categories.breakdown);
+  const sourceBreakdown = inCurrency(sources.breakdown);
+  const sameDaySummary = inCurrency(sameDay.summary);
   const periodOf = (periods: BankTransactionBreakdownPeriod[]) =>
     periods.find((period) => period.start.slice(0, 7) === month);
-  const earlier = (categories.breakdown?.periods ?? []).filter((period) => {
+  const earlier = (categoryBreakdown?.periods ?? []).filter((period) => {
     const start = period.start.slice(0, 7);
     return start < month && start >= shiftMonth(month, -USUAL_MONTHS);
   });
   const sameDayUsual = new Map(
-    (sameDay.summary?.baseline.months.length === SAME_DAY_USUAL_MONTHS
-      ? sameDay.summary.categories
+    (sameDaySummary?.baseline.months.length === SAME_DAY_USUAL_MONTHS
+      ? sameDaySummary.categories
       : []
     ).map((category) => [
       category.category as string,
@@ -215,17 +224,20 @@ function MonthView({
         earlier.length < USUAL_MONTHS
           ? null
           : earlier.reduce((sum, period) => sum + partCents(period, key), 0) / USUAL_MONTHS;
-  const usualReady = !running || sameDay.summary !== undefined;
+  const usualReady = !running || sameDaySummary !== undefined;
 
   return (
     <div className='grid gap-6'>
-      <MonthFigures point={point} overview={overview} running={running} />
+      <div className='grid gap-2'>
+        <MonthFigures point={point} overview={overview} running={running} />
+        <MissingAmounts from={dates.from} to={end} />
+      </div>
 
       <div className='grid gap-6 @[1000px]:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]'>
         <div className='grid min-w-0 content-start gap-6'>
-          {overview && categories.breakdown && usualReady ? (
+          {overview && categoryBreakdown && usualReady ? (
             <WhereItWent
-              period={periodOf(categories.breakdown.periods)}
+              period={periodOf(categoryBreakdown.periods)}
               usualOf={usualOf}
               usualLabel={
                 running
@@ -242,9 +254,9 @@ function MonthView({
           <MonthTransactions from={dates.from} to={end} />
         </div>
         <div className='grid min-w-0 content-start gap-6'>
-          {overview && sources.breakdown ? (
+          {overview && sourceBreakdown ? (
             <WhereItCameFrom
-              period={periodOf(sources.breakdown.periods)}
+              period={periodOf(sourceBreakdown.periods)}
               currency={currency}
               from={dates.from}
               to={end}
@@ -312,6 +324,26 @@ function MonthFigures({
         }
       />
     </FigureCells>
+  );
+}
+
+/**
+ * The month's rows its In and Out leave out for want of an amount in the reporting currency, linked to the list of
+ * them. Nothing while every row is counted.
+ */
+function MissingAmounts({from, to}: {from: string; to: string}) {
+  const {totals} = useGetBankTransactionTotals(from, to);
+  if (!totals?.baseCurrency || totals.excluded.missingBaseAmount === 0) return null;
+  return (
+    <Link
+      to='/bank-transactions'
+      search={{...periodDrill(from, to), baseAmount: 'MISSING'}}
+      className='inline-flex items-center gap-1.5 justify-self-start text-sm text-warning underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+      data-testid='month-missing-base-amounts-link'
+    >
+      <CircleAlert aria-hidden='true' className='size-3.5 shrink-0' />
+      {missingAmountsLabel(totals.excluded.missingBaseAmount, totals.baseCurrency)}
+    </Link>
   );
 }
 
@@ -607,10 +639,13 @@ function BiggestMerchants({month, today}: {month: string; today: string}) {
   const navigate = useNavigate({from: '/'});
   const open = (merchant: string) =>
     void navigate({search: (prev) => ({...prev, merchants: 'open', merchant})});
+  const accepted = useFiguresCurrencyAccepted();
+  // A ranking read mid-conversion or in another currency waits for its refetch; an empty one has nothing to label.
+  const waiting = !!ranking && ranking.merchants.length > 0 && !accepted(ranking.baseCurrency);
   return (
     <section aria-label='Biggest merchants' className='grid gap-3 rounded-card border bg-card p-5'>
       <h2 className='text-card-title'>Biggest merchants</h2>
-      {isPending ? (
+      {isPending || waiting ? (
         <div aria-busy='true'>
           <LoadingLabel>Loading merchants</LoadingLabel>
           <ul aria-hidden='true' className='-mx-3 -mb-3 divide-y divide-border/60'>

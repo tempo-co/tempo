@@ -802,7 +802,13 @@ describe('BankTransactionController', () => {
 			bookedRow(june(2), '-20.00', {valueDate: null, category: 'TRANSFER_OUT'}),
 			bookedRow(june(3), '5.00', {valueDate: null, category: 'REFUND'}),
 			bookedRow(june(4), '1000.00', {valueDate: null, category: 'INCOME'}),
-			bookedRow(june(5), '-50.00', {valueDate: null, category: null, ownTransferEvidence: 'IBAN'}),
+			// An own transfer without a converted amount is not missing from totals, which never count it.
+			bookedRow(june(5), '-50.00', {
+				valueDate: null,
+				category: null,
+				ownTransferEvidence: 'IBAN',
+				amountInBaseCurrency: null,
+			}),
 			bookedRow(june(6), '50.00', {
 				valueDate: null,
 				creditDebitIndicator: 'CRDT',
@@ -876,6 +882,9 @@ describe('BankTransactionController', () => {
 				sorted(expense, transferOut, refund, failed, pending),
 			);
 			expect(await idsFor({'filter[baseAmount]': 'MISSING'})).toEqual([unconverted]);
+			expect(await idsFor({'filter[cashFlows][]': 'INTERNAL', 'filter[baseAmount]': 'PRESENT'})).toEqual(
+				sorted(ownIn, currencyExchange),
+			);
 			expect(await idsFor({'filter[categoryStatuses][]': 'FAILED'})).toEqual([failed]);
 			expect(await idsFor({'filter[categoryStatuses][]': 'CATEGORIZING'})).toEqual([pending]);
 			expect(await idsFor({'filter[categoryStatuses][]': ['FAILED', 'CATEGORIZING']})).toEqual(

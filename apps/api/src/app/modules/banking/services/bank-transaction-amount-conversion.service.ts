@@ -1,25 +1,23 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
-import {Repository} from 'typeorm';
+import {DataSource, Repository} from 'typeorm';
 
-import {Account} from '@modules/account/account.entity';
+import type {Account} from '@modules/account/account.entity';
 
 import {BankAccount} from '../bank-account.entity';
 import {BankTransaction} from '../bank-transaction.entity';
 import {addDays} from '../banking.utils';
+import {lockReportingCurrencyForAmountWrites} from '../reporting-currency';
 import {
 	FX_RATE_MAX_AGE_DAYS,
 	baseAmountInputsSql,
 	convertEcbAmountSql,
 	ecbRateSql,
 	latestExpectedEcbRateDate,
-	normalizeCurrency,
 } from './bank-transaction-amount-conversion.utils';
 import {CurrencyExchangeService} from './currency-exchange.service';
 import {FxRateService} from './fx-rate.service';
 import {OwnTransferService} from './own-transfer.service';
-
-const DEFAULT_BASE_CURRENCY = 'EUR';
 
 /** Dates are null only when no pending row of the currency has a date; such rows can only be copied. */
 type PendingCurrency = {
@@ -29,7 +27,9 @@ type PendingCurrency = {
 	count: number;
 };
 
-type PendingOwner = {baseCurrency: string | null; currencies: PendingCurrency[]};
+type OwnerToConvert = Pick<Account, 'baseCurrency' | 'baseCurrencyRevision' | 'baseAmountsRevision'> & {
+	currencies: PendingCurrency[];
+};
 
 /** Rate date of a transaction, as used by the conversion. */
 const RATE_DATE_SQL = `COALESCE(t."transactionDate", t."bookingDate")`;
@@ -61,7 +61,7 @@ const rateLateral = (alias: string, currency: string) => `
 	) ${alias} ON TRUE`;
 
 /**
- * Converts every unconverted transaction of one owner into their base currency, in exact cents:
+ * Converts every unconverted transaction of one owner into their reporting currency (`$2`), in exact cents:
  * same currency → copied; bank-reported amount in the base currency → `INSTRUCTED`; otherwise via the
  * ECB reference rates (pivoting through EUR) of the newest final publication at most {@link FX_RATE_MAX_AGE_DAYS}
  * days before the transaction. Rows without a usable rate stay pending and are retried on the next run.
@@ -139,8 +139,7 @@ export class BankTransactionAmountConversionService {
 	private readonly logger = new Logger(BankTransactionAmountConversionService.name);
 
 	constructor(
-		@InjectRepository(Account)
-		private readonly accountRepository: Repository<Account>,
+		private readonly dataSource: DataSource,
 		@InjectRepository(BankAccount)
 		private readonly bankAccountRepository: Repository<BankAccount>,
 		@InjectRepository(BankTransaction)
@@ -150,30 +149,59 @@ export class BankTransactionAmountConversionService {
 		private readonly ownTransferService: OwnTransferService,
 	) {}
 
+	/**
+	 * One pass over every owner with a reporting currency and either unconverted rows or a currency change to finish.
+	 * Owners without a reporting currency wait for one (`ReportingCurrencyService`); this never picks it.
+	 */
 	async backfill(now = new Date()): Promise<{scanned: number; converted: number}> {
 		const latestExpectedDate = latestExpectedEcbRateDate(now);
 		await this.refreshAccountCurrencyRates(latestExpectedDate);
 
 		let scanned = 0;
 		let converted = 0;
-		for (const [accountId, owner] of await this.findPendingOwners()) {
-			const baseCurrency = await this.resolveBaseCurrency(accountId, owner.baseCurrency);
-			await this.ensureHistoricalRates(owner.currencies, baseCurrency, latestExpectedDate);
+		for (const [accountId, owner] of await this.findOwnersToConvert()) {
+			if (!owner.baseCurrency) continue;
+			await this.ensureHistoricalRates(owner.currencies, owner.baseCurrency, latestExpectedDate);
 
-			const [{count}] = (await this.bankTransactionRepository.query(CONVERT_OWNER_SQL, [
-				accountId,
-				baseCurrency,
-				FX_RATE_MAX_AGE_DAYS,
-			])) as Array<{count: number}>;
+			const count = await this.dataSource.transaction(async (manager) => {
+				await lockReportingCurrencyForAmountWrites(manager, accountId);
+				const [current] = (await manager.query(
+					`SELECT "baseCurrency", "baseCurrencyRevision" FROM "accounts" WHERE "id" = $1`,
+					[accountId],
+				)) as Array<Pick<Account, 'baseCurrency' | 'baseCurrencyRevision'>>;
+				// Changed since the rates were fetched: the change queued a pass of its own.
+				if (
+					current?.baseCurrency !== owner.baseCurrency ||
+					current.baseCurrencyRevision !== owner.baseCurrencyRevision
+				)
+					return null;
+				const [result] = (await manager.query(CONVERT_OWNER_SQL, [
+					accountId,
+					owner.baseCurrency,
+					FX_RATE_MAX_AGE_DAYS,
+				])) as Array<{count: number}>;
+				return result.count;
+			});
+			if (count === null) continue;
 			scanned += owner.currencies.reduce((total, row) => total + row.count, 0);
 			converted += count;
-			// Same-day exchanges are matched on base amounts, so new amounts can complete a pairing. Own-transfer
-			// detection reads no converted amount, only whether a row is an exchange leg, so it follows over the whole
-			// history only when a row became or stopped being one, or when that is unknown because the recompute failed.
-			if (count > 0) {
+			const changed = owner.baseCurrencyRevision !== owner.baseAmountsRevision;
+			// Same-day exchanges are matched on base amounts, so new amounts can complete a pairing, and a currency change
+			// replaced them all. Own-transfer detection reads no converted amount, only whether a row is an exchange leg,
+			// so it follows over the whole history only when a row became or stopped being one, or when that is unknown
+			// because the recompute failed.
+			if (count > 0 || changed) {
 				const reclassifiedIds = await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
 				if (reclassifiedIds === null || reclassifiedIds.length > 0)
 					await this.ownTransferService.recomputeForOwnerSafely(accountId);
+			}
+			// Every row this pass could convert is converted: totals are ready, and rows still without a rate (an
+			// unsupported currency, a missing or not yet published rate) are reported as left out of them.
+			if (changed) {
+				await this.dataSource.query(
+					`UPDATE "accounts" SET "baseAmountsRevision" = $2 WHERE "id" = $1 AND "baseCurrencyRevision" = $2`,
+					[accountId, owner.baseCurrencyRevision],
+				);
 			}
 		}
 
@@ -197,12 +225,14 @@ export class BankTransactionAmountConversionService {
 		);
 	}
 
-	/** Unconverted rows per owner and currency, with the rate-date range each currency needs. */
-	private async findPendingOwners(): Promise<Map<string, PendingOwner>> {
+	/**
+	 * Unconverted rows per owner and currency, with the rate-date range each currency needs, plus owners whose
+	 * reporting currency changed since the last finished pass (with or without such rows).
+	 */
+	private async findOwnersToConvert(): Promise<Map<string, OwnerToConvert>> {
 		const rows = (await this.bankTransactionRepository.query(
 			`SELECT
 				connection."accountId",
-				account."baseCurrency",
 				${CURRENCY_SQL} AS "currency",
 				to_char(MIN(${RATE_DATE_SQL}), 'YYYY-MM-DD') AS "fromDate",
 				to_char(MAX(${RATE_DATE_SQL}), 'YYYY-MM-DD') AS "toDate",
@@ -210,19 +240,23 @@ export class BankTransactionAmountConversionService {
 			FROM "bank_transactions" t
 			INNER JOIN "bank_accounts" bank_account ON bank_account."id" = t."bankAccountId"
 			INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
-			INNER JOIN "accounts" account ON account."id" = connection."accountId"
 			WHERE ${PENDING_SQL}
-			GROUP BY connection."accountId", account."baseCurrency", ${CURRENCY_SQL}
+			GROUP BY connection."accountId", ${CURRENCY_SQL}
 			ORDER BY connection."accountId", ${CURRENCY_SQL}`,
-		)) as Array<PendingCurrency & {accountId: string; baseCurrency: string | null}>;
+		)) as Array<PendingCurrency & {accountId: string}>;
+		const owners = (await this.dataSource.query(
+			`SELECT "id", "baseCurrency", "baseCurrencyRevision", "baseAmountsRevision" FROM "accounts"
+			WHERE "baseCurrency" IS NOT NULL
+				AND ("baseCurrencyRevision" <> "baseAmountsRevision" OR "id" = ANY($1::uuid[]))
+			ORDER BY "id"`,
+			[[...new Set(rows.map(({accountId}) => accountId))]],
+		)) as Array<Pick<Account, 'id' | 'baseCurrency' | 'baseCurrencyRevision' | 'baseAmountsRevision'>>;
 
-		const owners = new Map<string, PendingOwner>();
-		for (const {accountId, baseCurrency, ...currency} of rows) {
-			const owner = owners.get(accountId) ?? {baseCurrency, currencies: []};
-			owner.currencies.push(currency);
-			owners.set(accountId, owner);
-		}
-		return owners;
+		const result = new Map<string, OwnerToConvert>(
+			owners.map(({id, ...owner}) => [id, {...owner, currencies: []}]),
+		);
+		for (const {accountId, ...currency} of rows) result.get(accountId)?.currencies.push(currency);
+		return result;
 	}
 
 	private async ensureHistoricalRates(
@@ -247,25 +281,5 @@ export class BankTransactionAmountConversionService {
 			addDays(fromDate, -FX_RATE_MAX_AGE_DAYS),
 			fetchUntil < latestExpectedDate ? fetchUntil : latestExpectedDate,
 		);
-	}
-
-	private async resolveBaseCurrency(accountId: string, storedBaseCurrency: string | null): Promise<string> {
-		if (storedBaseCurrency) return storedBaseCurrency;
-
-		const preferredAccount = await this.bankAccountRepository
-			.createQueryBuilder('bankAccount')
-			.innerJoin('bankAccount.bankConnection', 'connection')
-			.innerJoin('connection.account', 'account')
-			.where('account.id = :accountId', {accountId})
-			.andWhere('bankAccount.isActive = TRUE')
-			.select('bankAccount.currency', 'currency')
-			.addSelect('COUNT(*)', 'count')
-			.groupBy('bankAccount.currency')
-			.orderBy('COUNT(*)', 'DESC')
-			.addOrderBy('bankAccount.currency', 'ASC')
-			.getRawOne<{currency?: string}>();
-		const baseCurrency = normalizeCurrency(preferredAccount?.currency) ?? DEFAULT_BASE_CURRENCY;
-		await this.accountRepository.update({id: accountId}, {baseCurrency});
-		return baseCurrency;
 	}
 }

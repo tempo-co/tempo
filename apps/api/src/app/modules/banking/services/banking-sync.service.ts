@@ -65,6 +65,7 @@ import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {BankingSyncOwnershipLostError} from '../errors/banking-sync-ownership-lost.error';
 import {FileConnectionNotSyncableException} from '../errors/file-connection-not-syncable.exception';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
+import {lockReportingCurrencyForAmountWrites} from '../reporting-currency';
 import {AspspCatalogService} from './aspsp-catalog.service';
 import {BankTransactionPersistenceService, PersistTransactionsResult} from './bank-transaction-persistence.service';
 import {BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';
@@ -83,6 +84,7 @@ import {CurrencyExchangeService} from './currency-exchange.service';
 import {EnableBankingClient, EnableBankingClientError} from './enable-banking.client';
 import {findOwnedConnection} from './find-owned-connection';
 import {OwnTransferService} from './own-transfer.service';
+import {ReportingCurrencyService} from './reporting-currency.service';
 
 const SUCCEEDED = BANK_SYNC_STATUSES.SUCCEEDED;
 const FAILED = BANK_SYNC_STATUSES.FAILED;
@@ -156,6 +158,7 @@ export class BankingSyncService {
 		private readonly merchantLogoService: MerchantLogoService,
 		private readonly bankTransactionPersistenceService: BankTransactionPersistenceService,
 		private readonly aspspCatalogService: AspspCatalogService,
+		private readonly reportingCurrencyService: ReportingCurrencyService,
 	) {
 		this.bankingIntegrationEnabled = configurationService.get('BANKING_INTEGRATION_ENABLED') !== false;
 	}
@@ -331,6 +334,8 @@ export class BankingSyncService {
 				}
 				committed = true;
 				this.logFailures(run.id, connection.id, status, failures);
+				// The run finished, so the owner can be asked to choose among several currencies now.
+				await this.reportingCurrencyService.reconcileSafely(accountId, {historySettled: true});
 				// Recompute first so new exchanges and own transfers are marked before the worker can claim them.
 				// Exchanges go first: own-transfer detection skips exchange legs.
 				// Own transfers can only change around the rows this sync wrote, the rows whose exchange
@@ -746,6 +751,7 @@ export class BankingSyncService {
 
 		const schedulingUpdate = this.getSchedulingUpdate(connection, fetchResult, status, finishedAt);
 		await this.dataSource.transaction(async (manager) => {
+			await lockReportingCurrencyForAmountWrites(manager, connection.accountId);
 			const connectionRepository = manager.getRepository(BankConnection);
 			const runRepository = manager.getRepository(BankSyncRun);
 			const balanceRepository = manager.getRepository(BankAccountBalance);

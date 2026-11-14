@@ -81,12 +81,7 @@ test('mobile pickers share combined drills, preserve category status and clear a
   await expect
     .poll(() => JSON.parse(new URL(page.url()).searchParams.get('cashFlows')!) as string[])
     .toEqual(['SPENDING', 'INCOME', 'INTERNAL', 'UNKNOWN']);
-  await openTransactionFilter(page, 'Amount in EUR');
-  await expect(
-    drawer.getByRole('option', {name: 'Not available yet', exact: true}),
-  ).toHaveAttribute('data-filter-selected', 'true');
-  await drawer.getByRole('option', {name: 'Available', exact: true}).click();
-  await expect.poll(() => new URL(page.url()).searchParams.get('baseAmount')).toBe('PRESENT');
+  expect(new URL(page.url()).searchParams.get('baseAmount')).toBe('MISSING');
   expect(JSON.parse(new URL(page.url()).searchParams.get('categoryStatuses')!)).toEqual(['FAILED']);
   await drawer.getByRole('button', {name: 'Clear all', exact: true}).click();
   await expect.poll(() => new URL(page.url()).searchParams.has('cashFlows')).toBe(false);
@@ -98,37 +93,28 @@ test('mobile pickers share combined drills, preserve category status and clear a
   );
 });
 
-test('amount availability picker shares direct URL filters and clears combinations', async ({
+test('a link to the rows a total leaves out lists them under its other filters until its chip is removed', async ({
   page,
 }) => {
   const params = new URLSearchParams({
     cashFlows: JSON.stringify(['INCOME']),
-    baseAmount: 'PRESENT',
+    baseAmount: 'MISSING',
   });
+  const responsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes('filter%5BbaseAmount%5D=MISSING') &&
+      response.url().includes('filter%5BcashFlows%5D%5B%5D=INCOME'),
+  );
   await page.goto(`/bank-transactions?${params}`);
+  expect((await responsePromise).ok()).toBe(true);
   await expect(
     page.getByRole('button', {name: 'Remove filter: Income', exact: true}),
   ).toBeVisible();
-  const panel = await openTransactionFilter(page, 'Amount in EUR');
-  await expect(panel.getByRole('tab', {name: 'Amount in EUR Has base amount'})).toBeVisible();
-  await expect(page.getByRole('option', {name: 'Available', exact: true})).toHaveAttribute(
-    'data-filter-selected',
-    'true',
-  );
-  const responsePromise = page.waitForResponse((response) =>
-    response.url().includes('filter%5BbaseAmount%5D=MISSING'),
-  );
-  await page.getByRole('option', {name: 'Not available yet', exact: true}).click();
-  expect((await responsePromise).ok()).toBe(true);
-  await expect(panel.getByRole('tab', {name: 'Amount in EUR No base amount yet'})).toBeVisible();
-  let search = new URL(page.url()).searchParams;
-  expect(search.get('baseAmount')).toBe('MISSING');
-  expect(JSON.parse(search.get('cashFlows')!)).toEqual(['INCOME']);
-  await panel.getByRole('button', {name: 'Clear all', exact: true}).click();
-  await expect(panel.getByRole('tab', {name: 'Amount in EUR', exact: true})).toBeVisible();
-  search = new URL(page.url()).searchParams;
-  expect(search.has('baseAmount')).toBe(false);
-  expect(search.has('cashFlows')).toBe(false);
+
+  await page.getByRole('button', {name: 'Remove filter: Missing EUR amount', exact: true}).click();
+
+  await expect.poll(() => new URL(page.url()).searchParams.has('baseAmount')).toBe(false);
+  expect(JSON.parse(new URL(page.url()).searchParams.get('cashFlows')!)).toEqual(['INCOME']);
 });
 
 test('cash flow picker applies the real spending predicate from the first page', async ({page}) => {

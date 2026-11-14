@@ -155,8 +155,12 @@ export function applyBankTransactionFilters(
 		query.andWhere(anyOf(filter.cashFlows.map((cashFlow) => CASH_FLOW_SQL[cashFlow])));
 	}
 	if (filter?.baseAmount) {
+		// MISSING lists exactly the rows totals leave out (`excluded.missingBaseAmount`); own transfers and currency
+		// exchanges never count towards totals, so they are not missing from them.
 		query.andWhere(
-			`"transaction"."amountInBaseCurrency" IS ${filter.baseAmount === 'PRESENT' ? 'NOT NULL' : 'NULL'}`,
+			filter.baseAmount === 'PRESENT'
+				? `"transaction"."amountInBaseCurrency" IS NOT NULL`
+				: SQL_MISSING_BASE_AMOUNT,
 		);
 	}
 	if (filter?.categoryStatuses && filter.categoryStatuses.length > 0) {

@@ -5,6 +5,11 @@ import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
 import {isConnectedBank, isSyncInProgress} from '@/features/banking/utils/bank-sync-status';
+import {useReportingCurrency} from '@/features/reporting-currency/api/use-reporting-currency';
+import {
+  RecalculatingTotals,
+  ReportingCurrencySetup,
+} from '@/features/reporting-currency/components/reporting-currency-setup';
 
 import {useOverview, useYearBreakdowns} from '../api/use-overview';
 import {type Overview, yearColumnWidth} from '../utils/overview';
@@ -21,6 +26,7 @@ type HomeDashboardProps = {
 /** Where the owner stands over the years: the balance and what was kept, year by year, and where money went. */
 export function HomeDashboard({today, onOpenMonth}: HomeDashboardProps) {
   const {bankConnections, isError, error, refetch} = useGetAllBankConnections();
+  const {data: reporting} = useReportingCurrency();
 
   if (isError) {
     return <LoadErrorState title="Couldn't load your banks" error={error} onRetry={refetch} />;
@@ -29,9 +35,13 @@ export function HomeDashboard({today, onOpenMonth}: HomeDashboardProps) {
   // The history requests run while the connections load, instead of after.
   const connections = bankConnections?.filter(isConnectedBank);
   if (connections?.length === 0) return <ConnectBankPrompt />;
+  // Without a currency to add them up in, there are no combined figures to show, only the question.
+  if (reporting?.setupRequired && reporting.currency === null) return <ReportingCurrencySetup />;
+  if (reporting?.recalculating) return <RecalculatingTotals currency={reporting.currency} />;
 
   return (
-    <div className='@container' aria-busy={!connections || undefined}>
+    <div className='@container grid gap-6' aria-busy={!connections || undefined}>
+      <ReportingCurrencySetup />
       <HomeHistory
         today={today}
         onOpenMonth={onOpenMonth}
@@ -90,7 +100,8 @@ function YearBreakdowns({today, overview}: {today: string; overview: Overview | 
         onRetry={refetch}
       />
     );
-  if (!overview || !breakdowns)
+  // Breakdowns read on the other side of a currency change than the history wait for their refetch.
+  if (!overview || !breakdowns || breakdowns.currency !== overview.currency)
     return (
       <>
         <HeatTableSkeleton title='Spending by category' kind='category' />

@@ -12,6 +12,7 @@ import {createBankTransaction} from '../../data/bank-transaction.data';
 import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
+  SETTLED_REPORTING_CURRENCY,
   expectFailedPageRetried,
   failLaterPages,
   fulfillJson,
@@ -389,6 +390,45 @@ for (const viewport of [
     await expect(card).toBeVisible();
   });
 }
+
+test('a page of merchants in a currency changed elsewhere reloads the list instead of mixing currencies', async ({
+  page,
+}) => {
+  await mockSignedIn(page);
+  const requests = await mockMerchants(page);
+  let settings = SETTLED_REPORTING_CURRENCY;
+  await page.route(`${API_URL}/reporting-currency`, (route) => fulfillJson(route, settings));
+  let currency = 'EUR';
+  await page.route(`${API_URL}/merchants?**`, (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    requests.push(params);
+    const offset = Number(params.get('offset'));
+    return fulfillJson(route, {
+      baseCurrency: currency,
+      merchants: allMerchants.slice(offset, offset + 2),
+      total: allMerchants.length,
+    } satisfies MerchantGroupsResponse);
+  });
+  await page.goto('/?merchants=open');
+  const all = dialog(page).getByRole('region', {name: 'All merchants'});
+  await expect(all.getByRole('listitem')).toHaveCount(2);
+  await expect(all.getByRole('listitem').first()).toContainText('€');
+
+  // Another device switched to USD and its amounts are converted; the next page answers in USD.
+  settings = {...settings, currency: 'USD'};
+  currency = 'USD';
+  const before = requests.length;
+  await all.getByRole('button', {name: 'Load more'}).click();
+
+  // The list starts over in USD rather than labelling the EUR page as USD.
+  await expect
+    .poll(() => requests.slice(before).some((params) => params.get('offset') === '0'))
+    .toBe(true);
+  await expect(all.getByRole('listitem')).toHaveCount(2);
+  for (const item of await all.getByRole('listitem').all())
+    await expect(item).not.toContainText('€');
+  await expect(all.getByRole('listitem').first()).toContainText('$');
+});
 
 test('the merchants dialog ranks by week, month or year and searches every merchant', async ({
   page,

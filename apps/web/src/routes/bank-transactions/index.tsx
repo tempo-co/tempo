@@ -1,7 +1,7 @@
-import {createFileRoute, stripSearchParams, useNavigate} from '@tanstack/react-router';
+import {Link, createFileRoute, stripSearchParams, useNavigate} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
 import {BANK_TRANSACTION_SEARCH_MAX_LENGTH, type BankTransactionTotals} from '@tempo/contracts';
-import {Search} from 'lucide-react';
+import {CircleAlert, Search} from 'lucide-react';
 import {Fragment, useEffect, useState} from 'react';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
@@ -35,6 +35,7 @@ import {
   TileRowsSkeleton,
 } from '@/features/dashboard/components/loading';
 import {formatMoney, toCents} from '@/features/dashboard/utils/money';
+import {missingAmountsLabel} from '@/features/reporting-currency/utils/currency-names';
 import {useBankTransactionInspector} from '@/hooks/use-bank-transaction-inspector';
 import {cn} from '@/utils/cn';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
@@ -94,6 +95,7 @@ function BankTransactionsIndex() {
                   count={total}
                   totals={totals}
                   settled={!pages.isPlaceholderData && !totalsPlaceholder}
+                  missingLinked={filters.baseAmount !== 'MISSING'}
                 />
               )
             )}
@@ -208,40 +210,53 @@ function LedgerSearch({search}: {search: string | undefined}) {
 }
 
 /**
- * How many rows match and, with a filter in force, what they spent and earned. It keeps the last settled line while
- * the list and its totals refetch, then swaps to the new one once both have arrived and fades it in: the line
- * changes once, in place, instead of jumping as each figure lands.
+ * How many rows match and, with a filter in force, what they spent and earned, and how many of them those totals
+ * leave out for want of an amount in the reporting currency. It keeps the last settled line while the list and its
+ * totals refetch, then swaps to the new one once both have arrived and fades it in: the line changes once, in place,
+ * instead of jumping as each figure lands. Without a reporting currency to add them up in, it counts rows only.
  */
 function LedgerSummary({
   count,
   totals,
   settled,
+  missingLinked,
 }: {
   count: number;
-  totals: Pick<BankTransactionTotals, 'spending' | 'income' | 'baseCurrency'> | undefined;
+  totals:
+    Pick<BankTransactionTotals, 'spending' | 'income' | 'baseCurrency' | 'excluded'> | undefined;
   settled: boolean;
+  /** Whether the left-out rows can be listed; not while the list already shows only them. */
+  missingLinked: boolean;
 }) {
   const parts: SummaryPart[] = [
     {text: `${count.toLocaleString()} ${count === 1 ? 'transaction' : 'transactions'}`},
   ];
-  if (totals && toCents(totals.spending) !== 0) {
+  const currency = totals?.baseCurrency ?? null;
+  if (totals && currency && toCents(totals.spending) !== 0) {
     parts.push({
-      figure: formatMoney(Math.abs(Number(totals.spending)), totals.baseCurrency),
+      figure: formatMoney(Math.abs(Number(totals.spending)), currency),
       word: 'spent',
     });
   }
-  if (totals && toCents(totals.income) !== 0) {
+  if (totals && currency && toCents(totals.income) !== 0) {
     parts.push({
-      figure: formatMoney(totals.income, totals.baseCurrency),
+      figure: formatMoney(totals.income, currency),
       word: 'earned',
       income: true,
     });
   }
-  const keyOf = (line: SummaryPart[]) =>
-    line.map((part) => part.text ?? `${part.figure} ${part.word}`).join(' · ');
+  const missing =
+    totals && currency && missingLinked
+      ? {count: totals.excluded.missingBaseAmount, currency}
+      : null;
+  const keyOf = (line: Shown) =>
+    [
+      ...line.parts.map((part) => part.text ?? `${part.figure} ${part.word}`),
+      line.missing?.count ?? 0,
+    ].join(' · ');
   // Until the list and its totals have both arrived once, the line stays a bone.
-  const [shown, setShown] = useState<SummaryPart[] | null>(settled ? parts : null);
-  if (settled && (!shown || keyOf(parts) !== keyOf(shown))) setShown(parts);
+  const [shown, setShown] = useState<Shown | null>(settled ? {parts, missing} : null);
+  if (settled && (!shown || keyOf({parts, missing}) !== keyOf(shown))) setShown({parts, missing});
 
   if (!shown) {
     return (
@@ -251,29 +266,56 @@ function LedgerSummary({
     );
   }
 
+  // The wrapper stays; the line is replaced, so it fades in as a whole.
   return (
-    <p
-      key={keyOf(shown)}
-      className='animate-in text-sm text-muted-foreground duration-200 fade-in motion-reduce:animate-none md:text-right'
-      data-testid='bank-transactions-summary'
-      aria-live='polite'
+    <div className='grid justify-items-start gap-0.5 text-sm text-muted-foreground md:justify-items-end md:text-right'>
+      <p
+        key={keyOf(shown)}
+        className='animate-in duration-200 fade-in motion-reduce:animate-none'
+        data-testid='bank-transactions-summary'
+        aria-live='polite'
+      >
+        {shown.parts.map((part, index) => (
+          <Fragment key={index}>
+            {index > 0 && ' · '}
+            <span className='whitespace-nowrap'>
+              {part.text ?? (
+                <>
+                  <span className={cn('numeric', part.income ? 'text-success' : 'text-foreground')}>
+                    {part.figure}
+                  </span>{' '}
+                  {part.word}
+                </>
+              )}
+            </span>
+          </Fragment>
+        ))}
+      </p>
+      {shown.missing && shown.missing.count > 0 && (
+        <MissingAmountsLink
+          key={`missing-${shown.missing.count}`}
+          count={shown.missing.count}
+          currency={shown.missing.currency}
+        />
+      )}
+    </div>
+  );
+}
+
+type Shown = {parts: SummaryPart[]; missing: {count: number; currency: string} | null};
+
+/** The rows a total leaves out, listed under the same filters. */
+function MissingAmountsLink({count, currency}: {count: number; currency: string}) {
+  return (
+    <Link
+      to='/bank-transactions'
+      search={(prev) => ({...prev, baseAmount: 'MISSING' as const})}
+      className='inline-flex items-center gap-1.5 text-warning underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+      data-testid='missing-base-amounts-link'
     >
-      {shown.map((part, index) => (
-        <Fragment key={index}>
-          {index > 0 && ' · '}
-          <span className='whitespace-nowrap'>
-            {part.text ?? (
-              <>
-                <span className={cn('numeric', part.income ? 'text-success' : 'text-foreground')}>
-                  {part.figure}
-                </span>{' '}
-                {part.word}
-              </>
-            )}
-          </span>
-        </Fragment>
-      ))}
-    </p>
+      <CircleAlert aria-hidden='true' className='size-3.5 shrink-0' />
+      {missingAmountsLabel(count, currency)}
+    </Link>
   );
 }
 

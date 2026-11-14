@@ -1,15 +1,17 @@
 import {Locator, Page, Route, expect} from '@playwright/test';
-import type {
-  BankBalanceTrend,
-  BankConnection,
-  BankTransactionBreakdown,
-  BankTransactionCashFlow,
-  BankTransactionReviewCounts,
-  BankTransactionSummary,
-  BankTransactionTotals,
-  MerchantRanking,
-  RecurringSeriesLists,
-  RecurringSummary,
+import {
+  type BankBalanceTrend,
+  type BankConnection,
+  type BankTransactionBreakdown,
+  type BankTransactionCashFlow,
+  type BankTransactionReviewCounts,
+  type BankTransactionSummary,
+  type BankTransactionTotals,
+  type MerchantRanking,
+  REPORTING_CURRENCIES,
+  type RecurringSeriesLists,
+  type RecurringSummary,
+  type ReportingCurrency,
 } from '@tempo/contracts';
 
 import {successfulBankRefresh} from '../data/bank-sync-run.data';
@@ -149,8 +151,20 @@ export const EMPTY_REVIEW_COUNTS: BankTransactionReviewCounts = {
  * history while the connections load, so a fully mocked spec that opens Home without banks still
  * sends them.
  */
+/** A reporting currency the owner chose long ago and whose totals are ready: nothing asks or waits. */
+export const SETTLED_REPORTING_CURRENCY: ReportingCurrency = {
+  currency: 'EUR',
+  confirmed: true,
+  setupRequired: false,
+  suggestion: null,
+  connectedCurrencies: ['EUR'],
+  options: ['EUR', ...REPORTING_CURRENCIES.filter((code) => code !== 'EUR')],
+  recalculating: false,
+};
+
 export async function mockEmptyHome(page: Page) {
   // Registered by the fully mocked fixture before each spec's more specific routes.
+  await mockJson(page, '**/reporting-currency', SETTLED_REPORTING_CURRENCY);
   await mockJson(page, '**/bank-transactions/*/recurring?**', null);
   const interval = (route: Route) =>
     new URL(route.request().url()).searchParams.get(

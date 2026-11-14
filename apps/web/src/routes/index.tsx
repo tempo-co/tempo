@@ -12,6 +12,11 @@ import {MerchantsDialog} from '@/features/dashboard/components/merchants-dialog'
 import {MonthDialog} from '@/features/dashboard/components/month-dialog';
 import {RecurringDialog} from '@/features/dashboard/components/recurring-dialog';
 import {MONTH_PATTERN} from '@/features/dashboard/utils/month';
+import {
+  moneyFiguresReady,
+  reportingCurrencyKnown,
+  useReportingCurrency,
+} from '@/features/reporting-currency/api/use-reporting-currency';
 import {useLocalDate} from '@/hooks/use-local-date';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
@@ -43,8 +48,11 @@ function Index() {
   const canGoBack = useCanGoBack();
   const today = useLocalDate();
   const thisMonth = today.slice(0, 7);
+  const reporting = useReportingCurrency();
+  // Home asks for a currency or waits for its amounts first; a link to a month or list waits with it.
+  const ready = moneyFiguresReady(reporting);
   // A future month has no history yet, so it opens nothing.
-  const month = search.month && search.month <= thisMonth ? search.month : null;
+  const month = ready && search.month && search.month <= thisMonth ? search.month : null;
   const openMonth = useCallback(
     (next: string) => void navigate({search: (prev) => ({...prev, month: next})}),
     [navigate],
@@ -76,6 +84,9 @@ function Index() {
     else void navigate({replace: true, search: (prev) => ({...prev, ...keys})});
   };
 
+  // Home and a linked dialog load together once it is known whether their figures may be added up at all.
+  if (!reportingCurrencyKnown(reporting)) return <AppBodyLayout>{null}</AppBodyLayout>;
+
   return (
     // One provider for Home and its dialogs, so moving between figures shows the next tip without a new delay.
     <TooltipProvider delayDuration={300}>
@@ -90,7 +101,7 @@ function Index() {
           }}
         />
         <RecurringDialog
-          open={search.recurring === 'open'}
+          open={ready && search.recurring === 'open'}
           selectedKey={search.series ?? null}
           onSelect={selectSeries}
           onOpenChange={(open) => {
@@ -98,7 +109,7 @@ function Index() {
           }}
         />
         <MerchantsDialog
-          open={search.merchants === 'open'}
+          open={ready && search.merchants === 'open'}
           month={thisMonth}
           selectedId={search.merchant ?? null}
           onSelect={selectMerchant}

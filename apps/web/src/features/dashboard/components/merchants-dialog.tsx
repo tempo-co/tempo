@@ -17,6 +17,7 @@ import {Skeleton} from '@/components/ui/skeleton';
 import {useGetMerchant} from '@/features/merchants/api/use-get-merchant';
 import {MerchantDetail} from '@/features/merchants/components/merchant-detail';
 import {MerchantsOverview} from '@/features/merchants/components/merchants-overview';
+import {useFiguresCurrencyAccepted} from '@/features/reporting-currency/api/use-reporting-currency';
 import {HttpError} from '@/utils/api';
 
 /** Merchant spending over Home: the ranking and every merchant, or one merchant's details. */
@@ -87,7 +88,9 @@ export function MerchantsDialog({
 
 function SelectedMerchant({id, onBack}: {id: string; onBack: () => void}) {
   const {merchant, isPending, isError, error, refetch} = useGetMerchant(id);
-  if (isPending) return <Skeleton className='h-96' role='img' aria-label='Loading merchant' />;
+  const accepted = useFiguresCurrencyAccepted();
+  if (isPending || (merchant && !accepted(merchant.baseCurrency)))
+    return <Skeleton className='h-96' role='img' aria-label='Loading merchant' />;
   if (error instanceof HttpError && error.status === 404)
     return (
       <StateMessage
