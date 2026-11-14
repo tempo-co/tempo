@@ -3,6 +3,8 @@ name: ECB currencies
 # Monthly comparison of the currencies the ECB publishes euro reference rates for with
 # packages/contracts/src/ecb-currencies.ts (see .github/scripts/ecb-currencies.mjs). When they differ, it opens a
 # pull request with the new table, or updates the one already open. Not part of CI: an ECB outage fails only this run.
+# It pushes and opens the PR as the tempo-co ECB currencies GitHub App (repository variable ECB_APP_CLIENT_ID, secret
+# ECB_APP_PRIVATE_KEY), because changes made with the workflow's own token start no CI.
 on:
     schedule:
         - cron: '23 5 2 * *'
@@ -17,14 +19,22 @@ jobs:
     table:
         name: ECB currencies
         runs-on: ubuntu-latest
-        permissions:
-            contents: write
-            pull-requests: write
         env:
             BRANCH: chore/ecb-currencies
         steps:
+            - name: Get the app's token
+              id: app
+              uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+              with:
+                  client-id: ${{ vars.ECB_APP_CLIENT_ID }}
+                  private-key: ${{ secrets.ECB_APP_PRIVATE_KEY }}
+                  permission-contents: write
+                  permission-pull-requests: write
+
             - name: Checkout
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  token: ${{ steps.app.outputs.token }}
 
             - name: Setup Node.js 26.x
               uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -44,11 +54,13 @@ jobs:
             - name: Open or update the pull request
               if: steps.table.outputs.changes != ''
               env:
-                  GH_TOKEN: ${{ github.token }}
+                  GH_TOKEN: ${{ steps.app.outputs.token }}
+                  APP_SLUG: ${{ steps.app.outputs.app-slug }}
                   CHANGES: ${{ steps.table.outputs.changes }}
               run: |
-                  git config user.name 'github-actions[bot]'
-                  git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+                  bot_id=$(gh api "users/${APP_SLUG}[bot]" --jq .id)
+                  git config user.name "${APP_SLUG}[bot]"
+                  git config user.email "$bot_id+${APP_SLUG}[bot]@users.noreply.github.com"
                   git switch -c "$BRANCH"
                   git commit -qam 'chore(contracts): update the ECB currency table'
                   git push --force origin "$BRANCH"
@@ -58,8 +70,6 @@ jobs:
                       sed 's/^/- /' <<<"$CHANGES"
                       echo
                       echo 'This updates the table the reporting-currency choices and the currencies offered for an imported file come from.'
-                      echo
-                      echo "**Note:** CI doesn't start on pull requests this workflow opens. Close and reopen this PR to run it."
                   )
                   pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
                   if [[ -n "$pr" ]]; then
