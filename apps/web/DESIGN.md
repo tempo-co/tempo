@@ -155,6 +155,11 @@ components:
     textColor: "{colors.foreground}"
     rounded: "{rounded.pill}"
     padding: "1px 10px"
+  alert:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.control}"
+    padding: "10px 12px"
   state-message:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.foreground}"
@@ -379,6 +384,26 @@ They stack collapsed and use the library's default lifetime. Distinct states get
 never imply data changed before the server confirms it. Motion is brief (0.2–0.3s), subtle,
 reduced-motion aware; never animate financial values continuously.
 
+### Alerts
+
+An inline message about the thing it sits in, such as a refused import, a bank that needs
+re-authorizing or a save that failed, is an `Alert` (`src/components/ui/alert.tsx`), never a
+hand-styled box or a bare line of red text. It is a 1px bordered block at control radius,
+`10px 12px` padding: a leading 16px glyph, a `text-sm` medium title, a muted `text-sm`
+description, and its actions under the text on phones and to the right from `sm` up.
+
+- **Variants.** `default` (surface field, muted glyph) explains or offers a next step;
+  `warning` (warning edge at 40%, field at 5%, warning glyph) is attention that is not a
+  failure; `destructive` (the same in destructive) is a refusal or a failed operation. Text
+  stays in the foreground and muted colours, so the glyph and the edge carry the tone.
+- **Glyph.** Names the subject (`FileX` a refused file, `Clock` consent ending, `CloudOff` a
+  failed load), not the tone alone.
+- **Announcing.** It has no live-region role by default: `role='alert'` for a message that
+  appears in answer to the owner, `role='status'` for a quiet update, none for a notice present
+  from the start.
+- A message about a single field stays on the field; toasts carry outcomes the screen does not
+  show; a list or section that failed to load is a `StateMessage` (below).
+
 ### Empty and error states
 
 Empty, not-found and failed loads use `StateMessage` (`src/components/shared/state-message.tsx`),
@@ -452,11 +477,13 @@ No copy calls import a fallback or assumes a bank is connected.
   the undo confirmation are steps of one `ResponsiveDialog`, with a scrolling body and a footer
   that stays in reach. It never closes by itself. Closing it does not cancel an upload; the
   outcome then arrives as a toast (View reopens the summary). Focus returns to Import a file.
-- **Refusals.** A drop is all or nothing, so a refusal is a section `StateMessage` in the failure
-  tone whose description ends with "Nothing was imported." It names the refused file when the drop
-  held several, and the choose controls stay under it. A choice over a drop's limits (20 files,
-  10 MB each, 25 MB together) is refused the same way before anything is uploaded. Failed
-  requests use `LoadErrorState`.
+- **Refusals.** A drop is all or nothing, so a refusal is a `destructive` `Alert` whose
+  description ends with "Nothing was imported." It sits at the end of the choose step, under
+  Supported files, and names the refused file when the drop held several. An offer to work out
+  a file's columns is a `default` Alert, and every answer from working them out is shown the
+  same way; the footer carries the action. A choice over a drop's limits (20 files, 10 MB each,
+  25 MB together) is refused the same way before anything is uploaded. A failed request is a
+  `destructive` Alert in the same place with the cause, the status line and Try again.
 - **Summary.** Counts as a bordered `divide-y` list with `numeric` values (the count that needs a
   look in `warning`), the date range, and the accounts the import went to. A drop that added
   nothing shows the `CheckCheck` state instead of the counts.
