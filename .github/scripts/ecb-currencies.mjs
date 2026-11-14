@@ -3,7 +3,7 @@
 // changed (one line per currency, nothing when the table is current). Exits non-zero on a reply it can't trust, so
 // a broken or partial reply never rewrites the table: one that lacks a currency the table lists counts as partial.
 //
-//   node .github/scripts/ecb-currencies.mjs
+//   node .github/scripts/ecb-currencies.mjs [reply.csv]   (a saved reply instead of asking the ECB)
 import {readFileSync, writeFileSync} from 'node:fs';
 
 const TABLE = new URL('../../packages/contracts/src/ecb-currencies.ts', import.meta.url);
@@ -12,9 +12,7 @@ const SOURCE = 'https://data-api.ecb.europa.eu/service/data/EXR/D..EUR.SP00.A?la
 // further behind the newest one has stopped.
 const PUBLISHED_WITHIN_DAYS = 10;
 
-const response = await fetch(SOURCE, {headers: {Accept: 'text/csv'}, signal: AbortSignal.timeout(60_000)});
-if (!response.ok) throw new Error(`ECB responded with HTTP ${response.status}`);
-const [header, ...rows] = parseCsv(await response.text());
+const [header, ...rows] = parseCsv(process.argv[2] ? readFileSync(process.argv[2], 'utf8') : await fetchReply());
 const column = (name) => {
 	const index = header.indexOf(name);
 	if (index < 0) throw new Error(`ECB reply has no ${name} column`);
@@ -22,12 +20,18 @@ const column = (name) => {
 };
 const currencyColumn = column('CURRENCY');
 const dateColumn = column('TIME_PERIOD');
+const rateColumn = column('OBS_VALUE');
 
 const lastRates = new Map();
 for (const row of rows) {
-	const [currency, date] = [row[currencyColumn], row[dateColumn]];
-	if (!/^[A-Z]{3}$/.test(currency) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-		throw new Error(`ECB reply has an unexpected row: ${row.slice(0, dateColumn + 1).join(',')}`);
+	const [currency, date, rate] = [row[currencyColumn], row[dateColumn], Number(row[rateColumn] || NaN)];
+	if (
+		row.length !== header.length ||
+		!/^[A-Z]{3}$/.test(currency) ||
+		!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+		!(rate > 0 && Number.isFinite(rate))
+	) {
+		throw new Error(`ECB reply has an unexpected row: ${row.slice(0, 7).join(',')}`);
 	}
 	if (date > (lastRates.get(currency) ?? '')) lastRates.set(currency, date);
 }
@@ -57,6 +61,12 @@ for (const [code, last] of table) {
 }
 
 writeFileSync(TABLE, render(table));
+
+async function fetchReply() {
+	const response = await fetch(SOURCE, {headers: {Accept: 'text/csv'}, signal: AbortSignal.timeout(60_000)});
+	if (!response.ok) throw new Error(`ECB responded with HTTP ${response.status}`);
+	return response.text();
+}
 
 function render(entries) {
 	const lines = [...entries].map(([code, last]) => `\t${code}: ${last === null ? 'null' : `'${last}'`},`);
@@ -104,6 +114,7 @@ function parseCsv(text) {
 			endRecord();
 		} else field += char;
 	}
+	if (quoted) throw new Error('ECB reply ends inside a quoted field');
 	if (field !== '' || record.length > 0) endRecord();
 	return records.filter((row) => row.length > 1);
 }
