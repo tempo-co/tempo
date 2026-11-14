@@ -190,7 +190,8 @@ export function DoubtfulRowsReview({
         )}
         {doubled && (
           <p>
-            Some are in Tempo twice, from the file and from your bank. Until you answer, both count.
+            Some are in Tempo twice, from the file and from your bank. Until you answer, both count
+            in your totals.
           </p>
         )}
       </div>
