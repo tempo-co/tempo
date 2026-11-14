@@ -1324,7 +1324,9 @@ test.describe('statement file import on Connections', () => {
 
     // Its summary opens with what the undo did, and its counts as what the import found when it ran.
     await rows.first().getByRole('button', {name: '3 files', exact: true}).click();
-    const summary = page.getByTestId('bank-import-dialog');
+    const summary = page.getByRole('dialog', {name: 'Import undone'});
+    await expect(summary.getByRole('heading', {name: 'Import undone'})).toBeVisible();
+    await expect(summary.getByRole('heading', {name: /^Imported/})).toHaveCount(0);
     const undoneAlert = summary.getByTestId('bank-import-undone');
     await expect(undoneAlert).toContainText('This import was undone today');
     await expect(undoneAlert).toContainText(

@@ -67,7 +67,9 @@ export function nameEndsWithCurrency(name: string, currency: string) {
   );
 }
 
-export function summaryTitle(summary: Pick<BankImportSummary, 'filesCount'>) {
+/** `Imported 3 files`; an undone import's summary says it was undone instead. */
+export function summaryTitle(summary: Pick<BankImportSummary, 'filesCount' | 'undoneAt'>) {
+  if (summary.undoneAt) return 'Import undone';
   return `Imported ${plural(summary.filesCount, 'file')}`;
 }
 
