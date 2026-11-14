@@ -1,3 +1,4 @@
+import {normalizeIdentityAmount} from './bank-transaction-identity';
 import {MATCH_WINDOW_DAYS, matchDay} from './bank-transaction-matcher';
 
 /** A row as the sweep compares it: a removed imported row, or a row sync stored that its edits could move to. */
@@ -57,7 +58,7 @@ export function pickCarryTargets(removed: readonly CarryRow[], pool: readonly Ca
 }
 
 function amountKey({amount, currency}: CarryRow): string {
-	return `${Number(amount).toFixed(2)}|${currency.trim().toUpperCase()}`;
+	return `${normalizeIdentityAmount(amount)}|${currency.trim().toUpperCase()}`;
 }
 
 function daysApart(left: string, right: string): number {

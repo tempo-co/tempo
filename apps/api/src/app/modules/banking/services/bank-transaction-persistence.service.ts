@@ -733,9 +733,16 @@ export class BankTransactionPersistenceService {
 				? {category, ownTransferOverride: row.ownTransferOverride}
 				: null;
 		};
-		// Rows with edits choose first, so an edit-less row never takes the look-alike one with edits needs.
+		// Rows with edits choose first, so a row without any never takes the look-alike one with edits needs. The
+		// others still get one of the rest, which their recurring hides follow.
 		const withEdits = removed.filter((row) => editsOf(row));
 		const targets = pickCarryTargets(withEdits.map(toCarryRow), pool.map(toCarryRow));
+		const chosen = new Set([...targets.values()].filter((id): id is string => id !== null));
+		for (const [id, target] of pickCarryTargets(
+			removed.filter((row) => !editsOf(row)).map(toCarryRow),
+			pool.filter(({id}) => !chosen.has(id)).map(toCarryRow),
+		))
+			targets.set(id, target);
 		const recomputeIds: string[] = [];
 		let moved = 0;
 		for (const row of withEdits) {

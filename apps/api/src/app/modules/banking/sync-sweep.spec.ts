@@ -52,6 +52,15 @@ describe('pickCarryTargets', () => {
 		expect(targets).toEqual(new Map([['removed', null]]));
 	});
 
+	it('tells amounts apart in every decimal the bank sends', () => {
+		expect(
+			pickCarryTargets(
+				[row('removed', '2026-03-18', '-15.00100000')],
+				[row('other', '2026-03-18', '-15.00400000')],
+			),
+		).toEqual(new Map([['removed', null]]));
+	});
+
 	it('compares amounts by value, whatever their decimals', () => {
 		expect(
 			pickCarryTargets([row('removed', '2026-03-18', '-15.00')], [row('target', '2026-03-21', '-15.00000000')]),

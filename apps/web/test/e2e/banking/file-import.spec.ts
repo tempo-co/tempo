@@ -729,6 +729,65 @@ test.describe('statement file import on Connections', () => {
     expect(api.neverSentReads).toBe(1);
   });
 
+  test('keeps what was added back when a list folds and opens again while the other list stays open', async ({
+    page,
+  }) => {
+    const row = (
+      id: number,
+      kind: BankImportNeverSentRow['kind'],
+      description: string,
+    ): BankImportNeverSentRow => ({
+      id: `00000000-0000-4000-8000-00000000096${id}`,
+      kind,
+      bankAccountId: CHECKING.id,
+      row: {
+        bookingDate: '2026-06-02',
+        valueDate: '2026-06-02',
+        amount: '-5.00',
+        currency: 'EUR',
+        balanceAfter: null,
+        bankReference: null,
+        counterpartyName: null,
+        description,
+        remittanceInformation: null,
+      },
+    });
+    const rows = [
+      row(1, 'not_in_bank', 'Example Gift'),
+      row(2, 'removed_by_sync', 'Example Fee'),
+      row(3, 'removed_by_sync', 'Example Pocket'),
+    ];
+    const summary = importSummary({rowsDoubtful: 0, rowsNotInBank: 1, rowsRemovedBySync: 2});
+    const api = await mockFileImport(page, {imports: [summary], neverSentRows: rows});
+    await page.goto('/bank-connections');
+    await page
+      .getByTestId('bank-import-row')
+      .getByRole('button', {name: '3 files · 212 new'})
+      .click();
+    const summaryBody = page.getByRole('dialog').getByTestId('bank-import-summary');
+    await summaryBody.getByRole('button', {name: 'Not added: 1 row your bank never sent'}).click();
+    const removedLine = summaryBody.getByRole('button', {
+      name: 'Removed: 2 rows your bank never sent',
+    });
+    await removedLine.click();
+    const removedList = summaryBody.getByTestId('bank-import-removed-by-sync');
+    await removedList.getByRole('button', {name: 'Add back Example Fee on 2 Jun'}).click();
+    await expect(removedList.getByRole('status')).toHaveText('Added back');
+
+    const line = summaryBody.getByRole('button', {name: 'Removed: 1 row your bank never sent'});
+    await line.click();
+    await expect(line).toHaveAttribute('aria-expanded', 'false');
+    await line.click();
+    await expect(removedList.getByRole('status')).toHaveText('Added back');
+    await expect(
+      removedList.getByRole('button', {name: 'Add back Example Fee on 2 Jun'}),
+    ).toHaveCount(0);
+    await expect(
+      removedList.getByRole('button', {name: 'Add back Example Pocket on 2 Jun'}),
+    ).toBeEnabled();
+    expect(api.adds).toEqual([{rowIds: [rows[1].id]}]);
+  });
+
   test('a refusal names the refused file, says nothing was imported and lets other files be chosen', async ({
     page,
   }) => {

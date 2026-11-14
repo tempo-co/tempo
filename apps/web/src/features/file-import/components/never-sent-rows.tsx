@@ -50,6 +50,9 @@ export function NeverSentRows({
   kind: BankImportNeverSentKind;
 }) {
   const [open, setOpen] = useState(false);
+  // Kept here, not in the list, so rows added stay added when the list folds and opens again: the other kind's list
+  // may keep the rows read before the add.
+  const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
   const listId = useId();
   const count = neverSentCount(summary, kind);
   // Opened once in this summary, the list stays so its added rows can show as added.
@@ -76,7 +79,12 @@ export function NeverSentRows({
       </Button>
       {open && (
         <div id={listId}>
-          <NeverSentList summary={summary} kind={kind} />
+          <NeverSentList
+            summary={summary}
+            kind={kind}
+            added={added}
+            onAdded={(ids) => setAdded((current) => new Set([...current, ...ids]))}
+          />
         </div>
       )}
     </section>
@@ -86,9 +94,13 @@ export function NeverSentRows({
 function NeverSentList({
   summary,
   kind,
+  added,
+  onAdded,
 }: {
   summary: BankImportSummary;
   kind: BankImportNeverSentKind;
+  added: ReadonlySet<string>;
+  onAdded: (ids: readonly string[]) => void;
 }) {
   const copy = NEVER_SENT_COPY[kind];
   const {
@@ -99,7 +111,6 @@ function NeverSentList({
     refetch,
   } = useBankImportNeverSentRows(summary.id, true);
   const {addNeverSentRows} = useAddNeverSentRows();
-  const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
   // The rows of the add on its way, so its button shows it and the others wait.
   const [adding, setAdding] = useState<readonly string[] | null>(null);
   const [shown, setShown] = useState(GROUPS_PAGE);
@@ -124,7 +135,7 @@ function NeverSentList({
     setAdding(ids);
     try {
       await addNeverSentRows({importId: summary.id, rowIds: ids});
-      setAdded((current) => new Set([...current, ...ids]));
+      onAdded(ids);
     } catch (failure) {
       if (!wasToasted(failure))
         toast.error(copy.failed(ids.length), {

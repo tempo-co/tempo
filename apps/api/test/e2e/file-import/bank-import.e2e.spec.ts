@@ -2667,12 +2667,18 @@ describe('Bank imports', () => {
 			{id: storedPharmacy.id},
 			{category: 'HEALTH', categorySource: 'MANUAL', categoryStatus: 'COMPLETED'},
 		);
+		// A row sync stored before, a day from the row without edits on the first final day.
+		const storedEdge = await fixtures.createTransaction(account, {
+			amount: '-9.50',
+			bookingDate: '2026-03-11',
+			valueDate: '2026-03-11',
+		});
 		const hides = app.get(DataSource).getRepository(RecurringSeriesHide);
 		const elsewhere = '00000000-0000-4000-8000-000000000001';
 		const hide = await hides.save({
 			accountId: owner.id,
 			seriesKey: 'example-sweep-series',
-			transactionIds: [kiosk1.id, pocket.id, elsewhere],
+			transactionIds: [kiosk1.id, pocket.id, edge.id, elsewhere],
 		});
 
 		const booked = (id: string, amount: string, day: string, description: string): EnableBankingTransaction => ({
@@ -2769,8 +2775,16 @@ describe('Bank imports', () => {
 				categorySource: 'MANUAL',
 				ownTransferOverride: 'MARKED',
 			});
-			// A hidden series follows the removed payment to its look-alike, and drops one without.
-			expect((await hides.findOneByOrFail({id: hide.id})).transactionIds).toEqual([kioskSynced.id, elsewhere]);
+			// A hidden series follows each removed payment to its look-alike, edits or not, and drops one without.
+			expect((await hides.findOneByOrFail({id: hide.id})).transactionIds).toEqual([
+				kioskSynced.id,
+				storedEdge.id,
+				elsewhere,
+			]);
+			expect(await transactions.findOneByOrFail({id: storedEdge.id})).toMatchObject({
+				category: null,
+				ownTransferOverride: null,
+			});
 			// Questions about removed rows go with them; inside coverage none are asked, those already open stay.
 			expect((await openQuestions()).sort()).toEqual([early1.id, early2.id].sort());
 			expect(await imports.findOneByOrFail({id: importId})).toMatchObject({
