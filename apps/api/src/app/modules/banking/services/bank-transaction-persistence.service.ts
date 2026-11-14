@@ -1,6 +1,8 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {FindOptionsSelect, In, IsNull, Not, Raw, Repository} from 'typeorm';
 
+import type {NormalizedRow} from '@modules/file-import/parsers/parse-result';
+
 import {BankAccount} from '../bank-account.entity';
 import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
@@ -14,7 +16,7 @@ import {
 	createBankTransactionStableIdentityKey,
 } from '../bank-transaction-identity';
 import {BankTransactionLocation, normalizeBankTransactionLocation} from '../bank-transaction-location';
-import {MATCH_WINDOW_DAYS, MatchIncomingRow, matchDay, matchTransactions} from '../bank-transaction-matcher';
+import {MATCH_WINDOW_DAYS, MatchIncomingRow, matchDay, matchWithReferenceFallback} from '../bank-transaction-matcher';
 import {deriveBankTransactionTextColumns} from '../bank-transaction-text-columns';
 import {normalizeBankTransactionType} from '../bank-transaction-type';
 import {BankTransaction} from '../bank-transaction.entity';
@@ -241,11 +243,30 @@ export class BankTransactionPersistenceService {
 				storedRows: storedRowsByGroup.get(groupKey) ?? 0,
 			})),
 		);
-		const transactionValues = assignBankTransactionStableIdentityKeys(
+		let transactionValues = assignBankTransactionStableIdentityKeys(
 			unassignedTransactionValues,
 			existingTransactions,
 			occupiedIdentityKeys,
 		);
+		// A pending row never takes over an imported row, even one equal to it in every identity field: it gets a
+		// key of its own, and the imported row stays reserved (and is asked about when the row books).
+		const importedByKey = new Map(
+			existingTransactions.flatMap((row) => (row.importId ? [[row.stableIdentityKey, row] as const] : [])),
+		);
+		const kept = new Set<BankTransaction>();
+		for (;;) {
+			const blocked = transactionValues.flatMap((value) => {
+				const row = isPendingStatus(value.transactionStatus) && importedByKey.get(value.stableIdentityKey);
+				return row ? [row] : [];
+			});
+			if (blocked.length === 0) break;
+			blocked.forEach((row) => kept.add(row));
+			transactionValues = assignBankTransactionStableIdentityKeys(
+				unassignedTransactionValues,
+				existingTransactions.filter((row) => !kept.has(row)),
+				new Set([...occupiedIdentityKeys, ...[...kept].map(({stableIdentityKey}) => stableIdentityKey)]),
+			);
+		}
 		const stableIdentityKeys = transactionValues.map(({stableIdentityKey}) => stableIdentityKey);
 		// Rows the write takes over from a file import: imported rows it updates by identity, and imported twins the
 		// ladder finds for rows it would otherwise insert. Accounts without imported rows skip this entirely.
@@ -254,9 +275,9 @@ export class BankTransactionPersistenceService {
 			[bankAccount.id],
 		);
 		const hasImportedRows = importedRows.length > 0;
-		const takenOverIds = hasImportedRows
+		const {takenOverIds, questions} = hasImportedRows
 			? await this.adoptImportedTwins(repository, bankAccount, transactionValues, existingTransactions)
-			: [];
+			: {takenOverIds: [], questions: new Map<string, ImportQuestion>()};
 		// The exchange recompute after the sync decides which marked rows are exchanges.
 		const exchangeMarkerKeys = transactionValues.flatMap((value) =>
 			detectCurrencyExchangeMarker({
@@ -306,6 +327,7 @@ export class BankTransactionPersistenceService {
 			// The row now belongs to the bank's history, so undoing its import leaves it.
 			await repository.update({id: In(ids)}, {importId: null});
 		}
+		if (hasImportedRows) await this.recordImportQuestions(repository, bankAccount.id, questions, adoptedIds);
 
 		await this.clearStaleBaseAmounts(repository, bankAccount.id, existingTransactions);
 		await this.copySameCurrencyBaseAmounts(repository, bankAccount.id);
@@ -407,10 +429,13 @@ export class BankTransactionPersistenceService {
 	}
 
 	/**
-	 * Finds the imported rows this write takes over. An incoming row that lands on an imported row by identity
-	 * updates it; an incoming row that would be inserted adopts the imported twin the duplicate ladder finds when it
-	 * is the only candidate, by moving that row to the incoming identity before the upsert. The adopted row joins
-	 * `existingTransactions`, so the usual re-categorization and base-amount rules see it.
+	 * Finds the imported rows this write takes over, and the ones to ask the owner about. An incoming row that lands
+	 * on an imported row by identity updates it. A booked incoming row that would be inserted adopts the imported twin
+	 * the duplicate ladder finds (`matchWithReferenceFallback`: the imports' references are set aside when the bank's
+	 * never equal them, and same-day look-alike groups as large on both sides pair off), by moving that row to the
+	 * incoming identity before the upsert. The adopted row joins `existingTransactions`, so the usual
+	 * re-categorization and base-amount rules see it. Pending rows adopt nothing. An imported row a doubtful incoming
+	 * row may be, or one that looks like a booked row continuing a stored pending row, gets a question instead.
 	 */
 	private async adoptImportedTwins(
 		repository: Repository<BankTransaction>,
@@ -422,24 +447,30 @@ export class BankTransactionPersistenceService {
 			}
 		>,
 		existingTransactions: BankTransaction[],
-	): Promise<string[]> {
+	): Promise<{takenOverIds: string[]; questions: Map<string, ImportQuestion>}> {
 		const existingByIdentity = new Map(
 			existingTransactions.flatMap((transaction) =>
 				transaction.stableIdentityKey ? [[transaction.stableIdentityKey, transaction] as const] : [],
 			),
 		);
 		const takenOverIds = new Set<string>();
-		const toInsert: Array<(typeof transactionValues)[number]> = [];
+		const questions = new Map<string, ImportQuestion>();
+		const toAdopt: Array<(typeof transactionValues)[number]> = [];
+		const continued: Array<{value: (typeof transactionValues)[number]; stored: BankTransaction}> = [];
 		for (const value of transactionValues) {
 			const existing = existingByIdentity.get(value.stableIdentityKey);
-			if (!existing) toInsert.push(value);
-			else if (existing.importId) takenOverIds.add(existing.id);
+			if (!existing) {
+				if (!isPendingStatus(value.transactionStatus)) toAdopt.push(value);
+			} else if (existing.importId) takenOverIds.add(existing.id);
+			else if (isPendingStatus(existing.transactionStatus) && !isPendingStatus(value.transactionStatus)) {
+				continued.push({value, stored: existing});
+			}
 		}
-		const days = toInsert.flatMap((value) => {
+		const days = [...toAdopt, ...continued.map(({value}) => value)].flatMap((value) => {
 			const day = matchDay(value);
 			return day ? [day] : [];
 		});
-		if (days.length === 0) return [...takenOverIds];
+		if (days.length === 0) return {takenOverIds: [...takenOverIds], questions};
 		days.sort();
 
 		const imported = await repository.find({
@@ -450,6 +481,7 @@ export class BankTransactionPersistenceService {
 				categoryStatus: true,
 				importId: true,
 				balanceAfterAmount: true,
+				counterpartyIban: true,
 				createdAt: true,
 			},
 			where: {
@@ -463,21 +495,29 @@ export class BankTransactionPersistenceService {
 			},
 		});
 		const candidates = imported.filter(({id}) => !takenOverIds.has(id));
-		const outcomes = matchTransactions(
-			toInsert.map(toMatchRow),
-			candidates.map((transaction) => ({
-				...toMatchRow(transaction),
-				id: transaction.id,
-				createdAt: transaction.createdAt,
-			})),
-			{uniqueCandidatesOnly: true},
-		);
+		const toExisting = (transaction: BankTransaction) => ({
+			...toMatchRow(transaction),
+			id: transaction.id,
+			createdAt: transaction.createdAt,
+		});
+		const ask = (transaction: BankTransaction, candidate: {key?: string; id?: string}) => {
+			const question = questions.get(transaction.id) ?? {
+				imported: transaction,
+				candidateKeys: [],
+				candidateIds: [],
+			};
+			if (candidate.key) question.candidateKeys.push(candidate.key);
+			if (candidate.id) question.candidateIds.push(candidate.id);
+			questions.set(transaction.id, question);
+		};
 		const candidatesById = new Map(candidates.map((transaction) => [transaction.id, transaction]));
-		let doubtful = 0;
+		const {outcomes} = matchWithReferenceFallback(toAdopt.map(toMatchRow), candidates.map(toExisting), {
+			uniqueCandidatesOnly: true,
+			pairLookAlikeGroups: true,
+		});
 		for (const [index, outcome] of outcomes.entries()) {
-			if (outcome.kind === 'doubtful') doubtful += 1;
 			if (outcome.kind !== 'matched') continue;
-			const value = toInsert[index];
+			const value = toAdopt[index];
 			const twin = candidatesById.get(outcome.existingId)!;
 			await repository.update(
 				{id: twin.id},
@@ -490,10 +530,97 @@ export class BankTransactionPersistenceService {
 			} as BankTransaction);
 			takenOverIds.add(twin.id);
 		}
-		if (doubtful > 0) {
-			this.logger.log(`Sync inserted ${doubtful} transaction(s) with more than one imported look-alike.`);
+		for (const [index, outcome] of outcomes.entries()) {
+			if (outcome.kind !== 'doubtful') continue;
+			for (const id of outcome.candidateIds) {
+				if (!takenOverIds.has(id)) ask(candidatesById.get(id)!, {key: toAdopt[index].stableIdentityKey});
+			}
 		}
-		return [...takenOverIds];
+		// A booked row continuing a pending one is already stored, so an imported look-alike is only ever asked about.
+		const left = candidates.filter(({id}) => !takenOverIds.has(id));
+		if (continued.length > 0 && left.length > 0) {
+			const {outcomes: continuedOutcomes} = matchWithReferenceFallback(
+				continued.map(({value}) => toMatchRow(value)),
+				left.map(toExisting),
+				{uniqueCandidatesOnly: true},
+			);
+			for (const [index, outcome] of continuedOutcomes.entries()) {
+				const ids =
+					outcome.kind === 'matched'
+						? [outcome.existingId]
+						: outcome.kind === 'doubtful'
+							? outcome.candidateIds
+							: [];
+				for (const id of ids) ask(candidatesById.get(id)!, {id: continued[index].stored.id});
+			}
+		}
+		return {takenOverIds: [...takenOverIds], questions};
+	}
+
+	/**
+	 * After the upsert: removes the open questions about imported rows this write took over, and asks about the
+	 * imported rows `adoptImportedTwins` could not settle. Each question sits on the imported row's own import, names
+	 * that row (`importedTransactionId`) and offers the synced look-alikes as candidates; a row already asked about
+	 * gains the new candidates. The import's doubtful count follows.
+	 */
+	private async recordImportQuestions(
+		repository: Repository<BankTransaction>,
+		bankAccountId: string,
+		questions: ReadonlyMap<string, ImportQuestion>,
+		adoptedIds: readonly string[],
+	): Promise<void> {
+		const settle = async (importIds: ReadonlyArray<{importId: string}>, change: 1 | -1) => {
+			for (const {importId} of importIds) {
+				await repository.query(
+					`UPDATE "bank_imports" SET "rowsDoubtful" = "rowsDoubtful" + $2 WHERE "id" = $1`,
+					[importId, change],
+				);
+			}
+		};
+		if (adoptedIds.length > 0) {
+			const [removed]: [Array<{importId: string}>, number] = await repository.query(
+				`DELETE FROM "bank_import_doubtful_rows"
+				WHERE "importedTransactionId" = ANY($1::uuid[]) AND "bankAccountId" = $2 AND "resolution" IS NULL
+				RETURNING "importId"`,
+				[adoptedIds, bankAccountId],
+			);
+			await settle(removed, -1);
+		}
+		const keys = [...new Set([...questions.values()].flatMap(({candidateKeys}) => candidateKeys))];
+		const idByKey = new Map(
+			keys.length === 0
+				? []
+				: (
+						await repository.find({
+							select: {id: true, stableIdentityKey: true},
+							where: {bankAccountId, stableIdentityKey: In(keys)},
+						})
+					).map(({id, stableIdentityKey}) => [stableIdentityKey, id] as const),
+		);
+		let asked = 0;
+		for (const {imported, candidateKeys, candidateIds} of questions.values()) {
+			const ids = [
+				...new Set([...candidateIds, ...candidateKeys.flatMap((key) => idByKey.get(key) ?? [])]),
+			].filter((id) => id !== imported.id);
+			if (ids.length === 0) continue;
+			const [updated]: [unknown[], number] = await repository.query(
+				`UPDATE "bank_import_doubtful_rows"
+				SET "candidateTransactionIds" = ARRAY(SELECT DISTINCT unnest("candidateTransactionIds" || $2::uuid[])), "updatedAt" = now()
+				WHERE "importedTransactionId" = $1 AND "resolution" IS NULL
+				RETURNING "id"`,
+				[imported.id, ids],
+			);
+			if (updated.length > 0) continue;
+			await repository.query(
+				`INSERT INTO "bank_import_doubtful_rows"
+					("importId", "bankAccountId", "row", "candidateTransactionIds", "importedTransactionId")
+				VALUES ($1, $2, $3::jsonb, $4::uuid[], $5)`,
+				[imported.importId, bankAccountId, JSON.stringify(toImportedRowSnapshot(imported)), ids, imported.id],
+			);
+			await settle([{importId: imported.importId!}], 1);
+			asked += 1;
+		}
+		if (asked > 0) this.logger.log(`Sync asked about ${asked} imported transaction(s) it could not match alone.`);
 	}
 
 	/** The earliest date of each account's pending rows, so the account's next fetch still covers all of them. */
@@ -757,13 +884,45 @@ function toMatchRow(row: {
 	valueDate: string | null;
 	balanceAfterAmount?: string | null;
 	entryReference: string | null;
+	counterpartyName?: string | null;
+	description?: string | null;
 }): MatchIncomingRow {
 	return {
+		text: [row.counterpartyName, row.description].filter(Boolean).join(' ') || null,
 		amount: row.amount,
 		currency: row.currency,
 		bookingDate: row.bookingDate,
 		valueDate: row.valueDate,
 		balanceAfter: row.balanceAfterAmount ?? null,
 		reference: row.entryReference,
+	};
+}
+
+/** An imported row the owner is asked about, and the synced rows (by identity key, or id once stored) it may be. */
+type ImportQuestion = {imported: BankTransaction; candidateKeys: string[]; candidateIds: string[]};
+
+function isPendingStatus(status: string | null | undefined): boolean {
+	return status?.trim().toUpperCase() === 'PDNG';
+}
+
+/** The imported row as a statement row, the shape a question shows; amounts keep at least two decimals. */
+function toImportedRowSnapshot(transaction: BankTransaction): NormalizedRow {
+	const decimal = (value: string | null) => value?.replace(/^(-?\d+\.\d{2}\d*?)0+$/, '$1') ?? null;
+	return {
+		bookingDate: transaction.bookingDate,
+		valueDate: transaction.valueDate,
+		transactionDate: transaction.transactionDate,
+		amount: decimal(transaction.amount)!,
+		creditDebitIndicator: transaction.creditDebitIndicator === 'CRDT' ? 'CRDT' : 'DBIT',
+		currency: transaction.currency,
+		balanceAfter: decimal(transaction.balanceAfterAmount),
+		bankReference: transaction.entryReference,
+		counterpartyName: transaction.counterpartyName,
+		counterpartyIban: transaction.counterpartyIban,
+		remittanceInformation: transaction.remittanceInformation,
+		description: transaction.description,
+		bankTransactionCode: transaction.bankTransactionCode,
+		bankTransactionSubCode: transaction.bankTransactionSubCode,
+		referenceNumber: transaction.referenceNumber,
 	};
 }

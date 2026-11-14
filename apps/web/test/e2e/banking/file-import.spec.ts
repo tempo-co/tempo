@@ -1106,10 +1106,10 @@ test.describe('statement file import on Connections', () => {
     );
   });
 
-  test('reviews doubtful rows in place, changes a choice, saves both answers and returns to the summary', async ({
+  test('reviews doubtful rows in place, changes a choice, saves every answer and returns to the summary', async ({
     page,
   }) => {
-    const summary = importSummary({rowsDoubtful: 2});
+    const summary = importSummary({rowsDoubtful: 3});
     const rows: BankImportDoubtfulRow[] = [
       doubtfulRow('00000000-0000-4000-8000-000000000601', 'Example Grocer', '-23.40', [
         candidate('00000000-0000-4000-8000-000000000701', 'Example Grocer', '-23.40'),
@@ -1123,6 +1123,14 @@ test.describe('statement file import on Connections', () => {
       doubtfulRow('00000000-0000-4000-8000-000000000602', 'Example Refund', '12.00', [
         candidate('00000000-0000-4000-8000-000000000703', 'Example Refund', '12.00'),
       ]),
+      // Already in Tempo from the file; a later bank sync brought a look-alike.
+      doubtfulRow(
+        '00000000-0000-4000-8000-000000000603',
+        'Example Bakery',
+        '-3.10',
+        [candidate('00000000-0000-4000-8000-000000000704', 'Example Bakery Amsterdam', '-3.10')],
+        '00000000-0000-4000-8000-000000000801',
+      ),
     ];
     const api = await mockFileImport(page, {imports: [summary], doubtfulRows: rows});
     await page.goto('/bank-connections');
@@ -1131,12 +1139,24 @@ test.describe('statement file import on Connections', () => {
       .getByRole('button', {name: '3 files · 212 new'})
       .click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('button', {name: 'Review 2 rows'}).click();
+    await dialog.getByRole('button', {name: 'Review 3 rows'}).click();
 
-    await expect(dialog.getByRole('heading', {name: 'Check 2 transactions'})).toBeVisible();
+    await expect(dialog.getByRole('heading', {name: 'Check 3 transactions'})).toBeVisible();
     const blocks = dialog.getByTestId('bank-import-doubtful-row');
-    await expect(blocks).toHaveCount(2);
-    const [first, second] = [blocks.nth(0), blocks.nth(1)];
+    await expect(blocks).toHaveCount(3);
+    const [first, second, third] = [blocks.nth(0), blocks.nth(1), blocks.nth(2)];
+    // Rows in Tempo twice count twice until answered, so the list says so instead of saying nothing is lost.
+    await expect(
+      dialog.getByText(
+        'Some are in Tempo twice, from the file and from your bank. Until you answer, both count.',
+      ),
+    ).toBeVisible();
+    await expect(dialog.getByText(SYNCED_LINE)).toHaveCount(0);
+    await expect(third).toContainText('1 Oct · from the file, already in Tempo');
+    await expect(third).toContainText('Your bank also sent');
+    await expect(third.getByRole('radio').nth(1)).toHaveAccessibleName(
+      'Different payments, keep both',
+    );
     await expect(first).toContainText('Example Grocer');
     await expect(first).toContainText('1 Oct · from the file');
     await expect(first).toContainText('Could be the same as');
@@ -1160,7 +1180,11 @@ test.describe('statement file import on Connections', () => {
     await expect(firstChoices.nth(2)).not.toBeChecked();
     await expect(save).toHaveText('Save answer');
     await second.getByText("It's a new transaction").click();
-    await expect(save).toHaveText('Save 2 answers');
+    await third.getByText('Example Bakery Amsterdam').click();
+    await expect(
+      third.getByRole('radio', {name: 'Same as Example Bakery Amsterdam on 1 Oct'}),
+    ).toBeChecked();
+    await expect(save).toHaveText('Save 3 answers');
     expect(api.resolves).toEqual([]);
 
     // The file row's amount and every choice's amount share one right edge.
@@ -1184,6 +1208,7 @@ test.describe('statement file import on Connections', () => {
     expect(api.resolves).toEqual([
       {decision: 'duplicate', transactionId: '00000000-0000-4000-8000-000000000702'},
       {decision: 'new'},
+      {decision: 'duplicate', transactionId: '00000000-0000-4000-8000-000000000704'},
     ]);
   });
 
@@ -2172,10 +2197,12 @@ function doubtfulRow(
   description: string,
   amount: string,
   candidates: BankImportDoubtfulRow['candidates'],
+  importedTransactionId: string | null = null,
 ): BankImportDoubtfulRow {
   return {
     id,
     bankAccountId: CHECKING.id,
+    importedTransactionId,
     row: {
       bookingDate: '2026-10-01',
       valueDate: '2026-10-01',

@@ -17,11 +17,14 @@ import {
 	MatchExistingRow,
 	MatchOutcome,
 	matchDay,
-	matchStatementRows,
 	matchTransactions,
+	matchWithReferenceFallback,
 } from '@modules/banking/bank-transaction-matcher';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {BATCH_WRITE_CHUNK_SIZE, chunkArray, safeErrorName} from '@modules/banking/banking.utils';
+import {createBankTransactionCategorizationInputHash} from '@modules/banking/categorization/bank-transaction-categorization-input';
+import {BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES} from '@modules/banking/categorization/bank-transaction-categorization.constants';
+import {isManualCategorySource} from '@modules/banking/categorization/bank-transaction-categorization.types';
 import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
 import {MerchantLogoService} from '@modules/banking/merchant-logos/merchant-logo.service';
 import {isIbanIdentificationHash, verifyIbanAgainstIdentificationHash} from '@modules/banking/own-transfer/iban';
@@ -216,7 +219,7 @@ export class BankImportService {
 					// formats before this one just inserted. Each format numbers its rows in a scheme of its own, so
 					// whether the bank's references are set aside is decided per format.
 					for (const {format, rows} of byFormat) {
-						const {outcomes, referencesSetAside} = matchStatementRows(
+						const {outcomes, referencesSetAside} = matchWithReferenceFallback(
 							rows.map(toMatchRow),
 							await this.findMatchCandidates(manager, account.id, rows),
 						);
@@ -398,6 +401,7 @@ export class BankImportService {
 			.map((doubtful) => ({
 				id: doubtful.id,
 				bankAccountId: doubtful.bankAccountId,
+				importedTransactionId: doubtful.importedTransactionId,
 				row: {
 					bookingDate: doubtful.row.bookingDate,
 					valueDate: doubtful.row.valueDate,
@@ -474,6 +478,11 @@ export class BankImportService {
 
 				let resolvedTransactionId: string;
 				const insertedTransactionIds: string[] = [];
+				if (current.importedTransactionId) {
+					await this.resolveImportedRowQuestion(manager, record, current, request);
+					for (const lock of locks) lock.assertHealthy();
+					return {record, insertedTransactionIds};
+				}
 				if (request.decision === 'duplicate') {
 					const transactionId = request.transactionId;
 					const candidate =
@@ -949,8 +958,91 @@ export class BankImportService {
 			valueDate: row.valueDate,
 			balanceAfter: row.balanceAfterAmount,
 			reference: row.entryReference,
-			imported: row.importId !== null,
+			sameNumbering: row.importId !== null,
 		}));
+	}
+
+	/**
+	 * Answers a question a sync raised about one of the import's rows already in history. `duplicate`: the row is the
+	 * chosen synced candidate, so it is deleted after its manual category and own-transfer choice move to the
+	 * candidate where the candidate has none of its own. `new`: both are payments of their own and stay.
+	 */
+	private async resolveImportedRowQuestion(
+		manager: EntityManager,
+		record: BankImport,
+		question: BankImportDoubtfulRow,
+		request: ResolveBankImportDoubtfulRowRequest,
+	): Promise<void> {
+		const transactions = manager.getRepository(BankTransaction);
+		// Only a row the import still owns is ever removed; a row bank sync took over is the bank's.
+		// Locked, so an edit saved on it meanwhile either lands before its choices move or finds it gone.
+		const imported = await transactions.findOne({
+			where: {id: question.importedTransactionId!, bankAccountId: question.bankAccountId, importId: record.id},
+			lock: {mode: 'pessimistic_write'},
+		});
+		if (!imported) throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
+		let resolvedTransactionId = imported.id;
+		if (request.decision === 'duplicate') {
+			const candidate =
+				request.transactionId && question.candidateTransactionIds.includes(request.transactionId)
+					? await transactions.findOne({
+							where: {id: request.transactionId, bankAccountId: question.bankAccountId},
+							relations: {bankAccount: {bankConnection: true}},
+						})
+					: null;
+			if (!candidate) throw new BadRequestException(BANK_IMPORT_NOT_A_CANDIDATE);
+			// Each choice moves only where the synced row has none at the moment of the write, so an owner's choice
+			// saved on it meanwhile is kept.
+			if (isManualCategorySource(imported.categorySource) && !isManualCategorySource(candidate.categorySource)) {
+				const inputHash = createBankTransactionCategorizationInputHash(candidate);
+				await transactions
+					.createQueryBuilder()
+					.update()
+					.set({
+						...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
+						category: imported.category,
+						categoryStatus: 'COMPLETED',
+						categorySource: 'MANUAL',
+						categoryInputHash: inputHash,
+						categoryAppliedInputHash: inputHash,
+						categoryUpdatedAt: new Date(),
+					})
+					.where('id = :id', {id: candidate.id})
+					.andWhere(`"categorySource" IS DISTINCT FROM 'MANUAL'`)
+					.execute();
+			}
+			if (imported.ownTransferOverride && !candidate.ownTransferOverride) {
+				await transactions
+					.createQueryBuilder()
+					.update()
+					.set({ownTransferOverride: imported.ownTransferOverride})
+					.where('id = :id', {id: candidate.id})
+					.andWhere(`"ownTransferOverride" IS NULL`)
+					.execute();
+			}
+			resolvedTransactionId = candidate.id;
+			record.rowsAdded -= 1;
+			record.rowsAlreadyPresent += 1;
+		}
+		record.rowsDoubtful -= 1;
+		// The question keeps its answer; it stops pointing at the imported row before that row goes.
+		await manager.getRepository(BankImportDoubtfulRow).update(
+			{id: question.id},
+			{
+				resolution: request.decision,
+				resolvedTransactionId,
+				importedTransactionId: request.decision === 'duplicate' ? null : imported.id,
+			},
+		);
+		if (request.decision === 'duplicate') await transactions.delete({id: imported.id, importId: record.id});
+		await manager.getRepository(BankImport).update(
+			{id: record.id},
+			{
+				rowsAdded: record.rowsAdded,
+				rowsAlreadyPresent: record.rowsAlreadyPresent,
+				rowsDoubtful: record.rowsDoubtful,
+			},
+		);
 	}
 
 	private async findOwnedImport(ownerId: Account['id'], importId: BankImport['id']): Promise<BankImport> {

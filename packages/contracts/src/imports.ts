@@ -196,6 +196,11 @@ export type BankImportDoubtfulRow = {
 	id: string;
 	bankAccountId: string;
 	row: BankImportFileRow;
+	/**
+	 * Null for a file row held out of history. Otherwise the row is already in history as this transaction, added by
+	 * the import, and a later bank sync brought look-alikes (the candidates) that may be the same payment.
+	 */
+	importedTransactionId: string | null;
 	/** The candidates that still exist. */
 	candidates: BankImportDoubtfulCandidate[];
 };
@@ -205,7 +210,9 @@ export type BankImportDoubtfulDecision = (typeof BANK_IMPORT_DOUBTFUL_DECISIONS)
 
 /**
  * `POST /bank-imports/:importId/doubtful-rows/:rowId/resolve`, answered with the import's `BankImportSummary`.
- * `new` adds the row; `duplicate` names the candidate it already is (`transactionId`) and adds nothing.
+ * `new` adds the row; `duplicate` names the candidate it already is (`transactionId`) and adds nothing. For a row
+ * already in history (`importedTransactionId`), `new` keeps both, and `duplicate` removes the imported row after
+ * moving its manual category and own-transfer choice to the candidate where that has none.
  */
 export type ResolveBankImportDoubtfulRowRequest = {
 	decision: BankImportDoubtfulDecision;

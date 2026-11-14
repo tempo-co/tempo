@@ -5,7 +5,7 @@ import type {
   ResolveBankImportDoubtfulRowRequest,
 } from '@tempo/contracts';
 import {differenceInCalendarDays, parseISO} from 'date-fns';
-import {CheckCheck, CircleAlert, FilePlus, FileQuestion} from 'lucide-react';
+import {CheckCheck, CircleAlert, FilePlus, FileQuestion, Files} from 'lucide-react';
 import {type ReactNode, useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
@@ -57,7 +57,8 @@ function dayGap(date: string | null, fileDate: string | null) {
 
 /**
  * The import's rows held for the owner: each next to the stored transactions it could be, as one choice between
- * them and a new transaction. Choices change freely until Save sends them, one row at a time. A saved answer is
+ * them and a new transaction. A row a bank sync later doubled is already in Tempo; its choice is between one of the
+ * bank's rows (the file's copy goes) and keeping both. Choices change freely until Save sends them, one row at a time. A saved answer is
  * final (the API cannot change it) and collapses its block to a line saying what was chosen; a row left without a
  * choice stays open for later. A long list shows a page of rows at a time; choices on every shown row count.
  */
@@ -126,7 +127,11 @@ export function DoubtfulRowsReview({
   const unsaved = rows.filter(({id}) => picks[id] && !saved[id]);
   const more = Math.min(PAGE, rows.length - shown);
   // Held rows on synced accounts are almost always stored already by sync; leaving them open loses nothing.
-  const synced = rows.every(({bankAccountId}) => known.get(bankAccountId)?.synced);
+  const synced = rows.every(
+    ({bankAccountId, importedTransactionId}) =>
+      !importedTransactionId && known.get(bankAccountId)?.synced,
+  );
+  const doubled = rows.some(({importedTransactionId}) => importedTransactionId);
   const unanswered = rows.filter(({id}) => !picks[id] && !saved[id]).length;
 
   const save = async () => {
@@ -181,6 +186,11 @@ export function DoubtfulRowsReview({
           <p>
             These are almost always in Tempo already from your bank, so leaving them without an
             answer loses nothing.
+          </p>
+        )}
+        {doubled && (
+          <p>
+            Some are in Tempo twice, from the file and from your bank. Until you answer, both count.
           </p>
         )}
       </div>
@@ -249,10 +259,17 @@ function DoubtfulRowBlock({
   onPick: (pick: Pick) => void;
 }) {
   const {row: fileRow} = row;
+  // Already in Tempo from the file; the candidates are what bank sync brought since.
+  const inTempo = row.importedTransactionId !== null;
   const title = fileRow.description || fileRow.counterpartyName || 'Transaction';
   const fileDate = fileRow.bookingDate ?? fileRow.valueDate;
   const date = formatBankTransactionCompactDate(fileDate);
   const name = `bank-import-doubtful-${row.id}`;
+  const newLabel = !inTempo
+    ? "It's a new transaction"
+    : row.candidates.length > 0
+      ? 'Different payments, keep both'
+      : 'Keep it';
   const savedCandidate =
     saved?.decision === 'duplicate'
       ? row.candidates.find(({id}) => id === saved.transactionId)
@@ -267,13 +284,18 @@ function DoubtfulRowBlock({
         <span aria-hidden='true' className={IMPORT_TILE}>
           <FileQuestion strokeWidth={2} />
         </span>
-        <Title title={title} detail={`${date} · from the file`} />
+        <Title
+          title={title}
+          detail={`${date} · from the file${inTempo ? ', already in Tempo' : ''}`}
+        />
         <Amount amount={fileRow.amount} currency={fileRow.currency} />
       </div>
       {saved ? (
         <p role='status' className='border-t px-3 py-2 text-sm text-muted-foreground'>
           {saved.decision === 'new'
-            ? 'Kept as new'
+            ? inTempo
+              ? 'Kept both'
+              : 'Kept as new'
             : savedCandidate
               ? `Marked as the same as ${candidateTitle(savedCandidate)} on ${formatBankTransactionCompactDate(candidateDate(savedCandidate))}`
               : 'Marked as the same'}
@@ -283,8 +305,12 @@ function DoubtfulRowBlock({
           <legend className='sr-only'>What {title} is</legend>
           <p aria-hidden='true' className='px-3 pt-2 text-xs text-muted-foreground'>
             {row.candidates.length > 0
-              ? 'Could be the same as'
-              : 'Nothing already in Tempo matches it now'}
+              ? inTempo
+                ? 'Your bank also sent'
+                : 'Could be the same as'
+              : inTempo
+                ? 'Nothing from your bank matches it now'
+                : 'Nothing already in Tempo matches it now'}
           </p>
           {row.candidates.map((candidate) => {
             const day = candidateDate(candidate);
@@ -308,14 +334,18 @@ function DoubtfulRowBlock({
           })}
           <Choice
             name={name}
-            label="It's a new transaction"
+            label={newLabel}
             checked={pick?.decision === 'new'}
             onChange={() => onPick({decision: 'new'})}
             divided={row.candidates.length > 0}
           >
             <span className='flex min-w-0 items-center gap-2 text-sm'>
-              <FilePlus aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' />
-              It&apos;s a new transaction
+              {inTempo ? (
+                <Files aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' />
+              ) : (
+                <FilePlus aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' />
+              )}
+              {newLabel}
             </span>
           </Choice>
           {failed && (
