@@ -71,7 +71,10 @@ export class BankTransactionAmountConversionQueueService implements OnModuleInit
 		}
 	}
 
-	/** Runs a conversion pass now, for a reporting currency that just changed (`key` names the change). */
+	/**
+	 * Runs a conversion pass now, after a reporting currency change or new rows (`key` names the reason). A pass still
+	 * waiting under the same key covers a second request; the 15-minute run catches anything a running pass missed.
+	 */
 	async enqueueConversion(key: string): Promise<void> {
 		// Tests run without schedulers or the boot backfill and run conversion passes themselves.
 		if (this.configurationService.get('NODE_ENV') === 'test') return;
