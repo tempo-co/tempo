@@ -440,6 +440,26 @@ test('the merchants dialog ranks by week, month or year and searches every merch
   await expect(results.getByRole('listitem')).toHaveCount(1);
   await dialog(page).getByRole('searchbox', {name: 'Search merchants and people'}).fill('nobody');
   await expect(results).toContainText('No merchant or person matches that name.');
+
+  // The clear button is a full touch target and brings the ranking back.
+  const search = dialog(page).getByRole('searchbox', {name: 'Search merchants and people'});
+  const clear = dialog(page).getByRole('button', {name: 'Clear search'});
+  const clearBox = await boxOf(clear);
+  expect(clearBox.width).toBeGreaterThanOrEqual(44);
+  expect(clearBox.height).toBeGreaterThanOrEqual(44);
+  await clear.click();
+  await expect(search).toHaveValue('');
+  await expect(search).toBeFocused();
+  await expect(clear).toBeHidden();
+  await expect(top).toBeVisible();
+  // Escape clears a filled search without closing the dialog; on an empty one it closes the dialog.
+  await search.fill('burger');
+  await expect(results).toContainText('1 match');
+  await search.press('Escape');
+  await expect(search).toHaveValue('');
+  await expect(top).toBeVisible();
+  await search.press('Escape');
+  await expect(dialog(page)).toBeHidden();
 });
 
 test('a later page of merchants or of a merchant’s transactions that fails keeps the loaded ones and tries that page again', async ({
