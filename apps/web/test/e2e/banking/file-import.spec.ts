@@ -1305,6 +1305,7 @@ test.describe('statement file import on Connections', () => {
   test('offers Add balance or Edit on imported-files accounts as their balance comes, in a dialog', async ({
     page,
   }) => {
+    test.setTimeout(20_000);
     const [base] = IMPORTED_FILES.bankAccounts;
     const accounts = [
       {
@@ -1406,6 +1407,29 @@ test.describe('statement file import on Connections', () => {
     await expect(
       rowOf('Example Wallet').getByRole('button', {name: 'Edit balance of Example Wallet'}),
     ).toBeVisible();
+
+    // On a phone the dialog is a sheet: Save over Cancel, full width under the field, and Enter saves.
+    await page.setViewportSize({width: 390, height: 844});
+    await rowOf('Example Savings')
+      .getByRole('button', {name: 'Edit balance of Example Savings'})
+      .click();
+    dialog = page.getByRole('dialog');
+    const phoneField = dialog.getByLabel('Balance of Example Savings today');
+    await expectInsideViewport(page, dialog.getByRole('button', {name: 'Cancel'}));
+    await expectCurrencyInside(phoneField, 'EUR');
+    const [phoneFieldBox, phoneSave, phoneCancel] = await Promise.all([
+      boxOf(phoneField),
+      boxOf(dialog.getByRole('button', {name: 'Save'})),
+      boxOf(dialog.getByRole('button', {name: 'Cancel'})),
+    ]);
+    expect(phoneSave.y).toBeGreaterThanOrEqual(phoneFieldBox.y + phoneFieldBox.height);
+    expect(phoneCancel.y).toBeGreaterThan(phoneSave.y);
+    expect(Math.abs(phoneSave.width - phoneFieldBox.width)).toBeLessThanOrEqual(1);
+    await phoneField.fill('-40.00');
+    await phoneField.press('Enter');
+    await expect(dialog).toBeHidden();
+    expect(amounts).toEqual(['99.5', '-40.00']);
+    await expect(rowOf('Example Savings')).toContainText('-€40.00');
   });
 
   test('shows imported files as a connection with no consent, sync or re-authorization', async ({
