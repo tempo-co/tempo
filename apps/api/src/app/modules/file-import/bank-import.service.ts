@@ -17,6 +17,7 @@ import {
 	MatchExistingRow,
 	MatchOutcome,
 	matchDay,
+	matchStatementRows,
 	matchTransactions,
 } from '@modules/banking/bank-transaction-matcher';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
@@ -212,12 +213,18 @@ export class BankImportService {
 				for (const [index, {byFormat}] of accountRows.entries()) {
 					const {account, connection} = accounts[index];
 					// Candidates are read again per format, inside the transaction, so they include the rows the
-					// formats before this one just inserted.
-					for (const {rows} of byFormat) {
-						const outcomes = matchTransactions(
+					// formats before this one just inserted. Each format numbers its rows in a scheme of its own, so
+					// whether the bank's references are set aside is decided per format.
+					for (const {format, rows} of byFormat) {
+						const {outcomes, referencesSetAside} = matchStatementRows(
 							rows.map(toMatchRow),
 							await this.findMatchCandidates(manager, account.id, rows),
 						);
+						if (referencesSetAside) {
+							this.logger.log(
+								`Import ${record.id} matched ${rows.length} ${format} row(s) of account ${account.id} without the bank's references: none is the file's`,
+							);
+						}
 						const newRows = rows.filter((_, rowIndex) => outcomes[rowIndex].kind === 'new');
 						if (newRows.length > 0) {
 							const persisted = await this.persistence.persistTransactions(
@@ -922,6 +929,7 @@ export class BankImportService {
 				balanceAfterAmount: true,
 				entryReference: true,
 				createdAt: true,
+				importId: true,
 			},
 			where: {
 				bankAccountId,
@@ -941,6 +949,7 @@ export class BankImportService {
 			valueDate: row.valueDate,
 			balanceAfter: row.balanceAfterAmount,
 			reference: row.entryReference,
+			imported: row.importId !== null,
 		}));
 	}
 

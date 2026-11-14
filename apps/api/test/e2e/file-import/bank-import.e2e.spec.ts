@@ -15,7 +15,7 @@ import {join} from 'node:path';
 import {deflateRawSync} from 'node:zlib';
 import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
-import {In, Repository} from 'typeorm';
+import {In, IsNull, Repository} from 'typeorm';
 
 import {dateInTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
@@ -1693,6 +1693,83 @@ describe('Bank imports', () => {
 
 		expect(await transactions.find({where: {bankAccountId: account.id}, order: {id: 'ASC'}})).toEqual(storedBefore);
 		expect(await bankAccounts.findOneByOrFail({id: account.id})).toEqual(accountBefore);
+
+		// A bank whose statement references are never the ones sync stored: 21 April payments on days of their own,
+		// and two equal ones on one day.
+		const april = Array.from({length: 21}, (_, day) => ({
+			amount: `-${101 + day}.00`,
+			bookingDate: `2026-04-${String(day + 1).padStart(2, '0')}`,
+		}));
+		const coffee = {amount: '-2.50', bookingDate: '2026-04-27'};
+		for (const [day, row] of april.entries()) await synced({...row, entryReference: `SYNC-${day}`});
+		const coffeeIds = [
+			(await synced({...coffee, entryReference: 'SYNC-C1'})).id,
+			(await synced({...coffee, entryReference: 'SYNC-C2'})).id,
+		];
+		const storedWithApril = await transactions.find({where: {bankAccountId: account.id}, order: {id: 'ASC'}});
+		// An earlier statement of that bank added a payment sync never delivered, in the file's own numbering.
+		const earlier = await drop(agent, [
+			Buffer.from(camt053([{entries: [entry('99.00', '2026-04-09', 'FILE-OLD')]}])),
+		]).expect(201);
+		const [earlierRow] = await transactions.find({where: {importId: earlier.body.id}});
+		const aprilStatement = (reference: (day: number) => string) =>
+			Buffer.from(
+				camt053([
+					{
+						entries: [
+							...april.map(({amount, bookingDate}, day) =>
+								entry(amount.slice(1), bookingDate, reference(day)),
+							),
+							entry('2.50', coffee.bookingDate, 'FILE-C1'),
+							entry('2.50', coffee.bookingDate, 'FILE-C2'),
+							entry('55.00', '2026-04-15', 'FILE-NEW'),
+							// Another payment of the same amount a day after the earlier statement's.
+							entry('99.00', '2026-04-10', 'FILE-NEXT'),
+						],
+					},
+				]),
+			);
+
+		// One reference sync stored is enough to keep the statement's references: every other row stays doubtful.
+		const sharingOne = await drop(agent, [aprilStatement((day) => (day === 0 ? 'SYNC-0' : `FILE-${day}`))]).expect(
+			201,
+		);
+		expect(sharingOne.body).toMatchObject({
+			rowsAdded: 1,
+			rowsMatchedByReference: 1,
+			rowsMatchedByDate: 0,
+			rowsDoubtful: 23,
+		} satisfies Partial<BankImportSummary>);
+		await agent.delete(`/bank-imports/${sharingOne.body.id}`).set('Origin', ORIGIN).expect(204);
+
+		const unrelated = await drop(agent, [aprilStatement((day) => `FILE-${day}`)]).expect(201);
+
+		expect(unrelated.body).toMatchObject({
+			rowsAdded: 1,
+			rowsAlreadyPresent: 21,
+			rowsMatchedByReference: 0,
+			rowsMatchedByDate: 21,
+			rowsDoubtful: 3,
+		} satisfies Partial<BankImportSummary>);
+		// The look-alikes on one day are asked about, each offered both synced rows; the row next to the earlier
+		// statement's keeps the reference conflict with it, so it is asked about too.
+		const held = await agent.get(`/bank-imports/${unrelated.body.id}/doubtful-rows`).expect(200);
+		expect(
+			(held.body as Array<{row: {bankReference: string}; candidates: Array<{id: string}>}>)
+				.map(({row, candidates}) => [row.bankReference, candidates.map(({id}) => id).sort()])
+				.sort(),
+		).toEqual([
+			['FILE-C1', [...coffeeIds].sort()],
+			['FILE-C2', [...coffeeIds].sort()],
+			['FILE-NEXT', [earlierRow.id]],
+		]);
+		// The new row keeps its statement reference; nothing stored changed.
+		expect(
+			(await transactions.find({where: {importId: unrelated.body.id}})).map(({entryReference}) => entryReference),
+		).toEqual(['FILE-NEW']);
+		expect(
+			await transactions.find({where: {bankAccountId: account.id, importId: IsNull()}, order: {id: 'ASC'}}),
+		).toEqual(storedWithApril);
 	});
 
 	it('keeps doubtful rows and their decisions to the owner', async () => {
