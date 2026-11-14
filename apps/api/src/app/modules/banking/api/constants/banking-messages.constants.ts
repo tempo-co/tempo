@@ -27,6 +27,10 @@ export const BANKING_CONNECTION_REMOVAL_CONFIRMATION_REQUIRED =
 	'Type DELETE to confirm removal of this connected bank.';
 export const BANKING_CONNECTION_NOT_AUTHORIZED = 'Bank connection is not authorized.';
 export const BANKING_CONNECTION_SESSION_UNAVAILABLE = 'Bank connection session is unavailable. Please reconnect.';
+export const BANKING_FILE_CONNECTION_NOT_SYNCABLE = 'Imported files are not synced with a bank.';
+export const BANKING_BALANCE_FROM_BANK = "This account's balance comes from its bank.";
+export const BANKING_ACCOUNT_NOT_FOUND = 'Bank account not found.';
+export const BANKING_BALANCE_AMOUNT_INVALID = 'Enter an amount with at most two decimals.';
 export const BANKING_CONSENT_EXPIRED = 'Bank consent has expired. Please reconnect.';
 
 export const BANKING_PARTIAL_SYNC_ERROR = 'Some bank data could not be synchronized.';

@@ -63,6 +63,7 @@ import {
 import {BankingEncryptionError} from '../errors/banking-encryption.error';
 import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {BankingSyncOwnershipLostError} from '../errors/banking-sync-ownership-lost.error';
+import {FileConnectionNotSyncableException} from '../errors/file-connection-not-syncable.exception';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {AspspCatalogService} from './aspsp-catalog.service';
 import {BankTransactionPersistenceService, PersistTransactionsResult} from './bank-transaction-persistence.service';
@@ -72,6 +73,7 @@ import {
 	BANKING_FOREGROUND_REFRESH_MIN_INTERVAL_MS,
 	BANKING_TRANSIENT_RETRY_BASE_MS,
 	BANKING_UNATTENDED_HISTORY_DAYS,
+	BANK_CONNECTION_PROVIDERS,
 	BANK_CONNECTION_STATUSES,
 	BANK_SYNC_STATUSES,
 	rateLimitCooldownSeconds,
@@ -126,7 +128,7 @@ type SyncRateLimit = {
 	retryAfterSeconds: number;
 };
 
-type PersistSyncResult = PersistTransactionsResult & {
+type PersistSyncResult = Pick<PersistTransactionsResult, 'transactionsAdded' | 'persistedTransactionIds'> & {
 	/** Rows whose own-transfer counterpart was a pending row the sync removed. */
 	formerCounterpartIds: string[];
 };
@@ -165,7 +167,13 @@ export class BankingSyncService {
 			where: {id: connectionId},
 			relations: {account: true},
 		});
-		if (!connection || connection.status !== BANK_CONNECTION_STATUSES.AUTHORIZED) return null;
+		if (
+			!connection ||
+			connection.provider === BANK_CONNECTION_PROVIDERS.FILE ||
+			connection.status !== BANK_CONNECTION_STATUSES.AUTHORIZED
+		) {
+			return null;
+		}
 
 		return this.runSynchronization(connection.account.id, connectionId);
 	}
@@ -178,7 +186,8 @@ export class BankingSyncService {
 		signal: AbortSignal,
 	): Promise<BankSyncRunResponse | null> {
 		if (!this.bankingIntegrationEnabled) throw new ServiceUnavailableException(BANKING_SERVICE_UNAVAILABLE);
-		await findOwnedConnection(this.bankConnectionRepository, accountId, connectionId);
+		const connection = await findOwnedConnection(this.bankConnectionRepository, accountId, connectionId);
+		if (connection.provider === BANK_CONNECTION_PROVIDERS.FILE) throw new FileConnectionNotSyncableException();
 		return this.runSynchronization(accountId, connectionId, psu, signal);
 	}
 

@@ -27,6 +27,15 @@ export const BANK_SYNC_STATUSES = {
 	EXPIRED: 'EXPIRED',
 } as const satisfies {[S in BankSyncStatus]: S};
 
+/** Who supplies a connection's data. Only Enable Banking connections sync; `file` holds the owner's imported files. */
+export const BANK_CONNECTION_PROVIDERS = {
+	ENABLE_BANKING: 'enable-banking',
+	FILE: 'file',
+} as const;
+
+/** The owner's single connection for imported statement files. */
+export const FILE_CONNECTION_ASPSP = {name: 'Imported files', country: 'ZZ'} as const;
+
 /** The rate-limit cooldown when the provider sent no usable Retry-After. */
 export const BANKING_DEFAULT_RETRY_AFTER_SECONDS = 6 * 60 * 60;
 /** A rate-limit cooldown never ends sooner than this, so a zero or past Retry-After cannot cause a tight loop. */

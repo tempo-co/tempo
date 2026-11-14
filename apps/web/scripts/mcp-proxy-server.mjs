@@ -20,6 +20,15 @@ const server = createServer((request, response) => {
     response.writeHead(204).end();
     return;
   }
+  if (request.method === 'POST' && request.url === '/bank-imports') {
+    let bytes = 0;
+    request.on('data', (chunk) => (bytes += chunk.length));
+    request.on('end', () => {
+      response.writeHead(201, {'Content-Type': 'application/json'});
+      response.end(JSON.stringify({bytes}));
+    });
+    return;
+  }
   let body = '';
   request.on('data', (chunk) => (body += chunk));
   request.on('end', () => {

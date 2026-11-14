@@ -40,6 +40,30 @@ for (const template of [
 	assert.ok(fs.existsSync(templatePath), `Email template missing from runtime image: ${templatePath}`);
 }
 
+// The file-import parse child runs as its own process from the compiled entry, with only production dependencies.
+const parseChild = '/usr/src/app/dist/src/app/modules/file-import/runner/parse-runner.child.js';
+assert.ok(fs.existsSync(parseChild), `File import parse child missing from runtime image: ${parseChild}`);
+// Its stdin is one JSON request line, then the file's bytes.
+const runParseChild = (request, file) =>
+	require('node:child_process').spawnSync(process.execPath, [parseChild], {
+		env: {},
+		input: `${JSON.stringify(request)}\n${file}`,
+	});
+const parseRun = runParseChild(
+	{mode: 'parse', layouts: []},
+	'<?xml version="1.0" encoding="UTF-8"?><Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">' +
+		'<BkToCstmrStmt><Stmt><Acct><Id><IBAN>NL91ABNA0417164300</IBAN></Id><Ccy>EUR</Ccy></Acct></Stmt></BkToCstmrStmt></Document>',
+);
+assert.equal(parseRun.status, 0, 'File import parse child failed to run');
+assert.equal(JSON.parse(parseRun.stdout.toString()).ok, true, 'File import parse child refused a valid statement');
+// The column mapper's masked sample comes from the same child.
+const sampleRun = runParseChild(
+	{mode: 'sample'},
+	'Date;Amount;Currency\n2026-03-02;-12.50;EUR\n2026-03-03;-4.20;EUR\n',
+);
+assert.equal(sampleRun.status, 0, 'File import parse child failed to sample a table');
+assert.equal(JSON.parse(sampleRun.stdout.toString()).ok, true, 'File import parse child found no table to sample');
+
 Object.assign(process.env, {
 	NODE_ENV: 'production',
 	WEB_BASE_URL: 'http://web.example.invalid',

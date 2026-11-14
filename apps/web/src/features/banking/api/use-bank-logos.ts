@@ -2,6 +2,7 @@ import {skipToken, useQuery, useQueryClient} from '@tanstack/react-query';
 import type {BankConnectionAspsp} from '@tempo/contracts';
 import {useEffect, useMemo} from 'react';
 
+import {isFileConnection} from '../utils/bank-sync-status';
 import {bankQueryKeys} from './query-keys';
 import {bankConnectionsQueryOptions} from './use-get-all-bank-connections';
 import {useGetSupportedBanks} from './use-get-supported-banks';
@@ -25,9 +26,11 @@ export const useBankLogos = (enabled: boolean) => {
     enabled: false,
   });
   // Older saved responses can lack references; current connections need no provider-catalogue request.
-  const {supportedBanks} = useGetSupportedBanks(
-    enabled && !!connections?.some((connection) => !connection.logo),
+  // Imported files have no bank, so no logo either.
+  const lacksLogo = !!connections?.some(
+    (connection) => !connection.logo && !isFileConnection(connection),
   );
+  const {supportedBanks} = useGetSupportedBanks(enabled && lacksLogo);
   const {data: savedLogos} = useQuery<BankLogos>({
     queryKey: bankQueryKeys.connectedBankLogos,
     queryFn: skipToken,
@@ -35,7 +38,7 @@ export const useBankLogos = (enabled: boolean) => {
 
   const logos = useMemo(() => {
     if (!connections) return undefined;
-    if (connections.some((connection) => !connection.logo) && !supportedBanks) return undefined;
+    if (lacksLogo && !supportedBanks) return undefined;
     const connected = new Set(
       connections.map((connection) => bankLogoKey(connection.aspspName, connection.aspspCountry)),
     );
@@ -50,7 +53,7 @@ export const useBankLogos = (enabled: boolean) => {
         logos[bankLogoKey(connection.aspspName, connection.aspspCountry)] = {logo: connection.logo};
     }
     return logos;
-  }, [supportedBanks, connections]);
+  }, [supportedBanks, connections, lacksLogo]);
 
   // Written again with each fetch of the bank list, so the saved logos stay within the offline age
   // limit while the app is open.

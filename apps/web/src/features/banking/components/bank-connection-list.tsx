@@ -2,21 +2,14 @@ import {useIsMutating} from '@tanstack/react-query';
 import {Link} from '@tanstack/react-router';
 import {BankConnection, BankConnectionAspsp} from '@tempo/contracts';
 import {format} from 'date-fns';
-import {
-  AlertTriangle,
-  ChevronRight,
-  Clock,
-  CreditCard,
-  Landmark,
-  PiggyBank,
-  Wallet,
-} from 'lucide-react';
-import {useEffect, useRef, useState} from 'react';
+import {AlertTriangle, ChevronRight, Clock, FileUp, Landmark} from 'lucide-react';
+import {type ReactNode, useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
 import {PendingLabel} from '@/components/shared/pending-label';
 import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
+import {Alert, AlertAction, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {Input} from '@/components/ui/input';
@@ -40,14 +33,16 @@ import {
 } from '../api/use-delete-bank-connection';
 import {useBankConnectionRefreshState} from '../api/use-refresh-bank-connection';
 import {useStartBankConnection} from '../api/use-start-bank-connection';
+import {accountName, accountSubline} from '../utils/bank-account-name';
 import {
   getAutomaticSyncProblemForConnection,
   isConnectedBank,
   isConsentEndingSoon,
+  isFileConnection,
   isReauthorizationRequired,
   isSyncInProgress,
 } from '../utils/bank-sync-status';
-import {formatBankingWords} from '../utils/formatters';
+import {ACCOUNT_TILE, AccountTypeIcon, ImportedFilesTile} from './account-tiles';
 import {BankConnectionPicker} from './bank-connection-picker';
 import {type BankArtwork, BankLogo} from './bank-logo';
 
@@ -57,6 +52,22 @@ type BankConnectionListProps = {
   isError: boolean;
   error: unknown;
   onRetry: () => unknown;
+  /**
+   * Statement file import, once the deployment has it on: its button beside Connect a bank, a page-wide drop,
+   * an empty page that offers both, and the Imports list under the cards. Without it the page is unchanged.
+   */
+  fileImport?: {
+    /** The Import a file button for the header. */
+    action: ReactNode;
+    /** The same action for the empty page. */
+    onImport: () => void;
+    /** The page-wide drop target and its overlay. */
+    drop: ReactNode;
+    /** The Imports list. */
+    imports: ReactNode;
+    /** Where an imported-files account shows its balance, the way to add or edit one the owner enters. */
+    balanceAction: (account: Account) => ReactNode;
+  };
 };
 
 type Account = BankConnection['bankAccounts'][number];
@@ -67,8 +78,6 @@ const DAY = 24 * 60 * 60 * 1000;
 /** The shared transaction row: 36px round tile, two lines, amount; 60px tall. */
 const ROW =
   'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
-const TILE =
-  'inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-transaction-tile-edge bg-transaction-tile-field text-transaction-tile-ink';
 
 export function BankConnectionList({
   bankConnections,
@@ -76,6 +85,7 @@ export function BankConnectionList({
   isError,
   error,
   onRetry,
+  fileImport,
 }: BankConnectionListProps) {
   const {startBankConnection, isPending: isStarting} = useStartBankConnection();
   const bankLogos = useBankLogos(!isPending && !isError);
@@ -123,9 +133,10 @@ export function BankConnectionList({
 
   return (
     <div
-      className='@container grid grid-cols-1 gap-5 max-md:gap-4'
+      className={cn('@container grid grid-cols-1 gap-5 max-md:gap-4', fileImport && 'relative')}
       data-testid='bank-connections-list'
     >
+      {fileImport?.drop}
       {/* The padding keeps the cards 16px below the overhanging button; the 18px row gap leaves 12px between the
           title and a button wrapped under it. */}
       <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-4.5 max-md:pb-1.5 md:pointer-coarse:pb-0.5'>
@@ -133,11 +144,19 @@ export function BankConnectionList({
         {/* Always there: loading, retrying or failing to load the list never closes an open sheet.
             It overhangs the title's row (44px tall on phones and touch screens, 40px otherwise), so the title and
             the cards start where other pages' do. */}
-        <BankConnectionPicker
-          onBankSelect={connectBank}
-          isStarting={isStarting}
-          className='-my-1.5 md:-my-1 md:pointer-coarse:-my-1.5'
-        />
+        {fileImport ? (
+          // On phones the two share the row under the title, equal width.
+          <div className='-my-1.5 flex gap-2 max-md:grid max-md:w-full max-md:grid-cols-2 md:-my-1 md:pointer-coarse:-my-1.5'>
+            {fileImport.action}
+            <BankConnectionPicker onBankSelect={connectBank} isStarting={isStarting} />
+          </div>
+        ) : (
+          <BankConnectionPicker
+            onBankSelect={connectBank}
+            isStarting={isStarting}
+            className='-my-1.5 md:-my-1 md:pointer-coarse:-my-1.5'
+          />
+        )}
       </header>
       {isPending ? (
         <div
@@ -152,11 +171,25 @@ export function BankConnectionList({
       ) : isError ? (
         <LoadErrorState title="Couldn't load bank connections" error={error} onRetry={onRetry} />
       ) : bankConnections.length === 0 ? (
-        <StateMessage
-          icon={Landmark}
-          title='No bank connections'
-          description='Connect a bank to bring its accounts in.'
-        />
+        fileImport ? (
+          <StateMessage
+            icon={Landmark}
+            title='No accounts yet'
+            description='Connect a bank to keep its accounts up to date, or import statement files.'
+          >
+            <BankConnectionPicker onBankSelect={connectBank} isStarting={isStarting} />
+            <Button variant='outline' onClick={fileImport.onImport}>
+              <FileUp />
+              Import a file
+            </Button>
+          </StateMessage>
+        ) : (
+          <StateMessage
+            icon={Landmark}
+            title='No bank connections'
+            description='Connect a bank to bring its accounts in.'
+          />
+        )
       ) : (
         // Two columns that each flow top to bottom, so a short card leaves neither a gap below it nor empty room inside it.
         <div className='grid grid-cols-1 gap-6 max-md:gap-4 @[60rem]:block @[60rem]:columns-2 @[60rem]:[&>*]:mb-6 @[60rem]:[&>*]:break-inside-avoid'>
@@ -164,6 +197,7 @@ export function BankConnectionList({
             <BankCard
               key={connection.id}
               connection={connection}
+              balanceAction={isFileConnection(connection) ? fileImport?.balanceAction : undefined}
               artwork={bankLogos[bankLogoKey(connection.aspspName, connection.aspspCountry)]}
               isStarting={isStarting}
               onReauthorize={reauthorize}
@@ -175,6 +209,7 @@ export function BankConnectionList({
           ))}
         </div>
       )}
+      {fileImport?.imports}
       <BankDetailsDialog
         open={detailsOpen}
         connection={detailsConnection}
@@ -205,6 +240,8 @@ type Problem = {
 
 /** The one thing wrong with a bank, if anything: what it is, when, and what to do. */
 function problemOf(connection: BankConnection): Problem | null {
+  // Imported files have no bank behind them: nothing to consent to, sync or re-authorize.
+  if (isFileConnection(connection)) return null;
   if (!isConnectedBank(connection)) {
     return {
       title: 'Not connected',
@@ -248,12 +285,14 @@ function problemOf(connection: BankConnection): Problem | null {
 
 function BankCard({
   connection,
+  balanceAction,
   artwork,
   isStarting,
   onReauthorize,
   onDetails,
 }: {
   connection: BankConnection;
+  balanceAction?: (account: Account) => ReactNode;
   artwork?: BankArtwork;
   isStarting: boolean;
   onReauthorize: (connection: BankConnection) => void | Promise<void>;
@@ -263,7 +302,8 @@ function BankCard({
   const problem = problemOf(connection);
   const accounts = connection.bankAccounts;
   const total = bankTotal(connection);
-  const stale = !problem && isStale(connection);
+  const files = isFileConnection(connection);
+  const stale = !problem && !files && isStale(connection);
 
   return (
     <Card
@@ -273,25 +313,22 @@ function BankCard({
       className='grid grid-cols-1 content-start gap-4 p-5 sm:p-6'
     >
       <header className='flex items-center gap-3'>
-        <BankLogo
-          bank={{name: connection.aspspName, ...artwork}}
-          className='size-9 rounded-md text-xs shadow-none'
-          imageClassName='p-1'
-          testId='bank-connection-logo'
-        />
+        <ConnectionTile connection={connection} artwork={artwork} testId='bank-connection-logo' />
         <div className='min-w-0 flex-1'>
           <h2 id={headingId} className='text-card-title wrap-break-word'>
-            {connection.aspspName}
+            {connectionName(connection)}
           </h2>
           <p className={cn('truncate text-xs text-muted-foreground', stale && 'text-warning')}>
-            {stale
-              ? `Updated ${relativeTime(connection.lastSyncedAt!)}`
-              : `${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`}
+            {files
+              ? 'From statement files'
+              : stale
+                ? `Updated ${relativeTime(connection.lastSyncedAt!)}`
+                : `${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`}
           </p>
         </div>
         <TextAction
           onClick={(event) => onDetails(event.currentTarget)}
-          aria-label={`${connection.aspspName} details`}
+          aria-label={`${connectionName(connection)} details`}
           className='-mr-2 gap-0.5 self-center'
         >
           Details <ChevronRight aria-hidden='true' />
@@ -299,39 +336,35 @@ function BankCard({
       </header>
 
       {problem && (
-        <div
-          role='alert'
-          data-testid='bank-connection-problem'
-          className='grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2.5 rounded-md border border-warning/40 bg-warning/5 px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)_auto]'
-        >
-          {problem.soon ? (
-            <Clock aria-hidden='true' className='size-4 text-warning' />
-          ) : (
-            <AlertTriangle aria-hidden='true' className='size-4 text-warning' />
-          )}
-          <span className='min-w-0'>
-            <span className='block text-sm font-medium'>{problem.title}</span>
-            <span className='block text-xs text-muted-foreground'>{problem.detail}</span>
-          </span>
+        <Alert role='alert' variant='warning' data-testid='bank-connection-problem'>
+          {problem.soon ? <Clock aria-hidden='true' /> : <AlertTriangle aria-hidden='true' />}
+          <AlertTitle>{problem.title}</AlertTitle>
+          <AlertDescription>{problem.detail}</AlertDescription>
           {problem.action === 'reauthorize' && (
-            <Button
-              variant='outline'
-              size='sm'
-              disabled={isStarting}
-              onClick={() => void onReauthorize(connection)}
-              className='col-start-2 justify-self-start sm:col-start-3 pointer-coarse:min-h-11'
-            >
-              {isStarting ? 'Starting…' : 'Re-authorize'}
-            </Button>
+            <AlertAction>
+              <Button
+                variant='outline'
+                size='sm'
+                disabled={isStarting}
+                onClick={() => void onReauthorize(connection)}
+                className='pointer-coarse:min-h-11'
+              >
+                {isStarting ? 'Starting…' : 'Re-authorize'}
+              </Button>
+            </AlertAction>
           )}
-        </div>
+        </Alert>
       )}
 
       {accounts.length > 0 && (
         <ul className='-mx-3 grid grid-cols-1'>
           {accounts.map((account) => (
             <li key={account.id}>
-              <AccountRow account={account} baseCurrency={connection.baseCurrency} />
+              <AccountRow
+                account={account}
+                baseCurrency={connection.baseCurrency}
+                action={balanceAction?.(account)}
+              />
             </li>
           ))}
           {accounts.length > 1 && total && (
@@ -346,6 +379,33 @@ function BankCard({
         </ul>
       )}
     </Card>
+  );
+}
+
+/** Imported files are named for what they are; a bank by its name. */
+function connectionName(connection: BankConnection) {
+  return isFileConnection(connection) ? 'Imported files' : connection.aspspName;
+}
+
+/** The card's leading tile: the bank's logo, or for imported files the files glyph in the Clay tile. */
+function ConnectionTile({
+  connection,
+  artwork,
+  testId,
+}: {
+  connection: BankConnection;
+  artwork?: BankArtwork;
+  testId?: string;
+}) {
+  // The Clay tile in the bank logo's square, so both kinds of card start alike.
+  if (isFileConnection(connection)) return <ImportedFilesTile testId={testId} />;
+  return (
+    <BankLogo
+      bank={{name: connection.aspspName, ...artwork}}
+      className='size-9 rounded-md text-xs shadow-none'
+      imageClassName='p-1'
+      testId={testId}
+    />
   );
 }
 
@@ -371,7 +431,16 @@ function BankCardSkeleton() {
   );
 }
 
-function AccountRow({account, baseCurrency}: {account: Account; baseCurrency: string | null}) {
+function AccountRow({
+  account,
+  baseCurrency,
+  action,
+}: {
+  account: Account;
+  baseCurrency: string | null;
+  /** Shown under the amount, or in its place when there is none; the row's link then covers the rest. */
+  action?: ReactNode;
+}) {
   const balance = accountBalance(account);
   const converted =
     balance?.amount !== 0 &&
@@ -381,8 +450,53 @@ function AccountRow({account, baseCurrency}: {account: Account; baseCurrency: st
       ? formatCurrency(Number(account.currentBalanceInBaseCurrency), baseCurrency)
       : null;
   const name = accountName(account);
-  const type = formatAccountType(account.cashAccountType);
-  const subline = [type !== name && type, lastDigits(account)].filter(Boolean).join(' · ');
+  const subline = accountSubline(account);
+  const amounts = (
+    <>
+      {balance && (
+        <span className='block numeric text-sm whitespace-nowrap'>
+          {formatCurrency(balance.amount, balance.currency)}
+        </span>
+      )}
+      {converted && (
+        <span className='block numeric text-xs whitespace-nowrap text-muted-foreground'>
+          ≈ {converted}
+        </span>
+      )}
+    </>
+  );
+
+  if (action)
+    // A button cannot sit inside the link, so the link stretches over the row and the action sits above it.
+    return (
+      <div
+        className={cn(
+          ROW,
+          'relative has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-ring',
+        )}
+      >
+        <span aria-hidden='true' className={ACCOUNT_TILE}>
+          <AccountTypeIcon type={account.cashAccountType} />
+        </span>
+        <span className='min-w-0'>
+          <Link
+            to='/bank-transactions'
+            search={{bankAccountIds: [account.id]}}
+            aria-label={`${name} transactions`}
+            className='block truncate text-sm outline-none after:absolute after:inset-0'
+          >
+            {name}
+          </Link>
+          <span className='block truncate text-xs text-muted-foreground'>
+            {subline || account.currency}
+          </span>
+        </span>
+        <span className='relative flex flex-col items-end text-right'>
+          {amounts}
+          {action}
+        </span>
+      </div>
+    );
 
   return (
     <Link
@@ -391,7 +505,7 @@ function AccountRow({account, baseCurrency}: {account: Account; baseCurrency: st
       aria-label={`${name} transactions`}
       className={ROW}
     >
-      <span aria-hidden='true' className={TILE}>
+      <span aria-hidden='true' className={ACCOUNT_TILE}>
         <AccountTypeIcon type={account.cashAccountType} />
       </span>
       <span className='min-w-0'>
@@ -400,18 +514,7 @@ function AccountRow({account, baseCurrency}: {account: Account; baseCurrency: st
           {subline || account.currency}
         </span>
       </span>
-      <span className='text-right'>
-        {balance && (
-          <span className='block numeric text-sm whitespace-nowrap'>
-            {formatCurrency(balance.amount, balance.currency)}
-          </span>
-        )}
-        {converted && (
-          <span className='block numeric text-xs whitespace-nowrap text-muted-foreground'>
-            ≈ {converted}
-          </span>
-        )}
-      </span>
+      <span className='text-right'>{amounts}</span>
     </Link>
   );
 }
@@ -488,38 +591,40 @@ function DetailsStep({
 }) {
   const consent = connection.consentValidUntil;
   const consentSoon = consent ? isWithinDays(consent, 30) : false;
+  const files = isFileConnection(connection);
   const canReauthorize =
-    !isConnectedBank(connection) ||
-    isReauthorizationRequired(connection) ||
-    isConsentEndingSoon(connection);
-  const facts: {label: string; value: string; warn?: boolean}[] = [
-    {label: 'Country', value: formatCountry(connection.aspspCountry)},
-    {
-      label: 'Accounts',
-      value: String(connection.bankAccounts.length),
-    },
-    {
-      label: 'Consent until',
-      value: consent ? longDate(consent) : '—',
-      warn: consentSoon,
-    },
-    {
-      label: 'Updated',
-      value: connection.lastSyncedAt ? relativeTime(connection.lastSyncedAt) : 'Never',
-    },
-  ];
+    !files &&
+    (!isConnectedBank(connection) ||
+      isReauthorizationRequired(connection) ||
+      isConsentEndingSoon(connection));
+  const accountsFact = {label: 'Accounts', value: String(connection.bankAccounts.length)};
+  // Imported files have no country, consent or sync to report.
+  const facts: {label: string; value: string; warn?: boolean}[] = files
+    ? [accountsFact]
+    : [
+        {label: 'Country', value: formatCountry(connection.aspspCountry)},
+        {
+          label: 'Accounts',
+          value: String(connection.bankAccounts.length),
+        },
+        {
+          label: 'Consent until',
+          value: consent ? longDate(consent) : '—',
+          warn: consentSoon,
+        },
+        {
+          label: 'Updated',
+          value: connection.lastSyncedAt ? relativeTime(connection.lastSyncedAt) : 'Never',
+        },
+      ];
 
   return (
     <>
       <ResponsiveDialogHeader className='text-start'>
         <div className='flex items-center gap-3'>
-          <BankLogo
-            bank={{name: connection.aspspName, ...artwork}}
-            className='size-9 rounded-md text-xs shadow-none'
-            imageClassName='p-1'
-          />
+          <ConnectionTile connection={connection} artwork={artwork} />
           <ResponsiveDialogTitle className='min-w-0 truncate'>
-            {connection.aspspName}
+            {connectionName(connection)}
           </ResponsiveDialogTitle>
         </div>
         <ResponsiveDialogDescription className='sr-only'>
@@ -608,7 +713,7 @@ function RemoveStep({
   return (
     <>
       <ResponsiveDialogHeader className='text-start'>
-        <ResponsiveDialogTitle>Remove {connection.aspspName}?</ResponsiveDialogTitle>
+        <ResponsiveDialogTitle>Remove {connectionName(connection)}?</ResponsiveDialogTitle>
         <ResponsiveDialogDescription className='pt-2'>
           This permanently deletes the connection, its {connection.bankAccounts.length}{' '}
           {connection.bankAccounts.length === 1 ? 'account' : 'accounts'} and all their
@@ -700,40 +805,6 @@ function bankTotal(connection: BankConnection) {
     else return null;
   }
   return {amount, currency: base};
-}
-
-/** The account's own name when it has one; provider names are often just the holder's name. */
-function accountName(account: Account) {
-  return (
-    account.alias ||
-    account.details ||
-    account.name ||
-    formatAccountType(account.cashAccountType) ||
-    'Bank account'
-  );
-}
-
-function lastDigits(account: Account) {
-  const digits = account.maskedIdentifier?.replace(/[^0-9A-Za-z]/g, '').slice(-4);
-  return digits ? `••${digits}` : null;
-}
-
-function AccountTypeIcon({type}: {type: string | null}) {
-  const props = {className: 'size-4', strokeWidth: 1.8} as const;
-  const normalized = type?.toUpperCase();
-  if (normalized === 'SVGS') return <PiggyBank {...props} />;
-  if (normalized === 'CARD') return <CreditCard {...props} />;
-  if (normalized === 'CACC') return <Wallet {...props} />;
-  return <Landmark {...props} />;
-}
-
-function formatAccountType(value: string | null) {
-  if (!value) return null;
-  const normalized = value.toUpperCase();
-  if (normalized === 'CACC') return 'Current account';
-  if (normalized === 'SVGS') return 'Savings';
-  if (normalized === 'CARD') return 'Card';
-  return formatBankingWords(value);
 }
 
 const regionNames = new Intl.DisplayNames(undefined, {type: 'region'});

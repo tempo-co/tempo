@@ -155,6 +155,11 @@ components:
     textColor: "{colors.foreground}"
     rounded: "{rounded.pill}"
     padding: "1px 10px"
+  alert:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.control}"
+    padding: "10px 12px"
   state-message:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.foreground}"
@@ -379,6 +384,26 @@ They stack collapsed and use the library's default lifetime. Distinct states get
 never imply data changed before the server confirms it. Motion is brief (0.2–0.3s), subtle,
 reduced-motion aware; never animate financial values continuously.
 
+### Alerts
+
+An inline message about the thing it sits in, such as a refused import, a bank that needs
+re-authorizing or a save that failed, is an `Alert` (`src/components/ui/alert.tsx`), never a
+hand-styled box or a bare line of red text. It is a 1px bordered block at control radius,
+`10px 12px` padding: a leading 16px glyph, a `text-sm` medium title, a muted `text-sm`
+description, and its actions under the text on phones and to the right from `sm` up.
+
+- **Variants.** `default` (surface field, muted glyph) explains or offers a next step;
+  `warning` (warning edge at 40%, field at 5%, warning glyph) is attention that is not a
+  failure; `destructive` (the same in destructive) is a refusal or a failed operation. Text
+  stays in the foreground and muted colours, so the glyph and the edge carry the tone.
+- **Glyph.** Names the subject (`FileX` a refused file, `Clock` consent ending, `CloudOff` a
+  failed load), not the tone alone.
+- **Announcing.** It has no live-region role by default: `role='alert'` for a message that
+  appears in answer to the owner, `role='status'` for a quiet update, none for a notice present
+  from the start.
+- A message about a single field stays on the field; toasts carry outcomes the screen does not
+  show; a list or section that failed to load is a `StateMessage` (below).
+
 ### Empty and error states
 
 Empty, not-found and failed loads use `StateMessage` (`src/components/shared/state-message.tsx`),
@@ -433,6 +458,63 @@ responsive overlay with an explicit Save: a bottom drawer on phones and a dialog
 Session and access-token details use the same responsive presentation. Account deletion is its
 own one-row group with an outline button; destructive actions use the shared destructive
 variant. Selected values (the theme picker) use a clay ring, never the navigation underline.
+
+### File import
+
+Statement file import lives on Connections, and only while the deployment has it on: the import
+list answering is the switch, and until it does the page shows nothing of it. Bank sync stays
+the page's primary action. **Import a file** is the outline button beside **Connect a bank**
+(the two share the row under the title on phones, equal width), and the empty page offers both.
+No copy calls import a fallback or assumes a bank is connected.
+
+- **Drop area.** On fine pointers: a 160px area with a dashed 1px rule at control radius, the
+  `FileUp` Clay tile, "Drop statement files here", a muted "or" and an outline **Choose files**.
+  Drag-over turns the rule to the ring token and the field to the accent wash. Phones and touch
+  screens get the button alone, full width. The picker accepts any extension, since banks name
+  their exports oddly. Files dragged anywhere over Connections show a full-column overlay (dashed
+  2px ring rule, page-field wash, "Drop to import"); it is the only drop target outside the dialog.
+- **One dialog.** Choosing, importing, the summary, the account question, the rows to check and
+  the undo confirmation are steps of one `ResponsiveDialog`, with a scrolling body and a footer
+  that stays in reach. It never closes by itself. Closing it does not cancel an upload; the
+  outcome then arrives as a toast (View reopens the summary). Focus returns to Import a file.
+- **Refusals.** A drop is all or nothing, so a refusal is a `destructive` `Alert` whose
+  description ends with "Nothing was imported." It sits at the end of the choose step, under
+  Supported files, and names the refused file when the drop held several. An offer to work out
+  a file's columns is a `default` Alert, and every answer from working them out is shown the
+  same way; the footer carries the action. A choice over a drop's limits (20 files, 10 MB each,
+  25 MB together) is refused the same way before anything is uploaded. A failed request is a
+  `destructive` Alert in the same place with the cause, the status line and Try again.
+- **Summary.** Counts as a bordered `divide-y` list with `numeric` values (the count that needs a
+  look in `warning`), then Period and Went to, each a small muted label with its glyph
+  (`CalendarRange`, `ArrowDownToLine`) over its value. Each account it went to shows as on
+  Connections: its bank's logo (imported files: the `Files` Clay tile) with the account-type tile
+  on its corner, its name, and its details and bank under it. A drop that added nothing shows
+  the `CheckCheck` state instead of the counts. An undone import opens with a `default` Alert
+  (`Undo2`) saying when and what the undo removed, and its counts sit muted under "When
+  imported" in the past tense.
+- **Account question.** Native radio rows, so arrow keys move between them; nothing is
+  preselected, and Import stays disabled until every question has an answer. Each row starts
+  with its bank's logo as on its Connections card (imported files: the `Files` Clay tile) and a
+  small round account-type tile on its corner as on its Connections row; a new account gets the
+  `Plus` Clay tile in the same square.
+- **Balances.** The amount field shows its currency inside at the far right, over padding the
+  value scrolls short of. Save sits under the field: in the summary on its own row, in the
+  Add/Edit balance dialog in its footer with Cancel.
+- **Rows to check.** Each file row (the `FileQuestion` tile) and the stored rows it could be form one
+  bordered block: one radio choice between those rows and "It's a new transaction", nothing
+  preselected. Radios take the tile's lead column and amounts share one right-aligned column, with
+  nothing after them; each stored row says how its day sits against the file row's ("2 days
+  later"). Choices change freely until Save, which stays in reach under the list and sends only the
+  rows with one. A saved answer is final and collapses its block to one muted line; a failed one
+  stays open with its choice and an error line.
+- **Imports list.** Under the connection cards once an import exists: a small heading, then one
+  bordered `divide-y` list, newest first, five rows before Show all. A row reads "3 files · 212
+  new" over the day, the accounts and any rows still to check (attention tone), with an
+  always-visible outline Undo named with its date. An undone import stays listed, muted, without
+  the button. Undo confirms with the destructive variant and says what goes and what stays.
+- **Imported files.** The imported-files connection uses the bank card with the `Files` Clay tile
+  and "From statement files". It never shows consent, sync or re-authorization states, and its
+  Details hold the accounts and Remove only.
 
 ## Do's and Don'ts
 

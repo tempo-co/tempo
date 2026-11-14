@@ -103,6 +103,10 @@ services:
             AI_CATEGORIZATION_MODEL: claude-sonnet-5-5
             AI_CATEGORIZATION_WEB_SEARCH_ENABLED: 'false'
             BANKING_INTEGRATION_ENABLED: 'false'
+            # Statement file import is on, so staging can try it; it calls nothing outside staging.
+            FILE_IMPORT_ENABLED: 'true'
+            # Working out an unknown file's columns calls a model, which staging never does.
+            FILE_IMPORT_MAPPER_ENABLED: 'false'
             ENABLE_BANKING_API_URL: https://disabled.invalid
             ENABLE_BANKING_APPLICATION_ID: tempo-staging-disabled
             ENABLE_BANKING_REDIRECT_URL: ${STAGING_WEB_BASE_URL:-http://127.0.0.1:8119}/bank-connections/callback

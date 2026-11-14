@@ -1,0 +1,5 @@
+KNAB EXPORT;;;;;;;;;;;;;;;;
+Rekeningnummer;Transactiedatum;Valutacode;CreditDebet;Bedrag;Tegenrekeningnummer;Tegenrekeninghouder;Valutadatum;Betaalwijze;Omschrijving;Type betaling;Machtigingsnummer;Incassant ID;Adres;Referentie;Boekdatum;
+"NL71KNAB0100000001";"05-03-2026";"EUR";"D";"24,95";"NL91ABNA0417164300";"Example Shop";"05-03-2026";"Betaalautomaat";"Example Shop Examplestad";"";"";"";"";"EXREF0000000003";"05-03-2026";
+"NL71KNAB0100000001";"03-03-2026";"EUR";"C";"2500";"12345678";"Example Employer BV";"03-03-2026";"Ontvangen betaling";"Salaris februari";"";"";"";"";"EXREF0000000002";"04-03-2026";
+"NL71KNAB0100000001";"02-03-2026";"EUR";"D";"850,00";"DE89370400440532013000";"Voorbeeld Verhuur BV";"02-03-2026";"Overboeking";"Huur maart";"";"";"";"";"EXREF0000000001";"02-03-2026";

@@ -16,7 +16,12 @@ import {
 import {BankConnection} from '../bank-connection.entity';
 import {safeErrorName} from '../banking.utils';
 import {BankingConnectionLockService} from './banking-connection-lock.service';
-import {BANK_CONNECTION_STATUSES, BANK_SYNC_STATUSES, resolveDurationMs} from './banking-sync.constants';
+import {
+	BANK_CONNECTION_PROVIDERS,
+	BANK_CONNECTION_STATUSES,
+	BANK_SYNC_STATUSES,
+	resolveDurationMs,
+} from './banking-sync.constants';
 
 export type BankConnectionSyncJobData = {
 	connectionId?: string;
@@ -72,6 +77,7 @@ export class BankingSyncQueueService implements OnModuleInit {
 		const connections = await this.bankConnectionRepository
 			.createQueryBuilder('connection')
 			.where('connection.status = :status', {status: BANK_CONNECTION_STATUSES.AUTHORIZED})
+			.andWhere('connection.provider = :provider', {provider: BANK_CONNECTION_PROVIDERS.ENABLE_BANKING})
 			.andWhere(
 				'(connection.nextSyncAt <= :now OR (connection.syncStatus = :running AND connection.syncStartedAt <= :staleBefore))',
 				{now, running: BANK_SYNC_STATUSES.RUNNING, staleBefore},

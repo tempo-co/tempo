@@ -7,6 +7,7 @@ import {getSessionSignal} from '@/utils/api';
 import {isAccountQuery} from '@/utils/offline-storage';
 
 import {
+  isFileConnection,
   isInRateLimitCooldown,
   isReauthorizationRequired,
   isSyncInProgress,
@@ -81,6 +82,8 @@ export function useAppOpenBankRefresh() {
             ?.find((connection) => connection.id === id);
           if (
             !connection ||
+            // Imported files have no bank to refresh from.
+            isFileConnection(connection) ||
             connection.status !== 'AUTHORIZED' ||
             isReauthorizationRequired(connection) ||
             isSyncInProgress(connection) ||
