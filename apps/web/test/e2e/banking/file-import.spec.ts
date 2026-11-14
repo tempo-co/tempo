@@ -1148,7 +1148,7 @@ test.describe('statement file import on Connections', () => {
     // Rows in Tempo twice count twice until answered, so the list says so instead of saying nothing is lost.
     await expect(
       dialog.getByText(
-        'Some are in Tempo twice, from the file and from your bank. Until you answer, both count.',
+        'Some are in Tempo twice, from the file and from your bank. Until you answer, both count in your totals.',
       ),
     ).toBeVisible();
     await expect(dialog.getByText(SYNCED_LINE)).toHaveCount(0);

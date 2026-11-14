@@ -109,8 +109,12 @@ const FORMAT_ORDER: readonly StatementFormat[] = [
 	'ofx',
 ];
 
-/** Where an account's rows go: an account bank sync writes to, or an imported-files account found or created. */
-type Target = {kind: 'synced'; account: BankAccount} | {kind: 'file'; account?: BankAccount};
+/**
+ * Where an account's rows go: an account bank sync writes to, or an imported-files account found or created.
+ * `ibanConfirmed`: the statement's own IBAN is the synced account's (it was routed there by it, or the account the
+ * request names has it), the only case its rows may be matched without the bank's references.
+ */
+type Target = {kind: 'synced'; account: BankAccount; ibanConfirmed: boolean} | {kind: 'file'; account?: BankAccount};
 
 /** A statement's target, and whether it was found by bank and currency alone (the case the unconfirmed guard checks). */
 type RoutedTarget = {target: Target; routedByBank: boolean};
@@ -215,14 +219,19 @@ export class BankImportService {
 				const persistedTransactionIds: string[] = [];
 				for (const [index, {byFormat}] of accountRows.entries()) {
 					const {account, connection} = accounts[index];
+					const target = targets[index];
+					// Without the bank's references a row of another account's statement can pass for a stored
+					// payment of the same amount and day, so that path needs the statement's own IBAN to agree.
+					const ibanConfirmed = target.kind === 'synced' && target.ibanConfirmed;
 					// Candidates are read again per format, inside the transaction, so they include the rows the
 					// formats before this one just inserted. Each format numbers its rows in a scheme of its own, so
 					// whether the bank's references are set aside is decided per format.
 					for (const {format, rows} of byFormat) {
-						const {outcomes, referencesSetAside} = matchWithReferenceFallback(
-							rows.map(toMatchRow),
-							await this.findMatchCandidates(manager, account.id, rows),
-						);
+						const incoming = rows.map(toMatchRow);
+						const candidates = await this.findMatchCandidates(manager, account.id, rows);
+						const {outcomes, referencesSetAside} = ibanConfirmed
+							? matchWithReferenceFallback(incoming, candidates, {pairLookAlikeGroups: true})
+							: {outcomes: matchTransactions(incoming, candidates), referencesSetAside: false};
 						if (referencesSetAside) {
 							this.logger.log(
 								`Import ${record.id} matched ${rows.length} ${format} row(s) of account ${account.id} without the bank's references: none is the file's`,
@@ -622,7 +631,10 @@ export class BankImportService {
 				routed.push(null);
 			} else {
 				routed.push({
-					target: matches.length === 1 ? {kind: 'synced', account: matches[0]} : {kind: 'file'},
+					target:
+						matches.length === 1
+							? {kind: 'synced', account: matches[0], ibanConfirmed: !!iban}
+							: {kind: 'file'},
 					routedByBank: !!bank && matches.length === 1,
 				});
 			}
@@ -705,9 +717,10 @@ export class BankImportService {
 		if (!account?.bankConnection || account.currency !== rows.currency) {
 			throw new BankImportRefusalException('target_account_mismatch');
 		}
+		// The statement names no account, so nothing in it can confirm the one chosen.
 		return account.bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE
 			? {kind: 'file', account}
-			: {kind: 'synced', account};
+			: {kind: 'synced', account, ibanConfirmed: false};
 	}
 
 	/**
@@ -782,7 +795,12 @@ export class BankImportService {
 					!verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency)
 			: false;
 		if (contradicts) throw new BankImportRefusalException('target_account_mismatch');
-		return {kind: 'synced', account};
+		const ibanConfirmed =
+			!!iban &&
+			(storedIban
+				? storedIban === iban
+				: verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency));
+		return {kind: 'synced', account, ibanConfirmed};
 	}
 
 	/**
@@ -937,6 +955,8 @@ export class BankImportService {
 				valueDate: true,
 				balanceAfterAmount: true,
 				entryReference: true,
+				counterpartyName: true,
+				description: true,
 				createdAt: true,
 				importId: true,
 			},
@@ -952,6 +972,7 @@ export class BankImportService {
 		return existing.map((row) => ({
 			id: row.id,
 			createdAt: row.createdAt,
+			text: matchText(row.counterpartyName, row.description),
 			amount: row.amount,
 			currency: row.currency,
 			bookingDate: row.bookingDate,
@@ -1281,6 +1302,7 @@ function normalizeStoredIban(iban: string | null): string | null {
 
 function toMatchRow(row: NormalizedRow) {
 	return {
+		text: matchText(row.counterpartyName, row.description),
 		amount: row.amount,
 		currency: row.currency,
 		bookingDate: row.bookingDate,
@@ -1288,6 +1310,11 @@ function toMatchRow(row: NormalizedRow) {
 		balanceAfter: row.balanceAfter,
 		reference: row.bankReference,
 	};
+}
+
+/** What look-alike pairing compares, as sync builds it: counterparty and description. */
+function matchText(counterpartyName: string | null, description: string | null): string | null {
+	return [counterpartyName, description].filter(Boolean).join(' ') || null;
 }
 
 function addLadderCounts(counts: LadderCounts, outcomes: readonly MatchOutcome[]): void {

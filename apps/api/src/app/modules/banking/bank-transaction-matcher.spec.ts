@@ -431,3 +431,21 @@ describe('matchWithReferenceFallback for rows a sync delivers against imported r
 		});
 	});
 });
+
+describe('matchWithReferenceFallback for a statement file', () => {
+	it('pairs the look-alike groups the fallback holds when asked to', () => {
+		const twins = referencedTwins(REFERENCE_FALLBACK_MIN_PROBED_ROWS);
+		const coffee = {amount: '-2.50', bookingDate: '2026-05-01', valueDate: null};
+		const rows = [...twins.incoming, incoming(coffee), incoming(coffee)];
+		const stored = [...twins.existing, existing('c1', coffee), existing('c2', coffee)];
+
+		expect(matchWithReferenceFallback(rows, stored).outcomes.slice(-2)).toEqual([
+			{kind: 'doubtful', candidateIds: ['c1', 'c2']},
+			{kind: 'doubtful', candidateIds: ['c1', 'c2']},
+		]);
+		expect(matchWithReferenceFallback(rows, stored, {pairLookAlikeGroups: true}).outcomes.slice(-2)).toEqual([
+			{kind: 'matched', existingId: 'c1', step: 'sameDayGroup'},
+			{kind: 'matched', existingId: 'c2', step: 'sameDayGroup'},
+		]);
+	});
+});
