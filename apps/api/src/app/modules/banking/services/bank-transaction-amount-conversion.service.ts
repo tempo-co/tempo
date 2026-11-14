@@ -64,8 +64,9 @@ const rateLateral = (alias: string, currency: string) => `
 
 /**
  * An ECB amount converted with a stand-in rate whose own publication is now stored: a rate of the row's currency or
- * the reporting currency (`base`) newer than the one used, on or before the rate date. A holiday row already uses
- * the final rate, since no publication falls between it and the rate date.
+ * the reporting currency (`base`) newer than the older of the two rates used (the stored rate date), on or before the
+ * rate date. A holiday row already uses the final rate, since no publication falls between it and the rate date; a
+ * row that is converted again to the same amount is not written.
  */
 const correctableSql = (base: string) => `(
 	t."baseAmountMethod" = 'ECB' AND EXISTS (
@@ -109,7 +110,7 @@ const CONVERT_OWNER_SQL = `
 			candidate.*,
 			${ecbRateSql('candidate."currency"', 'source."rateToEur"')} AS "sourceRate",
 			${ecbRateSql('$2', 'base."rateToEur"')} AS "baseRate",
-			GREATEST(source."rateDate", base."rateDate") AS "usedRateDate"
+			LEAST(source."rateDate", base."rateDate") AS "usedRateDate"
 		FROM candidate
 		${rateLateral('source', 'candidate."currency"')}
 		${rateLateral('base', '$2')}
@@ -149,6 +150,9 @@ const CONVERT_OWNER_SQL = `
 			AND ${TO_CONVERT_SQL('$2')}
 			AND ${baseAmountInputsSql('t')} IS NOT DISTINCT FROM converted."inputs"
 			AND converted."baseAmountMethod" IS NOT NULL
+			-- A stand-in whose newer rate does not change it yet is left as it is, so it counts as no conversion.
+			AND (t."amountInBaseCurrency", t."baseAmountMethod", t."baseAmountRateDate")
+				IS DISTINCT FROM (converted."amountInBaseCurrency", converted."baseAmountMethod", converted."baseAmountRateDate")
 		RETURNING 1
 	)
 	SELECT COUNT(*)::integer AS "count" FROM updated`;

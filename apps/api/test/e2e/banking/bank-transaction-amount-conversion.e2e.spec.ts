@@ -285,6 +285,35 @@ describe('BankTransactionAmountConversionService', () => {
 			expect(await stored(row.id)).toEqual(ecb('-12.50', '2026-09-03'));
 		});
 
+		it('corrects a row once either of its two rates is published, whichever came first', async () => {
+			// GBP into USD for one owner and USD into GBP for the other: on the same day, Wednesday's GBP rate is out while
+			// USD's still stands in with Tuesday's, so each owner has one final and one stand-in rate.
+			await accounts.update({id: owner.id}, {baseCurrency: 'USD'});
+			await accounts.update({id: otherOwner.id}, {baseCurrency: 'GBP'});
+			const [gbpRow] = await createRows(await createBankAccount(owner, 'GBP'), [
+				{amount: '-10.00', bookingDate: '2026-09-09'},
+			]);
+			const [usdRow] = await createRows(await createBankAccount(otherOwner, 'USD'), [
+				{amount: '-10.00', bookingDate: '2026-09-09'},
+			]);
+			await fxRates.save([
+				{currency: 'GBP', rateDate: '2026-09-09', rateToEur: '0.8', provider: 'ECB'},
+				{currency: 'USD', rateDate: '2026-09-08', rateToEur: '1.25', provider: 'ECB'},
+			]);
+			publishedThrough = null;
+
+			await expect(service.backfill(NOW)).resolves.toEqual({scanned: 2, converted: 2});
+			expect(await stored(gbpRow.id)).toEqual(ecb('-15.63', '2026-09-08'));
+			expect(await stored(usdRow.id)).toEqual(ecb('-6.40', '2026-09-08'));
+			await expect(service.backfill(NOW)).resolves.toMatchObject({converted: 0});
+
+			await fxRates.save({currency: 'USD', rateDate: '2026-09-09', rateToEur: '1.5', provider: 'ECB'});
+			await expect(service.backfill(NOW)).resolves.toMatchObject({converted: 2});
+			expect(await stored(gbpRow.id)).toEqual(ecb('-18.75', '2026-09-09'));
+			expect(await stored(usdRow.id)).toEqual(ecb('-5.33', '2026-09-09'));
+			await expect(service.backfill(NOW)).resolves.toEqual({scanned: 0, converted: 0});
+		});
+
 		it('uses the previous publication for an ECB holiday once a later one is out', async () => {
 			await accounts.update({id: owner.id}, {baseCurrency: 'EUR'});
 			const [holiday, unpublished] = await createRows(await createBankAccount(owner, 'GBP'), [
