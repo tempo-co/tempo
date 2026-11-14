@@ -56,5 +56,5 @@ export function describeBalanceFailure(error: unknown): BalanceCopy {
       description: 'It updates with every sync.',
     };
   if (error instanceof HttpError && error.status === 400) return INVALID_BALANCE;
-  return {title: "Couldn't save the balance", description: 'Please try again in a moment.'};
+  return {title: "Couldn't save the balance", description: 'Try again in a moment.'};
 }

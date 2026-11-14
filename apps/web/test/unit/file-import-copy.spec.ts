@@ -4,6 +4,7 @@ import type {BankImportError} from '@tempo/contracts';
 
 import {
   formatDateRange,
+  nameEndsWithCurrency,
   nothingNewCopy,
   undoDescription,
 } from '../../src/features/file-import/utils/import-format';
@@ -45,12 +46,12 @@ test('a refusal names its file only among several, and always says nothing was i
   // A busy bank or a busy import is worth trying again with the same files; the rest need other files.
   expect(describeRefusal(refusal({code: 'account_busy', statusCode: 409}), names)).toMatchObject({
     title: 'This bank is syncing right now',
-    description: 'Try again in a minute. Nothing was imported.',
+    description: 'Try again in a moment. Nothing was imported.',
     retry: true,
   });
   expect(describeRefusal(refusal({code: 'import_busy', statusCode: 503}), names)).toMatchObject({
-    title: 'Other files are being imported',
-    description: 'Try again in a minute. Nothing was imported.',
+    title: 'Tempo is busy right now',
+    description: 'Try again in a moment. Nothing was imported.',
     retry: true,
   });
   expect(describeRefusal(refusal({code: 'drop_too_large', statusCode: 413}), names)).toEqual({
@@ -240,4 +241,13 @@ test('undoing says what goes and what stays', () => {
   ).toBe(
     'It added no transactions, so none are removed. The accounts it created are removed too, unless another import also added transactions to them.',
   );
+});
+
+test("an account name ends with its currency only as the name's last whole word", () => {
+  for (const name of ['Example Card EUR', 'Example Card · eur', 'Example-EUR ', 'EUR'])
+    expect(nameEndsWithCurrency(name, 'EUR'), name).toBe(true);
+  for (const name of ['Example Card · EUR', 'Example Card', 'Example CardEUR', 'EUR savings'])
+    expect(nameEndsWithCurrency(name, 'USD'), name).toBe(false);
+  for (const name of ['Example CardEUR', 'Savings 2EUR', 'Cafe\u0301EUR', 'EUR savings', 'EUR account'])
+    expect(nameEndsWithCurrency(name, 'EUR'), name).toBe(false);
 });

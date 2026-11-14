@@ -31,7 +31,7 @@ export function useUndoImport() {
         return true;
       }
       toast.error("Couldn't undo the import", {
-        description: 'Please try again in a moment.',
+        description: 'Try again in a moment.',
         id: `bank-import-undo-failed-${summary.id}`,
       });
       return false;
