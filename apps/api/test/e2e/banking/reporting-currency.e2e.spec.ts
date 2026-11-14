@@ -259,7 +259,7 @@ describe('Reporting currency', () => {
 	it.each([
 		['the ECB no longer publishes', 'BGN', () => Promise.resolve()],
 		[
-			'its rates stopped while others went on',
+			'whose rates stopped while others went on, until they resume',
 			'GBP',
 			async () => {
 				await fxRates.save([
@@ -287,6 +287,11 @@ describe('Reporting currency', () => {
 		const response = await agent.put(ROUTE).send({currency}).expect(400);
 		expect(response.body.message).toBe(REPORTING_CURRENCY_UNSUPPORTED);
 
+		if (currency === 'GBP') {
+			// Once its rates come again, the choice holds without the owner doing anything.
+			await fxRates.save({currency, rateDate: addDays(today, -1), rateToEur: '0.85', provider: 'ECB'});
+			expect(await read(agent)).toMatchObject({currency, confirmed: true, setupRequired: false});
+		}
 		await agent.put(ROUTE).send({currency: 'EUR'}).expect(200);
 		expect(await read(agent)).toMatchObject({currency: 'EUR', setupRequired: false, currencyUnavailable: false});
 	});

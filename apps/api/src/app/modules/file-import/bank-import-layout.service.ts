@@ -8,6 +8,7 @@ import type {
 	BankImportLayout as BankImportLayoutResponse,
 	ConfirmBankImportLayoutProposalRequest,
 } from '@tempo/contracts';
+import {BANK_IMPORT_CURRENCIES} from '@tempo/contracts';
 import {createHash, randomUUID} from 'node:crypto';
 import {DataSource, EntityManager, MoreThan} from 'typeorm';
 
@@ -25,6 +26,9 @@ import {amountScale, formatUnits, parseDecimal} from './parsers/decimal';
 import {NormalizedRow, NormalizedStatement, STATEMENT_BANKS} from './parsers/parse-result';
 import {TableSample} from './parsers/table-sample';
 import {ParseRunnerService} from './runner/parse-runner.service';
+
+/** The codes a file or its owner may name: the active ISO 4217 ones, and the former ones the ECB has rates for. */
+const IMPORT_CURRENCY_CODES: ReadonlySet<string> = new Set([...ISO_CURRENCY_CODES, ...BANK_IMPORT_CURRENCIES]);
 
 /** Model calls an owner may start in 24 hours, whatever their outcome. */
 export const MAX_PROPOSALS_PER_DAY = 5;
@@ -174,7 +178,7 @@ export class BankImportLayoutService {
 			if (proposal.expiresAt.getTime() <= Date.now())
 				throw new BankImportRefusalException('layout_proposal_expired');
 			if (proposal.currencyNeeded) {
-				if (typeof request.currency !== 'string' || !ISO_CURRENCY_CODES.has(request.currency)) {
+				if (typeof request.currency !== 'string' || !IMPORT_CURRENCY_CODES.has(request.currency)) {
 					throw new BadRequestException(INVALID_CURRENCY);
 				}
 			} else if (request.currency !== undefined) {
@@ -300,7 +304,7 @@ function bankNameOf(value: string | null): string | null {
 /**
  * The layout the answer describes, on the table the parse child found: its header (or column count), source and
  * skipped lines come from the file, the columns and formats from the answer. Only the answer's layout fields are
- * used. Null when the answer names a currency that is no ISO 4217 code; `validateCsvLayout` checks everything else,
+ * used. Null when the answer names a currency outside {@link IMPORT_CURRENCY_CODES}; `validateCsvLayout` checks everything else,
  * such as an account line that is not above the table.
  */
 export function buildLayout(
@@ -309,7 +313,7 @@ export function buildLayout(
 	defaultCurrency: string,
 ): {layout: unknown; currencyNeeded: boolean} | null {
 	const {shape} = sample;
-	if (answer.currency && 'code' in answer.currency && !ISO_CURRENCY_CODES.has(answer.currency.code)) return null;
+	if (answer.currency && 'code' in answer.currency && !IMPORT_CURRENCY_CODES.has(answer.currency.code)) return null;
 	const {amount} = answer;
 	return {
 		currencyNeeded: answer.currency === null,

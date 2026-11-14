@@ -13,7 +13,10 @@ export const REPORTING_CURRENCIES: readonly string[] = [
 export type ReportingCurrency = {
 	/** Null until one is chosen, or picked automatically while every account holds the same currency. */
 	currency: string | null;
-	/** The owner chose this currency (or had it before choosing existed); Tempo never asks again. */
+	/**
+	 * The owner chose this currency (or had it before choosing existed); Tempo asks again only once it is
+	 * `currencyUnavailable`.
+	 */
 	confirmed: boolean;
 	/**
 	 * The owner is asked to choose: their accounts are in several currencies and none is chosen yet, or
@@ -43,6 +46,6 @@ export type ReportingCurrency = {
 
 /** `PUT /reporting-currency`. */
 export type ReportingCurrencyUpdateRequest = {
-	/** One of {@link REPORTING_CURRENCIES}, or the current currency to confirm it; anything else is a 400. */
+	/** One of {@link REPORTING_CURRENCIES}; the current one confirms it. Anything else is a 400. */
 	currency: string;
 };

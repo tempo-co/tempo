@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Rewrite packages/contracts/src/ecb-currencies.ts from the ECB's list of euro reference rates, and print what
 // changed (one line per currency, nothing when the table is current). Exits non-zero on a reply it can't trust, so
-// a broken or partial reply never rewrites the table.
+// a broken or partial reply never rewrites the table: one that lacks a currency the table lists counts as partial.
 //
 //   node .github/scripts/ecb-currencies.mjs
 import {readFileSync, writeFileSync} from 'node:fs';
@@ -45,13 +45,16 @@ const previous = new Map(
 	]),
 );
 
+// The ECB keeps the series of every currency it stopped, so one missing from the reply means the reply is incomplete.
+const missing = [...previous.keys()].filter((code) => !table.has(code));
+if (missing.length > 0) throw new Error(`ECB reply lacks ${missing.join(', ')}, which the table lists`);
+
 for (const [code, last] of table) {
 	if (!previous.has(code)) console.log(`${code}: new, ${last === null ? 'published' : `last rate ${last}`}`);
 	else if (previous.get(code) !== last) {
 		console.log(`${code}: ${last === null ? 'published again' : `last rate ${last}`} (was ${previous.get(code) ?? 'published'})`);
 	}
 }
-for (const code of previous.keys()) if (!table.has(code)) console.log(`${code}: no longer listed by the ECB`);
 
 writeFileSync(TABLE, render(table));
 
