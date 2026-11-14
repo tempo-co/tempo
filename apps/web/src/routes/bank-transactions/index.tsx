@@ -1,15 +1,14 @@
 import {createFileRoute, stripSearchParams, useNavigate} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
 import {BANK_TRANSACTION_SEARCH_MAX_LENGTH, type BankTransactionTotals} from '@tempo/contracts';
-import {Search} from 'lucide-react';
 import {Fragment, useEffect, useState} from 'react';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {LoadMore} from '@/components/shared/load-more';
 import {LoadingBar} from '@/components/shared/loading-bar';
+import {SearchInput} from '@/components/shared/search-input';
 import {LoadErrorState} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
-import {Input} from '@/components/ui/input';
 import {useBankTransactionLedger} from '@/features/banking/api/use-bank-transaction-ledger';
 import {BankTransactionDateFilter} from '@/features/banking/components/bank-transaction-date-filter';
 import {BankTransactionDetailsDialog} from '@/features/banking/components/bank-transaction-details-dialog';
@@ -192,18 +191,18 @@ function LedgerSearch({search}: {search: string | undefined}) {
   }, [search, navigate, input]);
 
   return (
-    <div className='relative min-w-0 flex-1 md:max-w-sm'>
-      <Search className='absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
-      <Input
-        value={input}
-        maxLength={BANK_TRANSACTION_SEARCH_MAX_LENGTH}
-        onChange={(event) => setInput(event.target.value)}
-        placeholder='Search...'
-        aria-label='Search transactions'
-        className='h-12 pl-9 sm:h-8'
-        data-testid='bank-transactions-search'
-      />
-    </div>
+    <SearchInput
+      value={input}
+      onValueChange={setInput}
+      // Clearing applies at once instead of after the typing pause.
+      onClear={() => void navigate({search: (prev) => ({...prev, search: undefined})})}
+      maxLength={BANK_TRANSACTION_SEARCH_MAX_LENGTH}
+      placeholder='Search...'
+      aria-label='Search transactions'
+      wrapperClassName='flex-1 md:max-w-sm'
+      className='h-12 sm:h-8'
+      data-testid='bank-transactions-search'
+    />
   );
 }
 
