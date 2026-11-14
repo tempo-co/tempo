@@ -78,6 +78,22 @@ const correctableSql = (base: string) => `(
 )`;
 /** Rows a pass converts: unconverted ones, and stand-in ECB amounts whose own rate is now published. */
 const TO_CONVERT_SQL = (base: string) => `(${PENDING_SQL} OR ${correctableSql(base)})`;
+/**
+ * An ECB amount that may still use a stand-in: its rate is older than its day's business day, and for its currency or
+ * the reporting currency (`base`) no publication after its day is stored, so neither the day's own rate nor a holiday
+ * is known yet. A pass fetches rates for it like for an unconverted row, whatever its age or account.
+ */
+const unresolvedSql = (base: string) => `(
+	t."baseAmountMethod" = 'ECB'
+	AND t."baseAmountRateDate" < ${RATE_DATE_SQL} - CASE EXTRACT(ISODOW FROM ${RATE_DATE_SQL}) WHEN 6 THEN 1 WHEN 7 THEN 2 ELSE 0 END
+	AND EXISTS (
+		SELECT 1 FROM (VALUES (t."currency"), (${base})) needed("currency")
+		WHERE needed."currency" <> 'EUR' AND NOT EXISTS (
+			SELECT 1 FROM "bank_transaction_fx_rates" later
+			WHERE later."currency" = needed."currency" AND later."rateDate" > ${RATE_DATE_SQL}
+		)
+	)
+)`;
 
 /**
  * Converts every unconverted transaction of one owner into their reporting currency (`$2`), in exact cents:
@@ -234,19 +250,13 @@ export class BankTransactionAmountConversionService {
 
 	/**
 	 * Keeps rates current for every active account currency and base currency, even without new transactions,
-	 * so the dashboard can show balances in the base currency (dashboard API, phase 1). Also for the currency of
-	 * every recent ECB amount, whatever its account: one converted with a stand-in rate needs the day's own rate stored
-	 * before {@link correctableSql} picks it up again.
+	 * so the dashboard can show balances in the base currency (dashboard API, phase 1).
 	 */
 	private async refreshAccountCurrencyRates(latestExpectedDate: string): Promise<void> {
 		const rows = (await this.bankAccountRepository.query(
 			`SELECT "currency" FROM "bank_accounts" WHERE "isActive" = TRUE
 			UNION
-			SELECT "baseCurrency" FROM "accounts" WHERE "baseCurrency" IS NOT NULL
-			UNION
-			SELECT t."currency" FROM "bank_transactions" t
-			WHERE t."baseAmountMethod" = 'ECB' AND ${RATE_DATE_SQL} >= $1::date - $2::integer`,
-			[latestExpectedDate, FX_RATE_MAX_AGE_DAYS],
+			SELECT "baseCurrency" FROM "accounts" WHERE "baseCurrency" IS NOT NULL`,
 		)) as Array<{currency: string}>;
 		await this.fxRateService.ensureLatestRates(
 			rows.map(({currency}) => currency),
@@ -255,8 +265,9 @@ export class BankTransactionAmountConversionService {
 	}
 
 	/**
-	 * Rows to convert per owner and currency, with the rate-date range each currency needs, plus owners whose
-	 * reporting currency changed since the last finished pass (with or without such rows).
+	 * Rows to convert or still on a stand-in rate, per owner and currency, with the rate-date range each currency needs
+	 * (fetched before the pass), plus owners whose reporting currency changed since the last finished pass (with or
+	 * without such rows).
 	 */
 	private async findOwnersToConvert(): Promise<Map<string, OwnerToConvert>> {
 		const rows = (await this.bankTransactionRepository.query(
@@ -270,7 +281,7 @@ export class BankTransactionAmountConversionService {
 			INNER JOIN "bank_accounts" bank_account ON bank_account."id" = t."bankAccountId"
 			INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
 			INNER JOIN "accounts" owner ON owner."id" = connection."accountId"
-			WHERE ${TO_CONVERT_SQL('owner."baseCurrency"')}
+			WHERE ${TO_CONVERT_SQL('owner."baseCurrency"')} OR ${unresolvedSql('owner."baseCurrency"')}
 			GROUP BY connection."accountId", ${CURRENCY_SQL}
 			ORDER BY connection."accountId", ${CURRENCY_SQL}`,
 		)) as Array<PendingCurrency & {accountId: string}>;
