@@ -1,4 +1,8 @@
-import type {BankImportNeverSentRow, BankImportSummary} from '@tempo/contracts';
+import {
+  BANK_IMPORT_MAX_ROWS_PER_ADD,
+  type BankImportNeverSentRow,
+  type BankImportSummary,
+} from '@tempo/contracts';
 import {ChevronRight, FileX} from 'lucide-react';
 import {useId, useState} from 'react';
 import {toast} from 'sonner';
@@ -109,8 +113,13 @@ function NeverSentList({summary}: {summary: BankImportSummary}) {
             : `Couldn't add ${plural(ids.length, 'transaction')}`,
           {description: 'Try again in a moment.', id: `bank-import-add-failed-${summary.id}`},
         );
-      // Another tab may have added a row or undone the import: show what is still open.
-      if (failure instanceof HttpError && [404, 409].includes(failure.status)) void refetch();
+      // Another tab may have added a row or undone the import, or a group sent in several requests got partway:
+      // show what is still open.
+      if (
+        ids.length > BANK_IMPORT_MAX_ROWS_PER_ADD ||
+        (failure instanceof HttpError && [404, 409].includes(failure.status))
+      )
+        void refetch();
     } finally {
       setAdding(null);
     }

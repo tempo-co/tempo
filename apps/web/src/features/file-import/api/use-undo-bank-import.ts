@@ -14,7 +14,9 @@ export function useUndoBankImport() {
       const undoneAt = new Date().toISOString();
       updateImports(queryClient, (imports) =>
         imports.map((summary) =>
-          summary.id === importId ? {...summary, undoneAt, rowsDoubtful: 0} : summary,
+          summary.id === importId
+            ? {...summary, undoneAt, rowsDoubtful: 0, rowsNotInBank: 0}
+            : summary,
         ),
       );
     },
