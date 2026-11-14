@@ -440,9 +440,17 @@ test.describe('statement file import on Connections', () => {
       await expect(summaryBody.getByText(label, {exact: true}).locator('..')).toContainText(value);
     }
     await expect(summaryBody.getByText('3', {exact: true})).toHaveClass(/text-warning/);
-    await expect(summaryBody.getByText('1 May – 30 Oct 2026')).toBeVisible();
-    // The account goes by the name Connections gives it, not the provider's holder name.
-    await expect(summaryBody.getByText('Mock ASPSP checking account · EUR')).toBeVisible();
+    await expect(
+      summaryBody.getByRole('definition').filter({hasText: '1 May – 30 Oct 2026'}),
+    ).toBeVisible();
+    // The account goes by the name and details Connections gives it, under its bank's logo, not the provider's
+    // holder name.
+    const wentTo = summaryBody.getByTestId('bank-import-accounts').getByRole('listitem');
+    await expect(wentTo).toHaveCount(1);
+    await expect(wentTo).toContainText('Mock ASPSP checking account');
+    await expect(wentTo).toContainText('Current account · ••1234 · EUR · Mock ASPSP');
+    await expect(wentTo.getByTestId('bank-logo')).toBeVisible();
+    await expect(dialog.getByTestId('bank-import-undone')).toHaveCount(0);
     await expect(dialog.getByRole('button', {name: 'Review 3 rows'})).toBeVisible();
     await expect(dialog.getByRole('button', {name: 'Undo import'})).toBeVisible();
     // A synced account keeps the balance its bank reports: nothing to ask.
@@ -1312,8 +1320,29 @@ test.describe('statement file import on Connections', () => {
     await expect(confirm).toBeHidden();
     expect(api.undos).toEqual(['00000000-0000-4000-8000-000000000511']);
     await expect(rows.first()).toContainText('Undone 12 Nov');
-    await expect(rows.first().getByRole('button', {name: '3 files', exact: true})).toBeVisible();
     await expect(rows.first().getByRole('button', {name: /^Undo/})).toHaveCount(0);
+
+    // Its summary opens with what the undo did, and its counts as what the import found when it ran.
+    await rows.first().getByRole('button', {name: '3 files', exact: true}).click();
+    const summary = page.getByTestId('bank-import-dialog');
+    const undoneAlert = summary.getByTestId('bank-import-undone');
+    await expect(undoneAlert).toContainText('This import was undone today');
+    await expect(undoneAlert).toContainText(
+      'The transactions it added were removed, except any that bank sync had picked up by then.',
+    );
+    const counts = summary.getByRole('region', {name: 'When imported'});
+    await expect(counts.getByText('Were new', {exact: true}).locator('..')).toContainText('212');
+    await expect(
+      counts.getByText('Were already in Tempo', {exact: true}).locator('..'),
+    ).toContainText('98');
+    await expect(summary.getByText('New transactions')).toHaveCount(0);
+    const wentTo = summary.getByTestId('bank-import-accounts').getByRole('listitem');
+    await expect(wentTo).toHaveCount(2);
+    await expect(wentTo.nth(0).getByTestId('bank-logo')).toBeVisible();
+    await expect(wentTo.nth(1)).toContainText('New account · EUR · Imported files');
+    await expect(wentTo.nth(1).getByTestId('bank-logo')).toHaveCount(0);
+    await expect(summary.getByRole('button', {name: 'Undo import'})).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
   });
 
   test('asks for the balance today of an imported-files account that has none, and saves it in place', async ({

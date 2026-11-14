@@ -121,3 +121,29 @@ export function undoDescription(
     .filter(Boolean)
     .join(' ');
 }
+
+/** The title of an undone import's summary: `This import was undone today`, `… on 3 Oct`. */
+export function undoneTitle(undoneAt: string) {
+  const date = parseISO(undoneAt);
+  const when = isToday(date)
+    ? 'today'
+    : isYesterday(date)
+      ? 'yesterday'
+      : `on ${formatShortDate(undoneAt)}`;
+  return `This import was undone ${when}`;
+}
+
+/** What undoing an import did, in the past tense of `undoDescription`. */
+export function undoneDescription(
+  summary: Pick<BankImportSummary, 'rowsAdded'>,
+  {intoSyncedAccount}: {intoSyncedAccount: boolean},
+) {
+  if (summary.rowsAdded === 0) return "It hadn't added any transactions, so none were removed.";
+  const removed =
+    summary.rowsAdded === 1
+      ? 'The transaction it added was removed'
+      : 'The transactions it added were removed';
+  return intoSyncedAccount
+    ? `${removed}, except any that bank sync had picked up by then.`
+    : `${removed}.`;
+}
