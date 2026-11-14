@@ -22,6 +22,8 @@ export type MatchIncomingRow = {
 export type MatchExistingRow = MatchIncomingRow & {
 	id: string;
 	createdAt: Date;
+	/** Stored by a file import, so its reference is in a file's numbering rather than the bank's. */
+	imported?: boolean;
 };
 
 export type MatchOutcome =
@@ -138,6 +140,76 @@ export function matchTransactions(
 	}
 
 	return outcomes as MatchOutcome[];
+}
+
+/**
+ * How many rows must be probed (`probeReferences`) before a statement's references count as unrelated to the
+ * bank's. A chosen value, not a measured one: enough rows that a statement sharing the bank's references has shown
+ * at least one of them.
+ */
+export const REFERENCE_FALLBACK_MIN_PROBED_ROWS = 20;
+
+export type ReferenceProbe = {
+	/**
+	 * Incoming rows with a reference that have at least one existing row in the bank's numbering (not `imported`)
+	 * with the same amount and currency at most `MATCH_WINDOW_DAYS` away that carries a reference too: rows whose
+	 * twin, if the bank stored it, could show whether the file and the bank share references.
+	 */
+	probedRows: number;
+	/** Incoming rows whose reference equals the reference of any existing row in the bank's numbering. */
+	rowsWithStoredReference: number;
+};
+
+/** What the incoming rows' references have in common with the bank's stored ones (references compared trimmed). */
+export function probeReferences(
+	incoming: readonly MatchIncomingRow[],
+	existing: readonly MatchExistingRow[],
+): ReferenceProbe {
+	const banks = existing.filter((row) => !row.imported && row.reference?.trim());
+	const storedReferences = new Set(banks.map(({reference}) => reference!.trim()));
+	const referencedByAmount = groupBy(
+		banks.filter((row) => matchDay(row)),
+		amountKey,
+	);
+	let probedRows = 0;
+	let rowsWithStoredReference = 0;
+	for (const row of incoming) {
+		const reference = row.reference?.trim();
+		if (!reference) continue;
+		if (storedReferences.has(reference)) rowsWithStoredReference += 1;
+		const day = matchDay(row);
+		const lookAlikes = referencedByAmount.get(amountKey(row)) ?? [];
+		if (day && lookAlikes.some((other) => daysBetween(day, matchDay(other)!) <= MATCH_WINDOW_DAYS)) probedRows += 1;
+	}
+	return {probedRows, rowsWithStoredReference};
+}
+
+export type StatementMatch = {outcomes: MatchOutcome[]; referencesSetAside: boolean};
+
+/**
+ * The ladder for a statement file's rows. Some banks number their files in another scheme than the one bank sync
+ * stores. When at least `REFERENCE_FALLBACK_MIN_PROBED_ROWS` rows were probed and none of the file's references is
+ * one the bank stored, the bank's references are set aside and the ladder runs with `uniqueCandidatesOnly`: rows
+ * then match the bank's rows by balance or date, and same-day look-alike groups are held as doubtful rather than
+ * paired in order, since nothing tells their rows apart. Rows stored by an import keep their references, so they
+ * still match or conflict with the file's. Otherwise this is `matchTransactions` unchanged.
+ */
+export function matchStatementRows(
+	incoming: readonly MatchIncomingRow[],
+	existing: readonly MatchExistingRow[],
+): StatementMatch {
+	const {probedRows, rowsWithStoredReference} = probeReferences(incoming, existing);
+	if (probedRows < REFERENCE_FALLBACK_MIN_PROBED_ROWS || rowsWithStoredReference > 0) {
+		return {outcomes: matchTransactions(incoming, existing), referencesSetAside: false};
+	}
+	return {
+		outcomes: matchTransactions(
+			incoming,
+			existing.map((row) => (row.imported ? row : {...row, reference: null})),
+			{uniqueCandidatesOnly: true},
+		),
+		referencesSetAside: true,
+	};
 }
 
 function referencesConflict(left: MatchIncomingRow, right: MatchIncomingRow): boolean {
