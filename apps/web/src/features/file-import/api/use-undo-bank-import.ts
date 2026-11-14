@@ -15,7 +15,7 @@ export function useUndoBankImport() {
       updateImports(queryClient, (imports) =>
         imports.map((summary) =>
           summary.id === importId
-            ? {...summary, undoneAt, rowsDoubtful: 0, rowsNotInBank: 0}
+            ? {...summary, undoneAt, rowsDoubtful: 0, rowsNotInBank: 0, rowsRemovedBySync: 0}
             : summary,
         ),
       );

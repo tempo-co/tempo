@@ -103,6 +103,7 @@ function importSummary(fields: Partial<BankImportSummary> = {}): BankImportSumma
     rowsMatchedByDate: 0,
     rowsDoubtful: 3,
     rowsNotInBank: 0,
+    rowsRemovedBySync: 0,
     dateFrom: '2026-05-01',
     dateTo: '2026-10-30',
     accounts: [{id: CHECKING.id, name: 'Holder Name', currency: 'EUR', created: false}],
@@ -228,10 +229,14 @@ async function mockFileImport(
     api.adds.push(request);
     await holdAdd?.();
     const [current] = api.imports;
+    const removed = request.rowIds.filter(
+      (id) => neverSentRows.find((row) => row.id === id)?.kind === 'removed_by_sync',
+    ).length;
     const next = {
       ...current,
       rowsAdded: current.rowsAdded + request.rowIds.length,
-      rowsNotInBank: current.rowsNotInBank - request.rowIds.length,
+      rowsNotInBank: current.rowsNotInBank - (request.rowIds.length - removed),
+      rowsRemovedBySync: current.rowsRemovedBySync - removed,
     };
     api.imports = [next, ...api.imports.slice(1)];
     return fulfillJson(route, next);
@@ -643,6 +648,144 @@ test.describe('statement file import on Connections', () => {
       {rowIds: [rows[0].id, rows[2].id, rows[3].id]},
     ]);
     expect(api.neverSentReads).toBe(1);
+  });
+
+  test('shows the rows a later sync removed in the import summary only, and adds them back by row or by group', async ({
+    page,
+  }) => {
+    const removed = (
+      id: number,
+      bookingDate: string,
+      amount: string,
+      counterpartyName: string | null,
+      description: string | null,
+    ): BankImportNeverSentRow => ({
+      id: `00000000-0000-4000-8000-00000000095${id}`,
+      kind: 'removed_by_sync',
+      bankAccountId: CHECKING.id,
+      row: {
+        bookingDate,
+        valueDate: bookingDate,
+        amount,
+        currency: 'EUR',
+        balanceAfter: null,
+        bankReference: null,
+        counterpartyName,
+        description,
+        remittanceInformation: null,
+      },
+    });
+    const rows = [
+      removed(1, '2026-06-02', '-5.00', 'Example Pocket', 'Round-up'),
+      removed(2, '2026-06-03', '-30.00', null, 'Example Fee'),
+      removed(3, '2026-06-09', '-5.00', 'Example Pocket', 'Round-up'),
+    ];
+    const summary = importSummary({rowsAdded: 209, rowsDoubtful: 0, rowsRemovedBySync: 3});
+    const api = await mockFileImport(page, {imports: [summary], neverSentRows: rows});
+    await page.goto('/bank-connections');
+
+    // The list of imports says nothing about them.
+    const listRow = page.getByTestId('bank-import-row');
+    await expect(listRow).toContainText('3 files · 209 new');
+    await expect(listRow).not.toContainText(/removed|never sent/i);
+    await listRow.getByRole('button', {name: '3 files · 209 new'}).click();
+    const dialog = page.getByRole('dialog');
+    const summaryBody = dialog.getByTestId('bank-import-summary');
+    await expect(summaryBody.getByText('Need a look')).toHaveCount(0);
+    await expect(summaryBody.getByRole('button', {name: /^Not added/})).toHaveCount(0);
+    const line = summaryBody.getByRole('button', {name: 'Removed: 3 rows your bank never sent'});
+    await expect(line).toHaveAttribute('aria-expanded', 'false');
+    expect(api.neverSentReads).toBe(0);
+
+    await line.click();
+    await expect(
+      summaryBody.getByText(
+        "Your bank sent every transaction for these days, and these weren't among them, so Tempo removed the file's copies. Add back any you know are real.",
+      ),
+    ).toBeVisible();
+    const groups = summaryBody.getByTestId('bank-import-never-sent-group');
+    await expect(groups).toHaveCount(2);
+    await expect(groups.nth(0)).toContainText('Example Pocket');
+    await expect(summaryBody.getByRole('button', {name: /^Add back all/})).toHaveCount(0);
+
+    await groups.nth(1).getByRole('button', {name: 'Add back Example Fee on 3 Jun'}).click();
+    await expect(groups.nth(1).getByRole('status')).toHaveText('Added back');
+    await expect(
+      summaryBody.getByRole('button', {name: 'Removed: 2 rows your bank never sent'}),
+    ).toBeVisible();
+    await expect(
+      summaryBody.getByText('New transactions', {exact: true}).locator('..'),
+    ).toContainText('210');
+
+    await groups.nth(0).getByRole('button', {name: 'Add back 2 from Example Pocket'}).click();
+    await expect(groups.nth(0).getByRole('listitem').getByRole('status')).toHaveText([
+      'Added back',
+      'Added back',
+    ]);
+    await expect(
+      summaryBody.getByRole('button', {name: 'Added back every row your bank never sent'}),
+    ).toBeVisible();
+    expect(api.adds).toEqual([{rowIds: [rows[1].id]}, {rowIds: [rows[0].id, rows[2].id]}]);
+    expect(api.neverSentReads).toBe(1);
+  });
+
+  test('keeps what was added back when a list folds and opens again while the other list stays open', async ({
+    page,
+  }) => {
+    const row = (
+      id: number,
+      kind: BankImportNeverSentRow['kind'],
+      description: string,
+    ): BankImportNeverSentRow => ({
+      id: `00000000-0000-4000-8000-00000000096${id}`,
+      kind,
+      bankAccountId: CHECKING.id,
+      row: {
+        bookingDate: '2026-06-02',
+        valueDate: '2026-06-02',
+        amount: '-5.00',
+        currency: 'EUR',
+        balanceAfter: null,
+        bankReference: null,
+        counterpartyName: null,
+        description,
+        remittanceInformation: null,
+      },
+    });
+    const rows = [
+      row(1, 'not_in_bank', 'Example Gift'),
+      row(2, 'removed_by_sync', 'Example Fee'),
+      row(3, 'removed_by_sync', 'Example Pocket'),
+    ];
+    const summary = importSummary({rowsDoubtful: 0, rowsNotInBank: 1, rowsRemovedBySync: 2});
+    const api = await mockFileImport(page, {imports: [summary], neverSentRows: rows});
+    await page.goto('/bank-connections');
+    await page
+      .getByTestId('bank-import-row')
+      .getByRole('button', {name: '3 files · 212 new'})
+      .click();
+    const summaryBody = page.getByRole('dialog').getByTestId('bank-import-summary');
+    await summaryBody.getByRole('button', {name: 'Not added: 1 row your bank never sent'}).click();
+    const removedLine = summaryBody.getByRole('button', {
+      name: 'Removed: 2 rows your bank never sent',
+    });
+    await removedLine.click();
+    const removedList = summaryBody.getByTestId('bank-import-removed-by-sync');
+    await removedList.getByRole('button', {name: 'Add back Example Fee on 2 Jun'}).click();
+    await expect(removedList.getByRole('status')).toHaveText('Added back');
+
+    const line = summaryBody.getByRole('button', {name: 'Removed: 1 row your bank never sent'});
+    await line.click();
+    await expect(line).toHaveAttribute('aria-expanded', 'false');
+    await line.click();
+    await expect(removedList.getByRole('status')).toHaveText('Added back');
+    await expect(
+      removedList.getByRole('button', {name: 'Add back Example Fee on 2 Jun'}),
+    ).toHaveCount(0);
+    await expect(
+      removedList.getByRole('button', {name: 'Add back Example Pocket on 2 Jun'}),
+    ).toBeEnabled();
+    expect(api.adds).toEqual([{rowIds: [rows[1].id]}]);
   });
 
   test('a refusal names the refused file, says nothing was imported and lets other files be chosen', async ({

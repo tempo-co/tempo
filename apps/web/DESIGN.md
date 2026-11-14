@@ -497,7 +497,11 @@ No copy calls import a fallback or assumes a bank is connected.
   group (the `FileX` Clay tile, the name, its row count and **Add N** while more than one is open),
   its rows under it with **Add** each. Both are small outline buttons of one minimum width in one
   right-hand column, so their right edges line up. An added row turns into a muted "Added". Nothing
-  adds every row at once. 50 groups show, then **Show 50 more**; a group
+  adds every row at once. Rows of the import a later sync removed get a second fold line just like
+  it ("Removed: 4 rows your bank never sent"), whose list says the bank sent every transaction for
+  those days, so Tempo removed the file's copies, and offers
+  **Add back** and **Add back N**, a removed row turning into "Added back". Only the summary shows
+  removed rows; the list of imports does not. 50 groups show, then **Show 50 more**; a group
   shows 5 rows, then **Show all**. An undone import opens with a `default` Alert
   (`Undo2`) saying when and what the undo removed, and its counts sit muted under "When
   imported" in the past tense.

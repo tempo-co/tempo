@@ -75,9 +75,17 @@ export function summaryTitle(summary: Pick<BankImportSummary, 'filesCount' | 'un
 
 /** Nothing was added, nothing waits for the owner and nothing is offered to add. */
 export function isNothingNew(
-  summary: Pick<BankImportSummary, 'rowsAdded' | 'rowsDoubtful' | 'rowsNotInBank'>,
+  summary: Pick<
+    BankImportSummary,
+    'rowsAdded' | 'rowsDoubtful' | 'rowsNotInBank' | 'rowsRemovedBySync'
+  >,
 ) {
-  return summary.rowsAdded === 0 && summary.rowsDoubtful === 0 && summary.rowsNotInBank === 0;
+  return (
+    summary.rowsAdded === 0 &&
+    summary.rowsDoubtful === 0 &&
+    summary.rowsNotInBank === 0 &&
+    summary.rowsRemovedBySync === 0
+  );
 }
 
 export function nothingNewCopy(

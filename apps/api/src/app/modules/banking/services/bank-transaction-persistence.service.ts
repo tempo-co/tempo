@@ -32,11 +32,15 @@ import {
 	createBankTransactionCategorizationInputHash,
 	toBankTransactionCategorizationInput,
 } from '../categorization/bank-transaction-categorization-input';
+import {BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES} from '../categorization/bank-transaction-categorization.constants';
 import {
 	isManualCategorySource,
 	notManualCategorySourceSql,
 } from '../categorization/bank-transaction-categorization.types';
 import {notOwnTransferCategorizedSql} from '../own-transfer/own-transfer-category';
+import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
+import type {FinalSyncDays, SyncCoverage} from '../sync-coverage';
+import {type CarryRow, pickCarryTargets} from '../sync-sweep';
 import {BASE_AMOUNT_INPUT_COLUMNS, baseAmountInputsSql} from './bank-transaction-amount-conversion.utils';
 
 const BANK_TRANSACTION_IDENTITY_SELECT = {
@@ -77,6 +81,20 @@ export type PersistTransactionsOptions = {
 	 * is inserted, never matched to or updating a stored row. The caller has already left out the duplicates.
 	 */
 	importId?: string;
+	/**
+	 * Bank sync: the account's coverage once this fetch is recorded. Sync never asks about an imported row on a day
+	 * inside it: the day becomes final, and the row is then taken over or removed.
+	 */
+	syncCoverage?: SyncCoverage | null;
+};
+
+/** An owner's choices on a row that move with it: a manual category and an own-transfer choice. */
+export type OwnerEdits = {category: string | null; ownTransferOverride: OwnTransferOverride | null};
+
+export type SweepImportedRowsResult = {
+	removedCount: number;
+	/** Rows whose own-transfer state the recompute after the sync must decide again. */
+	recomputeIds: string[];
 };
 
 const PENDING_ROW_SQL = `UPPER(BTRIM("transactionStatus")) = 'PDNG'`;
@@ -88,6 +106,8 @@ export type PersistTransactionsResult = {
 	/** The rows this call inserted; the others already existed and were updated. */
 	insertedTransactionIds: string[];
 	persistedTransactionIds: string[];
+	/** Imported rows this write took over, including any the upsert skipped. */
+	takenOverImportedIds: string[];
 };
 
 /** One transaction to write, from bank sync or a parsed statement file; `EnableBankingTransaction` satisfies it. */
@@ -276,7 +296,13 @@ export class BankTransactionPersistenceService {
 		);
 		const hasImportedRows = importedRows.length > 0;
 		const {takenOverIds, questions} = hasImportedRows
-			? await this.adoptImportedTwins(repository, bankAccount, transactionValues, existingTransactions)
+			? await this.adoptImportedTwins(
+					repository,
+					bankAccount,
+					transactionValues,
+					existingTransactions,
+					options.syncCoverage ?? null,
+				)
 			: {takenOverIds: [], questions: new Map<string, ImportQuestion>()};
 		// The exchange recompute after the sync decides which marked rows are exchanges.
 		const exchangeMarkerKeys = transactionValues.flatMap((value) =>
@@ -378,7 +404,12 @@ export class BankTransactionPersistenceService {
 			where: {bankAccountId: bankAccount.id, stableIdentityKey: In(stableIdentityKeys)},
 		});
 
-		return {transactionsAdded, insertedTransactionIds, persistedTransactionIds: persistedRows.map(({id}) => id)};
+		return {
+			transactionsAdded,
+			insertedTransactionIds,
+			persistedTransactionIds: persistedRows.map(({id}) => id),
+			takenOverImportedIds: takenOverIds,
+		};
 	}
 
 	/**
@@ -425,6 +456,7 @@ export class BankTransactionPersistenceService {
 			transactionsAdded: insertedTransactionIds.length,
 			insertedTransactionIds,
 			persistedTransactionIds: insertedTransactionIds,
+			takenOverImportedIds: [],
 		};
 	}
 
@@ -447,6 +479,7 @@ export class BankTransactionPersistenceService {
 			}
 		>,
 		existingTransactions: BankTransaction[],
+		syncCoverage: SyncCoverage | null,
 	): Promise<{takenOverIds: string[]; questions: Map<string, ImportQuestion>}> {
 		const existingByIdentity = new Map(
 			existingTransactions.flatMap((transaction) =>
@@ -501,6 +534,9 @@ export class BankTransactionPersistenceService {
 			createdAt: transaction.createdAt,
 		});
 		const ask = (transaction: BankTransaction, candidate: {key?: string; id?: string}) => {
+			// Inside coverage the row waits for its day to become final instead.
+			const day = matchDay(transaction);
+			if (syncCoverage && day && day >= syncCoverage.from && day <= syncCoverage.through) return;
 			const question = questions.get(transaction.id) ?? {
 				imported: transaction,
 				candidateKeys: [],
@@ -621,6 +657,237 @@ export class BankTransactionPersistenceService {
 			asked += 1;
 		}
 		if (asked > 0) this.logger.log(`Sync asked about ${asked} imported transaction(s) it could not match alone.`);
+	}
+
+	/**
+	 * Bank sync is final for `finalDays`: it sent every payment of those days, and will never read them again. An
+	 * imported row there that sync did not take over is one the bank never sent, so it is removed, with a snapshot on
+	 * its import (`removed_by_sync`) the owner can add back. Its manual category and own-transfer choice move to the
+	 * closest synced look-alike (`pickCarryTargets`) where that row has none, and its recurring hides follow it there.
+	 * Rows the owner kept stay: any row a resolution `new` points at (`resolvedTransactionId`), whether added from a
+	 * never-sent list, inserted by answering a doubtful row, or kept by answering a sync's question that it is a payment
+	 * of its own. So do the rows this write took over (`takenOverIds`), even one the upsert skipped. Open questions about removed rows go with them; answered ones keep their answer.
+	 */
+	async sweepImportedRows(
+		repository: Repository<BankTransaction>,
+		bankAccount: BankAccount,
+		finalDays: FinalSyncDays,
+		aspspName: string,
+		takenOverIds: readonly string[],
+	): Promise<SweepImportedRowsResult> {
+		const removedIds: Array<{id: string}> = await repository.query(
+			`SELECT t."id" FROM "bank_transactions" t
+			WHERE t."bankAccountId" = $1 AND t."importId" IS NOT NULL AND NOT (${PENDING_ROW_SQL})
+				AND COALESCE(t."bookingDate", t."valueDate") BETWEEN $2::date AND $3::date
+				AND NOT (t."id" = ANY($4::uuid[]))
+				AND NOT EXISTS (
+					SELECT 1 FROM "bank_import_doubtful_rows" answered
+					WHERE answered."resolvedTransactionId" = t."id" AND answered."resolution" = 'new'
+				)`,
+			[bankAccount.id, finalDays.from, finalDays.through, takenOverIds],
+		);
+		if (removedIds.length === 0) return {removedCount: 0, recomputeIds: []};
+		// Locked, so an edit saved meanwhile either lands before the snapshot or finds the row gone.
+		const removed = await repository.find({
+			where: {id: In(removedIds.map(({id}) => id)), bankAccountId: bankAccount.id},
+			order: {bookingDate: 'ASC', id: 'ASC'},
+			lock: {mode: 'pessimistic_write'},
+		});
+		const ids = removed.map(({id}) => id);
+		const days = removed.flatMap((row) => matchDay(row) ?? []).sort();
+		const pool: BankTransaction[] = days.length
+			? await repository.find({
+					select: {
+						id: true,
+						amount: true,
+						currency: true,
+						bookingDate: true,
+						valueDate: true,
+						counterpartyName: true,
+						description: true,
+					},
+					where: {
+						bankAccountId: bankAccount.id,
+						importId: IsNull(),
+						...(takenOverIds.length ? {id: Not(In([...takenOverIds]))} : {}),
+						transactionStatus: Raw((column) => `UPPER(BTRIM(COALESCE(${column}, ''))) <> 'PDNG'`),
+						bookingDate: Raw(
+							(column) =>
+								`COALESCE(${column}, "valueDate") BETWEEN (:from)::date - ${MATCH_WINDOW_DAYS} AND (:to)::date + ${MATCH_WINDOW_DAYS}`,
+							{from: days[0], to: days.at(-1)},
+						),
+					},
+				})
+			: [];
+		const toCarryRow = (row: BankTransaction): CarryRow => ({
+			id: row.id,
+			amount: row.amount,
+			currency: row.currency,
+			bookingDate: row.bookingDate,
+			valueDate: row.valueDate,
+			text: toMatchRow(row).text ?? null,
+		});
+		const editsOf = (row: BankTransaction): OwnerEdits | null => {
+			const category = isManualCategorySource(row.categorySource) ? row.category : null;
+			return category || row.ownTransferOverride
+				? {category, ownTransferOverride: row.ownTransferOverride}
+				: null;
+		};
+		// Rows with edits choose first, so a row without any never takes the look-alike one with edits needs. The
+		// others still get one of the rest, which their recurring hides follow.
+		const withEdits = removed.filter((row) => editsOf(row));
+		const targets = pickCarryTargets(withEdits.map(toCarryRow), pool.map(toCarryRow));
+		const chosen = new Set([...targets.values()].filter((id): id is string => id !== null));
+		for (const [id, target] of pickCarryTargets(
+			removed.filter((row) => !editsOf(row)).map(toCarryRow),
+			pool.filter(({id}) => !chosen.has(id)).map(toCarryRow),
+		))
+			targets.set(id, target);
+		const recomputeIds: string[] = [];
+		let moved = 0;
+		for (const row of withEdits) {
+			const target = targets.get(row.id);
+			if (!target) continue;
+			const applied = await this.applyOwnerEdits(repository, target, editsOf(row)!, aspspName);
+			if (applied.category || applied.ownTransferOverride) moved += 1;
+			if (applied.ownTransferOverride) recomputeIds.push(target);
+		}
+
+		for (const chunk of chunkArray(removed, BATCH_WRITE_CHUNK_SIZE)) {
+			await repository.query(
+				`INSERT INTO "bank_import_doubtful_rows"
+					("importId", "bankAccountId", "kind", "row", "candidateTransactionIds", "ownerEdits")
+				SELECT snapshot."importId", $1, 'removed_by_sync', snapshot."row", '{}', snapshot."ownerEdits"
+				FROM jsonb_to_recordset($2::jsonb) AS snapshot("importId" uuid, "row" jsonb, "ownerEdits" jsonb)`,
+				[
+					bankAccount.id,
+					JSON.stringify(
+						chunk.map((row) => ({
+							importId: row.importId,
+							row: toImportedRowSnapshot(row),
+							ownerEdits: editsOf(row),
+						})),
+					),
+				],
+			);
+		}
+
+		// A hidden series keeps following the payment: the look-alike stands in for the removed row, or it drops out.
+		const hides: Array<{id: string; transactionIds: string[]}> = await repository.query(
+			`SELECT hide."id", hide."transactionIds" FROM "recurring_series_hides" hide
+			INNER JOIN "bank_connections" connection ON connection."accountId" = hide."accountId"
+			INNER JOIN "bank_accounts" bank_account ON bank_account."bankConnectionId" = connection."id"
+			WHERE bank_account."id" = $1 AND hide."transactionIds" && $2::uuid[]
+			FOR UPDATE OF hide`,
+			[bankAccount.id, ids],
+		);
+		const replacement = new Map(removed.map((row) => [row.id, targets.get(row.id) ?? null]));
+		for (const hide of hides) {
+			const transactionIds = [
+				...new Set(
+					hide.transactionIds.flatMap((id) => (replacement.has(id) ? (replacement.get(id) ?? []) : [id])),
+				),
+			];
+			await repository.query(
+				`UPDATE "recurring_series_hides" SET "transactionIds" = $2::uuid[], "updatedAt" = now() WHERE "id" = $1`,
+				[hide.id, transactionIds],
+			);
+		}
+
+		// Open questions go with their rows; answered ones stop pointing at a row that is gone.
+		const [closed]: [Array<{importId: string}>, number] = await repository.query(
+			`DELETE FROM "bank_import_doubtful_rows"
+			WHERE "importedTransactionId" = ANY($1::uuid[]) AND "resolution" IS NULL
+			RETURNING "importId"`,
+			[ids],
+		);
+		await repository.query(
+			`UPDATE "bank_import_doubtful_rows" SET "importedTransactionId" = NULL, "updatedAt" = now()
+			WHERE "importedTransactionId" = ANY($1::uuid[])`,
+			[ids],
+		);
+		const perImport = new Map<string, {removed: number; closed: number}>();
+		const tally = (importId: string, field: 'removed' | 'closed') => {
+			const counts = perImport.get(importId) ?? {removed: 0, closed: 0};
+			counts[field] += 1;
+			perImport.set(importId, counts);
+		};
+		for (const row of removed) tally(row.importId!, 'removed');
+		for (const {importId} of closed) tally(importId, 'closed');
+		for (const [importId, counts] of perImport) {
+			await repository.query(
+				`UPDATE "bank_imports"
+				SET "rowsRemovedBySync" = "rowsRemovedBySync" + $2, "rowsAdded" = "rowsAdded" - $2,
+					"rowsDoubtful" = "rowsDoubtful" - $3
+				WHERE "id" = $1`,
+				[importId, counts.removed, counts.closed],
+			);
+		}
+
+		const formerCounterpartIds: string[] = [];
+		for (const chunk of chunkArray(ids, BATCH_WRITE_CHUNK_SIZE)) {
+			const result: unknown = await repository.query(
+				`DELETE FROM "bank_transactions" WHERE "id" = ANY($1::uuid[]) RETURNING "ownTransferCounterpartId"`,
+				[chunk],
+			);
+			// TypeORM returns [rows, affected] for a DELETE on PostgreSQL.
+			const rows = (Array.isArray(result) && Array.isArray(result[0]) ? result[0] : []) as Array<{
+				ownTransferCounterpartId: string | null;
+			}>;
+			formerCounterpartIds.push(...rows.flatMap(({ownTransferCounterpartId}) => ownTransferCounterpartId ?? []));
+		}
+		this.logger.log(
+			`Sync removed ${removed.length} imported row(s) it never sent on days it is final for, from ${perImport.size} import(s); edits moved for ${moved}.`,
+		);
+		return {removedCount: removed.length, recomputeIds: [...new Set([...formerCounterpartIds, ...recomputeIds])]};
+	}
+
+	/**
+	 * Gives a row an owner's manual category and own-transfer choice, each only where the row has none of its own at
+	 * the moment of the write, so a choice saved on it meanwhile is kept. Says which of the two landed.
+	 */
+	async applyOwnerEdits(
+		repository: Repository<BankTransaction>,
+		transactionId: string,
+		edits: OwnerEdits,
+		aspspName: string | undefined,
+	): Promise<{category: boolean; ownTransferOverride: boolean}> {
+		const applied = {category: false, ownTransferOverride: false};
+		if (edits.category) {
+			const target = await repository.findOneBy({id: transactionId});
+			if (target && !isManualCategorySource(target.categorySource)) {
+				const inputHash = createBankTransactionCategorizationInputHash(
+					toBankTransactionCategorizationInput({...target, aspspName}),
+				);
+				const result = await repository
+					.createQueryBuilder()
+					.update()
+					.set({
+						...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
+						category: edits.category,
+						categoryStatus: 'COMPLETED',
+						categorySource: 'MANUAL',
+						categoryInputHash: inputHash,
+						categoryAppliedInputHash: inputHash,
+						categoryUpdatedAt: new Date(),
+					})
+					.where('id = :id', {id: transactionId})
+					.andWhere(`"categorySource" IS DISTINCT FROM 'MANUAL'`)
+					.execute();
+				applied.category = (result.affected ?? 0) > 0;
+			}
+		}
+		if (edits.ownTransferOverride) {
+			const result = await repository
+				.createQueryBuilder()
+				.update()
+				.set({ownTransferOverride: edits.ownTransferOverride})
+				.where('id = :id', {id: transactionId})
+				.andWhere(`"ownTransferOverride" IS NULL`)
+				.execute();
+			applied.ownTransferOverride = (result.affected ?? 0) > 0;
+		}
+		return applied;
 	}
 
 	/** The earliest date of each account's pending rows, so the account's next fetch still covers all of them. */

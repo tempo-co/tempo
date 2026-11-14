@@ -71,6 +71,10 @@ export class BankImport {
 	@Column({type: 'integer', default: 0})
 	rowsNotInBank: number;
 
+	/** Rows of the import a later sync removed from days it is final for, still not added back by the owner. */
+	@Column({type: 'integer', default: 0})
+	rowsRemovedBySync: number;
+
 	@Column({type: 'date', nullable: true})
 	dateFrom: string | null;
 

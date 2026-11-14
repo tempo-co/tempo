@@ -1,5 +1,6 @@
 import {
   BANK_IMPORT_MAX_ROWS_PER_ADD,
+  type BankImportNeverSentKind,
   type BankImportNeverSentRow,
   type BankImportSummary,
 } from '@tempo/contracts';
@@ -21,9 +22,10 @@ import {
 } from '../api/use-bank-import-never-sent-rows';
 import {formatCount, plural} from '../utils/import-format';
 import {
+  NEVER_SENT_COPY,
   type NeverSentGroup,
+  neverSentCount,
   neverSentGroups,
-  neverSentLine,
   neverSentRowTitle,
 } from '../utils/never-sent-rows';
 import {IMPORT_TILE} from './file-choice';
@@ -35,17 +37,33 @@ const ADD_ACTION = 'min-w-20 max-sm:h-11';
 const GROUP_ROWS = 5;
 
 /**
- * The import's rows on days bank sync is final for that the bank never sent: one folded line, which opens a list
- * grouped by counterparty (else description), so a kind of payment the bank leaves out shows as one group. Each row
- * and each group can be added; nothing adds every row at once. Added rows stay listed as added.
+ * The import's rows on days bank sync is final for that the bank never sent, of one kind: left out by the import, or
+ * removed by a later sync. One folded line, which opens a list grouped by counterparty (else description), so a kind
+ * of payment the bank leaves out shows as one group. Each row and each group can be added (back); nothing adds every
+ * row at once. Added rows stay listed as added.
  */
-export function NeverSentRows({summary}: {summary: BankImportSummary}) {
+export function NeverSentRows({
+  summary,
+  kind,
+}: {
+  summary: BankImportSummary;
+  kind: BankImportNeverSentKind;
+}) {
   const [open, setOpen] = useState(false);
+  // Kept here, not in the list, so rows added stay added when the list folds and opens again: the other kind's list
+  // may keep the rows read before the add.
+  const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
   const listId = useId();
+  const count = neverSentCount(summary, kind);
   // Opened once in this summary, the list stays so its added rows can show as added.
-  if (summary.rowsNotInBank === 0 && !open) return null;
+  if (count === 0 && !open) return null;
   return (
-    <section className='grid grid-cols-1 gap-3' data-testid='bank-import-never-sent'>
+    <section
+      className='grid grid-cols-1 gap-3'
+      data-testid={
+        kind === 'not_in_bank' ? 'bank-import-never-sent' : 'bank-import-removed-by-sync'
+      }
+    >
       <Button
         variant='ghost'
         aria-expanded={open}
@@ -57,39 +75,50 @@ export function NeverSentRows({summary}: {summary: BankImportSummary}) {
           aria-hidden='true'
           className={`shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${open ? 'rotate-90' : ''}`}
         />
-        {neverSentLine(summary.rowsNotInBank)}
+        {NEVER_SENT_COPY[kind].line(count)}
       </Button>
       {open && (
         <div id={listId}>
-          <NeverSentList summary={summary} />
+          <NeverSentList
+            summary={summary}
+            kind={kind}
+            added={added}
+            onAdded={(ids) => setAdded((current) => new Set([...current, ...ids]))}
+          />
         </div>
       )}
     </section>
   );
 }
 
-function NeverSentList({summary}: {summary: BankImportSummary}) {
+function NeverSentList({
+  summary,
+  kind,
+  added,
+  onAdded,
+}: {
+  summary: BankImportSummary;
+  kind: BankImportNeverSentKind;
+  added: ReadonlySet<string>;
+  onAdded: (ids: readonly string[]) => void;
+}) {
+  const copy = NEVER_SENT_COPY[kind];
   const {
-    data: rows,
+    data: allRows,
     error,
     isPending,
     isError,
     refetch,
   } = useBankImportNeverSentRows(summary.id, true);
   const {addNeverSentRows} = useAddNeverSentRows();
-  const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
   // The rows of the add on its way, so its button shows it and the others wait.
   const [adding, setAdding] = useState<readonly string[] | null>(null);
   const [shown, setShown] = useState(GROUPS_PAGE);
 
   if (isPending)
     return (
-      <ul
-        role='status'
-        aria-label='Loading the rows your bank never sent'
-        className='grid grid-cols-1'
-      >
-        <TileRowsSkeleton count={Math.min(summary.rowsNotInBank, 4) || 1} />
+      <ul role='status' aria-label={copy.loading} className='grid grid-cols-1'>
+        <TileRowsSkeleton count={Math.min(neverSentCount(summary, kind), 4) || 1} />
       </ul>
     );
   if (isError)
@@ -106,15 +135,13 @@ function NeverSentList({summary}: {summary: BankImportSummary}) {
     setAdding(ids);
     try {
       await addNeverSentRows({importId: summary.id, rowIds: ids});
-      setAdded((current) => new Set([...current, ...ids]));
+      onAdded(ids);
     } catch (failure) {
       if (!wasToasted(failure))
-        toast.error(
-          ids.length === 1
-            ? "Couldn't add the transaction"
-            : `Couldn't add ${plural(ids.length, 'transaction')}`,
-          {description: 'Try again in a moment.', id: `bank-import-add-failed-${summary.id}`},
-        );
+        toast.error(copy.failed(ids.length), {
+          description: 'Try again in a moment.',
+          id: `bank-import-add-failed-${summary.id}`,
+        });
       // Another tab may have added a row or undone the import, or a group sent in several requests got partway:
       // show what is still open.
       if (
@@ -127,18 +154,17 @@ function NeverSentList({summary}: {summary: BankImportSummary}) {
     }
   };
 
-  const groups = neverSentGroups(rows);
+  // Both lists of an import share one read; each shows its own kind.
+  const groups = neverSentGroups(allRows.filter((row) => row.kind === kind));
   const more = Math.min(GROUPS_PAGE, groups.length - shown);
   return (
     <div className='grid grid-cols-1 gap-3'>
-      <p className='text-sm text-muted-foreground'>
-        Your bank sent every transaction for these days, and these weren&apos;t among them. Add any
-        you know are real.
-      </p>
+      <p className='text-sm text-muted-foreground'>{copy.intro}</p>
       <ul className='grid grid-cols-1 gap-3'>
         {groups.slice(0, shown).map((group) => (
           <Group
             key={group.key}
+            kind={kind}
             group={group}
             added={added}
             adding={adding}
@@ -160,11 +186,13 @@ function NeverSentList({summary}: {summary: BankImportSummary}) {
 }
 
 function Group({
+  kind,
   group,
   added,
   adding,
   onAdd,
 }: {
+  kind: BankImportNeverSentKind;
   group: NeverSentGroup;
   added: ReadonlySet<string>;
   adding: readonly string[] | null;
@@ -196,12 +224,18 @@ function Group({
             size='sm'
             disabled={adding !== null}
             aria-label={
-              addingGroup ? undefined : `Add ${formatCount(open.length)} from ${group.label}`
+              addingGroup
+                ? undefined
+                : `${NEVER_SENT_COPY[kind].add} ${formatCount(open.length)} from ${group.label}`
             }
             onClick={() => onAdd(open)}
             className={ADD_ACTION}
           >
-            {addingGroup ? <PendingLabel>Adding…</PendingLabel> : `Add ${formatCount(open.length)}`}
+            {addingGroup ? (
+              <PendingLabel>{NEVER_SENT_COPY[kind].adding}</PendingLabel>
+            ) : (
+              `${NEVER_SENT_COPY[kind].add} ${formatCount(open.length)}`
+            )}
           </Button>
         ) : (
           <span />
@@ -211,6 +245,7 @@ function Group({
         {rows.map((row) => (
           <Row
             key={row.id}
+            kind={kind}
             row={row}
             groupLabel={group.label}
             added={added.has(row.id)}
@@ -234,6 +269,7 @@ function Group({
 }
 
 function Row({
+  kind,
   row,
   groupLabel,
   added,
@@ -241,6 +277,7 @@ function Row({
   disabled,
   onAdd,
 }: {
+  kind: BankImportNeverSentKind;
   row: BankImportNeverSentRow;
   groupLabel: string;
   added: boolean;
@@ -248,6 +285,7 @@ function Row({
   disabled: boolean;
   onAdd: () => void;
 }) {
+  const copy = NEVER_SENT_COPY[kind];
   const title = neverSentRowTitle(row);
   const date = formatBankTransactionCompactDate(row.row.bookingDate ?? row.row.valueDate);
   // The group's name already says it: the row shows its day alone.
@@ -265,18 +303,18 @@ function Row({
       </span>
       {added ? (
         <span role='status' className='min-w-20 text-right text-sm text-muted-foreground'>
-          Added
+          {copy.added}
         </span>
       ) : (
         <Button
           variant='outline'
           size='sm'
           disabled={disabled}
-          aria-label={adding ? undefined : `Add ${title} on ${date}`}
+          aria-label={adding ? undefined : `${copy.add} ${title} on ${date}`}
           onClick={onAdd}
           className={ADD_ACTION}
         >
-          {adding ? <PendingLabel>Adding…</PendingLabel> : 'Add'}
+          {adding ? <PendingLabel>{copy.adding}</PendingLabel> : copy.add}
         </Button>
       )}
     </li>
