@@ -20,13 +20,15 @@ import {CurrencyList} from './currency-list';
 /** Changes the reporting currency: pick one, then Save. Nothing is saved on picking alone. */
 export function ReportingCurrencyDialog({settings}: {settings: ReportingCurrency}) {
   const [isOpen, setIsOpen] = useState(false);
-  const [selected, setSelected] = useState<string | null>(settings.currency);
+  // A currency Tempo can't convert into any more is no choice, so nothing starts selected then.
+  const saved = settings.currencyUnavailable ? null : settings.currency;
+  const [selected, setSelected] = useState<string | null>(saved);
   const {choose, isPending} = useChooseReportingCurrency();
   const changes = selected !== null && selected !== settings.currency;
 
   // Start from the saved currency every time, never from an abandoned pick.
   const handleOpenChange = (open: boolean) => {
-    if (open) setSelected(settings.currency);
+    if (open) setSelected(saved);
     setIsOpen(open);
   };
 

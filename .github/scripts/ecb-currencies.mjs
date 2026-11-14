@@ -49,6 +49,7 @@ const previous = new Map(
 	]),
 );
 
+if (previous.size === 0) throw new Error('Could not read the current table');
 // The ECB keeps the series of every currency it stopped, so one missing from the reply means the reply is incomplete.
 const missing = [...previous.keys()].filter((code) => !table.has(code));
 if (missing.length > 0) throw new Error(`ECB reply lacks ${missing.join(', ')}, which the table lists`);

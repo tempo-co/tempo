@@ -143,6 +143,15 @@ test.describe('fully mocked', () => {
     await expect(setup.getByTestId('reporting-currency-picker')).toHaveText('EUR — Euro');
     await expect(setup.getByText('Suggested from your recent transactions.')).toBeVisible();
 
+    // Settings shows the currency in use, but its dialog starts with nothing chosen.
+    await page.goto('/settings/account');
+    await expect(page.getByTestId('account-reporting-currency')).toHaveText('RUB');
+    await page.getByRole('button', {name: 'Edit reporting currency'}).click();
+    const dialog = page.getByRole('dialog', {name: 'Reporting currency'});
+    await expect(dialog.getByText('Choose a currency before saving.')).toBeVisible();
+    await expect(dialog.getByTestId('save-reporting-currency-button')).toBeDisabled();
+
+    await page.goto('/bank-connections');
     await setup.getByRole('button', {name: 'Use EUR'}).click();
     await expect(setup).toBeHidden();
     expect(api.saved).toEqual(['EUR']);
