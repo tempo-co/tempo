@@ -485,8 +485,13 @@ No copy calls import a fallback or assumes a bank is connected.
   25 MB together) is refused the same way before anything is uploaded. A failed request is a
   `destructive` Alert in the same place with the cause, the status line and Try again.
 - **Summary.** Counts as a bordered `divide-y` list with `numeric` values (the count that needs a
-  look in `warning`), the date range, and the accounts the import went to. A drop that added
-  nothing shows the `CheckCheck` state instead of the counts.
+  look in `warning`), then Period and Went to, each a small muted label with its glyph
+  (`CalendarRange`, `ArrowDownToLine`) over its value. Each account it went to shows as on
+  Connections: its bank's logo (imported files: the `Files` Clay tile) with the account-type tile
+  on its corner, its name, and its details and bank under it. A drop that added nothing shows
+  the `CheckCheck` state instead of the counts. An undone import opens with a `default` Alert
+  (`Undo2`) saying when and what the undo removed, and its counts sit muted under "When
+  imported" in the past tense.
 - **Account question.** Native radio rows, so arrow keys move between them; nothing is
   preselected, and Import stays disabled until every question has an answer. Each row starts
   with its bank's logo as on its Connections card (imported files: the `Files` Clay tile) and a
