@@ -1,4 +1,4 @@
-import type {Page} from '@playwright/test';
+import type {Page, Route} from '@playwright/test';
 import {REPORTING_CURRENCIES, type ReportingCurrency} from '@tempo/contracts';
 
 import {
@@ -225,6 +225,80 @@ test.describe('fully mocked', () => {
     } finally {
       release();
     }
+  });
+
+  test('Home reloads its figures when a settings read lands just before the save is answered', async ({
+    page,
+    homePage,
+  }) => {
+    await page.clock.setFixedTime(HOME_NOW);
+    await mockSyntheticHome(page);
+    const api = await mockReportingCurrency(
+      page,
+      {...ASKING, currency: 'EUR', suggestion: null},
+      {recalculates: false},
+    );
+    // Home's history answers in the saved currency; reads started during the race never answer on their own.
+    const history = homeHistory();
+    let racing = false;
+    const answer = (route: Route, body: object) =>
+      fulfillJson(route, {...body, baseCurrency: api.saved.length > 0 ? 'GBP' : 'EUR'});
+    await page.route('**/bank-transactions/balance-trend?**', async (route) => {
+      if (new URL(route.request().url()).searchParams.get('interval') !== 'month')
+        return route.fallback();
+      if (racing) {
+        await new Promise((resolve) => setTimeout(resolve, 30_000));
+        return route.fallback().catch(() => undefined);
+      }
+      return answer(route, history.trend);
+    });
+    await page.route('**/bank-transactions/cash-flow?**', (route) => answer(route, history.flow));
+    await page.exposeFunction('raceDone', () => {
+      racing = false;
+    });
+    // Once the save is answered, the page refocuses; the settings read it starts is delivered together with the
+    // save's answer and ahead of it, before React runs any effect.
+    await page.addInitScript(() => {
+      const original = window.fetch.bind(window);
+      // Set while a save waits for the settings read it started; takes that read's answer and its delivery.
+      let race:
+        ((read: {response: Response; deliver: (response: Response) => void}) => void) | null = null;
+      window.fetch = async (input, init) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (!url.endsWith('/reporting-currency')) return original(input, init);
+        if (init?.method === 'PUT') {
+          const save = await original(input, init);
+          const read = new Promise<{response: Response; deliver: (response: Response) => void}>(
+            (resolve) => (race = resolve),
+          );
+          window.dispatchEvent(new Event('visibilitychange'));
+          const {response, deliver} = await read;
+          const body = await response.text();
+          await (window as unknown as {raceDone: () => Promise<void>}).raceDone();
+          race = null;
+          // The read's answer first, then the save's, in the same task.
+          deliver(new Response(body, {status: response.status, headers: response.headers}));
+          for (let tick = 0; tick < 50; tick += 1) await Promise.resolve();
+          return save;
+        }
+        const settle = race;
+        if (!settle) return original(input, init);
+        const response = await original(input, init);
+        return new Promise<Response>((deliver) => settle({response, deliver}));
+      };
+    });
+    await page.goto('/');
+    await expect(homePage.totalBalance).toContainText('€');
+
+    racing = true;
+    const setup = page.getByRole('region', {name: QUESTION});
+    await setup.getByTestId('reporting-currency-picker').click();
+    await page.getByRole('dialog').getByRole('button', {name: 'GBP — British Pound'}).click();
+    await setup.getByRole('button', {name: 'Use GBP'}).click();
+    await expect.poll(() => api.saved).toEqual(['GBP']);
+
+    // The EUR figures are dropped and the GBP ones load now, not at Home's next refresh.
+    await expect(homePage.totalBalance).toContainText('£', {timeout: 5_000});
   });
 
   test('stops asking once the bank in the other currency is removed', async ({page, baseURL}) => {

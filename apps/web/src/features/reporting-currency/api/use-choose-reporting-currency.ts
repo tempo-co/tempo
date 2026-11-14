@@ -22,10 +22,11 @@ export function useChooseReportingCurrency() {
     onSuccess: async (saved) => {
       const previous = queryClient.getQueryData<ReportingCurrency>(reportingCurrencyQueryKey);
       queryClient.setQueryData(reportingCurrencyQueryKey, saved);
-      // Noted here, so the readers don't drop the figures a second time.
-      noteReportingCurrency(queryClient, saved);
+      // Noted here, so the readers don't drop the figures a second time. A read that cached the new currency
+      // before this answer arrived leaves the cache unchanged but not yet noted, so both are checked.
+      const changed = noteReportingCurrency(queryClient, saved);
       // Confirming the current currency changes no figure.
-      if (previous?.currency === saved.currency) return;
+      if (!changed && previous?.currency === saved.currency) return;
       // Figures in the old currency must not stay on screen, and the account names the new one.
       await Promise.all([
         resetMoneyFigures(queryClient),
