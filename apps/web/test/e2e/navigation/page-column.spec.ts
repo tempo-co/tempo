@@ -99,19 +99,38 @@ for (const width of [1440, 1280]) {
   });
 }
 
-test('starts every page title where Home starts its content on a phone', async ({page}) => {
-  await page.setViewportSize({width: 390, height: 844});
-  await mockPages(page);
-  await page.goto('/');
-  await expect(page.getByText('Total balance')).toBeVisible();
-  const home = await column(page);
-  for (const [path, name] of [
-    ['/bank-connections', 'Bank connections'],
-    ['/bank-transactions', 'Bank transactions'],
-    ['/settings/account', 'Settings'],
-  ]) {
-    await page.goto(path);
-    await expect(page.getByRole('heading', {name, exact: true})).toBeVisible();
-    expect(await title(page), path).toMatchObject({x: 16, y: home.top});
-  }
-});
+// At 390px the Connect button wraps under its title; at 430px it sits beside it.
+for (const [width, wraps] of [
+  [390, true],
+  [430, false],
+] as const) {
+  test(`starts every page title where Home starts its content on a ${width}px phone`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({width, height: 844});
+    await mockPages(page);
+    await page.goto('/');
+    await expect(page.getByText('Total balance')).toBeVisible();
+    const home = await column(page);
+    for (const [path, name] of [
+      ['/bank-connections', 'Bank connections'],
+      ['/bank-transactions', 'Bank transactions'],
+      ['/settings/account', 'Settings'],
+    ]) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', {name, exact: true})).toBeVisible();
+      expect(await title(page), path).toMatchObject({x: 16, y: home.top});
+    }
+    // Wrapped, the Connect button keeps 12px under the title; beside it, it centres on the title's row.
+    // Either way the cards start 16px below it.
+    await page.goto('/bank-connections');
+    await expect(page.getByRole('heading', {name: 'Bank connections', exact: true})).toBeVisible();
+    const [heading, button] = await Promise.all([
+      boxOf(page.getByRole('heading', {name: 'Bank connections', exact: true})),
+      boxOf(page.getByTestId('connect-bank-button')),
+    ]);
+    if (wraps) expect(button.y - (heading.y + heading.height)).toBe(12);
+    else expect(button.y + button.height / 2).toBe(heading.y + heading.height / 2);
+    expect((await title(page)).contentY! - (button.y + button.height)).toBe(16);
+  });
+}
