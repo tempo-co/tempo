@@ -246,7 +246,7 @@ describe('BankTransactionAmountConversionService', () => {
 			expect(await stored(row.id)).toEqual(UNCONVERTED);
 		});
 
-		it("waits for the transaction day's own rate while it is not yet published", async () => {
+		it("counts a row with the newest rate until its day's own is published, then converts it again", async () => {
 			await accounts.update({id: owner.id}, {baseCurrency: 'EUR'});
 			const [today, yesterday, saturday] = await createRows(await createBankAccount(owner, 'GBP'), [
 				{amount: '-10.00', bookingDate: '2026-09-09'},
@@ -255,22 +255,25 @@ describe('BankTransactionAmountConversionService', () => {
 			]);
 			publishedThrough = '2026-09-08';
 
-			await expect(service.backfill(BEFORE_PUBLICATION)).resolves.toEqual({scanned: 3, converted: 2});
-			expect(await stored(today.id)).toEqual(UNCONVERTED);
-			expect(await stored(yesterday.id)).toMatchObject({baseAmountRateDate: '2026-09-08'});
-			expect(await stored(saturday.id)).toMatchObject({baseAmountRateDate: '2026-09-04'});
+			await expect(service.backfill(BEFORE_PUBLICATION)).resolves.toEqual({scanned: 3, converted: 3});
+			expect(await stored(today.id)).toEqual(ecb('-12.50', '2026-09-08'));
+			expect(await stored(yesterday.id)).toEqual(ecb('-12.50', '2026-09-08'));
+			expect(await stored(saturday.id)).toEqual(ecb('-12.50', '2026-09-04'));
 
-			// Waiting rows do not re-download stored rates on every run.
+			// Until it is published, later runs neither download stored rates again nor rewrite the row.
 			ecbRequests = [];
-			await expect(service.backfill(BEFORE_PUBLICATION)).resolves.toEqual({scanned: 1, converted: 0});
+			await expect(service.backfill(BEFORE_PUBLICATION)).resolves.toEqual({scanned: 0, converted: 0});
 			expect(ecbRequests).toEqual([]);
 
-			publishedThrough = '2026-09-09';
+			// The day's own rate differs from the one that stood in; only that row changes.
+			await fxRates.save({currency: 'GBP', rateDate: '2026-09-09', rateToEur: '0.5', provider: 'ECB'});
 			await expect(service.backfill(NOW)).resolves.toEqual({scanned: 1, converted: 1});
-			expect(await stored(today.id)).toEqual(ecb('-12.50', '2026-09-09'));
+			expect(await stored(today.id)).toEqual(ecb('-20.00', '2026-09-09'));
+			expect(await stored(yesterday.id)).toEqual(ecb('-12.50', '2026-09-08'));
+			await expect(service.backfill(NOW)).resolves.toEqual({scanned: 0, converted: 0});
 		});
 
-		it('does not fall back to an older rate while ECB is unavailable', async () => {
+		it('counts a row with the newest stored rate while ECB is unavailable', async () => {
 			await accounts.update({id: owner.id}, {baseCurrency: 'EUR'});
 			const [row] = await createRows(await createBankAccount(owner, 'GBP'), [
 				{amount: '-10.00', bookingDate: '2026-09-05'},
@@ -278,8 +281,8 @@ describe('BankTransactionAmountConversionService', () => {
 			await fxRates.save({currency: 'GBP', rateDate: '2026-09-03', rateToEur: '0.8', provider: 'ECB'});
 			publishedThrough = null;
 
-			await expect(service.backfill(NOW)).resolves.toEqual({scanned: 1, converted: 0});
-			expect(await stored(row.id)).toEqual(UNCONVERTED);
+			await expect(service.backfill(NOW)).resolves.toEqual({scanned: 1, converted: 1});
+			expect(await stored(row.id)).toEqual(ecb('-12.50', '2026-09-03'));
 		});
 
 		it('uses the previous publication for an ECB holiday once a later one is out', async () => {
@@ -299,9 +302,13 @@ describe('BankTransactionAmountConversionService', () => {
 			);
 			publishedThrough = null;
 
-			await expect(service.backfill(NOW)).resolves.toEqual({scanned: 2, converted: 1});
+			await expect(service.backfill(NOW)).resolves.toEqual({scanned: 2, converted: 2});
 			expect(await stored(holiday.id)).toEqual(ecb('-20.00', '2026-09-02'));
-			expect(await stored(unpublished.id)).toMatchObject({amountInBaseCurrency: null});
+			// Tuesday's stands in with Monday's rate; the holiday row already has its final one and is not converted again.
+			expect(await stored(unpublished.id)).toEqual(ecb('-12.50', '2026-09-07'));
+			await fxRates.save({currency: 'GBP', rateDate: '2026-09-08', rateToEur: '0.8', provider: 'ECB'});
+			await expect(service.backfill(NOW)).resolves.toEqual({scanned: 1, converted: 1});
+			expect(await stored(holiday.id)).toEqual(ecb('-20.00', '2026-09-02'));
 		});
 
 		it('does not fetch a range that is already stored without gaps', async () => {
