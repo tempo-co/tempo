@@ -588,7 +588,7 @@ test.describe('statement file import on Connections', () => {
     await expect(summaryBody.getByText('Need a look')).toHaveCount(0);
     await expect(dialog.getByRole('button', {name: /^Review/})).toHaveCount(0);
     const line = summaryBody.getByRole('button', {
-      name: '4 rows in the file your bank never sent, not added',
+      name: 'Not added: 4 rows your bank never sent',
     });
     await expect(line).toHaveAttribute('aria-expanded', 'false');
     expect(api.neverSentReads).toBe(0);
@@ -597,7 +597,7 @@ test.describe('statement file import on Connections', () => {
     await expect(line).toHaveAttribute('aria-expanded', 'true');
     await expect(
       summaryBody.getByText(
-        "Your bank's sync has every transaction of these days, and none of these. Add any you know are real.",
+        "Your bank sent every transaction for these days, and these weren't among them. Add any you know are real.",
       ),
     ).toBeVisible();
     // One group per counterparty, else description, largest first; there is no way to add every row at once.
@@ -622,7 +622,7 @@ test.describe('statement file import on Connections', () => {
     release();
     await expect(groups.nth(1).getByRole('status')).toHaveText('Added');
     await expect(
-      summaryBody.getByRole('button', {name: '3 rows in the file your bank never sent, not added'}),
+      summaryBody.getByRole('button', {name: 'Not added: 3 rows your bank never sent'}),
     ).toBeVisible();
     await expect(
       summaryBody.getByText('New transactions', {exact: true}).locator('..'),
@@ -633,7 +633,7 @@ test.describe('statement file import on Connections', () => {
     await groups.nth(0).getByRole('button', {name: 'Add 3 from Example Pocket'}).click();
     await expect(pocketRows.getByRole('status')).toHaveText(['Added', 'Added', 'Added']);
     await expect(
-      summaryBody.getByRole('button', {name: 'Every row your bank never sent was added'}),
+      summaryBody.getByRole('button', {name: 'Added every row your bank never sent'}),
     ).toBeVisible();
     await expect(
       summaryBody.getByText('New transactions', {exact: true}).locator('..'),
@@ -2324,15 +2324,26 @@ test.describe('statement file import on Connections', () => {
       );
       await expectNothingWiderThan(dialog);
       await dialog
-        .getByRole('button', {name: '1,234 rows in the file your bank never sent, not added'})
+        .getByRole('button', {name: 'Not added: 1,234 rows your bank never sent'})
         .click();
       const groups = dialog.getByTestId('bank-import-never-sent-group');
       await expect(groups).toHaveCount(50);
       await expect(groups.first()).toContainText('5 rows');
       const addGroup = groups.first().getByRole('button', {name: `Add 5 from ${LONG_ACCOUNT}`});
-      const addRow = groups.nth(1).getByRole('button', {name: /^Add /});
-      for (const button of [addGroup, addRow])
+      const addRow = groups.first().getByRole('listitem').first().getByRole('button');
+      const addOnlyRow = groups.nth(1).getByRole('button', {name: /^Add /});
+      for (const button of [addGroup, addRow, addOnlyRow])
         expect((await boxOf(button)).height).toBeGreaterThanOrEqual(44);
+      // A group's Add and its rows' Add are one button style, and their right edges line up.
+      const look = (button: Locator) =>
+        button.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return [style.borderTopWidth, style.borderTopColor, style.backgroundColor];
+        });
+      expect(await look(addRow)).toEqual(await look(addGroup));
+      expect(await look(addOnlyRow)).toEqual(await look(addGroup));
+      const [groupBox, rowBox] = await Promise.all([boxOf(addGroup), boxOf(addRow)]);
+      expect(Math.abs(groupBox.x + groupBox.width - rowBox.x - rowBox.width)).toBeLessThan(1);
       await expectNothingWiderThan(dialog);
       await dialog.getByRole('button', {name: 'Show 6 more'}).click();
       await expect(groups).toHaveCount(56);

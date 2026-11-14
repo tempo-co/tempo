@@ -4,10 +4,10 @@ import {plural} from './import-format';
 
 export type NeverSentGroup = {key: string; label: string; rows: BankImportNeverSentRow[]};
 
-/** The summary's line: `4 rows in the file your bank never sent, not added`, or that every one was added. */
+/** The summary's line: `Not added: 4 rows your bank never sent`, or that every one was added. */
 export function neverSentLine(count: number) {
-  if (count === 0) return 'Every row your bank never sent was added';
-  return `${plural(count, 'row')} in the file your bank never sent, not added`;
+  if (count === 0) return 'Added every row your bank never sent';
+  return `Not added: ${plural(count, 'row')} your bank never sent`;
 }
 
 const groupLabel = ({row}: BankImportNeverSentRow) =>

@@ -30,6 +30,8 @@ import {IMPORT_TILE} from './file-choice';
 
 /** How many groups show at first, and how many more each Show more adds; and the rows a group shows before Show all. */
 const GROUPS_PAGE = 50;
+/** A group's Add and each row's Add: one small outline button of a shared minimum width, in one right-hand column. */
+const ADD_ACTION = 'min-w-20 max-sm:h-11';
 const GROUP_ROWS = 5;
 
 /**
@@ -130,8 +132,8 @@ function NeverSentList({summary}: {summary: BankImportSummary}) {
   return (
     <div className='grid grid-cols-1 gap-3'>
       <p className='text-sm text-muted-foreground'>
-        Your bank&apos;s sync has every transaction of these days, and none of these. Add any you
-        know are real.
+        Your bank sent every transaction for these days, and these weren&apos;t among them. Add any
+        you know are real.
       </p>
       <ul className='grid grid-cols-1 gap-3'>
         {groups.slice(0, shown).map((group) => (
@@ -197,7 +199,7 @@ function Group({
               addingGroup ? undefined : `Add ${formatCount(open.length)} from ${group.label}`
             }
             onClick={() => onAdd(open)}
-            className='max-sm:h-11'
+            className={ADD_ACTION}
           >
             {addingGroup ? <PendingLabel>Adding…</PendingLabel> : `Add ${formatCount(open.length)}`}
           </Button>
@@ -262,17 +264,17 @@ function Row({
         <CurrencyAmount amount={Number(row.row.amount)} currency={row.row.currency} />
       </span>
       {added ? (
-        <span role='status' className='min-w-16 text-right text-sm text-muted-foreground'>
+        <span role='status' className='min-w-20 text-right text-sm text-muted-foreground'>
           Added
         </span>
       ) : (
         <Button
-          variant='ghost'
+          variant='outline'
           size='sm'
           disabled={disabled}
           aria-label={adding ? undefined : `Add ${title} on ${date}`}
           onClick={onAdd}
-          className='min-w-16 max-sm:h-11'
+          className={ADD_ACTION}
         >
           {adding ? <PendingLabel>Adding…</PendingLabel> : 'Add'}
         </Button>

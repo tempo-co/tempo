@@ -490,13 +490,14 @@ No copy calls import a fallback or assumes a bank is connected.
   Connections: its bank's logo (imported files: the `Files` Clay tile) with the account-type tile
   on its corner, its name, and its details and bank under it. A drop that added nothing shows
   the `CheckCheck` state instead of the counts. Rows on days bank sync is final for that the bank
-  never sent sit under the counts as one bordered fold line ("4 rows in the file your bank never
-  sent, not added", `ChevronRight`), never in the attention tone and never counted as a look:
-  nothing waits for the owner. Opened, a muted line says sync has every transaction of those days,
-  then the rows grouped by counterparty (else description), largest group first: one bordered
-  block per group (the `FileX` Clay tile, the name, its row count and an outline **Add N** while
-  more than one is open), its rows under it with a ghost **Add** each. An added row turns into a
-  muted "Added". Nothing adds every row at once. 50 groups show, then **Show 50 more**; a group
+  never sent sit under the counts as one bordered fold line ("Not added: 4 rows your bank never
+  sent", `ChevronRight`), never in the attention tone and never counted as a look: nothing waits
+  for the owner. Opened, a muted line says the bank sent every transaction for those days, then the
+  rows grouped by counterparty (else description), largest group first: one bordered block per
+  group (the `FileX` Clay tile, the name, its row count and **Add N** while more than one is open),
+  its rows under it with **Add** each. Both are small outline buttons of one minimum width in one
+  right-hand column, so their right edges line up. An added row turns into a muted "Added". Nothing
+  adds every row at once. 50 groups show, then **Show 50 more**; a group
   shows 5 rows, then **Show all**. An undone import opens with a `default` Alert
   (`Undo2`) saying when and what the undo removed, and its counts sit muted under "When
   imported" in the past tense.
