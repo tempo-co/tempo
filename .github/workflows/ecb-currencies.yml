@@ -82,5 +82,5 @@ jobs:
                   if [[ -n "$pr" ]]; then
                       gh api -X PATCH "repos/$GITHUB_REPOSITORY/pulls/$pr" -f body="$body" >/dev/null
                   else
-                      gh pr create --base main --head "$BRANCH" --title 'chore(contracts): update the ECB currency table' --body "$body"
+                      gh pr create --base feat/ecb-currency-table --head "$BRANCH" --title 'chore(contracts): update the ECB currency table' --body "$body"
                   fi
