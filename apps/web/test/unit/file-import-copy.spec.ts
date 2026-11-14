@@ -61,6 +61,19 @@ test('a refusal names its file only among several, and always says nothing was i
     retry: false,
     mapFile: null,
   });
+  // More files than one drop holds, or one archive with more statements than it may hold.
+  expect(describeRefusal(refusal({code: 'too_many_files'}), names)).toMatchObject({
+    title: 'Too many files at once',
+    description:
+      'One import can hold 20 files. Import them in smaller batches. Nothing was imported.',
+  });
+  expect(
+    describeRefusal(refusal({code: 'too_many_files', file: 1}), ['statements.zip']),
+  ).toMatchObject({
+    title: 'This archive holds too many statements',
+    description:
+      'One archive can hold 500 statements. Split it into smaller archives. Nothing was imported.',
+  });
 });
 
 test('a table in no layout Tempo knows is offered to have its columns worked out, only while that is on', () => {
@@ -76,11 +89,17 @@ test('a table in no layout Tempo knows is offered to have its columns worked out
     retry: false,
     mapFile: 2,
   });
+  // A file that only looks like a bank's export keeps that bank's advice beside the offer.
   expect(
     describeRefusal(refusal({code: 'layout_not_recognized', file: 1, layout: 'ing-nl'}), names, {
       mapper: true,
     }),
-  ).toMatchObject({title: "Tempo doesn't know this file's layout yet", mapFile: 1});
+  ).toMatchObject({
+    title: "This file doesn't look the way ING's exports usually do",
+    description:
+      'statement-april.xml: Try exporting it again, or use CAMT.053 or MT940 if your bank offers them. Tempo can also work out which column is which. It sends the column headings and the shape of a few rows, with letters and digits masked, to its AI service. Nothing was imported.',
+    mapFile: 1,
+  });
   expect(describeRefusal(refusal({code: 'layout_unknown', file: 1}), ['export.csv'])).toMatchObject(
     {
       description: "It isn't a layout Tempo knows yet. Nothing was imported.",
@@ -100,9 +119,15 @@ test('a table in no layout Tempo knows is offered to have its columns worked out
       'Nothing was imported. Try another export format from your bank, such as CAMT.053 or MT940.',
     mapFile: null,
   });
+  // A failed try says so and is offered again.
   expect(
     describeRefusal(refusal({code: 'mapper_unavailable', file: 1}), ['a.csv'], {mapper: true}),
-  ).toMatchObject({title: "Tempo doesn't know this file's layout yet", mapFile: null});
+  ).toMatchObject({
+    title: "Working out the columns didn't work this time",
+    description:
+      'Try again later. Each try counts towards the 5 allowed in 24 hours. Nothing was imported.',
+    mapFile: 1,
+  });
 });
 
 test('a choice of files too large for one drop is refused before uploading, as the API would', () => {
