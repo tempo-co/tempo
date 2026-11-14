@@ -314,6 +314,20 @@ describe('BankTransactionAmountConversionService', () => {
 			await expect(service.backfill(NOW)).resolves.toEqual({scanned: 0, converted: 0});
 		});
 
+		it("corrects a stand-in once its day's rate is out, also for an account that is no longer active", async () => {
+			await accounts.update({id: owner.id}, {baseCurrency: 'EUR'});
+			const [row] = await createRows(await createBankAccount(owner, 'GBP', {isActive: false}), [
+				{amount: '-10.00', bookingDate: '2026-09-09'},
+			]);
+			publishedThrough = '2026-09-08';
+			await expect(service.backfill(BEFORE_PUBLICATION)).resolves.toMatchObject({converted: 1});
+			expect(await stored(row.id)).toEqual(ecb('-12.50', '2026-09-08'));
+
+			publishedThrough = '2026-09-09';
+			await expect(service.backfill(NOW)).resolves.toMatchObject({converted: 1});
+			expect(await stored(row.id)).toEqual(ecb('-12.50', '2026-09-09'));
+		});
+
 		it('uses the previous publication for an ECB holiday once a later one is out', async () => {
 			await accounts.update({id: owner.id}, {baseCurrency: 'EUR'});
 			const [holiday, unpublished] = await createRows(await createBankAccount(owner, 'GBP'), [

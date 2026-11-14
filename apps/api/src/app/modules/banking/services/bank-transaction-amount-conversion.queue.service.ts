@@ -78,10 +78,14 @@ export class BankTransactionAmountConversionQueueService implements OnModuleInit
 	async enqueueConversion(key: string): Promise<void> {
 		// Tests run without schedulers or the boot backfill and run conversion passes themselves.
 		if (this.configurationService.get('NODE_ENV') === 'test') return;
+		const jobId = `reporting-currency-${key}`;
+		// A failed pass keeps its id for a day, and the queue ignores a job added under it: clear it first.
+		const previous = await this.queue.getJob(jobId);
+		if (previous && (await previous.getState()) === 'failed') await previous.remove();
 		await this.queue.add(
 			BANK_TRANSACTION_AMOUNT_CONVERSION_JOB,
 			{},
-			{jobId: `reporting-currency-${key}`, removeOnComplete: true, removeOnFail: {age: 86_400, count: 10}},
+			{jobId, removeOnComplete: true, removeOnFail: {age: 86_400, count: 10}},
 		);
 	}
 

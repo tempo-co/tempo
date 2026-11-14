@@ -234,13 +234,19 @@ export class BankTransactionAmountConversionService {
 
 	/**
 	 * Keeps rates current for every active account currency and base currency, even without new transactions,
-	 * so the dashboard can show balances in the base currency (dashboard API, phase 1).
+	 * so the dashboard can show balances in the base currency (dashboard API, phase 1). Also for the currency of
+	 * every recent ECB amount, whatever its account: one converted with a stand-in rate needs the day's own rate stored
+	 * before {@link correctableSql} picks it up again.
 	 */
 	private async refreshAccountCurrencyRates(latestExpectedDate: string): Promise<void> {
 		const rows = (await this.bankAccountRepository.query(
 			`SELECT "currency" FROM "bank_accounts" WHERE "isActive" = TRUE
 			UNION
-			SELECT "baseCurrency" FROM "accounts" WHERE "baseCurrency" IS NOT NULL`,
+			SELECT "baseCurrency" FROM "accounts" WHERE "baseCurrency" IS NOT NULL
+			UNION
+			SELECT t."currency" FROM "bank_transactions" t
+			WHERE t."baseAmountMethod" = 'ECB' AND ${RATE_DATE_SQL} >= $1::date - $2::integer`,
+			[latestExpectedDate, FX_RATE_MAX_AGE_DAYS],
 		)) as Array<{currency: string}>;
 		await this.fxRateService.ensureLatestRates(
 			rows.map(({currency}) => currency),
