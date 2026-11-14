@@ -146,7 +146,7 @@ The transaction search cap is one constant, `BANK_TRANSACTION_SEARCH_MAX_LENGTH`
 
 ## Cash flow filters
 
-`INTERNAL` is a parent of the internal-movement kinds (`BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS`). The route schema normalizes subtypes and still accepts the older `financialEventTypes` parameter. When narrowing to a child, replace the parent rather than appending; the API treats the list as OR. Test Home drill navigation separately from direct `INTERNAL`, subtype and legacy URLs.
+`INTERNAL` is a parent of the internal-movement kinds (`BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS`). The route schema normalizes subtypes and also accepts `financialEventTypes`, which older shared links use. When narrowing to a child, replace the parent rather than appending; the API treats the list as OR. Test Home drill navigation separately from direct `INTERNAL`, subtype and `financialEventTypes` URLs.
 
 ## Standalone scripts against a build
 
