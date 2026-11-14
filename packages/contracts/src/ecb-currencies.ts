@@ -9,7 +9,7 @@
 export const ECB_CURRENCIES: Readonly<Record<string, string | null>> = {
 	ARS: '2020-10-30',
 	AUD: null,
-	BGN: null,
+	BGN: '2025-12-31',
 	BRL: null,
 	CAD: null,
 	CHF: null,
