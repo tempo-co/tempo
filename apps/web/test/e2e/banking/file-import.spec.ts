@@ -833,6 +833,14 @@ test.describe('statement file import on Connections', () => {
     page,
   }) => {
     const savings = MOCK_CONNECTION.bankAccounts[1];
+    // Two accounts at one bank under the holder's name, told apart as the Connections page tells them apart.
+    const atExampleBank = {
+      name: 'Example Holder',
+      details: null,
+      currency: 'EUR',
+      bankName: 'Example Bank',
+      imported: false,
+    };
     const api = await mockFileImport(page, {
       uploads: [
         refused({
@@ -844,20 +852,33 @@ test.describe('statement file import on Connections', () => {
               currency: 'EUR',
               candidates: [
                 {
+                  ...atExampleBank,
                   bankAccountId: CHECKING.id,
-                  name: 'Everyday',
-                  currency: 'EUR',
-                  bankName: 'Example Bank',
-                  imported: false,
+                  alias: null,
+                  cashAccountType: 'CACC',
+                  maskedIdentifier: 'NL** **** **** 4300',
                 },
                 {
+                  ...atExampleBank,
                   bankAccountId: savings.id,
-                  name: null,
+                  alias: 'Rainy day',
+                  cashAccountType: 'SVGS',
+                  maskedIdentifier: 'NL** **** **** 1234',
+                },
+                {
+                  bankAccountId: FILE_ACCOUNT_ID,
+                  name: 'Example Bank EUR',
+                  details: null,
+                  alias: null,
+                  cashAccountType: null,
+                  maskedIdentifier: null,
                   currency: 'EUR',
                   bankName: 'Imported files',
                   imported: true,
                 },
               ],
+              // The imported-files account of this bank and currency exists: it is offered as itself.
+              newAccount: false,
             },
           ],
         }),
@@ -871,12 +892,20 @@ test.describe('statement file import on Connections', () => {
     await expect(dialog.getByRole('heading', {name: 'Which account is this?'})).toBeVisible();
     const question = dialog.getByRole('group', {name: 'Example Bank · EUR'});
     await expect(
-      question.getByText('Few of these transactions match what Tempo already has for Everyday.'),
+      question.getByText(
+        'Few of these transactions match what Tempo already has for Example Holder.',
+      ),
     ).toBeVisible();
     const radios = question.getByRole('radio');
     await expect(radios).toHaveCount(3);
     for (const radio of await radios.all()) await expect(radio).not.toBeChecked();
-    await expect(question.getByText('Keeps these transactions separate')).toBeVisible();
+    await expect(radios.nth(0)).toHaveAccessibleName(
+      /^Example Holder\s*Current account · ••4300 · Example Bank$/,
+    );
+    await expect(radios.nth(1)).toHaveAccessibleName(
+      /^Rainy day\s*Savings · ••1234 · Example Bank$/,
+    );
+    await expect(radios.nth(2)).toHaveAccessibleName(/^Example Bank EUR\s*Imported files$/);
     const importButton = dialog.getByRole('button', {name: 'Import', exact: true});
     await expect(importButton).toBeDisabled();
 
@@ -884,8 +913,8 @@ test.describe('statement file import on Connections', () => {
     await radios.first().focus();
     await page.keyboard.press('Space');
     await page.keyboard.press('ArrowDown');
-    await expect(question.getByRole('radio', {name: /Imported files/})).toBeChecked();
-    await question.getByText('Everyday', {exact: true}).click();
+    await expect(question.getByRole('radio', {name: /Rainy day/})).toBeChecked();
+    await question.getByText('Example Holder', {exact: true}).click();
     await expect(importButton).toBeEnabled();
     await importButton.click();
 
@@ -911,13 +940,18 @@ test.describe('statement file import on Connections', () => {
             {
               bankAccountId: CHECKING.id,
               name: 'Everyday',
+              details: null,
+              alias: null,
+              cashAccountType: null,
+              maskedIdentifier: null,
               currency: 'EUR',
               bankName: 'Example Bank',
               imported: false,
             },
           ],
+          newAccount: true,
         },
-        {bank: 'Example Bank', currency: 'USD', candidates: []},
+        {bank: 'Example Bank', currency: 'USD', candidates: [], newAccount: true},
       ],
     };
     const api = await mockFileImport(page, {

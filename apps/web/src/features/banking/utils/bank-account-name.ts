@@ -15,6 +15,20 @@ export function accountName(
   );
 }
 
+/**
+ * What tells the account apart under its name: its type when the name is not already that, and the last four
+ * characters of its masked identifier. Empty when neither is known.
+ */
+export function accountSubline(
+  account: Pick<BankAccount, 'alias' | 'details' | 'name' | 'cashAccountType' | 'maskedIdentifier'>,
+) {
+  const type = formatAccountType(account.cashAccountType);
+  const digits = account.maskedIdentifier?.replace(/[^0-9A-Za-z]/g, '').slice(-4);
+  return [type !== accountName(account) && type, digits && `••${digits}`]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 export function formatAccountType(value: string | null) {
   if (!value) return null;
   const normalized = value.toUpperCase();

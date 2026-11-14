@@ -4,19 +4,24 @@ import type {
   BankImportErrorCode,
 } from '@tempo/contracts';
 
+import {accountName, accountSubline} from '@/features/banking/utils/bank-account-name';
 import {cn} from '@/utils/cn';
 
 import {accountQuestionKey} from '../utils/refusal-copy';
 
-/** The `accountChoices` value for a new imported-files account. */
+/** The `accountChoices` value for the imported-files account of the question's bank and currency. */
 export const NEW_ACCOUNT = 'new';
 
-const candidateName = (candidate: BankImportAccountCandidate) =>
-  candidate.name ?? candidate.bankName;
+/** The account as the Connections page names it, and where it is. */
+const candidateDetail = (candidate: BankImportAccountCandidate) =>
+  [accountSubline(candidate), candidate.imported ? 'Imported files' : candidate.bankName]
+    .filter(Boolean)
+    .join(' · ');
 
 /**
  * Which account each statement that names none goes to: one question per bank and currency, each with the
- * accounts it could be and a new account. Nothing is preselected.
+ * accounts it could be, and a new account until the imported-files account of that bank and currency exists (it is
+ * then a candidate). Nothing is preselected.
  */
 export function AccountQuestions({
   code,
@@ -39,10 +44,18 @@ export function AccountQuestions({
         const options = [
           ...question.candidates.map((candidate) => ({
             value: candidate.bankAccountId,
-            title: candidateName(candidate),
-            detail: candidate.imported ? 'Imported files' : candidate.bankName,
+            title: accountName(candidate),
+            detail: candidateDetail(candidate),
           })),
-          {value: NEW_ACCOUNT, title: 'A new account', detail: 'Keeps these transactions separate'},
+          ...(question.newAccount
+            ? [
+                {
+                  value: NEW_ACCOUNT,
+                  title: 'A new account',
+                  detail: 'Keeps these transactions separate',
+                },
+              ]
+            : []),
         ];
         return (
           <fieldset key={key} className='grid min-w-0 grid-cols-1 gap-2' disabled={disabled}>
@@ -51,7 +64,7 @@ export function AccountQuestions({
             </legend>
             <p className='text-sm text-muted-foreground'>
               {code === 'target_account_unconfirmed' && first
-                ? `Few of these transactions match what Tempo already has for ${candidateName(first)}.`
+                ? `Few of these transactions match what Tempo already has for ${accountName(first)}.`
                 : 'You have more than one account this could be.'}
             </p>
             <div className='divide-y overflow-hidden rounded-md border'>

@@ -42,7 +42,7 @@ import {
 } from '../api/use-delete-bank-connection';
 import {useBankConnectionRefreshState} from '../api/use-refresh-bank-connection';
 import {useStartBankConnection} from '../api/use-start-bank-connection';
-import {accountName, formatAccountType} from '../utils/bank-account-name';
+import {accountName, accountSubline} from '../utils/bank-account-name';
 import {
   getAutomaticSyncProblemForConnection,
   isConnectedBank,
@@ -470,8 +470,7 @@ function AccountRow({
       ? formatCurrency(Number(account.currentBalanceInBaseCurrency), baseCurrency)
       : null;
   const name = accountName(account);
-  const type = formatAccountType(account.cashAccountType);
-  const subline = [type !== name && type, lastDigits(account)].filter(Boolean).join(' · ');
+  const subline = accountSubline(account);
   const amounts = (
     <>
       {balance && (
@@ -826,11 +825,6 @@ function bankTotal(connection: BankConnection) {
     else return null;
   }
   return {amount, currency: base};
-}
-
-function lastDigits(account: Account) {
-  const digits = account.maskedIdentifier?.replace(/[^0-9A-Za-z]/g, '').slice(-4);
-  return digits ? `••${digits}` : null;
 }
 
 function AccountTypeIcon({type}: {type: string | null}) {
