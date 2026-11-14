@@ -6,7 +6,7 @@ import type {
 } from '@tempo/contracts';
 import {differenceInCalendarDays, parseISO} from 'date-fns';
 import {CheckCheck, CircleAlert, FilePlus, FileQuestion} from 'lucide-react';
-import {type ReactNode, useState} from 'react';
+import {type ReactNode, useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
@@ -24,12 +24,16 @@ import {
 } from '../api/use-bank-import-doubtful-rows';
 import {formatCount, plural} from '../utils/import-format';
 import {IMPORT_TILE} from './file-choice';
+import {useKnownAccounts} from './use-known-accounts';
 
 /**
  * One grid for the file row and every choice under it: a 36px lead (the file row's tile, or a choice's radio), the
  * text, and the amount. The amounts share one right-aligned column and nothing sits after them.
  */
 const ROW = 'grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-x-3 px-3';
+
+/** How many rows show at first, and how many more each Show more adds. */
+const PAGE = 50;
 
 type Pick = ResolveBankImportDoubtfulRowRequest;
 
@@ -55,7 +59,7 @@ function dayGap(date: string | null, fileDate: string | null) {
  * The import's rows held for the owner: each next to the stored transactions it could be, as one choice between
  * them and a new transaction. Choices change freely until Save sends them, one row at a time. A saved answer is
  * final (the API cannot change it) and collapses its block to a line saying what was chosen; a row left without a
- * choice stays open for later.
+ * choice stays open for later. A long list shows a page of rows at a time; choices on every shown row count.
  */
 export function DoubtfulRowsReview({
   summary,
@@ -72,6 +76,26 @@ export function DoubtfulRowsReview({
   const [saved, setSaved] = useState<Record<string, Pick>>({});
   const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [shown, setShown] = useState(PAGE);
+  const known = useKnownAccounts();
+  const list = useRef<HTMLOListElement>(null);
+  // The first row Show more revealed, which takes focus once it renders.
+  const revealed = useRef<number | null>(null);
+
+  useEffect(() => {
+    const index = revealed.current;
+    revealed.current = null;
+    if (index === null) return;
+    const block = list.current?.children[index];
+    const choice = block?.querySelector<HTMLInputElement>('input:not(:disabled)');
+    const viewport = block?.closest<HTMLElement>('[data-radix-scroll-area-viewport]');
+    if (!block || !choice) return;
+    choice.focus({preventScroll: true});
+    // To the top of the body: at its end the row would sit under the Save bar. Only the body's own scroller moves.
+    if (viewport)
+      viewport.scrollTop +=
+        block.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+  }, [shown]);
 
   if (isPending)
     return (
@@ -100,6 +124,9 @@ export function DoubtfulRowsReview({
     );
 
   const unsaved = rows.filter(({id}) => picks[id] && !saved[id]);
+  const more = Math.min(PAGE, rows.length - shown);
+  // Held rows on synced accounts are almost always stored already by sync; leaving them open loses nothing.
+  const synced = rows.every(({bankAccountId}) => known.get(bankAccountId)?.synced);
   const unanswered = rows.filter(({id}) => !picks[id] && !saved[id]).length;
 
   const save = async () => {
@@ -148,11 +175,17 @@ export function DoubtfulRowsReview({
 
   return (
     <div className='grid grid-cols-1 gap-4'>
-      <p className='text-sm text-muted-foreground'>
-        Choose what each one is, then save. You can change a choice until you save it.
-      </p>
-      <ol className='grid grid-cols-1 gap-4' data-testid='bank-import-review'>
-        {rows.map((row) => (
+      <div className='grid grid-cols-1 gap-1 text-sm text-muted-foreground'>
+        <p>Choose what each one is, then save. You can change a choice until you save it.</p>
+        {synced && (
+          <p>
+            These are almost always in Tempo already from your bank, so leaving them without an
+            answer loses nothing.
+          </p>
+        )}
+      </div>
+      <ol ref={list} className='grid grid-cols-1 gap-4' data-testid='bank-import-review'>
+        {rows.slice(0, shown).map((row) => (
           <DoubtfulRowBlock
             key={row.id}
             row={row}
@@ -164,6 +197,19 @@ export function DoubtfulRowsReview({
           />
         ))}
       </ol>
+      {more > 0 && (
+        <Button
+          variant='ghost'
+          className='-mt-2 w-full text-muted-foreground max-sm:h-11'
+          disabled={saving}
+          onClick={() => {
+            revealed.current = shown;
+            setShown(shown + PAGE);
+          }}
+        >
+          Show {formatCount(more)} more
+        </Button>
+      )}
       {/* Stays in reach at the bottom of the scrolling body, like the dialog's footer. */}
       <div className='sticky bottom-0 -mx-4 -mb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col gap-2 border-t bg-background px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:-mx-6 md:-mb-6 md:flex-row md:items-center md:justify-end md:px-6 md:pb-4'>
         {unsaved.length > 0 && unanswered > 0 && (

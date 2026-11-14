@@ -506,7 +506,10 @@ No copy calls import a fallback or assumes a bank is connected.
   nothing after them; each stored row says how its day sits against the file row's ("2 days
   later"). Choices change freely until Save, which stays in reach under the list and sends only the
   rows with one. A saved answer is final and collapses its block to one muted line; a failed one
-  stays open with its choice and an error line.
+  stays open with its choice and an error line. A long list shows 50 rows, then a ghost **Show 50
+  more** (as Load more) under them; it focuses the first row it adds, and choices on every shown
+  row count toward Save. When every row is on a synced account, a second muted line under the
+  intro says they are almost always in Tempo already and leaving them open loses nothing.
 - **Imports list.** Under the connection cards once an import exists: a small heading, then one
   bordered `divide-y` list, newest first, five rows before Show all. A row reads "3 files · 212
   new" over the day, the accounts and any rows still to check (attention tone), with an

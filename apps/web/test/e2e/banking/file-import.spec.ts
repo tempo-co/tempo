@@ -20,6 +20,8 @@ import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 const TODAY = new Date('2026-11-12T10:00:00+01:00');
 const CHECKING = MOCK_CONNECTION.bankAccounts[0];
 const FILE_ACCOUNT_ID = '00000000-0000-4000-8000-000000000401';
+const SYNCED_LINE =
+  'These are almost always in Tempo already from your bank, so leaving them without an answer loses nothing.';
 const LAYOUT_ID = '00000000-0000-4000-8000-000000000601';
 const RESERVED_BANK_NAME =
   "Revolut's own exports already import into your Revolut accounts. Name this bank differently.";
@@ -1188,7 +1190,10 @@ test.describe('statement file import on Connections', () => {
   test('keeps a doubtful row whose answer failed open with its choice, and saves only the rows with one', async ({
     page,
   }) => {
-    const summary = importSummary({rowsDoubtful: 4});
+    const summary = importSummary({
+      rowsDoubtful: 4,
+      accounts: [{id: FILE_ACCOUNT_ID, name: null, currency: 'EUR', created: false}],
+    });
     const rows: BankImportDoubtfulRow[] = [
       doubtfulRow('00000000-0000-4000-8000-000000000611', 'Example Grocer', '-23.40', [
         candidate('00000000-0000-4000-8000-000000000711', 'Example Grocer', '-23.40'),
@@ -1200,7 +1205,8 @@ test.describe('statement file import on Connections', () => {
       doubtfulRow('00000000-0000-4000-8000-000000000614', 'Example Florist', '-18.00', [
         candidate('00000000-0000-4000-8000-000000000714', 'Example Florist', '-18.00'),
       ]),
-    ];
+    ].map((row) => ({...row, bankAccountId: FILE_ACCOUNT_ID}));
+    await mockBankConnections(page, [MOCK_CONNECTION, IMPORTED_FILES]);
     const api = await mockFileImport(page, {imports: [summary], doubtfulRows: rows});
     let failRefund = true;
     await page.route(
@@ -1220,6 +1226,9 @@ test.describe('statement file import on Connections', () => {
     await dialog.getByRole('button', {name: 'Review 4 rows'}).click();
     const blocks = dialog.getByTestId('bank-import-doubtful-row');
     const [grocer, refund, bakery, florist] = [0, 1, 2, 3].map((index) => blocks.nth(index));
+    await expect(blocks).toHaveCount(4);
+    // Rows held on an imported-files account have no bank sync that could have stored them already.
+    await expect(dialog.getByText(SYNCED_LINE)).toHaveCount(0);
     // A row with nothing to compare offers the new transaction alone.
     await expect(refund).toContainText('Nothing already in Tempo matches it now');
     await expect(refund.getByRole('radio')).toHaveCount(1);
@@ -1252,6 +1261,92 @@ test.describe('statement file import on Connections', () => {
     await expect(dialog.getByRole('button', {name: 'Save answer'})).toBeDisabled();
     expect(api.resolves).toEqual([
       {decision: 'duplicate', transactionId: '00000000-0000-4000-8000-000000000711'},
+      {decision: 'new'},
+      {decision: 'new'},
+    ]);
+  });
+
+  test('shows a long list of rows to check 50 at a time, and choices on every shown row are saved', async ({
+    page,
+  }) => {
+    // A phone, where the Save bar takes most room from the list.
+    await page.setViewportSize({width: 390, height: 844});
+    const summary = importSummary({rowsDoubtful: 120});
+    const rows = Array.from({length: 120}, (_, index) =>
+      doubtfulRow(
+        `00000000-0000-4000-8000-000000001${String(index).padStart(3, '0')}`,
+        `Example Payee ${index + 1}`,
+        '-4.20',
+        [
+          candidate(
+            `00000000-0000-4000-8000-000000002${String(index).padStart(3, '0')}`,
+            `Example Payee ${index + 1}`,
+            '-4.20',
+          ),
+        ],
+      ),
+    );
+    const api = await mockFileImport(page, {imports: [summary], doubtfulRows: rows});
+    await page.goto('/bank-connections');
+    await page
+      .getByTestId('bank-import-row')
+      .getByRole('button', {name: '3 files · 212 new'})
+      .click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', {name: 'Review 120 rows'}).click();
+
+    await expect(dialog.getByRole('heading', {name: 'Check 120 transactions'})).toBeVisible();
+    // Held rows on a synced account are almost always stored by sync already.
+    await expect(dialog.getByText(SYNCED_LINE)).toBeVisible();
+    const blocks = dialog.getByTestId('bank-import-doubtful-row');
+    await expect(blocks).toHaveCount(50);
+    await expect(blocks.last()).toContainText('Example Payee 50');
+    await blocks.nth(0).getByText("It's a new transaction").click();
+    await blocks.nth(49).getByText('Example Payee 50', {exact: true}).last().click();
+    const save = dialog.getByRole('button', {name: /^Save/});
+    await expect(save).toHaveText('Save 2 answers');
+
+    // Show more adds the next rows and focuses the first of them; choices made above stay.
+    await dialog.getByRole('button', {name: 'Show 50 more'}).click();
+    await expect(blocks).toHaveCount(100);
+    await expect(blocks.nth(50).getByRole('radio').first()).toBeFocused();
+    // The row it focused is in view, its choices clear of the Save bar.
+    await expect
+      .poll(async () => {
+        const [row, choice, bar] = await Promise.all([
+          boxOf(blocks.nth(50)),
+          boxOf(blocks.nth(50).locator('label').first()),
+          boxOf(save.locator('..')),
+        ]);
+        return row.y >= 0 && choice.y + choice.height <= bar.y;
+      })
+      .toBe(true);
+    await expect(blocks.nth(0).getByRole('radio', {name: "It's a new transaction"})).toBeChecked();
+    await blocks.nth(50).getByText("It's a new transaction").click();
+    await expect(save).toHaveText('Save 3 answers');
+
+    // The last page holds the rest; with every row shown, Show more goes.
+    await dialog.getByRole('button', {name: 'Show 20 more'}).focus();
+    await page.keyboard.press('Enter');
+    await expect(blocks).toHaveCount(120);
+    await expect(blocks.nth(100).getByRole('radio').first()).toBeFocused();
+    await expect(dialog.getByRole('button', {name: /^Show \d+ more$/})).toHaveCount(0);
+    await blocks.nth(119).getByText("It's a new transaction").click();
+    await expect(save).toHaveText('Save 4 answers');
+    await expect(dialog.getByText('116 without an answer stay open')).toBeVisible();
+
+    // Saving sends every chosen row, collapses them in place and leaves the rest open, all still shown.
+    await save.click();
+    await expect(blocks.nth(119).getByRole('status')).toHaveText('Kept as new');
+    await expect(blocks.nth(49).getByRole('status')).toHaveText(
+      'Marked as the same as Example Payee 50 on 1 Oct',
+    );
+    await expect(blocks).toHaveCount(120);
+    await expect(blocks.nth(1).getByRole('radio')).toHaveCount(2);
+    await expect(dialog.getByRole('heading', {name: 'Check 120 transactions'})).toBeVisible();
+    expect(api.resolves).toEqual([
+      {decision: 'new'},
+      {decision: 'duplicate', transactionId: '00000000-0000-4000-8000-000000002049'},
       {decision: 'new'},
       {decision: 'new'},
     ]);
