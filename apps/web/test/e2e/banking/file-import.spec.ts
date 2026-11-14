@@ -1109,7 +1109,7 @@ test.describe('statement file import on Connections', () => {
   test('keeps a doubtful row whose answer failed open with its choice, and saves only the rows with one', async ({
     page,
   }) => {
-    const summary = importSummary({rowsDoubtful: 3});
+    const summary = importSummary({rowsDoubtful: 4});
     const rows: BankImportDoubtfulRow[] = [
       doubtfulRow('00000000-0000-4000-8000-000000000611', 'Example Grocer', '-23.40', [
         candidate('00000000-0000-4000-8000-000000000711', 'Example Grocer', '-23.40'),
@@ -1117,6 +1117,9 @@ test.describe('statement file import on Connections', () => {
       doubtfulRow('00000000-0000-4000-8000-000000000612', 'Example Refund', '12.00', []),
       doubtfulRow('00000000-0000-4000-8000-000000000613', 'Example Bakery', '-3.10', [
         candidate('00000000-0000-4000-8000-000000000713', 'Example Bakery', '-3.10'),
+      ]),
+      doubtfulRow('00000000-0000-4000-8000-000000000614', 'Example Florist', '-18.00', [
+        candidate('00000000-0000-4000-8000-000000000714', 'Example Florist', '-18.00'),
       ]),
     ];
     const api = await mockFileImport(page, {imports: [summary], doubtfulRows: rows});
@@ -1135,38 +1138,42 @@ test.describe('statement file import on Connections', () => {
       .getByRole('button', {name: '3 files · 212 new'})
       .click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('button', {name: 'Review 3 rows'}).click();
+    await dialog.getByRole('button', {name: 'Review 4 rows'}).click();
     const blocks = dialog.getByTestId('bank-import-doubtful-row');
-    const [grocer, refund, bakery] = [blocks.nth(0), blocks.nth(1), blocks.nth(2)];
+    const [grocer, refund, bakery, florist] = [0, 1, 2, 3].map((index) => blocks.nth(index));
     // A row with nothing to compare offers the new transaction alone.
     await expect(refund).toContainText('Nothing already in Tempo matches it now');
     await expect(refund.getByRole('radio')).toHaveCount(1);
 
     await grocer.getByText('Example Grocer', {exact: true}).last().click();
     await refund.getByText("It's a new transaction").click();
+    await bakery.getByText("It's a new transaction").click();
     await expect(dialog.getByText('1 without an answer stays open')).toBeVisible();
-    await dialog.getByRole('button', {name: 'Save 2 answers'}).click();
+    await dialog.getByRole('button', {name: 'Save 3 answers'}).click();
 
     await expect(grocer.getByRole('status')).toHaveText(
       'Marked as the same as Example Grocer on 1 Oct',
     );
     await expect(grocer.getByRole('radio')).toHaveCount(0);
+    // A failure does not stop the rows after it.
+    await expect(bakery.getByRole('status')).toHaveText('Kept as new');
     await expect(refund.getByRole('alert')).toHaveText(
       "Couldn't save this answer. Save to try again.",
     );
     await expect(refund.getByRole('radio', {name: "It's a new transaction"})).toBeChecked();
     await expect(page.locator('[data-sonner-toast]')).toContainText("Couldn't save your answer");
-    for (const choice of await bakery.getByRole('radio').all())
+    for (const choice of await florist.getByRole('radio').all())
       await expect(choice).not.toBeChecked();
-    await expect(dialog.getByRole('heading', {name: 'Check 3 transactions'})).toBeVisible();
+    await expect(dialog.getByRole('heading', {name: 'Check 4 transactions'})).toBeVisible();
 
     // Trying again sends the failed answer alone; the row without a choice stays open.
     await dialog.getByRole('button', {name: 'Save answer'}).click();
     await expect(refund.getByRole('status')).toHaveText('Kept as new');
-    await expect(bakery.getByRole('radio')).toHaveCount(2);
+    await expect(florist.getByRole('radio')).toHaveCount(2);
     await expect(dialog.getByRole('button', {name: 'Save answer'})).toBeDisabled();
     expect(api.resolves).toEqual([
       {decision: 'duplicate', transactionId: '00000000-0000-4000-8000-000000000711'},
+      {decision: 'new'},
       {decision: 'new'},
     ]);
   });
