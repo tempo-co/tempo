@@ -1,4 +1,5 @@
 import {
+	BANK_TRANSACTION_AMOUNT_CONVERSION_JOB,
 	BANK_TRANSACTION_AMOUNT_CONVERSION_SCHEDULER_ID,
 	OWN_TRANSFER_RECOMPUTE_SCHEDULER_ID,
 	RECOMPUTE_OWN_TRANSFERS_JOB,
@@ -35,6 +36,28 @@ describe('BankTransactionAmountConversionQueueService', () => {
 			{pattern: '0 3 * * *', tz: 'UTC'},
 			expect.objectContaining({name: RECOMPUTE_OWN_TRANSFERS_JOB}),
 		);
+	});
+
+	it('runs a pass again under a key whose earlier pass failed', async () => {
+		const remove = jest.fn();
+		const queue = {
+			getJob: jest.fn().mockResolvedValue({getState: jest.fn().mockResolvedValue('failed'), remove}),
+			add: jest.fn(),
+		};
+
+		await new BankTransactionAmountConversionQueueService(
+			queue as never,
+			configurationService as never,
+		).enqueueConversion('owner-rows');
+
+		expect(queue.getJob).toHaveBeenCalledWith('reporting-currency-owner-rows');
+		expect(remove).toHaveBeenCalledTimes(1);
+		expect(queue.add).toHaveBeenCalledWith(
+			BANK_TRANSACTION_AMOUNT_CONVERSION_JOB,
+			{},
+			expect.objectContaining({jobId: 'reporting-currency-owner-rows'}),
+		);
+		expect(remove.mock.invocationCallOrder[0]).toBeLessThan(queue.add.mock.invocationCallOrder[0]);
 	});
 
 	it('does not enqueue conversion work when banking integration is disabled', async () => {
