@@ -39,7 +39,7 @@ A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, an
 
 ## ECB currencies
 
-`.github/workflows/ecb-currencies.yml` runs `.github/scripts/ecb-currencies.mjs` monthly (and by hand from the Actions tab). The script rewrites `packages/contracts/src/ecb-currencies.ts` from the ECB's list of euro reference rates and prints what changed. It fails without writing on a reply it can't trust, including one that lacks a currency the table lists (the ECB keeps stopped currencies' series). When the table changed, the workflow opens a pull request from `chore/ecb-currencies`, or updates the open one. Pull requests opened with the workflow's token start no other workflow, so close and reopen the PR to run CI. The repository setting that lets Actions create pull requests must stay on. The workflow is separate from `CI/CD`, so an ECB outage fails only its own run.
+`.github/workflows/ecb-currencies.yml` runs `.github/scripts/ecb-currencies.mjs` monthly (and by hand from the Actions tab). The script rewrites `packages/contracts/src/ecb-currencies.ts` from the ECB's list of euro reference rates and prints what changed. It fails without writing on a reply it can't trust, including one that lacks a currency the table lists (the ECB keeps stopped currencies' series). When the table changed, the workflow opens a pull request from `chore/ecb-currencies`, or updates the open one; each run rebuilds that branch from `main`, replacing anything pushed to it. Pull requests opened with the workflow's token start no other workflow, so close and reopen the PR to run CI. The repository setting that lets Actions create pull requests must stay on. The workflow is separate from `CI/CD`, so an ECB outage fails only its own run.
 
 ## GHCR retention
 

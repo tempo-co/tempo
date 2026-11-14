@@ -24,7 +24,7 @@ export type ReportingCurrency = {
 	 */
 	setupRequired: boolean;
 	/**
-	 * Tempo can no longer convert amounts into `currency`, because the ECB stopped publishing its rates. Totals stay in
+	 * Tempo can no longer convert amounts into `currency`: it left {@link REPORTING_CURRENCIES}. Totals stay in
 	 * it until the owner chooses another; it is left out of `options`.
 	 */
 	currencyUnavailable: boolean;

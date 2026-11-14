@@ -138,7 +138,7 @@ test.describe('fully mocked', () => {
 
     const setup = page.getByRole('region', {name: QUESTION});
     await expect(setup).toContainText(
-      "The European Central Bank no longer publishes RUB exchange rates, so newer amounts can't be added up in RUB.",
+      "Tempo can't convert amounts into RUB, because the European Central Bank doesn't publish its exchange rates.",
     );
     await expect(setup.getByTestId('reporting-currency-picker')).toHaveText('EUR — Euro');
     await expect(setup.getByText('Suggested from your recent transactions.')).toBeVisible();

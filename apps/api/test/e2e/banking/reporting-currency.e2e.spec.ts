@@ -7,7 +7,6 @@ import {Repository} from 'typeorm';
 import {dateInAppTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
 import {REPORTING_CURRENCY_UNSUPPORTED} from '@modules/banking/api/constants/banking-messages.constants';
-import {BankTransactionFxRate} from '@modules/banking/bank-transaction-fx-rate.entity';
 import {addDays} from '@modules/banking/banking.utils';
 import {McpReaderService} from '@modules/banking/services/mcp-reader.service';
 import {ReportingCurrencyService} from '@modules/banking/services/reporting-currency.service';
@@ -24,7 +23,6 @@ describe('Reporting currency', () => {
 	let fixtures: BankingFixtures;
 	let accounts: Repository<Account>;
 	let service: ReportingCurrencyService;
-	let fxRates: Repository<BankTransactionFxRate>;
 	/** Today in the app's time zone, as the suggestion counts it. */
 	let today: string;
 
@@ -33,12 +31,10 @@ describe('Reporting currency', () => {
 		fixtures = new BankingFixtures(app);
 		accounts = app.get(getRepositoryToken(Account));
 		service = app.get(ReportingCurrencyService);
-		fxRates = app.get(getRepositoryToken(BankTransactionFxRate));
 	});
 
-	beforeEach(async () => {
+	beforeEach(() => {
 		today = dateInAppTimeZone(new Date());
-		await fxRates.clear();
 	});
 
 	/** A verified owner without a reporting currency, with one connection holding accounts in these currencies. */
@@ -256,56 +252,26 @@ describe('Reporting currency', () => {
 		await agent.put(ROUTE).send({currency: 'CHF'}).expect(200);
 	});
 
-	it.each([
-		['the ECB no longer publishes', 'BGN', () => Promise.resolve()],
-		[
-			'whose rates stopped while others went on, until they resume',
-			'GBP',
-			async () => {
-				await fxRates.save([
-					{currency: 'GBP', rateDate: addDays(today, -30), rateToEur: '0.85', provider: 'ECB'},
-					{currency: 'USD', rateDate: addDays(today, -1), rateToEur: '1.1', provider: 'ECB'},
-				]);
-			},
-		],
-	])('asks again for a chosen currency %s, and refuses it', async (_case, currency, setUpRates) => {
+	it('asks again for a chosen currency the ECB no longer publishes, and refuses it', async () => {
 		const {owner, agent, bankAccounts} = await ownerWithAccounts('EUR', 'USD');
-		await accounts.update({id: owner.id}, {baseCurrency: currency, baseCurrencyState: 'CONFIRMED'});
+		await accounts.update({id: owner.id}, {baseCurrency: 'BGN', baseCurrencyState: 'CONFIRMED'});
 		const usdAccount = bankAccounts.find((bankAccount) => bankAccount.currency === 'USD')!;
 		await fixtures.createTransactions(usdAccount, booked(3, 2, {currency: 'USD'}));
-		await setUpRates();
 
 		const asked = await read(agent);
 		expect(asked).toMatchObject({
-			currency,
+			currency: 'BGN',
 			confirmed: false,
 			setupRequired: true,
 			currencyUnavailable: true,
 			suggestion: 'USD',
 		});
-		expect(asked.options).not.toContain(currency);
-		const response = await agent.put(ROUTE).send({currency}).expect(400);
+		expect(asked.options).not.toContain('BGN');
+		const response = await agent.put(ROUTE).send({currency: 'BGN'}).expect(400);
 		expect(response.body.message).toBe(REPORTING_CURRENCY_UNSUPPORTED);
 
-		if (currency === 'GBP') {
-			// Once its rates come again, the choice holds without the owner doing anything.
-			await fxRates.save({currency, rateDate: addDays(today, -1), rateToEur: '0.85', provider: 'ECB'});
-			expect(await read(agent)).toMatchObject({currency, confirmed: true, setupRequired: false});
-		}
 		await agent.put(ROUTE).send({currency: 'EUR'}).expect(200);
 		expect(await read(agent)).toMatchObject({currency: 'EUR', setupRequired: false, currencyUnavailable: false});
-	});
-
-	it('keeps a chosen currency whose rates fall behind while no other currency gets newer ones', async () => {
-		const {owner, agent} = await ownerWithAccounts('EUR', 'GBP');
-		await accounts.update({id: owner.id}, {baseCurrency: 'GBP', baseCurrencyState: 'CONFIRMED'});
-		// As when the ECB can't be reached: every stored rate is equally old.
-		await fxRates.save([
-			{currency: 'GBP', rateDate: addDays(today, -30), rateToEur: '0.85', provider: 'ECB'},
-			{currency: 'USD', rateDate: addDays(today, -30), rateToEur: '1.1', provider: 'ECB'},
-		]);
-
-		expect(await read(agent)).toMatchObject({currency: 'GBP', setupRequired: false, currencyUnavailable: false});
 	});
 
 	it.each([

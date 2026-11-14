@@ -84,7 +84,7 @@ function SetupCard({settings, className}: {settings: ReportingCurrency; classNam
         </h2>
         <p className='text-sm text-muted-foreground'>
           {settings.currencyUnavailable && settings.currency
-            ? `The European Central Bank no longer publishes ${settings.currency} exchange rates, so newer amounts can't be added up in ${settings.currency}. Choose another currency for totals; each account and transaction keeps its own.`
+            ? `Tempo can't convert amounts into ${settings.currency}, because the European Central Bank doesn't publish its exchange rates. Choose another currency for totals; each account and transaction keeps its own.`
             : `Your accounts are in ${codeList(settings.connectedCurrencies)}. Totals and charts add them up in one currency; each account and transaction keeps its own.`}
         </p>
       </div>

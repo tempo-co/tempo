@@ -9,17 +9,10 @@ import {REPORTING_CURRENCY_UNSUPPORTED} from '../api/constants/banking-messages.
 import {addDays, safeErrorName} from '../banking.utils';
 import {lockReportingCurrencyForChange} from '../reporting-currency';
 import {BankTransactionAmountConversionQueueService} from './bank-transaction-amount-conversion.queue.service';
-import {MAX_ECB_PUBLICATION_GAP_DAYS} from './bank-transaction-amount-conversion.utils';
 import {SQL_INTERNAL} from './bank-transaction-filters';
 
 /** How far back the suggestion counts transactions. A starting point, not a measured optimum. */
 export const SUGGESTION_WINDOW_DAYS = 90;
-
-/**
- * A currency whose newest stored rate is this many days older than the newest rate of any currency has stopped being
- * published: twice the longest gap between ECB publications ({@link MAX_ECB_PUBLICATION_GAP_DAYS}).
- */
-export const RATES_STOPPED_AFTER_DAYS = 2 * MAX_ECB_PUBLICATION_GAP_DAYS;
 
 const SUPPORTED: ReadonlySet<string> = new Set(REPORTING_CURRENCIES);
 const CHOSEN_STATES: ReadonlySet<BaseCurrencyState | null> = new Set(['CONFIRMED', 'PRESET']);
@@ -39,16 +32,6 @@ const SUGGESTION_SQL = `
 	ORDER BY "count" DESC, "transaction"."currency"
 	LIMIT 2`;
 
-/** The newest stored rate of a currency (`$1`), and the newest of any currency when that one is older than `$2`. */
-const NEWEST_RATES_SQL = `
-	WITH own AS (SELECT MAX("rateDate") AS "rateDate" FROM "bank_transaction_fx_rates" WHERE "currency" = $1)
-	SELECT
-		to_char(own."rateDate", 'YYYY-MM-DD') AS "own",
-		CASE WHEN own."rateDate" < $2::date
-			THEN (SELECT to_char(MAX("rateDate"), 'YYYY-MM-DD') FROM "bank_transaction_fx_rates")
-		END AS "newest"
-	FROM own`;
-
 /**
  * The owner's reporting currency: the one currency every combined total is in.
  *
@@ -58,7 +41,7 @@ const NEWEST_RATES_SQL = `
  *   nothing is guessed: an automatic currency stays meanwhile, and without one, the currency most recent transactions
  *   are in is only suggested.
  * - A chosen currency (`CONFIRMED`, or `PRESET` from before owners could choose) never changes by itself. Once Tempo
- *   can no longer convert into the current currency (see {@link convertsInto}), the owner is asked again.
+ *   can no longer convert into the current currency (it left {@link REPORTING_CURRENCIES}), the owner is asked again.
  *
  * Changing it clears every converted amount in the same transaction and lets the conversion job convert them again.
  */
@@ -76,8 +59,7 @@ export class ReportingCurrencyService {
 		const account = await manager.getRepository(Account).findOneByOrFail({id: ownerId});
 		const connectedCurrencies = await findConnectedCurrencies(manager, ownerId);
 		const state = stateOf(account);
-		const currencyUnavailable =
-			account.baseCurrency !== null && !(await convertsInto(manager, account.baseCurrency, now));
+		const currencyUnavailable = account.baseCurrency !== null && !SUPPORTED.has(account.baseCurrency);
 		const setupRequired = state === 'SETUP_PENDING' || currencyUnavailable;
 		const suggestion =
 			setupRequired && (account.baseCurrency === null || currencyUnavailable)
@@ -106,7 +88,7 @@ export class ReportingCurrencyService {
 
 	/**
 	 * Saves the owner's choice. Choosing the current currency only confirms it; another one is converted to from
-	 * scratch. A currency Tempo can't convert into (see {@link convertsInto}) is refused, also the current one.
+	 * scratch. A currency outside {@link REPORTING_CURRENCIES} is refused, also the current one.
 	 */
 	async choose(ownerId: Account['id'], currency: string): Promise<ReportingCurrency> {
 		const revision = await this.dataSource.transaction(async (manager) => {
@@ -114,7 +96,7 @@ export class ReportingCurrencyService {
 			const account = await manager
 				.getRepository(Account)
 				.findOneOrFail({where: {id: ownerId}, lock: {mode: 'pessimistic_write'}});
-			if (!(await convertsInto(manager, currency))) throw new BadRequestException(REPORTING_CURRENCY_UNSUPPORTED);
+			if (!SUPPORTED.has(currency)) throw new BadRequestException(REPORTING_CURRENCY_UNSUPPORTED);
 			if (currency === account.baseCurrency) {
 				await manager.getRepository(Account).update({id: ownerId}, {baseCurrencyState: 'CONFIRMED'});
 				return null;
@@ -196,21 +178,6 @@ export class ReportingCurrencyService {
 			this.logger.warn(`Amount conversion enqueue failed: ${safeErrorName(error)}`);
 		}
 	}
-}
-
-/**
- * Whether amounts can still be converted into a currency: EUR, or one the ECB publishes. That is one of
- * {@link REPORTING_CURRENCIES}, unless its stored rates stopped while others' went on, which catches a currency the ECB
- * stops publishing before that list knows. A currency with no stored rate yet counts as published.
- */
-async function convertsInto(manager: EntityManager, currency: string, now = new Date()): Promise<boolean> {
-	if (currency === 'EUR') return true;
-	if (!SUPPORTED.has(currency)) return false;
-	const [{own, newest}] = (await manager.query(NEWEST_RATES_SQL, [
-		currency,
-		addDays(dateInAppTimeZone(now), -RATES_STOPPED_AFTER_DAYS),
-	])) as Array<{own: string | null; newest: string | null}>;
-	return own === null || newest === null || own >= addDays(newest, -RATES_STOPPED_AFTER_DAYS);
 }
 
 /** A currency stored without a state was set before owners could choose one (`PRESET`). */

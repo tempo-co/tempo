@@ -116,5 +116,5 @@ function parseCsv(text) {
 	}
 	if (quoted) throw new Error('ECB reply ends inside a quoted field');
 	if (field !== '' || record.length > 0) endRecord();
-	return records.filter((row) => row.length > 1);
+	return records.filter((row) => row.length > 1 || row[0] !== '');
 }
