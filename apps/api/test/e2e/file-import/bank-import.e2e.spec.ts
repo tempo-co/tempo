@@ -78,6 +78,15 @@ const ING_CSV = readFileSync(join(FIXTURES, 'ing-synthetic.csv'));
 // One account's 10 rows in CAMT.053 and in an MT940 export that numbers the same payments in another scheme.
 const CROSS_NUMBERING_CAMT = readFileSync(join(FIXTURES, 'cross-numbering-camt-synthetic.xml'));
 const CROSS_NUMBERING_MT940 = readFileSync(join(FIXTURES, 'cross-numbering-mt940-synthetic.sta'));
+// References that name no payment, on EXAMPLE_IBAN: CAMT.053 `NONREF`, and an MT940 whose bank reference is a
+// transaction-type code, repeated within the file and reused for April's rent.
+const NONREF_CAMT = readFileSync(join(FIXTURES, 'nonref-camt-synthetic.xml'));
+const TYPE_CODE_MT940 = readFileSync(join(FIXTURES, 'type-code-reference-mt940-synthetic.sta'));
+// Statements naming their account by bank code and account number, no IBAN: an OFX of 25 October rows and one of 6
+// other rows (BANKID 20041, BRANCHID 01005, ACCTID 0500013M026), and an MT940 of BLZ 37040044, Konto 0532013000.
+const BANK_CODE_OFX = readFileSync(join(FIXTURES, 'bank-code-account-ofx-synthetic.ofx'));
+const BANK_CODE_OTHER_ROWS_OFX = readFileSync(join(FIXTURES, 'bank-code-account-other-rows-ofx-synthetic.ofx'));
+const BLZ_MT940 = readFileSync(join(FIXTURES, 'blz-account-mt940-synthetic.sta'));
 // Enable Banking's identification hash of EXAMPLE_IBAN in EUR, in the shape it uses for IBAN accounts.
 const EXAMPLE_IBAN_HASH = [
 	Buffer.from(
@@ -1095,34 +1104,9 @@ describe('Bank imports', () => {
 		await fixtures.createTransactions(deAccount, [
 			{bookingDate: '2026-10-05', valueDate: '2026-10-05', amount: '-10.00', creditDebitIndicator: 'DBIT'},
 		]);
-		const ofx = (rows: ReadonlyArray<{day: string; amount: string}>) =>
-			Buffer.from(
-				[
-					'OFXHEADER:100',
-					'DATA:OFXSGML',
-					'VERSION:102',
-					'SECURITY:NONE',
-					'ENCODING:USASCII',
-					'CHARSET:1252',
-					'COMPRESSION:NONE',
-					'OLDFILEUID:NONE',
-					'NEWFILEUID:NONE',
-					'',
-					'<OFX><BANKMSGSRSV1><STMTTRNRS><TRNUID>1<STATUS><CODE>0<SEVERITY>INFO</STATUS><STMTRS><CURDEF>EUR',
-					'<BANKACCTFROM><BANKID>20041<BRANCHID>01005<ACCTID>0500013M026<ACCTTYPE>CHECKING</BANKACCTFROM>',
-					'<BANKTRANLIST><DTSTART>20261001<DTEND>20261025',
-					...rows.map(
-						({day, amount}, index) =>
-							`<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>${day.replaceAll('-', '')}<TRNAMT>${amount}` +
-							`<FITID>FIT${index}<NAME>Example Shop ${index}</STMTTRN>`,
-					),
-					'</BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>',
-					'',
-				].join('\r\n'),
-			);
 
 		// The OFX statement's own numbering never meets sync's, so its rows match by date.
-		const imported = await drop(agent, [ofx(october)]).expect(201);
+		const imported = await drop(agent, [BANK_CODE_OFX]).expect(201);
 
 		expect(imported.body).toMatchObject({
 			format: 'ofx',
@@ -1135,22 +1119,7 @@ describe('Bank imports', () => {
 		expect(await fileConnection(owner)).toBeNull();
 
 		// An MT940 statement naming its account by BLZ and Kontonummer goes to the account of that IBAN.
-		const mt940 = Buffer.from(
-			[
-				':20:EXAMPLE-1',
-				':25:37040044/0532013000',
-				':28C:1/1',
-				':60F:C261005EUR100,00',
-				':61:2610051005D10,00NMSCNONREF//NONREF',
-				':86:Example Shop',
-				':61:2610061006D12,00NMSCNONREF//NONREF',
-				':86:Example Shop',
-				':62F:C261006EUR78,00',
-				'-',
-				'',
-			].join('\r\n'),
-		);
-		expect((await drop(agent, [mt940]).expect(201)).body).toMatchObject({
+		expect((await drop(agent, [BLZ_MT940]).expect(201)).body).toMatchObject({
 			format: 'mt940',
 			rowsAdded: 1,
 			rowsMatchedByDate: 1,
@@ -1159,8 +1128,7 @@ describe('Bank imports', () => {
 		expect(await fileConnection(owner)).toBeNull();
 
 		// Rows the account does not hold within its dates: the owner is asked, and `new` keeps them apart.
-		const unstored = october.slice(0, 6).map(({day}, index) => ({day, amount: `-${101 + index}.00`}));
-		const refused = await drop(agent, [ofx(unstored)]).expect(409);
+		const refused = await drop(agent, [BANK_CODE_OTHER_ROWS_OFX]).expect(409);
 		expect(refused.body).toMatchObject({
 			code: 'target_account_unconfirmed',
 			accountQuestions: [
@@ -1172,14 +1140,14 @@ describe('Bank imports', () => {
 				},
 			],
 		});
-		const apart = await drop(agent, [ofx(unstored)])
+		const apart = await drop(agent, [BANK_CODE_OTHER_ROWS_OFX])
 			.field('accountChoices', JSON.stringify({'Example Bank FR:EUR': 'new'}))
 			.expect(201);
 		expect(apart.body).toMatchObject({
 			rowsAdded: 6,
 			accounts: [{name: '20041 01005 0500013M026', currency: 'EUR', created: true}],
 		});
-		expect((await drop(agent, [ofx(unstored)]).expect(201)).body).toMatchObject({
+		expect((await drop(agent, [BANK_CODE_OTHER_ROWS_OFX]).expect(201)).body).toMatchObject({
 			rowsAdded: 0,
 			rowsAlreadyPresent: 6,
 			accounts: [{id: apart.body.accounts[0].id, created: false}],
@@ -2099,20 +2067,7 @@ describe('Bank imports', () => {
 		// within the file neither match nor conflict, so those rows match sync's by date; April's rent is a
 		// payment of its own, as its reference names March's only from more than three days away.
 		await synced({amount: '-1200.00', bookingDate: '2026-03-26', entryReference: '6091 BGINB'});
-		const untrusted = await drop(agent, [
-			Buffer.from(
-				camt053([
-					{
-						entries: [
-							entry('20.00', '2026-03-11', 'NONREF'),
-							entry('17.00', '2026-03-12', '6000 IT-A06'),
-							entry('7.00', '2026-03-13', '6000 IT-A06'),
-							entry('1200.00', '2026-04-27', '6091 BGINB'),
-						],
-					},
-				]),
-			),
-		]).expect(201);
+		const untrusted = await drop(agent, [NONREF_CAMT, TYPE_CODE_MT940]).expect(201);
 		expect(untrusted.body).toMatchObject({
 			rowsAdded: 1,
 			rowsAlreadyPresent: 3,
