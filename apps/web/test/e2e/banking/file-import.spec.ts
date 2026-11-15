@@ -840,8 +840,11 @@ test.describe('statement file import on Connections', () => {
       /^bunq\s*CSV$/,
       /^ING\s*CSV$/,
       /^Knab\s*CSV$/,
-      /^Rabobank\s*CSV$/,
+      /^Rabobank\s*CSV and credit card CSV$/,
+      /^RegioBank\s*CSV$/,
       /^Revolut\s*CSV and Excel$/,
+      /^SNS\s*CSV$/,
+      /^Triodos Bank\s*CSV$/,
     ]);
     // Closing the list goes back to choosing files, where it was opened.
     await page.keyboard.press('Escape');
