@@ -19,7 +19,7 @@ import {MerchantDetail} from '@/features/merchants/components/merchant-detail';
 import {MerchantsOverview} from '@/features/merchants/components/merchants-overview';
 import {HttpError} from '@/utils/api';
 
-/** Merchant spending over Home: the ranking and every merchant, or one merchant's details. */
+/** Merchant spending over any page: the ranking and every merchant, or one merchant's details. */
 export function MerchantsDialog({
   open,
   onOpenChange,

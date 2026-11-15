@@ -197,7 +197,7 @@ for (const width of [320, 390, 1440]) {
       await expect(fold.getByRole('link')).toHaveCount(3);
       await expect(fold.getByRole('link', {name: 'All payments', exact: true})).toHaveAttribute(
         'href',
-        `/?recurring=open&series=${series.key}`,
+        `/bank-transactions?recurring=open&series=${series.key}`,
       );
       const after = await boxOf(category);
       expect(after.x).toBe(before.x);
