@@ -1454,6 +1454,16 @@ describe('Bank imports', () => {
 		});
 	});
 
+	it('lists a Revolut day whose two rows cancel out newest first, as Revolut lists its rows oldest first', async () => {
+		const {agent} = await createOwner();
+		const file = readFileSync(join(FIXTURES, 'revolut-one-day-cancelling-synthetic.csv'));
+
+		const response = await drop(agent, [file]).expect(201);
+
+		expect(response.body).toMatchObject({format: 'revolutCsv', rowsAdded: 2});
+		expect(await listed(agent, 'amount')).toEqual(['-10.00000000', '10.00000000']);
+	});
+
 	it('imports a bank CSV export and an OFX statement, recording the format and the layout of each', async () => {
 		const {owner, agent} = await createOwner();
 

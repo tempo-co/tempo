@@ -1,4 +1,8 @@
-import {NormalizedRow, NormalizedStatement, StatementBalance} from './parsers/parse-result';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+
+import {parseFile} from './parsers/parse-file';
+import {NormalizedRow, NormalizedStatement, StatementBalance, StatementFormat} from './parsers/parse-result';
 import {gapsOutsideCoverage, joinStatements, listsOldestFirst} from './statement-chain';
 
 const row = (bookingDate: string, amount: string, bankReference: string | null = null): NormalizedRow => ({
@@ -25,8 +29,9 @@ const statement = (
 	rows: NormalizedRow[],
 	openingBalance: StatementBalance | null = null,
 	closingBalance: StatementBalance | null = null,
+	format: StatementFormat = 'camt053',
 ): NormalizedStatement => ({
-	format: 'camt053',
+	format,
 	layout: null,
 	accountIban: 'NL91ABNA0417164300',
 	accountOtherId: null,
@@ -276,6 +281,29 @@ describe('listsOldestFirst', () => {
 	])('reads $name as oldest first: $expected', ({rows, expected}) => {
 		expect(listsOldestFirst(rows)).toBe(expected);
 	});
+
+	it.each([
+		{name: 'one day without balances', rows: [row('2026-03-02', '-1.00'), row('2026-03-02', '-2.00')]},
+		{
+			name: 'one day of a payment and its refund',
+			rows: [withBalance('2026-03-02', '10.00', '100.00'), withBalance('2026-03-02', '-10.00', '90.00')],
+		},
+	])('leaves $name to the order the format is known to list in', ({rows}) => {
+		expect(listsOldestFirst(rows, true)).toBe(true);
+		expect(listsOldestFirst(rows, false)).toBe(false);
+	});
+
+	it('lets dates and balances outweigh the order the format is known to list in', () => {
+		const newestFirst = [withBalance('2026-03-02', '5.00', '104.00'), withBalance('2026-03-02', '-1.00', '99.00')];
+		expect(listsOldestFirst(newestFirst, true)).toBe(false);
+		expect(listsOldestFirst([row('2026-03-03', '-1.00'), row('2026-03-02', '-2.00')], true)).toBe(false);
+		// Dates that fall decide before balances that follow the rows, and both before the format.
+		const datesAgainstBalances = [
+			withBalance('2026-03-03', '-1.00', '99.00'),
+			withBalance('2026-03-02', '-2.00', '97.00'),
+		];
+		expect(listsOldestFirst(datesAgainstBalances, true)).toBe(false);
+	});
 });
 
 describe('joinStatements newest-first listing', () => {
@@ -303,5 +331,30 @@ describe('joinStatements newest-first listing', () => {
 			statement(rows.slice(2), balance('2026-03-02', '97.00'), balance('2026-03-02', '90.00')),
 		]);
 		expect(joined.newestFirst).toEqual(rows.toReversed());
+	});
+
+	it.each(['revolutCsv', 'revolutXlsx', 'mt940', 'abnAmroTxt'] as const)(
+		'turns around a %s statement whose dates and balances leave its order open',
+		(format) => {
+			const rows = [row('2026-03-02', '10.00'), row('2026-03-02', '-10.00')];
+			expect(joinStatements([statement(rows, null, null, format)]).newestFirst).toEqual(rows.toReversed());
+		},
+	);
+
+	it.each(['camt053', 'ofx', 'csv'] as const)(
+		'keeps the order of a %s statement whose rows leave it open',
+		(format) => {
+			const rows = [row('2026-03-02', '10.00'), row('2026-03-02', '-10.00')];
+			expect(joinStatements([statement(rows, null, null, format)]).newestFirst).toEqual(rows);
+		},
+	);
+
+	it('lists a Revolut day of two rows that cancel out newest first', () => {
+		const file = readFileSync(
+			join(__dirname, '../../../../test/fixtures/file-import/revolut-one-day-cancelling-synthetic.csv'),
+		);
+		const [parsed] = parseFile(file).statements;
+		expect(parsed.format).toBe('revolutCsv');
+		expect(joinStatements([parsed]).newestFirst.map(({amount}) => amount)).toEqual(['-10.00', '10.00']);
 	});
 });
