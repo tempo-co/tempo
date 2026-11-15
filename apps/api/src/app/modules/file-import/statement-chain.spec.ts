@@ -137,6 +137,24 @@ describe('joinStatements', () => {
 		expect(joined.closingBalance).toEqual(balance('2026-10-09', '-1140.00'));
 	});
 
+	it('names a gap between statements of one day that do not follow on and share no rows', () => {
+		const joined = joinStatements([
+			statement(
+				[row('2026-10-05', '-10.00', 'R1')],
+				balance('2026-10-05', '100.00'),
+				balance('2026-10-05', '90.00'),
+			),
+			statement(
+				[row('2026-10-05', '-20.00', 'R3')],
+				balance('2026-10-05', '85.00'),
+				balance('2026-10-05', '65.00'),
+			),
+		]);
+
+		expect(joined.rows).toHaveLength(2);
+		expect(joined.gaps).toEqual([{from: '2026-10-05', to: '2026-10-05', amount: '-5.00'}]);
+	});
+
 	it('names no gap between overlapping statements or statements without balances', () => {
 		expect(
 			joinStatements([

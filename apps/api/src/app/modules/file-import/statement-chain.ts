@@ -29,46 +29,44 @@ export type JoinedStatements = {
  * after the ones before it. A statement that opens at the previous one's closing balance follows on from it and is
  * taken whole, even where its first day is the other's last. Otherwise each of its rows runs the duplicate ladder
  * against the earlier statements' rows of the same day, and the ones it matches are left out. Rows of other days,
- * and look-alikes within one statement, are always kept. A statement that neither follows on nor overlaps the one before
- * it, where both state the balances between them, is a gap.
+ * and look-alikes within one statement, are always kept. A statement that neither follows on from the one before it
+ * nor repeats any earlier row, where both state the balances between them, is a gap.
  */
 export function joinStatements(statements: readonly NormalizedStatement[]): JoinedStatements {
 	const rows: NormalizedRow[] = [];
 	const repeated: RepeatedRows = {reference: 0, balance: 0, date: 0};
 	const gaps: StatementGap[] = [];
 	let closingBalance: StatementBalance | null = null;
-	let previous: {statement: NormalizedStatement; span: {first: string; last: string} | null} | null = null;
+	let previous: NormalizedStatement | null = null;
 
 	for (const statement of statements) {
-		const span = spanOf(statement.rows);
 		const followsOn =
-			previous !== null &&
-			previous.statement.closingBalance !== null &&
+			previous?.closingBalance != null &&
 			statement.openingBalance !== null &&
-			sameAmount(previous.statement.closingBalance.amount, statement.openingBalance.amount);
+			sameAmount(previous.closingBalance.amount, statement.openingBalance.amount);
 
 		const kept = followsOn ? statement.rows : withoutRepeated(statement.rows, rows, repeated);
 		rows.push(...kept);
 
-		if (previous && !followsOn && previous.statement.closingBalance && statement.openingBalance) {
-			const overlaps = previous.span !== null && span !== null && span.first <= previous.span.last;
-			if (!overlaps) {
-				const from = previous.statement.closingBalance.date;
-				gaps.push({
-					from,
-					to: statement.openingBalance.date > from ? statement.openingBalance.date : from,
-					amount: difference(statement.openingBalance.amount, previous.statement.closingBalance.amount),
-				});
-			}
+		// A statement that repeats rows of an earlier one overlaps it, so it cannot open where the previous one closed.
+		const overlaps = kept.length < statement.rows.length;
+		if (previous?.closingBalance && statement.openingBalance && !followsOn && !overlaps) {
+			const from = previous.closingBalance.date;
+			gaps.push({
+				from,
+				to: statement.openingBalance.date > from ? statement.openingBalance.date : from,
+				amount: difference(statement.openingBalance.amount, previous.closingBalance.amount),
+			});
 		}
 
 		if (statement.closingBalance) {
-			const date = span && span.last > statement.closingBalance.date ? span.last : statement.closingBalance.date;
+			const last = lastDay(statement.rows);
+			const date = last && last > statement.closingBalance.date ? last : statement.closingBalance.date;
 			if (!closingBalance || date >= closingBalance.date) {
 				closingBalance = {date, amount: statement.closingBalance.amount};
 			}
 		}
-		previous = {statement, span};
+		previous = statement;
 	}
 	return {rows, repeated, gaps, closingBalance};
 }
@@ -117,15 +115,12 @@ function toMatchRow(row: NormalizedRow) {
 	};
 }
 
-/** The first and last day of the rows (booking date, else value date); null for a statement without rows. */
-function spanOf(rows: readonly NormalizedRow[]): {first: string; last: string} | null {
-	const days = rows.flatMap((row) => {
+/** The last day of the rows (booking date, else value date); null for a statement without rows. */
+function lastDay(rows: readonly NormalizedRow[]): string | null {
+	return rows.reduce<string | null>((last, row) => {
 		const day = matchDay(row);
-		return day ? [day] : [];
-	});
-	if (days.length === 0) return null;
-	days.sort();
-	return {first: days[0], last: days.at(-1)!};
+		return day && (!last || day > last) ? day : last;
+	}, null);
 }
 
 function sameAmount(left: string, right: string): boolean {

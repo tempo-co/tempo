@@ -126,7 +126,7 @@ function Counts({counts, muted}: {counts: Count[]; muted?: boolean}) {
 
 /**
  * Where a statement of the drop does not open at the balance the one before it closed at: the days between them and
- * what the missing transactions add up to, under the account's name when the drop went to several.
+ * what the missing transactions add up to, with the account's name when the drop went to several accounts.
  */
 function StatementGaps({
   summary,
@@ -137,7 +137,7 @@ function StatementGaps({
 }) {
   const gaps = summary.statementGaps;
   if (gaps.length === 0) return null;
-  const named = new Set(gaps.map(({bankAccountId}) => bankAccountId)).size > 1;
+  const named = summary.accounts.length > 1;
   return (
     <Alert variant='warning' data-testid='bank-import-statement-gaps'>
       <FileWarning aria-hidden='true' />

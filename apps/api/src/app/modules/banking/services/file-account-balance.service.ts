@@ -94,6 +94,42 @@ export class FileAccountBalanceService {
 		return fields;
 	}
 
+	/**
+	 * The imported-files accounts whose balance may anchor on a closing balance an import recorded under the
+	 * connection states; removing the connection removes those imports, so the caller recomputes them after
+	 * (`recomputeAll`), in the same transaction.
+	 */
+	async findAnchoredByConnection(
+		manager: EntityManager,
+		ownerId: Account['id'],
+		connectionId: BankConnection['id'],
+	): Promise<BankAccount['id'][]> {
+		const rows: Array<{bankAccountId: string}> = await manager.query(
+			`SELECT DISTINCT closing->>'bankAccountId' AS "bankAccountId"
+			FROM "bank_imports" bank_import
+			CROSS JOIN LATERAL jsonb_array_elements(bank_import."closingBalances") closing
+			WHERE bank_import."bankConnectionId" = $1 AND bank_import."accountId" = $2`,
+			[connectionId, ownerId],
+		);
+		return rows.map(({bankAccountId}) => bankAccountId);
+	}
+
+	/** Recomputes the given imported-files accounts under the owner's locked imported-files connection. */
+	async recomputeAll(
+		manager: EntityManager,
+		ownerId: Account['id'],
+		bankAccountIds: readonly BankAccount['id'][],
+	): Promise<void> {
+		if (bankAccountIds.length === 0) return;
+		// Locked as an import and an undo lock it, so its rows stay as read.
+		const connection = await manager.getRepository(BankConnection).findOne({
+			where: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
+			lock: {mode: 'pessimistic_write'},
+		});
+		if (!connection) return;
+		for (const id of bankAccountIds) await this.recompute(manager, ownerId, id);
+	}
+
 	/** Where each account's balance comes from, for accounts the caller already scoped to their owner. */
 	async findBalanceSources(
 		manager: EntityManager,

@@ -1602,6 +1602,38 @@ describe('Bank imports', () => {
 		expect(refused.body).toMatchObject({code: 'multiple_bank_connections', file: null});
 		expect(await imports.countBy({accountId: owner.id})).toBe(1);
 		expect(await transactions.countBy({bankAccountId: synced.id})).toBe(0);
+
+		// Removing the synced connection takes the record, and with it the balance its statements gave the
+		// imported-files account, whose rows stay.
+		const other = await createOwner();
+		const otherConnection = await fixtures.createConnection(other.owner);
+		await fixtures.createBankAccount(otherConnection, {iban: EXAMPLE_IBAN});
+		const stated = Buffer.from(
+			camt053([
+				{
+					iban: OTHER_EXAMPLE_IBAN,
+					servicerBic: 'EXAMPLEXX',
+					opening: '100.00',
+					closing: '70.00',
+					entries: [
+						{amount: '10.00', reference: 'OTHER-1', bookingDate: '2026-03-05'},
+						{amount: '20.00', reference: 'OTHER-2', bookingDate: '2026-03-06'},
+					],
+				},
+			]),
+		);
+		const recorded = await drop(other.agent, [STATEMENT_FILES[0], stated]).expect(201);
+		const fileAccountId = (recorded.body as BankImportSummary).accounts.find(({created}) => created)!.id;
+		expect(await balanceFields(fileAccountId)).toMatchObject({currentBalanceAmount: '70.00000000'});
+
+		await other.agent.delete(`/bank-connections/${otherConnection.id}`).send({confirmation: 'DELETE'}).expect(204);
+
+		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(2);
+		expect(await balanceFields(fileAccountId)).toEqual({
+			currentBalanceAmount: null,
+			currentBalanceType: null,
+			balanceUpdatedAt: null,
+		});
 	});
 
 	it('runs the duplicate ladder against a synced account, holds doubtful rows and undoes only what it added', async () => {
