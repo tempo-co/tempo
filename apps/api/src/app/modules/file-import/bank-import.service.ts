@@ -1503,6 +1503,8 @@ function askedBanks(accountRows: readonly AccountRows[]): Array<string | null> {
 			rows.bank ?? (rows.learnedBank && rows.byFormat.every(({learned}) => learned) ? rows.learnedBank : null),
 	);
 	const key = (index: number) => banks[index] && accountChoiceKey(banks[index], accountRows[index].currency);
+	// Such a statement is then refused without a question, and an earlier `new` answer is not looked up for it either:
+	// the owner drops its files one at a time.
 	return banks.map((bank, index) =>
 		accountRows[index].iban && accountRows.some((_, other) => other !== index && key(other) === key(index))
 			? null
