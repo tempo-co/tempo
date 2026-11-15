@@ -428,108 +428,186 @@ describe("an owner's saved layouts", () => {
 		]);
 	});
 
-	it('skip the rows a status or date column marks as not booked yet, and count them', () => {
+	it('skip the rows a status column marks as not booked yet, and count them', () => {
+		// Barclaycard's workbook: a payment not booked yet says vorgemerkt and has no second date.
+		const workbook = readFileSync(join(FIXTURES, 'barclaycard-pending-synthetic.xlsx'));
 		const layout: CsvLayout = {
-			...BALANCE,
-			recognize: {header: ['Date', 'Value date', 'Status', 'Description', 'Amount']},
-			delimiter: ';',
+			id: 'learned-card',
+			bank: 'Example Bank',
+			recognize: {
+				header: [
+					'Referenznummer',
+					'Buchungsdatum',
+					'Buchungsdatum',
+					'Betrag',
+					'Beschreibung',
+					'Typ',
+					'Status',
+					'Kartennummer',
+					'Originalbetrag',
+					'Mögliche Zahlpläne',
+					'Land',
+					'Karteninhaber',
+					'Kartennetzwerk',
+					'Kontaktlose Bezahlung',
+					'Details',
+				],
+			},
+			source: 'xlsx',
+			skipBefore: 4,
 			decimalMark: ',',
 			amountStyle: {thousandsSeparator: '.'},
 			dateFormat: 'DD.MM.YYYY',
 			currency: {fixed: 'EUR'},
+			bookingDate: 2,
+			transactionDate: 1,
+			amount: {kind: 'signed', column: 3},
+			counterpartyName: 4,
+			description: [14],
+		};
+		const read = (pendingColumn?: number) =>
+			readCsvLayout(workbook, [{...layout, ...(pendingColumn === undefined ? {} : {pendingColumn})}], {
+				owned: true,
+				today: '2026-11-13',
+			})?.statements.map(({entriesSkipped, rows}) => [entriesSkipped, rows.map(({amount}) => amount)]);
+
+		expect(read(6)).toEqual([[1, ['-12.50', '-41.25', '60.00']]]);
+		expect(refusal(workbook, [layout])).toEqual({code: 'layout_not_recognized', layout: 'learned-card'});
+	});
+
+	it('skip the rows a date column marks as not booked yet', () => {
+		const layout: CsvLayout = {
+			id: 'learned-pending',
+			bank: 'Example Bank',
+			recognize: {
+				header: ['Buchungstag', 'Wertstellung (Valuta)', 'Vorgang', 'Buchungstext', 'Umsatz in EUR', ''],
+			},
+			delimiter: ';',
+			quote: '"',
+			encoding: 'windows-1252',
+			skipBefore: 1,
+			decimalMark: ',',
+			amountStyle: {thousandsSeparator: '.'},
+			dateFormat: 'DD.MM.YYYY',
+			currency: {fixed: 'EUR'},
+			bookingDate: 0,
 			valueDate: 1,
 			amount: {kind: 'signed', column: 4},
 			description: [3],
+			pendingColumn: 0,
 		};
-		delete layout.balance;
-		const text = [
-			'Date;Value date;Status;Description;Amount',
-			'offen;--;Example;Example card payment;-41,25',
-			'05.10.2026;05.10.2026;Gebucht;Example Energy;-62,10',
-			'04.10.2026;04.10.2026;Vorgemerkt;Example Shop;-4,20',
-			'02.10.2026;02.10.2026;Gebucht;Example Employer;2.100,00',
-			'',
-		].join('\n');
-		const read = (column: number) =>
-			readCsvLayout(file(text), [{...layout, pendingColumn: column}], {owned: true, today: '2026-11-13'})
-				?.statements;
+		const text = fixture('comdirect-pending-synthetic.csv');
 
-		expect(refusal(text, [layout])).toEqual({code: 'layout_not_recognized', layout: layout.id});
-		expect(read(0)?.map(({entriesSkipped, rows}) => [entriesSkipped, rows.map(({amount}) => amount)])).toEqual([
-			[1, ['-62.10', '-4.20', '2100.00']],
-		]);
-		expect(refusal(text, [{...layout, pendingColumn: 2}])).toEqual({
+		expect(ROWS_OF(layout, text)?.[0].rows.map(([, amount]) => amount)).toEqual(['-62.10', '2100.00']);
+		// The same row read as booked is refused, and a pending row of another width is too.
+		const booked = {...layout};
+		delete booked.pendingColumn;
+		expect(refusal(text, [booked])).toEqual({code: 'layout_not_recognized', layout: 'learned-pending'});
+		expect(refusal(text.replace('"-41,25";', '"-41,25";"x";'), [layout])).toEqual({
 			code: 'layout_not_recognized',
-			layout: layout.id,
+			layout: 'learned-pending',
 		});
-		const booked = text.replace('offen;--;Example;', '06.10.2026;06.10.2026;Gebucht;');
-		expect(
-			readCsvLayout(file(booked), [{...layout, pendingColumn: 2}], {
-				owned: true,
-				today: '2026-11-13',
-			})?.statements.map(({entriesSkipped, rows}) => [entriesSkipped, rows.map(({amount}) => amount)]),
-		).toEqual([[1, ['-41.25', '-62.10', '2100.00']]]);
 	});
 
 	it("read the other party from the payer's columns on money in and the payee's on money out", () => {
+		// Oberbank: payer and payee each with a name and an account; the holder fills one side of every row.
 		const layout: CsvLayout = {
-			...BALANCE,
-			recognize: {header: ['Date', 'Amount', 'Payer', 'Payer IBAN', 'Payee', 'Payee IBAN', 'Description']},
+			id: 'learned-payer-payee',
+			bank: 'Example Bank',
+			recognize: {
+				header: [
+					'Buchungsdatum',
+					'Wertstellung',
+					'Betrag',
+					'Währung',
+					'Auftraggebername',
+					'Auftraggeber IBAN/Kto.Nr.',
+					'Auftraggeber BIC/BLZ',
+					'Empfängername',
+					'Empfänger IBAN/Kto.Nr.',
+					'Empfänger BIC/BLZ',
+					'Text',
+					'Verwendungszweck',
+				],
+			},
 			delimiter: ';',
-			amount: {kind: 'signed', column: 1},
-			counterpartyName: {moneyIn: 2, moneyOut: 4},
-			counterpartyIban: {moneyIn: 3, moneyOut: 5},
-			description: [6],
+			quote: '"',
+			encoding: 'windows-1252',
+			decimalMark: ',',
+			amountStyle: {thousandsSeparator: '.'},
+			dateFormat: 'DD.MM.YYYY',
+			currency: {column: 3},
+			bookingDate: 0,
+			valueDate: 1,
+			amount: {kind: 'signed', column: 2},
+			counterpartyName: {moneyIn: 4, moneyOut: 7},
+			counterpartyIban: {moneyIn: 5, moneyOut: 8},
+			description: [10, 11],
 		};
-		delete layout.balance;
-		const holder = 'Erika Example;DE89370400440532013000';
-		const text = [
-			'Date;Amount;Payer;Payer IBAN;Payee;Payee IBAN;Description',
-			`01/10/2026;2100.00;Example Employer;GB33BUKB20201555555555;${holder};Salary`,
-			`03/10/2026;-850.00;${holder};Example Landlord;NL91ABNA0417164300;Rent`,
-			`12/10/2026;-41.25;${holder};;;Example card payment`,
-			'',
-		].join('\n');
 
 		expect(
-			readCsvLayout(file(text), [layout], {owned: true, today: '2026-11-13'})?.statements[0].rows.map(
-				({amount, counterpartyName, counterpartyIban}) => [amount, counterpartyName, counterpartyIban],
-			),
+			readCsvLayout(file(fixture('oberbank-payer-payee-synthetic.csv')), [layout], {
+				owned: true,
+				today: '2026-11-13',
+			})?.statements[0].rows.map(({amount, counterpartyName, counterpartyIban}) => [
+				amount,
+				counterpartyName,
+				counterpartyIban,
+			]),
 		).toEqual([
-			['2100.00', 'Example Employer', 'GB33BUKB20201555555555'],
+			['2100.00', 'Example Employer GmbH', 'GB33BUKB20201555555555'],
 			['-850.00', 'Example Landlord', 'NL91ABNA0417164300'],
 			['-41.25', null, null],
 		]);
 	});
 
-	it('read an empty value date or transaction date as none, and refuse an empty booking date', () => {
+	it('read an empty value date as none, and refuse an empty booking date', () => {
+		// N26 leaves the value date of a card payment empty.
 		const layout: CsvLayout = {
-			...BALANCE,
-			recognize: {header: ['Date', 'Value date', 'Purchase date', 'Description', 'Amount']},
+			id: 'learned-value-dates',
+			bank: 'Example Bank',
+			recognize: {
+				header: [
+					'Booking Date',
+					'Value Date',
+					'Partner Name',
+					'Partner Iban',
+					'Type',
+					'Payment Reference',
+					'Account Name',
+					'Amount (EUR)',
+					'Original Amount',
+					'Original Currency',
+					'Exchange Rate',
+				],
+			},
+			delimiter: ',',
+			quote: '"',
+			encoding: 'utf-8',
+			decimalMark: '.',
+			dateFormat: 'YYYY-MM-DD',
+			currency: {fixed: 'EUR'},
+			bookingDate: 0,
 			valueDate: 1,
-			transactionDate: 2,
-			amount: {kind: 'signed', column: 4},
-			description: [3],
+			amount: {kind: 'signed', column: 7},
+			counterpartyName: 2,
+			counterpartyIban: 3,
+			description: [5],
 		};
-		delete layout.balance;
-		const text = [
-			'Date,Value date,Purchase date,Description,Amount',
-			'02/03/2026,02/03/2026,,Example,-4.50',
-			'03/03/2026,,01/03/2026,Example,-650.00',
-			'',
-		].join('\n');
+		const text = fixture('n26-empty-value-date-synthetic.csv');
 
 		expect(
 			readCsvLayout(file(text), [layout], {owned: true, today: '2026-11-13'})?.statements[0].rows.map(
-				({bookingDate, valueDate, transactionDate}) => [bookingDate, valueDate, transactionDate],
+				({bookingDate, valueDate}) => [bookingDate, valueDate],
 			),
 		).toEqual([
-			['2026-03-02', '2026-03-02', null],
-			['2026-03-03', null, '2026-03-01'],
+			['2026-10-01', '2026-10-01'],
+			['2026-10-02', null],
+			['2026-10-04', null],
 		]);
-		expect(refusal(text.replace('03/03/2026,,', ',,'), [layout])).toEqual({
+		expect(refusal(text.replace('2026-10-02,,', ',,'), [layout])).toEqual({
 			code: 'layout_not_recognized',
-			layout: layout.id,
+			layout: 'learned-value-dates',
 		});
 	});
 

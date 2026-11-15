@@ -207,18 +207,11 @@ describe('sampleTable', () => {
 	});
 
 	it("never sends a short export's names as written, however often one of them repeats", () => {
-		const text = [
-			'Date,Name,Amount,Description',
-			'2026-10-01,Corner Shop,-4.20,Example card',
-			'2026-10-02,Gym Club,-30.00,Example card',
-			'2026-10-03,Corner Shop,-3.10,Example card',
-			'2026-10-04,Jan Example,-25.00,Example transfer',
-			'',
-		].join('\n');
-		const sample = sampleTable(Buffer.from(text))!;
+		// A week of Starling card payments: a name written twice looks like a direction column.
+		const sample = sampleTable(fixture('starling-short-names-synthetic.csv'))!;
 
 		expect(sample.masked.rows.map((row) => row[1])).toEqual(['Aaaaaa Aaaa', 'Aaa Aaaa', 'Aaa Aaaaaaa']);
-		expect(JSON.stringify(sample.masked)).not.toMatch(/Corner|Gym|Jan|Example/);
+		expect(JSON.stringify(sample.masked)).not.toMatch(/Corner|Gym|Jan|Example|GROCERIES|CARD/);
 		expect(() => validateSampleOutput({ok: true, sample})).not.toThrow();
 	});
 
@@ -275,11 +268,11 @@ describe('sampleTable', () => {
 			),
 		).toMatchObject({rowCount: 4, skipAfter: 1, rowsBelow: 0});
 		// A last line cut short is counted, so a layout never skips the last row of a whole file.
-		expect(
-			sampleTable(
-				Buffer.from(text.replace(';extra', '').replace('2026-03-06;-3.00;EUR;Example', '2026-03-06;-3')),
-			),
-		).toMatchObject({rowCount: 4, skipAfter: 1, rowsBelow: 1});
+		expect(sampleTable(fixture('starling-cut-last-line-synthetic.csv'))).toMatchObject({
+			rowCount: 3,
+			skipAfter: 1,
+			rowsBelow: 1,
+		});
 	});
 
 	it('reads a comma file with quoted decimal-comma amounts with the quote that keeps them whole', () => {

@@ -370,13 +370,7 @@ describe('Bank import column mapper', () => {
 		{
 			// A layout learned from it would skip the last row of every whole file.
 			name: 'last line, cut short, looks',
-			lines: [
-				'Date,Amount,Account,Note',
-				'2026-03-02,-12.50,NL91ABNA0417164300,Example Shop',
-				'2026-03-03,-4.20,NL91ABNA0417164300,Example Cafe',
-				'2026-03-04,-1.00,NL91ABNA0417164300,Example Shop',
-				'2026-03-05,-2.00,NL91ABNA0417164300',
-			],
+			lines: readFileSync(join(FIXTURES, 'starling-cut-last-line-synthetic.csv'), 'utf8').trimEnd().split('\n'),
 		},
 	])('refuses to work out the columns of a file whose $name like rows, without a call', async ({lines}) => {
 		const {owner, agent} = await createOwner();

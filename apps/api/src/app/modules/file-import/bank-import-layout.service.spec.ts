@@ -1,9 +1,15 @@
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+
 import {MAX_SAVED_LAYOUTS, MAX_SAVED_LAYOUT_BYTES, buildLayout, mappingOf} from './bank-import-layout.service';
 import {LayoutAnswer, layoutAnswerSchema} from './mapper/layout-mapper.contract';
 import {validateCsvLayout} from './parsers/csv-layout';
 import {readCsvLayout} from './parsers/csv-layout-reader';
 import {sampleTable} from './parsers/table-sample';
 import {MAX_REQUEST_BYTES} from './runner/parse-runner.protocol';
+
+const FIXTURES = join(__dirname, '../../../../test/fixtures/file-import');
+const fixture = (name: string) => readFileSync(join(FIXTURES, name));
 
 describe('saved layout limits', () => {
 	it("keep an owner's every saved layout inside one request to the file reader", () => {
@@ -32,8 +38,8 @@ describe('buildLayout', () => {
 	};
 
 	/** The file's statements as the proposal previews them, with the layout the answer builds on it. */
-	function propose(text: string, answer: Partial<LayoutAnswer>) {
-		const bytes = Buffer.from(text);
+	function propose(file: string | Buffer, answer: Partial<LayoutAnswer>) {
+		const bytes = typeof file === 'string' ? Buffer.from(file) : file;
 		const sample = sampleTable(bytes)!;
 		const built = buildLayout(layoutAnswerSchema.parse({...ANSWER, ...answer}), sample, 'EUR')!;
 		const validation = validateCsvLayout(built.layout);
@@ -54,14 +60,16 @@ describe('buildLayout', () => {
 	const lines = (...rows: string[]) => [...rows, ''].join('\n');
 
 	it('leaves out an account column that holds no IBAN, so the file names no account and goes by bank and currency', () => {
-		const text = lines(
-			'Date,Description,Account,Amount',
-			"02/10/2026,Example Shop,'20-00-00 12345678,-4.20",
-			"03/10/2026,Example Employer,'20-00-00 12345678,2500.00",
-			"05/10/2026,Example Energy,'20-00-00 12345678,-60.00",
-		);
+		// Lloyds writes the sort code and the account number in two columns.
+		const file = fixture('lloyds-sort-code-synthetic.csv');
+		const answer: Partial<LayoutAnswer> = {
+			amount: {kind: 'debitCredit', moneyOutColumn: 5, moneyInColumn: 6},
+			balance: {column: 7, when: 'after'},
+			description: [4],
+			account: {column: 3},
+		};
 
-		const proposed = propose(text, {account: {column: 2}});
+		const proposed = propose(file, answer);
 
 		expect(proposed.layout.accountIban).toBeUndefined();
 		expect(proposed.statements).toEqual([
@@ -69,15 +77,16 @@ describe('buildLayout', () => {
 				accountIban: null,
 				bank: 'Proposed',
 				rows: [
-					['-4.20', null],
-					['2500.00', null],
-					['-60.00', null],
+					['-4.50', null],
+					['1500.00', null],
+					['-62.10', null],
+					['-23.00', null],
 				],
 			},
 		]);
 		// A column of IBANs is the account.
-		const ibans = text.replace(/'20-00-00 12345678/g, 'GB33BUKB20201555555555');
-		expect(propose(ibans, {account: {column: 2}}).statements).toEqual([
+		const ibans = Buffer.from(file.toString('utf8').replace(/12345678/g, 'GB33BUKB20201555555555'));
+		expect(propose(ibans, answer).statements).toEqual([
 			expect.objectContaining({accountIban: 'GB33BUKB20201555555555', bank: null}),
 		]);
 	});
@@ -114,68 +123,70 @@ describe('buildLayout', () => {
 		]);
 	});
 
-	it("names the other party from the payer's column on money in and the payee's on money out", () => {
-		const holder = 'Erika Example';
-		const text = lines(
-			'Date,Description,Payer,Amount,Payee,IBAN',
-			`03/10/2026,Example card,${holder},-4.20,Example Bakery,GB33BUKB20201555555555`,
-			`02/10/2026,Salary,Example Employer,2500.00,${holder},NL91ABNA0417164300`,
-			`01/10/2026,Energy,${holder},-60.00,Example Energy,GB33BUKB20201555555555`,
-			`30/09/2026,Garage,Example Tenant,50.00,${holder},NL91ABNA0417164300`,
-		);
+	it("names the other party from the payer's column on money in and the payee's on money out, below the account's line", () => {
+		// DKB: the holder fills one of the two name columns on every row; the IBAN column is the other party's.
+		const proposed = propose(fixture('dkb-payer-payee-synthetic.csv'), {
+			dateFormat: 'DD.MM.YY',
+			bookingDate: 0,
+			valueDate: 1,
+			amount: {kind: 'signed', column: 8},
+			decimalMark: ',',
+			thousandsSeparator: '.',
+			currency: {code: 'EUR'},
+			counterpartyName: {moneyIn: 3, moneyOut: 4},
+			counterpartyAccount: 7,
+			description: [5],
+			pending: 2,
+			account: {line: 0},
+		});
 
-		const proposed = propose(text, {counterpartyName: {moneyIn: 2, moneyOut: 4}, counterpartyAccount: 5});
-
-		expect(proposed.rows?.map(({amount, counterpartyName}) => [amount, counterpartyName])).toEqual([
-			['-4.20', 'Example Bakery'],
-			['2500.00', 'Example Employer'],
-			['-60.00', 'Example Energy'],
-			['50.00', 'Example Tenant'],
+		expect(proposed.statements?.map(({accountIban}) => accountIban)).toEqual(['DE89370400440532013000']);
+		expect(
+			proposed.rows?.map(({amount, counterpartyName, counterpartyIban}) => [
+				amount,
+				counterpartyName,
+				counterpartyIban,
+			]),
+		).toEqual([
+			['-60.00', 'Example Energy AG', 'NL91ABNA0417164300'],
+			['2500.00', 'Example Employer GmbH', 'GB33BUKB20201555555555'],
+			['50.00', 'Example Tenant', 'NL91ABNA0417164300'],
 		]);
 		expect(proposed.mapping.columns).toEqual(
 			expect.arrayContaining([
-				{field: 'counterparty', column: 3, header: 'Payer', onlyFor: 'moneyIn'},
-				{field: 'counterparty', column: 5, header: 'Payee', onlyFor: 'moneyOut'},
-				{field: 'counterpartyAccount', column: 6, header: 'IBAN'},
+				{field: 'counterparty', column: 4, header: 'Zahlungspflichtige*r', onlyFor: 'moneyIn'},
+				{field: 'counterparty', column: 5, header: 'Zahlungsempfänger*in', onlyFor: 'moneyOut'},
+				{field: 'counterpartyAccount', column: 8, header: 'IBAN'},
 			]),
 		);
 	});
 
 	it("dates a card statement's rows by settlement, and keeps the purchase date as the transaction date", () => {
-		const text = lines(
-			'Card,Purchase date,Settlement date,Description,Amount',
-			'1234,01/10/2026,03/10/2026,Example Shop,-4.20',
-			'1234,02/10/2026,03/10/2026,Example Cafe,-3.10',
-			'1234,04/10/2026,05/10/2026,Example Market,-41.25',
-		);
-
-		const proposed = propose(text, {
-			bookingDate: 2,
-			transactionDate: 1,
-			description: [3],
-			amount: {kind: 'signed', column: 4},
+		// KBC's card export: datum verrichting is the purchase, Datum verrekening the settlement.
+		const proposed = propose(fixture('kbc-creditcard-synthetic.csv'), {
+			bookingDate: 4,
+			transactionDate: 3,
+			amount: {kind: 'signed', column: 10},
+			decimalMark: ',',
+			currency: {column: 8},
+			counterpartyName: 12,
+			description: [],
 		});
 
 		expect(proposed.rows?.map(({bookingDate, transactionDate}) => [bookingDate, transactionDate])).toEqual([
 			['2026-10-03', '2026-10-01'],
 			['2026-10-03', '2026-10-02'],
-			['2026-10-05', '2026-10-04'],
+			['2026-10-06', '2026-10-04'],
 		]);
 		expect(proposed.mapping.columns.slice(0, 2)).toEqual([
-			{field: 'date', column: 3, header: 'Settlement date'},
-			{field: 'transactionDate', column: 2, header: 'Purchase date'},
+			{field: 'date', column: 5, header: 'Datum verrekening'},
+			{field: 'transactionDate', column: 4, header: 'datum verrichting'},
 		]);
 	});
 
 	it('skips the rows the answer names as not booked yet', () => {
-		const text = lines(
-			'Buchungstag;Wertstellung;Vorgang;Buchungstext;Umsatz in EUR',
-			'offen;--;Example;Example card payment;-41,25',
-			'05.10.2026;05.10.2026;Example;Example Energy;-62,10',
-			'02.10.2026;02.10.2026;Example;Example Employer;2.100,00',
-		);
-
-		const proposed = propose(text, {
+		// comdirect dates a card payment not booked yet offen, with -- as its value date.
+		const proposed = propose(fixture('comdirect-pending-synthetic.csv'), {
 			dateFormat: 'DD.MM.YYYY',
 			valueDate: 1,
 			amount: {kind: 'signed', column: 4},
