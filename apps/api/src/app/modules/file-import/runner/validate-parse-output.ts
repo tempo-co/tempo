@@ -31,7 +31,8 @@ const TEXT_LIMITS = {
 	bankTransactionSubCode: 64,
 	referenceNumber: 255,
 } as const;
-const MAX_ACCOUNT_ID_LENGTH = 34;
+/** CAMT's other id has at most 34 characters; OFX's bank, branch and account ids together at most 55. */
+const MAX_ACCOUNT_ID_LENGTH = 55;
 const MAX_SEQUENCE_NUMBER_LENGTH = 32;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]+/g;
 /** A masked cell: no letter but `a` and `A`, no digit but `9`. */
