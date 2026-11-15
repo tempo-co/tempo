@@ -488,6 +488,30 @@ describe('buildLayout', () => {
 		expect(proposed.rows?.map(({counterpartyName, description}) => [counterpartyName, description])).toEqual(rows);
 	});
 
+	it("refuses a file whose answer takes a source or target account column for the holder's account", () => {
+		// The holder's account moves between the two columns with the direction, so either holds several values.
+		const file = fixture('pekao-source-target-synthetic.csv');
+		for (const column of [4, 5]) {
+			const answer: Partial<LayoutAnswer> = {
+				dateFormat: 'DD.MM.YYYY',
+				valueDate: 1,
+				amount: {kind: 'signed', column: 7},
+				decimalMark: ',',
+				thousandsSeparator: ' ',
+				currency: {column: 8},
+				counterpartyName: 2,
+				description: [6],
+				account: {column},
+			};
+			const built = buildLayout(layoutAnswerSchema.parse({...ANSWER, ...answer}), sampleTable(file)!, 'EUR')!;
+			const validation = validateCsvLayout(built.layout);
+			if (!validation.ok) throw new Error(validation.error);
+
+			expect(validation.layout.oneAccountColumn).toBe(column);
+			expect(() => readCsvLayout(file, [validation.layout], {owned: true})).toThrow('layout_not_recognized');
+		}
+	});
+
 	it('reads dates with a two-digit year after the month name, and cannot read a headerless file with nothing to check', () => {
 		const shortYears = Buffer.from(
 			fixture('nationwide-month-names-synthetic.csv')
