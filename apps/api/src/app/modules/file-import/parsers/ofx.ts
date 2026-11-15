@@ -209,16 +209,16 @@ function parseStatement(statement: OfxElement, accountElement: 'BANKACCTFROM' | 
 }
 
 /**
- * The ledger balance as the statement's closing balance, when it is dated on or after every transaction's booking
- * day: one dated earlier may leave the later transactions out, and a missing balance is better than a wrong one.
+ * The ledger balance as the statement's closing balance, when it reads as an amount and is dated on or after every
+ * transaction's booking day: one dated earlier may leave the later transactions out, and a missing balance is better
+ * than a wrong one.
  */
 function ledgerBalance(ledger: OfxElement | null, rows: readonly NormalizedRow[]): StatementBalance | null {
 	const amountText = value(ledger, 'BALAMT');
 	const asOf = date(value(ledger, 'DTASOF'));
 	if (!amountText || !asOf) return null;
 	const amount = parseDecimal(amountText, '.') ?? parseDecimal(amountText, ',');
-	if (!amount) throw new ParseRefusal('parse_failed');
-	if (rows.some(({bookingDate}) => bookingDate !== null && bookingDate > asOf)) return null;
+	if (!amount || rows.some(({bookingDate}) => bookingDate !== null && bookingDate > asOf)) return null;
 	return {date: asOf, amount: formatUnits(amount.units, amountScale(amount))};
 }
 

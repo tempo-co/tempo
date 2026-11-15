@@ -145,11 +145,12 @@ function StatementGaps({
       <AlertDescription>
         <p>{STATEMENT_GAPS_COPY.description}</p>
         <ul className='mt-2 grid w-full grid-cols-1 gap-2'>
-          {gaps.map((gap) => {
+          {gaps.map((gap, index) => {
             const account = summary.accounts.find(({id}) => id === gap.bankAccountId);
             return (
               <li
-                key={`${gap.bankAccountId}:${gap.from}:${gap.to}`}
+                // One account can have a gap on the same days in two formats of one drop.
+                key={`${gap.bankAccountId}:${gap.from}:${gap.to}:${index}`}
                 className='flex items-baseline justify-between gap-4 text-foreground'
               >
                 <span className='min-w-0'>

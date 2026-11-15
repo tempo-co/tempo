@@ -48,11 +48,13 @@ describe('OFX and QFX files', () => {
 
 		const [stated] = parseFile(Buffer.from(ledger('-1234,5', '20260305120000[-5:EST]'), 'latin1')).statements;
 		const [early] = parseFile(Buffer.from(ledger('1234.56', '20260303'), 'latin1')).statements;
+		const [unreadable] = parseFile(Buffer.from(ledger('1.234,56', '20260305'), 'latin1')).statements;
 		const [none] = parseFile(Buffer.from(XML_FILE.replace(/<LEDGERBAL>.*<\/LEDGERBAL>/, ''))).statements;
 
 		expect(stated).toMatchObject({openingBalance: null, closingBalance: {date: '2026-03-05', amount: '-1234.50'}});
 		// A transaction is booked after it, so it may not include that one.
 		expect(early.closingBalance).toBeNull();
+		expect(unreadable).toMatchObject({closingBalance: null, rows: [{}, {}, {}]});
 		expect(none.closingBalance).toBeNull();
 	});
 
