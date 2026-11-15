@@ -1409,6 +1409,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "asn-nl",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -1696,6 +1698,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "asn-nl",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -1983,6 +1987,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "bunq-en",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -2270,6 +2276,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "bunq-en-7",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -2557,6 +2565,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "bunq-en-7-semicolon",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -2844,6 +2854,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "ing-nl-11",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -3131,6 +3143,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "ing-nl-11",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -3418,6 +3432,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "ing-en-11",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -3705,6 +3721,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "ing-en",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-14",
@@ -3992,6 +4010,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "rabobank-en",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -4274,6 +4294,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "rabobank-en",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-13",
@@ -4306,6 +4328,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "rabobank-creditcard",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-02",
@@ -4441,6 +4465,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "knab-nl-no-preamble",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-14",
@@ -4728,6 +4754,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "knab-nl",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-14",
@@ -5015,6 +5043,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "triodos-nl",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
