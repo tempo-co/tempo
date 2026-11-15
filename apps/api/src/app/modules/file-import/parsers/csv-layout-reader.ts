@@ -327,7 +327,10 @@ function dateCheck(body: readonly TableCell[][], layout: CsvLayout): CsvLayoutRe
 	return example;
 }
 
-/** The statements of the rows, one per account and currency in the order first met; null when any row fails. */
+/**
+ * The statements of the rows, one per account and currency in the order first met; null when any row fails, or when
+ * rows differ in the column that must name one account.
+ */
 function readRows(
 	records: readonly TableCell[][],
 	above: readonly TableCell[][],
@@ -337,6 +340,13 @@ function readRows(
 	try {
 		const lineIban = layout.accountIbanLine === undefined ? null : ibanOnLine(above[layout.accountIbanLine]);
 		const debitsNegative = writesDebitsNegative(records, layout);
+		const {oneAccountColumn} = layout;
+		if (
+			oneAccountColumn !== undefined &&
+			new Set(records.map((cells) => (cells[oneAccountColumn]?.text ?? '').trim())).size > 1
+		) {
+			throw new RowProblem();
+		}
 		rows = records.map((cells) => readRow(cells, layout, lineIban, debitsNegative));
 	} catch (error) {
 		if (error instanceof RowProblem) return null;

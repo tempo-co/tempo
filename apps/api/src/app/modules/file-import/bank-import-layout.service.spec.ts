@@ -91,6 +91,12 @@ describe('buildLayout', () => {
 		const merged = propose(Buffer.from(twoAccounts.join('\n')), answer);
 		expect(merged.layout.accountIban).toBe(3);
 		expect(merged.statements).toBeUndefined();
+		// The layout saved from a one-account file keeps that column to check: a later file of two is refused.
+		expect(proposed.layout.oneAccountColumn).toBe(3);
+		expect(
+			readCsvLayout(Buffer.from(twoAccounts.join('\n')), [proposed.layout], {owned: true, today: '2026-11-15'}),
+		).toBeNull();
+		expect(readCsvLayout(file, [proposed.layout], {owned: true, today: '2026-11-15'})?.statements).toHaveLength(1);
 		// A column of IBANs is the account.
 		const ibans = Buffer.from(file.toString('utf8').replace(/12345678/g, 'GB33BUKB20201555555555'));
 		expect(propose(ibans, answer).statements).toEqual([
