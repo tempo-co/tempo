@@ -1,0 +1,17 @@
+Rekeningnummer;Transactiedatum;Valutacode;CreditDebet;Bedrag;Tegenrekeningnummer;Tegenrekeninghouder;Valutadatum;Betaalwijze;Omschrijving;Type betaling;Machtigingsnummer;Incassant ID;Adres;Referentie;Boekdatum;
+"NL87KNAB0100000101";"14-10-2026";"EUR";"D";"7,80";"";"Café De Brück";"14-10-2026";"Betaalautomaat";"Café De Brück Examplestad ";"";"";"";"";"C6J15EX0000015";"14-10-2026";
+"NL87KNAB0100000101";"14-10-2026";"EUR";"C";"0,01";"NL83INGB0006000789";"Example Bank Verificatie";"14-10-2026";"Ontvangen betaling";"Verificatie rekening ";"";"";"";"";"C6J14EX0000014";"14-10-2026";
+"NL87KNAB0100000101";"13-10-2026";"EUR";"D";"500,00";"NL76KNAB0100000202";"Eigen spaarrekening";"13-10-2026";"Overboeking";"Naar spaarrekening ";"";"";"";"";"C6J13EX0000013";"13-10-2026";
+"NL87KNAB0100000101";"12-10-2026";"EUR";"D";"1234,56";"NL53INGB0006000456";"Example Verhuur BV";"12-10-2026";"Incasso";"Huur oktober ";"";"MNDT556677";"";"";"C6J12EX0000012";"12-10-2026";
+"NL87KNAB0100000101";"10-10-2026";"EUR";"D";"100,00";"";"Geldautomaat Examplestad";"10-10-2026";"Geldautomaat";"Geldopname ";"";"";"";"";"C6J11EX0000011";"10-10-2026";
+"NL87KNAB0100000101";"09-10-2026";"EUR";"D";"64,30";"NL23INGB0006000123";"Example Energie NV";"09-10-2026";"Incasso";"Termijn oktober klantnr 556677 ";"";"MNDT556677";"";"";"C6J10EX0000010";"09-10-2026";
+"NL87KNAB0100000101";"08-10-2026";"EUR";"D";"2,50";"";"Example Parkeren";"08-10-2026";"Betaalautomaat";"Parkeren zone 1 ";"";"";"";"";"C6J09EX0000009";"08-10-2026";
+"NL87KNAB0100000101";"08-10-2026";"EUR";"D";"2,50";"";"Example Parkeren";"08-10-2026";"Betaalautomaat";"Parkeren zone 1 ";"";"";"";"";"C6J08EX0000008";"08-10-2026";
+"NL87KNAB0100000101";"07-10-2026";"EUR";"C";"15,00";"";"Example Tankstation";"07-10-2026";"Ontvangen betaling";"Reservering pomp 3 vrijgegeven ";"";"";"";"";"C6J07EX0000007";"07-10-2026";
+"NL87KNAB0100000101";"07-10-2026";"EUR";"D";"15,00";"";"Example Tankstation";"07-10-2026";"Betaalautomaat";"Reservering pomp 3 ";"";"";"";"";"C6J06EX0000006";"07-10-2026";
+"NL87KNAB0100000101";"06-10-2026";"EUR";"D";"45,67";"";"EXAMPLE STORE NEW YORK";"05-10-2026";"Betaalautomaat";"Example Store New York ";"";"";"";"";"C6J05EX0000005";"06-10-2026";
+"NL87KNAB0100000101";"05-10-2026";"EUR";"C";"2500,00";"NL38RABO0300000777";"Example Werkgever BV";"05-10-2026";"Ontvangen betaling";"Salaris oktober 2026 ";"";"";"";"";"C6J04EX0000004";"05-10-2026";
+"NL87KNAB0100000101";"03-10-2026";"EUR";"C";"89,99";"NL91ABNA0417164300";"Example Webshop BV";"03-10-2026";"Ontvangen betaling";"Terugbetaling order 7781 ";"";"";"";"";"C6J03EX0000003";"03-10-2026";
+"NL87KNAB0100000101";"02-10-2026";"EUR";"C";"12,50";"NL82ABNA0900000101";"Tikkie";"02-10-2026";"Ontvangen betaling";"Tikkie ID 001234567890, Pizza; vrijdag, via A. Voorbeeld ";"";"";"";"";"C6J02EX0000002";"02-10-2026";
+"NL87KNAB0100000101";"01-10-2026";"EUR";"D";"89,99";"NL91ABNA0417164300";"Example Webshop BV";"01-10-2026";"iDEAL";"iDEAL order 7781; ""cadeau"", maat L ";"";"";"";"";"C6J01EX0000001";"01-10-2026";
+"NL87KNAB0100000101";"01-10-2026";"EUR";"D";"23,45";"";"Example Supermarket";"01-10-2026";"Betaalautomaat";"Example Supermarket Examplestad ";"";"";"";"";"C6J00EX0000000";"01-10-2026";

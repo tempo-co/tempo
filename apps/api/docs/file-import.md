@@ -35,7 +35,7 @@ Undo (`DELETE /bank-imports/:id`) deletes the rows that import inserted (never-s
 | OFX and QFX               | `ofx.ts`                                 | SGML and XML, bank and card statements. `LEDGERBAL` is not read.                |
 | ABN AMRO TXT              | `abn-amro-txt.ts`                        |                                                                                 |
 | Revolut CSV and Excel     | `revolut.ts`                             | Names no account; one statement per currency.                                   |
-| Bank CSV layouts          | `csv-layout-reader.ts`, `csv-layouts.ts` | ING, Rabobank, bunq, Knab, ASN Bank. Layouts are data; every row must validate. |
+| Bank CSV layouts          | `csv-layout-reader.ts`, `csv-layouts.ts` | The banks below. Layouts are data; every row must validate.                     |
 | The owner's saved layouts | the same reader                          | Learned by the mapper, tried after everything built in, for that owner only.    |
 
 What the standard readers take from the text, by general rule and never per bank:
@@ -45,7 +45,20 @@ What the standard readers take from the text, by general rule and never per bank
 - **CAMT.** The remittance text is the unstructured lines, then structured text (`AddtlRmtInf`) and creditor references (`CdtrRefInf/Ref`: Belgian structured communication, RF, Swiss QR) as written. The ultimate creditor or debtor is the counterparty when no direct one is named, and is added to the description when it differs from the named one. A camt.052 report (`Rpt`) is read like a statement: pending entries are skipped, and balances come only from the opening and closing booked balances, never an interim one (`ITBD`).
 - **OFX.** CDATA is text. A `BANKTRANLIST` left without its end tag is closed by the statement's end tag; every other aggregate needs its own. A bank account without an IBAN is named by `BANKID`, `BRANCHID` and `ACCTID` together, since an account number is unique only at its bank (UK sort codes, French bank and branch codes); a card by its `ACCTID`.
 
-Not read: QIF, PDF, old binary `.xls`. The built-in CSV layouts rest on public samples from 2018 to 2022 (`test/fixtures/file-import/SOURCES.md`); none has been checked against a current export.
+The built-in bank CSV layouts:
+
+| Bank                     | Layouts                                                                                    | Notes                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| ING                      | `ing-nl` (comma, 9 columns), `ing-nl-11` (semicolon, 11 columns), `ing-en-11`, `ing-en`    | Dutch and English downloads. The 11-column export states the balance after each row.      |
+| Rabobank                 | `rabobank-nl`, `rabobank-en`, `rabobank-creditcard`                                        | The credit card export names no account: it goes by bank and currency, as Revolut does, and an owner's layout naming no account cannot be called Rabobank. Several cards in one export are one account. |
+| bunq                     | `bunq-nl`, `bunq-en` (6 columns), `bunq-en-7`, `bunq-en-7-semicolon` (with Interest Date)  | Amounts may group thousands with `.`.                                                     |
+| Knab                     | `knab-nl` (with the `KNAB EXPORT` line), `knab-nl-no-preamble`                             | Amounts may group thousands with `.`.                                                     |
+| ASN Bank, SNS, RegioBank | `asn-nl`                                                                                   | No header; the account is held at `ASNB`, `SNSB` or `RBRB`.                               |
+| Triodos Bank             | `triodos-nl`                                                                               | No header; the account is held at `TRIO`; the other party's cell holds its BIC and IBAN. |
+
+In any layout, a counterparty cell holding a BIC, a space and an IBAN (as Triodos writes it) is read as that IBAN.
+
+Not read: QIF, PDF, old binary `.xls` (ABN AMRO's Excel download is one; its CAMT.053 and TXT are read). The built-in CSV layouts rest on public descriptions and samples from 2017 to 2026 (`test/fixtures/file-import/SOURCES.md`); none has been checked against a current export.
 
 Adding a bank's CSV export is a new entry in `csv-layouts.ts` with a fixture and a near-miss fixture, not a new parser. Write a parser only for a file that cannot be described as columns.
 

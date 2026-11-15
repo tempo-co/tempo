@@ -60,7 +60,7 @@ const REFUSAL_COPY: Record<
   },
   legacy_xls_not_supported: {
     title: "Old Excel files aren't supported",
-    description: 'Export the same statement as CAMT.053, MT940 or TXT instead.',
+    description: 'Download the statement as CAMT.053, MT940, CSV or Excel (.xlsx) instead.',
   },
   file_too_large: {
     title: 'This file is too large',
