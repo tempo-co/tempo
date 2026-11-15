@@ -103,7 +103,14 @@ type AccountRows = {
 	learnedBank: string | null;
 	currency: string;
 	/** `learned`: read by one of the owner's saved layouts. */
-	byFormat: {format: StatementFormat; layout: string | null; learned: boolean; rows: NormalizedRow[]}[];
+	byFormat: {
+		format: StatementFormat;
+		layout: string | null;
+		learned: boolean;
+		rows: NormalizedRow[];
+		/** `rows` as listed newest first (`joinStatements`): the order new rows are stored in. */
+		newestFirst: NormalizedRow[];
+	}[];
 	/** Rows a later statement of the same format repeats from an earlier one, left out of `byFormat`. */
 	repeated: RepeatedRows;
 	gaps: StatementGap[];
@@ -292,7 +299,7 @@ export class BankImportService {
 					// Candidates are read again per format, inside the transaction, so they include the rows the
 					// formats before this one just inserted. Each format numbers its rows in a scheme of its own, so
 					// whether the bank's references are set aside is decided per format.
-					for (const {format, layout, rows} of byFormat) {
+					for (const {format, layout, rows, newestFirst} of byFormat) {
 						const numbering = statementNumbering(format, layout);
 						const incoming = rows.map(toMatchRow);
 						// Only there are imported rows told apart by numbering; elsewhere every imported row keeps its
@@ -318,12 +325,15 @@ export class BankImportService {
 								`Import ${record.id} matched ${rows.length} ${format} row(s) of account ${account.id} without the bank's references: none is the file's`,
 							);
 						}
-						const newRows = rows.filter((_, rowIndex) => outcomes[rowIndex].kind === 'new');
-						if (newRows.length > 0) {
+						const newRows = new Set(rows.filter((_, rowIndex) => outcomes[rowIndex].kind === 'new'));
+						if (newRows.size > 0) {
+							// Stored newest first, so the transaction list shows a day's rows in that order.
 							const persisted = await this.persistence.persistTransactions(
 								manager.getRepository(BankTransaction),
 								account,
-								newRows.map((row) => toTransactionInput(row, account.currency)),
+								newestFirst
+									.filter((row) => newRows.has(row))
+									.map((row) => toTransactionInput(row, account.currency)),
 								connection.aspspName,
 								connection.provider,
 								{importId: record.id, statementNumbering: numbering},
@@ -1449,6 +1459,7 @@ function groupByAccount(
 				layout,
 				learned,
 				rows: joined[index].rows,
+				newestFirst: joined[index].newestFirst,
 			})),
 			repeated: {
 				reference: sum(joined.map(({repeated}) => repeated.reference)),
