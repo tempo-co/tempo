@@ -387,6 +387,10 @@ export function buildLayout(
 			dateFormat: answer.dateFormat,
 			...(answer.account && 'column' in answer.account ? {accountIban: answer.account.column} : {}),
 			...(answer.account && 'line' in answer.account ? {accountIbanLine: answer.account.line} : {}),
+			// An account column left out for holding no IBAN still checks that a later file names one account.
+			...(!answer.account && proposed.account && 'column' in proposed.account
+				? {oneAccountColumn: proposed.account.column}
+				: {}),
 			currency:
 				answer.currency === null
 					? {fixed: defaultCurrency}

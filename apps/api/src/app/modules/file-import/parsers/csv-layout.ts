@@ -45,6 +45,11 @@ type CsvLayoutColumns = {
 	accountIban?: number;
 	/** Which of the `skipBefore` lines (0-based) holds the account's IBAN. Without either, rows name no account. */
 	accountIbanLine?: number;
+	/**
+	 * A column naming the account without an IBAN (a sort code and account number): not read, but every row must
+	 * hold the same value there, so a file of several accounts is refused rather than read as one.
+	 */
+	oneAccountColumn?: number;
 	currency: {column: number} | {fixed: string};
 	bookingDate: number;
 	valueDate?: number;
@@ -198,6 +203,7 @@ function layoutOf(value: unknown): CsvLayout {
 			'amountStyle',
 			'accountIban',
 			'accountIbanLine',
+			'oneAccountColumn',
 			'valueDate',
 			'transactionDate',
 			'balance',
@@ -265,6 +271,8 @@ function layoutOf(value: unknown): CsvLayout {
 	if (thousandsSeparator === decimalMark) throw new LayoutProblem('amountStyle.thousandsSeparator');
 
 	const accountIban = optionalColumn(layout.accountIban, 'accountIban');
+	const oneAccountColumn = optionalColumn(layout.oneAccountColumn, 'oneAccountColumn');
+	if (oneAccountColumn !== undefined && accountIban !== undefined) throw new LayoutProblem('oneAccountColumn');
 	const accountIbanLine = count(layout.accountIbanLine, MAX_SKIP_BEFORE - 1, 'accountIbanLine');
 	if (accountIbanLine !== undefined && (accountIban !== undefined || accountIbanLine >= (skipBefore ?? 0))) {
 		throw new LayoutProblem('accountIbanLine');
@@ -290,6 +298,7 @@ function layoutOf(value: unknown): CsvLayout {
 		dateFormat: oneOf(layout.dateFormat, CSV_DATE_FORMATS, 'dateFormat'),
 		...defined('accountIban', accountIban),
 		...defined('accountIbanLine', accountIbanLine),
+		...defined('oneAccountColumn', oneAccountColumn),
 		currency,
 		bookingDate: column(layout.bookingDate, 'bookingDate'),
 		...defined('valueDate', valueDate),
