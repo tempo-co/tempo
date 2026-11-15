@@ -118,7 +118,12 @@ export class BankImportLayoutService {
 		if (!sampled.ok) throw this.refuse(sampled.code);
 		const {sample} = sampled;
 		// A layout skipping lines that look like rows would drop them from this file and every later one.
-		if (sample.rowsAbove > 0 || sample.skipBefore > MAX_SKIP_BEFORE || sample.skipAfter > MAX_SKIP_AFTER) {
+		if (
+			sample.rowsAbove > 0 ||
+			sample.rowsBelow > 0 ||
+			sample.skipBefore > MAX_SKIP_BEFORE ||
+			sample.skipAfter > MAX_SKIP_AFTER
+		) {
 			throw this.refuse('layout_not_mappable');
 		}
 		const owner = await this.dataSource.getRepository(Account).findOneByOrFail({id: ownerId});

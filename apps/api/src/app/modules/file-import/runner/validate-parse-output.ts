@@ -267,6 +267,7 @@ export function validateSampleOutput(output: unknown): SampleChildOutput {
 		skipBefore: whole(sample.skipBefore, 0, Number.MAX_SAFE_INTEGER),
 		rowsAbove: whole(sample.rowsAbove, 0, Number.MAX_SAFE_INTEGER),
 		skipAfter: whole(sample.skipAfter, 0, Number.MAX_SAFE_INTEGER),
+		rowsBelow: whole(sample.rowsBelow, 0, Number.MAX_SAFE_INTEGER),
 		header,
 		rowCount: whole(sample.rowCount, 1, Number.MAX_SAFE_INTEGER),
 		masked: {

@@ -86,7 +86,7 @@ type Attempt = {read: CsvLayoutRead} | {nearMiss: string} | {skipsRows: true} | 
  *
  * With `owned`, a header that matches but whose rows do not read lets the next layout try; only when no layout
  * reads the file is it refused with `layout_not_recognized`, naming the first that matched. A layout whose skipped
- * lines above the table look like rows does not read the file either: when no other layout does, it is refused with
+ * lines above or below the table look like rows does not read the file either: when no other layout does, it is refused with
  * `layout_not_mappable` (before any near miss) rather than read without those rows.
  */
 export function readCsvLayout(
@@ -122,8 +122,12 @@ function attemptLayout(source: TableSource, layout: CsvLayout, options: CsvLayou
 	const {recognize} = layout;
 	const skipBefore = layout.skipBefore ?? 0;
 	const workbook = layout.source === 'xlsx';
+	const skipAfter = layout.skipAfter ?? 0;
+	// Lines the layout skips above and below the table, none of which may look like a row.
 	const skipped = (records: readonly TableCell[][]) =>
-		records.slice(0, skipBefore).some((cells) => looksLikeRow(cells.map(({text}) => text)));
+		[...records.slice(0, skipBefore), ...(skipAfter > 0 ? records.slice(-skipAfter) : [])].some((cells) =>
+			looksLikeRow(cells.map(({text}) => text)),
+		);
 	if ('header' in recognize) {
 		const expected = [...(recognize.preamble ?? []), recognize.header];
 		const head = workbook ? source.workbookRows() : source.head(layout, skipBefore + expected.length);

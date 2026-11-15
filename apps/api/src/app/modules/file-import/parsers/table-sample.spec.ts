@@ -268,7 +268,13 @@ describe('sampleTable', () => {
 			sampleTable(
 				Buffer.from(text.replace(';extra', '').replace('2026-03-06;-3.00;EUR;Example', 'Total;-22.70')),
 			),
-		).toMatchObject({rowCount: 4, skipAfter: 1});
+		).toMatchObject({rowCount: 4, skipAfter: 1, rowsBelow: 0});
+		// A last line cut short is counted, so a layout never skips the last row of a whole file.
+		expect(
+			sampleTable(
+				Buffer.from(text.replace(';extra', '').replace('2026-03-06;-3.00;EUR;Example', '2026-03-06;-3')),
+			),
+		).toMatchObject({rowCount: 4, skipAfter: 1, rowsBelow: 1});
 	});
 
 	it('reads a comma file with quoted decimal-comma amounts with the quote that keeps them whole', () => {

@@ -197,6 +197,7 @@ describe('validateSampleOutput', () => {
 			skipBefore: 1,
 			rowsAbove: 0,
 			skipAfter: 0,
+			rowsBelow: 0,
 			header: ['Datum', 'Bedrag', 'Af Bij'],
 			rowCount: 2,
 			masked: {

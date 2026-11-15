@@ -629,6 +629,16 @@ describe("an owner's saved layouts", () => {
 		expect(parseFile(file(otherDates), [{...fixed, dateFormat: 'DD-MM-YYYY'}]).layouts).toEqual(['learned-ing']);
 	});
 
+	it('refuse a file whose lines below the table look like rows, rather than skip them', () => {
+		const layout: CsvLayout = {...HEADERLESS, id: 'learned-skipping-below', skipAfter: 1};
+		const rows = fixture('headerless-synthetic.csv');
+		expect(ROWS_OF(layout, `${rows}Example total;-12.50\n`)?.[0].rows).toHaveLength(4);
+
+		// A layout learned from a file whose last line was cut, read on a whole one.
+		expect(refusal(rows, [layout])).toEqual({code: 'layout_not_mappable', layout: null});
+		expect(parseFile(file(rows), [layout, HEADERLESS]).layouts).toEqual(['learned-headerless']);
+	});
+
 	it('refuse a file whose lines above the table look like rows, rather than skip them', () => {
 		const layout: CsvLayout = {...HEADERLESS, id: 'learned-skipping', skipBefore: 2};
 		const rows = fixture('headerless-synthetic.csv');

@@ -21,6 +21,8 @@ export type TableSample = {
 	rowsAbove: number;
 	/** Lines below the last row. */
 	skipAfter: number;
+	/** Lines below the table that look like rows, such as a last row cut short; not mapped either. */
+	rowsBelow: number;
 	/** The header's cells as written, trimmed; null when the table has none. */
 	header: string[] | null;
 	rowCount: number;
@@ -38,7 +40,7 @@ const LETTER = /\p{L}/u;
  * follow below a line of another width (skipping the lines below it would drop them). The rows start at the run's
  * first line with a cell that looks like a value; the line right above it is the header when none of its cells
  * does, and lines of the run above the header are lines above the table. A file whose first line looks like a row
- * has no header. Lines above the table that look like rows are counted (`rowsAbove`).
+ * has no header. Lines above and below the table that look like rows are counted (`rowsAbove`, `rowsBelow`).
  */
 export function sampleTable(bytes: Uint8Array): TableSample | null {
 	const table = isZip(bytes) ? (isXlsx(bytes) ? workbookTable(bytes) : null) : textTable(bytes);
@@ -60,6 +62,7 @@ export function sampleTable(bytes: Uint8Array): TableSample | null {
 		skipBefore: start,
 		rowsAbove: records.slice(0, start).filter(looksLikeRow).length,
 		skipAfter: records.length - end,
+		rowsBelow: records.slice(end).filter(looksLikeRow).length,
 		header,
 		rowCount: rows.length,
 		masked: maskTable({

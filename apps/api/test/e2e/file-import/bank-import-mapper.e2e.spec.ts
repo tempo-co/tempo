@@ -345,20 +345,34 @@ describe('Bank import column mapper', () => {
 		]);
 	});
 
-	it('refuses to work out the columns of a file whose lines above the table look like rows, without a call', async () => {
-		const {owner, agent} = await createOwner();
-		// The rows whose note holds a comma are wider than the rest, so the widest stretch of equal lines starts below them.
-		const file = Buffer.from(
-			[
+	it.each([
+		{
+			// The rows whose note holds a comma are wider than the rest, so the widest stretch of equal lines starts
+			// below them.
+			name: 'lines above the table look',
+			lines: [
 				'Date,Amount,Account,Note',
 				'2026-03-02,-12.50,NL91ABNA0417164300,Example Shop, Examplestad',
 				'2026-03-03,-4.20,NL91ABNA0417164300,Example Cafe, Examplestad, Centre',
 				'2026-03-04,-1.00,NL91ABNA0417164300,Example Shop',
 				'2026-03-05,-2.00,NL91ABNA0417164300,Example Shop',
 				'2026-03-06,-3.00,NL91ABNA0417164300,Example Shop',
-				'',
-			].join('\n'),
-		);
+			],
+		},
+		{
+			// A layout learned from it would skip the last row of every whole file.
+			name: 'last line, cut short, looks',
+			lines: [
+				'Date,Amount,Account,Note',
+				'2026-03-02,-12.50,NL91ABNA0417164300,Example Shop',
+				'2026-03-03,-4.20,NL91ABNA0417164300,Example Cafe',
+				'2026-03-04,-1.00,NL91ABNA0417164300,Example Shop',
+				'2026-03-05,-2.00,NL91ABNA0417164300',
+			],
+		},
+	])('refuses to work out the columns of a file whose $name like rows, without a call', async ({lines}) => {
+		const {owner, agent} = await createOwner();
+		const file = Buffer.from([...lines, ''].join('\n'));
 		expect((await drop(agent, file).expect(422)).body).toMatchObject({code: 'layout_unknown', file: 1});
 
 		const refused = await propose(agent, file).expect(422);
