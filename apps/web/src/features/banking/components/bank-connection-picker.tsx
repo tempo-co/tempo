@@ -1,4 +1,4 @@
-import {useQuery} from '@tanstack/react-query';
+import {useQuery, useQueryClient} from '@tanstack/react-query';
 import type {BankConnectionAspsp} from '@tempo/contracts';
 import {ArrowLeft, ChevronRight, Loader, Plus, Search} from 'lucide-react';
 import {useMemo, useState} from 'react';
@@ -15,10 +15,11 @@ import {
   ResponsiveDialogTrigger,
 } from '@/components/ui/responsive-dialog';
 import {ScrollArea} from '@/components/ui/scroll-area';
+import {Skeleton} from '@/components/ui/skeleton';
 import {cn} from '@/utils/cn';
 
 import {bankConnectionsQueryOptions} from '../api/use-get-all-bank-connections';
-import {useGetSupportedBanks} from '../api/use-get-supported-banks';
+import {supportedBanksQueryOptions, useGetSupportedBanks} from '../api/use-get-supported-banks';
 import {BankWordmark} from './bank-wordmark';
 
 type BankConnectionPickerProps = {
@@ -31,9 +32,16 @@ type CountryOption = {code: string; label: string; bankCount: number};
 
 type Step = 'bank' | 'country' | 'confirm';
 
-/** Shared row: 56px, full width, the whole row is the target. */
-const ROW =
-  'grid min-h-14 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
+/** Shared row shape: 56px, full width. */
+const ROW_SHAPE =
+  'grid min-h-14 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2 py-2 text-left';
+/** A list row whose whole width is the target. */
+const ROW = cn(
+  ROW_SHAPE,
+  'hover:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+);
+const COUNTRY_SHAPE =
+  'mb-3 flex min-h-11 w-full items-center gap-3 rounded-md border px-3 text-left text-sm';
 
 /**
  * Connecting a bank, one step at a time in one sheet: pick a bank in the likely country (changing it is a step of
@@ -48,6 +56,7 @@ export function BankConnectionPicker({
   const [step, setStep] = useState<Step>('bank');
   const [countryCode, setCountryCode] = useState<string>();
   const [bank, setBank] = useState<BankConnectionAspsp>();
+  const queryClient = useQueryClient();
   const {supportedBanks, isPending, isError, refetch} = useGetSupportedBanks(open);
   // The page already loads the connections; read them without fetching again.
   const {data: bankConnections} = useQuery({...bankConnectionsQueryOptions, enabled: false});
@@ -89,6 +98,9 @@ export function BankConnectionPicker({
             className,
           )}
           disabled={isStarting}
+          // Start loading the banks when the pointer or focus reaches the button, so they are often ready by the click.
+          onPointerEnter={() => void queryClient.prefetchQuery(supportedBanksQueryOptions)}
+          onFocus={() => void queryClient.prefetchQuery(supportedBanksQueryOptions)}
           data-testid='connect-bank-button'
         >
           {isStarting ? <Loader className='animate-slow-spin' /> : <Plus />}
@@ -135,12 +147,7 @@ export function BankConnectionPicker({
               </Button>
             </div>
           ) : isPending ? (
-            <div
-              role='status'
-              className='m-auto inline-flex flex-row flex-nowrap items-center justify-center text-sm whitespace-nowrap text-muted-foreground'
-            >
-              <PendingLabel>Loading banks…</PendingLabel>
-            </div>
+            <BankStepSkeleton />
           ) : !country ? (
             <p className='m-auto text-center text-sm text-muted-foreground'>
               No banks are available to connect right now.
@@ -203,7 +210,10 @@ function BankStep({
         type='button'
         onClick={onChangeCountry}
         data-testid='bank-connection-country'
-        className='mb-3 flex min-h-11 w-full items-center gap-3 rounded-md border px-3 text-left text-sm hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+        className={cn(
+          COUNTRY_SHAPE,
+          'hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+        )}
       >
         <CountryTile code={country.code} />
         <span className='min-w-0 flex-1 truncate'>{country.label}</span>
@@ -230,6 +240,43 @@ function BankStep({
         ))}
       </List>
     </>
+  );
+}
+
+const SKELETON_NAME_WIDTHS = ['w-32', 'w-40', 'w-24', 'w-36', 'w-28', 'w-44', 'w-32', 'w-24'];
+
+/** The bank step's shape while the banks load: its static labels, with placeholders where the data goes. */
+function BankStepSkeleton() {
+  return (
+    <div role='status' className='flex min-h-0 flex-1 flex-col'>
+      <span className='sr-only'>Loading banks…</span>
+      <div
+        aria-hidden='true'
+        className='flex min-h-0 flex-1 flex-col'
+        data-testid='bank-step-skeleton'
+      >
+        <div className={COUNTRY_SHAPE}>
+          <Skeleton className={TILE} />
+          <Skeleton className='h-4 w-24' />
+          <span className='ml-auto text-muted-foreground'>Change</span>
+        </div>
+        <div className='relative mb-2'>
+          <Search className='pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground' />
+          <Input disabled tabIndex={-1} placeholder='Search banks' className='h-11 pl-9' />
+        </div>
+        {/* The list's own insets, without its scroll area: the rows past the sheet's end are cut off. */}
+        <div className='-mx-2 min-h-0 flex-1 overflow-hidden'>
+          <ul className='grid pr-5 pl-2'>
+            {SKELETON_NAME_WIDTHS.map((width, index) => (
+              <li key={index} className={ROW_SHAPE}>
+                <Skeleton className='h-9 w-28' />
+                <Skeleton className={cn('h-4 max-w-full', width)} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
   );
 }
 
