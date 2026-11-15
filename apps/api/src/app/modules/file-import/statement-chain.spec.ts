@@ -297,6 +297,12 @@ describe('listsOldestFirst', () => {
 		const newestFirst = [withBalance('2026-03-02', '5.00', '104.00'), withBalance('2026-03-02', '-1.00', '99.00')];
 		expect(listsOldestFirst(newestFirst, true)).toBe(false);
 		expect(listsOldestFirst([row('2026-03-03', '-1.00'), row('2026-03-02', '-2.00')], true)).toBe(false);
+		// Dates that fall decide before balances that follow the rows, and both before the format.
+		const datesAgainstBalances = [
+			withBalance('2026-03-03', '-1.00', '99.00'),
+			withBalance('2026-03-02', '-2.00', '97.00'),
+		];
+		expect(listsOldestFirst(datesAgainstBalances, true)).toBe(false);
 	});
 });
 

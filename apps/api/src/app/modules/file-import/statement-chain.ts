@@ -81,9 +81,9 @@ export function joinStatements(statements: readonly NormalizedStatement[]): Join
 }
 
 /**
- * Formats that list a statement's rows oldest first, which decides a statement whose dates and balances leave its
- * order open. Revolut's exports and ABN AMRO's TXT export list oldest first, and MT940 statement lines run from the
- * opening to the closing balance. CAMT, OFX and bank CSV files come in either order.
+ * Formats whose statements usually list their rows oldest first. This decides only a statement whose dates and
+ * balances leave its order open: Revolut's exports and ABN AMRO's TXT export list oldest first, and MT940 statement
+ * lines nearly always run from the opening to the closing balance. CAMT, OFX and bank CSV files come in either order.
  */
 export const OLDEST_FIRST_FORMATS: ReadonlySet<StatementFormat> = new Set([
 	'revolutCsv',
