@@ -127,11 +127,11 @@ const FORMAT_ORDER: readonly StatementFormat[] = [
 
 /**
  * Where an account's rows go: an account bank sync writes to, or an imported-files account found or created.
- * `ibanConfirmed`: the statement's own IBAN is the synced account's (it was routed there by it, or the account the
- * request names has it), the only case its rows may be matched without the bank's references.
+ * `confirmed`: the statement names the synced account (its IBAN, or a bank code and account number that IBAN holds)
+ * or the owner chose it, the only cases its rows may be matched without the bank's references.
  */
 type Target =
-	| {kind: 'synced'; account: BankAccount; ibanConfirmed: boolean}
+	| {kind: 'synced'; account: BankAccount; confirmed: boolean}
 	/**
 	 * `bank`: the imported-files account of this bank and currency, for a statement whose IBAN an owner's saved layout
 	 * read and the owner said is not its account.
@@ -278,8 +278,8 @@ export class BankImportService {
 					const {account, connection} = accounts[index];
 					const target = targets[index];
 					// Without the bank's references a row of another account's statement can pass for a stored
-					// payment of the same amount and day, so that path needs the statement's own IBAN to agree.
-					const ibanConfirmed = target.kind === 'synced' && target.ibanConfirmed;
+					// payment of the same amount and day, so that path needs the statement or the owner to name it.
+					const confirmed = target.kind === 'synced' && target.confirmed;
 					// An imported-files account found by the IBAN a built-in reader read holds only that account's
 					// files, so another format's numbering may be set aside there too, after fewer probed rows.
 					const fileIbanConfirmed =
@@ -303,7 +303,7 @@ export class BankImportService {
 							rows,
 							fileIbanConfirmed ? numbering : null,
 						);
-						const ladder = ibanConfirmed
+						const ladder = confirmed
 							? matchWithReferenceFallback(incoming, candidates, {pairLookAlikeGroups: true})
 							: fileIbanConfirmed
 								? matchWithReferenceFallback(incoming, candidates, {
@@ -803,36 +803,44 @@ export class BankImportService {
 	}
 
 	/**
-	 * The target of each statement of a request that names no single account. A statement of a file that names no
-	 * account and has an `accountChoices` entry goes where the owner chose. The others go to the synced account with
-	 * their IBAN and currency (stored IBAN, or the identification hash); for a file that names no account, the synced
-	 * account in its currency at a connection of its bank, an active one when any fits. Otherwise an imported-files
-	 * account.
+	 * The target of each statement of a request that names no single account. A statement with an `accountChoices`
+	 * entry goes where the owner chose. The others go to the synced account with their IBAN and currency (stored IBAN,
+	 * or the identification hash); for one named by a bank code and account number (`bankCodeAndAccount`), the synced
+	 * account in its currency whose IBAN holds them; for a file that names no account, the synced account in its
+	 * currency at a connection of its bank, an active one when any fits. Otherwise an imported-files account.
 	 *
 	 * Refuses, listing every statement that needs an answer: `ambiguous_target_account` when two synced accounts fit
-	 * a statement, else `target_account_unconfirmed` when a statement routed by its bank alone, or by an IBAN an owner's
-	 * saved layout read, is not confirmed by the account's stored rows (`isTargetConfirmed`). Such a statement the owner
-	 * answered `new` for before goes to that imported-files account instead, once its rows confirm it.
+	 * a statement, else `target_account_unconfirmed` when a statement routed by its bank alone, by a bank code and
+	 * account number, or by an IBAN an owner's saved layout read, is not confirmed by the account's stored rows
+	 * (`isTargetConfirmed`). Such a statement the owner answered `new` for before goes to that imported-files account
+	 * instead, once its rows confirm it.
 	 */
 	private async findRoutedTargets(
 		ownerId: Account['id'],
 		accountRows: readonly AccountRows[],
 		accountChoices: AccountChoices,
 	): Promise<Target[]> {
-		const banks = askedBanks(accountRows);
-		const keys = accountRows.map(({currency}, index) =>
-			banks[index] ? accountChoiceKey(banks[index], currency) : null,
-		);
-		for (const key of accountChoices.keys()) {
-			if (!keys.includes(key)) throw new BankImportRefusalException('target_account_mismatch');
-		}
-		const syncedAccounts = accountRows.some(({iban, bank}) => iban || bank)
+		const syncedAccounts = accountRows.some((rows) => rows.iban || rows.bank || bankCodeAndAccount(rows))
 			? await this.dataSource.getRepository(BankAccount).find({
 					where: {bankConnection: {accountId: ownerId, provider: Not(BANK_CONNECTION_PROVIDERS.FILE)}},
 					relations: {bankConnection: true},
 					order: {id: 'ASC'},
 				})
 			: [];
+		// The synced accounts whose IBAN holds the bank code and account number a statement names its account by.
+		const holders = accountRows.map((rows) => {
+			const parts = bankCodeAndAccount(rows);
+			return parts
+				? syncedAccounts.filter(({iban, currency}) => currency === rows.currency && ibanHolds(iban, parts))
+				: [];
+		});
+		const banks = askedBanks(accountRows, holders.map(holdersBank));
+		const keys = accountRows.map(({currency}, index) =>
+			banks[index] ? accountChoiceKey(banks[index], currency) : null,
+		);
+		for (const key of accountChoices.keys()) {
+			if (!keys.includes(key)) throw new BankImportRefusalException('target_account_mismatch');
+		}
 		const routed: Array<RoutedTarget | null> = [];
 		const ambiguous: Array<{index: number; matches: BankAccount[]}> = [];
 		for (const [index, rows] of accountRows.entries()) {
@@ -842,15 +850,18 @@ export class BankImportService {
 				continue;
 			}
 			const {iban, bank, currency} = rows;
-			const fitting = syncedAccounts.filter(
-				(account) =>
-					account.currency === currency &&
-					(iban
-						? normalizeStoredIban(account.iban) === iban ||
-							verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency)
-						: !!bank && account.bankConnection.aspspName.trim().toLowerCase() === bank.toLowerCase()),
-			);
-			// By bank alone, an account bank sync no longer reports (closed, or left out of the consent) fits only when
+			const fitting =
+				iban || bank
+					? syncedAccounts.filter(
+							(account) =>
+								account.currency === currency &&
+								(iban
+									? normalizeStoredIban(account.iban) === iban ||
+										verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency)
+									: account.bankConnection.aspspName.trim().toLowerCase() === bank!.toLowerCase()),
+						)
+					: holders[index];
+			// Without an IBAN, an account bank sync no longer reports (closed, or left out of the consent) fits only when
 			// no active one does, so it cannot make the statement of an active account ambiguous.
 			const active = iban ? [] : fitting.filter(({isActive}) => isActive);
 			const matches = active.length > 0 ? active : fitting;
@@ -863,17 +874,16 @@ export class BankImportService {
 				const account = matches[0] ?? (await this.findFileAccount(ownerId, rows));
 				routed.push({
 					target: matches[0]
-						? {kind: 'synced', account: matches[0], ibanConfirmed: true}
+						? {kind: 'synced', account: matches[0], confirmed: true}
 						: {kind: 'file', ...(account ? {account} : {})},
 					check: account ? learnedPart(rows) : null,
 				});
 			} else {
+				// A file that names no account names none, so only the owner's choice confirms it.
 				routed.push({
 					target:
-						matches.length === 1
-							? {kind: 'synced', account: matches[0], ibanConfirmed: !!iban}
-							: {kind: 'file'},
-					check: !!bank && matches.length === 1 ? rows : null,
+						matches.length === 1 ? {kind: 'synced', account: matches[0], confirmed: !bank} : {kind: 'file'},
+					check: !iban && matches.length === 1 ? rows : null,
 				});
 			}
 		}
@@ -883,11 +893,11 @@ export class BankImportService {
 		for (const [index, entry] of routed.entries()) {
 			if (!entry?.check || !entry.target.account) continue;
 			if (await this.isTargetConfirmed(ownerId, entry.target.account, entry.check)) continue;
-			// The owner already said such a statement is not the IBAN's account: it goes where that answer put it,
-			// once that account's rows confirm it.
+			// The owner already said such a statement is not the account its IBAN or account number found: it goes where
+			// that answer put it, once that account's rows confirm it.
 			const rows = accountRows[index];
 			const bank = banks[index];
-			const answered = rows.iban && bank && (await this.findFileAccount(ownerId, withoutAccount(rows, bank)));
+			const answered = !rows.bank && bank && (await this.findFileAccount(ownerId, newAccountRows(rows, bank)));
 			if (answered && (await this.isTargetConfirmed(ownerId, answered, entry.check))) {
 				routed[index] = {target: {kind: 'file', account: answered}, check: null};
 				continue;
@@ -971,20 +981,21 @@ export class BankImportService {
 		if (!account?.bankConnection || account.currency !== rows.currency) {
 			throw new BankImportRefusalException('target_account_mismatch');
 		}
-		// The statement names no account, so nothing in it can confirm the one chosen.
+		// Nothing in the statement confirms the account chosen; the owner's choice does.
 		return account.bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE
 			? {kind: 'file', account}
-			: {kind: 'synced', account, ibanConfirmed: false};
+			: {kind: 'synced', account, confirmed: true};
 	}
 
 	/**
-	 * Whether a statement found only by its bank and currency, or by an IBAN an owner's saved layout read, looks like
-	 * the account's own history. It takes
+	 * Whether a statement found only by its bank and currency, by a bank code and account number, or by an IBAN an
+	 * owner's saved layout read, looks like the account's own history. It takes
 	 * the format with the most rows within the first and last day the account stores (on a tie, the earlier in
 	 * `FORMAT_ORDER`). With fewer than `UNCONFIRMED_TARGET_MIN_OVERLAP_ROWS` such rows, including a statement entirely
 	 * outside the stored dates, it is confirmed: there is too little to compare it with. Otherwise it is confirmed
 	 * only when the ladder matches at least `UNCONFIRMED_TARGET_MIN_MATCH_SHARE` of those rows against the stored
-	 * rows. A doubtful row is no match.
+	 * rows. A doubtful row is no match. A statement named by a bank code and account number carries the bank's
+	 * references in its own numbering, so its ladder is the reference fallback the import then runs.
 	 */
 	private async isTargetConfirmed(ownerId: Account['id'], account: BankAccount, rows: AccountRows): Promise<boolean> {
 		const range = (await this.dataSource
@@ -1015,10 +1026,11 @@ export class BankImportService {
 			if (inRange.length > (largest?.inRange.length ?? 0)) largest = {rows: formatRows, inRange};
 		}
 		if (!largest || largest.inRange.length < UNCONFIRMED_TARGET_MIN_OVERLAP_ROWS) return true;
-		const outcomes = matchTransactions(
-			largest.rows.map(toMatchRow),
-			await this.findMatchCandidates(this.dataSource.manager, account.id, largest.rows),
-		);
+		const incoming = largest.rows.map(toMatchRow);
+		const candidates = await this.findMatchCandidates(this.dataSource.manager, account.id, largest.rows);
+		const outcomes = bankCodeAndAccount(rows)
+			? matchWithReferenceFallback(incoming, candidates, {pairLookAlikeGroups: true}).outcomes
+			: matchTransactions(incoming, candidates);
 		const matched = largest.inRange.filter((index) => outcomes[index].kind === 'matched').length;
 		const {numerator, denominator} = UNCONFIRMED_TARGET_MIN_MATCH_SHARE;
 		return matched * denominator >= largest.inRange.length * numerator;
@@ -1050,12 +1062,8 @@ export class BankImportService {
 					!verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency)
 			: false;
 		if (contradicts) throw new BankImportRefusalException('target_account_mismatch');
-		const ibanConfirmed =
-			!!iban &&
-			(storedIban
-				? storedIban === iban
-				: verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency));
-		return {kind: 'synced', account, ibanConfirmed};
+		// The owner named the account, and nothing in the statement contradicts it.
+		return {kind: 'synced', account, confirmed: true};
 	}
 
 	/**
@@ -1253,6 +1261,7 @@ export class BankImportService {
 			valueDate: row.valueDate,
 			balanceAfter: row.balanceAfterAmount,
 			reference: row.entryReference,
+			source: row.importId,
 			sameNumbering:
 				row.importId !== null &&
 				(numbering === null || row.statementNumbering === null || row.statementNumbering === numbering),
@@ -1595,23 +1604,62 @@ function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): {
 }
 
 /**
- * The bank the owner is asked about each statement under: the bank of a file that names no account, or of the saved
- * layout that read every part of a statement's IBAN when no other statement of the drop has that bank and currency
- * (an answer under a shared one would move them all). Null when the owner cannot be asked about it.
+ * The bank the owner is asked about each statement under: the bank of a file that names no account; of the saved
+ * layout that read every part of a statement's IBAN; or, for a statement named by a bank code and account number, of
+ * the synced accounts whose IBAN holds them (`holderBanks`). The last two only when no other statement of the drop
+ * has that bank and currency (an answer under a shared one would move them all). Null when the owner cannot be asked
+ * about it.
  */
-function askedBanks(accountRows: readonly AccountRows[]): Array<string | null> {
+function askedBanks(
+	accountRows: readonly AccountRows[],
+	holderBanks: ReadonlyArray<string | null>,
+): Array<string | null> {
 	const banks = accountRows.map(
-		(rows) =>
-			rows.bank ?? (rows.learnedBank && rows.byFormat.every(({learned}) => learned) ? rows.learnedBank : null),
+		(rows, index) =>
+			rows.bank ??
+			(rows.learnedBank && rows.byFormat.every(({learned}) => learned) ? rows.learnedBank : null) ??
+			holderBanks[index],
 	);
 	const key = (index: number) => banks[index] && accountChoiceKey(banks[index], accountRows[index].currency);
 	// Such a statement is then refused without a question, and an earlier `new` answer is not looked up for it either:
 	// the owner drops its files one at a time.
 	return banks.map((bank, index) =>
-		accountRows[index].iban && accountRows.some((_, other) => other !== index && key(other) === key(index))
+		!accountRows[index].bank && accountRows.some((_, other) => other !== index && key(other) === key(index))
 			? null
 			: bank,
 	);
+}
+
+/** The bank of the synced accounts holding a statement's account number, when they are at one bank. */
+function holdersBank(holders: readonly BankAccount[]): string | null {
+	const names = [...new Set(holders.map(({bankConnection}) => bankConnection.aspspName.trim()))];
+	return names.length === 1 ? names[0] : null;
+}
+
+/**
+ * The parts of an account id that is no IBAN, when it gives at least a bank code and an account number (OFX
+ * `BANKID`, `BRANCHID` and `ACCTID`; an MT940 bank code and account number such as `BLZ/Kontonummer`), upper-cased;
+ * null for any other statement.
+ */
+function bankCodeAndAccount(rows: AccountRows): string[] | null {
+	if (rows.iban || rows.bank) return null;
+	const parts = rows.identifier
+		.toUpperCase()
+		.split(/[^A-Z0-9]+/)
+		.filter(Boolean);
+	return parts.length >= 2 ? parts : null;
+}
+
+/**
+ * Whether an IBAN's national part starts with the bank code (after the letters some countries put first) and holds
+ * the other parts after it in order, each with or without leading zeros. This is how IBANs embed the national bank
+ * code and account number (DE `BLZ` and `Kontonummer`, FR bank, branch and account, UK bank and sort code).
+ */
+function ibanHolds(iban: string | null, parts: readonly string[]): boolean {
+	const normalized = normalizeStoredIban(iban);
+	if (!normalized) return false;
+	const pattern = parts.map((part) => `0*${part.replace(/^0+(?=.)/, '')}`).join('[A-Z0-9]*?');
+	return new RegExp(`^[A-Z]*${pattern}`).test(normalized.slice(4));
 }
 
 /** The parts of the rows the owner's saved layouts read. */

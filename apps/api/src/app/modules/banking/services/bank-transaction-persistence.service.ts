@@ -536,6 +536,7 @@ export class BankTransactionPersistenceService {
 			...toMatchRow(transaction),
 			id: transaction.id,
 			createdAt: transaction.createdAt,
+			source: transaction.importId,
 		});
 		const ask = (transaction: BankTransaction, candidate: {key?: string; id?: string}) => {
 			// Inside coverage the row waits for its day to become final instead.

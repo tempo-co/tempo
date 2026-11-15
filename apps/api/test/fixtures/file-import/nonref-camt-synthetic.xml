@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02"><BkToCstmrStmt>
+<GrpHdr><MsgId>EXAMPLE-NONREF</MsgId><CreDtTm>2026-03-14T00:00:00</CreDtTm></GrpHdr>
+<Stmt><Id>EXAMPLE-STMT</Id>
+<Acct><Id><IBAN>NL91ABNA0417164300</IBAN></Id><Ccy>EUR</Ccy></Acct>
+<Ntry><Amt Ccy="EUR">20.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts>BOOK</Sts><BookgDt><Dt>2026-03-11</Dt></BookgDt><ValDt><Dt>2026-03-11</Dt></ValDt><AcctSvcrRef>NONREF</AcctSvcrRef><AddtlNtryInf>Example Shop</AddtlNtryInf></Ntry>
+</Stmt>
+</BkToCstmrStmt></Document>
