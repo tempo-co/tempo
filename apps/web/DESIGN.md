@@ -489,7 +489,10 @@ No copy calls import a fallback or assumes a bank is connected.
   (`CalendarRange`, `ArrowDownToLine`) over its value. Each account it went to shows as on
   Connections: its bank's logo (imported files: the `Files` Clay tile) with the account-type tile
   on its corner, its name, and its details and bank under it. A drop that added nothing shows
-  the `CheckCheck` state instead of the counts. Rows on days bank sync is final for that the bank
+  the `CheckCheck` state instead of the counts. Where a statement doesn't open at the balance the
+  one before it closed at, a `warning` Alert (`FileWarning`) under the counts names each gap: its
+  days and what the missing transactions add up to, in one right-aligned amount column, with the
+  account's name when the drop went to several. Rows on days bank sync is final for that the bank
   never sent sit under the counts as one bordered fold line ("Not added: 4 rows your bank never
   sent", `ChevronRight`), never in the attention tone and never counted as a look: nothing waits
   for the owner. Opened, a muted line says the bank sent every transaction for those days, then the
