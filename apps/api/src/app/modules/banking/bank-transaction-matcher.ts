@@ -155,6 +155,12 @@ export function matchTransactions(
  */
 export const REFERENCE_FALLBACK_MIN_PROBED_ROWS = 20;
 
+/**
+ * The same, between two statement formats on an imported-files account the statement's IBAN names: both sides are
+ * the owner's files of that one account, so fewer rows show whether they share a numbering. Chosen, not measured.
+ */
+export const REFERENCE_FALLBACK_MIN_PROBED_ROWS_BETWEEN_FILES = 5;
+
 export type ReferenceProbe = {
 	/**
 	 * Incoming rows with a reference that have at least one existing row in the other source's numbering (not
@@ -195,11 +201,14 @@ export type ReferenceFallbackMatch = {outcomes: MatchOutcome[]; referencesSetAsi
 export type ReferenceFallbackOptions = MatchOptions & {
 	/** Pair same-day look-alike groups as large on both sides (`pairLookAlikeGroups`) after the ladder. */
 	pairLookAlikeGroups?: boolean;
+	/** Rows to probe before references are set aside; `REFERENCE_FALLBACK_MIN_PROBED_ROWS` by default. */
+	minProbedRows?: number;
 };
 
 /**
  * The ladder between two sources that may number payments in different schemes: a statement file against what bank
- * sync stored, or a sync's rows against imported ones. When at least `REFERENCE_FALLBACK_MIN_PROBED_ROWS` rows were
+ * sync stored, a sync's rows against imported ones, or one statement format against another's imported rows. When at
+ * least `minProbedRows` (`REFERENCE_FALLBACK_MIN_PROBED_ROWS` by default) rows were
  * probed and none of the incoming references is one the other source stored, the other source's references are set
  * aside and the ladder runs with `uniqueCandidatesOnly`: rows then match by balance or date, and same-day look-alike
  * groups are held as doubtful rather than paired in order. Rows marked `sameNumbering` keep their references, so
@@ -208,10 +217,14 @@ export type ReferenceFallbackOptions = MatchOptions & {
 export function matchWithReferenceFallback(
 	incoming: readonly MatchIncomingRow[],
 	existing: readonly MatchExistingRow[],
-	{pairLookAlikeGroups: pairGroups = false, ...options}: ReferenceFallbackOptions = {},
+	{
+		pairLookAlikeGroups: pairGroups = false,
+		minProbedRows = REFERENCE_FALLBACK_MIN_PROBED_ROWS,
+		...options
+	}: ReferenceFallbackOptions = {},
 ): ReferenceFallbackMatch {
 	const {probedRows, rowsWithStoredReference} = probeReferences(incoming, existing);
-	const referencesSetAside = probedRows >= REFERENCE_FALLBACK_MIN_PROBED_ROWS && rowsWithStoredReference === 0;
+	const referencesSetAside = probedRows >= minProbedRows && rowsWithStoredReference === 0;
 	const compared = referencesSetAside
 		? existing.map((row) => (row.sameNumbering ? row : {...row, reference: null}))
 		: existing;

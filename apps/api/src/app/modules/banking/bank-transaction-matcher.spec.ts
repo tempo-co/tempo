@@ -2,6 +2,7 @@ import {
 	MatchExistingRow,
 	MatchIncomingRow,
 	REFERENCE_FALLBACK_MIN_PROBED_ROWS,
+	REFERENCE_FALLBACK_MIN_PROBED_ROWS_BETWEEN_FILES,
 	matchTransactions,
 	matchWithReferenceFallback,
 	pairLookAlikeGroups,
@@ -289,6 +290,21 @@ describe('matchWithReferenceFallback', () => {
 			outcomes: matchTransactions(twins.incoming, twins.existing),
 		});
 		expect(result.outcomes.filter(({kind}) => kind === 'doubtful').length).toBeGreaterThan(0);
+	});
+
+	it('sets the references aside after the rows a caller asks for, and not one row sooner', () => {
+		const minProbedRows = REFERENCE_FALLBACK_MIN_PROBED_ROWS_BETWEEN_FILES;
+		const enough = referencedTwins(minProbedRows);
+		const short = referencedTwins(minProbedRows - 1);
+
+		expect(matchWithReferenceFallback(enough.incoming, enough.existing, {minProbedRows})).toEqual({
+			referencesSetAside: true,
+			outcomes: enough.existing.map(({id}) => ({kind: 'matched', existingId: id, step: 'sameDay'})),
+		});
+		expect(matchWithReferenceFallback(short.incoming, short.existing, {minProbedRows}).referencesSetAside).toBe(
+			false,
+		);
+		expect(matchWithReferenceFallback(enough.incoming, enough.existing).referencesSetAside).toBe(false);
 	});
 });
 

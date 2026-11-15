@@ -81,6 +81,8 @@ export type PersistTransactionsOptions = {
 	 * is inserted, never matched to or updating a stored row. The caller has already left out the duplicates.
 	 */
 	importId?: string;
+	/** With `importId`: the scheme the statement numbered the rows in (`BankTransaction.statementNumbering`). */
+	statementNumbering?: string | null;
 	/**
 	 * Bank sync: the account's coverage once this fetch is recorded. Sync never asks about an imported row on a day
 	 * inside it: the day becomes final, and the row is then taken over or removed.
@@ -214,6 +216,7 @@ export class BankTransactionPersistenceService {
 				bankAccount,
 				unassignedTransactionValues,
 				options.importId,
+				options.statementNumbering ?? null,
 			);
 		}
 		const stableIdentityGroupKeys = [
@@ -421,6 +424,7 @@ export class BankTransactionPersistenceService {
 		bankAccount: BankAccount,
 		unassignedTransactionValues: BankTransactionValues[],
 		importId: string,
+		statementNumbering: string | null,
 	): Promise<PersistTransactionsResult> {
 		const newRowsByGroup = new Map<string, number>();
 		for (const {stableIdentityGroupKey} of unassignedTransactionValues) {
@@ -437,7 +441,7 @@ export class BankTransactionPersistenceService {
 				usedKeys,
 			);
 			usedKeys.add(stableIdentityKey);
-			return {...value, stableIdentityKey, importId};
+			return {...value, stableIdentityKey, importId, statementNumbering};
 		});
 		const insertedTransactionIds: string[] = [];
 		for (const chunk of chunkArray(transactionValues, BATCH_WRITE_CHUNK_SIZE)) {

@@ -75,6 +75,9 @@ const REVOLUT_XLSX = readFileSync(join(FIXTURES, 'account-statement_2026-03-01_2
 const RABOBANK_CSV = readFileSync(join(FIXTURES, 'rabobank-synthetic.csv'));
 const OFX_FILE = readFileSync(join(FIXTURES, 'ofx-sgml-synthetic.ofx'));
 const ING_CSV = readFileSync(join(FIXTURES, 'ing-synthetic.csv'));
+// One account's 10 rows in CAMT.053 and in an MT940 export that numbers the same payments in another scheme.
+const CROSS_NUMBERING_CAMT = readFileSync(join(FIXTURES, 'cross-numbering-camt-synthetic.xml'));
+const CROSS_NUMBERING_MT940 = readFileSync(join(FIXTURES, 'cross-numbering-mt940-synthetic.sta'));
 // Enable Banking's identification hash of EXAMPLE_IBAN in EUR, in the shape it uses for IBAN accounts.
 const EXAMPLE_IBAN_HASH = [
 	Buffer.from(
@@ -1111,6 +1114,63 @@ describe('Bank imports', () => {
 		});
 		// CAMT.053 is matched first whatever the drop order, so the rows stored are its own, with bank references.
 		expect((await ownerRows(allAtOnce.owner)).map(rowContent)).toEqual(camtRows.map(rowContent));
+
+		// A second format that numbers the same payments in another scheme adds and asks nothing on an account its
+		// IBAN names. Each row records the numbering it came in, and the undo of that format's import removes nothing.
+		const otherNumbering = await createOwner();
+		const camtImport = await drop(otherNumbering.agent, [CROSS_NUMBERING_CAMT]).expect(201);
+		expect(camtImport.body).toMatchObject({rowsAdded: 10});
+		const mt940Import = await drop(otherNumbering.agent, [CROSS_NUMBERING_MT940]).expect(201);
+		expect(mt940Import.body).toMatchObject({
+			rowsParsed: 10,
+			rowsAdded: 0,
+			rowsAlreadyPresent: 10,
+			rowsDoubtful: 0,
+			accounts: [{id: camtImport.body.accounts[0].id, created: false}],
+		});
+		const fileAccountId = camtImport.body.accounts[0].id as string;
+		expect(
+			await transactions.find({where: {bankAccountId: fileAccountId}, select: {statementNumbering: true}}),
+		).toEqual(Array.from({length: 10}, () => ({statementNumbering: 'camt053'})));
+		await otherNumbering.agent.delete(`/bank-imports/${mt940Import.body.id}`).set('Origin', ORIGIN).expect(204);
+		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(10);
+
+		// One changed reference in the same format still conflicts, as references of one numbering are compared.
+		const changed = Buffer.from(
+			CROSS_NUMBERING_CAMT.toString('utf8').replace('ING202610050002', 'ING202610059999'),
+		);
+		expect((await drop(otherNumbering.agent, [changed]).expect(201)).body).toMatchObject({
+			rowsAdded: 0,
+			rowsDoubtful: 1,
+		});
+
+		// Rows whose numbering is unknown (stored before it was recorded) keep their references against any format.
+		const unknownNumbering = await createOwner();
+		const unknown = await drop(unknownNumbering.agent, [CROSS_NUMBERING_CAMT]).expect(201);
+		await transactions.update({importId: unknown.body.id}, {statementNumbering: null});
+		expect((await drop(unknownNumbering.agent, [CROSS_NUMBERING_MT940]).expect(201)).body).toMatchObject({
+			rowsAdded: 0,
+			rowsDoubtful: 10,
+		});
+
+		// An account named by another id than an IBAN is not confirmed by it: the references stay and conflict.
+		const byOtherId = await createOwner();
+		const otherId = (file: Buffer) =>
+			Buffer.from(
+				file
+					.toString('utf8')
+					.replaceAll('<Id><IBAN>NL69INGB0123456789</IBAN></Id>', '<Id><Othr><Id>0123456789</Id></Othr></Id>')
+					.replaceAll(':25:NL69INGB0123456789EUR', ':25:0123456789'),
+			);
+		expect((await drop(byOtherId.agent, [otherId(CROSS_NUMBERING_CAMT)]).expect(201)).body).toMatchObject({
+			rowsAdded: 10,
+			accounts: [{name: '0123456789'}],
+		});
+		expect((await drop(byOtherId.agent, [otherId(CROSS_NUMBERING_MT940)]).expect(201)).body).toMatchObject({
+			rowsAdded: 0,
+			rowsDoubtful: 10,
+			accounts: [{created: false}],
+		});
 	});
 
 	it('adds nothing from the MT940 or TXT export of a synced account that holds its rows as bank sync stores them', async () => {
