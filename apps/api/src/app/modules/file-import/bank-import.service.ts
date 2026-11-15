@@ -769,10 +769,10 @@ export class BankImportService {
 		accountRows: readonly AccountRows[],
 		accountChoices: AccountChoices,
 	): Promise<Target[]> {
-		const keys = accountRows.map((rows) => {
-			const bank = askedBank(rows);
-			return bank ? accountChoiceKey(bank, rows.currency) : null;
-		});
+		const banks = askedBanks(accountRows);
+		const keys = accountRows.map(({currency}, index) =>
+			banks[index] ? accountChoiceKey(banks[index], currency) : null,
+		);
 		for (const key of accountChoices.keys()) {
 			if (!keys.includes(key)) throw new BankImportRefusalException('target_account_mismatch');
 		}
@@ -788,7 +788,7 @@ export class BankImportService {
 		for (const [index, rows] of accountRows.entries()) {
 			const choice = keys[index] === null ? undefined : accountChoices.get(keys[index]);
 			if (choice !== undefined) {
-				routed.push({target: await this.findChosenTarget(ownerId, choice, rows), check: null});
+				routed.push({target: await this.findChosenTarget(ownerId, choice, rows, banks[index]!), check: null});
 				continue;
 			}
 			const {iban, bank, currency} = rows;
@@ -836,8 +836,8 @@ export class BankImportService {
 			// The owner already said such a statement is not the IBAN's account: it goes where that answer put it,
 			// once that account's rows confirm it.
 			const rows = accountRows[index];
-			const answered =
-				rows.iban && askedBank(rows) && (await this.findFileAccount(ownerId, newAccountRows(rows)));
+			const bank = banks[index];
+			const answered = rows.iban && bank && (await this.findFileAccount(ownerId, withoutAccount(rows, bank)));
 			if (answered && (await this.isTargetConfirmed(ownerId, answered, entry.check))) {
 				routed[index] = {target: {kind: 'file', account: answered}, check: null};
 				continue;
@@ -872,11 +872,13 @@ export class BankImportService {
 			}
 		}
 		const asked = questions
-			.filter(({index}) => askedBank(accountRows[index]))
+			.filter(({index}) => banks[index])
 			.sort((left, right) => left.index - right.index)
 			.map(({index, candidates}) => ({
 				rows: accountRows[index],
-				providerAccountId: fileAccountIdentity(newAccountRows(accountRows[index])).providerAccountId,
+				bank: banks[index]!,
+				providerAccountId: fileAccountIdentity(newAccountRows(accountRows[index], banks[index]!))
+					.providerAccountId,
 				candidates,
 			}));
 		// `new` goes to the imported-files account of the bank and currency once it exists, so it is offered as itself.
@@ -893,11 +895,11 @@ export class BankImportService {
 		throw new BankImportRefusalException(
 			ambiguous.length > 0 ? 'ambiguous_target_account' : 'target_account_unconfirmed',
 			null,
-			asked.map(({rows, providerAccountId, candidates}) => {
+			asked.map(({rows, bank, providerAccountId, candidates}) => {
 				const fileAccount = fileAccounts.find((account) => account.providerAccountId === providerAccountId);
 				const unlisted = fileAccount && !candidates.some(({id}) => id === fileAccount.id);
 				return {
-					bank: askedBank(rows)!,
+					bank,
 					currency: rows.currency,
 					candidates: (unlisted ? [...candidates, fileAccount] : candidates).map(toAccountCandidate),
 					newAccount: !fileAccount,
@@ -907,9 +909,14 @@ export class BankImportService {
 	}
 
 	/** The owner's `accountChoices` answer for a statement that names no account: any account of theirs in its currency. */
-	private async findChosenTarget(ownerId: Account['id'], choice: string, rows: AccountRows): Promise<Target> {
+	private async findChosenTarget(
+		ownerId: Account['id'],
+		choice: string,
+		rows: AccountRows,
+		bank: string,
+	): Promise<Target> {
 		// `new` for a statement whose IBAN a saved layout read: the owner says that IBAN is not its account.
-		if (choice === ACCOUNT_CHOICE_NEW) return rows.iban ? {kind: 'file', bank: askedBank(rows)!} : {kind: 'file'};
+		if (choice === ACCOUNT_CHOICE_NEW) return rows.iban ? {kind: 'file', bank} : {kind: 'file'};
 		const [account] = await this.findOwnedAccounts(ownerId, [choice]);
 		if (!account?.bankConnection || account.currency !== rows.currency) {
 			throw new BankImportRefusalException('target_account_mismatch');
@@ -1486,12 +1493,21 @@ function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): {
 }
 
 /**
- * The bank the owner is asked about a statement under: the bank of a file that names no account, or of the saved
- * layout that read every part of a statement's IBAN. Null when the owner cannot be asked about it.
+ * The bank the owner is asked about each statement under: the bank of a file that names no account, or of the saved
+ * layout that read every part of a statement's IBAN when no other statement of the drop has that bank and currency
+ * (an answer under a shared one would move them all). Null when the owner cannot be asked about it.
  */
-function askedBank(rows: AccountRows): string | null {
-	if (rows.bank) return rows.bank;
-	return rows.learnedBank && rows.byFormat.every(({learned}) => learned) ? rows.learnedBank : null;
+function askedBanks(accountRows: readonly AccountRows[]): Array<string | null> {
+	const banks = accountRows.map(
+		(rows) =>
+			rows.bank ?? (rows.learnedBank && rows.byFormat.every(({learned}) => learned) ? rows.learnedBank : null),
+	);
+	const key = (index: number) => banks[index] && accountChoiceKey(banks[index], accountRows[index].currency);
+	return banks.map((bank, index) =>
+		accountRows[index].iban && accountRows.some((_, other) => other !== index && key(other) === key(index))
+			? null
+			: bank,
+	);
 }
 
 /** The parts of the rows the owner's saved layouts read. */
@@ -1504,10 +1520,9 @@ function withoutAccount(rows: AccountRows, bank: string): AccountRows {
 	return {...rows, identifier: bank, iban: null, bank, learnedBank: null};
 }
 
-/** The rows as the account the owner's answer `new` creates for them. */
-function newAccountRows(rows: AccountRows): AccountRows {
-	const bank = askedBank(rows);
-	return rows.iban && bank ? withoutAccount(rows, bank) : rows;
+/** The rows as the account the owner's answer `new` under `bank` creates for them. */
+function newAccountRows(rows: AccountRows, bank: string): AccountRows {
+	return rows.iban ? withoutAccount(rows, bank) : rows;
 }
 
 /** The `accountChoices` key of the statements of a file that names no account. */

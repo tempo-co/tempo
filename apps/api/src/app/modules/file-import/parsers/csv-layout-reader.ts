@@ -84,7 +84,7 @@ type Attempt = {read: CsvLayoutRead} | {nearMiss: string} | {skipsRows: true} | 
  * With `owned`, a header that matches but whose rows do not read lets the next layout try; only when no layout
  * reads the file is it refused with `layout_not_recognized`, naming the first that matched. A layout whose skipped
  * lines above the table look like rows does not read the file either: when no other layout does, it is refused with
- * `layout_not_mappable` rather than read without those rows.
+ * `layout_not_mappable` (before any near miss) rather than read without those rows.
  */
 export function readCsvLayout(
 	bytes: Uint8Array,
@@ -109,8 +109,9 @@ export function readCsvLayout(
 		if (!options.owned) throw new ParseRefusal('layout_not_recognized', attempt.nearMiss);
 		nearMiss ??= attempt.nearMiss;
 	}
-	if (nearMiss) throw new ParseRefusal('layout_not_recognized', nearMiss);
+	// Rows a layout would skip are the refusal to name, before a layout whose rows do not read.
 	if (skipsRows) throw new ParseRefusal('layout_not_mappable');
+	if (nearMiss) throw new ParseRefusal('layout_not_recognized', nearMiss);
 	return null;
 }
 

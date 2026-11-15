@@ -447,6 +447,67 @@ describe('Bank import column mapper', () => {
 		expect(await bankAccounts.countBy({bankConnection: {accountId: owner.id}})).toBe(2);
 	});
 
+	it("checks a saved layout's rows against a synced account too, and asks only about statements of a bank and currency of their own", async () => {
+		const {owner, agent} = await createOwner();
+		const days = ['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06'];
+		const [first, second] = ['NL86BUNQ2000000001', 'NL05BUNQ2000000101'];
+		const connection = await fixtures.createConnection(owner);
+		const synced = await fixtures.createBankAccount(connection, {iban: first});
+		await fixtures.createTransactions(
+			synced,
+			days.map((bookingDate, index) => ({bookingDate, valueDate: bookingDate, amount: `-${index + 1}0.00`})),
+		);
+		const card = (ibans: string[]) =>
+			Buffer.from(
+				[
+					'Linked account,Currency,Card,Date,Amount,Description',
+					...ibans.flatMap((iban) =>
+						days.map((day, index) => `${iban},EUR,9999,${day},-${index + 3}.40,Example Card Shop`),
+					),
+					'',
+				].join('\n'),
+			);
+		await saveLayout(
+			agent,
+			card([first]),
+			{
+				...ANSWER.headerless,
+				bookingDate: 3,
+				amount: {kind: 'signed', column: 4},
+				currency: {column: 1},
+				description: [5],
+				account: {column: 0},
+			},
+			{bankName: 'Example Card Bank'},
+		);
+		const bunq = Buffer.from(
+			[
+				'"Date","Amount","Account","Counterparty","Name","Description"',
+				`"2026-03-09","-1,00","${first}","","Example Shop","Example"`,
+				'',
+			].join('\n'),
+		);
+		// The synced account holds none of the card rows.
+		expect((await drop(agent, card([first])).expect(409)).body).toMatchObject({
+			code: 'target_account_unconfirmed',
+			accountQuestions: [{bank: 'Example Card Bank', candidates: [{bankAccountId: synced.id, imported: false}]}],
+		});
+		// Beside a built-in export of the same account, or another statement under the same bank and currency, an
+		// answer would move rows it is not about: the drop is refused without a question.
+		await fixtures.createTransactions(
+			await fixtures.createBankAccount(connection, {iban: second}),
+			days.map((bookingDate) => ({bookingDate, valueDate: bookingDate, amount: '-99.00'})),
+		);
+		for (const files of [[card([first]), bunq], [card([first, second])]]) {
+			const refused = drop(agent, files[0]);
+			if (files[1]) refused.attach('files', files[1], 'upload-1.bin');
+			expect((await refused.expect(409)).body).toEqual(
+				expect.objectContaining({code: 'target_account_unconfirmed', accountQuestions: []}),
+			);
+		}
+		expect(await transactions.countBy({bankAccountId: synced.id})).toBe(5);
+	});
+
 	it("refuses a bank name of Tempo's own files that name no account, so a layout never shares their accounts", async () => {
 		const {owner, agent} = await createOwner();
 		mapLayout.mockResolvedValueOnce(ANSWER.balance);
