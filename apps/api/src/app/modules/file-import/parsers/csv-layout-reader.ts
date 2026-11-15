@@ -69,6 +69,9 @@ const STYLED_AMOUNT =
 /** A grouped IBAN (blocks of four) or a compact one, as statements print it above the table. */
 const IBAN_IN_TEXT = /\b[A-Z]{2}\d{2}(?:(?: [A-Z0-9]{4}){2,7}(?: [A-Z0-9]{1,4})?|[A-Z0-9]{11,30})\b/g;
 
+/** A BIC (8 or 11 characters), a space and an IBAN written compact. */
+const BIC_AND_IBAN = /^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\s+([A-Z]{2}\d{2}[A-Z0-9]{11,30})$/;
+
 /** A row that does not read as its layout says; the reader turns it into the layout's refusal. */
 class RowProblem {}
 
@@ -531,8 +534,17 @@ function tryParseDate(text: string, format: CsvDateFormat, today = new Date()): 
 	return isCalendarDate(date) ? date : null;
 }
 
-/** Empty, or an old account number of digits only: none. Anything else must be a valid IBAN. */
+/**
+ * Empty, or an old account number of digits only: none. A BIC and an IBAN in one cell, as Triodos writes them: the
+ * IBAN. Anything else must be a valid IBAN.
+ */
 function counterpartyIban(value: string | null): string | null {
+	const withBic = BIC_AND_IBAN.exec(value?.trim().toUpperCase() ?? '');
+	if (withBic) {
+		const iban = normalizeIban(withBic[1]);
+		if (!iban) throw new RowProblem();
+		return iban;
+	}
 	const compact = value?.replace(/\s+/g, '').toUpperCase();
 	if (!compact || /^\d+$/.test(compact)) return null;
 	const iban = normalizeIban(compact);

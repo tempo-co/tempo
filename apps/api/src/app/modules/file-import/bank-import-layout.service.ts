@@ -20,6 +20,7 @@ import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {LayoutMapper, LayoutMapperError} from './mapper/layout-mapper';
 import {LayoutAnswer, toMapperInput} from './mapper/layout-mapper.contract';
 import {CsvLayout, MAX_SKIP_AFTER, MAX_SKIP_BEFORE, validateCsvLayout} from './parsers/csv-layout';
+import {NO_ACCOUNT_LAYOUT_BANKS, namesNoAccount} from './parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from './parsers/currency-codes';
 import {amountScale, formatUnits, parseDecimal} from './parsers/decimal';
 import {NormalizedRow, NormalizedStatement, STATEMENT_BANKS} from './parsers/parse-result';
@@ -174,6 +175,12 @@ export class BankImportLayoutService {
 			const proposal = await this.lockProposal(manager, ownerId, proposalId);
 			if (proposal.expiresAt.getTime() <= Date.now())
 				throw new BankImportRefusalException('layout_proposal_expired');
+			// A layout whose files name no account goes by its bank, so it cannot take a built-in one's. Unlike the
+			// Revolut check above, this one needs the proposal's layout, so it runs under the lock.
+			const builtIn = namesNoAccount(proposal.layout)
+				? NO_ACCOUNT_LAYOUT_BANKS.find((bank) => bank.toLowerCase() === bankName.toLowerCase())
+				: undefined;
+			if (builtIn) throw new BadRequestException(reservedBankName(builtIn));
 			if (proposal.currencyNeeded) {
 				if (typeof request.currency !== 'string' || !ISO_CURRENCY_CODES.has(request.currency)) {
 					throw new BadRequestException(INVALID_CURRENCY);

@@ -1250,6 +1250,19 @@ describe('Bank imports', () => {
 		]);
 		const again = await drop(agent, [RABOBANK_CSV]).expect(201);
 		expect(again.body).toMatchObject({format: 'csv', layout: 'rabobank-nl', rowsAdded: 0, rowsAlreadyPresent: 5});
+		// The credit card export names no account: its rows go by bank and currency, never to the current account.
+		const currentRows = await transactions.countBy({bankAccountId: current.id});
+		const card = await drop(agent, [readFileSync(join(FIXTURES, 'rabobank-creditcard-synthetic.csv'))]).expect(201);
+		expect(card.body).toMatchObject({
+			layout: 'rabobank-creditcard',
+			rowsAdded: 7,
+			accounts: [{name: 'Rabobank EUR', currency: 'EUR', created: true}],
+		});
+		expect(await bankAccounts.findOneByOrFail({id: card.body.accounts[0].id})).toMatchObject({
+			providerAccountId: 'file-bank:Rabobank:EUR',
+			iban: null,
+		});
+		expect(await transactions.countBy({bankAccountId: current.id})).toBe(currentRows);
 
 		// The same rows exported in another layout of the same bank are found already there, even in one drop.
 		const bunqDutch = readFileSync(join(FIXTURES, 'bunq-nl-synthetic.csv'));
@@ -1296,7 +1309,7 @@ describe('Bank imports', () => {
 			['150.00000000', 'EX-OFX-0002', 'Test Persoon'],
 			['-3.77000000', 'EX-OFX-0003', null],
 		]);
-		expect(await imports.countBy({accountId: owner.id})).toBe(4);
+		expect(await imports.countBy({accountId: owner.id})).toBe(5);
 	});
 
 	async function createSyncedRevolutAccount(owner: Account, currency = 'EUR') {
@@ -3211,6 +3224,8 @@ describe('Bank imports', () => {
 			status: 415,
 			code: 'legacy_xls_not_supported',
 			file: 1,
+			message:
+				"Old Excel files (.xls) can't be read. Download the statement again as CAMT.053, MT940, CSV or Excel (.xlsx).",
 		},
 		{
 			name: "a file with a bank's CSV header whose dates are written another way",
@@ -3271,12 +3286,12 @@ describe('Bank imports', () => {
 			code: 'too_many_files',
 			file: null,
 		},
-	])('refuses $name and writes nothing', async ({files, status, code, file, layout}) => {
+	])('refuses $name and writes nothing', async ({files, status, code, file, layout, message}) => {
 		const {owner, agent} = await createOwner();
 
 		const response = await drop(agent, files()).expect(status);
 
-		expect(response.body).toMatchObject({code, file});
+		expect(response.body).toMatchObject({code, file, ...(message ? {message} : {})});
 		// Only a near miss of a bank's CSV layout names the layout.
 		expect(response.body.layout).toBe(layout);
 		expect(await fileConnection(owner)).toBeNull();
