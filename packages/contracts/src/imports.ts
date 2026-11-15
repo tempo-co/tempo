@@ -308,6 +308,8 @@ export const BANK_IMPORT_LAYOUT_FIELDS = [
 	'counterparty',
 	'counterpartyAccount',
 	'description',
+	/** The column that marks the rows not booked yet, which are skipped. */
+	'pending',
 ] as const;
 export type BankImportLayoutField = (typeof BANK_IMPORT_LAYOUT_FIELDS)[number];
 

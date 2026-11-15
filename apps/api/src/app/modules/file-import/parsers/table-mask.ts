@@ -1,4 +1,4 @@
-import {MAX_LAYOUT_COLUMNS} from './csv-layout';
+import {MAX_LAYOUT_COLUMNS, PENDING_WORDS} from './csv-layout';
 import {ISO_CURRENCY_CODES} from './currency-codes';
 
 /** A file's table as found, before masking: every cell as written. */
@@ -130,7 +130,8 @@ export const PLAIN_WORDS: ReadonlySet<string> = new Set([
 	...['af', 'bij', 'debet', 'uit', 's', 'h', 'soll', 'haben', 'eingang', 'ausgang', 'débit', 'crédit'],
 	...['dare', 'avere', 'addebito', 'accredito', 'cargo', 'abono', 'wn', 'ma', 'uznanie', 'obciążenie'],
 	// Booked and pending.
-	...['booked', 'pending', 'gebucht', 'vorgemerkt', 'offen', 'geboekt', 'contabilizzato', 'en attente'],
+	...['booked', 'gebucht', 'geboekt', 'contabilizzato'],
+	...PENDING_WORDS,
 ]);
 
 /** A row cell sent as written: one of the `PLAIN_WORDS`, in any case. */

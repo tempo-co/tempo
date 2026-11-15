@@ -83,6 +83,8 @@ describe('validateCsvLayout', () => {
 		});
 		const headerless = {...OWNED, recognize: {columnCount: 6}};
 		expect(validateCsvLayout(headerless)).toEqual({ok: true, layout: headerless});
+		const pending = {...OWNED, pendingColumn: 0};
+		expect(validateCsvLayout(pending)).toEqual({ok: true, layout: pending});
 		const byDirection = {
 			...OWNED,
 			counterpartyName: {moneyIn: 2, moneyOut: 3},
@@ -135,6 +137,7 @@ describe('validateCsvLayout', () => {
 			error: 'amountStyle: missing thousandsSeparator',
 		},
 		{name: 'an unknown date format', value: {...OWNED, dateFormat: 'D/M/Y'}, error: 'dateFormat'},
+		{name: 'a pending column outside the row', value: {...OWNED, pendingColumn: 6}, error: 'pendingColumn'},
 		{
 			name: 'one counterparty column for both directions',
 			value: {...OWNED, counterpartyName: {moneyIn: 2, moneyOut: 2}},

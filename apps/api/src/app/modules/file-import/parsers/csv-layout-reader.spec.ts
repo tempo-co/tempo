@@ -428,6 +428,49 @@ describe("an owner's saved layouts", () => {
 		]);
 	});
 
+	it('skip the rows a status or date column marks as not booked yet, and count them', () => {
+		const layout: CsvLayout = {
+			...BALANCE,
+			recognize: {header: ['Date', 'Value date', 'Status', 'Description', 'Amount']},
+			delimiter: ';',
+			decimalMark: ',',
+			amountStyle: {thousandsSeparator: '.'},
+			dateFormat: 'DD.MM.YYYY',
+			currency: {fixed: 'EUR'},
+			valueDate: 1,
+			amount: {kind: 'signed', column: 4},
+			description: [3],
+		};
+		delete layout.balance;
+		const text = [
+			'Date;Value date;Status;Description;Amount',
+			'offen;--;Example;Example card payment;-41,25',
+			'05.10.2026;05.10.2026;Gebucht;Example Energy;-62,10',
+			'04.10.2026;04.10.2026;Vorgemerkt;Example Shop;-4,20',
+			'02.10.2026;02.10.2026;Gebucht;Example Employer;2.100,00',
+			'',
+		].join('\n');
+		const read = (column: number) =>
+			readCsvLayout(file(text), [{...layout, pendingColumn: column}], {owned: true, today: '2026-11-13'})
+				?.statements;
+
+		expect(refusal(text, [layout])).toEqual({code: 'layout_not_recognized', layout: layout.id});
+		expect(read(0)?.map(({entriesSkipped, rows}) => [entriesSkipped, rows.map(({amount}) => amount)])).toEqual([
+			[1, ['-62.10', '-4.20', '2100.00']],
+		]);
+		expect(refusal(text, [{...layout, pendingColumn: 2}])).toEqual({
+			code: 'layout_not_recognized',
+			layout: layout.id,
+		});
+		const booked = text.replace('offen;--;Example;', '06.10.2026;06.10.2026;Gebucht;');
+		expect(
+			readCsvLayout(file(booked), [{...layout, pendingColumn: 2}], {
+				owned: true,
+				today: '2026-11-13',
+			})?.statements.map(({entriesSkipped, rows}) => [entriesSkipped, rows.map(({amount}) => amount)]),
+		).toEqual([[1, ['-41.25', '-62.10', '2100.00']]]);
+	});
+
 	it("read the other party from the payer's columns on money in and the payee's on money out", () => {
 		const layout: CsvLayout = {
 			...BALANCE,

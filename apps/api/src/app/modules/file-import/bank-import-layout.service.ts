@@ -407,6 +407,7 @@ export function buildLayout(
 			...(answer.balance ? {balance: answer.balance} : {}),
 			...(answer.counterpartyName === null ? {} : {counterpartyName: answer.counterpartyName}),
 			...(answer.counterpartyAccount === null ? {} : {counterpartyIban: answer.counterpartyAccount}),
+			...(answer.pending === null ? {} : {pendingColumn: answer.pending}),
 			description: answer.description,
 		},
 	};
@@ -441,6 +442,7 @@ export function mappingOf(layout: CsvLayout, header: readonly string[] | null): 
 	addByDirection('counterparty', layout.counterpartyName);
 	addByDirection('counterpartyAccount', layout.counterpartyIban);
 	for (const column of layout.description) add('description', column);
+	add('pending', layout.pendingColumn);
 	return {
 		columns,
 		amount: amount.kind,

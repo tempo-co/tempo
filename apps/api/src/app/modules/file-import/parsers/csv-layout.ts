@@ -56,6 +56,11 @@ type CsvLayoutColumns = {
 	counterpartyName?: number | CsvByDirection;
 	/** An old account number (digits only) is left out; any other value must be a valid IBAN. */
 	counterpartyIban?: number | CsvByDirection;
+	/**
+	 * A row whose cell in this column is one of the `PENDING_WORDS` (a status column, or a date column that says
+	 * `offen` until the payment is booked) is not booked yet: it is skipped and counted as skipped, never read.
+	 */
+	pendingColumn?: number;
 	/** Joined with spaces, empty values left out. */
 	description: number[];
 	bankTransactionCode?: number;
@@ -66,6 +71,23 @@ type CsvLayoutColumns = {
  * holder on one side of every row and the other party on the other.
  */
 export type CsvByDirection = {moneyIn: number; moneyOut: number};
+
+/** What a status or date cell says of a payment not booked yet, compared case-folded. */
+export const PENDING_WORDS: ReadonlySet<string> = new Set([
+	'pending',
+	'vorgemerkt',
+	'offen',
+	'nicht gebucht',
+	'in bearbeitung',
+	'en attente',
+	'in sospeso',
+	'pendiente',
+]);
+
+/** Whether a cell says its row is not booked yet. */
+export function isPendingWord(value: string): boolean {
+	return PENDING_WORDS.has(value.trim().toLowerCase());
+}
 
 export const CSV_DELIMITERS = [',', ';', '\t', '|'] as const;
 export type CsvDelimiter = (typeof CSV_DELIMITERS)[number];
@@ -181,6 +203,7 @@ function layoutOf(value: unknown): CsvLayout {
 			'balance',
 			'counterpartyName',
 			'counterpartyIban',
+			'pendingColumn',
 			'bankTransactionCode',
 		],
 	});
@@ -282,6 +305,7 @@ function layoutOf(value: unknown): CsvLayout {
 				}),
 		...defined('counterpartyName', byDirection(layout.counterpartyName, 'counterpartyName')),
 		...defined('counterpartyIban', byDirection(layout.counterpartyIban, 'counterpartyIban')),
+		...defined('pendingColumn', optionalColumn(layout.pendingColumn, 'pendingColumn')),
 		description: layout.description.map((value: unknown) => column(value, 'description')),
 		...defined('bankTransactionCode', optionalColumn(layout.bankTransactionCode, 'bankTransactionCode')),
 	};

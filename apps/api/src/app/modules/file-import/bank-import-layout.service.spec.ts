@@ -28,6 +28,7 @@ describe('buildLayout', () => {
 		description: [1],
 		account: null,
 		transactionDate: null,
+		pending: null,
 	};
 
 	/** The file's statements as the proposal previews them, with the layout the answer builds on it. */
@@ -164,5 +165,31 @@ describe('buildLayout', () => {
 			{field: 'date', column: 3, header: 'Settlement date'},
 			{field: 'transactionDate', column: 2, header: 'Purchase date'},
 		]);
+	});
+
+	it('skips the rows the answer names as not booked yet', () => {
+		const text = lines(
+			'Buchungstag;Wertstellung;Vorgang;Buchungstext;Umsatz in EUR',
+			'offen;--;Example;Example card payment;-41,25',
+			'05.10.2026;05.10.2026;Example;Example Energy;-62,10',
+			'02.10.2026;02.10.2026;Example;Example Employer;2.100,00',
+		);
+
+		const proposed = propose(text, {
+			dateFormat: 'DD.MM.YYYY',
+			valueDate: 1,
+			amount: {kind: 'signed', column: 4},
+			decimalMark: ',',
+			thousandsSeparator: '.',
+			currency: {code: 'EUR'},
+			description: [3],
+			pending: 0,
+		});
+
+		expect(proposed.rows?.map(({bookingDate, amount}) => [bookingDate, amount])).toEqual([
+			['2026-10-05', '-62.10'],
+			['2026-10-02', '2100.00'],
+		]);
+		expect(proposed.mapping.columns).toContainEqual({field: 'pending', column: 1, header: 'Buchungstag'});
 	});
 });

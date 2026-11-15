@@ -1,6 +1,6 @@
 import {normalizeIban} from '../../banking/own-transfer/iban';
 import {readCsv} from './csv';
-import {CsvByDirection, CsvDateFormat, CsvLayout, csvLayoutColumnCount} from './csv-layout';
+import {CsvByDirection, CsvDateFormat, CsvLayout, csvLayoutColumnCount, isPendingWord} from './csv-layout';
 import {CSV_LAYOUTS} from './csv-layouts';
 import {isCalendarDate, serialDate} from './dates';
 import {Decimal, amountScale, formatUnits, parseDecimal} from './decimal';
@@ -246,10 +246,15 @@ function readTable(
 ): CsvLayoutRead | null {
 	const end = records.length - (layout.skipAfter ?? 0);
 	if (end < start) return null;
-	const body = records.slice(start, end);
+	const lines = records.slice(start, end);
+	const pending = (cells: readonly TableCell[]) =>
+		layout.pendingColumn !== undefined && isPendingWord(cells[layout.pendingColumn]?.text ?? '');
+	// A pending row is a row of the table all the same: one of another width is not skipped but refused.
+	const body = lines.filter((cells) => !pending(cells) || !fitsRow(cells, layout));
 	const statements = readRows(body, records.slice(0, layout.skipBefore ?? 0), layout);
 	if (!statements) return null;
 	if (options.owned && !plausible(statements, options.today ?? new Date().toISOString().slice(0, 10))) return null;
+	if (statements.length > 0) statements[0].entriesSkipped = lines.length - body.length;
 	return {layout, statements, dateCheck: options.owned ? dateCheck(body, layout) : null};
 }
 
@@ -377,6 +382,12 @@ function writesDebitsNegative(records: readonly TableCell[][], layout: CsvLayout
 	});
 }
 
+/** Whether a row has the layout's width; a workbook does not store the empty cells at a row's end. */
+function fitsRow(row: readonly TableCell[], layout: CsvLayout): boolean {
+	const columns = csvLayoutColumnCount(layout);
+	return layout.source === 'xlsx' ? trimRow([...row]).length <= columns : row.length === columns;
+}
+
 function readRow(
 	row: readonly TableCell[],
 	layout: CsvLayout,
@@ -386,8 +397,7 @@ function readRow(
 	const {recognize} = layout;
 	const columns = csvLayoutColumnCount(layout);
 	const workbook = layout.source === 'xlsx';
-	// A workbook does not store the empty cells at a row's end.
-	if (workbook ? trimRow([...row]).length > columns : row.length !== columns) throw new RowProblem();
+	if (!fitsRow(row, layout)) throw new RowProblem();
 	const cells = workbook ? Array.from({length: columns}, (_, index) => row[index] ?? {text: '', number: false}) : row;
 	const cell = (column: number) => cells[column].text.trim();
 	const optional = (column: number | undefined) => (column === undefined ? null : cell(column) || null);

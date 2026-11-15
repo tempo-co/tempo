@@ -74,6 +74,11 @@ describe('maskTable', () => {
 		{name: 'Debit and Credit, each written once', column: ['Debit', 'Credit'], sent: ['Debit', 'Credit']},
 		{name: 'Soll and Haben', column: ['Soll', 'Haben', 'Haben'], sent: ['Soll', 'Haben', 'Haben']},
 		{
+			name: 'a date column that says offen until the payment is booked',
+			column: ['offen', '05.10.2026', '02.10.2026'],
+			sent: ['offen', '99.99.9999', '99.99.9999'],
+		},
+		{
 			name: 'a status word beside a name, which stays masked',
 			column: ['Gebucht', 'Example', 'VORGEMERKT'],
 			sent: ['Gebucht', 'Aaaaaaa', 'VORGEMERKT'],
