@@ -30,8 +30,8 @@ function refusal(text: string | Buffer, owned: CsvLayout[] = []): {code: string;
 	throw new Error('The file was read');
 }
 
-// A valid IBAN at a bank in the same family as ASN Bank, whose exports share its shape.
-const OTHER_FAMILY_IBAN = 'NL76SNSB0900000001';
+// A valid IBAN at a bank outside ASN Bank's family, whose exports share its shape.
+const OTHER_BANK_IBAN = 'NL91ABNA0417164300';
 
 describe('bank CSV layouts', () => {
 	it('reads the statements of two accounts in one file, in booking order whichever way the file lists them', () => {
@@ -198,6 +198,55 @@ describe('bank CSV layouts', () => {
 			to: '"Euro"',
 		},
 		{layout: 'knab-nl', name: 'knab-synthetic.csv', change: 'a missing column', from: '"Huur maart";', to: ''},
+		{
+			layout: 'ing-nl-11',
+			name: 'ing-11-synthetic.csv',
+			change: 'a balance that does not follow the amounts',
+			from: '"2055,18"',
+			to: '"2055,81"',
+		},
+		{
+			layout: 'ing-en-11',
+			name: 'ing-en-11-synthetic.csv',
+			change: 'an unknown direction',
+			from: '"Debit"',
+			to: '"Af"',
+		},
+		{
+			layout: 'ing-en',
+			name: 'ing-en-9-synthetic.csv',
+			change: 'a date in another format',
+			from: '"20261014"',
+			to: '"14-10-2026"',
+		},
+		{
+			layout: 'rabobank-en',
+			name: 'rabobank-en-synthetic.csv',
+			change: 'a balance that does not follow the amounts',
+			from: '"+1500,00"',
+			to: '"+1500,01"',
+		},
+		{
+			layout: 'rabobank-creditcard',
+			name: 'rabobank-creditcard-synthetic.csv',
+			change: 'a currency that is not a code',
+			from: '"EUR","9999"',
+			to: '"Euro","9999"',
+		},
+		{
+			layout: 'bunq-en-7',
+			name: 'bunq-en-7-synthetic.csv',
+			change: 'a misgrouped thousands separator',
+			from: '"2.500,00"',
+			to: '"25.00,00"',
+		},
+		{
+			layout: 'knab-nl-no-preamble',
+			name: 'knab-no-preamble-synthetic.csv',
+			change: 'an unknown direction',
+			from: '"D";"7,80"',
+			to: '"X";"7,80"',
+		},
 	])('refuses a $layout file with $change as layout_not_recognized', ({layout, name, from, to}) => {
 		const text = fixture(name);
 		expect(text).toContain(from);
@@ -213,7 +262,7 @@ describe('bank CSV layouts', () => {
 		},
 		{change: 'a date in another format', from: '02-03-2026,NL33', to: '2026-03-02,NL33'},
 		{change: 'an account IBAN that fails its checksum', from: 'NL33ASNB0700000001', to: 'NL34ASNB0700000001'},
-		{change: 'the account of another bank', from: /NL33ASNB0700000001/g, to: OTHER_FAMILY_IBAN},
+		{change: 'the account of another bank', from: /NL33ASNB0700000001/g, to: OTHER_BANK_IBAN},
 	])(
 		'leaves an ASN Bank file with $change unclaimed, since the export has no header, as a table of no known layout',
 		({from, to}) => {
@@ -223,6 +272,20 @@ describe('bank CSV layouts', () => {
 			expect(refusal(text.replace(from, to))).toEqual({code: 'layout_unknown', layout: null});
 		},
 	);
+
+	it.each([
+		{
+			change: 'a BIC beside an IBAN that fails its checksum',
+			from: 'INGBNL2A NL91ABNA0417164300',
+			to: 'INGBNL2A NL91ABNA0417164301',
+		},
+		{change: 'the account of another bank', from: /NL42TRIO0390000101/g, to: OTHER_BANK_IBAN},
+	])('leaves a Triodos Bank file with $change unclaimed, as a table of no known layout', ({from, to}) => {
+		const text = fixture('triodos-synthetic.csv');
+		expect(text).toMatch(from);
+
+		expect(refusal(text.replace(from, to))).toEqual({code: 'layout_unknown', layout: null});
+	});
 
 	it.each([
 		{

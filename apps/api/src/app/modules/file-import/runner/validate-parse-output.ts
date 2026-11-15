@@ -1,6 +1,7 @@
 import {normalizeIban} from '@modules/banking/own-transfer/iban';
 
 import {CSV_DELIMITERS, CsvLayout, MAX_LAYOUT_COLUMNS, isCsvLayoutId} from '../parsers/csv-layout';
+import {CSV_LAYOUTS, namesNoAccount} from '../parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from '../parsers/currency-codes';
 import {MAX_ARCHIVE_ENTRIES, MAX_ROWS_PER_DROP} from '../parsers/parse-limits';
 import {
@@ -107,7 +108,7 @@ export function validateParseOutput(output: unknown, owned: readonly CsvLayout[]
 
 /**
  * A statement names its account by IBAN or other id, or else, for a file that names none, by its bank: Revolut for
- * Revolut's own formats, or the bank of the owner's saved layout it was read with.
+ * Revolut's own formats, or the bank of the CSV layout (built in, or the owner's saved one) it was read with.
  */
 function validateStatement(value: unknown, owned: readonly CsvLayout[]): NormalizedStatement {
 	const statement = asRecord(value);
@@ -120,7 +121,9 @@ function validateStatement(value: unknown, owned: readonly CsvLayout[]): Normali
 	const layout = statement.layout;
 	if (format === 'csv' ? !isCsvLayoutId(layout) : layout !== null) throw new ParseRefusal('parse_failed');
 	const banks: readonly unknown[] =
-		format === 'csv' ? owned.filter(({id}) => id === layout).map(({bank}) => bank) : STATEMENT_BANKS;
+		format === 'csv'
+			? [...CSV_LAYOUTS.filter(namesNoAccount), ...owned].filter(({id}) => id === layout).map(({bank}) => bank)
+			: STATEMENT_BANKS;
 	if (bank !== null && (!banks.includes(bank) || accountIban || accountOtherId)) {
 		throw new ParseRefusal('parse_failed');
 	}
