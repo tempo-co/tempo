@@ -48,7 +48,7 @@ const LETTER = /\p{L}/u;
  * else, and for a table that rows of its width follow below a line of another width (skipping the lines below it
  * would drop them). The rows start at the run's first line with a cell that looks like a value, past lines padded
  * out to the run's width that hold only a few cells (`padded`); the line right above it is the header when none of
- * its cells does, and lines of the run above the header are lines above the table. A header right above the run
+ * its cells does and it is no padded line, and lines of the run above the header are lines above the table. A header right above the run
  * that is narrower only by the empty cells the rows end in is the table's. Padded lines, and lines whose cell in a
  * date or amount column is no value, at the run's end are lines below it. A file whose first line looks like a row
  * has no header. Lines above and below the table that could be its rows are counted (`rowsAbove`, `rowsBelow`).
@@ -80,9 +80,11 @@ export function sampleTable(bytes: Uint8Array): TableSample | null {
 	const rows = records.slice(table.start + firstRow, end);
 	const headerLine = table.start + firstRow - 1;
 	const above = records[headerLine];
+	// A padded line (a title, a holder's name) is never the header: a header's cells are sent as written.
 	const hasHeader =
 		headerLine >= 0 &&
 		looksLikeHeader(above) &&
+		!padded(above) &&
 		(firstRow > 0 || (text && above.length < columnCount && above.length >= Math.max(...rows.map(filledWidth))));
 	const start = hasHeader ? headerLine : table.start + firstRow;
 	const outside = rowsOfTable(rows, columnCount);

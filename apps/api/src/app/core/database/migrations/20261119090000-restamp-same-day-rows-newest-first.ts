@@ -22,6 +22,7 @@ export class RestampSameDayRowsNewestFirst20261119090000 implements MigrationInt
 	name = 'RestampSameDayRowsNewestFirst20261119090000';
 
 	public async up(queryRunner: QueryRunner): Promise<void> {
+		if (!(await queryRunner.hasTable('bank_transactions'))) return;
 		const accounts = (await queryRunner.query(
 			`SELECT DISTINCT "bankAccountId" AS "id" FROM "bank_transactions"`,
 		)) as Array<{
