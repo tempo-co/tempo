@@ -72,6 +72,27 @@ jobs:
                   if [[ $api == true || $web == true ]]; then e2e=true; fi
                   printf 'api=%s\nweb=%s\nops=%s\ne2e=%s\n' "$api" "$web" "$ops" "$e2e" | tee -a "$GITHUB_OUTPUT"
 
+    # Not gated: every change can touch a living doc or a path one names.
+    docs:
+        name: Docs check
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  persist-credentials: false
+
+            - name: Setup Node.js 26.x
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              with:
+                  node-version: 26.x
+
+            - name: Test the docs check
+              run: node --test .github/scripts/check-docs.test.mjs
+
+            - name: Check living docs
+              run: node .github/scripts/check-docs.mjs
+
     ops:
         name: Ops checks
         runs-on: ubuntu-latest
@@ -578,7 +599,7 @@ jobs:
         name: CI
         runs-on: ubuntu-latest
         needs:
-            [changes, ops, api-lint-format, api-build, api-unit-test, api-e2e-test, api-image, web-lint-format, web-build, web-e2e-shards, web-e2e-test, web-image]
+            [changes, docs, ops, api-lint-format, api-build, api-unit-test, api-e2e-test, api-image, web-lint-format, web-build, web-e2e-shards, web-e2e-test, web-image]
         if: ${{ always() }}
         steps:
             - name: Require every needed job to pass or be skipped
