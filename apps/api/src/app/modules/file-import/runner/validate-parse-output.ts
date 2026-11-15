@@ -12,6 +12,7 @@ import {
 	ParseResult,
 	STATEMENT_BANKS,
 	STATEMENT_FORMATS,
+	StatementBalance,
 	StatementFormat,
 } from '../parsers/parse-result';
 import {MAX_COLUMN_SHAPES, MAX_HEADER_CELL_LENGTH, MAX_MASKED_CELL_LENGTH} from '../parsers/table-mask';
@@ -137,6 +138,8 @@ function validateStatement(value: unknown, owned: readonly CsvLayout[]): Normali
 		accountCurrency: validCurrency(statement.accountCurrency),
 		sequenceNumber: cleanText(statement.sequenceNumber, MAX_SEQUENCE_NUMBER_LENGTH, true),
 		entriesSkipped,
+		openingBalance: validBalance(statement.openingBalance),
+		closingBalance: validBalance(statement.closingBalance),
 		rows: (statement.rows as unknown[]).map(validateRow),
 	};
 }
@@ -167,6 +170,14 @@ function validateRow(value: unknown): NormalizedRow {
 		bankTransactionSubCode: cleanText(row.bankTransactionSubCode, TEXT_LIMITS.bankTransactionSubCode),
 		referenceNumber: cleanText(row.referenceNumber, TEXT_LIMITS.referenceNumber),
 	};
+}
+
+function validBalance(value: unknown): StatementBalance | null {
+	if (value === null) return null;
+	const balance = asRecord(value);
+	const date = validDate(balance.date);
+	if (date === null) throw new ParseRefusal('parse_failed');
+	return {date, amount: validAmount(balance.amount)};
 }
 
 function validFormat(value: unknown): StatementFormat {

@@ -306,6 +306,8 @@ function readRows(
 		accountCurrency: group[0].currency,
 		sequenceNumber: null,
 		entriesSkipped: 0,
+		openingBalance: null,
+		closingBalance: null,
 		// In booking order: a file listing the newest first is turned around.
 		rows: (order === 'reversed' ? [...group].reverse() : group).map(
 			({iban: _iban, units: _units, balance: _balance, ...row}) => row,

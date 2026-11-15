@@ -67,6 +67,13 @@ export function nameEndsWithCurrency(name: string, currency: string) {
   );
 }
 
+/** What the summary says where a statement does not open at the balance the one before it closed at. */
+export const STATEMENT_GAPS_COPY = {
+  title: 'Transactions missing between statements',
+  description:
+    "Where a statement doesn't open at the balance the one before it closed at, these files leave out transactions. The rest were imported. Import the statements for these days to add them:",
+};
+
 /** `Imported 3 files`; an undone import's summary says it was undone instead. */
 export function summaryTitle(summary: Pick<BankImportSummary, 'filesCount' | 'undoneAt'>) {
   if (summary.undoneAt) return 'Import undone';

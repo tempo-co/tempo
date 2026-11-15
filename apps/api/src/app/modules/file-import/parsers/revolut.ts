@@ -131,6 +131,8 @@ function revolutStatements(records: readonly RevolutRecord[], format: StatementF
 			accountCurrency: currency,
 			sequenceNumber: null,
 			entriesSkipped: 0,
+			openingBalance: null,
+			closingBalance: null,
 			rows: [],
 		};
 		statements.set(currency, statement);

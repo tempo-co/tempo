@@ -1,7 +1,8 @@
 import type {BankImportSummary} from '@tempo/contracts';
-import {ArrowDownToLine, CalendarRange, CheckCheck, Undo2} from 'lucide-react';
+import {ArrowDownToLine, CalendarRange, CheckCheck, FileWarning, Undo2} from 'lucide-react';
 import type {ElementType, ReactNode} from 'react';
 
+import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {StateMessage} from '@/components/shared/state-message';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {type BankLogos, bankLogoKey, useBankLogos} from '@/features/banking/api/use-bank-logos';
@@ -15,6 +16,7 @@ import {accountSubline} from '@/features/banking/utils/bank-account-name';
 import {cn} from '@/utils/cn';
 
 import {
+  STATEMENT_GAPS_COPY,
   formatCount,
   formatDateRange,
   isNothingNew,
@@ -80,6 +82,7 @@ export function ImportSummaryBody({summary}: {summary: BankImportSummary}) {
           ]}
         />
       )}
+      {!undoneAt && <StatementGaps summary={summary} known={known} />}
       {!undoneAt && <NeverSentRows summary={summary} kind='not_in_bank' />}
       {!undoneAt && <NeverSentRows summary={summary} kind='removed_by_sync' />}
       {(range || summary.accounts.length > 0) && (
@@ -118,6 +121,53 @@ function Counts({counts, muted}: {counts: Count[]; muted?: boolean}) {
         </div>
       ))}
     </dl>
+  );
+}
+
+/**
+ * Where a statement of the drop does not open at the balance the one before it closed at: the days between them and
+ * what the missing transactions add up to, under the account's name when the drop went to several.
+ */
+function StatementGaps({
+  summary,
+  known,
+}: {
+  summary: BankImportSummary;
+  known: Map<string, KnownAccount>;
+}) {
+  const gaps = summary.statementGaps;
+  if (gaps.length === 0) return null;
+  const named = new Set(gaps.map(({bankAccountId}) => bankAccountId)).size > 1;
+  return (
+    <Alert variant='warning' data-testid='bank-import-statement-gaps'>
+      <FileWarning aria-hidden='true' />
+      <AlertTitle>{STATEMENT_GAPS_COPY.title}</AlertTitle>
+      <AlertDescription>
+        <p>{STATEMENT_GAPS_COPY.description}</p>
+        <ul className='mt-2 grid w-full grid-cols-1 gap-1'>
+          {gaps.map((gap) => {
+            const account = summary.accounts.find(({id}) => id === gap.bankAccountId);
+            return (
+              <li
+                key={`${gap.bankAccountId}:${gap.from}:${gap.to}`}
+                className='flex items-baseline justify-between gap-4 text-foreground'
+              >
+                <span className='min-w-0 wrap-anywhere'>
+                  {formatDateRange(gap.from, gap.to)}
+                  {named && account && (
+                    <span className='text-muted-foreground'>
+                      {' '}
+                      · {importAccountName(account, known)}
+                    </span>
+                  )}
+                </span>
+                <CurrencyAmount amount={Number(gap.amount)} currency={gap.currency} />
+              </li>
+            );
+          })}
+        </ul>
+      </AlertDescription>
+    </Alert>
   );
 }
 

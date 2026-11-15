@@ -47,6 +47,8 @@ export function parseAbnAmroTxt(bytes: Uint8Array): NormalizedStatement[] {
 			accountCurrency: currency,
 			sequenceNumber: null,
 			entriesSkipped: 0,
+			openingBalance: null,
+			closingBalance: null,
 			rows: [],
 		};
 		statements.set(key, statement);

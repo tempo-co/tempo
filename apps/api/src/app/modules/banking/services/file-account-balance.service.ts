@@ -20,8 +20,10 @@ type BalanceFields = Pick<BankAccount, 'currentBalanceAmount' | 'currentBalanceT
 /**
  * The balance of an account that exists only from imported files. It is the anchor amount plus every row booked
  * after the anchor's day, reported as of midnight UTC of the later of that day and the newest booking day, so the
- * balance trend rebuilds history from it like a synced account's. The anchor is the newest unambiguous end-of-day
- * balance the stored rows state (`findFileAnchor`), else the balance the owner stated, dated the day they stated it.
+ * balance trend rebuilds history from it like a synced account's. The anchor is the newest balance the account's
+ * files state: an unambiguous end-of-day balance of its stored rows (`findFileAnchor`) or a statement's closing
+ * balance an import that is not undone recorded for it, the rows' on the same day. Without one it is the balance the
+ * owner stated, dated the day they stated it.
  */
 @Injectable()
 export class FileAccountBalanceService {
@@ -114,8 +116,31 @@ export class FileAccountBalanceService {
 		return sources;
 	}
 
-	/** The account's file anchor, from the rows of its newest `FILE_ANCHOR_MAX_DAYS` booking days with balances. */
+	/**
+	 * The account's file anchor: the newer of its rows' (`findRowAnchor`) and the newest closing balance its imports
+	 * that are not undone recorded, the rows' on the same day.
+	 */
 	private async findFileAnchor(manager: EntityManager, bankAccountId: BankAccount['id']): Promise<FileAnchor | null> {
+		const rowAnchor = await this.findRowAnchor(manager, bankAccountId);
+		// Joined through the account's own connection, so only its owner's imports count.
+		const [statement]: FileAnchor[] = await manager.query(
+			`SELECT closing->>'date' AS "date", closing->>'amount' AS "amount"
+			FROM "bank_accounts" bank_account
+			JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+			JOIN "bank_imports" bank_import ON bank_import."accountId" = connection."accountId"
+				AND bank_import."undoneAt" IS NULL
+			CROSS JOIN LATERAL jsonb_array_elements(bank_import."closingBalances") closing
+			WHERE bank_account."id" = $1 AND closing->>'bankAccountId' = $1::text
+			ORDER BY closing->>'date' DESC, bank_import."createdAt" DESC
+			LIMIT 1`,
+			[bankAccountId],
+		);
+		if (!statement) return rowAnchor;
+		return rowAnchor && rowAnchor.date >= statement.date ? rowAnchor : statement;
+	}
+
+	/** The anchor of the account's rows, from those of its newest `FILE_ANCHOR_MAX_DAYS` booking days with balances. */
+	private async findRowAnchor(manager: EntityManager, bankAccountId: BankAccount['id']): Promise<FileAnchor | null> {
 		const rows: StatedBalanceRow[] = await manager.query(
 			`SELECT to_char(t."bookingDate", 'YYYY-MM-DD') AS "bookingDate", t."amount"::text AS "amount",
 				t."balanceAfterAmount"::text AS "balanceAfter"
