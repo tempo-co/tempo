@@ -151,21 +151,6 @@
         "apps/web/AGENTS.md"
       ],
       "reason": "an example file name for a naming rule"
-    },
-    {
-      "paths": [
-        "bank-authorization.service.spec.ts",
-        "banking-sync.service.spec.ts",
-        "session.module.ts",
-        "auth.guard.ts",
-        "main.ts",
-        "modules/account/auth-secret-keys.ts",
-        "core/queue"
-      ],
-      "docs": [
-        "apps/api/AGENTS.md"
-      ],
-      "reason": "short names for files under src/; remove once the doc names their full paths"
     }
   ]
 }
