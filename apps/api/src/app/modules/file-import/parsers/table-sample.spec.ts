@@ -315,6 +315,14 @@ describe('sampleTable', () => {
 			header: expect.arrayContaining(['Date']),
 			rowCount: 3,
 		});
+		// A last row with text in a column the rows above fill with numbers is a row all the same.
+		expect(
+			sampleTable(
+				Buffer.from(
+					'Date;Amount;Reference;Description\n2026-10-05;-4.20;12345;Cafe\n2026-10-09;-62.10;NOTPROVIDED;Energy\n',
+				),
+			),
+		).toMatchObject({skipAfter: 0, rowCount: 2});
 		// A footer of the table's width whose date cell holds a word is a line below it, not a row.
 		expect(sampleTable(sparse([...full, '2026-10-09;-62.10;Energy;Home;x;y', 'Saldo;2433.40;;;;']))).toMatchObject({
 			skipAfter: 1,

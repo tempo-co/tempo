@@ -115,8 +115,8 @@ export function decodeTable(bytes: Uint8Array, encoding: CsvTextEncoding): strin
 /**
  * The encoding a text file is written in: UTF-16LE after its byte order mark, else UTF-8 when the bytes are valid
  * UTF-8, else the code page whose reading gives letters where the other gives symbols. Polish, Czech and Hungarian
- * letters such as `ł`, `ż` and `ą` are symbols in Windows-1252 (`³`, `¿`, `¹`). Windows-1250 needs two such letters,
- * so one `¿` in Spanish text keeps Windows-1252, which also wins a tie.
+ * letters such as `ł`, `ś` and `ą` are symbols in Windows-1252 (`³`, `œ`, `¹`). Windows-1250 needs two such letters,
+ * and Windows-1252 wins a tie.
  */
 export function detectEncoding(bytes: Uint8Array): CsvTextEncoding {
 	if (bytes[0] === UTF16LE_BOM[0] && bytes[1] === UTF16LE_BOM[1]) return 'utf-16le';
@@ -126,7 +126,8 @@ export function detectEncoding(bytes: Uint8Array): CsvTextEncoding {
 	const letter = /\p{L}/u;
 	let central = 0;
 	let western = 0;
-	for (const byte of new Set(bytes.filter((value) => value >= 0x80))) {
+	// `¡` and `¿` are Spanish punctuation in Windows-1252, though Windows-1250 reads them as letters.
+	for (const byte of new Set(bytes.filter((value) => value >= 0x80 && value !== 0xa1 && value !== 0xbf))) {
 		const one = Uint8Array.of(byte);
 		const centralLetter = letter.test(centralText.decode(one));
 		const westernLetter = letter.test(westernText.decode(one));

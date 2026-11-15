@@ -6,6 +6,7 @@ import {
 	MAX_LAYOUT_COLUMNS,
 	decodeTable,
 	detectEncoding,
+	isPendingWord,
 } from './csv-layout';
 import {MaskedTable, maskTable} from './table-mask';
 import {isXlsx, readFirstSheet} from './xlsx';
@@ -67,14 +68,12 @@ export function sampleTable(bytes: Uint8Array): TableSample | null {
 	const firstRow = run.findIndex((row, index) => index > lastHeader && row.some(looksLikeValue) && !padded(row));
 	if (firstRow === -1) return null;
 	let end = table.end;
-	// The last line is below the table when it is padding, or holds something else where the lines above it all hold
-	// a value (`Kontostand` in the date column).
+	// The last line is below the table when it is padding, or holds a word where the lines above it all hold a date
+	// (`Kontostand`).
 	while (
 		end - 1 > table.start + firstRow &&
 		(padded(records[end - 1]) ||
-			!rowsOfTable(records.slice(table.start + firstRow, end - 1), columnCount).fitsValueColumns(
-				records[end - 1],
-			))
+			!rowsOfTable(records.slice(table.start + firstRow, end - 1), columnCount).fitsDateColumns(records[end - 1]))
 	) {
 		end--;
 	}
@@ -126,9 +125,10 @@ function paddedLine(cells: readonly string[], columnCount: number): boolean {
 
 /**
  * Which lines outside a table could be among its rows, a layout skipping them would drop: lines that look like rows
- * (`looksLikeRow`), less padded lines and lines whose cell in a column every row fills with a value (a date, an
- * amount) is something else, such as `Kontostand` on a balance line. Above the table, a line narrower than it (a
- * summary line of another table) is no row either; below it, one is (a row cut short).
+ * (`looksLikeRow`), less padded lines and lines whose cell in a date column (one every row above fills with a date
+ * only) is a word, such as `Kontostand` on a balance line. A pending word there (`offen`) is a row's. Above the
+ * table, a line narrower than it (a summary line of another table) is no row either; below it, one is (a row cut
+ * short).
  */
 export function rowsOfTable(
 	rows: readonly (readonly string[])[],
@@ -136,21 +136,24 @@ export function rowsOfTable(
 ): {
 	above: (cells: readonly string[]) => boolean;
 	below: (cells: readonly string[]) => boolean;
-	fitsValueColumns: (cells: readonly string[]) => boolean;
+	fitsDateColumns: (cells: readonly string[]) => boolean;
 } {
-	const valueColumns = Array.from({length: columnCount}, (_, column) => column).filter((column) => {
+	const dateColumns = Array.from({length: columnCount}, (_, column) => column).filter((column) => {
 		const filled = rows.map((row) => (row[column] ?? '').trim()).filter((cell) => cell !== '');
-		return filled.length > 0 && filled.every(looksLikeValue);
+		return filled.length > 0 && filled.every((cell) => DATE_SHAPE.test(cell));
 	});
-	const fitsValueColumns = (cells: readonly string[]) =>
-		valueColumns.every((column) => {
+	const fitsDateColumns = (cells: readonly string[]) =>
+		dateColumns.every((column) => {
 			const cell = (cells[column] ?? '').trim();
-			return cell === '' || looksLikeValue(cell);
+			return cell === '' || DATE_SHAPE.test(cell) || isPendingWord(cell);
 		});
 	const below = (cells: readonly string[]) =>
-		looksLikeRow(cells) && !paddedLine(cells, columnCount) && fitsValueColumns(cells);
-	return {above: (cells) => cells.length >= columnCount && below(cells), below, fitsValueColumns};
+		looksLikeRow(cells) && !paddedLine(cells, columnCount) && fitsDateColumns(cells);
+	return {above: (cells) => cells.length >= columnCount && below(cells), below, fitsDateColumns};
 }
+
+/** A cell written like a date: `2026-10-05`, `5.10.2026`, `2026.10.05.`, `05 Oct 2026`, `20261005`, a time after it. */
+const DATE_SHAPE = /^(?:\d{1,4}[./-]\d{1,2}[./-]\d{1,4}\.?|\d{1,2}[ -]\p{L}{3,4}\.?[ -]\d{2,4}|\d{8})(?:[ T].*)?$/u;
 
 /**
  * A line that looks like a transaction row rather than a title, an account line or a header: two or more of its cells
