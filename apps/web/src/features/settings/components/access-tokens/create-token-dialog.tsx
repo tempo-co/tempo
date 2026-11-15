@@ -40,10 +40,6 @@ import {
 } from '../../types/create-personal-access-token.dto';
 import {CopyField} from './copy-field';
 
-/**
- * Give it a new `key` for each opening: every open then starts clean, while a close keeps its content, so a
- * closing reveal does not flash the create form. The secret leaves memory on the next open or unmount.
- */
 type CreateTokenDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -51,6 +47,10 @@ type CreateTokenDialogProps = {
   onClosed?: () => void;
 };
 
+/**
+ * Give it a new `key` for each opening: every open then starts clean, while a close keeps its content, so a
+ * closing reveal does not flash the create form. The secret leaves memory on the next open or unmount.
+ */
 export function CreateTokenDialog({open, onOpenChange, onClosed}: CreateTokenDialogProps) {
   const [secret, setSecret] = useState<string>();
   const create = useCreatePersonalAccessToken(setSecret);
