@@ -2,7 +2,7 @@ import {type Element} from '@xmldom/xmldom';
 
 import {checkedDate} from './dates';
 import {amountScale, formatUnits, parseDecimal} from './decimal';
-import {NormalizedRow, NormalizedStatement, ParseRefusal} from './parse-result';
+import {NormalizedRow, NormalizedStatement, ParseRefusal, StatementBalance} from './parse-result';
 import {child, children, parseXml} from './xml';
 
 /** Statements (camt.053) and account reports (camt.052), any version. */
@@ -88,7 +88,11 @@ function parseStatement(statement: Element): NormalizedStatement {
 		rows.push(parseEntry(entry));
 	}
 
-	const balanceAfter = reconcileBalances(balances, rows, entryOrder(servicerBic(account)));
+	const {openingBalance, closingBalance, balanceAfter} = reconcileBalances(
+		balances,
+		rows,
+		entryOrder(servicerBic(account)),
+	);
 	return {
 		format: 'camt053',
 		layout: null,
@@ -98,6 +102,8 @@ function parseStatement(statement: Element): NormalizedStatement {
 		accountCurrency,
 		sequenceNumber: text(child(statement, 'ElctrncSeqNb')),
 		entriesSkipped,
+		openingBalance,
+		closingBalance,
 		rows: rows.map(({units: _units, scale: _scale, ...row}, index) => ({
 			...row,
 			balanceAfter: balanceAfter?.[index] ?? null,
@@ -215,33 +221,46 @@ function entryOrder(bic: string | null): EntryOrder | null {
 }
 
 /**
- * The balance after each row (in document order): the opening balance plus the running sum in booking order, kept
- * only when the last one equals the closing balance exactly. Several rows need a known entry order; without one
- * every row is left without a balance, since a missing balance is better than a wrong one.
+ * The statement's stated balances and the balance after each row (in document order). A statement stating both an
+ * opening and a closing balance must reconcile: the opening balance plus every booked entry equals the closing
+ * balance, in whatever order the entries come, or the file is refused as damaged or altered. The balance after each
+ * row is the running sum in booking order, so it needs a known entry order for several rows; without one every row
+ * is left without a balance, since a missing balance is better than a wrong one.
  */
 function reconcileBalances(
 	balances: Element[],
 	rows: {units: bigint; scale: number}[],
 	order: EntryOrder | null,
-): string[] | null {
-	if (rows.length > 1 && !order) return null;
-	const opening = balances.find((balance) => OPENING_BALANCE_TYPES.includes(balanceType(balance) ?? ''));
-	const closing = balances.find((balance) => balanceType(balance) === CLOSING_BALANCE_TYPE);
-	if (!opening || !closing) return null;
-	const openingAmount = balanceAmount(opening);
-	const closingAmount = balanceAmount(closing);
-	if (!openingAmount || !closingAmount) return null;
+): {openingBalance: StatementBalance | null; closingBalance: StatementBalance | null; balanceAfter: string[] | null} {
+	const openingElement = balances.find((balance) => OPENING_BALANCE_TYPES.includes(balanceType(balance) ?? ''));
+	const closingElement = balances.find((balance) => balanceType(balance) === CLOSING_BALANCE_TYPE);
+	const opening = openingElement ? balanceAmount(openingElement) : null;
+	const closing = closingElement ? balanceAmount(closingElement) : null;
+	const scale = amountScale(...[opening, closing].flatMap((amount) => (amount ? [amount] : [])), ...rows);
+	// A balance counts as stated with its day (`Dt/Dt`, or the date part of `Dt/DtTm`).
+	const stated = (element: Element | undefined, amount: typeof opening): StatementBalance | null => {
+		const date = element ? dateOf(child(element, 'Dt')) : null;
+		return amount && date ? {date, amount: formatUnits(amount.units, scale)} : null;
+	};
+	const result = {
+		openingBalance: stated(openingElement, opening),
+		closingBalance: stated(closingElement, closing),
+		balanceAfter: null,
+	};
+	if (!opening || !closing) return result;
 
-	const scale = amountScale(openingAmount, closingAmount, ...rows);
+	const total = rows.reduce((sum, row) => sum + row.units, opening.units);
+	if (total !== closing.units) throw new ParseRefusal('parse_failed');
+	if (rows.length > 1 && !order) return result;
 	const bookingOrder = rows.map((_row, index) => index);
 	if (order === 'newest_first') bookingOrder.reverse();
-	let running = openingAmount.units;
+	let running = opening.units;
 	const after: string[] = [];
 	for (const index of bookingOrder) {
 		running += rows[index].units;
 		after[index] = formatUnits(running, scale);
 	}
-	return running === closingAmount.units ? after : null;
+	return {...result, balanceAfter: after};
 }
 
 function balanceType(balance: Element): string | null {

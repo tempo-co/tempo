@@ -124,6 +124,8 @@ function parseStatement(statement: RawStatement): NormalizedStatement {
 		accountCurrency: opening.currency,
 		sequenceNumber: sequence === null ? null : BigInt(sequence).toString(),
 		entriesSkipped: 0,
+		openingBalance: {date: opening.date, amount: formatUnits(opening.amount.units, scale)},
+		closingBalance: {date: closing.date, amount: formatUnits(closing.amount.units, scale)},
 		rows: rows.map(({row}, index) => ({...row, balanceAfter: balances[index]})),
 	};
 }

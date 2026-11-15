@@ -1,5 +1,5 @@
 import type {BankImportSummary} from '@tempo/contracts';
-import {ArrowDownToLine, CalendarRange, CheckCheck, Undo2} from 'lucide-react';
+import {ArrowDownToLine, CalendarRange, CheckCheck, FileWarning, Undo2} from 'lucide-react';
 import type {ElementType, ReactNode} from 'react';
 
 import {StateMessage} from '@/components/shared/state-message';
@@ -15,9 +15,11 @@ import {accountSubline} from '@/features/banking/utils/bank-account-name';
 import {cn} from '@/utils/cn';
 
 import {
+  STATEMENT_GAPS_COPY,
   formatCount,
   formatDateRange,
   isNothingNew,
+  missingAmount,
   nameEndsWithCurrency,
   nothingNewCopy,
   undoneDescription,
@@ -80,6 +82,7 @@ export function ImportSummaryBody({summary}: {summary: BankImportSummary}) {
           ]}
         />
       )}
+      {!undoneAt && <StatementGaps summary={summary} known={known} />}
       {!undoneAt && <NeverSentRows summary={summary} kind='not_in_bank' />}
       {!undoneAt && <NeverSentRows summary={summary} kind='removed_by_sync' />}
       {(range || summary.accounts.length > 0) && (
@@ -118,6 +121,55 @@ function Counts({counts, muted}: {counts: Count[]; muted?: boolean}) {
         </div>
       ))}
     </dl>
+  );
+}
+
+/**
+ * Where a statement of the drop does not open at the balance the one before it closed at: the days between them and
+ * what the missing transactions add up to, with the account's name when the drop went to several accounts.
+ */
+function StatementGaps({
+  summary,
+  known,
+}: {
+  summary: BankImportSummary;
+  known: Map<string, KnownAccount>;
+}) {
+  const gaps = summary.statementGaps;
+  if (gaps.length === 0) return null;
+  const named = summary.accounts.length > 1;
+  return (
+    <Alert variant='warning' data-testid='bank-import-statement-gaps'>
+      <FileWarning aria-hidden='true' />
+      <AlertTitle>{STATEMENT_GAPS_COPY.title}</AlertTitle>
+      <AlertDescription>
+        <p>{STATEMENT_GAPS_COPY.description}</p>
+        <ul className='mt-2 grid w-full grid-cols-1 gap-2'>
+          {gaps.map((gap, index) => {
+            const account = summary.accounts.find(({id}) => id === gap.bankAccountId);
+            return (
+              <li
+                // One account can have a gap on the same days in two formats of one drop.
+                key={`${gap.bankAccountId}:${gap.from}:${gap.to}:${index}`}
+                className='flex items-baseline justify-between gap-4 text-foreground'
+              >
+                <span className='min-w-0'>
+                  <span className='block'>{formatDateRange(gap.from, gap.to)}</span>
+                  {named && account && (
+                    <span className='block text-xs wrap-anywhere text-muted-foreground'>
+                      {importAccountName(account, known)}
+                    </span>
+                  )}
+                </span>
+                <span className='numeric whitespace-nowrap'>
+                  {missingAmount(gap.amount, gap.currency)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </AlertDescription>
+    </Alert>
   );
 }
 

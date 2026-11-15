@@ -9,11 +9,16 @@ const BANK_CONNECTION_REMOVAL_SERVICE_DEPENDENCIES = [
 	'connectionLockService',
 	'ownTransferService',
 	'consentRevocationService',
+	'fileAccountBalanceService',
 ] as const;
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
 	ownTransferService: {recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
 	consentRevocationService: {revokeSessions: jest.fn().mockResolvedValue(undefined)},
+	fileAccountBalanceService: {
+		findAnchoredByConnection: jest.fn().mockResolvedValue([]),
+		recomputeAll: jest.fn().mockResolvedValue(undefined),
+	},
 };
 
 /** Builds the service with named test doubles; unspecified dependencies are empty objects. */

@@ -108,6 +108,7 @@ function importSummary(fields: Partial<BankImportSummary> = {}): BankImportSumma
     dateTo: '2026-10-30',
     accounts: [{id: CHECKING.id, name: 'Holder Name', currency: 'EUR', created: false}],
     accountsWithoutBalance: [],
+    statementGaps: [],
     undoneAt: null,
     createdAt: '2026-11-12T09:30:00.000Z',
     ...fields,
@@ -532,6 +533,46 @@ test.describe('statement file import on Connections', () => {
       'background-color',
       await bgOf(page, 'bg-primary'),
     );
+  });
+
+  test('names where statements leave out transactions, with the days and what they add up to, per account', async ({
+    page,
+  }) => {
+    const gap = {from: '2026-10-07', to: '2026-10-09', currency: 'EUR'};
+    await mockFileImport(page, {
+      uploads: [
+        created(
+          importSummary({
+            rowsDoubtful: 0,
+            accounts: [
+              {id: CHECKING.id, name: 'Holder Name', currency: 'EUR', created: false},
+              {id: FILE_ACCOUNT_ID, name: 'Example Card · EUR', currency: 'EUR', created: false},
+            ],
+            statementGaps: [
+              {...gap, bankAccountId: CHECKING.id, amount: '-1200.00'},
+              {...gap, bankAccountId: FILE_ACCOUNT_ID, from: '2026-09-30', amount: '5.00'},
+            ],
+          }),
+        ),
+      ],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog
+      .getByTestId('bank-import-file-input')
+      .setInputFiles([statement('statement-a.xml')]);
+
+    const gaps = dialog.getByTestId('bank-import-statement-gaps');
+    await expect(gaps.getByText('Some days are missing')).toBeVisible();
+    await expect(gaps).toContainText(
+      "These statements skip some days, so their transactions aren't in Tempo. Everything else was imported. Import the statements for these days to add them.",
+    );
+    await expect(gaps.getByRole('listitem')).toHaveText([
+      /^7 Oct – 9 Oct 2026\s*Mock ASPSP checking account\s*-€1,200\.00 missing$/,
+      /^30 Sept? – 9 Oct 2026\s*Example Card · EUR\s*€5\.00 missing$/,
+    ]);
+    // The counts still say what was imported.
+    await expect(dialog.getByText('New transactions')).toBeVisible();
   });
 
   test('lists the rows a bank never sent by who they went to, and adds one or a whole group in place', async ({

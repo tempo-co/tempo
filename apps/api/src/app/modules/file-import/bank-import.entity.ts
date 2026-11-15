@@ -1,8 +1,11 @@
-import type {BankImportFormat} from '@tempo/contracts';
+import type {BankImportFormat, BankImportStatementGap} from '@tempo/contracts';
 import {Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
+
+/** A closing balance an import's statements state for one account: a decimal string as of the end of `date`. */
+export type BankImportClosingBalance = {bankAccountId: string; date: string; amount: string};
 
 /** One drop of statement files. The files themselves are discarded after parsing; only this record is kept. */
 @Entity('bank_imports')
@@ -88,6 +91,17 @@ export class BankImport {
 	/** The accounts the drop created. */
 	@Column({type: 'uuid', array: true})
 	createdBankAccountIds: string[];
+
+	/**
+	 * Per imported-files account, the newest closing balance the drop's statements state, dated the later of its day
+	 * and its statement's last booking day. The account's balance may anchor on it until the import is undone.
+	 */
+	@Column({type: 'jsonb', default: () => `'[]'::jsonb`})
+	closingBalances: BankImportClosingBalance[];
+
+	/** Where a statement of the drop does not open at the closing balance of the one before it. */
+	@Column({type: 'jsonb', default: () => `'[]'::jsonb`})
+	statementGaps: BankImportStatementGap[];
 
 	@Column({type: 'timestamptz', nullable: true})
 	undoneAt: Date | null;

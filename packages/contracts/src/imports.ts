@@ -120,6 +120,19 @@ export type BankImportAccount = {
 	created: boolean;
 };
 
+/**
+ * Entries missing between two statements of one account: the later one opens at a balance `amount` away from the
+ * earlier one's closing balance. `from` is the earlier statement's closing day, `to` the later one's opening day.
+ */
+export type BankImportStatementGap = {
+	bankAccountId: string;
+	from: string;
+	to: string;
+	/** What the missing entries add up to: the later opening balance minus the earlier closing balance, signed. */
+	amount: string;
+	currency: string;
+};
+
 /** An account the owner can give a balance (`SetBankAccountBalanceRequest`). */
 export type BankImportAccountWithoutBalance = {
 	id: string;
@@ -174,6 +187,12 @@ export type BankImportSummary = {
 	 * the owner entered one. Empty for synced accounts and once the import is undone.
 	 */
 	accountsWithoutBalance: BankImportAccountWithoutBalance[];
+	/**
+	 * Where a statement of the drop does not open at the balance the statement before it (same account and format)
+	 * closed at, in drop order: entries between them are missing from the files. The rows that are there are imported.
+	 * On a synced account only the days outside its bank sync coverage are listed, each uncovered stretch as one gap.
+	 */
+	statementGaps: BankImportStatementGap[];
 	undoneAt: string | null;
 	createdAt: string;
 };

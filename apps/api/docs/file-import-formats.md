@@ -6,7 +6,7 @@ The files `src/app/modules/file-import/parsers/` reads, for the import described
 | ------------------------- | ------------------------------------ | ------------------------------------------------------------------------------- |
 | CAMT.053 and camt.052     | `src/app/modules/file-import/parsers/camt053.ts`                     | Also zipped, several statements per archive. Booked entries only.               |
 | MT940                     | `src/app/modules/file-import/parsers/mt940.ts`, `src/app/modules/file-import/parsers/mt940-information.ts` | UTF-8 or latin-1. Payee from the three published `:86:` layouts (below). |
-| OFX and QFX               | `src/app/modules/file-import/parsers/ofx.ts`                         | SGML and XML, bank and card statements. `LEDGERBAL` is not read.                |
+| OFX and QFX               | `src/app/modules/file-import/parsers/ofx.ts`                         | SGML and XML, bank and card statements. `LEDGERBAL` is the closing balance.     |
 | ABN AMRO TXT              | `src/app/modules/file-import/parsers/abn-amro-txt.ts`                |                                                                                 |
 | Revolut CSV and Excel     | `src/app/modules/file-import/parsers/revolut.ts`                     | Names no account; one statement per currency.                                   |
 | Bank CSV layouts          | `src/app/modules/file-import/parsers/csv-layout-reader.ts`, `src/app/modules/file-import/parsers/csv-layouts.ts` | The banks below. Layouts are data; every row must validate. |

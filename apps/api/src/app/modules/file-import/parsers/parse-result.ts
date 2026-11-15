@@ -59,6 +59,9 @@ export type StatementFormat = (typeof STATEMENT_FORMATS)[number];
  */
 export const STATEMENT_BANKS = ['Revolut'] as const;
 
+/** A balance a statement states: the decimal string as of the end of `date` (`YYYY-MM-DD`), signed. */
+export type StatementBalance = {date: string; amount: string};
+
 export type NormalizedStatement = {
 	format: StatementFormat;
 	/** The id of the bank's CSV layout the statement was read with; null for every other format. */
@@ -77,6 +80,16 @@ export type NormalizedStatement = {
 	sequenceNumber: string | null;
 	/** Entries left out because they are not booked. */
 	entriesSkipped: number;
+	/**
+	 * The booked balance before the statement's first entry, as the file states it (CAMT `OPBD`/`PRCD`, MT940
+	 * `:60F:`/`:60M:`); null when it states none.
+	 */
+	openingBalance: StatementBalance | null;
+	/**
+	 * The booked balance after the statement's last entry, as the file states it (CAMT `CLBD`, MT940 `:62F:`/`:62M:`,
+	 * OFX `LEDGERBAL` dated on or after every entry); null when it states none.
+	 */
+	closingBalance: StatementBalance | null;
 	rows: NormalizedRow[];
 };
 

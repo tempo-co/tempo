@@ -197,6 +197,8 @@ describe('parseCamt053', () => {
 					accountCurrency: 'EUR',
 					sequenceNumber: '61',
 					entriesSkipped: 1,
+					openingBalance: {date: '2026-03-01', amount: '1000.00'},
+					closingBalance: {date: '2026-03-01', amount: '1137.50'},
 					rows: [
 						expect.objectContaining({bankReference: 'B', amount: '150.00', balanceAfter: '1137.50'}),
 						expect.objectContaining({bankReference: 'A', amount: '-12.50', balanceAfter: '987.50'}),
@@ -215,17 +217,63 @@ describe('parseCamt053', () => {
 	});
 
 	it.each([
-		{name: 'does not reconcile', statement: {opening: '1000.00', closing: '999.00'}},
 		{name: 'comes from a bank whose entry order is unknown', statement: {servicerBic: 'EXAMPLEXX'}},
 		{name: 'names no account servicer', statement: {servicerBic: null}},
-	])('leaves the balance after empty for a statement with several rows that $name', ({statement}) => {
-		const [parsed] = parse(
+	])(
+		'leaves the balance after empty for a statement with several rows that $name, keeping its stated balances',
+		({statement}) => {
+			const [parsed] = parse(
+				camt053([
+					{
+						opening: '-1000.00',
+						closing: '-1014.50',
+						openingDate: '2026-03-01',
+						closingDate: '2026-03-02',
+						...statement,
+						entries: [{amount: '12.50'}, {amount: '2.00'}],
+					},
+				]),
+			);
+
+			expect(parsed.rows.map(({balanceAfter}) => balanceAfter)).toEqual([null, null]);
+			expect(parsed).toMatchObject({
+				openingBalance: {date: '2026-03-01', amount: '-1000.00'},
+				closingBalance: {date: '2026-03-02', amount: '-1014.50'},
+			});
+		},
+	);
+
+	it.each([
+		{name: 'several rows of a bank whose entry order is unknown', bic: 'EXAMPLEXX', entries: ['12.50', '2.00']},
+		{name: 'several rows of a bank whose entry order is known', bic: 'ABNANL2A', entries: ['12.50', '2.00']},
+		{name: 'one row', bic: 'EXAMPLEXX', entries: ['12.50']},
+		{name: 'no rows', bic: 'EXAMPLEXX', entries: []},
+	])('refuses a statement of $name whose entries do not add up to its closing balance', ({bic, entries}) => {
+		const xml = camt053([
+			{
+				servicerBic: bic,
+				opening: '1000.00',
+				closing: '999.00',
+				entries: entries.map((amount) => ({amount})),
+			},
+		]);
+
+		expect(() => parse(xml)).toThrow(new ParseRefusal('parse_failed'));
+	});
+
+	it('keeps the closing balance of a statement that states no opening balance, and states none without one', () => {
+		const [closedOnly, neither] = parse(
 			camt053([
-				{opening: '1000.00', closing: '985.50', ...statement, entries: [{amount: '12.50'}, {amount: '2.00'}]},
+				{closing: '985.50', closingDate: '2026-03-02', entries: [{amount: '12.50'}, {amount: '2.00'}]},
+				{entries: [{amount: '1.00'}]},
 			]),
 		);
 
-		expect(parsed.rows.map(({balanceAfter}) => balanceAfter)).toEqual([null, null]);
+		expect(closedOnly).toMatchObject({
+			openingBalance: null,
+			closingBalance: {date: '2026-03-02', amount: '985.50'},
+		});
+		expect(neither).toMatchObject({openingBalance: null, closingBalance: null});
 	});
 
 	it('reads a later version: wrapped status codes, DtTm dates as written, nested party names and several statements', () => {

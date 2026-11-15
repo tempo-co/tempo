@@ -38,6 +38,8 @@ const output = (rows: unknown[], statement: Record<string, unknown> = {}) => ({
 			accountCurrency: 'EUR',
 			sequenceNumber: '1',
 			entriesSkipped: 0,
+			openingBalance: {date: '2026-03-01', amount: '1000.00'},
+			closingBalance: null,
 			rows,
 			...statement,
 		},
@@ -63,6 +65,9 @@ describe('validateParseOutput', () => {
 		expect(first.counterpartyName).toBe(`Example Shop [31m ${'x'.repeat(300)}`.slice(0, 255));
 		expect(first.description).toBe('Example card payment');
 		expect(second.counterpartyIban).toBeNull();
+		expect(result).toMatchObject({
+			result: {statements: [{openingBalance: {date: '2026-03-01', amount: '1000.00'}, closingBalance: null}]},
+		});
 	});
 
 	it('accepts a statement that names no account when it names a known bank', () => {
@@ -162,6 +167,16 @@ describe('validateParseOutput', () => {
 			value: output([], {accountIban: null, accountOtherId: 'x'.repeat(56)}),
 		},
 		{name: 'a statement without an account', value: output([], {accountIban: null, accountOtherId: null})},
+		{name: 'a statement without its balances', value: output([], {openingBalance: undefined})},
+		{
+			name: 'a stated balance that is not a decimal',
+			value: output([], {closingBalance: {date: '2026-03-02', amount: '1,000.00'}}),
+		},
+		{
+			name: 'a stated balance on a day that does not exist',
+			value: output([], {closingBalance: {date: '2026-02-30', amount: '1000.00'}}),
+		},
+		{name: 'a stated balance without its day', value: output([], {closingBalance: {date: null, amount: '1.00'}})},
 	])('refuses $name as parse_failed', ({value}) => {
 		expect(() => validateParseOutput(value)).toThrow(new ParseRefusal('parse_failed'));
 	});

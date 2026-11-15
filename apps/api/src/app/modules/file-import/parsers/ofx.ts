@@ -1,7 +1,7 @@
 import {normalizeIban} from '../../banking/own-transfer/iban';
 import {checkedDate} from './dates';
 import {amountScale, formatUnits, parseDecimal} from './decimal';
-import {NormalizedRow, NormalizedStatement, ParseRefusal} from './parse-result';
+import {NormalizedRow, NormalizedStatement, ParseRefusal, StatementBalance} from './parse-result';
 
 const SNIFF_BYTES = 4096;
 const CURRENCY = /^[A-Z]{3}$/;
@@ -188,6 +188,9 @@ function parseStatement(statement: OfxElement, accountElement: 'BANKACCTFROM' | 
 	const accountId = value(account, 'ACCTID');
 	if (!accountId) throw new ParseRefusal('parse_failed');
 	const iban = normalizeIban(accountId);
+	const rows = children(child(statement, 'BANKTRANLIST'), 'STMTTRN').map((transaction) =>
+		parseTransaction(transaction, accountCurrency),
+	);
 	// An account number is unique only at its bank (and branch): UK sort codes, French bank and branch codes.
 	const otherId = [value(account, 'BANKID'), value(account, 'BRANCHID'), accountId].filter(Boolean).join(' ');
 	return {
@@ -199,10 +202,24 @@ function parseStatement(statement: OfxElement, accountElement: 'BANKACCTFROM' | 
 		accountCurrency,
 		sequenceNumber: null,
 		entriesSkipped: 0,
-		rows: children(child(statement, 'BANKTRANLIST'), 'STMTTRN').map((transaction) =>
-			parseTransaction(transaction, accountCurrency),
-		),
+		openingBalance: null,
+		closingBalance: ledgerBalance(child(statement, 'LEDGERBAL'), rows),
+		rows,
 	};
+}
+
+/**
+ * The ledger balance as the statement's closing balance, when it reads as an amount and is dated on or after every
+ * transaction's booking day: one dated earlier may leave the later transactions out, and a missing balance is better
+ * than a wrong one.
+ */
+function ledgerBalance(ledger: OfxElement | null, rows: readonly NormalizedRow[]): StatementBalance | null {
+	const amountText = value(ledger, 'BALAMT');
+	const asOf = date(value(ledger, 'DTASOF'));
+	if (!amountText || !asOf) return null;
+	const amount = parseDecimal(amountText, '.') ?? parseDecimal(amountText, ',');
+	if (!amount || rows.some(({bookingDate}) => bookingDate !== null && bookingDate > asOf)) return null;
+	return {date: asOf, amount: formatUnits(amount.units, amountScale(amount))};
 }
 
 function parseTransaction(transaction: OfxElement, currency: string): NormalizedRow {

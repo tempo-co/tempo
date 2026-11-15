@@ -8,6 +8,14 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": "6101",
 				"entriesSkipped": 0,
+				"openingBalance": {
+					"date": "2026-03-01",
+					"amount": "1000.00"
+				},
+				"closingBalance": {
+					"date": "2026-03-02",
+					"amount": "2637.50"
+				},
 				"rows": [
 					{
 						"bookingDate": "2026-03-02",
@@ -68,6 +76,14 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": "6102",
 				"entriesSkipped": 0,
+				"openingBalance": {
+					"date": "2026-03-02",
+					"amount": "2637.50"
+				},
+				"closingBalance": {
+					"date": "2026-03-04",
+					"amount": "2570.56"
+				},
 				"rows": [
 					{
 						"bookingDate": "2026-03-04",
@@ -145,6 +161,14 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": "6103",
 				"entriesSkipped": 0,
+				"openingBalance": {
+					"date": "2026-03-04",
+					"amount": "2570.56"
+				},
+				"closingBalance": {
+					"date": "2026-03-05",
+					"amount": "2545.61"
+				},
 				"rows": [
 					{
 						"bookingDate": "2026-03-05",
@@ -176,6 +200,8 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-01",
@@ -326,6 +352,8 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": null,
 				"entriesSkipped": 3,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-01",
@@ -454,6 +482,8 @@
 				"accountCurrency": "RON",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-03",
@@ -502,6 +532,8 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": null,
 				"entriesSkipped": 3,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-01",
@@ -630,6 +662,8 @@
 				"accountCurrency": "RON",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-03",
@@ -679,6 +713,8 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-05",
@@ -762,6 +798,8 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-02",
@@ -840,6 +878,8 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-02",
@@ -872,6 +912,8 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-02",
@@ -938,6 +980,8 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-05",
@@ -987,6 +1031,8 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-05",
@@ -1053,6 +1099,8 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-02",
@@ -1119,6 +1167,11 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": {
+					"date": "2026-03-05",
+					"amount": "1234.56"
+				},
 				"rows": [
 					{
 						"bookingDate": "2026-03-02",
@@ -1185,6 +1238,11 @@
 				"accountCurrency": "USD",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": {
+					"date": "2026-03-05",
+					"amount": "958.00"
+				},
 				"rows": [
 					{
 						"bookingDate": "2026-03-02",
@@ -1234,6 +1292,11 @@
 				"accountCurrency": "EUR",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": {
+					"date": "2026-03-31",
+					"amount": "-6.00"
+				},
 				"rows": [
 					{
 						"bookingDate": "2026-03-30",
@@ -1266,6 +1329,8 @@
 				"accountCurrency": "CAD",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-09",
@@ -1310,6 +1375,8 @@
 				"accountCurrency": "CAD",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-03-31",
@@ -1342,6 +1409,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "asn-nl",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -1629,6 +1698,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "asn-nl",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -1916,6 +1987,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "bunq-en",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -2203,6 +2276,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "bunq-en-7",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -2490,6 +2565,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "bunq-en-7-semicolon",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -2777,6 +2854,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "ing-nl-11",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -3064,6 +3143,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "ing-nl-11",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -3351,6 +3432,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "ing-en-11",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -3638,6 +3721,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "ing-en",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-14",
@@ -3925,6 +4010,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "rabobank-en",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",
@@ -4207,6 +4294,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "rabobank-en",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-13",
@@ -4239,6 +4328,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "rabobank-creditcard",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-02",
@@ -4374,6 +4465,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "knab-nl-no-preamble",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-14",
@@ -4661,6 +4754,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "knab-nl",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-14",
@@ -4948,6 +5043,8 @@
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
 				"layout": "triodos-nl",
+				"openingBalance": null,
+				"closingBalance": null,
 				"rows": [
 					{
 						"bookingDate": "2026-10-01",

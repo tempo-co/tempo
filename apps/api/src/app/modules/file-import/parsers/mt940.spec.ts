@@ -51,6 +51,8 @@ describe('parseMt940', () => {
 				accountCurrency: 'EUR',
 				sequenceNumber: '12',
 				entriesSkipped: 0,
+				openingBalance: {date: '2026-02-27', amount: '100.00'},
+				closingBalance: {date: '2026-03-02', amount: '87.50'},
 				rows: [
 					{
 						bookingDate: '2026-03-01',

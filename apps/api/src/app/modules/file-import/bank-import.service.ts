@@ -53,8 +53,9 @@ import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {BankImport} from './bank-import.entity';
 import {ImportOutcome, decideOnFinalDays} from './never-sent-rows';
 import {MAX_ROWS_PER_DROP} from './parsers/parse-limits';
-import {NormalizedRow, NormalizedStatement, StatementFormat} from './parsers/parse-result';
+import {NormalizedRow, NormalizedStatement, StatementBalance, StatementFormat} from './parsers/parse-result';
 import {ParseRunnerService} from './runner/parse-runner.service';
+import {RepeatedRows, StatementGap, gapsOutsideCoverage, joinStatements} from './statement-chain';
 
 export const BANK_IMPORT_NOT_FOUND = 'Import not found.';
 export const BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND = 'Row not found.';
@@ -87,7 +88,7 @@ export type BankImportRequest = {bankAccountId?: BankAccount['id'] | null; accou
 
 /**
  * The statements of one account in one drop: its rows per format (a bank CSV export per layout), in matching order
- * (`FORMAT_ORDER`, then layout id), each in booking order.
+ * (`FORMAT_ORDER`, then layout id), each joined in statement order (`joinStatements`).
  */
 type AccountRows = {
 	identifier: string;
@@ -102,6 +103,11 @@ type AccountRows = {
 	currency: string;
 	/** `learned`: read by one of the owner's saved layouts. */
 	byFormat: {format: StatementFormat; layout: string | null; learned: boolean; rows: NormalizedRow[]}[];
+	/** Rows a later statement of the same format repeats from an earlier one, left out of `byFormat`. */
+	repeated: RepeatedRows;
+	gaps: StatementGap[];
+	/** The newest closing balance any format's statements state (`joinStatements`); the first format's on a tie. */
+	closingBalance: StatementBalance | null;
 };
 
 /**
@@ -185,7 +191,7 @@ export class BankImportService {
 	): Promise<BankImportSummary> {
 		const {statements, kinds, learnedBanks} = await this.parseDrop(ownerId, files);
 		const accountRows = groupByAccount(statements, learnedBanks);
-		const allRows = accountRows.flatMap(({byFormat}) => byFormat.flatMap(({rows}) => rows));
+		const allRows = statements.flatMap(({rows}) => rows);
 		const bookingDates = allRows.flatMap(({bookingDate}) => (bookingDate ? [bookingDate] : [])).sort();
 		const rowsParsed = allRows.length;
 		const targets = bankAccountId
@@ -232,14 +238,37 @@ export class BankImportService {
 						dateTo: bookingDates.at(-1) ?? null,
 						bankAccountIds: accounts.map(({account}) => account.id),
 						createdBankAccountIds: accounts.filter(({created}) => created).map(({account}) => account.id),
+						// Only an imported-files account takes its balance from its files.
+						closingBalances: accountRows.flatMap(({closingBalance}, index) => {
+							const {account, connection} = accounts[index];
+							return closingBalance && connection.provider === BANK_CONNECTION_PROVIDERS.FILE
+								? [{bankAccountId: account.id, ...closingBalance}]
+								: [];
+						}),
+						// On a synced account only the days its bank sync does not cover can be missing from Tempo.
+						statementGaps: accountRows.flatMap(({gaps, currency}, index) => {
+							const {account, connection} = accounts[index];
+							const covered =
+								connection.provider !== BANK_CONNECTION_PROVIDERS.FILE &&
+								account.syncCoveredFrom &&
+								account.syncCoveredThrough
+									? {from: account.syncCoveredFrom, through: account.syncCoveredThrough}
+									: null;
+							return gapsOutsideCoverage(gaps, covered).map((gap) => ({
+								bankAccountId: account.id,
+								...gap,
+								currency,
+							}));
+						}),
 					}),
 				);
 
+				// Rows one statement of the drop repeats from another are already present, as on a later drop.
 				const counts: LadderCounts = {
 					rowsAdded: 0,
-					rowsMatchedByReference: 0,
-					rowsMatchedByBalance: 0,
-					rowsMatchedByDate: 0,
+					rowsMatchedByReference: sum(accountRows.map(({repeated}) => repeated.reference)),
+					rowsMatchedByBalance: sum(accountRows.map(({repeated}) => repeated.balance)),
+					rowsMatchedByDate: sum(accountRows.map(({repeated}) => repeated.date)),
 					rowsDoubtful: 0,
 					rowsNotInBank: 0,
 				};
@@ -1317,16 +1346,26 @@ export class BankImportService {
 }
 
 /**
- * Orders statements by electronic sequence number, then first booking date, and joins each account's rows in that
- * order, per format. An account is one (IBAN, other id or bank; currency) pair.
+ * Orders statements by electronic sequence number, then first booking date, and joins each account's statements in
+ * that order, per format (`joinStatements`). An account is one (IBAN, other id or bank; currency) pair.
+ * `learnedBanks`: the bank of each of the owner's saved layouts, by layout id.
  */
-/** `learnedBanks`: the bank of each of the owner's saved layouts, by layout id. */
 function groupByAccount(
 	statements: readonly NormalizedStatement[],
 	learnedBanks: ReadonlyMap<string, string>,
 ): AccountRows[] {
 	const ordered = [...statements].sort(compareStatements);
-	const groups = new Map<string, AccountRows>();
+	const groups = new Map<
+		string,
+		Omit<AccountRows, 'byFormat' | 'repeated' | 'gaps' | 'closingBalance'> & {
+			parts: {
+				format: StatementFormat;
+				layout: string | null;
+				learned: boolean;
+				statements: NormalizedStatement[];
+			}[];
+		}
+	>();
 	for (const statement of ordered) {
 		const [kind, identifier] = statement.accountIban
 			? ['iban', statement.accountIban]
@@ -1340,33 +1379,55 @@ function groupByAccount(
 			bank: statement.accountIban || statement.accountOtherId ? null : statement.bank,
 			learnedBank: null,
 			currency: statement.accountCurrency,
-			byFormat: [],
+			parts: [],
 		};
 		const learnedBank = (statement.layout && learnedBanks.get(statement.layout)) ?? null;
 		if (statement.accountIban) group.learnedBank ??= learnedBank;
 		// Exports of one bank in two CSV layouts (such as two languages) are two formats to each other.
-		const part = group.byFormat.find(
-			({format, layout}) => format === statement.format && layout === statement.layout,
-		);
-		if (part) part.rows.push(...statement.rows);
+		const part = group.parts.find(({format, layout}) => format === statement.format && layout === statement.layout);
+		if (part) part.statements.push(statement);
 		else {
-			group.byFormat.push({
+			group.parts.push({
 				format: statement.format,
 				layout: statement.layout,
 				learned: learnedBank !== null,
-				rows: [...statement.rows],
+				statements: [statement],
 			});
 		}
 		groups.set(key, group);
 	}
-	for (const group of groups.values()) {
-		group.byFormat.sort(
+	return [...groups.values()].map(({parts, ...account}) => {
+		parts.sort(
 			(left, right) =>
 				FORMAT_ORDER.indexOf(left.format) - FORMAT_ORDER.indexOf(right.format) ||
 				(left.layout ?? '').localeCompare(right.layout ?? ''),
 		);
-	}
-	return [...groups.values()];
+		const joined = parts.map(({statements: partStatements}) => joinStatements(partStatements));
+		return {
+			...account,
+			byFormat: parts.map(({format, layout, learned}, index) => ({
+				format,
+				layout,
+				learned,
+				rows: joined[index].rows,
+			})),
+			repeated: {
+				reference: sum(joined.map(({repeated}) => repeated.reference)),
+				balance: sum(joined.map(({repeated}) => repeated.balance)),
+				date: sum(joined.map(({repeated}) => repeated.date)),
+			},
+			gaps: joined.flatMap(({gaps}) => gaps),
+			closingBalance: joined.reduce<StatementBalance | null>(
+				(newest, {closingBalance}) =>
+					closingBalance && (!newest || closingBalance.date > newest.date) ? closingBalance : newest,
+				null,
+			),
+		};
+	});
+}
+
+function sum(values: readonly number[]): number {
+	return values.reduce((total, value) => total + value, 0);
 }
 
 function compareStatements(left: NormalizedStatement, right: NormalizedStatement): number {
@@ -1464,6 +1525,7 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 					}
 					return [{id, name: account.name, currency: account.currency}];
 				}),
+		statementGaps: record.statementGaps,
 		undoneAt: record.undoneAt?.toISOString() ?? null,
 		createdAt: record.createdAt.toISOString(),
 	};
