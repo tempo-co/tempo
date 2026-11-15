@@ -20,6 +20,7 @@ Every file here is synthetic: accounts are invented IBANs with valid check digit
 | `ofx-card-synthetic.ofx` | `packages/loot-core/src/mocks/files/credit-card.ofx` in actualbudget/actual | MIT | 2023 |
 | `qfx-synthetic.qfx` | `packages/loot-core/src/mocks/files/html-vals.qfx` in actualbudget/actual | MIT | 2023 |
 | `ofx-xml-synthetic.ofx` | The OFX 2.x element names of the files above, written as XML | MIT | |
+| `cross-numbering-camt-synthetic.xml`, `cross-numbering-mt940-synthetic.sta` | Written for Tempo: one ING account's 5 to 9 October in CAMT.053 (`AcctSvcrRef` references) and in MT940 numbering the same payments in another scheme | own | 2026 |
 
 The OFX reader in `src/app/modules/file-import/parsers/ofx.ts` follows the structure of `packages/loot-core/src/server/transactions/import/ofx2json.ts` in actualbudget/actual at the same commit (MIT): the statement paths, the declared-charset decoding and the decimal comma. Its tokenizer is written for Tempo; no code was copied.
 

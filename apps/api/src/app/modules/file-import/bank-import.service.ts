@@ -18,6 +18,7 @@ import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {
 	MATCH_WINDOW_DAYS,
 	MatchExistingRow,
+	REFERENCE_FALLBACK_MIN_PROBED_ROWS_BETWEEN_FILES,
 	matchDay,
 	matchTransactions,
 	matchWithReferenceFallback,
@@ -279,17 +280,30 @@ export class BankImportService {
 					// Without the bank's references a row of another account's statement can pass for a stored
 					// payment of the same amount and day, so that path needs the statement's own IBAN to agree.
 					const ibanConfirmed = target.kind === 'synced' && target.ibanConfirmed;
+					// An imported-files account found by the IBAN a built-in reader read holds only that account's
+					// files, so another format's numbering may be set aside there too, after fewer probed rows.
+					const fileIbanConfirmed =
+						target.kind === 'file' &&
+						!target.bank &&
+						!!accountRows[index].iban &&
+						!accountRows[index].learnedBank;
 					// Read under the sync lock, which every write of coverage and pending rows holds.
 					const finalDays = await this.findFinalSyncDays(manager, account, connection);
 					// Candidates are read again per format, inside the transaction, so they include the rows the
 					// formats before this one just inserted. Each format numbers its rows in a scheme of its own, so
 					// whether the bank's references are set aside is decided per format.
-					for (const {format, rows} of byFormat) {
+					for (const {format, layout, rows} of byFormat) {
+						const numbering = statementNumbering(format, layout);
 						const incoming = rows.map(toMatchRow);
-						const candidates = await this.findMatchCandidates(manager, account.id, rows);
+						const candidates = await this.findMatchCandidates(manager, account.id, rows, numbering);
 						const ladder = ibanConfirmed
 							? matchWithReferenceFallback(incoming, candidates, {pairLookAlikeGroups: true})
-							: {outcomes: matchTransactions(incoming, candidates), referencesSetAside: false};
+							: fileIbanConfirmed
+								? matchWithReferenceFallback(incoming, candidates, {
+										pairLookAlikeGroups: true,
+										minProbedRows: REFERENCE_FALLBACK_MIN_PROBED_ROWS_BETWEEN_FILES,
+									})
+								: {outcomes: matchTransactions(incoming, candidates), referencesSetAside: false};
 						const {referencesSetAside} = ladder;
 						const outcomes = decideOnFinalDays(rows, ladder.outcomes, finalDays);
 						if (referencesSetAside) {
@@ -305,7 +319,7 @@ export class BankImportService {
 								newRows.map((row) => toTransactionInput(row, account.currency)),
 								connection.aspspName,
 								connection.provider,
-								{importId: record.id},
+								{importId: record.id, statementNumbering: numbering},
 							);
 							persistedTransactionIds.push(...persisted.insertedTransactionIds);
 						}
@@ -574,7 +588,7 @@ export class BankImportService {
 						[toTransactionInput(current.row, account.currency)],
 						connection.aspspName,
 						connection.provider,
-						{importId: record.id},
+						{importId: record.id, statementNumbering: importNumbering(record)},
 					);
 					insertedTransactionIds.push(...persisted.insertedTransactionIds);
 					resolvedTransactionId = persisted.insertedTransactionIds[0];
@@ -679,7 +693,7 @@ export class BankImportService {
 						[toTransactionInput(row.row, account.currency)],
 						account.bankConnection.aspspName,
 						account.bankConnection.provider,
-						{importId: record.id},
+						{importId: record.id, statementNumbering: importNumbering(record)},
 					);
 					const [transactionId] = persisted.insertedTransactionIds;
 					insertedTransactionIds.push(transactionId);
@@ -1181,10 +1195,15 @@ export class BankImportService {
 	}
 
 	/** The account's stored rows, any status, whose date lies within the ladder's window around the file's days. */
+	/**
+	 * `numbering`: the incoming rows' (`statementNumbering`). An imported row is in the same numbering unless it records
+	 * another one; a row stored before numberings were recorded counts as the same, so its reference still conflicts.
+	 */
 	private async findMatchCandidates(
 		manager: EntityManager,
 		bankAccountId: BankAccount['id'],
 		rows: readonly NormalizedRow[],
+		numbering: string | null = null,
 	): Promise<MatchExistingRow[]> {
 		const days = rows.flatMap((row) => {
 			const day = matchDay(row);
@@ -1205,6 +1224,7 @@ export class BankImportService {
 				description: true,
 				createdAt: true,
 				importId: true,
+				statementNumbering: true,
 			},
 			where: {
 				bankAccountId,
@@ -1225,7 +1245,9 @@ export class BankImportService {
 			valueDate: row.valueDate,
 			balanceAfter: row.balanceAfterAmount,
 			reference: row.entryReference,
-			sameNumbering: row.importId !== null,
+			sameNumbering:
+				row.importId !== null &&
+				(numbering === null || row.statementNumbering === null || row.statementNumbering === numbering),
 		}));
 	}
 
@@ -1535,6 +1557,16 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
  * How an imported-files account is found again on the next drop: by its IBAN or other id and currency, or, for a
  * bank whose files name no account, by that bank and currency (one such account per currency).
  */
+/** The scheme a statement numbers its rows in: its format, and the layout of a CSV-style file. */
+function statementNumbering(format: StatementFormat, layout: string | null): string {
+	return layout ? `${format}:${layout}` : format;
+}
+
+/** The numbering of an import's rows, unknown for a drop of several formats or layouts. */
+function importNumbering({format, layout}: BankImport): string | null {
+	return format === 'mixed' ? null : statementNumbering(format, layout);
+}
+
 function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): {
 	providerAccountId: string;
 	hashSeed: string;
