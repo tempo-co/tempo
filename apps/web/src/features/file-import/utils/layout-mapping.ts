@@ -18,7 +18,7 @@ const FIELD_NAMES: Record<BankImportLayoutField, string> = {
   counterparty: 'Name',
   counterpartyAccount: 'Their account',
   description: 'Description',
-  pending: 'Not booked yet',
+  pending: 'Pending',
 };
 
 /** A field read on rows of one direction only, as payer and payee columns are. */
