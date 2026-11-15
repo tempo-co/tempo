@@ -1,5 +1,6 @@
 import {EXAMPLE_IBAN, camt053} from '../../../../../test/fixtures/statement-file.fixture';
 import {parseCamt053} from './camt053';
+import {parseFile} from './parse-file';
 import {NormalizedRow, ParseRefusal} from './parse-result';
 
 const parse = (xml: string) => parseCamt053(Buffer.from(xml));
@@ -107,6 +108,56 @@ describe('parseCamt053', () => {
 					),
 			},
 			expected: row({amount: '-30.00', remittanceInformation: 'First Second', referenceNumber: 'E2E-EXAMPLE'}),
+		},
+		{
+			name: 'a structured creditor reference without free text is the remittance text',
+			entry: {
+				amount: '10.00',
+				details:
+					'<TxDtls><RltdPties><Cdtr><Nm>Example Shop</Nm></Cdtr></RltdPties><RmtInf><Strd><CdtrRefInf><Tp>' +
+					'<CdOrPrtry><Cd>SCOR</Cd></CdOrPrtry><Issr>BBA</Issr></Tp><Ref>123456789002</Ref></CdtrRefInf></Strd>' +
+					'</RmtInf></TxDtls>',
+			},
+			expected: row({amount: '-10.00', counterpartyName: 'Example Shop', remittanceInformation: '123456789002'}),
+		},
+		{
+			name: 'free text, structured text and an RF or QR reference are joined in that order',
+			entry: {
+				amount: '10.00',
+				details:
+					'<TxDtls><RmtInf><Ustrd>Invoice 12</Ustrd><Strd><CdtrRefInf><Tp><CdOrPrtry><Prtry>QRR</Prtry>' +
+					'</CdOrPrtry></Tp><Ref>210000000003139471430009017</Ref></CdtrRefInf><AddtlRmtInf>Order 1001</AddtlRmtInf>' +
+					'</Strd><Strd><CdtrRefInf><Ref>RF18539007547034</Ref></CdtrRefInf></Strd></RmtInf></TxDtls>',
+			},
+			expected: row({
+				amount: '-10.00',
+				remittanceInformation: 'Invoice 12 Order 1001 210000000003139471430009017 RF18539007547034',
+			}),
+		},
+		{
+			name: 'the ultimate creditor is the counterparty when the creditor is not named',
+			entry: {
+				amount: '10.00',
+				details: '<TxDtls><RltdPties><UltmtCdtr><Nm>Example Shop</Nm></UltmtCdtr></RltdPties></TxDtls>',
+			},
+			expected: row({amount: '-10.00', counterpartyName: 'Example Shop'}),
+		},
+		{
+			name: 'an ultimate debtor other than the debtor is added to the description',
+			entry: {
+				amount: '10.00',
+				indicator: 'CRDT' as const,
+				info: 'Transfer',
+				details:
+					'<TxDtls><RltdPties><Dbtr><Pty><Nm>Example Payments</Nm></Pty></Dbtr>' +
+					'<UltmtDbtr><Pty><Nm>Example Customer</Nm></Pty></UltmtDbtr></RltdPties></TxDtls>',
+			},
+			expected: row({
+				amount: '10.00',
+				creditDebitIndicator: 'CRDT',
+				counterpartyName: 'Example Payments',
+				description: 'Transfer Example Customer',
+			}),
 		},
 	])('$name', ({entry, expected}) => {
 		const [statement] = parse(camt053([{entries: [entry]}]));
@@ -217,6 +268,42 @@ describe('parseCamt053', () => {
 			}),
 			expect.objectContaining({accountIban: EXAMPLE_IBAN, entriesSkipped: 1, rows: []}),
 		]);
+	});
+
+	it('reads the booked entries of a camt.052 account report, with the balances of a statement', () => {
+		const report = camt053([
+			{
+				servicerBic: 'EXAMPLEXX',
+				opening: '1000.00',
+				closing: '987.50',
+				entries: [
+					{amount: '12.50', reference: 'BOOKED'},
+					{amount: '5.00', status: 'PDNG', reference: 'PENDING'},
+				],
+			},
+		])
+			.replace('camt.053.001.02', 'camt.052.001.02')
+			.replace(/BkToCstmrStmt>/g, 'BkToCstmrAcctRpt>')
+			.replace(/<(\/?)Stmt>/g, '<$1Rpt>');
+		expect(report).toContain('<BkToCstmrAcctRpt><GrpHdr>');
+
+		const result = parseFile(Buffer.from(report));
+
+		expect(result).toMatchObject({
+			formats: ['camt053'],
+			statements: [
+				{
+					accountIban: EXAMPLE_IBAN,
+					entriesSkipped: 1,
+					rows: [
+						expect.objectContaining({bankReference: 'BOOKED', amount: '-12.50', balanceAfter: '987.50'}),
+					],
+				},
+			],
+		});
+		// An interim booked balance is no end-of-day balance: more may be booked that day.
+		const interim = parseFile(Buffer.from(report.replace('<Cd>CLBD</Cd>', '<Cd>ITBD</Cd>')));
+		expect(interim.statements[0].rows.map(({balanceAfter}) => balanceAfter)).toEqual([null]);
 	});
 
 	it.each([

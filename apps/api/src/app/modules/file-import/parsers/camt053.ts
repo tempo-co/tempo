@@ -5,8 +5,17 @@ import {amountScale, formatUnits, parseDecimal} from './decimal';
 import {NormalizedRow, NormalizedStatement, ParseRefusal} from './parse-result';
 import {child, children, parseXml} from './xml';
 
-const CAMT053_NAMESPACE = /^urn:iso:std:iso:20022:tech:xsd:camt\.053\.001\.\d+$/;
-const CAMT053_NAMESPACE_PREFIX = 'urn:iso:std:iso:20022:tech:xsd:camt.053.001.';
+/** Statements (camt.053) and account reports (camt.052), any version. */
+const CAMT_NAMESPACE = /^urn:iso:std:iso:20022:tech:xsd:camt\.05([23])\.001\.\d+$/;
+const CAMT_NAMESPACE_PREFIXES = [
+	'urn:iso:std:iso:20022:tech:xsd:camt.053.001.',
+	'urn:iso:std:iso:20022:tech:xsd:camt.052.001.',
+];
+/** Each kind's message element and the element of one statement or report in it. */
+const CAMT_MESSAGES = {
+	'3': {message: 'BkToCstmrStmt', statement: 'Stmt'},
+	'2': {message: 'BkToCstmrAcctRpt', statement: 'Rpt'},
+} as const;
 const SNIFF_BYTES = 4096;
 const DECIMAL = /^\d{1,15}(\.\d{1,8})?$/;
 const CURRENCY = /^[A-Z]{3}$/;
@@ -16,29 +25,32 @@ const CLOSING_BALANCE_TYPE = 'CLBD';
 const NOT_PROVIDED = 'NOTPROVIDED';
 
 /**
- * A quick look at the first bytes: markup that names the CAMT.053 namespace. `parseCamt053` still checks that the
- * root is `Document` in that namespace, so camt.052, camt.054 and other XML stay unsupported.
+ * A quick look at the first bytes: markup that names the CAMT.053 or camt.052 namespace. `parseCamt053` still
+ * checks that the root is `Document` in that namespace, so camt.054 and other XML stay unsupported.
  */
 export function looksLikeCamt053(bytes: Uint8Array): boolean {
 	const head = Buffer.from(bytes.buffer, bytes.byteOffset, Math.min(bytes.byteLength, SNIFF_BYTES))
 		.toString('latin1')
 		.replace(/^\u00ef\u00bb\u00bf/, '');
-	return head.trimStart().startsWith('<') && head.includes(CAMT053_NAMESPACE_PREFIX);
+	return head.trimStart().startsWith('<') && CAMT_NAMESPACE_PREFIXES.some((prefix) => head.includes(prefix));
 }
 
 /**
  * Reads a bank-to-customer statement (CAMT.053, any `camt.053.001.*` version) into one normalized statement per
- * `Stmt`. Documents declaring a DTD or entities are refused (see `parseXml`).
+ * `Stmt`, and an account report (camt.052) the same way per `Rpt`: a report has the same shape, and only its booked
+ * entries are read, as for a statement. Its balances follow the statement's rules, which use only the opening and
+ * closing booked balances (`PRCD`/`OPBD`, `CLBD`), never an interim one (`ITBD`), since more can be booked that day.
+ * Documents declaring a DTD or entities are refused (see `parseXml`).
  */
 export function parseCamt053(bytes: Uint8Array): NormalizedStatement[] {
 	const root = parseXml(decode(bytes));
-	if (!root || root.localName !== 'Document' || !CAMT053_NAMESPACE.test(root.namespaceURI ?? '')) {
-		throw new ParseRefusal('unsupported_format');
-	}
+	const kind = CAMT_NAMESPACE.exec(root?.namespaceURI ?? '')?.[1] as keyof typeof CAMT_MESSAGES | undefined;
+	if (!root || root.localName !== 'Document' || !kind) throw new ParseRefusal('unsupported_format');
 
-	const report = child(root, 'BkToCstmrStmt');
+	const {message, statement} = CAMT_MESSAGES[kind];
+	const report = child(root, message);
 	if (!report) throw new ParseRefusal('parse_failed');
-	return children(report, 'Stmt').map(parseStatement);
+	return children(report, statement).map(parseStatement);
 }
 
 function decode(bytes: Uint8Array): string {
@@ -110,9 +122,13 @@ function parseEntry(entry: Element): NormalizedRow & {units: bigint; scale: numb
 	const details = children(child(entry, 'NtryDtls'), 'TxDtls');
 	const counterparty = agreed(details.map((detail) => counterpartyOf(detail, indicator)));
 	const endToEndId = agreed(details.map((detail) => text(child(child(detail, 'Refs'), 'EndToEndId'))));
-	const remittance = details
-		.flatMap((detail) => children(child(detail, 'RmtInf'), 'Ustrd').map(text))
-		.filter((line): line is string => Boolean(line));
+	const remittance = details.flatMap((detail) => remittanceLines(child(detail, 'RmtInf')));
+	const ultimate = agreed(details.map((detail) => ultimatePartyOf(detail, indicator)));
+	const counterpartyName = counterparty?.[0] ?? ultimate ?? null;
+	const entryInformation = text(child(entry, 'AddtlNtryInf'));
+	// An ultimate party behind a named one (a shop behind a payment provider) is kept in the text.
+	const description =
+		[entryInformation, ultimate !== counterpartyName ? ultimate : null].filter(Boolean).join(' ') || null;
 	const domain = child(child(entry, 'BkTxCd'), 'Domn');
 	const family = child(domain, 'Fmly');
 	const unsigned = trimAmount(amountText);
@@ -127,10 +143,10 @@ function parseEntry(entry: Element): NormalizedRow & {units: bigint; scale: numb
 		currency: entryCurrency,
 		balanceAfter: null,
 		bankReference: text(child(entry, 'AcctSvcrRef')),
-		counterpartyName: counterparty?.[0] ?? null,
+		counterpartyName,
 		counterpartyIban: counterparty?.[1] ?? null,
 		remittanceInformation: remittance.length > 0 ? remittance.join(' ') : null,
-		description: text(child(entry, 'AddtlNtryInf')),
+		description,
 		bankTransactionCode: text(child(family, 'Cd')),
 		bankTransactionSubCode: text(child(family, 'SubFmlyCd')),
 		referenceNumber: endToEndId && endToEndId.toUpperCase() !== NOT_PROVIDED ? endToEndId : null,
@@ -151,6 +167,25 @@ function counterpartyOf(detail: Element, indicator: 'CRDT' | 'DBIT'): [string | 
 			?.replace(/\s+/g, '')
 			.toUpperCase() ?? null;
 	return [name, iban];
+}
+
+/**
+ * The remittance text: the unstructured lines, then of each structured block its additional text and the creditor's
+ * reference (a Belgian structured communication, an RF reference, a Swiss QR reference), as written.
+ */
+function remittanceLines(remittance: Element | null): string[] {
+	const structured = children(remittance, 'Strd');
+	return [
+		...children(remittance, 'Ustrd').map(text),
+		...structured.flatMap((block) => children(block, 'AddtlRmtInf').map(text)),
+		...structured.map((block) => text(child(child(block, 'CdtrRefInf'), 'Ref'))),
+	].filter((line): line is string => Boolean(line));
+}
+
+/** The party the payment is finally for (a debit) or from (a credit), when the file names one. */
+function ultimatePartyOf(detail: Element, indicator: 'CRDT' | 'DBIT'): string | null {
+	const party = child(child(detail, 'RltdPties'), indicator === 'DBIT' ? 'UltmtCdtr' : 'UltmtDbtr');
+	return text(child(party, 'Nm')) ?? text(child(child(party, 'Pty'), 'Nm'));
 }
 
 /** The value every detail agrees on; null when there are no details or they differ. */
