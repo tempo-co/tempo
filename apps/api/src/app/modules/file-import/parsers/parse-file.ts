@@ -98,8 +98,9 @@ function readOwned(bytes: Uint8Array, owned: readonly CsvLayout[], nearMiss: Par
 	try {
 		read = owned.length > 0 ? readCsvLayout(bytes, owned, {owned: true}) : null;
 	} catch (error) {
-		if (!(error instanceof ParseRefusal && error.code === 'layout_not_recognized')) throw error;
-		nearMiss ??= error;
+		const refused = error instanceof ParseRefusal ? error.code : null;
+		if (refused !== 'layout_not_recognized' && refused !== 'layout_not_mappable') throw error;
+		nearMiss ??= error as ParseRefusal;
 	}
 	if (read) return {format: 'csv', layout: read.layout.id, statements: read.statements};
 	if (nearMiss) throw nearMiss;

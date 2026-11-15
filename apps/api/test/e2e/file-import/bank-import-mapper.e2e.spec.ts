@@ -345,6 +345,108 @@ describe('Bank import column mapper', () => {
 		]);
 	});
 
+	it('refuses to work out the columns of a file whose lines above the table look like rows, without a call', async () => {
+		const {owner, agent} = await createOwner();
+		// The rows whose note holds a comma are wider than the rest, so the widest stretch of equal lines starts below them.
+		const file = Buffer.from(
+			[
+				'Date,Amount,Account,Note',
+				'2026-03-02,-12.50,NL91ABNA0417164300,Example Shop, Examplestad',
+				'2026-03-03,-4.20,NL91ABNA0417164300,Example Cafe, Examplestad, Centre',
+				'2026-03-04,-1.00,NL91ABNA0417164300,Example Shop',
+				'2026-03-05,-2.00,NL91ABNA0417164300,Example Shop',
+				'2026-03-06,-3.00,NL91ABNA0417164300,Example Shop',
+				'',
+			].join('\n'),
+		);
+		expect((await drop(agent, file).expect(422)).body).toMatchObject({code: 'layout_unknown', file: 1});
+
+		const refused = await propose(agent, file).expect(422);
+
+		expect(refused.body).toMatchObject({code: 'layout_not_mappable', file: 1});
+		expect(mapLayout).not.toHaveBeenCalled();
+		expect(await proposals.countBy({accountId: owner.id})).toBe(0);
+	});
+
+	it("asks where a saved layout's file goes when the account its IBAN names holds none of its rows, and imports it where the owner chooses", async () => {
+		const {owner, agent} = await createOwner();
+		const iban = 'NL86BUNQ2000000001';
+		const days = ['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06', '2026-03-07'];
+		const current = Buffer.from(
+			[
+				'"Date","Amount","Account","Counterparty","Name","Description"',
+				...days.map((day, index) => `"${day}","-${index + 1}0,00","${iban}","","Example Shop","Example"`),
+				'',
+			].join('\n'),
+		);
+		// A card export whose first column is the current account the card is paid from.
+		const card = (amounts: string[]) =>
+			Buffer.from(
+				[
+					'Linked account,Currency,Card,Date,Amount,Description',
+					...days.map((day, index) => `${iban},EUR,9999,${day},${amounts[index]},Example Card Shop`),
+					'',
+				].join('\n'),
+			);
+		const cardRows = card(['-4.10', '-7.20', '-3.30', '-9.40', '-2.50', '-8.60']);
+		const currentRows = card(['-10.00', '-20.00', '-30.00', '-40.00', '-50.00', '-60.00']);
+		const imported = await drop(agent, current).expect(201);
+		const currentAccount = imported.body.accounts[0];
+		await saveLayout(
+			agent,
+			cardRows,
+			{
+				...ANSWER.headerless,
+				bookingDate: 3,
+				amount: {kind: 'signed', column: 4},
+				currency: {column: 1},
+				description: [5],
+				account: {column: 0},
+			},
+			{bankName: 'Example Card Bank'},
+		);
+
+		// Rows the account already holds confirm it.
+		expect((await drop(agent, currentRows).expect(201)).body).toMatchObject({
+			rowsAdded: 0,
+			rowsAlreadyPresent: 6,
+			accounts: [{id: currentAccount.id, created: false}],
+		});
+
+		const refused = await drop(agent, cardRows).expect(409);
+
+		expect(refused.body).toMatchObject({
+			code: 'target_account_unconfirmed',
+			accountQuestions: [
+				{
+					bank: 'Example Card Bank',
+					currency: 'EUR',
+					candidates: [{bankAccountId: currentAccount.id, imported: true}],
+					newAccount: true,
+				},
+			],
+		});
+		expect(await transactions.countBy({bankAccountId: currentAccount.id})).toBe(6);
+
+		const chosen = await drop(agent, cardRows)
+			.field('accountChoices', JSON.stringify({'Example Card Bank:EUR': 'new'}))
+			.expect(201);
+
+		expect(chosen.body).toMatchObject({rowsAdded: 6, accounts: [{name: 'Example Card Bank EUR', created: true}]});
+		expect(await bankAccounts.findOneByOrFail({id: chosen.body.accounts[0].id})).toMatchObject({
+			providerAccountId: 'file-bank:Example Card Bank:EUR',
+			iban: null,
+		});
+		expect(await transactions.countBy({bankAccountId: currentAccount.id})).toBe(6);
+		// The answer holds for the layout's later files.
+		expect((await drop(agent, cardRows).expect(201)).body).toMatchObject({
+			rowsAdded: 0,
+			rowsAlreadyPresent: 6,
+			accounts: [{id: chosen.body.accounts[0].id}],
+		});
+		expect(await bankAccounts.countBy({bankConnection: {accountId: owner.id}})).toBe(2);
+	});
+
 	it("refuses a bank name of Tempo's own files that name no account, so a layout never shares their accounts", async () => {
 		const {owner, agent} = await createOwner();
 		mapLayout.mockResolvedValueOnce(ANSWER.balance);

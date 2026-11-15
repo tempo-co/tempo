@@ -167,6 +167,7 @@ describe('validateSampleOutput', () => {
 			shape: {source: 'text', delimiter: ';', quote: '"', encoding: 'utf-8'},
 			columnCount: 3,
 			skipBefore: 1,
+			rowsAbove: 0,
 			skipAfter: 0,
 			header: ['Datum', 'Bedrag', 'Af Bij'],
 			rowCount: 2,

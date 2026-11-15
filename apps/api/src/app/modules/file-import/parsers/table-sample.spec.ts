@@ -201,7 +201,12 @@ describe('sampleTable', () => {
 		].join('\n');
 		const sample = sampleTable(Buffer.from(text));
 
-		expect(sample).toMatchObject({skipBefore: 1, header: ['Date', 'Amount', 'Currency'], rowCount: 2});
+		expect(sample).toMatchObject({
+			skipBefore: 1,
+			rowsAbove: 0,
+			header: ['Date', 'Amount', 'Currency'],
+			rowCount: 2,
+		});
 		expect(sample?.masked.header).toEqual(['Date', 'Amount', 'Currency']);
 		expect(sample?.masked.linesAbove).toEqual([
 			{line: 0, cells: ['Aaaaa', 'Aaaaaaa Aaaaaa', 'AA99AAAA9999999999']},
@@ -221,6 +226,17 @@ describe('sampleTable', () => {
 		].join('\n');
 
 		expect(sampleTable(Buffer.from(text))).toBeNull();
+		// Rows of another width above the table are counted, so a layout never skips them.
+		const wider = [
+			'Date;Amount;Currency;Note',
+			'2026-03-02;-12.50;EUR;Example;Examplestad',
+			'2026-03-03;-4.20;EUR;Example;Example;Examplestad',
+			'2026-03-04;-1.00;EUR;Example',
+			'2026-03-05;-2.00;EUR;Example',
+			'2026-03-06;-3.00;EUR;Example',
+			'',
+		].join('\n');
+		expect(sampleTable(Buffer.from(wider))).toMatchObject({skipBefore: 3, header: null, rowCount: 3, rowsAbove: 2});
 		// A footer of another width below the table is skipped as usual.
 		expect(
 			sampleTable(
