@@ -295,7 +295,14 @@ export class BankImportService {
 					for (const {format, layout, rows} of byFormat) {
 						const numbering = statementNumbering(format, layout);
 						const incoming = rows.map(toMatchRow);
-						const candidates = await this.findMatchCandidates(manager, account.id, rows, numbering);
+						// Only there are imported rows told apart by numbering; elsewhere every imported row keeps its
+						// references, as sync's set-aside decision rests on sync's references alone.
+						const candidates = await this.findMatchCandidates(
+							manager,
+							account.id,
+							rows,
+							fileIbanConfirmed ? numbering : null,
+						);
 						const ladder = ibanConfirmed
 							? matchWithReferenceFallback(incoming, candidates, {pairLookAlikeGroups: true})
 							: fileIbanConfirmed
@@ -1194,10 +1201,11 @@ export class BankImportService {
 		return {account, connection, created: true};
 	}
 
-	/** The account's stored rows, any status, whose date lies within the ladder's window around the file's days. */
 	/**
-	 * `numbering`: the incoming rows' (`statementNumbering`). An imported row is in the same numbering unless it records
-	 * another one; a row stored before numberings were recorded counts as the same, so its reference still conflicts.
+	 * The account's stored rows, any status, whose date lies within the ladder's window around the file's days.
+	 * `numbering`: the incoming rows' (`statementNumbering`), or null to count every imported row as the same
+	 * numbering. With one, an imported row of another recorded numbering is not; a row stored before numberings were
+	 * recorded still is, so its reference conflicts.
 	 */
 	private async findMatchCandidates(
 		manager: EntityManager,
@@ -1553,10 +1561,6 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 	};
 }
 
-/**
- * How an imported-files account is found again on the next drop: by its IBAN or other id and currency, or, for a
- * bank whose files name no account, by that bank and currency (one such account per currency).
- */
 /** The scheme a statement numbers its rows in: its format, and the layout of a CSV-style file. */
 function statementNumbering(format: StatementFormat, layout: string | null): string {
 	return layout ? `${format}:${layout}` : format;
@@ -1567,6 +1571,10 @@ function importNumbering({format, layout}: BankImport): string | null {
 	return format === 'mixed' ? null : statementNumbering(format, layout);
 }
 
+/**
+ * How an imported-files account is found again on the next drop: by its IBAN or other id and currency, or, for a
+ * bank whose files name no account, by that bank and currency (one such account per currency).
+ */
 function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): {
 	providerAccountId: string;
 	hashSeed: string;
