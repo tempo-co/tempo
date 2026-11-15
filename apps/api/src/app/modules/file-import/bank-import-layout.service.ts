@@ -174,7 +174,8 @@ export class BankImportLayoutService {
 			const proposal = await this.lockProposal(manager, ownerId, proposalId);
 			if (proposal.expiresAt.getTime() <= Date.now())
 				throw new BankImportRefusalException('layout_proposal_expired');
-			// A layout whose files name no account goes by its bank, so it cannot take a built-in one's.
+			// A layout whose files name no account goes by its bank, so it cannot take a built-in one's. Unlike the
+			// Revolut check above, this one needs the proposal's layout, so it runs under the lock.
 			const builtIn = namesNoAccount(proposal.layout)
 				? NO_ACCOUNT_LAYOUT_BANKS.find((bank) => bank.toLowerCase() === bankName.toLowerCase())
 				: undefined;
