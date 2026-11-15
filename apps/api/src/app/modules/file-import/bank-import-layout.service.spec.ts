@@ -84,6 +84,13 @@ describe('buildLayout', () => {
 				],
 			},
 		]);
+		// A column that holds more than one account is kept, so the reader refuses the file rather than merge them.
+		const twoAccounts = file.toString('utf8').split('\n');
+		twoAccounts[3] = twoAccounts[3].replace('12345678', '87654321');
+		twoAccounts[4] = twoAccounts[4].replace('12345678', '87654321');
+		const merged = propose(Buffer.from(twoAccounts.join('\n')), answer);
+		expect(merged.layout.accountIban).toBe(3);
+		expect(merged.statements).toBeUndefined();
 		// A column of IBANs is the account.
 		const ibans = Buffer.from(file.toString('utf8').replace(/12345678/g, 'GB33BUKB20201555555555'));
 		expect(propose(ibans, answer).statements).toEqual([

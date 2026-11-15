@@ -6,7 +6,11 @@ import {parseMt940} from './mt940';
 import {parseFile} from './parse-file';
 import {NormalizedRow, ParseRefusal} from './parse-result';
 
-const ABN_AMRO_FILE = readFileSync(join(__dirname, '../../../../../test/fixtures/file-import/MT940260305120000.STA'));
+/** A synthetic Polish IBAN. */
+const POLISH_IBAN = 'PL4910900000000000000000001234';
+const FIXTURES = join(__dirname, '../../../../../test/fixtures/file-import');
+const fixture = (name: string) => readFileSync(join(FIXTURES, name));
+const ABN_AMRO_FILE = fixture('MT940260305120000.STA');
 
 /** One statement of another bank: opening 100.00 on 2026-10-05, the given entries, closing at the running total. */
 const statement = (entries: string[], closing: string, header: string[] = []) =>
@@ -63,7 +67,8 @@ describe('parseMt940', () => {
 						currency: 'EUR',
 						balanceAfter: '87.50',
 						bankReference: 'BANKREF-1',
-						counterpartyName: 'Example Shop',
+						// Free text in no known layout names no payee.
+						counterpartyName: null,
 						counterpartyIban: null,
 						remittanceInformation: null,
 						description: 'Example Shop card payment',
@@ -115,8 +120,7 @@ describe('parseMt940', () => {
 				counterpartyName: 'Example Employer',
 				counterpartyIban: 'NL20INGB0001234567',
 				remittanceInformation: 'Salary October 2026',
-				description:
-					'/EREF/E2E-EXAMPLE-2//CNTP/NL20INGB0001234567/INGBNL2A/Example Employer/AMSTERDAM//REMI/USTD//Salary October 2026/',
+				description: 'E2E-EXAMPLE-2 NL20INGB0001234567 INGBNL2A Example Employer AMSTERDAM Salary October 2026',
 				referenceNumber: 'E2E-EXAMPLE-2',
 			},
 		},
@@ -127,7 +131,7 @@ describe('parseMt940', () => {
 				counterpartyName: 'Example Shop',
 				counterpartyIban: null,
 				remittanceInformation: 'Card payment',
-				description: '/EREF/E2E-EXAMPLE-3//CNTP///Example Shop/EXAMPLE CITY//REMI/USTD//Card payment/',
+				description: 'E2E-EXAMPLE-3 Example Shop EXAMPLE CITY Card payment',
 				referenceNumber: 'E2E-EXAMPLE-3',
 			},
 		},
@@ -142,8 +146,7 @@ describe('parseMt940', () => {
 				counterpartyName: 'Example Housing',
 				counterpartyIban: 'NL20INGB0001234567',
 				remittanceInformation: 'Rent October 2026 contract 4711 apartment 3B',
-				description:
-					'/EREF/NOTPROVIDED/BENM//NAME/Example Housing/REMI/Rent October 2026 contract 4711 apartment 3B/ISDT/2026-10-05',
+				description: 'Example Housing Rent October 2026 contract 4711 apartment 3B 2026-10-05',
 				referenceNumber: null,
 			},
 		},
@@ -154,9 +157,90 @@ describe('parseMt940', () => {
 				counterpartyName: 'Example Sender',
 				counterpartyIban: null,
 				remittanceInformation: 'Gift',
-				description: '/ORDP//NAME/Example Sender/ADDR/Example Street 1/REMI/Gift/',
+				description: 'Example Sender Example Street 1 Gift',
 				referenceNumber: null,
 			},
+		},
+		{
+			name: 'SWIFT /ORDP/name?city on a credit, with the account in /BENM/',
+			information: [':86:/REMI/0056696/ORDP/Example Company AB?EXAMPLE CITY/BENM/56785678'],
+			expected: {
+				counterpartyName: 'Example Company AB',
+				counterpartyIban: null,
+				remittanceInformation: '0056696',
+				description: '0056696 Example Company AB?EXAMPLE CITY 56785678',
+				referenceNumber: null,
+			},
+		},
+		{
+			name: 'SWIFT codes in a field that starts with a code without its slash',
+			information: [':86:REMI/57700?+719,00/ORDP/Example Company AB?EXAMPLE CITY'],
+			expected: {
+				counterpartyName: 'Example Company AB',
+				remittanceInformation: '57700?+719,00',
+				description: '57700?+719,00 Example Company AB?EXAMPLE CITY',
+			},
+		},
+		{
+			name: 'SWIFT /BENM/name?account on a debit',
+			debit: true,
+			information: [':86:/REMI/INVOICE 117777/ORDP/Example Owner AB/BENM/Example Supplier AB?2777006'],
+			expected: {
+				counterpartyName: 'Example Supplier AB',
+				remittanceInformation: 'INVOICE 117777',
+				description: 'INVOICE 117777 Example Owner AB Example Supplier AB?2777006',
+			},
+		},
+		{
+			name: 'two :86: fields, the second with ~nn subfields',
+			information: [':86:303', ':86:303~00B303PRZELEW WEWNETRZNY~20ZASILENIE RACHUNKU~32EXAMPLE PAYEE'],
+			expected: {
+				counterpartyName: 'EXAMPLE PAYEE',
+				remittanceInformation: 'ZASILENIE RACHUNKU',
+				description: '303 B303PRZELEW WEWNETRZNY ZASILENIE RACHUNKU',
+			},
+		},
+		{
+			name: 'the Polish DLA: keyword on a debit, its value wrapped onto the next line',
+			debit: true,
+			information: [
+				':86:944 PRZELEW KRAJOWY; NA RACH.: 12100000000000000000001234; ',
+				'DLA: EXAMPLE SHOP SP. Z O.O. EXAMPLE STREET 1 ',
+				'00-001 EXAMPLE CITY; OD: EXAMPLE OWNER; TYT.: FV 100/2026',
+			],
+			expected: {
+				counterpartyName: 'EXAMPLE SHOP SP. Z O.O. EXAMPLE STREET 1 00-001 EXAMPLE CITY',
+				counterpartyIban: null,
+				remittanceInformation: null,
+				description:
+					'944 PRZELEW KRAJOWY; NA RACH.: 12100000000000000000001234; DLA: EXAMPLE SHOP SP. Z O.O. EXAMPLE STREET 1 00-001 EXAMPLE CITY; OD: EXAMPLE OWNER; TYT.: FV 100/2026',
+			},
+		},
+		{
+			name: 'the Polish OD: keyword on a credit',
+			information: [':86:943 PRZELEW KRAJOWY; DLA: EXAMPLE OWNER; OD: EXAMPLE SENDER; TYT.: ZWROT'],
+			expected: {counterpartyName: 'EXAMPLE SENDER'},
+		},
+		{
+			name: 'the Polish Nadawca: keyword on a credit',
+			information: [
+				':86:UZNANIE;Numer ref:2234567;Rachunek nadawcy:',
+				'11100000000000000000000000;Nadawca:EXAMPLE SENDER SP Z O.O. EXAMPLE',
+				'CITY;Adresat:EXAMPLE OWNER;Tytul: Example title;',
+			],
+			expected: {counterpartyName: 'EXAMPLE SENDER SP Z O.O. EXAMPLE CITY'},
+		},
+		{
+			name: 'the Polish Odbiorca: keyword on a debit',
+			debit: true,
+			information: [':86:OBCIAZENIE;Numer ref:1234567;Odbiorca:EXAMPLE PAYEE SP. Z O.O.;Tytul:Example title;'],
+			expected: {counterpartyName: 'EXAMPLE PAYEE SP. Z O.O.'},
+		},
+		{
+			name: 'the Polish OD: keyword on a debit, where it names the account holder',
+			debit: true,
+			information: [':86:944 PRZELEW KRAJOWY; OD: EXAMPLE OWNER; TYT.: EXAMPLE'],
+			expected: {counterpartyName: null},
 		},
 		{
 			name: 'free text with an account and the name on the first line',
@@ -170,32 +254,135 @@ describe('parseMt940', () => {
 			},
 		},
 		{
-			name: 'free text on one line, which names no counterparty',
-			information: [':86:Account fee October'],
+			name: 'free text in no known layout, which names no counterparty',
+			information: [':86:Transfer to: Example card', 'Card account 1234', '00000000000011234 Example name'],
 			expected: {
 				counterpartyName: null,
 				counterpartyIban: null,
 				remittanceInformation: null,
-				description: 'Account fee October',
+				description: 'Transfer to: Example card Card account 1234 00000000000011234 Example name',
 				referenceNumber: null,
 			},
 		},
-	])('reads the payee from $name', ({information, entryDetails, expected}) => {
-		const entry = [':61:2610051005C10,00NTRFNONREF//B1', ...(entryDetails ? [entryDetails] : []), ...information];
+	])('reads the payee from $name', ({information, entryDetails, debit, expected}) => {
+		const entry = [
+			`:61:2610051005${debit ? 'D' : 'C'}10,00NTRFNONREF//B1`,
+			...(entryDetails ? [entryDetails] : []),
+			...information,
+		];
 
-		const row = only(statement(entry, '110,00'), 'utf8');
+		const row = only(statement(entry, debit ? '90,00' : '110,00'), 'utf8');
 
 		expect(row).toMatchObject(expected);
 	});
 
-	it('reads a UTF-8 file as UTF-8 and any other as latin-1', () => {
-		const file = statement([':61:2610051005D10,00NTRFNONREF//B1', ':86:166?00GUTSCHRIFT?32Jörg Müller'], '90,00');
+	it.each([
+		{
+			name: "Handelsbanken's single-slash /ORDP/ and /BENM/ codes",
+			file: 'handelsbanken-ordp-benm-mt940-synthetic.sta',
+			accountIban: 'SE4550000000058398257466',
+			expected: [
+				{counterpartyName: 'EXAMPLE COMPANY ONE AB', remittanceInformation: '57700?+719,00'},
+				{counterpartyName: 'EXAMPLE COMPANY TWO AB', remittanceInformation: '0056696'},
+				{counterpartyName: 'EXAMPLE SUPPLIER AB', remittanceInformation: 'INVOICE 117777', amount: '-841.00'},
+			],
+		},
+		{
+			name: "mBank's second :86: field, after an account written with a slash",
+			file: 'mbank-retail-second-86-mt940-synthetic.sta',
+			accountIban: 'PL61109010140000071219812874',
+			expected: [
+				{
+					counterpartyName: 'EXAMPLE PAYEE NAME',
+					remittanceInformation: 'ZASILENIE RACHUNKU',
+					description: '303 B303PRZELEW WEWNETRZNY WYCH ZASILENIE RACHUNKU',
+				},
+			],
+		},
+		{
+			name: "Santander Bank Polska's Odbiorca: and Nadawca: keywords",
+			file: 'santander-pl-keywords-mt940-synthetic.sta',
+			accountIban: 'PL61109010140000071219812874',
+			expected: [
+				{counterpartyName: 'EXAMPLE PAYEE SP. Z O.O. EXAMPLE CITY', amount: '-50.00'},
+				{counterpartyName: 'EXAMPLE SENDER SP Z O.O. EXAMPLE TOWN', amount: '100.00'},
+			],
+		},
+		{
+			name: "mBank's DLA: and OD: keywords in Windows-1250",
+			file: 'mbank-cp1250-mt940-synthetic.sta',
+			accountIban: 'PL61109010140000071219812874',
+			expected: [
+				{counterpartyName: 'ŁÓDZKA SPÓŁKA PRZYKŁADOWA ŚWIĘTOKRZYSKA 1 00-001 ŹRÓDŁO', amount: '-25.00'},
+				{counterpartyName: 'ŻANETA PRZYKŁAD UL. ŻÓŁTA 2 00-002 ŁĘCZYCA', amount: '40.00'},
+			],
+		},
+	])('reads the payees of a file in the shape of $name', ({file, accountIban, expected}) => {
+		const [statement] = parseFile(fixture(file)).statements;
 
-		expect(only(file, 'utf8').counterpartyName).toBe('Jörg Müller');
-		expect(only(file, 'latin1').counterpartyName).toBe('Jörg Müller');
+		expect(statement.accountIban).toBe(accountIban);
+		expect(statement.rows).toMatchObject(expected);
+	});
+
+	it('reads a UTF-8 file as UTF-8, any other as Windows-1252, and a Central European account in its own encoding', () => {
+		const file = statement(
+			[':61:2610051005D10,00NTRFNONREF//B1', ':86:166?00GUTSCHRIFT?20Fee 10 \x80?32Jörg Müller'],
+			'90,00',
+		);
+		// ŁÓDŹ ŚLĄSK ŻÓŁTA in Windows-1250 and in ISO-8859-2, for an account the IBAN places in Poland.
+		const polish = (name: number[]) =>
+			Buffer.concat([
+				Buffer.from(
+					[
+						':20:EXAMPLE',
+						`:25:/${POLISH_IBAN}`,
+						':60F:C261005PLN100,00',
+						':61:2610051005D10,00NTRFNONREF//B1',
+						':86:944 PRZELEW KRAJOWY; DLA: ',
+					].join('\r\n'),
+					'latin1',
+				),
+				Buffer.from(name),
+				Buffer.from(['; TYT.: EXAMPLE', ':62F:C261005PLN90,00', '-'].join('\r\n'), 'latin1'),
+			]);
+		const windows1250 = [
+			0xa3, 0xd3, 0x44, 0x8f, 0x20, 0x8c, 0x4c, 0xa5, 0x53, 0x4b, 0x20, 0xaf, 0xd3, 0xa3, 0x54, 0x41,
+		];
+		const iso88592 = [
+			0xa3, 0xd3, 0x44, 0xac, 0x20, 0xa6, 0x4c, 0xa1, 0x53, 0x4b, 0x20, 0xaf, 0xd3, 0xa3, 0x54, 0x41,
+		];
+
+		expect(only(file, 'utf8')).toMatchObject({
+			counterpartyName: 'Jörg Müller',
+			remittanceInformation: 'Fee 10 \x80',
+		});
+		expect(only(file, 'latin1')).toMatchObject({
+			counterpartyName: 'Jörg Müller',
+			remittanceInformation: 'Fee 10 €',
+		});
 		expect(parseFile(Buffer.from(`\uFEFF${file}`, 'utf8')).statements[0].rows[0].counterpartyName).toBe(
 			'Jörg Müller',
 		);
+		for (const bytes of [windows1250, iso88592]) {
+			const [parsed] = parseMt940(polish(bytes));
+			expect(parsed).toMatchObject({accountIban: POLISH_IBAN, rows: [{counterpartyName: 'ŁÓDŹ ŚLĄSK ŻÓŁTA'}]});
+		}
+		const utf8 = Buffer.from(
+			polish(windows1250)
+				.toString('latin1')
+				.replace(/DLA: [^;]*/, 'DLA: ŁÓDŹ'),
+			'utf8',
+		);
+		expect(parseMt940(utf8)[0].rows[0].counterpartyName).toBe('ŁÓDŹ');
+	});
+
+	it("dates a balance on the 29th to 31st of a shorter month, as 30/360 interest statements do, on that month's last day", () => {
+		const [statement] = parseMt940(fixture('nov-31-balance-mt940-synthetic.sta'));
+
+		expect(statement).toMatchObject({
+			closingBalance: {date: '2026-11-30', amount: '105.00'},
+			rows: [{valueDate: '2026-11-30', amount: '5.00', balanceAfter: '105.00'}],
+		});
 	});
 
 	it.each([
@@ -261,6 +448,10 @@ describe('parseMt940', () => {
 		{
 			name: 'a value date on a day no month has',
 			file: statement([':61:2602320301D10,00N805NONREF'], '90,00'),
+		},
+		{
+			name: 'a file that ends inside the available balance after the closing balance',
+			file: fixture('cut-available-balance-mt940-synthetic.sta').toString('latin1'),
 		},
 	])('refuses $name', ({file}) => {
 		expect(() => parseMt940(Buffer.from(file, 'latin1'))).toThrow(new ParseRefusal('parse_failed'));
