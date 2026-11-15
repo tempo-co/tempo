@@ -315,6 +315,11 @@ describe('sampleTable', () => {
 			header: expect.arrayContaining(['Date']),
 			rowCount: 3,
 		});
+		// A date with a four-letter month is a value too.
+		const wide = (rows: string[]) => Buffer.from(['Date;Amount;Description;A;B;C;D;E', ...rows, ''].join('\n'));
+		const wideRows = ['01 Sept 2026;-4.20;Cafe;a;b;c;d;e', '02 Sept 2026;-5.20;Cafe;a;b;c;d;e'];
+		expect(sampleTable(wide([...wideRows, '05 Sept 2026;-12.50;Shop;;;;;']))).toMatchObject({rowCount: 3});
+		expect(sampleTable(wide(['05 Sept 2026;-12.50;Shop;;;;;', ...wideRows]))).toMatchObject({rowCount: 3});
 		// A last row with text in a column the rows above fill with numbers is a row all the same.
 		expect(
 			sampleTable(

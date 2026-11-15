@@ -507,6 +507,11 @@ describe("an owner's saved layouts", () => {
 			code: 'layout_not_recognized',
 			layout: 'learned-pending',
 		});
+		// Its header ends in an empty column, so a row one cell longer is a row shifted by a cell, never read.
+		expect(refusal(text.replace('Example bill";"-62,10";', 'Example bill";"1,00";"-62,10";'), [layout])).toEqual({
+			code: 'layout_not_recognized',
+			layout: 'learned-pending',
+		});
 	});
 
 	it("read the other party from the payer's columns on money in and the payee's on money out", () => {

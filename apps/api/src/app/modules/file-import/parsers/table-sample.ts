@@ -163,9 +163,9 @@ export function looksLikeRow(cells: readonly string[]): boolean {
 	return cells.filter(looksLikeValue).length >= 2;
 }
 
-/** A cell with a digit and at most three letters, like an amount, a date or an account number. */
+/** A cell with a digit and at most three letters, like an amount or an account number, or a date (`05 Sept 2026`). */
 function looksLikeValue(cell: string): boolean {
-	return DIGIT.test(cell) && (cell.match(/\p{L}/gu)?.length ?? 0) <= 3;
+	return (DIGIT.test(cell) && (cell.match(/\p{L}/gu)?.length ?? 0) <= 3) || DATE_SHAPE.test(cell.trim());
 }
 
 function looksLikeHeader(row: readonly string[]): boolean {

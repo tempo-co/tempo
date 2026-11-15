@@ -424,10 +424,13 @@ function writesDebitsNegative(records: readonly TableCell[][], layout: CsvLayout
 /** Whether a row has the layout's width; a workbook does not store the empty cells at a row's end. */
 function fitsRow(row: readonly TableCell[], layout: CsvLayout): boolean {
 	const columns = csvLayoutColumnCount(layout);
-	// Nor does it matter that a text row ends in more empty cells than its header has (Sparda-Bank).
-	return layout.source === 'xlsx' || row.length > columns
-		? trimRow([...row]).length <= columns
-		: row.length === columns;
+	if (layout.source === 'xlsx') return trimRow([...row]).length <= columns;
+	if (row.length <= columns) return row.length === columns;
+	// A text row may end in more empty cells than its header has (Sparda-Bank), unless that header ends in an empty
+	// column itself: then a longer row may be one shifted by a cell.
+	const {recognize} = layout;
+	const header = 'header' in recognize ? recognize.header : null;
+	return !!header && header[header.length - 1].trim() !== '' && trimRow([...row]).length <= columns;
 }
 
 function readRow(
