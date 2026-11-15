@@ -28,17 +28,63 @@ function existing(id: string, overrides: Partial<Omit<MatchExistingRow, 'id'>> =
 }
 
 describe('matchTransactions', () => {
-	it('matches a bank reference to the one existing row with that reference, amount and currency', () => {
+	it('matches a bank reference to the one existing row with that reference, amount and currency at most three days away', () => {
 		const outcomes = matchTransactions(
-			[incoming({reference: 'REF-1', bookingDate: '2026-03-20', valueDate: null})],
 			[
-				existing('same-day', {}),
-				existing('other-amount', {reference: 'REF-1', amount: '-12.51'}),
+				incoming({reference: 'REF-1', bookingDate: '2026-03-05', valueDate: null}),
+				// The same reference and amount a month later, as a bank that reuses one reference for a monthly payment.
+				incoming({reference: 'REF-2', bookingDate: '2026-04-02', valueDate: null}),
+			],
+			[
+				existing('same-day', {bookingDate: '2026-03-05'}),
+				// Each stored by an import of its own, so the reference is unique within each source.
+				existing('other-amount', {reference: 'REF-1', amount: '-12.51', source: 'import-1'}),
 				existing('referenced', {reference: 'REF-1', bookingDate: '2026-03-02'}),
+				existing('a-month-earlier', {reference: 'REF-1', bookingDate: '2026-02-02', source: 'import-2'}),
+				existing('last-month', {reference: 'REF-2', bookingDate: '2026-03-02'}),
 			],
 		);
 
-		expect(outcomes).toEqual([{kind: 'matched', existingId: 'referenced', step: 'reference'}]);
+		expect(outcomes).toEqual([{kind: 'matched', existingId: 'referenced', step: 'reference'}, {kind: 'new'}]);
+	});
+
+	it('takes no identity from a placeholder reference or one that more than one row of its own source carries', () => {
+		const outcomes = matchTransactions(
+			[
+				// A placeholder neither matches the stored placeholder nor conflicts with a real reference.
+				incoming({amount: '-1.00', reference: 'NONREF', bookingDate: '2026-03-03'}),
+				incoming({amount: '-2.00', reference: ' notprovided ', bookingDate: '2026-03-03'}),
+				// A bank that writes a transaction-type code as every row's reference.
+				incoming({amount: '-3.00', reference: '6091 BGINB', bookingDate: '2026-03-03'}),
+				incoming({amount: '-4.00', reference: '6091 BGINB', bookingDate: '2026-03-03'}),
+				// Unique among the incoming rows, but two stored rows of one import carry it.
+				incoming({amount: '-5.00', reference: 'CARD', bookingDate: '2026-03-03'}),
+			],
+			[
+				existing('placeholder-before', {amount: '-1.00', reference: 'NONREF', bookingDate: '2026-03-02'}),
+				existing('placeholder-after', {amount: '-1.00', bookingDate: '2026-03-04'}),
+				existing('real-reference', {amount: '-2.00', reference: 'BANK-2', bookingDate: '2026-03-03'}),
+				existing('type-code-before', {amount: '-3.00', reference: '6091 BGINB', bookingDate: '2026-03-02'}),
+				existing('type-code-after', {amount: '-3.00', bookingDate: '2026-03-04'}),
+				existing('other-reference', {amount: '-4.00', reference: 'BANK-4', bookingDate: '2026-03-03'}),
+				existing('card-before', {
+					amount: '-5.00',
+					reference: 'CARD',
+					bookingDate: '2026-03-02',
+					source: 'import-1',
+				}),
+				existing('card-after', {amount: '-5.00', bookingDate: '2026-03-04'}),
+				existing('card-elsewhere', {amount: '-9.00', reference: 'CARD', source: 'import-1'}),
+			],
+		);
+
+		expect(outcomes).toEqual([
+			{kind: 'doubtful', candidateIds: ['placeholder-before', 'placeholder-after']},
+			{kind: 'matched', existingId: 'real-reference', step: 'sameDay'},
+			{kind: 'doubtful', candidateIds: ['type-code-before', 'type-code-after']},
+			{kind: 'matched', existingId: 'other-reference', step: 'sameDay'},
+			{kind: 'doubtful', candidateIds: ['card-before', 'card-after']},
+		]);
 	});
 
 	it('matches amount, value date and balance after when both sides carry them', () => {
@@ -167,9 +213,9 @@ describe('matchTransactions', () => {
 		]);
 	});
 
-	it('claims each existing row once, so a repeated reference matches one row and the other is new', () => {
+	it('claims each existing row once, so of two rows matching one existing row the other is new', () => {
 		const outcomes = matchTransactions(
-			[incoming({reference: 'REF-1'}), incoming({reference: 'REF-1'})],
+			[incoming({reference: 'REF-1'}), incoming({reference: 'REF-2', bookingDate: '2026-03-03'})],
 			[existing('only', {reference: 'REF-1'})],
 		);
 
@@ -218,8 +264,11 @@ describe('probeReferences', () => {
 				incoming({amount: '-3.00', reference: 'FILE-4', bookingDate: '2026-03-06', valueDate: null}),
 				incoming({amount: '-4.00', reference: ' SHARED '}),
 				incoming({amount: '-5.00', reference: 'FILE-5'}),
+				// A placeholder is no reference: neither probed nor found stored.
+				incoming({amount: '-6.00', reference: 'NONREF'}),
 			],
 			[
+				existing('placeholder-look-alike', {amount: '-6.00', reference: 'NONREF'}),
 				existing('referenced', {reference: 'BANK-1'}),
 				existing('without-reference', {amount: '-1.00', reference: ' '}),
 				existing('four-days-away', {amount: '-2.00', reference: 'BANK-3', bookingDate: '2026-03-06'}),

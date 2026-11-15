@@ -1070,6 +1070,123 @@ describe('Bank imports', () => {
 		expect(await transactions.countBy({bankAccountId: fileAccount.id})).toBe(3);
 	});
 
+	it('imports a statement named by a bank code and account number into the synced account whose IBAN holds them, once its rows confirm it', async () => {
+		const {owner, agent} = await createOwner();
+		// A published example IBAN: bank 20041, branch 01005, account 0500013M026, key 06.
+		const frConnection = await fixtures.createConnection(owner, {aspspName: 'Example Bank FR'});
+		const frAccount = await fixtures.createBankAccount(frConnection, {iban: 'FR1420041010050500013M02606'});
+		const deConnection = await fixtures.createConnection(owner, {aspspName: 'Example Bank DE'});
+		const deAccount = await fixtures.createBankAccount(deConnection, {iban: OTHER_EXAMPLE_IBAN});
+		// 25 October payments as bank sync stores them, numbered in sync's own scheme.
+		const october = Array.from({length: 25}, (_, day) => ({
+			day: `2026-10-${String(day + 1).padStart(2, '0')}`,
+			amount: `-${day + 1}.00`,
+		}));
+		await fixtures.createTransactions(
+			frAccount,
+			october.map(({day, amount}, index) => ({
+				bookingDate: day,
+				valueDate: day,
+				amount,
+				creditDebitIndicator: 'DBIT',
+				entryReference: `SYNC-${index}`,
+			})),
+		);
+		await fixtures.createTransactions(deAccount, [
+			{bookingDate: '2026-10-05', valueDate: '2026-10-05', amount: '-10.00', creditDebitIndicator: 'DBIT'},
+		]);
+		const ofx = (rows: ReadonlyArray<{day: string; amount: string}>) =>
+			Buffer.from(
+				[
+					'OFXHEADER:100',
+					'DATA:OFXSGML',
+					'VERSION:102',
+					'SECURITY:NONE',
+					'ENCODING:USASCII',
+					'CHARSET:1252',
+					'COMPRESSION:NONE',
+					'OLDFILEUID:NONE',
+					'NEWFILEUID:NONE',
+					'',
+					'<OFX><BANKMSGSRSV1><STMTTRNRS><TRNUID>1<STATUS><CODE>0<SEVERITY>INFO</STATUS><STMTRS><CURDEF>EUR',
+					'<BANKACCTFROM><BANKID>20041<BRANCHID>01005<ACCTID>0500013M026<ACCTTYPE>CHECKING</BANKACCTFROM>',
+					'<BANKTRANLIST><DTSTART>20261001<DTEND>20261025',
+					...rows.map(
+						({day, amount}, index) =>
+							`<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>${day.replaceAll('-', '')}<TRNAMT>${amount}` +
+							`<FITID>FIT${index}<NAME>Example Shop ${index}</STMTTRN>`,
+					),
+					'</BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>',
+					'',
+				].join('\r\n'),
+			);
+
+		// The OFX statement's own numbering never meets sync's, so its rows match by date.
+		const imported = await drop(agent, [ofx(october)]).expect(201);
+
+		expect(imported.body).toMatchObject({
+			format: 'ofx',
+			rowsAdded: 0,
+			rowsAlreadyPresent: 25,
+			rowsMatchedByDate: 25,
+			rowsDoubtful: 0,
+			accounts: [{id: frAccount.id, name: 'Main account', currency: 'EUR', created: false}],
+		} satisfies Partial<BankImportSummary>);
+		expect(await fileConnection(owner)).toBeNull();
+
+		// An MT940 statement naming its account by BLZ and Kontonummer goes to the account of that IBAN.
+		const mt940 = Buffer.from(
+			[
+				':20:EXAMPLE-1',
+				':25:37040044/0532013000',
+				':28C:1/1',
+				':60F:C261005EUR100,00',
+				':61:2610051005D10,00NMSCNONREF//NONREF',
+				':86:Example Shop',
+				':61:2610061006D12,00NMSCNONREF//NONREF',
+				':86:Example Shop',
+				':62F:C261006EUR78,00',
+				'-',
+				'',
+			].join('\r\n'),
+		);
+		expect((await drop(agent, [mt940]).expect(201)).body).toMatchObject({
+			format: 'mt940',
+			rowsAdded: 1,
+			rowsMatchedByDate: 1,
+			accounts: [{id: deAccount.id, created: false}],
+		});
+		expect(await fileConnection(owner)).toBeNull();
+
+		// Rows the account does not hold within its dates: the owner is asked, and `new` keeps them apart.
+		const unstored = october.slice(0, 6).map(({day}, index) => ({day, amount: `-${101 + index}.00`}));
+		const refused = await drop(agent, [ofx(unstored)]).expect(409);
+		expect(refused.body).toMatchObject({
+			code: 'target_account_unconfirmed',
+			accountQuestions: [
+				{
+					bank: 'Example Bank FR',
+					currency: 'EUR',
+					candidates: [{bankAccountId: frAccount.id}, {bankAccountId: deAccount.id}],
+					newAccount: true,
+				},
+			],
+		});
+		const apart = await drop(agent, [ofx(unstored)])
+			.field('accountChoices', JSON.stringify({'Example Bank FR:EUR': 'new'}))
+			.expect(201);
+		expect(apart.body).toMatchObject({
+			rowsAdded: 6,
+			accounts: [{name: '20041 01005 0500013M026', currency: 'EUR', created: true}],
+		});
+		expect((await drop(agent, [ofx(unstored)]).expect(201)).body).toMatchObject({
+			rowsAdded: 0,
+			rowsAlreadyPresent: 6,
+			accounts: [{id: apart.body.accounts[0].id, created: false}],
+		});
+		expect(await transactions.countBy({bankAccountId: frAccount.id})).toBe(25);
+	});
+
 	it("imports one account's rows once across CAMT.053, MT940 and TXT, dropped in either order or all at once", async () => {
 		const camtFirst = await createOwner();
 		expect((await drop(camtFirst.agent, CAMT_FILES).expect(201)).body).toMatchObject({
@@ -1151,6 +1268,40 @@ describe('Bank imports', () => {
 		expect((await drop(unknownNumbering.agent, [CROSS_NUMBERING_MT940]).expect(201)).body).toMatchObject({
 			rowsAdded: 0,
 			rowsDoubtful: 10,
+		});
+
+		// A bank whose CAMT.053 and MT940 exports give each payment the same unique reference: matched by it.
+		const sameReferences = await createOwner();
+		await drop(sameReferences.agent, [
+			Buffer.from(
+				camt053([
+					{
+						iban: OTHER_EXAMPLE_IBAN,
+						entries: [
+							{amount: '10.00', bookingDate: '2026-06-01', reference: 'DE-REF-1', info: 'Example Shop'},
+							{amount: '20.00', bookingDate: '2026-06-02', reference: 'DE-REF-2', info: 'Example Shop'},
+						],
+					},
+				]),
+			),
+		]).expect(201);
+		const sameReferencesMt940 = [
+			':20:EXAMPLE-1',
+			`:25:${OTHER_EXAMPLE_IBAN}`,
+			':28C:1/1',
+			':60F:C260601EUR100,00',
+			':61:2606010601D10,00NTRFNONREF//DE-REF-1',
+			':86:Example Shop',
+			':61:2606020602D20,00NTRFNONREF//DE-REF-2',
+			':86:Example Shop',
+			':62F:C260602EUR70,00',
+			'-',
+			'',
+		].join('\r\n');
+		expect((await drop(sameReferences.agent, [Buffer.from(sameReferencesMt940)]).expect(201)).body).toMatchObject({
+			rowsAdded: 0,
+			rowsMatchedByReference: 2,
+			rowsDoubtful: 0,
 		});
 
 		// An account named by another id than an IBAN is not confirmed by it: the references stay and conflict.
@@ -1943,6 +2094,40 @@ describe('Bank imports', () => {
 		expect(await transactions.find({where: {bankAccountId: account.id}, order: {id: 'ASC'}})).toEqual(storedBefore);
 		expect(await bankAccounts.findOneByOrFail({id: account.id})).toEqual(accountBefore);
 
+		// A bank that writes a placeholder or a transaction-type code where the reference goes, and reuses one
+		// reference for a monthly payment: none of them names a payment. The placeholder and the code repeated
+		// within the file neither match nor conflict, so those rows match sync's by date; April's rent is a
+		// payment of its own, as its reference names March's only from more than three days away.
+		await synced({amount: '-1200.00', bookingDate: '2026-03-26', entryReference: '6091 BGINB'});
+		const untrusted = await drop(agent, [
+			Buffer.from(
+				camt053([
+					{
+						entries: [
+							entry('20.00', '2026-03-11', 'NONREF'),
+							entry('17.00', '2026-03-12', '6000 IT-A06'),
+							entry('7.00', '2026-03-13', '6000 IT-A06'),
+							entry('1200.00', '2026-04-27', '6091 BGINB'),
+						],
+					},
+				]),
+			),
+		]).expect(201);
+		expect(untrusted.body).toMatchObject({
+			rowsAdded: 1,
+			rowsAlreadyPresent: 3,
+			rowsMatchedByReference: 0,
+			rowsMatchedByDate: 3,
+			rowsDoubtful: 0,
+		} satisfies Partial<BankImportSummary>);
+		expect(
+			(await transactions.find({where: {importId: untrusted.body.id}})).map(({bookingDate, amount}) => [
+				bookingDate,
+				amount,
+			]),
+		).toEqual([['2026-04-27', '-1200.00000000']]);
+		await agent.delete(`/bank-imports/${untrusted.body.id}`).set('Origin', ORIGIN).expect(204);
+
 		// A bank whose statement references are never the ones sync stored: 21 April payments on days of their own,
 		// and two equal ones on one day.
 		const april = Array.from({length: 21}, (_, day) => ({
@@ -1951,10 +2136,8 @@ describe('Bank imports', () => {
 		}));
 		const coffee = {amount: '-2.50', bookingDate: '2026-04-27'};
 		for (const [day, row] of april.entries()) await synced({...row, entryReference: `SYNC-${day}`});
-		const coffeeIds = [
-			(await synced({...coffee, entryReference: 'SYNC-C1'})).id,
-			(await synced({...coffee, entryReference: 'SYNC-C2'})).id,
-		];
+		await synced({...coffee, entryReference: 'SYNC-C1'});
+		await synced({...coffee, entryReference: 'SYNC-C2'});
 		const storedWithApril = await transactions.find({where: {bankAccountId: account.id}, order: {id: 'ASC'}});
 		// An earlier statement of that bank added a payment sync never delivered, in the file's own numbering.
 		const earlier = await drop(agent, [
@@ -2031,29 +2214,36 @@ describe('Bank imports', () => {
 		expect(named.body).toMatchObject(fallback);
 		await agent.delete(`/bank-imports/${named.body.id}`).set('Origin', ORIGIN).expect(204);
 
-		// A statement that names its account by no IBAN, sent to this account by its id: nothing shows it is this
-		// account's, so its references count and every row they set apart from sync's is held, none taken as present.
-		const unconfirmed = await drop(agent, [aprilStatement((day) => `FILE-${day}`, {otherId: 'EXAMPLE-ACCOUNT-7'})])
+		// A statement that names its account by no IBAN, sent to this account by its id: the owner's choice confirms
+		// it, so its references are set aside the same way.
+		const chosen = await drop(agent, [aprilStatement((day) => `FILE-${day}`, {otherId: 'EXAMPLE-ACCOUNT-7'})])
 			.field('bankAccountId', account.id)
 			.expect(201);
-		expect(unconfirmed.body).toMatchObject({
-			rowsAdded: 1,
-			rowsAlreadyPresent: 0,
-			rowsMatchedByDate: 0,
-			rowsDoubtful: 24,
-		} satisfies Partial<BankImportSummary>);
-		expect(await heldReferences(unconfirmed.body.id)).toEqual(
-			[
-				...april.map((_, day) => [
-					`FILE-${day}`,
-					[storedWithApril.find((row) => row.entryReference === `SYNC-${day}`)!.id],
+		expect(chosen.body).toMatchObject(fallback);
+		expect(await heldReferences(chosen.body.id)).toEqual([['FILE-NEXT', [earlierRow.id]]]);
+		await agent.delete(`/bank-imports/${chosen.body.id}`).set('Origin', ORIGIN).expect(204);
+
+		// Under 20 probed rows the references count, and every row they set apart from sync's is held.
+		const fewProbed = await drop(agent, [
+			Buffer.from(
+				camt053([
+					{
+						otherId: 'EXAMPLE-ACCOUNT-7',
+						entries: april
+							.slice(0, 19)
+							.map(({amount, bookingDate}, day) => entry(amount.slice(1), bookingDate, `FILE-${day}`)),
+					},
 				]),
-				['FILE-C1', [...coffeeIds].sort()],
-				['FILE-C2', [...coffeeIds].sort()],
-				['FILE-NEXT', [earlierRow.id]],
-			].sort(),
-		);
-		await agent.delete(`/bank-imports/${unconfirmed.body.id}`).set('Origin', ORIGIN).expect(204);
+			),
+		])
+			.field('bankAccountId', account.id)
+			.expect(201);
+		expect(fewProbed.body).toMatchObject({
+			rowsAdded: 0,
+			rowsAlreadyPresent: 0,
+			rowsDoubtful: 19,
+		} satisfies Partial<BankImportSummary>);
+		await agent.delete(`/bank-imports/${fewProbed.body.id}`).set('Origin', ORIGIN).expect(204);
 
 		// An account bank sync knows by the hash of its IBAN only, named by its id: the statement's IBAN confirms it
 		// all the same.
