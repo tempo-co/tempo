@@ -566,6 +566,25 @@ describe("an owner's saved layouts", () => {
 		expect(parseFile(file(otherDates), [{...fixed, dateFormat: 'DD-MM-YYYY'}]).layouts).toEqual(['learned-ing']);
 	});
 
+	it('refuse a file whose lines above the table look like rows, rather than skip them', () => {
+		const layout: CsvLayout = {...HEADERLESS, id: 'learned-skipping', skipBefore: 2};
+		const rows = fixture('headerless-synthetic.csv');
+		expect(ROWS_OF(layout, `Example statement\nExample Bank;Example Person\n${rows}`)?.[0].rows).toHaveLength(4);
+
+		expect(refusal(rows, [layout])).toEqual({code: 'layout_not_mappable', layout: null});
+		// Another saved layout that reads the whole file still does; one whose rows do not read is no reason to skip any.
+		expect(parseFile(file(rows), [layout, HEADERLESS]).layouts).toEqual(['learned-headerless']);
+		const header: CsvLayout = {
+			...HEADERLESS,
+			id: 'learned-header',
+			recognize: {header: ['Date', 'Amount', 'Currency', 'Note']},
+			dateFormat: 'DD/MM/YYYY',
+		};
+		const headed = `Date;Amount;Currency;Note\n${rows}`;
+		expect(refusal(headed, [header])).toEqual({code: 'layout_not_recognized', layout: 'learned-header'});
+		expect(refusal(headed, [header, layout])).toEqual({code: 'layout_not_mappable', layout: null});
+	});
+
 	it('leave a table no saved layout reads to the column mapper', () => {
 		expect(refusal(fixture('balance-synthetic.csv'), [HEADERLESS])).toEqual({code: 'layout_unknown', layout: null});
 		expect(refusal(createWorkbook(WORKBOOK_ROWS))).toEqual({code: 'layout_unknown', layout: null});

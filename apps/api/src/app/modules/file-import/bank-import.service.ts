@@ -95,8 +95,14 @@ type AccountRows = {
 	iban: string | null;
 	/** The bank of a file that names no account (Revolut, or an owner's saved layout); null when it names one. */
 	bank: string | null;
+	/**
+	 * For a statement that names an account: the bank of the owner's saved layout that read it, null when no saved
+	 * layout did. Its IBAN then came from a column or line the model chose, so it must be confirmed like a bank.
+	 */
+	learnedBank: string | null;
 	currency: string;
-	byFormat: {format: StatementFormat; layout: string | null; rows: NormalizedRow[]}[];
+	/** `learned`: read by one of the owner's saved layouts. */
+	byFormat: {format: StatementFormat; layout: string | null; learned: boolean; rows: NormalizedRow[]}[];
 	/** Rows a later statement of the same format repeats from an earlier one, left out of `byFormat`. */
 	repeated: RepeatedRows;
 	gaps: StatementGap[];
@@ -123,10 +129,20 @@ const FORMAT_ORDER: readonly StatementFormat[] = [
  * `ibanConfirmed`: the statement's own IBAN is the synced account's (it was routed there by it, or the account the
  * request names has it), the only case its rows may be matched without the bank's references.
  */
-type Target = {kind: 'synced'; account: BankAccount; ibanConfirmed: boolean} | {kind: 'file'; account?: BankAccount};
+type Target =
+	| {kind: 'synced'; account: BankAccount; ibanConfirmed: boolean}
+	/**
+	 * `bank`: the imported-files account of this bank and currency, for a statement whose IBAN an owner's saved layout
+	 * read and the owner said is not its account.
+	 */
+	| {kind: 'file'; account?: BankAccount; bank?: string};
 
-/** A statement's target, and whether it was found by bank and currency alone (the case the unconfirmed guard checks). */
-type RoutedTarget = {target: Target; routedByBank: boolean};
+/**
+ * A statement's target, and the rows the wrong-account guard compares with it: all of them for a statement found by
+ * bank and currency alone, the rows an owner's saved layout read for one found by an IBAN that layout read. Null
+ * when the target needs no check.
+ */
+type RoutedTarget = {target: Target; check: AccountRows | null};
 
 type ImportedAccount = {account: BankAccount; connection: BankConnection; created: boolean};
 
@@ -173,8 +189,8 @@ export class BankImportService {
 		files: readonly Buffer[],
 		{bankAccountId = null, accountChoices = new Map()}: BankImportRequest = {},
 	): Promise<BankImportSummary> {
-		const {statements, kinds} = await this.parseDrop(ownerId, files);
-		const accountRows = groupByAccount(statements);
+		const {statements, kinds, learnedBanks} = await this.parseDrop(ownerId, files);
+		const accountRows = groupByAccount(statements, learnedBanks);
 		const allRows = statements.flatMap(({rows}) => rows);
 		const bookingDates = allRows.flatMap(({bookingDate}) => (bookingDate ? [bookingDate] : [])).sort();
 		const rowsParsed = allRows.length;
@@ -718,8 +734,13 @@ export class BankImportService {
 	private async parseDrop(
 		ownerId: Account['id'],
 		files: readonly Buffer[],
-	): Promise<{statements: NormalizedStatement[]; kinds: Map<string, FileKind>}> {
+	): Promise<{
+		statements: NormalizedStatement[];
+		kinds: Map<string, FileKind>;
+		learnedBanks: ReadonlyMap<string, string>;
+	}> {
 		const owned = await this.layoutService.ownedLayouts(ownerId);
+		const learnedBanks = new Map(owned.map(({id, bank}) => [id, bank]));
 		const statements: NormalizedStatement[] = [];
 		const kinds = new Map<string, FileKind>();
 		const seen = new Set<string>();
@@ -745,7 +766,7 @@ export class BankImportService {
 				statements.push(statement);
 			}
 		}
-		return {statements, kinds};
+		return {statements, kinds, learnedBanks};
 	}
 
 	/**
@@ -756,15 +777,19 @@ export class BankImportService {
 	 * account.
 	 *
 	 * Refuses, listing every statement that needs an answer: `ambiguous_target_account` when two synced accounts fit
-	 * a statement, else `target_account_unconfirmed` when a statement routed by its bank alone is not confirmed by the
-	 * account's stored rows (`isTargetConfirmed`).
+	 * a statement, else `target_account_unconfirmed` when a statement routed by its bank alone, or by an IBAN an owner's
+	 * saved layout read, is not confirmed by the account's stored rows (`isTargetConfirmed`). Such a statement the owner
+	 * answered `new` for before goes to that imported-files account instead, once its rows confirm it.
 	 */
 	private async findRoutedTargets(
 		ownerId: Account['id'],
 		accountRows: readonly AccountRows[],
 		accountChoices: AccountChoices,
 	): Promise<Target[]> {
-		const keys = accountRows.map(({bank, currency}) => (bank ? accountChoiceKey(bank, currency) : null));
+		const banks = askedBanks(accountRows);
+		const keys = accountRows.map(({currency}, index) =>
+			banks[index] ? accountChoiceKey(banks[index], currency) : null,
+		);
 		for (const key of accountChoices.keys()) {
 			if (!keys.includes(key)) throw new BankImportRefusalException('target_account_mismatch');
 		}
@@ -780,7 +805,7 @@ export class BankImportService {
 		for (const [index, rows] of accountRows.entries()) {
 			const choice = keys[index] === null ? undefined : accountChoices.get(keys[index]);
 			if (choice !== undefined) {
-				routed.push({target: await this.findChosenTarget(ownerId, choice, rows), routedByBank: false});
+				routed.push({target: await this.findChosenTarget(ownerId, choice, rows, banks[index]!), check: null});
 				continue;
 			}
 			const {iban, bank, currency} = rows;
@@ -799,13 +824,23 @@ export class BankImportService {
 			if (matches.length > 1) {
 				ambiguous.push({index, matches});
 				routed.push(null);
+			} else if (iban && rows.learnedBank) {
+				// The IBAN came from a column or line the model chose, so the account it names, synced or imported,
+				// must hold the rows the saved layout read, as an account found by bank alone must.
+				const account = matches[0] ?? (await this.findFileAccount(ownerId, rows));
+				routed.push({
+					target: matches[0]
+						? {kind: 'synced', account: matches[0], ibanConfirmed: true}
+						: {kind: 'file', ...(account ? {account} : {})},
+					check: account ? learnedPart(rows) : null,
+				});
 			} else {
 				routed.push({
 					target:
 						matches.length === 1
 							? {kind: 'synced', account: matches[0], ibanConfirmed: !!iban}
 							: {kind: 'file'},
-					routedByBank: !!bank && matches.length === 1,
+					check: !!bank && matches.length === 1 ? rows : null,
 				});
 			}
 		}
@@ -813,10 +848,18 @@ export class BankImportService {
 		// Read without the sync lock: this only decides whether to ask the owner, and the ladder runs again under it.
 		const unconfirmed: number[] = [];
 		for (const [index, entry] of routed.entries()) {
-			if (!entry?.routedByBank || entry.target.kind !== 'synced') continue;
-			if (!(await this.isTargetConfirmed(ownerId, entry.target.account, accountRows[index]))) {
-				unconfirmed.push(index);
+			if (!entry?.check || !entry.target.account) continue;
+			if (await this.isTargetConfirmed(ownerId, entry.target.account, entry.check)) continue;
+			// The owner already said such a statement is not the IBAN's account: it goes where that answer put it,
+			// once that account's rows confirm it.
+			const rows = accountRows[index];
+			const bank = banks[index];
+			const answered = rows.iban && bank && (await this.findFileAccount(ownerId, withoutAccount(rows, bank)));
+			if (answered && (await this.isTargetConfirmed(ownerId, answered, entry.check))) {
+				routed[index] = {target: {kind: 'file', account: answered}, check: null};
+				continue;
 			}
+			unconfirmed.push(index);
 		}
 		if (ambiguous.length === 0 && unconfirmed.length === 0) return routed.map((entry) => entry!.target);
 
@@ -846,11 +889,13 @@ export class BankImportService {
 			}
 		}
 		const asked = questions
-			.filter(({index}) => accountRows[index].bank)
+			.filter(({index}) => banks[index])
 			.sort((left, right) => left.index - right.index)
 			.map(({index, candidates}) => ({
 				rows: accountRows[index],
-				providerAccountId: fileAccountIdentity(accountRows[index]).providerAccountId,
+				bank: banks[index]!,
+				providerAccountId: fileAccountIdentity(newAccountRows(accountRows[index], banks[index]!))
+					.providerAccountId,
 				candidates,
 			}));
 		// `new` goes to the imported-files account of the bank and currency once it exists, so it is offered as itself.
@@ -867,12 +912,12 @@ export class BankImportService {
 		throw new BankImportRefusalException(
 			ambiguous.length > 0 ? 'ambiguous_target_account' : 'target_account_unconfirmed',
 			null,
-			asked.map(({rows: {bank, currency}, providerAccountId, candidates}) => {
+			asked.map(({rows, bank, providerAccountId, candidates}) => {
 				const fileAccount = fileAccounts.find((account) => account.providerAccountId === providerAccountId);
 				const unlisted = fileAccount && !candidates.some(({id}) => id === fileAccount.id);
 				return {
-					bank: bank!,
-					currency,
+					bank,
+					currency: rows.currency,
 					candidates: (unlisted ? [...candidates, fileAccount] : candidates).map(toAccountCandidate),
 					newAccount: !fileAccount,
 				};
@@ -881,8 +926,14 @@ export class BankImportService {
 	}
 
 	/** The owner's `accountChoices` answer for a statement that names no account: any account of theirs in its currency. */
-	private async findChosenTarget(ownerId: Account['id'], choice: string, rows: AccountRows): Promise<Target> {
-		if (choice === ACCOUNT_CHOICE_NEW) return {kind: 'file'};
+	private async findChosenTarget(
+		ownerId: Account['id'],
+		choice: string,
+		rows: AccountRows,
+		bank: string,
+	): Promise<Target> {
+		// `new` for a statement whose IBAN a saved layout read: the owner says that IBAN is not its account.
+		if (choice === ACCOUNT_CHOICE_NEW) return rows.iban ? {kind: 'file', bank} : {kind: 'file'};
 		const [account] = await this.findOwnedAccounts(ownerId, [choice]);
 		if (!account?.bankConnection || account.currency !== rows.currency) {
 			throw new BankImportRefusalException('target_account_mismatch');
@@ -894,7 +945,8 @@ export class BankImportService {
 	}
 
 	/**
-	 * Whether a statement found only by its bank and currency looks like the synced account's own history. It takes
+	 * Whether a statement found only by its bank and currency, or by an IBAN an owner's saved layout read, looks like
+	 * the account's own history. It takes
 	 * the format with the most rows within the first and last day the account stores (on a tie, the earlier in
 	 * `FORMAT_ORDER`). With fewer than `UNCONFIRMED_TARGET_MIN_OVERLAP_ROWS` such rows, including a statement entirely
 	 * outside the stored dates, it is confirmed: there is too little to compare it with. Otherwise it is confirmed
@@ -1030,7 +1082,8 @@ export class BankImportService {
 				continue;
 			}
 			if (target.kind === 'file') {
-				accounts.push(await this.findOrCreateFileAccount(manager, fileConnection!, accountRows[index]));
+				const rows = target.bank ? withoutAccount(accountRows[index], target.bank) : accountRows[index];
+				accounts.push(await this.findOrCreateFileAccount(manager, fileConnection!, rows));
 				continue;
 			}
 			const account = await manager.getRepository(BankAccount).findOne({
@@ -1079,6 +1132,17 @@ export class BankImportService {
 		// Only a removal committing between the two statements gets here.
 		if (!connection) throw new ConflictException(BANK_IMPORT_NOT_SAVED);
 		return connection;
+	}
+
+	/** The owner's imported-files account the rows would go to, if it exists already. */
+	private async findFileAccount(ownerId: Account['id'], rows: AccountRows): Promise<BankAccount | null> {
+		return this.dataSource.getRepository(BankAccount).findOne({
+			where: {
+				bankConnection: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
+				providerAccountId: fileAccountIdentity(rows).providerAccountId,
+			},
+			relations: {bankConnection: true},
+		});
 	}
 
 	private async findOrCreateFileAccount(
@@ -1272,13 +1336,22 @@ export class BankImportService {
 /**
  * Orders statements by electronic sequence number, then first booking date, and joins each account's statements in
  * that order, per format (`joinStatements`). An account is one (IBAN, other id or bank; currency) pair.
+ * `learnedBanks`: the bank of each of the owner's saved layouts, by layout id.
  */
-function groupByAccount(statements: readonly NormalizedStatement[]): AccountRows[] {
+function groupByAccount(
+	statements: readonly NormalizedStatement[],
+	learnedBanks: ReadonlyMap<string, string>,
+): AccountRows[] {
 	const ordered = [...statements].sort(compareStatements);
 	const groups = new Map<
 		string,
 		Omit<AccountRows, 'byFormat' | 'repeated' | 'gaps' | 'closingBalance'> & {
-			parts: {format: StatementFormat; layout: string | null; statements: NormalizedStatement[]}[];
+			parts: {
+				format: StatementFormat;
+				layout: string | null;
+				learned: boolean;
+				statements: NormalizedStatement[];
+			}[];
 		}
 	>();
 	for (const statement of ordered) {
@@ -1292,13 +1365,23 @@ function groupByAccount(statements: readonly NormalizedStatement[]): AccountRows
 			identifier,
 			iban: statement.accountIban,
 			bank: statement.accountIban || statement.accountOtherId ? null : statement.bank,
+			learnedBank: null,
 			currency: statement.accountCurrency,
 			parts: [],
 		};
+		const learnedBank = (statement.layout && learnedBanks.get(statement.layout)) ?? null;
+		if (statement.accountIban) group.learnedBank ??= learnedBank;
 		// Exports of one bank in two CSV layouts (such as two languages) are two formats to each other.
 		const part = group.parts.find(({format, layout}) => format === statement.format && layout === statement.layout);
 		if (part) part.statements.push(statement);
-		else group.parts.push({format: statement.format, layout: statement.layout, statements: [statement]});
+		else {
+			group.parts.push({
+				format: statement.format,
+				layout: statement.layout,
+				learned: learnedBank !== null,
+				statements: [statement],
+			});
+		}
 		groups.set(key, group);
 	}
 	return [...groups.values()].map(({parts, ...account}) => {
@@ -1310,7 +1393,12 @@ function groupByAccount(statements: readonly NormalizedStatement[]): AccountRows
 		const joined = parts.map(({statements: partStatements}) => joinStatements(partStatements));
 		return {
 			...account,
-			byFormat: parts.map(({format, layout}, index) => ({format, layout, rows: joined[index].rows})),
+			byFormat: parts.map(({format, layout, learned}, index) => ({
+				format,
+				layout,
+				learned,
+				rows: joined[index].rows,
+			})),
 			repeated: {
 				reference: sum(joined.map(({repeated}) => repeated.reference)),
 				balance: sum(joined.map(({repeated}) => repeated.balance)),
@@ -1452,6 +1540,41 @@ function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): {
 		hashSeed: `${identifier}:${currency}`,
 		name: iban ? iban.replace(/(.{4})(?=.)/g, '$1 ') : identifier,
 	};
+}
+
+/**
+ * The bank the owner is asked about each statement under: the bank of a file that names no account, or of the saved
+ * layout that read every part of a statement's IBAN when no other statement of the drop has that bank and currency
+ * (an answer under a shared one would move them all). Null when the owner cannot be asked about it.
+ */
+function askedBanks(accountRows: readonly AccountRows[]): Array<string | null> {
+	const banks = accountRows.map(
+		(rows) =>
+			rows.bank ?? (rows.learnedBank && rows.byFormat.every(({learned}) => learned) ? rows.learnedBank : null),
+	);
+	const key = (index: number) => banks[index] && accountChoiceKey(banks[index], accountRows[index].currency);
+	// Such a statement is then refused without a question, and an earlier `new` answer is not looked up for it either:
+	// the owner drops its files one at a time.
+	return banks.map((bank, index) =>
+		accountRows[index].iban && accountRows.some((_, other) => other !== index && key(other) === key(index))
+			? null
+			: bank,
+	);
+}
+
+/** The parts of the rows the owner's saved layouts read. */
+function learnedPart(rows: AccountRows): AccountRows {
+	return {...rows, byFormat: rows.byFormat.filter(({learned}) => learned)};
+}
+
+/** The rows as a statement of the bank that names no account. */
+function withoutAccount(rows: AccountRows, bank: string): AccountRows {
+	return {...rows, identifier: bank, iban: null, bank, learnedBank: null};
+}
+
+/** The rows as the account the owner's answer `new` under `bank` creates for them. */
+function newAccountRows(rows: AccountRows, bank: string): AccountRows {
+	return rows.iban ? withoutAccount(rows, bank) : rows;
 }
 
 /** The `accountChoices` key of the statements of a file that names no account. */
