@@ -11,6 +11,9 @@ const SGML_FILE = readFileSync(join(FIXTURES, 'ofx-sgml-synthetic.ofx'), 'latin1
 const QFX_FILE = readFileSync(join(FIXTURES, 'qfx-synthetic.qfx'), 'latin1');
 const CARD_FILE = readFileSync(join(FIXTURES, 'ofx-card-synthetic.ofx'), 'latin1');
 const BUNQ_FILE = readFileSync(join(FIXTURES, 'bunq-nl-synthetic.csv'), 'utf8');
+const LCL_FILE = readFileSync(join(FIXTURES, 'lcl-content-type-ofx-synthetic.ofx'));
+const DECLARED_1252_UTF8_FILE = readFileSync(join(FIXTURES, 'charset-1252-utf8-ofx-synthetic.ofx'));
+const CIC_FILE = readFileSync(join(FIXTURES, 'cic-bad-dtuser-ofx-synthetic.ofx'));
 
 describe('OFX and QFX files', () => {
 	it('reads the date of a date and time as written, whatever its time zone', () => {
@@ -19,6 +22,42 @@ describe('OFX and QFX files', () => {
 		const [statement] = parseFile(Buffer.from(file, 'latin1')).statements;
 
 		expect(statement.rows.map(({bookingDate}) => bookingDate)).toEqual(['2026-03-02', '2026-03-03', '2026-03-04']);
+	});
+
+	it("reads a download's header lines before the OFX header, a UTF-8 file whatever charset it declares, and an unreadable transaction date as none", () => {
+		const prefixed = `Content-Type: application/x-ofx\r\n${SGML_FILE}`;
+		const named = SGML_FILE.replace('<NAME>Test Persoon', '<NAME>Café £5');
+		const userDates = (date: string) => SGML_FILE.replace('<DTUSER>20260301', `<DTUSER>${date}`);
+
+		expect(parseFile(Buffer.from(prefixed, 'latin1'))).toEqual(parseFile(Buffer.from(SGML_FILE, 'latin1')));
+		// CHARSET:1252 is declared; the bytes decide.
+		expect(parseFile(Buffer.from(named, 'utf8')).statements[0].rows[1].counterpartyName).toBe('Café £5');
+		expect(parseFile(Buffer.from(named, 'latin1')).statements[0].rows[1].counterpartyName).toBe('Café £5');
+		expect(parseFile(LCL_FILE)).toMatchObject({
+			formats: ['ofx'],
+			statements: [{accountOtherId: '20041 01005 0500013M026', rows: [{counterpartyName: 'EXAMPLE BAKERY'}]}],
+		});
+		expect(parseFile(DECLARED_1252_UTF8_FILE).statements[0].rows[0]).toMatchObject({
+			counterpartyName: 'EXAMPLE CAFÉ',
+			remittanceInformation: '£5 OFF COFFEE',
+		});
+		expect(
+			parseFile(CIC_FILE).statements[0].rows.map(({bookingDate, transactionDate}) => [
+				bookingDate,
+				transactionDate,
+			]),
+		).toEqual([
+			['2026-10-05', null],
+			['2026-10-06', '2026-10-06'],
+		]);
+		for (const date of ['202603010', '20260230']) {
+			const [statement] = parseFile(Buffer.from(userDates(date), 'latin1')).statements;
+			expect(statement.rows.map(({bookingDate, transactionDate}) => [bookingDate, transactionDate])).toEqual([
+				['2026-03-02', null],
+				['2026-03-03', null],
+				['2026-03-04', null],
+			]);
+		}
 	});
 
 	it('reads an SGML element left empty as empty, keeping the elements after it in place', () => {
