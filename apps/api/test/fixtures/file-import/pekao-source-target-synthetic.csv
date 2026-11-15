@@ -1,0 +1,4 @@
+Data księgowania;Data waluty;Nadawca / Odbiorca;Adres nadawcy / odbiorcy;Rachunek źródłowy;Rachunek docelowy;Tytułem;Kwota operacji;Waluta;Numer referencyjny;Typ operacji
+09.10.2026;09.10.2026;Example Energia;Example ulica 1 00-001 Example;'61109010140000071219812874;'27114020040000300201355387;Example rachunek 10/2026;-62,10;PLN;'0000000000000003;PRZELEW
+05.10.2026;05.10.2026;Example Pracodawca;Example ulica 2 00-002 Example;'27114020040000300201355387;'61109010140000071219812874;Example wynagrodzenie;2 500,00;PLN;'0000000000000002;PRZELEW
+02.10.2026;02.10.2026;Example Sklep;;'61109010140000071219812874;;*********0001;-12,50;PLN;'0000000000000001;TRANSAKCJA KARTĄ PŁATNICZĄ
