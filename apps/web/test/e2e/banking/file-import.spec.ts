@@ -566,8 +566,8 @@ test.describe('statement file import on Connections', () => {
     await expect(gaps.getByText('Transactions missing between statements')).toBeVisible();
     await expect(gaps).toContainText('The rest were imported.');
     await expect(gaps.getByRole('listitem')).toHaveText([
-      /^7 Oct – 9 Oct 2026 · Mock ASPSP checking account\s*-€1,200\.00$/,
-      /^30 Sept? – 9 Oct 2026 · Example Card · EUR\s*€5\.00$/,
+      /^7 Oct – 9 Oct 2026\s*Mock ASPSP checking account\s*-€1,200\.00$/,
+      /^30 Sept? – 9 Oct 2026\s*Example Card · EUR\s*€5\.00$/,
     ]);
     // The counts still say what was imported.
     await expect(dialog.getByText('New transactions')).toBeVisible();

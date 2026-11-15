@@ -144,7 +144,7 @@ function StatementGaps({
       <AlertTitle>{STATEMENT_GAPS_COPY.title}</AlertTitle>
       <AlertDescription>
         <p>{STATEMENT_GAPS_COPY.description}</p>
-        <ul className='mt-2 grid w-full grid-cols-1 gap-1'>
+        <ul className='mt-2 grid w-full grid-cols-1 gap-2'>
           {gaps.map((gap) => {
             const account = summary.accounts.find(({id}) => id === gap.bankAccountId);
             return (
@@ -152,12 +152,11 @@ function StatementGaps({
                 key={`${gap.bankAccountId}:${gap.from}:${gap.to}`}
                 className='flex items-baseline justify-between gap-4 text-foreground'
               >
-                <span className='min-w-0 wrap-anywhere'>
-                  {formatDateRange(gap.from, gap.to)}
+                <span className='min-w-0'>
+                  <span className='block'>{formatDateRange(gap.from, gap.to)}</span>
                   {named && account && (
-                    <span className='text-muted-foreground'>
-                      {' '}
-                      · {importAccountName(account, known)}
+                    <span className='block text-xs wrap-anywhere text-muted-foreground'>
+                      {importAccountName(account, known)}
                     </span>
                   )}
                 </span>
