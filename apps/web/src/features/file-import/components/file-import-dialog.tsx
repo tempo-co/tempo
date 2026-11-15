@@ -4,7 +4,7 @@ import {ArrowLeft, Columns3, FileX, RotateCw} from 'lucide-react';
 import {type ReactNode, type RefObject, useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
-import {describeFailure, failedAtLabel} from '@/components/shared/load-failure';
+import {FailedAt, describeFailure, failureKey} from '@/components/shared/load-failure';
 import {PendingLabel} from '@/components/shared/pending-label';
 import {Alert, AlertAction, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
@@ -268,8 +268,6 @@ function FailureAlert({failure, onRetry}: {failure: ImportFailure; onRetry: () =
     const by = Math.min(box.bottom - view.bottom, box.top - view.top);
     if (by > 0) viewport.scrollTop += by;
   }, [failure]);
-  const [failedAt, setFailedAt] = useState(() => Date.now());
-  useEffect(() => setFailedAt(Date.now()), [failure]);
 
   if (failure.kind === 'refused') {
     const offer = offersColumns(failure);
@@ -294,7 +292,7 @@ function FailureAlert({failure, onRetry}: {failure: ImportFailure; onRetry: () =
         {cause.description}
         {cause.code && (
           <span className='mt-1 block font-mono text-label break-all'>
-            {`${cause.code} · ${failedAtLabel(failedAt)}`}
+            {cause.code} · <FailedAt key={failureKey(failure)} />
           </span>
         )}
       </AlertDescription>

@@ -14,6 +14,6 @@ export class HealthController {
 	@Public()
 	@HealthCheck()
 	async check() {
-		return await this.health.check([async () => ({api: {status: 'up'}}), () => this.db.pingCheck('database')]);
+		return await this.health.check([() => ({api: {status: 'up'}}), () => this.db.pingCheck('database')]);
 	}
 }

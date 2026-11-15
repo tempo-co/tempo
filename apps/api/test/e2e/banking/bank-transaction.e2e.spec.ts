@@ -259,6 +259,33 @@ describe('BankTransactionController', () => {
 			.expect(200);
 
 		expect(bookingDateAscendingResponse.body.transactions[0].bookingDate).toBe('2026-08-10');
+
+		const sameDayTransactions = await fixtures.createTransactions(
+			fixtureBankAccount,
+			['first', 'second'].map((label) => ({
+				bookingDate: '2026-08-02',
+				valueDate: '2026-08-02',
+				amount: '-1.00',
+				description: `Same day ${label}`,
+			})),
+		);
+		try {
+			// Give the higher id the earlier sync time, so ordering by id alone would put the earlier row first.
+			const [higherId, lowerId] = [...sameDayTransactions].sort((a, b) => b.id.localeCompare(a.id));
+			await bankTransactionRepository.update(higherId.id, {createdAt: new Date('2026-08-02T09:00:00Z')});
+			await bankTransactionRepository.update(lowerId.id, {createdAt: new Date('2026-08-02T18:00:00Z')});
+
+			const sameDayResponse = await verifiedAgent
+				.get('/bank-transactions')
+				.query({'filter[search]': 'Same day'})
+				.expect(200);
+			expect(sameDayResponse.body.transactions.map(({id}: {id: string}) => id)).toEqual([
+				lowerId.id,
+				higherId.id,
+			]);
+		} finally {
+			await bankTransactionRepository.remove(sameDayTransactions);
+		}
 	});
 
 	it('sorts mixed currencies by normalized amount before pagination', async () => {

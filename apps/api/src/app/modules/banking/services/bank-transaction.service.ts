@@ -79,6 +79,8 @@ export class BankTransactionService {
 		}
 		query
 			.addOrderBy('transaction.valueDate', 'DESC', 'NULLS LAST')
+			// Providers send dates without a time, so the order sync first saw rows in breaks same-day ties.
+			.addOrderBy('transaction.createdAt', 'DESC')
 			.addOrderBy('transaction.id', 'DESC')
 			// Every join is many-to-one, so a plain LIMIT pages rows without TypeORM's extra distinct-id query.
 			.offset(pageIndex * pageSize)

@@ -568,7 +568,7 @@ export class BankTransactionPersistenceService {
 				...twin,
 				stableIdentityKey: value.stableIdentityKey,
 				stableIdentityGroupKey: value.stableIdentityGroupKey,
-			} as BankTransaction);
+			});
 			takenOverIds.add(twin.id);
 		}
 		for (const [index, outcome] of outcomes.entries()) {

@@ -1,11 +1,31 @@
 import {format, isToday} from 'date-fns';
 import {CloudOff, WifiOff} from 'lucide-react';
+import {useState} from 'react';
 
 import {HttpError, NetworkError} from '@/utils/api';
 
 /** When a load failed, for its detail line: the time today, else the day and time. */
 export const failedAtLabel = (time: number) =>
   format(time, isToday(time) ? 'HH:mm' : 'd MMM, HH:mm');
+
+/** When the failure it is keyed by first showed. */
+export function FailedAt() {
+  const [failedAt] = useState(() => Date.now());
+  return failedAtLabel(failedAt);
+}
+
+const failureKeys = new WeakMap<object, number>();
+let lastFailureKey = 0;
+/** One key per error object, so each new failure gets its own time. */
+export function failureKey(error: unknown) {
+  if (typeof error !== 'object' || error === null) return String(error);
+  let key = failureKeys.get(error);
+  if (key === undefined) {
+    key = ++lastFailureKey;
+    failureKeys.set(error, key);
+  }
+  return key;
+}
 
 /** What a failed load says about its cause: offline, no answer, or an error reply. */
 export function describeFailure(error: unknown) {

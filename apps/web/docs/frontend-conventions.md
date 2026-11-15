@@ -84,7 +84,7 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 - One-line read-only monospace input that selects all on focus, `text-ellipsis`, with Copy joined inside the field's border behind a `border-l` divider. A button positioned over the text hides part of the secret.
 - No focus ring on the field wrapper (`focus-within`); it fires when the inner Copy button is clicked. The Copy button keeps its own focus-visible outline.
 - Copy shows `Copied` for about 2 s, then reverts; clear the timer on unmount.
-- Reset dialog state on the open transition (`useEffect` on `open`), never in a delayed close timeout; a timer that fires after a quick reopen wipes the fresh form.
+- Reset dialog state on each opening: the opener gives the dialog a new `key` (`src/features/settings/components/access-tokens/access-token-settings.tsx`). Never reset in a delayed close timeout; a timer that fires after a quick reopen wipes the fresh form.
 - Do not cap the dialog body height or give inner blocks their own scroll: nested scroll regions show double scrollbars once content grows. If the dialog must scroll, scroll it once as a whole.
 - Credentials get an expiry choice at creation (`TOKEN_LIFETIMES`: 30 days, 90 days, 1 year, No expiration). Expired tokens stay listed until revoked.
 

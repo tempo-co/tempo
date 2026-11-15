@@ -60,14 +60,14 @@ export class OwnTransferService {
 	): Promise<boolean> {
 		const requeuedIds = await this.dataSource.transaction(async (manager) => {
 			await lockOwnTransfers(manager, ownerId);
-			const [updated] = (await manager.query(
+			const [updated] = await manager.query<[unknown[], number]>(
 				`UPDATE "bank_transactions" transaction SET "ownTransferOverride" = $1
 				FROM "bank_accounts" account, "bank_connections" connection
 				WHERE transaction."id" = $2 AND account."id" = transaction."bankAccountId"
 					AND connection."id" = account."bankConnectionId" AND connection."accountId" = $3
 				RETURNING transaction."id"`,
 				[override, transactionId, ownerId],
-			)) as [unknown[], number];
+			);
 			if (updated.length === 0) return null;
 
 			await recomputeOwnTransfers(manager, ownerId);

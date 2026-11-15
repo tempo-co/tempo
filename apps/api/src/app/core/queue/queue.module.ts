@@ -11,7 +11,7 @@ import {RedisModule} from '@core/redis/redis.module';
 		BullModule.forRootAsync({
 			imports: [RedisModule],
 			inject: [ConfigurationService],
-			useFactory: async (config: ConfigurationService) => ({
+			useFactory: (config: ConfigurationService) => ({
 				connection: {
 					url: config.get('REDIS_URL'),
 					maxRetriesPerRequest: null,

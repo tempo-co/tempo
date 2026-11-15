@@ -7,8 +7,10 @@ import {REDIS} from './redis.constants';
 export class RedisService implements OnModuleDestroy {
 	constructor(@Inject(REDIS) private readonly client: Redis) {}
 
-	/** Quits gracefully when shutdown hooks fire. */
+	/** Quits gracefully when shutdown hooks fire, so shutdown waits until Redis has replied. */
 	async onModuleDestroy() {
-		this.client.quit();
+		// While Redis is unreachable, QUIT would wait behind queued commands that never run; drop the connection instead.
+		if (this.client.status === 'ready') await this.client.quit();
+		else this.client.disconnect();
 	}
 }

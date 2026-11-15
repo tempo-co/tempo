@@ -8,39 +8,42 @@ export function LoadingBar({isPending}: LoadingBarProps) {
   const [width, setWidth] = useState(0);
   const [visible, setVisible] = useState(false);
   const animationFrameRef = useRef<number | null>(null);
-  const fadeOutTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
+  // A new load restarts the bar from empty; the end of one fills it before it fades out.
+  const [wasPending, setWasPending] = useState(false);
+  if (isPending !== wasPending) {
+    setWasPending(isPending);
     if (isPending) {
       setVisible(true);
       setWidth(0);
-
-      const animate = () => {
-        setWidth((prev) => {
-          const nextWidth = prev + (100 - prev) * 0.3;
-          if (nextWidth < 100) {
-            animationFrameRef.current = requestAnimationFrame(animate);
-          }
-          return nextWidth;
-        });
-      };
-
-      animationFrameRef.current = requestAnimationFrame(animate);
     } else if (visible) {
       setWidth(100);
-      fadeOutTimeoutRef.current = setTimeout(() => {
-        setVisible(false);
-      }, 300);
     }
+  }
 
+  useEffect(() => {
+    if (!isPending) return;
+    const animate = () => {
+      setWidth((prev) => {
+        const nextWidth = prev + (100 - prev) * 0.3;
+        if (nextWidth < 100) {
+          animationFrameRef.current = requestAnimationFrame(animate);
+        }
+        return nextWidth;
+      });
+    };
+    animationFrameRef.current = requestAnimationFrame(animate);
     return () => {
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
       }
-      if (fadeOutTimeoutRef.current !== null) {
-        clearTimeout(fadeOutTimeoutRef.current);
-      }
     };
+  }, [isPending]);
+
+  useEffect(() => {
+    if (isPending || !visible) return;
+    const fadeOutTimeout = setTimeout(() => setVisible(false), 300);
+    return () => clearTimeout(fadeOutTimeout);
   }, [isPending, visible]);
 
   if (!visible) return null;
