@@ -301,6 +301,28 @@ describe('sampleTable', () => {
 		expect(sampleTable(fixture('mbank-totals-cp1250-synthetic.csv'))).toMatchObject({rowsAbove: 0, rowCount: 3});
 	});
 
+	it('reads a sparse row at either end of the table as a row, not as padding', () => {
+		const sparse = (rows: string[]) =>
+			Buffer.from(['Date;Amount;Description;Category;Notes;Tags', ...rows, ''].join('\n'));
+		const full = ['2026-10-05;2500.00;Salary;Income;x;y', '2026-10-07;-4.20;Cafe;Food;x;y'];
+		expect(sampleTable(sparse([...full, '2026-10-09;-62.10;Energy;;;']))).toMatchObject({
+			skipBefore: 0,
+			skipAfter: 0,
+			rowCount: 3,
+		});
+		expect(sampleTable(sparse(['2026-10-02;-12.50;Shop;;;', ...full]))).toMatchObject({
+			skipBefore: 0,
+			header: expect.arrayContaining(['Date']),
+			rowCount: 3,
+		});
+		// A footer of the table's width whose date cell holds a word is a line below it, not a row.
+		expect(sampleTable(sparse([...full, '2026-10-09;-62.10;Energy;Home;x;y', 'Saldo;2433.40;;;;']))).toMatchObject({
+			skipAfter: 1,
+			rowsBelow: 0,
+			rowCount: 3,
+		});
+	});
+
 	it('reads windows-1250 and UTF-16 text in the encoding it is written in', () => {
 		expect(sampleTable(fixture('pko-cp1250-synthetic.csv'))?.shape).toEqual({
 			source: 'text',

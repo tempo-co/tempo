@@ -60,13 +60,21 @@ export function sampleTable(bytes: Uint8Array): TableSample | null {
 	const columnCount = Math.max(...records.slice(table.start, table.end).map((row) => row.length));
 	if (columnCount < 2 || columnCount > MAX_LAYOUT_COLUMNS) return null;
 	const padded = (row: readonly string[]) => text && paddedLine(row, columnCount);
-	const firstRow = records.slice(table.start, table.end).findIndex((row) => row.some(looksLikeValue) && !padded(row));
+	// Rows start below the run's last header that is not padding, as titles, account lines and balances may sit above it
+	// in lines of the table's width; a line above it that could be a row is counted, not dropped (`rowsAbove`).
+	const run = records.slice(table.start, table.end);
+	const lastHeader = run.findLastIndex((row) => looksLikeHeader(row) && !padded(row));
+	const firstRow = run.findIndex((row, index) => index > lastHeader && row.some(looksLikeValue) && !padded(row));
 	if (firstRow === -1) return null;
 	let end = table.end;
-	const rowLike = rowsOfTable(records.slice(table.start + firstRow, end), columnCount);
+	// The last line is below the table when it is padding, or holds something else where the lines above it all hold
+	// a value (`Kontostand` in the date column).
 	while (
 		end - 1 > table.start + firstRow &&
-		(padded(records[end - 1]) || !rowLike.fitsValueColumns(records[end - 1]))
+		(padded(records[end - 1]) ||
+			!rowsOfTable(records.slice(table.start + firstRow, end - 1), columnCount).fitsValueColumns(
+				records[end - 1],
+			))
 	) {
 		end--;
 	}
@@ -108,11 +116,12 @@ function filledWidth(cells: readonly string[]): number {
 }
 
 /**
- * A line written out to the table's width that holds cells in less than half of it, as banks that pad every line
- * with delimiters write their titles and balances (Postbank, Intesa Sanpaolo).
+ * A line written out to the table's width that holds cells in less than half of it and does not look like a row, as
+ * banks that pad every line with delimiters write their titles and balances (Postbank, Intesa Sanpaolo). A sparse
+ * row (a date, an amount and a name, the rest empty) is no padding.
  */
 function paddedLine(cells: readonly string[], columnCount: number): boolean {
-	return cells.length >= columnCount && filledWidth(cells) * 2 <= columnCount;
+	return cells.length >= columnCount && filledWidth(cells) * 2 <= columnCount && !looksLikeRow(cells);
 }
 
 /**
