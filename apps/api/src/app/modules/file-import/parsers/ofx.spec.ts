@@ -1,6 +1,7 @@
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
+import {validateParseOutput} from '../runner/validate-parse-output';
 import {parseFile} from './parse-file';
 import {ParseRefusal} from './parse-result';
 
@@ -56,6 +57,15 @@ describe('OFX and QFX files', () => {
 			]),
 		);
 
+		// The longest ids the standard allows still pass the parent's check.
+		const longest = XML_FILE.replace(
+			'<BANKID>000000000</BANKID><ACCTID>000123456789</ACCTID>',
+			`<BANKID>${'1'.repeat(9)}</BANKID><BRANCHID>${'2'.repeat(22)}</BRANCHID><ACCTID>${'3'.repeat(22)}</ACCTID>`,
+		);
+		expect(validateParseOutput({ok: true, ...parseFile(Buffer.from(longest, 'utf8'))})).toMatchObject({
+			ok: true,
+			result: {statements: [{accountOtherId: `${'1'.repeat(9)} ${'2'.repeat(22)} ${'3'.repeat(22)}`}]},
+		});
 		expect(accounts).toEqual([
 			[[null, '070116 12345678']],
 			[[null, '309634 12345678']],
@@ -66,17 +76,25 @@ describe('OFX and QFX files', () => {
 	});
 
 	it('reads CDATA as text, and a transaction list the statement end closes', () => {
-		const cdata = XML_FILE.replace('<NAME>Example Market</NAME>', '<NAME><![CDATA[Example <Market> & Co]]></NAME>');
+		const cdata = XML_FILE.replace(
+			'<NAME>Example Market</NAME>',
+			'<NAME><![CDATA[Example <!-- Market --> & Co]]></NAME>',
+		);
 		const unclosed = XML_FILE.replace('</BANKTRANLIST>', '');
 		const unclosedSgml = SGML_FILE.replace('</BANKTRANLIST>', '');
+		// An empty SGML leaf just before the list holds it until the statement's end tag.
+		const unclosedAfterLeaf = unclosedSgml.replace('<BANKTRANLIST>', '<INTU.XID>\r\n<BANKTRANLIST>');
 
 		expect(parseFile(Buffer.from(cdata, 'utf8')).statements[0].rows[0].counterpartyName).toBe(
-			'Example <Market> & Co',
+			'Example <!-- Market --> & Co',
 		);
 		expect(parseFile(Buffer.from(unclosed, 'utf8')).statements).toEqual(
 			parseFile(Buffer.from(XML_FILE, 'utf8')).statements,
 		);
 		expect(parseFile(Buffer.from(unclosedSgml, 'latin1')).statements).toEqual(
+			parseFile(Buffer.from(SGML_FILE, 'latin1')).statements,
+		);
+		expect(parseFile(Buffer.from(unclosedAfterLeaf, 'latin1')).statements).toEqual(
 			parseFile(Buffer.from(SGML_FILE, 'latin1')).statements,
 		);
 	});

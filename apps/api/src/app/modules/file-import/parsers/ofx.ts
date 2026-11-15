@@ -102,7 +102,7 @@ function decode(bytes: Uint8Array): string {
 function parseOfxTree(text: string): OfxElement {
 	const start = /<OFX\s*>/i.exec(text);
 	if (!start) throw new ParseRefusal('unsupported_format');
-	if (/<!(?!\[CDATA\[)/.test(text)) throw new ParseRefusal('parse_failed');
+	if (/<!/.test(text.slice(0, start.index))) throw new ParseRefusal('parse_failed');
 	const root: OfxElement = {name: 'OFX', children: [], value: null};
 	const open: OfxElement[] = [root];
 	let index = start.index + start[0].length;
@@ -118,6 +118,8 @@ function parseOfxTree(text: string): OfxElement {
 			index = cdataEnd + CDATA_END.length;
 			continue;
 		}
+		// A declaration or comment outside CDATA.
+		if (text.startsWith('<!', tagStart)) throw new ParseRefusal('parse_failed');
 		const content = pending.trim();
 		pending = '';
 		const tagEnd = text.indexOf('>', tagStart);
@@ -141,7 +143,8 @@ function parseOfxTree(text: string): OfxElement {
 			for (let inner = open.length - 1; inner > position; inner--) {
 				const element = open[inner];
 				const parent = open[inner - 1].children;
-				if (element.name === TRANSACTION_LIST && inner === position + 1 && STATEMENTS.has(name)) {
+				// Anything open between the list and the statement is an empty leaf, or an aggregate refused below.
+				if (element.name === TRANSACTION_LIST && STATEMENTS.has(name)) {
 					const after = element.children.filter((member) => !TRANSACTION_LIST_MEMBERS.has(member.name));
 					element.children = element.children.filter((member) => TRANSACTION_LIST_MEMBERS.has(member.name));
 					parent.splice(parent.indexOf(element) + 1, 0, ...after);
