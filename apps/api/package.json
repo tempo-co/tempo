@@ -38,7 +38,9 @@
 		"predb:schema": "npm run contracts:build",
 		"precontract:input": "npm run contracts:build",
 		"pretest:e2e": "npm run contracts:build",
-		"pretest:e2e:cov": "npm run contracts:build"
+		"pretest:e2e:cov": "npm run contracts:build",
+		"prelint": "npm run contracts:build",
+		"prelint:check": "npm run contracts:build"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "1.6.0",
