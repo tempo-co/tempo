@@ -163,12 +163,14 @@ export function useWatchTotalsCurrency() {
       }
       if (!MONEY_QUERY_ROOTS.some((root) => root[0] === key)) return;
       const currencies = responseCurrencies(event.query.state.data);
-      if (currencies.length === 0 || !settings?.data) return;
+      if (currencies.length === 0 || !settings) return;
+      // Also during the first read: until it is in, figures show as they come.
       if (settings.fetchStatus !== 'idle') {
         landedDuringRead = true;
         return;
       }
       const {data: cached} = settings;
+      if (!cached) return;
       if (currencies.every((currency) => figuresCurrencyAccepted(cached, currency))) return;
       void queryClient.invalidateQueries({queryKey: reportingCurrencyQueryKey});
     });
