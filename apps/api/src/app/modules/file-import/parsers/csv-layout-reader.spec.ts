@@ -503,7 +503,12 @@ describe("an owner's saved layouts", () => {
 		const booked = {...layout};
 		delete booked.pendingColumn;
 		expect(refusal(text, [booked])).toEqual({code: 'layout_not_recognized', layout: 'learned-pending'});
-		expect(refusal(text.replace('"-41,25";', '"-41,25";"x";'), [layout])).toEqual({
+		expect(refusal(text.replace('"-41,25";', '"-41,25";"x";"y";'), [layout])).toEqual({
+			code: 'layout_not_recognized',
+			layout: 'learned-pending',
+		});
+		// Its header ends in an empty column, so a row one cell longer is a row shifted by a cell, never read.
+		expect(refusal(text.replace('Example bill";"-62,10";', 'Example bill";"1,00";"-62,10";'), [layout])).toEqual({
 			code: 'layout_not_recognized',
 			layout: 'learned-pending',
 		});

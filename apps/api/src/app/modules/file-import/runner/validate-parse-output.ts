@@ -1,6 +1,6 @@
 import {normalizeIban} from '@modules/banking/own-transfer/iban';
 
-import {CSV_DELIMITERS, CsvLayout, MAX_LAYOUT_COLUMNS, isCsvLayoutId} from '../parsers/csv-layout';
+import {CSV_DELIMITERS, CSV_TEXT_ENCODINGS, CsvLayout, MAX_LAYOUT_COLUMNS, isCsvLayoutId} from '../parsers/csv-layout';
 import {CSV_LAYOUTS, namesNoAccount} from '../parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from '../parsers/currency-codes';
 import {MAX_ARCHIVE_ENTRIES, MAX_ROWS_PER_DROP} from '../parsers/parse-limits';
@@ -334,7 +334,7 @@ function tableShape(value: unknown): TableShape {
 		Object.keys(shape).length !== 4 ||
 		!(CSV_DELIMITERS as readonly unknown[]).includes(shape.delimiter) ||
 		(shape.quote !== '"' && shape.quote !== "'") ||
-		(shape.encoding !== 'utf-8' && shape.encoding !== 'windows-1252')
+		!(CSV_TEXT_ENCODINGS as readonly unknown[]).includes(shape.encoding)
 	) {
 		throw new ParseRefusal('parse_failed');
 	}

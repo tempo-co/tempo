@@ -216,4 +216,204 @@ describe('buildLayout', () => {
 		]);
 		expect(proposed.mapping.columns).toContainEqual({field: 'pending', column: 1, header: 'Buchungstag'});
 	});
+
+	const rowsOf = (proposed: ReturnType<typeof propose>) =>
+		proposed.rows?.map(({bookingDate, amount, description}) => [bookingDate, amount, description]);
+	const ROWS = (descriptions: string[], amounts = ['-12.50', '2500.00', '-62.10']) =>
+		['2026-10-02', '2026-10-05', '2026-10-09'].map((date, index) => [date, amounts[index], descriptions[index]]);
+
+	it.each<{name: string; fixture: string; answer: Partial<LayoutAnswer>; rows: unknown[]}>([
+		{
+			name: 'Postbank, every line padded to the table width',
+			fixture: 'postbank-padded-synthetic.csv',
+			answer: {
+				dateFormat: 'DD.MM.YYYY',
+				valueDate: 1,
+				amount: {kind: 'signed', column: 11},
+				decimalMark: ',',
+				thousandsSeparator: '.',
+				currency: {column: 17},
+				counterpartyName: 3,
+				description: [4],
+			},
+			rows: ROWS(['Example card payment', 'Example salary', 'Example bill']),
+		},
+		{
+			name: 'Intesa Sanpaolo, padded and with empty lines around the table',
+			fixture: 'intesa-padded-synthetic.csv',
+			answer: {
+				amount: {kind: 'signed', column: 7},
+				decimalMark: ',',
+				thousandsSeparator: '.',
+				currency: {column: 6},
+				description: [1, 2],
+			},
+			rows: ROWS(['Pagamento Example Shop', 'Stipendio Example Employer', 'Addebito Example Energy']),
+		},
+		{
+			name: 'UniCredit, a padded balance preamble and footer',
+			fixture: 'unicredit-trailer-synthetic.csv',
+			answer: {
+				dateFormat: 'DD.MM.YYYY',
+				valueDate: 1,
+				amount: {kind: 'signed', column: 4},
+				currency: {code: 'EUR'},
+				description: [3],
+			},
+			rows: ROWS(['Example Shop', 'Example Employer', 'Example Energy']),
+		},
+		{
+			name: 'a Spanish bank, a padded preamble naming the account',
+			fixture: 'consulta-movimientos-synthetic.csv',
+			answer: {
+				valueDate: 2,
+				amount: {kind: 'signed', column: 3},
+				decimalMark: ',',
+				thousandsSeparator: '.',
+				currency: {code: 'EUR'},
+				balance: {column: 4, when: 'after'},
+				description: [1],
+				account: {line: 2},
+			},
+			rows: ROWS(['Example Shop', 'Example Employer', 'Example Energy']),
+		},
+		{
+			name: 'Sparda-Bank, a summary line of values above its header',
+			fixture: 'sparda-summary-line-synthetic.csv',
+			answer: {
+				dateFormat: 'DD.MM.YYYY',
+				valueDate: 1,
+				amount: {kind: 'signed', column: 3},
+				decimalMark: ',',
+				thousandsSeparator: '.',
+				currency: {column: 4},
+				description: [2],
+			},
+			rows: ROWS(['Example Shop', 'Example Employer', 'Example Energy']),
+		},
+		{
+			name: 'mBank, windows-1250 with a totals line above its header',
+			fixture: 'mbank-totals-cp1250-synthetic.csv',
+			answer: {
+				dateFormat: 'YYYY-MM-DD',
+				amount: {kind: 'signed', column: 4},
+				decimalMark: ',',
+				thousandsSeparator: ' ',
+				currency: {code: 'PLN'},
+				description: [1],
+			},
+			rows: ROWS(['Żabka Example Wrocław', 'Example Pracodawca Sp. z o.o.', 'Example Energia Łódź']),
+		},
+		{
+			name: 'PKO BP, windows-1250',
+			fixture: 'pko-cp1250-synthetic.csv',
+			answer: {
+				dateFormat: 'YYYY-MM-DD',
+				valueDate: 1,
+				amount: {kind: 'signed', column: 3},
+				currency: {column: 4},
+				balance: {column: 5, when: 'after'},
+				description: [6],
+			},
+			rows: ROWS(['Żabka Example Ślężna', 'Example Księgarnia Częstochowa', 'Example Energia Łódź']),
+		},
+		{
+			name: "Erste Bank's George, UTF-16LE",
+			fixture: 'george-utf16-synthetic.csv',
+			answer: {
+				dateFormat: 'DD.MM.YYYY',
+				valueDate: 1,
+				amount: {kind: 'signed', column: 2},
+				decimalMark: ',',
+				thousandsSeparator: '.',
+				currency: {column: 6},
+				counterpartyName: 3,
+				counterpartyAccount: 4,
+				description: [8],
+			},
+			rows: ROWS(['Example card payment', 'Example salary', 'Example bill']),
+		},
+		{
+			name: 'Nationwide, month names and pound signs',
+			fixture: 'nationwide-month-names-synthetic.csv',
+			answer: {
+				dateFormat: 'DD MMM YYYY',
+				amount: {kind: 'debitCredit', moneyOutColumn: 3, moneyInColumn: 4},
+				thousandsSeparator: ',',
+				balance: {column: 5, when: 'after'},
+				description: [2],
+			},
+			rows: ROWS(['Example Shop', 'Example Employer Ltd', 'Example Energy']),
+		},
+		{
+			name: 'Erste Bank (HU), dates ending in a dot',
+			fixture: 'erste-hu-dotted-dates-synthetic.csv',
+			answer: {
+				dateFormat: 'YYYY.MM.DD',
+				valueDate: 10,
+				amount: {kind: 'signed', column: 6},
+				currency: {column: 7},
+				balance: {column: 14, when: 'after'},
+				counterpartyName: 1,
+				description: [13],
+			},
+			rows: [
+				['2026-10-02', '-1250.00', 'Example card'],
+				['2026-10-05', '250000.00', 'Example salary'],
+			],
+		},
+		{
+			name: 'Monzo, date-times with a UTC offset',
+			fixture: 'monzo-offset-synthetic.csv',
+			answer: {
+				dateFormat: 'YYYY-MM-DD',
+				bookingDate: 1,
+				amount: {kind: 'signed', column: 2},
+				currency: {column: 3},
+				description: [8],
+			},
+			rows: ROWS(['EXAMPLE SHOP', 'EXAMPLE EMPLOYER', 'EXAMPLE ENERGY']),
+		},
+		{
+			name: 'Crédit Agricole Italia, amounts after an apostrophe',
+			fixture: 'creditagricole-it-apostrophe-synthetic.csv',
+			answer: {
+				valueDate: 1,
+				amount: {kind: 'signed', column: 4},
+				decimalMark: ',',
+				currency: {column: 5},
+				description: [3],
+			},
+			rows: ROWS(['Example Shop', 'Example Employer', 'Example Energy']),
+		},
+	])('reads $name with the layout its answer builds', ({fixture: name, answer, rows}) => {
+		const proposed = propose(fixture(name), answer);
+
+		expect(rowsOf(proposed)).toEqual(rows);
+	});
+
+	it('reads dates with a two-digit year after the month name, and cannot read a headerless file with nothing to check', () => {
+		const shortYears = Buffer.from(
+			fixture('nationwide-month-names-synthetic.csv')
+				.toString('utf8')
+				.replace(/ 2026"/g, ' 26"'),
+		);
+		expect(
+			propose(shortYears, {
+				dateFormat: 'DD MMM YY',
+				amount: {kind: 'debitCredit', moneyOutColumn: 3, moneyInColumn: 4},
+				thousandsSeparator: ',',
+				balance: {column: 5, when: 'after'},
+				description: [2],
+			}).rows?.map(({bookingDate}) => bookingDate),
+		).toEqual(['2026-10-02', '2026-10-05', '2026-10-09']);
+		// Barclaycard's headerless export holds nothing besides a date and an amount that every row must pass.
+		const file = fixture('barclaycard-uk-short-year-synthetic.csv');
+		const built = buildLayout(
+			layoutAnswerSchema.parse({...ANSWER, dateFormat: 'DD MMM YY', amount: {kind: 'signed', column: 6}}),
+			sampleTable(file)!,
+			'GBP',
+		)!;
+		expect(validateCsvLayout(built.layout)).toEqual({ok: false, error: 'recognize.columnCount'});
+	});
 });

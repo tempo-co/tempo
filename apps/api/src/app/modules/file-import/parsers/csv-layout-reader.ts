@@ -1,11 +1,19 @@
 import {normalizeIban} from '../../banking/own-transfer/iban';
 import {readCsv} from './csv';
-import {CsvByDirection, CsvDateFormat, CsvLayout, csvLayoutColumnCount, isPendingWord} from './csv-layout';
+import {
+	CsvByDirection,
+	CsvDateFormat,
+	CsvLayout,
+	CsvTextEncoding,
+	csvLayoutColumnCount,
+	decodeTable,
+	isPendingWord,
+} from './csv-layout';
 import {CSV_LAYOUTS} from './csv-layouts';
 import {isCalendarDate, serialDate} from './dates';
 import {Decimal, amountScale, formatUnits, parseDecimal} from './decimal';
 import {NormalizedRow, NormalizedStatement, ParseRefusal} from './parse-result';
-import {looksLikeRow} from './table-sample';
+import {rowsOfTable, withoutEmptyLines} from './table-sample';
 import {isXlsx, readFirstSheet} from './xlsx';
 import {isZip} from './zip-reader';
 
@@ -35,10 +43,27 @@ export type CsvLayoutReadOptions = {
 
 const BYTE_ORDER_MARK = /\ufeff/g;
 const CURRENCY = /^[A-Z]{3}$/;
-const TIME_OF_DAY = String.raw`(?:[ T]\d{1,2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?(?:\s?[AaPp][Mm])?)?`;
+/** A time of day after the date, with seconds, AM or PM, and a UTC offset (`Z`, `+0000`, `+01:00`) as written. */
+const TIME_OF_DAY = String.raw`(?:[ T]\d{1,2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?(?:\s?[AaPp][Mm])?(?:\s?(?:Z|[+-]\d{2}:?\d{2}))?)?`;
 type DatePattern = {pattern: RegExp; order: [year: number, month: number, day: number]; shortYear?: true};
+const MONTH = String.raw`(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sept?|Oct|Nov|Dec)`;
+const MONTH_NUMBERS: Record<string, string> = {
+	jan: '01',
+	feb: '02',
+	mar: '03',
+	apr: '04',
+	may: '05',
+	jun: '06',
+	jul: '07',
+	aug: '08',
+	sep: '09',
+	sept: '09',
+	oct: '10',
+	nov: '11',
+	dec: '12',
+};
 const datePattern = (source: string, order: DatePattern['order'], shortYear?: true): DatePattern => ({
-	pattern: new RegExp(`^${source}${TIME_OF_DAY}$`),
+	pattern: new RegExp(`^${source}${TIME_OF_DAY}$`, 'i'),
 	order,
 	...(shortYear ? {shortYear} : {}),
 });
@@ -54,6 +79,9 @@ const DATE_PATTERNS: Record<CsvDateFormat, DatePattern> = {
 	'DD/MM/YY': datePattern(String.raw`(\d{1,2})/(\d{1,2})/(\d{2})`, [3, 2, 1], true),
 	'MM/DD/YY': datePattern(String.raw`(\d{1,2})/(\d{1,2})/(\d{2})`, [3, 1, 2], true),
 	'DD.MM.YY': datePattern(String.raw`(\d{1,2})\.(\d{1,2})\.(\d{2})`, [3, 2, 1], true),
+	'DD MMM YYYY': datePattern(String.raw`(\d{1,2})[ -]${MONTH}[ -](\d{4})`, [3, 2, 1]),
+	'DD MMM YY': datePattern(String.raw`(\d{1,2})[ -]${MONTH}[ -](\d{2})`, [3, 2, 1], true),
+	'YYYY.MM.DD': datePattern(String.raw`(\d{4})\.(\d{1,2})\.(\d{1,2})\.?`, [1, 2, 3]),
 };
 /** Formats whose day-first and month-first readings are both supported, so a file can fit either. */
 const SWAPPED_DATE_FORMATS: Partial<Record<CsvDateFormat, CsvDateFormat>> = {
@@ -123,17 +151,21 @@ function attemptLayout(source: TableSource, layout: CsvLayout, options: CsvLayou
 	const skipBefore = layout.skipBefore ?? 0;
 	const workbook = layout.source === 'xlsx';
 	const skipAfter = layout.skipAfter ?? 0;
-	// Lines the layout skips above and below the table, none of which may look like a row.
-	const skipped = (records: readonly TableCell[][]) =>
-		[...records.slice(0, skipBefore), ...(skipAfter > 0 ? records.slice(-skipAfter) : [])].some((cells) =>
-			looksLikeRow(cells.map(({text}) => text)),
-		);
+	// Lines the layout skips above and below the table, none of which may be one of its rows (`rowsOfTable`).
+	const skipped = (records: readonly TableCell[][], start: number) => {
+		const texts = records.map((cells) => cells.map(({text}) => text));
+		const end = texts.length - skipAfter;
+		const rows = texts.slice(start, end);
+		const outside = rowsOfTable(rows, Math.max(csvLayoutColumnCount(layout), ...rows.map(({length}) => length)));
+		const above = 'header' in recognize ? outside.above : outside.below;
+		return texts.slice(0, skipBefore).some(above) || texts.slice(Math.max(start, end)).some(outside.below);
+	};
 	if ('header' in recognize) {
 		const expected = [...(recognize.preamble ?? []), recognize.header];
 		const head = workbook ? source.workbookRows() : source.head(layout, skipBefore + expected.length);
 		if (!head || !expected.every((row, index) => sameCells(head[skipBefore + index], row, workbook))) return null;
 		const records = workbook ? head : source.records(layout);
-		if (options.owned && records && skipped(records)) return {skipsRows: true};
+		if (options.owned && records && skipped(records, skipBefore + expected.length)) return {skipsRows: true};
 		const read = records && readTable(records, skipBefore + expected.length, layout, options);
 		return read ? {read} : {nearMiss: layout.id};
 	}
@@ -143,15 +175,17 @@ function attemptLayout(source: TableSource, layout: CsvLayout, options: CsvLayou
 	// A workbook does not store the empty cells at a row's end, so its first row may be narrower.
 	const width = rowWidth(first, workbook);
 	if (workbook ? width > recognize.columnCount : width !== recognize.columnCount) return null;
-	if (options.owned && skipped(records)) return {skipsRows: true};
+	if (options.owned && skipped(records, skipBefore)) return {skipsRows: true};
 	const read = readTable(records, skipBefore, layout, options);
 	return read ? {read} : null;
 }
 
-/** The file's table, decoded or unpacked once per way a layout asks for. */
+/**
+ * The file's table, decoded or unpacked once per way a layout asks for. Text lines whose every cell is empty (a line
+ * padded with delimiters) are no lines, as blank lines are not.
+ */
 class TableSource {
-	private utf8?: string | null;
-	private windows1252?: string;
+	private readonly texts = new Map<CsvTextEncoding, string | null>();
 	private sheet?: TableCell[][] | null;
 	private readonly parsed = new Map<string, TableCell[][] | null>();
 
@@ -160,9 +194,14 @@ class TableSource {
 	/** The first rows for comparing a header: decoded leniently, so a near miss is still recognised as one. */
 	head(layout: CsvLayout, rows: number): TableCell[][] | null {
 		if (layout.source === 'xlsx') return null;
-		const text = this.strict(layout.encoding) ?? new TextDecoder('utf-8').decode(this.bytes);
+		const records = this.records(layout);
+		if (records) return records.slice(0, rows);
 		try {
-			return toCells(readCsv(text, {delimiter: layout.delimiter, quote: layout.quote}, rows));
+			const text = new TextDecoder('utf-8').decode(this.bytes);
+			return withoutEmptyLines(toCells(readCsv(text, {delimiter: layout.delimiter, quote: layout.quote}))).slice(
+				0,
+				rows,
+			);
 		} catch {
 			return null;
 		}
@@ -173,11 +212,15 @@ class TableSource {
 		if (layout.source === 'xlsx') return null;
 		const key = JSON.stringify([layout.encoding, layout.delimiter, layout.quote]);
 		if (!this.parsed.has(key)) {
-			const text = this.strict(layout.encoding);
+			if (!this.texts.has(layout.encoding))
+				this.texts.set(layout.encoding, decodeTable(this.bytes, layout.encoding));
+			const text = this.texts.get(layout.encoding)!;
 			let records: TableCell[][] | null = null;
 			try {
 				records =
-					text === null ? null : toCells(readCsv(text, {delimiter: layout.delimiter, quote: layout.quote}));
+					text === null
+						? null
+						: withoutEmptyLines(toCells(readCsv(text, {delimiter: layout.delimiter, quote: layout.quote})));
 			} catch {
 				records = null;
 			}
@@ -197,19 +240,6 @@ class TableSource {
 					: null;
 		}
 		return this.sheet;
-	}
-
-	private strict(encoding: 'utf-8' | 'windows-1252'): string | null {
-		if (this.utf8 === undefined) {
-			try {
-				this.utf8 = new TextDecoder('utf-8', {fatal: true}).decode(this.bytes);
-			} catch {
-				this.utf8 = null;
-			}
-		}
-		if (this.utf8 !== null || encoding === 'utf-8') return this.utf8;
-		this.windows1252 ??= new TextDecoder('windows-1252').decode(this.bytes);
-		return this.windows1252;
 	}
 }
 
@@ -250,7 +280,8 @@ function readTable(
 	const pending = (cells: readonly TableCell[]) =>
 		layout.pendingColumn !== undefined && isPendingWord(cells[layout.pendingColumn]?.text ?? '');
 	// A pending row is a row of the table all the same: one of another width is not skipped but refused.
-	const body = lines.filter((cells) => !pending(cells) || !fitsRow(cells, layout));
+	const width = rowWidthOf(lines);
+	const body = lines.filter((cells) => !pending(cells) || !fitsRow(cells, layout, width));
 	const statements = readRows(body, records.slice(0, layout.skipBefore ?? 0), layout);
 	if (!statements) return null;
 	if (options.owned && !plausible(statements, options.today ?? new Date().toISOString().slice(0, 10))) return null;
@@ -318,7 +349,8 @@ function readRows(
 		) {
 			throw new RowProblem();
 		}
-		rows = records.map((cells) => readRow(cells, layout, lineIban, debitsNegative));
+		const width = rowWidthOf(records);
+		rows = records.map((cells) => readRow(cells, layout, lineIban, debitsNegative, width));
 	} catch (error) {
 		if (error instanceof RowProblem) return null;
 		throw error;
@@ -392,10 +424,31 @@ function writesDebitsNegative(records: readonly TableCell[][], layout: CsvLayout
 	});
 }
 
-/** Whether a row has the layout's width; a workbook does not store the empty cells at a row's end. */
-function fitsRow(row: readonly TableCell[], layout: CsvLayout): boolean {
+/**
+ * Whether a row has the layout's width; a workbook does not store the empty cells at a row's end. A text row may end
+ * in more empty cells than the header has (Sparda-Bank, mBank) when every row of the file has that same width
+ * (`width`, null when they differ): one row longer than the rest is one shifted by a stray cell. A lone row may only
+ * when the header does not end in an empty column.
+ */
+function fitsRow(row: readonly TableCell[], layout: CsvLayout, width: RowWidth): boolean {
 	const columns = csvLayoutColumnCount(layout);
-	return layout.source === 'xlsx' ? trimRow([...row]).length <= columns : row.length === columns;
+	if (layout.source === 'xlsx') return trimRow([...row]).length <= columns;
+	if (row.length <= columns) return row.length === columns;
+	const {recognize} = layout;
+	const header = 'header' in recognize ? recognize.header : null;
+	return (
+		row.length === width.common &&
+		trimRow([...row]).length <= columns &&
+		(width.rows > 1 || (!!header && header[header.length - 1].trim() !== ''))
+	);
+}
+
+/** The width every row of a table shares (null when they differ), and how many rows it has. */
+type RowWidth = {common: number | null; rows: number};
+
+function rowWidthOf(rows: readonly (readonly TableCell[])[]): RowWidth {
+	const widths = new Set(rows.map(({length}) => length));
+	return {common: widths.size === 1 ? [...widths][0] : null, rows: rows.length};
 }
 
 function readRow(
@@ -403,11 +456,12 @@ function readRow(
 	layout: CsvLayout,
 	lineIban: string | null,
 	debitsNegative: boolean,
+	width: RowWidth,
 ): ReadRow {
 	const {recognize} = layout;
 	const columns = csvLayoutColumnCount(layout);
 	const workbook = layout.source === 'xlsx';
-	if (!fitsRow(row, layout)) throw new RowProblem();
+	if (!fitsRow(row, layout, width)) throw new RowProblem();
 	const cells = workbook ? Array.from({length: columns}, (_, index) => row[index] ?? {text: '', number: false}) : row;
 	const cell = (column: number) => cells[column].text.trim();
 	const optional = (column: number | undefined) => (column === undefined ? null : cell(column) || null);
@@ -502,7 +556,8 @@ function readAmount(cells: readonly TableCell[], layout: CsvLayout, debitsNegati
  * layout writes one.
  */
 function parseAmount(cell: TableCell, layout: CsvLayout, signed: boolean): Decimal {
-	const text = cell.text.trim();
+	// A leading apostrophe is how a spreadsheet marks a number kept as text (Crédit Agricole Italia).
+	const text = cell.text.trim().replace(/^'/, '');
 	if (cell.number) {
 		const number = Number(text);
 		if (!Number.isFinite(number) || Math.abs(number) >= 1e15 || (!signed && number < 0)) throw new RowProblem();
@@ -563,7 +618,8 @@ function tryParseDate(text: string, format: CsvDateFormat, today = new Date()): 
 		const full = 2000 + Number(year);
 		year = String(full > today.getUTCFullYear() + 1 ? full - 100 : full);
 	}
-	const date = `${year}-${parts[order[1]].padStart(2, '0')}-${parts[order[2]].padStart(2, '0')}`;
+	const month = MONTH_NUMBERS[parts[order[1]].toLowerCase()] ?? parts[order[1]];
+	const date = `${year}-${month.padStart(2, '0')}-${parts[order[2]].padStart(2, '0')}`;
 	return isCalendarDate(date) ? date : null;
 }
 

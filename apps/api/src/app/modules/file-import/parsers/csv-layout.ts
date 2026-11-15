@@ -10,10 +10,11 @@ export type CsvTextTable = {
 	delimiter: CsvDelimiter;
 	quote: '"' | "'";
 	/**
-	 * `utf-8` refuses bytes that are not UTF-8. `windows-1252` reads a file that is valid UTF-8 as UTF-8 and any
-	 * other file as Windows-1252, since Windows-1252 text with letters outside ASCII is almost never valid UTF-8.
+	 * `utf-8` refuses bytes that are not UTF-8. `windows-1252` and `windows-1250` read a file that is valid UTF-8 as
+	 * UTF-8 and any other file in that code page, since such text with letters outside ASCII is almost never valid
+	 * UTF-8. `utf-16le` reads a file that starts with its byte order mark, as Erste Bank's George writes.
 	 */
-	encoding: 'utf-8' | 'windows-1252';
+	encoding: CsvTextEncoding;
 };
 
 /**
@@ -94,6 +95,55 @@ export function isPendingWord(value: string): boolean {
 	return PENDING_WORDS.has(value.trim().toLowerCase());
 }
 
+export const CSV_TEXT_ENCODINGS = ['utf-8', 'windows-1252', 'windows-1250', 'utf-16le'] as const;
+export type CsvTextEncoding = (typeof CSV_TEXT_ENCODINGS)[number];
+
+const UTF16LE_BOM = [0xff, 0xfe];
+
+/** A file's text as an encoding reads it (`CsvTextTable.encoding`); null when the bytes are not in it. */
+export function decodeTable(bytes: Uint8Array, encoding: CsvTextEncoding): string | null {
+	if (encoding === 'utf-16le') {
+		if (bytes[0] !== UTF16LE_BOM[0] || bytes[1] !== UTF16LE_BOM[1]) return null;
+		try {
+			return new TextDecoder('utf-16le', {fatal: true}).decode(bytes);
+		} catch {
+			return null;
+		}
+	}
+	try {
+		return new TextDecoder('utf-8', {fatal: true}).decode(bytes);
+	} catch {
+		return encoding === 'utf-8' ? null : new TextDecoder(encoding).decode(bytes);
+	}
+}
+
+/** Signs Western text writes (`¡`, `£`, `¥`, `¼`, `¾`, `¿`) that Windows-1250 reads as letters: no evidence of it. */
+const WESTERN_SIGNS = new Set([0xa1, 0xa3, 0xa5, 0xbc, 0xbe, 0xbf]);
+
+/**
+ * The encoding a text file is written in: UTF-16LE after its byte order mark, else UTF-8 when the bytes are valid
+ * UTF-8, else the code page whose reading gives letters where the other gives symbols. Polish, Czech and Hungarian
+ * letters such as `ł`, `ą` and `Ż` are symbols in Windows-1252 (`³`, `¹`, `¯`). Windows-1250 needs two such letters,
+ * and Windows-1252 wins a tie.
+ */
+export function detectEncoding(bytes: Uint8Array): CsvTextEncoding {
+	if (bytes[0] === UTF16LE_BOM[0] && bytes[1] === UTF16LE_BOM[1]) return 'utf-16le';
+	if (decodeTable(bytes, 'utf-8') !== null) return 'utf-8';
+	const westernText = new TextDecoder('windows-1252');
+	const centralText = new TextDecoder('windows-1250');
+	const letter = /\p{L}/u;
+	let central = 0;
+	let western = 0;
+	for (const byte of new Set(bytes.filter((value) => value >= 0x80 && !WESTERN_SIGNS.has(value)))) {
+		const one = Uint8Array.of(byte);
+		const centralLetter = letter.test(centralText.decode(one));
+		const westernLetter = letter.test(westernText.decode(one));
+		if (centralLetter && !westernLetter) central++;
+		else if (westernLetter && !centralLetter) western++;
+	}
+	return central >= 2 && central > western ? 'windows-1250' : 'windows-1252';
+}
+
 export const CSV_DELIMITERS = [',', ';', '\t', '|'] as const;
 export type CsvDelimiter = (typeof CSV_DELIMITERS)[number];
 export const CSV_THOUSANDS_SEPARATORS = ['.', ',', ' ', "'"] as const;
@@ -126,6 +176,11 @@ export const CSV_DATE_FORMATS = [
 	'DD/MM/YY',
 	'MM/DD/YY',
 	'DD.MM.YY',
+	/** `05 Oct 2026`, an English month name. */
+	'DD MMM YYYY',
+	'DD MMM YY',
+	/** `2026.10.05`, or `2026.10.05.` as Hungarian banks write it. */
+	'YYYY.MM.DD',
 ] as const;
 export type CsvDateFormat = (typeof CSV_DATE_FORMATS)[number];
 
@@ -289,7 +344,7 @@ function layoutOf(value: unknown): CsvLayout {
 					...(layout.source === undefined ? {} : {source: oneOf(layout.source, ['text'] as const, 'source')}),
 					delimiter: oneOf(layout.delimiter, CSV_DELIMITERS, 'delimiter'),
 					quote: oneOf(layout.quote, ['"', "'"] as const, 'quote'),
-					encoding: oneOf(layout.encoding, ['utf-8', 'windows-1252'] as const, 'encoding'),
+					encoding: oneOf(layout.encoding, CSV_TEXT_ENCODINGS, 'encoding'),
 				}),
 		...defined('skipBefore', skipBefore),
 		...defined('skipAfter', skipAfter),

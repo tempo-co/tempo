@@ -275,6 +275,125 @@ describe('sampleTable', () => {
 		});
 	});
 
+	it('finds a table padded with delimiters, and counts no padded or summary line around it as a row', () => {
+		// Postbank pads every line to the table's 18 columns, the balance lines above and below it too.
+		expect(sampleTable(fixture('postbank-padded-synthetic.csv'))).toMatchObject({
+			columnCount: 18,
+			skipBefore: 6,
+			rowsAbove: 0,
+			skipAfter: 1,
+			rowsBelow: 0,
+			rowCount: 3,
+			header: expect.arrayContaining(['Buchungstag', 'Betrag', 'Währung']),
+		});
+		// Intesa pads empty lines too; they are no lines at all.
+		expect(sampleTable(fixture('intesa-padded-synthetic.csv'))).toMatchObject({
+			skipBefore: 2,
+			skipAfter: 0,
+			rowCount: 3,
+		});
+		// Sparda writes a line of values above a header of its own, and ends each row with a delimiter.
+		expect(sampleTable(fixture('sparda-summary-line-synthetic.csv'))).toMatchObject({
+			rowsAbove: 0,
+			header: ['Buchungstag', 'Wertstellungstag', 'Verwendungszweck', 'Umsatz', 'Währung'],
+			rowCount: 3,
+		});
+		expect(sampleTable(fixture('mbank-totals-cp1250-synthetic.csv'))).toMatchObject({rowsAbove: 0, rowCount: 3});
+	});
+
+	it('reads a sparse row at either end of the table as a row, not as padding', () => {
+		const sparse = (rows: string[]) =>
+			Buffer.from(['Date;Amount;Description;Category;Notes;Tags', ...rows, ''].join('\n'));
+		const full = ['2026-10-05;2500.00;Salary;Income;x;y', '2026-10-07;-4.20;Cafe;Food;x;y'];
+		expect(sampleTable(sparse([...full, '2026-10-09;-62.10;Energy;;;']))).toMatchObject({
+			skipBefore: 0,
+			skipAfter: 0,
+			rowCount: 3,
+		});
+		expect(sampleTable(sparse(['2026-10-02;-12.50;Shop;;;', ...full]))).toMatchObject({
+			skipBefore: 0,
+			header: expect.arrayContaining(['Date']),
+			rowCount: 3,
+		});
+		// With no header between, a narrower row above the table is a row its layout would drop: counted, not skipped.
+		expect(
+			sampleTable(
+				Buffer.from(
+					'Date;Amount;Currency;Note\n2026-10-01;-1.00;EUR\n2026-10-02;-2.00;EUR;n\n2026-10-03;-3.00;EUR;n\n',
+				),
+			),
+		).toMatchObject({rowsAbove: 1});
+		// A placeholder in a date column is no word: the last row is a row.
+		expect(
+			sampleTable(
+				Buffer.from(
+					'Date;Value date;Amount;Description\n2026-10-02;2026-10-02;-12.50;Shop\n2026-10-05;2026-10-05;2500.00;Salary\n2026-10-09;--;-62.10;Energy\n',
+				),
+			),
+		).toMatchObject({skipAfter: 0, rowCount: 3});
+		// Eight-digit references are no dates: a last row with a word there is a row.
+		expect(
+			sampleTable(
+				Buffer.from(
+					'Date;Amount;Reference;Description\n2026-10-02;-12.50;10000001;Shop\n2026-10-05;2500.00;10000002;Salary\n2026-10-09;-62.10;INV-77;Energy\n',
+				),
+			),
+		).toMatchObject({skipAfter: 0, rowCount: 3});
+		// A line cut short below the table with a date where the rows have one is a row a layout would drop.
+		expect(
+			sampleTable(
+				Buffer.from(
+					'Date;Amount;Description\n2026-10-02;-12.50;Shop\n2026-10-05;2500.00;Salary\n2026-10-10;Cafe\n',
+				),
+			),
+		).toMatchObject({rowsBelow: 1});
+		// A date with a four-letter month is a value too.
+		const wide = (rows: string[]) => Buffer.from(['Date;Amount;Description;A;B;C;D;E', ...rows, ''].join('\n'));
+		const wideRows = ['01 Sept 2026;-4.20;Cafe;a;b;c;d;e', '02 Sept 2026;-5.20;Cafe;a;b;c;d;e'];
+		expect(sampleTable(wide([...wideRows, '05 Sept 2026;-12.50;Shop;;;;;']))).toMatchObject({rowCount: 3});
+		expect(sampleTable(wide(['05 Sept 2026;-12.50;Shop;;;;;', ...wideRows]))).toMatchObject({rowCount: 3});
+		// A last row with text in a column the rows above fill with numbers is a row all the same.
+		expect(
+			sampleTable(
+				Buffer.from(
+					'Date;Amount;Reference;Description\n2026-10-05;-4.20;12345;Cafe\n2026-10-09;-62.10;NOTPROVIDED;Energy\n',
+				),
+			),
+		).toMatchObject({skipAfter: 0, rowCount: 2});
+		// A footer of the table's width whose date cell holds a word is a line below it, not a row.
+		expect(sampleTable(sparse([...full, '2026-10-09;-62.10;Energy;Home;x;y', 'Saldo;2433.40;;;;']))).toMatchObject({
+			skipAfter: 1,
+			rowsBelow: 0,
+			rowCount: 3,
+		});
+	});
+
+	it('reads windows-1250 and UTF-16 text in the encoding it is written in', () => {
+		expect(sampleTable(fixture('pko-cp1250-synthetic.csv'))?.shape).toEqual({
+			source: 'text',
+			delimiter: ',',
+			quote: '"',
+			encoding: 'windows-1250',
+		});
+		expect(sampleTable(fixture('mbank-totals-cp1250-synthetic.csv'))?.header).toEqual([
+			'#Data operacji',
+			'#Opis operacji',
+			'#Rachunek',
+			'#Kategoria',
+			'#Kwota',
+			'',
+		]);
+		expect(sampleTable(fixture('george-utf16-synthetic.csv'))).toMatchObject({
+			shape: {source: 'text', delimiter: ';', encoding: 'utf-16le'},
+			header: expect.arrayContaining(['Buchungsdatum', 'Währung']),
+			rowCount: 3,
+		});
+		// Text in windows-1252 stays so.
+		expect(sampleTable(fixture('comdirect-pending-synthetic.csv'))?.shape).toMatchObject({
+			encoding: 'windows-1252',
+		});
+	});
+
 	it('reads a comma file with quoted decimal-comma amounts with the quote that keeps them whole', () => {
 		const sample = sampleTable(fixture('headerless-direction-synthetic.csv'));
 
