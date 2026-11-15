@@ -92,7 +92,8 @@ export function sampleTable(bytes: Uint8Array): TableSample | null {
 		shape,
 		columnCount,
 		skipBefore: start,
-		rowsAbove: records.slice(0, start).filter(outside.above).length,
+		// A narrower line above a header is another table's; with no header between, it is a row cut short.
+		rowsAbove: records.slice(0, start).filter(hasHeader ? outside.above : outside.below).length,
 		skipAfter: records.length - end,
 		rowsBelow: records.slice(end).filter(outside.below).length,
 		header,
@@ -126,9 +127,9 @@ function paddedLine(cells: readonly string[], columnCount: number): boolean {
 /**
  * Which lines outside a table could be among its rows, a layout skipping them would drop: lines that look like rows
  * (`looksLikeRow`), less padded lines and lines whose cell in a date column (one every row above fills with a date
- * only) is a word, such as `Kontostand` on a balance line. A pending word there (`offen`) is a row's. Above the
- * table, a line narrower than it (a summary line of another table) is no row either; below it, one is (a row cut
- * short).
+ * only) is a word, such as `Kontostand` on a balance line. A pending word there (`offen`) is a row's. Above a
+ * header, a line narrower than the table (a summary line of another table) is no row either (`above`); elsewhere
+ * one is (`below`, a row cut short).
  */
 export function rowsOfTable(
 	rows: readonly (readonly string[])[],

@@ -157,7 +157,8 @@ function attemptLayout(source: TableSource, layout: CsvLayout, options: CsvLayou
 		const end = texts.length - skipAfter;
 		const rows = texts.slice(start, end);
 		const outside = rowsOfTable(rows, Math.max(csvLayoutColumnCount(layout), ...rows.map(({length}) => length)));
-		return texts.slice(0, skipBefore).some(outside.above) || texts.slice(Math.max(start, end)).some(outside.below);
+		const above = 'header' in recognize ? outside.above : outside.below;
+		return texts.slice(0, skipBefore).some(above) || texts.slice(Math.max(start, end)).some(outside.below);
 	};
 	if ('header' in recognize) {
 		const expected = [...(recognize.preamble ?? []), recognize.header];
@@ -279,7 +280,8 @@ function readTable(
 	const pending = (cells: readonly TableCell[]) =>
 		layout.pendingColumn !== undefined && isPendingWord(cells[layout.pendingColumn]?.text ?? '');
 	// A pending row is a row of the table all the same: one of another width is not skipped but refused.
-	const body = lines.filter((cells) => !pending(cells) || !fitsRow(cells, layout));
+	const width = rowWidthOf(lines);
+	const body = lines.filter((cells) => !pending(cells) || !fitsRow(cells, layout, width));
 	const statements = readRows(body, records.slice(0, layout.skipBefore ?? 0), layout);
 	if (!statements) return null;
 	if (options.owned && !plausible(statements, options.today ?? new Date().toISOString().slice(0, 10))) return null;
@@ -347,7 +349,8 @@ function readRows(
 		) {
 			throw new RowProblem();
 		}
-		rows = records.map((cells) => readRow(cells, layout, lineIban, debitsNegative));
+		const width = rowWidthOf(records);
+		rows = records.map((cells) => readRow(cells, layout, lineIban, debitsNegative, width));
 	} catch (error) {
 		if (error instanceof RowProblem) return null;
 		throw error;
@@ -421,16 +424,31 @@ function writesDebitsNegative(records: readonly TableCell[][], layout: CsvLayout
 	});
 }
 
-/** Whether a row has the layout's width; a workbook does not store the empty cells at a row's end. */
-function fitsRow(row: readonly TableCell[], layout: CsvLayout): boolean {
+/**
+ * Whether a row has the layout's width; a workbook does not store the empty cells at a row's end. A text row may end
+ * in more empty cells than the header has (Sparda-Bank, mBank) when every row of the file has that same width
+ * (`width`, null when they differ): one row longer than the rest is one shifted by a stray cell. A lone row may only
+ * when the header does not end in an empty column.
+ */
+function fitsRow(row: readonly TableCell[], layout: CsvLayout, width: RowWidth): boolean {
 	const columns = csvLayoutColumnCount(layout);
 	if (layout.source === 'xlsx') return trimRow([...row]).length <= columns;
 	if (row.length <= columns) return row.length === columns;
-	// A text row may end in more empty cells than its header has (Sparda-Bank), unless that header ends in an empty
-	// column itself: then a longer row may be one shifted by a cell.
 	const {recognize} = layout;
 	const header = 'header' in recognize ? recognize.header : null;
-	return !!header && header[header.length - 1].trim() !== '' && trimRow([...row]).length <= columns;
+	return (
+		row.length === width.common &&
+		trimRow([...row]).length <= columns &&
+		(width.rows > 1 || (!!header && header[header.length - 1].trim() !== ''))
+	);
+}
+
+/** The width every row of a table shares (null when they differ), and how many rows it has. */
+type RowWidth = {common: number | null; rows: number};
+
+function rowWidthOf(rows: readonly (readonly TableCell[])[]): RowWidth {
+	const widths = new Set(rows.map(({length}) => length));
+	return {common: widths.size === 1 ? [...widths][0] : null, rows: rows.length};
 }
 
 function readRow(
@@ -438,11 +456,12 @@ function readRow(
 	layout: CsvLayout,
 	lineIban: string | null,
 	debitsNegative: boolean,
+	width: RowWidth,
 ): ReadRow {
 	const {recognize} = layout;
 	const columns = csvLayoutColumnCount(layout);
 	const workbook = layout.source === 'xlsx';
-	if (!fitsRow(row, layout)) throw new RowProblem();
+	if (!fitsRow(row, layout, width)) throw new RowProblem();
 	const cells = workbook ? Array.from({length: columns}, (_, index) => row[index] ?? {text: '', number: false}) : row;
 	const cell = (column: number) => cells[column].text.trim();
 	const optional = (column: number | undefined) => (column === undefined ? null : cell(column) || null);

@@ -201,6 +201,10 @@ describe('detectEncoding', () => {
 		);
 		// `ł`, `ą` and `ś` in Windows-1250 are symbols in Windows-1252.
 		expect(detectEncoding(Uint8Array.from([0x4f, 0x70, 0xb3, 0x61, 0x74, 0xb9, 0x20, 0x9c]))).toBe('windows-1250');
+		// `£12 ¼`: signs in Windows-1252, though Windows-1250 reads them as letters.
+		expect(detectEncoding(Uint8Array.from([0xa3, 0x31, 0x32, 0x20, 0xbc]))).toBe('windows-1252');
+		// One letter only Windows-1250 has is not enough.
+		expect(detectEncoding(Uint8Array.from([0x4f, 0x70, 0xb3, 0x61]))).toBe('windows-1252');
 		// `¡Hola! ¿Qué?`: `¡` and `¿` are punctuation in Windows-1252, though Windows-1250 reads them as letters.
 		expect(
 			detectEncoding(Uint8Array.from([0xa1, 0x48, 0x6f, 0x6c, 0x61, 0x21, 0x20, 0xbf, 0x51, 0x75, 0xe9, 0x3f])),

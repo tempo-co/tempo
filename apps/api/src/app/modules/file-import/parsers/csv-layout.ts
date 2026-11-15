@@ -117,10 +117,13 @@ export function decodeTable(bytes: Uint8Array, encoding: CsvTextEncoding): strin
 	}
 }
 
+/** Signs Western text writes (`¡`, `£`, `¥`, `¼`, `¾`, `¿`) that Windows-1250 reads as letters: no evidence of it. */
+const WESTERN_SIGNS = new Set([0xa1, 0xa3, 0xa5, 0xbc, 0xbe, 0xbf]);
+
 /**
  * The encoding a text file is written in: UTF-16LE after its byte order mark, else UTF-8 when the bytes are valid
  * UTF-8, else the code page whose reading gives letters where the other gives symbols. Polish, Czech and Hungarian
- * letters such as `ł`, `ś` and `ą` are symbols in Windows-1252 (`³`, `œ`, `¹`). Windows-1250 needs two such letters,
+ * letters such as `ł`, `ą` and `Ż` are symbols in Windows-1252 (`³`, `¹`, `¯`). Windows-1250 needs two such letters,
  * and Windows-1252 wins a tie.
  */
 export function detectEncoding(bytes: Uint8Array): CsvTextEncoding {
@@ -131,8 +134,7 @@ export function detectEncoding(bytes: Uint8Array): CsvTextEncoding {
 	const letter = /\p{L}/u;
 	let central = 0;
 	let western = 0;
-	// `¡` and `¿` are Spanish punctuation in Windows-1252, though Windows-1250 reads them as letters.
-	for (const byte of new Set(bytes.filter((value) => value >= 0x80 && value !== 0xa1 && value !== 0xbf))) {
+	for (const byte of new Set(bytes.filter((value) => value >= 0x80 && !WESTERN_SIGNS.has(value)))) {
 		const one = Uint8Array.of(byte);
 		const centralLetter = letter.test(centralText.decode(one));
 		const westernLetter = letter.test(westernText.decode(one));

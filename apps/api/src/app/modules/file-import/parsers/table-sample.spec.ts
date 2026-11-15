@@ -315,6 +315,14 @@ describe('sampleTable', () => {
 			header: expect.arrayContaining(['Date']),
 			rowCount: 3,
 		});
+		// With no header between, a narrower row above the table is a row its layout would drop: counted, not skipped.
+		expect(
+			sampleTable(
+				Buffer.from(
+					'Date;Amount;Currency;Note\n2026-10-01;-1.00;EUR\n2026-10-02;-2.00;EUR;n\n2026-10-03;-3.00;EUR;n\n',
+				),
+			),
+		).toMatchObject({rowsAbove: 1});
 		// A date with a four-letter month is a value too.
 		const wide = (rows: string[]) => Buffer.from(['Date;Amount;Description;A;B;C;D;E', ...rows, ''].join('\n'));
 		const wideRows = ['01 Sept 2026;-4.20;Cafe;a;b;c;d;e', '02 Sept 2026;-5.20;Cafe;a;b;c;d;e'];
