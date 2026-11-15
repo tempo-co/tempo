@@ -3055,6 +3055,8 @@ describe('Bank imports', () => {
 			status: 415,
 			code: 'legacy_xls_not_supported',
 			file: 1,
+			message:
+				"Old Excel files (.xls) can't be read. Download the statement again as CAMT.053, MT940, CSV or Excel (.xlsx).",
 		},
 		{
 			name: "a file with a bank's CSV header whose dates are written another way",
@@ -3115,12 +3117,12 @@ describe('Bank imports', () => {
 			code: 'too_many_files',
 			file: null,
 		},
-	])('refuses $name and writes nothing', async ({files, status, code, file, layout}) => {
+	])('refuses $name and writes nothing', async ({files, status, code, file, layout, message}) => {
 		const {owner, agent} = await createOwner();
 
 		const response = await drop(agent, files()).expect(status);
 
-		expect(response.body).toMatchObject({code, file});
+		expect(response.body).toMatchObject({code, file, ...(message ? {message} : {})});
 		// Only a near miss of a bank's CSV layout names the layout.
 		expect(response.body.layout).toBe(layout);
 		expect(await fileConnection(owner)).toBeNull();

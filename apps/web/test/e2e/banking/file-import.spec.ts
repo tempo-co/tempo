@@ -819,6 +819,21 @@ test.describe('statement file import on Connections', () => {
     expect(api.uploads).toHaveLength(2);
   });
 
+  test('an old Excel file is refused with the formats to download instead', async ({page}) => {
+    await mockFileImport(page, {
+      uploads: [refused({code: 'legacy_xls_not_supported', file: 1, statusCode: 415})],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.xls')]);
+
+    const alert = dialog.getByRole('alert');
+    await expect(alert.getByText("Old Excel files aren't supported")).toBeVisible();
+    await expect(alert).toContainText(
+      'Download the statement as CAMT.053, MT940, CSV or Excel (.xlsx) instead. Nothing was imported.',
+    );
+  });
+
   test("lists the supported files, and a file laid out like a bank's export that doesn't read as one names the bank", async ({
     page,
   }) => {
