@@ -150,8 +150,8 @@ describe('validateParseOutput', () => {
 		{name: 'a currency that is not a code', value: output([row({currency: 'eur'})])},
 		{name: 'an account IBAN that fails its checksum', value: output([], {accountIban: 'NL91ABNA0417164301'})},
 		{
-			name: 'an account id longer than an account number',
-			value: output([], {accountIban: null, accountOtherId: 'x'.repeat(35)}),
+			name: 'an account id longer than any format writes',
+			value: output([], {accountIban: null, accountOtherId: 'x'.repeat(56)}),
 		},
 		{name: 'a statement without an account', value: output([], {accountIban: null, accountOtherId: null})},
 		{name: 'a statement without its balances', value: output([], {openingBalance: undefined})},

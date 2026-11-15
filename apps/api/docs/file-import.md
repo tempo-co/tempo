@@ -31,13 +31,20 @@ Undo (`DELETE /bank-imports/:id`) deletes the rows that import inserted (never-s
 
 | Format                    | Reader                                   | Notes                                                                           |
 | ------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------- |
-| CAMT.053                  | `camt053.ts`                             | Also zipped, several statements per archive.                                    |
-| MT940                     | `mt940.ts`                               | Payee details only where a bank's free-text packing is known (ABN AMRO).        |
+| CAMT.053 and camt.052     | `camt053.ts`                             | Also zipped, several statements per archive. Booked entries only.               |
+| MT940                     | `mt940.ts`, `mt940-information.ts`       | UTF-8 or latin-1. Payee from the three published `:86:` layouts (below).        |
 | OFX and QFX               | `ofx.ts`                                 | SGML and XML, bank and card statements. `LEDGERBAL` is the closing balance.     |
 | ABN AMRO TXT              | `abn-amro-txt.ts`                        |                                                                                 |
 | Revolut CSV and Excel     | `revolut.ts`                             | Names no account; one statement per currency.                                   |
 | Bank CSV layouts          | `csv-layout-reader.ts`, `csv-layouts.ts` | ING, Rabobank, bunq, Knab, ASN Bank. Layouts are data; every row must validate. |
 | The owner's saved layouts | the same reader                          | Learned by the mapper, tried after everything built in, for that owner only.    |
+
+What the standard readers take from the text, by general rule and never per bank:
+
+- **MT940 `:86:`.** German `?nn` subfields (DK): name in `?32`/`?33`, account in `?31`, purpose in `?20` to `?29` and `?60` to `?63` (`SVWZ+` as the payment text, `EREF+` as the reference), posting text in `?00`; a full 27-character subfield runs on into the next without a space, and the description carries no subfield codes. SWIFT-style codes (`/CNTP/account/BIC/name/city/`, `/BENM//NAME/`, `/ORDP//NAME/`, `/REMI/`, `/EREF/`), written continuously, so wrapped lines join without a space. Otherwise free text, whose first line names the counterparty when it leads with an IBAN or is followed by more lines. ABN AMRO keeps its own reader (`abn-amro.ts`).
+- **MT940 `:61:`.** Spaces in place of the entry date, a space before the transaction type and a two-letter type padded with a space are read; an entry without an entry date is booked on its value date (ABN AMRO: on the statement's date). A value date of the 29th to 31st in a shorter month (30/360 closing entries, such as 30 February) is that month's last day. A statement whose entries do not add up to its closing balance is still refused.
+- **CAMT.** The remittance text is the unstructured lines, then structured text (`AddtlRmtInf`) and creditor references (`CdtrRefInf/Ref`: Belgian structured communication, RF, Swiss QR) as written. The ultimate creditor or debtor is the counterparty when no direct one is named, and is added to the description when it differs from the named one. A camt.052 report (`Rpt`) is read like a statement: pending entries are skipped, and balances come only from the opening and closing booked balances, never an interim one (`ITBD`).
+- **OFX.** CDATA is text. A `BANKTRANLIST` left without its end tag is closed by the statement's end tag; every other aggregate needs its own. A bank account without an IBAN is named by `BANKID`, `BRANCHID` and `ACCTID` together, since an account number is unique only at its bank (UK sort codes, French bank and branch codes); a card by its `ACCTID`.
 
 Not read: QIF, PDF, old binary `.xls`. The built-in CSV layouts rest on public samples from 2018 to 2022 (`test/fixtures/file-import/SOURCES.md`); none has been checked against a current export.
 

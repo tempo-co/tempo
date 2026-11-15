@@ -1234,7 +1234,7 @@
 			{
 				"layout": null,
 				"accountIban": null,
-				"accountOtherId": "000123456789",
+				"accountOtherId": "000000000 000123456789",
 				"accountCurrency": "USD",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
@@ -1325,7 +1325,7 @@
 			{
 				"layout": null,
 				"accountIban": null,
-				"accountOtherId": "00000 00-00001",
+				"accountOtherId": "000000000 00000 00-00001",
 				"accountCurrency": "CAD",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
@@ -1371,7 +1371,7 @@
 			{
 				"layout": null,
 				"accountIban": null,
-				"accountOtherId": "00000 00-00002",
+				"accountOtherId": "000000000 00000 00-00002",
 				"accountCurrency": "CAD",
 				"sequenceNumber": null,
 				"entriesSkipped": 0,
