@@ -8,6 +8,7 @@ const FIXTURES = join(__dirname, '../../../../../test/fixtures/file-import');
 const XML_FILE = readFileSync(join(FIXTURES, 'ofx-xml-synthetic.ofx'), 'utf8');
 const SGML_FILE = readFileSync(join(FIXTURES, 'ofx-sgml-synthetic.ofx'), 'latin1');
 const QFX_FILE = readFileSync(join(FIXTURES, 'qfx-synthetic.qfx'), 'latin1');
+const CARD_FILE = readFileSync(join(FIXTURES, 'ofx-card-synthetic.ofx'), 'latin1');
 const BUNQ_FILE = readFileSync(join(FIXTURES, 'bunq-nl-synthetic.csv'), 'utf8');
 
 describe('OFX and QFX files', () => {
@@ -38,6 +39,46 @@ describe('OFX and QFX files', () => {
 		expect(statement.rows).toHaveLength(3);
 		expect(statement.rows[1]).toMatchObject({counterpartyName: null, remittanceInformation: 'Example memo'});
 		expect(statements.map(({rows}) => rows.length)).toEqual([2, 1]);
+	});
+
+	it('names a bank account by its bank id, branch and account number, and an IBAN or a card by itself', () => {
+		const ukAccount = (bankId: string) =>
+			XML_FILE.replace(
+				'<BANKID>000000000</BANKID><ACCTID>000123456789</ACCTID>',
+				`<BANKID>${bankId}</BANKID><ACCTID>12345678</ACCTID>`,
+			);
+		const french = XML_FILE.replace('<ACCTID>', '<BRANCHID>00001</BRANCHID><ACCTID>');
+
+		const accounts = [ukAccount('070116'), ukAccount('309634'), french, SGML_FILE, CARD_FILE].map((file) =>
+			parseFile(Buffer.from(file, 'latin1')).statements.map(({accountIban, accountOtherId}) => [
+				accountIban,
+				accountOtherId,
+			]),
+		);
+
+		expect(accounts).toEqual([
+			[[null, '070116 12345678']],
+			[[null, '309634 12345678']],
+			[[null, '000000000 00001 000123456789']],
+			[['NL91ABNA0417164300', null]],
+			[[null, 'EXAMPLE-CARD-0001']],
+		]);
+	});
+
+	it('reads CDATA as text, and a transaction list the statement end closes', () => {
+		const cdata = XML_FILE.replace('<NAME>Example Market</NAME>', '<NAME><![CDATA[Example <Market> & Co]]></NAME>');
+		const unclosed = XML_FILE.replace('</BANKTRANLIST>', '');
+		const unclosedSgml = SGML_FILE.replace('</BANKTRANLIST>', '');
+
+		expect(parseFile(Buffer.from(cdata, 'utf8')).statements[0].rows[0].counterpartyName).toBe(
+			'Example <Market> & Co',
+		);
+		expect(parseFile(Buffer.from(unclosed, 'utf8')).statements).toEqual(
+			parseFile(Buffer.from(XML_FILE, 'utf8')).statements,
+		);
+		expect(parseFile(Buffer.from(unclosedSgml, 'latin1')).statements).toEqual(
+			parseFile(Buffer.from(SGML_FILE, 'latin1')).statements,
+		);
 	});
 
 	it('leaves a CSV file whose text mentions OFX to the CSV layouts', () => {
@@ -77,8 +118,18 @@ describe('OFX and QFX files', () => {
 			code: 'parse_failed',
 		},
 		{
-			name: 'a transaction list left without its end tag',
-			file: () => XML_FILE.replace('</BANKTRANLIST>', ''),
+			name: 'a transaction left without its end tag',
+			file: () => XML_FILE.replace('</STMTTRN>\n        </BANKTRANLIST>', '</BANKTRANLIST>'),
+			code: 'parse_failed',
+		},
+		{
+			name: 'a CDATA section that never ends',
+			file: () => XML_FILE.replace('<NAME>Example Market</NAME>', '<NAME><![CDATA[Example Market</NAME>'),
+			code: 'parse_failed',
+		},
+		{
+			name: 'a comment',
+			file: () => XML_FILE.replace('<NAME>Example Market</NAME>', '<!-- note --><NAME>Example Market</NAME>'),
 			code: 'parse_failed',
 		},
 		{

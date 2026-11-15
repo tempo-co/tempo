@@ -31,6 +31,12 @@ const READ_AGGREGATES = new Set([
 	'PAYEE',
 ]);
 const ENTITIES: Record<string, string> = {lt: '<', gt: '>', amp: '&', quot: '"', apos: "'"};
+const CDATA_START = '<![CDATA[';
+const CDATA_END = ']]>';
+/** The statements whose end tag may close a transaction list left open, and what such a list holds. */
+const STATEMENTS = new Set(['STMTRS', 'CCSTMTRS']);
+const TRANSACTION_LIST = 'BANKTRANLIST';
+const TRANSACTION_LIST_MEMBERS = new Set(['DTSTART', 'DTEND', 'STMTTRN']);
 
 /** An OFX element: an aggregate holds elements, a leaf holds a value. */
 type OfxElement = {name: string; children: OfxElement[]; value: string | null};
@@ -50,8 +56,8 @@ export function looksLikeOfx(bytes: Uint8Array): boolean {
 /**
  * Reads the bank statements (`STMTRS`) and card statements (`CCSTMTRS`) of an OFX or QFX file, version 1.x (SGML,
  * leaf elements left unclosed) or 2.x (XML), into one normalized statement each. Elements Tempo does not use,
- * including vendor elements, are skipped. Markup declarations (a DTD, entities, comments) are refused, and only the
- * predefined and numeric character references are decoded. A statement without a currency is `parse_failed`.
+ * including vendor elements, are skipped. Markup declarations (a DTD, entities, comments) are refused; CDATA is
+ * text as written, and elsewhere only the predefined and numeric character references are decoded. A statement without a currency is `parse_failed`.
  */
 export function parseOfx(bytes: Uint8Array): NormalizedStatement[] {
 	const root = parseOfxTree(decode(bytes));
@@ -89,19 +95,31 @@ function decode(bytes: Uint8Array): string {
  * The `OFX` element as a tree. Text right after an element's tag makes it a leaf, which the next tag ends whether or
  * not it is an end tag (SGML leaves have none). An end tag closes the element it names and every element opened
  * after it. One of those that holds no text was an SGML leaf left empty (aggregates always have an end tag), so the
- * elements read into it belong to its parent, after it; one of the aggregates the reader walks is refused instead.
+ * elements read into it belong to its parent, after it; one of the aggregates the reader walks is refused instead,
+ * except a transaction list the end of its statement closes (some banks leave out `</BANKTRANLIST>`): it ends after
+ * its transactions, and what follows them (such as `LEDGERBAL`) belongs to the statement.
  */
 function parseOfxTree(text: string): OfxElement {
 	const start = /<OFX\s*>/i.exec(text);
 	if (!start) throw new ParseRefusal('unsupported_format');
-	if (/<!/.test(text)) throw new ParseRefusal('parse_failed');
+	if (/<!(?!\[CDATA\[)/.test(text)) throw new ParseRefusal('parse_failed');
 	const root: OfxElement = {name: 'OFX', children: [], value: null};
 	const open: OfxElement[] = [root];
 	let index = start.index + start[0].length;
+	let pending = '';
 	while (open.length > 0) {
 		const tagStart = text.indexOf('<', index);
 		if (tagStart === -1) throw new ParseRefusal('parse_failed');
-		const content = text.slice(index, tagStart).trim();
+		pending += decodeReferences(text.slice(index, tagStart));
+		if (text.startsWith(CDATA_START, tagStart)) {
+			const cdataEnd = text.indexOf(CDATA_END, tagStart + CDATA_START.length);
+			if (cdataEnd === -1) throw new ParseRefusal('parse_failed');
+			pending += text.slice(tagStart + CDATA_START.length, cdataEnd);
+			index = cdataEnd + CDATA_END.length;
+			continue;
+		}
+		const content = pending.trim();
+		pending = '';
 		const tagEnd = text.indexOf('>', tagStart);
 		if (tagEnd === -1) throw new ParseRefusal('parse_failed');
 		const tag = text.slice(tagStart + 1, tagEnd).trim();
@@ -112,7 +130,7 @@ function parseOfxTree(text: string): OfxElement {
 			if (current === root || current.children.length > 0 || current.value !== null) {
 				throw new ParseRefusal('parse_failed');
 			}
-			current.value = decodeReferences(content);
+			current.value = content;
 		}
 		if (tag.startsWith('?')) continue;
 		if (tag.startsWith('/')) {
@@ -122,8 +140,14 @@ function parseOfxTree(text: string): OfxElement {
 			// Innermost first, so elements move up through every empty leaf they were read into.
 			for (let inner = open.length - 1; inner > position; inner--) {
 				const element = open[inner];
-				if (READ_AGGREGATES.has(element.name)) throw new ParseRefusal('parse_failed');
 				const parent = open[inner - 1].children;
+				if (element.name === TRANSACTION_LIST && inner === position + 1 && STATEMENTS.has(name)) {
+					const after = element.children.filter((member) => !TRANSACTION_LIST_MEMBERS.has(member.name));
+					element.children = element.children.filter((member) => TRANSACTION_LIST_MEMBERS.has(member.name));
+					parent.splice(parent.indexOf(element) + 1, 0, ...after);
+					continue;
+				}
+				if (READ_AGGREGATES.has(element.name)) throw new ParseRefusal('parse_failed');
 				parent.splice(parent.indexOf(element) + 1, 0, ...element.children.splice(0));
 			}
 			open.length = position;
@@ -157,14 +181,17 @@ function decodeReferences(value: string): string {
 function parseStatement(statement: OfxElement, accountElement: 'BANKACCTFROM' | 'CCACCTFROM'): NormalizedStatement {
 	const accountCurrency = value(statement, 'CURDEF')?.toUpperCase() ?? null;
 	if (!accountCurrency || !CURRENCY.test(accountCurrency)) throw new ParseRefusal('parse_failed');
-	const accountId = value(child(statement, accountElement), 'ACCTID');
+	const account = child(statement, accountElement);
+	const accountId = value(account, 'ACCTID');
 	if (!accountId) throw new ParseRefusal('parse_failed');
 	const iban = normalizeIban(accountId);
+	// An account number is unique only at its bank (and branch): UK sort codes, French bank and branch codes.
+	const otherId = [value(account, 'BANKID'), value(account, 'BRANCHID'), accountId].filter(Boolean).join(' ');
 	return {
 		format: 'ofx',
 		layout: null,
 		accountIban: iban,
-		accountOtherId: iban ? null : accountId,
+		accountOtherId: iban ? null : otherId,
 		bank: null,
 		accountCurrency,
 		sequenceNumber: null,
