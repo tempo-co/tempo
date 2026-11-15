@@ -1,12 +1,19 @@
 import {readCsv} from './csv';
-import {CSV_DELIMITERS, CsvDelimiter, MAX_LAYOUT_COLUMNS} from './csv-layout';
+import {
+	CSV_DELIMITERS,
+	CsvDelimiter,
+	CsvTextEncoding,
+	MAX_LAYOUT_COLUMNS,
+	decodeTable,
+	detectEncoding,
+} from './csv-layout';
 import {MaskedTable, maskTable} from './table-mask';
 import {isXlsx, readFirstSheet} from './xlsx';
 import {isZip} from './zip-reader';
 
 /** Where a table sits in a file and how it is written, found without reading any of its values. */
 export type TableShape =
-	{source: 'text'; delimiter: CsvDelimiter; quote: '"' | "'"; encoding: 'utf-8' | 'windows-1252'} | {source: 'xlsx'};
+	{source: 'text'; delimiter: CsvDelimiter; quote: '"' | "'"; encoding: CsvTextEncoding} | {source: 'xlsx'};
 
 /** A file's table: where it is, and what the column mapper may see of it (`maskTable`). */
 export type TableSample = {
@@ -36,33 +43,51 @@ const LETTER = /\p{L}/u;
 
 /**
  * Finds the table in a file: delimited text whose longest run of lines with one column count (two or more) is at
- * least two lines, or the first sheet of a workbook. Null for anything else, and for a table that rows of its width
- * follow below a line of another width (skipping the lines below it would drop them). The rows start at the run's
- * first line with a cell that looks like a value; the line right above it is the header when none of its cells
- * does, and lines of the run above the header are lines above the table. A file whose first line looks like a row
- * has no header. Lines above and below the table that look like rows are counted (`rowsAbove`, `rowsBelow`).
+ * least two lines, or the first sheet of a workbook. Lines whose every cell is empty are no lines. Null for anything
+ * else, and for a table that rows of its width follow below a line of another width (skipping the lines below it
+ * would drop them). The rows start at the run's first line with a cell that looks like a value, past lines padded
+ * out to the run's width that hold only a few cells (`padded`); the line right above it is the header when none of
+ * its cells does, and lines of the run above the header are lines above the table. A header right above the run
+ * that is narrower only by the empty cells the rows end in is the table's. Padded lines, and lines whose cell in a
+ * date or amount column is no value, at the run's end are lines below it. A file whose first line looks like a row
+ * has no header. Lines above and below the table that could be its rows are counted (`rowsAbove`, `rowsBelow`).
  */
 export function sampleTable(bytes: Uint8Array): TableSample | null {
 	const table = isZip(bytes) ? (isXlsx(bytes) ? workbookTable(bytes) : null) : textTable(bytes);
 	if (!table) return null;
-	const {shape, records, end} = table;
-	const columnCount = Math.max(...records.slice(table.start, end).map((row) => row.length));
+	const {shape, records} = table;
+	const text = shape.source === 'text';
+	const columnCount = Math.max(...records.slice(table.start, table.end).map((row) => row.length));
 	if (columnCount < 2 || columnCount > MAX_LAYOUT_COLUMNS) return null;
-	const firstRow = records.slice(table.start, end).findIndex((row) => row.some(looksLikeValue));
+	const padded = (row: readonly string[]) => text && paddedLine(row, columnCount);
+	const firstRow = records.slice(table.start, table.end).findIndex((row) => row.some(looksLikeValue) && !padded(row));
 	if (firstRow === -1) return null;
-	const headerLine = table.start + firstRow - 1;
-	const hasHeader = firstRow > 0 && looksLikeHeader(records[headerLine]);
-	const start = hasHeader ? headerLine : table.start + firstRow;
+	let end = table.end;
+	const rowLike = rowsOfTable(records.slice(table.start + firstRow, end), columnCount);
+	while (
+		end - 1 > table.start + firstRow &&
+		(padded(records[end - 1]) || !rowLike.fitsValueColumns(records[end - 1]))
+	) {
+		end--;
+	}
 	const rows = records.slice(table.start + firstRow, end);
-	if (records.slice(end).some((row) => row.length === columnCount && row.some(looksLikeValue))) return null;
+	const headerLine = table.start + firstRow - 1;
+	const above = records[headerLine];
+	const hasHeader =
+		headerLine >= 0 &&
+		looksLikeHeader(above) &&
+		(firstRow > 0 || (text && above.length < columnCount && above.length >= Math.max(...rows.map(filledWidth))));
+	const start = hasHeader ? headerLine : table.start + firstRow;
+	const outside = rowsOfTable(rows, columnCount);
+	if (records.slice(end).some((row) => row.length === columnCount && outside.below(row))) return null;
 	const header = hasHeader ? records[headerLine].map((value) => value.replace(/\ufeff/g, '').trim()) : null;
 	return {
 		shape,
 		columnCount,
 		skipBefore: start,
-		rowsAbove: records.slice(0, start).filter(looksLikeRow).length,
+		rowsAbove: records.slice(0, start).filter(outside.above).length,
 		skipAfter: records.length - end,
-		rowsBelow: records.slice(end).filter(looksLikeRow).length,
+		rowsBelow: records.slice(end).filter(outside.below).length,
 		header,
 		rowCount: rows.length,
 		masked: maskTable({
@@ -73,6 +98,49 @@ export function sampleTable(bytes: Uint8Array): TableSample | null {
 			columnCount,
 		}),
 	};
+}
+
+/** The number of cells up to the last one that holds something. */
+function filledWidth(cells: readonly string[]): number {
+	let width = cells.length;
+	while (width > 0 && cells[width - 1].trim() === '') width--;
+	return width;
+}
+
+/**
+ * A line written out to the table's width that holds cells in less than half of it, as banks that pad every line
+ * with delimiters write their titles and balances (Postbank, Intesa Sanpaolo).
+ */
+function paddedLine(cells: readonly string[], columnCount: number): boolean {
+	return cells.length >= columnCount && filledWidth(cells) * 2 <= columnCount;
+}
+
+/**
+ * Which lines outside a table could be among its rows, a layout skipping them would drop: lines that look like rows
+ * (`looksLikeRow`), less padded lines and lines whose cell in a column every row fills with a value (a date, an
+ * amount) is something else, such as `Kontostand` on a balance line. Above the table, a line narrower than it (a
+ * summary line of another table) is no row either; below it, one is (a row cut short).
+ */
+export function rowsOfTable(
+	rows: readonly (readonly string[])[],
+	columnCount: number,
+): {
+	above: (cells: readonly string[]) => boolean;
+	below: (cells: readonly string[]) => boolean;
+	fitsValueColumns: (cells: readonly string[]) => boolean;
+} {
+	const valueColumns = Array.from({length: columnCount}, (_, column) => column).filter((column) => {
+		const filled = rows.map((row) => (row[column] ?? '').trim()).filter((cell) => cell !== '');
+		return filled.length > 0 && filled.every(looksLikeValue);
+	});
+	const fitsValueColumns = (cells: readonly string[]) =>
+		valueColumns.every((column) => {
+			const cell = (cells[column] ?? '').trim();
+			return cell === '' || looksLikeValue(cell);
+		});
+	const below = (cells: readonly string[]) =>
+		looksLikeRow(cells) && !paddedLine(cells, columnCount) && fitsValueColumns(cells);
+	return {above: (cells) => cells.length >= columnCount && below(cells), below, fitsValueColumns};
 }
 
 /**
@@ -95,26 +163,19 @@ function looksLikeHeader(row: readonly string[]): boolean {
 type FoundTable = {shape: TableShape; records: string[][]; start: number; end: number};
 
 function textTable(bytes: Uint8Array): FoundTable | null {
-	let text: string;
-	let encoding: 'utf-8' | 'windows-1252';
-	try {
-		text = new TextDecoder('utf-8', {fatal: true}).decode(bytes);
-		encoding = 'utf-8';
-	} catch {
-		text = new TextDecoder('windows-1252').decode(bytes);
-		encoding = 'windows-1252';
-	}
-	if (BINARY.test(text)) return null;
+	const encoding = detectEncoding(bytes);
+	const text = decodeTable(bytes, encoding);
+	if (text === null || BINARY.test(text)) return null;
 	let best: (FoundTable & {length: number; columns: number}) | null = null;
 	for (const quote of ['"', "'"] as const) {
 		for (const delimiter of CSV_DELIMITERS) {
 			let records: string[][];
 			try {
-				records = readCsv(text, {delimiter, quote});
+				records = withoutEmptyLines(readCsv(text, {delimiter, quote}));
 			} catch {
 				continue;
 			}
-			if (splitsQuotedCells(records, delimiter, quote)) continue;
+			if (splitsQuotedCells(records, delimiter, quote) || joinsQuotedCells(records, delimiter, quote)) continue;
 			const run = longestRun(records);
 			if (!run) continue;
 			const columns = records[run.start].length;
@@ -125,6 +186,20 @@ function textTable(bytes: Uint8Array): FoundTable | null {
 		}
 	}
 	return best && {shape: best.shape, records: best.records, start: best.start, end: best.end};
+}
+
+/** The records less those whose every cell is empty, as a line padded with delimiters is: no line at all. */
+export function withoutEmptyLines<T extends string | {text: string}>(records: T[][]): T[][] {
+	return records.filter((cells) => cells.some((cell) => (typeof cell === 'string' ? cell : cell.text).trim() !== ''));
+}
+
+/**
+ * Another delimiter is the file's: a cell holds a quote, that delimiter and a quote (`x";"y`), as quoted cells read
+ * with the wrong delimiter come out.
+ */
+function joinsQuotedCells(records: readonly string[][], delimiter: string, quote: '"' | "'"): boolean {
+	const joints = CSV_DELIMITERS.filter((other) => other !== delimiter).map((other) => `${quote}${other}${quote}`);
+	return records.some((cells) => cells.some((cell) => joints.some((joint) => cell.includes(joint))));
 }
 
 /**
@@ -144,13 +219,21 @@ function splitsQuotedCells(records: readonly string[][], delimiter: string, quot
 	});
 }
 
-/** The longest stretch (earliest on a tie) of at least two lines with the same number of cells, two or more. */
+/**
+ * The longest stretch (earliest on a tie) of at least two lines with the same number of cells, two or more, one of
+ * which looks like a row: a stretch of title lines is no table.
+ */
 function longestRun(records: readonly string[][]): {start: number; end: number} | null {
 	let best: {start: number; end: number} | null = null;
 	let start = 0;
 	for (let index = 1; index <= records.length; index++) {
 		if (index < records.length && records[index].length === records[start].length) continue;
-		if (records[start]?.length >= 2 && index - start >= 2 && (!best || index - start > best.end - best.start)) {
+		if (
+			records[start]?.length >= 2 &&
+			index - start >= 2 &&
+			(!best || index - start > best.end - best.start) &&
+			records.slice(start, index).some(looksLikeRow)
+		) {
 			best = {start, end: index};
 		}
 		start = index;

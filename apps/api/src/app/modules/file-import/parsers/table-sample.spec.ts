@@ -275,6 +275,58 @@ describe('sampleTable', () => {
 		});
 	});
 
+	it('finds a table padded with delimiters, and counts no padded or summary line around it as a row', () => {
+		// Postbank pads every line to the table's 18 columns, the balance lines above and below it too.
+		expect(sampleTable(fixture('postbank-padded-synthetic.csv'))).toMatchObject({
+			columnCount: 18,
+			skipBefore: 6,
+			rowsAbove: 0,
+			skipAfter: 1,
+			rowsBelow: 0,
+			rowCount: 3,
+			header: expect.arrayContaining(['Buchungstag', 'Betrag', 'Währung']),
+		});
+		// Intesa pads empty lines too; they are no lines at all.
+		expect(sampleTable(fixture('intesa-padded-synthetic.csv'))).toMatchObject({
+			skipBefore: 2,
+			skipAfter: 0,
+			rowCount: 3,
+		});
+		// Sparda writes a line of values above a header of its own, and ends each row with a delimiter.
+		expect(sampleTable(fixture('sparda-summary-line-synthetic.csv'))).toMatchObject({
+			rowsAbove: 0,
+			header: ['Buchungstag', 'Wertstellungstag', 'Verwendungszweck', 'Umsatz', 'Währung'],
+			rowCount: 3,
+		});
+		expect(sampleTable(fixture('mbank-totals-cp1250-synthetic.csv'))).toMatchObject({rowsAbove: 0, rowCount: 3});
+	});
+
+	it('reads windows-1250 and UTF-16 text in the encoding it is written in', () => {
+		expect(sampleTable(fixture('pko-cp1250-synthetic.csv'))?.shape).toEqual({
+			source: 'text',
+			delimiter: ',',
+			quote: '"',
+			encoding: 'windows-1250',
+		});
+		expect(sampleTable(fixture('mbank-totals-cp1250-synthetic.csv'))?.header).toEqual([
+			'#Data operacji',
+			'#Opis operacji',
+			'#Rachunek',
+			'#Kategoria',
+			'#Kwota',
+			'',
+		]);
+		expect(sampleTable(fixture('george-utf16-synthetic.csv'))).toMatchObject({
+			shape: {source: 'text', delimiter: ';', encoding: 'utf-16le'},
+			header: expect.arrayContaining(['Buchungsdatum', 'Währung']),
+			rowCount: 3,
+		});
+		// Text in windows-1252 stays so.
+		expect(sampleTable(fixture('comdirect-pending-synthetic.csv'))?.shape).toMatchObject({
+			encoding: 'windows-1252',
+		});
+	});
+
 	it('reads a comma file with quoted decimal-comma amounts with the quote that keeps them whole', () => {
 		const sample = sampleTable(fixture('headerless-direction-synthetic.csv'));
 

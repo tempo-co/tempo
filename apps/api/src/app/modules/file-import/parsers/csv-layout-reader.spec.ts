@@ -503,7 +503,7 @@ describe("an owner's saved layouts", () => {
 		const booked = {...layout};
 		delete booked.pendingColumn;
 		expect(refusal(text, [booked])).toEqual({code: 'layout_not_recognized', layout: 'learned-pending'});
-		expect(refusal(text.replace('"-41,25";', '"-41,25";"x";'), [layout])).toEqual({
+		expect(refusal(text.replace('"-41,25";', '"-41,25";"x";"y";'), [layout])).toEqual({
 			code: 'layout_not_recognized',
 			layout: 'learned-pending',
 		});

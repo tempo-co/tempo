@@ -1,0 +1,12 @@
+﻿Umsätze;;;;;;;;;;;;;;;;;
+Konto;Filial-/Kontonummer;IBAN;Währung;;;;;;;;;;;;;;
+Giro plus;123 4567890 00;DE89370400440532013000;EUR;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;
+1.10.2026 - 31.10.2026;;;;;;;;;;;;;;;;;
+Alter Kontostand;;;;1.000,00;EUR;;;;;;;;;;;;
+Kontoumsätze;;;;;;;;;;;;;;;;;
+Buchungstag;Wert;Umsatzart;Begünstigter / Auftraggeber;Verwendungszweck;IBAN / Kontonummer;BIC;Kundenreferenz;Mandatsreferenz;Gläubiger ID;Fremde Gebühren;Betrag;Abweichender Empfänger;Anzahl der Aufträge;Anzahl der Schecks;Soll;Haben;Währung
+2.10.2026;2.10.2026;Kartenzahlung;Example Shop;Example card payment;;;;;;;-12,50;;;;-12,50;;EUR
+5.10.2026;5.10.2026;Gutschrift;Example Employer GmbH;Example salary;GB33BUKB20201555555555;BUKBGB22;;;;;2.500,00;;;;;2.500,00;EUR
+9.10.2026;9.10.2026;Lastschrift;Example Energy AG;Example bill;NL91ABNA0417164300;ABNANL2A;EX-1;EX-M1;DE98ZZZ09999999999;;-62,10;;;;-62,10;;EUR
+Kontostand;31.10.2026;;;3.425,40;EUR;;;;;;;;;;;;
