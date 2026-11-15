@@ -319,9 +319,12 @@ const MASKED_BIC_AND_IBAN = /^[A9]{8}(?:[A9]{3})? [Aa]{2}99[Aa9]{11,30}$/;
 
 /**
  * The answer without the account columns and line its values cannot fill, judged by the sample's masked shapes: an
- * account column whose values are not all IBANs (a sort code and account number, a card number), an account line
+ * account column whose values are not all IBANs (a sort code and account number, a card number) but one value on
+ * every sampled row, an account line
  * without an IBAN, and a counterparty account column holding something other than IBANs and old account numbers.
- * Such a file then names no account and is asked about by bank and currency, rather than refused.
+ * Such a file then names no account and is asked about by bank and currency, rather than refused. A non-IBAN column
+ * that holds more than one account (or too few rows to tell) is kept, so the reader refuses the file rather than
+ * read several accounts as one.
  */
 function withReadableAccounts(answer: LayoutAnswer, sample: TableSample): LayoutAnswer {
 	const holds = (columns: number | {moneyIn: number; moneyOut: number}, fits: (shape: string) => boolean) =>
@@ -333,7 +336,8 @@ function withReadableAccounts(answer: LayoutAnswer, sample: TableSample): Layout
 	const accountReadable =
 		account === null ||
 		('column' in account
-			? holds(account.column, iban)
+			? // A column of one non-IBAN value is left out; one of several accounts is kept, for the reader to refuse.
+				holds(account.column, iban) || !sample.masked.columns[account.column]?.sameValue
 			: !!sample.masked.linesAbove
 					.find(({line}) => line === account.line)
 					?.cells.some((cell) => MASKED_IBAN_IN_TEXT.test(cell)));
