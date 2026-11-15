@@ -323,6 +323,14 @@ describe('sampleTable', () => {
 				),
 			),
 		).toMatchObject({rowsAbove: 1});
+		// A placeholder in a date column is no word: the last row is a row.
+		expect(
+			sampleTable(
+				Buffer.from(
+					'Date;Value date;Amount;Description\n2026-10-02;2026-10-02;-12.50;Shop\n2026-10-05;2026-10-05;2500.00;Salary\n2026-10-09;--;-62.10;Energy\n',
+				),
+			),
+		).toMatchObject({skipAfter: 0, rowCount: 3});
 		// Eight-digit references are no dates: a last row with a word there is a row.
 		expect(
 			sampleTable(

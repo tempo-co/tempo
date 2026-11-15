@@ -127,9 +127,9 @@ function paddedLine(cells: readonly string[], columnCount: number): boolean {
 /**
  * Which lines outside a table could be among its rows, a layout skipping them would drop: lines that look like rows
  * (`looksLikeRow`), less padded lines and lines whose cell in a date column (one every row above fills with a date
- * only) is a word, such as `Kontostand` on a balance line. A pending word there (`offen`) is a row's. Above a
- * header, a line narrower than the table (a summary line of another table) is no row either (`above`); elsewhere
- * one is (`below`, a row cut short).
+ * only) is a word of two letters or more, such as `Kontostand` on a balance line. A placeholder such as `--` is no
+ * word, and a pending word (`offen`) is a row's. Above a header, a line narrower than the table (a summary line of
+ * another table) is no row either (`above`); elsewhere one is (`below`, a row cut short).
  */
 export function rowsOfTable(
 	rows: readonly (readonly string[])[],
@@ -146,7 +146,7 @@ export function rowsOfTable(
 	const fitsDateColumns = (cells: readonly string[]) =>
 		dateColumns.every((column) => {
 			const cell = (cells[column] ?? '').trim();
-			return cell === '' || DATE_SHAPE.test(cell) || isPendingWord(cell);
+			return !/\p{L}{2}/u.test(cell) || DATE_SHAPE.test(cell) || isPendingWord(cell);
 		});
 	// A line cut short with a date where the rows have one is a row too, though it holds only one value.
 	const cutShort = (cells: readonly string[]) =>
