@@ -15,7 +15,10 @@ import {ConfigurationService} from '@core/config/config.service';
 import {MERCHANT_LOGO_QUEUE, MERCHANT_LOGO_RECONCILE_SCHEDULER_ID} from '@core/queue/queue.constants';
 import {REDIS} from '@core/redis/redis.constants';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
-import {BankTransactionCategorizationUnavailableError} from '@modules/banking/categorization/bank-transaction-categorization.provider';
+import {
+	BankTransactionCategorizationProviderError,
+	BankTransactionCategorizationUnavailableError,
+} from '@modules/banking/categorization/bank-transaction-categorization.provider';
 import {
 	MerchantIdentification,
 	MerchantIdentificationInput,
@@ -40,25 +43,88 @@ enableMerchantLogosE2e();
 
 /** What the fake model answers per sanitized merchant name, ignoring a card terminal number. */
 const IDENTITIES: Record<string, Omit<MerchantIdentification, 'correlationId'>> = {
-	'Example Shop': {kind: 'BUSINESS', brand: 'Example Shop', domain: 'shop.example.test', domainConfident: true},
+	'Example Shop': {
+		kind: 'BUSINESS',
+		brand: 'Example Shop',
+		company: 'Example Shop',
+		domain: 'shop.example.test',
+		domainConfident: true,
+	},
 	// A branch of the same brand whose own site the model could not name.
-	'Example Shop Station': {kind: 'BUSINESS', brand: 'Example Shop', domain: null, domainConfident: false},
-	'Example Pay': {kind: 'PAYMENT_SERVICE', brand: 'Example Pay', domain: 'pay.example.test', domainConfident: true},
+	'Example Shop Station': {
+		kind: 'BUSINESS',
+		brand: 'Example Shop',
+		company: 'Example Shop',
+		domain: null,
+		domainConfident: false,
+	},
+	'Example Pay': {
+		kind: 'PAYMENT_SERVICE',
+		brand: 'Example Pay',
+		company: 'Example Pay',
+		domain: 'pay.example.test',
+		domainConfident: true,
+	},
 	'Other Example Shop': {
 		kind: 'BUSINESS',
 		brand: 'Other Example Shop',
+		company: 'Other Example Shop',
 		domain: 'other-shop.example.test',
 		domainConfident: true,
 	},
-	'Jane Example': {kind: 'PERSON', brand: null, domain: null, domainConfident: false},
-	Exampleshop: {kind: 'BUSINESS', brand: 'Exampleshop', domain: 'exampleshop.test', domainConfident: false},
-	'Walled Example': {kind: 'BUSINESS', brand: 'Walled Example', domain: 'walled.example.test', domainConfident: true},
+	'Jane Example': {kind: 'PERSON', brand: null, company: null, domain: null, domainConfident: false},
+	Exampleshop: {
+		kind: 'BUSINESS',
+		brand: 'Exampleshop',
+		company: 'Exampleshop',
+		domain: 'exampleshop.test',
+		domainConfident: false,
+	},
+	'Walled Example': {
+		kind: 'BUSINESS',
+		brand: 'Walled Example',
+		company: 'Walled Example',
+		domain: 'walled.example.test',
+		domainConfident: true,
+	},
+	// A product its business sells under a separate name.
+	'Example Tunes': {
+		kind: 'BUSINESS',
+		brand: 'Example Tunes',
+		company: 'Example Media',
+		domain: null,
+		domainConfident: false,
+	},
+	// Another key of the product, which the model now names differently.
+	'Example Tunes Plus': {
+		kind: 'BUSINESS',
+		brand: 'Example Tunes Premium',
+		company: 'Example Tunes Premium',
+		domain: null,
+		domainConfident: false,
+	},
+	// A payment service sharing the product's brand.
+	'Example Tunes Pay': {
+		kind: 'PAYMENT_SERVICE',
+		brand: 'Example Tunes',
+		company: 'Example Tunes',
+		domain: null,
+		domainConfident: false,
+	},
+	// The same product under another key, for which the model names a different company.
+	'Example Tunes Online': {
+		kind: 'BUSINESS',
+		brand: 'Example Tunes',
+		company: 'Example Tunes',
+		domain: null,
+		domainConfident: false,
+	},
 };
 
 const FAVICON_SERVICE = 'https://icons.duckduckgo.com/ip3/';
 const LOGO_DEV_ASSET = 'https://img.logo.dev/assets/';
 const DAY_MS = 24 * 60 * 60 * 1000;
-const MASK_CACHE_PREFIX = 'merchant-logo:mask-v2:';
+const MASK_CACHE_PREFIX = 'merchant-logo:mask-v3:';
 const maskKey = (source: Buffer, prefix = MASK_CACHE_PREFIX) =>
 	prefix + createHash('sha256').update(source).digest('hex');
 function getPng(agent: TestAgent, url: string) {
@@ -95,6 +161,8 @@ describe('Merchant logos', () => {
 	let fetchSpy: jest.SpyInstance;
 	let queue: Queue;
 	let routesUnavailable = false;
+	/** Whether the model answers with an unusable reply, which counts as a failed attempt. */
+	let routesFail = false;
 	/** Hostnames whose pages and icons currently fail to load. */
 	const unreachable = new Set<string>();
 	/** Hostnames whose homepage refuses the server while their other files still load, like a bot wall. */
@@ -136,11 +204,13 @@ describe('Merchant logos', () => {
 			.spyOn(app.get(ClaudeBankTransactionCategorizationProvider), 'identifyMerchants')
 			.mockImplementation(async (inputs: readonly MerchantIdentificationInput[]) => {
 				if (routesUnavailable) throw new BankTransactionCategorizationUnavailableError();
+				if (routesFail) throw new BankTransactionCategorizationProviderError('synthetic', true);
 				return inputs.map(({correlationId, name}) => ({
 					correlationId,
 					...(IDENTITIES[name.replace(/\s+\d+$/, '')] ?? {
 						kind: 'UNCLEAR',
 						brand: null,
+						company: null,
 						domain: null,
 						domainConfident: false,
 					}),
@@ -201,6 +271,7 @@ describe('Merchant logos', () => {
 
 	afterEach(() => {
 		routesUnavailable = false;
+		routesFail = false;
 		unreachable.clear();
 		walledHomepages.clear();
 		logoDevNow.clear();
@@ -371,7 +442,7 @@ describe('Merchant logos', () => {
 		expect(await sharp(image.body as Buffer).metadata()).toMatchObject({format: 'png', width: 128, height: 128});
 		const sourceBefore = Buffer.from(image.body as Buffer);
 		const metadataBefore = await logos.findOneByOrFail({domain: 'shop.example.test'});
-		const maskUrl = `${logoUrl}/mask-v2`;
+		const maskUrl = `${logoUrl}/mask-v3`;
 		const mask = await getPng(owner.agent, maskUrl)
 			.expect(200)
 			.expect('Content-Type', 'image/png')
@@ -391,11 +462,13 @@ describe('Merchant logos', () => {
 		expect(await redis.ttl(maskKey(sourceBefore))).toBeGreaterThan(0);
 		expect(await redis.ttl(maskKey(sourceBefore))).toBeLessThanOrEqual(7 * 24 * 60 * 60);
 		expect((await getPng(owner.agent, maskUrl).expect(200)).body).toEqual(mask.body);
-		// Clients holding the previous algorithm's URL keep a logo, converted and cached under that algorithm.
-		const previous = await getPng(owner.agent, `${logoUrl}/mask-v1`)
-			.expect(200)
-			.expect('Cache-Control', 'private, max-age=31536000, immutable');
-		expect(await redis.getBuffer(maskKey(sourceBefore, 'merchant-logo:mask-v1:'))).toEqual(previous.body);
+		// Clients holding an earlier algorithm's URL keep a logo, converted and cached under that algorithm.
+		for (const algorithm of ['mask-v1', 'mask-v2']) {
+			const previous = await getPng(owner.agent, `${logoUrl}/${algorithm}`)
+				.expect(200)
+				.expect('Cache-Control', 'private, max-age=31536000, immutable');
+			expect(await redis.getBuffer(maskKey(sourceBefore, `merchant-logo:${algorithm}:`))).toEqual(previous.body);
+		}
 		expect((await getPng(owner.agent, logoUrl).expect(200)).body).toEqual(sourceBefore);
 		expect(await logos.findOneByOrFail({domain: 'shop.example.test'})).toEqual(metadataBefore);
 
@@ -404,8 +477,8 @@ describe('Merchant logos', () => {
 		try {
 			for (const [agent, url] of [
 				[other.agent, maskUrl],
-				[owner.agent, `${logoUrl.replace(/[0-9a-f]{64}$/, 'b'.repeat(64))}/mask-v2`],
-				[owner.agent, `${logoUrl}/mask-v3`],
+				[owner.agent, `${logoUrl.replace(/[0-9a-f]{64}$/, 'b'.repeat(64))}/mask-v3`],
+				[owner.agent, `${logoUrl}/mask-v4`],
 			] as const) {
 				expect((await agent.get(url).expect(404)).headers).not.toHaveProperty('cache-control');
 			}
@@ -425,7 +498,7 @@ describe('Merchant logos', () => {
 		const emptyConversion = jest.spyOn(maskConversion, 'createMerchantLogoMask');
 		try {
 			for (let attempt = 0; attempt < 2; attempt++)
-				expect((await owner.agent.get(`${paymentLogo}/mask-v2`).expect(404)).headers).not.toHaveProperty(
+				expect((await owner.agent.get(`${paymentLogo}/mask-v3`).expect(404)).headers).not.toHaveProperty(
 					'cache-control',
 				);
 			expect(emptyConversion).toHaveBeenCalledTimes(2);
@@ -527,7 +600,7 @@ describe('Merchant logos', () => {
 		try {
 			const detail = await account.agent.get(`/bank-transactions/${purchase.id}`).expect(200);
 			expect(detail.body.merchantLogoUrl).toBe(`/merchant-logos/${logo.id}/${logo.version}`);
-			await getPng(account.agent, `${detail.body.merchantLogoUrl}/mask-v2`).expect(200);
+			await getPng(account.agent, `${detail.body.merchantLogoUrl}/mask-v3`).expect(200);
 			for (const operation of [
 				() => service.enqueueForOwnerSafely(account.id),
 				() => service.reconcile(),
@@ -669,7 +742,7 @@ describe('Merchant logos', () => {
 		expect(guessedResponse.body.merchantLogoUrl).toBeNull();
 	});
 
-	it('keeps merchants pending while both model routes are unavailable and identifies them once one recovers', async () => {
+	it('keeps merchants pending while both model routes are unavailable, identifies them once one recovers, and asks earlier merchants for their company only', async () => {
 		const account = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
 		const connection = await fixtures.createConnection({id: account.id});
 		const bankAccount = await fixtures.createBankAccount(connection);
@@ -706,5 +779,133 @@ describe('Merchant logos', () => {
 		// The shared site was fetched once for the first owner; this owner's merchant reuses its logo.
 		expect(response.body.merchantLogoUrl).toMatch(/^\/merchant-logos\//);
 		expect(await logos.countBy({domain: 'shop.example.test'})).toBe(1);
+
+		// Merchants identified before companies existed are asked once more, for their company only. One the model
+		// now names differently keeps its brand, logo and grouping.
+		await fixtures.createTransaction(
+			bankAccount,
+			bookedRow('2026-10-07', '-9.99', {description: 'Example Tunes', transactionType: 'CARD_PAYMENT'}),
+		);
+		await app.get(MerchantLogoService).enqueueForOwnerSafely(account.id);
+		const tunes = await waitFor(
+			() => merchants.findOneBy({accountId: account.id, key: 'example tunes'}),
+			(merchant) => merchant?.status === 'IDENTIFIED',
+		);
+		const shop = await merchants.findOneByOrFail({accountId: account.id, key: 'example shop'});
+		await merchants.update({id: tunes!.id}, {company: null});
+		await merchants.update({id: shop.id}, {brand: 'Example Market', company: null});
+		identifySpy.mockClear();
+
+		await app.get(MerchantLogoService).reconcile();
+		await waitFor(
+			() => merchants.findBy({accountId: account.id}),
+			(rows) => rows.every(({company}) => company !== null),
+		);
+		expect(
+			identifySpy.mock.calls
+				.flatMap(([inputs]: [MerchantIdentificationInput[]]) => inputs.map(({name}) => name))
+				.sort(),
+		).toEqual(['Example Shop', 'Example Tunes']);
+		expect(await merchants.findOneByOrFail({id: tunes!.id})).toMatchObject({
+			status: 'IDENTIFIED',
+			brand: 'Example Tunes',
+			company: 'Example Media',
+		});
+		expect(await merchants.findOneByOrFail({id: shop.id})).toMatchObject({
+			status: 'IDENTIFIED',
+			brand: 'Example Market',
+			company: 'Example Market',
+			logoId: shop.logoId,
+		});
+
+		// One brand groups under one company: another key of it takes the company recorded first.
+		await fixtures.createTransaction(
+			bankAccount,
+			bookedRow('2026-10-08', '-4.99', {description: 'Example Tunes Online', transactionType: 'CARD_PAYMENT'}),
+		);
+		await app.get(MerchantLogoService).enqueueForOwnerSafely(account.id);
+		const online = await waitFor(
+			() => merchants.findOneBy({accountId: account.id, key: 'example tunes online'}),
+			(merchant) => merchant?.status === 'IDENTIFIED',
+		);
+		expect(online).toMatchObject({brand: 'Example Tunes', company: 'Example Media'});
+
+		// A merchant identified before companies existed follows its stored brand's company, even when the model now
+		// names a different brand, and keeps that brand.
+		await fixtures.createTransaction(
+			bankAccount,
+			bookedRow('2026-10-08', '-5.99', {description: 'Example Tunes Plus', transactionType: 'CARD_PAYMENT'}),
+		);
+		await merchants.save({
+			accountId: account.id,
+			key: 'example tunes plus',
+			status: 'IDENTIFIED',
+			brand: 'Example Tunes',
+		});
+		await app.get(MerchantLogoService).reconcile();
+		const plus = await waitFor(
+			() => merchants.findOneByOrFail({accountId: account.id, key: 'example tunes plus'}),
+			(merchant) => merchant.company !== null,
+		);
+		expect(plus).toMatchObject({status: 'IDENTIFIED', brand: 'Example Tunes', company: 'Example Media'});
+
+		// A payment service never takes another business's company, even one recorded for its brand.
+		await fixtures.createTransaction(
+			bankAccount,
+			bookedRow('2026-10-09', '25.00', {description: 'Example Tunes Pay', transactionType: 'CARD_PAYMENT'}),
+		);
+		await app.get(MerchantLogoService).enqueueForOwnerSafely(account.id);
+		const pay = await waitFor(
+			() => merchants.findOneBy({accountId: account.id, key: 'example tunes pay'}),
+			(merchant) => merchant?.status === 'IDENTIFIED',
+		);
+		expect(pay).toMatchObject({brand: 'Example Tunes', company: 'Example Tunes'});
+		// Nor when it is asked once more for its company, also when the model names its brand differently.
+		await merchants.update({id: pay!.id}, {brand: 'Example Tunes Wallet', company: null});
+		await merchants.save({
+			accountId: account.id,
+			key: 'example tunes wallet shop',
+			status: 'IDENTIFIED',
+			brand: 'Example Tunes Wallet',
+			company: 'Example Media',
+		});
+		await app.get(MerchantLogoService).reconcile();
+		await waitFor(
+			() => merchants.findOneByOrFail({id: pay!.id}),
+			(merchant) => merchant.company !== null,
+		);
+		expect(await merchants.findOneByOrFail({id: pay!.id})).toMatchObject({company: 'Example Tunes Wallet'});
+
+		// A failed company lookup keeps the merchant's identity and logo, groups it by its brand and is not retried,
+		// even when another merchant of its brand recorded another company: it may be a payment service.
+		await merchants.update({id: shop.id}, {company: null});
+		await merchants.save({
+			accountId: account.id,
+			key: 'example market app',
+			status: 'IDENTIFIED',
+			brand: 'Example Market',
+			company: 'Example Group',
+		});
+		routesFail = true;
+		identifySpy.mockClear();
+		await app.get(MerchantLogoService).reconcile();
+		await waitFor(
+			() => merchants.findOneByOrFail({id: shop.id}),
+			(merchant) => merchant.company !== null,
+		);
+		expect(await merchants.findOneByOrFail({id: shop.id})).toMatchObject({
+			status: 'IDENTIFIED',
+			brand: 'Example Market',
+			company: 'Example Market',
+			logoId: shop.logoId,
+		});
+		routesFail = false;
+		identifySpy.mockClear();
+		await app.get(MerchantLogoService).reconcile();
+		await waitFor(
+			() => queue.getJobCounts('waiting', 'active', 'delayed', 'prioritized'),
+			(counts) => Object.values(counts).every((count) => count === 0),
+		);
+		expect(identifySpy).not.toHaveBeenCalled();
 	});
 });

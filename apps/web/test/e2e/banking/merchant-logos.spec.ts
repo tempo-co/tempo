@@ -139,7 +139,7 @@ async function mockMerchantLogos(page: Page) {
     state.servedImages.push({path, authenticated});
     if (!authenticated) {
       response.writeHead(401).end();
-    } else if ([LOGO, RECOVERED_LOGO].some((src) => path.endsWith(`${src}/mask-v2`))) {
+    } else if ([LOGO, RECOVERED_LOGO].some((src) => path.endsWith(`${src}/mask-v3`))) {
       response
         .writeHead(200, {
           'Content-Type': 'image/png',
@@ -243,7 +243,7 @@ async function expectPalette(tile: Locator, theme: Theme) {
 
 async function expectLogo(tile: Locator, theme: Theme, src = LOGO) {
   const image = tile.locator('img');
-  await expect(image).toHaveAttribute('src', `${API_URL}${src}/mask-v2`);
+  await expect(image).toHaveAttribute('src', `${API_URL}${src}/mask-v3`);
   await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(128);
   // Ordinary image requests include the cross-origin API session; anonymous CORS masks do not.
   expect(await image.evaluate((el: HTMLImageElement) => el.crossOrigin)).toBeNull();
@@ -543,7 +543,7 @@ for (const width of [1440, 390]) {
         });
         expect(
           state.logoRequests.every((path) =>
-            [LOGO, BROKEN_LOGO, RECOVERED_LOGO].some((src) => path.endsWith(`${src}/mask-v2`)),
+            [LOGO, BROKEN_LOGO, RECOVERED_LOGO].some((src) => path.endsWith(`${src}/mask-v3`)),
           ),
         ).toBe(true);
         expect(state.servedImages.length).toBeGreaterThan(0);

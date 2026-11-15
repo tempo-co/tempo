@@ -1,6 +1,6 @@
 # Built from the repository root. `@tempo/contracts` is a `file:../../packages/contracts` dependency, so it sits two
 # levels above the app directory here too.
-FROM node:26-alpine AS builder
+FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS builder
 WORKDIR /usr/src/app
 
 RUN apk add --no-cache python3 make g++
@@ -16,7 +16,7 @@ COPY apps/api/scripts/ ./scripts/
 COPY apps/api/nest-cli.json ./
 RUN npm run build
 
-FROM node:26-alpine AS runtime-dependencies
+FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS runtime-dependencies
 
 RUN apk add --no-cache python3 make g++
 
@@ -32,7 +32,7 @@ RUN node -e 'require("node:fs").writeFileSync("/tmp/dev-dependencies.json", JSON
 
 COPY --from=builder --chown=node:node /usr/src/app/dist ./dist
 
-FROM node:26-alpine AS runtime
+FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS runtime
 
 # Without NODE_ENV the config falls back to development, which this image has no env file for.
 ENV NODE_ENV=production

@@ -24,7 +24,7 @@ test('searches with a long description and restores it from the URL', async ({pa
     return fulfillJson(route, {transactions: [], total: 0});
   });
   await page.goto('/bank-transactions?search=initial&pageIndex=2');
-  const search = page.getByRole('textbox', {name: 'Search transactions'});
+  const search = page.getByRole('searchbox', {name: 'Search transactions'});
   await search.fill(description);
   await expect.poll(() => searches[searches.length - 1]).toBe(description);
   // The description repeats a long search only in part.
@@ -42,6 +42,22 @@ test('searches with a long description and restores it from the URL', async ({pa
   await page.getByRole('button', {name: 'Clear filters'}).first().click();
   await expect(page.getByRole('heading', {name: 'No transactions yet'})).toBeVisible();
   expect(new URL(page.url()).searchParams.has('search')).toBe(false);
+
+  // Another filter keeps the toolbar on screen once the search is gone. The button clears a filled field and leaves
+  // the cursor in it.
+  await page.goto('/bank-transactions?needsAttention=true&search=bakery');
+  const clear = page.getByRole('button', {name: 'Clear search'});
+  await clear.click();
+  await expect(search).toHaveValue('');
+  await expect(search).toBeFocused();
+  await expect(clear).toBeHidden();
+  await expect.poll(() => new URL(page.url()).searchParams.has('search')).toBe(false);
+  // Escape clears it too.
+  await search.fill('bakery');
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('bakery');
+  await search.press('Escape');
+  await expect(search).toHaveValue('');
+  await expect.poll(() => new URL(page.url()).searchParams.has('search')).toBe(false);
 });
 
 test('a search within dates that matches nothing widens to all dates', async ({page}) => {
