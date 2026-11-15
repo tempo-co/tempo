@@ -40,8 +40,6 @@ export const MAX_HEADER_CELL_LENGTH = 80;
 const MAX_HEADER_CELLS = 200;
 const MAX_LINES_ABOVE = 10;
 const MAX_LINES_BELOW = 3;
-const MAX_PLAIN_VALUES = 4;
-const MAX_PLAIN_VALUE_LENGTH = 12;
 export const MAX_COLUMN_SHAPES = 6;
 const MIN_SAME_VALUE_ROWS = 3;
 
@@ -51,16 +49,15 @@ const MIN_SAME_VALUE_ROWS = 3;
  * - Every letter becomes `a` or `A` (case kept) and every digit `9`; punctuation, spaces and length are kept, and each
  *   cell is cut at 60 characters.
  * - Sent as written: the header's cells without a digit (cut at 80 characters, at most 200 of them); a cell that is
- *   an ISO 4217 currency code; and the values of a column that has at most four distinct ones over the whole table,
- *   each at most 12 characters without a digit, one of them written more than once (a direction column like
- *   `Af`/`Bij`). A column whose every value is written once, such as the names in a three-row file, stays masked.
+ *   an ISO 4217 currency code; and a row cell that is one of the `PLAIN_WORDS` a direction or status column holds
+ *   (`Af`/`Bij`, `Debit`/`Credit`, `Gebucht`/`Vorgemerkt`). Nothing else of a row is, however short or often
+ *   repeated: in a short export, a name written twice looks like a direction column.
  * - Only the first, middle and last rows, the 10 lines just above the table and the 3 just below it.
  * - Per column, over the whole table: up to 6 distinct values masked without exceptions, most frequent first (the
  *   empty one kept when the column has empty cells), and whether every non-empty cell holds the same value.
  */
 export function maskTable(table: FoundTableParts): MaskedTable {
 	const {rows, columnCount} = table;
-	const plainValues = Array.from({length: columnCount}, (_, column) => plainColumnValues(rows, column));
 	const cellOf = (row: readonly string[], column: number) => (row[column] ?? '').trim();
 	const maskLine = (line: readonly string[]) =>
 		line.slice(0, MAX_LAYOUT_COLUMNS).map((value) => maskCell(value.trim()));
@@ -80,7 +77,7 @@ export function maskTable(table: FoundTableParts): MaskedTable {
 		rows: sampled.map((row) =>
 			row.slice(0, columnCount).map((_, column) => {
 				const value = cellOf(row, column);
-				return plainValues[column].has(value) ? value : maskCell(value);
+				return isPlainWord(value) ? value : maskCell(value);
 			}),
 		),
 		linesBelow: table.linesBelow.slice(0, MAX_LINES_BELOW).map(maskLine),
@@ -122,18 +119,21 @@ function maskText(text: string): string {
 		.join('');
 }
 
-function plainColumnValues(rows: readonly (readonly string[])[], column: number): Set<string> {
-	const counts = new Map<string, number>();
-	for (const row of rows) {
-		const value = (row[column] ?? '').trim();
-		if (value === '') continue;
-		counts.set(value, (counts.get(value) ?? 0) + 1);
-		if (counts.size > MAX_PLAIN_VALUES) return new Set();
-	}
-	// A column of few short values, one of them written more than once, like a direction column; a column whose
-	// every value is written once (a few names in a short file) stays masked.
-	const plain =
-		[...counts.values()].some((count) => count >= 2) &&
-		[...counts.keys()].every((value) => value.length <= MAX_PLAIN_VALUE_LENGTH && !/\p{Nd}/u.test(value));
-	return plain ? new Set(counts.keys()) : new Set();
+/**
+ * The words a direction column (money out or in) or a status column (booked or pending) writes, compared
+ * case-folded. They name no one, so a row cell holding one is sent as written: the mapper needs a direction
+ * column's exact values, and a status column's to tell pending rows apart.
+ */
+export const PLAIN_WORDS: ReadonlySet<string> = new Set([
+	// Money out and money in.
+	...['+', '-', 'd', 'c', 'dr', 'cr', 'db', 'dbit', 'crdt', 'debit', 'credit', 'in', 'out'],
+	...['af', 'bij', 'debet', 'uit', 's', 'h', 'soll', 'haben', 'eingang', 'ausgang', 'débit', 'crédit'],
+	...['dare', 'avere', 'addebito', 'accredito', 'cargo', 'abono', 'wn', 'ma', 'uznanie', 'obciążenie'],
+	// Booked and pending.
+	...['booked', 'pending', 'gebucht', 'vorgemerkt', 'offen', 'geboekt', 'contabilizzato', 'en attente'],
+]);
+
+/** A row cell sent as written: one of the `PLAIN_WORDS`, in any case. */
+export function isPlainWord(value: string): boolean {
+	return PLAIN_WORDS.has(value.trim().toLowerCase());
 }

@@ -215,13 +215,17 @@ describe('validateSampleOutput', () => {
 		},
 	});
 
-	it('passes a masked sample with its header, currency codes and short repeated values', () => {
+	it('passes a masked sample with its header, currency codes and direction words', () => {
 		expect(validateSampleOutput(sample())).toEqual(sample());
 	});
 
 	it.each([
 		{name: 'a row cell with a digit', masked: {rows: [['99-99-9999', '-12,50', 'Af']]}},
 		{name: 'a long unmasked row cell', masked: {rows: [['99-99-9999', '-99,99', 'Example Lender BV']]}},
+		{
+			name: 'a short unmasked row cell that is no direction word',
+			masked: {rows: [['99-99-9999', '-99,99', 'Gym Club']]},
+		},
 		{name: 'an unmasked line above', masked: {linesAbove: [{line: 0, cells: ['Rekening']}]}},
 		{name: 'an unmasked column shape', masked: {columnShapes: ['99-99-9999', '-99,99', 'Af']}},
 		{
