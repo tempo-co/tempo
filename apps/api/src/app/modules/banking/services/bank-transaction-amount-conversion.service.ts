@@ -160,11 +160,11 @@ export class BankTransactionAmountConversionService {
 			const baseCurrency = await this.resolveBaseCurrency(accountId, owner.baseCurrency);
 			await this.ensureHistoricalRates(owner.currencies, baseCurrency, latestExpectedDate);
 
-			const [{count}] = (await this.bankTransactionRepository.query(CONVERT_OWNER_SQL, [
+			const [{count}] = await this.bankTransactionRepository.query<Array<{count: number}>>(CONVERT_OWNER_SQL, [
 				accountId,
 				baseCurrency,
 				FX_RATE_MAX_AGE_DAYS,
-			])) as Array<{count: number}>;
+			]);
 			scanned += owner.currencies.reduce((total, row) => total + row.count, 0);
 			converted += count;
 			// Same-day exchanges are matched on base amounts, so new amounts can complete a pairing. Own-transfer
@@ -186,11 +186,11 @@ export class BankTransactionAmountConversionService {
 	 * so the dashboard can show balances in the base currency (dashboard API, phase 1).
 	 */
 	private async refreshAccountCurrencyRates(latestExpectedDate: string): Promise<void> {
-		const rows = (await this.bankAccountRepository.query(
+		const rows = await this.bankAccountRepository.query<Array<{currency: string}>>(
 			`SELECT "currency" FROM "bank_accounts" WHERE "isActive" = TRUE
 			UNION
 			SELECT "baseCurrency" FROM "accounts" WHERE "baseCurrency" IS NOT NULL`,
-		)) as Array<{currency: string}>;
+		);
 		await this.fxRateService.ensureLatestRates(
 			rows.map(({currency}) => currency),
 			latestExpectedDate,
@@ -199,7 +199,9 @@ export class BankTransactionAmountConversionService {
 
 	/** Unconverted rows per owner and currency, with the rate-date range each currency needs. */
 	private async findPendingOwners(): Promise<Map<string, PendingOwner>> {
-		const rows = (await this.bankTransactionRepository.query(
+		const rows = await this.bankTransactionRepository.query<
+			Array<PendingCurrency & {accountId: string; baseCurrency: string | null}>
+		>(
 			`SELECT
 				connection."accountId",
 				account."baseCurrency",
@@ -214,7 +216,7 @@ export class BankTransactionAmountConversionService {
 			WHERE ${PENDING_SQL}
 			GROUP BY connection."accountId", account."baseCurrency", ${CURRENCY_SQL}
 			ORDER BY connection."accountId", ${CURRENCY_SQL}`,
-		)) as Array<PendingCurrency & {accountId: string; baseCurrency: string | null}>;
+		);
 
 		const owners = new Map<string, PendingOwner>();
 		for (const {accountId, baseCurrency, ...currency} of rows) {

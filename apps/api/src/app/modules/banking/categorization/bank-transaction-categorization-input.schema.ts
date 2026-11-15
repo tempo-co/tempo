@@ -167,7 +167,7 @@ function pickFields(schema: z.ZodType, value: unknown): unknown {
 
 	const record = value as Record<string, unknown>;
 	const picked: Record<string, unknown> = {};
-	for (const [key, field] of Object.entries(schema.shape as Record<string, z.ZodType>)) {
+	for (const [key, field] of Object.entries<z.ZodType>(schema.shape)) {
 		const fieldValue = record[key];
 		const absent =
 			fieldValue === undefined || fieldValue === null || (Array.isArray(fieldValue) && fieldValue.length === 0);

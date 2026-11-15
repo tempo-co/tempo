@@ -1,5 +1,5 @@
 import {Inject, MiddlewareConsumer, Module, NestModule} from '@nestjs/common';
-import {NextFunction, Request, Response} from 'express';
+import {NextFunction, Request, RequestHandler, Response} from 'express';
 import session from 'express-session';
 import Redis from 'ioredis';
 import ms from 'ms';
@@ -27,7 +27,7 @@ export class SessionModule implements NestModule {
 		private readonly sessionMiddleware: SessionMiddleware,
 	) {}
 
-	async configure(consumer: MiddlewareConsumer) {
+	configure(consumer: MiddlewareConsumer) {
 		const isProduction = this.config.get('NODE_ENV') === 'production';
 
 		const sessionOnly =
@@ -57,7 +57,7 @@ export class SessionModule implements NestModule {
 					}),
 				),
 				sessionOnly(passport.initialize()),
-				sessionOnly(passport.session()),
+				sessionOnly(passport.session() as RequestHandler),
 				sessionOnly(this.sessionMiddleware.use.bind(this.sessionMiddleware)),
 			)
 			.forRoutes('*');

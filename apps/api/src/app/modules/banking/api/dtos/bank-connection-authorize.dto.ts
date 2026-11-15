@@ -8,7 +8,7 @@ export class BankConnectionAuthorizeDto implements BankConnectionAuthorizationRe
 	@MaxLength(255)
 	aspspName: string;
 
-	@Transform(({value}) => (typeof value === 'string' ? value.toUpperCase() : value))
+	@Transform(({value}: {value: unknown}) => (typeof value === 'string' ? value.toUpperCase() : value))
 	@IsString()
 	@Length(2, 2)
 	@Matches(/^[A-Z]{2}$/)

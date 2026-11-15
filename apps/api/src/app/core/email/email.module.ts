@@ -1,4 +1,4 @@
-import {MailerModule} from '@nestjs-modules/mailer';
+import {MailerModule, type MailerOptions} from '@nestjs-modules/mailer';
 import {HandlebarsAdapter} from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import {BullModule} from '@nestjs/bullmq';
 import {Module} from '@nestjs/common';
@@ -28,9 +28,12 @@ const PLAIN_TEXT_OPTIONS: HtmlToTextOptions = {
 	],
 };
 
+/** The part of the mail the Handlebars adapter reads (`template`, `context`) and fills (`html`, the rendered template). */
+type TemplatedMail = {data: {template?: string; context?: object; html?: string; text?: string}};
+
 /** Adds a plain-text part generated from the rendered HTML to every templated email. */
 export class EmailTemplateAdapter extends HandlebarsAdapter {
-	compile(...[mail, callback, mailerOptions]: Parameters<HandlebarsAdapter['compile']>) {
+	compile(mail: TemplatedMail, callback: (error?: Error) => void, mailerOptions: MailerOptions) {
 		super.compile(
 			mail,
 			(error?: Error) => {

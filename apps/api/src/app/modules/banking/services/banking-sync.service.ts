@@ -465,7 +465,7 @@ export class BankingSyncService {
 				{
 					id: connection.id,
 					status: BANK_CONNECTION_STATUSES.AUTHORIZED,
-					providerSessionId: connection.providerSessionId as string,
+					providerSessionId: connection.providerSessionId,
 				},
 				{
 					status: BANK_CONNECTION_STATUSES.EXPIRED,
@@ -924,10 +924,7 @@ export class BankingSyncService {
 	}
 
 	private getBackgroundIntervalMs(): number {
-		return resolveDurationMs(
-			this.configurationService.get('BANKING_SYNC_INTERVAL') as string,
-			'BANKING_SYNC_INTERVAL',
-		);
+		return resolveDurationMs(this.configurationService.get('BANKING_SYNC_INTERVAL'), 'BANKING_SYNC_INTERVAL');
 	}
 
 	private async enqueuePersistedTransactions(transactionIds: readonly string[]): Promise<void> {
