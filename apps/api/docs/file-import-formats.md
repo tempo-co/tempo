@@ -30,7 +30,7 @@ The built-in bank CSV layouts:
 | ASN Bank, SNS, RegioBank | `asn-nl`                                                                                   | No header; the account is held at `ASNB`, `SNSB` or `RBRB`.                               |
 | Triodos Bank             | `triodos-nl`                                                                               | No header; the account is held at `TRIO`; the other party's cell holds its BIC and IBAN. |
 
-In any layout, a counterparty cell holding a BIC, a space and an IBAN (as Triodos writes it) is read as that IBAN.
+In any layout, a counterparty cell holding a BIC, a space and an IBAN (as Triodos writes it) is read as that IBAN. An empty value or transaction date is none; the booking date is required. On a card export the settlement date is the booking date and the purchase date the transaction date. A layout can take the other party from payer and payee columns by direction (DKB, Oberbank, Intesa): the payer's on money in, the payee's on money out, since the account holder fills the other side. A layout can name a column that marks rows not booked yet (a status such as `vorgemerkt`, or a date cell saying `offen`, `PENDING_WORDS` in `src/app/modules/file-import/parsers/csv-layout.ts`): those rows are skipped and counted, never imported as booked.
 
 Not read: QIF, PDF, old binary `.xls` (ABN AMRO's Excel download is one; its CAMT.053 and TXT are read). The built-in CSV layouts rest on public descriptions and samples from 2017 to 2026 (`test/fixtures/file-import/SOURCES.md`); none has been checked against a current export.
 
