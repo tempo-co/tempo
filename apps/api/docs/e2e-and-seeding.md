@@ -20,7 +20,7 @@ Consequences:
 - Anything seeded before a `NODE_ENV=test` API finishes booting is wiped. Seeds for a long-lived test API must run after it reports healthy, and data must be rechecked after boot. The symptom is every seeded login failing with 401 while the seed itself logged success.
 - For a long-lived API used by browser tests against a disposable database, seed first and then run the API in development mode with `DB_SYNCHRONIZE=true`; never point that at real data.
 - `npm run db:seed` truncates and recreates `public` before seeding; `db:schema` creates tables from entities without data. Production has no baseline migration, so a fresh production database needs `node dist/scripts/schema.js` first.
-- Synchronize creates tables and indexes, not triggers or SQL functions. A migration that installs anything beyond entities must be safe to rerun, return early while its tables do not exist (a fresh production database runs migrations before `schema.js` synchronizes), and be listed in `SCHEMA_EXTRA_MIGRATIONS` (`src/app/core/database/synchronized-schema-extras.ts`). `installSchemaExtras` runs that list after every synchronize: at boot when the schema is synchronized, and in `db:schema` and `db:seed`. Otherwise tests pass on a schema production does not have.
+- Synchronize creates tables and indexes, not triggers or SQL functions. A migration that installs anything beyond entities must be safe to rerun, return early while its tables do not exist (a fresh production database runs migrations before `dist/scripts/schema.js` synchronizes), and be listed in `SCHEMA_EXTRA_MIGRATIONS` (`src/app/core/database/synchronized-schema-extras.ts`). `installSchemaExtras` runs that list after every synchronize: at boot when the schema is synchronized, and in `db:schema` and `db:seed`. Otherwise tests pass on a schema production does not have.
 
 ## Disposable stacks
 
@@ -37,9 +37,9 @@ Consequences:
 
 - API E2E setup boots the application and runs `seedAccounts` for each spec file. It does not load the full banking dataset: create the rows a spec depends on with `BankingFixtures`.
 - `scripts/seed-data/seed.constants.ts` holds the synthetic accounts. Tests that change account data use the account dedicated to that flow, not the shared `VERIFIED` one; scenarios that need their own banking totals use an isolated owner.
-- `npm run db:seed` and API-backed web E2E run the full seed: accounts, banking and own transfers. `test/auth.setup.ts` in the web app only logs those accounts in and saves their sessions; it does not seed.
+- `npm run db:seed` and API-backed web E2E run the full seed: accounts, banking and own transfers. `apps/web/test/auth.setup.ts` in the web app only logs those accounts in and saves their sessions; it does not seed.
 - `seedBankingData` is a full synthetic dataset with fixed row IDs, not a repeatable per-owner fixture factory. Do not make feature assertions depend on its exact contents. Account-deletion E2E uses it to exercise cascades through populated relationships.
-- Data a test counts as a whole goes under its own owner (see `seed-own-transfer-data.ts`), so default pagination fixtures keep their counts.
+- Data a test counts as a whole goes under its own owner (see `scripts/seed-data/seed-own-transfer-data.ts`), so default pagination fixtures keep their counts.
 - Fixture text must be synthetic and must not be derived from real merchants, names or places.
 
 ## Reusing test setup
@@ -69,6 +69,6 @@ Web E2E (`apps/web`) runs an API image and seeds it inside the container. In CI 
 
 ## Timeouts
 
-- `e2e.setup.ts` gives app boot 60 s because a cold CI runner exceeds Jest's 5 s default. If CI repeats an identical mass failure in one spec, grep the log for `Exceeded timeout of 5000 ms for a hook` before calling it a flake.
-- Specs that wait for several email deliveries raise their own timeout (`bank-connection-alerts.e2e.spec.ts`). Do not shorten a mail helper's polling window to fit a default timeout.
+- `test/setup/e2e.setup.ts` gives app boot 60 s because a cold CI runner exceeds Jest's 5 s default. If CI repeats an identical mass failure in one spec, grep the log for `Exceeded timeout of 5000 ms for a hook` before calling it a flake.
+- Specs that wait for several email deliveries raise their own timeout (`test/e2e/banking/bank-connection-alerts.e2e.spec.ts`). Do not shorten a mail helper's polling window to fit a default timeout.
 - When Supertest requests overlap (concurrency or latency tests), bind the app's HTTP server to an ephemeral loopback port for the test and close it afterwards; otherwise Supertest starts and closes a listener per request and overlapping calls fail with `ECONNRESET`.

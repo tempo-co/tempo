@@ -12,7 +12,7 @@ The metadata route and `/:algorithm/:hash` image route require a verified sessio
 
 ## Conversion
 
-`bank-logos/bank-logo.ts` owns the versioned `colour-v2` converter:
+`src/app/modules/banking/bank-logos/bank-logo.ts` owns the versioned `colour-v2` converter:
 
 - Decode a still raster at most 4096×4096 through the merchant image loader policy, or render SVG through the merchant renderer's isolated, time-limited child. Retain the aspect ratio and cap conversion work at 896×288.
 - A near-white field has minimum RGB ≥235, channel spread ≤18 and alpha ≥245. Remove only its four-connected edge components, and only when it covers at least 65% of the whole boundary and three corners. Enclosed white and sparse white lettering on transparent edges stay intact.
