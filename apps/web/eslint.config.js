@@ -42,13 +42,15 @@ export default [
       tsconfigRootDir: __dirname,
     },
     rules: {
-      '@typescript-eslint/no-misused-promises': 'off',
+      // Async JSX handlers are fine: React ignores the returned promise.
+      '@typescript-eslint/no-misused-promises': ['error', {checksVoidReturn: {attributes: false}}],
       '@typescript-eslint/no-unused-vars': ['error', {argsIgnorePattern: '^_'}],
+      // TanStack Router redirects and not-found responses are thrown objects (`throw redirect()`).
       '@typescript-eslint/only-throw-error': 'off',
+      // Only reports what the React Compiler would skip memoizing (react-hook-form's `watch`); the compiler isn't used.
       'react-hooks/incompatible-library': 'off',
-      'react-hooks/set-state-in-effect': 'off',
+      // TypeScript checks props; the rule misreads typed forwarded props (`components/ui/calendar.tsx`).
       'react/prop-types': 'off',
-      'no-console': 'off',
     },
   }),
   {
@@ -61,6 +63,7 @@ export default [
   {
     files: ['src/routes/**/*.{ts,tsx}'],
     rules: {
+      // Route files export `Route` next to their components; TanStack Router splits them.
       'react-refresh/only-export-components': 'off',
     },
   },

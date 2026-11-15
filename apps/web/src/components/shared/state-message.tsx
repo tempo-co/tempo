@@ -17,7 +17,7 @@ type StateMessageProps = {
   title: string;
   description: React.ReactNode;
   /** One quiet technical line, such as a status code and the time it failed. */
-  detail?: string;
+  detail?: React.ReactNode;
   /** The title's heading level; a page's only state is its `h1`. */
   titleAs?: 'h1' | 'h2' | 'h3';
   /** A list's first run: static rows in the list's row shape under the message. */
@@ -109,6 +109,25 @@ function PreviewRows() {
 
 const failedAtLabel = (time: number) => format(time, isToday(time) ? 'HH:mm' : 'd MMM, HH:mm');
 
+/** When the failure it is keyed by first showed. */
+function FailedAt() {
+  const [failedAt] = React.useState(() => Date.now());
+  return failedAtLabel(failedAt);
+}
+
+const failureKeys = new WeakMap<object, number>();
+let lastFailureKey = 0;
+/** One key per error object, so each new failure gets its own time. */
+function failureKey(error: unknown) {
+  if (typeof error !== 'object' || error === null) return String(error);
+  let key = failureKeys.get(error);
+  if (key === undefined) {
+    key = ++lastFailureKey;
+    failureKeys.set(error, key);
+  }
+  return key;
+}
+
 /** What a failed load says about its cause: offline, no answer, or an error reply. */
 function describeFailure(error: unknown) {
   if (!navigator.onLine)
@@ -166,10 +185,7 @@ export function LoadErrorState({
   className,
   children,
 }: LoadErrorStateProps) {
-  const [failedAt, setFailedAt] = React.useState(() => Date.now());
   const [isRetrying, setIsRetrying] = React.useState(false);
-  // Each failure brings a new error, also from a refetch or a new request the state stays mounted for.
-  React.useEffect(() => setFailedAt(Date.now()), [error]);
   const failure = describeFailure(error);
 
   const retry = async () => {
@@ -189,7 +205,15 @@ export function LoadErrorState({
         icon={failure.icon}
         title={failure.offline ? "You're offline" : title}
         description={failure.description}
-        detail={failure.code ? `${failure.code} · ${failedAtLabel(failedAt)}` : undefined}
+        detail={
+          failure.code ? (
+            <>
+              {failure.code} ·{' '}
+              {/* Each failure brings a new error, also from a refetch or a new request the state stays mounted for. */}
+              <FailedAt key={failureKey(error)} />
+            </>
+          ) : undefined
+        }
       >
         <Button
           variant='outline'

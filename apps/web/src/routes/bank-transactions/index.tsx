@@ -179,7 +179,12 @@ function BankTransactionsIndex() {
 function LedgerSearch({search}: {search: string | undefined}) {
   const navigate = useNavigate({from: '/bank-transactions/'});
   const [input, setInput] = useState(search || '');
-  useEffect(() => setInput(search || ''), [search]);
+  // A search changed elsewhere (applied, cleared, back navigation) replaces what is typed.
+  const [shownSearch, setShownSearch] = useState(search);
+  if (search !== shownSearch) {
+    setShownSearch(search);
+    setInput(search || '');
+  }
   useEffect(() => {
     const next = input.trim() || undefined;
     if (next === search) return;

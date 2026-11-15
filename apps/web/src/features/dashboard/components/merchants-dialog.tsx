@@ -1,6 +1,6 @@
 import type {CashFlowInterval} from '@tempo/contracts';
 import {FileQuestion} from 'lucide-react';
-import {useEffect, useState} from 'react';
+import {useState} from 'react';
 
 import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
@@ -37,11 +37,14 @@ export function MerchantsDialog({
   const [searchInput, setSearchInput] = useState('');
   const [interval, setInterval] = useState<CashFlowInterval>('month');
   // A fresh opening starts from this month's ranking without a search.
-  useEffect(() => {
-    if (open) return;
-    setSearchInput('');
-    setInterval('month');
-  }, [open]);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (!open) {
+      setSearchInput('');
+      setInterval('month');
+    }
+  }
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
       <ResponsiveDialogContent
