@@ -318,13 +318,12 @@ const MASKED_ACCOUNT_NUMBER = /^9+$/;
 const MASKED_BIC_AND_IBAN = /^[A9]{8}(?:[A9]{3})? [Aa]{2}99[Aa9]{11,30}$/;
 
 /**
- * The answer without the account columns and line its values cannot fill, judged by the sample's masked shapes: an
- * account column whose values are not all IBANs (a sort code and account number, a card number) but one value on
- * every sampled row, an account line
- * without an IBAN, and a counterparty account column holding something other than IBANs and old account numbers.
- * Such a file then names no account and is asked about by bank and currency, rather than refused. A non-IBAN column
- * that holds more than one account (or too few rows to tell) is kept, so the reader refuses the file rather than
- * read several accounts as one.
+ * The answer without the columns and line its values cannot fill, judged by the sample's masked shapes: an account
+ * column whose values are not all IBANs (a sort code and account number, a card number), an account line without an
+ * IBAN, a counterparty account column holding something other than IBANs and old account numbers, and a balance
+ * column holding one value on every row (the balance when the file was made, not one after each row). Such a file
+ * then names no account and is asked about by bank and currency, rather than refused. A non-IBAN account column is
+ * still checked to hold one account (`oneAccountColumn` in `buildLayout`), so a file of several is refused.
  */
 function withReadableAccounts(answer: LayoutAnswer, sample: TableSample): LayoutAnswer {
 	const holds = (columns: number | {moneyIn: number; moneyOut: number}, fits: (shape: string) => boolean) =>
@@ -332,12 +331,11 @@ function withReadableAccounts(answer: LayoutAnswer, sample: TableSample): Layout
 			(sample.masked.columns[column]?.shapes ?? []).every((shape) => shape === '' || fits(shape)),
 		);
 	const iban = (shape: string) => MASKED_IBAN.test(shape.replace(/ /g, ''));
-	const {account, counterpartyAccount} = answer;
+	const {account, counterpartyAccount, balance} = answer;
 	const accountReadable =
 		account === null ||
 		('column' in account
-			? // A column of one non-IBAN value is left out; one of several accounts is kept, for the reader to refuse.
-				holds(account.column, iban) || !sample.masked.columns[account.column]?.sameValue
+			? holds(account.column, iban)
 			: !!sample.masked.linesAbove
 					.find(({line}) => line === account.line)
 					?.cells.some((cell) => MASKED_IBAN_IN_TEXT.test(cell)));
@@ -352,13 +350,14 @@ function withReadableAccounts(answer: LayoutAnswer, sample: TableSample): Layout
 		...answer,
 		account: accountReadable ? account : null,
 		counterpartyAccount: counterpartyReadable ? counterpartyAccount : null,
+		balance: balance && sample.masked.columns[balance.column]?.sameValue ? null : balance,
 	};
 }
 
 /**
  * The layout the answer describes, on the table the parse child found: its header (or column count), source and
  * skipped lines come from the file, the columns and formats from the answer. Only the answer's layout fields are
- * used, less the account columns and line their values cannot fill (`withReadableAccounts`). Null when the answer
+ * used, less the columns and line their values cannot fill (`withReadableAccounts`). Null when the answer
  * names a currency that is no ISO 4217 code; `validateCsvLayout` checks everything else, such as an account line
  * that is not above the table.
  */

@@ -84,12 +84,14 @@ describe('buildLayout', () => {
 				],
 			},
 		]);
-		// A column that holds more than one account is kept, so the reader refuses the file rather than merge them.
+		// A column that holds more than one account is checked as one account, so the reader refuses the file
+		// rather than merge them.
 		const twoAccounts = file.toString('utf8').split('\n');
 		twoAccounts[3] = twoAccounts[3].replace('12345678', '87654321');
 		twoAccounts[4] = twoAccounts[4].replace('12345678', '87654321');
 		const merged = propose(Buffer.from(twoAccounts.join('\n')), answer);
-		expect(merged.layout.accountIban).toBe(3);
+		expect(merged.layout).toEqual(expect.objectContaining({oneAccountColumn: 3}));
+		expect(merged.layout.accountIban).toBeUndefined();
 		expect(merged.statements).toBeUndefined();
 		// The layout saved from a one-account file keeps that column to check: a later file of two is refused.
 		expect(proposed.layout.oneAccountColumn).toBe(3);
@@ -101,6 +103,45 @@ describe('buildLayout', () => {
 		const ibans = Buffer.from(file.toString('utf8').replace(/12345678/g, 'GB33BUKB20201555555555'));
 		expect(propose(ibans, answer).statements).toEqual([
 			expect.objectContaining({accountIban: 'GB33BUKB20201555555555', bank: null}),
+		]);
+	});
+
+	it('leaves out an account column of no IBAN in a file too short to show one value on every row', () => {
+		// Raiffeisenbank (CZ): an account number with a bank code, in a one-row export.
+		const proposed = propose(fixture('raiffeisen-cz-one-row-synthetic.csv'), {
+			dateFormat: 'DD.MM.YYYY',
+			bookingDate: 1,
+			amount: {kind: 'signed', column: 13},
+			decimalMark: ',',
+			thousandsSeparator: ' ',
+			currency: {column: 14},
+			counterpartyName: 6,
+			description: [8],
+			account: {column: 2},
+		});
+
+		expect(proposed.layout).toEqual(expect.objectContaining({oneAccountColumn: 2}));
+		expect(proposed.statements).toEqual([{accountIban: null, bank: 'Proposed', rows: [['-120.50', null]]}]);
+	});
+
+	it('leaves out a balance column that holds one value on every row: the current balance, not one per row', () => {
+		// Boursorama repeats the account's balance at the time of the export on every row.
+		const proposed = propose(fixture('boursorama-current-balance-synthetic.csv'), {
+			dateFormat: 'YYYY-MM-DD',
+			valueDate: 1,
+			amount: {kind: 'signed', column: 6},
+			decimalMark: ',',
+			thousandsSeparator: ' ',
+			currency: {code: 'EUR'},
+			balance: {column: 10, when: 'after'},
+			description: [2],
+		});
+
+		expect(proposed.layout.balance).toBeUndefined();
+		expect(proposed.rows?.map(({amount, balanceAfter}) => [amount, balanceAfter])).toEqual([
+			['-62.10', null],
+			['2500.00', null],
+			['-12.50', null],
 		]);
 	});
 
@@ -390,6 +431,61 @@ describe('buildLayout', () => {
 		const proposed = propose(fixture(name), answer);
 
 		expect(rowsOf(proposed)).toEqual(rows);
+	});
+
+	// The answers the mapper's instructions ask for on files where description text and the holder's account are easy
+	// to mistake for the other party's (`LAYOUT_MAPPER_INSTRUCTIONS`).
+	it.each<{name: string; fixture: string; answer: Partial<LayoutAnswer>; rows: unknown[]}>([
+		{
+			name: 'PKO BP, labelled cells under empty headings',
+			fixture: 'pko-labelled-cells-synthetic.csv',
+			answer: {
+				dateFormat: 'YYYY-MM-DD',
+				valueDate: 1,
+				amount: {kind: 'signed', column: 3},
+				currency: {column: 4},
+				balance: {column: 5, when: 'after'},
+				description: [6, 7, 8, 9, 10],
+			},
+			rows: [
+				[
+					null,
+					'Tytuł: 000000000000001 Lokalizacja: Adres: Example Sklep Miasto: Example Data wykonania: 2026-10-01 Oryginalna kwota operacji: 12.50 PLN',
+				],
+				[
+					null,
+					'Tytuł: Example wynagrodzenie Nazwa nadawcy: Example Pracodawca Rachunek nadawcy: PL27114020040000300201355387',
+				],
+				[
+					null,
+					'Tytuł: Example rachunek 10/2026 Nazwa odbiorcy: Example Energia Rachunek odbiorcy: PL27114020040000300201355387',
+				],
+			],
+		},
+		{
+			name: 'Bank Pekao, source and target account columns that swap with the direction',
+			fixture: 'pekao-source-target-synthetic.csv',
+			answer: {
+				dateFormat: 'DD.MM.YYYY',
+				valueDate: 1,
+				amount: {kind: 'signed', column: 7},
+				decimalMark: ',',
+				thousandsSeparator: ' ',
+				currency: {column: 8},
+				counterpartyName: 2,
+				description: [6],
+			},
+			rows: [
+				['Example Energia', 'Example rachunek 10/2026'],
+				['Example Pracodawca', 'Example wynagrodzenie'],
+				['Example Sklep', '*********0001'],
+			],
+		},
+	])('reads $name with the answer the instructions ask for', ({fixture: name, answer, rows}) => {
+		const proposed = propose(fixture(name), answer);
+
+		expect(proposed.statements?.map(({accountIban}) => accountIban)).toEqual([null]);
+		expect(proposed.rows?.map(({counterpartyName, description}) => [counterpartyName, description])).toEqual(rows);
 	});
 
 	it('reads dates with a two-digit year after the month name, and cannot read a headerless file with nothing to check', () => {

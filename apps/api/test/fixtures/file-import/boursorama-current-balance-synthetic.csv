@@ -1,0 +1,4 @@
+"dateOp";"dateVal";"label";"category";"categoryParent";"supplierFound";"amount";"comment";"accountNum";"accountLabel";"accountbalance"
+"2026-10-09";"2026-10-09";"PRLV SEPA EXAMPLE ENERGY";"Divers";"Divers";"example energy";"-62,10";"";"00012345678";"EXAMPLE ACCOUNT";"1 234,56"
+"2026-10-05";"2026-10-05";"VIR SEPA EXAMPLE EMPLOYER";"Divers";"Divers";"example employer";"2 500,00";"";"00012345678";"EXAMPLE ACCOUNT";"1 234,56"
+"2026-10-02";"2026-10-02";"CARTE EXAMPLE SHOP";"Divers";"Divers";"example shop";"-12,50";"";"00012345678";"EXAMPLE ACCOUNT";"1 234,56"
