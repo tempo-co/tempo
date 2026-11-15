@@ -316,6 +316,8 @@ export type BankImportLayoutColumn = {
 	column: number;
 	/** The column's heading in the file; null when it has none. */
 	header: string | null;
+	/** Read on these rows only: a file with payer and payee columns names the other party in one per direction. */
+	onlyFor?: 'moneyIn' | 'moneyOut';
 };
 
 /** How a proposed layout reads the file. */

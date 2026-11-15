@@ -52,13 +52,20 @@ type CsvLayoutColumns = {
 	amount: CsvAmount;
 	/** The account's balance next to each row: after the row, or before it. */
 	balance?: {column: number; when: 'after' | 'before'};
-	counterpartyName?: number;
+	/** The other party's name: one column, or the payer's on money in and the payee's on money out. */
+	counterpartyName?: number | CsvByDirection;
 	/** An old account number (digits only) is left out; any other value must be a valid IBAN. */
-	counterpartyIban?: number;
+	counterpartyIban?: number | CsvByDirection;
 	/** Joined with spaces, empty values left out. */
 	description: number[];
 	bankTransactionCode?: number;
 };
+
+/**
+ * A field a file writes in two columns, one per direction: a statement with payer and payee columns holds the account
+ * holder on one side of every row and the other party on the other.
+ */
+export type CsvByDirection = {moneyIn: number; moneyOut: number};
 
 export const CSV_DELIMITERS = [',', ';', '\t', '|'] as const;
 export type CsvDelimiter = (typeof CSV_DELIMITERS)[number];
@@ -188,6 +195,14 @@ function layoutOf(value: unknown): CsvLayout {
 		return value as number;
 	};
 	const optionalColumn = (value: unknown, name: string) => (value === undefined ? undefined : column(value, name));
+	const byDirection = (value: unknown, name: string): number | CsvByDirection | undefined => {
+		if (value === undefined || typeof value === 'number') return optionalColumn(value, name);
+		const sides = record(value, name, {required: ['moneyIn', 'moneyOut'], optional: []});
+		const moneyIn = column(sides.moneyIn, `${name}.moneyIn`);
+		const moneyOut = column(sides.moneyOut, `${name}.moneyOut`);
+		if (moneyIn === moneyOut) throw new LayoutProblem(name);
+		return {moneyIn, moneyOut};
+	};
 	const skipBefore = count(layout.skipBefore, MAX_SKIP_BEFORE, 'skipBefore');
 	// A preamble is compared, skipped lines are not: a layout has one or the other.
 	if ('preamble' in recognize && skipBefore !== undefined) throw new LayoutProblem('skipBefore');
@@ -265,8 +280,8 @@ function layoutOf(value: unknown): CsvLayout {
 						when: oneOf(balanceValue.when, ['after', 'before'] as const, 'balance.when'),
 					},
 				}),
-		...defined('counterpartyName', optionalColumn(layout.counterpartyName, 'counterpartyName')),
-		...defined('counterpartyIban', optionalColumn(layout.counterpartyIban, 'counterpartyIban')),
+		...defined('counterpartyName', byDirection(layout.counterpartyName, 'counterpartyName')),
+		...defined('counterpartyIban', byDirection(layout.counterpartyIban, 'counterpartyIban')),
 		description: layout.description.map((value: unknown) => column(value, 'description')),
 		...defined('bankTransactionCode', optionalColumn(layout.bankTransactionCode, 'bankTransactionCode')),
 	};
@@ -405,6 +420,6 @@ function oneOf<T extends string>(value: unknown, values: readonly T[], name: str
 	return value as T;
 }
 
-function defined<K extends string>(key: K, value: number | undefined): {[key in K]?: number} {
-	return value === undefined ? {} : ({[key]: value} as {[key in K]: number});
+function defined<K extends string, V>(key: K, value: V | undefined): {[key in K]?: V} {
+	return value === undefined ? {} : ({[key]: value} as {[key in K]: V});
 }

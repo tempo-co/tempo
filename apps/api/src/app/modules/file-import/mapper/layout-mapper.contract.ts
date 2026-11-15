@@ -20,6 +20,8 @@ export const LAYOUT_MAPPER_INSTRUCTIONS = [
 
 const column = z.number().int();
 const nullable = <T extends z.ZodType>(schema: T) => schema.nullable();
+/** One column, or the payer's column for money in and the payee's for money out. */
+const byDirection = z.union([column, z.object({moneyIn: column, moneyOut: column}).strict()]);
 
 /** The answer the mapper must give; anything else is not a layout. */
 export const layoutAnswerSchema = z
@@ -45,8 +47,8 @@ export const layoutAnswerSchema = z
 		thousandsSeparator: nullable(z.enum(CSV_THOUSANDS_SEPARATORS)),
 		currency: z.union([z.object({column}).strict(), z.object({code: z.string()}).strict(), z.null()]),
 		balance: nullable(z.object({column, when: z.enum(['after', 'before'])}).strict()),
-		counterpartyName: nullable(column),
-		counterpartyAccount: nullable(column),
+		counterpartyName: nullable(byDirection),
+		counterpartyAccount: nullable(byDirection),
 		description: z.array(column),
 		account: z.union([z.object({column}).strict(), z.object({line: column}).strict(), z.null()]),
 	})
@@ -89,8 +91,8 @@ export const LAYOUT_ANSWER_JSON_SCHEMA = strictObject({
 	thousandsSeparator: nullableJson({type: 'string', enum: [...CSV_THOUSANDS_SEPARATORS]}),
 	currency: {anyOf: [strictObject({column: integer}), strictObject({code: {type: 'string'}}), {type: 'null'}]},
 	balance: nullableJson(strictObject({column: integer, when: {type: 'string', enum: ['after', 'before']}})),
-	counterpartyName: nullableJson(integer),
-	counterpartyAccount: nullableJson(integer),
+	counterpartyName: {anyOf: [integer, strictObject({moneyIn: integer, moneyOut: integer}), {type: 'null'}]},
+	counterpartyAccount: {anyOf: [integer, strictObject({moneyIn: integer, moneyOut: integer}), {type: 'null'}]},
 	description: {type: 'array', items: integer},
 	account: {anyOf: [strictObject({column: integer}), strictObject({line: integer}), {type: 'null'}]},
 });

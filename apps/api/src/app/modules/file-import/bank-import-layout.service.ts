@@ -19,7 +19,7 @@ import {BankImportLayout, savedLayoutId} from './bank-import-layout.entity';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {LayoutMapper, LayoutMapperError} from './mapper/layout-mapper';
 import {LayoutAnswer, toMapperInput} from './mapper/layout-mapper.contract';
-import {CsvLayout, MAX_SKIP_AFTER, MAX_SKIP_BEFORE, validateCsvLayout} from './parsers/csv-layout';
+import {CsvByDirection, CsvLayout, MAX_SKIP_AFTER, MAX_SKIP_BEFORE, validateCsvLayout} from './parsers/csv-layout';
 import {NO_ACCOUNT_LAYOUT_BANKS, namesNoAccount} from './parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from './parsers/currency-codes';
 import {amountScale, formatUnits, parseDecimal} from './parsers/decimal';
@@ -324,8 +324,10 @@ const MASKED_BIC_AND_IBAN = /^[A9]{8}(?:[A9]{3})? [Aa]{2}99[Aa9]{11,30}$/;
  * Such a file then names no account and is asked about by bank and currency, rather than refused.
  */
 function withReadableAccounts(answer: LayoutAnswer, sample: TableSample): LayoutAnswer {
-	const holds = (column: number, fits: (shape: string) => boolean) =>
-		(sample.masked.columns[column]?.shapes ?? []).every((shape) => shape === '' || fits(shape));
+	const holds = (columns: number | {moneyIn: number; moneyOut: number}, fits: (shape: string) => boolean) =>
+		(typeof columns === 'number' ? [columns] : [columns.moneyIn, columns.moneyOut]).every((column) =>
+			(sample.masked.columns[column]?.shapes ?? []).every((shape) => shape === '' || fits(shape)),
+		);
 	const iban = (shape: string) => MASKED_IBAN.test(shape.replace(/ /g, ''));
 	const {account, counterpartyAccount} = answer;
 	const accountReadable =
@@ -415,6 +417,12 @@ export function mappingOf(layout: CsvLayout, header: readonly string[] | null): 
 	const add = (field: BankImportLayoutColumn['field'], column: number | undefined) => {
 		if (column !== undefined) columns.push({field, column: column + 1, header: header?.[column] || null});
 	};
+	const addByDirection = (field: BankImportLayoutColumn['field'], column: number | CsvByDirection | undefined) => {
+		if (typeof column !== 'object') return add(field, column);
+		for (const onlyFor of ['moneyIn', 'moneyOut'] as const) {
+			columns.push({field, column: column[onlyFor] + 1, header: header?.[column[onlyFor]] || null, onlyFor});
+		}
+	};
 	add('date', layout.bookingDate);
 	add('valueDate', layout.valueDate);
 	const {amount} = layout;
@@ -428,8 +436,8 @@ export function mappingOf(layout: CsvLayout, header: readonly string[] | null): 
 	add('balance', layout.balance?.column);
 	if ('column' in layout.currency) add('currency', layout.currency.column);
 	add('account', layout.accountIban);
-	add('counterparty', layout.counterpartyName);
-	add('counterpartyAccount', layout.counterpartyIban);
+	addByDirection('counterparty', layout.counterpartyName);
+	addByDirection('counterpartyAccount', layout.counterpartyIban);
 	for (const column of layout.description) add('description', column);
 	return {
 		columns,

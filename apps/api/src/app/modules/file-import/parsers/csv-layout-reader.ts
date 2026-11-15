@@ -1,6 +1,6 @@
 import {normalizeIban} from '../../banking/own-transfer/iban';
 import {readCsv} from './csv';
-import {CsvDateFormat, CsvLayout, csvLayoutColumnCount} from './csv-layout';
+import {CsvByDirection, CsvDateFormat, CsvLayout, csvLayoutColumnCount} from './csv-layout';
 import {CSV_LAYOUTS} from './csv-layouts';
 import {isCalendarDate, serialDate} from './dates';
 import {Decimal, amountScale, formatUnits, parseDecimal} from './decimal';
@@ -432,14 +432,20 @@ function readRow(
 		currency,
 		balanceAfter: balance && formatUnits(balance.units, amountScale(balance, amount)),
 		bankReference: null,
-		counterpartyName: optional(layout.counterpartyName),
-		counterpartyIban: counterpartyIban(optional(layout.counterpartyIban)),
+		counterpartyName: optional(sideOf(layout.counterpartyName, amount.units)),
+		counterpartyIban: counterpartyIban(optional(sideOf(layout.counterpartyIban, amount.units))),
 		remittanceInformation: null,
 		description: description || null,
 		bankTransactionCode: optional(layout.bankTransactionCode),
 		bankTransactionSubCode: null,
 		referenceNumber: null,
 	};
+}
+
+/** The column a row reads a field from: the one column, or its direction's. */
+function sideOf(column: number | CsvByDirection | undefined, units: bigint): number | undefined {
+	if (column === undefined || typeof column === 'number') return column;
+	return units < 0n ? column.moneyOut : column.moneyIn;
 }
 
 /**

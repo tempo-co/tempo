@@ -19,6 +19,12 @@ const FIELD_NAMES: Record<BankImportLayoutField, string> = {
   description: 'Description',
 };
 
+/** A field read on rows of one direction only, as payer and payee columns are. */
+const ONLY_FOR: Record<'moneyIn' | 'moneyOut', string> = {
+  moneyIn: 'on money in',
+  moneyOut: 'on money out',
+};
+
 /** `column 4`, `columns 4 and 5`, `columns 3, 4 and 6`. */
 function columnsInWords(columns: number[]) {
   if (columns.length === 1) return `column ${columns[0]}`;
@@ -30,12 +36,17 @@ function columnsInWords(columns: number[]) {
  * column 4, negative for money out · …`.
  */
 export function mappingInWords(mapping: BankImportLayoutMapping): string[] {
-  const fields = new Map<BankImportLayoutField, number[]>();
-  for (const {field, column} of mapping.columns)
-    fields.set(field, [...(fields.get(field) ?? []), column]);
+  const fields = new Map<string, {field: BankImportLayoutField; name: string; columns: number[]}>();
+  for (const {field, column, onlyFor} of mapping.columns) {
+    const key = onlyFor ? `${field} ${onlyFor}` : field;
+    const name = onlyFor ? `${FIELD_NAMES[field]} ${ONLY_FOR[onlyFor]}` : FIELD_NAMES[field];
+    const entry = fields.get(key) ?? {field, name, columns: []};
+    entry.columns.push(column);
+    fields.set(key, entry);
+  }
 
-  const parts = [...fields].map(([field, columns]) => {
-    const words = `${FIELD_NAMES[field]}: ${columnsInWords(columns)}`;
+  const parts = [...fields.values()].map(({field, name, columns}) => {
+    const words = `${name}: ${columnsInWords(columns)}`;
     if (field === 'amount' && mapping.amount === 'signed')
       return `${words}, negative for money out`;
     if (field === 'direction' && mapping.direction)

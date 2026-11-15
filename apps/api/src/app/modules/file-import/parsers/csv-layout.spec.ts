@@ -83,6 +83,12 @@ describe('validateCsvLayout', () => {
 		});
 		const headerless = {...OWNED, recognize: {columnCount: 6}};
 		expect(validateCsvLayout(headerless)).toEqual({ok: true, layout: headerless});
+		const byDirection = {
+			...OWNED,
+			counterpartyName: {moneyIn: 2, moneyOut: 3},
+			counterpartyIban: {moneyIn: 4, moneyOut: 5},
+		};
+		expect(validateCsvLayout(byDirection)).toEqual({ok: true, layout: byDirection});
 	});
 
 	it.each([
@@ -129,6 +135,21 @@ describe('validateCsvLayout', () => {
 			error: 'amountStyle: missing thousandsSeparator',
 		},
 		{name: 'an unknown date format', value: {...OWNED, dateFormat: 'D/M/Y'}, error: 'dateFormat'},
+		{
+			name: 'one counterparty column for both directions',
+			value: {...OWNED, counterpartyName: {moneyIn: 2, moneyOut: 2}},
+			error: 'counterpartyName',
+		},
+		{
+			name: 'a counterparty account outside the row',
+			value: {...OWNED, counterpartyIban: {moneyIn: 2, moneyOut: 6}},
+			error: 'counterpartyIban.moneyOut',
+		},
+		{
+			name: 'an unknown field in a counterparty by direction',
+			value: {...OWNED, counterpartyName: {moneyIn: 2, moneyOut: 3, payer: 4}},
+			error: 'counterpartyName: unknown payer',
+		},
 		{
 			name: 'one column for debit and credit',
 			value: {...OWNED, amount: {kind: 'debitCredit', debitColumn: 2, creditColumn: 2}},

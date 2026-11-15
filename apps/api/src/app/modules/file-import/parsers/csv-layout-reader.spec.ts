@@ -428,6 +428,37 @@ describe("an owner's saved layouts", () => {
 		]);
 	});
 
+	it("read the other party from the payer's columns on money in and the payee's on money out", () => {
+		const layout: CsvLayout = {
+			...BALANCE,
+			recognize: {header: ['Date', 'Amount', 'Payer', 'Payer IBAN', 'Payee', 'Payee IBAN', 'Description']},
+			delimiter: ';',
+			amount: {kind: 'signed', column: 1},
+			counterpartyName: {moneyIn: 2, moneyOut: 4},
+			counterpartyIban: {moneyIn: 3, moneyOut: 5},
+			description: [6],
+		};
+		delete layout.balance;
+		const holder = 'Erika Example;DE89370400440532013000';
+		const text = [
+			'Date;Amount;Payer;Payer IBAN;Payee;Payee IBAN;Description',
+			`01/10/2026;2100.00;Example Employer;GB33BUKB20201555555555;${holder};Salary`,
+			`03/10/2026;-850.00;${holder};Example Landlord;NL91ABNA0417164300;Rent`,
+			`12/10/2026;-41.25;${holder};;;Example card payment`,
+			'',
+		].join('\n');
+
+		expect(
+			readCsvLayout(file(text), [layout], {owned: true, today: '2026-11-13'})?.statements[0].rows.map(
+				({amount, counterpartyName, counterpartyIban}) => [amount, counterpartyName, counterpartyIban],
+			),
+		).toEqual([
+			['2100.00', 'Example Employer', 'GB33BUKB20201555555555'],
+			['-850.00', 'Example Landlord', 'NL91ABNA0417164300'],
+			['-41.25', null, null],
+		]);
+	});
+
 	it('read an empty value date or transaction date as none, and refuse an empty booking date', () => {
 		const layout: CsvLayout = {
 			...BALANCE,

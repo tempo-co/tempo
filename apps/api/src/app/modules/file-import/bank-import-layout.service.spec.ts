@@ -1,5 +1,5 @@
-import {MAX_SAVED_LAYOUTS, MAX_SAVED_LAYOUT_BYTES, buildLayout} from './bank-import-layout.service';
-import {LayoutAnswer} from './mapper/layout-mapper.contract';
+import {MAX_SAVED_LAYOUTS, MAX_SAVED_LAYOUT_BYTES, buildLayout, mappingOf} from './bank-import-layout.service';
+import {LayoutAnswer, layoutAnswerSchema} from './mapper/layout-mapper.contract';
 import {validateCsvLayout} from './parsers/csv-layout';
 import {readCsvLayout} from './parsers/csv-layout-reader';
 import {sampleTable} from './parsers/table-sample';
@@ -33,17 +33,19 @@ describe('buildLayout', () => {
 	function propose(text: string, answer: Partial<LayoutAnswer>) {
 		const bytes = Buffer.from(text);
 		const sample = sampleTable(bytes)!;
-		const built = buildLayout({...ANSWER, ...answer}, sample, 'EUR')!;
+		const built = buildLayout(layoutAnswerSchema.parse({...ANSWER, ...answer}), sample, 'EUR')!;
 		const validation = validateCsvLayout(built.layout);
 		if (!validation.ok) throw new Error(validation.error);
 		const read = readCsvLayout(bytes, [validation.layout], {owned: true, today: '2026-11-15'});
 		return {
 			layout: validation.layout,
+			mapping: mappingOf(validation.layout, sample.header),
 			statements: read?.statements.map(({accountIban, bank, rows}) => ({
 				accountIban,
 				bank,
 				rows: rows.map(({amount, counterpartyIban}) => [amount, counterpartyIban]),
 			})),
+			rows: read?.statements.flatMap(({rows}) => rows),
 		};
 	}
 
@@ -108,5 +110,32 @@ describe('buildLayout', () => {
 			['2500.00', 'GB33BUKB20201555555555'],
 			['-60.00', null],
 		]);
+	});
+
+	it("names the other party from the payer's column on money in and the payee's on money out", () => {
+		const holder = 'Erika Example';
+		const text = lines(
+			'Date,Description,Payer,Amount,Payee,IBAN',
+			`03/10/2026,Example card,${holder},-4.20,Example Bakery,GB33BUKB20201555555555`,
+			`02/10/2026,Salary,Example Employer,2500.00,${holder},NL91ABNA0417164300`,
+			`01/10/2026,Energy,${holder},-60.00,Example Energy,GB33BUKB20201555555555`,
+			`30/09/2026,Garage,Example Tenant,50.00,${holder},NL91ABNA0417164300`,
+		);
+
+		const proposed = propose(text, {counterpartyName: {moneyIn: 2, moneyOut: 4}, counterpartyAccount: 5});
+
+		expect(proposed.rows?.map(({amount, counterpartyName}) => [amount, counterpartyName])).toEqual([
+			['-4.20', 'Example Bakery'],
+			['2500.00', 'Example Employer'],
+			['-60.00', 'Example Energy'],
+			['50.00', 'Example Tenant'],
+		]);
+		expect(proposed.mapping.columns).toEqual(
+			expect.arrayContaining([
+				{field: 'counterparty', column: 3, header: 'Payer', onlyFor: 'moneyIn'},
+				{field: 'counterparty', column: 5, header: 'Payee', onlyFor: 'moneyOut'},
+				{field: 'counterpartyAccount', column: 6, header: 'IBAN'},
+			]),
+		);
 	});
 });

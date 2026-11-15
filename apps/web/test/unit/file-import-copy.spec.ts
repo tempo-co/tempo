@@ -8,6 +8,7 @@ import {
   nothingNewCopy,
   undoDescription,
 } from '../../src/features/file-import/utils/import-format';
+import {mappingInWords} from '../../src/features/file-import/utils/layout-mapping';
 import {
   describeRefusal,
   refuseBySize,
@@ -248,6 +249,46 @@ test("an account name ends with its currency only as the name's last whole word"
     expect(nameEndsWithCurrency(name, 'EUR'), name).toBe(true);
   for (const name of ['Example Card · EUR', 'Example Card', 'Example CardEUR', 'EUR savings'])
     expect(nameEndsWithCurrency(name, 'USD'), name).toBe(false);
-  for (const name of ['Example CardEUR', 'Savings 2EUR', 'Cafe\u0301EUR', 'EUR savings', 'EUR account'])
+  for (const name of [
+    'Example CardEUR',
+    'Savings 2EUR',
+    'Cafe\u0301EUR',
+    'EUR savings',
+    'EUR account',
+  ])
     expect(nameEndsWithCurrency(name, 'EUR'), name).toBe(false);
+});
+
+test('a proposed layout in words names the rows a payer or payee column is read on', () => {
+  const column = (
+    field: 'date' | 'amount' | 'counterparty' | 'counterpartyAccount',
+    at: number,
+  ) => ({
+    field,
+    column: at,
+    header: null,
+  });
+  expect(
+    mappingInWords({
+      columns: [
+        column('date', 1),
+        column('amount', 2),
+        {...column('counterparty', 3), onlyFor: 'moneyIn'},
+        {...column('counterparty', 5), onlyFor: 'moneyOut'},
+        column('counterpartyAccount', 6),
+      ],
+      amount: 'signed',
+      direction: null,
+      balance: null,
+      accountLine: null,
+      dateFormat: 'DD.MM.YYYY',
+    }),
+  ).toEqual([
+    'Date: column 1',
+    'Amount: column 2, negative for money out',
+    'Name on money in: column 3',
+    'Name on money out: column 5',
+    'Their account: column 6',
+    'Dates written DD.MM.YYYY',
+  ]);
 });
