@@ -44,11 +44,18 @@ const SLASH_KEYS = [
 	'OCMT',
 ];
 const SLASH_KEY = new RegExp(`/(${SLASH_KEYS.join('|')})/`, 'g');
-const SLASH_START = new RegExp(`^/(${SLASH_KEYS.join('|')})/`);
+/** The field starts with a code, with or without its leading slash. */
+const SLASH_START = new RegExp(`^/?(${SLASH_KEYS.join('|')})/`);
 /** An IBAN-shaped account at the start of a line of free text, then the name. */
 const LEADING_ACCOUNT = /^([A-Z]{2}\d{2}[A-Z0-9]{11,30})(?:\s+(.*))?$/;
-/** MT940 lines are at most 65 characters, tag included; a full one may have been cut anywhere. */
-const LINE_WIDTH = 65;
+/**
+ * The Polish keywords that name the other party in free text, up to the next `;`: the payer of a credit (`OD:`,
+ * `Nadawca:`) and the payee of a debit (`DLA:`, `Odbiorca:`). The other direction's keyword names the account holder.
+ */
+const PARTY_KEYWORDS = {
+	credit: /(?:^|[;\s])(?:OD|NADAWCA)\s*:([^;]*)/iu,
+	debit: /(?:^|[;\s])(?:DLA|ODBIORCA)\s*:([^;]*)/iu,
+};
 const NOT_PROVIDED = 'NOTPROVIDED';
 
 /**
@@ -58,17 +65,20 @@ const NOT_PROVIDED = 'NOTPROVIDED';
  * - German `?nn` subfields (DK): posting text in `?00`, purpose in `?20` to `?29` and `?60` to `?63` with SEPA
  *   keywords such as `EREF+` and `SVWZ+`, the account in `?31` and the name in `?32` and `?33`. Lines are joined as
  *   written, and a subfield continues the one before it without a space only when that one is full.
- * - SWIFT-style codes (`/EREF/`, `/CNTP/account/BIC/name/city/`, `/BENM//NAME/`, `/ORDP//NAME/`, `/REMI/`): the
- *   field is written continuously, so lines are joined without a space.
- * - Free text: lines joined with a space. A first line that leads with an account, or that is followed by others
- *   without filling its width, names the counterparty.
+ * - SWIFT-style codes (`/EREF/`, `/CNTP/account/BIC/name/city/`, `/BENM//NAME/`, `/ORDP//NAME/`, `/REMI/`, and
+ *   `/ORDP/name?city` on a credit or `/BENM/name?account` on a debit, `?` standing for a line break), the first
+ *   code's slash sometimes left out: the field is written continuously, so lines are joined without a space. The
+ *   description is the values without their codes.
+ * - Free text: lines joined with a space. A first line that leads with an account names the counterparty, and so do
+ *   the Polish keywords (`PARTY_KEYWORDS`); other free text names none, since banks' narrative takes any shape.
  */
-export function informationFields(lines: readonly string[]): InformationFields {
+export function informationFields(lines: readonly string[], credit: boolean): InformationFields {
 	const joined = lines.join('');
 	const separator = GERMAN_LAYOUT.exec(joined)?.[1];
 	if (separator) return germanFields(joined, separator);
-	if (SLASH_START.test(joined.trimStart())) return slashFields(joined.trim());
-	return freeTextFields(lines);
+	const trimmed = joined.trim();
+	if (SLASH_START.test(trimmed)) return slashFields(trimmed.startsWith('/') ? trimmed : `/${trimmed}`, credit);
+	return freeTextFields(lines, credit);
 }
 
 function germanFields(text: string, separator: string): InformationFields {
@@ -115,17 +125,30 @@ function clean(text: string | null | undefined): string | null {
 	return text?.replace(/\s+/g, ' ').trim() || null;
 }
 
-function slashFields(text: string): InformationFields {
-	const values = splitOnKeys(text, SLASH_KEY, (value) => value.replace(/\/+$/, '').trim());
+function slashFields(text: string, credit: boolean): InformationFields {
+	const cleanValue = (value: string) => value.replace(/\/+$/, '').trim();
+	const values = splitOnKeys(text, SLASH_KEY, cleanValue);
 	// CNTP is account/BIC/name/city.
 	const counterparty = values.get('CNTP')?.split('/') ?? [];
+	// Without a NAME code, the payer (credit) or payee (debit) code holds the name, then `?` and the city or account.
+	const party = values
+		.get(credit ? 'ORDP' : 'BENM')
+		?.split('?')[0]
+		.trim();
 	const reference = values.get('EREF');
+	const matches = [...text.matchAll(SLASH_KEY)];
+	const description = matches.map((match, index) => {
+		const value = cleanValue(text.slice(match.index + match[0].length, matches[index + 1]?.index ?? text.length));
+		if (value.toUpperCase() === NOT_PROVIDED) return null;
+		if (match[1] === 'REMI') return remittance(value);
+		return match[1] === 'CNTP' ? value.split('/').join(' ') : value;
+	});
 	return {
-		counterpartyName: values.get('NAME') || counterparty[2]?.trim() || null,
+		counterpartyName: values.get('NAME') || counterparty[2]?.trim() || party || null,
 		counterpartyIban: normalizeIban(values.get('IBAN') ?? counterparty[0]),
 		remittanceInformation: remittance(values.get('REMI')),
 		referenceNumber: reference && reference.toUpperCase() !== NOT_PROVIDED ? reference : null,
-		description: text || null,
+		description: clean(description.filter(Boolean).join(' ')),
 	};
 }
 
@@ -139,16 +162,13 @@ function remittance(value: string | undefined): string | null {
 	return value;
 }
 
-function freeTextFields(lines: readonly string[]): InformationFields {
+function freeTextFields(lines: readonly string[], credit: boolean): InformationFields {
 	const trimmed = lines.map((line) => line.trim());
 	const description = trimmed.filter(Boolean).join(' ') || null;
-	const [first = '', ...rest] = trimmed;
-	const account = LEADING_ACCOUNT.exec(first);
-	// The tag `:86:` takes four characters of the first line.
-	const firstIsItem = rest.some(Boolean) && lines[0].length + 4 < LINE_WIDTH;
-	const name = account ? account[2]?.trim() : firstIsItem ? first : null;
+	const account = LEADING_ACCOUNT.exec(trimmed[0] ?? '');
+	const keyword = PARTY_KEYWORDS[credit ? 'credit' : 'debit'].exec(description ?? '')?.[1];
 	return {
-		counterpartyName: name || null,
+		counterpartyName: clean(account ? account[2] : keyword),
 		counterpartyIban: normalizeIban(account?.[1]),
 		remittanceInformation: null,
 		referenceNumber: null,
