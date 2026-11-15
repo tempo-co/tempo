@@ -40,6 +40,7 @@ const ANSWER: LayoutAnswer = {
 	dateFormat: 'DD.MM.YYYY',
 	bookingDate: 0,
 	valueDate: 1,
+	transactionDate: null,
 	amount: {kind: 'debitCredit', moneyOutColumn: 4, moneyInColumn: 5},
 	decimalMark: ',',
 	thousandsSeparator: '.',

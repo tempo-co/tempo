@@ -6,6 +6,7 @@ import type {
 
 const FIELD_NAMES: Record<BankImportLayoutField, string> = {
   date: 'Date',
+  transactionDate: 'Transaction date',
   valueDate: 'Value date',
   amount: 'Amount',
   direction: 'Money in or out',

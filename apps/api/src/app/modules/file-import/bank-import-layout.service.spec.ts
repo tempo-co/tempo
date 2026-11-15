@@ -27,6 +27,7 @@ describe('buildLayout', () => {
 		counterpartyAccount: null,
 		description: [1],
 		account: null,
+		transactionDate: null,
 	};
 
 	/** The file's statements as the proposal previews them, with the layout the answer builds on it. */
@@ -137,5 +138,31 @@ describe('buildLayout', () => {
 				{field: 'counterpartyAccount', column: 6, header: 'IBAN'},
 			]),
 		);
+	});
+
+	it("dates a card statement's rows by settlement, and keeps the purchase date as the transaction date", () => {
+		const text = lines(
+			'Card,Purchase date,Settlement date,Description,Amount',
+			'1234,01/10/2026,03/10/2026,Example Shop,-4.20',
+			'1234,02/10/2026,03/10/2026,Example Cafe,-3.10',
+			'1234,04/10/2026,05/10/2026,Example Market,-41.25',
+		);
+
+		const proposed = propose(text, {
+			bookingDate: 2,
+			transactionDate: 1,
+			description: [3],
+			amount: {kind: 'signed', column: 4},
+		});
+
+		expect(proposed.rows?.map(({bookingDate, transactionDate}) => [bookingDate, transactionDate])).toEqual([
+			['2026-10-03', '2026-10-01'],
+			['2026-10-03', '2026-10-02'],
+			['2026-10-05', '2026-10-04'],
+		]);
+		expect(proposed.mapping.columns.slice(0, 2)).toEqual([
+			{field: 'date', column: 3, header: 'Settlement date'},
+			{field: 'transactionDate', column: 2, header: 'Purchase date'},
+		]);
 	});
 });

@@ -391,6 +391,7 @@ export function buildLayout(
 						: {column: answer.currency.column},
 			bookingDate: answer.bookingDate,
 			...(answer.valueDate === null ? {} : {valueDate: answer.valueDate}),
+			...(answer.transactionDate === null ? {} : {transactionDate: answer.transactionDate}),
 			amount:
 				amount.kind === 'signed'
 					? {kind: 'signed', column: amount.column}
@@ -424,6 +425,7 @@ export function mappingOf(layout: CsvLayout, header: readonly string[] | null): 
 		}
 	};
 	add('date', layout.bookingDate);
+	add('transactionDate', layout.transactionDate);
 	add('valueDate', layout.valueDate);
 	const {amount} = layout;
 	if (amount.kind === 'debitCredit') {

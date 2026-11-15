@@ -294,6 +294,8 @@ export type BankImportList = {
 /** What a column of a proposed layout holds. */
 export const BANK_IMPORT_LAYOUT_FIELDS = [
 	'date',
+	/** The date the payment was made, besides the date it was booked: a card purchase date. */
+	'transactionDate',
 	'valueDate',
 	'amount',
 	/** The column whose value says whether the amount went out or came in. */
