@@ -1,6 +1,6 @@
 import {zodResolver} from '@hookform/resolvers/zod';
 import {Loader} from 'lucide-react';
-import {useEffect, useState} from 'react';
+import {useState} from 'react';
 import {useForm} from 'react-hook-form';
 
 import {Button} from '@/components/ui/button';
@@ -47,6 +47,10 @@ type CreateTokenDialogProps = {
   onClosed?: () => void;
 };
 
+/**
+ * Give it a new `key` for each opening: every open then starts clean, while a close keeps its content, so a
+ * closing reveal does not flash the create form. The secret leaves memory on the next open or unmount.
+ */
 export function CreateTokenDialog({open, onOpenChange, onClosed}: CreateTokenDialogProps) {
   const [secret, setSecret] = useState<string>();
   const create = useCreatePersonalAccessToken(setSecret);
@@ -54,20 +58,6 @@ export function CreateTokenDialog({open, onOpenChange, onClosed}: CreateTokenDia
     resolver: zodResolver(createPersonalAccessTokenDtoSchema),
     defaultValues: {name: '', expiresInDays: 90},
   });
-
-  const resetDialog = () => {
-    setSecret(undefined);
-    create.reset();
-    form.reset({name: '', expiresInDays: 90});
-  };
-
-  // Every open starts clean, however it was opened; a close keeps its content until then, so a
-  // closing reveal does not flash the create form. The secret leaves memory on the next open or unmount.
-  useEffect(() => {
-    if (open) resetDialog();
-    // Runs only on the open transition; resetDialog is stable in what it clears.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (create.isPending) return;
