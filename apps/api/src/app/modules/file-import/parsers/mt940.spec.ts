@@ -119,6 +119,17 @@ describe('parseMt940', () => {
 			},
 		},
 		{
+			name: 'SWIFT /CNTP/ without an account or BIC',
+			information: [':86:/EREF/E2E-EXAMPLE-3//CNTP///Example Shop/EXAMPLE CITY//REMI/USTD//Card payment/'],
+			expected: {
+				counterpartyName: 'Example Shop',
+				counterpartyIban: null,
+				remittanceInformation: 'Card payment',
+				description: '/EREF/E2E-EXAMPLE-3//CNTP///Example Shop/EXAMPLE CITY//REMI/USTD//Card payment/',
+				referenceNumber: 'E2E-EXAMPLE-3',
+			},
+		},
+		{
 			name: 'SWIFT /BENM//NAME/ and /REMI/ codes, the counterparty account on the entry line after the amount',
 			entryDetails: 'NL20INGB0001234567',
 			information: [
@@ -180,7 +191,9 @@ describe('parseMt940', () => {
 
 		expect(only(file, 'utf8').counterpartyName).toBe('Jörg Müller');
 		expect(only(file, 'latin1').counterpartyName).toBe('Jörg Müller');
-		expect(parseFile(Buffer.from(`\uFEFF${file}`, 'utf8')).statements[0].rows[0].counterpartyName).toBe('Jörg Müller');
+		expect(parseFile(Buffer.from(`\uFEFF${file}`, 'utf8')).statements[0].rows[0].counterpartyName).toBe(
+			'Jörg Müller',
+		);
 	});
 
 	it.each([
@@ -197,7 +210,12 @@ describe('parseMt940', () => {
 		{
 			name: 'a space between the amount and the transaction type',
 			entry: ':61:2610051006D10,00 NRTIKREF-1//B1',
-			expected: {valueDate: '2026-10-05', bookingDate: '2026-10-06', referenceNumber: 'KREF-1', bankReference: 'B1'},
+			expected: {
+				valueDate: '2026-10-05',
+				bookingDate: '2026-10-06',
+				referenceNumber: 'KREF-1',
+				bankReference: 'B1',
+			},
 		},
 		{
 			name: 'spaces where the entry date goes',

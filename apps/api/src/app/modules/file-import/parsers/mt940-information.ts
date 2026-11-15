@@ -116,7 +116,7 @@ function clean(text: string | null | undefined): string | null {
 }
 
 function slashFields(text: string): InformationFields {
-	const values = splitOnKeys(text, SLASH_KEY, (value) => value.replace(/^\/+|\/+$/g, '').trim());
+	const values = splitOnKeys(text, SLASH_KEY, (value) => value.replace(/\/+$/, '').trim());
 	// CNTP is account/BIC/name/city.
 	const counterparty = values.get('CNTP')?.split('/') ?? [];
 	const reference = values.get('EREF');

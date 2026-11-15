@@ -295,7 +295,9 @@ describe('parseCamt053', () => {
 				{
 					accountIban: EXAMPLE_IBAN,
 					entriesSkipped: 1,
-					rows: [expect.objectContaining({bankReference: 'BOOKED', amount: '-12.50', balanceAfter: '987.50'})],
+					rows: [
+						expect.objectContaining({bankReference: 'BOOKED', amount: '-12.50', balanceAfter: '987.50'}),
+					],
 				},
 			],
 		});
