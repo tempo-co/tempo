@@ -55,7 +55,7 @@ import {ImportOutcome, decideOnFinalDays} from './never-sent-rows';
 import {MAX_ROWS_PER_DROP} from './parsers/parse-limits';
 import {NormalizedRow, NormalizedStatement, StatementBalance, StatementFormat} from './parsers/parse-result';
 import {ParseRunnerService} from './runner/parse-runner.service';
-import {RepeatedRows, StatementGap, joinStatements} from './statement-chain';
+import {RepeatedRows, StatementGap, gapsOutsideCoverage, joinStatements} from './statement-chain';
 
 export const BANK_IMPORT_NOT_FOUND = 'Import not found.';
 export const BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND = 'Row not found.';
@@ -245,9 +245,21 @@ export class BankImportService {
 								? [{bankAccountId: account.id, ...closingBalance}]
 								: [];
 						}),
-						statementGaps: accountRows.flatMap(({gaps, currency}, index) =>
-							gaps.map((gap) => ({bankAccountId: accounts[index].account.id, ...gap, currency})),
-						),
+						// On a synced account only the days its bank sync does not cover can be missing from Tempo.
+						statementGaps: accountRows.flatMap(({gaps, currency}, index) => {
+							const {account, connection} = accounts[index];
+							const covered =
+								connection.provider !== BANK_CONNECTION_PROVIDERS.FILE &&
+								account.syncCoveredFrom &&
+								account.syncCoveredThrough
+									? {from: account.syncCoveredFrom, through: account.syncCoveredThrough}
+									: null;
+							return gapsOutsideCoverage(gaps, covered).map((gap) => ({
+								bankAccountId: account.id,
+								...gap,
+								currency,
+							}));
+						}),
 					}),
 				);
 

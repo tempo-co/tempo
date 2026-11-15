@@ -2,7 +2,6 @@ import type {BankImportSummary} from '@tempo/contracts';
 import {ArrowDownToLine, CalendarRange, CheckCheck, FileWarning, Undo2} from 'lucide-react';
 import type {ElementType, ReactNode} from 'react';
 
-import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {StateMessage} from '@/components/shared/state-message';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {type BankLogos, bankLogoKey, useBankLogos} from '@/features/banking/api/use-bank-logos';
@@ -20,6 +19,7 @@ import {
   formatCount,
   formatDateRange,
   isNothingNew,
+  missingAmount,
   nameEndsWithCurrency,
   nothingNewCopy,
   undoneDescription,
@@ -161,7 +161,9 @@ function StatementGaps({
                     </span>
                   )}
                 </span>
-                <CurrencyAmount amount={Number(gap.amount)} currency={gap.currency} />
+                <span className='numeric whitespace-nowrap'>
+                  {missingAmount(gap.amount, gap.currency)}
+                </span>
               </li>
             );
           })}

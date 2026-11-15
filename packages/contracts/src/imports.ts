@@ -190,6 +190,7 @@ export type BankImportSummary = {
 	/**
 	 * Where a statement of the drop does not open at the balance the statement before it (same account and format)
 	 * closed at, in drop order: entries between them are missing from the files. The rows that are there are imported.
+	 * On a synced account only the days outside its bank sync coverage are listed, each uncovered stretch as one gap.
 	 */
 	statementGaps: BankImportStatementGap[];
 	undoneAt: string | null;

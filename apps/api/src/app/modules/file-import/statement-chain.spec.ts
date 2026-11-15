@@ -1,5 +1,5 @@
 import {NormalizedRow, NormalizedStatement, StatementBalance} from './parsers/parse-result';
-import {joinStatements} from './statement-chain';
+import {gapsOutsideCoverage, joinStatements} from './statement-chain';
 
 const row = (bookingDate: string, amount: string, bankReference: string | null = null): NormalizedRow => ({
 	bookingDate,
@@ -170,5 +170,35 @@ describe('joinStatements', () => {
 			joinStatements([statement([row('2026-10-07', '-15.00')], null, balance('2026-10-06', '60.00'))])
 				.closingBalance,
 		).toEqual(balance('2026-10-07', '60.00'));
+	});
+});
+
+describe('gapsOutsideCoverage', () => {
+	const gap = {from: '2026-10-05', to: '2026-10-20', amount: '-5.00'};
+
+	it.each([
+		{name: 'no coverage', coverage: null, expected: [gap]},
+		{name: 'coverage after it', coverage: {from: '2026-10-21', through: '2026-11-10'}, expected: [gap]},
+		{
+			name: 'coverage over its end',
+			coverage: {from: '2026-10-12', through: '2026-11-10'},
+			expected: [{...gap, to: '2026-10-11'}],
+		},
+		{
+			name: 'coverage over its start',
+			coverage: {from: '2026-09-01', through: '2026-10-07'},
+			expected: [{...gap, from: '2026-10-08'}],
+		},
+		{
+			name: 'coverage inside it',
+			coverage: {from: '2026-10-10', through: '2026-10-12'},
+			expected: [
+				{...gap, to: '2026-10-09'},
+				{...gap, from: '2026-10-13'},
+			],
+		},
+		{name: 'coverage over all of it', coverage: {from: '2026-10-05', through: '2026-10-20'}, expected: []},
+	])('keeps the days of a gap that bank sync does not cover, with $name', ({coverage, expected}) => {
+		expect(gapsOutsideCoverage([gap], coverage)).toEqual(expected);
 	});
 });

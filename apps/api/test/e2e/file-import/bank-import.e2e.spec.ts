@@ -807,19 +807,33 @@ describe('Bank imports', () => {
 		expect(await balanceFields(accountId)).toMatchObject({currentBalanceAmount: '55.00000000'});
 
 		// The next statement opens at 50.00 where the one before closed at 55.00: 5.00 went out that no file holds.
-		const gapped = await drop(agent, [
-			sixthToSeventh,
-			statement(
-				[{amount: '-10.00', bookingDate: '2026-10-09', reference: 'R4'}],
-				balances('50.00', '40.00', '2026-10-09', '2026-10-09'),
-			),
-		]).expect(201);
+		const ninth = statement(
+			[{amount: '-10.00', bookingDate: '2026-10-09', reference: 'R4'}],
+			balances('50.00', '40.00', '2026-10-09', '2026-10-09'),
+		);
+		const gapped = await drop(agent, [sixthToSeventh, ninth]).expect(201);
 
 		const gap = {bankAccountId: accountId, from: '2026-10-07', to: '2026-10-09', amount: '-5.00', currency: 'EUR'};
 		expect(gapped.body).toMatchObject({rowsAdded: 1, rowsAlreadyPresent: 2, statementGaps: [gap]});
 		expect(await balanceFields(accountId)).toMatchObject({currentBalanceAmount: '40.00000000'});
 		const history = (await agent.get('/bank-imports').expect(200)).body as BankImportList;
 		expect(history.imports.map(({statementGaps}) => statementGaps)).toEqual([[gap], []]);
+
+		// On a synced account only the days bank sync does not cover are named, and nothing when it covers them all.
+		const intoSynced = async (syncCoveredFrom: string) => {
+			const synced = await createOwner();
+			const connection = await fixtures.createConnection(synced.owner, {
+				nextSyncAt: new Date('2030-01-01T00:00:00.000Z'),
+			});
+			const account = await fixtures.createBankAccount(connection, {iban: EXAMPLE_IBAN});
+			await bankAccounts.update(account.id, {syncCoveredFrom, syncCoveredThrough: '2026-11-10'});
+			const imported = await drop(synced.agent, [sixthToSeventh, ninth]).expect(201);
+			expect(imported.body).toMatchObject({accounts: [{id: account.id}], rowsAdded: 3});
+			return {accountId: account.id, gaps: (imported.body as BankImportSummary).statementGaps};
+		};
+		const partly = await intoSynced('2026-10-08');
+		expect(partly.gaps).toEqual([{...gap, bankAccountId: partly.accountId, to: '2026-10-07'}]);
+		expect((await intoSynced('2026-10-07')).gaps).toEqual([]);
 	});
 
 	it('resolves a doubtful row of an imported-files account from a drop into a synced account alongside a balance save and another such drop', async () => {

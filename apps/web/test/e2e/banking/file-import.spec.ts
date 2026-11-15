@@ -563,11 +563,13 @@ test.describe('statement file import on Connections', () => {
       .setInputFiles([statement('statement-a.xml')]);
 
     const gaps = dialog.getByTestId('bank-import-statement-gaps');
-    await expect(gaps.getByText('Transactions missing between statements')).toBeVisible();
-    await expect(gaps).toContainText('The rest were imported.');
+    await expect(gaps.getByText('Some days are missing')).toBeVisible();
+    await expect(gaps).toContainText(
+      "These statements skip some days, so their transactions aren't in Tempo. Everything else was imported. Import the statements for these days to add them.",
+    );
     await expect(gaps.getByRole('listitem')).toHaveText([
-      /^7 Oct – 9 Oct 2026\s*Mock ASPSP checking account\s*-€1,200\.00$/,
-      /^30 Sept? – 9 Oct 2026\s*Example Card · EUR\s*€5\.00$/,
+      /^7 Oct – 9 Oct 2026\s*Mock ASPSP checking account\s*-€1,200\.00 missing$/,
+      /^30 Sept? – 9 Oct 2026\s*Example Card · EUR\s*€5\.00 missing$/,
     ]);
     // The counts still say what was imported.
     await expect(dialog.getByText('New transactions')).toBeVisible();

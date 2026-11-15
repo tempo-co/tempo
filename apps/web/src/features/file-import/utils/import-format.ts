@@ -1,6 +1,8 @@
 import type {BankImportSummary} from '@tempo/contracts';
 import {format, isThisYear, isToday, isYesterday, parseISO} from 'date-fns';
 
+import {formatCurrency} from '@/utils/format-currency';
+
 const countFormat = new Intl.NumberFormat();
 
 /** A count with the locale's thousands separator. */
@@ -69,10 +71,15 @@ export function nameEndsWithCurrency(name: string, currency: string) {
 
 /** What the summary says where a statement does not open at the balance the one before it closed at. */
 export const STATEMENT_GAPS_COPY = {
-  title: 'Transactions missing between statements',
+  title: 'Some days are missing',
   description:
-    "Where a statement doesn't open at the balance the one before it closed at, these files leave out transactions. The rest were imported. Import the statements for these days to add them:",
+    "These statements skip some days, so their transactions aren't in Tempo. Everything else was imported. Import the statements for these days to add them.",
 };
+
+/** A gap's amount as its line ends: `-€1,200.00 missing`. */
+export function missingAmount(amount: string, currency: string) {
+  return `${formatCurrency(Number(amount), currency)} missing`;
+}
 
 /** `Imported 3 files`; an undone import's summary says it was undone instead. */
 export function summaryTitle(summary: Pick<BankImportSummary, 'filesCount' | 'undoneAt'>) {

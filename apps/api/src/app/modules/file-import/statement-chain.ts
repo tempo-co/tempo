@@ -71,6 +71,36 @@ export function joinStatements(statements: readonly NormalizedStatement[]): Join
 	return {rows, repeated, gaps, closingBalance};
 }
 
+/**
+ * The days of each gap bank sync does not cover (`from` to `through`, inclusive), as one gap per uncovered stretch
+ * with the gap's whole amount: on a covered day sync has every transaction, so nothing is missing there. Without
+ * coverage every gap stays whole.
+ */
+export function gapsOutsideCoverage(
+	gaps: readonly StatementGap[],
+	coverage: {from: string; through: string} | null,
+): StatementGap[] {
+	if (!coverage) return [...gaps];
+	return gaps.flatMap((gap) => {
+		const parts: StatementGap[] = [];
+		if (gap.from < coverage.from) parts.push({...gap, to: earlier(gap.to, addDays(coverage.from, -1))});
+		if (gap.to > coverage.through) parts.push({...gap, from: later(gap.from, addDays(coverage.through, 1))});
+		return parts;
+	});
+}
+
+function addDays(day: string, days: number): string {
+	return new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+function earlier(left: string, right: string): string {
+	return left < right ? left : right;
+}
+
+function later(left: string, right: string): string {
+	return left > right ? left : right;
+}
+
 /** The statement's rows without those an earlier statement holds on the same day, counted into `repeated`. */
 function withoutRepeated(
 	incoming: readonly NormalizedRow[],
