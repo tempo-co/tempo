@@ -338,8 +338,8 @@ const PLACEHOLDER_REFERENCE = /^(?:NONREF|NOREF|NOREFERENCE|NOTPROVIDED|NOTAVAIL
 
 /**
  * The rows with only the references that identify a payment, trimmed; every other reference becomes null. A
- * placeholder identifies nothing. Nor does a reference more than one row of its own source carries: among the
- * incoming rows (one file's, or one sync's), or among the existing rows of one `source` (an import, or bank sync).
+ * placeholder identifies nothing. Nor does a reference more than one row of its own source carries, among the rows
+ * compared: the incoming rows (one file's, or one sync's), or the existing rows of one `source` (an import, or bank sync).
  * Banks fill the field with a transaction-type code, a card scheme or a number that restarts every day, and those
  * repeat within a file. A reused reference that does not repeat within one file is held off by the reference step's
  * `MATCH_WINDOW_DAYS`.
