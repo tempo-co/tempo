@@ -126,6 +126,50 @@ const ARCHIVE_ROWS = [
 	['2026-03-04', '2026-03-04', '-39.99000000', '6063000000000003', '2572.51000000'],
 	['2026-03-04', '2026-03-04', '-1.95000000', '6063000000000004', '2570.56000000'],
 ];
+// Two days of rows on the archive's account, as MT940 lists them: oldest first, and so do their balances.
+// [booking date, amount]
+const OLDEST_FIRST_ROWS = [
+	['2026-03-02', '-10.00'],
+	['2026-03-02', '-20.00'],
+	['2026-03-02', '30.00'],
+	['2026-03-04', '-40.00'],
+	['2026-03-04', '-50.00'],
+] as const;
+
+/** An MT940 file of the archive's account holding the given statements, the first opening at 1000.00. */
+function mt940OfArchiveAccount(
+	statements: ReadonlyArray<ReadonlyArray<readonly [day: string, amount: string]>>,
+): Buffer {
+	let cents = 100_000;
+	const money = (value: number) =>
+		`${Math.abs(value / 100)
+			.toFixed(2)
+			.replace('.', ',')}`;
+	const lines = statements.flatMap((rows, index) => {
+		const opening = cents;
+		const entries = rows.flatMap(([day, amount], row) => {
+			const value = Math.round(Number(amount) * 100);
+			cents += value;
+			const date = day.slice(2).replaceAll('-', '');
+			return [
+				`:61:${date}${date.slice(2)}${value < 0 ? 'D' : 'C'}${money(value)}NTRFNONREF`,
+				`:86:Example row ${row + 1}`,
+			];
+		});
+		const last = rows.at(-1)![0].slice(2).replaceAll('-', '');
+		const first = rows[0][0].slice(2).replaceAll('-', '');
+		return [
+			`:20:EXAMPLE-${index + 1}`,
+			`:25:${EXAMPLE_IBAN}`,
+			`:28C:${index + 1}/1`,
+			`:60F:C${first}EUR${money(opening)}`,
+			...entries,
+			`:62F:C${last}EUR${money(cents)}`,
+			'-',
+		];
+	});
+	return Buffer.from([...lines, ''].join('\r\n'));
+}
 const MARCH_ROWS = [...ARCHIVE_ROWS, ['2026-03-05', '2026-03-05', '-24.95000000', '6064000000000001', '2545.61000000']];
 const REVOLUT_HEADER = 'Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance';
 
@@ -303,15 +347,12 @@ describe('Bank imports', () => {
 			.getMany();
 	}
 
-	/** The owner's transaction list, first page, as the bank references of its rows. */
-	async function listedReferences(agent: TestAgent) {
-		const listed = await agent.get('/bank-transactions').expect(200);
-		const referenceById = new Map(
-			(await transactions.findBy({id: In(listed.body.transactions.map(({id}: {id: string}) => id))})).map(
-				({id, entryReference}) => [id, entryReference],
-			),
-		);
-		return listed.body.transactions.map(({id}: {id: string}) => referenceById.get(id));
+	/** The owner's transaction list, first page, as one stored field of its rows. */
+	async function listed(agent: TestAgent, field: 'entryReference' | 'amount') {
+		const page = await agent.get('/bank-transactions').expect(200);
+		const ids: string[] = page.body.transactions.map(({id}: {id: string}) => id);
+		const valueById = new Map((await transactions.findBy({id: In(ids)})).map((row) => [row.id, row[field]]));
+		return ids.map((id) => valueById.get(id));
 	}
 
 	/** The three fields the balance trend reads, as stored. */
@@ -468,7 +509,7 @@ describe('Bank imports', () => {
 		expect(rows.every((row) => row.importId === first.body.id && row.bankAccountId === account.id)).toBe(true);
 		// The statements list each day's rows newest first, and the transaction list shows them in that order.
 		const newestFirst = ARCHIVE_ROWS.map(([, , , reference]) => reference).reverse();
-		expect(await listedReferences(agent)).toEqual(newestFirst);
+		expect(await listed(agent, 'entryReference')).toEqual(newestFirst);
 		expect(rows[2]).toMatchObject({
 			creditDebitIndicator: 'CRDT',
 			transactionStatus: 'BOOK',
@@ -506,7 +547,7 @@ describe('Bank imports', () => {
 		const unzipped = await drop(agent, STATEMENT_FILES).expect(201);
 		expect(unzipped.body).toMatchObject({filesCount: 3, rowsParsed: 7, rowsAdded: 7, rowsAlreadyPresent: 0});
 		expect((await ownerRows(owner)).map(rowContent)).toEqual(rows.map(rowContent));
-		expect(await listedReferences(agent)).toEqual(newestFirst);
+		expect(await listed(agent, 'entryReference')).toEqual(newestFirst);
 
 		const history = await agent.get('/bank-imports').expect(200);
 		expect((history.body as BankImportList).imports.map(({id, undoneAt}) => [id, Boolean(undoneAt)])).toEqual([
@@ -516,6 +557,17 @@ describe('Bank imports', () => {
 		]);
 		// The undone import's account is gone; the unzipped drop created a new one.
 		expect((history.body as BankImportList).imports[2].accounts).toEqual([]);
+
+		// MT940 lists rows oldest first, yet the list shows each day's newest row first: the statement's dates tell
+		// its order, and within statements of one day each, its running balances do.
+		await agent.delete(`/bank-imports/${unzipped.body.id}`).set('Origin', ORIGIN).expect(204);
+		const newestFirstAmounts = OLDEST_FIRST_ROWS.map(([, amount]) => `${amount}000000`).reverse();
+		for (const statements of [[OLDEST_FIRST_ROWS], [OLDEST_FIRST_ROWS.slice(0, 3), OLDEST_FIRST_ROWS.slice(3)]]) {
+			const oldestFirst = await drop(agent, [mt940OfArchiveAccount(statements)]).expect(201);
+			expect(oldestFirst.body).toMatchObject({format: 'mt940', rowsAdded: OLDEST_FIRST_ROWS.length});
+			expect(await listed(agent, 'amount')).toEqual(newestFirstAmounts);
+			await agent.delete(`/bank-imports/${oldestFirst.body.id}`).set('Origin', ORIGIN).expect(204);
+		}
 	});
 
 	it('undoes exactly the rows one import inserted, keeping the rows and accounts of another', async () => {

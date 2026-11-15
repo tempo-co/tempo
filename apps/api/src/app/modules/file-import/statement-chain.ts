@@ -15,6 +15,11 @@ export type RepeatedRows = {reference: number; balance: number; date: number};
 export type JoinedStatements = {
 	/** Every statement's rows in order, without the rows an earlier statement of the drop already holds. */
 	rows: NormalizedRow[];
+	/**
+	 * The same rows listed newest first: later statements first, each statement's rows turned around when it lists
+	 * them oldest first.
+	 */
+	newestFirst: NormalizedRow[];
 	repeated: RepeatedRows;
 	gaps: StatementGap[];
 	/**
@@ -34,6 +39,8 @@ export type JoinedStatements = {
  */
 export function joinStatements(statements: readonly NormalizedStatement[]): JoinedStatements {
 	const rows: NormalizedRow[] = [];
+	// Each statement's rows newest first; statements come oldest first, so the later ones go in front.
+	const newestFirstByStatement: NormalizedRow[][] = [];
 	const repeated: RepeatedRows = {reference: 0, balance: 0, date: 0};
 	const gaps: StatementGap[] = [];
 	let closingBalance: StatementBalance | null = null;
@@ -47,6 +54,7 @@ export function joinStatements(statements: readonly NormalizedStatement[]): Join
 
 		const kept = followsOn ? statement.rows : withoutRepeated(statement.rows, rows, repeated);
 		rows.push(...kept);
+		newestFirstByStatement.unshift(listsOldestFirst(statement.rows) ? [...kept].reverse() : kept);
 
 		// A statement that repeats rows of an earlier one overlaps it, so it cannot open where the previous one closed.
 		const overlaps = kept.length < statement.rows.length;
@@ -68,7 +76,43 @@ export function joinStatements(statements: readonly NormalizedStatement[]): Join
 		}
 		previous = statement;
 	}
-	return {rows, repeated, gaps, closingBalance};
+	return {rows, newestFirst: newestFirstByStatement.flat(), repeated, gaps, closingBalance};
+}
+
+/**
+ * Whether a statement lists its rows oldest first. Its dates decide when they rise more often than they fall between
+ * neighbouring rows, or the other way round. When they don't (one day, or as many rises as falls), the balances after
+ * neighbouring rows decide, by which of the two each row's amount leads to. Otherwise the file's order stands: banks
+ * list newest first.
+ */
+export function listsOldestFirst(rows: readonly NormalizedRow[]): boolean {
+	const neighbours = rows.slice(1).map((later, index) => [rows[index], later] as const);
+	const byDates = sum(
+		neighbours.map(([earlier, later]) => {
+			const [from, to] = [matchDay(earlier), matchDay(later)];
+			return !from || !to || from === to ? 0 : from < to ? 1 : -1;
+		}),
+	);
+	if (byDates !== 0) return byDates > 0;
+	return sum(neighbours.map(([earlier, later]) => balanceDirection(earlier, later))) > 0;
+}
+
+/** 1 when the later row's balance follows from the earlier one's, -1 when the reverse holds, else 0. */
+function balanceDirection(earlier: NormalizedRow, later: NormalizedRow): number {
+	if (earlier.balanceAfter === null || later.balanceAfter === null) return 0;
+	const [before, after] = [units(earlier.balanceAfter), units(later.balanceAfter)];
+	// Rows whose amounts cancel out (a payment and its refund, two zero rows) fit either way and tell nothing.
+	const forward = before + units(later.amount) === after;
+	const backward = after + units(earlier.amount) === before;
+	return forward === backward ? 0 : forward ? 1 : -1;
+}
+
+function units(amount: string): bigint {
+	return parseDecimal(amount, '.')!.units;
+}
+
+function sum(values: readonly number[]): number {
+	return values.reduce((total, value) => total + value, 0);
 }
 
 /**
