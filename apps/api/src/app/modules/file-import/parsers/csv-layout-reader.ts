@@ -5,6 +5,7 @@ import {CSV_LAYOUTS} from './csv-layouts';
 import {isCalendarDate, serialDate} from './dates';
 import {Decimal, amountScale, formatUnits, parseDecimal} from './decimal';
 import {NormalizedRow, NormalizedStatement, ParseRefusal} from './parse-result';
+import {looksLikeRow} from './table-sample';
 import {isXlsx, readFirstSheet} from './xlsx';
 import {isZip} from './zip-reader';
 
@@ -75,7 +76,7 @@ const BIC_AND_IBAN = /^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\s+([A-Z]{2}\d{2}[A-Z0
 class RowProblem {}
 
 type ReadRow = NormalizedRow & {iban: string | null; units: bigint; balance: Decimal | null};
-type Attempt = {read: CsvLayoutRead} | {nearMiss: string} | null;
+type Attempt = {read: CsvLayoutRead} | {nearMiss: string} | {skipsRows: true} | null;
 
 /**
  * Reads a file with the first layout that claims it, or returns null when none does. A layout with a header claims
@@ -84,7 +85,9 @@ type Attempt = {read: CsvLayoutRead} | {nearMiss: string} | null;
  * claims a file only when all of it reads; otherwise the next layout is tried.
  *
  * With `owned`, a header that matches but whose rows do not read lets the next layout try; only when no layout
- * reads the file is it refused with `layout_not_recognized`, naming the first that matched.
+ * reads the file is it refused with `layout_not_recognized`, naming the first that matched. A layout whose skipped
+ * lines above the table look like rows does not read the file either: when no other layout does, it is refused with
+ * `layout_not_mappable` (before any near miss) rather than read without those rows.
  */
 export function readCsvLayout(
 	bytes: Uint8Array,
@@ -97,13 +100,20 @@ export function readCsvLayout(
 		...layouts.filter(({recognize}) => !('header' in recognize)),
 	];
 	let nearMiss: string | null = null;
+	let skipsRows = false;
 	for (const layout of ordered) {
 		const attempt = attemptLayout(source, layout, options);
 		if (!attempt) continue;
 		if ('read' in attempt) return attempt.read;
+		if ('skipsRows' in attempt) {
+			skipsRows = true;
+			continue;
+		}
 		if (!options.owned) throw new ParseRefusal('layout_not_recognized', attempt.nearMiss);
 		nearMiss ??= attempt.nearMiss;
 	}
+	// Rows a layout would skip are the refusal to name, before a layout whose rows do not read.
+	if (skipsRows) throw new ParseRefusal('layout_not_mappable');
 	if (nearMiss) throw new ParseRefusal('layout_not_recognized', nearMiss);
 	return null;
 }
@@ -112,11 +122,14 @@ function attemptLayout(source: TableSource, layout: CsvLayout, options: CsvLayou
 	const {recognize} = layout;
 	const skipBefore = layout.skipBefore ?? 0;
 	const workbook = layout.source === 'xlsx';
+	const skipped = (records: readonly TableCell[][]) =>
+		records.slice(0, skipBefore).some((cells) => looksLikeRow(cells.map(({text}) => text)));
 	if ('header' in recognize) {
 		const expected = [...(recognize.preamble ?? []), recognize.header];
 		const head = workbook ? source.workbookRows() : source.head(layout, skipBefore + expected.length);
 		if (!head || !expected.every((row, index) => sameCells(head[skipBefore + index], row, workbook))) return null;
 		const records = workbook ? head : source.records(layout);
+		if (options.owned && records && skipped(records)) return {skipsRows: true};
 		const read = records && readTable(records, skipBefore + expected.length, layout, options);
 		return read ? {read} : {nearMiss: layout.id};
 	}
@@ -126,6 +139,7 @@ function attemptLayout(source: TableSource, layout: CsvLayout, options: CsvLayou
 	// A workbook does not store the empty cells at a row's end, so its first row may be narrower.
 	const width = rowWidth(first, workbook);
 	if (workbook ? width > recognize.columnCount : width !== recognize.columnCount) return null;
+	if (options.owned && skipped(records)) return {skipsRows: true};
 	const read = readTable(records, skipBefore, layout, options);
 	return read ? {read} : null;
 }

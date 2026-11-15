@@ -14,6 +14,11 @@ export type TableSample = {
 	columnCount: number;
 	/** Lines above the header, or above the first row when there is none. */
 	skipBefore: number;
+	/**
+	 * Lines above the table that look like rows (`looksLikeRow`). A layout skipping them would drop them, so such a
+	 * table is not mapped.
+	 */
+	rowsAbove: number;
 	/** Lines below the last row. */
 	skipAfter: number;
 	/** The header's cells as written, trimmed; null when the table has none. */
@@ -33,7 +38,7 @@ const LETTER = /\p{L}/u;
  * follow below a line of another width (skipping the lines below it would drop them). The rows start at the run's
  * first line with a cell that looks like a value; the line right above it is the header when none of its cells
  * does, and lines of the run above the header are lines above the table. A file whose first line looks like a row
- * has no header.
+ * has no header. Lines above the table that look like rows are counted (`rowsAbove`).
  */
 export function sampleTable(bytes: Uint8Array): TableSample | null {
 	const table = isZip(bytes) ? (isXlsx(bytes) ? workbookTable(bytes) : null) : textTable(bytes);
@@ -53,6 +58,7 @@ export function sampleTable(bytes: Uint8Array): TableSample | null {
 		shape,
 		columnCount,
 		skipBefore: start,
+		rowsAbove: records.slice(0, start).filter(looksLikeRow).length,
 		skipAfter: records.length - end,
 		header,
 		rowCount: rows.length,
@@ -64,6 +70,14 @@ export function sampleTable(bytes: Uint8Array): TableSample | null {
 			columnCount,
 		}),
 	};
+}
+
+/**
+ * A line that looks like a transaction row rather than a title, an account line or a header: two or more of its cells
+ * look like values (a date and an amount, say).
+ */
+export function looksLikeRow(cells: readonly string[]): boolean {
+	return cells.filter(looksLikeValue).length >= 2;
 }
 
 /** A cell with a digit and at most three letters, like an amount, a date or an account number. */

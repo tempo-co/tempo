@@ -11,6 +11,8 @@ export const PARSE_REFUSAL_CODES = [
 	'layout_not_recognized',
 	/** A file no reader claims that reads as a table: delimited text, or a workbook that is no Revolut statement. */
 	'layout_unknown',
+	/** An owner's saved layout claims the file but would skip lines above its table that look like rows. */
+	'layout_not_mappable',
 ] as const;
 export type ParseRefusalCode = (typeof PARSE_REFUSAL_CODES)[number];
 
