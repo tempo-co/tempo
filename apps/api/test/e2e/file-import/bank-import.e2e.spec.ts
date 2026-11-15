@@ -303,6 +303,17 @@ describe('Bank imports', () => {
 			.getMany();
 	}
 
+	/** The owner's transaction list, first page, as the bank references of its rows. */
+	async function listedReferences(agent: TestAgent) {
+		const listed = await agent.get('/bank-transactions').expect(200);
+		const referenceById = new Map(
+			(await transactions.findBy({id: In(listed.body.transactions.map(({id}: {id: string}) => id))})).map(
+				({id, entryReference}) => [id, entryReference],
+			),
+		);
+		return listed.body.transactions.map(({id}: {id: string}) => referenceById.get(id));
+	}
+
 	/** The three fields the balance trend reads, as stored. */
 	async function balanceFields(bankAccountId: string) {
 		const {currentBalanceAmount, currentBalanceType, balanceUpdatedAt} = await bankAccounts.findOneByOrFail({
@@ -455,6 +466,9 @@ describe('Bank imports', () => {
 			]),
 		).toEqual(ARCHIVE_ROWS);
 		expect(rows.every((row) => row.importId === first.body.id && row.bankAccountId === account.id)).toBe(true);
+		// The statements list each day's rows newest first, and the transaction list shows them in that order.
+		const newestFirst = ARCHIVE_ROWS.map(([, , , reference]) => reference).reverse();
+		expect(await listedReferences(agent)).toEqual(newestFirst);
 		expect(rows[2]).toMatchObject({
 			creditDebitIndicator: 'CRDT',
 			transactionStatus: 'BOOK',
@@ -492,6 +506,7 @@ describe('Bank imports', () => {
 		const unzipped = await drop(agent, STATEMENT_FILES).expect(201);
 		expect(unzipped.body).toMatchObject({filesCount: 3, rowsParsed: 7, rowsAdded: 7, rowsAlreadyPresent: 0});
 		expect((await ownerRows(owner)).map(rowContent)).toEqual(rows.map(rowContent));
+		expect(await listedReferences(agent)).toEqual(newestFirst);
 
 		const history = await agent.get('/bank-imports').expect(200);
 		expect((history.body as BankImportList).imports.map(({id, undoneAt}) => [id, Boolean(undoneAt)])).toEqual([

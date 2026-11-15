@@ -1,5 +1,5 @@
 import {Injectable, Logger} from '@nestjs/common';
-import {FindOptionsSelect, In, IsNull, Not, Raw, Repository} from 'typeorm';
+import {FindOptionsSelect, In, IsNull, Not, QueryRunner, Raw, Repository} from 'typeorm';
 
 import type {NormalizedRow} from '@modules/file-import/parsers/parse-result';
 
@@ -151,6 +151,22 @@ export type BankTransactionInput = {
 };
 
 type BankTransactionValues = ReturnType<BankTransactionPersistenceService['toBankTransactionValues']>;
+
+/**
+ * Banks and statement files give a row no time of day, and every row one database transaction inserts shares its
+ * `now()`. Each row is stamped a microsecond before the row listed above it, counting on across the writes of one
+ * transaction, so the transaction list's `createdAt` tie-break shows a day's rows in the order the bank or file
+ * lists them, newest first. Updates never set it, so a row keeps the time a write first stored it. Every caller writes
+ * inside a transaction; without one, each chunk of a large import would start from its own `now()`.
+ */
+const stampedRowsByTransaction = new WeakMap<QueryRunner, number>();
+
+function listedOrderCreatedAt(repository: Repository<BankTransaction>, count: number) {
+	const runner = repository.manager.queryRunner;
+	const first = runner ? (stampedRowsByTransaction.get(runner) ?? 0) : 0;
+	if (runner) stampedRowsByTransaction.set(runner, first + count);
+	return Array.from({length: count}, (_, index) => () => `now() - interval '${first + index} microseconds'`);
+}
 
 @Injectable()
 export class BankTransactionPersistenceService {
@@ -326,11 +342,12 @@ export class BankTransactionPersistenceService {
 		const overwriteColumns = Object.keys(transactionValues[0]).filter(
 			(column) => !conflictColumns.includes(column),
 		);
+		const createdAt = listedOrderCreatedAt(repository, transactionValues.length);
 		const upsertResult = await repository
 			.createQueryBuilder()
 			.insert()
 			.into(BankTransaction)
-			.values(transactionValues)
+			.values(transactionValues.map((value, position) => ({...value, createdAt: createdAt[position]})))
 			.orUpdate(overwriteColumns, conflictColumns, {
 				// A row the categorization worker holds keeps its values until the worker finishes, except one that
 				// now carries a currency exchange marker, so the exchange recompute can take it out of categorization.
@@ -444,7 +461,9 @@ export class BankTransactionPersistenceService {
 			return {...value, stableIdentityKey, importId, statementNumbering};
 		});
 		const insertedTransactionIds: string[] = [];
-		for (const chunk of chunkArray(transactionValues, BATCH_WRITE_CHUNK_SIZE)) {
+		const createdAt = listedOrderCreatedAt(repository, transactionValues.length);
+		const listedValues = transactionValues.map((value, position) => ({...value, createdAt: createdAt[position]}));
+		for (const chunk of chunkArray(listedValues, BATCH_WRITE_CHUNK_SIZE)) {
 			const result = await repository
 				.createQueryBuilder()
 				.insert()
