@@ -32,13 +32,14 @@ export class RevocationSafeRedisStore extends RedisStore {
 		return session;
 	}
 
-	override async set(sid: string, sess: SessionData, cb?: Callback) {
+	override async set(sid: string, sess: SessionData, cb?: Callback): Promise<void> {
 		// New sessions (login, signup) are created normally. Sessions here always expire (cookie maxAge).
 		const expires = sess.cookie.expires;
-		if (!this.loadedSessions.has(sess) || !expires) return super.set(sid, sess, cb);
-
-		const ttl = Math.ceil((new Date(expires).getTime() - Date.now()) / 1000);
-		if (ttl <= 0) return super.set(sid, sess, cb);
+		const ttl = expires ? Math.ceil((new Date(expires).getTime() - Date.now()) / 1000) : 0;
+		if (!this.loadedSessions.has(sess) || ttl <= 0) {
+			await super.set(sid, sess, cb);
+			return;
+		}
 
 		try {
 			// XX: only overwrite the session if it still exists.

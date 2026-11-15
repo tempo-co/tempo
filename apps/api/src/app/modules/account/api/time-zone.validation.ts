@@ -7,7 +7,7 @@ export const INVALID_TIME_ZONE = 'timeZone must be a supported IANA time zone';
 
 /** Accepts a supported time zone and stores it in the API's spelling; anything else fails validation. */
 export function IsSupportedTimeZone(options?: ValidationOptions): PropertyDecorator {
-	const normalize = Transform(({value}) => supportedTimeZone(value) ?? value);
+	const normalize = Transform(({value}: {value: unknown}) => supportedTimeZone(value) ?? value);
 	const validate = ValidateBy(
 		{
 			name: 'isSupportedTimeZone',

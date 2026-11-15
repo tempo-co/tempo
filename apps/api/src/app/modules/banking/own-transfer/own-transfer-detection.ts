@@ -42,7 +42,7 @@ export type OwnTransferTransaction = {
 	/** The party the direction names (creditor of a debit, debtor of a credit), as the provider reported it. */
 	counterpartyName: string | null;
 	description: string | null;
-	override: OwnTransferOverride | string | null;
+	override: string | null;
 };
 
 export type OwnTransferResult = {

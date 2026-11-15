@@ -17,14 +17,14 @@ export async function resetSingleStagingAccountPassword(queryable: Pick<DataSour
 		throw new Error('staging password must be between 16 and 255 UTF-8 bytes');
 	}
 
-	const accounts = (await queryable.query('SELECT id FROM accounts')) as Array<{id: string}>;
+	const accounts = await queryable.query<Array<{id: string}>>('SELECT id FROM accounts');
 	if (accounts.length !== 1) throw new Error('expected exactly one staging account');
 
 	const passwordHash = await argon2.hash(password);
-	const [updated, affectedRows] = (await queryable.query(
+	const [updated, affectedRows] = await queryable.query<[Array<{id: string}>, number]>(
 		'UPDATE accounts SET password = $1, name = $2, email = $3, "updatedAt" = NOW() WHERE id = $4 RETURNING id',
 		[passwordHash, VERIFIED_ACCOUNT_NAME, VERIFIED_ACCOUNT_EMAIL, accounts[0].id],
-	)) as [Array<{id: string}>, number];
+	);
 	if (updated.length !== 1 || affectedRows !== 1) {
 		throw new Error('password update did not affect exactly one staging account');
 	}
@@ -33,7 +33,7 @@ export async function resetSingleStagingAccountPassword(queryable: Pick<DataSour
 async function readStagingPassword() {
 	const chunks: Buffer[] = [];
 	let size = 0;
-	for await (const chunk of process.stdin) {
+	for await (const chunk of process.stdin as AsyncIterable<Buffer | string>) {
 		const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
 		size += bytes.length;
 		if (size > 256) throw new Error('staging password input is too large');

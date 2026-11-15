@@ -4,7 +4,6 @@ import type {
 	BankTransactionFinancialEventType,
 } from '@tempo/contracts';
 
-import type {BankTransactionDirection} from './bank-transaction-direction';
 import {normalizeBankTransactionText} from './bank-transaction-display';
 import {normalizeCurrency} from './services/bank-transaction-amount-conversion.utils';
 
@@ -107,8 +106,8 @@ function hasForeignExchangeSpotCode(code: string | null | undefined, subCode: st
 }
 
 export function getBankTransactionCashFlowTreatment(
-	financialEventType: BankTransactionFinancialEventType | string | null | undefined,
-	direction: BankTransactionDirection | string | null | undefined,
+	financialEventType: string | null | undefined,
+	direction: string | null | undefined,
 	ownTransferEvidence?: string | null,
 ): BankTransactionCashFlowTreatment {
 	if (financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE || ownTransferEvidence) {
