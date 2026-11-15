@@ -310,18 +310,59 @@ function bankNameOf(value: string | null): string | null {
 	return name || null;
 }
 
+/** A masked IBAN, compact or in blocks of four: two letters, two digits and 11 to 30 letters or digits. */
+const MASKED_IBAN = /^[Aa]{2}99[Aa9]{11,30}$/;
+const MASKED_IBAN_IN_TEXT = /(?<![Aa9])[Aa]{2}99(?:(?: [Aa9]{4}){2,7}(?: [Aa9]{1,4})?|[Aa9]{11,30})(?![Aa9])/;
+/** An old account number, digits only, which the reader leaves out of a counterparty account. */
+const MASKED_ACCOUNT_NUMBER = /^9+$/;
+const MASKED_BIC_AND_IBAN = /^[A9]{8}(?:[A9]{3})? [Aa]{2}99[Aa9]{11,30}$/;
+
+/**
+ * The answer without the account columns and line its values cannot fill, judged by the sample's masked shapes: an
+ * account column whose values are not all IBANs (a sort code and account number, a card number), an account line
+ * without an IBAN, and a counterparty account column holding something other than IBANs and old account numbers.
+ * Such a file then names no account and is asked about by bank and currency, rather than refused.
+ */
+function withReadableAccounts(answer: LayoutAnswer, sample: TableSample): LayoutAnswer {
+	const holds = (column: number, fits: (shape: string) => boolean) =>
+		(sample.masked.columns[column]?.shapes ?? []).every((shape) => shape === '' || fits(shape));
+	const iban = (shape: string) => MASKED_IBAN.test(shape.replace(/ /g, ''));
+	const {account, counterpartyAccount} = answer;
+	const accountReadable =
+		account === null ||
+		('column' in account
+			? holds(account.column, iban)
+			: !!sample.masked.linesAbove
+					.find(({line}) => line === account.line)
+					?.cells.some((cell) => MASKED_IBAN_IN_TEXT.test(cell)));
+	const counterpartyReadable =
+		counterpartyAccount === null ||
+		holds(
+			counterpartyAccount,
+			(shape) =>
+				iban(shape) || MASKED_ACCOUNT_NUMBER.test(shape.replace(/ /g, '')) || MASKED_BIC_AND_IBAN.test(shape),
+		);
+	return {
+		...answer,
+		account: accountReadable ? account : null,
+		counterpartyAccount: counterpartyReadable ? counterpartyAccount : null,
+	};
+}
+
 /**
  * The layout the answer describes, on the table the parse child found: its header (or column count), source and
  * skipped lines come from the file, the columns and formats from the answer. Only the answer's layout fields are
- * used. Null when the answer names a currency that is no ISO 4217 code; `validateCsvLayout` checks everything else,
- * such as an account line that is not above the table.
+ * used, less the account columns and line their values cannot fill (`withReadableAccounts`). Null when the answer
+ * names a currency that is no ISO 4217 code; `validateCsvLayout` checks everything else, such as an account line
+ * that is not above the table.
  */
 export function buildLayout(
-	answer: LayoutAnswer,
+	proposed: LayoutAnswer,
 	sample: TableSample,
 	defaultCurrency: string,
 ): {layout: unknown; currencyNeeded: boolean} | null {
 	const {shape} = sample;
+	const answer = withReadableAccounts(proposed, sample);
 	if (answer.currency && 'code' in answer.currency && !ISO_CURRENCY_CODES.has(answer.currency.code)) return null;
 	const {amount} = answer;
 	return {

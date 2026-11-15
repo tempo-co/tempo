@@ -392,6 +392,9 @@ function readRow(
 	const cell = (column: number) => cells[column].text.trim();
 	const optional = (column: number | undefined) => (column === undefined ? null : cell(column) || null);
 	const date = (column: number | undefined) => (column === undefined ? null : readDate(cells[column], layout));
+	// A value or transaction date may be left empty on some rows (card payments); the booking date may not.
+	const optionalDate = (column: number | undefined) =>
+		column === undefined || cell(column) === '' ? null : date(column);
 
 	let iban: string | null = lineIban;
 	if (layout.accountIban !== undefined) {
@@ -422,8 +425,8 @@ function readRow(
 		units: amount.units,
 		balance,
 		bookingDate: date(layout.bookingDate),
-		valueDate: date(layout.valueDate),
-		transactionDate: date(layout.transactionDate),
+		valueDate: optionalDate(layout.valueDate),
+		transactionDate: optionalDate(layout.transactionDate),
 		amount: formatUnits(amount.units, amountScale(amount)),
 		creditDebitIndicator: amount.units < 0n ? 'DBIT' : 'CRDT',
 		currency,

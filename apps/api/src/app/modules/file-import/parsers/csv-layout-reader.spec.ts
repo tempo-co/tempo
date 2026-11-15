@@ -428,6 +428,37 @@ describe("an owner's saved layouts", () => {
 		]);
 	});
 
+	it('read an empty value date or transaction date as none, and refuse an empty booking date', () => {
+		const layout: CsvLayout = {
+			...BALANCE,
+			recognize: {header: ['Date', 'Value date', 'Purchase date', 'Description', 'Amount']},
+			valueDate: 1,
+			transactionDate: 2,
+			amount: {kind: 'signed', column: 4},
+			description: [3],
+		};
+		delete layout.balance;
+		const text = [
+			'Date,Value date,Purchase date,Description,Amount',
+			'02/03/2026,02/03/2026,,Example,-4.50',
+			'03/03/2026,,01/03/2026,Example,-650.00',
+			'',
+		].join('\n');
+
+		expect(
+			readCsvLayout(file(text), [layout], {owned: true, today: '2026-11-13'})?.statements[0].rows.map(
+				({bookingDate, valueDate, transactionDate}) => [bookingDate, valueDate, transactionDate],
+			),
+		).toEqual([
+			['2026-03-02', '2026-03-02', null],
+			['2026-03-03', null, '2026-03-01'],
+		]);
+		expect(refusal(text.replace('03/03/2026,,', ',,'), [layout])).toEqual({
+			code: 'layout_not_recognized',
+			layout: layout.id,
+		});
+	});
+
 	it.each([
 		{
 			name: 'parentheses, a trailing minus and currency symbols',
