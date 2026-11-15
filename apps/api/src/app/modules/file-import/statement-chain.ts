@@ -1,7 +1,7 @@
 import {MatchExistingRow, matchDay, matchTransactions} from '@modules/banking/bank-transaction-matcher';
 
 import {amountScale, formatUnits, parseDecimal} from './parsers/decimal';
-import {NormalizedRow, NormalizedStatement, StatementBalance} from './parsers/parse-result';
+import {NormalizedRow, NormalizedStatement, StatementBalance, StatementFormat} from './parsers/parse-result';
 
 /**
  * Where one statement does not open at the balance the statement before it closed at: entries between them are
@@ -54,7 +54,8 @@ export function joinStatements(statements: readonly NormalizedStatement[]): Join
 
 		const kept = followsOn ? statement.rows : withoutRepeated(statement.rows, rows, repeated);
 		rows.push(...kept);
-		newestFirstByStatement.unshift(listsOldestFirst(statement.rows) ? [...kept].reverse() : kept);
+		const oldestFirst = listsOldestFirst(statement.rows, OLDEST_FIRST_FORMATS.has(statement.format));
+		newestFirstByStatement.unshift(oldestFirst ? [...kept].reverse() : kept);
 
 		// A statement that repeats rows of an earlier one overlaps it, so it cannot open where the previous one closed.
 		const overlaps = kept.length < statement.rows.length;
@@ -80,12 +81,24 @@ export function joinStatements(statements: readonly NormalizedStatement[]): Join
 }
 
 /**
+ * Formats that list a statement's rows oldest first, which decides a statement whose dates and balances leave its
+ * order open. Revolut's exports and ABN AMRO's TXT export list oldest first, and MT940 statement lines run from the
+ * opening to the closing balance. CAMT, OFX and bank CSV files come in either order.
+ */
+export const OLDEST_FIRST_FORMATS: ReadonlySet<StatementFormat> = new Set([
+	'revolutCsv',
+	'revolutXlsx',
+	'mt940',
+	'abnAmroTxt',
+]);
+
+/**
  * Whether a statement lists its rows oldest first. Its dates decide when they rise more often than they fall between
  * neighbouring rows, or the other way round. When they don't (one day, or as many rises as falls), the balances after
- * neighbouring rows decide, by which of the two each row's amount leads to. Otherwise the file's order stands: banks
- * list newest first.
+ * neighbouring rows decide, by which of the two each row's amount leads to. Otherwise the order the format is known to
+ * list in stands (`formatListsOldestFirst`), and else the file's: banks list newest first.
  */
-export function listsOldestFirst(rows: readonly NormalizedRow[]): boolean {
+export function listsOldestFirst(rows: readonly NormalizedRow[], formatListsOldestFirst = false): boolean {
 	const neighbours = rows.slice(1).map((later, index) => [rows[index], later] as const);
 	const byDates = sum(
 		neighbours.map(([earlier, later]) => {
@@ -94,7 +107,8 @@ export function listsOldestFirst(rows: readonly NormalizedRow[]): boolean {
 		}),
 	);
 	if (byDates !== 0) return byDates > 0;
-	return sum(neighbours.map(([earlier, later]) => balanceDirection(earlier, later))) > 0;
+	const byBalances = sum(neighbours.map(([earlier, later]) => balanceDirection(earlier, later)));
+	return byBalances !== 0 ? byBalances > 0 : formatListsOldestFirst;
 }
 
 /** 1 when the later row's balance follows from the earlier one's, -1 when the reverse holds, else 0. */
