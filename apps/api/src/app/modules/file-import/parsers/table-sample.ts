@@ -148,13 +148,20 @@ export function rowsOfTable(
 			const cell = (cells[column] ?? '').trim();
 			return cell === '' || DATE_SHAPE.test(cell) || isPendingWord(cell);
 		});
+	// A line cut short with a date where the rows have one is a row too, though it holds only one value.
+	const cutShort = (cells: readonly string[]) =>
+		cells.length < columnCount && dateColumns.some((column) => DATE_SHAPE.test((cells[column] ?? '').trim()));
 	const below = (cells: readonly string[]) =>
-		looksLikeRow(cells) && !paddedLine(cells, columnCount) && fitsDateColumns(cells);
+		(looksLikeRow(cells) || cutShort(cells)) && !paddedLine(cells, columnCount) && fitsDateColumns(cells);
 	return {above: (cells) => cells.length >= columnCount && below(cells), below, fitsDateColumns};
 }
 
-/** A cell written like a date: `2026-10-05`, `5.10.2026`, `2026.10.05.`, `05 Oct 2026`, `20261005`, a time after it. */
-const DATE_SHAPE = /^(?:\d{1,4}[./-]\d{1,2}[./-]\d{1,4}\.?|\d{1,2}[ -]\p{L}{3,4}\.?[ -]\d{2,4}|\d{8})(?:[ T].*)?$/u;
+/**
+ * A cell written like a date: `2026-10-05`, `5.10.2026`, `2026.10.05.`, `05 Oct 2026`, `20261005` (eight digits only
+ * when they make a date, not a reference), a time after it.
+ */
+const DATE_SHAPE =
+	/^(?:\d{1,4}[./-]\d{1,2}[./-]\d{1,4}\.?|\d{1,2}[ -]\p{L}{3,4}\.?[ -]\d{2,4}|(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))(?:[ T].*)?$/u;
 
 /**
  * A line that looks like a transaction row rather than a title, an account line or a header: two or more of its cells

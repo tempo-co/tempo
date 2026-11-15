@@ -323,6 +323,22 @@ describe('sampleTable', () => {
 				),
 			),
 		).toMatchObject({rowsAbove: 1});
+		// Eight-digit references are no dates: a last row with a word there is a row.
+		expect(
+			sampleTable(
+				Buffer.from(
+					'Date;Amount;Reference;Description\n2026-10-02;-12.50;10000001;Shop\n2026-10-05;2500.00;10000002;Salary\n2026-10-09;-62.10;INV-77;Energy\n',
+				),
+			),
+		).toMatchObject({skipAfter: 0, rowCount: 3});
+		// A line cut short below the table with a date where the rows have one is a row a layout would drop.
+		expect(
+			sampleTable(
+				Buffer.from(
+					'Date;Amount;Description\n2026-10-02;-12.50;Shop\n2026-10-05;2500.00;Salary\n2026-10-10;Cafe\n',
+				),
+			),
+		).toMatchObject({rowsBelow: 1});
 		// A date with a four-letter month is a value too.
 		const wide = (rows: string[]) => Buffer.from(['Date;Amount;Description;A;B;C;D;E', ...rows, ''].join('\n'));
 		const wideRows = ['01 Sept 2026;-4.20;Cafe;a;b;c;d;e', '02 Sept 2026;-5.20;Cafe;a;b;c;d;e'];
