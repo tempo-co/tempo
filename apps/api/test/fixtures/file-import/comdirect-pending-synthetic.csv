@@ -1,0 +1,8 @@
+
+"Umsätze Girokonto";"Zeitraum: 01.10.2026 - 31.10.2026";
+
+"Buchungstag";"Wertstellung (Valuta)";"Vorgang";"Buchungstext";"Umsatz in EUR";
+"offen";"--";"Kartenverfügung";"Buchungstext: Example Market 1234";"-41,25";
+"05.10.2026";"05.10.2026";"Lastschrift / Belastung";"Auftraggeber: Example Energy AG Buchungstext: Example bill";"-62,10";
+"02.10.2026";"02.10.2026";"Übertrag / Überweisung";"Auftraggeber: Example Employer GmbH Buchungstext: Example salary";"2.100,00";
+

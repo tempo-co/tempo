@@ -1,0 +1,5 @@
+Date,Counter Party,Reference,Type,Amount (GBP),Balance (GBP),Spending Category,Notes
+01/10/2026,Corner Shop,Example card 1234,CARD PAYMENT,-4.20,995.80,GROCERIES,
+02/10/2026,Gym Club,Example card 1234,CARD PAYMENT,-30.00,965.80,ENTERTAINMENT,
+03/10/2026,Corner Shop,Example card 1234,CARD PAYMENT,-3.10,962.70,GROCERIES,
+04/10/2026,Jan Example,Example transfer,FASTER PAYMENT,-25.00,937.70,GENERAL,

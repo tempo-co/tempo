@@ -16,7 +16,7 @@ import {
 	StatementBalance,
 	StatementFormat,
 } from '../parsers/parse-result';
-import {MAX_COLUMN_SHAPES, MAX_HEADER_CELL_LENGTH, MAX_MASKED_CELL_LENGTH} from '../parsers/table-mask';
+import {MAX_COLUMN_SHAPES, MAX_HEADER_CELL_LENGTH, MAX_MASKED_CELL_LENGTH, isPlainWord} from '../parsers/table-mask';
 import {TableSample, TableShape} from '../parsers/table-sample';
 import {PreviewChildOutput, SampleChildOutput} from './parse-runner.protocol';
 
@@ -250,7 +250,7 @@ export function validateSampleOutput(output: unknown): SampleChildOutput {
 		masked.header === null ? null : textCells(masked.header, columnCount, 2 * MAX_HEADER_CELL_LENGTH);
 	if ((header === null) !== (maskedHeader === null)) throw new ParseRefusal('parse_failed');
 	const plain = (cell: string) => MASKED.test(cell) || ISO_CURRENCY_CODES.has(cell);
-	const rowCell = (cell: string) => plain(cell) || (cell.length <= 12 && !/\p{Nd}/u.test(cell));
+	const rowCell = (cell: string) => plain(cell) || isPlainWord(cell);
 	const maskedCells = (value: unknown, allowed: (cell: string) => boolean) => {
 		// Lengths count characters, which a string longer than the basic plane holds two units of.
 		const cells = textCells(value, MAX_LAYOUT_COLUMNS, 2 * MAX_MASKED_CELL_LENGTH);
@@ -267,6 +267,7 @@ export function validateSampleOutput(output: unknown): SampleChildOutput {
 		skipBefore: whole(sample.skipBefore, 0, Number.MAX_SAFE_INTEGER),
 		rowsAbove: whole(sample.rowsAbove, 0, Number.MAX_SAFE_INTEGER),
 		skipAfter: whole(sample.skipAfter, 0, Number.MAX_SAFE_INTEGER),
+		rowsBelow: whole(sample.rowsBelow, 0, Number.MAX_SAFE_INTEGER),
 		header,
 		rowCount: whole(sample.rowCount, 1, Number.MAX_SAFE_INTEGER),
 		masked: {

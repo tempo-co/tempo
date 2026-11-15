@@ -22,7 +22,7 @@ describe('maskTable', () => {
 		expect(masked.rows).toEqual([['Aaaaaaa Aa-Aaaa 99,99 €', 'a'.repeat(60)]]);
 	});
 
-	it('sends header cells, currency codes and the few repeated short values of a column as written', () => {
+	it('sends header cells, currency codes and the words of a direction column as written', () => {
 		const rows = [
 			['Af', 'EUR', 'Jan Example', '1,00'],
 			['Bij', 'EUR', 'Example Cafe', '2,00'],
@@ -55,7 +55,8 @@ describe('maskTable', () => {
 		{name: 'no value written twice', column: ['Jan Example', 'Example Shop', 'Example Bar']},
 		{name: 'a value with a digit', column: ['Example 1', 'Example 1', 'Example 1']},
 		{name: 'a value over 12 characters', column: ['Example Lender', 'Example Lender', 'Example Lender']},
-		{name: 'more than four values', column: ['A', 'A', 'B', 'B', 'C', 'C', 'D', 'D', 'E', 'E']},
+		{name: 'two short names, one written twice', column: ['Corner Shop', 'Gym Club', 'Corner Shop']},
+		{name: 'one short name on every row', column: ['Example', 'Example', 'Example']},
 	])('masks every value of a column with $name', ({column}) => {
 		const masked = maskTable({
 			header: null,
@@ -68,16 +69,30 @@ describe('maskTable', () => {
 		for (const [value] of masked.rows) expect(value).toMatch(/^[aA9 ]+$/);
 	});
 
-	it('sends a direction column as written when one of its values repeats, however often the other is written', () => {
+	it.each([
+		{name: 'D and C', column: ['D', 'C', 'D'], sent: ['D', 'C', 'D']},
+		{name: 'Debit and Credit, each written once', column: ['Debit', 'Credit'], sent: ['Debit', 'Credit']},
+		{name: 'Soll and Haben', column: ['Soll', 'Haben', 'Haben'], sent: ['Soll', 'Haben', 'Haben']},
+		{
+			name: 'a date column that says offen until the payment is booked',
+			column: ['offen', '05.10.2026', '02.10.2026'],
+			sent: ['offen', '99.99.9999', '99.99.9999'],
+		},
+		{
+			name: 'a status word beside a name, which stays masked',
+			column: ['Gebucht', 'Example', 'VORGEMERKT'],
+			sent: ['Gebucht', 'Aaaaaaa', 'VORGEMERKT'],
+		},
+	])('sends the words of a direction or status column as written: $name', ({column, sent}) => {
 		const masked = maskTable({
 			header: null,
 			linesAbove: [],
-			rows: [['D'], ['C'], ['D']],
+			rows: column.map((value) => [value]),
 			linesBelow: [],
 			columnCount: 1,
 		});
 
-		expect(masked.rows).toEqual([['D'], ['C'], ['D']]);
+		expect(masked.rows.map(([value]) => value)).toEqual(sent);
 	});
 
 	it('masks a header cell with a digit, which a header never needs', () => {
@@ -191,6 +206,15 @@ describe('sampleTable', () => {
 		}
 	});
 
+	it("never sends a short export's names as written, however often one of them repeats", () => {
+		// A week of Starling card payments: a name written twice looks like a direction column.
+		const sample = sampleTable(fixture('starling-short-names-synthetic.csv'))!;
+
+		expect(sample.masked.rows.map((row) => row[1])).toEqual(['Aaaaaa Aaaa', 'Aaa Aaaa', 'Aaa Aaaaaaa']);
+		expect(JSON.stringify(sample.masked)).not.toMatch(/Corner|Gym|Jan|Example|GROCERIES|CARD/);
+		expect(() => validateSampleOutput({ok: true, sample})).not.toThrow();
+	});
+
 	it('takes the line right above the first row as the header, and a line of the same width above it as a line above', () => {
 		const text = [
 			'Owner;Example Person;NL91ABNA0417164300',
@@ -242,7 +266,13 @@ describe('sampleTable', () => {
 			sampleTable(
 				Buffer.from(text.replace(';extra', '').replace('2026-03-06;-3.00;EUR;Example', 'Total;-22.70')),
 			),
-		).toMatchObject({rowCount: 4, skipAfter: 1});
+		).toMatchObject({rowCount: 4, skipAfter: 1, rowsBelow: 0});
+		// A last line cut short is counted, so a layout never skips the last row of a whole file.
+		expect(sampleTable(fixture('starling-cut-last-line-synthetic.csv'))).toMatchObject({
+			rowCount: 3,
+			skipAfter: 1,
+			rowsBelow: 1,
+		});
 	});
 
 	it('reads a comma file with quoted decimal-comma amounts with the quote that keeps them whole', () => {

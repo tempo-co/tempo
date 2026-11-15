@@ -294,6 +294,8 @@ export type BankImportList = {
 /** What a column of a proposed layout holds. */
 export const BANK_IMPORT_LAYOUT_FIELDS = [
 	'date',
+	/** The date the payment was made, besides the date it was booked: a card purchase date. */
+	'transactionDate',
 	'valueDate',
 	'amount',
 	/** The column whose value says whether the amount went out or came in. */
@@ -306,6 +308,8 @@ export const BANK_IMPORT_LAYOUT_FIELDS = [
 	'counterparty',
 	'counterpartyAccount',
 	'description',
+	/** The column that marks the rows not booked yet, which are skipped. */
+	'pending',
 ] as const;
 export type BankImportLayoutField = (typeof BANK_IMPORT_LAYOUT_FIELDS)[number];
 
@@ -316,6 +320,8 @@ export type BankImportLayoutColumn = {
 	column: number;
 	/** The column's heading in the file; null when it has none. */
 	header: string | null;
+	/** Read on these rows only: a file with payer and payee columns names the other party in one per direction. */
+	onlyFor?: 'moneyIn' | 'moneyOut';
 };
 
 /** How a proposed layout reads the file. */

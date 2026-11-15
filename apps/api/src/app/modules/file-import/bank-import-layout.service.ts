@@ -19,7 +19,7 @@ import {BankImportLayout, savedLayoutId} from './bank-import-layout.entity';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {LayoutMapper, LayoutMapperError} from './mapper/layout-mapper';
 import {LayoutAnswer, toMapperInput} from './mapper/layout-mapper.contract';
-import {CsvLayout, MAX_SKIP_AFTER, MAX_SKIP_BEFORE, validateCsvLayout} from './parsers/csv-layout';
+import {CsvByDirection, CsvLayout, MAX_SKIP_AFTER, MAX_SKIP_BEFORE, validateCsvLayout} from './parsers/csv-layout';
 import {NO_ACCOUNT_LAYOUT_BANKS, namesNoAccount} from './parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from './parsers/currency-codes';
 import {amountScale, formatUnits, parseDecimal} from './parsers/decimal';
@@ -118,7 +118,12 @@ export class BankImportLayoutService {
 		if (!sampled.ok) throw this.refuse(sampled.code);
 		const {sample} = sampled;
 		// A layout skipping lines that look like rows would drop them from this file and every later one.
-		if (sample.rowsAbove > 0 || sample.skipBefore > MAX_SKIP_BEFORE || sample.skipAfter > MAX_SKIP_AFTER) {
+		if (
+			sample.rowsAbove > 0 ||
+			sample.rowsBelow > 0 ||
+			sample.skipBefore > MAX_SKIP_BEFORE ||
+			sample.skipAfter > MAX_SKIP_AFTER
+		) {
 			throw this.refuse('layout_not_mappable');
 		}
 		const owner = await this.dataSource.getRepository(Account).findOneByOrFail({id: ownerId});
@@ -305,18 +310,65 @@ function bankNameOf(value: string | null): string | null {
 	return name || null;
 }
 
+/** A masked IBAN, compact or in blocks of four: two letters, two digits and 11 to 30 letters or digits. */
+const MASKED_IBAN = /^[Aa]{2}99[Aa9]{11,30}$/;
+const MASKED_IBAN_IN_TEXT = /(?<![Aa9])[Aa]{2}99(?:(?: [Aa9]{4}){2,7}(?: [Aa9]{1,4})?|[Aa9]{11,30})(?![Aa9])/;
+/** An old account number, digits only, which the reader leaves out of a counterparty account. */
+const MASKED_ACCOUNT_NUMBER = /^9+$/;
+const MASKED_BIC_AND_IBAN = /^[A9]{8}(?:[A9]{3})? [Aa]{2}99[Aa9]{11,30}$/;
+
+/**
+ * The answer without the account columns and line its values cannot fill, judged by the sample's masked shapes: an
+ * account column whose values are not all IBANs (a sort code and account number, a card number) but one value on
+ * every sampled row, an account line
+ * without an IBAN, and a counterparty account column holding something other than IBANs and old account numbers.
+ * Such a file then names no account and is asked about by bank and currency, rather than refused. A non-IBAN column
+ * that holds more than one account (or too few rows to tell) is kept, so the reader refuses the file rather than
+ * read several accounts as one.
+ */
+function withReadableAccounts(answer: LayoutAnswer, sample: TableSample): LayoutAnswer {
+	const holds = (columns: number | {moneyIn: number; moneyOut: number}, fits: (shape: string) => boolean) =>
+		(typeof columns === 'number' ? [columns] : [columns.moneyIn, columns.moneyOut]).every((column) =>
+			(sample.masked.columns[column]?.shapes ?? []).every((shape) => shape === '' || fits(shape)),
+		);
+	const iban = (shape: string) => MASKED_IBAN.test(shape.replace(/ /g, ''));
+	const {account, counterpartyAccount} = answer;
+	const accountReadable =
+		account === null ||
+		('column' in account
+			? // A column of one non-IBAN value is left out; one of several accounts is kept, for the reader to refuse.
+				holds(account.column, iban) || !sample.masked.columns[account.column]?.sameValue
+			: !!sample.masked.linesAbove
+					.find(({line}) => line === account.line)
+					?.cells.some((cell) => MASKED_IBAN_IN_TEXT.test(cell)));
+	const counterpartyReadable =
+		counterpartyAccount === null ||
+		holds(
+			counterpartyAccount,
+			(shape) =>
+				iban(shape) || MASKED_ACCOUNT_NUMBER.test(shape.replace(/ /g, '')) || MASKED_BIC_AND_IBAN.test(shape),
+		);
+	return {
+		...answer,
+		account: accountReadable ? account : null,
+		counterpartyAccount: counterpartyReadable ? counterpartyAccount : null,
+	};
+}
+
 /**
  * The layout the answer describes, on the table the parse child found: its header (or column count), source and
  * skipped lines come from the file, the columns and formats from the answer. Only the answer's layout fields are
- * used. Null when the answer names a currency that is no ISO 4217 code; `validateCsvLayout` checks everything else,
- * such as an account line that is not above the table.
+ * used, less the account columns and line their values cannot fill (`withReadableAccounts`). Null when the answer
+ * names a currency that is no ISO 4217 code; `validateCsvLayout` checks everything else, such as an account line
+ * that is not above the table.
  */
 export function buildLayout(
-	answer: LayoutAnswer,
+	proposed: LayoutAnswer,
 	sample: TableSample,
 	defaultCurrency: string,
 ): {layout: unknown; currencyNeeded: boolean} | null {
 	const {shape} = sample;
+	const answer = withReadableAccounts(proposed, sample);
 	if (answer.currency && 'code' in answer.currency && !ISO_CURRENCY_CODES.has(answer.currency.code)) return null;
 	const {amount} = answer;
 	return {
@@ -335,6 +387,10 @@ export function buildLayout(
 			dateFormat: answer.dateFormat,
 			...(answer.account && 'column' in answer.account ? {accountIban: answer.account.column} : {}),
 			...(answer.account && 'line' in answer.account ? {accountIbanLine: answer.account.line} : {}),
+			// An account column left out for holding no IBAN still checks that a later file names one account.
+			...(!answer.account && proposed.account && 'column' in proposed.account
+				? {oneAccountColumn: proposed.account.column}
+				: {}),
 			currency:
 				answer.currency === null
 					? {fixed: defaultCurrency}
@@ -343,6 +399,7 @@ export function buildLayout(
 						: {column: answer.currency.column},
 			bookingDate: answer.bookingDate,
 			...(answer.valueDate === null ? {} : {valueDate: answer.valueDate}),
+			...(answer.transactionDate === null ? {} : {transactionDate: answer.transactionDate}),
 			amount:
 				amount.kind === 'signed'
 					? {kind: 'signed', column: amount.column}
@@ -358,6 +415,7 @@ export function buildLayout(
 			...(answer.balance ? {balance: answer.balance} : {}),
 			...(answer.counterpartyName === null ? {} : {counterpartyName: answer.counterpartyName}),
 			...(answer.counterpartyAccount === null ? {} : {counterpartyIban: answer.counterpartyAccount}),
+			...(answer.pending === null ? {} : {pendingColumn: answer.pending}),
 			description: answer.description,
 		},
 	};
@@ -369,7 +427,14 @@ export function mappingOf(layout: CsvLayout, header: readonly string[] | null): 
 	const add = (field: BankImportLayoutColumn['field'], column: number | undefined) => {
 		if (column !== undefined) columns.push({field, column: column + 1, header: header?.[column] || null});
 	};
+	const addByDirection = (field: BankImportLayoutColumn['field'], column: number | CsvByDirection | undefined) => {
+		if (typeof column !== 'object') return add(field, column);
+		for (const onlyFor of ['moneyIn', 'moneyOut'] as const) {
+			columns.push({field, column: column[onlyFor] + 1, header: header?.[column[onlyFor]] || null, onlyFor});
+		}
+	};
 	add('date', layout.bookingDate);
+	add('transactionDate', layout.transactionDate);
 	add('valueDate', layout.valueDate);
 	const {amount} = layout;
 	if (amount.kind === 'debitCredit') {
@@ -382,9 +447,10 @@ export function mappingOf(layout: CsvLayout, header: readonly string[] | null): 
 	add('balance', layout.balance?.column);
 	if ('column' in layout.currency) add('currency', layout.currency.column);
 	add('account', layout.accountIban);
-	add('counterparty', layout.counterpartyName);
-	add('counterpartyAccount', layout.counterpartyIban);
+	addByDirection('counterparty', layout.counterpartyName);
+	addByDirection('counterpartyAccount', layout.counterpartyIban);
 	for (const column of layout.description) add('description', column);
+	add('pending', layout.pendingColumn);
 	return {
 		columns,
 		amount: amount.kind,

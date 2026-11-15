@@ -45,6 +45,11 @@ type CsvLayoutColumns = {
 	accountIban?: number;
 	/** Which of the `skipBefore` lines (0-based) holds the account's IBAN. Without either, rows name no account. */
 	accountIbanLine?: number;
+	/**
+	 * A column naming the account without an IBAN (a sort code and account number): not read, but every row must
+	 * hold the same value there, so a file of several accounts is refused rather than read as one.
+	 */
+	oneAccountColumn?: number;
 	currency: {column: number} | {fixed: string};
 	bookingDate: number;
 	valueDate?: number;
@@ -52,13 +57,42 @@ type CsvLayoutColumns = {
 	amount: CsvAmount;
 	/** The account's balance next to each row: after the row, or before it. */
 	balance?: {column: number; when: 'after' | 'before'};
-	counterpartyName?: number;
+	/** The other party's name: one column, or the payer's on money in and the payee's on money out. */
+	counterpartyName?: number | CsvByDirection;
 	/** An old account number (digits only) is left out; any other value must be a valid IBAN. */
-	counterpartyIban?: number;
+	counterpartyIban?: number | CsvByDirection;
+	/**
+	 * A row whose cell in this column is one of the `PENDING_WORDS` (a status column, or a date column that says
+	 * `offen` until the payment is booked) is not booked yet: it is skipped and counted as skipped, never read.
+	 */
+	pendingColumn?: number;
 	/** Joined with spaces, empty values left out. */
 	description: number[];
 	bankTransactionCode?: number;
 };
+
+/**
+ * A field a file writes in two columns, one per direction: a statement with payer and payee columns holds the account
+ * holder on one side of every row and the other party on the other.
+ */
+export type CsvByDirection = {moneyIn: number; moneyOut: number};
+
+/** What a status or date cell says of a payment not booked yet, compared case-folded. */
+export const PENDING_WORDS: ReadonlySet<string> = new Set([
+	'pending',
+	'vorgemerkt',
+	'offen',
+	'nicht gebucht',
+	'in bearbeitung',
+	'en attente',
+	'in sospeso',
+	'pendiente',
+]);
+
+/** Whether a cell says its row is not booked yet. */
+export function isPendingWord(value: string): boolean {
+	return PENDING_WORDS.has(value.trim().toLowerCase());
+}
 
 export const CSV_DELIMITERS = [',', ';', '\t', '|'] as const;
 export type CsvDelimiter = (typeof CSV_DELIMITERS)[number];
@@ -169,11 +203,13 @@ function layoutOf(value: unknown): CsvLayout {
 			'amountStyle',
 			'accountIban',
 			'accountIbanLine',
+			'oneAccountColumn',
 			'valueDate',
 			'transactionDate',
 			'balance',
 			'counterpartyName',
 			'counterpartyIban',
+			'pendingColumn',
 			'bankTransactionCode',
 		],
 	});
@@ -188,6 +224,14 @@ function layoutOf(value: unknown): CsvLayout {
 		return value as number;
 	};
 	const optionalColumn = (value: unknown, name: string) => (value === undefined ? undefined : column(value, name));
+	const byDirection = (value: unknown, name: string): number | CsvByDirection | undefined => {
+		if (value === undefined || typeof value === 'number') return optionalColumn(value, name);
+		const sides = record(value, name, {required: ['moneyIn', 'moneyOut'], optional: []});
+		const moneyIn = column(sides.moneyIn, `${name}.moneyIn`);
+		const moneyOut = column(sides.moneyOut, `${name}.moneyOut`);
+		if (moneyIn === moneyOut) throw new LayoutProblem(name);
+		return {moneyIn, moneyOut};
+	};
 	const skipBefore = count(layout.skipBefore, MAX_SKIP_BEFORE, 'skipBefore');
 	// A preamble is compared, skipped lines are not: a layout has one or the other.
 	if ('preamble' in recognize && skipBefore !== undefined) throw new LayoutProblem('skipBefore');
@@ -227,6 +271,8 @@ function layoutOf(value: unknown): CsvLayout {
 	if (thousandsSeparator === decimalMark) throw new LayoutProblem('amountStyle.thousandsSeparator');
 
 	const accountIban = optionalColumn(layout.accountIban, 'accountIban');
+	const oneAccountColumn = optionalColumn(layout.oneAccountColumn, 'oneAccountColumn');
+	if (oneAccountColumn !== undefined && accountIban !== undefined) throw new LayoutProblem('oneAccountColumn');
 	const accountIbanLine = count(layout.accountIbanLine, MAX_SKIP_BEFORE - 1, 'accountIbanLine');
 	if (accountIbanLine !== undefined && (accountIban !== undefined || accountIbanLine >= (skipBefore ?? 0))) {
 		throw new LayoutProblem('accountIbanLine');
@@ -252,6 +298,7 @@ function layoutOf(value: unknown): CsvLayout {
 		dateFormat: oneOf(layout.dateFormat, CSV_DATE_FORMATS, 'dateFormat'),
 		...defined('accountIban', accountIban),
 		...defined('accountIbanLine', accountIbanLine),
+		...defined('oneAccountColumn', oneAccountColumn),
 		currency,
 		bookingDate: column(layout.bookingDate, 'bookingDate'),
 		...defined('valueDate', valueDate),
@@ -265,8 +312,9 @@ function layoutOf(value: unknown): CsvLayout {
 						when: oneOf(balanceValue.when, ['after', 'before'] as const, 'balance.when'),
 					},
 				}),
-		...defined('counterpartyName', optionalColumn(layout.counterpartyName, 'counterpartyName')),
-		...defined('counterpartyIban', optionalColumn(layout.counterpartyIban, 'counterpartyIban')),
+		...defined('counterpartyName', byDirection(layout.counterpartyName, 'counterpartyName')),
+		...defined('counterpartyIban', byDirection(layout.counterpartyIban, 'counterpartyIban')),
+		...defined('pendingColumn', optionalColumn(layout.pendingColumn, 'pendingColumn')),
 		description: layout.description.map((value: unknown) => column(value, 'description')),
 		...defined('bankTransactionCode', optionalColumn(layout.bankTransactionCode, 'bankTransactionCode')),
 	};
@@ -405,6 +453,6 @@ function oneOf<T extends string>(value: unknown, values: readonly T[], name: str
 	return value as T;
 }
 
-function defined<K extends string>(key: K, value: number | undefined): {[key in K]?: number} {
-	return value === undefined ? {} : ({[key]: value} as {[key in K]: number});
+function defined<K extends string, V>(key: K, value: V | undefined): {[key in K]?: V} {
+	return value === undefined ? {} : ({[key]: value} as {[key in K]: V});
 }

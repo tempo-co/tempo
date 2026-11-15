@@ -45,6 +45,8 @@ const ANSWER: Record<'debitCredit' | 'balance' | 'headerless' | 'workbook', Layo
 		dateFormat: 'DD.MM.YYYY',
 		bookingDate: 0,
 		valueDate: 1,
+		transactionDate: null,
+		pending: null,
 		amount: {kind: 'debitCredit', moneyOutColumn: 4, moneyInColumn: 5},
 		decimalMark: ',',
 		thousandsSeparator: '.',
@@ -60,6 +62,8 @@ const ANSWER: Record<'debitCredit' | 'balance' | 'headerless' | 'workbook', Layo
 		dateFormat: 'DD/MM/YYYY',
 		bookingDate: 0,
 		valueDate: null,
+		transactionDate: null,
+		pending: null,
 		amount: {kind: 'signed', column: 3},
 		decimalMark: '.',
 		thousandsSeparator: ',',
@@ -75,6 +79,8 @@ const ANSWER: Record<'debitCredit' | 'balance' | 'headerless' | 'workbook', Layo
 		dateFormat: 'YYYY-MM-DD',
 		bookingDate: 0,
 		valueDate: null,
+		transactionDate: null,
+		pending: null,
 		amount: {kind: 'signed', column: 1},
 		decimalMark: '.',
 		thousandsSeparator: null,
@@ -90,6 +96,8 @@ const ANSWER: Record<'debitCredit' | 'balance' | 'headerless' | 'workbook', Layo
 		dateFormat: 'DD/MM/YYYY',
 		bookingDate: 0,
 		valueDate: null,
+		transactionDate: null,
+		pending: null,
 		amount: {kind: 'signed', column: 2},
 		decimalMark: '.',
 		thousandsSeparator: null,
@@ -345,20 +353,28 @@ describe('Bank import column mapper', () => {
 		]);
 	});
 
-	it('refuses to work out the columns of a file whose lines above the table look like rows, without a call', async () => {
-		const {owner, agent} = await createOwner();
-		// The rows whose note holds a comma are wider than the rest, so the widest stretch of equal lines starts below them.
-		const file = Buffer.from(
-			[
+	it.each([
+		{
+			// The rows whose note holds a comma are wider than the rest, so the widest stretch of equal lines starts
+			// below them.
+			name: 'lines above the table look',
+			lines: [
 				'Date,Amount,Account,Note',
 				'2026-03-02,-12.50,NL91ABNA0417164300,Example Shop, Examplestad',
 				'2026-03-03,-4.20,NL91ABNA0417164300,Example Cafe, Examplestad, Centre',
 				'2026-03-04,-1.00,NL91ABNA0417164300,Example Shop',
 				'2026-03-05,-2.00,NL91ABNA0417164300,Example Shop',
 				'2026-03-06,-3.00,NL91ABNA0417164300,Example Shop',
-				'',
-			].join('\n'),
-		);
+			],
+		},
+		{
+			// A layout learned from it would skip the last row of every whole file.
+			name: 'last line, cut short, looks',
+			lines: readFileSync(join(FIXTURES, 'starling-cut-last-line-synthetic.csv'), 'utf8').trimEnd().split('\n'),
+		},
+	])('refuses to work out the columns of a file whose $name like rows, without a call', async ({lines}) => {
+		const {owner, agent} = await createOwner();
+		const file = Buffer.from([...lines, ''].join('\n'));
 		expect((await drop(agent, file).expect(422)).body).toMatchObject({code: 'layout_unknown', file: 1});
 
 		const refused = await propose(agent, file).expect(422);

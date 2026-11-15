@@ -1,6 +1,6 @@
 import {normalizeIban} from '../../banking/own-transfer/iban';
 import {readCsv} from './csv';
-import {CsvDateFormat, CsvLayout, csvLayoutColumnCount} from './csv-layout';
+import {CsvByDirection, CsvDateFormat, CsvLayout, csvLayoutColumnCount, isPendingWord} from './csv-layout';
 import {CSV_LAYOUTS} from './csv-layouts';
 import {isCalendarDate, serialDate} from './dates';
 import {Decimal, amountScale, formatUnits, parseDecimal} from './decimal';
@@ -86,7 +86,7 @@ type Attempt = {read: CsvLayoutRead} | {nearMiss: string} | {skipsRows: true} | 
  *
  * With `owned`, a header that matches but whose rows do not read lets the next layout try; only when no layout
  * reads the file is it refused with `layout_not_recognized`, naming the first that matched. A layout whose skipped
- * lines above the table look like rows does not read the file either: when no other layout does, it is refused with
+ * lines above or below the table look like rows does not read the file either: when no other layout does, it is refused with
  * `layout_not_mappable` (before any near miss) rather than read without those rows.
  */
 export function readCsvLayout(
@@ -122,8 +122,12 @@ function attemptLayout(source: TableSource, layout: CsvLayout, options: CsvLayou
 	const {recognize} = layout;
 	const skipBefore = layout.skipBefore ?? 0;
 	const workbook = layout.source === 'xlsx';
+	const skipAfter = layout.skipAfter ?? 0;
+	// Lines the layout skips above and below the table, none of which may look like a row.
 	const skipped = (records: readonly TableCell[][]) =>
-		records.slice(0, skipBefore).some((cells) => looksLikeRow(cells.map(({text}) => text)));
+		[...records.slice(0, skipBefore), ...(skipAfter > 0 ? records.slice(-skipAfter) : [])].some((cells) =>
+			looksLikeRow(cells.map(({text}) => text)),
+		);
 	if ('header' in recognize) {
 		const expected = [...(recognize.preamble ?? []), recognize.header];
 		const head = workbook ? source.workbookRows() : source.head(layout, skipBefore + expected.length);
@@ -242,10 +246,15 @@ function readTable(
 ): CsvLayoutRead | null {
 	const end = records.length - (layout.skipAfter ?? 0);
 	if (end < start) return null;
-	const body = records.slice(start, end);
+	const lines = records.slice(start, end);
+	const pending = (cells: readonly TableCell[]) =>
+		layout.pendingColumn !== undefined && isPendingWord(cells[layout.pendingColumn]?.text ?? '');
+	// A pending row is a row of the table all the same: one of another width is not skipped but refused.
+	const body = lines.filter((cells) => !pending(cells) || !fitsRow(cells, layout));
 	const statements = readRows(body, records.slice(0, layout.skipBefore ?? 0), layout);
 	if (!statements) return null;
 	if (options.owned && !plausible(statements, options.today ?? new Date().toISOString().slice(0, 10))) return null;
+	if (statements.length > 0) statements[0].entriesSkipped = lines.length - body.length;
 	return {layout, statements, dateCheck: options.owned ? dateCheck(body, layout) : null};
 }
 
@@ -289,7 +298,10 @@ function dateCheck(body: readonly TableCell[][], layout: CsvLayout): CsvLayoutRe
 	return example;
 }
 
-/** The statements of the rows, one per account and currency in the order first met; null when any row fails. */
+/**
+ * The statements of the rows, one per account and currency in the order first met; null when any row fails, or when
+ * rows differ in the column that must name one account.
+ */
 function readRows(
 	records: readonly TableCell[][],
 	above: readonly TableCell[][],
@@ -299,6 +311,13 @@ function readRows(
 	try {
 		const lineIban = layout.accountIbanLine === undefined ? null : ibanOnLine(above[layout.accountIbanLine]);
 		const debitsNegative = writesDebitsNegative(records, layout);
+		const {oneAccountColumn} = layout;
+		if (
+			oneAccountColumn !== undefined &&
+			new Set(records.map((cells) => (cells[oneAccountColumn]?.text ?? '').trim())).size > 1
+		) {
+			throw new RowProblem();
+		}
 		rows = records.map((cells) => readRow(cells, layout, lineIban, debitsNegative));
 	} catch (error) {
 		if (error instanceof RowProblem) return null;
@@ -373,6 +392,12 @@ function writesDebitsNegative(records: readonly TableCell[][], layout: CsvLayout
 	});
 }
 
+/** Whether a row has the layout's width; a workbook does not store the empty cells at a row's end. */
+function fitsRow(row: readonly TableCell[], layout: CsvLayout): boolean {
+	const columns = csvLayoutColumnCount(layout);
+	return layout.source === 'xlsx' ? trimRow([...row]).length <= columns : row.length === columns;
+}
+
 function readRow(
 	row: readonly TableCell[],
 	layout: CsvLayout,
@@ -382,12 +407,14 @@ function readRow(
 	const {recognize} = layout;
 	const columns = csvLayoutColumnCount(layout);
 	const workbook = layout.source === 'xlsx';
-	// A workbook does not store the empty cells at a row's end.
-	if (workbook ? trimRow([...row]).length > columns : row.length !== columns) throw new RowProblem();
+	if (!fitsRow(row, layout)) throw new RowProblem();
 	const cells = workbook ? Array.from({length: columns}, (_, index) => row[index] ?? {text: '', number: false}) : row;
 	const cell = (column: number) => cells[column].text.trim();
 	const optional = (column: number | undefined) => (column === undefined ? null : cell(column) || null);
 	const date = (column: number | undefined) => (column === undefined ? null : readDate(cells[column], layout));
+	// A value or transaction date may be left empty on some rows (card payments); the booking date may not.
+	const optionalDate = (column: number | undefined) =>
+		column === undefined || cell(column) === '' ? null : date(column);
 
 	let iban: string | null = lineIban;
 	if (layout.accountIban !== undefined) {
@@ -418,21 +445,27 @@ function readRow(
 		units: amount.units,
 		balance,
 		bookingDate: date(layout.bookingDate),
-		valueDate: date(layout.valueDate),
-		transactionDate: date(layout.transactionDate),
+		valueDate: optionalDate(layout.valueDate),
+		transactionDate: optionalDate(layout.transactionDate),
 		amount: formatUnits(amount.units, amountScale(amount)),
 		creditDebitIndicator: amount.units < 0n ? 'DBIT' : 'CRDT',
 		currency,
 		balanceAfter: balance && formatUnits(balance.units, amountScale(balance, amount)),
 		bankReference: null,
-		counterpartyName: optional(layout.counterpartyName),
-		counterpartyIban: counterpartyIban(optional(layout.counterpartyIban)),
+		counterpartyName: optional(sideOf(layout.counterpartyName, amount.units)),
+		counterpartyIban: counterpartyIban(optional(sideOf(layout.counterpartyIban, amount.units))),
 		remittanceInformation: null,
 		description: description || null,
 		bankTransactionCode: optional(layout.bankTransactionCode),
 		bankTransactionSubCode: null,
 		referenceNumber: null,
 	};
+}
+
+/** The column a row reads a field from: the one column, or its direction's. */
+function sideOf(column: number | CsvByDirection | undefined, units: bigint): number | undefined {
+	if (column === undefined || typeof column === 'number') return column;
+	return units < 0n ? column.moneyOut : column.moneyIn;
 }
 
 /**
