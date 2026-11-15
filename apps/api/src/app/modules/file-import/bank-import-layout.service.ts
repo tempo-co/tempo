@@ -24,6 +24,7 @@ import {NO_ACCOUNT_LAYOUT_BANKS, namesNoAccount} from './parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from './parsers/currency-codes';
 import {amountScale, formatUnits, parseDecimal} from './parsers/decimal';
 import {NormalizedRow, NormalizedStatement, STATEMENT_BANKS} from './parsers/parse-result';
+import {MaskedTable} from './parsers/table-mask';
 import {TableSample} from './parsers/table-sample';
 import {ParseRunnerService} from './runner/parse-runner.service';
 
@@ -355,9 +356,52 @@ function withReadableAccounts(answer: LayoutAnswer, sample: TableSample): Layout
 }
 
 /**
+ * Currency symbols that name one currency each. `$`, `¥`, `kr` and the like are shared by several and name none;
+ * letter symbols count only where the model sees them as written (a header cell), as masking hides them elsewhere.
+ */
+const CURRENCY_SYMBOLS: ReadonlyMap<string, string> = new Map([
+	['€', 'EUR'],
+	['£', 'GBP'],
+	['zł', 'PLN'],
+	['Kč', 'CZK'],
+	['Ft', 'HUF'],
+	['₹', 'INR'],
+	['₺', 'TRY'],
+	['₽', 'RUB'],
+	['₴', 'UAH'],
+	['₪', 'ILS'],
+	['₦', 'NGN'],
+	['₫', 'VND'],
+	['฿', 'THB'],
+	['₸', 'KZT'],
+	['₾', 'GEL'],
+	['₼', 'AZN'],
+]);
+
+/** Whether the masked sample the model saw shows the currency: its ISO code as a word, or its own symbol. */
+function currencyShown(code: string, masked: MaskedTable): boolean {
+	const sent = [
+		...(masked.header ?? []),
+		...masked.linesAbove.flatMap(({cells}) => cells),
+		...masked.rows.flat(),
+		...masked.linesBelow.flat(),
+		...masked.columns.flatMap(({shapes}) => shapes),
+	];
+	const tokens = [
+		code,
+		...[...CURRENCY_SYMBOLS].filter(([, symbolCode]) => symbolCode === code).map(([symbol]) => symbol),
+	];
+	return tokens.some((token) => {
+		const word = new RegExp(`(?<!\\p{L})${token}(?!\\p{L})`, 'u');
+		return sent.some((cell) => word.test(cell));
+	});
+}
+
+/**
  * The layout the answer describes, on the table the parse child found: its header (or column count), source and
  * skipped lines come from the file, the columns and formats from the answer. Only the answer's layout fields are
- * used, less the columns and line their values cannot fill (`withReadableAccounts`). Null when the answer
+ * used, less the columns and line their values cannot fill (`withReadableAccounts`). A currency code the sample
+ * never showed the model (`currencyShown`) is left for the owner to pick, like no currency. Null when the answer
  * names a currency that is no ISO 4217 code; `validateCsvLayout` checks everything else, such as an account line
  * that is not above the table.
  */
@@ -369,6 +413,10 @@ export function buildLayout(
 	const {shape} = sample;
 	const answer = withReadableAccounts(proposed, sample);
 	if (answer.currency && 'code' in answer.currency && !ISO_CURRENCY_CODES.has(answer.currency.code)) return null;
+	// A code the file never showed the model is a guess: the owner picks the currency instead.
+	if (answer.currency && 'code' in answer.currency && !currencyShown(answer.currency.code, sample.masked)) {
+		answer.currency = null;
+	}
 	const {amount} = answer;
 	return {
 		currencyNeeded: answer.currency === null,

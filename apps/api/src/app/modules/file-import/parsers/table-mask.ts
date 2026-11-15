@@ -5,6 +5,8 @@ import {ISO_CURRENCY_CODES} from './currency-codes';
 export type FoundTableParts = {
 	/** The header's cells, or null when the table has none. */
 	header: readonly string[] | null;
+	/** Whether the header names a date over a date column, so it is a bank's header and not a holder's details. */
+	headerAsWritten: boolean;
 	/** The lines above the table, with their 0-based line numbers in the file. */
 	linesAbove: readonly {line: number; cells: readonly string[]}[];
 	/** Every row of the table. */
@@ -48,7 +50,8 @@ const MIN_SAME_VALUE_ROWS = 3;
  *
  * - Every letter becomes `a` or `A` (case kept) and every numeric character `9`; the combining marks after them are
  *   dropped; punctuation, spaces and length are kept, and each cell is cut at 60 characters.
- * - Sent as written: the header's cells without a digit (cut at 80 characters, at most 200 of them); a cell that is
+ * - Sent as written: the header's cells without a digit (cut at 80 characters, at most 200 of them), when the header
+ *   names a date over a date column (`headerAsWritten`; else it is masked like the rows); a cell that is
  *   an ISO 4217 currency code; and a row cell that is one of the `PLAIN_WORDS` a direction or status column holds
  *   (`Af`/`Bij`, `Debit`/`Credit`, `Gebucht`/`Vorgemerkt`). Nothing else of a row is, however short or often
  *   repeated: in a short export, a name written twice looks like a direction column.
@@ -71,7 +74,9 @@ export function maskTable(table: FoundTableParts): MaskedTable {
 				.slice(0, MAX_HEADER_CELLS)
 				// A heading never needs a digit; a cell with one (an account number in a title line) is masked.
 				.map((value) =>
-					/\p{Nd}/u.test(value) ? maskText(value) : [...value].slice(0, MAX_HEADER_CELL_LENGTH).join(''),
+					/\p{Nd}/u.test(value) || !table.headerAsWritten
+						? maskText(value)
+						: [...value].slice(0, MAX_HEADER_CELL_LENGTH).join(''),
 				),
 		linesAbove: table.linesAbove.slice(-MAX_LINES_ABOVE).map(({line, cells}) => ({line, cells: maskLine(cells)})),
 		rows: sampled.map((row) =>

@@ -537,6 +537,49 @@ describe('buildLayout', () => {
 		}
 	});
 
+	it("takes the answer's currency only when the file shows it to the model, and otherwise asks the owner", () => {
+		const built = (text: string, code: string) =>
+			buildLayout(
+				layoutAnswerSchema.parse({
+					...ANSWER,
+					dateFormat: 'DD.MM.YYYY',
+					decimalMark: ',',
+					amount: {kind: 'signed', column: 1},
+					currency: {code},
+				}),
+				sampleTable(Buffer.from(text))!,
+				'GBP',
+			)!;
+		const file = (header: string, amounts: [string, string], above: string[] = [], text = 'Shop') =>
+			lines(...above, header, `05.10.2026;${amounts[0]};${text}`, `06.10.2026;${amounts[1]};${text}`);
+		const plain = file('Datum;Betrag;Text', ['-12,50', '-4,20']);
+
+		// A valid code the file never shows: the owner picks the currency, starting from their own.
+		expect(built(plain, 'CHF')).toMatchObject({currencyNeeded: true, layout: {currency: {fixed: 'GBP'}}});
+		// A code masked in a longer cell is not shown either.
+		expect(built(file('Datum;Betrag;Text', ['-12,50 CHF', '-4,20 CHF']), 'CHF')).toMatchObject({
+			currencyNeeded: true,
+		});
+		// The code in the header, as a cell of a line above the table, or as a row's cell.
+		for (const shown of [
+			file('Datum;Betrag (CHF);Text', ['-12,50', '-4,20']),
+			file('Datum;Betrag;Text', ['-12,50', '-4,20'], ['Waehrung;CHF']),
+			file('Datum;Betrag;Waehrung', ['-12,50', '-4,20'], [], 'CHF'),
+		]) {
+			expect(built(shown, 'CHF')).toMatchObject({currencyNeeded: false, layout: {currency: {fixed: 'CHF'}}});
+		}
+		// An unambiguous symbol the model saw names its currency; a shared one, or another currency's, does not.
+		const euros = file('Datum;Betrag;Text', ['-12,50 €', '-4,20 €']);
+		expect(built(euros, 'EUR')).toMatchObject({currencyNeeded: false, layout: {currency: {fixed: 'EUR'}}});
+		expect(built(euros, 'GBP')).toMatchObject({currencyNeeded: true});
+		expect(built(file('Datum;Kwota (zł);Text', ['-12,50', '-4,20']), 'PLN')).toMatchObject({currencyNeeded: false});
+		expect(built(file('Datum;Betrag;Text', ['-12,50 $', '-4,20 $']), 'USD')).toMatchObject({currencyNeeded: true});
+		// Masked letters show the model nothing: zł in a row is sent as aa.
+		expect(built(file('Datum;Betrag;Text', ['-12,50 zł', '-4,20 zł']), 'PLN')).toMatchObject({
+			currencyNeeded: true,
+		});
+	});
+
 	it('reads dates with a two-digit year after the month name, and cannot read a headerless file with nothing to check', () => {
 		const shortYears = Buffer.from(
 			fixture('nationwide-month-names-synthetic.csv')

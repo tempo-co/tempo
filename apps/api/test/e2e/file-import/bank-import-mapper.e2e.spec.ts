@@ -573,7 +573,7 @@ describe('Bank import column mapper', () => {
 		});
 		const proposed = await propose(agent, wide).expect(201);
 
-		const refused = await confirm(agent, proposed.body.id, {bankName: 'Example Bank'}).expect(422);
+		const refused = await confirm(agent, proposed.body.id, {bankName: 'Example Bank', currency: 'EUR'}).expect(422);
 
 		expect(refused.body).toMatchObject({code: 'layout_not_mappable'});
 		expect(await layouts.countBy({accountId: owner.id})).toBe(0);
@@ -594,7 +594,8 @@ describe('Bank import column mapper', () => {
 	it('reads a file without a header and a workbook with the layouts their owner confirmed', async () => {
 		const {agent} = await createOwner();
 		await saveLayout(agent, HEADERLESS_CSV, ANSWER.headerless, {bankName: 'Example Bank'});
-		await saveLayout(agent, WORKBOOK, ANSWER.workbook, {bankName: 'Example Workbook Bank'});
+		// The workbook shows no currency, so its owner picks the one the model named.
+		await saveLayout(agent, WORKBOOK, ANSWER.workbook, {bankName: 'Example Workbook Bank', currency: 'EUR'});
 
 		expect((await drop(agent, HEADERLESS_CSV).expect(201)).body).toMatchObject({
 			rowsAdded: 4,
