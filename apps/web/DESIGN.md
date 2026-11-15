@@ -494,7 +494,8 @@ No copy calls import a fallback or assumes a bank is connected.
   account's name under them when the drop went to several accounts, and on the right what the
   missing transactions add up to ("-€1,200.00 missing"), in one right-aligned `numeric` column
   without the income tone. A synced account's gap shows only for days its bank sync does not
-  cover. Rows on days bank sync is final for that the bank
+  cover; a gap split by that coverage shows its whole amount on both lines, so the lines are never
+  totalled. Rows on days bank sync is final for that the bank
   never sent sit under the counts as one bordered fold line ("Not added: 4 rows your bank never
   sent", `ChevronRight`), never in the attention tone and never counted as a look: nothing waits
   for the owner. Opened, a muted line says the bank sent every transaction for those days, then the

@@ -179,6 +179,7 @@ describe('gapsOutsideCoverage', () => {
 	it.each([
 		{name: 'no coverage', coverage: null, expected: [gap]},
 		{name: 'coverage after it', coverage: {from: '2026-10-21', through: '2026-11-10'}, expected: [gap]},
+		{name: 'coverage before it', coverage: {from: '2026-09-01', through: '2026-10-04'}, expected: [gap]},
 		{
 			name: 'coverage over its end',
 			coverage: {from: '2026-10-12', through: '2026-11-10'},
