@@ -14,20 +14,18 @@ VITE_API_URL=http://localhost:3000 VITE_APP_URL=http://localhost:5173 VITE_EMAIL
   npx playwright test <spec> --project=chromium --no-deps --retries=0
 ```
 
-Leave `NODE_ENV` unset. Without `--no-deps` the `setup` project needs the seeded API. A seeded spec run with `--no-deps` fails at once with ENOENT on `playwright/.auth/*.json`.
+Without `--no-deps` the `setup` project needs the seeded API. A seeded spec run with `--no-deps` fails at once with ENOENT on `playwright/.auth/*.json`.
 
 A mocked spec is a UI integration test, not full-stack coverage. Report it separately from seeded runs, and keep backend behaviour (matching, validation, rejection) proved in the seeded suite or in `apps/api`.
 
 ## Choosing what to run locally
 
-- Find the specs for a change with `git grep` over `test/e2e` for the route, component, label or test id. `--only-changed` finds nothing: specs drive the browser and do not import `src`.
 - Home specs build on the synthetic history in `test/data/home-history.data.ts`: `mockSyntheticHome` answers every Home and month-dialog request, and `test/e2e/home/layout.spec.ts` renders it and a worst-case variant at every width, checking for overflow and amounts cut short or broken across lines. `test/e2e/home/loading.spec.ts` answers the same requests in a staggered order and records Chromium's layout-shift entries, so a section that moves the page as it fills in fails there. When Home gains a query, add its mock there, its delay to that spec's `STAGGER` and its empty answer to `mockEmptyHome` in `test/utils/api-mocks.ts`; when a row layout changes, grep `test/e2e` for `boxOf(` on the surface you changed and run those specs too.
 - Run the full suite locally only for cross-cutting changes (`src/utils/api.ts`, `src/query-client.ts`, routing, auth, providers, shared layout or `src/components/ui`) or to reproduce a CI failure the logs do not explain.
 
 ## Local runs and shared servers
 
-- `playwright.config.ts` sets `reuseExistingServer: !process.env.CI`. Locally, any server already on `VITE_APP_URL` is reused, so another worktree's preview on 5173 silently tests the wrong build. Check the listener's working directory first.
-- The suite runs with one worker and `fullyParallel: false`; CI retries twice, local runs do not. A pass that needed a retry is a flake; say so.
+- The suite runs with one worker and `fullyParallel: false`; local runs do not retry. A pass that needed a retry is a flake; say so.
 - Parallel Playwright runs in one checkout overwrite `test-results/` and `playwright-report/`. Give each run its own `--output` directory and `PLAYWRIGHT_HTML_OUTPUT_DIR`.
 - Stop a background preview by PID or port. `pkill -f "<command line>"` also matches the shell running it.
 
@@ -37,23 +35,10 @@ CI retries a failed test twice, so a test that fails and then passes leaves the 
 
 ## Reusing fixtures
 
-- Use `freshAccount` from `test/fixtures.ts` when a test changes account data or sessions. Read-only banking journeys can use seeded storage state; password changes and session revocation must not invalidate an identity another test or browser project reuses. Request `freshAccount` in the setup hook before navigating.
-- Mocked HTTP response builders live in `test/data`: `createAccount` in `account.data.ts` and `createBankTransaction` in `bank-transaction.data.ts`. Each returns a fresh object typed against `@tempo/contracts`. They supply required fields; the spec supplies the values that explain its scenario.
+The helpers and when to use them are listed in `AGENTS.md` (E2E test helpers). Beyond that:
 
-```ts
-import {createBankTransaction} from '../../data/bank-transaction.data';
-
-const transaction = createBankTransaction({
-  id: '00000000-0000-4000-8000-000000000201',
-  displayDescription: 'Example subscription',
-  transactionDate: '2026-09-10',
-  amount: '-12.00',
-  category: 'SUBSCRIPTIONS',
-});
-```
-
-- Keep meaningful dates, amounts, category states, conversion evidence and linked identities explicit. A small local `payment` or logo-row wrapper can express a scenario on top of the shared shape.
-- Reuse existing helpers before adding another. Keep one-spec mechanics local; share them when real callers need the same contract. Keep actions and expected outcomes in the spec rather than hiding a whole journey in a helper.
+- Password changes and session revocation must not invalidate an identity another test or browser project reuses. Request `freshAccount` in the setup hook before navigating.
+- Keep meaningful dates, amounts, category states, conversion evidence and linked identities explicit in the spec, not in fixture defaults.
 - Do not cast incomplete responses to a contract type or share a mutable fixture between tests. Do not use API entity factories or full database seeds to construct HTTP mocks: they represent different boundaries.
 
 ## Fixtures and RED runs
@@ -65,7 +50,7 @@ const transaction = createBankTransaction({
 
 ## Hook harness
 
-`test/utils/hook-harness.ts` (`createHookHarness`) runs real hooks from `src` against a real `QueryClient` with chosen modules replaced wholesale, for cache behaviour the UI cannot set up. Any named import that a hook starts using from a stubbed module is `undefined` in the harness. When you add an import from `@/utils/api` or `sonner` to a hook, add it to every harness stub for that module (for example `isAuthError: () => false`, `toast.error: () => undefined`), or the failure-path test throws `TypeError` instead of the expected error. Current users: `grep -rl createHookHarness test`.
+`createHookHarness` (see `AGENTS.md`) is for cache behaviour the UI cannot set up. A named import missing from a stub is `undefined` in the harness, so the failure-path test throws `TypeError` instead of the expected error; for `@/utils/api` or `sonner` add it to every stub of that module (for example `isAuthError: () => false`, `toast.error: () => undefined`). Current users: `grep -rl createHookHarness test`.
 
 ## Route mocks
 
@@ -92,8 +77,8 @@ const transaction = createBankTransaction({
 ## Dialogs, drawers and phone layouts
 
 - Dialog open state that should close on Back lives in a search param on the host route; see `recurring` in `src/routes/index.tsx`. Close with `router.history.back()` when `useCanGoBack()` is true and with `navigate({replace: true})` only for a deep link. Test: open, Escape, then `page.goBack()` must leave the page.
-- Constrain a dialog's inner `ScrollArea`, either with a definite content height (as in the recurring dialog) or with a `min-h-0` grid and a `minmax(0,1fr)` row inside the maximum-height flex shell (as in transaction details). An unconstrained viewport grows off screen. Test real mouse-wheel scrolling and Chromium touch swipes with `Input.dispatchTouchEvent` and animation-frame-separated moves; `scrollIntoViewIfNeeded()` is programmatic and passes on a broken dialog. Await opening animations before measuring; verify the final action is reachable and overflow adds no native gutter or content-width shift.
-- `src/components/ui/drawer.tsx` never passes vaul's `shouldScaleBackground` (off by default); never add it. Turning it on transforms the app wrapper, which becomes the containing block for the fixed tab bar (`app-nav.tsx`) and blackens the body during close. `test/e2e/settings/dialog-focus.spec.ts` dismisses every settings drawer with Escape and Cancel; extend that loop for drawer regressions.
+- Constrain a dialog's inner `ScrollArea` with a definite content height (the recurring dialog) or the `min-h-0` grid in `docs/frontend-conventions.md` (transaction details); an unconstrained viewport grows off screen. Test real mouse-wheel scrolling and Chromium touch swipes with `Input.dispatchTouchEvent` and animation-frame-separated moves; `scrollIntoViewIfNeeded()` is programmatic and passes on a broken dialog. Await opening animations before measuring.
+- `test/e2e/settings/dialog-focus.spec.ts` dismisses every settings drawer with Escape and Cancel; extend that loop for drawer regressions (the `shouldScaleBackground` rule is in `docs/frontend-conventions.md`).
 - On phone viewports, the fixed tab bar and stacked toasts cover controls near the bottom. Use `focus()` plus `keyboard.press('Enter')`, or scroll the control to the centre first.
 - Wait out open animations (about 300 ms) before screenshots; a mid-fade dialog looks transparent. Check the computed `backgroundColor`/`opacity` at rest before changing styles.
 - Theme: the storage key is `vite-ui-theme`. Set it with `page.addInitScript` and assert the rendered theme; a different key leaves both captures in the default theme.
@@ -101,22 +86,7 @@ const transaction = createBankTransaction({
 
 ## Merchant logo rendering
 
-`test/e2e/banking/merchant-logos.spec.ts` drives transactions, the inspector,
-a month's transaction rows and Home's next recurring payments at `1440px` and `390px` in both themes. Its synthetic
-`128px` white RGBA fixture contains transparent, quarter-, half-, three-quarter- and full-alpha
-bands. The pixel assertions decode actual browser screenshots of the tinted tile, not a canvas
-drawing of the unfiltered image. They compare the composited sRGB colors with the Clay field
-and ink, allowing one channel value of rounding error. Attachments record the tile pixels and
-synthetic transaction, inspector and Home screens in the Playwright report.
-
-The same journey checks fallback colors, source-version recovery, theme switching with the
-same loaded mask, ordinary category metadata colors and row geometry. JSON responses are
-mocked, but images come from a loopback HTTP server that requires a synthetic cookie and
-sets the API's private cache and same-site CORP headers without CORS permission. This exercises
-real browser cookie and image-header enforcement. Local runs must use localhost for both the
-web and API URLs, matching the fixture cookie and same-site image origin. The fixture blocks service workers so
-page-level routes own image requests; offline behaviour is covered separately. Verify actual
-API authorization separately against the paired API.
+`test/e2e/banking/merchant-logos.spec.ts` asserts on decoded browser screenshots of the tinted tile, with images served from a loopback server that requires a synthetic cookie and sends the API's cache and CORP headers. Run it locally with localhost for both the web and API URLs, or the cookie and same-site image origin do not match. It mocks the API, so verify logo authorization against the API itself.
 
 ## WebKit project
 
@@ -124,9 +94,9 @@ Every iPhone browser is WebKit, so `playwright.config.ts` runs every spec a seco
 
 - WebKit sends requests from a controlling service worker past `page.route`, so mocks stop applying once the worker takes over and requests leak to the real API. The project blocks service workers and ignores the saved-app specs that need one (`testIgnore` in `playwright.config.ts`); a new spec that needs the worker goes on that list.
 - Touch gestures are sent with Chromium CDP (`Input.dispatchTouchEvent`), and hover-tooltip checks need a mouse; both skip outside Chromium. Real iPhone touch is not covered.
-- With Playwright's clock installed (`mockSyntheticHome` does), WebKit can keep reporting an element's position from the last frame it read of a finished CSS transition until its next rendering update, hundreds of milliseconds later, so an element that stands still may not have arrived. Wait until it has no animations left and its computed transform matches its style, as `settled` in `home/where-you-stand.spec.ts` does.
+- With Playwright's clock installed (`mockSyntheticHome` does), WebKit can keep reporting an element's position from the last frame it read of a finished CSS transition until its next rendering update, hundreds of milliseconds later, so an element that stands still may not have arrived. Wait until it has no animations left and its computed transform matches its style, as `settled` in `test/e2e/home/where-you-stand.spec.ts` does.
 - WebKit cannot fulfill a mocked 3xx, so mock a redirect with `fulfillRedirect` from `test/utils/api-mocks.ts`. Only Chromium lets a test read the clipboard back; the copy itself still runs in WebKit.
-- Put worst-case data (long names, large amounts, flags) in layout specs: kind seed data fits any screen in any engine, and that is how a page-widening Recurring card shipped.
+- Put worst-case data (long names, large amounts, flags) in layout specs: kind seed data fits any screen in any engine.
 
 ## Visual checks that pass when they should not
 
@@ -138,7 +108,7 @@ Every iPhone browser is WebKit, so `playwright.config.ts` runs every spec a seco
 
 ## URL-backed search limits
 
-The transaction search cap is one constant, `BANK_TRANSACTION_SEARCH_MAX_LENGTH` in `src/features/banking/types/bank-transaction.ts`, used by both the route schema and the input's `maxLength`. To change it:
+To change the transaction search cap (`BANK_TRANSACTION_SEARCH_MAX_LENGTH`, see `docs/frontend-conventions.md`):
 
 1. Trace input → debounced `navigate` → route schema → request → API DTO. Raising one boundary alone leaves the router error or turns it into an API rejection; change the API validator in `apps/api` in the same PR.
 2. Percent-encoded three-byte characters cost nine request-line bytes each. `nginx/tempo.conf` sizes `large_client_header_buffers` for the current cap, and `scripts/tempo-web-security-headers-test.sh` sends 1000 `€` through both the SPA route and the API proxy. Update both with the cap.
@@ -146,7 +116,7 @@ The transaction search cap is one constant, `BANK_TRANSACTION_SEARCH_MAX_LENGTH`
 
 ## Cash flow filters
 
-`INTERNAL` is a parent of the internal-movement kinds (`BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS`). The route schema normalizes subtypes and still accepts the older `financialEventTypes` parameter. When narrowing to a child, replace the parent rather than appending; the API treats the list as OR. Test Home drill navigation separately from direct `INTERNAL`, subtype and legacy URLs.
+`INTERNAL` is a parent of the internal-movement kinds (`BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS`). The route schema normalizes subtypes and also accepts `financialEventTypes`, which older shared links use. When narrowing to a child, replace the parent rather than appending; the API treats the list as OR. Test Home drill navigation separately from direct `INTERNAL`, subtype and `financialEventTypes` URLs.
 
 ## Standalone scripts against a build
 

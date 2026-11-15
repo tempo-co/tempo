@@ -44,6 +44,13 @@ export class Merchant {
 	@Column({type: 'varchar', length: 120, nullable: true})
 	brand: string | null;
 
+	/**
+	 * The business that sells the brand, which groups the owner's merchant spending: the brand itself unless the brand
+	 * is a product the business sells under another name. Null until identification has named it.
+	 */
+	@Column({type: 'varchar', length: 120, nullable: true})
+	company: string | null;
+
 	/** The official website hostname the model named; its logo shows once the site confirms the brand. */
 	@Column({type: 'varchar', length: 253, nullable: true})
 	domain: string | null;

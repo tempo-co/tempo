@@ -5,12 +5,11 @@ import {
   type MerchantGroupListItem,
 } from '@tempo/contracts';
 import {format} from 'date-fns';
-import {Search} from 'lucide-react';
 import {useEffect, useState} from 'react';
 
 import {LoadMore} from '@/components/shared/load-more';
+import {SearchInput} from '@/components/shared/search-input';
 import {LoadErrorState} from '@/components/shared/state-message';
-import {Input} from '@/components/ui/input';
 import {Skeleton} from '@/components/ui/skeleton';
 import {formatBankTransactionCompactDate} from '@/features/banking/utils/formatters';
 import {ChartCardHeader} from '@/features/dashboard/components/chart-card';
@@ -54,18 +53,15 @@ export function MerchantsOverview({
 
   return (
     <div className='grid grid-cols-1 gap-8'>
-      <div className='relative min-w-0'>
-        <Search className='absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
-        <Input
-          type='search'
-          value={searchInput}
-          maxLength={MERCHANT_SEARCH_MAX_LENGTH}
-          onChange={(event) => onSearchInputChange(event.target.value)}
-          placeholder='Search merchants and people'
-          aria-label='Search merchants and people'
-          className='h-12 pl-9 text-base sm:h-9 sm:text-sm'
-        />
-      </div>
+      <SearchInput
+        value={searchInput}
+        onValueChange={onSearchInputChange}
+        onClear={() => setSearch('')}
+        maxLength={MERCHANT_SEARCH_MAX_LENGTH}
+        placeholder='Search merchants and people'
+        aria-label='Search merchants and people'
+        className='h-12 text-base sm:h-9 sm:text-sm'
+      />
       {search ? (
         <AllMerchants search={search} onSelect={onSelect} />
       ) : (

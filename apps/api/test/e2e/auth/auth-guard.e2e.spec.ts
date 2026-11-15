@@ -101,7 +101,7 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['get', '/bank-imports/layouts'],
 	['delete', `/bank-imports/layouts/${RESOURCE_ID}`],
 	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}`],
-	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}/mask-v2`],
+	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}/mask-v3`],
 	['get', '/notifications'],
 	['patch', '/notifications/preferences'],
 	['put', '/notifications/subscriptions'],

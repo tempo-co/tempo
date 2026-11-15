@@ -1,8 +1,8 @@
 import {MigrationInterface, QueryRunner} from 'typeorm';
 
 /** A question a sync raises about an imported row already in history: which stored row it is about. */
-export class AddBankImportDoubtfulImportedTransaction20261114180000 implements MigrationInterface {
-	name = 'AddBankImportDoubtfulImportedTransaction20261114180000';
+export class AddBankImportDoubtfulImportedTransaction20261114190000 implements MigrationInterface {
+	name = 'AddBankImportDoubtfulImportedTransaction20261114190000';
 
 	async up(queryRunner: QueryRunner): Promise<void> {
 		// Fresh installations are bootstrapped from entities by the schema script.

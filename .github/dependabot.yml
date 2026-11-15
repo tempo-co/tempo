@@ -90,3 +90,23 @@ updates:
         update-types: ['version-update:semver-major']
       - dependency-name: redis
         update-types: ['version-update:semver-major']
+
+  # The Dockerfiles' base images, pinned by tag and digest. Checked daily, and Node skips the cooldown:
+  # a Node security release's flaws are public the day it ships, and the official image carries far
+  # less supply-chain risk than an npm package, so waiting a week costs more than it buys.
+  - package-ecosystem: docker
+    directories: [/apps/api, /apps/web]
+    schedule:
+      interval: daily
+    cooldown:
+      default-days: 7
+      exclude:
+        - node
+    groups:
+      # One PR per image across both Dockerfiles.
+      base-images:
+        group-by: dependency-name
+    ignore:
+      # Keep the image on the runtime major in .nvmrc and CI.
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
