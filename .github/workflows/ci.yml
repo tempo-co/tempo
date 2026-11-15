@@ -85,12 +85,18 @@ jobs:
 
             - name: Check deploy scripts and Compose files
               run: |
-                  shellcheck -x ops/deploy.sh ops/install.sh ops/backup.sh ops/targets/*.env ops/staging/tempo-staging-refresh.sh ops/ghcr-retention.sh ops/sync-pins.sh
+                  shellcheck -x ops/deploy.sh ops/install.sh ops/backup.sh ops/targets/*.env ops/staging/tempo-staging-refresh.sh ops/ghcr-retention.sh ops/sync-pins.sh ops/test-deploy.sh ops/test-sync-pins.sh
                   export TEMPO_API_IMAGE=api TEMPO_WEB_IMAGE=web DB_USERNAME=u DB_PASSWORD=p DB_NAME=d TEMPO_PRODUCTION_ENV_FILE=/dev/null ENABLE_BANKING_PRIVATE_KEY_HOST_PATH=/dev/null
                   docker compose -f ops/production.compose.yml config -q
                   docker compose -f ops/tailscale.compose.yml config -q
                   docker compose -f ops/staging/docker-compose.yml --env-file ops/staging/staging.env.example config -q
                   docker compose -f ops/staging/tailscale.compose.yml config -q
+
+            # Offline: stub docker and curl in a temporary sandbox; no daemon or registry is used.
+            - name: Test deploy scripts
+              run: |
+                  ops/test-deploy.sh
+                  ops/test-sync-pins.sh
 
     api-lint-format:
         name: API lint & format

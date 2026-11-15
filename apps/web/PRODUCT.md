@@ -44,7 +44,7 @@ Tempo is intended to be a private, read-only financial record for one person: re
 
 - The product is named **Tempo**.
 - The brand identity (name, logo, palette, typography) is defined in `DESIGN.md`, which is the binding reference for visual work.
-- No legal, testimonial, customer, benchmark, or other proof assets were confirmed. Future work must not fabricate them.
+- Tempo has no legal, testimonial, customer, benchmark, or other proof assets. Never fabricate them.
 
 ## Evidence on Hand
 
@@ -62,4 +62,4 @@ Tempo is intended to be a private, read-only financial record for one person: re
 
 ## Accessibility & Inclusion
 
-No product-specific accessibility standard or user need was confirmed during init. The target standard remains an open decision; future interface work should still preserve standard web accessibility and usable access across personal devices.
+No product-specific accessibility standard or user need is set; the target standard is an open decision. Interface work preserves standard web accessibility and usable access across personal devices.
