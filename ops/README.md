@@ -5,7 +5,7 @@ CI builds an image of each app a commit changes, publishes `ghcr.io/tempo-co/{ap
 | File | Purpose |
 |---|---|
 | `deploy.sh` | Deploy script for both targets |
-| `targets/{production,staging}.env` | Non-secret per-target settings |
+| `targets/production.env`, `targets/staging.env` | Non-secret per-target settings |
 | `backup.sh` | Validated `pg_dump`, scheduled and pre-deploy |
 | `install.sh` | Copies the above to the host |
 | `sync-pins.sh` | Applies image-pin-only Compose changes from `main` before each production deploy |
