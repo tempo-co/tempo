@@ -17,7 +17,10 @@ const CAMT_MESSAGES = {
 	'2': {message: 'BkToCstmrAcctRpt', statement: 'Rpt'},
 } as const;
 const SNIFF_BYTES = 4096;
-const DECIMAL = /^\d{1,15}(\.\d{1,8})?$/;
+/** An `xs:decimal` amount, which may leave out the zero before the point (`.21`). */
+const DECIMAL = /^(?:\d{1,15}(?:\.\d{1,8})?|\.\d{1,8})$/;
+/** The time zone an `xs:date` may end with. */
+const DATE_ZONE = /(?:Z|[+-]\d{2}:\d{2})$/;
 const CURRENCY = /^[A-Z]{3}$/;
 const ENCODING_DECLARATION = /^\s*<\?xml[^>]*\bencoding\s*=\s*["']([A-Za-z0-9._-]+)["']/;
 const OPENING_BALANCE_TYPES = ['PRCD', 'OPBD'];
@@ -119,9 +122,9 @@ function entryStatus(entry: Element): string | null {
 
 function parseEntry(entry: Element): NormalizedRow & {units: bigint; scale: number} {
 	const amountElement = child(entry, 'Amt');
-	const amountText = text(amountElement);
+	const amountText = decimal(amountElement);
 	const entryCurrency = currency(amountElement?.getAttribute('Ccy') ?? null);
-	if (!amountText || !DECIMAL.test(amountText) || !entryCurrency) throw new ParseRefusal('parse_failed');
+	if (!amountText || !entryCurrency) throw new ParseRefusal('parse_failed');
 	const indicator = text(child(entry, 'CdtDbtInd'))?.toUpperCase();
 	if (indicator !== 'CRDT' && indicator !== 'DBIT') throw new ParseRefusal('parse_failed');
 
@@ -268,13 +271,20 @@ function balanceType(balance: Element): string | null {
 }
 
 function balanceAmount(balance: Element): {units: bigint; scale: number} | null {
-	const amount = text(child(balance, 'Amt'));
+	const amount = decimal(child(balance, 'Amt'));
 	const indicator = text(child(balance, 'CdtDbtInd'))?.toUpperCase();
-	if (!amount || !DECIMAL.test(amount) || (indicator !== 'CRDT' && indicator !== 'DBIT')) return null;
+	if (!amount || (indicator !== 'CRDT' && indicator !== 'DBIT')) return null;
 	return {units: toUnits(amount, indicator), scale: fractionDigits(amount)};
 }
 
-/** An unsigned `DECIMAL` amount, signed by its credit/debit indicator. */
+/** A `DECIMAL` amount as written, with the zero before the point; null for any other text. */
+function decimal(element: Element | null): string | null {
+	const value = text(element);
+	if (!value || !DECIMAL.test(value)) return null;
+	return value.startsWith('.') ? `0${value}` : value;
+}
+
+/** An unsigned `decimal` amount, signed by its credit/debit indicator. */
 function toUnits(amount: string, indicator: 'CRDT' | 'DBIT'): bigint {
 	const {units} = parseDecimal(amount, '.')!;
 	return indicator === 'DBIT' ? -units : units;
@@ -288,9 +298,10 @@ function trimAmount(amount: string): string {
 	return amount.replace(/^0+(?=\d)/, '');
 }
 
-/** `Dt` as written, or the date part of `DtTm` as written; no timezone conversion. */
+/** `Dt` as written without its time zone, if any, or the date part of `DtTm` as written; no timezone conversion. */
 function dateOf(container: Element | null): string | null {
-	const value = text(child(container, 'Dt')) ?? text(child(container, 'DtTm'))?.slice(0, 10) ?? null;
+	const value =
+		text(child(container, 'Dt'))?.replace(DATE_ZONE, '') ?? text(child(container, 'DtTm'))?.slice(0, 10) ?? null;
 	return value === null ? null : checkedDate(value);
 }
 

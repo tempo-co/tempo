@@ -81,6 +81,11 @@ describe('parseCamt053', () => {
 			}),
 		},
 		{
+			name: 'an amount without a leading zero and dates with a time zone, read as written',
+			entry: {amount: '.21', bookingDate: '2026-03-02+01:00', valueDate: '2026-03-01Z'},
+			expected: row({amount: '-0.21', valueDate: '2026-03-01'}),
+		},
+		{
 			name: 'NOTPROVIDED is no reference number',
 			entry: {
 				amount: '5.00',
@@ -212,8 +217,26 @@ describe('parseCamt053', () => {
 		const [statement] = parse(
 			camt053([{servicerBic: 'EXAMPLEXX', opening: '1000.00', closing: '987.50', entries: [{amount: '12.50'}]}]),
 		);
+		// Balances without a leading zero, dated with a time zone.
+		const [swiss] = parse(
+			camt053([
+				{
+					servicerBic: 'EXAMPLEXX',
+					opening: '.71',
+					closing: '.50',
+					openingDate: '2026-03-01+02:00',
+					closingDate: '2026-03-02-05:00',
+					entries: [{amount: '.21'}],
+				},
+			]),
+		);
 
 		expect(statement.rows.map(({balanceAfter}) => balanceAfter)).toEqual(['987.50']);
+		expect(swiss).toMatchObject({
+			openingBalance: {date: '2026-03-01', amount: '0.71'},
+			closingBalance: {date: '2026-03-02', amount: '0.50'},
+			rows: [{amount: '-0.21', balanceAfter: '0.50'}],
+		});
 	});
 
 	it.each([
@@ -247,6 +270,7 @@ describe('parseCamt053', () => {
 		{name: 'several rows of a bank whose entry order is unknown', bic: 'EXAMPLEXX', entries: ['12.50', '2.00']},
 		{name: 'several rows of a bank whose entry order is known', bic: 'ABNANL2A', entries: ['12.50', '2.00']},
 		{name: 'one row', bic: 'EXAMPLEXX', entries: ['12.50']},
+		{name: 'one row without a leading zero', bic: 'EXAMPLEXX', entries: ['.21']},
 		{name: 'no rows', bic: 'EXAMPLEXX', entries: []},
 	])('refuses a statement of $name whose entries do not add up to its closing balance', ({bic, entries}) => {
 		const xml = camt053([
@@ -389,6 +413,16 @@ describe('parseCamt053', () => {
 		{
 			name: 'a date that does not exist',
 			xml: camt053([{entries: [{amount: '1.00', bookingDate: '2026-02-30'}]}]),
+			code: 'parse_failed',
+		},
+		{
+			name: 'an amount with no digits',
+			xml: camt053([{entries: [{amount: '.'}]}]),
+			code: 'parse_failed',
+		},
+		{
+			name: 'a time zone that is not one',
+			xml: camt053([{entries: [{amount: '1.00', bookingDate: '2026-03-02+2'}]}]),
 			code: 'parse_failed',
 		},
 		{

@@ -11,6 +11,8 @@ const OFX_DATE =
 const TAG_NAME = /^[A-Za-z][A-Za-z0-9._]*$/;
 /** How the file begins: the 1.x header, the 2.x declarations, or the root element itself. */
 const OFX_PROLOGUE = /^(?:OFXHEADER\s*:|(?:<\?xml\b[^>]*\?>\s*)?<\?OFX\b|<OFX\s*>)/i;
+/** HTTP-style header lines a download can keep above the OFX header (`Content-Type: application/x-ofx`). */
+const DOWNLOAD_HEADER_LINES = /^(?:\s*(?!OFXHEADER\s*:)[A-Za-z][A-Za-z0-9-]*:[^\r\n]*\r?\n){1,5}/i;
 const MAX_DEPTH = 256;
 /**
  * The aggregates the reader walks through. Only a document type definition tells an aggregate from an SGML leaf
@@ -42,15 +44,15 @@ const TRANSACTION_LIST_MEMBERS = new Set(['DTSTART', 'DTEND', 'STMTTRN']);
 type OfxElement = {name: string; children: OfxElement[]; value: string | null};
 
 /**
- * A quick look at how the file begins: the OFX 1.x header (`OFXHEADER:`), the OFX 2.x processing instruction
- * (`<?OFX`, after an optional XML declaration) or an `<OFX>` root. QFX files are OFX files with extra vendor
- * elements.
+ * A quick look at how the file begins, after any download header lines: the OFX 1.x header (`OFXHEADER:`), the OFX
+ * 2.x processing instruction (`<?OFX`, after an optional XML declaration) or an `<OFX>` root. QFX files are OFX files
+ * with extra vendor elements.
  */
 export function looksLikeOfx(bytes: Uint8Array): boolean {
 	const head = Buffer.from(bytes.buffer, bytes.byteOffset, Math.min(bytes.byteLength, SNIFF_BYTES))
 		.toString('latin1')
 		.replace(/^\u00ef\u00bb\u00bf/, '');
-	return OFX_PROLOGUE.test(head.trimStart());
+	return OFX_PROLOGUE.test(head.replace(DOWNLOAD_HEADER_LINES, '').trimStart());
 }
 
 /**
@@ -74,20 +76,22 @@ export function parseOfx(bytes: Uint8Array): NormalizedStatement[] {
 }
 
 /**
- * The text in the encoding the file declares: the 1.x header's `CHARSET:1252` or `CHARSET:8859-1` (both read as
- * Windows-1252, which the latter is a subset of), else UTF-8, which 2.x files declare and ASCII is part of.
+ * The text as UTF-8, which 2.x files declare and ASCII is part of, when it decodes as such: some exports declare
+ * another charset and write UTF-8. Otherwise the 1.x header's `CHARSET:1252` or `CHARSET:8859-1` (both read as
+ * Windows-1252, which the latter is a subset of); a file that declares neither must be UTF-8.
  */
 function decode(bytes: Uint8Array): string {
-	const head = Buffer.from(bytes.buffer, bytes.byteOffset, Math.min(bytes.byteLength, SNIFF_BYTES)).toString(
-		'latin1',
-	);
-	const encoding = /^\s*ENCODING\s*:\s*(\S+)/im.exec(head)?.[1].toUpperCase();
-	const charset = /^\s*CHARSET\s*:\s*(\S+)/im.exec(head)?.[1].toUpperCase();
-	const label = encoding !== 'UTF-8' && (charset === '1252' || charset === '8859-1') ? 'windows-1252' : 'utf-8';
 	try {
-		return new TextDecoder(label, {fatal: true}).decode(bytes);
+		return new TextDecoder('utf-8', {fatal: true}).decode(bytes);
 	} catch {
-		throw new ParseRefusal('parse_failed');
+		const head = Buffer.from(bytes.buffer, bytes.byteOffset, Math.min(bytes.byteLength, SNIFF_BYTES)).toString(
+			'latin1',
+		);
+		const encoding = /^\s*ENCODING\s*:\s*(\S+)/im.exec(head)?.[1].toUpperCase();
+		const charset = /^\s*CHARSET\s*:\s*(\S+)/im.exec(head)?.[1].toUpperCase();
+		if (encoding === 'UTF-8' || (charset !== '1252' && charset !== '8859-1'))
+			throw new ParseRefusal('parse_failed');
+		return new TextDecoder('windows-1252').decode(bytes);
 	}
 }
 
@@ -231,7 +235,8 @@ function parseTransaction(transaction: OfxElement, currency: string): Normalized
 	return {
 		bookingDate,
 		valueDate: null,
-		transactionDate: date(value(transaction, 'DTUSER')),
+		// Only the posting date books the transaction; an unreadable user date is left out.
+		transactionDate: optionalDate(value(transaction, 'DTUSER')),
 		amount: formatUnits(amount.units, amountScale(amount)),
 		creditDebitIndicator: amount.units < 0n ? 'DBIT' : 'CRDT',
 		currency,
@@ -253,6 +258,14 @@ function date(text: string | null): string | null {
 	const parts = OFX_DATE.exec(text);
 	if (!parts) throw new ParseRefusal('parse_failed');
 	return checkedDate(`${parts[1]}-${parts[2]}-${parts[3]}`);
+}
+
+function optionalDate(text: string | null): string | null {
+	try {
+		return date(text);
+	} catch {
+		return null;
+	}
 }
 
 /** The elements at the end of a path of child names, below `root`. */

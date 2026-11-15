@@ -21,6 +21,25 @@ describe('OFX and QFX files', () => {
 		expect(statement.rows.map(({bookingDate}) => bookingDate)).toEqual(['2026-03-02', '2026-03-03', '2026-03-04']);
 	});
 
+	it("reads a download's header lines before the OFX header, a UTF-8 file whatever charset it declares, and an unreadable transaction date as none", () => {
+		const prefixed = `Content-Type: application/x-ofx\r\n${SGML_FILE}`;
+		const named = SGML_FILE.replace('<NAME>Test Persoon', '<NAME>Café £5');
+		const userDates = (date: string) => SGML_FILE.replace('<DTUSER>20260301', `<DTUSER>${date}`);
+
+		expect(parseFile(Buffer.from(prefixed, 'latin1'))).toEqual(parseFile(Buffer.from(SGML_FILE, 'latin1')));
+		// CHARSET:1252 is declared; the bytes decide.
+		expect(parseFile(Buffer.from(named, 'utf8')).statements[0].rows[1].counterpartyName).toBe('Café £5');
+		expect(parseFile(Buffer.from(named, 'latin1')).statements[0].rows[1].counterpartyName).toBe('Café £5');
+		for (const date of ['202603010', '20260230']) {
+			const [statement] = parseFile(Buffer.from(userDates(date), 'latin1')).statements;
+			expect(statement.rows.map(({bookingDate, transactionDate}) => [bookingDate, transactionDate])).toEqual([
+				['2026-03-02', null],
+				['2026-03-03', null],
+				['2026-03-04', null],
+			]);
+		}
+	});
+
 	it('reads an SGML element left empty as empty, keeping the elements after it in place', () => {
 		const file = SGML_FILE.replace('<NAME>Test Persoon', '<NAME>\r\n<MEMO>Example memo').replace(
 			'<BANKTRANLIST>',
