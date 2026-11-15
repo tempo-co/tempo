@@ -1,9 +1,16 @@
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+
 import {EXAMPLE_IBAN, camt053} from '../../../../../test/fixtures/statement-file.fixture';
 import {parseCamt053} from './camt053';
 import {parseFile} from './parse-file';
 import {NormalizedRow, ParseRefusal} from './parse-result';
 
 const parse = (xml: string) => parseCamt053(Buffer.from(xml));
+const SWISS_FILE = readFileSync(
+	join(__dirname, '../../../../../test/fixtures/file-import/swiss-zone-dates-camt-synthetic.xml'),
+	'utf8',
+);
 
 const counterpartyDetails = (party: 'Cdtr' | 'Dbtr', name: string, iban: string, extra = '') =>
 	`<TxDtls><Refs><EndToEndId>E2E-EXAMPLE</EndToEndId></Refs><RltdPties><${party}><Nm>${name}</Nm></${party}>` +
@@ -283,6 +290,31 @@ describe('parseCamt053', () => {
 		]);
 
 		expect(() => parse(xml)).toThrow(new ParseRefusal('parse_failed'));
+	});
+
+	it('reads a Swiss statement with amounts without a leading zero and dates with a time zone, and refuses it altered', () => {
+		const [statement] = parse(SWISS_FILE);
+
+		expect(statement).toMatchObject({
+			accountIban: 'CH9300762011623852957',
+			openingBalance: {date: '2026-10-01', amount: '0.95'},
+			closingBalance: {date: '2026-10-01', amount: '100.64'},
+			rows: [
+				{
+					bookingDate: '2026-10-01',
+					valueDate: '2026-10-01',
+					amount: '-0.21',
+					counterpartyName: 'Example Bank Fees',
+				},
+				{
+					bookingDate: '2026-10-01',
+					valueDate: '2026-10-01',
+					amount: '99.90',
+					counterpartyName: 'Example Customer AG',
+				},
+			],
+		});
+		expect(() => parse(SWISS_FILE.replace('>.21<', '>.22<'))).toThrow(new ParseRefusal('parse_failed'));
 	});
 
 	it('keeps the closing balance of a statement that states no opening balance, and states none without one', () => {

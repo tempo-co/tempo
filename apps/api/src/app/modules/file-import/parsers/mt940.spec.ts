@@ -8,7 +8,9 @@ import {NormalizedRow, ParseRefusal} from './parse-result';
 
 /** A synthetic Polish IBAN. */
 const POLISH_IBAN = 'PL4910900000000000000000001234';
-const ABN_AMRO_FILE = readFileSync(join(__dirname, '../../../../../test/fixtures/file-import/MT940260305120000.STA'));
+const FIXTURES = join(__dirname, '../../../../../test/fixtures/file-import');
+const fixture = (name: string) => readFileSync(join(FIXTURES, name));
+const ABN_AMRO_FILE = fixture('MT940260305120000.STA');
 
 /** One statement of another bank: opening 100.00 on 2026-10-05, the given entries, closing at the running total. */
 const statement = (entries: string[], closing: string, header: string[] = []) =>
@@ -274,6 +276,54 @@ describe('parseMt940', () => {
 		expect(row).toMatchObject(expected);
 	});
 
+	it.each([
+		{
+			name: "Handelsbanken's single-slash /ORDP/ and /BENM/ codes",
+			file: 'handelsbanken-ordp-benm-mt940-synthetic.sta',
+			accountIban: 'SE4550000000058398257466',
+			expected: [
+				{counterpartyName: 'EXAMPLE COMPANY ONE AB', remittanceInformation: '57700?+719,00'},
+				{counterpartyName: 'EXAMPLE COMPANY TWO AB', remittanceInformation: '0056696'},
+				{counterpartyName: 'EXAMPLE SUPPLIER AB', remittanceInformation: 'INVOICE 117777', amount: '-841.00'},
+			],
+		},
+		{
+			name: "mBank's second :86: field, after an account written with a slash",
+			file: 'mbank-retail-second-86-mt940-synthetic.sta',
+			accountIban: 'PL61109010140000071219812874',
+			expected: [
+				{
+					counterpartyName: 'EXAMPLE PAYEE NAME',
+					remittanceInformation: 'ZASILENIE RACHUNKU',
+					description: '303 B303PRZELEW WEWNETRZNY WYCH ZASILENIE RACHUNKU',
+				},
+			],
+		},
+		{
+			name: "Santander Bank Polska's Odbiorca: and Nadawca: keywords",
+			file: 'santander-pl-keywords-mt940-synthetic.sta',
+			accountIban: 'PL61109010140000071219812874',
+			expected: [
+				{counterpartyName: 'EXAMPLE PAYEE SP. Z O.O. EXAMPLE CITY', amount: '-50.00'},
+				{counterpartyName: 'EXAMPLE SENDER SP Z O.O. EXAMPLE TOWN', amount: '100.00'},
+			],
+		},
+		{
+			name: "mBank's DLA: and OD: keywords in Windows-1250",
+			file: 'mbank-cp1250-mt940-synthetic.sta',
+			accountIban: 'PL61109010140000071219812874',
+			expected: [
+				{counterpartyName: 'ŁÓDZKA SPÓŁKA PRZYKŁADOWA ŚWIĘTOKRZYSKA 1 00-001 ŹRÓDŁO', amount: '-25.00'},
+				{counterpartyName: 'ŻANETA PRZYKŁAD UL. ŻÓŁTA 2 00-002 ŁĘCZYCA', amount: '40.00'},
+			],
+		},
+	])('reads the payees of a file in the shape of $name', ({file, accountIban, expected}) => {
+		const [statement] = parseFile(fixture(file)).statements;
+
+		expect(statement.accountIban).toBe(accountIban);
+		expect(statement.rows).toMatchObject(expected);
+	});
+
 	it('reads a UTF-8 file as UTF-8, any other as Windows-1252, and a Central European account in its own encoding', () => {
 		const file = statement(
 			[':61:2610051005D10,00NTRFNONREF//B1', ':86:166?00GUTSCHRIFT?20Fee 10 \x80?32Jörg Müller'],
@@ -327,20 +377,11 @@ describe('parseMt940', () => {
 	});
 
 	it("dates a balance on the 29th to 31st of a shorter month, as 30/360 interest statements do, on that month's last day", () => {
-		const file = [
-			':20:EXAMPLE',
-			`:25:${OTHER_EXAMPLE_IBAN}`,
-			':60F:C261130EUR100,00',
-			':61:2611301130C5,00NINTNONREF',
-			':86:Interest',
-			':62F:C261131EUR105,00',
-			':64:C261131EUR105,00',
-			'-',
-		].join('\r\n');
+		const [statement] = parseMt940(fixture('nov-31-balance-mt940-synthetic.sta'));
 
-		expect(parseMt940(Buffer.from(file, 'latin1'))[0].closingBalance).toEqual({
-			date: '2026-11-30',
-			amount: '105.00',
+		expect(statement).toMatchObject({
+			closingBalance: {date: '2026-11-30', amount: '105.00'},
+			rows: [{valueDate: '2026-11-30', amount: '5.00', balanceAfter: '105.00'}],
 		});
 	});
 
@@ -410,10 +451,7 @@ describe('parseMt940', () => {
 		},
 		{
 			name: 'a file that ends inside the available balance after the closing balance',
-			file: statement([':61:261005D10,00NTRFNONREF', ':86:Example Shop'], '90,00').replace(
-				/\r\n-$/,
-				'\r\n:64:C2610',
-			),
+			file: fixture('cut-available-balance-mt940-synthetic.sta').toString('latin1'),
 		},
 	])('refuses $name', ({file}) => {
 		expect(() => parseMt940(Buffer.from(file, 'latin1'))).toThrow(new ParseRefusal('parse_failed'));
