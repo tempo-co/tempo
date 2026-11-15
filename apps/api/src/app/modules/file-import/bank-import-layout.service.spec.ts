@@ -512,6 +512,31 @@ describe('buildLayout', () => {
 		}
 	});
 
+	it('never saves a padded title or name line as the layout header, or as the header the proposal records', () => {
+		const rows = ['05.10.2026;-12,50;EUR;Shop;Ref;X', '06.10.2026;-4,20;EUR;Cafe;Ref;Y'];
+		for (const lines of [
+			['Kontoinhaber Example Person;;;;;', ...rows],
+			['Datum;Betrag;Waehrung;Name;Referenz;Text', 'Example Person;;;;;', ...rows],
+		]) {
+			const sample = sampleTable(Buffer.from(lines.join('\n')))!;
+			const built = buildLayout(
+				layoutAnswerSchema.parse({
+					...ANSWER,
+					dateFormat: 'DD.MM.YYYY',
+					decimalMark: ',',
+					amount: {kind: 'signed', column: 1},
+				}),
+				sample,
+				'EUR',
+			)!;
+
+			// The proposal stores `sample.header` as its header cells.
+			expect(sample.header).toBeNull();
+			expect(built.layout).toMatchObject({recognize: {columnCount: 6}});
+			expect(JSON.stringify(built.layout)).not.toMatch(/Kontoinhaber|Example|Person/);
+		}
+	});
+
 	it('reads dates with a two-digit year after the month name, and cannot read a headerless file with nothing to check', () => {
 		const shortYears = Buffer.from(
 			fixture('nationwide-month-names-synthetic.csv')

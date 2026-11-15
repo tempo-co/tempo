@@ -46,6 +46,10 @@ The API calls the Anthropic API with `ANTHROPIC_API_KEY` from the production env
 
 `MERCHANT_LOGOS_ENABLED=true` in `/etc/tempo/production.env` turns merchant logos on. The first start identifies every existing merchant key in batches of 50 and then fetches each confirmed site's icon, so expect a few minutes of model calls and outbound HTTPS requests to merchant sites, `icons.duckduckgo.com` and, with `LOGO_DEV_SECRET_KEY` set, `api.logo.dev`. logo.dev's free plan has a monthly credit allowance; when it runs out, logos come from the merchants' sites and logo.dev is asked again the next day.
 
+### Statement file import
+
+`FILE_IMPORT_ENABLED=true` in `/etc/tempo/production.env` turns statement file import on, and `FILE_IMPORT_MAPPER_ENABLED=true` lets a file in no known layout have its columns worked out by one model call on a masked sample; the mapper needs `ANTHROPIC_API_KEY`.
+
 ### Push notifications
 
 `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY` and `WEB_PUSH_VAPID_SUBJECT` (a `mailto:` contact) in `/etc/tempo/production.env` turn push alerts on; generate the pair once with `npx web-push generate-vapid-keys`. Without them, Settings says the server sends no notifications. Changing the pair ends every device's subscription: on each device, turn notifications off and allow them again in Settings → Account. Pushes go out to Apple's, Google's, Mozilla's and Microsoft's push services.

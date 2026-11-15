@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
 import {createWorkbook} from '../../../../../test/fixtures/statement-file.fixture';
+import {toMapperInput} from '../mapper/layout-mapper.contract';
 import {validateSampleOutput} from '../runner/validate-parse-output';
 import {maskTable} from './table-mask';
 import {sampleTable} from './table-sample';
@@ -175,6 +176,21 @@ describe('maskTable', () => {
 		]);
 		expect(masked.linesBelow).toHaveLength(3);
 	});
+
+	it('masks every numeric character and drops the combining marks after a masked one, in rows and lines around them', () => {
+		const masked = maskTable({
+			header: null,
+			linesAbove: [{line: 0, cells: ['Kontoinhaber Exam\u0301ple ①']}],
+			rows: [['Huur 50m² ½ Ⅻ', 'Cafe\u0301 ٣']],
+			linesBelow: [['Saldo ⅷ']],
+			columnCount: 2,
+		});
+
+		expect(masked.rows).toEqual([['Aaaa 99a9 9 9', 'Aaaa 9']]);
+		expect(masked.linesAbove).toEqual([{line: 0, cells: ['Aaaaaaaaaaaa Aaaaaaa 9']}]);
+		expect(masked.linesBelow).toEqual([['Aaaaa 9']]);
+		expect(masked.columnShapes).toEqual(['Aaaa 99a9 9 9', 'Aaaa 9']);
+	});
 });
 
 describe('sampleTable', () => {
@@ -236,6 +252,28 @@ describe('sampleTable', () => {
 			{line: 0, cells: ['Aaaaa', 'Aaaaaaa Aaaaaa', 'AA99AAAA9999999999']},
 		]);
 		expect(JSON.stringify(sample?.masked)).not.toMatch(/Example|NL91/);
+	});
+
+	it('never takes a padded title line for the header, so its text is masked like any line above the table', () => {
+		const rows = [
+			'05.10.2026;-12,50;EUR;Shop;Ref;X',
+			'06.10.2026;-4,20;EUR;Cafe;Ref;Y',
+			'07.10.2026;-1,00;EUR;Bar;Ref;Z',
+		];
+		const title = 'Kontoinhaber Example Person;;;;;';
+		const header = 'Datum;Betrag;Waehrung;Name;Referenz;Text';
+		// A title padded out to the table's width right above the rows, and a name line between the header and the rows.
+		for (const [lines, skipBefore] of [
+			[[title, ...rows], 1],
+			[[header, 'Example Person;;;;;', ...rows], 2],
+		] as const) {
+			const sample = sampleTable(Buffer.from([...lines, ''].join('\n')))!;
+
+			expect(sample).toMatchObject({columnCount: 6, skipBefore, rowsAbove: 0, header: null, rowCount: 3});
+			expect(sample.masked.header).toBeNull();
+			expect(JSON.stringify(toMapperInput(sample))).not.toMatch(/Kontoinhaber|Example|Person/);
+			expect(() => validateSampleOutput({ok: true, sample})).not.toThrow();
+		}
 	});
 
 	it('finds no table when rows of its width follow a line of another width, which skipping would drop', () => {

@@ -46,8 +46,8 @@ const MIN_SAME_VALUE_ROWS = 3;
 /**
  * Everything the column mapper may learn about a file, decided in this one place.
  *
- * - Every letter becomes `a` or `A` (case kept) and every digit `9`; punctuation, spaces and length are kept, and each
- *   cell is cut at 60 characters.
+ * - Every letter becomes `a` or `A` (case kept) and every numeric character `9`; the combining marks after them are
+ *   dropped; punctuation, spaces and length are kept, and each cell is cut at 60 characters.
  * - Sent as written: the header's cells without a digit (cut at 80 characters, at most 200 of them); a cell that is
  *   an ISO 4217 currency code; and a row cell that is one of the `PLAIN_WORDS` a direction or status column holds
  *   (`Af`/`Bij`, `Debit`/`Credit`, `Gebucht`/`Vorgemerkt`). Nothing else of a row is, however short or often
@@ -91,8 +91,7 @@ function columnHint(values: readonly string[]): ColumnHint {
 	// A Map keeps insertion order, so equally frequent shapes stay in the order they first appear.
 	const counts = new Map<string, number>();
 	for (const value of values) {
-		// Every numeric character, not only decimal digits (², ½), since these shapes cover every row of the file.
-		const shape = maskText(value).replace(/\p{N}/gu, '9');
+		const shape = maskText(value);
 		counts.set(shape, (counts.get(shape) ?? 0) + 1);
 	}
 	const shapes = [...counts.keys()]
@@ -108,12 +107,19 @@ function maskCell(value: string): string {
 	return ISO_CURRENCY_CODES.has(value) ? value : maskText(value);
 }
 
+/**
+ * Every numeric character becomes `9` (not only decimal digits: ², ½, Ⅻ) and every letter `a` or `A`; the combining
+ * marks after a masked character are dropped, so an accent written as a mark masks like one written in its letter.
+ */
 function maskText(text: string): string {
+	let masked = false;
 	return [...text]
 		.slice(0, MAX_MASKED_CELL_LENGTH)
 		.map((character) => {
-			if (/\p{Nd}/u.test(character)) return '9';
-			if (!/\p{L}/u.test(character)) return character;
+			if (/\p{M}/u.test(character) && masked) return '';
+			masked = /[\p{N}\p{L}]/u.test(character);
+			if (/\p{N}/u.test(character)) return '9';
+			if (!masked) return character;
 			return character === character.toLowerCase() && character !== character.toUpperCase() ? 'a' : 'A';
 		})
 		.join('');
