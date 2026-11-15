@@ -350,14 +350,23 @@ describe('Bank import column mapper', () => {
 		mapLayout.mockResolvedValueOnce(ANSWER.balance);
 		const proposed = await propose(agent, BALANCE_CSV).expect(201);
 
-		for (const bankName of [' revolut ', 'REVOLUT']) {
+		for (const [bankName, bank] of [
+			[' revolut ', 'Revolut'],
+			['REVOLUT', 'Revolut'],
+			// Its credit card export names no account.
+			['rabobank', 'Rabobank'],
+		]) {
 			const refused = await confirm(agent, proposed.body.id, {bankName, currency: 'GBP'}).expect(400);
 			expect(refused.body.message).toBe(
-				"Revolut's own exports already import into your Revolut accounts. Name this bank differently.",
+				`${bank}'s own exports already import into your ${bank} accounts. Name this bank differently.`,
 			);
 		}
 		expect(await layouts.countBy({accountId: owner.id})).toBe(0);
 		await confirm(agent, proposed.body.id, {bankName: 'Revolut Example', currency: 'GBP'}).expect(201);
+		// A layout whose files name their account shares no account with those files.
+		mapLayout.mockResolvedValueOnce(ANSWER.debitCredit);
+		const named = await propose(agent, DEBIT_CREDIT_CSV).expect(201);
+		await confirm(agent, named.body.id, {bankName: 'Rabobank'}).expect(201);
 	});
 
 	it('refuses to save a layout too large to send to the file reader with the others', async () => {

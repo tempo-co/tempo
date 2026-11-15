@@ -50,11 +50,13 @@ The built-in bank CSV layouts:
 | Bank                     | Layouts                                                                                    | Notes                                                                                     |
 | ------------------------ | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
 | ING                      | `ing-nl` (comma, 9 columns), `ing-nl-11` (semicolon, 11 columns), `ing-en-11`, `ing-en`    | Dutch and English downloads. The 11-column export states the balance after each row.      |
-| Rabobank                 | `rabobank-nl`, `rabobank-en`, `rabobank-creditcard`                                        | The credit card export names no account: it goes by bank and currency, as Revolut does.   |
+| Rabobank                 | `rabobank-nl`, `rabobank-en`, `rabobank-creditcard`                                        | The credit card export names no account: it goes by bank and currency, as Revolut does, and an owner's layout naming no account cannot be called Rabobank. Several cards in one export are one account. |
 | bunq                     | `bunq-nl`, `bunq-en` (6 columns), `bunq-en-7`, `bunq-en-7-semicolon` (with Interest Date)  | Amounts may group thousands with `.`.                                                     |
 | Knab                     | `knab-nl` (with the `KNAB EXPORT` line), `knab-nl-no-preamble`                             | Amounts may group thousands with `.`.                                                     |
 | ASN Bank, SNS, RegioBank | `asn-nl`                                                                                   | No header; the account is held at `ASNB`, `SNSB` or `RBRB`.                               |
 | Triodos Bank             | `triodos-nl`                                                                               | No header; the account is held at `TRIO`; the other party's cell holds its BIC and IBAN. |
+
+In any layout, a counterparty cell holding a BIC, a space and an IBAN (as Triodos writes it) is read as that IBAN.
 
 Not read: QIF, PDF, old binary `.xls` (ABN AMRO's Excel download is one; its CAMT.053 and TXT are read). The built-in CSV layouts rest on public descriptions and samples from 2017 to 2026 (`test/fixtures/file-import/SOURCES.md`); none has been checked against a current export.
 

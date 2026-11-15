@@ -51,8 +51,9 @@ export const STATEMENT_FORMATS = ['camt053', 'mt940', 'abnAmroTxt', 'revolutCsv'
 export type StatementFormat = (typeof STATEMENT_FORMATS)[number];
 
 /**
- * Banks whose files name no account; the owner's account at that bank is found by currency instead. An owner's
- * saved layout whose files name no account works the same way, under the bank name the owner gave it.
+ * Banks whose files name no account; the owner's account at that bank is found by currency instead. A built-in
+ * CSV layout whose files name no account (`NO_ACCOUNT_LAYOUT_BANKS`), and an owner's saved one under the bank name the
+ * owner gave it, work the same way.
  */
 export const STATEMENT_BANKS = ['Revolut'] as const;
 
@@ -65,8 +66,8 @@ export type NormalizedStatement = {
 	/** The account's other id (CAMT `Acct/Id/Othr/Id`, MT940 `:25:`) when it has no IBAN. */
 	accountOtherId: string | null;
 	/**
-	 * The bank of a file that names no account at all (one of `STATEMENT_BANKS`, or the bank of the owner's saved
-	 * layout it was read with); null whenever the file has an IBAN or other id.
+	 * The bank of a file that names no account at all (one of `STATEMENT_BANKS`, or the bank of the CSV layout,
+	 * built in or the owner's, it was read with); null whenever the file has an IBAN or other id.
 	 */
 	bank: string | null;
 	accountCurrency: string;

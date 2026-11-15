@@ -1,7 +1,7 @@
 import {normalizeIban} from '@modules/banking/own-transfer/iban';
 
 import {CSV_DELIMITERS, CsvLayout, MAX_LAYOUT_COLUMNS, isCsvLayoutId} from '../parsers/csv-layout';
-import {CSV_LAYOUTS} from '../parsers/csv-layouts';
+import {CSV_LAYOUTS, namesNoAccount} from '../parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from '../parsers/currency-codes';
 import {MAX_ARCHIVE_ENTRIES, MAX_ROWS_PER_DROP} from '../parsers/parse-limits';
 import {
@@ -122,7 +122,7 @@ function validateStatement(value: unknown, owned: readonly CsvLayout[]): Normali
 	if (format === 'csv' ? !isCsvLayoutId(layout) : layout !== null) throw new ParseRefusal('parse_failed');
 	const banks: readonly unknown[] =
 		format === 'csv'
-			? [...CSV_LAYOUTS, ...owned].filter(({id}) => id === layout).map(({bank}) => bank)
+			? [...CSV_LAYOUTS.filter(namesNoAccount), ...owned].filter(({id}) => id === layout).map(({bank}) => bank)
 			: STATEMENT_BANKS;
 	if (bank !== null && (!banks.includes(bank) || accountIban || accountOtherId)) {
 		throw new ParseRefusal('parse_failed');

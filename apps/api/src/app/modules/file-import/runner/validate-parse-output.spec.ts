@@ -77,6 +77,19 @@ describe('validateParseOutput', () => {
 		});
 	});
 
+	it('accepts a statement that names no account under the bank of the built-in layout it was read with', () => {
+		const statement = {format: 'csv', layout: 'rabobank-creditcard', accountIban: null, bank: 'Rabobank'};
+		const value = {...output([], statement), formats: ['csv'], layouts: ['rabobank-creditcard']};
+
+		expect(validateParseOutput(value)).toMatchObject({ok: true, result: {statements: [statement]}});
+		for (const other of [{layout: 'rabobank-nl'}, {bank: 'Revolut'}, {accountIban: 'NL91ABNA0417164300'}]) {
+			const changed = {...statement, ...other};
+			expect(() =>
+				validateParseOutput({...output([], changed), formats: ['csv'], layouts: [changed.layout]}),
+			).toThrow(new ParseRefusal('parse_failed'));
+		}
+	});
+
 	it("accepts a statement that names no account under the bank of the owner's layout it was read with", () => {
 		const owned = {id: 'learned-example', bank: 'Example Bank'} as CsvLayout;
 		const statement = {format: 'csv', layout: 'learned-example', accountIban: null, bank: 'Example Bank'};

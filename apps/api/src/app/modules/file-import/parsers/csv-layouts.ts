@@ -1,5 +1,9 @@
 import {CsvLayout} from './csv-layout';
 
+/** Whether a layout's files name no account, so its statements go by its bank and currency. */
+export const namesNoAccount = (layout: Pick<CsvLayout, 'accountIban' | 'accountIbanLine'>): boolean =>
+	layout.accountIban === undefined && layout.accountIbanLine === undefined;
+
 /**
  * The bank CSV exports Tempo reads, each established from a public description and sample of the export (see
  * `test/fixtures/file-import/SOURCES.md`). A layout with a header is tried before one without: a file without a
@@ -461,4 +465,9 @@ export const CSV_LAYOUTS: readonly CsvLayout[] = [
 		description: [7],
 		balance: {column: 8, when: 'after'},
 	},
+];
+
+/** The banks of the built-in layouts whose files name no account: an owner's layout naming none cannot take them. */
+export const NO_ACCOUNT_LAYOUT_BANKS: readonly string[] = [
+	...new Set(CSV_LAYOUTS.filter(namesNoAccount).map(({bank}) => bank)),
 ];
