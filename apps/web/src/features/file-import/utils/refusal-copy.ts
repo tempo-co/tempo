@@ -60,7 +60,8 @@ const REFUSAL_COPY: Record<
   },
   legacy_xls_not_supported: {
     title: "Old Excel files aren't supported",
-    description: 'Export the same statement as CAMT.053, MT940 or TXT instead.',
+    description:
+      'Download the same statement as CAMT.053 or TXT instead. Banks like ABN AMRO offer both.',
   },
   file_too_large: {
     title: 'This file is too large',
