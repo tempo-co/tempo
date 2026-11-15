@@ -45,7 +45,7 @@ export class AuthService {
 		}
 		// Passport removes the user, then regenerates the session, which deletes the old one from the store.
 		await new Promise<void>((resolve, reject) => {
-			request.logOut({keepSessionInfo: false}, (error?: unknown) => (error ? reject(error) : resolve()));
+			request.logOut({keepSessionInfo: false}, (error?: Error) => (error ? reject(error) : resolve()));
 		});
 		return {message: LOGOUT_SUCCESS};
 	}

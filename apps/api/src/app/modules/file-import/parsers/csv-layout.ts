@@ -219,9 +219,7 @@ export function csvLayoutColumnCount({recognize}: Pick<CsvLayout, 'recognize'>):
 }
 
 /** Thrown inside the validator only; `validateCsvLayout` turns it into its result. */
-class LayoutProblem {
-	constructor(readonly message: string) {}
-}
+class LayoutProblem extends Error {}
 
 /**
  * Checks that a value is a complete layout: every required field present, no unknown field, every column within the
@@ -300,7 +298,7 @@ function layoutOf(value: unknown): CsvLayout {
 				  !('column' in currencyValue) &&
 				  typeof currencyValue.fixed === 'string' &&
 				  CURRENCY.test(currencyValue.fixed)
-				? {fixed: currencyValue.fixed as string}
+				? {fixed: currencyValue.fixed}
 				: null;
 	if (!currency) throw new LayoutProblem('currency');
 

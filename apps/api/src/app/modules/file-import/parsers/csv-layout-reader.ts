@@ -101,7 +101,7 @@ const IBAN_IN_TEXT = /\b[A-Z]{2}\d{2}(?:(?: [A-Z0-9]{4}){2,7}(?: [A-Z0-9]{1,4})?
 const BIC_AND_IBAN = /^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\s+([A-Z]{2}\d{2}[A-Z0-9]{11,30})$/;
 
 /** A row that does not read as its layout says; the reader turns it into the layout's refusal. */
-class RowProblem {}
+class RowProblem extends Error {}
 
 type ReadRow = NormalizedRow & {iban: string | null; units: bigint; balance: Decimal | null};
 type Attempt = {read: CsvLayoutRead} | {nearMiss: string} | {skipsRows: true} | null;

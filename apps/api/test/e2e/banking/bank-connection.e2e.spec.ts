@@ -2591,8 +2591,13 @@ describe('BankConnectionController', () => {
 			bookingDate: '2026-08-21',
 			valueDate: '2026-08-21',
 		};
-		// Two payments with the same date, amount and currency, told apart only by their details.
-		const lookAlikes: EnableBankingTransaction[] = ['Example Cafe', 'Example Bakery'].map((counterpartyName) => ({
+		// Payments with the same date, amount and currency, told apart only by their details.
+		const lookAlikes: EnableBankingTransaction[] = [
+			'Example Cafe',
+			'Example Bakery',
+			'Example Deli',
+			'Example Florist',
+		].map((counterpartyName) => ({
 			amount: '3.50',
 			currency: 'EUR',
 			creditDebitIndicator: 'DBIT',
@@ -2615,6 +2620,19 @@ describe('BankConnectionController', () => {
 					(row) => [row.counterpartyName, row.id],
 				),
 			);
+			// Providers send no time of day, so same-day rows list in the order the bank sent them.
+			const sameDayOrder = async () => {
+				const listed = await verifiedAgent
+					.get(`/bank-connections/${connection.id}/transactions?limit=10`)
+					.expect(200);
+				return (listed.body.transactions as Array<{id: string}>).flatMap(({id}) =>
+					[...lookAlikeIds].flatMap(([counterpartyName, lookAlikeId]) =>
+						lookAlikeId === id ? [counterpartyName] : [],
+					),
+				);
+			};
+			const bankOrder = lookAlikes.map(({counterpartyName}) => counterpartyName);
+			expect(await sameDayOrder()).toEqual(bankOrder);
 
 			// Providers list the newest booking first, so the new row precedes the stored one.
 			getAccountTransactions.mockResolvedValueOnce(
@@ -2632,12 +2650,13 @@ describe('BankConnectionController', () => {
 			).toMatchObject({id, createdAt});
 			const storedCount = await bankTransactionRepository.countBy({bankAccountId: bankAccounts[0].id});
 
-			// The bank renames the stored payment's entry reference and rewrites both look-alikes' descriptions.
+			// The bank renames the stored payment's entry reference, rewrites the look-alikes' descriptions and sends them
+			// in another order.
 			getAccountTransactions.mockResolvedValueOnce(
 				fetchedTransactions([
 					newPayment,
 					{...storedPayment, entryReference: 'entry-stable-id-renamed'},
-					...lookAlikes.map((lookAlike) => ({
+					...lookAlikes.toReversed().map((lookAlike) => ({
 						...lookAlike,
 						description: `${lookAlike.counterpartyName} 22.08 Exampletown`,
 					})),
@@ -2656,6 +2675,8 @@ describe('BankConnectionController', () => {
 					description: `${counterpartyName} 22.08 Exampletown`,
 				});
 			}
+			// A later sync keeps when each row was first seen, so the list keeps the order of the first.
+			expect(await sameDayOrder()).toEqual(bankOrder);
 		} finally {
 			await bankConnectionRepository.delete(connection.id);
 		}
