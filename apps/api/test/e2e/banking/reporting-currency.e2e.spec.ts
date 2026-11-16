@@ -77,6 +77,7 @@ describe('Reporting currency', () => {
 			currency: null,
 			confirmed: false,
 			setupRequired: false,
+			currencyUnavailable: false,
 			suggestion: null,
 			connectedCurrencies: ['EUR', 'GBP'],
 			options: ['EUR', 'GBP', ...REPORTING_CURRENCIES.filter((code) => code !== 'EUR' && code !== 'GBP')],
@@ -239,17 +240,38 @@ describe('Reporting currency', () => {
 
 	it('keeps a currency set before owners could choose one', async () => {
 		const {owner, agent} = await ownerWithAccounts('EUR', 'GBP');
-		await accounts.update({id: owner.id}, {baseCurrency: 'BGN', baseCurrencyState: 'PRESET'});
+		await accounts.update({id: owner.id}, {baseCurrency: 'CHF', baseCurrencyState: 'PRESET'});
 
 		await service.reconcileSafely(owner.id, {historySettled: true});
 		expect(await read(agent)).toMatchObject({
-			currency: 'BGN',
+			currency: 'CHF',
 			confirmed: true,
 			setupRequired: false,
-			// Kept as an option even though amounts can no longer be converted into it.
-			options: ['BGN', 'EUR', 'GBP', ...REPORTING_CURRENCIES.filter((code) => code !== 'EUR' && code !== 'GBP')],
+			currencyUnavailable: false,
 		});
-		await agent.put(ROUTE).send({currency: 'BGN'}).expect(200);
+		await agent.put(ROUTE).send({currency: 'CHF'}).expect(200);
+	});
+
+	it('asks again for a chosen currency the ECB no longer publishes, and refuses it', async () => {
+		const {owner, agent, bankAccounts} = await ownerWithAccounts('EUR', 'USD');
+		await accounts.update({id: owner.id}, {baseCurrency: 'BGN', baseCurrencyState: 'CONFIRMED'});
+		const usdAccount = bankAccounts.find((bankAccount) => bankAccount.currency === 'USD')!;
+		await fixtures.createTransactions(usdAccount, booked(3, 2, {currency: 'USD'}));
+
+		const asked = await read(agent);
+		expect(asked).toMatchObject({
+			currency: 'BGN',
+			confirmed: false,
+			setupRequired: true,
+			currencyUnavailable: true,
+			suggestion: 'USD',
+		});
+		expect(asked.options).not.toContain('BGN');
+		const response = await agent.put(ROUTE).send({currency: 'BGN'}).expect(400);
+		expect(response.body.message).toBe(REPORTING_CURRENCY_UNSUPPORTED);
+
+		await agent.put(ROUTE).send({currency: 'EUR'}).expect(200);
+		expect(await read(agent)).toMatchObject({currency: 'EUR', setupRequired: false, currencyUnavailable: false});
 	});
 
 	it.each([

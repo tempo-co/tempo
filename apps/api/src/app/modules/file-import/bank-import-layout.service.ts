@@ -8,6 +8,7 @@ import type {
 	BankImportLayout as BankImportLayoutResponse,
 	ConfirmBankImportLayoutProposalRequest,
 } from '@tempo/contracts';
+import {BANK_IMPORT_CURRENCIES} from '@tempo/contracts';
 import {createHash, randomUUID} from 'node:crypto';
 import {DataSource, EntityManager, MoreThan} from 'typeorm';
 
@@ -27,6 +28,9 @@ import {NormalizedRow, NormalizedStatement, STATEMENT_BANKS} from './parsers/par
 import {MaskedTable} from './parsers/table-mask';
 import {TableSample} from './parsers/table-sample';
 import {ParseRunnerService} from './runner/parse-runner.service';
+
+/** The codes a file or its owner may name: the active ISO 4217 ones, and the former ones the ECB has rates for. */
+const IMPORT_CURRENCY_CODES: ReadonlySet<string> = new Set([...ISO_CURRENCY_CODES, ...BANK_IMPORT_CURRENCIES]);
 
 /** Model calls an owner may start in 24 hours, whatever their outcome. */
 export const MAX_PROPOSALS_PER_DAY = 5;
@@ -188,7 +192,7 @@ export class BankImportLayoutService {
 				: undefined;
 			if (builtIn) throw new BadRequestException(reservedBankName(builtIn));
 			if (proposal.currencyNeeded) {
-				if (typeof request.currency !== 'string' || !ISO_CURRENCY_CODES.has(request.currency)) {
+				if (typeof request.currency !== 'string' || !IMPORT_CURRENCY_CODES.has(request.currency)) {
 					throw new BadRequestException(INVALID_CURRENCY);
 				}
 			} else if (request.currency !== undefined) {
@@ -402,7 +406,7 @@ function currencyShown(code: string, masked: MaskedTable): boolean {
  * skipped lines come from the file, the columns and formats from the answer. Only the answer's layout fields are
  * used, less the columns and line their values cannot fill (`withReadableAccounts`). A currency code the sample
  * never showed the model (`currencyShown`) is left for the owner to pick, like no currency. Null when the answer
- * names a currency that is no ISO 4217 code; `validateCsvLayout` checks everything else, such as an account line
+ * names a currency outside {@link IMPORT_CURRENCY_CODES}; `validateCsvLayout` checks everything else, such as an account line
  * that is not above the table.
  */
 export function buildLayout(
@@ -412,7 +416,7 @@ export function buildLayout(
 ): {layout: unknown; currencyNeeded: boolean} | null {
 	const {shape} = sample;
 	const answer = withReadableAccounts(proposed, sample);
-	if (answer.currency && 'code' in answer.currency && !ISO_CURRENCY_CODES.has(answer.currency.code)) return null;
+	if (answer.currency && 'code' in answer.currency && !IMPORT_CURRENCY_CODES.has(answer.currency.code)) return null;
 	// A code the file never showed the model is a guess: the owner picks the currency instead.
 	if (answer.currency && 'code' in answer.currency && !currencyShown(answer.currency.code, sample.masked)) {
 		answer.currency = null;

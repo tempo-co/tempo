@@ -132,24 +132,47 @@ function responseCurrencies(data: unknown, depth = 0): Array<string | null> {
 /**
  * Reads the reporting currency again whenever a money response names another currency than the cached settings,
  * or none: it was changed elsewhere or is being converted. That brings the settings, and with them every figure,
- * up to date without polling them. Mount once, at the app root.
+ * up to date without polling them. A response that lands while the settings are being read is checked once that
+ * read is in, since the read may have begun before the change. Mount once, at the app root.
  */
 export function useWatchTotalsCurrency() {
   const queryClient = useQueryClient();
-  useEffect(
-    () =>
-      queryClient.getQueryCache().subscribe((event) => {
-        if (event.type !== 'updated' || event.action.type !== 'success') return;
-        const [key] = event.query.queryKey as readonly unknown[];
-        if (!MONEY_QUERY_ROOTS.some((root) => root[0] === key)) return;
-        const currencies = responseCurrencies(event.query.state.data);
-        if (currencies.length === 0) return;
-        const settings = queryClient.getQueryState<ReportingCurrency>(reportingCurrencyQueryKey);
-        if (!settings?.data || settings.fetchStatus !== 'idle') return;
-        const {data: cached} = settings;
-        if (currencies.every((currency) => figuresCurrencyAccepted(cached, currency))) return;
-        void queryClient.invalidateQueries({queryKey: reportingCurrencyQueryKey});
-      }),
-    [queryClient],
-  );
+  useEffect(() => {
+    const cache = queryClient.getQueryCache();
+    let landedDuringRead = false;
+    /** Whether every cached money response is in a currency the settings accept. */
+    const moneyAccepted = (settings: ReportingCurrency) =>
+      cache
+        .findAll()
+        .filter(({queryKey: [key]}) => MONEY_QUERY_ROOTS.some((root) => root[0] === key))
+        .every((query) =>
+          responseCurrencies(query.state.data).every((currency) =>
+            figuresCurrencyAccepted(settings, currency),
+          ),
+        );
+    return cache.subscribe((event) => {
+      if (event.type !== 'updated' || event.action.type !== 'success') return;
+      const [key] = event.query.queryKey as readonly unknown[];
+      const settings = queryClient.getQueryState<ReportingCurrency>(reportingCurrencyQueryKey);
+      if (key === reportingCurrencyQueryKey[0]) {
+        if (!landedDuringRead || !settings?.data) return;
+        landedDuringRead = false;
+        if (!moneyAccepted(settings.data))
+          void queryClient.invalidateQueries({queryKey: reportingCurrencyQueryKey});
+        return;
+      }
+      if (!MONEY_QUERY_ROOTS.some((root) => root[0] === key)) return;
+      const currencies = responseCurrencies(event.query.state.data);
+      if (currencies.length === 0 || !settings) return;
+      // Also during the first read: until it is in, figures show as they come.
+      if (settings.fetchStatus !== 'idle') {
+        landedDuringRead = true;
+        return;
+      }
+      const {data: cached} = settings;
+      if (!cached) return;
+      if (currencies.every((currency) => figuresCurrencyAccepted(cached, currency))) return;
+      void queryClient.invalidateQueries({queryKey: reportingCurrencyQueryKey});
+    });
+  }, [queryClient]);
 }

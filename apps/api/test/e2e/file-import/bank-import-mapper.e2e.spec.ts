@@ -610,7 +610,7 @@ describe('Bank import column mapper', () => {
 		});
 	});
 
-	it('routes a file that names no account by the bank its owner named and the currency they chose, as Revolut files go', async () => {
+	it('routes a file that names no account by the bank its owner named and the currency they chose, also one the ECB no longer publishes, as Revolut files go', async () => {
 		const {owner, agent} = await createOwner();
 		mapLayout.mockResolvedValueOnce(ANSWER.balance);
 		const proposed = await propose(agent, BALANCE_CSV).expect(201);
@@ -624,19 +624,19 @@ describe('Bank import column mapper', () => {
 			preview: {accounts: [], totals: [{currency: 'EUR', moneyIn: '1800.00', moneyOut: '677.60'}]},
 		});
 		await confirm(agent, proposed.body.id, {bankName: 'Example Bank'}).expect(400);
-		await confirm(agent, proposed.body.id, {bankName: '', currency: 'GBP'}).expect(400);
-		await confirm(agent, proposed.body.id, {bankName: 'Example Bank', currency: 'GBP'}).expect(201);
+		await confirm(agent, proposed.body.id, {bankName: '', currency: 'HRK'}).expect(400);
+		await confirm(agent, proposed.body.id, {bankName: 'Example Bank', currency: 'HRK'}).expect(201);
 
 		const connection = await fixtures.createConnection(owner, {aspspName: 'Example Bank'});
-		const first = await fixtures.createBankAccount(connection, {currency: 'GBP'});
-		const second = await fixtures.createBankAccount(connection, {currency: 'GBP'});
+		const first = await fixtures.createBankAccount(connection, {currency: 'HRK'});
+		const second = await fixtures.createBankAccount(connection, {currency: 'HRK'});
 		const refused = await drop(agent, BALANCE_CSV).expect(409);
 		expect(refused.body).toMatchObject({
 			code: 'ambiguous_target_account',
 			accountQuestions: [
 				{
 					bank: 'Example Bank',
-					currency: 'GBP',
+					currency: 'HRK',
 					candidates: [{bankAccountId: first.id}, {bankAccountId: second.id}].sort((left, right) =>
 						left.bankAccountId.localeCompare(right.bankAccountId),
 					),
@@ -645,13 +645,13 @@ describe('Bank import column mapper', () => {
 		});
 
 		const imported = await drop(agent, BALANCE_CSV)
-			.field('accountChoices', JSON.stringify({'Example Bank:GBP': 'new'}))
+			.field('accountChoices', JSON.stringify({'Example Bank:HRK': 'new'}))
 			.expect(201);
-		expect(imported.body).toMatchObject({rowsAdded: 4, accounts: [{name: 'Example Bank GBP', created: true}]});
+		expect(imported.body).toMatchObject({rowsAdded: 4, accounts: [{name: 'Example Bank HRK', created: true}]});
 		expect(await bankAccounts.findOneByOrFail({id: imported.body.accounts[0].id})).toMatchObject({
-			providerAccountId: 'file-bank:Example Bank:GBP',
+			providerAccountId: 'file-bank:Example Bank:HRK',
 			iban: null,
-			currency: 'GBP',
+			currency: 'HRK',
 		});
 	});
 });

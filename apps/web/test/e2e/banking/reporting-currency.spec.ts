@@ -23,6 +23,7 @@ const ASKING: ReportingCurrency = {
   currency: null,
   confirmed: false,
   setupRequired: true,
+  currencyUnavailable: false,
   suggestion: 'GBP',
   connectedCurrencies: ['EUR', 'GBP'],
   options: ['EUR', 'GBP', ...REPORTING_CURRENCIES.filter((code) => !['EUR', 'GBP'].includes(code))],
@@ -45,6 +46,7 @@ async function mockReportingCurrency(
         currency,
         confirmed: true,
         setupRequired: false,
+        currencyUnavailable: false,
         suggestion: null,
         recalculating: recalculates && currency !== api.state.currency,
       };
@@ -116,6 +118,43 @@ test.describe('fully mocked', () => {
     await expect(setup).toBeHidden();
     expect(api.saved).toEqual(['EUR']);
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
+  });
+
+  test('asks again once Tempo can no longer convert into the chosen currency, suggesting another', async ({
+    page,
+    baseURL,
+  }) => {
+    await routeMockedBankApp(page, baseURL);
+    await mockBankConnections(page, () => [HOME_CONNECTION]);
+    const api = await mockReportingCurrency(page, {
+      ...ASKING,
+      currency: 'RUB',
+      currencyUnavailable: true,
+      suggestion: 'EUR',
+      connectedCurrencies: ['EUR'],
+      options: [...REPORTING_CURRENCIES],
+    });
+    await page.goto('/bank-connections');
+
+    const setup = page.getByRole('region', {name: QUESTION});
+    await expect(setup).toContainText(
+      "Tempo can't convert amounts into RUB, because the European Central Bank doesn't publish its exchange rates.",
+    );
+    await expect(setup.getByTestId('reporting-currency-picker')).toHaveText('EUR — Euro');
+    await expect(setup.getByText('Suggested from your recent transactions.')).toBeVisible();
+
+    // Settings shows the currency in use, but its dialog starts with nothing chosen.
+    await page.goto('/settings/account');
+    await expect(page.getByTestId('account-reporting-currency')).toHaveText('RUB');
+    await page.getByRole('button', {name: 'Edit reporting currency'}).click();
+    const dialog = page.getByRole('dialog', {name: 'Reporting currency'});
+    await expect(dialog.getByText('Choose a currency before saving.')).toBeVisible();
+    await expect(dialog.getByTestId('save-reporting-currency-button')).toBeDisabled();
+
+    await page.goto('/bank-connections');
+    await setup.getByRole('button', {name: 'Use EUR'}).click();
+    await expect(setup).toBeHidden();
+    expect(api.saved).toEqual(['EUR']);
   });
 
   test('Home and a linked month ask before they add anything up, then wait while totals are recalculated', async ({

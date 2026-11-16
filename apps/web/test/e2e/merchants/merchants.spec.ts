@@ -721,3 +721,75 @@ test('an invalid merchant id in the link opens the list', async ({page}) => {
   await page.goto('/?merchants=open&merchant=not-a-merchant');
   await expect(dialog(page).getByRole('region', {name: 'All merchants'})).toBeVisible();
 });
+
+/** Answers the reporting currency; with `holdNext` set, holds the next read, answering what the server had when it began. */
+async function mockHeldSettings(page: Page) {
+  const api = {settings: SETTLED_REPORTING_CURRENCY, reads: 0, holdNext: false};
+  let readBegan!: () => void;
+  const began = new Promise<void>((resolve) => (readBegan = resolve));
+  let releaseRead!: () => void;
+  const released = new Promise<void>((resolve) => (releaseRead = resolve));
+  await page.route(`${API_URL}/reporting-currency`, async (route) => {
+    api.reads += 1;
+    const answer = api.settings;
+    if (api.holdNext) {
+      api.holdNext = false;
+      readBegan();
+      await released;
+    }
+    return fulfillJson(route, answer);
+  });
+  return {api, began, release: () => releaseRead()};
+}
+
+/** Answers the merchants list in `state.currency`, each answer waiting for `state.answer`. */
+async function mockMerchantsIn(page: Page, requests: URLSearchParams[]) {
+  const state = {currency: 'EUR', answer: Promise.resolve()};
+  await page.route(`${API_URL}/merchants?**`, async (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    requests.push(params);
+    await state.answer;
+    const offset = Number(params.get('offset'));
+    return fulfillJson(route, {
+      baseCurrency: state.currency,
+      merchants: allMerchants.slice(offset, offset + 2),
+      total: allMerchants.length,
+    } satisfies MerchantGroupsResponse);
+  });
+  return state;
+}
+
+test('a list answering in a currency changed elsewhere while the settings are being read reloads once they are in', async ({
+  page,
+}) => {
+  await mockSignedIn(page);
+  const requests = await mockMerchants(page);
+  const settings = await mockHeldSettings(page);
+  const merchants = await mockMerchantsIn(page, requests);
+  await page.goto('/?merchants=open');
+  const all = dialog(page).getByRole('region', {name: 'All merchants'});
+  await expect(all.getByRole('listitem').first()).toContainText('€');
+  // Settled, so regaining focus reads the settings and the list again.
+  await page.waitForTimeout(1_000);
+
+  // The window regains focus. Once the settings read has begun, another device switches to USD, and the list
+  // answers in USD before that read, which began earlier, answers EUR.
+  settings.api.holdNext = true;
+  let changed!: () => void;
+  merchants.answer = new Promise<void>((resolve) => (changed = resolve));
+  await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+  await settings.began;
+  settings.api.settings = {...settings.api.settings, currency: 'USD'};
+  merchants.currency = 'USD';
+  changed();
+  await expect(all.getByRole('img', {name: 'Loading merchants'})).toBeVisible();
+  settings.release();
+
+  // The settings are read once more at once, and the list shows in USD well before its next refresh.
+  await expect(all.getByRole('listitem').first()).toContainText('$', {timeout: 5_000});
+  for (const item of await all.getByRole('listitem').all())
+    await expect(item).not.toContainText('€');
+  const reads = settings.api.reads;
+  await page.waitForTimeout(1_500);
+  expect(settings.api.reads).toBe(reads);
+});

@@ -1,3 +1,5 @@
+import {ECB_CURRENCIES} from './ecb-currencies.js';
+
 /**
  * The format of a drop's files; `mixed` when the drop held files of more than one format, or bank CSV exports of
  * more than one layout. `csv` is a bank's CSV export, whose layout `BankImportSummary.layout` names.
@@ -389,6 +391,12 @@ export type ConfirmBankImportLayoutProposalRequest = {
 	/** Required when the proposal's `currencyNeeded`; otherwise left out. */
 	currency?: string;
 };
+
+/**
+ * The currencies offered for a file that states none: EUR plus every currency the ECB has published rates for, also
+ * ones it no longer publishes, so an old statement's amounts convert for the days they were published.
+ */
+export const BANK_IMPORT_CURRENCIES: readonly string[] = ['EUR', ...Object.keys(ECB_CURRENCIES)].sort();
 
 /**
  * A layout the owner confirmed: every later drop of theirs is tried with it after Tempo's own readers. Each item of

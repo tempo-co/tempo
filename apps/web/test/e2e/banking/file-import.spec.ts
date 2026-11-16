@@ -1110,6 +1110,8 @@ test.describe('statement file import on Connections', () => {
     await expect(preview.getByText(RESERVED_BANK_NAME)).toHaveCount(0);
     await expect(preview.getByLabel('Currency')).toHaveText('EUR');
     await preview.getByLabel('Currency').click();
+    // Old statements can be in a currency the ECB no longer publishes; its amounts convert up to its last rate.
+    await expect(page.getByRole('option', {name: 'HRK'})).toBeVisible();
     await page.getByRole('option', {name: 'GBP'}).click();
     await expect(preview.getByTestId('bank-import-layout-totals')).toContainText('£2,545.00');
     // A balance column shows on each row, in the chosen currency.

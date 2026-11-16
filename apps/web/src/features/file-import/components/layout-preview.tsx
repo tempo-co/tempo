@@ -1,4 +1,8 @@
-import type {BankImportLayoutPreviewRow, BankImportLayoutProposal} from '@tempo/contracts';
+import {
+  BANK_IMPORT_CURRENCIES,
+  type BankImportLayoutPreviewRow,
+  type BankImportLayoutProposal,
+} from '@tempo/contracts';
 import {CalendarCheck, FileText} from 'lucide-react';
 import {useId} from 'react';
 
@@ -22,41 +26,6 @@ import {IMPORT_TILE} from './file-choice';
 
 /** The shared 60px row shape, as a plain row: preview rows open nothing. */
 const ROW = 'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-3';
-
-/** The currencies offered for a file that states none; the owner's base currency is always among them. */
-const CURRENCIES = [
-  'AUD',
-  'BGN',
-  'BRL',
-  'CAD',
-  'CHF',
-  'CNY',
-  'CZK',
-  'DKK',
-  'EUR',
-  'GBP',
-  'HKD',
-  'HUF',
-  'IDR',
-  'ILS',
-  'INR',
-  'ISK',
-  'JPY',
-  'KRW',
-  'MXN',
-  'MYR',
-  'NOK',
-  'NZD',
-  'PHP',
-  'PLN',
-  'RON',
-  'SEK',
-  'SGD',
-  'THB',
-  'TRY',
-  'USD',
-  'ZAR',
-];
 
 /**
  * A proposed layout read through the owner's own file: how it reads the columns, the first and last rows as they
@@ -185,11 +154,13 @@ export function LayoutPreview({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[...new Set([...CURRENCIES, proposal.defaultCurrency])].sort().map((code) => (
-                  <SelectItem key={code} value={code}>
-                    {code}
-                  </SelectItem>
-                ))}
+                {[...new Set([...BANK_IMPORT_CURRENCIES, proposal.defaultCurrency])]
+                  .sort()
+                  .map((code) => (
+                    <SelectItem key={code} value={code}>
+                      {code}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
             <p className='text-xs text-muted-foreground'>The file doesn&apos;t say.</p>

@@ -156,6 +156,7 @@ export const SETTLED_REPORTING_CURRENCY: ReportingCurrency = {
   currency: 'EUR',
   confirmed: true,
   setupRequired: false,
+  currencyUnavailable: false,
   suggestion: null,
   connectedCurrencies: ['EUR'],
   options: ['EUR', ...REPORTING_CURRENCIES.filter((code) => code !== 'EUR')],

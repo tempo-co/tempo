@@ -26,7 +26,10 @@ const codeList = (codes: string[]) =>
     ? codes.join('')
     : `${codes.slice(0, -1).join(', ')} and ${codes[codes.length - 1]}`;
 
-/** The one-time question which currency totals use, while the owner's accounts hold several and none is chosen. */
+/**
+ * The question which currency totals use: once, while the owner's accounts hold several and none is chosen, and again
+ * when Tempo can no longer convert into the chosen one.
+ */
 export function ReportingCurrencySetup({className}: {className?: string}) {
   const {data: settings} = useReportingCurrency();
   if (!settings?.setupRequired) return null;
@@ -40,9 +43,10 @@ function SetupCard({settings, className}: {settings: ReportingCurrency; classNam
   const [picked, setPicked] = useState<{value: string | null} | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const {choose, isPending} = useChooseReportingCurrency();
-  const selected = picked ? picked.value : (settings.currency ?? settings.suggestion);
-  const suggested =
-    selected !== null && settings.currency === null && selected === settings.suggestion;
+  // A currency Tempo can't convert into any more is never offered, so it isn't preselected either.
+  const current = settings.currencyUnavailable ? null : settings.currency;
+  const selected = picked ? picked.value : (current ?? settings.suggestion);
+  const suggested = selected !== null && current === null && selected === settings.suggestion;
 
   const openPicker = () => {
     setPicked((current) => current ?? {value: selected});
@@ -79,8 +83,9 @@ function SetupCard({settings, className}: {settings: ReportingCurrency; classNam
           Which currency should Tempo use for totals?
         </h2>
         <p className='text-sm text-muted-foreground'>
-          Your accounts are in {codeList(settings.connectedCurrencies)}. Totals and charts add them
-          up in one currency; each account and transaction keeps its own.
+          {settings.currencyUnavailable && settings.currency
+            ? `Tempo can't convert amounts into ${settings.currency}, because the European Central Bank doesn't publish its exchange rates. Choose another currency for totals; each account and transaction keeps its own.`
+            : `Your accounts are in ${codeList(settings.connectedCurrencies)}. Totals and charts add them up in one currency; each account and transaction keeps its own.`}
         </p>
       </div>
       <div className='grid gap-2'>

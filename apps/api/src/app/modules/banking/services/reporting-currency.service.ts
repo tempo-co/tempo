@@ -40,7 +40,8 @@ const SUGGESTION_SQL = `
  * - Once accounts hold several and a sync or import has finished, the owner is asked once (`SETUP_PENDING`) and
  *   nothing is guessed: an automatic currency stays meanwhile, and without one, the currency most recent transactions
  *   are in is only suggested.
- * - A chosen currency (`CONFIRMED`, or `PRESET` from before owners could choose) never changes by itself.
+ * - A chosen currency (`CONFIRMED`, or `PRESET` from before owners could choose) never changes by itself. Once Tempo
+ *   can no longer convert into the current currency (it left {@link REPORTING_CURRENCIES}), the owner is asked again.
  *
  * Changing it clears every converted amount in the same transaction and lets the conversion job convert them again.
  */
@@ -58,25 +59,36 @@ export class ReportingCurrencyService {
 		const account = await manager.getRepository(Account).findOneByOrFail({id: ownerId});
 		const connectedCurrencies = await findConnectedCurrencies(manager, ownerId);
 		const state = stateOf(account);
-		const setupRequired = state === 'SETUP_PENDING';
+		const currencyUnavailable = account.baseCurrency !== null && !SUPPORTED.has(account.baseCurrency);
+		const setupRequired = state === 'SETUP_PENDING' || currencyUnavailable;
 		const suggestion =
-			setupRequired && account.baseCurrency === null ? await this.findSuggestion(manager, ownerId, now) : null;
-		const first = connectedCurrencies.filter((currency) => SUPPORTED.has(currency));
-		if (account.baseCurrency && !SUPPORTED.has(account.baseCurrency)) first.unshift(account.baseCurrency);
+			setupRequired && (account.baseCurrency === null || currencyUnavailable)
+				? await this.findSuggestion(manager, ownerId, now, account.baseCurrency)
+				: null;
+		const first = connectedCurrencies.filter(
+			(currency) => SUPPORTED.has(currency) && !(currencyUnavailable && currency === account.baseCurrency),
+		);
 		return {
 			currency: account.baseCurrency,
-			confirmed: CHOSEN_STATES.has(state),
+			confirmed: CHOSEN_STATES.has(state) && !currencyUnavailable,
 			setupRequired,
+			currencyUnavailable,
 			suggestion,
 			connectedCurrencies,
-			options: [...first, ...REPORTING_CURRENCIES.filter((currency) => !first.includes(currency))],
+			options: [
+				...first,
+				...REPORTING_CURRENCIES.filter(
+					(currency) =>
+						!first.includes(currency) && !(currencyUnavailable && currency === account.baseCurrency),
+				),
+			],
 			recalculating: account.baseCurrencyRevision !== account.baseAmountsRevision,
 		};
 	}
 
 	/**
 	 * Saves the owner's choice. Choosing the current currency only confirms it; another one is converted to from
-	 * scratch. A currency outside {@link REPORTING_CURRENCIES} is refused, unless it is the current one.
+	 * scratch. A currency outside {@link REPORTING_CURRENCIES} is refused, also the current one.
 	 */
 	async choose(ownerId: Account['id'], currency: string): Promise<ReportingCurrency> {
 		const revision = await this.dataSource.transaction(async (manager) => {
@@ -84,11 +96,11 @@ export class ReportingCurrencyService {
 			const account = await manager
 				.getRepository(Account)
 				.findOneOrFail({where: {id: ownerId}, lock: {mode: 'pessimistic_write'}});
+			if (!SUPPORTED.has(currency)) throw new BadRequestException(REPORTING_CURRENCY_UNSUPPORTED);
 			if (currency === account.baseCurrency) {
 				await manager.getRepository(Account).update({id: ownerId}, {baseCurrencyState: 'CONFIRMED'});
 				return null;
 			}
-			if (!SUPPORTED.has(currency)) throw new BadRequestException(REPORTING_CURRENCY_UNSUPPORTED);
 			return changeBaseCurrency(manager, ownerId, currency, 'CONFIRMED');
 		});
 		if (revision !== null) await this.enqueueConversion(ownerId, revision);
@@ -137,14 +149,22 @@ export class ReportingCurrencyService {
 		}
 	}
 
-	/** The single currency most recent booked transactions are in; null on a tie or without any. */
-	private async findSuggestion(manager: EntityManager, ownerId: string, now: Date): Promise<string | null> {
+	/**
+	 * The single currency most recent booked transactions are in, other than `current` (one Tempo can no longer
+	 * convert into); null on a tie or without any.
+	 */
+	private async findSuggestion(
+		manager: EntityManager,
+		ownerId: string,
+		now: Date,
+		current: string | null,
+	): Promise<string | null> {
 		const today = dateInAppTimeZone(now);
 		const rows = await manager.query<Array<{currency: string; count: number}>>(SUGGESTION_SQL, [
 			ownerId,
 			addDays(today, -SUGGESTION_WINDOW_DAYS),
 			today,
-			[...SUPPORTED],
+			[...SUPPORTED].filter((currency) => currency !== current),
 		]);
 		if (rows.length === 0 || rows[1]?.count === rows[0].count) return null;
 		return rows[0].currency;
