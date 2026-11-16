@@ -33,15 +33,54 @@ process.stdin.on('data', (chunk) => chunks.push(chunk)).on('end', async () => {
 });
 `;
 
-/** Whether bytes are an SVG document rather than a raster image or an HTML page. */
+/**
+ * Whether bytes are an SVG document rather than a raster image or an HTML page: within the first 4096 bytes, after an
+ * optional byte order mark, an optional XML declaration, comments and an optional SVG doctype, the root element is
+ * `<svg`. Scans forward only, so its time is linear in the head whatever the bytes are.
+ */
 export function isSvg(bytes: Buffer): boolean {
 	const head = bytes
 		.subarray(0, 4096)
 		.toString('utf8')
-		.replace(/^\uFEFF/, '');
-	return /^\s*(?:<\?xml[^>]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*(?:<!doctype\s+svg[^>]*>\s*)?(?:<!--[\s\S]*?-->\s*)*<svg[\s>]/i.test(
-		head,
-	);
+		.replace(/^\uFEFF/, '')
+		.toLowerCase();
+	const whitespace = /\s*/y;
+	const svgDoctype = /<!doctype\s+svg/y;
+	let at = 0;
+	const skipWhitespace = () => {
+		whitespace.lastIndex = at;
+		whitespace.test(head);
+		at = whitespace.lastIndex;
+	};
+	/** Moves past the markup that starts here and ends at `close`; false when it never ends. */
+	const skipPast = (close: string, from: number) => {
+		const end = head.indexOf(close, from);
+		if (end < 0) return false;
+		at = end + close.length;
+		return true;
+	};
+
+	skipWhitespace();
+	if (head.startsWith('<?xml', at)) {
+		// Like `<?xml[^>]*?>`: the declaration ends at its first `>`, which must follow a `?`.
+		const end = head.indexOf('>', at + 5);
+		if (end < 0 || end - 1 < at + 5 || head[end - 1] !== '?') return false;
+		at = end + 1;
+		skipWhitespace();
+	}
+	let doctype = false;
+	for (;;) {
+		svgDoctype.lastIndex = at;
+		if (head.startsWith('<!--', at)) {
+			if (!skipPast('-->', at + 4)) return false;
+		} else if (!doctype && svgDoctype.test(head)) {
+			if (!skipPast('>', svgDoctype.lastIndex)) return false;
+			doctype = true;
+		} else {
+			return head.startsWith('<svg', at) && /[\s>]/.test(head.charAt(at + 4));
+		}
+		skipWhitespace();
+	}
 }
 
 /** Renders an SVG to a PNG whose longer side is SVG_RENDER_SIZE; rejects anything that fails or takes too long. */

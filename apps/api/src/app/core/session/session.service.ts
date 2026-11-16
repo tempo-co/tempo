@@ -71,7 +71,7 @@ export class SessionService {
 					const sessionDataString = sessionDataStrings[i];
 					if (!sessionDataString) continue;
 
-					const sessionData: AuthenticatedSession = JSON.parse(sessionDataString);
+					const sessionData = JSON.parse(sessionDataString) as AuthenticatedSession;
 
 					if (sessionData?.passport?.user !== accountId) continue;
 					const sessionId = key.substring(prefix.length);
@@ -115,7 +115,7 @@ export class SessionService {
 			throw new NotFoundException(INVALID_SESSION);
 		}
 
-		const sessionData: AuthenticatedSession = JSON.parse(sessionDataString);
+		const sessionData = JSON.parse(sessionDataString) as AuthenticatedSession;
 		if (sessionData?.passport?.user !== accountId) {
 			throw new NotFoundException(INVALID_SESSION);
 		}

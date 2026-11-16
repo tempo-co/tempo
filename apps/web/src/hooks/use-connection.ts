@@ -39,12 +39,13 @@ export function useConnection() {
         checking = false;
       }
     };
-    const timer = window.setInterval(() => void check(), 10000);
-    window.addEventListener('focus', check);
+    const probe = () => void check();
+    const timer = window.setInterval(probe, 10000);
+    window.addEventListener('focus', probe);
     return () => {
       controller.abort();
       window.clearInterval(timer);
-      window.removeEventListener('focus', check);
+      window.removeEventListener('focus', probe);
     };
   }, [isOnline]);
   return isOnline;

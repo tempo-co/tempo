@@ -166,7 +166,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 			inputSchema: z.strictObject({}),
 			annotations,
 		},
-		async () => ({
+		() => ({
 			content: [
 				{
 					type: 'text',

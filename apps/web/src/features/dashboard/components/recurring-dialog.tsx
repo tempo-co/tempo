@@ -10,7 +10,7 @@ import {ScrollArea} from '@/components/ui/scroll-area';
 import {RecurringSeriesOverview} from '@/features/banking/components/recurring-series-overview';
 import {useLocalDate} from '@/hooks/use-local-date';
 
-/** Every recurring bill and income stream, over Home. */
+/** Every recurring bill and income stream, over any page. */
 export function RecurringDialog({
   open,
   onOpenChange,

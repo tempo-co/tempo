@@ -76,7 +76,7 @@ const STAGGER: [string, number][] = [
   ['**/merchants/ranking?**', 1300],
   // The running month's usual by this day.
   ['**/bank-transactions/summary?**', 1350],
-  [`**${EMPLOYER_LOGO}/mask-v2`, 1700],
+  [`**${EMPLOYER_LOGO}/mask-v3`, 1700],
 ];
 
 /** Holds each answer of {@link STAGGER} for its delay, then lets the synthetic mock answer it. */

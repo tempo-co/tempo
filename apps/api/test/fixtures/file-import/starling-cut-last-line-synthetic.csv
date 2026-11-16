@@ -1,0 +1,5 @@
+Date,Counter Party,Reference,Type,Amount (GBP),Balance (GBP),Spending Category,Notes
+01/10/2026,Example Shop,Example card 1234,CARD PAYMENT,-4.20,995.80,GROCERIES,
+02/10/2026,Example Employer,Example salary,FASTER PAYMENT,1500.00,2495.80,INCOME,
+03/10/2026,Example Energy,Example bill,DIRECT DEBIT,-62.10,2433.70,BILLS,
+04/10/2026,Example Cafe,Example card 1234,CARD PAYMENT,-3

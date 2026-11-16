@@ -63,7 +63,7 @@ export function abnAmroDescriptionFields(text: string): DescriptionFields {
 }
 
 /** Each key's first value (keys upper case): the text from after the key up to the next key or the end. */
-function splitOnKeys(text: string, keys: RegExp, clean: (value: string) => string): Map<string, string> {
+export function splitOnKeys(text: string, keys: RegExp, clean: (value: string) => string): Map<string, string> {
 	const matches = [...text.matchAll(keys)];
 	const values = new Map<string, string>();
 	for (const [index, match] of matches.entries()) {

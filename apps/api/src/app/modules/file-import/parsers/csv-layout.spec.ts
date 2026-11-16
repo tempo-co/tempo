@@ -1,4 +1,4 @@
-import {validateCsvLayout} from './csv-layout';
+import {detectEncoding, validateCsvLayout} from './csv-layout';
 import {CSV_LAYOUTS} from './csv-layouts';
 
 const [ING] = CSV_LAYOUTS;
@@ -83,6 +83,14 @@ describe('validateCsvLayout', () => {
 		});
 		const headerless = {...OWNED, recognize: {columnCount: 6}};
 		expect(validateCsvLayout(headerless)).toEqual({ok: true, layout: headerless});
+		const pending = {...OWNED, pendingColumn: 0};
+		expect(validateCsvLayout(pending)).toEqual({ok: true, layout: pending});
+		const byDirection = {
+			...OWNED,
+			counterpartyName: {moneyIn: 2, moneyOut: 3},
+			counterpartyIban: {moneyIn: 4, moneyOut: 5},
+		};
+		expect(validateCsvLayout(byDirection)).toEqual({ok: true, layout: byDirection});
 	});
 
 	it.each([
@@ -129,6 +137,22 @@ describe('validateCsvLayout', () => {
 			error: 'amountStyle: missing thousandsSeparator',
 		},
 		{name: 'an unknown date format', value: {...OWNED, dateFormat: 'D/M/Y'}, error: 'dateFormat'},
+		{name: 'a pending column outside the row', value: {...OWNED, pendingColumn: 6}, error: 'pendingColumn'},
+		{
+			name: 'one counterparty column for both directions',
+			value: {...OWNED, counterpartyName: {moneyIn: 2, moneyOut: 2}},
+			error: 'counterpartyName',
+		},
+		{
+			name: 'a counterparty account outside the row',
+			value: {...OWNED, counterpartyIban: {moneyIn: 2, moneyOut: 6}},
+			error: 'counterpartyIban.moneyOut',
+		},
+		{
+			name: 'an unknown field in a counterparty by direction',
+			value: {...OWNED, counterpartyName: {moneyIn: 2, moneyOut: 3, payer: 4}},
+			error: 'counterpartyName: unknown payer',
+		},
 		{
 			name: 'one column for debit and credit',
 			value: {...OWNED, amount: {kind: 'debitCredit', debitColumn: 2, creditColumn: 2}},
@@ -167,5 +191,23 @@ describe('validateCsvLayout', () => {
 		},
 	])("refuses an owner's layout with $name", ({value, error}) => {
 		expect(validateCsvLayout(JSON.parse(JSON.stringify(value)))).toEqual({ok: false, error});
+	});
+});
+
+describe('detectEncoding', () => {
+	it('reads Polish letters as Windows-1250, and Spanish marks as no evidence of it', () => {
+		expect(detectEncoding(Buffer.from('Op\u0142ata \u017babka \u0142\u0105ka', 'latin1').map(() => 0))).toBe(
+			'utf-8',
+		);
+		// `ł`, `ą` and `ś` in Windows-1250 are symbols in Windows-1252.
+		expect(detectEncoding(Uint8Array.from([0x4f, 0x70, 0xb3, 0x61, 0x74, 0xb9, 0x20, 0x9c]))).toBe('windows-1250');
+		// `£12 ¼`: signs in Windows-1252, though Windows-1250 reads them as letters.
+		expect(detectEncoding(Uint8Array.from([0xa3, 0x31, 0x32, 0x20, 0xbc]))).toBe('windows-1252');
+		// One letter only Windows-1250 has is not enough.
+		expect(detectEncoding(Uint8Array.from([0x4f, 0x70, 0xb3, 0x61]))).toBe('windows-1252');
+		// `¡Hola! ¿Qué?`: `¡` and `¿` are punctuation in Windows-1252, though Windows-1250 reads them as letters.
+		expect(
+			detectEncoding(Uint8Array.from([0xa1, 0x48, 0x6f, 0x6c, 0x61, 0x21, 0x20, 0xbf, 0x51, 0x75, 0xe9, 0x3f])),
+		).toBe('windows-1252');
 	});
 });

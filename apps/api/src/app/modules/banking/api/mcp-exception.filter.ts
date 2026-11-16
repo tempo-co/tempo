@@ -1,6 +1,6 @@
 import {ArgumentsHost, Catch, ExceptionFilter, HttpException} from '@nestjs/common';
 import {BaseExceptionFilter, HttpAdapterHost} from '@nestjs/core';
-import {Request} from 'express';
+import {Request, Response} from 'express';
 import {STATUS_CODES} from 'node:http';
 
 import {isMcpRequest} from '@core/personal-access-token/mcp-request';
@@ -31,7 +31,7 @@ export class McpExceptionFilter implements ExceptionFilter {
 			if (typeof body === 'object' && 'message' in body && body.message === EMAIL_NOT_VERIFIED)
 				message = EMAIL_NOT_VERIFIED;
 		}
-		const response = host.switchToHttp().getResponse();
+		const response = host.switchToHttp().getResponse<Response>();
 		if (adapter.isHeadersSent(response)) adapter.end(response);
 		else adapter.reply(response, {statusCode: status, message}, status);
 	}

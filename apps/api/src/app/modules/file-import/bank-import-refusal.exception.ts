@@ -39,7 +39,7 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 	legacy_xls_not_supported: {
 		status: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
 		message:
-			'Old Excel files (.xls) are not supported. Export the same statement as CAMT.053, MT940 or TXT instead, or from Revolut as CSV or Excel (.xlsx).',
+			"Old Excel files (.xls) can't be read. Download the statement again as CAMT.053, MT940, CSV or Excel (.xlsx).",
 	},
 	file_too_large: {status: HttpStatus.PAYLOAD_TOO_LARGE, message: 'A file can be at most 10 MB.'},
 	drop_too_large: {

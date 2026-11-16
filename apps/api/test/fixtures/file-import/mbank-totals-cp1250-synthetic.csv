@@ -1,0 +1,16 @@
+mBank S.A. Bankowoœæ Detaliczna;
+#Klient;
+ERIKA EXAMPLE;
+
+#Za okres:;
+01.10.2026;31.10.2026;
+
+#Waluta;#Wp³ywy;#Wydatki;
+PLN;2 500,00;-74,60;
+
+#Data operacji;#Opis operacji;#Rachunek;#Kategoria;#Kwota;
+2026-10-02;"¯abka Example Wroc³aw";"";"Jedzenie";-12,50 PLN;;
+2026-10-05;"Example Pracodawca Sp. z o.o.";"PL61109010140000071219812874";"Wp³ywy";2 500,00 PLN;;
+2026-10-09;"Example Energia £ódŸ";"PL27114020040000300201355387";"Rachunki";-62,10 PLN;;
+
+#Saldo koñcowe;3 425,40 PLN;

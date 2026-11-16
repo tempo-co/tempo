@@ -10,6 +10,7 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 ## Feedback: confirm in place, toast the rest
 
 - An edit whose result shows where it was made (category select, inline fields) shows progress and outcome on the control and its status line, and toasts only on failure. `useUpdateBankTransactionCategory` is the reference: no `toast.promise`, `toast.error` for non-auth failures.
+- A message that stays on screen next to what it is about (a refusal, a bank needing attention, a failed save in a dialog) is an `Alert` from `src/components/ui/alert.tsx`; `DESIGN.md` (Alerts) says which variant and role. Do not hand-style bordered callouts or bare red lines for these.
 - Toast failures and outcomes the screen does not show: email sent, session revoked, effects elsewhere, saves that can finish after a dialog closes.
 - The `api` wrapper toasts offline writes, lost write connections, expired sessions, rate limits and unverified email, and marks those errors. A call site that toasts a failure skips errors where `wasToasted(error)` (`src/utils/api.ts`) is true; with a loading toast, use `toastRequest` (`src/utils/toast-request.ts`) instead of `toast.promise`.
 - A toast Undo is a shortcut only. Every reversible choice (hide, unlink, dismiss) also needs a persistent way back on the affected row.
@@ -27,7 +28,7 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 ## Merchant logo tiles
 
 - Use `MerchantLogoTile` for leading transaction and recurring tiles, including category/activity fallbacks. Its Clay field, ink and edge tokens are defined in `src/index.css` and `DESIGN.md`; do not recolor the ordinary `BankTransactionCategoryIcon` globally.
-- DTOs retain the original `merchantLogoUrl`. The tile appends `/mask-v2` and loads the white RGBA derivative in an ordinary `img`, without `crossOrigin`. Development and E2E use a cross-origin API; anonymous CSS-mask requests omit the API session cookies. A per-tile SVG `SourceAlpha` filter applies the ink token directly in sRGB without changing alpha or fetching a second image on theme changes. Referencing the token in `floodColor` also invalidates the filter when the theme changes in WebKit; inherited `currentColor` can leave its rendered tint stale. Keep SVG definitions zero-sized and out of layout.
+- DTOs retain the original `merchantLogoUrl`. The tile appends `/mask-v3` and loads the white RGBA derivative in an ordinary `img`, without `crossOrigin`. Development and E2E use a cross-origin API; anonymous CSS-mask requests omit the API session cookies. A per-tile SVG `SourceAlpha` filter applies the ink token directly in sRGB without changing alpha or fetching a second image on theme changes. Referencing the token in `floodColor` also invalidates the filter when the theme changes in WebKit; inherited `currentColor` can leave its rendered tint stale. Keep SVG definitions zero-sized and out of layout.
 - Missing or failed derivatives, including a 404 from an older API, show the fallback glyph. Failure state is keyed to the full source URL so a new version can recover. Never fall back to a full-color original or add merchant-specific artwork rules.
 
 ## Phone layouts
@@ -83,7 +84,7 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 - One-line read-only monospace input that selects all on focus, `text-ellipsis`, with Copy joined inside the field's border behind a `border-l` divider. A button positioned over the text hides part of the secret.
 - No focus ring on the field wrapper (`focus-within`); it fires when the inner Copy button is clicked. The Copy button keeps its own focus-visible outline.
 - Copy shows `Copied` for about 2 s, then reverts; clear the timer on unmount.
-- Reset dialog state on the open transition (`useEffect` on `open`), never in a delayed close timeout; a timer that fires after a quick reopen wipes the fresh form.
+- Reset dialog state on each opening: the opener gives the dialog a new `key` (`src/features/settings/components/access-tokens/access-token-settings.tsx`). Never reset in a delayed close timeout; a timer that fires after a quick reopen wipes the fresh form.
 - Do not cap the dialog body height or give inner blocks their own scroll: nested scroll regions show double scrollbars once content grows. If the dialog must scroll, scroll it once as a whole.
 - Credentials get an expiry choice at creation (`TOKEN_LIFETIMES`: 30 days, 90 days, 1 year, No expiration). Expired tokens stay listed until revoked.
 
@@ -92,6 +93,7 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 - Name a feature by its use and an item by convention (tab `Integrations`, item `Access tokens`). Explain the use once on the page; keep dialogs about the item.
 - Never name the services Tempo is built on (its bank-data, AI or logo providers, for example) in UI copy, placeholders or hints, and do not name Tempo itself in descriptions ("Bills and income found in your history"). The owner's own banks and their export formats may be named, because that is how the owner recognises them: connection cards show bank names, and the file-import Supported files list names the exports it reads ("ABN AMRO TXT", "Rabobank CSV").
 - Do not ship setup snippets that need a local checkout path; only developers could use them.
+- When something is briefly busy or failed for a moment, say what the owner can do, not which internal process is busy ("Tempo is busy right now", not "Other files are being imported"). Say "Try again in a moment." for a short wait; name a duration only when the server gives a real one (`formatRetryAfter`).
 
 ## Routing and URL state
 

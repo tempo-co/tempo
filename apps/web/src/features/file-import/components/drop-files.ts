@@ -1,20 +1,21 @@
-import {useEffect, useState} from 'react';
+import {useSyncExternalStore} from 'react';
 
 import {useIsMobile} from '@/hooks/use-is-mobile';
 
-const FINE_POINTER = '(pointer: fine)';
+let finePointerQuery: MediaQueryList | undefined;
+const getFinePointerQuery = () => (finePointerQuery ??= matchMedia('(pointer: fine)'));
+
+const subscribe = (onChange: () => void) => {
+  const query = getFinePointerQuery();
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+};
+const getSnapshot = () => getFinePointerQuery().matches;
 
 /** Whether files can be dropped here: a fine pointer on a layout wider than a phone. */
 export function useCanDropFiles() {
   const isMobile = useIsMobile();
-  const [fine, setFine] = useState(() => matchMedia(FINE_POINTER).matches);
-  useEffect(() => {
-    const query = matchMedia(FINE_POINTER);
-    const onChange = (event: MediaQueryListEvent) => setFine(event.matches);
-    query.addEventListener('change', onChange);
-    setFine(query.matches);
-    return () => query.removeEventListener('change', onChange);
-  }, []);
+  const fine = useSyncExternalStore(subscribe, getSnapshot);
   return fine && !isMobile;
 }
 

@@ -14,6 +14,12 @@ export function AccessTokenSettings() {
   const {data: tokens, isPending, isError, error, refetch} = usePersonalAccessTokens();
   // The dialog lives outside the empty state, so the one-time reveal survives the list refresh.
   const [creating, setCreating] = useState(false);
+  // Each opening mounts a fresh dialog, so it starts clean.
+  const [creation, setCreation] = useState(0);
+  const startCreating = () => {
+    setCreation((count) => count + 1);
+    setCreating(true);
+  };
   const headerCreate = useRef<HTMLButtonElement>(null);
   const emptyCreate = useRef<HTMLButtonElement>(null);
   const hasTokens = (tokens?.length ?? 0) > 0;
@@ -25,12 +31,7 @@ export function AccessTokenSettings() {
       description='Access tokens let MCP clients, such as AI assistants, read your Tempo data.'
       action={
         hasTokens && (
-          <Button
-            ref={headerCreate}
-            size='sm'
-            onClick={() => setCreating(true)}
-            className='max-sm:h-11'
-          >
+          <Button ref={headerCreate} size='sm' onClick={startCreating} className='max-sm:h-11'>
             <Plus className='size-4' aria-hidden='true' />
             Create token
           </Button>
@@ -47,7 +48,7 @@ export function AccessTokenSettings() {
           title='No access tokens yet'
           description='Create a token to connect an MCP client.'
         >
-          <Button ref={emptyCreate} onClick={() => setCreating(true)} className='max-sm:h-11'>
+          <Button ref={emptyCreate} onClick={startCreating} className='max-sm:h-11'>
             Create token
           </Button>
         </StateMessage>
@@ -60,6 +61,7 @@ export function AccessTokenSettings() {
         </SettingsList>
       )}
       <CreateTokenDialog
+        key={creation}
         open={creating}
         onOpenChange={setCreating}
         onClosed={() => (headerCreate.current ?? emptyCreate.current)?.focus()}

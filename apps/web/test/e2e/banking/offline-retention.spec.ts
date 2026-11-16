@@ -42,7 +42,7 @@ async function padTransactionPages(page: Page) {
 }
 
 async function search(page: Page, text: string, row: string) {
-  await page.getByRole('textbox', {name: 'Search transactions'}).fill(text);
+  await page.getByRole('searchbox', {name: 'Search transactions'}).fill(text);
   await expect(page).toHaveURL(new RegExp(`search=${text}`));
   await expect(page.getByText(row, {exact: true}).first()).toBeVisible();
 }

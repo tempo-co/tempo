@@ -2,23 +2,14 @@ import {useIsMutating} from '@tanstack/react-query';
 import {Link} from '@tanstack/react-router';
 import {BankConnection, BankConnectionAspsp} from '@tempo/contracts';
 import {format} from 'date-fns';
-import {
-  AlertTriangle,
-  ChevronRight,
-  Clock,
-  CreditCard,
-  FileUp,
-  Files,
-  Landmark,
-  PiggyBank,
-  Wallet,
-} from 'lucide-react';
+import {AlertTriangle, ChevronRight, Clock, FileUp, Landmark} from 'lucide-react';
 import {type ReactNode, useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
 import {PendingLabel} from '@/components/shared/pending-label';
 import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
+import {Alert, AlertAction, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
 import {Input} from '@/components/ui/input';
@@ -51,6 +42,7 @@ import {
   isReauthorizationRequired,
   isSyncInProgress,
 } from '../utils/bank-sync-status';
+import {ACCOUNT_TILE, AccountTypeIcon, ImportedFilesTile} from './account-tiles';
 import {BankConnectionPicker} from './bank-connection-picker';
 import {type BankArtwork, BankLogo} from './bank-logo';
 
@@ -88,8 +80,6 @@ const DAY = 24 * 60 * 60 * 1000;
 /** The shared transaction row: 36px round tile, two lines, amount; 60px tall. */
 const ROW =
   'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
-const TILE =
-  'inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-transaction-tile-edge bg-transaction-tile-field text-transaction-tile-ink';
 
 export function BankConnectionList({
   bankConnections,
@@ -350,32 +340,24 @@ function BankCard({
       </header>
 
       {problem && (
-        <div
-          role='alert'
-          data-testid='bank-connection-problem'
-          className='grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2.5 rounded-md border border-warning/40 bg-warning/5 px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)_auto]'
-        >
-          {problem.soon ? (
-            <Clock aria-hidden='true' className='size-4 text-warning' />
-          ) : (
-            <AlertTriangle aria-hidden='true' className='size-4 text-warning' />
-          )}
-          <span className='min-w-0'>
-            <span className='block text-sm font-medium'>{problem.title}</span>
-            <span className='block text-xs text-muted-foreground'>{problem.detail}</span>
-          </span>
+        <Alert role='alert' variant='warning' data-testid='bank-connection-problem'>
+          {problem.soon ? <Clock aria-hidden='true' /> : <AlertTriangle aria-hidden='true' />}
+          <AlertTitle>{problem.title}</AlertTitle>
+          <AlertDescription>{problem.detail}</AlertDescription>
           {problem.action === 'reauthorize' && (
-            <Button
-              variant='outline'
-              size='sm'
-              disabled={isStarting}
-              onClick={() => void onReauthorize(connection)}
-              className='col-start-2 justify-self-start sm:col-start-3 pointer-coarse:min-h-11'
-            >
-              {isStarting ? 'Starting…' : 'Re-authorize'}
-            </Button>
+            <AlertAction>
+              <Button
+                variant='outline'
+                size='sm'
+                disabled={isStarting}
+                onClick={() => void onReauthorize(connection)}
+                className='pointer-coarse:min-h-11'
+              >
+                {isStarting ? 'Starting…' : 'Re-authorize'}
+              </Button>
+            </AlertAction>
           )}
-        </div>
+        </Alert>
       )}
 
       {accounts.length > 0 && (
@@ -420,12 +402,7 @@ function ConnectionTile({
   testId?: string;
 }) {
   // The Clay tile in the bank logo's square, so both kinds of card start alike.
-  if (isFileConnection(connection))
-    return (
-      <span aria-hidden='true' data-testid={testId} className={cn(TILE, 'rounded-md')}>
-        <Files className='size-4' strokeWidth={1.8} />
-      </span>
-    );
+  if (isFileConnection(connection)) return <ImportedFilesTile testId={testId} />;
   return (
     <BankLogo
       bank={{name: connection.aspspName, ...artwork}}
@@ -502,7 +479,7 @@ function AccountRow({
           'relative has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-ring',
         )}
       >
-        <span aria-hidden='true' className={TILE}>
+        <span aria-hidden='true' className={ACCOUNT_TILE}>
           <AccountTypeIcon type={account.cashAccountType} />
         </span>
         <span className='min-w-0'>
@@ -532,7 +509,7 @@ function AccountRow({
       aria-label={`${name} transactions`}
       className={ROW}
     >
-      <span aria-hidden='true' className={TILE}>
+      <span aria-hidden='true' className={ACCOUNT_TILE}>
         <AccountTypeIcon type={account.cashAccountType} />
       </span>
       <span className='min-w-0'>
@@ -832,15 +809,6 @@ function bankTotal(connection: BankConnection) {
     else return null;
   }
   return {amount, currency: base};
-}
-
-function AccountTypeIcon({type}: {type: string | null}) {
-  const props = {className: 'size-4', strokeWidth: 1.8} as const;
-  const normalized = type?.toUpperCase();
-  if (normalized === 'SVGS') return <PiggyBank {...props} />;
-  if (normalized === 'CARD') return <CreditCard {...props} />;
-  if (normalized === 'CACC') return <Wallet {...props} />;
-  return <Landmark {...props} />;
 }
 
 const regionNames = new Intl.DisplayNames(undefined, {type: 'region'});

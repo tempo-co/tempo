@@ -9,6 +9,7 @@ export const bankImportQueryKeys = {
   root: ['bank-imports'] as const,
   list: ['bank-imports', 'list'] as const,
   doubtfulRows: (importId: string) => ['bank-imports', 'doubtful-rows', importId] as const,
+  neverSentRows: (importId: string) => ['bank-imports', 'never-sent-rows', importId] as const,
   layouts: ['bank-imports', 'layouts'] as const,
 };
 

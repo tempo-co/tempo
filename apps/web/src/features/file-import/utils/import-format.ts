@@ -1,6 +1,8 @@
 import type {BankImportSummary} from '@tempo/contracts';
 import {format, isThisYear, isToday, isYesterday, parseISO} from 'date-fns';
 
+import {formatCurrency} from '@/utils/format-currency';
+
 const countFormat = new Intl.NumberFormat();
 
 /** A count with the locale's thousands separator. */
@@ -53,13 +55,51 @@ export function formatDateRange(from: string | null, to: string | null) {
   return `${format(start, sameYear ? 'd MMM' : 'd MMM yyyy')} – ${format(end, 'd MMM yyyy')}`;
 }
 
-export function summaryTitle(summary: Pick<BankImportSummary, 'filesCount'>) {
+/**
+ * Whether an account's name already ends with its currency code as a whole word (`Revolut EUR`, `Card · usd`), so a
+ * detail line under it need not repeat the code. Elsewhere the code stays, keeping same-named accounts apart.
+ */
+export function nameEndsWithCurrency(name: string, currency: string) {
+  const code = currency.trim();
+  if (!code) return false;
+  const tail = name.trimEnd().slice(-code.length - 1);
+  return (
+    tail.slice(-code.length).toUpperCase() === code.toUpperCase() &&
+    (tail.length === code.length || !/[\p{L}\p{M}\p{N}]/u.test(tail[0]))
+  );
+}
+
+/** What the summary says where a statement does not open at the balance the one before it closed at. */
+export const STATEMENT_GAPS_COPY = {
+  title: 'Some days are missing',
+  description:
+    "These statements skip some days, so their transactions aren't in Tempo. Everything else was imported. Import the statements for these days to add them.",
+};
+
+/** A gap's amount as its line ends: `-€1,200.00 missing`. */
+export function missingAmount(amount: string, currency: string) {
+  return `${formatCurrency(Number(amount), currency)} missing`;
+}
+
+/** `Imported 3 files`; an undone import's summary says it was undone instead. */
+export function summaryTitle(summary: Pick<BankImportSummary, 'filesCount' | 'undoneAt'>) {
+  if (summary.undoneAt) return 'Import undone';
   return `Imported ${plural(summary.filesCount, 'file')}`;
 }
 
-/** Nothing was added and nothing waits for the owner. */
-export function isNothingNew(summary: Pick<BankImportSummary, 'rowsAdded' | 'rowsDoubtful'>) {
-  return summary.rowsAdded === 0 && summary.rowsDoubtful === 0;
+/** Nothing was added, nothing waits for the owner and nothing is offered to add. */
+export function isNothingNew(
+  summary: Pick<
+    BankImportSummary,
+    'rowsAdded' | 'rowsDoubtful' | 'rowsNotInBank' | 'rowsRemovedBySync'
+  >,
+) {
+  return (
+    summary.rowsAdded === 0 &&
+    summary.rowsDoubtful === 0 &&
+    summary.rowsNotInBank === 0 &&
+    summary.rowsRemovedBySync === 0
+  );
 }
 
 export function nothingNewCopy(
@@ -120,4 +160,30 @@ export function undoDescription(
   ]
     .filter(Boolean)
     .join(' ');
+}
+
+/** The title of an undone import's summary: `This import was undone today`, `… on 3 Oct`. */
+export function undoneTitle(undoneAt: string) {
+  const date = parseISO(undoneAt);
+  const when = isToday(date)
+    ? 'today'
+    : isYesterday(date)
+      ? 'yesterday'
+      : `on ${formatShortDate(undoneAt)}`;
+  return `This import was undone ${when}`;
+}
+
+/** What undoing an import did, in the past tense of `undoDescription`. */
+export function undoneDescription(
+  summary: Pick<BankImportSummary, 'rowsAdded'>,
+  {intoSyncedAccount}: {intoSyncedAccount: boolean},
+) {
+  if (summary.rowsAdded === 0) return "It hadn't added any transactions, so none were removed.";
+  const removed =
+    summary.rowsAdded === 1
+      ? 'The transaction it added was removed'
+      : 'The transactions it added were removed';
+  return intoSyncedAccount
+    ? `${removed}, except any that bank sync had picked up by then.`
+    : `${removed}.`;
 }

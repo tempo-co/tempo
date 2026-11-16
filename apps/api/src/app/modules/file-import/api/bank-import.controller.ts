@@ -18,6 +18,7 @@ import type {
 	BankImportLayout,
 	BankImportLayoutProposal,
 	BankImportList,
+	BankImportNeverSentRow,
 	BankImportSummary,
 } from '@tempo/contracts';
 import {isUUID} from 'class-validator';
@@ -28,6 +29,7 @@ import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 import {BankImportLayoutService} from '../bank-import-layout.service';
 import {BankImportRefusalException} from '../bank-import-refusal.exception';
 import {ACCOUNT_CHOICE_NEW, AccountChoices, BankImportService} from '../bank-import.service';
+import {AddBankImportNeverSentRowsDto} from './add-bank-import-never-sent-rows.dto';
 import {
 	BANK_IMPORT_ACCOUNT_CHOICES_FIELD,
 	BANK_IMPORT_ACCOUNT_FIELD,
@@ -61,7 +63,8 @@ export class BankImportController {
 		@Body(BANK_IMPORT_ACCOUNT_CHOICES_FIELD) accountChoices: unknown,
 		@CurrentAccount() account: Account,
 	): Promise<BankImportSummary> {
-		if (!files?.length) throw new BadRequestException(NO_FILES);
+		// Checked as an array: a tampered request must not pass a look-alike with a length.
+		if (!Array.isArray(files) || files.length === 0) throw new BadRequestException(NO_FILES);
 		if (bankAccountId !== undefined && !(typeof bankAccountId === 'string' && isUUID(bankAccountId))) {
 			throw new BadRequestException(INVALID_ACCOUNT_ID);
 		}
@@ -92,7 +95,9 @@ export class BankImportController {
 		@Body() fields: Record<string, unknown> | undefined,
 		@CurrentAccount() account: Account,
 	): Promise<BankImportLayoutProposal> {
-		if (files?.length !== 1 || Object.keys(fields ?? {}).length > 0) throw new BadRequestException(ONE_FILE);
+		if (!Array.isArray(files) || files.length !== 1 || Object.keys(fields ?? {}).length > 0) {
+			throw new BadRequestException(ONE_FILE);
+		}
 		return this.layoutService.propose(account.id, files[0].buffer);
 	}
 
@@ -146,6 +151,24 @@ export class BankImportController {
 		@CurrentAccount() account: Account,
 	): Promise<BankImportSummary> {
 		return this.bankImportService.resolveDoubtfulRow(account.id, importId, rowId, body);
+	}
+
+	@Get(':importId/never-sent-rows')
+	async findNeverSentRows(
+		@Param('importId', UUID_PIPE) importId: string,
+		@CurrentAccount() account: Account,
+	): Promise<BankImportNeverSentRow[]> {
+		return this.bankImportService.findNeverSentRows(account.id, importId);
+	}
+
+	@Post(':importId/never-sent-rows/add')
+	@HttpCode(200)
+	async addNeverSentRows(
+		@Param('importId', UUID_PIPE) importId: string,
+		@Body() body: AddBankImportNeverSentRowsDto,
+		@CurrentAccount() account: Account,
+	): Promise<BankImportSummary> {
+		return this.bankImportService.addNeverSentRows(account.id, importId, body.rowIds);
 	}
 
 	@Delete(':importId')

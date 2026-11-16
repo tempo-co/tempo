@@ -1,0 +1,8 @@
+"Account Name:","FlexAccount ****1234"
+"Account Balance:","£3,425.40"
+"Available Balance: ","£3,425.40"
+
+"Date","Transaction type","Description","Paid out","Paid in","Balance"
+"02 Oct 2026","Contactless Payment","Example Shop","£12.50","","£987.50"
+"05 Oct 2026","Bank credit","Example Employer Ltd","","£2,500.00","£3,487.50"
+"09 Oct 2026","Direct debit","Example Energy","£62.10","","£3,425.40"

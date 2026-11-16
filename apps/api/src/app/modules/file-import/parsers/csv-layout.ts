@@ -10,10 +10,11 @@ export type CsvTextTable = {
 	delimiter: CsvDelimiter;
 	quote: '"' | "'";
 	/**
-	 * `utf-8` refuses bytes that are not UTF-8. `windows-1252` reads a file that is valid UTF-8 as UTF-8 and any
-	 * other file as Windows-1252, since Windows-1252 text with letters outside ASCII is almost never valid UTF-8.
+	 * `utf-8` refuses bytes that are not UTF-8. `windows-1252` and `windows-1250` read a file that is valid UTF-8 as
+	 * UTF-8 and any other file in that code page, since such text with letters outside ASCII is almost never valid
+	 * UTF-8. `utf-16le` reads a file that starts with its byte order mark, as Erste Bank's George writes.
 	 */
-	encoding: 'utf-8' | 'windows-1252';
+	encoding: CsvTextEncoding;
 };
 
 /**
@@ -45,6 +46,11 @@ type CsvLayoutColumns = {
 	accountIban?: number;
 	/** Which of the `skipBefore` lines (0-based) holds the account's IBAN. Without either, rows name no account. */
 	accountIbanLine?: number;
+	/**
+	 * A column naming the account without an IBAN (a sort code and account number): not read, but every row must
+	 * hold the same value there, so a file of several accounts is refused rather than read as one.
+	 */
+	oneAccountColumn?: number;
 	currency: {column: number} | {fixed: string};
 	bookingDate: number;
 	valueDate?: number;
@@ -52,13 +58,91 @@ type CsvLayoutColumns = {
 	amount: CsvAmount;
 	/** The account's balance next to each row: after the row, or before it. */
 	balance?: {column: number; when: 'after' | 'before'};
-	counterpartyName?: number;
+	/** The other party's name: one column, or the payer's on money in and the payee's on money out. */
+	counterpartyName?: number | CsvByDirection;
 	/** An old account number (digits only) is left out; any other value must be a valid IBAN. */
-	counterpartyIban?: number;
+	counterpartyIban?: number | CsvByDirection;
+	/**
+	 * A row whose cell in this column is one of the `PENDING_WORDS` (a status column, or a date column that says
+	 * `offen` until the payment is booked) is not booked yet: it is skipped and counted as skipped, never read.
+	 */
+	pendingColumn?: number;
 	/** Joined with spaces, empty values left out. */
 	description: number[];
 	bankTransactionCode?: number;
 };
+
+/**
+ * A field a file writes in two columns, one per direction: a statement with payer and payee columns holds the account
+ * holder on one side of every row and the other party on the other.
+ */
+export type CsvByDirection = {moneyIn: number; moneyOut: number};
+
+/** What a status or date cell says of a payment not booked yet, compared case-folded. */
+export const PENDING_WORDS: ReadonlySet<string> = new Set([
+	'pending',
+	'vorgemerkt',
+	'offen',
+	'nicht gebucht',
+	'in bearbeitung',
+	'en attente',
+	'in sospeso',
+	'pendiente',
+]);
+
+/** Whether a cell says its row is not booked yet. */
+export function isPendingWord(value: string): boolean {
+	return PENDING_WORDS.has(value.trim().toLowerCase());
+}
+
+export const CSV_TEXT_ENCODINGS = ['utf-8', 'windows-1252', 'windows-1250', 'utf-16le'] as const;
+export type CsvTextEncoding = (typeof CSV_TEXT_ENCODINGS)[number];
+
+const UTF16LE_BOM = [0xff, 0xfe];
+
+/** A file's text as an encoding reads it (`CsvTextTable.encoding`); null when the bytes are not in it. */
+export function decodeTable(bytes: Uint8Array, encoding: CsvTextEncoding): string | null {
+	if (encoding === 'utf-16le') {
+		if (bytes[0] !== UTF16LE_BOM[0] || bytes[1] !== UTF16LE_BOM[1]) return null;
+		try {
+			return new TextDecoder('utf-16le', {fatal: true}).decode(bytes);
+		} catch {
+			return null;
+		}
+	}
+	try {
+		return new TextDecoder('utf-8', {fatal: true}).decode(bytes);
+	} catch {
+		return encoding === 'utf-8' ? null : new TextDecoder(encoding).decode(bytes);
+	}
+}
+
+/** Signs Western text writes (`¡`, `£`, `¥`, `¼`, `¾`, `¿`) that Windows-1250 reads as letters: no evidence of it. */
+const WESTERN_SIGNS = new Set([0xa1, 0xa3, 0xa5, 0xbc, 0xbe, 0xbf]);
+
+/**
+ * The encoding a text file is written in: UTF-16LE after its byte order mark, else UTF-8 when the bytes are valid
+ * UTF-8, else the code page whose reading gives letters where the other gives symbols. Polish, Czech and Hungarian
+ * letters such as `ł`, `ą` and `Ż` are symbols in Windows-1252 (`³`, `¹`, `¯`). Windows-1250 needs two such letters,
+ * and Windows-1252 wins a tie.
+ */
+export function detectEncoding(bytes: Uint8Array): CsvTextEncoding {
+	if (bytes[0] === UTF16LE_BOM[0] && bytes[1] === UTF16LE_BOM[1]) return 'utf-16le';
+	if (decodeTable(bytes, 'utf-8') !== null) return 'utf-8';
+	const westernText = new TextDecoder('windows-1252');
+	const centralText = new TextDecoder('windows-1250');
+	const letter = /\p{L}/u;
+	let central = 0;
+	let western = 0;
+	for (const byte of new Set(bytes.filter((value) => value >= 0x80 && !WESTERN_SIGNS.has(value)))) {
+		const one = Uint8Array.of(byte);
+		const centralLetter = letter.test(centralText.decode(one));
+		const westernLetter = letter.test(westernText.decode(one));
+		if (centralLetter && !westernLetter) central++;
+		else if (westernLetter && !centralLetter) western++;
+	}
+	return central >= 2 && central > western ? 'windows-1250' : 'windows-1252';
+}
 
 export const CSV_DELIMITERS = [',', ';', '\t', '|'] as const;
 export type CsvDelimiter = (typeof CSV_DELIMITERS)[number];
@@ -92,6 +176,11 @@ export const CSV_DATE_FORMATS = [
 	'DD/MM/YY',
 	'MM/DD/YY',
 	'DD.MM.YY',
+	/** `05 Oct 2026`, an English month name. */
+	'DD MMM YYYY',
+	'DD MMM YY',
+	/** `2026.10.05`, or `2026.10.05.` as Hungarian banks write it. */
+	'YYYY.MM.DD',
 ] as const;
 export type CsvDateFormat = (typeof CSV_DATE_FORMATS)[number];
 
@@ -130,9 +219,7 @@ export function csvLayoutColumnCount({recognize}: Pick<CsvLayout, 'recognize'>):
 }
 
 /** Thrown inside the validator only; `validateCsvLayout` turns it into its result. */
-class LayoutProblem {
-	constructor(readonly message: string) {}
-}
+class LayoutProblem extends Error {}
 
 /**
  * Checks that a value is a complete layout: every required field present, no unknown field, every column within the
@@ -169,11 +256,13 @@ function layoutOf(value: unknown): CsvLayout {
 			'amountStyle',
 			'accountIban',
 			'accountIbanLine',
+			'oneAccountColumn',
 			'valueDate',
 			'transactionDate',
 			'balance',
 			'counterpartyName',
 			'counterpartyIban',
+			'pendingColumn',
 			'bankTransactionCode',
 		],
 	});
@@ -188,6 +277,14 @@ function layoutOf(value: unknown): CsvLayout {
 		return value as number;
 	};
 	const optionalColumn = (value: unknown, name: string) => (value === undefined ? undefined : column(value, name));
+	const byDirection = (value: unknown, name: string): number | CsvByDirection | undefined => {
+		if (value === undefined || typeof value === 'number') return optionalColumn(value, name);
+		const sides = record(value, name, {required: ['moneyIn', 'moneyOut'], optional: []});
+		const moneyIn = column(sides.moneyIn, `${name}.moneyIn`);
+		const moneyOut = column(sides.moneyOut, `${name}.moneyOut`);
+		if (moneyIn === moneyOut) throw new LayoutProblem(name);
+		return {moneyIn, moneyOut};
+	};
 	const skipBefore = count(layout.skipBefore, MAX_SKIP_BEFORE, 'skipBefore');
 	// A preamble is compared, skipped lines are not: a layout has one or the other.
 	if ('preamble' in recognize && skipBefore !== undefined) throw new LayoutProblem('skipBefore');
@@ -201,7 +298,7 @@ function layoutOf(value: unknown): CsvLayout {
 				  !('column' in currencyValue) &&
 				  typeof currencyValue.fixed === 'string' &&
 				  CURRENCY.test(currencyValue.fixed)
-				? {fixed: currencyValue.fixed as string}
+				? {fixed: currencyValue.fixed}
 				: null;
 	if (!currency) throw new LayoutProblem('currency');
 
@@ -227,6 +324,8 @@ function layoutOf(value: unknown): CsvLayout {
 	if (thousandsSeparator === decimalMark) throw new LayoutProblem('amountStyle.thousandsSeparator');
 
 	const accountIban = optionalColumn(layout.accountIban, 'accountIban');
+	const oneAccountColumn = optionalColumn(layout.oneAccountColumn, 'oneAccountColumn');
+	if (oneAccountColumn !== undefined && accountIban !== undefined) throw new LayoutProblem('oneAccountColumn');
 	const accountIbanLine = count(layout.accountIbanLine, MAX_SKIP_BEFORE - 1, 'accountIbanLine');
 	if (accountIbanLine !== undefined && (accountIban !== undefined || accountIbanLine >= (skipBefore ?? 0))) {
 		throw new LayoutProblem('accountIbanLine');
@@ -243,7 +342,7 @@ function layoutOf(value: unknown): CsvLayout {
 					...(layout.source === undefined ? {} : {source: oneOf(layout.source, ['text'] as const, 'source')}),
 					delimiter: oneOf(layout.delimiter, CSV_DELIMITERS, 'delimiter'),
 					quote: oneOf(layout.quote, ['"', "'"] as const, 'quote'),
-					encoding: oneOf(layout.encoding, ['utf-8', 'windows-1252'] as const, 'encoding'),
+					encoding: oneOf(layout.encoding, CSV_TEXT_ENCODINGS, 'encoding'),
 				}),
 		...defined('skipBefore', skipBefore),
 		...defined('skipAfter', skipAfter),
@@ -252,6 +351,7 @@ function layoutOf(value: unknown): CsvLayout {
 		dateFormat: oneOf(layout.dateFormat, CSV_DATE_FORMATS, 'dateFormat'),
 		...defined('accountIban', accountIban),
 		...defined('accountIbanLine', accountIbanLine),
+		...defined('oneAccountColumn', oneAccountColumn),
 		currency,
 		bookingDate: column(layout.bookingDate, 'bookingDate'),
 		...defined('valueDate', valueDate),
@@ -265,8 +365,9 @@ function layoutOf(value: unknown): CsvLayout {
 						when: oneOf(balanceValue.when, ['after', 'before'] as const, 'balance.when'),
 					},
 				}),
-		...defined('counterpartyName', optionalColumn(layout.counterpartyName, 'counterpartyName')),
-		...defined('counterpartyIban', optionalColumn(layout.counterpartyIban, 'counterpartyIban')),
+		...defined('counterpartyName', byDirection(layout.counterpartyName, 'counterpartyName')),
+		...defined('counterpartyIban', byDirection(layout.counterpartyIban, 'counterpartyIban')),
+		...defined('pendingColumn', optionalColumn(layout.pendingColumn, 'pendingColumn')),
 		description: layout.description.map((value: unknown) => column(value, 'description')),
 		...defined('bankTransactionCode', optionalColumn(layout.bankTransactionCode, 'bankTransactionCode')),
 	};
@@ -405,6 +506,6 @@ function oneOf<T extends string>(value: unknown, values: readonly T[], name: str
 	return value as T;
 }
 
-function defined<K extends string>(key: K, value: number | undefined): {[key in K]?: number} {
-	return value === undefined ? {} : ({[key]: value} as {[key in K]: number});
+function defined<K extends string, V>(key: K, value: V | undefined): {[key in K]?: V} {
+	return value === undefined ? {} : ({[key]: value} as {[key in K]: V});
 }

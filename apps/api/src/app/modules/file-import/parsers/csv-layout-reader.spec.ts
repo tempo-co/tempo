@@ -30,8 +30,8 @@ function refusal(text: string | Buffer, owned: CsvLayout[] = []): {code: string;
 	throw new Error('The file was read');
 }
 
-// A valid IBAN at a bank in the same family as ASN Bank, whose exports share its shape.
-const OTHER_FAMILY_IBAN = 'NL76SNSB0900000001';
+// A valid IBAN at a bank outside ASN Bank's family, whose exports share its shape.
+const OTHER_BANK_IBAN = 'NL91ABNA0417164300';
 
 describe('bank CSV layouts', () => {
 	it('reads the statements of two accounts in one file, in booking order whichever way the file lists them', () => {
@@ -198,6 +198,55 @@ describe('bank CSV layouts', () => {
 			to: '"Euro"',
 		},
 		{layout: 'knab-nl', name: 'knab-synthetic.csv', change: 'a missing column', from: '"Huur maart";', to: ''},
+		{
+			layout: 'ing-nl-11',
+			name: 'ing-11-synthetic.csv',
+			change: 'a balance that does not follow the amounts',
+			from: '"2055,18"',
+			to: '"2055,81"',
+		},
+		{
+			layout: 'ing-en-11',
+			name: 'ing-en-11-synthetic.csv',
+			change: 'an unknown direction',
+			from: '"Debit"',
+			to: '"Af"',
+		},
+		{
+			layout: 'ing-en',
+			name: 'ing-en-9-synthetic.csv',
+			change: 'a date in another format',
+			from: '"20261014"',
+			to: '"14-10-2026"',
+		},
+		{
+			layout: 'rabobank-en',
+			name: 'rabobank-en-synthetic.csv',
+			change: 'a balance that does not follow the amounts',
+			from: '"+1500,00"',
+			to: '"+1500,01"',
+		},
+		{
+			layout: 'rabobank-creditcard',
+			name: 'rabobank-creditcard-synthetic.csv',
+			change: 'a currency that is not a code',
+			from: '"EUR","9999"',
+			to: '"Euro","9999"',
+		},
+		{
+			layout: 'bunq-en-7',
+			name: 'bunq-en-7-synthetic.csv',
+			change: 'a misgrouped thousands separator',
+			from: '"2.500,00"',
+			to: '"25.00,00"',
+		},
+		{
+			layout: 'knab-nl-no-preamble',
+			name: 'knab-no-preamble-synthetic.csv',
+			change: 'an unknown direction',
+			from: '"D";"7,80"',
+			to: '"X";"7,80"',
+		},
 	])('refuses a $layout file with $change as layout_not_recognized', ({layout, name, from, to}) => {
 		const text = fixture(name);
 		expect(text).toContain(from);
@@ -213,7 +262,7 @@ describe('bank CSV layouts', () => {
 		},
 		{change: 'a date in another format', from: '02-03-2026,NL33', to: '2026-03-02,NL33'},
 		{change: 'an account IBAN that fails its checksum', from: 'NL33ASNB0700000001', to: 'NL34ASNB0700000001'},
-		{change: 'the account of another bank', from: /NL33ASNB0700000001/g, to: OTHER_FAMILY_IBAN},
+		{change: 'the account of another bank', from: /NL33ASNB0700000001/g, to: OTHER_BANK_IBAN},
 	])(
 		'leaves an ASN Bank file with $change unclaimed, since the export has no header, as a table of no known layout',
 		({from, to}) => {
@@ -223,6 +272,20 @@ describe('bank CSV layouts', () => {
 			expect(refusal(text.replace(from, to))).toEqual({code: 'layout_unknown', layout: null});
 		},
 	);
+
+	it.each([
+		{
+			change: 'a BIC beside an IBAN that fails its checksum',
+			from: 'INGBNL2A NL91ABNA0417164300',
+			to: 'INGBNL2A NL91ABNA0417164301',
+		},
+		{change: 'the account of another bank', from: /NL42TRIO0390000101/g, to: OTHER_BANK_IBAN},
+	])('leaves a Triodos Bank file with $change unclaimed, as a table of no known layout', ({from, to}) => {
+		const text = fixture('triodos-synthetic.csv');
+		expect(text).toMatch(from);
+
+		expect(refusal(text.replace(from, to))).toEqual({code: 'layout_unknown', layout: null});
+	});
 
 	it.each([
 		{
@@ -363,6 +426,194 @@ describe("an owner's saved layouts", () => {
 				],
 			},
 		]);
+	});
+
+	it('skip the rows a status column marks as not booked yet, and count them', () => {
+		// Barclaycard's workbook: a payment not booked yet says vorgemerkt and has no second date.
+		const workbook = readFileSync(join(FIXTURES, 'barclaycard-pending-synthetic.xlsx'));
+		const layout: CsvLayout = {
+			id: 'learned-card',
+			bank: 'Example Bank',
+			recognize: {
+				header: [
+					'Referenznummer',
+					'Buchungsdatum',
+					'Buchungsdatum',
+					'Betrag',
+					'Beschreibung',
+					'Typ',
+					'Status',
+					'Kartennummer',
+					'Originalbetrag',
+					'Mögliche Zahlpläne',
+					'Land',
+					'Karteninhaber',
+					'Kartennetzwerk',
+					'Kontaktlose Bezahlung',
+					'Details',
+				],
+			},
+			source: 'xlsx',
+			skipBefore: 4,
+			decimalMark: ',',
+			amountStyle: {thousandsSeparator: '.'},
+			dateFormat: 'DD.MM.YYYY',
+			currency: {fixed: 'EUR'},
+			bookingDate: 2,
+			transactionDate: 1,
+			amount: {kind: 'signed', column: 3},
+			counterpartyName: 4,
+			description: [14],
+		};
+		const read = (pendingColumn?: number) =>
+			readCsvLayout(workbook, [{...layout, ...(pendingColumn === undefined ? {} : {pendingColumn})}], {
+				owned: true,
+				today: '2026-11-13',
+			})?.statements.map(({entriesSkipped, rows}) => [entriesSkipped, rows.map(({amount}) => amount)]);
+
+		expect(read(6)).toEqual([[1, ['-12.50', '-41.25', '60.00']]]);
+		expect(refusal(workbook, [layout])).toEqual({code: 'layout_not_recognized', layout: 'learned-card'});
+	});
+
+	it('skip the rows a date column marks as not booked yet', () => {
+		const layout: CsvLayout = {
+			id: 'learned-pending',
+			bank: 'Example Bank',
+			recognize: {
+				header: ['Buchungstag', 'Wertstellung (Valuta)', 'Vorgang', 'Buchungstext', 'Umsatz in EUR', ''],
+			},
+			delimiter: ';',
+			quote: '"',
+			encoding: 'windows-1252',
+			skipBefore: 1,
+			decimalMark: ',',
+			amountStyle: {thousandsSeparator: '.'},
+			dateFormat: 'DD.MM.YYYY',
+			currency: {fixed: 'EUR'},
+			bookingDate: 0,
+			valueDate: 1,
+			amount: {kind: 'signed', column: 4},
+			description: [3],
+			pendingColumn: 0,
+		};
+		const text = fixture('comdirect-pending-synthetic.csv');
+
+		expect(ROWS_OF(layout, text)?.[0].rows.map(([, amount]) => amount)).toEqual(['-62.10', '2100.00']);
+		// The same row read as booked is refused, and a pending row of another width is too.
+		const booked = {...layout};
+		delete booked.pendingColumn;
+		expect(refusal(text, [booked])).toEqual({code: 'layout_not_recognized', layout: 'learned-pending'});
+		expect(refusal(text.replace('"-41,25";', '"-41,25";"x";"y";'), [layout])).toEqual({
+			code: 'layout_not_recognized',
+			layout: 'learned-pending',
+		});
+		// Its header ends in an empty column, so a row one cell longer is a row shifted by a cell, never read.
+		expect(refusal(text.replace('Example bill";"-62,10";', 'Example bill";"1,00";"-62,10";'), [layout])).toEqual({
+			code: 'layout_not_recognized',
+			layout: 'learned-pending',
+		});
+	});
+
+	it("read the other party from the payer's columns on money in and the payee's on money out", () => {
+		// Oberbank: payer and payee each with a name and an account; the holder fills one side of every row.
+		const layout: CsvLayout = {
+			id: 'learned-payer-payee',
+			bank: 'Example Bank',
+			recognize: {
+				header: [
+					'Buchungsdatum',
+					'Wertstellung',
+					'Betrag',
+					'Währung',
+					'Auftraggebername',
+					'Auftraggeber IBAN/Kto.Nr.',
+					'Auftraggeber BIC/BLZ',
+					'Empfängername',
+					'Empfänger IBAN/Kto.Nr.',
+					'Empfänger BIC/BLZ',
+					'Text',
+					'Verwendungszweck',
+				],
+			},
+			delimiter: ';',
+			quote: '"',
+			encoding: 'windows-1252',
+			decimalMark: ',',
+			amountStyle: {thousandsSeparator: '.'},
+			dateFormat: 'DD.MM.YYYY',
+			currency: {column: 3},
+			bookingDate: 0,
+			valueDate: 1,
+			amount: {kind: 'signed', column: 2},
+			counterpartyName: {moneyIn: 4, moneyOut: 7},
+			counterpartyIban: {moneyIn: 5, moneyOut: 8},
+			description: [10, 11],
+		};
+
+		expect(
+			readCsvLayout(file(fixture('oberbank-payer-payee-synthetic.csv')), [layout], {
+				owned: true,
+				today: '2026-11-13',
+			})?.statements[0].rows.map(({amount, counterpartyName, counterpartyIban}) => [
+				amount,
+				counterpartyName,
+				counterpartyIban,
+			]),
+		).toEqual([
+			['2100.00', 'Example Employer GmbH', 'GB33BUKB20201555555555'],
+			['-850.00', 'Example Landlord', 'NL91ABNA0417164300'],
+			['-41.25', null, null],
+		]);
+	});
+
+	it('read an empty value date as none, and refuse an empty booking date', () => {
+		// N26 leaves the value date of a card payment empty.
+		const layout: CsvLayout = {
+			id: 'learned-value-dates',
+			bank: 'Example Bank',
+			recognize: {
+				header: [
+					'Booking Date',
+					'Value Date',
+					'Partner Name',
+					'Partner Iban',
+					'Type',
+					'Payment Reference',
+					'Account Name',
+					'Amount (EUR)',
+					'Original Amount',
+					'Original Currency',
+					'Exchange Rate',
+				],
+			},
+			delimiter: ',',
+			quote: '"',
+			encoding: 'utf-8',
+			decimalMark: '.',
+			dateFormat: 'YYYY-MM-DD',
+			currency: {fixed: 'EUR'},
+			bookingDate: 0,
+			valueDate: 1,
+			amount: {kind: 'signed', column: 7},
+			counterpartyName: 2,
+			counterpartyIban: 3,
+			description: [5],
+		};
+		const text = fixture('n26-empty-value-date-synthetic.csv');
+
+		expect(
+			readCsvLayout(file(text), [layout], {owned: true, today: '2026-11-13'})?.statements[0].rows.map(
+				({bookingDate, valueDate}) => [bookingDate, valueDate],
+			),
+		).toEqual([
+			['2026-10-01', '2026-10-01'],
+			['2026-10-02', null],
+			['2026-10-04', null],
+		]);
+		expect(refusal(text.replace('2026-10-02,,', ',,'), [layout])).toEqual({
+			code: 'layout_not_recognized',
+			layout: 'learned-value-dates',
+		});
 	});
 
 	it.each([
@@ -564,6 +815,35 @@ describe("an owner's saved layouts", () => {
 		});
 		const otherDates = moved.replace(/"(\d{4})(\d{2})(\d{2})"/g, '"$3-$2-$1"');
 		expect(parseFile(file(otherDates), [{...fixed, dateFormat: 'DD-MM-YYYY'}]).layouts).toEqual(['learned-ing']);
+	});
+
+	it('refuse a file whose lines below the table look like rows, rather than skip them', () => {
+		const layout: CsvLayout = {...HEADERLESS, id: 'learned-skipping-below', skipAfter: 1};
+		const rows = fixture('headerless-synthetic.csv');
+		expect(ROWS_OF(layout, `${rows}Example total;-12.50\n`)?.[0].rows).toHaveLength(4);
+
+		// A layout learned from a file whose last line was cut, read on a whole one.
+		expect(refusal(rows, [layout])).toEqual({code: 'layout_not_mappable', layout: null});
+		expect(parseFile(file(rows), [layout, HEADERLESS]).layouts).toEqual(['learned-headerless']);
+	});
+
+	it('refuse a file whose lines above the table look like rows, rather than skip them', () => {
+		const layout: CsvLayout = {...HEADERLESS, id: 'learned-skipping', skipBefore: 2};
+		const rows = fixture('headerless-synthetic.csv');
+		expect(ROWS_OF(layout, `Example statement\nExample Bank;Example Person\n${rows}`)?.[0].rows).toHaveLength(4);
+
+		expect(refusal(rows, [layout])).toEqual({code: 'layout_not_mappable', layout: null});
+		// Another saved layout that reads the whole file still does; one whose rows do not read is no reason to skip any.
+		expect(parseFile(file(rows), [layout, HEADERLESS]).layouts).toEqual(['learned-headerless']);
+		const header: CsvLayout = {
+			...HEADERLESS,
+			id: 'learned-header',
+			recognize: {header: ['Date', 'Amount', 'Currency', 'Note']},
+			dateFormat: 'DD/MM/YYYY',
+		};
+		const headed = `Date;Amount;Currency;Note\n${rows}`;
+		expect(refusal(headed, [header])).toEqual({code: 'layout_not_recognized', layout: 'learned-header'});
+		expect(refusal(headed, [header, layout])).toEqual({code: 'layout_not_mappable', layout: null});
 	});
 
 	it('leave a table no saved layout reads to the column mapper', () => {

@@ -1,6 +1,7 @@
 import {normalizeIban} from '@modules/banking/own-transfer/iban';
 
-import {CSV_DELIMITERS, CsvLayout, MAX_LAYOUT_COLUMNS, isCsvLayoutId} from '../parsers/csv-layout';
+import {CSV_DELIMITERS, CSV_TEXT_ENCODINGS, CsvLayout, MAX_LAYOUT_COLUMNS, isCsvLayoutId} from '../parsers/csv-layout';
+import {CSV_LAYOUTS, namesNoAccount} from '../parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from '../parsers/currency-codes';
 import {MAX_ARCHIVE_ENTRIES, MAX_ROWS_PER_DROP} from '../parsers/parse-limits';
 import {
@@ -12,9 +13,10 @@ import {
 	ParseResult,
 	STATEMENT_BANKS,
 	STATEMENT_FORMATS,
+	StatementBalance,
 	StatementFormat,
 } from '../parsers/parse-result';
-import {MAX_COLUMN_SHAPES, MAX_HEADER_CELL_LENGTH, MAX_MASKED_CELL_LENGTH} from '../parsers/table-mask';
+import {MAX_COLUMN_SHAPES, MAX_HEADER_CELL_LENGTH, MAX_MASKED_CELL_LENGTH, isPlainWord} from '../parsers/table-mask';
 import {TableSample, TableShape} from '../parsers/table-sample';
 import {PreviewChildOutput, SampleChildOutput} from './parse-runner.protocol';
 
@@ -31,7 +33,8 @@ const TEXT_LIMITS = {
 	bankTransactionSubCode: 64,
 	referenceNumber: 255,
 } as const;
-const MAX_ACCOUNT_ID_LENGTH = 34;
+/** CAMT's other id has at most 34 characters; OFX's bank, branch and account ids together at most 55. */
+const MAX_ACCOUNT_ID_LENGTH = 55;
 const MAX_SEQUENCE_NUMBER_LENGTH = 32;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]+/g;
 /** A masked cell: no letter but `a` and `A`, no digit but `9`. */
@@ -106,7 +109,7 @@ export function validateParseOutput(output: unknown, owned: readonly CsvLayout[]
 
 /**
  * A statement names its account by IBAN or other id, or else, for a file that names none, by its bank: Revolut for
- * Revolut's own formats, or the bank of the owner's saved layout it was read with.
+ * Revolut's own formats, or the bank of the CSV layout (built in, or the owner's saved one) it was read with.
  */
 function validateStatement(value: unknown, owned: readonly CsvLayout[]): NormalizedStatement {
 	const statement = asRecord(value);
@@ -119,7 +122,9 @@ function validateStatement(value: unknown, owned: readonly CsvLayout[]): Normali
 	const layout = statement.layout;
 	if (format === 'csv' ? !isCsvLayoutId(layout) : layout !== null) throw new ParseRefusal('parse_failed');
 	const banks: readonly unknown[] =
-		format === 'csv' ? owned.filter(({id}) => id === layout).map(({bank}) => bank) : STATEMENT_BANKS;
+		format === 'csv'
+			? [...CSV_LAYOUTS.filter(namesNoAccount), ...owned].filter(({id}) => id === layout).map(({bank}) => bank)
+			: STATEMENT_BANKS;
 	if (bank !== null && (!banks.includes(bank) || accountIban || accountOtherId)) {
 		throw new ParseRefusal('parse_failed');
 	}
@@ -137,6 +142,8 @@ function validateStatement(value: unknown, owned: readonly CsvLayout[]): Normali
 		accountCurrency: validCurrency(statement.accountCurrency),
 		sequenceNumber: cleanText(statement.sequenceNumber, MAX_SEQUENCE_NUMBER_LENGTH, true),
 		entriesSkipped,
+		openingBalance: validBalance(statement.openingBalance),
+		closingBalance: validBalance(statement.closingBalance),
 		rows: (statement.rows as unknown[]).map(validateRow),
 	};
 }
@@ -167,6 +174,14 @@ function validateRow(value: unknown): NormalizedRow {
 		bankTransactionSubCode: cleanText(row.bankTransactionSubCode, TEXT_LIMITS.bankTransactionSubCode),
 		referenceNumber: cleanText(row.referenceNumber, TEXT_LIMITS.referenceNumber),
 	};
+}
+
+function validBalance(value: unknown): StatementBalance | null {
+	if (value === null) return null;
+	const balance = asRecord(value);
+	const date = validDate(balance.date);
+	if (date === null) throw new ParseRefusal('parse_failed');
+	return {date, amount: validAmount(balance.amount)};
 }
 
 function validFormat(value: unknown): StatementFormat {
@@ -235,7 +250,7 @@ export function validateSampleOutput(output: unknown): SampleChildOutput {
 		masked.header === null ? null : textCells(masked.header, columnCount, 2 * MAX_HEADER_CELL_LENGTH);
 	if ((header === null) !== (maskedHeader === null)) throw new ParseRefusal('parse_failed');
 	const plain = (cell: string) => MASKED.test(cell) || ISO_CURRENCY_CODES.has(cell);
-	const rowCell = (cell: string) => plain(cell) || (cell.length <= 12 && !/\p{Nd}/u.test(cell));
+	const rowCell = (cell: string) => plain(cell) || isPlainWord(cell);
 	const maskedCells = (value: unknown, allowed: (cell: string) => boolean) => {
 		// Lengths count characters, which a string longer than the basic plane holds two units of.
 		const cells = textCells(value, MAX_LAYOUT_COLUMNS, 2 * MAX_MASKED_CELL_LENGTH);
@@ -250,7 +265,9 @@ export function validateSampleOutput(output: unknown): SampleChildOutput {
 		shape: tableShape(sample.shape),
 		columnCount,
 		skipBefore: whole(sample.skipBefore, 0, Number.MAX_SAFE_INTEGER),
+		rowsAbove: whole(sample.rowsAbove, 0, Number.MAX_SAFE_INTEGER),
 		skipAfter: whole(sample.skipAfter, 0, Number.MAX_SAFE_INTEGER),
+		rowsBelow: whole(sample.rowsBelow, 0, Number.MAX_SAFE_INTEGER),
 		header,
 		rowCount: whole(sample.rowCount, 1, Number.MAX_SAFE_INTEGER),
 		masked: {
@@ -317,7 +334,7 @@ function tableShape(value: unknown): TableShape {
 		Object.keys(shape).length !== 4 ||
 		!(CSV_DELIMITERS as readonly unknown[]).includes(shape.delimiter) ||
 		(shape.quote !== '"' && shape.quote !== "'") ||
-		(shape.encoding !== 'utf-8' && shape.encoding !== 'windows-1252')
+		!(CSV_TEXT_ENCODINGS as readonly unknown[]).includes(shape.encoding)
 	) {
 		throw new ParseRefusal('parse_failed');
 	}

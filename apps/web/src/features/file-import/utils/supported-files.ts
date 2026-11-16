@@ -13,11 +13,19 @@ export type BankExport = {
 export const BANK_EXPORTS: readonly BankExport[] = [
   {bank: 'ABN AMRO', files: 'TXT'},
   {bank: 'ASN Bank', files: 'CSV', layouts: ['asn-nl']},
-  {bank: 'bunq', files: 'CSV', layouts: ['bunq-nl', 'bunq-en']},
-  {bank: 'ING', files: 'CSV', layouts: ['ing-nl']},
-  {bank: 'Knab', files: 'CSV', layouts: ['knab-nl']},
-  {bank: 'Rabobank', files: 'CSV', layouts: ['rabobank-nl']},
+  {bank: 'bunq', files: 'CSV', layouts: ['bunq-nl', 'bunq-en', 'bunq-en-7', 'bunq-en-7-semicolon']},
+  {bank: 'ING', files: 'CSV', layouts: ['ing-nl', 'ing-nl-11', 'ing-en-11', 'ing-en']},
+  {bank: 'Knab', files: 'CSV', layouts: ['knab-nl', 'knab-nl-no-preamble']},
+  {
+    bank: 'Rabobank',
+    files: 'CSV and credit card CSV',
+    layouts: ['rabobank-nl', 'rabobank-en', 'rabobank-creditcard'],
+  },
+  // SNS and RegioBank accounts export in ASN Bank's layout, which `layoutBank` names first.
+  {bank: 'RegioBank', files: 'CSV', layouts: ['asn-nl']},
   {bank: 'Revolut', files: 'CSV and Excel'},
+  {bank: 'SNS', files: 'CSV', layouts: ['asn-nl']},
+  {bank: 'Triodos Bank', files: 'CSV', layouts: ['triodos-nl']},
 ];
 
 /** The bank whose CSV export a layout id describes; null for a layout this list does not know. */
