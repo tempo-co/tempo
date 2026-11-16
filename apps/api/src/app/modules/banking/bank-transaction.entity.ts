@@ -236,6 +236,13 @@ export class BankTransaction {
 	@Column({type: 'uuid', nullable: true})
 	importId: string | null;
 
+	/**
+	 * The scheme the import's statement numbered this row in: its format, and the layout of a CSV-style file
+	 * (`camt053`, `csv:ing-nl-11`). Null for synced rows and for imported rows stored before it was recorded.
+	 */
+	@Column({type: 'varchar', length: 96, nullable: true})
+	statementNumbering: string | null;
+
 	// Named by string: the import record belongs to the file-import module, which depends on banking.
 	@ManyToOne('BankImport', {onDelete: 'SET NULL', nullable: true})
 	@JoinColumn({name: 'importId', foreignKeyConstraintName: 'fk_bank_transactions_import'})

@@ -1,11 +1,10 @@
-import {format, isToday} from 'date-fns';
-import {CloudOff, RotateCw, WifiOff} from 'lucide-react';
+import {RotateCw} from 'lucide-react';
 import * as React from 'react';
 
+import {FailedAt, describeFailure, failureKey} from '@/components/shared/load-failure';
 import {PendingLabel} from '@/components/shared/pending-label';
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
-import {HttpError, NetworkError} from '@/utils/api';
 import {cn} from '@/utils/cn';
 
 type StateMessageProps = {
@@ -17,7 +16,7 @@ type StateMessageProps = {
   title: string;
   description: React.ReactNode;
   /** One quiet technical line, such as a status code and the time it failed. */
-  detail?: string;
+  detail?: React.ReactNode;
   /** The title's heading level; a page's only state is its `h1`. */
   titleAs?: 'h1' | 'h2' | 'h3';
   /** A list's first run: static rows in the list's row shape under the message. */
@@ -107,45 +106,6 @@ function PreviewRows() {
   );
 }
 
-const failedAtLabel = (time: number) => format(time, isToday(time) ? 'HH:mm' : 'd MMM, HH:mm');
-
-/** What a failed load says about its cause: offline, no answer, or an error reply. */
-function describeFailure(error: unknown) {
-  if (!navigator.onLine)
-    return {
-      offline: true,
-      icon: WifiOff,
-      description: 'This loads once the device is back online.',
-      code: null,
-    } as const;
-  // A request without a reply, or one paused until the server answers again.
-  if (error instanceof NetworkError || error == null)
-    return {
-      offline: false,
-      icon: CloudOff,
-      description: "The server can't be reached right now.",
-      code: 'No response',
-    } as const;
-  if (error instanceof HttpError)
-    return {
-      offline: false,
-      icon: CloudOff,
-      description:
-        error.status >= 500
-          ? 'The server ran into a problem.'
-          : error.status === 429
-            ? 'Too many requests for now. Wait a moment.'
-            : 'The server turned the request down.',
-      code: String(error.status),
-    } as const;
-  return {
-    offline: false,
-    icon: CloudOff,
-    description: 'Something went wrong while loading.',
-    code: null,
-  } as const;
-}
-
 type LoadErrorStateProps = {
   title: string;
   /** The failed query's error; it picks the description and the status code. */
@@ -166,10 +126,7 @@ export function LoadErrorState({
   className,
   children,
 }: LoadErrorStateProps) {
-  const [failedAt, setFailedAt] = React.useState(() => Date.now());
   const [isRetrying, setIsRetrying] = React.useState(false);
-  // Each failure brings a new error, also from a refetch or a new request the state stays mounted for.
-  React.useEffect(() => setFailedAt(Date.now()), [error]);
   const failure = describeFailure(error);
 
   const retry = async () => {
@@ -189,7 +146,15 @@ export function LoadErrorState({
         icon={failure.icon}
         title={failure.offline ? "You're offline" : title}
         description={failure.description}
-        detail={failure.code ? `${failure.code} · ${failedAtLabel(failedAt)}` : undefined}
+        detail={
+          failure.code ? (
+            <>
+              {failure.code} ·{' '}
+              {/* Each failure brings a new error, also from a refetch or a new request the state stays mounted for. */}
+              <FailedAt key={failureKey(error)} />
+            </>
+          ) : undefined
+        }
       >
         <Button
           variant='outline'

@@ -228,6 +228,15 @@ for (const width of [1440, 320]) {
     expect((await headerCreate.boundingBox())!.y).toBeLessThan((await row.boundingBox())!.y);
     await expect(headerCreate).toBeFocused();
     await expect(page.locator('body')).not.toContainText(secret);
+    // Opening it again starts from an empty form, without the revealed token.
+    await headerCreate.click();
+    const reopened = page.getByRole('dialog', {name: 'Create access token', exact: true});
+    await expect(reopened.getByLabel('Name', {exact: true})).toHaveValue('');
+    await expect(reopened.getByRole('combobox', {name: 'Expiration'})).toHaveText('90 days');
+    await expect(page.getByLabel('Access token', {exact: true})).toHaveCount(0);
+    await reopened.getByRole('button', {name: 'Cancel', exact: true}).click();
+    await expect(reopened).toBeHidden();
+    await expect(headerCreate).toBeFocused();
     await viewToken.focus();
     await page.keyboard.press('Enter');
     const details = page.getByRole('dialog', {name: tokenMetadata.name, exact: true});

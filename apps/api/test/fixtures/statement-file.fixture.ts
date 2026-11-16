@@ -26,6 +26,9 @@ export type CamtStatement = {
 	sequence?: string;
 	opening?: string;
 	closing?: string;
+	/** The days the opening and closing balances are stated for; 1 March by default. */
+	openingDate?: string;
+	closingDate?: string;
 	/** The account servicer's BIC; ABN AMRO's by default, `null` for none. */
 	servicerBic?: string | null;
 	/** In document order. ABN AMRO lists a statement's entries newest first. */
@@ -52,15 +55,15 @@ function camtStatement(statement: CamtStatement, laterStatus: boolean): string {
 	const bic = statement.servicerBic === undefined ? 'ABNANL2A' : statement.servicerBic;
 	const bicElement = laterStatus ? 'BICFI' : 'BIC';
 	const servicer = bic ? `<Svcr><FinInstnId><${bicElement}>${bic}</${bicElement}></FinInstnId></Svcr>` : '';
-	const balance = (type: string, amount: string) =>
+	const balance = (type: string, amount: string, date = '2026-03-01') =>
 		`<Bal><Tp><CdOrPrtry><Cd>${type}</Cd></CdOrPrtry></Tp><Amt Ccy="${currency}">${amount.replace('-', '')}</Amt>` +
-		`<CdtDbtInd>${amount.startsWith('-') ? 'DBIT' : 'CRDT'}</CdtDbtInd><Dt><Dt>2026-03-01</Dt></Dt></Bal>`;
+		`<CdtDbtInd>${amount.startsWith('-') ? 'DBIT' : 'CRDT'}</CdtDbtInd><Dt><Dt>${date}</Dt></Dt></Bal>`;
 	return (
 		`<Stmt><Id>EXAMPLE-STMT</Id>` +
 		(statement.sequence ? `<ElctrncSeqNb>${statement.sequence}</ElctrncSeqNb>` : '') +
 		`<Acct><Id>${id}</Id><Ccy>${currency}</Ccy>${servicer}</Acct>` +
-		(statement.opening ? balance('PRCD', statement.opening) : '') +
-		(statement.closing ? balance('CLBD', statement.closing) : '') +
+		(statement.opening ? balance('PRCD', statement.opening, statement.openingDate) : '') +
+		(statement.closing ? balance('CLBD', statement.closing, statement.closingDate) : '') +
 		statement.entries.map((entry) => camtEntry(entry, currency, laterStatus)).join('') +
 		`</Stmt>`
 	);

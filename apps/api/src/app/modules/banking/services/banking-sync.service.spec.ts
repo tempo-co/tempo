@@ -206,6 +206,7 @@ describe('BankingSyncService synchronization lock', () => {
 		upsert: jest.Mock;
 		update: jest.Mock;
 		createQueryBuilder: jest.Mock;
+		manager: object;
 	};
 	let transactionRepository: TransactionRepository & {findOne: jest.Mock};
 	let bankAccountRepository: {find: jest.Mock; update: jest.Mock};
@@ -294,6 +295,7 @@ describe('BankingSyncService synchronization lock', () => {
 			upsert: jest.fn().mockResolvedValue(undefined),
 			update: jest.fn().mockResolvedValue({affected: 1}),
 			createQueryBuilder: jest.fn(),
+			manager: {},
 		};
 		const dataSource = {
 			transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) =>

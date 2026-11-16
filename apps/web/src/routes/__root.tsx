@@ -1,8 +1,11 @@
 import {Outlet, createRootRouteWithContext} from '@tanstack/react-router';
 import {TanStackRouterDevtools} from '@tanstack/router-devtools';
+import {zodValidator} from '@tanstack/zod-adapter';
 
 import {AppHeader} from '@/components/shared/layout/app-header';
 import {AppTabBar} from '@/components/shared/layout/app-nav';
+import {AppDialogs} from '@/features/dashboard/components/app-dialogs';
+import {appDialogsSearchSchema} from '@/features/dashboard/types/app-dialogs-search';
 import {DeviceAlerts} from '@/features/notifications/components/device-alerts';
 
 export const Route = createRootRouteWithContext<{
@@ -10,6 +13,7 @@ export const Route = createRootRouteWithContext<{
   isEmailVerified: boolean;
 }>()({
   component: Root,
+  validateSearch: zodValidator(appDialogsSearchSchema),
 });
 
 function Root() {
@@ -34,6 +38,7 @@ function Root() {
         <Outlet />
       </main>
       <AppTabBar />
+      <AppDialogs />
       <DeviceAlerts />
       {import.meta.env.DEV && <TanStackRouterDevtools position='bottom-right' />}
     </>

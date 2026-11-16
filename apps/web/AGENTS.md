@@ -8,6 +8,7 @@ React 19 + TypeScript SPA (Vite, TanStack Router/Query, Tailwind with shadcn-sty
 - `docs/env-boundaries.md`: before changing `VITE_*` values, `NODE_ENV`, `docker-compose.e2e.yml`, the API image, Nginx or `Dockerfile.production`, or when local E2E setup fails.
 - `docs/frontend-conventions.md`: before changing feedback/toasts, destructive styles, phone layouts, settings lists, copy or `src/components/ui`.
 - `docs/pwa.md`: before changing the manifest, icons, base path or offline shell.
+- `docs/file-import.md`: before changing the statement file import's screens on Connections.
 - `DESIGN.md`: palette, typography and component tokens. `PRODUCT.md`: product scope.
 
 ## Verification

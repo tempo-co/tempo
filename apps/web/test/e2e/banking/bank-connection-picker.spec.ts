@@ -191,9 +191,11 @@ test.describe('Connect a bank', () => {
         metadataRequests.push(route.request().url());
         await route.fallback();
       });
+      let bankRequests = 0;
       let releaseBanks!: () => void;
       const banksHeld = new Promise<void>((resolve) => (releaseBanks = resolve));
       await page.route('**/bank-connections/aspsps', async (route) => {
+        bankRequests += 1;
         await banksHeld;
         await route.fallback();
       });
@@ -205,23 +207,23 @@ test.describe('Connect a bank', () => {
       });
 
       await page.goto('/bank-connections');
-      await page.getByTestId('connect-bank-button').click();
+      const trigger = page.getByTestId('connect-bank-button');
+      // Pointing at the button starts loading the banks.
+      await trigger.hover();
+      await expect.poll(() => bankRequests).toBe(1);
+      await trigger.click();
       const picker = page.getByTestId('bank-connection-picker');
       await expect(picker.getByRole('heading', {name: 'Connect a bank'})).toBeVisible();
+      // While the banks load, the sheet holds the bank step's shape and announces one status.
       const loading = picker.getByRole('status');
-      await expect(loading).toHaveText('Loading banks…');
-      // The spinner sits on the same line as its text.
-      const loadingText = await boxOf(loading.getByText('Loading banks…'));
-      const spinner = await boxOf(loading.locator('svg'));
-      expect(spinner.x).toBeGreaterThan(loadingText.x + loadingText.width);
-      expect(
-        Math.abs(spinner.y + spinner.height / 2 - (loadingText.y + loadingText.height / 2)),
-      ).toBeLessThanOrEqual(1);
-      const loadingBox = await boxOf(loading);
-      const pickerBox = await boxOf(picker);
-      expect(
-        Math.abs(loadingBox.x + loadingBox.width / 2 - (pickerBox.x + pickerBox.width / 2)),
-      ).toBeLessThanOrEqual(1);
+      expect(await loading.ariaSnapshot()).toBe('- status: Loading banks…');
+      const skeleton = picker.getByTestId('bank-step-skeleton');
+      await expect(skeleton.locator('li')).not.toHaveCount(0);
+      const [skeletonCountry, skeletonSearch, skeletonRow] = await Promise.all([
+        boxOf(skeleton.locator(':scope > div').first()),
+        boxOf(skeleton.locator('input')),
+        boxOf(skeleton.locator('li').first()),
+      ]);
       const height = await sheetHeight(picker);
 
       releaseBanks();
@@ -234,6 +236,13 @@ test.describe('Connect a bank', () => {
       const search = picker.getByRole('searchbox', {name: 'Search banks in Netherlands'});
       await expect(search).toHaveAttribute('placeholder', 'Search 15 banks');
       await expectListRows(picker);
+      // The loaded step fills the skeleton's places, so nothing moves.
+      expect(await boxOf(country)).toEqual(skeletonCountry);
+      expect(await boxOf(search)).toEqual(skeletonSearch);
+      expect(await boxOf(picker.getByRole('list').getByRole('button').first())).toEqual(
+        skeletonRow,
+      );
+      expect(bankRequests).toBe(1);
       await expect(picker.getByTestId('bank-wordmark').first()).toBeVisible();
       expect(await boxOf(picker.getByTestId('bank-wordmark').first())).toMatchObject({
         width: 112,

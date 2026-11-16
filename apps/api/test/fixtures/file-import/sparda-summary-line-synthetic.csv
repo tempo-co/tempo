@@ -1,0 +1,14 @@
+Umsatzanzeige
+
+Kontoinhaber:;Erika Example
+Kontonummer:;1234567
+
+Umsätze ab;Enddatum;Kontonummer;Saldo;Währung
+01.10.2026;31.10.2026;1234567;3.425,40;EUR
+Weitere Infos;Keine
+
+Buchungstag;Wertstellungstag;Verwendungszweck;Umsatz;Währung
+02.10.2026;02.10.2026;Example Shop;-12,50;EUR;
+05.10.2026;05.10.2026;Example Employer;2.500,00;EUR;
+09.10.2026;09.10.2026;Example Energy;-62,10;EUR;
+* noch nicht ausgeführte Umsätze

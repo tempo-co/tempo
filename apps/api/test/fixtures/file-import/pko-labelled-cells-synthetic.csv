@@ -1,0 +1,4 @@
+"Data operacji","Data waluty","Typ transakcji","Kwota","Waluta","Saldo po transakcji","Opis transakcji","","","",""
+"2026-10-09","2026-10-09","Przelew z rachunku","-62.10","PLN","+3425.40","Tytu³: Example rachunek 10/2026","Nazwa odbiorcy: Example Energia","Rachunek odbiorcy: PL27114020040000300201355387","",""
+"2026-10-05","2026-10-05","Przelew na rachunek","+2500.00","PLN","+3487.50","Tytu³: Example wynagrodzenie","Nazwa nadawcy: Example Pracodawca","Rachunek nadawcy: PL27114020040000300201355387","",""
+"2026-10-02","2026-10-02","P³atnoœæ kart¹","-12.50","PLN","+987.50","Tytu³: 000000000000001","Lokalizacja: Adres: Example Sklep Miasto: Example","Data wykonania: 2026-10-01","Oryginalna kwota operacji: 12.50 PLN",""

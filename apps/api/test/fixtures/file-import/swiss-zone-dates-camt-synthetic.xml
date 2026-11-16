@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.04">
+  <BkToCstmrStmt>
+    <GrpHdr><MsgId>EXAMPLE-MSG-1</MsgId><CreDtTm>2026-10-02T06:00:00+02:00</CreDtTm></GrpHdr>
+    <Stmt>
+      <Id>EXAMPLE-STMT-1</Id>
+      <ElctrncSeqNb>7</ElctrncSeqNb>
+      <CreDtTm>2026-10-02T06:00:00+02:00</CreDtTm>
+      <Acct><Id><IBAN>CH9300762011623852957</IBAN></Id><Ccy>CHF</Ccy></Acct>
+      <Bal><Tp><CdOrPrtry><Cd>OPBD</Cd></CdOrPrtry></Tp><Amt Ccy="CHF">.95</Amt><CdtDbtInd>CRDT</CdtDbtInd><Dt><Dt>2026-10-01+02:00</Dt></Dt></Bal>
+      <Bal><Tp><CdOrPrtry><Cd>CLBD</Cd></CdOrPrtry></Tp><Amt Ccy="CHF">100.64</Amt><CdtDbtInd>CRDT</CdtDbtInd><Dt><Dt>2026-10-01+02:00</Dt></Dt></Bal>
+      <Ntry>
+        <Amt Ccy="CHF">.21</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-10-01+02:00</Dt></BookgDt><ValDt><Dt>2026-10-01+02:00</Dt></ValDt>
+        <AcctSvcrRef>EXAMPLE-REF-1</AcctSvcrRef>
+        <NtryDtls><TxDtls><RltdPties><Cdtr><Nm>Example Bank Fees</Nm></Cdtr></RltdPties><RmtInf><Ustrd>Account fee</Ustrd></RmtInf></TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="CHF">99.90</Amt><CdtDbtInd>CRDT</CdtDbtInd><Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-10-01+02:00</Dt></BookgDt><ValDt><Dt>2026-10-01Z</Dt></ValDt>
+        <AcctSvcrRef>EXAMPLE-REF-2</AcctSvcrRef>
+        <NtryDtls><TxDtls><RltdPties><Dbtr><Nm>Example Customer AG</Nm></Dbtr></RltdPties><RmtInf><Ustrd>Invoice 1001</Ustrd></RmtInf></TxDtls></NtryDtls>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

@@ -39,10 +39,15 @@ export const SQL_MISSING_BASE_AMOUNT = `(NOT ${SQL_INTERNAL} AND ${SQL_BASE_AMOU
 export const SQL_MERCHANT_KEY_NAME = `substring("transaction"."merchantKey" from position(':' in "transaction"."merchantKey") + 1)`;
 /**
  * The row's merchant group (`MERCHANT_GROUP_ID_PATTERN`): the owner's merchant identified with a brand groups by the
- * lowercased brand, any other merchant key is its own group. Own transfers, currency exchanges and rows without a
+ * lowercased name of its company (`sqlMerchantGroupName`), any other merchant key is its own group. Own transfers, currency exchanges and rows without a
  * merchant key have none. Needs the owner-scoped `connection` alias.
  */
-export const SQL_MERCHANT_GROUP = `(CASE WHEN "transaction"."merchantKey" IS NULL OR ${SQL_INTERNAL} OR ${SQL_MERCHANT_KEY_NAME} = '' THEN NULL ELSE COALESCE((SELECT 'b_' || md5(lower(btrim(merchant."brand"))) FROM "merchants" merchant WHERE merchant."accountId" = "connection"."accountId" AND merchant."key" = ${SQL_MERCHANT_KEY_NAME} AND merchant."status" = '${MERCHANT_STATUSES.IDENTIFIED}' AND btrim(merchant."brand") <> ''), 'k_' || md5(${SQL_MERCHANT_KEY_NAME})) END)`;
+/** The name an identified merchant groups under: its company, or its brand until identification named a company. */
+export function sqlMerchantGroupName(alias: string): string {
+	return `COALESCE(NULLIF(btrim(${alias}."company"), ''), btrim(${alias}."brand"))`;
+}
+
+export const SQL_MERCHANT_GROUP = `(CASE WHEN "transaction"."merchantKey" IS NULL OR ${SQL_INTERNAL} OR ${SQL_MERCHANT_KEY_NAME} = '' THEN NULL ELSE COALESCE((SELECT 'b_' || md5(lower(${sqlMerchantGroupName('merchant')})) FROM "merchants" merchant WHERE merchant."accountId" = "connection"."accountId" AND merchant."key" = ${SQL_MERCHANT_KEY_NAME} AND merchant."status" = '${MERCHANT_STATUSES.IDENTIFIED}' AND btrim(merchant."brand") <> ''), 'k_' || md5(${SQL_MERCHANT_KEY_NAME})) END)`;
 
 const CASH_FLOW_SQL: Record<BankTransactionCashFlowFilterValue, string> = {
 	SPENDING: SQL_SPENDING,

@@ -297,6 +297,7 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 		const repository = {
 			query: jest.fn().mockResolvedValue([]),
 			find: jest.fn().mockResolvedValue([]),
+			manager: {},
 			createQueryBuilder: jest.fn().mockReturnValue(insertQueryBuilder),
 		} as unknown as Repository<BankTransaction>;
 		const transaction = {
@@ -357,6 +358,7 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 		const repository = {
 			query: jest.fn().mockResolvedValue([]),
 			find: repositoryFind,
+			manager: {},
 			createQueryBuilder: jest.fn().mockReturnValue(insertQueryBuilder),
 		} as unknown as Repository<BankTransaction>;
 		const refreshedTransaction = {
@@ -418,6 +420,7 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 			const repository = {
 				query: jest.fn().mockResolvedValue([]),
 				find: repositoryFind,
+				manager: {},
 				createQueryBuilder: jest.fn().mockReturnValueOnce(insertQueryBuilder),
 			} as unknown as Repository<BankTransaction>;
 			const bankAccount = {id: 'bank-account-id', currency: 'EUR'} as BankAccount;
@@ -541,6 +544,7 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 		const repository = {
 			query: jest.fn().mockResolvedValue([]),
 			find: repositoryFind,
+			manager: {},
 			createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
 		} as unknown as Repository<BankTransaction>;
 
@@ -626,6 +630,7 @@ describe('BankTransactionPersistenceService transaction event persistence', () =
 				.fn()
 				.mockResolvedValueOnce(existingTransactions)
 				.mockResolvedValueOnce(existingTransactions.map(({id}) => ({id}))),
+			manager: {},
 			createQueryBuilder: jest.fn().mockReturnValue(insertQueryBuilder),
 		} as unknown as Repository<BankTransaction>;
 		const updatedFirstTransaction = {

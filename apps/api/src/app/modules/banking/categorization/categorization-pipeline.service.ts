@@ -52,6 +52,8 @@ export class CategorizationPipeline {
 		// batchIds is capped at the batch size, so every claimed transaction fits in one provider call.
 		if (claimed.length > 0) await this.categorizeClaimedBatch(claimed);
 		// Rows already claimed are categorized first, so a failed claim retries only the rows it left unclaimed.
+		// The refresh's rejection reason is rethrown as is, so the queue retries it like any other job failure.
+		// eslint-disable-next-line @typescript-eslint/only-throw-error
 		if (error) throw error;
 	}
 
@@ -129,7 +131,8 @@ export class CategorizationPipeline {
 		}
 		if (unavailable) await this.rowStore.markFailed(pending, unavailable);
 		// Completed rows are no longer claimable, so the queue retry only picks up the pending and failed ones.
-		if (unavailable ?? retryable) throw unavailable ?? retryable;
+		const failure = unavailable ?? retryable;
+		if (failure) throw failure;
 	}
 
 	/**

@@ -1,0 +1,10 @@
+﻿Consulta de movimientos;;;;;;
+31/10/2026 9:00;;;;;;
+;;;;;;
+Cuenta: ;ES91 2100 0418 4502 0005 1332;;;;;
+Divisa: ;EUR;;;;;
+;;;;;;
+F. Operación;Concepto;F. Valor;Importe;Saldo;Referencia 1;Referencia 2
+02/10/2026;Example Shop;02/10/2026;-12,50;987,50;;000000000001
+05/10/2026;Example Employer;05/10/2026;2.500,00;3.487,50;000000000002;
+09/10/2026;Example Energy;09/10/2026;-62,10;3.425,40;;000000000003

@@ -1,0 +1,4 @@
+kredietkaart;kaarthouder;uitgavenstaat;datum verrichting;Datum verrekening;bedrag;credit;debet;munt;koers;bedrag in EUR;Kosten op verrichting;Handelaar;locatie;land;toelichting
+5100XXXXXXXX1234;ERIKA EXAMPLE;;01/10/2026;03/10/2026;-4,20;;-4,20;EUR;1;-4,20;0;Example Shop;;;
+5100XXXXXXXX1234;ERIKA EXAMPLE;;02/10/2026;03/10/2026;-12,50;;-12,50;EUR;1;-12,50;0;Example Cafe;;;
+5100XXXXXXXX1234;ERIKA EXAMPLE;;04/10/2026;06/10/2026;-41,25;;-41,25;EUR;1;-41,25;0;Example Market;;;

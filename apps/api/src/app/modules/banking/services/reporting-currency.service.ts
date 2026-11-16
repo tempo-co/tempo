@@ -140,12 +140,12 @@ export class ReportingCurrencyService {
 	/** The single currency most recent booked transactions are in; null on a tie or without any. */
 	private async findSuggestion(manager: EntityManager, ownerId: string, now: Date): Promise<string | null> {
 		const today = dateInAppTimeZone(now);
-		const rows = (await manager.query(SUGGESTION_SQL, [
+		const rows = await manager.query<Array<{currency: string; count: number}>>(SUGGESTION_SQL, [
 			ownerId,
 			addDays(today, -SUGGESTION_WINDOW_DAYS),
 			today,
 			[...SUPPORTED],
-		])) as Array<{currency: string; count: number}>;
+		]);
 		if (rows.length === 0 || rows[1]?.count === rows[0].count) return null;
 		return rows[0].currency;
 	}
@@ -166,14 +166,14 @@ function stateOf({baseCurrency, baseCurrencyState}: Account): BaseCurrencyState 
 }
 
 async function findConnectedCurrencies(manager: EntityManager, ownerId: string): Promise<string[]> {
-	const rows = (await manager.query(
+	const rows = await manager.query<Array<{currency: string}>>(
 		`SELECT DISTINCT UPPER(BTRIM(bank_account."currency")) AS "currency"
 		FROM "bank_accounts" bank_account
 		INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
 		WHERE connection."accountId" = $1 AND bank_account."isActive" = TRUE AND BTRIM(bank_account."currency") <> ''
 		ORDER BY 1`,
 		[ownerId],
-	)) as Array<{currency: string}>;
+	);
 	return rows.map(({currency}) => currency);
 }
 
@@ -206,7 +206,7 @@ async function changeBaseCurrency(
 			AND (t."baseAmountMethod" IS NOT NULL OR t."currency" = $2)`,
 		[ownerId, currency],
 	);
-	const [{toConvert}] = (await manager.query(
+	const [{toConvert}] = await manager.query<Array<{toConvert: boolean}>>(
 		`SELECT EXISTS (
 			SELECT 1 FROM "bank_transactions" t
 			INNER JOIN "bank_accounts" bank_account ON bank_account."id" = t."bankAccountId"
@@ -214,7 +214,7 @@ async function changeBaseCurrency(
 			WHERE connection."accountId" = $1 AND t."baseAmountMethod" IS NULL
 		) AS "toConvert"`,
 		[ownerId],
-	)) as Array<{toConvert: boolean}>;
+	);
 	if (!toConvert) {
 		// Also finishes an earlier change still waiting for its conversion pass: nothing is left for it to convert.
 		await manager.query(`UPDATE "accounts" SET "baseAmountsRevision" = "baseCurrencyRevision" WHERE "id" = $1`, [
@@ -223,10 +223,10 @@ async function changeBaseCurrency(
 		return null;
 	}
 	// TypeORM answers an UPDATE on PostgreSQL with [rows, affected].
-	const [[{baseCurrencyRevision}]] = (await manager.query(
+	const [[{baseCurrencyRevision}]] = await manager.query<[Array<{baseCurrencyRevision: number}>, number]>(
 		`UPDATE "accounts" SET "baseCurrencyRevision" = "baseCurrencyRevision" + 1 WHERE "id" = $1
 		RETURNING "baseCurrencyRevision"`,
 		[ownerId],
-	)) as [Array<{baseCurrencyRevision: number}>, number];
+	);
 	return baseCurrencyRevision;
 }

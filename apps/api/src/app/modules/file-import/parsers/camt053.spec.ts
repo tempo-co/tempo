@@ -1,8 +1,16 @@
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+
 import {EXAMPLE_IBAN, camt053} from '../../../../../test/fixtures/statement-file.fixture';
 import {parseCamt053} from './camt053';
+import {parseFile} from './parse-file';
 import {NormalizedRow, ParseRefusal} from './parse-result';
 
 const parse = (xml: string) => parseCamt053(Buffer.from(xml));
+const SWISS_FILE = readFileSync(
+	join(__dirname, '../../../../../test/fixtures/file-import/swiss-zone-dates-camt-synthetic.xml'),
+	'utf8',
+);
 
 const counterpartyDetails = (party: 'Cdtr' | 'Dbtr', name: string, iban: string, extra = '') =>
 	`<TxDtls><Refs><EndToEndId>E2E-EXAMPLE</EndToEndId></Refs><RltdPties><${party}><Nm>${name}</Nm></${party}>` +
@@ -80,6 +88,11 @@ describe('parseCamt053', () => {
 			}),
 		},
 		{
+			name: 'an amount without a leading zero and dates with a time zone, read as written',
+			entry: {amount: '.21', bookingDate: '2026-03-02+01:00', valueDate: '2026-03-01Z'},
+			expected: row({amount: '-0.21', valueDate: '2026-03-01'}),
+		},
+		{
 			name: 'NOTPROVIDED is no reference number',
 			entry: {
 				amount: '5.00',
@@ -107,6 +120,56 @@ describe('parseCamt053', () => {
 					),
 			},
 			expected: row({amount: '-30.00', remittanceInformation: 'First Second', referenceNumber: 'E2E-EXAMPLE'}),
+		},
+		{
+			name: 'a structured creditor reference without free text is the remittance text',
+			entry: {
+				amount: '10.00',
+				details:
+					'<TxDtls><RltdPties><Cdtr><Nm>Example Shop</Nm></Cdtr></RltdPties><RmtInf><Strd><CdtrRefInf><Tp>' +
+					'<CdOrPrtry><Cd>SCOR</Cd></CdOrPrtry><Issr>BBA</Issr></Tp><Ref>123456789002</Ref></CdtrRefInf></Strd>' +
+					'</RmtInf></TxDtls>',
+			},
+			expected: row({amount: '-10.00', counterpartyName: 'Example Shop', remittanceInformation: '123456789002'}),
+		},
+		{
+			name: 'free text, structured text and an RF or QR reference are joined in that order',
+			entry: {
+				amount: '10.00',
+				details:
+					'<TxDtls><RmtInf><Ustrd>Invoice 12</Ustrd><Strd><CdtrRefInf><Tp><CdOrPrtry><Prtry>QRR</Prtry>' +
+					'</CdOrPrtry></Tp><Ref>210000000003139471430009017</Ref></CdtrRefInf><AddtlRmtInf>Order 1001</AddtlRmtInf>' +
+					'</Strd><Strd><CdtrRefInf><Ref>RF18539007547034</Ref></CdtrRefInf></Strd></RmtInf></TxDtls>',
+			},
+			expected: row({
+				amount: '-10.00',
+				remittanceInformation: 'Invoice 12 Order 1001 210000000003139471430009017 RF18539007547034',
+			}),
+		},
+		{
+			name: 'the ultimate creditor is the counterparty when the creditor is not named',
+			entry: {
+				amount: '10.00',
+				details: '<TxDtls><RltdPties><UltmtCdtr><Nm>Example Shop</Nm></UltmtCdtr></RltdPties></TxDtls>',
+			},
+			expected: row({amount: '-10.00', counterpartyName: 'Example Shop'}),
+		},
+		{
+			name: 'an ultimate debtor other than the debtor is added to the description',
+			entry: {
+				amount: '10.00',
+				indicator: 'CRDT' as const,
+				info: 'Transfer',
+				details:
+					'<TxDtls><RltdPties><Dbtr><Pty><Nm>Example Payments</Nm></Pty></Dbtr>' +
+					'<UltmtDbtr><Pty><Nm>Example Customer</Nm></Pty></UltmtDbtr></RltdPties></TxDtls>',
+			},
+			expected: row({
+				amount: '10.00',
+				creditDebitIndicator: 'CRDT',
+				counterpartyName: 'Example Payments',
+				description: 'Transfer Example Customer',
+			}),
 		},
 	])('$name', ({entry, expected}) => {
 		const [statement] = parse(camt053([{entries: [entry]}]));
@@ -146,6 +209,8 @@ describe('parseCamt053', () => {
 					accountCurrency: 'EUR',
 					sequenceNumber: '61',
 					entriesSkipped: 1,
+					openingBalance: {date: '2026-03-01', amount: '1000.00'},
+					closingBalance: {date: '2026-03-01', amount: '1137.50'},
 					rows: [
 						expect.objectContaining({bankReference: 'B', amount: '150.00', balanceAfter: '1137.50'}),
 						expect.objectContaining({bankReference: 'A', amount: '-12.50', balanceAfter: '987.50'}),
@@ -159,22 +224,112 @@ describe('parseCamt053', () => {
 		const [statement] = parse(
 			camt053([{servicerBic: 'EXAMPLEXX', opening: '1000.00', closing: '987.50', entries: [{amount: '12.50'}]}]),
 		);
-
-		expect(statement.rows.map(({balanceAfter}) => balanceAfter)).toEqual(['987.50']);
-	});
-
-	it.each([
-		{name: 'does not reconcile', statement: {opening: '1000.00', closing: '999.00'}},
-		{name: 'comes from a bank whose entry order is unknown', statement: {servicerBic: 'EXAMPLEXX'}},
-		{name: 'names no account servicer', statement: {servicerBic: null}},
-	])('leaves the balance after empty for a statement with several rows that $name', ({statement}) => {
-		const [parsed] = parse(
+		// Balances without a leading zero, dated with a time zone.
+		const [swiss] = parse(
 			camt053([
-				{opening: '1000.00', closing: '985.50', ...statement, entries: [{amount: '12.50'}, {amount: '2.00'}]},
+				{
+					servicerBic: 'EXAMPLEXX',
+					opening: '.71',
+					closing: '.50',
+					openingDate: '2026-03-01+02:00',
+					closingDate: '2026-03-02-05:00',
+					entries: [{amount: '.21'}],
+				},
 			]),
 		);
 
-		expect(parsed.rows.map(({balanceAfter}) => balanceAfter)).toEqual([null, null]);
+		expect(statement.rows.map(({balanceAfter}) => balanceAfter)).toEqual(['987.50']);
+		expect(swiss).toMatchObject({
+			openingBalance: {date: '2026-03-01', amount: '0.71'},
+			closingBalance: {date: '2026-03-02', amount: '0.50'},
+			rows: [{amount: '-0.21', balanceAfter: '0.50'}],
+		});
+	});
+
+	it.each([
+		{name: 'comes from a bank whose entry order is unknown', statement: {servicerBic: 'EXAMPLEXX'}},
+		{name: 'names no account servicer', statement: {servicerBic: null}},
+	])(
+		'leaves the balance after empty for a statement with several rows that $name, keeping its stated balances',
+		({statement}) => {
+			const [parsed] = parse(
+				camt053([
+					{
+						opening: '-1000.00',
+						closing: '-1014.50',
+						openingDate: '2026-03-01',
+						closingDate: '2026-03-02',
+						...statement,
+						entries: [{amount: '12.50'}, {amount: '2.00'}],
+					},
+				]),
+			);
+
+			expect(parsed.rows.map(({balanceAfter}) => balanceAfter)).toEqual([null, null]);
+			expect(parsed).toMatchObject({
+				openingBalance: {date: '2026-03-01', amount: '-1000.00'},
+				closingBalance: {date: '2026-03-02', amount: '-1014.50'},
+			});
+		},
+	);
+
+	it.each([
+		{name: 'several rows of a bank whose entry order is unknown', bic: 'EXAMPLEXX', entries: ['12.50', '2.00']},
+		{name: 'several rows of a bank whose entry order is known', bic: 'ABNANL2A', entries: ['12.50', '2.00']},
+		{name: 'one row', bic: 'EXAMPLEXX', entries: ['12.50']},
+		{name: 'one row without a leading zero', bic: 'EXAMPLEXX', entries: ['.21']},
+		{name: 'no rows', bic: 'EXAMPLEXX', entries: []},
+	])('refuses a statement of $name whose entries do not add up to its closing balance', ({bic, entries}) => {
+		const xml = camt053([
+			{
+				servicerBic: bic,
+				opening: '1000.00',
+				closing: '999.00',
+				entries: entries.map((amount) => ({amount})),
+			},
+		]);
+
+		expect(() => parse(xml)).toThrow(new ParseRefusal('parse_failed'));
+	});
+
+	it('reads a Swiss statement with amounts without a leading zero and dates with a time zone, and refuses it altered', () => {
+		const [statement] = parse(SWISS_FILE);
+
+		expect(statement).toMatchObject({
+			accountIban: 'CH9300762011623852957',
+			openingBalance: {date: '2026-10-01', amount: '0.95'},
+			closingBalance: {date: '2026-10-01', amount: '100.64'},
+			rows: [
+				{
+					bookingDate: '2026-10-01',
+					valueDate: '2026-10-01',
+					amount: '-0.21',
+					counterpartyName: 'Example Bank Fees',
+				},
+				{
+					bookingDate: '2026-10-01',
+					valueDate: '2026-10-01',
+					amount: '99.90',
+					counterpartyName: 'Example Customer AG',
+				},
+			],
+		});
+		expect(() => parse(SWISS_FILE.replace('>.21<', '>.22<'))).toThrow(new ParseRefusal('parse_failed'));
+	});
+
+	it('keeps the closing balance of a statement that states no opening balance, and states none without one', () => {
+		const [closedOnly, neither] = parse(
+			camt053([
+				{closing: '985.50', closingDate: '2026-03-02', entries: [{amount: '12.50'}, {amount: '2.00'}]},
+				{entries: [{amount: '1.00'}]},
+			]),
+		);
+
+		expect(closedOnly).toMatchObject({
+			openingBalance: null,
+			closingBalance: {date: '2026-03-02', amount: '985.50'},
+		});
+		expect(neither).toMatchObject({openingBalance: null, closingBalance: null});
 	});
 
 	it('reads a later version: wrapped status codes, DtTm dates as written, nested party names and several statements', () => {
@@ -219,6 +374,42 @@ describe('parseCamt053', () => {
 		]);
 	});
 
+	it('reads the booked entries of a camt.052 account report, with the balances of a statement', () => {
+		const report = camt053([
+			{
+				servicerBic: 'EXAMPLEXX',
+				opening: '1000.00',
+				closing: '987.50',
+				entries: [
+					{amount: '12.50', reference: 'BOOKED'},
+					{amount: '5.00', status: 'PDNG', reference: 'PENDING'},
+				],
+			},
+		])
+			.replace('camt.053.001.02', 'camt.052.001.02')
+			.replace(/BkToCstmrStmt>/g, 'BkToCstmrAcctRpt>')
+			.replace(/<(\/?)Stmt>/g, '<$1Rpt>');
+		expect(report).toContain('<BkToCstmrAcctRpt><GrpHdr>');
+
+		const result = parseFile(Buffer.from(report));
+
+		expect(result).toMatchObject({
+			formats: ['camt053'],
+			statements: [
+				{
+					accountIban: EXAMPLE_IBAN,
+					entriesSkipped: 1,
+					rows: [
+						expect.objectContaining({bankReference: 'BOOKED', amount: '-12.50', balanceAfter: '987.50'}),
+					],
+				},
+			],
+		});
+		// An interim booked balance is no end-of-day balance: more may be booked that day.
+		const interim = parseFile(Buffer.from(report.replace('<Cd>CLBD</Cd>', '<Cd>ITBD</Cd>')));
+		expect(interim.statements[0].rows.map(({balanceAfter}) => balanceAfter)).toEqual([null]);
+	});
+
 	it.each([
 		{
 			name: 'an internal entity declaration',
@@ -254,6 +445,16 @@ describe('parseCamt053', () => {
 		{
 			name: 'a date that does not exist',
 			xml: camt053([{entries: [{amount: '1.00', bookingDate: '2026-02-30'}]}]),
+			code: 'parse_failed',
+		},
+		{
+			name: 'an amount with no digits',
+			xml: camt053([{entries: [{amount: '.'}]}]),
+			code: 'parse_failed',
+		},
+		{
+			name: 'a time zone that is not one',
+			xml: camt053([{entries: [{amount: '1.00', bookingDate: '2026-03-02+2'}]}]),
 			code: 'parse_failed',
 		},
 		{

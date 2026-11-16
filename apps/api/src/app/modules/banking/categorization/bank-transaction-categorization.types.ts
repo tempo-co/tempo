@@ -67,6 +67,8 @@ export type MerchantIdentification = {
 	kind: MerchantKind;
 	/** Set for a business or a payment service. */
 	brand: string | null;
+	/** Set for a business: the business that sells the brand, often the brand itself. */
+	company: string | null;
 	/** A well-formed lowercase hostname without `www.`, set with a brand; not yet confirmed by its site. */
 	domain: string | null;
 	/** Whether the model was sure the domain is the brand's own site rather than its best guess. */

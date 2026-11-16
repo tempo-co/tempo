@@ -204,21 +204,21 @@ export class BankTransactionAmountConversionService {
 
 			const count = await this.dataSource.transaction(async (manager) => {
 				await lockReportingCurrencyForAmountWrites(manager, accountId);
-				const [current] = (await manager.query(
+				const [current] = await manager.query<Array<Pick<Account, 'baseCurrency' | 'baseCurrencyRevision'>>>(
 					`SELECT "baseCurrency", "baseCurrencyRevision" FROM "accounts" WHERE "id" = $1`,
 					[accountId],
-				)) as Array<Pick<Account, 'baseCurrency' | 'baseCurrencyRevision'>>;
+				);
 				// Changed since the rates were fetched: the change queued a pass of its own.
 				if (
 					current?.baseCurrency !== owner.baseCurrency ||
 					current.baseCurrencyRevision !== owner.baseCurrencyRevision
 				)
 					return null;
-				const [result] = (await manager.query(CONVERT_OWNER_SQL, [
+				const [result] = await manager.query<Array<{count: number}>>(CONVERT_OWNER_SQL, [
 					accountId,
 					owner.baseCurrency,
 					FX_RATE_MAX_AGE_DAYS,
-				])) as Array<{count: number}>;
+				]);
 				return result.count;
 			});
 			if (count === null) continue;
@@ -253,11 +253,11 @@ export class BankTransactionAmountConversionService {
 	 * so the dashboard can show balances in the base currency (dashboard API, phase 1).
 	 */
 	private async refreshAccountCurrencyRates(latestExpectedDate: string): Promise<void> {
-		const rows = (await this.bankAccountRepository.query(
+		const rows = await this.bankAccountRepository.query<Array<{currency: string}>>(
 			`SELECT "currency" FROM "bank_accounts" WHERE "isActive" = TRUE
 			UNION
 			SELECT "baseCurrency" FROM "accounts" WHERE "baseCurrency" IS NOT NULL`,
-		)) as Array<{currency: string}>;
+		);
 		await this.fxRateService.ensureLatestRates(
 			rows.map(({currency}) => currency),
 			latestExpectedDate,
@@ -270,7 +270,7 @@ export class BankTransactionAmountConversionService {
 	 * without such rows).
 	 */
 	private async findOwnersToConvert(): Promise<Map<string, OwnerToConvert>> {
-		const rows = (await this.bankTransactionRepository.query(
+		const rows = await this.bankTransactionRepository.query<Array<PendingCurrency & {accountId: string}>>(
 			`SELECT
 				connection."accountId",
 				${CURRENCY_SQL} AS "currency",
@@ -284,14 +284,16 @@ export class BankTransactionAmountConversionService {
 			WHERE ${TO_CONVERT_SQL('owner."baseCurrency"')} OR ${unresolvedSql('owner."baseCurrency"')}
 			GROUP BY connection."accountId", ${CURRENCY_SQL}
 			ORDER BY connection."accountId", ${CURRENCY_SQL}`,
-		)) as Array<PendingCurrency & {accountId: string}>;
-		const owners = (await this.dataSource.query(
+		);
+		const owners = await this.dataSource.query<
+			Array<Pick<Account, 'id' | 'baseCurrency' | 'baseCurrencyRevision' | 'baseAmountsRevision'>>
+		>(
 			`SELECT "id", "baseCurrency", "baseCurrencyRevision", "baseAmountsRevision" FROM "accounts"
 			WHERE "baseCurrency" IS NOT NULL
 				AND ("baseCurrencyRevision" <> "baseAmountsRevision" OR "id" = ANY($1::uuid[]))
 			ORDER BY "id"`,
 			[[...new Set(rows.map(({accountId}) => accountId))]],
-		)) as Array<Pick<Account, 'id' | 'baseCurrency' | 'baseCurrencyRevision' | 'baseAmountsRevision'>>;
+		);
 
 		const result = new Map<string, OwnerToConvert>(
 			owners.map(({id, ...owner}) => [id, {...owner, currencies: []}]),

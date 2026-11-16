@@ -40,6 +40,8 @@ const ANSWER: LayoutAnswer = {
 	dateFormat: 'DD.MM.YYYY',
 	bookingDate: 0,
 	valueDate: 1,
+	transactionDate: null,
+	pending: null,
 	amount: {kind: 'debitCredit', moneyOutColumn: 4, moneyInColumn: 5},
 	decimalMark: ',',
 	thousandsSeparator: '.',
@@ -140,5 +142,33 @@ describe('LayoutMapper', () => {
 
 		await expect(mapper.mapLayout(input())).rejects.toEqual(new LayoutMapperError('unavailable'));
 		expect(create).not.toHaveBeenCalled();
+	});
+});
+
+// Rules the instructions state for columns that are easy to mistake, each with the file showing the cue the rule
+// reads (the answers they ask for are read in `bank-import-layout.service.spec.ts`).
+describe('LAYOUT_MAPPER_INSTRUCTIONS', () => {
+	const sent = (name: string) =>
+		toMapperInput(sampleTable(readFileSync(join(__dirname, '../../../../../test/fixtures/file-import', name)))!);
+
+	it.each([
+		{
+			rule: 'labelled cells are description',
+			says: /cell that carries its own label before a colon[^.]*\) is description, never counterpartyName or counterpartyAccount\./,
+			fixture: 'pko-labelled-cells-synthetic.csv',
+			// The labels are masked like any value, but their colon is kept.
+			cue: (input: ReturnType<typeof sent>) => [input.header?.[7], input.rows[0][7]],
+			shows: ['', 'Aaaaa aaaaaaaa: Aaaaaaa Aaaaaaa'],
+		},
+		{
+			rule: "source and target account columns are not the holder's account",
+			says: /Source and target account columns, between which the holder's account moves with the direction[^:]*: neither is account\./,
+			fixture: 'pekao-source-target-synthetic.csv',
+			cue: (input: ReturnType<typeof sent>) => [...(input.header?.slice(4, 6) ?? []), input.columns[5].sameValue],
+			shows: ['Rachunek źródłowy', 'Rachunek docelowy', false],
+		},
+	])('says $rule', ({says, fixture, cue, shows}) => {
+		expect(LAYOUT_MAPPER_INSTRUCTIONS).toMatch(says);
+		expect(cue(sent(fixture))).toEqual(shows);
 	});
 });

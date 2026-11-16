@@ -402,7 +402,16 @@ function Recurring({transaction}: {transaction: BankTransaction}) {
             })}
           </ul>
           <TextAction asChild className='mt-2 -ml-2'>
-            <Link to='/' search={{recurring: 'open', series: recurring.key}}>
+            <Link
+              to='.'
+              // The transaction closes while the series is open; Back brings it back.
+              search={(prev) => ({
+                ...prev,
+                transactionId: undefined,
+                recurring: 'open',
+                series: recurring.key,
+              })}
+            >
               All payments
             </Link>
           </TextAction>

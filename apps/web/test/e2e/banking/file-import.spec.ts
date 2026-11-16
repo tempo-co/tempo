@@ -1,10 +1,12 @@
-import type {Page, Request, Route} from '@playwright/test';
+import type {Locator, Page, Request, Route} from '@playwright/test';
 import type {
+  AddBankImportNeverSentRowsRequest,
   BankConnection,
   BankImportDoubtfulRow,
   BankImportError,
   BankImportLayout,
   BankImportLayoutProposal,
+  BankImportNeverSentRow,
   BankImportSummary,
   ConfirmBankImportLayoutProposalRequest,
   ResolveBankImportDoubtfulRowRequest,
@@ -20,6 +22,8 @@ import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 const TODAY = new Date('2026-11-12T10:00:00+01:00');
 const CHECKING = MOCK_CONNECTION.bankAccounts[0];
 const FILE_ACCOUNT_ID = '00000000-0000-4000-8000-000000000401';
+const SYNCED_LINE =
+  'These are almost always in Tempo already from your bank, so leaving them without an answer loses nothing.';
 const LAYOUT_ID = '00000000-0000-4000-8000-000000000601';
 const RESERVED_BANK_NAME =
   "Revolut's own exports already import into your Revolut accounts. Name this bank differently.";
@@ -98,10 +102,13 @@ function importSummary(fields: Partial<BankImportSummary> = {}): BankImportSumma
     rowsMatchedByBalance: 8,
     rowsMatchedByDate: 0,
     rowsDoubtful: 3,
+    rowsNotInBank: 0,
+    rowsRemovedBySync: 0,
     dateFrom: '2026-05-01',
     dateTo: '2026-10-30',
     accounts: [{id: CHECKING.id, name: 'Holder Name', currency: 'EUR', created: false}],
     accountsWithoutBalance: [],
+    statementGaps: [],
     undoneAt: null,
     createdAt: '2026-11-12T09:30:00.000Z',
     ...fields,
@@ -137,6 +144,9 @@ type ImportApi = {
   imports: BankImportSummary[];
   uploads: Request[];
   resolves: ResolveBankImportDoubtfulRowRequest[];
+  /** The bodies of never-sent rows added, and how often the list of them was read. */
+  adds: AddBankImportNeverSentRowsRequest[];
+  neverSentReads: number;
   undos: string[];
   proposals: Request[];
   confirms: ConfirmBankImportLayoutProposalRequest[];
@@ -155,6 +165,8 @@ async function mockFileImport(
     imports = [],
     uploads = [],
     doubtfulRows = [],
+    neverSentRows = [],
+    holdAdd,
     mapper = false,
     proposals = [],
     layouts = [],
@@ -162,6 +174,9 @@ async function mockFileImport(
     imports?: BankImportSummary[];
     uploads?: ((route: Route, api: ImportApi) => Promise<void>)[];
     doubtfulRows?: BankImportDoubtfulRow[];
+    neverSentRows?: BankImportNeverSentRow[];
+    /** Holds each add of never-sent rows until it resolves. */
+    holdAdd?: () => Promise<void>;
     /** Whether the deployment works out the columns of a table it does not know. */
     mapper?: boolean;
     /** The answer to each proposal in turn. */
@@ -173,6 +188,8 @@ async function mockFileImport(
     imports: [...imports],
     uploads: [],
     resolves: [],
+    adds: [],
+    neverSentReads: 0,
     undos: [],
     proposals: [],
     confirms: [],
@@ -200,6 +217,27 @@ async function mockFileImport(
       rowsDoubtful: current.rowsDoubtful - 1,
       rowsAdded: current.rowsAdded + (request.decision === 'new' ? 1 : 0),
       rowsAlreadyPresent: current.rowsAlreadyPresent + (request.decision === 'new' ? 0 : 1),
+    };
+    api.imports = [next, ...api.imports.slice(1)];
+    return fulfillJson(route, next);
+  });
+  await page.route(`${API_URL}/bank-imports/*/never-sent-rows`, (route) => {
+    api.neverSentReads += 1;
+    return fulfillJson(route, neverSentRows);
+  });
+  await page.route(`${API_URL}/bank-imports/*/never-sent-rows/add`, async (route) => {
+    const request = route.request().postDataJSON() as AddBankImportNeverSentRowsRequest;
+    api.adds.push(request);
+    await holdAdd?.();
+    const [current] = api.imports;
+    const removed = request.rowIds.filter(
+      (id) => neverSentRows.find((row) => row.id === id)?.kind === 'removed_by_sync',
+    ).length;
+    const next = {
+      ...current,
+      rowsAdded: current.rowsAdded + request.rowIds.length,
+      rowsNotInBank: current.rowsNotInBank - (request.rowIds.length - removed),
+      rowsRemovedBySync: current.rowsRemovedBySync - removed,
     };
     api.imports = [next, ...api.imports.slice(1)];
     return fulfillJson(route, next);
@@ -309,6 +347,35 @@ function sentForm(request: Request) {
   return {files, fields};
 }
 
+/**
+ * A balance field shows its currency inside, at the far right, over the padding its value scrolls short of; and
+ * names it in its description.
+ */
+async function expectCurrencyInside(field: Locator, currency: string) {
+  const suffix = field.locator('xpath=..').getByText(currency, {exact: true});
+  await expect(suffix).toBeVisible();
+  await expect(field).toHaveAccessibleDescription(new RegExp(`^${currency} `));
+  const [box, suffixBox, paddingRight] = await Promise.all([
+    boxOf(field),
+    boxOf(suffix),
+    field.evaluate((element) => parseFloat(getComputedStyle(element).paddingRight)),
+  ]);
+  expect(suffixBox.x + suffixBox.width).toBeLessThanOrEqual(box.x + box.width);
+  expect(box.x + box.width - paddingRight).toBeLessThanOrEqual(suffixBox.x);
+}
+
+/** Waits out a dialog's or sheet's opening animation, so boxes read in one go come from one frame. */
+async function settled(scope: Locator) {
+  await scope.evaluate((element) =>
+    Promise.all(
+      element
+        .getAnimations({subtree: true})
+        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+        .map((animation) => animation.finished),
+    ),
+  );
+}
+
 async function openImport(page: Page) {
   await page.getByRole('button', {name: 'Import a file'}).first().click();
   const dialog = page.getByRole('dialog');
@@ -411,9 +478,17 @@ test.describe('statement file import on Connections', () => {
       await expect(summaryBody.getByText(label, {exact: true}).locator('..')).toContainText(value);
     }
     await expect(summaryBody.getByText('3', {exact: true})).toHaveClass(/text-warning/);
-    await expect(summaryBody.getByText('1 May – 30 Oct 2026')).toBeVisible();
-    // The account goes by the name Connections gives it, not the provider's holder name.
-    await expect(summaryBody.getByText('Mock ASPSP checking account · EUR')).toBeVisible();
+    await expect(
+      summaryBody.getByRole('definition').filter({hasText: '1 May – 30 Oct 2026'}),
+    ).toBeVisible();
+    // The account goes by the name and details Connections gives it, under its bank's logo, not the provider's
+    // holder name.
+    const wentTo = summaryBody.getByTestId('bank-import-accounts').getByRole('listitem');
+    await expect(wentTo).toHaveCount(1);
+    await expect(wentTo).toContainText('Mock ASPSP checking account');
+    await expect(wentTo).toContainText('Current account · ••1234 · EUR · Mock ASPSP');
+    await expect(wentTo.getByTestId('bank-logo')).toBeVisible();
+    await expect(dialog.getByTestId('bank-import-undone')).toHaveCount(0);
     await expect(dialog.getByRole('button', {name: 'Review 3 rows'})).toBeVisible();
     await expect(dialog.getByRole('button', {name: 'Undo import'})).toBeVisible();
     // A synced account keeps the balance its bank reports: nothing to ask.
@@ -460,6 +535,300 @@ test.describe('statement file import on Connections', () => {
     );
   });
 
+  test('names where statements leave out transactions, with the days and what they add up to, per account', async ({
+    page,
+  }) => {
+    const gap = {from: '2026-10-07', to: '2026-10-09', currency: 'EUR'};
+    await mockFileImport(page, {
+      uploads: [
+        created(
+          importSummary({
+            rowsDoubtful: 0,
+            accounts: [
+              {id: CHECKING.id, name: 'Holder Name', currency: 'EUR', created: false},
+              {id: FILE_ACCOUNT_ID, name: 'Example Card · EUR', currency: 'EUR', created: false},
+            ],
+            statementGaps: [
+              {...gap, bankAccountId: CHECKING.id, amount: '-1200.00'},
+              {...gap, bankAccountId: FILE_ACCOUNT_ID, from: '2026-09-30', amount: '5.00'},
+            ],
+          }),
+        ),
+      ],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog
+      .getByTestId('bank-import-file-input')
+      .setInputFiles([statement('statement-a.xml')]);
+
+    const gaps = dialog.getByTestId('bank-import-statement-gaps');
+    await expect(gaps.getByText('Some days are missing')).toBeVisible();
+    await expect(gaps).toContainText(
+      "These statements skip some days, so their transactions aren't in Tempo. Everything else was imported. Import the statements for these days to add them.",
+    );
+    await expect(gaps.getByRole('listitem')).toHaveText([
+      /^7 Oct – 9 Oct 2026\s*Mock ASPSP checking account\s*-€1,200\.00 missing$/,
+      /^30 Sept? – 9 Oct 2026\s*Example Card · EUR\s*€5\.00 missing$/,
+    ]);
+    // The counts still say what was imported.
+    await expect(dialog.getByText('New transactions')).toBeVisible();
+  });
+
+  test('lists the rows a bank never sent by who they went to, and adds one or a whole group in place', async ({
+    page,
+  }) => {
+    const neverSent = (
+      id: number,
+      bookingDate: string,
+      amount: string,
+      counterpartyName: string | null,
+      description: string | null,
+    ): BankImportNeverSentRow => ({
+      id: `00000000-0000-4000-8000-00000000090${id}`,
+      kind: 'not_in_bank',
+      bankAccountId: CHECKING.id,
+      row: {
+        bookingDate,
+        valueDate: bookingDate,
+        amount,
+        currency: 'EUR',
+        balanceAfter: null,
+        bankReference: null,
+        counterpartyName,
+        description,
+        remittanceInformation: null,
+      },
+    });
+    const rows = [
+      neverSent(1, '2026-06-02', '-5.00', 'Example Pocket', 'Round-up'),
+      neverSent(2, '2026-06-03', '-30.00', null, 'Example Fee'),
+      neverSent(3, '2026-06-09', '-5.00', 'Example Pocket', 'Round-up'),
+      neverSent(4, '2026-06-16', '-10.00', 'example pocket', 'Top-up'),
+    ];
+    let release!: () => void;
+    let held = new Promise<void>((resolve) => (release = resolve));
+    const api = await mockFileImport(page, {
+      uploads: [
+        created(
+          importSummary({
+            rowsAdded: 0,
+            rowsAlreadyPresent: 309,
+            rowsDoubtful: 0,
+            rowsNotInBank: 4,
+          }),
+        ),
+      ],
+      neverSentRows: rows,
+      holdAdd: () => held,
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('june.xml')]);
+
+    // Nothing waits for the owner: one folded line, not a row to check.
+    const summaryBody = dialog.getByTestId('bank-import-summary');
+    await expect(
+      summaryBody.getByText('New transactions', {exact: true}).locator('..'),
+    ).toContainText('0');
+    await expect(summaryBody.getByText('Need a look')).toHaveCount(0);
+    await expect(dialog.getByRole('button', {name: /^Review/})).toHaveCount(0);
+    const line = summaryBody.getByRole('button', {
+      name: 'Not added: 4 rows your bank never sent',
+    });
+    await expect(line).toHaveAttribute('aria-expanded', 'false');
+    expect(api.neverSentReads).toBe(0);
+
+    await line.click();
+    await expect(line).toHaveAttribute('aria-expanded', 'true');
+    await expect(
+      summaryBody.getByText(
+        "Your bank sent every transaction for these days, and these weren't among them. Add any you know are real.",
+      ),
+    ).toBeVisible();
+    // One group per counterparty, else description, largest first; there is no way to add every row at once.
+    const groups = summaryBody.getByTestId('bank-import-never-sent-group');
+    await expect(groups).toHaveCount(2);
+    await expect(groups.nth(0)).toContainText('Example Pocket');
+    await expect(groups.nth(0)).toContainText('3 rows');
+    await expect(groups.nth(1)).toContainText('Example Fee');
+    await expect(summaryBody.getByRole('button', {name: /^Add all/})).toHaveCount(0);
+    const pocketRows = groups.nth(0).getByRole('listitem');
+    await expect(pocketRows).toHaveCount(3);
+    await expect(pocketRows.nth(0)).toContainText('Round-up');
+    await expect(pocketRows.nth(2)).toContainText('Top-up');
+
+    // One row: pending, then added, and the line counts what is left.
+    const addFee = groups.nth(1).getByRole('button', {name: 'Add Example Fee on 3 Jun'});
+    await addFee.click();
+    await expect(groups.nth(1).getByRole('button', {name: 'Adding…'})).toBeDisabled();
+    await expect(
+      groups.nth(0).getByRole('button', {name: 'Add 3 from Example Pocket'}),
+    ).toBeDisabled();
+    release();
+    await expect(groups.nth(1).getByRole('status')).toHaveText('Added');
+    await expect(
+      summaryBody.getByRole('button', {name: 'Not added: 3 rows your bank never sent'}),
+    ).toBeVisible();
+    await expect(
+      summaryBody.getByText('New transactions', {exact: true}).locator('..'),
+    ).toContainText('1');
+
+    // A whole group in one go.
+    held = Promise.resolve();
+    await groups.nth(0).getByRole('button', {name: 'Add 3 from Example Pocket'}).click();
+    await expect(pocketRows.getByRole('status')).toHaveText(['Added', 'Added', 'Added']);
+    await expect(
+      summaryBody.getByRole('button', {name: 'Added every row your bank never sent'}),
+    ).toBeVisible();
+    await expect(
+      summaryBody.getByText('New transactions', {exact: true}).locator('..'),
+    ).toContainText('4');
+    expect(api.adds).toEqual([
+      {rowIds: [rows[1].id]},
+      {rowIds: [rows[0].id, rows[2].id, rows[3].id]},
+    ]);
+    expect(api.neverSentReads).toBe(1);
+  });
+
+  test('shows the rows a later sync removed in the import summary only, and adds them back by row or by group', async ({
+    page,
+  }) => {
+    const removed = (
+      id: number,
+      bookingDate: string,
+      amount: string,
+      counterpartyName: string | null,
+      description: string | null,
+    ): BankImportNeverSentRow => ({
+      id: `00000000-0000-4000-8000-00000000095${id}`,
+      kind: 'removed_by_sync',
+      bankAccountId: CHECKING.id,
+      row: {
+        bookingDate,
+        valueDate: bookingDate,
+        amount,
+        currency: 'EUR',
+        balanceAfter: null,
+        bankReference: null,
+        counterpartyName,
+        description,
+        remittanceInformation: null,
+      },
+    });
+    const rows = [
+      removed(1, '2026-06-02', '-5.00', 'Example Pocket', 'Round-up'),
+      removed(2, '2026-06-03', '-30.00', null, 'Example Fee'),
+      removed(3, '2026-06-09', '-5.00', 'Example Pocket', 'Round-up'),
+    ];
+    const summary = importSummary({rowsAdded: 209, rowsDoubtful: 0, rowsRemovedBySync: 3});
+    const api = await mockFileImport(page, {imports: [summary], neverSentRows: rows});
+    await page.goto('/bank-connections');
+
+    // The list of imports says nothing about them.
+    const listRow = page.getByTestId('bank-import-row');
+    await expect(listRow).toContainText('3 files · 209 new');
+    await expect(listRow).not.toContainText(/removed|never sent/i);
+    await listRow.getByRole('button', {name: '3 files · 209 new'}).click();
+    const dialog = page.getByRole('dialog');
+    const summaryBody = dialog.getByTestId('bank-import-summary');
+    await expect(summaryBody.getByText('Need a look')).toHaveCount(0);
+    await expect(summaryBody.getByRole('button', {name: /^Not added/})).toHaveCount(0);
+    const line = summaryBody.getByRole('button', {name: 'Removed: 3 rows your bank never sent'});
+    await expect(line).toHaveAttribute('aria-expanded', 'false');
+    expect(api.neverSentReads).toBe(0);
+
+    await line.click();
+    await expect(
+      summaryBody.getByText(
+        "Your bank sent every transaction for these days, and these weren't among them, so Tempo removed the file's copies. Add back any you know are real.",
+      ),
+    ).toBeVisible();
+    const groups = summaryBody.getByTestId('bank-import-never-sent-group');
+    await expect(groups).toHaveCount(2);
+    await expect(groups.nth(0)).toContainText('Example Pocket');
+    await expect(summaryBody.getByRole('button', {name: /^Add back all/})).toHaveCount(0);
+
+    await groups.nth(1).getByRole('button', {name: 'Add back Example Fee on 3 Jun'}).click();
+    await expect(groups.nth(1).getByRole('status')).toHaveText('Added back');
+    await expect(
+      summaryBody.getByRole('button', {name: 'Removed: 2 rows your bank never sent'}),
+    ).toBeVisible();
+    await expect(
+      summaryBody.getByText('New transactions', {exact: true}).locator('..'),
+    ).toContainText('210');
+
+    await groups.nth(0).getByRole('button', {name: 'Add back 2 from Example Pocket'}).click();
+    await expect(groups.nth(0).getByRole('listitem').getByRole('status')).toHaveText([
+      'Added back',
+      'Added back',
+    ]);
+    await expect(
+      summaryBody.getByRole('button', {name: 'Added back every row your bank never sent'}),
+    ).toBeVisible();
+    expect(api.adds).toEqual([{rowIds: [rows[1].id]}, {rowIds: [rows[0].id, rows[2].id]}]);
+    expect(api.neverSentReads).toBe(1);
+  });
+
+  test('keeps what was added back when a list folds and opens again while the other list stays open', async ({
+    page,
+  }) => {
+    const row = (
+      id: number,
+      kind: BankImportNeverSentRow['kind'],
+      description: string,
+    ): BankImportNeverSentRow => ({
+      id: `00000000-0000-4000-8000-00000000096${id}`,
+      kind,
+      bankAccountId: CHECKING.id,
+      row: {
+        bookingDate: '2026-06-02',
+        valueDate: '2026-06-02',
+        amount: '-5.00',
+        currency: 'EUR',
+        balanceAfter: null,
+        bankReference: null,
+        counterpartyName: null,
+        description,
+        remittanceInformation: null,
+      },
+    });
+    const rows = [
+      row(1, 'not_in_bank', 'Example Gift'),
+      row(2, 'removed_by_sync', 'Example Fee'),
+      row(3, 'removed_by_sync', 'Example Pocket'),
+    ];
+    const summary = importSummary({rowsDoubtful: 0, rowsNotInBank: 1, rowsRemovedBySync: 2});
+    const api = await mockFileImport(page, {imports: [summary], neverSentRows: rows});
+    await page.goto('/bank-connections');
+    await page
+      .getByTestId('bank-import-row')
+      .getByRole('button', {name: '3 files · 212 new'})
+      .click();
+    const summaryBody = page.getByRole('dialog').getByTestId('bank-import-summary');
+    await summaryBody.getByRole('button', {name: 'Not added: 1 row your bank never sent'}).click();
+    const removedLine = summaryBody.getByRole('button', {
+      name: 'Removed: 2 rows your bank never sent',
+    });
+    await removedLine.click();
+    const removedList = summaryBody.getByTestId('bank-import-removed-by-sync');
+    await removedList.getByRole('button', {name: 'Add back Example Fee on 2 Jun'}).click();
+    await expect(removedList.getByRole('status')).toHaveText('Added back');
+
+    const line = summaryBody.getByRole('button', {name: 'Removed: 1 row your bank never sent'});
+    await line.click();
+    await expect(line).toHaveAttribute('aria-expanded', 'false');
+    await line.click();
+    await expect(removedList.getByRole('status')).toHaveText('Added back');
+    await expect(
+      removedList.getByRole('button', {name: 'Add back Example Fee on 2 Jun'}),
+    ).toHaveCount(0);
+    await expect(
+      removedList.getByRole('button', {name: 'Add back Example Pocket on 2 Jun'}),
+    ).toBeEnabled();
+    expect(api.adds).toEqual([{rowIds: [rows[1].id]}]);
+  });
+
   test('a refusal names the refused file, says nothing was imported and lets other files be chosen', async ({
     page,
   }) => {
@@ -477,6 +846,11 @@ test.describe('statement file import on Connections', () => {
     await expect(alert).toContainText(
       "statement-march.xml: Something in it doesn't add up. Download it again from your bank and retry. Nothing was imported.",
     );
+    // The refusal ends the dialog, under Supported files.
+    const supportedFiles = dialog.getByRole('button', {name: 'Supported files'});
+    expect((await boxOf(alert)).y).toBeGreaterThanOrEqual(
+      (await boxOf(supportedFiles)).y + (await boxOf(supportedFiles)).height,
+    );
     // The refused files are not kept; the owner chooses again without reopening.
     await expect(dialog.getByRole('list', {name: 'Chosen files'})).toHaveCount(0);
     await dialog
@@ -484,6 +858,21 @@ test.describe('statement file import on Connections', () => {
       .setInputFiles([statement('statement-april.xml')]);
     await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
     expect(api.uploads).toHaveLength(2);
+  });
+
+  test('an old Excel file is refused with the formats to download instead', async ({page}) => {
+    await mockFileImport(page, {
+      uploads: [refused({code: 'legacy_xls_not_supported', file: 1, statusCode: 415})],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.xls')]);
+
+    const alert = dialog.getByRole('alert');
+    await expect(alert.getByText("Old Excel files aren't supported")).toBeVisible();
+    await expect(alert).toContainText(
+      'Download the statement as CAMT.053, MT940, CSV or Excel (.xlsx) instead. Nothing was imported.',
+    );
   });
 
   test("lists the supported files, and a file laid out like a bank's export that doesn't read as one names the bank", async ({
@@ -507,8 +896,11 @@ test.describe('statement file import on Connections', () => {
       /^bunq\s*CSV$/,
       /^ING\s*CSV$/,
       /^Knab\s*CSV$/,
-      /^Rabobank\s*CSV$/,
+      /^Rabobank\s*CSV and credit card CSV$/,
+      /^RegioBank\s*CSV$/,
       /^Revolut\s*CSV and Excel$/,
+      /^SNS\s*CSV$/,
+      /^Triodos Bank\s*CSV$/,
     ]);
     // Closing the list goes back to choosing files, where it was opened.
     await page.keyboard.press('Escape');
@@ -579,7 +971,13 @@ test.describe('statement file import on Connections', () => {
     ).toHaveCount(2);
     await dialog.getByRole('button', {name: 'Work out the columns'}).click();
 
-    await expect(dialog.getByRole('status').getByText('Working out the columns…')).toBeVisible();
+    const working = dialog.getByRole('status').filter({hasText: 'Working out the columns…'});
+    await expect(working).toBeVisible();
+    // The spinner sits on the text's line.
+    const [line, spinner] = [await boxOf(working), await boxOf(working.locator('svg'))];
+    expect(line.height).toBeLessThan(28);
+    expect(spinner.y).toBeGreaterThanOrEqual(line.y);
+    expect(spinner.y + spinner.height).toBeLessThanOrEqual(line.y + line.height);
     await expect(dialog.getByRole('button', {name: 'Cancel'})).toBeEnabled();
     answer();
 
@@ -617,6 +1015,42 @@ test.describe('statement file import on Connections', () => {
       ['statement-april.xml', 'export-example.csv'],
     ]);
   });
+
+  // The API previews the first 5 rows and the last 2, so 6 or 7 rows hide none.
+  for (const [rowCount, lastShown, separator] of [
+    [6, 1, null],
+    [7, 2, null],
+    [8, 2, '1 more'],
+  ] as const) {
+    test(`a preview of ${rowCount} rows shows ${separator ? `"${separator}"` : 'no separator'} between the first and last rows`, async ({
+      page,
+    }) => {
+      const {preview: sample} = layoutProposal();
+      await mockFileImport(page, {
+        mapper: true,
+        uploads: [refused({code: 'layout_unknown', file: 1})],
+        proposals: [
+          proposed(
+            layoutProposal({
+              preview: {...sample, rowCount, lastRows: sample.lastRows.slice(-lastShown)},
+            }),
+          ),
+        ],
+      });
+      await page.goto('/bank-connections');
+      const dialog = await openImport(page);
+      await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('export.csv')]);
+      await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+
+      const preview = dialog.getByTestId('bank-import-layout-preview');
+      await expect(preview.getByText(`${rowCount} transactions`)).toBeVisible();
+      await expect(preview.getByTestId('bank-import-layout-row')).toHaveCount(
+        sample.firstRows.length + lastShown,
+      );
+      await expect(preview.getByText(/^\s*\d+\s+more\s*$/)).toHaveCount(separator ? 1 : 0);
+      if (separator) await expect(preview.getByText(separator)).toBeVisible();
+    });
+  }
 
   test('a file whose dates read both ways asks for a check, and one that names no currency or bank asks for them', async ({
     page,
@@ -874,6 +1308,16 @@ test.describe('statement file import on Connections', () => {
       bankName: 'Example Bank',
       imported: false,
     };
+    const logo =
+      'data:image/svg+xml,' +
+      encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#808080"/></svg>',
+      );
+    await page.route(`${API_URL}/bank-connections/aspsps`, (route) =>
+      fulfillJson(route, [
+        {name: MOCK_CONNECTION.aspspName, country: MOCK_CONNECTION.aspspCountry, logoUrl: logo},
+      ]),
+    );
     const api = await mockFileImport(page, {
       uploads: [
         refused({
@@ -939,6 +1383,19 @@ test.describe('statement file import on Connections', () => {
       /^Rainy day\s*Savings · ••1234 · Example Bank$/,
     );
     await expect(radios.nth(2)).toHaveAccessibleName(/^Example Bank EUR\s*Imported files$/);
+    // Each starts with its bank's logo as on its Connections card (imported files: the files tile), and its type
+    // as on its Connections row.
+    const tiles = question.getByTestId('bank-import-account-tile');
+    await expect(tiles).toHaveCount(3);
+    for (const index of [0, 1])
+      await expect(tiles.nth(index).getByTestId('bank-logo').locator('img')).toHaveAttribute(
+        'src',
+        logo,
+      );
+    await expect(tiles.nth(2).getByTestId('bank-logo')).toHaveCount(0);
+    await expect(tiles.nth(2).locator('svg.lucide-files')).toBeVisible();
+    for (const [index, type] of ['wallet', 'piggy-bank', 'landmark'].entries())
+      await expect(tiles.nth(index).locator(`svg.lucide-${type}`)).toBeVisible();
     const importButton = dialog.getByRole('button', {name: 'Import', exact: true});
     await expect(importButton).toBeDisabled();
 
@@ -998,6 +1455,14 @@ test.describe('statement file import on Connections', () => {
     await expect(dialog.getByRole('heading', {name: 'Import a file'})).toBeVisible();
 
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.csv')]);
+    // A new account starts with its own tile, in line with the accounts above it.
+    const eur = dialog.getByRole('group', {name: 'Example Bank · EUR'});
+    const tiles = eur.getByTestId('bank-import-account-tile');
+    await expect(tiles).toHaveCount(2);
+    await expect(tiles.nth(1).locator('svg.lucide-plus')).toBeVisible();
+    const [accountTile, newTile] = await Promise.all([boxOf(tiles.nth(0)), boxOf(tiles.nth(1))]);
+    expect(newTile.x).toBe(accountTile.x);
+    expect(newTile.width).toBe(accountTile.width);
     for (const currency of ['EUR', 'USD'])
       await dialog
         .getByRole('group', {name: `Example Bank · ${currency}`})
@@ -1025,18 +1490,31 @@ test.describe('statement file import on Connections', () => {
     );
   });
 
-  test('reviews doubtful rows in place with either answer, then returns to the summary', async ({
+  test('reviews doubtful rows in place, changes a choice, saves every answer and returns to the summary', async ({
     page,
   }) => {
-    const summary = importSummary({rowsDoubtful: 2});
+    const summary = importSummary({rowsDoubtful: 3});
     const rows: BankImportDoubtfulRow[] = [
       doubtfulRow('00000000-0000-4000-8000-000000000601', 'Example Grocer', '-23.40', [
         candidate('00000000-0000-4000-8000-000000000701', 'Example Grocer', '-23.40'),
-        candidate('00000000-0000-4000-8000-000000000702', 'Example Grocer Outlet', '-23.40'),
+        candidate(
+          '00000000-0000-4000-8000-000000000702',
+          'Example Grocer Outlet',
+          '-23.40',
+          '2026-10-03',
+        ),
       ]),
       doubtfulRow('00000000-0000-4000-8000-000000000602', 'Example Refund', '12.00', [
         candidate('00000000-0000-4000-8000-000000000703', 'Example Refund', '12.00'),
       ]),
+      // Already in Tempo from the file; a later bank sync brought a look-alike.
+      doubtfulRow(
+        '00000000-0000-4000-8000-000000000603',
+        'Example Bakery',
+        '-3.10',
+        [candidate('00000000-0000-4000-8000-000000000704', 'Example Bakery Amsterdam', '-3.10')],
+        '00000000-0000-4000-8000-000000000801',
+      ),
     ];
     const api = await mockFileImport(page, {imports: [summary], doubtfulRows: rows});
     await page.goto('/bank-connections');
@@ -1045,21 +1523,67 @@ test.describe('statement file import on Connections', () => {
       .getByRole('button', {name: '3 files · 212 new'})
       .click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('button', {name: 'Review 2 rows'}).click();
+    await dialog.getByRole('button', {name: 'Review 3 rows'}).click();
 
-    await expect(dialog.getByRole('heading', {name: 'Check 2 transactions'})).toBeVisible();
+    await expect(dialog.getByRole('heading', {name: 'Check 3 transactions'})).toBeVisible();
     const blocks = dialog.getByTestId('bank-import-doubtful-row');
-    await expect(blocks).toHaveCount(2);
-    const [first, second] = [blocks.nth(0), blocks.nth(1)];
+    await expect(blocks).toHaveCount(3);
+    const [first, second, third] = [blocks.nth(0), blocks.nth(1), blocks.nth(2)];
+    // Rows in Tempo twice count twice until answered, so the list says so instead of saying nothing is lost.
+    await expect(
+      dialog.getByText(
+        'Some are in Tempo twice, from the file and from your bank. Until you answer, both count in your totals.',
+      ),
+    ).toBeVisible();
+    await expect(dialog.getByText(SYNCED_LINE)).toHaveCount(0);
+    await expect(third).toContainText('1 Oct · from the file, already in Tempo');
+    await expect(third).toContainText('Your bank also sent');
+    await expect(third.getByRole('radio').nth(1)).toHaveAccessibleName(
+      'Different payments, keep both',
+    );
     await expect(first).toContainText('Example Grocer');
     await expect(first).toContainText('1 Oct · from the file');
     await expect(first).toContainText('Could be the same as');
-    await first.getByRole('button', {name: /^Same transaction as Example Grocer Outlet/}).click();
-    await expect(first.getByText('Marked as the same')).toBeVisible();
-    await expect(first.getByRole('button')).toHaveCount(0);
+    // Each stored row says how its day sits against the file row's.
+    await expect(first.getByText('1 Oct · same day')).toBeVisible();
+    await expect(first.getByText('3 Oct · 2 days later')).toBeVisible();
+    // One choice per row, nothing chosen yet, and nothing to save.
+    const firstChoices = first.getByRole('radio');
+    await expect(firstChoices).toHaveCount(3);
+    for (const choice of await firstChoices.all()) await expect(choice).not.toBeChecked();
+    await expect(firstChoices.nth(2)).toHaveAccessibleName("It's a new transaction");
+    const save = dialog.getByRole('button', {name: /^Save/});
+    await expect(save).toBeDisabled();
 
-    await second.getByRole('button', {name: "It's a new transaction"}).click();
-    // The last answer returns to the summary, with its counts.
+    // Choices change freely before they are saved: arrow keys move between them, a click picks another.
+    const outlet = first.getByRole('radio', {name: 'Same as Example Grocer Outlet on 3 Oct'});
+    await first.getByText("It's a new transaction").click();
+    await expect(firstChoices.nth(2)).toBeChecked();
+    await firstChoices.nth(2).press('ArrowUp');
+    await expect(outlet).toBeChecked();
+    await expect(firstChoices.nth(2)).not.toBeChecked();
+    await expect(save).toHaveText('Save answer');
+    await second.getByText("It's a new transaction").click();
+    await third.getByText('Example Bakery Amsterdam').click();
+    await expect(
+      third.getByRole('radio', {name: 'Same as Example Bakery Amsterdam on 1 Oct'}),
+    ).toBeChecked();
+    await expect(save).toHaveText('Save 3 answers');
+    expect(api.resolves).toEqual([]);
+
+    // The file row's amount and every choice's amount share one right edge.
+    const amounts = first.locator('.numeric');
+    await expect(amounts).toHaveCount(3);
+    const rights = await Promise.all(
+      (await amounts.all()).map(async (amount) => {
+        const box = await boxOf(amount);
+        return Math.round(box.x + box.width);
+      }),
+    );
+    expect(new Set(rights).size).toBe(1);
+
+    // Saving every answer returns to the summary, with its counts.
+    await save.click();
     await expect(dialog.getByRole('heading', {name: 'Imported 3 files'})).toBeVisible();
     await expect(dialog.getByText('Need a look')).toHaveCount(0);
     await expect(dialog.getByText('New transactions', {exact: true}).locator('..')).toContainText(
@@ -1067,6 +1591,172 @@ test.describe('statement file import on Connections', () => {
     );
     expect(api.resolves).toEqual([
       {decision: 'duplicate', transactionId: '00000000-0000-4000-8000-000000000702'},
+      {decision: 'new'},
+      {decision: 'duplicate', transactionId: '00000000-0000-4000-8000-000000000704'},
+    ]);
+  });
+
+  test('keeps a doubtful row whose answer failed open with its choice, and saves only the rows with one', async ({
+    page,
+  }) => {
+    const summary = importSummary({
+      rowsDoubtful: 4,
+      accounts: [{id: FILE_ACCOUNT_ID, name: null, currency: 'EUR', created: false}],
+    });
+    const rows: BankImportDoubtfulRow[] = [
+      doubtfulRow('00000000-0000-4000-8000-000000000611', 'Example Grocer', '-23.40', [
+        candidate('00000000-0000-4000-8000-000000000711', 'Example Grocer', '-23.40'),
+      ]),
+      doubtfulRow('00000000-0000-4000-8000-000000000612', 'Example Refund', '12.00', []),
+      doubtfulRow('00000000-0000-4000-8000-000000000613', 'Example Bakery', '-3.10', [
+        candidate('00000000-0000-4000-8000-000000000713', 'Example Bakery', '-3.10'),
+      ]),
+      doubtfulRow('00000000-0000-4000-8000-000000000614', 'Example Florist', '-18.00', [
+        candidate('00000000-0000-4000-8000-000000000714', 'Example Florist', '-18.00'),
+      ]),
+    ].map((row) => ({...row, bankAccountId: FILE_ACCOUNT_ID}));
+    await mockBankConnections(page, [MOCK_CONNECTION, IMPORTED_FILES]);
+    const api = await mockFileImport(page, {imports: [summary], doubtfulRows: rows});
+    let failRefund = true;
+    await page.route(
+      `${API_URL}/bank-imports/*/doubtful-rows/00000000-0000-4000-8000-000000000612/resolve`,
+      (route) => {
+        if (!failRefund) return route.fallback();
+        failRefund = false;
+        return fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500);
+      },
+    );
+    await page.goto('/bank-connections');
+    await page
+      .getByTestId('bank-import-row')
+      .getByRole('button', {name: '3 files · 212 new'})
+      .click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', {name: 'Review 4 rows'}).click();
+    const blocks = dialog.getByTestId('bank-import-doubtful-row');
+    const [grocer, refund, bakery, florist] = [0, 1, 2, 3].map((index) => blocks.nth(index));
+    await expect(blocks).toHaveCount(4);
+    // Rows held on an imported-files account have no bank sync that could have stored them already.
+    await expect(dialog.getByText(SYNCED_LINE)).toHaveCount(0);
+    // A row with nothing to compare offers the new transaction alone.
+    await expect(refund).toContainText('Nothing already in Tempo matches it now');
+    await expect(refund.getByRole('radio')).toHaveCount(1);
+
+    await grocer.getByText('Example Grocer', {exact: true}).last().click();
+    await refund.getByText("It's a new transaction").click();
+    await bakery.getByText("It's a new transaction").click();
+    await expect(dialog.getByText('1 without an answer stays open')).toBeVisible();
+    await dialog.getByRole('button', {name: 'Save 3 answers'}).click();
+
+    await expect(grocer.getByRole('status')).toHaveText(
+      'Marked as the same as Example Grocer on 1 Oct',
+    );
+    await expect(grocer.getByRole('radio')).toHaveCount(0);
+    // A failure does not stop the rows after it.
+    await expect(bakery.getByRole('status')).toHaveText('Kept as new');
+    await expect(refund.getByRole('alert')).toHaveText(
+      "Couldn't save this answer. Save to try again.",
+    );
+    await expect(refund.getByRole('radio', {name: "It's a new transaction"})).toBeChecked();
+    await expect(page.locator('[data-sonner-toast]')).toContainText("Couldn't save your answer");
+    for (const choice of await florist.getByRole('radio').all())
+      await expect(choice).not.toBeChecked();
+    await expect(dialog.getByRole('heading', {name: 'Check 4 transactions'})).toBeVisible();
+
+    // Trying again sends the failed answer alone; the row without a choice stays open.
+    await dialog.getByRole('button', {name: 'Save answer'}).click();
+    await expect(refund.getByRole('status')).toHaveText('Kept as new');
+    await expect(florist.getByRole('radio')).toHaveCount(2);
+    await expect(dialog.getByRole('button', {name: 'Save answer'})).toBeDisabled();
+    expect(api.resolves).toEqual([
+      {decision: 'duplicate', transactionId: '00000000-0000-4000-8000-000000000711'},
+      {decision: 'new'},
+      {decision: 'new'},
+    ]);
+  });
+
+  test('shows a long list of rows to check 50 at a time, and choices on every shown row are saved', async ({
+    page,
+  }) => {
+    // A phone, where the Save bar takes most room from the list.
+    await page.setViewportSize({width: 390, height: 844});
+    const summary = importSummary({rowsDoubtful: 120});
+    const rows = Array.from({length: 120}, (_, index) =>
+      doubtfulRow(
+        `00000000-0000-4000-8000-000000001${String(index).padStart(3, '0')}`,
+        `Example Payee ${index + 1}`,
+        '-4.20',
+        [
+          candidate(
+            `00000000-0000-4000-8000-000000002${String(index).padStart(3, '0')}`,
+            `Example Payee ${index + 1}`,
+            '-4.20',
+          ),
+        ],
+      ),
+    );
+    const api = await mockFileImport(page, {imports: [summary], doubtfulRows: rows});
+    await page.goto('/bank-connections');
+    await page
+      .getByTestId('bank-import-row')
+      .getByRole('button', {name: '3 files · 212 new'})
+      .click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', {name: 'Review 120 rows'}).click();
+
+    await expect(dialog.getByRole('heading', {name: 'Check 120 transactions'})).toBeVisible();
+    // Held rows on a synced account are almost always stored by sync already.
+    await expect(dialog.getByText(SYNCED_LINE)).toBeVisible();
+    const blocks = dialog.getByTestId('bank-import-doubtful-row');
+    await expect(blocks).toHaveCount(50);
+    await expect(blocks.last()).toContainText('Example Payee 50');
+    await blocks.nth(0).getByText("It's a new transaction").click();
+    await blocks.nth(49).getByText('Example Payee 50', {exact: true}).last().click();
+    const save = dialog.getByRole('button', {name: /^Save/});
+    await expect(save).toHaveText('Save 2 answers');
+
+    // Show more adds the next rows and focuses the first of them; choices made above stay.
+    await dialog.getByRole('button', {name: 'Show 50 more'}).click();
+    await expect(blocks).toHaveCount(100);
+    await expect(blocks.nth(50).getByRole('radio').first()).toBeFocused();
+    // The row it focused is in view, its choices clear of the Save bar.
+    await expect
+      .poll(async () => {
+        const [row, choice, bar] = await Promise.all([
+          boxOf(blocks.nth(50)),
+          boxOf(blocks.nth(50).locator('label').first()),
+          boxOf(save.locator('..')),
+        ]);
+        return row.y >= 0 && choice.y + choice.height <= bar.y;
+      })
+      .toBe(true);
+    await expect(blocks.nth(0).getByRole('radio', {name: "It's a new transaction"})).toBeChecked();
+    await blocks.nth(50).getByText("It's a new transaction").click();
+    await expect(save).toHaveText('Save 3 answers');
+
+    // The last page holds the rest; with every row shown, Show more goes.
+    await dialog.getByRole('button', {name: 'Show 20 more'}).focus();
+    await page.keyboard.press('Enter');
+    await expect(blocks).toHaveCount(120);
+    await expect(blocks.nth(100).getByRole('radio').first()).toBeFocused();
+    await expect(dialog.getByRole('button', {name: /^Show \d+ more$/})).toHaveCount(0);
+    await blocks.nth(119).getByText("It's a new transaction").click();
+    await expect(save).toHaveText('Save 4 answers');
+    await expect(dialog.getByText('116 without an answer stay open')).toBeVisible();
+
+    // Saving sends every chosen row, collapses them in place and leaves the rest open, all still shown.
+    await save.click();
+    await expect(blocks.nth(119).getByRole('status')).toHaveText('Kept as new');
+    await expect(blocks.nth(49).getByRole('status')).toHaveText(
+      'Marked as the same as Example Payee 50 on 1 Oct',
+    );
+    await expect(blocks).toHaveCount(120);
+    await expect(blocks.nth(1).getByRole('radio')).toHaveCount(2);
+    await expect(dialog.getByRole('heading', {name: 'Check 120 transactions'})).toBeVisible();
+    expect(api.resolves).toEqual([
+      {decision: 'new'},
+      {decision: 'duplicate', transactionId: '00000000-0000-4000-8000-000000002049'},
+      {decision: 'new'},
       {decision: 'new'},
     ]);
   });
@@ -1134,8 +1824,34 @@ test.describe('statement file import on Connections', () => {
     await expect(confirm).toBeHidden();
     expect(api.undos).toEqual(['00000000-0000-4000-8000-000000000511']);
     await expect(rows.first()).toContainText('Undone 12 Nov');
-    await expect(rows.first().getByRole('button', {name: '3 files', exact: true})).toBeVisible();
     await expect(rows.first().getByRole('button', {name: /^Undo/})).toHaveCount(0);
+
+    // Its summary opens with what the undo did, and its counts as what the import found when it ran.
+    await rows.first().getByRole('button', {name: '3 files', exact: true}).click();
+    const summary = page.getByRole('dialog', {name: 'Import undone'});
+    await expect(summary.getByRole('heading', {name: 'Import undone'})).toBeVisible();
+    await expect(summary.getByRole('heading', {name: /^Imported/})).toHaveCount(0);
+    const undoneAlert = summary.getByTestId('bank-import-undone');
+    await expect(undoneAlert).toContainText('This import was undone today');
+    await expect(undoneAlert).toContainText(
+      'The transactions it added were removed, except any that bank sync had picked up by then.',
+    );
+    const counts = summary.getByRole('region', {name: 'When imported'});
+    await expect(counts.getByText('Were new', {exact: true}).locator('..')).toContainText('212');
+    await expect(
+      counts.getByText('Were already in Tempo', {exact: true}).locator('..'),
+    ).toContainText('98');
+    await expect(summary.getByText('New transactions')).toHaveCount(0);
+    const wentTo = summary.getByTestId('bank-import-accounts').getByRole('listitem');
+    await expect(wentTo).toHaveCount(2);
+    await expect(wentTo.nth(0).getByTestId('bank-logo')).toBeVisible();
+    await expect(wentTo.nth(0)).toContainText('Current account · ••1234 · EUR · Mock ASPSP');
+    // A name that already ends with its currency is not followed by it again.
+    await expect(wentTo.nth(1)).toContainText('Example Card · EUR');
+    await expect(wentTo.nth(1)).toContainText('New account · Imported files');
+    await expect(wentTo.nth(1).getByTestId('bank-logo')).toHaveCount(0);
+    await expect(summary.getByRole('button', {name: 'Undo import'})).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
   });
 
   test('asks for the balance today of an imported-files account that has none, and saves it in place', async ({
@@ -1188,6 +1904,13 @@ test.describe('statement file import on Connections', () => {
     await expect(
       prompt.getByText('Tempo works out earlier balances from your transactions.'),
     ).toBeVisible();
+    await expectCurrencyInside(field, 'EUR');
+    // Save under the field, as in the Add balance dialog.
+    const [fieldBox, saveBox] = await Promise.all([
+      boxOf(field),
+      boxOf(prompt.getByRole('button', {name: 'Save'})),
+    ]);
+    expect(saveBox.y).toBeGreaterThanOrEqual(fieldBox.y + fieldBox.height);
     // Inline in the summary, not a dialog on top of it.
     await expect(page.getByRole('dialog')).toHaveCount(1);
 
@@ -1256,6 +1979,7 @@ test.describe('statement file import on Connections', () => {
   test('offers Add balance or Edit on imported-files accounts as their balance comes, in a dialog', async ({
     page,
   }) => {
+    test.setTimeout(20_000);
     const [base] = IMPORTED_FILES.bankAccounts;
     const accounts = [
       {
@@ -1337,7 +2061,19 @@ test.describe('statement file import on Connections', () => {
     await expect(
       dialog.getByText('Tempo works out earlier balances from your transactions.'),
     ).toBeVisible();
-    await dialog.getByLabel('Balance of Example Wallet today').fill('99.5');
+    const field = dialog.getByLabel('Balance of Example Wallet today');
+    await settled(dialog);
+    await expectCurrencyInside(field, 'EUR');
+    // Cancel and Save under the field, Save last.
+    const [fieldBox, cancelBox, saveBox] = await Promise.all([
+      boxOf(field),
+      boxOf(dialog.getByRole('button', {name: 'Cancel'})),
+      boxOf(dialog.getByRole('button', {name: 'Save'})),
+    ]);
+    expect(cancelBox.y).toBeGreaterThanOrEqual(fieldBox.y + fieldBox.height);
+    expect(saveBox.y).toBe(cancelBox.y);
+    expect(saveBox.x).toBeGreaterThan(cancelBox.x);
+    await field.fill('99.5');
     await dialog.getByRole('button', {name: 'Save'}).click();
 
     await expect(dialog).toBeHidden();
@@ -1346,6 +2082,30 @@ test.describe('statement file import on Connections', () => {
     await expect(
       rowOf('Example Wallet').getByRole('button', {name: 'Edit balance of Example Wallet'}),
     ).toBeVisible();
+
+    // On a phone the dialog is a sheet: Save over Cancel, full width under the field, and Enter saves.
+    await page.setViewportSize({width: 390, height: 844});
+    await rowOf('Example Savings')
+      .getByRole('button', {name: 'Edit balance of Example Savings'})
+      .click();
+    dialog = page.getByRole('dialog');
+    const phoneField = dialog.getByLabel('Balance of Example Savings today');
+    await expectInsideViewport(page, dialog.getByRole('button', {name: 'Cancel'}));
+    await settled(dialog);
+    await expectCurrencyInside(phoneField, 'EUR');
+    const [phoneFieldBox, phoneSave, phoneCancel] = await Promise.all([
+      boxOf(phoneField),
+      boxOf(dialog.getByRole('button', {name: 'Save'})),
+      boxOf(dialog.getByRole('button', {name: 'Cancel'})),
+    ]);
+    expect(phoneSave.y).toBeGreaterThanOrEqual(phoneFieldBox.y + phoneFieldBox.height);
+    expect(phoneCancel.y).toBeGreaterThan(phoneSave.y);
+    expect(Math.abs(phoneSave.width - phoneFieldBox.width)).toBeLessThanOrEqual(1);
+    await phoneField.fill('-40.00');
+    await phoneField.press('Enter');
+    await expect(dialog).toBeHidden();
+    expect(amounts).toEqual(['99.5', '-40.00']);
+    await expect(rowOf('Example Savings')).toContainText('-€40.00');
   });
 
   test('shows imported files as a connection with no consent, sync or re-authorization', async ({
@@ -1541,8 +2301,8 @@ test.describe('statement file import on Connections', () => {
       .setInputFiles([statement('statement-a.xml'), statement('statement-b.xml')]);
 
     const alert = dialog.getByRole('alert');
-    await expect(alert.getByText('Other files are being imported')).toBeVisible();
-    await expect(alert).toContainText('Try again in a minute. Nothing was imported.');
+    await expect(alert.getByText('Tempo is busy right now')).toBeVisible();
+    await expect(alert).toContainText('Try again in a moment. Nothing was imported.');
     await expect(
       dialog.getByRole('list', {name: 'Chosen files'}).getByRole('listitem'),
     ).toHaveCount(2);
@@ -1552,6 +2312,38 @@ test.describe('statement file import on Connections', () => {
     await expect(alert).toContainText('Import them in smaller batches. Nothing was imported.');
     await expect(dialog.getByRole('list', {name: 'Chosen files'})).toHaveCount(0);
     expect(api.uploads).toHaveLength(2);
+  });
+
+  test('a server failure says so at the end of the dialog, and Try again sends the same files', async ({
+    page,
+  }) => {
+    const api = await mockFileImport(page, {
+      uploads: [
+        (route) => fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500),
+        created(importSummary({filesCount: 2})),
+      ],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog
+      .getByTestId('bank-import-file-input')
+      .setInputFiles([statement('statement-a.xml'), statement('statement-b.xml')]);
+
+    const alert = dialog.getByRole('alert');
+    await expect(alert.getByText("Couldn't import these files")).toBeVisible();
+    await expect(alert).toContainText('The server ran into a problem.');
+    await expect(alert).toContainText(/500 · \d{2}:\d{2}/);
+    const supportedFiles = dialog.getByRole('button', {name: 'Supported files'});
+    expect((await boxOf(alert)).y).toBeGreaterThanOrEqual(
+      (await boxOf(supportedFiles)).y + (await boxOf(supportedFiles)).height,
+    );
+
+    await alert.getByRole('button', {name: 'Try again'}).click();
+    await expect(dialog.getByRole('heading', {name: 'Imported 2 files'})).toBeVisible();
+    expect(api.uploads.map((upload) => sentForm(upload).files)).toEqual([
+      ['statement-a.xml', 'statement-b.xml'],
+      ['statement-a.xml', 'statement-b.xml'],
+    ]);
   });
 
   test('a lost connection keeps the chosen files for another try', async ({page}) => {
@@ -1657,6 +2449,7 @@ test.describe('statement file import on Connections', () => {
         rowsAdded: 1_234_567,
         rowsAlreadyPresent: 7_654_321,
         rowsDoubtful: 40,
+        rowsNotInBank: 1_234,
         accounts: [
           {id: CHECKING.id, name: null, currency: 'EUR', created: false},
           {id: FILE_ACCOUNT_ID, name: null, currency: 'EUR', created: true},
@@ -1696,9 +2489,22 @@ test.describe('statement file import on Connections', () => {
       ]);
       let release!: () => void;
       const held = new Promise<void>((resolve) => (release = resolve));
+      // One long group of a counterparty and 55 groups of one row, each with a long name and amount.
+      const neverSent = Array.from({length: 60}, (_, index): BankImportNeverSentRow => ({
+        id: `00000000-0000-4000-8000-0000000007${String(index).padStart(2, '0')}`,
+        kind: 'not_in_bank',
+        bankAccountId: CHECKING.id,
+        row: {
+          ...doubtfulRow('', '', '', []).row,
+          amount: '-1234567.89',
+          counterpartyName: index < 5 ? LONG_ACCOUNT : null,
+          description: `${LONG_ACCOUNT} ${index}`,
+        },
+      }));
       await mockFileImport(page, {
         imports: [worst],
         doubtfulRows: rows,
+        neverSentRows: neverSent,
         uploads: [
           async (route, api) => {
             await held;
@@ -1746,22 +2552,64 @@ test.describe('statement file import on Connections', () => {
 
       await expect(dialog.getByRole('heading', {name: 'Imported 12 files'})).toBeVisible();
       await expect(dialog.getByText('1,234,567', {exact: true})).toBeVisible();
-      await expect(dialog.getByLabel(`Balance of ${LONG_ACCOUNT} today`)).toBeVisible();
+      const balance = dialog.getByLabel(`Balance of ${LONG_ACCOUNT} today`);
+      await expect(balance).toBeVisible();
+      // A long amount scrolls inside the field and leaves its currency in view.
+      await balance.fill('-123456789012345678901234567890.55');
+      await expectCurrencyInside(balance, 'EUR');
+      expect(await balance.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(
+        true,
+      );
+      await expectNothingWiderThan(dialog);
+      await dialog
+        .getByRole('button', {name: 'Not added: 1,234 rows your bank never sent'})
+        .click();
+      const groups = dialog.getByTestId('bank-import-never-sent-group');
+      await expect(groups).toHaveCount(50);
+      await expect(groups.first()).toContainText('5 rows');
+      const addGroup = groups.first().getByRole('button', {name: `Add 5 from ${LONG_ACCOUNT}`});
+      const addRow = groups.first().getByRole('listitem').first().getByRole('button');
+      const addOnlyRow = groups.nth(1).getByRole('button', {name: /^Add /});
+      for (const button of [addGroup, addRow, addOnlyRow])
+        expect((await boxOf(button)).height).toBeGreaterThanOrEqual(44);
+      // A group's Add and its rows' Add are one button style, and their right edges line up.
+      const look = (button: Locator) =>
+        button.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return [style.borderTopWidth, style.borderTopColor, style.backgroundColor];
+        });
+      expect(await look(addRow)).toEqual(await look(addGroup));
+      expect(await look(addOnlyRow)).toEqual(await look(addGroup));
+      const [groupBox, rowBox] = await Promise.all([boxOf(addGroup), boxOf(addRow)]);
+      expect(Math.abs(groupBox.x + groupBox.width - rowBox.x - rowBox.width)).toBeLessThan(1);
+      await expectNothingWiderThan(dialog);
+      await dialog.getByRole('button', {name: 'Show 6 more'}).click();
+      await expect(groups).toHaveCount(56);
       await expectNothingWiderThan(dialog);
       const review = dialog.getByRole('button', {name: 'Review 40 rows'});
       await expectInsideViewport(page, review);
       await review.click();
       await expect(dialog.getByRole('heading', {name: 'Check 40 transactions'})).toBeVisible();
       await expect(dialog.getByTestId('bank-import-doubtful-row')).toHaveCount(40);
-      // On phones the answer sits under the row, full width.
-      const same = dialog.getByRole('button', {name: /^Same transaction/}).first();
+      // On phones the file row's amount and its choice's amount still share one right edge.
       const block = dialog.getByTestId('bank-import-doubtful-row').first();
-      expect((await boxOf(same)).width).toBeGreaterThan((await boxOf(block)).width - 2);
+      const [fileAmount, candidateAmount] = await Promise.all([
+        boxOf(block.locator('.numeric').first()),
+        boxOf(block.locator('.numeric').last()),
+      ]);
+      expect(
+        Math.abs(fileAmount.x + fileAmount.width - candidateAmount.x - candidateAmount.width),
+      ).toBeLessThan(1);
       await expectNothingWiderThan(dialog);
-      // The body scrolls inside the sheet to the last row.
-      const last = dialog.getByRole('button', {name: "It's a new transaction"}).last();
+      // Save stays in reach while the body scrolls inside the sheet to the last row.
+      const save = dialog.getByRole('button', {name: /^Save/});
+      await expectInsideViewport(page, save);
+      const last = dialog.getByText("It's a new transaction").last();
       await last.scrollIntoViewIfNeeded();
       await expectInsideViewport(page, last);
+      await last.click();
+      await expect(save).toHaveText('Save answer');
+      await expectInsideViewport(page, save);
       await expectNoHorizontalOverflow(page);
     });
   });
@@ -1772,10 +2620,12 @@ function doubtfulRow(
   description: string,
   amount: string,
   candidates: BankImportDoubtfulRow['candidates'],
+  importedTransactionId: string | null = null,
 ): BankImportDoubtfulRow {
   return {
     id,
     bankAccountId: CHECKING.id,
+    importedTransactionId,
     row: {
       bookingDate: '2026-10-01',
       valueDate: '2026-10-01',
@@ -1791,12 +2641,12 @@ function doubtfulRow(
   };
 }
 
-function candidate(id: string, description: string, amount: string) {
+function candidate(id: string, description: string, amount: string, date = '2026-10-01') {
   return {
     id,
-    transactionDate: '2026-10-01',
-    bookingDate: '2026-10-01',
-    valueDate: '2026-10-01',
+    transactionDate: date,
+    bookingDate: date,
+    valueDate: date,
     amount,
     currency: 'EUR',
     displayDescription: description,

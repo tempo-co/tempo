@@ -19,10 +19,12 @@ import {BankImportLayout, savedLayoutId} from './bank-import-layout.entity';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {LayoutMapper, LayoutMapperError} from './mapper/layout-mapper';
 import {LayoutAnswer, toMapperInput} from './mapper/layout-mapper.contract';
-import {CsvLayout, MAX_SKIP_AFTER, MAX_SKIP_BEFORE, validateCsvLayout} from './parsers/csv-layout';
+import {CsvByDirection, CsvLayout, MAX_SKIP_AFTER, MAX_SKIP_BEFORE, validateCsvLayout} from './parsers/csv-layout';
+import {NO_ACCOUNT_LAYOUT_BANKS, namesNoAccount} from './parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from './parsers/currency-codes';
 import {amountScale, formatUnits, parseDecimal} from './parsers/decimal';
 import {NormalizedRow, NormalizedStatement, STATEMENT_BANKS} from './parsers/parse-result';
+import {MaskedTable} from './parsers/table-mask';
 import {TableSample} from './parsers/table-sample';
 import {ParseRunnerService} from './runner/parse-runner.service';
 
@@ -116,7 +118,13 @@ export class BankImportLayoutService {
 		const sampled = await this.parseRunner.sample(file);
 		if (!sampled.ok) throw this.refuse(sampled.code);
 		const {sample} = sampled;
-		if (sample.skipBefore > MAX_SKIP_BEFORE || sample.skipAfter > MAX_SKIP_AFTER) {
+		// A layout skipping lines that look like rows would drop them from this file and every later one.
+		if (
+			sample.rowsAbove > 0 ||
+			sample.rowsBelow > 0 ||
+			sample.skipBefore > MAX_SKIP_BEFORE ||
+			sample.skipAfter > MAX_SKIP_AFTER
+		) {
 			throw this.refuse('layout_not_mappable');
 		}
 		const owner = await this.dataSource.getRepository(Account).findOneByOrFail({id: ownerId});
@@ -173,6 +181,12 @@ export class BankImportLayoutService {
 			const proposal = await this.lockProposal(manager, ownerId, proposalId);
 			if (proposal.expiresAt.getTime() <= Date.now())
 				throw new BankImportRefusalException('layout_proposal_expired');
+			// A layout whose files name no account goes by its bank, so it cannot take a built-in one's. Unlike the
+			// Revolut check above, this one needs the proposal's layout, so it runs under the lock.
+			const builtIn = namesNoAccount(proposal.layout)
+				? NO_ACCOUNT_LAYOUT_BANKS.find((bank) => bank.toLowerCase() === bankName.toLowerCase())
+				: undefined;
+			if (builtIn) throw new BadRequestException(reservedBankName(builtIn));
 			if (proposal.currencyNeeded) {
 				if (typeof request.currency !== 'string' || !ISO_CURRENCY_CODES.has(request.currency)) {
 					throw new BadRequestException(INVALID_CURRENCY);
@@ -297,19 +311,112 @@ function bankNameOf(value: string | null): string | null {
 	return name || null;
 }
 
+/** A masked IBAN, compact or in blocks of four: two letters, two digits and 11 to 30 letters or digits. */
+const MASKED_IBAN = /^[Aa]{2}99[Aa9]{11,30}$/;
+const MASKED_IBAN_IN_TEXT = /(?<![Aa9])[Aa]{2}99(?:(?: [Aa9]{4}){2,7}(?: [Aa9]{1,4})?|[Aa9]{11,30})(?![Aa9])/;
+/** An old account number, digits only, which the reader leaves out of a counterparty account. */
+const MASKED_ACCOUNT_NUMBER = /^9+$/;
+const MASKED_BIC_AND_IBAN = /^[A9]{8}(?:[A9]{3})? [Aa]{2}99[Aa9]{11,30}$/;
+
+/**
+ * The answer without the columns and line its values cannot fill, judged by the sample's masked shapes: an account
+ * column whose values are not all IBANs (a sort code and account number, a card number), an account line without an
+ * IBAN, a counterparty account column holding something other than IBANs and old account numbers, and a balance
+ * column holding one value on every row (the balance when the file was made, not one after each row). Such a file
+ * then names no account and is asked about by bank and currency, rather than refused. A non-IBAN account column is
+ * still checked to hold one account (`oneAccountColumn` in `buildLayout`), so a file of several is refused.
+ */
+function withReadableAccounts(answer: LayoutAnswer, sample: TableSample): LayoutAnswer {
+	const holds = (columns: number | {moneyIn: number; moneyOut: number}, fits: (shape: string) => boolean) =>
+		(typeof columns === 'number' ? [columns] : [columns.moneyIn, columns.moneyOut]).every((column) =>
+			(sample.masked.columns[column]?.shapes ?? []).every((shape) => shape === '' || fits(shape)),
+		);
+	const iban = (shape: string) => MASKED_IBAN.test(shape.replace(/ /g, ''));
+	const {account, counterpartyAccount, balance} = answer;
+	const accountReadable =
+		account === null ||
+		('column' in account
+			? holds(account.column, iban)
+			: !!sample.masked.linesAbove
+					.find(({line}) => line === account.line)
+					?.cells.some((cell) => MASKED_IBAN_IN_TEXT.test(cell)));
+	const counterpartyReadable =
+		counterpartyAccount === null ||
+		holds(
+			counterpartyAccount,
+			(shape) =>
+				iban(shape) || MASKED_ACCOUNT_NUMBER.test(shape.replace(/ /g, '')) || MASKED_BIC_AND_IBAN.test(shape),
+		);
+	return {
+		...answer,
+		account: accountReadable ? account : null,
+		counterpartyAccount: counterpartyReadable ? counterpartyAccount : null,
+		balance: balance && sample.masked.columns[balance.column]?.sameValue ? null : balance,
+	};
+}
+
+/**
+ * Currency symbols that name one currency each. `$`, `¥`, `kr` and the like are shared by several and name none;
+ * letter symbols count only where the model sees them as written (a header cell), as masking hides them elsewhere.
+ */
+const CURRENCY_SYMBOLS: ReadonlyMap<string, string> = new Map([
+	['€', 'EUR'],
+	['£', 'GBP'],
+	['zł', 'PLN'],
+	['Kč', 'CZK'],
+	['Ft', 'HUF'],
+	['₹', 'INR'],
+	['₺', 'TRY'],
+	['₽', 'RUB'],
+	['₴', 'UAH'],
+	['₪', 'ILS'],
+	['₦', 'NGN'],
+	['₫', 'VND'],
+	['฿', 'THB'],
+	['₸', 'KZT'],
+	['₾', 'GEL'],
+	['₼', 'AZN'],
+]);
+
+/** Whether the masked sample the model saw shows the currency: its ISO code as a word, or its own symbol. */
+function currencyShown(code: string, masked: MaskedTable): boolean {
+	const sent = [
+		...(masked.header ?? []),
+		...masked.linesAbove.flatMap(({cells}) => cells),
+		...masked.rows.flat(),
+		...masked.linesBelow.flat(),
+		...masked.columns.flatMap(({shapes}) => shapes),
+	];
+	const tokens = [
+		code,
+		...[...CURRENCY_SYMBOLS].filter(([, symbolCode]) => symbolCode === code).map(([symbol]) => symbol),
+	];
+	return tokens.some((token) => {
+		const word = new RegExp(`(?<!\\p{L})${token}(?!\\p{L})`, 'u');
+		return sent.some((cell) => word.test(cell));
+	});
+}
+
 /**
  * The layout the answer describes, on the table the parse child found: its header (or column count), source and
  * skipped lines come from the file, the columns and formats from the answer. Only the answer's layout fields are
- * used. Null when the answer names a currency that is no ISO 4217 code; `validateCsvLayout` checks everything else,
- * such as an account line that is not above the table.
+ * used, less the columns and line their values cannot fill (`withReadableAccounts`). A currency code the sample
+ * never showed the model (`currencyShown`) is left for the owner to pick, like no currency. Null when the answer
+ * names a currency that is no ISO 4217 code; `validateCsvLayout` checks everything else, such as an account line
+ * that is not above the table.
  */
 export function buildLayout(
-	answer: LayoutAnswer,
+	proposed: LayoutAnswer,
 	sample: TableSample,
 	defaultCurrency: string,
 ): {layout: unknown; currencyNeeded: boolean} | null {
 	const {shape} = sample;
+	const answer = withReadableAccounts(proposed, sample);
 	if (answer.currency && 'code' in answer.currency && !ISO_CURRENCY_CODES.has(answer.currency.code)) return null;
+	// A code the file never showed the model is a guess: the owner picks the currency instead.
+	if (answer.currency && 'code' in answer.currency && !currencyShown(answer.currency.code, sample.masked)) {
+		answer.currency = null;
+	}
 	const {amount} = answer;
 	return {
 		currencyNeeded: answer.currency === null,
@@ -327,6 +434,10 @@ export function buildLayout(
 			dateFormat: answer.dateFormat,
 			...(answer.account && 'column' in answer.account ? {accountIban: answer.account.column} : {}),
 			...(answer.account && 'line' in answer.account ? {accountIbanLine: answer.account.line} : {}),
+			// An account column left out for holding no IBAN still checks that a later file names one account.
+			...(!answer.account && proposed.account && 'column' in proposed.account
+				? {oneAccountColumn: proposed.account.column}
+				: {}),
 			currency:
 				answer.currency === null
 					? {fixed: defaultCurrency}
@@ -335,6 +446,7 @@ export function buildLayout(
 						: {column: answer.currency.column},
 			bookingDate: answer.bookingDate,
 			...(answer.valueDate === null ? {} : {valueDate: answer.valueDate}),
+			...(answer.transactionDate === null ? {} : {transactionDate: answer.transactionDate}),
 			amount:
 				amount.kind === 'signed'
 					? {kind: 'signed', column: amount.column}
@@ -350,6 +462,7 @@ export function buildLayout(
 			...(answer.balance ? {balance: answer.balance} : {}),
 			...(answer.counterpartyName === null ? {} : {counterpartyName: answer.counterpartyName}),
 			...(answer.counterpartyAccount === null ? {} : {counterpartyIban: answer.counterpartyAccount}),
+			...(answer.pending === null ? {} : {pendingColumn: answer.pending}),
 			description: answer.description,
 		},
 	};
@@ -361,7 +474,14 @@ export function mappingOf(layout: CsvLayout, header: readonly string[] | null): 
 	const add = (field: BankImportLayoutColumn['field'], column: number | undefined) => {
 		if (column !== undefined) columns.push({field, column: column + 1, header: header?.[column] || null});
 	};
+	const addByDirection = (field: BankImportLayoutColumn['field'], column: number | CsvByDirection | undefined) => {
+		if (typeof column !== 'object') return add(field, column);
+		for (const onlyFor of ['moneyIn', 'moneyOut'] as const) {
+			columns.push({field, column: column[onlyFor] + 1, header: header?.[column[onlyFor]] || null, onlyFor});
+		}
+	};
 	add('date', layout.bookingDate);
+	add('transactionDate', layout.transactionDate);
 	add('valueDate', layout.valueDate);
 	const {amount} = layout;
 	if (amount.kind === 'debitCredit') {
@@ -374,9 +494,10 @@ export function mappingOf(layout: CsvLayout, header: readonly string[] | null): 
 	add('balance', layout.balance?.column);
 	if ('column' in layout.currency) add('currency', layout.currency.column);
 	add('account', layout.accountIban);
-	add('counterparty', layout.counterpartyName);
-	add('counterpartyAccount', layout.counterpartyIban);
+	addByDirection('counterparty', layout.counterpartyName);
+	addByDirection('counterpartyAccount', layout.counterpartyIban);
 	for (const column of layout.description) add('description', column);
+	add('pending', layout.pendingColumn);
 	return {
 		columns,
 		amount: amount.kind,

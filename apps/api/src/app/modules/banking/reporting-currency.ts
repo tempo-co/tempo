@@ -20,10 +20,10 @@ export function totalsCurrency(owner: ReportingOwner): string | null {
  */
 export async function settleTotalsCurrency<T>(manager: EntityManager, owner: ReportingOwner, response: T): Promise<T> {
 	if (totalsCurrency(owner) === null || !namesCurrency(response)) return response;
-	const [current] = (await manager.query(
+	const [current] = await manager.query<Array<Pick<ReportingOwner, 'baseCurrency' | 'baseCurrencyRevision'>>>(
 		`SELECT "baseCurrency", "baseCurrencyRevision" FROM "accounts" WHERE "id" = $1`,
 		[owner.id],
-	)) as Array<Pick<ReportingOwner, 'baseCurrency' | 'baseCurrencyRevision'>>;
+	);
 	const unchanged =
 		current?.baseCurrency === owner.baseCurrency && current.baseCurrencyRevision === owner.baseCurrencyRevision;
 	return unchanged ? response : (withoutCurrency(response) as T);
