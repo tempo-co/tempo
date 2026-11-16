@@ -1,16 +1,21 @@
 import {BankConnectionQueryService} from './bank-connection-query.service';
+import {FileAccountBalanceService} from './file-account-balance.service';
 
 const BANK_CONNECTION_QUERY_SERVICE_DEPENDENCIES = [
 	'bankConnectionRepository',
 	'bankAccountRepository',
 	'bankAccountBalanceRepository',
 	'dataSource',
+	'fileAccountBalanceService',
 ] as const;
 
 /** An owner whose base currency is not chosen yet, so balances are not converted. */
 const OWNER = {id: 'owner-account-id', baseCurrency: null};
 
-const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {};
+const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
+	// Reads rows only for an imported-files account with both a file and an entered balance, which no test here has.
+	fileAccountBalanceService: new FileAccountBalanceService({} as never),
+};
 
 /** Builds the service with named test doubles; unspecified dependencies are empty objects. */
 function createBankConnectionQueryService(

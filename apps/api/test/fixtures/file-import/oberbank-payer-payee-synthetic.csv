@@ -1,0 +1,4 @@
+Buchungsdatum;Wertstellung;Betrag;Währung;Auftraggebername;Auftraggeber IBAN/Kto.Nr.;Auftraggeber BIC/BLZ;Empfängername;Empfänger IBAN/Kto.Nr.;Empfänger BIC/BLZ;Text;Verwendungszweck
+01.10.2026;01.10.2026;2100,00;EUR;Example Employer GmbH;GB33BUKB20201555555555;BUKBGB22;Erika Example;AT611904300234573201;BKAUATWW;Gehalt;Example salary
+03.10.2026;03.10.2026;-850,00;EUR;Erika Example;AT611904300234573201;BKAUATWW;Example Landlord;NL91ABNA0417164300;ABNANL2A;Dauerauftrag;Example rent
+12.10.2026;12.10.2026;-41,25;EUR;;;;;;;Bezahlung Karte;Example Market 1234

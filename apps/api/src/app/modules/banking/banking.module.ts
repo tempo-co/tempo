@@ -53,6 +53,7 @@ import {BankingSyncQueueService} from './services/banking-sync-queue.service';
 import {BankingSyncProcessor} from './services/banking-sync.processor';
 import {BankingSyncService} from './services/banking-sync.service';
 import {CurrencyExchangeService} from './services/currency-exchange.service';
+import {FileAccountBalanceService} from './services/file-account-balance.service';
 import {FxRateService} from './services/fx-rate.service';
 import {McpReaderService} from './services/mcp-reader.service';
 import {MerchantSpendingService} from './services/merchant-spending.service';
@@ -88,6 +89,7 @@ import {OwnTransferService} from './services/own-transfer.service';
 		AspspCatalogService,
 		BankAuthorizationService,
 		BankConnectionQueryService,
+		FileAccountBalanceService,
 		BankConnectionRemovalService,
 		BankLogoService,
 		McpReaderService,
@@ -110,6 +112,15 @@ import {OwnTransferService} from './services/own-transfer.service';
 		BankConnectionAlertProcessor,
 		PushAlertProcessor,
 		RecurringSeriesService,
+	],
+	exports: [
+		BankTransactionPersistenceService,
+		FileAccountBalanceService,
+		BankingConnectionLockService,
+		OwnTransferService,
+		CurrencyExchangeService,
+		BankTransactionCategorizationModule,
+		MerchantLogoModule,
 	],
 	controllers: [
 		BankConnectionController,

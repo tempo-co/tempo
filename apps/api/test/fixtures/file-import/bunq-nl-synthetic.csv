@@ -1,0 +1,4 @@
+"Datum","Bedrag","Rekening","Tegenrekening","Naam","Omschrijving"
+"2026-03-02","-4,50","NL86BUNQ2000000001","","Example Cafe","Example Cafe Examplestad, NL"
+"2026-03-03","750,00","NL86BUNQ2000000001","NL91ABNA0417164300","Test Persoon","Naar bunq"
+"2026-03-04","-12,00","NL86BUNQ2000000001","DE89370400440532013000","Example Shop","Bestelling 1001"

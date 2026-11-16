@@ -267,6 +267,26 @@ describe('categorization web-search configuration', () => {
 	});
 });
 
+describe('file import column mapper configuration', () => {
+	it('defaults the mapper off, with the categorization model', () => {
+		expect(configSchema.parse(baseConfig)).toMatchObject({
+			FILE_IMPORT_MAPPER_ENABLED: false,
+			FILE_IMPORT_MAPPER_MODEL: 'claude-sonnet-5-5',
+		});
+	});
+
+	it('enables the mapper only with an Anthropic API key', () => {
+		const mapper = {...baseConfig, FILE_IMPORT_MAPPER_ENABLED: 'true'};
+		expect(() => configSchema.parse(mapper)).toThrow('when the file import column mapper is enabled');
+		expect(() =>
+			configSchema.parse({...mapper, AI_CATEGORIZATION_SUBSCRIPTION_SOCKET: '/run/claude-bridge.sock'}),
+		).toThrow('when the file import column mapper is enabled');
+		expect(configSchema.parse({...mapper, ANTHROPIC_API_KEY: 'synthetic-api-key'})).toMatchObject({
+			FILE_IMPORT_MAPPER_ENABLED: true,
+		});
+	});
+});
+
 describe('merchant logo configuration', () => {
 	it('allows cached-only display without a model route', () => {
 		expect(

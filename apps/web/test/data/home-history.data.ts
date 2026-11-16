@@ -49,6 +49,7 @@ export const HOME_CONNECTION: BankConnection = {
       baseCurrencyRateDate: null,
       currentBalanceType: null,
       balanceUpdatedAt: '2026-11-05T11:00:00.000Z',
+      balanceSource: 'bank',
       isActive: true,
       latestBalances: [],
     },

@@ -3,6 +3,7 @@ export * from './auth.js';
 export * from './categories.js';
 export * from './connections.js';
 export * from './dashboard.js';
+export * from './imports.js';
 export * from './merchants.js';
 export * from './notifications.js';
 export * from './recurring.js';

@@ -1,6 +1,7 @@
 import {Injectable} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import type {
+	BankAccountBalanceSource,
 	BankAccount as BankAccountResponse,
 	BankConnection as BankConnectionResponse,
 	BankConnectionStatus,
@@ -17,7 +18,8 @@ import {bankLogoReference} from '../bank-logos/bank-logo-reference';
 import {BankSyncRun} from '../bank-sync-run.entity';
 import {selectPreferredBalance} from '../banking.utils';
 import {convertEcbAmountSql, newestEcbRatePairSql} from './bank-transaction-amount-conversion.utils';
-import {BANK_SYNC_STATUSES} from './banking-sync.constants';
+import {BANK_CONNECTION_PROVIDERS, BANK_SYNC_STATUSES} from './banking-sync.constants';
+import {FileAccountBalanceService} from './file-account-balance.service';
 
 type ConvertedBalance = {amount: string; rateDate: string | null};
 
@@ -32,6 +34,7 @@ export class BankConnectionQueryService {
 		@InjectRepository(BankAccountBalance)
 		private readonly bankAccountBalanceRepository: Repository<BankAccountBalance>,
 		private readonly dataSource: DataSource,
+		private readonly fileAccountBalanceService: FileAccountBalanceService,
 	) {}
 
 	async findAll({
@@ -57,14 +60,23 @@ export class BankConnectionQueryService {
 			.andWhere('bankConnection.accountId = :accountId', {accountId})
 			.orderBy('bankAccount.createdAt', 'ASC')
 			.getMany();
-		const [latestBalancesByAccountId, convertedBalances, lastSuccessfulSyncAtByConnectionId] = await Promise.all([
-			this.findLatestBalancesByAccountId(
-				accountId,
-				bankAccounts.map(({id}) => id),
-			),
-			this.convertBalances(bankAccounts, baseCurrency),
-			this.findLastSuccessfulSyncAt(accountId, connectionIds),
-		]);
+		const providers = new Map(connections.map(({id, provider}) => [id, provider]));
+		const [latestBalancesByAccountId, convertedBalances, lastSuccessfulSyncAtByConnectionId, balanceSources] =
+			await Promise.all([
+				this.findLatestBalancesByAccountId(
+					accountId,
+					bankAccounts.map(({id}) => id),
+				),
+				this.convertBalances(bankAccounts, baseCurrency),
+				this.findLastSuccessfulSyncAt(accountId, connectionIds),
+				this.fileAccountBalanceService.findBalanceSources(
+					this.dataSource.manager,
+					bankAccounts.map((bankAccount) => ({
+						...bankAccount,
+						provider: providers.get(bankAccount.bankConnection.id)!,
+					})),
+				),
+			]);
 		const bankAccountsByConnectionId = new Map<string, BankAccount[]>();
 		for (const bankAccount of bankAccounts) {
 			const connectionAccounts = bankAccountsByConnectionId.get(bankAccount.bankConnection.id) ?? [];
@@ -77,7 +89,9 @@ export class BankConnectionQueryService {
 			provider: connection.provider,
 			aspspName: connection.aspspName,
 			aspspCountry: connection.aspspCountry,
-			logo: bankLogoReference(connection.aspspName, connection.aspspCountry),
+			...(connection.provider === BANK_CONNECTION_PROVIDERS.ENABLE_BANKING
+				? {logo: bankLogoReference(connection.aspspName, connection.aspspCountry)}
+				: {}),
 			// Written only from BANK_CONNECTION_STATUSES.
 			status: connection.status as BankConnectionStatus,
 			consentValidUntil: connection.consentValidUntil?.toISOString() ?? null,
@@ -94,9 +108,21 @@ export class BankConnectionQueryService {
 					bankAccount,
 					latestBalancesByAccountId.get(bankAccount.id) ?? [],
 					convertedBalances.get(bankAccount.id),
+					balanceSources.get(bankAccount.id) ?? null,
 				),
 			),
 		}));
+	}
+
+	/** One account of the owner's connection as `findAll` describes it; null when it is not theirs. */
+	async findAccount(
+		owner: Pick<Account, 'id' | 'baseCurrency'>,
+		connectionId: BankConnection['id'],
+		bankAccountId: BankAccount['id'],
+	): Promise<BankAccountResponse | null> {
+		const connections = await this.findAll(owner);
+		const connection = connections.find(({id}) => id === connectionId);
+		return connection?.bankAccounts.find(({id}) => id === bankAccountId) ?? null;
 	}
 
 	/** `lastSyncedAt` also advances for partial runs, so the last fully successful run is read from the run history. */
@@ -190,6 +216,7 @@ export class BankConnectionQueryService {
 		account: BankAccount,
 		latestBalances: BankAccountBalance[],
 		convertedBalance: ConvertedBalance | undefined,
+		balanceSource: BankAccountBalanceSource | null,
 	): BankAccountResponse {
 		const primaryBalance = selectPreferredBalance(latestBalances);
 
@@ -207,6 +234,7 @@ export class BankConnectionQueryService {
 			currentBalanceInBaseCurrency: convertedBalance?.amount ?? null,
 			baseCurrencyRateDate: convertedBalance?.rateDate ?? null,
 			balanceUpdatedAt: account.balanceUpdatedAt?.toISOString() ?? null,
+			balanceSource,
 			isActive: account.isActive,
 			latestBalances: latestBalances.map((balance) => ({
 				name: balance.name,

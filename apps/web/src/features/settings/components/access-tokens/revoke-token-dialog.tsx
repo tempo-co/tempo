@@ -1,6 +1,8 @@
 import type {PersonalAccessToken} from '@tempo/contracts';
+import {CircleAlert} from 'lucide-react';
 import {useState} from 'react';
 
+import {Alert, AlertDescription} from '@/components/ui/alert';
 import {Button, ButtonProps} from '@/components/ui/button';
 import {
   ResponsiveDialog,
@@ -61,9 +63,12 @@ export function RevokeTokenDialog({token, triggerVariant = 'outline'}: RevokeTok
         </ResponsiveDialogHeader>
         {revoke.isError && (
           <ResponsiveDialogBody>
-            <p role='alert' className='text-sm text-destructive'>
-              The token could not be revoked. Please try again.
-            </p>
+            <Alert role='alert' variant='destructive'>
+              <CircleAlert aria-hidden='true' />
+              <AlertDescription className='text-foreground'>
+                The token could not be revoked. Please try again.
+              </AlertDescription>
+            </Alert>
           </ResponsiveDialogBody>
         )}
         <ResponsiveDialogFooter className='gap-2'>

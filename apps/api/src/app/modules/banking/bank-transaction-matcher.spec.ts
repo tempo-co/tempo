@@ -1,0 +1,516 @@
+import {
+	MatchExistingRow,
+	MatchIncomingRow,
+	REFERENCE_FALLBACK_MIN_PROBED_ROWS,
+	REFERENCE_FALLBACK_MIN_PROBED_ROWS_BETWEEN_FILES,
+	matchTransactions,
+	matchWithReferenceFallback,
+	pairLookAlikeGroups,
+	probeReferences,
+} from './bank-transaction-matcher';
+
+function incoming(overrides: Partial<MatchIncomingRow> = {}): MatchIncomingRow {
+	return {
+		amount: '-12.50',
+		currency: 'EUR',
+		bookingDate: '2026-03-02',
+		valueDate: '2026-03-02',
+		balanceAfter: null,
+		reference: null,
+		...overrides,
+	};
+}
+
+let created = 0;
+function existing(id: string, overrides: Partial<Omit<MatchExistingRow, 'id'>> = {}): MatchExistingRow {
+	created += 1;
+	return {...incoming(), id, createdAt: new Date(Date.UTC(2026, 2, 10, 0, 0, created)), ...overrides};
+}
+
+describe('matchTransactions', () => {
+	it('matches a bank reference to the one existing row with that reference, amount and currency at most three days away', () => {
+		const outcomes = matchTransactions(
+			[
+				incoming({reference: 'REF-1', bookingDate: '2026-03-05', valueDate: null}),
+				// The same reference and amount a month later, as a bank that reuses one reference for a monthly payment.
+				incoming({reference: 'REF-2', bookingDate: '2026-04-02', valueDate: null}),
+			],
+			[
+				existing('same-day', {bookingDate: '2026-03-05'}),
+				// Each stored by an import of its own, so the reference is unique within each source.
+				existing('other-amount', {reference: 'REF-1', amount: '-12.51', source: 'import-1'}),
+				existing('referenced', {reference: 'REF-1', bookingDate: '2026-03-02'}),
+				existing('a-month-earlier', {reference: 'REF-1', bookingDate: '2026-02-02', source: 'import-2'}),
+				existing('last-month', {reference: 'REF-2', bookingDate: '2026-03-02'}),
+			],
+		);
+
+		expect(outcomes).toEqual([{kind: 'matched', existingId: 'referenced', step: 'reference'}, {kind: 'new'}]);
+	});
+
+	it('takes no identity from a placeholder reference or one that more than one row of its own source carries', () => {
+		const outcomes = matchTransactions(
+			[
+				// A placeholder neither matches the stored placeholder nor conflicts with a real reference.
+				incoming({amount: '-1.00', reference: 'NONREF', bookingDate: '2026-03-03'}),
+				incoming({amount: '-2.00', reference: ' notprovided ', bookingDate: '2026-03-03'}),
+				// A bank that writes a transaction-type code as every row's reference.
+				incoming({amount: '-3.00', reference: '6091 BGINB', bookingDate: '2026-03-03'}),
+				incoming({amount: '-4.00', reference: '6091 BGINB', bookingDate: '2026-03-03'}),
+				// Unique among the incoming rows, but two stored rows of one import carry it.
+				incoming({amount: '-5.00', reference: 'CARD', bookingDate: '2026-03-03'}),
+			],
+			[
+				existing('placeholder-before', {amount: '-1.00', reference: 'NONREF', bookingDate: '2026-03-02'}),
+				existing('placeholder-after', {amount: '-1.00', bookingDate: '2026-03-04'}),
+				existing('real-reference', {amount: '-2.00', reference: 'BANK-2', bookingDate: '2026-03-03'}),
+				existing('type-code-before', {amount: '-3.00', reference: '6091 BGINB', bookingDate: '2026-03-02'}),
+				existing('type-code-after', {amount: '-3.00', bookingDate: '2026-03-04'}),
+				existing('other-reference', {amount: '-4.00', reference: 'BANK-4', bookingDate: '2026-03-03'}),
+				existing('card-before', {
+					amount: '-5.00',
+					reference: 'CARD',
+					bookingDate: '2026-03-02',
+					source: 'import-1',
+				}),
+				existing('card-after', {amount: '-5.00', bookingDate: '2026-03-04'}),
+				existing('card-elsewhere', {amount: '-9.00', reference: 'CARD', source: 'import-1'}),
+			],
+		);
+
+		expect(outcomes).toEqual([
+			{kind: 'doubtful', candidateIds: ['placeholder-before', 'placeholder-after']},
+			{kind: 'matched', existingId: 'real-reference', step: 'sameDay'},
+			{kind: 'doubtful', candidateIds: ['type-code-before', 'type-code-after']},
+			{kind: 'matched', existingId: 'other-reference', step: 'sameDay'},
+			{kind: 'doubtful', candidateIds: ['card-before', 'card-after']},
+		]);
+	});
+
+	it('matches amount, value date and balance after when both sides carry them', () => {
+		const outcomes = matchTransactions(
+			[
+				incoming({bookingDate: '2026-03-03', valueDate: '2026-03-01', balanceAfter: '987.5'}),
+				incoming({bookingDate: '2026-03-03', valueDate: '2026-03-01', balanceAfter: null}),
+			],
+			[
+				existing('without-balance', {bookingDate: null, valueDate: '2026-03-01'}),
+				existing('with-balance', {bookingDate: null, valueDate: '2026-03-01', balanceAfter: '987.50000000'}),
+			],
+		);
+
+		expect(outcomes[0]).toEqual({kind: 'matched', existingId: 'with-balance', step: 'balance'});
+		// The second row has no balance, so it falls through to the date steps and finds the remaining row.
+		expect(outcomes[1]).toEqual({kind: 'matched', existingId: 'without-balance', step: 'nearby'});
+	});
+
+	it('pairs same-day groups of unequal size in order and sends the leftover rows on', () => {
+		const outcomes = matchTransactions(
+			[incoming(), incoming(), incoming(), incoming({amount: '-3.00'})],
+			[
+				existing('second', {createdAt: new Date('2026-03-11T00:00:00Z')}),
+				existing('first', {createdAt: new Date('2026-03-10T00:00:00Z')}),
+			],
+		);
+
+		expect(outcomes).toEqual([
+			{kind: 'matched', existingId: 'first', step: 'sameDay'},
+			{kind: 'matched', existingId: 'second', step: 'sameDay'},
+			{kind: 'new'},
+			{kind: 'new'},
+		]);
+	});
+
+	it('pairs a same-day row with the next existing row whose reference does not conflict with its own', () => {
+		const outcomes = matchTransactions(
+			[incoming({reference: 'REF-A'}), incoming({reference: 'REF-B'})],
+			[existing('other-reference', {reference: 'REF-C'}), existing('no-reference')],
+		);
+
+		expect(outcomes).toEqual([
+			{kind: 'matched', existingId: 'no-reference', step: 'sameDay'},
+			{kind: 'doubtful', candidateIds: ['other-reference']},
+		]);
+	});
+
+	it('holds a row as doubtful when its only candidate one to three days away carries a different reference', () => {
+		const outcomes = matchTransactions(
+			[
+				incoming({amount: '-1.00', reference: 'FILE-1', bookingDate: '2026-03-03'}),
+				incoming({amount: '-2.00', reference: 'FILE-2', bookingDate: '2026-03-04'}),
+				incoming({amount: '-3.00', reference: ' FILE-3 ', bookingDate: '2026-03-05'}),
+				incoming({amount: '-4.00', reference: 'FILE-4', bookingDate: '2026-03-04'}),
+				incoming({amount: '-5.00', reference: null, bookingDate: '2026-03-04'}),
+			],
+			[
+				existing('one-day', {amount: '-1.00', reference: 'BANK-1'}),
+				existing('two-days', {amount: '-2.00', reference: 'BANK-2'}),
+				existing('three-days', {amount: '-3.00', reference: 'BANK-3'}),
+				existing('stored-without-reference', {amount: '-4.00', reference: '  '}),
+				existing('incoming-without-reference', {amount: '-5.00', reference: 'BANK-5'}),
+			],
+			{uniqueCandidatesOnly: true},
+		);
+
+		expect(outcomes).toEqual([
+			{kind: 'doubtful', candidateIds: ['one-day']},
+			{kind: 'doubtful', candidateIds: ['two-days']},
+			{kind: 'doubtful', candidateIds: ['three-days']},
+			{kind: 'matched', existingId: 'stored-without-reference', step: 'nearby'},
+			{kind: 'matched', existingId: 'incoming-without-reference', step: 'nearby'},
+		]);
+	});
+
+	it('pairs only one-to-one same-day groups when asked for unique candidates, and holds larger groups as doubtful', () => {
+		const outcomes = matchTransactions(
+			[incoming(), incoming({amount: '-3.00'})],
+			[existing('first'), existing('second'), existing('alone', {amount: '-3.00'})],
+			{uniqueCandidatesOnly: true},
+		);
+
+		expect(outcomes).toEqual([
+			{kind: 'doubtful', candidateIds: ['first', 'second']},
+			{kind: 'matched', existingId: 'alone', step: 'sameDay'},
+		]);
+	});
+
+	it('uses the value date as the day of a row without a booking date', () => {
+		const outcomes = matchTransactions(
+			[incoming({bookingDate: null, valueDate: '2026-03-02'})],
+			[existing('booked', {bookingDate: '2026-03-02', valueDate: '2026-02-27'})],
+		);
+
+		expect(outcomes).toEqual([{kind: 'matched', existingId: 'booked', step: 'sameDay'}]);
+	});
+
+	it('matches the one candidate within three days, and nothing four days away', () => {
+		const outcomes = matchTransactions(
+			[incoming({bookingDate: '2026-03-05'}), incoming({amount: '-7.00', bookingDate: '2026-03-06'})],
+			[existing('three-days', {}), existing('four-days', {amount: '-7.00'})],
+		);
+
+		expect(outcomes).toEqual([{kind: 'matched', existingId: 'three-days', step: 'nearby'}, {kind: 'new'}]);
+	});
+
+	it('holds a row with two candidates as doubtful, and a row whose only candidate another row shares', () => {
+		const outcomes = matchTransactions(
+			[
+				incoming({bookingDate: '2026-03-04'}),
+				incoming({amount: '-8.00', bookingDate: '2026-03-04'}),
+				incoming({amount: '-8.00', bookingDate: '2026-03-05'}),
+			],
+			[
+				existing('before', {bookingDate: '2026-03-02'}),
+				existing('after', {bookingDate: '2026-03-06'}),
+				existing('shared', {amount: '-8.00', bookingDate: '2026-03-03'}),
+			],
+		);
+
+		expect(outcomes).toEqual([
+			{kind: 'doubtful', candidateIds: ['before', 'after']},
+			{kind: 'doubtful', candidateIds: ['shared']},
+			{kind: 'doubtful', candidateIds: ['shared']},
+		]);
+	});
+
+	it('claims each existing row once, so of two rows matching one existing row the other is new', () => {
+		const outcomes = matchTransactions(
+			[incoming({reference: 'REF-1'}), incoming({reference: 'REF-2', bookingDate: '2026-03-03'})],
+			[existing('only', {reference: 'REF-1'})],
+		);
+
+		expect(outcomes).toEqual([{kind: 'matched', existingId: 'only', step: 'reference'}, {kind: 'new'}]);
+	});
+
+	it('compares amounts as signed decimals within one currency', () => {
+		const outcomes = matchTransactions(
+			[incoming({amount: '10.5'}), incoming({amount: '-10.50'}), incoming({amount: '10.5', currency: 'USD'})],
+			[existing('credit', {amount: '10.50000000'})],
+		);
+
+		expect(outcomes).toEqual([
+			{kind: 'matched', existingId: 'credit', step: 'sameDay'},
+			{kind: 'new'},
+			{kind: 'new'},
+		]);
+	});
+
+	it('calls a row with no candidate new', () => {
+		expect(matchTransactions([incoming()], [])).toEqual([{kind: 'new'}]);
+	});
+});
+
+/** `count` rows, one a day from 2026-04-01 at amounts -1.00, -2.00…, the file's references against other ones stored. */
+function referencedTwins(count: number, existingReference = (day: number) => `BANK-${day}`) {
+	const rows = Array.from({length: count}, (_, day) => ({
+		amount: `-${day + 1}.00`,
+		bookingDate: new Date(Date.UTC(2026, 3, 1 + day)).toISOString().slice(0, 10),
+		valueDate: null,
+	}));
+	return {
+		incoming: rows.map((row, day) => incoming({...row, reference: `FILE-${day}`})),
+		existing: rows.map((row, day) => existing(`twin-${day}`, {...row, reference: existingReference(day)})),
+	};
+}
+
+describe('probeReferences', () => {
+	it('probes each referenced row with a look-alike within three days carrying a bank reference, and counts the rows whose reference the bank stored', () => {
+		const probe = probeReferences(
+			[
+				incoming({reference: 'FILE-1'}),
+				incoming({reference: null}),
+				incoming({amount: '-1.00', reference: 'FILE-2'}),
+				incoming({amount: '-2.00', reference: 'FILE-3'}),
+				incoming({amount: '-3.00', reference: 'FILE-4', bookingDate: '2026-03-06', valueDate: null}),
+				incoming({amount: '-4.00', reference: ' SHARED '}),
+				incoming({amount: '-5.00', reference: 'FILE-5'}),
+				// A placeholder is no reference: neither probed nor found stored.
+				incoming({amount: '-6.00', reference: 'NONREF'}),
+			],
+			[
+				existing('placeholder-look-alike', {amount: '-6.00', reference: 'NONREF'}),
+				existing('referenced', {reference: 'BANK-1'}),
+				existing('without-reference', {amount: '-1.00', reference: ' '}),
+				existing('four-days-away', {amount: '-2.00', reference: 'BANK-3', bookingDate: '2026-03-06'}),
+				existing('three-days-away', {amount: '-3.00', reference: 'BANK-4', bookingDate: '2026-03-03'}),
+				existing('other-amount', {amount: '-99.00', reference: 'SHARED'}),
+				// Rows in the file's own numbering (an earlier import's) neither probe nor count.
+				existing('imported', {amount: '-5.00', reference: 'FILE-OLD', sameNumbering: true}),
+				existing('imported-same-reference', {amount: '-99.00', reference: 'FILE-1', sameNumbering: true}),
+			],
+		);
+
+		// Probed: FILE-1 and FILE-4. SHARED has no look-alike to probe, but the bank stored its reference.
+		expect(probe).toEqual({probedRows: 2, rowsWithStoredReference: 1});
+	});
+});
+
+describe('matchWithReferenceFallback', () => {
+	it("sets aside the bank's references once 20 rows were probed and none is the file's, matching by date and holding same-day look-alike groups", () => {
+		// With the two look-alikes and the row two days from its twin, exactly the 20 rows needed are probed.
+		const twins = referencedTwins(REFERENCE_FALLBACK_MIN_PROBED_ROWS - 3);
+		const lookAlikes = {amount: '-2.50', bookingDate: '2026-05-01', valueDate: null};
+		const day = (bookingDate: string) => ({bookingDate, valueDate: null});
+
+		const result = matchWithReferenceFallback(
+			[
+				...twins.incoming,
+				incoming({...lookAlikes, reference: 'FILE-C1'}),
+				incoming({...lookAlikes, reference: 'FILE-C2'}),
+				incoming({amount: '-7.77', ...day('2026-05-10'), reference: 'FILE-N'}),
+				incoming({amount: '-8.88', ...day('2026-05-10'), reference: 'FILE-I'}),
+			],
+			[
+				...twins.existing,
+				existing('coffee-1', {...lookAlikes, reference: 'BANK-C1'}),
+				existing('coffee-2', {...lookAlikes, reference: 'BANK-C2'}),
+				existing('two-days-away', {amount: '-7.77', ...day('2026-05-12'), reference: 'BANK-N'}),
+				// An earlier import of the same numbering stored this row: its reference still names another payment.
+				existing('earlier-import', {
+					amount: '-8.88',
+					...day('2026-05-09'),
+					reference: 'FILE-OLD',
+					sameNumbering: true,
+				}),
+			],
+		);
+
+		expect(result.referencesSetAside).toBe(true);
+		expect(result.outcomes).toEqual([
+			...twins.existing.map(({id}) => ({kind: 'matched', existingId: id, step: 'sameDay'})),
+			{kind: 'doubtful', candidateIds: ['coffee-1', 'coffee-2']},
+			{kind: 'doubtful', candidateIds: ['coffee-1', 'coffee-2']},
+			{kind: 'matched', existingId: 'two-days-away', step: 'nearby'},
+			{kind: 'doubtful', candidateIds: ['earlier-import']},
+		]);
+	});
+
+	it.each([
+		{name: 'fewer than 20 rows were probed', twins: referencedTwins(REFERENCE_FALLBACK_MIN_PROBED_ROWS - 1)},
+		{
+			name: "one row's reference is stored",
+			twins: referencedTwins(30, (day) => (day === 29 ? 'FILE-29' : `BANK-${day}`)),
+		},
+	])('keeps the references and runs the ladder unchanged when $name', ({twins}) => {
+		const result = matchWithReferenceFallback(twins.incoming, twins.existing);
+
+		expect(result).toEqual({
+			referencesSetAside: false,
+			outcomes: matchTransactions(twins.incoming, twins.existing),
+		});
+		expect(result.outcomes.filter(({kind}) => kind === 'doubtful').length).toBeGreaterThan(0);
+	});
+
+	it('sets the references aside after the rows a caller asks for, and not one row sooner', () => {
+		const minProbedRows = REFERENCE_FALLBACK_MIN_PROBED_ROWS_BETWEEN_FILES;
+		const enough = referencedTwins(minProbedRows);
+		const short = referencedTwins(minProbedRows - 1);
+
+		expect(matchWithReferenceFallback(enough.incoming, enough.existing, {minProbedRows})).toEqual({
+			referencesSetAside: true,
+			outcomes: enough.existing.map(({id}) => ({kind: 'matched', existingId: id, step: 'sameDay'})),
+		});
+		expect(matchWithReferenceFallback(short.incoming, short.existing, {minProbedRows}).referencesSetAside).toBe(
+			false,
+		);
+		expect(matchWithReferenceFallback(enough.incoming, enough.existing).referencesSetAside).toBe(false);
+	});
+});
+
+describe('pairLookAlikeGroups', () => {
+	const coffee = {amount: '-2.50', bookingDate: '2026-06-01', valueDate: null};
+	const held = (...candidateIds: string[]) => ({kind: 'doubtful', candidateIds}) as const;
+
+	it('pairs a same-day group as large on both sides, most similar text first, then in stored order', () => {
+		const incomingRows = [
+			incoming({...coffee, text: 'Example Tea House  amsterdam'}),
+			incoming({...coffee, text: 'Example Coffee Bar'}),
+			incoming({amount: '-4.00', bookingDate: '2026-06-02', valueDate: null}),
+			incoming({amount: '-4.00', bookingDate: '2026-06-02', valueDate: null}),
+		];
+		const existingRows = [
+			existing('coffee-bar', {...coffee, text: 'CARD Example Coffee Bar NLD'}),
+			existing('tea-house', {...coffee, text: 'example tea house amsterdam'}),
+			existing('second', {
+				amount: '-4.00',
+				bookingDate: '2026-06-02',
+				valueDate: null,
+				createdAt: new Date('2026-06-05'),
+			}),
+			existing('first', {
+				amount: '-4.00',
+				bookingDate: '2026-06-02',
+				valueDate: null,
+				createdAt: new Date('2026-06-04'),
+			}),
+		];
+
+		const outcomes = pairLookAlikeGroups(incomingRows, existingRows, [
+			held('coffee-bar', 'tea-house'),
+			held('coffee-bar', 'tea-house'),
+			held('first', 'second'),
+			held('first', 'second'),
+		]);
+
+		expect(outcomes).toEqual([
+			{kind: 'matched', existingId: 'tea-house', step: 'sameDayGroup'},
+			{kind: 'matched', existingId: 'coffee-bar', step: 'sameDayGroup'},
+			{kind: 'matched', existingId: 'first', step: 'sameDayGroup'},
+			{kind: 'matched', existingId: 'second', step: 'sameDayGroup'},
+		]);
+	});
+
+	it('leaves a group doubtful when its sides differ in size, a reference conflicts, or a row is claimed already', () => {
+		const incomingRows = [
+			incoming({...coffee}),
+			incoming({...coffee}),
+			incoming({amount: '-3.00', bookingDate: '2026-06-01', valueDate: null, reference: 'FILE-1'}),
+			incoming({amount: '-3.00', bookingDate: '2026-06-01', valueDate: null}),
+			incoming({amount: '-5.00', bookingDate: '2026-06-01', valueDate: null}),
+			incoming({amount: '-5.00', bookingDate: '2026-06-01', valueDate: null}),
+			incoming({amount: '-5.00', bookingDate: '2026-06-01', valueDate: null}),
+		];
+		const existingRows = [
+			existing('a', {...coffee}),
+			existing('b', {...coffee}),
+			existing('c', {...coffee}),
+			existing('d', {amount: '-3.00', bookingDate: '2026-06-01', valueDate: null, reference: 'BANK-1'}),
+			existing('e', {amount: '-3.00', bookingDate: '2026-06-01', valueDate: null}),
+			existing('f', {amount: '-5.00', bookingDate: '2026-06-01', valueDate: null}),
+			existing('g', {amount: '-5.00', bookingDate: '2026-06-01', valueDate: null}),
+			existing('h', {amount: '-5.00', bookingDate: '2026-06-01', valueDate: null}),
+		];
+		const outcomes = [
+			held('a', 'b', 'c'),
+			held('a', 'b', 'c'),
+			held('d', 'e'),
+			held('d', 'e'),
+			{kind: 'matched', existingId: 'f', step: 'balance'} as const,
+			held('g', 'h'),
+			held('g', 'h'),
+		];
+
+		expect(pairLookAlikeGroups(incomingRows, existingRows, outcomes)).toEqual([
+			held('a', 'b', 'c'),
+			held('a', 'b', 'c'),
+			held('d', 'e'),
+			held('d', 'e'),
+			{kind: 'matched', existingId: 'f', step: 'balance'},
+			// What the balance step left is a group of two on each side.
+			{kind: 'matched', existingId: 'g', step: 'sameDayGroup'},
+			{kind: 'matched', existingId: 'h', step: 'sameDayGroup'},
+		]);
+	});
+});
+
+describe('matchWithReferenceFallback for rows a sync delivers against imported rows', () => {
+	it("sets aside the imported rows' references when sync's are never theirs, and pairs look-alike groups when asked", () => {
+		const twins = referencedTwins(REFERENCE_FALLBACK_MIN_PROBED_ROWS);
+		const coffee = {amount: '-2.50', bookingDate: '2026-05-01', valueDate: null};
+
+		const result = matchWithReferenceFallback(
+			[
+				...twins.incoming,
+				incoming({...coffee, text: 'Example Bar'}),
+				incoming({...coffee, text: 'Example Cafe'}),
+			],
+			[
+				...twins.existing,
+				existing('cafe', {...coffee, text: 'Example Cafe'}),
+				existing('bar', {...coffee, text: 'Example Bar'}),
+			],
+			{uniqueCandidatesOnly: true, pairLookAlikeGroups: true},
+		);
+
+		expect(result.referencesSetAside).toBe(true);
+		expect(result.outcomes).toEqual([
+			...twins.existing.map(({id}) => ({kind: 'matched', existingId: id, step: 'sameDay'})),
+			{kind: 'matched', existingId: 'bar', step: 'sameDayGroup'},
+			{kind: 'matched', existingId: 'cafe', step: 'sameDayGroup'},
+		]);
+	});
+
+	it('pairs look-alike groups without setting references aside, and keeps conflicting ones apart', () => {
+		const coffee = {amount: '-2.50', bookingDate: '2026-05-01', valueDate: null};
+		const tea = {amount: '-3.10', bookingDate: '2026-05-01', valueDate: null};
+
+		const result = matchWithReferenceFallback(
+			[incoming(coffee), incoming(coffee), incoming({...tea, reference: 'SYNC-T1'}), incoming(tea)],
+			[
+				existing('c1', coffee),
+				existing('c2', coffee),
+				existing('t1', {...tea, reference: 'FILE-T1'}),
+				existing('t2', tea),
+			],
+			{uniqueCandidatesOnly: true, pairLookAlikeGroups: true},
+		);
+
+		expect(result).toEqual({
+			referencesSetAside: false,
+			outcomes: [
+				{kind: 'matched', existingId: 'c1', step: 'sameDayGroup'},
+				{kind: 'matched', existingId: 'c2', step: 'sameDayGroup'},
+				{kind: 'doubtful', candidateIds: ['t1', 't2']},
+				{kind: 'doubtful', candidateIds: ['t1', 't2']},
+			],
+		});
+	});
+});
+
+describe('matchWithReferenceFallback for a statement file', () => {
+	it('pairs the look-alike groups the fallback holds when asked to', () => {
+		const twins = referencedTwins(REFERENCE_FALLBACK_MIN_PROBED_ROWS);
+		const coffee = {amount: '-2.50', bookingDate: '2026-05-01', valueDate: null};
+		const rows = [...twins.incoming, incoming(coffee), incoming(coffee)];
+		const stored = [...twins.existing, existing('c1', coffee), existing('c2', coffee)];
+
+		expect(matchWithReferenceFallback(rows, stored).outcomes.slice(-2)).toEqual([
+			{kind: 'doubtful', candidateIds: ['c1', 'c2']},
+			{kind: 'doubtful', candidateIds: ['c1', 'c2']},
+		]);
+		expect(matchWithReferenceFallback(rows, stored, {pairLookAlikeGroups: true}).outcomes.slice(-2)).toEqual([
+			{kind: 'matched', existingId: 'c1', step: 'sameDayGroup'},
+			{kind: 'matched', existingId: 'c2', step: 'sameDayGroup'},
+		]);
+	});
+});

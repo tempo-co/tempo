@@ -1,0 +1,9 @@
+Kontoumsätze Girokonto
+Kontonummer: DE89 3704 0044 0532 0130 00
+Zeitraum: 01.03.2026 - 05.03.2026
+
+Buchungstag;Valuta;Auftraggeber/Empfänger;Verwendungszweck;Soll;Haben;Währung
+02.03.2026;02.03.2026;Example Shop GmbH;Kartenzahlung Example Shop;12,50;;EUR
+03.03.2026;03.03.2026;Beispiel Vermietung GmbH;Miete Maerz;850,00;;EUR
+04.03.2026;04.03.2026;Example Employer AG;Gehalt Maerz;;2.500,00;EUR
+05.03.2026;05.03.2026;Example Shop GmbH;Kartenzahlung Example Shop;39,99;;EUR

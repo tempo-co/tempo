@@ -1,3 +1,6 @@
+import {CloudOff} from 'lucide-react';
+
+import {Alert, AlertAction, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {Skeleton} from '@/components/ui/skeleton';
 
@@ -73,17 +76,15 @@ type SessionsErrorBannerProps = {
 
 function SessionsErrorBanner({title, description, role, onRetry}: SessionsErrorBannerProps) {
   return (
-    <div
-      role={role}
-      className='flex flex-col gap-3 rounded-card border border-destructive/50 bg-destructive/10 p-4 sm:flex-row sm:items-center sm:justify-between'
-    >
-      <div>
-        <p className='text-sm font-medium'>{title}</p>
-        <p className='mt-1 text-xs text-muted-foreground'>{description}</p>
-      </div>
-      <Button variant='outline' size='sm' className='max-sm:h-11' onClick={onRetry}>
-        Try again
-      </Button>
-    </div>
+    <Alert role={role} variant='destructive'>
+      <CloudOff aria-hidden='true' />
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription>{description}</AlertDescription>
+      <AlertAction>
+        <Button variant='outline' size='sm' className='max-sm:h-11' onClick={onRetry}>
+          Try again
+        </Button>
+      </AlertAction>
+    </Alert>
   );
 }

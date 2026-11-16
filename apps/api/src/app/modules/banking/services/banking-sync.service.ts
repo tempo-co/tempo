@@ -63,7 +63,9 @@ import {
 import {BankingEncryptionError} from '../errors/banking-encryption.error';
 import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {BankingSyncOwnershipLostError} from '../errors/banking-sync-ownership-lost.error';
+import {FileConnectionNotSyncableException} from '../errors/file-connection-not-syncable.exception';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
+import {INCREMENTAL_OVERLAP_DAYS, extendSyncCoverage, finalSyncDays, recordsSyncCoverage} from '../sync-coverage';
 import {AspspCatalogService} from './aspsp-catalog.service';
 import {BankTransactionPersistenceService, PersistTransactionsResult} from './bank-transaction-persistence.service';
 import {BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';
@@ -72,6 +74,7 @@ import {
 	BANKING_FOREGROUND_REFRESH_MIN_INTERVAL_MS,
 	BANKING_TRANSIENT_RETRY_BASE_MS,
 	BANKING_UNATTENDED_HISTORY_DAYS,
+	BANK_CONNECTION_PROVIDERS,
 	BANK_CONNECTION_STATUSES,
 	BANK_SYNC_STATUSES,
 	rateLimitCooldownSeconds,
@@ -86,8 +89,6 @@ const SUCCEEDED = BANK_SYNC_STATUSES.SUCCEEDED;
 const FAILED = BANK_SYNC_STATUSES.FAILED;
 const PARTIAL = BANK_SYNC_STATUSES.PARTIAL;
 
-const INCREMENTAL_OVERLAP_DAYS = 7;
-
 type AccountFetchResult = {
 	bankAccount: BankAccount;
 	balances: EnableBankingBalance[];
@@ -98,8 +99,8 @@ type AccountFetchResult = {
 	transactionsSucceeded: boolean;
 	/** Every page was fetched and every row read, so pending rows the fetch did not return are gone. */
 	transactionsComplete: boolean;
-	/** The first date the transactions call asked for; null when it asked for the whole history. */
-	transactionsFrom: string | null;
+	/** What the transactions call asked for. */
+	transactionsFetchOptions: EnableBankingTransactionFetchOptions;
 };
 
 type SyncFetchResult = {
@@ -126,7 +127,7 @@ type SyncRateLimit = {
 	retryAfterSeconds: number;
 };
 
-type PersistSyncResult = PersistTransactionsResult & {
+type PersistSyncResult = Pick<PersistTransactionsResult, 'transactionsAdded' | 'persistedTransactionIds'> & {
 	/** Rows whose own-transfer counterpart was a pending row the sync removed. */
 	formerCounterpartIds: string[];
 };
@@ -165,7 +166,13 @@ export class BankingSyncService {
 			where: {id: connectionId},
 			relations: {account: true},
 		});
-		if (!connection || connection.status !== BANK_CONNECTION_STATUSES.AUTHORIZED) return null;
+		if (
+			!connection ||
+			connection.provider === BANK_CONNECTION_PROVIDERS.FILE ||
+			connection.status !== BANK_CONNECTION_STATUSES.AUTHORIZED
+		) {
+			return null;
+		}
 
 		return this.runSynchronization(connection.account.id, connectionId);
 	}
@@ -178,7 +185,8 @@ export class BankingSyncService {
 		signal: AbortSignal,
 	): Promise<BankSyncRunResponse | null> {
 		if (!this.bankingIntegrationEnabled) throw new ServiceUnavailableException(BANKING_SERVICE_UNAVAILABLE);
-		await findOwnedConnection(this.bankConnectionRepository, accountId, connectionId);
+		const connection = await findOwnedConnection(this.bankConnectionRepository, accountId, connectionId);
+		if (connection.provider === BANK_CONNECTION_PROVIDERS.FILE) throw new FileConnectionNotSyncableException();
 		return this.runSynchronization(accountId, connectionId, psu, signal);
 	}
 
@@ -685,7 +693,7 @@ export class BankingSyncService {
 				balancesSucceeded,
 				transactionsSucceeded,
 				transactionsComplete,
-				transactionsFrom: fetchOptions.dateFrom ?? null,
+				transactionsFetchOptions: fetchOptions,
 			});
 
 			if (stopped()) break;
@@ -769,7 +777,21 @@ export class BankingSyncService {
 					);
 				}
 
+				// The account's coverage once this fetch is recorded: only a complete fetch extends it.
+				const {syncCoveredFrom, syncCoveredThrough} = accountResult.bankAccount;
+				const storedCoverage =
+					syncCoveredFrom && syncCoveredThrough ? {from: syncCoveredFrom, through: syncCoveredThrough} : null;
+				const recordsCoverage = accountResult.transactionsComplete && recordsSyncCoverage(connection.provider);
+				const coverage = recordsCoverage
+					? extendSyncCoverage(storedCoverage, {
+							options: accountResult.transactionsFetchOptions,
+							transactions: accountResult.transactions,
+							fetchedOn: fetchResult.fetchedThrough,
+						})
+					: storedCoverage;
+
 				let returnedTransactionIds: string[] = [];
+				let takenOverImportedIds: string[] = [];
 				if (accountResult.transactions.length > 0) {
 					const transactionPersistence = await this.bankTransactionPersistenceService.persistTransactions(
 						bankTransactionRepository,
@@ -777,9 +799,11 @@ export class BankingSyncService {
 						accountResult.transactions,
 						connection.aspspName,
 						connection.provider,
+						{syncCoverage: recordsSyncCoverage(connection.provider) ? coverage : null},
 					);
 					transactionsAdded += transactionPersistence.transactionsAdded;
 					returnedTransactionIds = transactionPersistence.persistedTransactionIds;
+					takenOverImportedIds = transactionPersistence.takenOverImportedIds;
 					persistedTransactionIds.push(...returnedTransactionIds);
 				}
 
@@ -789,9 +813,37 @@ export class BankingSyncService {
 							bankTransactionRepository,
 							accountResult.bankAccount.id,
 							returnedTransactionIds,
-							accountResult.transactionsFrom,
+							accountResult.transactionsFetchOptions.dateFrom ?? null,
 						)),
 					);
+				}
+
+				if (recordsCoverage && coverage) {
+					await bankAccountRepository.update(
+						{id: accountResult.bankAccount.id},
+						{syncCoveredFrom: coverage.from, syncCoveredThrough: coverage.through},
+					);
+					// Sync is final for these days now: imported rows there it never sent go.
+					const pendingStarts = await this.bankTransactionPersistenceService.findPendingTransactionStarts(
+						bankTransactionRepository,
+						[accountResult.bankAccount.id],
+					);
+					const finalDays = finalSyncDays({
+						provider: connection.provider,
+						syncCoveredFrom: coverage.from,
+						syncCoveredThrough: coverage.through,
+						oldestPendingDay: pendingStarts.get(accountResult.bankAccount.id) ?? null,
+					});
+					if (finalDays) {
+						const swept = await this.bankTransactionPersistenceService.sweepImportedRows(
+							bankTransactionRepository,
+							accountResult.bankAccount,
+							finalDays,
+							connection.aspspName,
+							takenOverImportedIds,
+						);
+						formerCounterpartIds.push(...swept.recomputeIds);
+					}
 				}
 
 				if (accountResult.transactionsSucceeded) {

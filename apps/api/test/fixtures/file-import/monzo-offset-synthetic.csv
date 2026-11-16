@@ -1,0 +1,4 @@
+id,created,amount,currency,local_amount,local_currency,category,emoji,description,address,notes,receipt
+tx_00001EXAMPLE,2026-10-02 08:15:30 +0000,-12.50,GBP,-12.50,GBP,groceries,,EXAMPLE SHOP,,,
+tx_00002EXAMPLE,2026-10-05 17:43:35 +0100,2500.00,GBP,2500.00,GBP,income,,EXAMPLE EMPLOYER,,,
+tx_00003EXAMPLE,2026-10-09 23:59:59 +0000,-62.10,GBP,-62.10,GBP,bills,,EXAMPLE ENERGY,,,

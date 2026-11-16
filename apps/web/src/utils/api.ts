@@ -16,6 +16,9 @@ export class HttpError extends Error {
 
   /** The api wrapper already showed a toast for this failure. */
   toasted = false;
+
+  /** The error reply's JSON body, when it had one: routes with typed refusals carry more than a message. */
+  body: unknown = undefined;
 }
 
 export class NetworkError extends HttpError {
@@ -159,7 +162,11 @@ async function request<T = unknown>(
   await completePendingLogout();
   init?.signal?.throwIfAborted();
   const url = API_BASE_URL + resource;
-  const headers = {'Content-Type': 'application/json', ...init?.headers};
+  // A multipart body sets its own content type with the boundary.
+  const headers =
+    init?.body instanceof FormData
+      ? {...init.headers}
+      : {'Content-Type': 'application/json', ...init?.headers};
 
   const epoch = sessionEpoch;
   const isWrite = !['GET', 'HEAD'].includes(init?.method ?? 'GET');
@@ -235,13 +242,22 @@ async function request<T = unknown>(
       throw toasted(new HttpError(response.status, response.statusText, retryAfterSeconds));
     }
     if (response.status >= 500) {
-      throw new HttpError(response.status, 'Tempo is temporarily unavailable. Please try again.');
+      const unavailable = new HttpError(
+        response.status,
+        'Tempo is temporarily unavailable. Please try again.',
+      );
+      // A busy refusal is a 503 with a typed body the caller can tell apart from an outage.
+      unavailable.body = await response.json().catch(() => undefined);
+      throw unavailable;
     }
 
     if (init?.parseJson === false) {
       throw new HttpError(response.status, response.statusText);
     }
-    const error = (await response.json()) as {message: string; code?: unknown};
+    // A proxy in front of the API can answer with a page rather than JSON (an upload over its size limit).
+    const error = ((await response.json().catch(() => null)) ?? {
+      message: response.statusText,
+    }) as {message: string; code?: unknown};
     if (response.status === 403 && error.message === EMAIL_NOT_VERIFIED_MESSAGE) {
       toast.error('Email not verified', {
         description: 'Please verify your email to continue using the app.',
@@ -249,12 +265,14 @@ async function request<T = unknown>(
       });
       throw toasted(new EmailNotVerifiedError(response.status, error.message));
     }
-    throw new HttpError(
+    const httpError = new HttpError(
       response.status,
       error.message,
       undefined,
       typeof error.code === 'string' ? error.code : undefined,
     );
+    httpError.body = error;
+    throw httpError;
   }
 
   if (response.status === 204) {
@@ -280,7 +298,9 @@ function get<T = unknown>(resource: string, init?: RequestOptions): Promise<T> {
   return request<T>(resource, {...init, method: 'GET'});
 }
 
-const json = (body: unknown) => (body === undefined ? undefined : JSON.stringify(body));
+/** A JSON body is serialized; a multipart form is sent as it is. */
+const json = (body: unknown) =>
+  body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body);
 
 function post<T = unknown>(resource: string, body?: unknown, init?: WriteOptions): Promise<T> {
   return request<T>(resource, {...init, method: 'POST', body: json(body)});

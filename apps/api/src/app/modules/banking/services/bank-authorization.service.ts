@@ -28,6 +28,7 @@ import {BankConnection} from '../bank-connection.entity';
 import {normalizeBankCode, truncate} from '../banking.utils';
 import {EnableBankingAccount, EnableBankingSession} from '../enable-banking.types';
 import {BankingAuthorizationStateError} from '../errors/banking-authorization-state.error';
+import {FileConnectionNotSyncableException} from '../errors/file-connection-not-syncable.exception';
 import {AspspCatalogService} from './aspsp-catalog.service';
 import {
 	ensureBankingIntegrationEnabled,
@@ -39,11 +40,17 @@ import {BankingAuthorizationStateService} from './banking-authorization-state.se
 import {type BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';
 import {BankingEncryptionService} from './banking-encryption.service';
 import {BankingSyncQueueService} from './banking-sync-queue.service';
-import {BANK_CONNECTION_STATUSES, BANK_SYNC_STATUSES, DESTRUCTIVE_CONNECTION_STATUSES} from './banking-sync.constants';
+import {
+	BANK_CONNECTION_PROVIDERS,
+	BANK_CONNECTION_STATUSES,
+	BANK_SYNC_STATUSES,
+	DESTRUCTIVE_CONNECTION_STATUSES,
+	FILE_CONNECTION_ASPSP,
+} from './banking-sync.constants';
 import {EnableBankingClient, EnableBankingClientError} from './enable-banking.client';
 import {OwnTransferService} from './own-transfer.service';
 
-const PROVIDER = 'enable-banking';
+const PROVIDER = BANK_CONNECTION_PROVIDERS.ENABLE_BANKING;
 const AUTHORIZATION_LOCK_WAIT_MS = 10_000;
 
 /** Starts bank authorizations and turns the provider callback into an authorized connection. */
@@ -73,6 +80,8 @@ export class BankAuthorizationService {
 		ensureBankingIntegrationEnabled(this.configurationService);
 		const aspspName = dto.aspspName.trim();
 		const aspspCountry = dto.aspspCountry.toUpperCase();
+		// Re-authorizing names the connection's bank; the imported-files connection has none.
+		if (aspspCountry === FILE_CONNECTION_ASPSP.country) throw new FileConnectionNotSyncableException();
 		const aspsps = await this.aspspCatalogService.getAspsps(aspspCountry);
 		const aspsp = aspsps.find((candidate) => candidate.name === aspspName && candidate.country === aspspCountry);
 

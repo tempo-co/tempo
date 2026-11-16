@@ -155,6 +155,11 @@ components:
     textColor: "{colors.foreground}"
     rounded: "{rounded.pill}"
     padding: "1px 10px"
+  alert:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.control}"
+    padding: "10px 12px"
   state-message:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.foreground}"
@@ -379,6 +384,24 @@ They stack collapsed and use the library's default lifetime. Distinct states get
 never imply data changed before the server confirms it. Motion is brief (0.2–0.3s), subtle,
 reduced-motion aware; never animate financial values continuously.
 
+### Alerts
+
+An inline message about the thing it sits in (a refused import, a bank to re-authorize, a failed
+save) is an `Alert` (`src/components/ui/alert.tsx`), never a hand-styled box or bare red text:
+1px border, control radius, `10px 12px` padding, a leading 16px glyph, a `text-sm` medium title,
+a muted `text-sm` description, actions under the text on phones and to the right from `sm` up.
+
+- **Variants.** `default` (surface field, muted glyph) explains or offers a next step;
+  `warning` (warning edge at 40%, field at 5%, warning glyph) is attention that is not a
+  failure; `destructive` (the same in destructive) is a refusal or a failed operation. Text
+  stays foreground and muted; the glyph and the edge carry the tone.
+- **Glyph.** Names the subject (`FileX` a refused file, `Clock` consent ending, `CloudOff` a
+  failed load), not the tone alone.
+- **Announcing.** `role='alert'` for a message that appears in answer to the owner,
+  `role='status'` for a quiet update, none for a notice present from the start.
+- A message about one field stays on the field; a failed list or section load is a
+  `StateMessage` (below).
+
 ### Empty and error states
 
 Empty, not-found and failed loads use `StateMessage` (`src/components/shared/state-message.tsx`),
@@ -433,6 +456,16 @@ responsive overlay with an explicit Save: a bottom drawer on phones and a dialog
 Session and access-token details use the same responsive presentation. Account deletion is its
 own one-row group with an outline button; destructive actions use the shared destructive
 variant. Selected values (the theme picker) use a clay ring, never the navigation underline.
+
+### File import
+
+Import shows on Connections only while the deployment has it on, and bank sync stays the
+primary action: **Import a file** is the outline button beside **Connect a bank**, and no copy
+calls import a fallback. Every step is one `ResponsiveDialog` that never closes by itself;
+closing it does not cancel an upload. A refusal is a `destructive` `Alert` ending "Nothing was
+imported." Questions are native radio rows, nothing preselected. Rows the bank never sent are
+never in the attention tone: nothing waits for the owner. The imported-files connection never
+shows consent or sync states. Each screen's layout and copy: `docs/file-import.md`.
 
 ## Do's and Don'ts
 

@@ -3,7 +3,7 @@ import {type Locator, type Page, expect} from '@playwright/test';
 import {createAccount} from '../data/account.data';
 import {REFRESH_RESULT} from '../data/bank-connection.data';
 import {API_URL} from '../fixtures';
-import {EMPTY_REVIEW_COUNTS, fulfillJson} from './api-mocks';
+import {EMPTY_REVIEW_COUNTS, FILE_IMPORT_OFF, fulfillJson} from './api-mocks';
 
 /** Opens a bank's details dialog from its card. */
 export async function openDetails(page: Page, card: Locator) {
@@ -33,6 +33,9 @@ export async function routeMockedBankApp(page: Page, baseURL: string | undefined
     if (url.origin === API_URL && url.pathname === '/bank-connections/aspsps')
       return fulfillJson(route, []);
     if (url.origin === API_URL && url.pathname === '/health') return fulfillJson(route, {});
+    // Connections asks whether file import is on: off unless a spec routes it.
+    if (url.origin === API_URL && url.pathname === '/bank-imports')
+      return fulfillJson(route, FILE_IMPORT_OFF, 404);
     // The navigation's review badge reads these on every page.
     if (url.origin === API_URL && url.pathname === '/bank-transactions/review-counts')
       return fulfillJson(route, EMPTY_REVIEW_COUNTS);

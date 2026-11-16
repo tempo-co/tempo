@@ -102,6 +102,7 @@ export class BankTransactionService {
 			.orderBy('transaction.bookingDate', 'DESC', 'NULLS LAST')
 			.addOrderBy('transaction.valueDate', 'DESC', 'NULLS LAST')
 			.addOrderBy('transaction.createdAt', 'DESC')
+			.addOrderBy('transaction.id', 'DESC')
 			.limit(limit);
 
 		const [transactions, total] = await query.getManyAndCount();

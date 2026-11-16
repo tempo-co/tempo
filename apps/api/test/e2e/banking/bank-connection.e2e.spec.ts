@@ -244,9 +244,12 @@ describe('BankConnectionController', () => {
 				transactionsFetched: 5,
 			});
 			expect(await bankTransactionRepository.countBy({bankAccountId: bankAccount.id})).toBe(5);
-			// The account's own window now starts from the date this complete fetch covered.
+			// The account's own window now starts from the date this complete fetch covered. The longest history
+			// covers from the day after its earliest row (2026-08-22): the bank does not say how far back it served.
 			expect(await bankAccountRepository.findOneByOrFail({id: bankAccount.id})).toMatchObject({
 				transactionsFetchedThrough: response.body.requestedTo,
+				syncCoveredFrom: '2026-08-23',
+				syncCoveredThrough: response.body.requestedTo,
 			});
 			const savedConnection = await bankConnectionRepository.findOneByOrFail({id: connection.id});
 			expect(savedConnection).toMatchObject({syncStatus: 'SUCCEEDED', lastSyncError: null});
@@ -293,6 +296,11 @@ describe('BankConnectionController', () => {
 			// The bank catalog fetched for the first refresh is reused.
 			expect(getAspsps).not.toHaveBeenCalled();
 			expect(await bankTransactionRepository.countBy({bankAccountId: bankAccount.id})).toBe(5);
+			// The incremental fetch starts inside the covered range, so it extends that range.
+			expect(await bankAccountRepository.findOneByOrFail({id: bankAccount.id})).toMatchObject({
+				syncCoveredFrom: '2026-08-23',
+				syncCoveredThrough: second.body.requestedTo,
+			});
 		} finally {
 			transport.mockRestore();
 			getAccountTransactions.mockReset();
@@ -1225,13 +1233,37 @@ describe('BankConnectionController', () => {
 		if (!originalBankAccount) throw new Error('Bank account was not persisted.');
 		expect(originalBankAccount.iban).toBe('NL91ABNA0417164300');
 		expect(originalBankAccount.transactionsFetchedThrough).toBe(firstRun!.requestedTo);
+		// A longest history without rows says nothing about the past: it covers only the day it was fetched.
+		expect(originalBankAccount).toMatchObject({
+			syncCoveredFrom: firstRun!.requestedTo,
+			syncCoveredThrough: firstRun!.requestedTo,
+		});
 		// The dormant account was last fetched longer ago than banks serve history without the user present.
 		const dormantFetchedThrough = addDays(firstRun!.requestedTo!, -200);
 		await bankAccountRepository.update(
 			{bankConnection: {id: originalConnection.id}, providerAccountId: 'provider-account-dormant'},
-			{transactionsFetchedThrough: dormantFetchedThrough},
+			{
+				transactionsFetchedThrough: dormantFetchedThrough,
+				syncCoveredFrom: addDays(dormantFetchedThrough, -60),
+				syncCoveredThrough: dormantFetchedThrough,
+			},
 		);
 		getAccountTransactions.mockClear();
+		// The bank serves the dormant account's last 80 days only, not the 207 Tempo asks for.
+		const dormantEarliestRow = addDays(firstRun!.requestedTo!, -80);
+		getAccountTransactions.mockImplementation(async (accountId) =>
+			fetchedTransactions(
+				accountId === 'provider-account-dormant'
+					? [
+							{
+								...makeTransactions('dormant')[0],
+								bookingDate: dormantEarliestRow,
+								valueDate: dormantEarliestRow,
+							},
+						]
+					: [],
+			),
+		);
 
 		const secondState = await authorize();
 		createSession.mockResolvedValueOnce({
@@ -1282,6 +1314,18 @@ describe('BankConnectionController', () => {
 		expect(refreshedBankAccount?.identificationHash).toBe('stable-account-reauth');
 		// The refreshed session reported no IBAN; the stored one is kept.
 		expect(refreshedBankAccount?.iban).toBe('NL91ABNA0417164300');
+		const today = firstRun!.requestedTo!;
+		const coverage = (providerAccountId: string) => {
+			const bankAccount = refreshedBankAccounts.find(
+				(candidate) => candidate.providerAccountId === providerAccountId,
+			);
+			return [bankAccount?.syncCoveredFrom, bankAccount?.syncCoveredThrough];
+		};
+		// The incremental fetch asked from a week before the range, so the range now starts there.
+		expect(coverage('provider-account-rotated')).toEqual([addDays(today, -7), today]);
+		// The bank did not fill the dormant account's gap, so its range starts again after the earliest row it sent.
+		expect(coverage('provider-account-dormant')).toEqual([addDays(dormantEarliestRow, 1), today]);
+		expect(coverage('provider-account-added')).toEqual([today, today]);
 		getAccountTransactions.mockReset();
 	});
 
@@ -1876,10 +1920,16 @@ describe('BankConnectionController', () => {
 				namedTransferPending,
 				cardPending,
 			];
-			expect(await synchronizeProviderRows(connection.id, firstFetch)).toMatchObject({
-				status: 'SUCCEEDED',
-				transactionsAdded: 7,
-			});
+			const firstRun = await synchronizeProviderRows(connection.id, firstFetch);
+			expect(firstRun).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 7});
+			const coverage = async () => {
+				const {syncCoveredFrom, syncCoveredThrough} = await bankAccountRepository.findOneByOrFail({
+					id: bankAccount.id,
+				});
+				return [syncCoveredFrom, syncCoveredThrough];
+			};
+			// The pending rows carry only their transaction date, so the earliest row is on 2026-08-20.
+			expect(await coverage()).toEqual(['2026-08-21', firstRun!.requestedTo]);
 			// Pending payments count, as in the bank's own app; pending own transfers are internal until they book.
 			expect(await totals()).toMatchObject({count: 7, spending: '85.00', income: '0.00'});
 			const releasedTransfer = await bankTransactionRepository.findOneByOrFail({
@@ -1921,13 +1971,15 @@ describe('BankConnectionController', () => {
 				ownTransferCounterpartId: releasedTransfer.id,
 			});
 
-			// A fetch with a row the client cannot read is incomplete, so it removes nothing.
+			// A fetch with a row the client cannot read is incomplete, so it removes nothing and covers nothing.
 			const unreadable = {entry_reference: 'lifecycle-unreadable', transaction_amount: {currency: 'EUR'}};
+			await bankAccountRepository.update(bankAccount.id, {syncCoveredThrough: '2026-08-30'});
 			expect(await synchronizeProviderRows(connection.id, [booked, unreadable])).toMatchObject({
 				status: 'PARTIAL',
 				transactionsAdded: 0,
 			});
 			expect(await totals()).toMatchObject({count: 7, spending: '85.00'});
+			expect(await coverage()).toEqual(['2026-08-21', '2026-08-30']);
 
 			// The hold and the second transfer were released, the tip and the IBAN transfer booked as new rows, the named
 			// transfer booked into its pending row and the card payment is still pending.
@@ -1945,6 +1997,7 @@ describe('BankConnectionController', () => {
 			});
 			// The window reaches back to the oldest pending row, so the fetch covers every row it removes.
 			expect(getAccountTransactions.mock.lastCall?.[1]).toMatchObject({dateFrom: '2026-08-20'});
+			expect(await coverage()).toEqual(['2026-08-20', firstRun!.requestedTo]);
 			const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
 			expect(rows.map(({amount, transactionStatus}) => [amount, transactionStatus]).sort()).toEqual([
 				['-10.00000000', 'BOOK'],
@@ -2538,8 +2591,13 @@ describe('BankConnectionController', () => {
 			bookingDate: '2026-08-21',
 			valueDate: '2026-08-21',
 		};
-		// Two payments with the same date, amount and currency, told apart only by their details.
-		const lookAlikes: EnableBankingTransaction[] = ['Example Cafe', 'Example Bakery'].map((counterpartyName) => ({
+		// Payments with the same date, amount and currency, told apart only by their details.
+		const lookAlikes: EnableBankingTransaction[] = [
+			'Example Cafe',
+			'Example Bakery',
+			'Example Deli',
+			'Example Florist',
+		].map((counterpartyName) => ({
 			amount: '3.50',
 			currency: 'EUR',
 			creditDebitIndicator: 'DBIT',
@@ -2562,6 +2620,19 @@ describe('BankConnectionController', () => {
 					(row) => [row.counterpartyName, row.id],
 				),
 			);
+			// Providers send no time of day, so same-day rows list in the order the bank sent them.
+			const sameDayOrder = async () => {
+				const listed = await verifiedAgent
+					.get(`/bank-connections/${connection.id}/transactions?limit=10`)
+					.expect(200);
+				return (listed.body.transactions as Array<{id: string}>).flatMap(({id}) =>
+					[...lookAlikeIds].flatMap(([counterpartyName, lookAlikeId]) =>
+						lookAlikeId === id ? [counterpartyName] : [],
+					),
+				);
+			};
+			const bankOrder = lookAlikes.map(({counterpartyName}) => counterpartyName);
+			expect(await sameDayOrder()).toEqual(bankOrder);
 
 			// Providers list the newest booking first, so the new row precedes the stored one.
 			getAccountTransactions.mockResolvedValueOnce(
@@ -2579,12 +2650,13 @@ describe('BankConnectionController', () => {
 			).toMatchObject({id, createdAt});
 			const storedCount = await bankTransactionRepository.countBy({bankAccountId: bankAccounts[0].id});
 
-			// The bank renames the stored payment's entry reference and rewrites both look-alikes' descriptions.
+			// The bank renames the stored payment's entry reference, rewrites the look-alikes' descriptions and sends them
+			// in another order.
 			getAccountTransactions.mockResolvedValueOnce(
 				fetchedTransactions([
 					newPayment,
 					{...storedPayment, entryReference: 'entry-stable-id-renamed'},
-					...lookAlikes.map((lookAlike) => ({
+					...lookAlikes.toReversed().map((lookAlike) => ({
 						...lookAlike,
 						description: `${lookAlike.counterpartyName} 22.08 Exampletown`,
 					})),
@@ -2603,6 +2675,8 @@ describe('BankConnectionController', () => {
 					description: `${counterpartyName} 22.08 Exampletown`,
 				});
 			}
+			// A later sync keeps when each row was first seen, so the list keeps the order of the first.
+			expect(await sameDayOrder()).toEqual(bankOrder);
 		} finally {
 			await bankConnectionRepository.delete(connection.id);
 		}
@@ -2972,6 +3046,12 @@ describe('BankConnectionController', () => {
 		getAccountBalances.mockRejectedValueOnce(new EnableBankingClientError('TOO_MANY_REQUESTS_EXAMPLE', 429, 17));
 		getAccountBalances.mockResolvedValue(makeBalances());
 		getAccountTransactions.mockResolvedValue(fetchedTransactions([]));
+		const covered = {
+			transactionsFetchedThrough: '2026-08-30',
+			syncCoveredFrom: '2026-06-01',
+			syncCoveredThrough: '2026-08-30',
+		};
+		await bankAccountRepository.update({bankConnection: {id: connection.id}}, covered);
 
 		try {
 			const response = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
@@ -2989,6 +3069,10 @@ describe('BankConnectionController', () => {
 			const saved = await bankConnectionRepository.findOneByOrFail({id: connection.id});
 			expect(saved).toMatchObject({status: 'AUTHORIZED', syncStatus: 'RATE_LIMITED'});
 			expect(saved.nextSyncAt!.getTime() - new Date(response!.finishedAt!).getTime()).toBe(15 * 60 * 1000);
+			// Neither account's transactions were fetched, so neither one's coverage moves.
+			const bankAccounts = await bankAccountRepository.findBy({bankConnection: {id: connection.id}});
+			expect(bankAccounts).toHaveLength(2);
+			for (const bankAccount of bankAccounts) expect(bankAccount).toMatchObject(covered);
 		} finally {
 			await bankConnectionRepository.delete(connection.id);
 		}
@@ -3107,6 +3191,12 @@ describe('BankConnectionController', () => {
 			});
 			if (!successfulBankAccount || !failedBankAccount) throw new Error('Expected both bank accounts.');
 			expect(await bankTransactionRepository.count({where: {bankAccountId: successfulBankAccount.id}})).toBe(5);
+			// Every page came back, so the window moves on, but rows it could not read leave the account uncovered.
+			expect(successfulBankAccount).toMatchObject({
+				transactionsFetchedThrough: response!.requestedTo,
+				syncCoveredFrom: null,
+				syncCoveredThrough: null,
+			});
 			expect(JSON.stringify(response)).not.toContain('ASPSP_ACCOUNT_NOT_ACCESSIBLE');
 			// The run keeps why it was partial, by Tempo account id, without provider ids or messages.
 			const failures = [
@@ -3191,6 +3281,8 @@ describe('BankConnectionController', () => {
 			expect(afterRetry.nextSyncAt!.getTime() - new Date(retry!.finishedAt!).getTime()).toBe(6 * 60 * 60 * 1000);
 			expect(await bankAccountRepository.findOneByOrFail({id: failedBankAccount.id})).toMatchObject({
 				transactionsFetchedThrough: null,
+				syncCoveredFrom: null,
+				syncCoveredThrough: null,
 			});
 		} finally {
 			warn.mockRestore();
@@ -3277,6 +3369,8 @@ describe('BankConnectionController', () => {
 			// Whether the pages covered the whole window is unknown, so the account keeps asking for its longest history.
 			expect(await bankAccountRepository.findOneByOrFail({id: bankAccount.id})).toMatchObject({
 				transactionsFetchedThrough: null,
+				syncCoveredFrom: null,
+				syncCoveredThrough: null,
 			});
 			expect(await bankConnectionRepository.findOneByOrFail({id: connection.id})).toMatchObject({
 				syncStatus: 'PARTIAL',

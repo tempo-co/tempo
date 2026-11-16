@@ -345,7 +345,8 @@ function normalizeOptionalIdentityAmount(value: string | null): string | null {
 	return value === null ? null : normalizeIdentityAmount(value);
 }
 
-function normalizeIdentityAmount(value: string): string {
+/** A decimal string in one canonical form, so `10.5` and `10.50` compare equal. */
+export function normalizeIdentityAmount(value: string): string {
 	const normalized = value.trim();
 	const match = normalized.match(/^([+-]?)(\d+)(?:\.(\d*))?$/);
 	if (!match) return normalized.toLowerCase();
