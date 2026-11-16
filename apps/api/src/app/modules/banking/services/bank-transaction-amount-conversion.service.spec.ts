@@ -1,6 +1,4 @@
-import {Repository} from 'typeorm';
-
-import {Account} from '@modules/account/account.entity';
+import {DataSource, Repository} from 'typeorm';
 
 import {BankAccount} from '../bank-account.entity';
 import {BankTransaction} from '../bank-transaction.entity';
@@ -12,32 +10,36 @@ import {OwnTransferService} from './own-transfer.service';
 describe('BankTransactionAmountConversionService', () => {
 	const NOW = new Date('2026-03-10T12:00:00Z');
 	let transactionQuery: jest.Mock;
+	let ownerQuery: jest.Mock;
 	let exchanges: {recomputeForOwnerSafely: jest.Mock};
 	let ownTransfers: {recomputeForOwnerSafely: jest.Mock};
 	let service: BankTransactionAmountConversionService;
 
 	/** One owner with one pending base-currency row, converted by the backfill when `converted` is 1. */
 	function pendingOwner(converted: number): void {
-		transactionQuery
-			.mockResolvedValueOnce([
-				{
-					accountId: 'owner-id',
-					baseCurrency: 'EUR',
-					currency: 'EUR',
-					fromDate: '2026-03-09',
-					toDate: '2026-03-09',
-					count: 1,
-				},
-			])
+		transactionQuery.mockResolvedValueOnce([
+			{accountId: 'owner-id', currency: 'EUR', fromDate: '2026-03-09', toDate: '2026-03-09', count: 1},
+		]);
+		ownerQuery.mockResolvedValueOnce([
+			{id: 'owner-id', baseCurrency: 'EUR', baseCurrencyRevision: 0, baseAmountsRevision: 0},
+		]);
+		// Inside the conversion transaction: the lock, the owner's current currency, the conversion.
+		ownerQuery
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([{baseCurrency: 'EUR', baseCurrencyRevision: 0}])
 			.mockResolvedValueOnce([{count: converted}]);
 	}
 
 	beforeEach(() => {
 		transactionQuery = jest.fn();
+		ownerQuery = jest.fn();
 		exchanges = {recomputeForOwnerSafely: jest.fn()};
 		ownTransfers = {recomputeForOwnerSafely: jest.fn()};
 		service = new BankTransactionAmountConversionService(
-			{update: jest.fn()} as unknown as Repository<Account>,
+			{
+				query: ownerQuery,
+				transaction: (work: (manager: unknown) => Promise<unknown>) => work({query: ownerQuery}),
+			} as unknown as DataSource,
 			{query: jest.fn().mockResolvedValue([])} as unknown as Repository<BankAccount>,
 			{query: transactionQuery} as unknown as Repository<BankTransaction>,
 			{ensureLatestRates: jest.fn(), ensureRates: jest.fn()} as unknown as FxRateService,

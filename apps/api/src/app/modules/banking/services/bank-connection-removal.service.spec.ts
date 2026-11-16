@@ -10,9 +10,11 @@ const BANK_CONNECTION_REMOVAL_SERVICE_DEPENDENCIES = [
 	'ownTransferService',
 	'consentRevocationService',
 	'fileAccountBalanceService',
+	'reportingCurrencyService',
 ] as const;
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
+	reportingCurrencyService: {reconcileSafely: jest.fn().mockResolvedValue(undefined)},
 	ownTransferService: {recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
 	consentRevocationService: {revokeSessions: jest.fn().mockResolvedValue(undefined)},
 	fileAccountBalanceService: {

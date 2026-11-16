@@ -20,9 +20,11 @@ const BANK_AUTHORIZATION_SERVICE_DEPENDENCIES = [
 	'connectionLockService',
 	'bankingSyncQueueService',
 	'ownTransferService',
+	'reportingCurrencyService',
 ] as const;
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
+	reportingCurrencyService: {reconcileSafely: jest.fn().mockResolvedValue(undefined)},
 	ownTransferService: {recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
 };
 

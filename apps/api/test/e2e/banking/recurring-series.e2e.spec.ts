@@ -2322,7 +2322,14 @@ describe('RecurringSeries', () => {
 			app.get(MerchantLogoService),
 		);
 		const readRestarted = async () =>
-			JSON.parse(JSON.stringify(await restarted.list({id: owner.id, baseCurrency: 'EUR'}, AS_OF))) as unknown;
+			JSON.parse(
+				JSON.stringify(
+					await restarted.list(
+						{id: owner.id, baseCurrency: 'EUR', baseCurrencyRevision: 0, baseAmountsRevision: 0},
+						AS_OF,
+					),
+				),
+			) as unknown;
 		const detect = jest.spyOn(detection, 'detectUndatedRecurringSeries');
 		try {
 			const before = await list(ownerAgent);
@@ -2579,8 +2586,7 @@ describe('RecurringSeries', () => {
 			);
 			ids.push(...rows.map(({id}) => id));
 		}
-		const read = async () =>
-			JSON.parse(JSON.stringify(await service.list({id: probeOwner.id, baseCurrency: 'EUR'}, AS_OF)));
+		const read = async () => JSON.parse(JSON.stringify(await service.list(probeOwner, AS_OF)));
 		const detect = jest.spyOn(detection, 'detectUndatedRecurringSeries');
 		try {
 			for (let round = 0; round < 40; round++) {

@@ -104,7 +104,8 @@ function useSpanView(overview: Overview | null, today: string, span: Span) {
   if (!overview) return {loaded: null, isError: false, refetch: daily.refetch};
   if (span !== '1m')
     return {loaded: monthSpanView(overview, span), isError: false, refetch: daily.refetch};
-  const month = daily.lastMonth;
+  // The 1M span is drawn against the month history's total, so both must be in one currency.
+  const month = daily.lastMonth?.currency === overview.currency ? daily.lastMonth : null;
   if (!month)
     return {loaded: null, isError: daily.isError, error: daily.error, refetch: daily.refetch};
   // A history shorter than the month has no balance to measure from (it is unknown, not zero): no change.

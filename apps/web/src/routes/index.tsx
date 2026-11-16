@@ -8,6 +8,11 @@ import {TooltipProvider} from '@/components/ui/tooltip';
 import {HomeDashboard} from '@/features/dashboard/components/home-dashboard';
 import {MonthDialog} from '@/features/dashboard/components/month-dialog';
 import {MONTH_PATTERN} from '@/features/dashboard/utils/month';
+import {
+  moneyFiguresReady,
+  reportingCurrencyKnown,
+  useReportingCurrency,
+} from '@/features/reporting-currency/api/use-reporting-currency';
 import {useLocalDate} from '@/hooks/use-local-date';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
@@ -31,8 +36,11 @@ function Index() {
   const canGoBack = useCanGoBack();
   const today = useLocalDate();
   const thisMonth = today.slice(0, 7);
+  const reporting = useReportingCurrency();
+  // Home asks for a currency or waits for its amounts first; a link to a month or list waits with it.
+  const ready = moneyFiguresReady(reporting);
   // A future month has no history yet, so it opens nothing.
-  const month = search.month && search.month <= thisMonth ? search.month : null;
+  const month = ready && search.month && search.month <= thisMonth ? search.month : null;
   const openMonth = useCallback(
     (next: string) => void navigate({search: (prev) => ({...prev, month: next})}),
     [navigate],
@@ -47,6 +55,9 @@ function Index() {
     if (canGoBack) router.history.back();
     else void navigate({replace: true, search: (prev) => ({...prev, month: undefined})});
   };
+
+  // Home and a linked dialog load together once it is known whether their figures may be added up at all.
+  if (!reportingCurrencyKnown(reporting)) return <AppBodyLayout>{null}</AppBodyLayout>;
 
   return (
     // One provider for Home and its month, so moving between figures shows the next tip without a new delay.

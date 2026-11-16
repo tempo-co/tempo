@@ -103,6 +103,8 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}`],
 	['get', `/merchant-logos/${RESOURCE_ID}/${'a'.repeat(64)}/mask-v3`],
 	['get', '/notifications'],
+	['get', '/reporting-currency'],
+	['put', '/reporting-currency'],
 	['patch', '/notifications/preferences'],
 	['put', '/notifications/subscriptions'],
 	['delete', '/notifications/subscriptions'],

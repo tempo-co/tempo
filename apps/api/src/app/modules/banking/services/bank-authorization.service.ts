@@ -49,6 +49,7 @@ import {
 } from './banking-sync.constants';
 import {EnableBankingClient, EnableBankingClientError} from './enable-banking.client';
 import {OwnTransferService} from './own-transfer.service';
+import {ReportingCurrencyService} from './reporting-currency.service';
 
 const PROVIDER = BANK_CONNECTION_PROVIDERS.ENABLE_BANKING;
 const AUTHORIZATION_LOCK_WAIT_MS = 10_000;
@@ -71,6 +72,7 @@ export class BankAuthorizationService {
 		private readonly connectionLockService: BankingConnectionLockService,
 		private readonly bankingSyncQueueService: BankingSyncQueueService,
 		private readonly ownTransferService: OwnTransferService,
+		private readonly reportingCurrencyService: ReportingCurrencyService,
 	) {}
 
 	async startAuthorization(
@@ -335,6 +337,8 @@ export class BankAuthorizationService {
 		if (!authorizedConnectionId) return;
 		// Account IBANs may have changed.
 		await this.ownTransferService.recomputeForOwnerSafely(accountId);
+		// Accounts that all hold one currency set it right away; a choice among several waits for the sync.
+		await this.reportingCurrencyService.reconcileSafely(accountId, {historySettled: false});
 		try {
 			await this.bankingSyncQueueService.enqueueInitialSync(authorizedConnectionId);
 		} catch (error) {

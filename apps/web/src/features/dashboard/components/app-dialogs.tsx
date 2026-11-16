@@ -5,6 +5,10 @@ import {TooltipProvider} from '@/components/ui/tooltip';
 import {MerchantsDialog} from '@/features/dashboard/components/merchants-dialog';
 import {RecurringDialog} from '@/features/dashboard/components/recurring-dialog';
 import type {AppDialogsSearch} from '@/features/dashboard/types/app-dialogs-search';
+import {
+  moneyFiguresReady,
+  useReportingCurrency,
+} from '@/features/reporting-currency/api/use-reporting-currency';
 import {useLocalDate} from '@/hooks/use-local-date';
 
 /** The recurring and merchants dialogs, over whichever page opened them. */
@@ -14,6 +18,8 @@ export function AppDialogs() {
   const router = useRouter();
   const canGoBack = useCanGoBack();
   const thisMonth = useLocalDate().slice(0, 7);
+  // A link to a list waits while the owner still has to choose a currency or its amounts are converted.
+  const ready = moneyFiguresReady(useReportingCurrency());
   // Replace rather than push, so closing the dialog still steps back over one entry.
   const selectSeries = useCallback(
     (series: string | null) =>
@@ -43,7 +49,7 @@ export function AppDialogs() {
     // One provider for the dialogs, so moving between figures shows the next tip without a new delay.
     <TooltipProvider delayDuration={300}>
       <RecurringDialog
-        open={search.recurring === 'open'}
+        open={ready && search.recurring === 'open'}
         selectedKey={search.series ?? null}
         onSelect={selectSeries}
         onOpenChange={(open) => {
@@ -51,7 +57,7 @@ export function AppDialogs() {
         }}
       />
       <MerchantsDialog
-        open={search.merchants === 'open'}
+        open={ready && search.merchants === 'open'}
         month={thisMonth}
         selectedId={search.merchant ?? null}
         onSelect={selectMerchant}

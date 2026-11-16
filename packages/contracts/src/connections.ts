@@ -137,7 +137,7 @@ export type BankConnection = {
 	lastSyncError: string | null;
 	nextSyncAt: string | null;
 	syncStatus: BankSyncStatus;
-	/** The owner's base currency; null until the first conversion run has picked one. */
+	/** The reporting currency; null while there is none or its amounts are being converted (`GET /reporting-currency`). */
 	baseCurrency: string | null;
 	bankAccounts: BankAccount[];
 };

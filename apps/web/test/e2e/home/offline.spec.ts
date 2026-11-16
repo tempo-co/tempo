@@ -9,7 +9,12 @@ import {
   monthTransactions,
 } from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
-import {fulfillJson, mockBankConnections, mockJson} from '../../utils/api-mocks';
+import {
+  SETTLED_REPORTING_CURRENCY,
+  fulfillJson,
+  mockBankConnections,
+  mockJson,
+} from '../../utils/api-mocks';
 
 const CACHE_KEY = 'tempo-offline-cache';
 type SavedCache = {
@@ -68,6 +73,7 @@ async function mockHome(page: Page, padding = 0) {
     url: LOGO_URL,
   });
   await mockHomeHistory(page);
+  await mockJson(page, '**/reporting-currency', SETTLED_REPORTING_CURRENCY);
   await page.route('**/bank-transactions/review-counts', (route) =>
     fulfillJson(route, {
       ...HOME_REVIEW_COUNTS,

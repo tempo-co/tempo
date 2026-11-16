@@ -1,5 +1,6 @@
 import {HttpException, Injectable, Logger, ValidationPipe} from '@nestjs/common';
 import {instanceToPlain} from 'class-transformer';
+import {DataSource} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 
@@ -14,6 +15,7 @@ import {safeErrorStack} from '../bank-sync-failure';
 import {ToolReadError} from '../mcp/errors';
 import type {ToolReader} from '../mcp/tools';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
+import {settleTotalsCurrency} from '../reporting-currency';
 import {BankConnectionQueryService} from './bank-connection-query.service';
 import {BankTransactionHistoryService} from './bank-transaction-history.service';
 import {BankTransactionSummaryService} from './bank-transaction-summary.service';
@@ -33,6 +35,7 @@ export class McpReaderService {
 		private readonly recurring: RecurringSeriesService,
 		private readonly history: BankTransactionHistoryService,
 		private readonly merchants: MerchantSpendingService,
+		private readonly dataSource: DataSource,
 	) {}
 
 	/** Capture the authenticated owner once; caller input can only filter that owner's data. */
@@ -43,7 +46,12 @@ export class McpReaderService {
 			try {
 				// These services explicitly map entities to the same @tempo/contracts shapes REST returns.
 				// Apply the global REST ClassSerializerInterceptor's class-transformer boundary too; it keeps the shape.
-				return instanceToPlain(await operation()) as T;
+				// Like REST's TotalsCurrencyInterceptor: no currency name for amounts read across a currency change.
+				return (await settleTotalsCurrency(
+					this.dataSource.manager,
+					account,
+					instanceToPlain(await operation()),
+				)) as T;
 			} catch (error) {
 				if (error instanceof HttpException) throw new ToolReadError(error.getStatus());
 				// Like REST's exception filter, log unexpected failures; name and stack frames only, never the message.

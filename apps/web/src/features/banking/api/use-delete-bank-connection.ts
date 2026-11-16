@@ -26,6 +26,8 @@ export const useDeleteBankConnection = () => {
       await Promise.all([
         queryClient.invalidateQueries({queryKey: bankQueryKeys.connections}),
         queryClient.invalidateQueries({queryKey: dashboardQueryKeys.root}),
+        // Removing a bank can settle or change the currency totals use.
+        queryClient.invalidateQueries({queryKey: bankQueryKeys.reportingCurrency}),
       ]);
     },
   });

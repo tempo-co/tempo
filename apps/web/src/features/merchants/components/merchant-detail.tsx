@@ -18,6 +18,7 @@ import {axisFormatter, axisTicks} from '@/features/dashboard/utils/chart-axis';
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {formatMoney, formatWholeMoney, toCents} from '@/features/dashboard/utils/money';
 import {latestWindow} from '@/features/dashboard/utils/period-window';
+import {useFiguresCurrencyAccepted} from '@/features/reporting-currency/api/use-reporting-currency';
 import {useIsMobile} from '@/hooks/use-is-mobile';
 import {useLocalDate} from '@/hooks/use-local-date';
 import {cn} from '@/utils/cn';
@@ -174,7 +175,9 @@ function PeriodsCard({merchant, hasIncome}: {merchant: MerchantGroup; hasIncome:
     to,
     asOf,
   );
-  const loaded = periods?.interval === interval ? periods : undefined;
+  const accepted = useFiguresCurrencyAccepted();
+  const loaded =
+    periods?.interval === interval && accepted(periods.baseCurrency) ? periods : undefined;
   const shown = loaded?.periods ?? [];
   const hasActivity = shown.some((period) => period.count > 0);
 

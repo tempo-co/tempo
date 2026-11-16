@@ -4,7 +4,7 @@ export type Account = {
 	name: string;
 	email: string;
 	isEmailVerified: boolean;
-	/** Null until the owner's first conversion run has picked a base currency. */
+	/** The reporting currency (`GET /reporting-currency`); null until one is set. */
 	baseCurrency: string | null;
 	/** IANA name of the owner's time zone (`Europe/Lisbon`); alert quiet hours and the MCP default date follow it. */
 	timeZone: string;

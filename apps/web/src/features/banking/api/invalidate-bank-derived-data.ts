@@ -25,5 +25,7 @@ export function invalidateBankDerivedData(
     queryClient.invalidateQueries({queryKey: recurringQueryKeys.root}),
     // Refund categories and own transfers change merchant totals too.
     queryClient.invalidateQueries({queryKey: merchantQueryKeys.root}),
+    // A finished sync or import can bring the question which currency totals use.
+    queryClient.invalidateQueries({queryKey: bankQueryKeys.reportingCurrency}),
   ]);
 }

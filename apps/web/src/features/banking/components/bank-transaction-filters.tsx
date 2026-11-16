@@ -20,17 +20,14 @@ import {useIsMobile} from '@/hooks/use-is-mobile';
 import {cn} from '@/utils/cn';
 
 import {useActiveBankAccounts} from '../api/use-active-bank-accounts';
-import {useGetAllBankConnections} from '../api/use-get-all-bank-connections';
 import type {BankTransactionFilterParams} from '../types/bank-transaction';
 import {BankTransactionAccountFilter} from './bank-transaction-account-filter';
-import {BankTransactionBaseAmountFilter} from './bank-transaction-base-amount-filter';
 import {BankTransactionCashFlowFilter} from './bank-transaction-cash-flow-filter';
 import {BankTransactionCategoryFilter} from './bank-transaction-category-filter';
 import {BankTransactionCategorySourceFilter} from './bank-transaction-category-source-filter';
 import {BankTransactionDateFilter} from './bank-transaction-date-filter';
 
-type FacetKey =
-  'bookingDate' | 'categories' | 'cashFlows' | 'bankAccountIds' | 'categorySources' | 'baseAmount';
+type FacetKey = 'bookingDate' | 'categories' | 'cashFlows' | 'bankAccountIds' | 'categorySources';
 
 type Facet = {
   key: FacetKey;
@@ -53,9 +50,6 @@ function useFacets(filters: BankTransactionFilterParams, isMobile: boolean): Fac
   const labels = useBankTransactionFilterLabels(filters);
   const summary = (key: FacetKey) => labels.find((label) => label.key === key)?.label;
   const {showsAccountFilter} = useActiveBankAccounts();
-  const currency = useGetAllBankConnections().bankConnections?.find(
-    (connection) => connection.baseCurrency,
-  )?.baseCurrency;
   const facets: (Omit<Facet, 'isSet'> | false)[] = [
     isMobile && {
       key: 'bookingDate',
@@ -86,12 +80,6 @@ function useFacets(filters: BankTransactionFilterParams, isMobile: boolean): Fac
       label: 'Category source',
       summary: summary('categorySources'),
       pane: <BankTransactionCategorySourceFilter filters={filters} />,
-    },
-    {
-      key: 'baseAmount',
-      label: `Amount in ${currency ?? 'base currency'}`,
-      summary: summary('baseAmount'),
-      pane: <BankTransactionBaseAmountFilter filters={filters} />,
     },
   ];
   return facets

@@ -7,6 +7,7 @@ import {TextAction} from '@/components/shared/text-action';
 import {useGetRecurringSummary} from '@/features/banking/api/use-get-recurring-summary';
 import {SeriesTile} from '@/features/banking/components/recurring-series-tile';
 import {formatAmount, formatRelativeDays} from '@/features/banking/utils/recurring-format';
+import {useFiguresCurrencyAccepted} from '@/features/reporting-currency/api/use-reporting-currency';
 import {cn} from '@/utils/cn';
 
 import {parseCalendarDate} from '../utils/drill-links';
@@ -36,7 +37,9 @@ const ROW =
  */
 export function RepeatsBlock({today, className}: {today: string; className?: string}) {
   const totals = useGetRecurringSummary(today);
-  const summary = totals.summary;
+  // Totals in another currency than the reporting one, or none while it is converted, wait for their refetch.
+  const accepted = useFiguresCurrencyAccepted();
+  const summary = accepted(totals.summary?.baseCurrency) ? totals.summary : undefined;
   const navigate = useNavigate({from: '/'});
   const open = (key?: string) =>
     void navigate({search: (prev) => ({...prev, recurring: 'open', series: key})});

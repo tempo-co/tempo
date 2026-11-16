@@ -599,6 +599,8 @@ test.describe('mocked Enable Banking bank connection', () => {
       try {
         await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id]);
         await expect.poll(() => reviewCountReads).toBe(1);
+        // Home reads the list once as it mounts, which waits for the reporting currency; count from there.
+        await expect(page.getByRole('region', {name: 'Where you stand'})).toBeVisible();
         readsBeforeRun = listReads;
         releases.get(MOCK_CONNECTION.id)!();
         // The next bank starts only after the previous refresh has settled.

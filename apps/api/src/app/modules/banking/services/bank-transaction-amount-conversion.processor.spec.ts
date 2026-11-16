@@ -11,13 +11,15 @@ import {BankTransactionAmountConversionJobData} from './bank-transaction-amount-
 
 describe('BankTransactionAmountConversionProcessor', () => {
 	const job = (name: string) => ({name}) as Job<BankTransactionAmountConversionJobData>;
-	const setup = (enabled: boolean) => {
+	const setup = (enabled: boolean | Record<string, boolean>) => {
 		const conversionService = {backfill: jest.fn().mockResolvedValue(undefined)};
 		const ownTransferService = {recomputeAllOwners: jest.fn().mockResolvedValue(undefined)};
 		const recurringSeriesService = {foldAllChangeNotes: jest.fn().mockResolvedValue(undefined)};
 		const processor = new BankTransactionAmountConversionProcessor(
 			conversionService as never,
-			{get: jest.fn().mockReturnValue(enabled)} as never,
+			{
+				get: jest.fn((key: string) => (typeof enabled === 'boolean' ? enabled : (enabled[key] ?? false))),
+			} as never,
 			ownTransferService as never,
 			recurringSeriesService as never,
 		);
@@ -42,6 +44,14 @@ describe('BankTransactionAmountConversionProcessor', () => {
 
 		expect(conversionService.backfill).toHaveBeenCalledTimes(1);
 		expect(ownTransferService.recomputeAllOwners).not.toHaveBeenCalled();
+	});
+
+	it('converts imported statements while bank synchronization is off', async () => {
+		const {conversionService, processor} = setup({BANKING_INTEGRATION_ENABLED: false, FILE_IMPORT_ENABLED: true});
+
+		await processor.process(job(BANK_TRANSACTION_AMOUNT_CONVERSION_JOB));
+
+		expect(conversionService.backfill).toHaveBeenCalledTimes(1);
 	});
 
 	it('runs the daily whole-history own-transfer recompute, then folds every owner’s history change notes', async () => {

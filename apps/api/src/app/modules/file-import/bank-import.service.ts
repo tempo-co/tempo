@@ -29,6 +29,7 @@ import {isManualCategorySource} from '@modules/banking/categorization/bank-trans
 import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
 import {MerchantLogoService} from '@modules/banking/merchant-logos/merchant-logo.service';
 import {isIbanIdentificationHash, verifyIbanAgainstIdentificationHash} from '@modules/banking/own-transfer/iban';
+import {lockReportingCurrencyForAmountWrites} from '@modules/banking/reporting-currency';
 import {
 	BankTransactionInput,
 	BankTransactionPersistenceService,
@@ -46,6 +47,7 @@ import {
 import {CurrencyExchangeService} from '@modules/banking/services/currency-exchange.service';
 import {FileAccountBalanceService} from '@modules/banking/services/file-account-balance.service';
 import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
+import {ReportingCurrencyService} from '@modules/banking/services/reporting-currency.service';
 import {FinalSyncDays, finalSyncDays} from '@modules/banking/sync-coverage';
 
 import {BANK_IMPORT_NEVER_SENT_ROW_KINDS, BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
@@ -182,6 +184,7 @@ export class BankImportService {
 		private readonly merchantLogoService: MerchantLogoService,
 		private readonly fileAccountBalanceService: FileAccountBalanceService,
 		private readonly layoutService: BankImportLayoutService,
+		private readonly reportingCurrencyService: ReportingCurrencyService,
 	) {}
 
 	/**
@@ -218,6 +221,7 @@ export class BankImportService {
 		let result: {record: BankImport; accounts: ImportedAccount[]; persistedTransactionIds: string[]};
 		try {
 			result = await this.dataSource.transaction(async (manager) => {
+				await lockReportingCurrencyForAmountWrites(manager, ownerId);
 				const {accounts, fileConnection} = await this.resolveTargets(manager, ownerId, accountRows, targets);
 				const syncedAccount = accounts.find(
 					({connection}) => connection.provider !== BANK_CONNECTION_PROVIDERS.FILE,
@@ -562,6 +566,7 @@ export class BankImportService {
 		let resolved: {record: BankImport; insertedTransactionIds: string[]};
 		try {
 			resolved = await this.dataSource.transaction(async (manager) => {
+				await lockReportingCurrencyForAmountWrites(manager, ownerId);
 				const {record} = await this.lockImport(manager, ownerId, owned);
 				// An imported-files account's connection after the record's own, the order an import and an undo take
 				// them in, so its balance is recomputed over rows and an entered balance no one else is changing.
@@ -1380,6 +1385,8 @@ export class BankImportService {
 
 	/** The steps sync runs after it persists rows, in the same order. */
 	private async afterRowsChanged(ownerId: Account['id'], transactionIds: readonly string[]): Promise<void> {
+		// An import can add accounts in another currency, and its history is complete once it commits.
+		await this.reportingCurrencyService.reconcileSafely(ownerId, {historySettled: true});
 		// Recompute first so new exchanges and own transfers are marked before the worker can claim them.
 		// Exchanges go first: own-transfer detection skips exchange legs.
 		await this.currencyExchangeService.recomputeForOwnerSafely(ownerId);

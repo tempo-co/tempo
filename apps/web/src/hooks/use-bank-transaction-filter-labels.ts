@@ -9,6 +9,7 @@ import {
 import {BOOKING_DATE_PRESETS} from '@/features/banking/utils/booking-date-presets';
 import {CASH_FLOW_LABELS, CATEGORY_STATUS_LABELS} from '@/features/banking/utils/drill-filters';
 import {formatBankTransactionCategorySource} from '@/features/banking/utils/formatters';
+import {useReportingCurrency} from '@/features/reporting-currency/api/use-reporting-currency';
 
 export type BankTransactionFilterKey = (typeof BANK_TRANSACTION_FILTER_KEYS)[number];
 
@@ -35,6 +36,7 @@ function dateLabel(range: NonNullable<BankTransactionFilterParams['bookingDate']
 /** One short label per filter in force, in the order the chips show them; the Filters panel summarizes with them. */
 export function useBankTransactionFilterLabels(filters: BankTransactionFilterParams) {
   const {accounts, needsAccountName} = useActiveBankAccounts();
+  const currency = useReportingCurrency().data?.currency ?? 'reporting currency';
   const chips: FilterLabel[] = [];
   if (filters.needsAttention) chips.push({key: 'needsAttention', label: 'To review'});
   if (filters.bookingDate?.from)
@@ -78,7 +80,11 @@ export function useBankTransactionFilterLabels(filters: BankTransactionFilterPar
   if (filters.baseAmount)
     chips.push({
       key: 'baseAmount',
-      label: filters.baseAmount === 'MISSING' ? 'No base amount yet' : 'Has base amount',
+      // Only links from a total set it: to list the rows the total leaves out, or exactly the ones it adds up.
+      label:
+        filters.baseAmount === 'MISSING'
+          ? `Missing ${currency} amount`
+          : `Included in ${currency} totals`,
     });
   if (filters.categoryStatuses?.length)
     chips.push({

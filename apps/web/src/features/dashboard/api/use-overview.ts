@@ -1,5 +1,7 @@
 import {useMemo} from 'react';
 
+import {useFiguresCurrencyAccepted} from '@/features/reporting-currency/api/use-reporting-currency';
+
 import {toCents} from '../utils/money';
 import {buildOverview, dayBalancePoints, historyFrom, lastMonthRange} from '../utils/overview';
 import {useGetBankBalanceTrend} from './use-get-bank-balance-trend';
@@ -15,13 +17,23 @@ export function useOverview(today: string, {enabled = true}: {enabled?: boolean}
   const from = historyFrom(today);
   const trend = useGetBankBalanceTrend('month', from, today, today, {enabled});
   const flow = useGetBankTransactionCashFlow('month', from, today, today, {enabled});
+  const accepted = useFiguresCurrencyAccepted();
+  // Only in the reporting currency: responses read on either side of a currency change, or during its conversion,
+  // are not shown or added together.
+  // An empty history has no figures to mislabel, so it shows as it is (importing, or none yet).
+  const shown =
+    trend.balanceTrend &&
+    flow.cashFlow &&
+    trend.balanceTrend.baseCurrency === flow.cashFlow.baseCurrency &&
+    ((trend.balanceTrend.periods.length === 0 && flow.cashFlow.periods.length === 0) ||
+      accepted(trend.balanceTrend.baseCurrency));
 
   const overview = useMemo(
     () =>
-      trend.balanceTrend && flow.cashFlow
+      shown && trend.balanceTrend && flow.cashFlow
         ? buildOverview({today, trend: trend.balanceTrend, flow: flow.cashFlow})
         : null,
-    [today, trend.balanceTrend, flow.cashFlow],
+    [shown, today, trend.balanceTrend, flow.cashFlow],
   );
   return {overview, ...settled([trend, flow], overview)};
 }
@@ -34,17 +46,23 @@ export function useLastMonth(today: string, enabled: boolean) {
   const range = useMemo(() => lastMonthRange(today), [today]);
   const trend = useGetBankBalanceTrend('day', range.base, range.to, today, {enabled});
   const totals = useGetBankTransactionTotals(range.from, range.to, {enabled});
+  const accepted = useFiguresCurrencyAccepted();
+  const shown = accepted(trend.balanceTrend?.baseCurrency) && accepted(totals.totals?.baseCurrency);
   const lastMonth = useMemo(
     () =>
-      trend.balanceTrend && totals.totals
+      shown &&
+      trend.balanceTrend &&
+      totals.totals &&
+      trend.balanceTrend.baseCurrency === totals.totals.baseCurrency
         ? {
             ...range,
+            currency: trend.balanceTrend.baseCurrency,
             days: dayBalancePoints(trend.balanceTrend),
             income: toCents(totals.totals.income),
             spending: toCents(totals.totals.spending),
           }
         : null,
-    [range, trend.balanceTrend, totals.totals],
+    [shown, range, trend.balanceTrend, totals.totals],
   );
   return {lastMonth, ...settled([trend, totals], lastMonth)};
 }
@@ -54,9 +72,17 @@ export function useYearBreakdowns(today: string) {
   const from = historyFrom(today);
   const categories = useGetBankTransactionBreakdown('year', 'category', from, today, today);
   const sources = useGetBankTransactionBreakdown('year', 'source', from, today, today);
+  const accepted = useFiguresCurrencyAccepted();
   const breakdowns =
-    categories.breakdown && sources.breakdown
-      ? {categories: categories.breakdown.periods, sources: sources.breakdown.periods}
+    categories.breakdown &&
+    accepted(categories.breakdown.baseCurrency) &&
+    sources.breakdown &&
+    categories.breakdown.baseCurrency === sources.breakdown.baseCurrency
+      ? {
+          categories: categories.breakdown.periods,
+          sources: sources.breakdown.periods,
+          currency: categories.breakdown.baseCurrency,
+        }
       : null;
   return {breakdowns, ...settled([categories, sources], breakdowns)};
 }

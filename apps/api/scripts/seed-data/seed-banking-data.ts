@@ -21,7 +21,9 @@ export async function seedBankingData(
 	const account = await app
 		.get<Repository<Account>>(getRepositoryToken(Account))
 		.findOneByOrFail({email: accountEmail});
-	await app.get<Repository<Account>>(getRepositoryToken(Account)).update(account.id, {baseCurrency: 'EUR'});
+	await app
+		.get<Repository<Account>>(getRepositoryToken(Account))
+		.update(account.id, {baseCurrency: 'EUR', baseCurrencyState: 'CONFIRMED'});
 	const fixtures = new BankingFixtures(app);
 
 	const bankConnection = await fixtures.createConnection(account, {

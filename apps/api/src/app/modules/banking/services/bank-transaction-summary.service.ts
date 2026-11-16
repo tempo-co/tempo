@@ -31,6 +31,7 @@ import type {BankTransactionSummaryQueryDto} from '../api/dtos/bank-transaction-
 import {BankTransaction} from '../bank-transaction.entity';
 import {addDays} from '../banking.utils';
 import {RecurringSeriesService} from '../recurring/recurring-series.service';
+import {type ReportingOwner, totalsCurrency} from '../reporting-currency';
 import {
 	averageCents,
 	buildSpendingPace,
@@ -88,9 +89,11 @@ export class BankTransactionSummaryService {
 	) {}
 
 	async getSummary(
-		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
+		owner: ReportingOwner,
 		{month, asOf}: BankTransactionSummaryQueryDto,
 	): Promise<BankTransactionSummary> {
+		const {id: accountId} = owner;
+		const baseCurrency = totalsCurrency(owner);
 		const monthDays = daysInMonth(month);
 		const monthStart = `${month}-01`;
 		const monthEnd = `${month}-${monthDays}`;
@@ -205,9 +208,11 @@ export class BankTransactionSummaryService {
 	}
 
 	async getCashFlow(
-		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
+		owner: ReportingOwner,
 		{interval, from, to, asOf}: BankTransactionCashFlowQueryDto,
 	): Promise<BankTransactionCashFlow> {
+		const {id: accountId} = owner;
+		const baseCurrency = totalsCurrency(owner);
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(BANKING_TRANSACTION_CASH_FLOW_RANGE);
 
@@ -240,9 +245,11 @@ export class BankTransactionSummaryService {
 	 * Only bookings up to the day the balance was reported are subtracted; later ones are not in it yet.
 	 */
 	async getBalanceTrend(
-		{id: accountId, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
+		owner: ReportingOwner,
 		{interval, from, to, asOf}: BankBalanceTrendQueryDto,
 	): Promise<BankBalanceTrend> {
+		const {id: accountId} = owner;
+		const baseCurrency = totalsCurrency(owner);
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(BANKING_BALANCE_TREND_RANGE);
 		const windows = starts.map((start) => {
@@ -316,10 +323,9 @@ export class BankTransactionSummaryService {
 		return {baseCurrency, interval, periods};
 	}
 
-	async getTotals(
-		{id, baseCurrency}: Pick<Account, 'id' | 'baseCurrency'>,
-		{filter}: BankTransactionTotalsQueryDto,
-	): Promise<BankTransactionTotals> {
+	async getTotals(owner: ReportingOwner, {filter}: BankTransactionTotalsQueryDto): Promise<BankTransactionTotals> {
+		const {id} = owner;
+		const baseCurrency = totalsCurrency(owner);
 		const query = createOwnerScopedQuery(this.bankTransactionRepository, id);
 		const recurringIds = filter?.recurringSeriesKey
 			? await this.recurringSeriesService.findTransactionIds(id, filter.recurringSeriesKey)

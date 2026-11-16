@@ -19,7 +19,9 @@ test.describe('currency exchanges', () => {
     await expect(exchange.getByRole('heading', {name: 'One currency to another'})).toBeVisible();
     await expect(exchange).toContainText('Excluded from income and spending');
     // Exchanges are never offered as own transfers.
-    await expect(inspector.getByRole('button', {name: 'Transfer settings', exact: true})).toHaveCount(0);
+    await expect(
+      inspector.getByRole('button', {name: 'Transfer settings', exact: true}),
+    ).toHaveCount(0);
 
     const counterpartCard = exchange.getByTestId('movement-counterpart');
     await expect(counterpartCard).toContainText('Revolut · USD');

@@ -52,7 +52,7 @@ export type BankTransactionSummary = {
 	month: string;
 	through: string;
 	daysInMonth: number;
-	/** Null until the owner's first conversion run has picked a base currency. */
+	/** The reporting currency; null while there is none or its amounts are being converted (`GET /reporting-currency`). */
 	baseCurrency: string | null;
 	totals: {spending: string; income: string; net: string; ownTransfers: string};
 	/** Rows in the period left out of the totals. */

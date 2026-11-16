@@ -13,4 +13,6 @@ export const bankQueryKeys = {
   transactions: (filters: BankTransactionFilterParams, sort: BankTransactionSortParams) =>
     ['bank-transactions', 'ledger', filters, sort] as const,
   transactionsRoot: ['bank-transactions'] as const,
+  /** The reporting currency: whether the owner is asked to choose one depends on their accounts and history. */
+  reportingCurrency: ['reporting-currency'] as const,
 };

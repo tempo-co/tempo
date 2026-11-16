@@ -111,10 +111,12 @@ async function mockLedger(
   });
   const matching = (params: URLSearchParams) => {
     const categories = params.getAll('filter[categories][]');
+    const baseAmount = params.get('filter[baseAmount]');
     return rows.filter(
       (candidate) =>
         (params.get('filter[needsAttention]') !== 'true' || candidate.toReview) &&
-        (categories.length === 0 || categories.includes(String(candidate.category))),
+        (categories.length === 0 || categories.includes(String(candidate.category))) &&
+        (!baseAmount || (baseAmount === 'MISSING') === (candidate.amountInBaseCurrency === null)),
     );
   };
   await page.route('**/bank-transactions?**', (route) => {
@@ -139,6 +141,7 @@ async function mockLedger(
     const selected = matching(params);
     const sum = (sign: number) =>
       selected
+        .filter((candidate) => candidate.amountInBaseCurrency !== null)
         .map((candidate) => Number(candidate.amount))
         .filter((amount) => Math.sign(amount) === sign)
         .reduce((total, amount) => total + Math.abs(amount), 0);
@@ -148,7 +151,11 @@ async function mockLedger(
       income: sum(1).toFixed(2),
       net: (sum(1) - sum(-1)).toFixed(2),
       count: selected.length,
-      excluded: {unknownDirection: 0, missingBaseAmount: 0},
+      excluded: {
+        unknownDirection: 0,
+        missingBaseAmount: selected.filter((candidate) => candidate.amountInBaseCurrency === null)
+          .length,
+      },
     } satisfies BankTransactionTotals);
   });
   return requests;
@@ -282,6 +289,34 @@ test('shows what a filter matches, spent and earned, swapping the line once', as
   await expect(summary).toHaveText('40 transactions · €400.00 spent');
 });
 
+test('names the rows a filtered total leaves out without an amount in the reporting currency, and lists them', async ({
+  page,
+}) => {
+  // Two shopping rows in another currency that has no EUR amount yet.
+  const rows = history().map((candidate, index) =>
+    index === 9 || index === 12
+      ? {...candidate, currency: 'CHF', amount: '-30.00', amountInBaseCurrency: null}
+      : candidate,
+  );
+  const requests = await mockLedger(page, rows);
+  await page.setViewportSize({width: 1440, height: 900});
+  await page.goto(`/bank-transactions?categories=${encodeURIComponent('["SHOPPING"]')}`);
+  const summary = page.getByTestId('bank-transactions-summary');
+  await expect(summary).toHaveText('40 transactions · €380.00 spent');
+  const missing = page.getByRole('link', {name: '2 transactions aren’t included in EUR totals'});
+
+  await missing.click();
+
+  await expect(page).toHaveURL(/baseAmount=MISSING/);
+  expect(last(requests.list)?.get('filter[categories][]')).toBe('SHOPPING');
+  await expect(listRows(page)).toHaveCount(2);
+  await expect(summary).toHaveText('2 transactions');
+  await expect(missing).toHaveCount(0);
+  await page.getByRole('button', {name: 'Remove filter: Missing EUR amount'}).click();
+  await expect(page).not.toHaveURL(/baseAmount/);
+  await expect(summary).toHaveText('40 transactions · €380.00 spent');
+});
+
 for (const phone of [false, true]) {
   test(`To review lists exactly the rows the nav badge counts (${phone ? 'phone' : 'desktop'})`, async ({
     page,
@@ -374,7 +409,6 @@ test('filters from a two-pane panel whose options alone scroll', async ({page}) 
     'Cash flow',
     'Bank accounts',
     'Category source',
-    'Amount in EUR',
   ]);
   await panel.evaluate((element) => Promise.all(element.getAnimations().map((a) => a.finished)));
   const panelBox = await boxOf(panel);
@@ -425,6 +459,7 @@ test('shows every filter in force as a removable chip, Home drills included', as
     categoryStatuses: JSON.stringify(['FAILED']),
     categories: JSON.stringify(['FOOD_AND_DRINK', 'SHOPPING', 'HEALTH']),
     bookingDate: JSON.stringify({from: '2026-10-03', to: '2026-10-20'}),
+    baseAmount: 'PRESENT',
   });
   await page.setViewportSize({width: 1440, height: 900});
   await page.goto(`/bank-transactions?${params}`);
@@ -435,6 +470,7 @@ test('shows every filter in force as a removable chip, Home drills included', as
   // The date has its own control on larger screens, so it is no chip there.
   await expect(chips).toHaveText([
     '3 categories',
+    'Included in EUR totals',
     'Not categorized',
     'One recurring payment',
     'One merchant',
@@ -444,6 +480,9 @@ test('shows every filter in force as a removable chip, Home drills included', as
   await expect(page).not.toHaveURL(/merchantGroup/);
   await expect.poll(() => last(requests.list)?.has('filter[merchantGroup]')).toBe(false);
   expect(last(requests.list)?.get('filter[incomeSource]')).toBe('Example Employer');
+  await expect(chips).toHaveCount(5);
+  await page.getByRole('button', {name: 'Remove filter: Included in EUR totals'}).click();
+  await expect(page).not.toHaveURL(/baseAmount/);
   await expect(chips).toHaveCount(4);
 
   await page.setViewportSize({width: 390, height: 844});
@@ -517,7 +556,8 @@ test('keeps rows, tiles and the Category column in place with worst-case values 
       await mockLedger(page, worstCase(), {accounts});
       await page.goto('/bank-transactions');
       await expect(listRows(page)).toHaveCount(4);
-      const account = (index: number) => listRows(page).nth(index).getByTestId('ledger-row-account');
+      const account = (index: number) =>
+        listRows(page).nth(index).getByTestId('ledger-row-account');
       // Several accounts in one bank and currency: each row names its own account, whatever the payment's
       // currency, and so does a closed account's row.
       if (accounts === 'several') {

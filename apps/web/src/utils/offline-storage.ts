@@ -23,6 +23,8 @@ const RECENT_DATA_BUDGET = 2 * 1024 * 1024;
 const savedQueryRoots = new Map<unknown, 'kept' | 'recent'>([
   [CURRENT_ACCOUNT_KEY[0], 'kept'],
   [bankQueryKeys.connections[0], 'kept'],
+  // Home shows saved figures only once it knows whether they may be added up.
+  [bankQueryKeys.reportingCurrency[0], 'kept'],
   [bankQueryKeys.connectedBankLogos[0], 'kept'],
   ['bank-logo', 'recent'],
   [bankQueryKeys.transactionsRoot[0], 'recent'],

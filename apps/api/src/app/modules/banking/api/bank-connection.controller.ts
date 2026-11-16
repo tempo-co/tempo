@@ -12,6 +12,7 @@ import {
 	Query,
 	Req,
 	Res,
+	UseInterceptors,
 } from '@nestjs/common';
 import {Throttle, minutes} from '@nestjs/throttler';
 import type {
@@ -45,7 +46,9 @@ import {BankConnectionCallbackDto} from './dtos/bank-connection-callback.dto';
 import {BankConnectionRemoveDto} from './dtos/bank-connection-remove.dto';
 import {BankConnectionTransactionsQueryDto} from './dtos/bank-connection-transactions-query.dto';
 import {SetBankAccountBalanceDto} from './dtos/set-bank-account-balance.dto';
+import {TotalsCurrencyInterceptor} from './totals-currency.interceptor';
 
+@UseInterceptors(TotalsCurrencyInterceptor)
 @Controller('bank-connections')
 export class BankConnectionController {
 	constructor(

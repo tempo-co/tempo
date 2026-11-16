@@ -7,6 +7,7 @@ import {StateMessage} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {Toaster} from '@/components/ui/sonner';
 import {useAppOpenBankRefresh} from '@/features/banking/api/use-app-open-bank-refresh';
+import {useWatchTotalsCurrency} from '@/features/reporting-currency/api/use-reporting-currency';
 import {useConnection} from '@/hooks/use-connection';
 import {
   markSavedSessionShown,
@@ -32,6 +33,7 @@ export function App() {
     refetch,
   } = useCurrentAccount();
   useAppOpenBankRefresh();
+  useWatchTotalsCurrency();
   const isShowingSavedSession = isSavedSessionUnconfirmed && !isOnline;
   useEffect(() => {
     if (isShowingSavedSession) markSavedSessionShown();

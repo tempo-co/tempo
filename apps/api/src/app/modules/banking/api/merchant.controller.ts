@@ -1,4 +1,4 @@
-import {Controller, Get, Param, Query} from '@nestjs/common';
+import {Controller, Get, Param, Query, UseInterceptors} from '@nestjs/common';
 import {Throttle} from '@nestjs/throttler';
 import type {MerchantGroup, MerchantGroupPeriods, MerchantGroupsResponse, MerchantRanking} from '@tempo/contracts';
 
@@ -11,7 +11,9 @@ import {BROWSING_THROTTLE} from './constants/throttle.constants';
 import {BankTransactionCashFlowQueryDto} from './dtos/bank-transaction-cash-flow-query.dto';
 import {MerchantGroupsQueryDto, MerchantRankingQueryDto} from './dtos/merchant-query.dto';
 import {MerchantGroupIdPipe} from './pipes/merchant-group-id.pipe';
+import {TotalsCurrencyInterceptor} from './totals-currency.interceptor';
 
+@UseInterceptors(TotalsCurrencyInterceptor)
 @Controller('merchants')
 export class MerchantController {
 	constructor(private readonly merchantSpendingService: MerchantSpendingService) {}
