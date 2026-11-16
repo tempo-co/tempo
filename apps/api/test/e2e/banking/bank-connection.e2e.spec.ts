@@ -26,6 +26,7 @@ import {BankTransactionFxRate} from '@modules/banking/bank-transaction-fx-rate.e
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {addDays} from '@modules/banking/banking.utils';
 import {EnableBankingBalance, EnableBankingTransaction} from '@modules/banking/enable-banking.types';
+import {BankTransactionAmountConversionQueueService} from '@modules/banking/services/bank-transaction-amount-conversion.queue.service';
 import {BankTransactionPersistenceService} from '@modules/banking/services/bank-transaction-persistence.service';
 import {BankingAuthorizationStateService} from '@modules/banking/services/banking-authorization-state.service';
 import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
@@ -171,6 +172,7 @@ describe('BankConnectionController', () => {
 		getAccountTransactions.mockImplementation((...args) =>
 			EnableBankingClient.prototype.getAccountTransactions.call(enableBankingClient, ...args),
 		);
+		const conversion = jest.spyOn(app.get(BankTransactionAmountConversionQueueService), 'enqueueConversion');
 
 		try {
 			const response = await verifiedAgent
@@ -202,6 +204,8 @@ describe('BankConnectionController', () => {
 				expectedPresence,
 			);
 			expect(transport).toHaveBeenCalledTimes(3);
+			// The rows it wrote are converted right away, not at the next scheduled run.
+			expect(conversion).toHaveBeenCalledWith(`${connection.accountId}-rows`);
 			for (const [, init] of transport.mock.calls) {
 				const headers = new Headers(init?.headers);
 				expect(headers.get('Psu-Ip-Address')).toEqual(expectedPresence.ipAddress);

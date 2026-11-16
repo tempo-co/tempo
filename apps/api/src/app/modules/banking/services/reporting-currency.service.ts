@@ -98,7 +98,8 @@ export class ReportingCurrencyService {
 	/**
 	 * Brings the state up to date with the owner's active accounts, after anything that adds, removes or fills them
 	 * (authorization, sync, import, removal). `historySettled` says a sync or import of history has finished, so the
-	 * owner can be asked now; an authorization only knows the accounts. Never throws: the next event retries.
+	 * owner can be asked now; an authorization only knows the accounts. After a sync or import it also converts the
+	 * rows it wrote right away, rather than at the next 15-minute run. Never throws: the next event retries.
 	 */
 	async reconcileSafely(ownerId: Account['id'], {historySettled}: {historySettled: boolean}): Promise<void> {
 		try {
@@ -130,6 +131,7 @@ export class ReportingCurrencyService {
 				return null;
 			});
 			if (revision !== null) await this.enqueueConversion(ownerId, revision);
+			else if (historySettled) await this.enqueueConversion(ownerId, 'rows');
 		} catch (error) {
 			this.logger.warn(`Reporting currency reconciliation failed: ${safeErrorName(error)}`);
 		}
@@ -149,9 +151,9 @@ export class ReportingCurrencyService {
 	}
 
 	/** The 15-minute conversion run catches up if this fails. */
-	private async enqueueConversion(ownerId: string, revision: number): Promise<void> {
+	private async enqueueConversion(ownerId: string, reason: number | 'rows'): Promise<void> {
 		try {
-			await this.conversionQueue.enqueueConversion(`${ownerId}-${revision}`);
+			await this.conversionQueue.enqueueConversion(`${ownerId}-${reason}`);
 		} catch (error) {
 			this.logger.warn(`Amount conversion enqueue failed: ${safeErrorName(error)}`);
 		}

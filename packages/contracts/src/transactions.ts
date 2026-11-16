@@ -165,7 +165,7 @@ export type BankTransaction = {
 	amountInBaseCurrency: string | null;
 	/** How the base-currency amount was derived; null while unconverted. */
 	baseAmountMethod: BankTransactionBaseAmountMethod | null;
-	/** The ECB reference rate date used when `baseAmountMethod` is `ECB`. */
+	/** The ECB reference rate date used when `baseAmountMethod` is `ECB`; the older one when two rates were combined. */
 	baseAmountRateDate: string | null;
 	referenceNumber: string | null;
 	referenceNumberScheme: string | null;

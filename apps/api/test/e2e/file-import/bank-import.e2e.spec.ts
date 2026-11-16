@@ -30,6 +30,7 @@ import {
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {EnableBankingTransaction} from '@modules/banking/enable-banking.types';
 import {RecurringSeriesHide} from '@modules/banking/recurring/recurring-series-hide.entity';
+import {BankTransactionAmountConversionQueueService} from '@modules/banking/services/bank-transaction-amount-conversion.queue.service';
 import {BankingConnectionLockService} from '@modules/banking/services/banking-connection-lock.service';
 import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
 import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
@@ -448,8 +449,12 @@ describe('Bank imports', () => {
 
 	it('imports a statement archive into a new account, adds nothing on a second drop and reads the unzipped files the same way', async () => {
 		const {owner, agent} = await createOwner();
+		const conversion = jest.spyOn(app.get(BankTransactionAmountConversionQueueService), 'enqueueConversion');
 
 		const first = await drop(agent, [ARCHIVE]).expect(201);
+		// The rows it added are converted right away, not at the next scheduled run.
+		expect(conversion).toHaveBeenCalledWith(`${owner.id}-rows`);
+		conversion.mockRestore();
 
 		const connection = await fileConnection(owner);
 		expect(connection).toMatchObject({

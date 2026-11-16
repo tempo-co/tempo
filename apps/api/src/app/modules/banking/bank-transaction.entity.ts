@@ -87,7 +87,7 @@ export class BankTransaction {
 	@Column({type: 'varchar', length: 16, nullable: true})
 	baseAmountMethod: BankTransactionBaseAmountMethod | null;
 
-	/** The ECB reference rate date used, when `baseAmountMethod` is `ECB`. */
+	/** The ECB reference rate date used (the older one when two rates were combined), when `baseAmountMethod` is `ECB`. */
 	@Column({type: 'date', nullable: true})
 	baseAmountRateDate: string | null;
 
