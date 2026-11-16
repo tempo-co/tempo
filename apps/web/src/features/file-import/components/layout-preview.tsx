@@ -88,6 +88,7 @@ export function LayoutPreview({
   // A file that states no currency previews in the default one; the owner's choice shows at once.
   const rowCurrency = (row: BankImportLayoutPreviewRow) =>
     currencyNeeded ? currency : row.currency;
+  const hiddenRows = preview.rowCount - preview.firstRows.length - preview.lastRows.length;
   const totals = preview.totals.map((total) => ({
     ...total,
     currency: currencyNeeded ? currency : total.currency,
@@ -121,10 +122,9 @@ export function LayoutPreview({
           {preview.firstRows.map((row, index) => (
             <PreviewRow key={`first-${index}`} row={row} currency={rowCurrency(row)} />
           ))}
-          {preview.lastRows.length > 0 && (
+          {hiddenRows > 0 && (
             <li className='py-2 text-center text-xs text-muted-foreground'>
-              {formatCount(preview.rowCount - preview.firstRows.length - preview.lastRows.length)}{' '}
-              more
+              {formatCount(hiddenRows)} more
             </li>
           )}
           {preview.lastRows.map((row, index) => (

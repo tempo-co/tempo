@@ -63,7 +63,8 @@ export class BankImportController {
 		@Body(BANK_IMPORT_ACCOUNT_CHOICES_FIELD) accountChoices: unknown,
 		@CurrentAccount() account: Account,
 	): Promise<BankImportSummary> {
-		if (!files?.length) throw new BadRequestException(NO_FILES);
+		// Checked as an array: a tampered request must not pass a look-alike with a length.
+		if (!Array.isArray(files) || files.length === 0) throw new BadRequestException(NO_FILES);
 		if (bankAccountId !== undefined && !(typeof bankAccountId === 'string' && isUUID(bankAccountId))) {
 			throw new BadRequestException(INVALID_ACCOUNT_ID);
 		}
@@ -94,7 +95,9 @@ export class BankImportController {
 		@Body() fields: Record<string, unknown> | undefined,
 		@CurrentAccount() account: Account,
 	): Promise<BankImportLayoutProposal> {
-		if (files?.length !== 1 || Object.keys(fields ?? {}).length > 0) throw new BadRequestException(ONE_FILE);
+		if (!Array.isArray(files) || files.length !== 1 || Object.keys(fields ?? {}).length > 0) {
+			throw new BadRequestException(ONE_FILE);
+		}
 		return this.layoutService.propose(account.id, files[0].buffer);
 	}
 

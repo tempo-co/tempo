@@ -1016,6 +1016,42 @@ test.describe('statement file import on Connections', () => {
     ]);
   });
 
+  // The API previews the first 5 rows and the last 2, so 6 or 7 rows hide none.
+  for (const [rowCount, lastShown, separator] of [
+    [6, 1, null],
+    [7, 2, null],
+    [8, 2, '1 more'],
+  ] as const) {
+    test(`a preview of ${rowCount} rows shows ${separator ? `"${separator}"` : 'no separator'} between the first and last rows`, async ({
+      page,
+    }) => {
+      const {preview: sample} = layoutProposal();
+      await mockFileImport(page, {
+        mapper: true,
+        uploads: [refused({code: 'layout_unknown', file: 1})],
+        proposals: [
+          proposed(
+            layoutProposal({
+              preview: {...sample, rowCount, lastRows: sample.lastRows.slice(-lastShown)},
+            }),
+          ),
+        ],
+      });
+      await page.goto('/bank-connections');
+      const dialog = await openImport(page);
+      await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('export.csv')]);
+      await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+
+      const preview = dialog.getByTestId('bank-import-layout-preview');
+      await expect(preview.getByText(`${rowCount} transactions`)).toBeVisible();
+      await expect(preview.getByTestId('bank-import-layout-row')).toHaveCount(
+        sample.firstRows.length + lastShown,
+      );
+      await expect(preview.getByText(/^\s*\d+\s+more\s*$/)).toHaveCount(separator ? 1 : 0);
+      if (separator) await expect(preview.getByText(separator)).toBeVisible();
+    });
+  }
+
   test('a file whose dates read both ways asks for a check, and one that names no currency or bank asks for them', async ({
     page,
   }) => {

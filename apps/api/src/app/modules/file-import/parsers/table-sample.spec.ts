@@ -14,6 +14,7 @@ describe('maskTable', () => {
 	it('masks letters by case and digits, keeps punctuation, spaces and length, and cuts a cell at 60 characters', () => {
 		const masked = maskTable({
 			header: null,
+			headerAsWritten: false,
 			linesAbove: [],
 			rows: [['Ünïcode Ex-Shop 12,50 €', 'x'.repeat(70)]],
 			linesBelow: [],
@@ -32,6 +33,7 @@ describe('maskTable', () => {
 		];
 		const masked = maskTable({
 			header: ['Af Bij', 'Munt', `Naam ${'n'.repeat(90)}`, 'Bedrag'],
+			headerAsWritten: true,
 			linesAbove: [{line: 0, cells: ['Rekening NL91ABNA0417164300', 'EUR']}],
 			rows,
 			linesBelow: [['Totaal', '10,00']],
@@ -61,6 +63,7 @@ describe('maskTable', () => {
 	])('masks every value of a column with $name', ({column}) => {
 		const masked = maskTable({
 			header: null,
+			headerAsWritten: false,
 			linesAbove: [],
 			rows: column.map((value) => [value, '1']),
 			linesBelow: [],
@@ -87,6 +90,7 @@ describe('maskTable', () => {
 	])('sends the words of a direction or status column as written: $name', ({column, sent}) => {
 		const masked = maskTable({
 			header: null,
+			headerAsWritten: false,
 			linesAbove: [],
 			rows: column.map((value) => [value]),
 			linesBelow: [],
@@ -99,6 +103,7 @@ describe('maskTable', () => {
 	it('masks a header cell with a digit, which a header never needs', () => {
 		const masked = maskTable({
 			header: ['Datum', 'Rekening NL91ABNA0417164300'],
+			headerAsWritten: true,
 			linesAbove: [],
 			rows: [['1', '2']],
 			linesBelow: [],
@@ -112,6 +117,7 @@ describe('maskTable', () => {
 		const iban = 'DE89370400440532013000';
 		const masked = maskTable({
 			header: null,
+			headerAsWritten: false,
 			linesAbove: [],
 			rows: [
 				['12,50', iban, 'Af', 'Example Shop'],
@@ -137,6 +143,7 @@ describe('maskTable', () => {
 	it('keeps at most six shapes of a column, the empty one always among them, and needs three rows for one value', () => {
 		const masked = maskTable({
 			header: null,
+			headerAsWritten: false,
 			linesAbove: [],
 			rows: [
 				...['1', '22', '333', '4444', '55555', '666666', '7777777'].flatMap((value) => [[value], [value]]),
@@ -147,10 +154,18 @@ describe('maskTable', () => {
 		});
 		expect(masked.columns[0].shapes).toEqual(['9', '99', '999', '9999', '99999', '']);
 
-		const twoRows = maskTable({header: null, linesAbove: [], rows: [['X'], ['X']], linesBelow: [], columnCount: 1});
+		const twoRows = maskTable({
+			header: null,
+			headerAsWritten: false,
+			linesAbove: [],
+			rows: [['X'], ['X']],
+			linesBelow: [],
+			columnCount: 1,
+		});
 		expect(twoRows.columns).toEqual([{shapes: ['A'], sameValue: false}]);
 		const threeRows = maskTable({
 			header: null,
+			headerAsWritten: false,
 			linesAbove: [],
 			rows: [['X'], [''], ['X'], ['X']],
 			linesBelow: [],
@@ -162,6 +177,7 @@ describe('maskTable', () => {
 	it('keeps the first, middle and last rows only, the 10 lines above the table and the 3 below it', () => {
 		const masked = maskTable({
 			header: null,
+			headerAsWritten: false,
 			linesAbove: Array.from({length: 12}, (_, line) => ({line, cells: ['Example']})),
 			rows: Array.from({length: 9}, (_, index) => [String(index), 'x'.repeat(index + 1)]),
 			linesBelow: Array.from({length: 5}, () => ['Example']),
@@ -180,6 +196,7 @@ describe('maskTable', () => {
 	it('masks every numeric character and drops the combining marks after a masked one, in rows and lines around them', () => {
 		const masked = maskTable({
 			header: null,
+			headerAsWritten: false,
 			linesAbove: [{line: 0, cells: ['Kontoinhaber Exam\u0301ple ①']}],
 			rows: [['Huur 50m² ½ Ⅻ', 'Cafe\u0301 ٣']],
 			linesBelow: [['Saldo ⅷ']],
@@ -252,6 +269,38 @@ describe('sampleTable', () => {
 			{line: 0, cells: ['Aaaaa', 'Aaaaaaa Aaaaaa', 'AA99AAAA9999999999']},
 		]);
 		expect(JSON.stringify(sample?.masked)).not.toMatch(/Example|NL91/);
+	});
+
+	it("masks a filled line of the holder's details taken for the header, as no cell over a date column names a date", () => {
+		const rows = ['05.10.2026;-12,50;EUR;Shop;Card payment;Ref', '06.10.2026;-4,20;EUR;Cafe;Coffee;Ref'];
+		const holder = 'Name;Jane Roe;Street;Elm Street;City;Springfield';
+		// At the file's start, and below a title of another width.
+		for (const text of [
+			[holder, ...rows],
+			['Statement', holder, ...rows],
+		]) {
+			const sample = sampleTable(Buffer.from([...text, ''].join('\n')))!;
+
+			expect(sample.header).toEqual(holder.split(';'));
+			expect(sample.masked.header).toEqual(['Aaaa', 'Aaaa Aaa', 'Aaaaaa', 'Aaa Aaaaaa', 'Aaaa', 'Aaaaaaaaaaa']);
+			expect(JSON.stringify(sample.masked)).not.toMatch(/Jane|Roe|Elm|Springfield/);
+			expect(() => validateSampleOutput({ok: true, sample})).not.toThrow();
+		}
+		// A header that names the date column is sent as written, in whatever language or compound.
+		for (const date of ['Buchungstag', 'Booking date', 'dateOp', 'Data Contabile', 'Bokföringsdag', 'Fecha']) {
+			const header = `${date};Amount;Currency;Name;Text;Ref`;
+			expect(sampleTable(Buffer.from([header, ...rows, ''].join('\n')))?.masked.header).toEqual(
+				header.split(';'),
+			);
+		}
+		// Rows not booked yet may say so where the others have a date.
+		const pending = [
+			'Buchungstag;Betrag;Waehrung;Name;Text;Ref',
+			'offen;-1,00;EUR;Shop;Card;Ref',
+			...rows,
+			...rows,
+		];
+		expect(sampleTable(Buffer.from([...pending, ''].join('\n')))?.masked.header).toEqual(pending[0].split(';'));
 	});
 
 	it('never takes a padded title line for the header, so its text is masked like any line above the table', () => {

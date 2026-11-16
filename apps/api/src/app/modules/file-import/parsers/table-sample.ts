@@ -102,12 +102,57 @@ export function sampleTable(bytes: Uint8Array): TableSample | null {
 		rowCount: rows.length,
 		masked: maskTable({
 			header,
+			headerAsWritten: header !== null && headerNamesDate(header, rows, columnCount, !text),
 			linesAbove: records.slice(0, start).map((cells, line) => ({line, cells})),
 			rows,
 			linesBelow: records.slice(end),
 			columnCount,
 		}),
 	};
+}
+
+/**
+ * Whether the header names a date over a column at least half its rows fill with a date, as a bank's header does
+ * (`Datum`, `Booking date`, `Buchungstag`). A filled line of the holder's details right above a headerless table
+ * (`Name;Jane Roe;City;Springfield`) is taken for the header too; it names no date, so it is masked.
+ */
+function headerNamesDate(
+	header: readonly string[],
+	rows: readonly (readonly string[])[],
+	columnCount: number,
+	workbook: boolean,
+): boolean {
+	return Array.from({length: columnCount}, (_, column) => column).some((column) => {
+		const filled = rows.map((row) => (row[column] ?? '').trim()).filter((cell) => cell !== '');
+		const dates = filled.filter((cell) => DATE_SHAPE.test(cell) || (workbook && SERIAL_DATE.test(cell))).length;
+		// Pending rows may say `offen` or `Ej bokfört` where the others have a date.
+		return dates > 0 && dates * 2 >= filled.length && namesDate(header[column] ?? '');
+	});
+}
+
+/** A workbook date stored as a day count (`46083`), between 1954 and 2119. */
+const SERIAL_DATE = /^[2-7]\d{4}(?:\.\d+)?$/;
+
+/** Words a header writes for a date, in the languages of Europe's bank exports. */
+const DATE_WORDS: ReadonlySet<string> = new Set([
+	...['date', 'datum', 'data', 'dato', 'datums', 'fecha', 'dátum', 'dátuma'],
+	...['created', 'posted', 'completed', 'booking', 'buchung', 'boeking', 'wertstellung', 'valuta', 'valor', 'valeur'],
+	...['operaz', 'operazione', 'registrazione', 'contabile', 'bokfört', 'bokført', 'kuupäev', 'päivämäärä', 'tarih'],
+]);
+/** Ends of compound words that name a date (`Buchungstag`, `Reskontradatum`, `Bokföringsdag`). */
+const DATE_WORD_ENDINGS = ['datum', 'dato', 'date', 'stag', 'sdag', 'päivä'];
+
+/** A header cell with a word for a date, camelCase split (`dateOp`). */
+function namesDate(cell: string): boolean {
+	return cell
+		.replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2')
+		.toLowerCase()
+		.split(/[^\p{L}]+/u)
+		.some(
+			(word) =>
+				DATE_WORDS.has(word) ||
+				DATE_WORD_ENDINGS.some((ending) => word.length > ending.length && word.endsWith(ending)),
+		);
 }
 
 /** The number of cells up to the last one that holds something. */
