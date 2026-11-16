@@ -51,6 +51,7 @@ import {
 	applyBankTransactionFilters,
 	createOwnerScopedQuery,
 	findFirstBookingDate,
+	sqlMerchantGroupName,
 } from './bank-transaction-filters';
 
 /** Each amount rounded to minor units before summing; monetary SQL results are never converted to Number. */
@@ -76,7 +77,7 @@ type VariantRow = {
 type Group = Omit<MerchantGroup, 'baseCurrency'> & {spentCents: bigint};
 
 /**
- * Money paid to and received from one merchant group: every merchant key identified with one brand, or a single
+ * Money paid to and received from one merchant group: every merchant key identified with one company, or a single
  * merchant key such as a person. Rows count on the summary's definitions (`SQL_SPENDING`, `SQL_INCOME`), so a group's
  * totals reconcile with the transaction list filtered by `merchantGroup`.
  */
@@ -294,12 +295,12 @@ export class MerchantSpendingService {
 			.addSelect(`to_char(MAX("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'lastDate')
 			.andWhere(`"transaction"."merchantKey" IS NOT NULL AND NOT ${SQL_INTERNAL}`)
 			.groupBy('1');
-		const [variantSql, parameters] = variants.getQueryAndParameters();
+		const [variantSql, parameters]: [string, unknown[]] = variants.getQueryAndParameters();
 		// The same group as SQL_MERCHANT_GROUP gives each of the key's rows; the default collation keeps the key index.
-		const groupId = `CASE WHEN variant."key" = '' THEN NULL ELSE COALESCE((SELECT 'b_' || md5(lower(btrim(merchant."brand"))) FROM "merchants" merchant WHERE merchant."accountId" = $${parameters.length + 1} AND merchant."key" = variant."key" COLLATE "default" AND merchant."status" = '${MERCHANT_STATUSES.IDENTIFIED}' AND btrim(merchant."brand") <> ''), 'k_' || md5(variant."key")) END`;
+		const groupId = `CASE WHEN variant."key" = '' THEN NULL ELSE COALESCE((SELECT 'b_' || md5(lower(${sqlMerchantGroupName('merchant')})) FROM "merchants" merchant WHERE merchant."accountId" = $${parameters.length + 1} AND merchant."key" = variant."key" COLLATE "default" AND merchant."status" = '${MERCHANT_STATUSES.IDENTIFIED}' AND btrim(merchant."brand") <> ''), 'k_' || md5(variant."key")) END`;
 		const filter = groupIds ? `WHERE grouped."groupId" = ANY($${parameters.length + 2}::text[])` : '';
 		const [rows, brandNames]: [VariantRow[], Map<string, string>] = await Promise.all([
-			this.bankTransactionRepository.manager.query(
+			this.bankTransactionRepository.manager.query<VariantRow[]>(
 				`SELECT grouped.* FROM (SELECT ${groupId} AS "groupId", variant.* FROM (${variantSql}) variant) grouped ${filter}`,
 				[...parameters, accountId, ...(groupIds ? [groupIds] : [])],
 			),
@@ -333,11 +334,11 @@ export class MerchantSpendingService {
 		return groups;
 	}
 
-	/** Each brand's most common spelling among the owner's identified merchants, by group id. */
+	/** Each group's most common spelling of its company or brand among the owner's identified merchants, by group id. */
 	private async findBrandNames(accountId: string): Promise<Map<string, string>> {
 		const rows: Array<{id: string; name: string}> = await this.bankTransactionRepository.manager.query(
-			`SELECT 'b_' || md5(lower(btrim("brand"))) AS "id", mode() WITHIN GROUP (ORDER BY btrim("brand")) AS "name"
-			FROM "merchants"
+			`SELECT 'b_' || md5(lower(${sqlMerchantGroupName('merchant')})) AS "id", mode() WITHIN GROUP (ORDER BY ${sqlMerchantGroupName('merchant')}) AS "name"
+			FROM "merchants" merchant
 			WHERE "accountId" = $1 AND "status" = $2 AND btrim("brand") <> ''
 			GROUP BY 1`,
 			[accountId, MERCHANT_STATUSES.IDENTIFIED],
@@ -362,7 +363,7 @@ export class MerchantSpendingService {
 			.select('1', 'found')
 			.andWhere(`${SQL_MERCHANT_GROUP} = :groupId`, {groupId})
 			.limit(1)
-			.getRawOne();
+			.getRawOne<{found: number}>();
 		return Boolean(row);
 	}
 }

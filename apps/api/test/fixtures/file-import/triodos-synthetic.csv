@@ -1,0 +1,34 @@
+"01-10-2026","NL42TRIO0390000101","23,45","Debet","Example Supermarket","","BA","Example Supermarket Examplestad","1.500,00"
+
+"01-10-2026","NL42TRIO0390000101","89,99","Debet","Example Webshop BV","INGBNL2A NL91ABNA0417164300","ID","iDEAL order 7781; ""cadeau"", maat L","1.410,01"
+
+"02-10-2026","NL42TRIO0390000101","12,50","Credit","Tikkie","INGBNL2A NL82ABNA0900000101","OV","Tikkie ID 001234567890, Pizza; vrijdag, via A. Voorbeeld","1.422,51"
+
+"03-10-2026","NL42TRIO0390000101","89,99","Credit","Example Webshop BV","INGBNL2A NL91ABNA0417164300","OV","Terugbetaling order 7781","1.512,50"
+
+"05-10-2026","NL42TRIO0390000101","2.500,00","Credit","Example Werkgever BV","INGBNL2A NL38RABO0300000777","OV","Salaris oktober 2026","4.012,50"
+
+"06-10-2026","NL42TRIO0390000101","45,67","Debet","EXAMPLE STORE NEW YORK","","BA","Example Store New York","3.966,83"
+
+"07-10-2026","NL42TRIO0390000101","15,00","Debet","Example Tankstation","","BA","Reservering pomp 3","3.951,83"
+
+"07-10-2026","NL42TRIO0390000101","15,00","Credit","Example Tankstation","","BA","Reservering pomp 3 vrijgegeven","3.966,83"
+
+"08-10-2026","NL42TRIO0390000101","2,50","Debet","Example Parkeren","","BA","Parkeren zone 1","3.964,33"
+
+"08-10-2026","NL42TRIO0390000101","2,50","Debet","Example Parkeren","","BA","Parkeren zone 1","3.961,83"
+
+"09-10-2026","NL42TRIO0390000101","64,30","Debet","Example Energie NV","INGBNL2A NL23INGB0006000123","IC","Termijn oktober klantnr 556677
+Machtiging MNDT556677","3.897,53"
+
+"10-10-2026","NL42TRIO0390000101","100,00","Debet","Geldautomaat Examplestad","","GA","Geldopname","3.797,53"
+
+"12-10-2026","NL42TRIO0390000101","1.234,56","Debet","Example Verhuur BV","INGBNL2A NL53INGB0006000456","IC","Huur oktober
+Machtiging MNDT556677","2.562,97"
+
+"13-10-2026","NL42TRIO0390000101","500,00","Debet","Eigen spaarrekening","INGBNL2A NL31TRIO0390000202","OV","Naar spaarrekening","2.062,97"
+
+"14-10-2026","NL42TRIO0390000101","0,01","Credit","Example Bank Verificatie","INGBNL2A NL83INGB0006000789","OV","Verificatie rekening","2.062,98"
+
+"14-10-2026","NL42TRIO0390000101","7,80","Debet","Café De Brück","","BA","Café De Brück Examplestad","2.055,18"
+

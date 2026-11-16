@@ -64,10 +64,17 @@ describe('Merchant spending', () => {
 		const ownerBankAccount = await fixtures.createBankAccount(await fixtures.createConnection(owner));
 		const otherBankAccount = await fixtures.createBankAccount(await fixtures.createConnection(otherOwner));
 
-		// One brand under two keys, spelled differently; a third key of the brand has no rows yet.
+		// One company under two keys, spelled differently: its own brand, identified before companies existed, and a
+		// product it sells under another name. A third key of the brand has no rows yet.
 		await merchants.save([
 			{accountId: owner.id, key: 'example burger nl', status: 'IDENTIFIED', brand: 'Example Burger'},
-			{accountId: owner.id, key: 'example burger online', status: 'IDENTIFIED', brand: 'EXAMPLE BURGER '},
+			{
+				accountId: owner.id,
+				key: 'example burger online',
+				status: 'IDENTIFIED',
+				brand: 'Burger Online',
+				company: 'EXAMPLE BURGER ',
+			},
 			{accountId: owner.id, key: 'example burger station', status: 'IDENTIFIED', brand: 'Example Burger'},
 			{accountId: owner.id, key: 'alex example', status: 'NONE', brand: null},
 			{accountId: otherOwner.id, key: 'example burger nl', status: 'IDENTIFIED', brand: 'Example Burger'},

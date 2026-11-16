@@ -22,7 +22,7 @@ import {
 	SORT_ORDERS,
 	type SortOrder,
 } from '@tempo/contracts';
-import {Transform, type TransformFnParams, Type} from 'class-transformer';
+import {Transform, Type} from 'class-transformer';
 import {
 	IsArray,
 	IsEnum,
@@ -142,7 +142,7 @@ export class BankTransactionFilterQueryDto implements BankTransactionFilter {
 
 	/** Only the rows the review counts count as needing attention; sent as `true`. */
 	@IsOptional()
-	@Transform(({value}: TransformFnParams) => (value === 'true' ? true : value))
+	@Transform(({value}: {value: unknown}) => (value === 'true' ? true : value))
 	@IsIn([true])
 	needsAttention?: true;
 }

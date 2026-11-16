@@ -1,0 +1,3 @@
+Tranzakció dátuma;Partner neve;Partner számlaszáma;Számla neve;Számlaszám;Tranzakció típusa;Tranzakció összege;Tranzakció devizaneme;Bevétel/Kiadás;Kártyaszám;Értéknap;Közlemény;Megbízás azonosító;Részletek;Egyenleg;Devizanem
+2026.10.02.;Example Bolt;;Example számla;11600006-00000000-12345678;Kártyás vásárlás;-1250;HUF;Kiadás;512345******1234;2026.10.02.;;EX-1;Example card;98750;HUF
+2026.10.05.;Example Munkáltató Kft.;11773016-11111018-00000000;Example számla;11600006-00000000-12345678;Jóváírás;250000;HUF;Bevétel;;2026.10.05.;Example fizetés;EX-2;Example salary;348750;HUF

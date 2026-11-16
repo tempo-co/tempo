@@ -45,6 +45,8 @@ const ANSWER: Record<'debitCredit' | 'balance' | 'headerless' | 'workbook', Layo
 		dateFormat: 'DD.MM.YYYY',
 		bookingDate: 0,
 		valueDate: 1,
+		transactionDate: null,
+		pending: null,
 		amount: {kind: 'debitCredit', moneyOutColumn: 4, moneyInColumn: 5},
 		decimalMark: ',',
 		thousandsSeparator: '.',
@@ -60,6 +62,8 @@ const ANSWER: Record<'debitCredit' | 'balance' | 'headerless' | 'workbook', Layo
 		dateFormat: 'DD/MM/YYYY',
 		bookingDate: 0,
 		valueDate: null,
+		transactionDate: null,
+		pending: null,
 		amount: {kind: 'signed', column: 3},
 		decimalMark: '.',
 		thousandsSeparator: ',',
@@ -75,6 +79,8 @@ const ANSWER: Record<'debitCredit' | 'balance' | 'headerless' | 'workbook', Layo
 		dateFormat: 'YYYY-MM-DD',
 		bookingDate: 0,
 		valueDate: null,
+		transactionDate: null,
+		pending: null,
 		amount: {kind: 'signed', column: 1},
 		decimalMark: '.',
 		thousandsSeparator: null,
@@ -90,6 +96,8 @@ const ANSWER: Record<'debitCredit' | 'balance' | 'headerless' | 'workbook', Layo
 		dateFormat: 'DD/MM/YYYY',
 		bookingDate: 0,
 		valueDate: null,
+		transactionDate: null,
+		pending: null,
 		amount: {kind: 'signed', column: 2},
 		decimalMark: '.',
 		thousandsSeparator: null,
@@ -345,19 +353,199 @@ describe('Bank import column mapper', () => {
 		]);
 	});
 
+	it.each([
+		{
+			// The rows whose note holds a comma are wider than the rest, so the widest stretch of equal lines starts
+			// below them.
+			name: 'lines above the table look',
+			lines: [
+				'Date,Amount,Account,Note',
+				'2026-03-02,-12.50,NL91ABNA0417164300,Example Shop, Examplestad',
+				'2026-03-03,-4.20,NL91ABNA0417164300,Example Cafe, Examplestad, Centre',
+				'2026-03-04,-1.00,NL91ABNA0417164300,Example Shop',
+				'2026-03-05,-2.00,NL91ABNA0417164300,Example Shop',
+				'2026-03-06,-3.00,NL91ABNA0417164300,Example Shop',
+			],
+		},
+		{
+			// A layout learned from it would skip the last row of every whole file.
+			name: 'last line, cut short, looks',
+			lines: readFileSync(join(FIXTURES, 'starling-cut-last-line-synthetic.csv'), 'utf8').trimEnd().split('\n'),
+		},
+	])('refuses to work out the columns of a file whose $name like rows, without a call', async ({lines}) => {
+		const {owner, agent} = await createOwner();
+		const file = Buffer.from([...lines, ''].join('\n'));
+		expect((await drop(agent, file).expect(422)).body).toMatchObject({code: 'layout_unknown', file: 1});
+
+		const refused = await propose(agent, file).expect(422);
+
+		expect(refused.body).toMatchObject({code: 'layout_not_mappable', file: 1});
+		expect(mapLayout).not.toHaveBeenCalled();
+		expect(await proposals.countBy({accountId: owner.id})).toBe(0);
+	});
+
+	it("asks where a saved layout's file goes when the account its IBAN names holds none of its rows, and imports it where the owner chooses", async () => {
+		const {owner, agent} = await createOwner();
+		const iban = 'NL86BUNQ2000000001';
+		const days = ['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06', '2026-03-07'];
+		const current = Buffer.from(
+			[
+				'"Date","Amount","Account","Counterparty","Name","Description"',
+				...days.map((day, index) => `"${day}","-${index + 1}0,00","${iban}","","Example Shop","Example"`),
+				'',
+			].join('\n'),
+		);
+		// A card export whose first column is the current account the card is paid from.
+		const card = (amounts: string[]) =>
+			Buffer.from(
+				[
+					'Linked account,Currency,Card,Date,Amount,Description',
+					...days.map((day, index) => `${iban},EUR,9999,${day},${amounts[index]},Example Card Shop`),
+					'',
+				].join('\n'),
+			);
+		const cardRows = card(['-4.10', '-7.20', '-3.30', '-9.40', '-2.50', '-8.60']);
+		const currentRows = card(['-10.00', '-20.00', '-30.00', '-40.00', '-50.00', '-60.00']);
+		const imported = await drop(agent, current).expect(201);
+		const currentAccount = imported.body.accounts[0];
+		await saveLayout(
+			agent,
+			cardRows,
+			{
+				...ANSWER.headerless,
+				bookingDate: 3,
+				amount: {kind: 'signed', column: 4},
+				currency: {column: 1},
+				description: [5],
+				account: {column: 0},
+			},
+			{bankName: 'Example Card Bank'},
+		);
+
+		// Rows the account already holds confirm it.
+		expect((await drop(agent, currentRows).expect(201)).body).toMatchObject({
+			rowsAdded: 0,
+			rowsAlreadyPresent: 6,
+			accounts: [{id: currentAccount.id, created: false}],
+		});
+
+		const refused = await drop(agent, cardRows).expect(409);
+
+		expect(refused.body).toMatchObject({
+			code: 'target_account_unconfirmed',
+			accountQuestions: [
+				{
+					bank: 'Example Card Bank',
+					currency: 'EUR',
+					candidates: [{bankAccountId: currentAccount.id, imported: true}],
+					newAccount: true,
+				},
+			],
+		});
+		expect(await transactions.countBy({bankAccountId: currentAccount.id})).toBe(6);
+
+		const chosen = await drop(agent, cardRows)
+			.field('accountChoices', JSON.stringify({'Example Card Bank:EUR': 'new'}))
+			.expect(201);
+
+		expect(chosen.body).toMatchObject({rowsAdded: 6, accounts: [{name: 'Example Card Bank EUR', created: true}]});
+		expect(await bankAccounts.findOneByOrFail({id: chosen.body.accounts[0].id})).toMatchObject({
+			providerAccountId: 'file-bank:Example Card Bank:EUR',
+			iban: null,
+		});
+		expect(await transactions.countBy({bankAccountId: currentAccount.id})).toBe(6);
+		// The answer holds for the layout's later files.
+		expect((await drop(agent, cardRows).expect(201)).body).toMatchObject({
+			rowsAdded: 0,
+			rowsAlreadyPresent: 6,
+			accounts: [{id: chosen.body.accounts[0].id}],
+		});
+		expect(await bankAccounts.countBy({bankConnection: {accountId: owner.id}})).toBe(2);
+	});
+
+	it("checks a saved layout's rows against a synced account too, and asks only about statements of a bank and currency of their own", async () => {
+		const {owner, agent} = await createOwner();
+		const days = ['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06'];
+		const [first, second] = ['NL86BUNQ2000000001', 'NL05BUNQ2000000101'];
+		const connection = await fixtures.createConnection(owner);
+		const synced = await fixtures.createBankAccount(connection, {iban: first});
+		await fixtures.createTransactions(
+			synced,
+			days.map((bookingDate, index) => ({bookingDate, valueDate: bookingDate, amount: `-${index + 1}0.00`})),
+		);
+		const card = (ibans: string[]) =>
+			Buffer.from(
+				[
+					'Linked account,Currency,Card,Date,Amount,Description',
+					...ibans.flatMap((iban) =>
+						days.map((day, index) => `${iban},EUR,9999,${day},-${index + 3}.40,Example Card Shop`),
+					),
+					'',
+				].join('\n'),
+			);
+		await saveLayout(
+			agent,
+			card([first]),
+			{
+				...ANSWER.headerless,
+				bookingDate: 3,
+				amount: {kind: 'signed', column: 4},
+				currency: {column: 1},
+				description: [5],
+				account: {column: 0},
+			},
+			{bankName: 'Example Card Bank'},
+		);
+		const bunq = Buffer.from(
+			[
+				'"Date","Amount","Account","Counterparty","Name","Description"',
+				`"2026-03-09","-1,00","${first}","","Example Shop","Example"`,
+				'',
+			].join('\n'),
+		);
+		// The synced account holds none of the card rows.
+		expect((await drop(agent, card([first])).expect(409)).body).toMatchObject({
+			code: 'target_account_unconfirmed',
+			accountQuestions: [{bank: 'Example Card Bank', candidates: [{bankAccountId: synced.id, imported: false}]}],
+		});
+		// Beside a built-in export of the same account, or another statement under the same bank and currency, an
+		// answer would move rows it is not about: the drop is refused without a question.
+		await fixtures.createTransactions(
+			await fixtures.createBankAccount(connection, {iban: second}),
+			days.map((bookingDate) => ({bookingDate, valueDate: bookingDate, amount: '-99.00'})),
+		);
+		for (const files of [[card([first]), bunq], [card([first, second])]]) {
+			const refused = drop(agent, files[0]);
+			if (files[1]) refused.attach('files', files[1], 'upload-1.bin');
+			expect((await refused.expect(409)).body).toEqual(
+				expect.objectContaining({code: 'target_account_unconfirmed', accountQuestions: []}),
+			);
+		}
+		expect(await transactions.countBy({bankAccountId: synced.id})).toBe(5);
+	});
+
 	it("refuses a bank name of Tempo's own files that name no account, so a layout never shares their accounts", async () => {
 		const {owner, agent} = await createOwner();
 		mapLayout.mockResolvedValueOnce(ANSWER.balance);
 		const proposed = await propose(agent, BALANCE_CSV).expect(201);
 
-		for (const bankName of [' revolut ', 'REVOLUT']) {
+		for (const [bankName, bank] of [
+			[' revolut ', 'Revolut'],
+			['REVOLUT', 'Revolut'],
+			// Its credit card export names no account.
+			['rabobank', 'Rabobank'],
+		]) {
 			const refused = await confirm(agent, proposed.body.id, {bankName, currency: 'GBP'}).expect(400);
 			expect(refused.body.message).toBe(
-				"Revolut's own exports already import into your Revolut accounts. Name this bank differently.",
+				`${bank}'s own exports already import into your ${bank} accounts. Name this bank differently.`,
 			);
 		}
 		expect(await layouts.countBy({accountId: owner.id})).toBe(0);
 		await confirm(agent, proposed.body.id, {bankName: 'Revolut Example', currency: 'GBP'}).expect(201);
+		// A layout whose files name their account shares no account with those files.
+		mapLayout.mockResolvedValueOnce(ANSWER.debitCredit);
+		const named = await propose(agent, DEBIT_CREDIT_CSV).expect(201);
+		await confirm(agent, named.body.id, {bankName: 'Rabobank'}).expect(201);
 	});
 
 	it('refuses to save a layout too large to send to the file reader with the others', async () => {
@@ -385,7 +573,7 @@ describe('Bank import column mapper', () => {
 		});
 		const proposed = await propose(agent, wide).expect(201);
 
-		const refused = await confirm(agent, proposed.body.id, {bankName: 'Example Bank'}).expect(422);
+		const refused = await confirm(agent, proposed.body.id, {bankName: 'Example Bank', currency: 'EUR'}).expect(422);
 
 		expect(refused.body).toMatchObject({code: 'layout_not_mappable'});
 		expect(await layouts.countBy({accountId: owner.id})).toBe(0);
@@ -406,7 +594,8 @@ describe('Bank import column mapper', () => {
 	it('reads a file without a header and a workbook with the layouts their owner confirmed', async () => {
 		const {agent} = await createOwner();
 		await saveLayout(agent, HEADERLESS_CSV, ANSWER.headerless, {bankName: 'Example Bank'});
-		await saveLayout(agent, WORKBOOK, ANSWER.workbook, {bankName: 'Example Workbook Bank'});
+		// The workbook shows no currency, so its owner picks the one the model named.
+		await saveLayout(agent, WORKBOOK, ANSWER.workbook, {bankName: 'Example Workbook Bank', currency: 'EUR'});
 
 		expect((await drop(agent, HEADERLESS_CSV).expect(201)).body).toMatchObject({
 			rowsAdded: 4,

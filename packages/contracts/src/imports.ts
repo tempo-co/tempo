@@ -122,6 +122,19 @@ export type BankImportAccount = {
 	created: boolean;
 };
 
+/**
+ * Entries missing between two statements of one account: the later one opens at a balance `amount` away from the
+ * earlier one's closing balance. `from` is the earlier statement's closing day, `to` the later one's opening day.
+ */
+export type BankImportStatementGap = {
+	bankAccountId: string;
+	from: string;
+	to: string;
+	/** What the missing entries add up to: the later opening balance minus the earlier closing balance, signed. */
+	amount: string;
+	currency: string;
+};
+
 /** An account the owner can give a balance (`SetBankAccountBalanceRequest`). */
 export type BankImportAccountWithoutBalance = {
 	id: string;
@@ -155,6 +168,18 @@ export type BankImportSummary = {
 	rowsMatchedByDate: number;
 	/** Rows held for the owner to decide, still open. */
 	rowsDoubtful: number;
+	/**
+	 * Rows on days bank sync is final for (it fetched them completely and will not read them again) that sync never
+	 * sent and that match none of its rows: not added and not asked about, but listed under
+	 * `GET /bank-imports/:importId/never-sent-rows` for the owner to add. Counts those still not added.
+	 */
+	rowsNotInBank: number;
+	/**
+	 * The import's rows a later bank sync removed: on days it is final for, it never sent them and took over none of
+	 * them. Listed under `GET /bank-imports/:importId/never-sent-rows` for the owner to add back. Counts those still
+	 * not added back; `rowsAdded` no longer counts them.
+	 */
+	rowsRemovedBySync: number;
 	/** Earliest and latest booking date in the drop; null when it held no entries. */
 	dateFrom: string | null;
 	dateTo: string | null;
@@ -164,6 +189,12 @@ export type BankImportSummary = {
 	 * the owner entered one. Empty for synced accounts and once the import is undone.
 	 */
 	accountsWithoutBalance: BankImportAccountWithoutBalance[];
+	/**
+	 * Where a statement of the drop does not open at the balance the statement before it (same account and format)
+	 * closed at, in drop order: entries between them are missing from the files. The rows that are there are imported.
+	 * On a synced account only the days outside its bank sync coverage are listed, each uncovered stretch as one gap.
+	 */
+	statementGaps: BankImportStatementGap[];
 	undoneAt: string | null;
 	createdAt: string;
 };
@@ -198,6 +229,11 @@ export type BankImportDoubtfulRow = {
 	id: string;
 	bankAccountId: string;
 	row: BankImportFileRow;
+	/**
+	 * Null for a file row held out of history. Otherwise the row is already in history as this transaction, added by
+	 * the import, and a later bank sync brought look-alikes (the candidates) that may be the same payment.
+	 */
+	importedTransactionId: string | null;
 	/** The candidates that still exist. */
 	candidates: BankImportDoubtfulCandidate[];
 };
@@ -207,12 +243,45 @@ export type BankImportDoubtfulDecision = (typeof BANK_IMPORT_DOUBTFUL_DECISIONS)
 
 /**
  * `POST /bank-imports/:importId/doubtful-rows/:rowId/resolve`, answered with the import's `BankImportSummary`.
- * `new` adds the row; `duplicate` names the candidate it already is (`transactionId`) and adds nothing.
+ * `new` adds the row; `duplicate` names the candidate it already is (`transactionId`) and adds nothing. For a row
+ * already in history (`importedTransactionId`), `new` keeps both, and `duplicate` removes the imported row after
+ * moving its manual category and own-transfer choice to the candidate where that has none.
  */
 export type ResolveBankImportDoubtfulRowRequest = {
 	decision: BankImportDoubtfulDecision;
 	/** Required for `duplicate`: one of the row's current candidates. */
 	transactionId?: string;
+};
+
+/**
+ * Why a row of the import is listed as one the bank never sent. `not_in_bank`: the file's row was not added.
+ * `removed_by_sync`: the row was added, and a later sync removed it.
+ */
+export const BANK_IMPORT_NEVER_SENT_KINDS = ['not_in_bank', 'removed_by_sync'] as const;
+export type BankImportNeverSentKind = (typeof BANK_IMPORT_NEVER_SENT_KINDS)[number];
+
+/**
+ * Each item of `GET /bank-imports/:importId/never-sent-rows`: a row of the import on a day bank sync is final for
+ * that sync never sent, still not added, in booking order.
+ */
+export type BankImportNeverSentRow = {
+	id: string;
+	kind: BankImportNeverSentKind;
+	bankAccountId: string;
+	row: BankImportFileRow;
+};
+
+/** At most this many rows per `AddBankImportNeverSentRowsRequest`. */
+export const BANK_IMPORT_MAX_ROWS_PER_ADD = 500;
+
+/**
+ * `POST /bank-imports/:importId/never-sent-rows/add`, answered with the import's `BankImportSummary`: adds the rows
+ * as rows of the import, all or none, a removed row with the manual category and own-transfer choice it had. A row
+ * is added once (409 after), and bank sync never removes it.
+ */
+export type AddBankImportNeverSentRowsRequest = {
+	/** 1 to `BANK_IMPORT_MAX_ROWS_PER_ADD` ids of the import's never-sent rows. */
+	rowIds: string[];
 };
 
 /**
@@ -227,6 +296,8 @@ export type BankImportList = {
 /** What a column of a proposed layout holds. */
 export const BANK_IMPORT_LAYOUT_FIELDS = [
 	'date',
+	/** The date the payment was made, besides the date it was booked: a card purchase date. */
+	'transactionDate',
 	'valueDate',
 	'amount',
 	/** The column whose value says whether the amount went out or came in. */
@@ -239,6 +310,8 @@ export const BANK_IMPORT_LAYOUT_FIELDS = [
 	'counterparty',
 	'counterpartyAccount',
 	'description',
+	/** The column that marks the rows not booked yet, which are skipped. */
+	'pending',
 ] as const;
 export type BankImportLayoutField = (typeof BANK_IMPORT_LAYOUT_FIELDS)[number];
 
@@ -249,6 +322,8 @@ export type BankImportLayoutColumn = {
 	column: number;
 	/** The column's heading in the file; null when it has none. */
 	header: string | null;
+	/** Read on these rows only: a file with payer and payee columns names the other party in one per direction. */
+	onlyFor?: 'moneyIn' | 'moneyOut';
 };
 
 /** How a proposed layout reads the file. */

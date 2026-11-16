@@ -92,12 +92,13 @@ function parseDocument(bytes: Uint8Array, owned: readonly CsvLayout[]): Document
 	return readOwned(bytes, owned, nearMiss);
 }
 
-/** Reads a file with the owner's layouts; a built-in near miss wins over theirs when none reads it. */
+/** Reads a file with the owner's layouts; a built-in near miss wins over their near misses when none reads it. */
 function readOwned(bytes: Uint8Array, owned: readonly CsvLayout[], nearMiss: ParseRefusal | null): Document {
 	let read: ReturnType<typeof readCsvLayout> = null;
 	try {
 		read = owned.length > 0 ? readCsvLayout(bytes, owned, {owned: true}) : null;
 	} catch (error) {
+		// Rows a saved layout would skip are the refusal to name, even before a built-in near miss.
 		if (!(error instanceof ParseRefusal && error.code === 'layout_not_recognized')) throw error;
 		nearMiss ??= error;
 	}

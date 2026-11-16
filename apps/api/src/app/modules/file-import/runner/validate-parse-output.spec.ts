@@ -38,6 +38,8 @@ const output = (rows: unknown[], statement: Record<string, unknown> = {}) => ({
 			accountCurrency: 'EUR',
 			sequenceNumber: '1',
 			entriesSkipped: 0,
+			openingBalance: {date: '2026-03-01', amount: '1000.00'},
+			closingBalance: null,
 			rows,
 			...statement,
 		},
@@ -63,6 +65,9 @@ describe('validateParseOutput', () => {
 		expect(first.counterpartyName).toBe(`Example Shop [31m ${'x'.repeat(300)}`.slice(0, 255));
 		expect(first.description).toBe('Example card payment');
 		expect(second.counterpartyIban).toBeNull();
+		expect(result).toMatchObject({
+			result: {statements: [{openingBalance: {date: '2026-03-01', amount: '1000.00'}, closingBalance: null}]},
+		});
 	});
 
 	it('accepts a statement that names no account when it names a known bank', () => {
@@ -75,6 +80,19 @@ describe('validateParseOutput', () => {
 			ok: true,
 			result: {formats: ['revolutCsv'], statements: [{accountIban: null, accountOtherId: null, bank: 'Revolut'}]},
 		});
+	});
+
+	it('accepts a statement that names no account under the bank of the built-in layout it was read with', () => {
+		const statement = {format: 'csv', layout: 'rabobank-creditcard', accountIban: null, bank: 'Rabobank'};
+		const value = {...output([], statement), formats: ['csv'], layouts: ['rabobank-creditcard']};
+
+		expect(validateParseOutput(value)).toMatchObject({ok: true, result: {statements: [statement]}});
+		for (const other of [{layout: 'rabobank-nl'}, {bank: 'Revolut'}, {accountIban: 'NL91ABNA0417164300'}]) {
+			const changed = {...statement, ...other};
+			expect(() =>
+				validateParseOutput({...output([], changed), formats: ['csv'], layouts: [changed.layout]}),
+			).toThrow(new ParseRefusal('parse_failed'));
+		}
 	});
 
 	it("accepts a statement that names no account under the bank of the owner's layout it was read with", () => {
@@ -145,10 +163,20 @@ describe('validateParseOutput', () => {
 		{name: 'a currency that is not a code', value: output([row({currency: 'eur'})])},
 		{name: 'an account IBAN that fails its checksum', value: output([], {accountIban: 'NL91ABNA0417164301'})},
 		{
-			name: 'an account id longer than an account number',
-			value: output([], {accountIban: null, accountOtherId: 'x'.repeat(35)}),
+			name: 'an account id longer than any format writes',
+			value: output([], {accountIban: null, accountOtherId: 'x'.repeat(56)}),
 		},
 		{name: 'a statement without an account', value: output([], {accountIban: null, accountOtherId: null})},
+		{name: 'a statement without its balances', value: output([], {openingBalance: undefined})},
+		{
+			name: 'a stated balance that is not a decimal',
+			value: output([], {closingBalance: {date: '2026-03-02', amount: '1,000.00'}}),
+		},
+		{
+			name: 'a stated balance on a day that does not exist',
+			value: output([], {closingBalance: {date: '2026-02-30', amount: '1000.00'}}),
+		},
+		{name: 'a stated balance without its day', value: output([], {closingBalance: {date: null, amount: '1.00'}})},
 	])('refuses $name as parse_failed', ({value}) => {
 		expect(() => validateParseOutput(value)).toThrow(new ParseRefusal('parse_failed'));
 	});
@@ -167,7 +195,9 @@ describe('validateSampleOutput', () => {
 			shape: {source: 'text', delimiter: ';', quote: '"', encoding: 'utf-8'},
 			columnCount: 3,
 			skipBefore: 1,
+			rowsAbove: 0,
 			skipAfter: 0,
+			rowsBelow: 0,
 			header: ['Datum', 'Bedrag', 'Af Bij'],
 			rowCount: 2,
 			masked: {
@@ -186,13 +216,17 @@ describe('validateSampleOutput', () => {
 		},
 	});
 
-	it('passes a masked sample with its header, currency codes and short repeated values', () => {
+	it('passes a masked sample with its header, currency codes and direction words', () => {
 		expect(validateSampleOutput(sample())).toEqual(sample());
 	});
 
 	it.each([
 		{name: 'a row cell with a digit', masked: {rows: [['99-99-9999', '-12,50', 'Af']]}},
 		{name: 'a long unmasked row cell', masked: {rows: [['99-99-9999', '-99,99', 'Example Lender BV']]}},
+		{
+			name: 'a short unmasked row cell that is no direction word',
+			masked: {rows: [['99-99-9999', '-99,99', 'Gym Club']]},
+		},
 		{name: 'an unmasked line above', masked: {linesAbove: [{line: 0, cells: ['Rekening']}]}},
 		{name: 'an unmasked column shape', masked: {columnShapes: ['99-99-9999', '-99,99', 'Af']}},
 		{

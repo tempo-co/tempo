@@ -155,6 +155,11 @@ components:
     textColor: "{colors.foreground}"
     rounded: "{rounded.pill}"
     padding: "1px 10px"
+  alert:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.control}"
+    padding: "10px 12px"
   state-message:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.foreground}"
@@ -379,6 +384,24 @@ They stack collapsed and use the library's default lifetime. Distinct states get
 never imply data changed before the server confirms it. Motion is brief (0.2–0.3s), subtle,
 reduced-motion aware; never animate financial values continuously.
 
+### Alerts
+
+An inline message about the thing it sits in (a refused import, a bank to re-authorize, a failed
+save) is an `Alert` (`src/components/ui/alert.tsx`), never a hand-styled box or bare red text:
+1px border, control radius, `10px 12px` padding, a leading 16px glyph, a `text-sm` medium title,
+a muted `text-sm` description, actions under the text on phones and to the right from `sm` up.
+
+- **Variants.** `default` (surface field, muted glyph) explains or offers a next step;
+  `warning` (warning edge at 40%, field at 5%, warning glyph) is attention that is not a
+  failure; `destructive` (the same in destructive) is a refusal or a failed operation. Text
+  stays foreground and muted; the glyph and the edge carry the tone.
+- **Glyph.** Names the subject (`FileX` a refused file, `Clock` consent ending, `CloudOff` a
+  failed load), not the tone alone.
+- **Announcing.** `role='alert'` for a message that appears in answer to the owner,
+  `role='status'` for a quiet update, none for a notice present from the start.
+- A message about one field stays on the field; a failed list or section load is a
+  `StateMessage` (below).
+
 ### Empty and error states
 
 Empty, not-found and failed loads use `StateMessage` (`src/components/shared/state-message.tsx`),
@@ -436,42 +459,13 @@ variant. Selected values (the theme picker) use a clay ring, never the navigatio
 
 ### File import
 
-Statement file import lives on Connections, and only while the deployment has it on: the import
-list answering is the switch, and until it does the page shows nothing of it. Bank sync stays
-the page's primary action. **Import a file** is the outline button beside **Connect a bank**
-(the two share the row under the title on phones, equal width), and the empty page offers both.
-No copy calls import a fallback or assumes a bank is connected.
-
-- **Drop area.** On fine pointers: a 160px area with a dashed 1px rule at control radius, the
-  `FileUp` Clay tile, "Drop statement files here", a muted "or" and an outline **Choose files**.
-  Drag-over turns the rule to the ring token and the field to the accent wash. Phones and touch
-  screens get the button alone, full width. The picker accepts any extension, since banks name
-  their exports oddly. Files dragged anywhere over Connections show a full-column overlay (dashed
-  2px ring rule, page-field wash, "Drop to import"); it is the only drop target outside the dialog.
-- **One dialog.** Choosing, importing, the summary, the account question, the rows to check and
-  the undo confirmation are steps of one `ResponsiveDialog`, with a scrolling body and a footer
-  that stays in reach. It never closes by itself. Closing it does not cancel an upload; the
-  outcome then arrives as a toast (View reopens the summary). Focus returns to Import a file.
-- **Refusals.** A drop is all or nothing, so a refusal is a section `StateMessage` in the failure
-  tone whose description ends with "Nothing was imported." It names the refused file when the drop
-  held several, and the choose controls stay under it. A choice over a drop's limits (20 files,
-  10 MB each, 25 MB together) is refused the same way before anything is uploaded. Failed
-  requests use `LoadErrorState`.
-- **Summary.** Counts as a bordered `divide-y` list with `numeric` values (the count that needs a
-  look in `warning`), the date range, and the accounts the import went to. A drop that added
-  nothing shows the `CheckCheck` state instead of the counts.
-- **Account question.** Native radio rows, so arrow keys move between them; nothing is
-  preselected, and Import stays disabled until every question has an answer.
-- **Rows to check.** Each file row (the `FileQuestion` tile in the 60px row shape) sits over the
-  stored rows it could be. An answer is final and collapses its block to one muted line.
-- **Imports list.** Under the connection cards once an import exists: a small heading, then one
-  bordered `divide-y` list, newest first, five rows before Show all. A row reads "3 files · 212
-  new" over the day, the accounts and any rows still to check (attention tone), with an
-  always-visible outline Undo named with its date. An undone import stays listed, muted, without
-  the button. Undo confirms with the destructive variant and says what goes and what stays.
-- **Imported files.** The imported-files connection uses the bank card with the `Files` Clay tile
-  and "From statement files". It never shows consent, sync or re-authorization states, and its
-  Details hold the accounts and Remove only.
+Import shows on Connections only while the deployment has it on, and bank sync stays the
+primary action: **Import a file** is the outline button beside **Connect a bank**, and no copy
+calls import a fallback. Every step is one `ResponsiveDialog` that never closes by itself;
+closing it does not cancel an upload. A refusal is a `destructive` `Alert` ending "Nothing was
+imported." Questions are native radio rows, nothing preselected. Rows the bank never sent are
+never in the attention tone: nothing waits for the owner. The imported-files connection never
+shows consent or sync states. Each screen's layout and copy: `docs/file-import.md`.
 
 ## Do's and Don'ts
 

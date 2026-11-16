@@ -7,6 +7,7 @@ import {CalendarCheck, FileText} from 'lucide-react';
 import {useId} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
+import {Alert, AlertDescription} from '@/components/ui/alert';
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
 import {
@@ -56,6 +57,7 @@ export function LayoutPreview({
   // A file that states no currency previews in the default one; the owner's choice shows at once.
   const rowCurrency = (row: BankImportLayoutPreviewRow) =>
     currencyNeeded ? currency : row.currency;
+  const hiddenRows = preview.rowCount - preview.firstRows.length - preview.lastRows.length;
   const totals = preview.totals.map((total) => ({
     ...total,
     currency: currencyNeeded ? currency : total.currency,
@@ -71,16 +73,13 @@ export function LayoutPreview({
       </section>
 
       {dateCheck && (
-        <p
-          className='flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm'
-          data-testid='bank-import-date-check'
-        >
-          <CalendarCheck aria-hidden='true' className='mt-0.5 size-4 shrink-0 text-warning' />
-          <span>
+        <Alert variant='warning' data-testid='bank-import-date-check'>
+          <CalendarCheck aria-hidden='true' />
+          <AlertDescription className='text-foreground'>
             {dateCheckCopy(dateCheck)}. Check this matches your bank&apos;s statement before you
             continue.
-          </span>
-        </p>
+          </AlertDescription>
+        </Alert>
       )}
 
       <section aria-labelledby='bank-import-layout-rows' className='grid grid-cols-1 gap-1.5'>
@@ -92,10 +91,9 @@ export function LayoutPreview({
           {preview.firstRows.map((row, index) => (
             <PreviewRow key={`first-${index}`} row={row} currency={rowCurrency(row)} />
           ))}
-          {preview.lastRows.length > 0 && (
+          {hiddenRows > 0 && (
             <li className='py-2 text-center text-xs text-muted-foreground'>
-              {formatCount(preview.rowCount - preview.firstRows.length - preview.lastRows.length)}{' '}
-              more
+              {formatCount(hiddenRows)} more
             </li>
           )}
           {preview.lastRows.map((row, index) => (

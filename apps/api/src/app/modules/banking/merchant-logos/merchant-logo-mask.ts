@@ -2,10 +2,13 @@ import sharp, {OutputInfo} from 'sharp';
 
 import {resizeMask} from './mask-resample';
 
-/** `mask-v1` stays served unchanged for cached clients; `mask-v2` adds the ring-window rule below. */
-export const MERCHANT_LOGO_MASK_VERSIONS = ['mask-v1', 'mask-v2'] as const;
+/**
+ * Earlier versions stay served unchanged for cached clients. `mask-v2` adds the ring-window rule; `mask-v3` also
+ * takes the corner colour as background for line art (`isLineArt`) or an open mark (`isOpenMark`) at any band dominance.
+ */
+export const MERCHANT_LOGO_MASK_VERSIONS = ['mask-v1', 'mask-v2', 'mask-v3'] as const;
 export type MerchantLogoMaskVersion = (typeof MERCHANT_LOGO_MASK_VERSIONS)[number];
-export const MERCHANT_LOGO_MASK_VERSION: MerchantLogoMaskVersion = 'mask-v2';
+export const MERCHANT_LOGO_MASK_VERSION: MerchantLogoMaskVersion = 'mask-v3';
 const SIZE = 128;
 const MARK_SIZE = 104;
 type Colour = [number, number, number];
@@ -170,6 +173,73 @@ function isRingWindow(
 	return inter / (area + disc - inter) >= 0.96;
 }
 
+/**
+ * A mark drawn straight on the corner colour: taking the corner colour as background leaves the inside mostly
+ * uncovered (it is not a plate) and no substantial corner-coloured detail sealed off by the edge field (it is not a
+ * badge around a glyph).
+ */
+function isOpenMark(
+	rgb: Buffer,
+	width: number,
+	height: number,
+	radius: Float64Array,
+	frame: number[],
+	background: Colour,
+	cornerField: Colour,
+): boolean {
+	const count = width * height;
+	const candidate = matteFor(rgb, cornerField);
+	// Only the selected field is a barrier. Preserve substantial white detail enclosed by that field.
+	const open = Uint8Array.from({length: count}, (_, i) => Number(distance(rgb, i, background) >= 0.04));
+	const reachable = new Uint8Array(count);
+	const queue: number[] = [];
+	const visit = (i: number) => {
+		if (open[i] && !reachable[i]) {
+			reachable[i] = 1;
+			queue.push(i);
+		}
+	};
+	for (const i of frame) visit(i);
+	for (let head = 0; head < queue.length; head++) {
+		const i = queue[head];
+		if (i >= width) visit(i - width);
+		if (i < count - width) visit(i + width);
+		if (i % width) visit(i - 1);
+		if (i % width < width - 1) visit(i + 1);
+	}
+	let inner = 0,
+		filled = 0,
+		enclosed = 0;
+	for (let i = 0; i < count; i++) {
+		if (radius[i] > 0.84) continue;
+		inner++;
+		if (candidate[i] > 0.5) filled++;
+		if (distance(rgb, i, cornerField) < 0.04 && !reachable[i]) enclosed++;
+	}
+	return filled / inner < 0.75 && enclosed / count <= 0.01;
+}
+
+/**
+ * Line art: every pixel of the edge field lies within a thin stroke (a few percent of the tile) of another colour.
+ * A badge or plate always has a thicker solid area of its field around or between its glyphs.
+ */
+function isLineArt(rgb: Buffer, width: number, height: number, background: Colour): boolean {
+	const count = width * height;
+	// Two-pass city-block distance from each field pixel to the nearest pixel of another colour.
+	const steps = Float64Array.from({length: count}, (_, i) => (distance(rgb, i, background) < 0.04 ? Infinity : 0));
+	for (let i = 0; i < count; i++) {
+		if (i % width) steps[i] = Math.min(steps[i], steps[i - 1] + 1);
+		if (i >= width) steps[i] = Math.min(steps[i], steps[i - width] + 1);
+	}
+	for (let i = count - 1; i >= 0; i--) {
+		if (i % width < width - 1) steps[i] = Math.min(steps[i], steps[i + 1] + 1);
+		if (i < count - width) steps[i] = Math.min(steps[i], steps[i + width] + 1);
+	}
+	let thickest = 0;
+	for (const value of steps) thickest = Math.max(thickest, value);
+	return thickest < 0.08 * Math.min(width, height);
+}
+
 export function sourceForegroundMatte(
 	rgb: Buffer,
 	width: number,
@@ -205,43 +275,22 @@ export function sourceForegroundMatte(
 	const frame = frameIndices(width, height);
 	const corner = cornerFieldFor(rgb, width, height, frame);
 	const cornerField = corner.field;
-	const distinctCorners =
-		corner.cornerAgreement > 0.95 &&
-		corner.frameAgreement > 0.8 &&
-		Math.max(...cornerField.map((v, c) => Math.abs(v - background[c]))) > 0.1;
-	if (dominance < 0.5) {
-		if (distinctCorners) {
-			const candidate = matteFor(rgb, cornerField);
-			// Only the selected field is a barrier. Preserve substantial white detail enclosed by that field.
-			const open = Uint8Array.from({length: count}, (_, i) => Number(distance(rgb, i, background) >= 0.04));
-			const reachable = new Uint8Array(count);
-			const queue: number[] = [];
-			const visit = (i: number) => {
-				if (open[i] && !reachable[i]) {
-					reachable[i] = 1;
-					queue.push(i);
-				}
-			};
-			for (const i of frame) visit(i);
-			for (let head = 0; head < queue.length; head++) {
-				const i = queue[head];
-				if (i >= width) visit(i - width);
-				if (i < count - width) visit(i + width);
-				if (i % width) visit(i - 1);
-				if (i % width < width - 1) visit(i + 1);
-			}
-			let inner = 0,
-				filled = 0,
-				enclosed = 0;
-			for (let i = 0; i < count; i++) {
-				if (radius[i] > 0.84) continue;
-				inner++;
-				if (candidate[i] > 0.5) filled++;
-				if (distance(rgb, i, cornerField) < 0.04 && !reachable[i]) enclosed++;
-			}
-			if (filled / inner < 0.75 && enclosed / count <= 0.01) background = cornerField;
-		}
-	}
+	const agreeingCorners =
+		corner.cornerAgreement > 0.95 && Math.max(...cornerField.map((v, c) => Math.abs(v - background[c]))) > 0.1;
+	// A plate touching the frame is told apart from an open mark only by the frame; line art needs the corners alone.
+	const distinctCorners = agreeingCorners && corner.frameAgreement > 0.8;
+	if (version === 'mask-v3') {
+		if (
+			(distinctCorners && isOpenMark(rgb, width, height, radius, frame, background, cornerField)) ||
+			(agreeingCorners && isLineArt(rgb, width, height, background))
+		)
+			background = cornerField;
+	} else if (
+		distinctCorners &&
+		dominance < 0.5 &&
+		isOpenMark(rgb, width, height, radius, frame, background, cornerField)
+	)
+		background = cornerField;
 	if (
 		version !== 'mask-v1' &&
 		background !== cornerField &&

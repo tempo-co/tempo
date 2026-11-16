@@ -44,7 +44,6 @@ export function RecurringSeriesOverview({
 }) {
   const query = useGetRecurringSeries(asOf);
   const {isPending, isError} = savedDataStatus(query);
-  const [direction, setDirection] = useState<RecurringSeriesDirection>('EXPENSE');
   const lists = query.data;
   const selected = lists
     ? [...lists.expenses.series, ...lists.income.series].find(({key}) => key === selectedKey)
@@ -56,9 +55,14 @@ export function RecurringSeriesOverview({
   }, [lists, selected, selectedKey, onSelect]);
   // Details restored from the URL return to their own tab.
   const selectedDirection = selected?.direction;
-  useEffect(() => {
+  const [direction, setDirection] = useState<RecurringSeriesDirection>(
+    selectedDirection ?? 'EXPENSE',
+  );
+  const [shownDirection, setShownDirection] = useState(selectedDirection);
+  if (selectedDirection !== shownDirection) {
+    setShownDirection(selectedDirection);
     if (selectedDirection) setDirection(selectedDirection);
-  }, [selectedDirection]);
+  }
 
   const accepted = useFiguresCurrencyAccepted();
   // Lists read mid-conversion or in another currency wait for their refetch; empty ones have nothing to label.

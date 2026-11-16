@@ -224,6 +224,12 @@ export function siteMatchesBrand(brand: string, domain: string, siteNames: reado
 	);
 }
 
+/** Whether two brand names spell the same brand, spaces, punctuation and case aside. */
+export function isSameBrand(first: string | null, second: string | null): boolean {
+	const spelling = first ? tokens(first).join('') : '';
+	return !!spelling && spelling === (second ? tokens(second).join('') : '');
+}
+
 /**
  * Decodes one icon to a square PNG on white, with the source's size in pixels: SVG (rendered), PNG, JPEG, WebP, GIF,
  * or a PNG or bitmap inside an ICO. Rejects icons too small to show, animations and icons that come out blank.

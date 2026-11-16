@@ -11,6 +11,8 @@ export const PARSE_REFUSAL_CODES = [
 	'layout_not_recognized',
 	/** A file no reader claims that reads as a table: delimited text, or a workbook that is no Revolut statement. */
 	'layout_unknown',
+	/** An owner's saved layout claims the file but would skip lines above its table that look like rows. */
+	'layout_not_mappable',
 ] as const;
 export type ParseRefusalCode = (typeof PARSE_REFUSAL_CODES)[number];
 
@@ -51,10 +53,14 @@ export const STATEMENT_FORMATS = ['camt053', 'mt940', 'abnAmroTxt', 'revolutCsv'
 export type StatementFormat = (typeof STATEMENT_FORMATS)[number];
 
 /**
- * Banks whose files name no account; the owner's account at that bank is found by currency instead. An owner's
- * saved layout whose files name no account works the same way, under the bank name the owner gave it.
+ * Banks whose files name no account; the owner's account at that bank is found by currency instead. A built-in
+ * CSV layout whose files name no account (`NO_ACCOUNT_LAYOUT_BANKS`), and an owner's saved one under the bank name the
+ * owner gave it, work the same way.
  */
 export const STATEMENT_BANKS = ['Revolut'] as const;
+
+/** A balance a statement states: the decimal string as of the end of `date` (`YYYY-MM-DD`), signed. */
+export type StatementBalance = {date: string; amount: string};
 
 export type NormalizedStatement = {
 	format: StatementFormat;
@@ -65,8 +71,8 @@ export type NormalizedStatement = {
 	/** The account's other id (CAMT `Acct/Id/Othr/Id`, MT940 `:25:`) when it has no IBAN. */
 	accountOtherId: string | null;
 	/**
-	 * The bank of a file that names no account at all (one of `STATEMENT_BANKS`, or the bank of the owner's saved
-	 * layout it was read with); null whenever the file has an IBAN or other id.
+	 * The bank of a file that names no account at all (one of `STATEMENT_BANKS`, or the bank of the CSV layout,
+	 * built in or the owner's, it was read with); null whenever the file has an IBAN or other id.
 	 */
 	bank: string | null;
 	accountCurrency: string;
@@ -74,6 +80,16 @@ export type NormalizedStatement = {
 	sequenceNumber: string | null;
 	/** Entries left out because they are not booked. */
 	entriesSkipped: number;
+	/**
+	 * The booked balance before the statement's first entry, as the file states it (CAMT `OPBD`/`PRCD`, MT940
+	 * `:60F:`/`:60M:`); null when it states none.
+	 */
+	openingBalance: StatementBalance | null;
+	/**
+	 * The booked balance after the statement's last entry, as the file states it (CAMT `CLBD`, MT940 `:62F:`/`:62M:`,
+	 * OFX `LEDGERBAL` dated on or after every entry); null when it states none.
+	 */
+	closingBalance: StatementBalance | null;
 	rows: NormalizedRow[];
 };
 

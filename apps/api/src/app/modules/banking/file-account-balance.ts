@@ -7,7 +7,7 @@ const SCALE = 8;
 /** A stored row of an imported-files account that states its balance after. Amounts are decimal strings. */
 export type StatedBalanceRow = {bookingDate: string; amount: string; balanceAfter: string};
 
-/** The balance the bank stated at the end of one booking day. `amount` is a decimal string at scale 8. */
+/** The balance the bank stated at the end of one booking day. `amount` is a decimal string. */
 export type FileAnchor = {date: string; amount: string};
 
 /**

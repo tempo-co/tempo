@@ -89,7 +89,9 @@ export class FxRateService {
 		const fromDate = toWeekday(rawFromDate, 1);
 		const toDate = toWeekday(rawToDate, -1);
 		if (fromDate > toDate) return true;
-		const [coverage] = (await this.fxRateRepository.query(
+		const [coverage] = await this.fxRateRepository.query<
+			Array<{minimumDate: string | null; maximumDate: string | null; hasGap: boolean}>
+		>(
 			`WITH stored AS (
 				SELECT "rateDate", LAG("rateDate") OVER (ORDER BY "rateDate") AS "previousDate"
 				FROM "bank_transaction_fx_rates"
@@ -103,7 +105,7 @@ export class FxRateService {
 				), FALSE) AS "hasGap"
 			FROM stored`,
 			[currency, fromDate, toDate, MAX_ECB_PUBLICATION_GAP_DAYS],
-		)) as Array<{minimumDate: string | null; maximumDate: string | null; hasGap: boolean}>;
+		);
 		return Boolean(
 			coverage?.minimumDate &&
 			coverage.maximumDate &&

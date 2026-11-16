@@ -20,7 +20,7 @@ const server = createServer((request, response) => {
     response.writeHead(204).end();
     return;
   }
-  if (request.method === 'POST' && request.url === '/bank-imports') {
+  if (request.method === 'POST' && ['/bank-imports', '/bank-imports/layout-proposals'].includes(request.url)) {
     let bytes = 0;
     request.on('data', (chunk) => (bytes += chunk.length));
     request.on('end', () => {

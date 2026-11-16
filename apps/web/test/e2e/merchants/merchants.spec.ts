@@ -480,6 +480,26 @@ test('the merchants dialog ranks by week, month or year and searches every merch
   await expect(results.getByRole('listitem')).toHaveCount(1);
   await dialog(page).getByRole('searchbox', {name: 'Search merchants and people'}).fill('nobody');
   await expect(results).toContainText('No merchant or person matches that name.');
+
+  // The clear button is a full touch target and brings the ranking back.
+  const search = dialog(page).getByRole('searchbox', {name: 'Search merchants and people'});
+  const clear = dialog(page).getByRole('button', {name: 'Clear search'});
+  const clearBox = await boxOf(clear);
+  expect(clearBox.width).toBeGreaterThanOrEqual(44);
+  expect(clearBox.height).toBeGreaterThanOrEqual(44);
+  await clear.click();
+  await expect(search).toHaveValue('');
+  await expect(search).toBeFocused();
+  await expect(clear).toBeHidden();
+  await expect(top).toBeVisible();
+  // Escape clears a filled search without closing the dialog; on an empty one it closes the dialog.
+  await search.fill('burger');
+  await expect(results).toContainText('1 match');
+  await search.press('Escape');
+  await expect(search).toHaveValue('');
+  await expect(top).toBeVisible();
+  await search.press('Escape');
+  await expect(dialog(page)).toBeHidden();
 });
 
 test('a later page of merchants or of a merchant’s transactions that fails keeps the loaded ones and tries that page again', async ({
@@ -671,8 +691,15 @@ for (const scenario of [
     } else {
       await history.click();
     }
-    await expect(page).toHaveURL(`/?merchants=open&merchant=${BRAND}`);
+    // The merchant opens over the transactions it came from, in place of the transaction.
+    await expect(page).toHaveURL(`/bank-transactions?merchants=open&merchant=${BRAND}`);
     await expect(dialog(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
+    await expect(page.locator('main h1')).toHaveText('Bank transactions');
+    await expect(inspector).toHaveCount(0);
+    // Moving within the dialog keeps it over the same page.
+    await dialog(page).getByRole('button', {name: 'All merchants'}).click();
+    await expect(page).toHaveURL('/bank-transactions?merchants=open');
+    await expect(dialog(page).getByRole('region', {name: 'All merchants'})).toBeVisible();
     // Closing returns to the transaction it was opened from.
     await dialog(page).getByRole('button', {name: 'Close merchants'}).click();
     await expect(page).toHaveURL(new RegExp(`transactionId=${transaction.id}`));

@@ -108,7 +108,7 @@ function LayoutRow({layout}: {layout: BankImportLayout}) {
       setPending(false);
       if (wasToasted(error)) return;
       toast.error(`Couldn't remove ${layout.bankName}`, {
-        description: 'Please try again in a moment.',
+        description: 'Try again in a moment.',
         id: `bank-import-layout-remove-failed-${layout.id}`,
       });
     }

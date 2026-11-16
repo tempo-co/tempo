@@ -43,6 +43,7 @@ import {
 	encodeMerchantLogo,
 	iconCandidates,
 	isPlatformDefaultIcon,
+	isSameBrand,
 	parseHomepage,
 	parseManifestIcons,
 } from './merchant-site';
@@ -155,13 +156,20 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 
 	async identifyMerchants(merchantIds: readonly string[]): Promise<void> {
 		if (!this.canAcquire()) return;
+		const ids = In([...new Set(merchantIds)].slice(0, BATCH_SIZE));
 		const merchants = await this.merchants.find({
-			where: {id: In([...new Set(merchantIds)].slice(0, BATCH_SIZE)), status: PENDING},
+			where: [
+				{id: ids, status: PENDING},
+				{id: ids, status: IDENTIFIED, company: IsNull()},
+			],
 		});
+		const byId = new Map(merchants.map((merchant) => [merchant.id, merchant]));
+		const identified = new Map(merchants.filter(({status}) => status === IDENTIFIED).map((m) => [m.id, m]));
 		const inputs: MerchantIdentificationInput[] = [];
 		for (const merchant of merchants) {
 			const input = await this.toIdentificationInput(merchant);
 			if (input) inputs.push(input);
+			else if (identified.has(merchant.id)) await this.setCompany(merchant, merchant.brand!);
 			else await this.merchants.update({id: merchant.id, status: PENDING}, {status: NONE});
 		}
 		if (!inputs.length) return;
@@ -169,21 +177,55 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		try {
 			results = await this.provider.identifyMerchants(inputs);
 		} catch (error) {
-			// Both routes unavailable: stay pending for the hourly retry. Anything else counts as a failed attempt.
+			// Both routes unavailable: stay pending for the hourly retry. Anything else counts as a failed attempt;
+			// a merchant identified before companies existed then keeps grouping by its brand.
 			if (error instanceof BankTransactionCategorizationUnavailableError) return;
-			for (const {correlationId} of inputs) await this.recordFailedIdentification(correlationId);
+			for (const {correlationId} of inputs) {
+				const merchant = identified.get(correlationId);
+				if (merchant) await this.setCompany(merchant, merchant.brand!);
+				else await this.recordFailedIdentification(correlationId);
+			}
 			return;
 		}
 		for (const result of results) {
+			const merchant = identified.get(result.correlationId);
+			if (merchant) {
+				// An identified merchant keeps its brand and logo, so a different answer this time changes nothing:
+				// its company counts only when the model named the same brand again. Only a merchant the model calls a
+				// business follows its brand's recorded company; anything else may be a payment service.
+				const company =
+					result.kind !== 'BUSINESS'
+						? merchant.brand!
+						: await this.toCompany(
+								merchant.accountId,
+								merchant.brand!,
+								isSameBrand(result.brand, merchant.brand) ? result.company : null,
+							);
+				await this.setCompany(merchant, company);
+				continue;
+			}
 			// A payment service the statement names on its own shows its own logo.
 			const named = result.kind === 'BUSINESS' || result.kind === 'PAYMENT_SERVICE';
 			const status = named && result.brand ? IDENTIFIED : NONE;
 			const logo = status === IDENTIFIED && result.domain ? await this.findOrCreateLogo(result.domain) : null;
+			// A payment service moved someone else's money: it keeps its own brand even when a business of that brand
+			// recorded another company.
+			const company =
+				status !== IDENTIFIED
+					? null
+					: result.kind === 'PAYMENT_SERVICE'
+						? result.brand
+						: await this.toCompany(
+								byId.get(result.correlationId)!.accountId,
+								result.brand!,
+								result.company,
+							);
 			await this.merchants.update(
 				{id: result.correlationId, status: PENDING},
 				{
 					status,
 					brand: result.brand,
+					company,
 					domain: result.domain,
 					domainConfident: result.domainConfident,
 					logoId: logo?.id ?? null,
@@ -361,7 +403,11 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 	private async enqueuePendingIdentifications(): Promise<void> {
 		const pending = await this.merchants.find({
 			select: {id: true},
-			where: {status: PENDING, retryAfter: Or(IsNull(), LessThanOrEqual(new Date()))},
+			where: [
+				{status: PENDING, retryAfter: Or(IsNull(), LessThanOrEqual(new Date()))},
+				// Identified before companies existed: asked once more, for the company only.
+				{status: IDENTIFIED, company: IsNull()},
+			],
 			order: {id: 'ASC'},
 		});
 		for (const batch of chunkArray(pending, BATCH_SIZE)) {
@@ -432,6 +478,27 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 	private async findOrCreateLogo(domain: string): Promise<MerchantLogo> {
 		await this.logos.createQueryBuilder().insert().values({domain}).orIgnore().execute();
 		return this.logos.findOneByOrFail({domain});
+	}
+
+	/**
+	 * The company a business of this brand groups under. One brand has one company per owner, the first one recorded,
+	 * because the model can name a different company for another key of the same brand, which would split its spending.
+	 * Brands match as grouping does, by lowercased trimmed name. Without one recorded yet, the proposed company or else
+	 * the brand itself.
+	 */
+	private async toCompany(accountId: string, brand: string, proposed: string | null): Promise<string> {
+		const [sibling]: Array<{company: string}> = await this.dataSource.query(
+			`SELECT "company" FROM merchants
+			WHERE "accountId" = $1 AND "status" = $2 AND "company" IS NOT NULL AND lower(btrim("brand")) = lower(btrim($3))
+			ORDER BY "updatedAt", "id"
+			LIMIT 1`,
+			[accountId, IDENTIFIED, brand],
+		);
+		return sibling?.company ?? proposed ?? brand;
+	}
+
+	private async setCompany(merchant: Merchant, company: string): Promise<void> {
+		await this.merchants.update({id: merchant.id, status: IDENTIFIED, company: IsNull()}, {company});
 	}
 
 	private async recordFailedIdentification(merchantId: string): Promise<void> {

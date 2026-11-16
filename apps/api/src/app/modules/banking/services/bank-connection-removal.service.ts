@@ -16,6 +16,7 @@ import {BankingAuthorizationStateService} from './banking-authorization-state.se
 import {BankingConnectionLockService} from './banking-connection-lock.service';
 import {BankingConsentRevocationService} from './banking-consent-revocation.service';
 import {BANK_CONNECTION_STATUSES, DESTRUCTIVE_CONNECTION_STATUSES} from './banking-sync.constants';
+import {FileAccountBalanceService} from './file-account-balance.service';
 import {findOwnedConnection} from './find-owned-connection';
 import {OwnTransferService} from './own-transfer.service';
 import {ReportingCurrencyService} from './reporting-currency.service';
@@ -42,6 +43,7 @@ export class BankConnectionRemovalService {
 		private readonly connectionLockService: BankingConnectionLockService,
 		private readonly ownTransferService: OwnTransferService,
 		private readonly consentRevocationService: BankingConsentRevocationService,
+		private readonly fileAccountBalanceService: FileAccountBalanceService,
 		private readonly reportingCurrencyService: ReportingCurrencyService,
 	) {}
 
@@ -107,7 +109,14 @@ export class BankConnectionRemovalService {
 					}
 				}
 
+				// Its import records go with it, and with them closing balances imported-files accounts may anchor on.
+				const anchored = await this.fileAccountBalanceService.findAnchoredByConnection(
+					manager,
+					accountId,
+					connection.id,
+				);
 				await connectionRepository.remove(connection);
+				await this.fileAccountBalanceService.recomputeAll(manager, accountId, anchored);
 				connectionLock.assertHealthy();
 			});
 			deletionCommitted = true;
