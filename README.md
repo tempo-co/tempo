@@ -9,7 +9,7 @@
 
 ## Tempo
 
-Tempo is a private, self-hosted personal-finance app. It synchronizes real bank data through [Enable Banking](https://enablebanking.com) and shows accounts, balances, transactions and recurring payments.
+Tempo is a personal-finance app. It synchronizes real bank data through [Enable Banking](https://enablebanking.com) and shows accounts, balances, transactions and recurring payments.
 
 | Path | Contents |
 |---|---|

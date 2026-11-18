@@ -1,0 +1,27 @@
+# E2E test helpers
+
+The shared helpers of the Playwright suite under `test/`, and the rules for reusing them. Running specs, mocks and traps are in `docs/browser-and-e2e-testing.md`.
+
+## Helpers
+
+- `test/fixtures.ts`: import `test` and `expect` from here instead of `@playwright/test`. It provides the page objects as fixtures (`loginPage`, `homePage`, `signupPage`, `verifyEmailPage`, `verifyEmailChangePage`, `resetPasswordPage`, `accountSettingsPage`, `securitySettingsPage`, `appearanceSettingsPage`), plus:
+  - `freshAccount`: a new verified account with no bank data, with the test's browser context logged in as it.
+  - `createVerifiedAccount(request)`: the same account without logging in, for tests that log in through the UI.
+- `test/data/account.data.ts` (`createAccount`) and `test/data/bank-transaction.data.ts` (`createBankTransaction`) return complete typed HTTP response fixtures. Override the fields the scenario depends on; keep its actions and assertions in the spec.
+- `test/utils/api-mocks.ts`: `mockBankConnections`, `transformBankConnections` and `routeBankConnectionsApi` intercept the `GET /bank-connections` API call while letting navigations to `/bank-connections` through. `mockJson` and `fulfillJson` answer other routes with JSON. `mockEmptyHome` answers Home's history requests with empty data (from parts such as `mockEmptyRecurringLists` and `EMPTY_REVIEW_COUNTS`, which specs that replace its routes reuse); fully mocked specs get it and `mockBankConnections(page, [])` by default from `test/fixtures.ts`. `failLaterPages` fails a paged list's later pages until told to stop, and `expectFailedPageRetried` checks that the loaded rows stay and Retry adds the page.
+- `test/utils/layout.ts`: `boxOf(locator)` returns a rendered element's bounding box, `expectNoHorizontalOverflow(page)` checks for horizontal scrolling, and `expectLoaded(scope)` waits until no part of it is `aria-busy`. Home and its month dialog show placeholders of the loaded size while sections load, so measure only after `expectLoaded` or a loaded value.
+- `test/utils/url.ts`: `withSearchParams(path, params)` builds URLs for the invalid-search-param cases in `test/data`.
+- `test/utils/email-utils.ts`: `EmailUtils.getVerificationCode(email)` reads a verification code from Mailpit; `ResetPasswordPage.openResetLink(email)` requests a reset and opens the emailed link.
+- `test/utils/hook-harness.ts`: `createHookHarness(stubs)` runs a real hook against a real `QueryClient` with whole modules stubbed (see Hook harness below).
+
+## Reusing fixtures
+
+- Tests that change account data or depend on an account having no bank data use `freshAccount` rather than a seeded account, so they do not depend on test order and stay safe to retry. Do not change seeded data another test reads.
+- Password changes and session revocation must not invalidate an identity another test or browser project reuses. Request `freshAccount` in the setup hook before navigating.
+- Keep meaningful dates, amounts, category states, conversion evidence and linked identities explicit in the spec, not in fixture defaults. Use local helpers for repetition within one spec and shared helpers only for a contract multiple specs need.
+- Do not cast incomplete responses to a contract type or share a mutable fixture between tests. Do not use API entity factories or full database seeds to construct HTTP mocks: they represent different boundaries.
+- Write repeated validation cases as a `for` loop over a table of cases.
+
+## Hook harness
+
+`createHookHarness` is for cache behaviour the UI cannot set up. A named import missing from a stub is `undefined` in the harness, so the failure-path test throws `TypeError` instead of the expected error. Add every named import a hook uses from a stubbed module to the stubs; for `@/utils/api` or `sonner` add it to every stub of that module (for example `isAuthError: () => false`, `toast.error: () => undefined`). Current users: `grep -rl createHookHarness test`.

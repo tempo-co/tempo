@@ -10,6 +10,17 @@ Staging is a separate copy of Tempo on this host, deployed with `tempo-deploy st
 - Config: `staging.compose.yml`, `tailscale.compose.yml`, `tailscale-serve.json` and `staging.env` (secrets, the tailnet origin and the deployed image digests; template in `staging.env.example`), installed to `~/.config/tempo-staging/` by `ops/install.sh staging`
 - URLs: app `http://127.0.0.1:8119/` and `https://tempo-staging.<tailnet>.ts.net/`; Mailpit `http://127.0.0.1:8125/`, loopback only
 
+## Deploying
+
+- `tempo-deploy staging --api <tag> --web <tag>` exits 0 when the stack is healthy, 1 when the deploy failed, and 75 when another deploy holds the lock. A head that changed only the web app has no API image of its own, so pass `--api main` with it.
+- `tempo-deploy` and the refresh script run from the installed copy, not the checkout. `ops/install.sh staging` installs whatever the checkout's `HEAD` is (production's install refuses anything but the fetched main) and records that commit in `$HOME/.local/lib/tempo-deploy/VERSION`. Compare it with the fetched main before deploying, and reinstall from a main checkout when `ops/` has moved; an older installed copy lacks the fixes merged since.
+- The API container gets only the variables listed under its `environment:` in `ops/staging/docker-compose.yml`; there is no `env_file`. A new API setting reaches staging only through a line there.
+- What is deployed: the containers' `org.opencontainers.image.revision` labels (the deploy log prints them) and `http://127.0.0.1:8119/api/health`. The staging API is limited to one CPU.
+
+## Signing in
+
+Sign in with a synthetic account, never a restored login: `POST /api/auth/signup` with a random `@example.test` address, read the code from Mailpit (`http://127.0.0.1:8125/api/v1/messages`), then `POST /api/auth/signup/verify`. Send `Origin` set to the configured web origin on every write. The session cookie is `Secure` (staging runs with `NODE_ENV=production`), so over loopback HTTP send it back by hand in a `Cookie` header. The next database refresh deletes the account.
+
 ## Safety
 
 The Compose file hard-codes `BANKING_INTEGRATION_ENABLED=false`, `AI_CATEGORIZATION_ENABLED=false` and `AI_CATEGORIZATION_WEB_SEARCH_ENABLED=false`, and the env template has no Anthropic or banking keys, so staging makes no billable AI calls and no bank calls. It sets `FILE_IMPORT_ENABLED=true`, so statement file import can be tried there, and `FILE_IMPORT_MAPPER_ENABLED=false`, so a file in no known layout is refused there rather than sent to a model; production leaves both off unless its env file turns them on.

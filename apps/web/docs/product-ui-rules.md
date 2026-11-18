@@ -1,0 +1,51 @@
+# Product UI rules
+
+The owner's standing rules for what Tempo's screens show and how they behave, for new and changed screens. Tokens and components are in `DESIGN.md`; shared code rules are in `docs/frontend-conventions.md`.
+
+## Density and copy
+
+- A lean dashboard: each number is shown once, with no repeated or decorative content. A new summary widget needs the decision it helps the owner make.
+- Glanceable headers use horizontal space: the headline on the left, a two-line comparison beside it.
+- No explanatory sentences under charts and cards. When one is removed from a view, remove it and its data plumbing everywhere that component renders.
+- An info icon only for a definition the screen cannot show (a formula, a computed rule such as "usual"), never to restate labels or the legend.
+- Hide an empty-state card that has nothing to act on. On phones, also hide all-clear status lines; problems and expiring-consent warnings still show.
+- Words over signed percentages: "€X now · €Y less than on <d Mon>", and nothing more. No caveats, not even conditional ones.
+- Before rewording a headline figure, read how it is computed and make the words match what the chart shows.
+- The offline indicator never covers UI: a small inline label with detail in a tooltip, never a floating or undismissable banner. No toast that blocks the screen or cannot be closed.
+- Everything works on both phone and desktop.
+
+## Charts and periods
+
+- Absolute, comparable views over relative ones: a fixed scale with even round ticks and headroom over the tallest bar.
+- Every incomplete period (the running one, and one cut short by where history starts) is marked apart from complete ones and labelled "so far". Averages count complete periods only.
+- Weekly comparisons use the median of earlier full weeks, since one rent week inflates the mean.
+- Hide a header average while fewer than two full periods exist. Word it as the exact span plus money per period: "Per month, <Mon YYYY> – <Mon YYYY>: €X spent · €Y earned · €Z kept". Round each figure to the displayed unit before deriving "kept".
+- Summary cards lead with figures that compare month to month ("Monthly bills", "Monthly income"), not countdowns that shrink to zero. Income is green, costs stay neutral, and amber is only for problems.
+- Wide tables do not just scroll sideways at 320 to 430 px: give them a phone form (one row per item with the latest value and change, older periods on tap). Desktop keeps the table.
+
+## Lists and detail views
+
+- One row spec per entity: anything standing for transactions uses the transaction row's height and tile size on every surface. Layout specs measure rows and tiles at 1440 and 390 px on each surface.
+- The left tile shows the merchant logo when there is one; the category keeps its own small icon beside the label.
+- Fact grids are two lines: a label over one value. Fold secondary detail into the label ("Next · in 29 days"). A value that can grow without bound moves to a wrapping badge. Estimates are whole amounts.
+- Detail views list their items inline, newest first, with Load more and the shared row, and keep the open entity in the URL (with `replace`).
+- Optional columns keep their grid track: render an empty cell so the next column starts at the same x in every state.
+
+## Filters and pickers
+
+- Parent and child checkboxes: the parent selects or clears all children and shows a mixed state when some are selected.
+- A filter panel has exactly one scroll area. Desktop: two panes, filter types on the left and options on the right. Phones: one stepped bottom sheet at a fixed height, rows at least 44 px.
+- One-press filter shortcuts ("To review") sit in the toolbar, not alone in the chips row.
+- Long-list pickers (country, bank) on phones are one stepped bottom sheet with the likely value preselected and 56 px rows. Never auto-focus search, on any device.
+- Restyle, don't replace: flags stay flags (small 4:3, small radius) and badges keep the pill radius.
+- An underline marks navigation; a selected setting value needs a different cue (a ring plus a filled cell).
+
+## Loading
+
+First load shows skeleton rows shaped like the real list. A refetch keeps the old rows and fades them after about 150 ms. Changing figures fade in as a whole line, never rolling digit by digit.
+
+## Setup and settings pages
+
+- A managed list comes first and one-time setup steps below it; setup copy never refers to where the list sits.
+- Setup steps are terse, with only key terms in medium weight.
+- Pages with separate sections use in-page tabs on phones.

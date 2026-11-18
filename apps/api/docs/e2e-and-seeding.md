@@ -26,8 +26,11 @@ Consequences:
 
 `docker-compose.test.yml` uses fixed container names (`postgres_test`, `redis_test`, `mailpit_test`), and `docker-compose.dev.yml` uses its own (`postgres`, `redis`, `mailpit`, ...); both use env-interpolated host ports. `npm run test:e2e*` runs `docker compose -p tempo-api-test ... down -v` first.
 
+Every worktree on a host shares the one API E2E stack: the same project, container names, host ports and `tempo_test` database, and each spec file's boot drops the schema. Two runs at once wipe each other's data, and `down -v` from one deletes the other's volume. Web E2E (`apps/web/docker-compose.e2e.yml`, project `tempo-web`) uses the same three container names, so the two stacks cannot exist at the same time.
+
 - Before starting or tearing down, check `docker compose ls --all`, container names and listening ports. Never run `down` on a project you did not start.
 - For a parallel stack (another worktree, a host-run API for browser tests), use a unique project name, container names and host ports through a temporary override file kept outside the repo (`ports: !override`). A unique project name alone does not prevent port or container-name collisions.
+- On alternate ports, override `REDIS_URL` as well as `REDIS_PORT`: the app and BullMQ read only `REDIS_URL` (`src/app/core/redis/redis.module.ts`, `src/app/core/queue/queue.module.ts`), while `REDIS_PORT`, `DB_PORT`, `EMAIL_PORT` and `EMAIL_UI_PORT` set the Compose port mappings. The Mailpit helper derives its URL from `EMAIL_UI_PORT` (`test/utils/email-utils.ts`).
 - Host-run processes reach Compose services through `127.0.0.1` and the published ports; service names resolve only inside the Compose network. Set host-facing values after sourcing every env file, since a `.local` file can replace them.
 - Repeated auth setup can exhaust the login rate limit or leave sessions behind; reset only the disposable Redis (`FLUSHDB` on that container) or wait for the TTL.
 - A "started" log line proves only that bootstrap happened once. Before reporting a background API live, check the PID, the listener and `GET /health`.
@@ -44,7 +47,8 @@ Consequences:
 
 ## Reusing test setup
 
-- Use `BankingFixtures` for persisted connections, accounts and transactions. Use `test/fixtures/bank-transaction.fixture.ts` for an in-memory entity in unit tests; it does not set up database relationships or replace persisted fixtures.
+- `test/setup/e2e.setup.ts`: `getApp`, `loginAgent`, and `enableAiCategorizationE2e()` or `enableMerchantLogosE2e()` at module scope. `test/utils/wait-utils.ts`: `waitFor` until background workers finish. `test/utils/auth-utils.ts`: `createVerifiedAccount`, `expectValidationMessage`. `test/utils/email-utils.ts`: Mailpit.
+- Use `BankingFixtures` (`scripts/seed-data/banking-fixtures.ts`, valid defaults; pass only the fields a test depends on) for persisted connections, accounts and transactions. Use `test/fixtures/bank-transaction.fixture.ts` for an in-memory entity in unit tests; it does not set up database relationships or replace persisted fixtures.
 - Use `test/utils/banking-utils.ts` to create an isolated owner with real signup, verification and login, plus one connection and an empty bank account. Pass the base currency explicitly and keep scenario rows local:
 
 ```ts

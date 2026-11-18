@@ -8,24 +8,23 @@ web
 
 ## Users
 
-The primary user is the individual owner of the instance. Tempo is used for personal finances across multiple bank accounts and multiple devices. Success means being able to pull up current banking information whenever needed and use it to understand spending and financial habits.
+Tempo is for anyone with accounts at a bank Enable Banking covers, in any country; sign-up is open. Each user owns their account and its data and may use several bank accounts and devices. Success means being able to pull up current banking information whenever needed and use it to understand spending and financial habits.
 
 ## Product Purpose
 
 Tempo is a personal finance application for tracking real financial data across connected bank accounts. It should make current account information, balances, and transactions easy to retrieve and inspect, then support richer understanding through transaction categorization with owner-controlled manual correction, spending and habit statistics, and future predictions.
 
-The product is useful when it gives the owner a dependable, always-available view of their finances without a broad-market financial product workflow.
+The product is useful when it gives each owner a dependable, always-available view of their finances.
 
 ## Positioning
 
-Tempo is intended to be a private, read-only financial record for one person, run continuously under the owner's control and accessible from their own devices. It takes real bank data two ways. Live sync through Enable Banking is the main path where it is available, because it stays current by itself. Statement files the owner imports are the other path: for history that sync does not reach, and for banks or accounts without live sync. An account can have either or both.
+Tempo is a read-only financial record for each owner, always running and reachable from their own devices. It takes real bank data two ways. Live sync through Enable Banking is the main path where it is available, because it stays current by itself. Statement files the owner imports are the other path: for history that sync does not reach, and for banks or accounts without live sync. An account can have either or both.
 
 ## Operating Context
 
-- The intended deployment is a self-hosted, continuously running instance on a machine controlled by the owner, if that remains viable long term.
-- The app should be reachable from multiple personal devices, including a phone, so banking information is available on demand.
-- If the machine is not a viable long-term host, moving to cloud hosting remains an open fallback with additional security implications.
-- Enable Banking is the intended live-sync integration. European bank coverage is relevant; UK support is currently understood to be weak or unavailable and must not be assumed.
+- Production is one continuously running deployment, and every merge to `main` ships to it without a separate approval (`docs/adr/`).
+- The app is reachable from phones and other devices, so banking information is available on demand.
+- Enable Banking is the live-sync integration. UK support is currently understood to be weak or unavailable and must not be assumed.
 
 ## Capabilities and Constraints
 
@@ -37,8 +36,8 @@ Tempo is intended to be a private, read-only financial record for one person, ru
 - Home answers where the owner stands over the years: the total balance and its change over a chosen span, the balance and what was kept each month, recurring bills and income, a year-by-year table, and spending by category and income by source as a month on average in each year. A month opens in a dialog over Home with its money in and out, where it went against the category's usual, its transactions, sources and biggest merchants. The navigation counts transactions that need review and flags banks that need attention. Recurring-payment details link to their underlying transaction history. These are history-based views, not a general prediction engine.
 - Merchant details total what was paid to a merchant or person all time and per week, month or year, grouping merchant names that share an identified brand. They open in a dialog over Home (a drawer on phones) from a transaction's details, a month's biggest merchants or the searchable merchants list in the same dialog.
 - Integrations provides expiring, revocable, read-only access tokens and a hosted Streamable HTTP MCP endpoint; clients connect with the server URL and a bearer token.
-- Privacy, security, and financial-data correctness take priority over growth or multi-tenant SaaS concerns.
-- Exact long-term hosting, supported bank/country coverage, currency scope, and the accessibility target remain open decisions where the provider or product has not yet established them.
+- Privacy, security, and financial-data correctness take priority over growth.
+- Long-term hosting, currency scope, and the accessibility target remain open decisions.
 
 ## Brand Commitments
 
@@ -48,13 +47,16 @@ Tempo is intended to be a private, read-only financial record for one person, ru
 
 ## Evidence on Hand
 
-- The implemented frontend feature areas are under `src/features/auth`, `src/features/banking`, `src/features/file-import` and `src/features/settings`, with routes under `src/routes`.
-- The backend in `apps/api` contains the Enable Banking integration, statement file import, and bank connection, account, balance, synchronization, and transaction services under `apps/api/src/app/modules`.
-- The current repository contains authentication, bank connection, synchronization, balance history, cash-flow and category-spending views, recurring-payment discovery and review, transaction inspection and categorization, and hosted read-only MCP access. Dashboard components live under `src/features/dashboard`, and recurring-payment components live under `src/features/banking/components`.
+- Frontend features are under `src/features`, routes under `src/routes`; backend modules are under `apps/api/src/app/modules`.
 
 ## Product Principles
 
-- Personal utility comes before broad-market product scope.
+- Automatic features use general, tested rules over stored transaction evidence, never exceptions for one person, merchant or account. Owner actions (category corrections, confirm or dismiss choices) are legitimate inputs.
+- Bank sync is authoritative and never asks the owner about what it fetched; questions to the owner concern only rows from imported files.
+- Recurring payments keep merchant identity apart from payment-stream continuity: no fuzzy name matching, alias registry, merchant-specific code or manual combine control.
+- Notifications interrupt only for what the owner must act on now: push covers bank re-authorization and stopped sync. Tempo sends no spending, large-transaction, low-balance, budget or digest alerts.
+- Settings and Profile have no data-cleanup controls.
+- Public copy outside the app addresses the whole EU, leads with product value rather than privacy, and never names a specific bank.
 - Read-only behavior and accurate financial state are non-negotiable.
 - Current multi-bank information should be quick to retrieve and straightforward to inspect.
 - Keep financial data under the user's control wherever practical, while treating remote access as a security-sensitive capability.

@@ -1,6 +1,6 @@
 # Banking invariants
 
-Rules for `src/app/modules/banking/` that the code relies on but does not state in one place.
+Rules for `src/app/modules/banking/` that the code relies on but does not state in one place. Write rules: `docs/derived-data-writes.md`.
 
 ## Ownership
 
@@ -115,4 +115,4 @@ Defined in `src/app/modules/banking/services/bank-transaction-filters.ts`; read 
 - Recurring detection is stored per owner (`recurring_snapshots`) and reused while the owner's history version is unchanged. Statement triggers on `bank_transactions` (migration `AddBankHistoryChanges20261113170000`) add a change note per owner and writing transaction for every insert, delete and update of a tracked column; the version is the sum of the notes plus the owner's bank account ids, which covers rows deleted with their account. Writers insert only their own note key, so they never wait for each other, and reads fold many notes into one of the same weight. The daily whole-history recompute then folds the notes of every owner with more than one, so owners who never read recurring payments keep few notes too; a fold keeps the version, so stored detections stay valid. Every column counts except the untracked list in that migration (categorization bookkeeping, pair links, rule versions, `updatedAt`); a column detection starts reading must not be on it. Detection reads no `bank_accounts` or `bank_connections` column besides the ownership join, so their other changes leave the version alone; a candidate filter on such a column needs its own note. `TRUNCATE` writes no note.
 - For conflict upserts, inspect the generated SQL and run it against real PostgreSQL; qualify target-table columns in `ON CONFLICT ... WHERE`, or they become ambiguous with `EXCLUDED`.
 
-Test conventions (E2E first, `BankingFixtures`, isolated owners, database read-backs, auth-guard tables) are in `apps/api/AGENTS.md`.
+Test conventions: `apps/api/AGENTS.md` and `docs/e2e-and-seeding.md`.
